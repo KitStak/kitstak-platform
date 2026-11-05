@@ -31,6 +31,24 @@ import { Skeleton } from "@/components/ui/card";
 
 export type Density = "comfortable" | "compact";
 
+/** Column meta: set `{ sticky: "right" }` to freeze a column at the grid's right edge. */
+export interface GridColumnMeta {
+  sticky?: "right";
+}
+
+declare module "@tanstack/react-table" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface ColumnMeta<TData, TValue> extends GridColumnMeta {}
+}
+
+function isStickyRight(meta: unknown): boolean {
+  return (
+    typeof meta === "object" &&
+    meta !== null &&
+    (meta as GridColumnMeta).sticky === "right"
+  );
+}
+
 export interface DataGridProps<T> {
   columns: ColumnDef<T, unknown>[];
   data: T[];
@@ -230,7 +248,11 @@ export function DataGrid<T>({
                     <th
                       key={header.id}
                       style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
-                      className="whitespace-nowrap px-3 py-2.5 text-left align-middle text-[11px] font-semibold uppercase tracking-[0.04em] text-faint"
+                      className={cn(
+                        "whitespace-nowrap px-3 py-2.5 text-left align-middle text-[11px] font-semibold uppercase tracking-[0.04em] text-faint",
+                        isStickyRight(header.column.columnDef.meta) &&
+                          "sticky right-0 z-20 bg-surface shadow-[inset_1px_0_0_var(--border)]"
+                      )}
                     >
                       {header.isPlaceholder ? null : header.column.getCanSort() ? (
                         <button
@@ -301,13 +323,25 @@ export function DataGrid<T>({
                     onClick={onRowClick ? () => onRowClick(row.original) : undefined}
                     className={cn(
                       rowH,
-                      "border-t border-border transition-colors",
+                      "group border-t border-border transition-colors",
                       onRowClick && "cursor-pointer",
                       row.getIsSelected() ? "bg-primary-soft/60" : "hover:bg-surface-sunken"
                     )}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="whitespace-nowrap px-3 align-middle">
+                      <td
+                        key={cell.id}
+                        className={cn(
+                          "whitespace-nowrap px-3 align-middle",
+                          isStickyRight(cell.column.columnDef.meta) &&
+                            cn(
+                              "sticky right-0 z-[1] shadow-[inset_1px_0_0_var(--border)]",
+                              row.getIsSelected()
+                                ? "bg-primary-soft"
+                                : "bg-surface group-hover:bg-surface-sunken"
+                            )
+                        )}
+                      >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}

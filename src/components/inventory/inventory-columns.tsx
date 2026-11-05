@@ -171,8 +171,9 @@ export const totalColumns: ColumnDef<TotalInventoryRow, unknown>[] = [
   },
   {
     id: "belowReorder",
-    header: "Below Reorder",
+    header: "Stock Status",
     size: 120,
+    meta: { sticky: "right" },
     accessorFn: (row) => row.available < deriveReorderPoint(row.sku),
     cell: ({ row }) => (
       <ReorderStatus

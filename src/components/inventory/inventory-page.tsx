@@ -349,11 +349,13 @@ export function InventoryPage() {
         scroller.querySelector("thead")?.getBoundingClientRect().height ?? 0;
       const rowHeight =
         scroller.querySelector("tbody tr")?.getBoundingClientRect().height ?? 0;
+      /* Capped at 16px: a taller fade ghosts a readable row, which reads as
+         a rendering bug rather than a scroll hint. */
       let fadeHeight = 0;
       if (canScrollY && rowHeight > 0) {
         const visibleBodyHeight =
           scroller.scrollTop + scroller.clientHeight - theadHeight;
-        fadeHeight = Math.round(visibleBodyHeight % rowHeight);
+        fadeHeight = Math.min(16, Math.round(visibleBodyHeight % rowHeight));
       }
       host.style.setProperty("--ks-vfade-h", `${fadeHeight}px`);
     };
