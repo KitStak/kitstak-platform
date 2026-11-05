@@ -144,7 +144,7 @@ export const totalColumns: ColumnDef<TotalInventoryRow, unknown>[] = [
     cell: ({ row }) => (
       <QtyCell
         value={row.original.damaged}
-        className={row.original.damaged > 0 ? "text-danger" : undefined}
+        className={row.original.damaged > 0 ? "text-danger" : "text-faint"}
       />
     ),
   },

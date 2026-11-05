@@ -336,6 +336,7 @@ export function DataGrid<T>({
                           isStickyRight(cell.column.columnDef.meta) &&
                             cn(
                               "sticky right-0 z-[1] shadow-[inset_1px_0_0_var(--border)]",
+                              "before:pointer-events-none before:absolute before:inset-y-0 before:-left-3 before:w-3 before:bg-gradient-to-r before:from-transparent before:to-[var(--surface)]",
                               row.getIsSelected()
                                 ? "bg-primary-soft"
                                 : "bg-surface group-hover:bg-surface-sunken"
