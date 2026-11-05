@@ -3,9 +3,19 @@
  * The shared grid component is read-only for this module, so layout and
  * interaction fixes are scoped here. These rules are unlayered, so they
  * intentionally win over Tailwind's @layer utilities.
+ *
+ * IMPORTANT — why a literal class instead of a CSS-module class:
+ * next.config.ts routes every `*.css` file (this one included) through the
+ * Tailwind turbopack loader with `as: "*.css"`, which bypasses CSS-module
+ * processing. The file is emitted as plain global CSS (selectors unhashed)
+ * and the JS import returns no class mappings, so `styles.gridWrap` was
+ * `undefined` and the wrapper <div> rendered with no class — none of these
+ * rules ever matched. users-tab.tsx therefore imports this file for its
+ * side effect and puts the literal `usersGridWrap` class on the wrapper.
+ * The name is prefixed to stay collision-safe at global scope.
  */
 
-.gridWrap {
+.usersGridWrap {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -18,20 +28,19 @@
  * Let the card hug its rows instead; it still shrinks and scrolls
  * internally when the row count exceeds the available space.
  */
-.gridWrap > div {
+.usersGridWrap > div {
   flex: 0 1 auto;
 }
 
 /*
  * Header case consistency: the shared grid uppercases <th>, but sortable
- * headers render their label inside a <button>, and the UA stylesheet's
- * `text-transform: none` on buttons blocks inheritance — so "Last sign-in"
+ * headers render their label inside a <button>, and the preflight reset's
+ * `text-transform` on buttons blocks inheritance — so "Last sign-in"
  * (plain span) rendered ALL-CAPS while Name/Email/Role/Status/Created
  * (buttons) rendered title case. Normalize all six headers to the one
  * treatment: 11px / uppercase / 0.05em tracking.
  */
-.gridWrap thead th,
-.gridWrap thead th button {
+.usersGridWrap :is(thead th, thead th button) {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -39,14 +48,14 @@
 }
 
 /* Explicit row hover; selected rows keep their primary tint. */
-.gridWrap tbody tr:hover:not([class*="bg-primary-soft"]) {
+.usersGridWrap tbody tr:hover:not([class*="bg-primary-soft"]) {
   background: var(--surface-sunken);
 }
 
 /* Visible focus rings on checkboxes, name links and toolbar buttons. */
-.gridWrap input[type="checkbox"]:focus-visible,
-.gridWrap button:focus-visible,
-.gridWrap select:focus-visible {
+.usersGridWrap input[type="checkbox"]:focus-visible,
+.usersGridWrap button:focus-visible,
+.usersGridWrap select:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
@@ -57,7 +66,7 @@
  * spec — 32px height, 13px type, hairline border matching the density
  * toggle, custom chevron — since the grid component itself is read-only.
  */
-.gridWrap select {
+.usersGridWrap select {
   appearance: none;
   height: 32px;
   padding: 0 26px 0 10px;
@@ -74,7 +83,7 @@
   cursor: pointer;
 }
 
-.gridWrap select:hover {
+.usersGridWrap select:hover {
   border-color: var(--border-strong);
   color: var(--text-body);
 }
@@ -85,7 +94,7 @@
  * range counter in the same 13px secondary (slate-500) tone as the
  * pagination "1 / 1" so the cluster reads as one aligned group.
  */
-.gridWrap div[class*="border-t"] > div:last-child {
+.usersGridWrap div[class*="border-t"] > div:last-child {
   gap: 16px;
 }
 
@@ -94,13 +103,13 @@
  * throughout, and one consistent weight — the shared grid bolds only the
  * trailing total, which reads as accidental next to the regular "1–10 of".
  */
-.gridWrap div[class*="border-t"] > div:last-child > span:last-child {
+.usersGridWrap div[class*="border-t"] > div:last-child > span:last-child {
   font-size: 13px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
-.gridWrap div[class*="border-t"] > div:last-child > span:last-child > span {
+.usersGridWrap div[class*="border-t"] > div:last-child > span:last-child > span {
   font-size: inherit;
   font-weight: 400;
   color: inherit;

@@ -1,8 +1,14 @@
-import { count, desc, eq, inArray, isNotNull, like, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, like, sql } from "drizzle-orm";
 import { db, schema } from "@/server/db";
 import { BACKLOG_STATUSES } from "./orders";
 
 const { shipmentOrders, orderLines, clients, jobs, users } = schema;
+
+/** Statuses that mean an order has left the building (carrier ranking scope). */
+const SHIPPED_OUT_STATUSES = ["Shipped", "Delivered"] as const;
+
+/** Job statuses shown in the dashboard's active jobs table. */
+const ACTIVE_JOB_STATUSES = ["In Progress", "Pending"] as const;
 
 export interface RankEntry {
   name: string;
@@ -19,6 +25,8 @@ export interface ActiveJobRow {
   id: string;
   code: string;
   jobType: string;
+  /** "In Progress" | "Pending" — both count as active floor work. */
+  status: string;
   assigneeName: string | null;
   waveNumber: string | null;
   unitCount: number;
@@ -135,11 +143,20 @@ export function getDashboardData(): DashboardData {
       .orderBy(desc(count()))
       .all()
   );
+  // Carriers rank only orders that actually went out the door (Shipped +
+  // Delivered) so the card's total reconciles with Order Breakdown's
+  // Shipped + Delivered counts. Orders with a carrier pre-assigned but not
+  // yet shipped are deliberately excluded.
   const carrierRank = toRank(
     db
       .select({ name: shipmentOrders.carrier, count: count() })
       .from(shipmentOrders)
-      .where(isNotNull(shipmentOrders.carrier))
+      .where(
+        and(
+          isNotNull(shipmentOrders.carrier),
+          inArray(shipmentOrders.status, [...SHIPPED_OUT_STATUSES])
+        )
+      )
       .groupBy(shipmentOrders.carrier)
       .orderBy(desc(count()))
       .all()
@@ -163,11 +180,15 @@ export function getDashboardData(): DashboardData {
     .get();
   const completedToday =
     db.select({ n: count() }).from(jobs).where(like(jobs.completedAt, todayPrefix)).get()?.n ?? 0;
+  // Pending jobs are "active pick/count work across the floor" per the card's
+  // subtitle, so they belong in the table alongside In Progress jobs. In
+  // Progress rows sort first so live work stays at the top.
   const activeJobs = db
     .select({
       id: jobs.id,
       code: jobs.code,
       jobType: jobs.jobType,
+      status: jobs.status,
       assigneeName: users.name,
       waveNumber: jobs.waveNumber,
       unitCount: jobs.unitCount,
@@ -175,8 +196,11 @@ export function getDashboardData(): DashboardData {
     })
     .from(jobs)
     .leftJoin(users, eq(jobs.assignedToUserId, users.id))
-    .where(eq(jobs.status, "In Progress"))
-    .orderBy(desc(jobs.createdAt))
+    .where(inArray(jobs.status, [...ACTIVE_JOB_STATUSES]))
+    .orderBy(
+      sql`case when ${jobs.status} = 'In Progress' then 0 else 1 end`,
+      desc(jobs.createdAt)
+    )
     .all()
     .map((j) => ({
       ...j,

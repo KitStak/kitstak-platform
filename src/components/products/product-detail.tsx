@@ -121,6 +121,49 @@ function deriveSlotting(rows: readonly ProductInventoryRow[]): ProductInventoryR
   return [...capped, ...reserveRows.filter((row) => row.onHand > 0)];
 }
 
+/* ============ recent activity (derived from the displayed rows) ============ */
+
+const RECENT_ACTIVITY_LIMIT = 5;
+
+interface StockActivityEvent {
+  id: string;
+  kind: "received" | "damage";
+  qty: number;
+  locationCode: string;
+  atMs: number;
+}
+
+/**
+ * Last few stock transactions for this SKU, derived from the same rows the
+ * locations grid renders: one receive event per row (newest first) plus any
+ * damage reports, which always surface even when older than the receives.
+ */
+function deriveRecentActivity(rows: readonly ProductInventoryRow[]): StockActivityEvent[] {
+  const damageEvents = rows
+    .filter((row) => row.damaged > 0)
+    .map((row) => ({
+      id: `damage-${row.locationId}`,
+      kind: "damage" as const,
+      qty: row.damaged,
+      locationCode: row.locationCode,
+      atMs: Date.parse(row.receivedAt),
+    }));
+  const receiveEvents = rows
+    .filter((row) => row.onHand > 0)
+    .map((row) => ({
+      id: `received-${row.locationId}`,
+      kind: "received" as const,
+      qty: row.onHand,
+      locationCode: row.locationCode,
+      atMs: Date.parse(row.receivedAt),
+    }))
+    .sort((a, b) => b.atMs - a.atMs)
+    .slice(0, Math.max(RECENT_ACTIVITY_LIMIT - damageEvents.length, 0));
+  return [...damageEvents, ...receiveEvents]
+    .sort((a, b) => b.atMs - a.atMs)
+    .slice(0, RECENT_ACTIVITY_LIMIT);
+}
+
 /* ============ presentational bits ============ */
 
 function IdentityRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -269,9 +312,23 @@ export function ProductDetailView({ detail }: ProductDetailViewProps) {
   const slottedInventory = deriveSlotting(inventory);
   const isLotTracked = slottedInventory.some((row) => row.lotNumber !== null);
 
-  const stockedLocations = slottedInventory.length;
+  // Available never includes damaged units: on hand − allocated − damaged.
+  const availableTotal = totals.onHand - totals.allocated - totals.damaged;
   const allocatedPct = totals.onHand > 0 ? (totals.allocated / totals.onHand) * 100 : 0;
-  const availablePct = totals.onHand > 0 ? (totals.available / totals.onHand) * 100 : 0;
+  const availablePct = totals.onHand > 0 ? (availableTotal / totals.onHand) * 100 : 0;
+  const zoneCount = new Set(
+    slottedInventory.filter((row) => row.locationType !== "Receiving").map((row) => row.zone)
+  ).size;
+  const hasReceiving = slottedInventory.some((row) => row.locationType === "Receiving");
+  const recentActivity = deriveRecentActivity(slottedInventory);
+  const buildableKits =
+    kitComponents.length > 0
+      ? Math.min(
+          ...kitComponents.map((component) =>
+            component.qty > 0 ? Math.floor(component.available / component.qty) : 0
+          )
+        )
+      : 0;
   const lastDamagedMs = slottedInventory.reduce(
     (latest, row) => (row.damaged > 0 ? Math.max(latest, Date.parse(row.receivedAt)) : latest),
     0
@@ -305,7 +362,8 @@ export function ProductDetailView({ detail }: ProductDetailViewProps) {
 
       <div className="ks-scroll min-h-0 flex-1 overflow-auto px-6 py-4">
         <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          {/* left — identity */}
+          {/* left rail — identity + recent activity; sticky so it rides beside the long locations grid */}
+          <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-6">
           <Card className="p-5">
             <div
               className={cn(
@@ -360,13 +418,54 @@ export function ProductDetailView({ detail }: ProductDetailViewProps) {
             </p>
           </Card>
 
+          <Card>
+            <CardHeader
+              title="Recent Activity"
+              description="Latest stock transactions for this SKU"
+            />
+            <ul className="px-5 pb-4">
+              {recentActivity.length === 0 ? (
+                <li className="py-2 text-[12px] text-faint">No stock transactions yet.</li>
+              ) : (
+                recentActivity.map((event) => (
+                  <li
+                    key={event.id}
+                    className="flex items-center justify-between gap-3 border-t border-border py-2 first:border-t-0"
+                  >
+                    <span className="min-w-0 truncate text-[12px] text-body">
+                      <span
+                        className={cn(
+                          "font-medium",
+                          event.kind === "damage" ? "text-danger" : "text-body"
+                        )}
+                      >
+                        {event.kind === "damage" ? "Damage reported" : "Received"}{" "}
+                        <span className="tabular-nums">{formatNumber(event.qty)}</span>
+                      </span>
+                      <span className="text-faint"> · {event.locationCode}</span>
+                    </span>
+                    <span className="shrink-0 text-[12px] tabular-nums text-faint">
+                      {formatDate(new Date(event.atMs).toISOString())}
+                    </span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </Card>
+          </div>
+
           {/* right — attributes, pricing, inventory */}
           <div className="flex min-w-0 flex-col gap-4">
             <Card className="flex divide-x divide-border overflow-hidden">
+              {/* Zone mix here; the locations table subtitle already carries the location count. */}
               <StatTile
                 label="On Hand"
                 value={totals.onHand}
-                sub={`${formatNumber(stockedLocations)} location${stockedLocations === 1 ? "" : "s"} · MLT1`}
+                sub={
+                  hasReceiving
+                    ? `across ${formatNumber(zoneCount)} zones + receiving`
+                    : `across ${formatNumber(zoneCount)} zone${zoneCount === 1 ? "" : "s"}`
+                }
               />
               <StatTile
                 label="Allocated"
@@ -375,9 +474,9 @@ export function ProductDetailView({ detail }: ProductDetailViewProps) {
               />
               <StatTile
                 label="Available"
-                value={totals.available}
+                value={availableTotal}
                 sub={`${availablePct.toFixed(1)}% sellable`}
-                accent={totals.available <= product.reorderPoint ? "text-warning" : "text-success"}
+                accent={availableTotal <= product.reorderPoint ? "text-warning" : "text-success"}
               />
               <StatTile
                 label="Damaged"
@@ -496,8 +595,9 @@ export function ProductDetailView({ detail }: ProductDetailViewProps) {
                             {formatNumber(row.allocated)}
                           </td>
                           <td className={cn(TD, "text-right font-medium tabular-nums text-body")}>
-                            {formatNumber(row.onHand - row.allocated)}
+                            {formatNumber(row.onHand - row.allocated - row.damaged)}
                           </td>
+                          {/* Zero damaged renders as an em dash so a real damage count is the only glyph in the column. */}
                           <td
                             className={cn(
                               TD,
@@ -505,7 +605,7 @@ export function ProductDetailView({ detail }: ProductDetailViewProps) {
                               row.damaged > 0 ? "font-medium text-danger" : "text-faint"
                             )}
                           >
-                            {formatNumber(row.damaged)}
+                            {row.damaged > 0 ? formatNumber(row.damaged) : "—"}
                           </td>
                           <td className={cn(TD, "text-secondary")}>{formatDate(row.receivedAt)}</td>
                         </tr>
@@ -528,7 +628,7 @@ export function ProductDetailView({ detail }: ProductDetailViewProps) {
                           {formatNumber(totals.allocated)}
                         </td>
                         <td className={cn(TD, "text-right font-semibold tabular-nums text-foreground")}>
-                          {formatNumber(totals.available)}
+                          {formatNumber(availableTotal)}
                         </td>
                         <td className={cn(TD, "text-right font-semibold tabular-nums text-foreground")}>
                           {formatNumber(totals.damaged)}
@@ -545,7 +645,7 @@ export function ProductDetailView({ detail }: ProductDetailViewProps) {
               <Card>
                 <CardHeader
                   title="Kit Components"
-                  description="Bill of materials consumed when this kit ships"
+                  description={`Buildable kits: ${formatNumber(buildableKits)} · Bill of materials consumed when this kit ships`}
                 />
                 <div className="ks-scroll overflow-x-auto">
                   <table className="w-full border-collapse text-[13px]">
@@ -553,6 +653,8 @@ export function ProductDetailView({ detail }: ProductDetailViewProps) {
                       <tr className="border-b border-border">
                         <th className={TH}>Component SKU</th>
                         <th className={TH}>Name</th>
+                        <th className={cn(TH, "text-right")}>On Hand</th>
+                        <th className={cn(TH, "text-right")}>Available</th>
                         <th className={cn(TH, "text-right")}>Qty per Kit</th>
                       </tr>
                     </thead>
@@ -564,6 +666,12 @@ export function ProductDetailView({ detail }: ProductDetailViewProps) {
                         >
                           <td className={cn(TD, "font-medium text-primary")}>{component.sku}</td>
                           <td className={cn(TD, "text-body")}>{component.name}</td>
+                          <td className={cn(TD, "text-right tabular-nums text-body")}>
+                            {formatNumber(component.onHand)}
+                          </td>
+                          <td className={cn(TD, "text-right font-medium tabular-nums text-body")}>
+                            {formatNumber(component.available)}
+                          </td>
                           <td className={cn(TD, "text-right tabular-nums text-body")}>
                             {component.qty}
                           </td>

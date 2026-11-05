@@ -154,7 +154,8 @@ export function QtyCell({
   );
 }
 
-/** Available = on hand − allocated. Emphasis comes from weight, not color:
+/** Available = on hand − allocated − damaged (see deriveAvailable).
+ *  Emphasis comes from weight, not color:
  *  default text color at 600 so blue stays reserved for interactive SKU
  *  links; subtle danger text at or below zero. */
 export function AvailableCell({ value }: { value: number }) {
@@ -170,7 +171,10 @@ export function AvailableCell({ value }: { value: number }) {
   );
 }
 
-/** Warning pill when available stock has fallen below the reorder point. */
+/** Below-reorder signal: an amber "Low" pill (amber-100 bg / amber-800 text,
+ *  11px/16px, fully rounded — the spec'd pair, which reads on the row hover
+ *  tint in both themes) when available stock has fallen below the reorder
+ *  point; a quiet em-dash otherwise. */
 export function ReorderStatus({
   available,
   reorderPoint,
@@ -182,8 +186,8 @@ export function ReorderStatus({
     return <span className="text-[12px] text-faint">—</span>;
   }
   return (
-    <span className="inline-flex items-center rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning whitespace-nowrap">
-      Reorder
+    <span className="inline-flex items-center rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[11px] font-semibold leading-4 text-[#92400E] whitespace-nowrap">
+      Low
     </span>
   );
 }

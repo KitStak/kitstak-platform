@@ -9,7 +9,10 @@ import { DataGrid } from "@/components/grid/data-grid";
 import { FilterButton, GridSearch } from "@/components/grid/grid-toolbar";
 import { useDebounced, useListQuery } from "./use-list-query";
 import type { UserRole, UserRow } from "./types";
-import styles from "./users-grid.module.css";
+// Side-effect import: next.config.ts compiles all CSS (modules included) as
+// plain global CSS, so this file exposes no class mappings — the wrapper div
+// below carries the literal `usersGridWrap` class instead.
+import "./users-grid.module.css";
 
 /** Tinted badge treatment per role — Viewer gets the same tinted (not outlined) look as Operator. */
 const ROLE_STYLES: Record<UserRole, string> = {
@@ -212,6 +215,9 @@ const COLUMNS: ColumnDef<UserRow, unknown>[] = [
   {
     accessorKey: "email",
     header: "Email",
+    // Cap the column so the longest address doesn't push a wide dead gutter
+    // between Email and Last sign-in.
+    size: 280,
     cell: ({ row }) => (
       <span
         className={
@@ -224,12 +230,18 @@ const COLUMNS: ColumnDef<UserRow, unknown>[] = [
   },
   {
     id: "lastSignIn",
-    header: () => <span className="block text-right">Last sign-in</span>,
+    // Left-aligned like every other column (Created included); a function
+    // header keeps this display-only column out of the CSV export, which
+    // only serializes string headers with accessor keys.
+    header: () => <span>Last sign-in</span>,
     enableSorting: false,
+    // Fixed width so the spacing between Email, Last sign-in and Role reads
+    // intentional rather than leaving a wide dead gutter.
+    size: 130,
     cell: ({ row }) => (
       <span
         className={cn(
-          "block text-right tabular-nums",
+          "tabular-nums",
           statusOf(row.original) === "deactivated" ? "text-faint" : "text-secondary"
         )}
       >
@@ -299,7 +311,7 @@ export function UsersTab() {
   return (
     <>
       <RoleLegend />
-      <div className={styles.gridWrap}>
+      <div className="usersGridWrap">
         <DataGrid<UserRow>
         columns={COLUMNS}
         data={rows}

@@ -145,9 +145,10 @@ export function UnfulfilledCard({
     <Card className="flex flex-col">
       <CardHeader title="Unfulfilled Orders" info />
       {/* CardHeader contributes 12px below the title; pt-1 brings the title-to-content gap to 16px.
-          flex-1 + items-stretch let the table column fill the card's inner height so the
-          rows distribute instead of leaving a dead zone below "In Progress". */}
-      <div className="flex flex-1 items-stretch gap-8 px-6 pb-5 pt-1">
+          flex-1 + items-center vertically center both the donut+legend and the fixed-leading
+          table against the card's inner height, so leftover space splits evenly instead of
+          pooling below "In Progress". */}
+      <div className="flex flex-1 items-center gap-8 px-6 pb-5 pt-1">
         <div className="flex shrink-0 flex-col items-center justify-center gap-3">
           <div className="relative h-[180px] w-[180px]">
             <svg
@@ -229,13 +230,14 @@ export function UnfulfilledCard({
             <span className="text-right">Total Orders</span>
             <span className="text-right">Pack Quantity</span>
           </div>
-          {/* Rows are flex-1 (min 56px) so Total/Open/In Progress distribute across the
-              card's full inner height; divide-y hairlines span the table's full width. */}
-          <div className="flex flex-1 flex-col divide-y divide-border">
+          {/* Rows sit on a fixed 72px leading (9 x 8px grid) so the panel's density
+              matches Order Breakdown directly below; divide-y hairlines span the
+              table's full width. */}
+          <div className="flex flex-col divide-y divide-border">
             {rows.map((row) => (
               <div
                 key={row.label}
-                className="grid min-h-14 flex-1 grid-cols-[1fr_auto_auto] items-center gap-x-10"
+                className="grid h-[72px] grid-cols-[1fr_auto_auto] items-center gap-x-10"
               >
                 <span className={cn("text-[13px] font-semibold", toneClass[row.tone])}>
                   {row.label}
@@ -303,12 +305,22 @@ export function RankCard({
   icon = "globe",
   title,
   description,
+  periodLabel,
+  percentLabel = "of all orders",
   rows,
   totalEntries,
 }: {
   icon?: RankIconName;
   title: string;
   description: string;
+  /** Explicit reporting window shown under the card title (e.g. "Last 30 days"). */
+  periodLabel?: string;
+  /**
+   * Names the base the percentages are computed against. Defaults to
+   * "of all orders"; cards ranked against a subset (e.g. carrier-shipped
+   * orders only) must say so instead of contradicting sibling cards.
+   */
+  percentLabel?: string;
   rows: { name: string; percent: number; count: number }[];
   /** Total number of ranked entries available (rows may be a truncated top-N slice). */
   totalEntries?: number;
@@ -323,22 +335,31 @@ export function RankCard({
         </span>
         <div>
           <h3 className="text-[14px] font-semibold text-foreground">{title}</h3>
+          {periodLabel ? (
+            <p className="text-[12px] leading-4 text-secondary">{periodLabel}</p>
+          ) : null}
           <p className="text-[11px] leading-4 text-faint">{description}</p>
         </div>
       </div>
-      <div className="mx-5 flex flex-col divide-y divide-border border-t border-border">
+      {/* flex-1 list + flex-1 rows: inside the grid's equal-height cards a 3-entry
+          list fills the same vertical space as a 4-entry sibling (hairlines spread
+          evenly) instead of leaving a dead band above the footer hairline. */}
+      <div className="mx-5 flex flex-1 flex-col divide-y divide-border border-t border-border">
         {rows.length === 0 ? (
           <p className="py-4 text-center text-[12px] text-faint">No orders in range</p>
         ) : (
           rows.map((row, i) => (
-            <div key={row.name} className="flex items-center justify-between py-2.5">
+            <div
+              key={row.name}
+              className="flex min-h-[52px] flex-1 items-center justify-between py-2.5"
+            >
               <div className="min-w-0">
                 <p className="truncate text-[13px] font-semibold text-foreground">
                   {i + 1}. {row.name}
                 </p>
                 <p className="text-[11px] text-faint">
-                  <span className="font-semibold text-secondary">{row.percent}%</span> of
-                  all orders
+                  <span className="font-semibold text-secondary">{row.percent}%</span>{" "}
+                  {percentLabel}
                 </p>
               </div>
               <span className="text-[15px] font-bold tabular-nums text-foreground">

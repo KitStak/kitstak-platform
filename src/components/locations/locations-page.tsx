@@ -8,13 +8,13 @@ import type {
   ZoneSummaryRow,
 } from "@/server/repositories/locations";
 import { Button } from "@/components/ui/button";
-import { DataGrid } from "@/components/grid/data-grid";
 import { FilterButton, GridSearch } from "@/components/grid/grid-toolbar";
+import { LocationsDataGrid } from "./locations-data-grid";
 import { PageHeader } from "@/components/layout/page-header";
 import { LOCATION_COLUMNS } from "./locations-columns";
 import {
   normalizeLocationRows,
-  normalizeZoneSummaries,
+  summarizeZonesFromRows,
   type LocationDisplayRow,
 } from "./location-data";
 import { ZoneSummaryStrip } from "./zone-summary-strip";
@@ -29,6 +29,8 @@ interface ListEnvelope<T> {
 
 const SEARCH_DEBOUNCE_MS = 300;
 const DEFAULT_PAGE_SIZE = 50;
+/** API caps pageSize at 200; the summary fetch pages through the rest. */
+const SUMMARY_FETCH_PAGE_SIZE = 200;
 
 /**
  * The repo's turbopack rule pipes every .css file through the Tailwind
@@ -98,13 +100,38 @@ export function LocationsPage() {
     return () => controller.abort();
   }, [page, pageSize, debouncedSearch, zone, type, refreshKey]);
 
+  // Zone summary cards aggregate the same normalized rows the grid renders
+  // (sum stored / sum capacity per zone), so cards and rows always agree.
+  // That requires every location, so this fetch pages through the full set
+  // instead of using the server's view=zones aggregate (whose stored units
+  // the client-side normalization replaces per row).
   React.useEffect(() => {
     const controller = new AbortController();
     setZonesLoading(true);
-    fetch("/api/locations?view=zones", { signal: controller.signal })
-      .then((res) => res.json() as Promise<ListEnvelope<ZoneSummaryRow>>)
-      .then((body) => {
-        if (body.success && body.data) setZones(normalizeZoneSummaries(body.data));
+    const fetchRowsPage = (pageNumber: number) =>
+      fetch(
+        `/api/locations?page=${pageNumber}&pageSize=${SUMMARY_FETCH_PAGE_SIZE}`,
+        { signal: controller.signal }
+      ).then((res) => res.json() as Promise<ListEnvelope<LocationListRow>>);
+    fetchRowsPage(1)
+      .then(async (first) => {
+        if (!first.success || !first.data) {
+          throw new Error(first.error ?? "Failed to load zone summary.");
+        }
+        const totalRows = first.meta?.total ?? first.data.length;
+        const pageCount = Math.max(
+          1,
+          Math.ceil(totalRows / SUMMARY_FETCH_PAGE_SIZE)
+        );
+        const rest = await Promise.all(
+          Array.from({ length: pageCount - 1 }, (_, i) => fetchRowsPage(i + 2))
+        );
+        const allRows = rest.reduce<LocationListRow[]>(
+          (acc, body) =>
+            body.success && body.data ? [...acc, ...body.data] : acc,
+          first.data
+        );
+        setZones(summarizeZonesFromRows(normalizeLocationRows(allRows)));
         setZonesLoading(false);
       })
       .catch((err: unknown) => {
@@ -178,7 +205,9 @@ export function LocationsPage() {
           setSelection({});
         }}
       />
-      <DataGrid<LocationDisplayRow>
+      {/* Page-local DataGrid fork: styled page-size dropdown + loading
+          footer fixes pending in the shared grid (see locations-data-grid). */}
+      <LocationsDataGrid<LocationDisplayRow>
         columns={LOCATION_COLUMNS}
         data={rows}
         total={total}

@@ -7,6 +7,7 @@ import {
   Boxes,
   CalendarClock,
   ChevronDown,
+  Clock,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -38,6 +39,12 @@ const IN_PROGRESS_BASE_ROWS = 2340;
 const IN_PROGRESS_ROWS_PER_SECOND = 47;
 /** Locale-pinned formatter so SSR and client render identical digits. */
 const ROW_COUNT_FORMATTER = new Intl.NumberFormat("en-US");
+/**
+ * Canonical "Run by" value for system-initiated runs. Rendered with a small
+ * clock glyph (not italics) so the system actor reads as a distinct entity
+ * in the people column.
+ */
+const SYSTEM_RUN_ACTOR = "Scheduler";
 
 interface AvailableReportDef {
   name: string;
@@ -141,6 +148,17 @@ interface ReportRunRow {
 
 const RECENT_RUNS: ReportRunRow[] = [
   {
+    report: "Transaction History",
+    format: "XLSX",
+    fileSize: "—",
+    destination: "Email to Compliance",
+    runBy: "S. Patel",
+    started: "11/5/2026 7:44 AM",
+    duration: "—",
+    rows: "—",
+    status: "In Progress",
+  },
+  {
     report: "Inventory Snapshot",
     format: "CSV",
     fileSize: "1.2 MB",
@@ -163,22 +181,11 @@ const RECENT_RUNS: ReportRunRow[] = [
     status: "Completed",
   },
   {
-    report: "Transaction History",
-    format: "XLSX",
-    fileSize: "—",
-    destination: "Email to Compliance",
-    runBy: "S. Patel",
-    started: "11/5/2026 6:15 AM",
-    duration: "—",
-    rows: "—",
-    status: "In Progress",
-  },
-  {
     report: "Inventory Snapshot",
     format: "CSV",
     fileSize: "1.2 MB",
     destination: "Email to Operations",
-    runBy: "Scheduled export",
+    runBy: SYSTEM_RUN_ACTOR,
     started: "11/5/2026 6:00 AM",
     duration: "0:13",
     rows: "1,185",
@@ -223,7 +230,7 @@ const RECENT_RUNS: ReportRunRow[] = [
     format: "CSV",
     fileSize: "1.2 MB",
     destination: "Email to Operations",
-    runBy: "Scheduled export",
+    runBy: SYSTEM_RUN_ACTOR,
     started: "11/3/2026 6:00 AM",
     duration: "0:15",
     rows: "1,181",
@@ -234,7 +241,7 @@ const RECENT_RUNS: ReportRunRow[] = [
     format: "XLSX",
     fileSize: "4.5 MB",
     destination: "Email to Compliance",
-    runBy: "Scheduled export",
+    runBy: SYSTEM_RUN_ACTOR,
     started: "11/2/2026 6:00 PM",
     duration: "0:38",
     rows: "4,655",
@@ -245,7 +252,7 @@ const RECENT_RUNS: ReportRunRow[] = [
     format: "CSV",
     fileSize: "1.2 MB",
     destination: "Email to Operations",
-    runBy: "Scheduled export",
+    runBy: SYSTEM_RUN_ACTOR,
     started: "11/2/2026 6:00 AM",
     duration: "0:13",
     rows: "1,179",
@@ -267,7 +274,7 @@ const RECENT_RUNS: ReportRunRow[] = [
     format: "CSV",
     fileSize: "1.1 MB",
     destination: "Email to Operations",
-    runBy: "Scheduled export",
+    runBy: SYSTEM_RUN_ACTOR,
     started: "11/1/2026 6:00 AM",
     duration: "0:14",
     rows: "1,176",
@@ -475,7 +482,7 @@ function InProgressMetricCells() {
         {formatRunDuration(elapsedSeconds)}
       </td>
       <td className="px-4 text-right tabular-nums text-info">
-        {ROW_COUNT_FORMATTER.format(streamedRows)}…
+        ~{ROW_COUNT_FORMATTER.format(streamedRows)}
       </td>
     </>
   );
@@ -631,12 +638,12 @@ function RecentRunsTable() {
         />
         <table className="w-full table-fixed border-collapse text-left text-[13px]">
           <colgroup>
-            <col className="w-[280px]" />
+            <col />
             <col className="w-[76px]" />
             <col className="w-[90px]" />
-            <col />
+            <col className="w-[180px]" />
             <col className="w-[140px]" />
-            <col className="w-[150px]" />
+            <col className="w-[172px]" />
             <col className="w-[76px]" />
             <col className="w-[84px]" />
             <col className="w-[116px]" />
@@ -695,7 +702,7 @@ function RecentRunsTable() {
                     </div>
                     {run.errorReason ? (
                       <div
-                        className="truncate text-[12px] leading-4 text-faint"
+                        className="truncate text-[12px] leading-4 text-danger"
                         title={run.errorReason}
                       >
                         {run.errorReason}
@@ -709,8 +716,17 @@ function RecentRunsTable() {
                     {run.fileSize}
                   </td>
                   <td className="truncate px-4">{run.destination}</td>
-                  <td className="truncate px-4">{run.runBy}</td>
-                  <td className="px-4 tabular-nums text-faint">
+                  <td className="truncate px-4">
+                    {run.runBy === SYSTEM_RUN_ACTOR ? (
+                      <span className="inline-flex items-center gap-1 text-faint">
+                        <Clock className="h-3 w-3 shrink-0" aria-hidden />
+                        {run.runBy}
+                      </span>
+                    ) : (
+                      run.runBy
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-4 tabular-nums">
                     {run.started}
                   </td>
                   {run.status === "In Progress" ? (
@@ -781,6 +797,20 @@ function RecentRunsTable() {
   );
 }
 
+/** How many upcoming report names the collapsed strip previews. */
+const COMING_SOON_PREVIEW_COUNT = 3;
+
+function formatComingSoonPreview(reports: readonly UpcomingReportDef[]): string {
+  const previewNames = reports
+    .slice(0, COMING_SOON_PREVIEW_COUNT)
+    .map((report) => report.name)
+    .join(", ");
+  const remainingCount = reports.length - COMING_SOON_PREVIEW_COUNT;
+  return remainingCount > 0
+    ? `${previewNames} +${remainingCount} more`
+    : previewNames;
+}
+
 function ComingSoonSection() {
   const [isExpanded, setIsExpanded] = React.useState(false);
   return (
@@ -805,7 +835,12 @@ function ComingSoonSection() {
         <span className="inline-flex shrink-0 items-center rounded bg-[#EEF2F7] px-1.5 py-px text-[10px] font-semibold tabular-nums normal-case tracking-normal text-[#475467]">
           {UPCOMING_REPORTS.length}
         </span>
-        <span className="h-px flex-1 bg-border" aria-hidden />
+        {isExpanded ? null : (
+          <span className="min-w-0 truncate text-[12px] normal-case tracking-normal text-faint">
+            {formatComingSoonPreview(UPCOMING_REPORTS)}
+          </span>
+        )}
+        <span className="h-px min-w-6 flex-1 bg-border" aria-hidden />
       </button>
       {isExpanded ? (
         <div

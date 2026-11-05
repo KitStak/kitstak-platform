@@ -45,6 +45,10 @@ function ZoneCard({
 }) {
   const pct = utilizationPct(zone.storedUnits, zone.capacityUnits);
   const tone = utilizationTone(pct);
+  // Multi-letter tokens (RECV, RET, SHIP) get a smaller, slightly tightened
+  // face so they keep >=3px of horizontal padding per side inside the badge
+  // and match the optical weight of the single-letter A–D badges.
+  const isSpecialZoneCode = zone.zone.length > 1;
   return (
     <button
       type="button"
@@ -65,7 +69,12 @@ function ZoneCard({
       <span className="flex items-center gap-2.5">
         <span
           aria-hidden
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500 to-blue-600 text-[13px] font-bold text-white"
+          className={cn(
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500 to-blue-600 text-white",
+            isSpecialZoneCode
+              ? "text-[8px] font-semibold tracking-[-0.01em]"
+              : "text-[13px] font-bold"
+          )}
         >
           {zone.zone}
         </span>

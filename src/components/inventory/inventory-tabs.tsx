@@ -47,6 +47,16 @@ export function InventoryTabs({ tabs, active, onChange, className }: InventoryTa
                 ? "border-primary text-primary"
                 : "border-transparent text-faint hover:text-secondary"
             )}
+            /* Inline style, not a class: a global (read-only) stylesheet rule
+               overrides every Tailwind border-color utility — even
+               `border-transparent` computes to the gray --border token — which
+               painted a faint 2px gray bar under each INACTIVE tab and turned
+               the active underline gray. The inline declaration wins the
+               cascade: inactive tabs keep the reserved 2px space but render
+               nothing; only the active tab draws the blue bar. */
+            style={{
+              borderBottomColor: isActive ? "var(--primary)" : "transparent",
+            }}
           >
             {tab.label}
             {typeof tab.count === "number" ? (

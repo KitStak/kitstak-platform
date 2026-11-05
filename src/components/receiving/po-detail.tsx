@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import {
   Ban,
-  CalendarClock,
+  Check,
   ChevronDown,
   FileDown,
   PackageCheck,
@@ -63,9 +63,16 @@ function calendarDaysUntil(expectedDate: string): number {
   return Math.round((expectedDay - today) / MS_PER_DAY);
 }
 
+/** "2026-11-04" → "Nov 4" — compact month-day for the DUE stat. */
+function formatMonthDay(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function etaLabel(po: PoDetailData): { text: string; tone: EtaTone } {
   if (po.status === "Completed" && po.receivedAt) {
-    return { text: `Received ${formatDate(po.receivedAt)}`, tone: "ok" };
+    return { text: `Received ${formatMonthDay(po.receivedAt)}`, tone: "ok" };
   }
   if (po.status === "Cancelled") return { text: "Order cancelled", tone: "muted" };
   if (!po.expectedDate) return { text: "No expected date", tone: "muted" };
@@ -74,10 +81,34 @@ function etaLabel(po: PoDetailData): { text: string; tone: EtaTone } {
   if (days > 1) return { text: `Due in ${days} days`, tone: "muted" };
   if (days === 1) return { text: "Due tomorrow", tone: "warn" };
   if (days === 0) return { text: "Due today", tone: "warn" };
-  return { text: `Overdue by ${Math.abs(days)} day${days === -1 ? "" : "s"}`, tone: "overdue" };
+  // Compact "Nov 4 · 1d late" keeps DUE reading as a numeral-style stat.
+  return { text: `${formatMonthDay(po.expectedDate)} · ${Math.abs(days)}d late`, tone: "overdue" };
 }
 
-function ProgressHero({ po, lineCount }: { po: PoDetailData; lineCount: number }) {
+/** Text color for the DUE stat value, matching the REMAINING / LINES numeral style. */
+const DUE_TONE_TEXT: Record<EtaTone, string> = {
+  ok: "text-success",
+  warn: "text-warning",
+  overdue: "text-danger",
+  muted: "text-faint",
+};
+
+function ProgressHero({
+  po,
+  openLineCount,
+  inProgressUnits,
+}: {
+  po: PoDetailData;
+  /**
+   * Lines that still have open (unreceived) quantity. Pairing this with
+   * REMAINING keeps the stat row consistent with the order-lines table: a
+   * fully received line no longer counts, so "REMAINING 591 · OPEN LINES 3"
+   * never contradicts a "Completed" line below.
+   */
+  openLineCount: number;
+  /** Units counted in `receivedQuantity` that sit on a still-open receipt. */
+  inProgressUnits: number;
+}) {
   const pct =
     po.totalQuantity > 0
       ? Math.min(100, Math.round((po.receivedQuantity / po.totalQuantity) * 100))
@@ -97,6 +128,16 @@ function ProgressHero({ po, lineCount }: { po: PoDetailData; lineCount: number }
           <span className="text-[14px] text-faint">
             / {formatNumber(po.totalQuantity)} units received
           </span>
+          {/*
+            The headline total includes units on receipts still being worked;
+            say so inline so it never reads as contradicting the receipt
+            statuses below.
+          */}
+          {inProgressUnits > 0 ? (
+            <span className="text-[12px] text-faint">
+              (incl. {formatNumber(inProgressUnits)} in progress)
+            </span>
+          ) : null}
         </p>
         <div className="flex items-end gap-6">
           <div className="text-right">
@@ -108,42 +149,37 @@ function ProgressHero({ po, lineCount }: { po: PoDetailData; lineCount: number }
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
-              Lines
+            <p className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+              Open lines
             </p>
             <p className="mt-1 text-[18px] font-semibold tabular-nums text-foreground">
-              {formatNumber(lineCount)}
+              {formatNumber(openLineCount)}
             </p>
           </div>
           {/*
-            Third KPI column: a "DUE" micro-label in the same 11px uppercase
-            style keeps the REMAINING / LINES / DUE cluster reading as a clean
-            label-over-value grid instead of a floating pill.
+            Third KPI column: DUE follows the exact REMAINING / LINES stat
+            pattern — 11px uppercase label over an 18px semibold value on the
+            shared baseline — with tone carried by text color instead of a
+            pill, so the three stats align as one row.
           */}
-          <div className="flex flex-col items-end text-right">
+          <div className="text-right">
             <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
               Due
             </p>
-            <span
+            <p
               className={cn(
-                "mt-1 flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-semibold",
-                eta.tone === "ok" && "bg-success-soft text-success",
-                eta.tone === "warn" && "bg-warning-soft text-warning",
-                eta.tone === "overdue" && "border border-danger/30 bg-danger-soft text-danger",
-                eta.tone === "muted" && "bg-neutral-soft text-neutral"
+                "mt-1 whitespace-nowrap text-[18px] font-semibold tabular-nums",
+                DUE_TONE_TEXT[eta.tone]
               )}
             >
-              {eta.tone === "ok" ? (
-                <PackageCheck className="h-3.5 w-3.5" aria-hidden />
-              ) : (
-                <CalendarClock className="h-3.5 w-3.5" aria-hidden />
-              )}
               {eta.text}
-            </span>
+            </p>
           </div>
         </div>
       </div>
-      <div className="mt-4 flex items-center gap-3">
+      {/* Bar + % label share one flex row: bar flex-1, 8px gap, label
+          vertically centered on the 8px track so nothing wraps below it. */}
+      <div className="mt-4 flex items-center gap-2">
         <div
           className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-neutral-soft"
           role="progressbar"
@@ -161,7 +197,7 @@ function ProgressHero({ po, lineCount }: { po: PoDetailData; lineCount: number }
           />
         </div>
         {/* leading-none keeps the % label optically centered on the 8px track */}
-        <span className="shrink-0 text-[12px] font-semibold leading-none tabular-nums text-body">
+        <span className="shrink-0 text-[12px] leading-none tabular-nums text-faint">
           {pct}%
         </span>
       </div>
@@ -170,15 +206,19 @@ function ProgressHero({ po, lineCount }: { po: PoDetailData; lineCount: number }
 }
 
 const thClass =
-  "whitespace-nowrap px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint";
-const numTd = "px-4 text-right text-[13px] tabular-nums text-body";
+  "whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint";
+const numTd = "px-3 text-right text-[13px] tabular-nums text-body";
 
 type LineStatus = "open" | "partial" | "complete";
 
+/*
+ * One status lexicon across this page: finished order lines and finished
+ * receipts both say "Completed" (matching the receipts table and Logiwa).
+ */
 const LINE_STATUS_STYLES: Record<LineStatus, { label: string; className: string }> = {
   open: { label: "Open", className: "bg-neutral-soft text-neutral" },
   partial: { label: "Partial", className: "bg-warning-soft text-warning" },
-  complete: { label: "Complete", className: "bg-success-soft text-success" },
+  complete: { label: "Completed", className: "bg-success-soft text-success" },
 };
 
 function lineStatus(ordered: number, received: number): LineStatus {
@@ -206,7 +246,7 @@ function LineRow({ line }: { line: PurchaseOrderLineRow }) {
   const remaining = Math.max(0, line.orderedQuantity - line.receivedQuantity);
   return (
     <tr className="group h-10 border-t border-border transition-colors hover:bg-surface-sunken">
-      <td className="truncate px-4">
+      <td className="truncate px-3">
         <Link
           href={`/products/${line.productId}`}
           className="font-medium text-primary hover:underline focus-visible:underline focus-visible:outline-none"
@@ -219,12 +259,12 @@ function LineRow({ line }: { line: PurchaseOrderLineRow }) {
         true "…" flush to the text; `title` exposes the full name on hover.
         Never slice the string by hand — that produces the " ..." artifact.
       */}
-      <td className="max-w-0 truncate px-4 text-body" title={line.productName}>
+      <td className="max-w-0 truncate px-3 text-body" title={line.productName}>
         {line.productName}
       </td>
       <td className={numTd}>{formatNumber(line.orderedQuantity)}</td>
       <td className={numTd}>{formatNumber(line.receivedQuantity)}</td>
-      <td className="px-4 text-center">
+      <td className="px-3 text-center">
         <LineStatusPill ordered={line.orderedQuantity} received={line.receivedQuantity} />
       </td>
       <td className={cn(numTd, remaining > 0 ? "font-medium text-warning" : "text-faint")}>
@@ -235,14 +275,26 @@ function LineRow({ line }: { line: PurchaseOrderLineRow }) {
         {formatMoney(line.orderedQuantity * line.unitCost)}
       </td>
       <td className="pl-2 pr-6 text-right">
-        <button
-          type="button"
-          className="rounded text-[12px] font-medium text-primary hover:underline focus-visible:underline focus-visible:outline-none disabled:cursor-default disabled:text-faint disabled:no-underline"
-          disabled={remaining === 0}
-          aria-label={`Receive units for ${line.sku}`}
-        >
-          Receive
-        </button>
+        {remaining === 0 ? (
+          /*
+           * Fully received: a quiet check in the same 56px action slot reads
+           * as "done" instead of a dead, faint "Receive" link.
+           */
+          <span
+            className="inline-flex w-[56px] items-center justify-end text-success"
+            aria-label={`${line.sku} fully received`}
+          >
+            <Check className="h-3.5 w-3.5" aria-hidden />
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="rounded text-[12px] font-medium text-primary hover:underline focus-visible:underline focus-visible:outline-none"
+            aria-label={`Receive units for ${line.sku}`}
+          >
+            Receive
+          </button>
+        )}
       </td>
     </tr>
   );
@@ -264,20 +316,21 @@ function LinesTable({ lines }: { lines: PurchaseOrderLineRow[] }) {
         description={`${lines.length} SKU${lines.length === 1 ? "" : "s"} on this purchase order`}
       />
       <div className="ks-scroll overflow-x-auto">
-        {/* min-w 940 (was 900): the flexible PRODUCT column gains ~40px so
-            full seeded names ("NovaForge USB-C Cable 3m — Braided") fit
-            without truncating at typical widths. */}
-        <table className="w-full min-w-[940px] table-fixed border-collapse text-[13px]">
+        {/* Tighter cell padding (px-3) and trimmed fixed columns hand ~75px
+            back to the flexible PRODUCT column, so full seeded names
+            ("NovaForge USB-C Cable 3m — Braided") render without truncating
+            at typical widths; narrower viewports still get a true CSS "…". */}
+        <table className="w-full min-w-[1050px] table-fixed border-collapse text-[13px]">
           <colgroup>
-            <col className="w-[170px]" />
+            <col className="w-[172px]" />
             <col />
-            <col className="w-[84px]" />
+            <col className="w-[76px]" />
+            <col className="w-[80px]" />
+            <col className="w-[100px]" />
             <col className="w-[88px]" />
-            <col className="w-[96px]" />
-            <col className="w-[96px]" />
-            <col className="w-[92px]" />
-            <col className="w-[108px]" />
-            <col className="w-[90px]" />
+            <col className="w-[84px]" />
+            <col className="w-[100px]" />
+            <col className="w-[80px]" />
           </colgroup>
           <thead className="bg-surface shadow-[inset_0_-1px_0_var(--border)]">
             <tr>
@@ -301,7 +354,7 @@ function LinesTable({ lines }: { lines: PurchaseOrderLineRow[] }) {
           </tbody>
           <tfoot>
             <tr className="h-10 border-t border-border bg-surface-sunken/60">
-              <td className="px-4 text-[12px] font-semibold uppercase tracking-[0.04em] text-faint">
+              <td className="px-3 text-[12px] font-semibold uppercase tracking-[0.04em] text-faint">
                 Totals
               </td>
               <td />
@@ -341,9 +394,17 @@ interface ReceiptRow {
 const RECEIVERS = ["M. Alvarez", "D. Chen", "R. Okafor"] as const;
 
 /** Deterministic receiving history derived from the PO's received totals. */
-function buildReceiptHistory(po: PoDetailData, totalLines: number): ReceiptRow[] {
+function buildReceiptHistory(po: PoDetailData, lines: PurchaseOrderLineRow[]): ReceiptRow[] {
   if (po.receivedQuantity <= 0) return [];
   const poNumber = po.code.replace(/^PO-/, "");
+  const totalLines = lines.length;
+  /*
+   * A receipt can only have touched SKUs that actually received units, so the
+   * per-receipt line count is clamped to the number of lines with received
+   * units. Without the clamp an early receipt could claim every PO line,
+   * contradicting an "Open" 0-received line in the order-lines table above.
+   */
+  const linesWithUnits = lines.filter((line) => line.receivedQuantity > 0).length;
   const first = Math.round(po.receivedQuantity * 0.45);
   const second = Math.round(po.receivedQuantity * 0.34);
   const third = po.receivedQuantity - first - second;
@@ -354,7 +415,7 @@ function buildReceiptHistory(po: PoDetailData, totalLines: number): ReceiptRow[]
     number: `RCV-${poNumber}-0${index + 1}`,
     date: new Date(createdMs + (index + 1) * 2 * MS_PER_DAY).toISOString(),
     receivedBy: RECEIVERS[index % RECEIVERS.length] ?? "Receiving Team",
-    lineCount: Math.max(1, totalLines - index),
+    lineCount: Math.max(1, Math.min(totalLines - index, linesWithUnits)),
     units,
     status:
       index === unitSplits.length - 1 && po.status === "Receiving" ? "In Progress" : "Completed",
@@ -419,14 +480,14 @@ function ReceiptsTable({ receipts }: { receipts: ReceiptRow[] }) {
               key={receipt.id}
               className="h-10 border-t border-border transition-colors hover:bg-surface-sunken"
             >
-              <td className="px-4 font-medium text-primary">{receipt.number}</td>
-              <td className="px-4 text-body">{formatDate(receipt.date)}</td>
-              <td className="px-4 text-body">{receipt.receivedBy}</td>
+              <td className="px-3 font-medium text-primary">{receipt.number}</td>
+              <td className="px-3 text-body">{formatDate(receipt.date)}</td>
+              <td className="px-3 text-body">{receipt.receivedBy}</td>
               <td className={numTd}>{formatNumber(receipt.lineCount)}</td>
               <td className={cn(numTd, "font-medium text-foreground")}>
                 {formatNumber(receipt.units)}
               </td>
-              <td className="px-4">
+              <td className="px-3">
                 <StatusPill status={receipt.status} />
               </td>
             </tr>
@@ -492,9 +553,8 @@ const HISTORY_TABS = [
 
 type HistoryTabKey = (typeof HISTORY_TABS)[number]["key"];
 
-function ReceivingHistory({ po, lineCount }: { po: PoDetailData; lineCount: number }) {
+function ReceivingHistory({ po, receipts }: { po: PoDetailData; receipts: ReceiptRow[] }) {
   const [activeTab, setActiveTab] = React.useState<HistoryTabKey>("receipts");
-  const receipts = React.useMemo(() => buildReceiptHistory(po, lineCount), [po, lineCount]);
   const events = React.useMemo(() => buildActivity(po, receipts), [po, receipts]);
   return (
     <Card className="overflow-hidden">
@@ -514,10 +574,19 @@ function ReceivingHistory({ po, lineCount }: { po: PoDetailData; lineCount: numb
               onClick={() => setActiveTab(tab.key)}
               className={cn(
                 "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                isActive
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-faint hover:text-body"
+                isActive ? "text-foreground" : "text-faint hover:text-body"
               )}
+              /*
+               * Underline color is set inline, not via `border-primary` /
+               * `border-transparent`: globals.css ships an UNLAYERED
+               * `* { border-color: var(--border) }` rule, and unlayered CSS
+               * outranks every rule inside Tailwind v4's `@layer utilities`,
+               * so the color utilities never applied — all three tabs drew a
+               * 2px grey underline. An inline style wins the cascade
+               * unconditionally. --primary (#2e5ce6) matches the progress
+               * bar fill.
+               */
+              style={{ borderBottomColor: isActive ? "var(--primary)" : "transparent" }}
             >
               {tab.label}
               {tab.key === "receipts" ? (
@@ -646,17 +715,30 @@ function SummaryRail({
   po,
   lineValue,
   receivedValue,
+  lastReceiptAt,
 }: {
   po: PoDetailData;
   lineValue: number;
   receivedValue: number;
+  /** Date of the most recent receipt, when the PO has activity but no final received-at. */
+  lastReceiptAt: string | null;
 }) {
   const receivable = po.status !== "Completed" && po.status !== "Cancelled";
   return (
     <div className="flex w-full shrink-0 flex-col gap-3 lg:sticky lg:top-6 lg:w-80 lg:self-start">
       <div className="flex items-center gap-2">
-        <Button variant="primary" size="lg" className="min-w-0 flex-1" disabled={!receivable}>
-          <PackageCheck className="h-4 w-4" aria-hidden />
+        <Button variant="primary" size="lg" className="min-w-0 flex-1 gap-2" disabled={!receivable}>
+          {/*
+            Primary-CTA icon rendered with explicit, non-negotiable geometry:
+            inline 16×16 size, full opacity, and white stroke so no utility or
+            flex shrink can degrade it to a stray artifact. Gap is 8px (gap-2).
+          */}
+          <PackageCheck
+            className="shrink-0 text-white"
+            style={{ width: 16, height: 16, opacity: 1 }}
+            strokeWidth={2}
+            aria-hidden
+          />
           Receive Items
         </Button>
         <OtherActionsMenu />
@@ -683,16 +765,32 @@ function SummaryRail({
         <div className="my-1 h-px bg-border" />
         <SummaryRow label="Created" value={formatDateTime(po.createdAt)} />
         <SummaryRow label="Expected Date" value={formatDate(po.expectedDate)} />
+        {/*
+          With receipts already posted, a bare "—" reads as missing data, so
+          show the latest receipt date marked "(partial)". The em dash is
+          reserved for POs with zero receiving activity.
+        */}
         <SummaryRow
           label="Received At"
-          value={po.receivedAt ? formatDateTime(po.receivedAt) : <span className="text-faint">—</span>}
+          value={
+            po.receivedAt ? (
+              formatDateTime(po.receivedAt)
+            ) : lastReceiptAt ? (
+              <>
+                {formatDate(lastReceiptAt)} <span className="font-normal text-faint">(partial)</span>
+              </>
+            ) : (
+              <span className="text-faint">—</span>
+            )
+          }
         />
         <div className="my-1 h-px bg-border" />
         <SummaryRow label="Total Quantity" value={formatNumber(po.totalQuantity)} />
         <SummaryRow label="Received" value={formatNumber(po.receivedQuantity)} />
         <SummaryRow label="Received Value" value={formatMoney(receivedValue)} />
+        {/* "Order Total" = PO grand total (sum of ordered qty × unit cost). */}
         <SummaryRow
-          label="Line Value"
+          label="Order Total"
           value={
             <span className="text-[14px] font-semibold text-foreground">
               {formatMoney(lineValue)}
@@ -714,6 +812,21 @@ function warehouseCode(label: string): string {
 export function PoDetail({ po, lines }: PoDetailProps) {
   const lineValue = lines.reduce((sum, l) => sum + l.orderedQuantity * l.unitCost, 0);
   const receivedValue = lines.reduce((sum, l) => sum + l.receivedQuantity * l.unitCost, 0);
+  // Receipt history is derived once here so the progress card can annotate how
+  // many "received" units still sit on an in-progress receipt.
+  const receipts = React.useMemo(() => buildReceiptHistory(po, lines), [po, lines]);
+  const inProgressUnits = receipts.reduce(
+    (sum, receipt) => (receipt.status === "In Progress" ? sum + receipt.units : sum),
+    0
+  );
+  // Lines that still have open quantity — fully received lines drop out so
+  // the hero stat agrees with the per-line status pills below.
+  const openLineCount = lines.filter(
+    (line) => line.orderedQuantity - line.receivedQuantity > 0
+  ).length;
+  // Receipts are built oldest→newest, so the last entry is the latest activity.
+  const lastReceipt = receipts.length > 0 ? receipts[receipts.length - 1] : undefined;
+  const lastReceiptAt = lastReceipt ? lastReceipt.date : null;
   return (
     <div className="ks-scroll min-h-0 flex-1 overflow-y-auto">
       <div className="px-6 pb-6 pt-3">
@@ -741,11 +854,16 @@ export function PoDetail({ po, lines }: PoDetailProps) {
 
         <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start">
           <div className="flex min-w-0 flex-1 flex-col gap-4">
-            <ProgressHero po={po} lineCount={lines.length} />
+            <ProgressHero po={po} openLineCount={openLineCount} inProgressUnits={inProgressUnits} />
             <LinesTable lines={lines} />
-            <ReceivingHistory po={po} lineCount={lines.length} />
+            <ReceivingHistory po={po} receipts={receipts} />
           </div>
-          <SummaryRail po={po} lineValue={lineValue} receivedValue={receivedValue} />
+          <SummaryRail
+            po={po}
+            lineValue={lineValue}
+            receivedValue={receivedValue}
+            lastReceiptAt={lastReceiptAt}
+          />
         </div>
       </div>
     </div>

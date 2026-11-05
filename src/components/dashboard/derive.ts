@@ -148,9 +148,11 @@ export interface JobsTableRow {
   id: string;
   code: string;
   jobType: string;
+  /** "In Progress" | "Pending" — drives the Status grouping chips. */
+  status: string;
   assigneeName: string | null;
   productQty: number;
-  /** Null for count/replenishment jobs that are not order-driven. */
+  /** Null only for non-order job types (counts/replenishment). */
   orderQty: number | null;
   pctComplete: number;
   jobQty: number;
@@ -159,10 +161,20 @@ export interface JobsTableRow {
 /** Seeded average line depth used to derive order counts for multi-item picks. */
 const MULTI_ITEM_UNITS_PER_ORDER = 2.5;
 
+/** Seeded carton depth for B2B picks: ~3 units per wholesale order. */
+const B2B_UNITS_PER_ORDER = 3;
+
+/**
+ * Order-driven job types always derive an order count; "—" is reserved for
+ * job types that have no orders by nature (Cycle Count, Dynamic Replenishment).
+ */
 function deriveOrderQty(jobType: string, unitCount: number): number | null {
   if (jobType === "Single Unit Orders") return unitCount;
   if (jobType === "Multi Item Orders") {
     return Math.max(1, Math.ceil(unitCount / MULTI_ITEM_UNITS_PER_ORDER));
+  }
+  if (jobType === "B2B Order Picking") {
+    return Math.max(1, Math.ceil(unitCount / B2B_UNITS_PER_ORDER));
   }
   return null;
 }
@@ -172,6 +184,7 @@ export function buildJobRows(data: DashboardData): JobsTableRow[] {
     id: job.id,
     code: job.code,
     jobType: job.jobType,
+    status: job.status,
     assigneeName: job.assigneeName,
     productQty: job.unitCount,
     orderQty: deriveOrderQty(job.jobType, job.unitCount),

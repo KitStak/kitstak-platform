@@ -25,6 +25,14 @@ export const metadata: Metadata = { title: "Dashboard" };
 
 const RANK_ROW_LIMIT = 4;
 
+/**
+ * Explicit reporting window for the four ranking cards. Each card resolves to
+ * a different implied total (all orders vs. carrier-shipped orders), so the
+ * shared period caption anchors them to one reporting window instead of
+ * letting readers reconcile them against the live status counts above.
+ */
+const RANK_PERIOD_LABEL = "Last 30 days";
+
 function toRankRows(entries: RankEntry[]): { name: string; percent: number; count: number }[] {
   return entries
     .slice(0, RANK_ROW_LIMIT)
@@ -78,6 +86,7 @@ export default function DashboardPage() {
             icon="store"
             title="Channels"
             description="Order details coming from channels"
+            periodLabel={RANK_PERIOD_LABEL}
             rows={toRankRows(data.channelRank)}
             totalEntries={data.channelRank.length}
           />
@@ -85,13 +94,19 @@ export default function DashboardPage() {
             icon="users"
             title="Clients"
             description="Client order details and rank"
+            periodLabel={RANK_PERIOD_LABEL}
             rows={toRankRows(data.clientRank)}
             totalEntries={data.clientRank.length}
           />
+          {/* Carrier percentages are computed against carrier-shipped orders
+              (Shipped + Delivered), not the all-orders base the sibling cards
+              use, so the sublabel names that base explicitly. */}
           <RankCard
             icon="truck"
             title="Carriers"
             description="Ranking of carriers to which orders are shipped"
+            periodLabel={RANK_PERIOD_LABEL}
+            percentLabel="of carrier-shipped orders"
             rows={toRankRows(data.carrierRank)}
             totalEntries={data.carrierRank.length}
           />
@@ -99,6 +114,7 @@ export default function DashboardPage() {
             icon="globe"
             title="Order By Country"
             description="Rank of the regions where orders are shipped"
+            periodLabel={RANK_PERIOD_LABEL}
             rows={toRankRows(data.countryRank)}
             totalEntries={data.countryRank.length}
           />

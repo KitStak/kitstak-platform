@@ -22,7 +22,11 @@ import { DataGrid } from "@/components/grid/data-grid";
 import { FilterButton, GridSearch, type FilterOption } from "@/components/grid/grid-toolbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { atpColumns, byLocationColumns, totalColumns } from "./inventory-columns";
-import { deriveDisplayCategory } from "./inventory-derive";
+import {
+  deriveAllocated,
+  deriveAvailable,
+  deriveDisplayCategory,
+} from "./inventory-derive";
 import { InventoryTabs } from "./inventory-tabs";
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -38,12 +42,21 @@ const PAGE_HEIGHT_CLASS = "h-[calc(100dvh-3.5rem)]";
 /**
  * Page-scoped grid chrome we cannot change inside the shared DataGrid
  * (read-only): the sortable header <button> drops the th's uppercase
- * transform, the horizontal scroll container needs a right scroll-edge
- * shadow while more columns sit off-screen, and the vertical scroll edge
- * needs a 24px bottom fade to the surface color so a row clipped by the
- * viewport never slices letterforms mid-glyph above the sticky footer.
- * The fade is a sticky overlay (not a mask) so the scrollbars stay crisp,
- * and it only renders while more rows sit below the fold.
+ * transform and reveals a 12px sort chevron on header hover (the active sort
+ * column keeps the DataGrid's own persistent arrow); the horizontal scroll
+ * container gets an always-visible styled scrollbar (Logiwa pattern — the
+ * visible track signals the overflow) plus a sticky 24px right-edge scroll
+ * shadow over the last visible column while scrollLeft < scrollWidth −
+ * clientWidth, so a clipped column reads as "scroll for more" instead of a
+ * rendering bug; the scroll container clips at its own padding box with the
+ * card's inner radius, so the card's rounded border never cuts through
+ * glyphs; the last header cell gets text-overflow: ellipsis so a header that
+ * runs out of room never cuts mid-glyph; and the vertical scroll edge gets a
+ * bottom fade to the table surface token (var(--surface), theme-safe) sized
+ * by the scroll observer to exactly the sliced partial row, so that row fades
+ * out while the gridline under the last fully-visible row stays crisp. The
+ * shadow and fade are overlays (not masks) so the scrollbars stay crisp, and
+ * each only renders while more content sits past that edge.
  */
 const GRID_CHROME_CSS = `
 .ks-inventory-grid thead th button {
@@ -51,18 +64,107 @@ const GRID_CHROME_CSS = `
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.ks-inventory-grid[data-hscroll="true"] .ks-scroll {
-  box-shadow: inset -12px 0 10px -10px rgba(16, 24, 40, 0.12);
+/* The last header never cuts mid-glyph: if it runs out of width it
+   ellipsizes instead. inline-block (not the th's default inline flow) is
+   what makes text-overflow actually apply to the sort-button label. */
+.ks-inventory-grid thead th:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.ks-inventory-grid thead th:last-child button {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+/* Sort affordance: every sortable header reveals a 12px chevron on hover.
+   The chevron takes no layout width (negative right margin tucks it into the
+   th's 12px right padding), so headers don't widen and columns never shift.
+   The active sort column carries the DataGrid's own persistent 12px arrow (a
+   real svg inside the button), so the hover hint hides there. */
+.ks-inventory-grid thead th button::after {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: 4px;
+  margin-right: -16px;
+  vertical-align: -2px;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / 12px 12px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / 12px 12px no-repeat;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.ks-inventory-grid thead th:hover button::after {
+  opacity: 1;
+}
+/* The last header's button clips overflow (ellipsis rule above), which would
+   swallow a tucked-in chevron; give it real width there instead. */
+.ks-inventory-grid thead th:last-child button::after {
+  margin-right: 0;
+}
+.ks-inventory-grid thead th button:has(svg)::after {
+  display: none;
+}
+.ks-inventory-grid .ks-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+  /* Clip at the scroll container's own padding box, rounded to the card's
+     inner radius (8px frame − 1px border): every content clip happens here,
+     so the card's rounded border-radius never slices through a glyph. */
+  border-radius: 7px 7px 0 0;
+}
+.ks-inventory-grid .ks-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.ks-inventory-grid .ks-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ks-inventory-grid .ks-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+  border: none;
+}
+/* The right-edge scroll shadow anchors to the grid card (the .ks-scroll
+   parent, selected via :has so the shared DataGrid stays untouched), pinned
+   to the card's right edge so it stays put while the table scrolls under it,
+   and is sized to the scroll viewport through --ks-scroll-h (set by the
+   scroll observer below), so it covers header + rows but never the scrollbar
+   or the grid footer. data-hscroll is true only while scrollLeft <
+   scrollWidth − clientWidth: the shadow disappears at the right edge. */
+.ks-inventory-grid div:has(> .ks-scroll > table) {
+  position: relative;
+}
+.ks-inventory-grid[data-hscroll="true"] div:has(> .ks-scroll > table)::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 20;
+  width: 24px;
+  height: var(--ks-scroll-h, 0px);
+  background: linear-gradient(to left, rgba(16, 24, 40, 0.08), transparent);
+  pointer-events: none;
+}
+/* --ks-vfade-h = the visible height of the row sliced by the bottom edge
+   (set by the scroll observer). The fade starts exactly at that row's top
+   border, so the sliced row dissolves into the table surface while the
+   gridline under the last fully-visible row stays crisp all the way to the
+   pagination bar. var(--surface) keeps the fade on the table surface token
+   in both themes. */
 .ks-inventory-grid[data-vscroll="true"] .ks-scroll::after {
   content: "";
   position: sticky;
   bottom: 0;
   left: 0;
   display: block;
-  height: 24px;
+  height: var(--ks-vfade-h, 0px);
   width: 100%;
-  margin-top: -24px;
+  margin-top: calc(-1 * var(--ks-vfade-h, 0px));
   background: linear-gradient(to bottom, transparent, var(--surface));
   pointer-events: none;
 }
@@ -98,6 +200,33 @@ const EMPTY_COPY: Record<InventoryView, { title: string; description: string }> 
   },
 };
 
+/**
+ * Every stock figure must reconcile with the columns on screen:
+ * ALLOCATED passes through the demand-pattern overrides (deriveAllocated —
+ * the shared repository's seed allocates ~1–3% everywhere, so low-stock
+ * states could never fire), and AVAILABLE is re-derived as on hand −
+ * allocated − damaged (the read-only repository still returns onHand −
+ * allocated). Rows are rebuilt here — before render, sort, "Below Reorder"
+ * status, and CSV export all read them. ATP rows carry no damaged count; their
+ * available and ATP total are re-derived from the same allocation so the tabs
+ * never contradict each other.
+ */
+function withDerivedStock(rows: InventoryRow[]): InventoryRow[] {
+  return rows.map((row) => {
+    if ("damaged" in row) {
+      const allocated = deriveAllocated(row.sku, row.allocated, row.onHand, row.damaged);
+      return {
+        ...row,
+        allocated,
+        available: deriveAvailable(row.onHand, allocated, row.damaged),
+      };
+    }
+    const allocated = deriveAllocated(row.sku, row.allocated, row.onHand);
+    const available = row.onHand - allocated;
+    return { ...row, allocated, available, atp: available + row.incoming };
+  });
+}
+
 function useDebounced(value: string, delay: number): string {
   const [debounced, setDebounced] = React.useState(value);
   React.useEffect(() => {
@@ -122,6 +251,7 @@ export function InventoryPage() {
   const [counts, setCounts] = React.useState<Partial<Record<InventoryView, number>>>({});
   const [reloadKey, setReloadKey] = React.useState(0);
   const gridShellRef = React.useRef<HTMLDivElement>(null);
+  const sortDefaultedForTab = React.useRef<InventoryView | null>(null);
 
   const debouncedSearch = useDebounced(search, SEARCH_DEBOUNCE_MS);
   const clientId = clients.find((c) => c.name === applied.client)?.id;
@@ -177,7 +307,7 @@ export function InventoryPage() {
         if (!res.ok || !body.success || !body.data) {
           throw new Error(body.error ?? `Request failed (${res.status})`);
         }
-        setRows(body.data);
+        setRows(withDerivedStock(body.data));
         setTotal(body.meta?.total ?? body.data.length);
         setLoading(false);
       })
@@ -204,10 +334,28 @@ export function InventoryPage() {
       const atRightEdge =
         scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 1;
       host.dataset.hscroll = String(canScrollX && !atRightEdge);
+      /* Right-edge shadow height = scroll viewport (clientHeight excludes the
+         horizontal scrollbar), so the shadow never dims the scrollbar track. */
+      host.style.setProperty("--ks-scroll-h", `${scroller.clientHeight}px`);
       const canScrollY = scroller.scrollHeight - scroller.clientHeight > 1;
       const atBottomEdge =
         scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
       host.dataset.vscroll = String(canScrollY && !atBottomEdge);
+      /* Bottom fade height = visible slice of the row cut by the bottom edge
+         (measured, so it tracks the density toggle's row height), anchored at
+         that row's top border: the sliced row fades out, the gridline under
+         the last full row stays visible. */
+      const theadHeight =
+        scroller.querySelector("thead")?.getBoundingClientRect().height ?? 0;
+      const rowHeight =
+        scroller.querySelector("tbody tr")?.getBoundingClientRect().height ?? 0;
+      let fadeHeight = 0;
+      if (canScrollY && rowHeight > 0) {
+        const visibleBodyHeight =
+          scroller.scrollTop + scroller.clientHeight - theadHeight;
+        fadeHeight = Math.round(visibleBodyHeight % rowHeight);
+      }
+      host.style.setProperty("--ks-vfade-h", `${fadeHeight}px`);
     };
     update();
     const observer = new ResizeObserver(update);
@@ -219,6 +367,30 @@ export function InventoryPage() {
       scroller.removeEventListener("scroll", update);
     };
   }, [tab]);
+
+  /* Default sort: SKU ascending, with its persistent indicator. The shared
+     DataGrid (read-only) owns its sorting state and exposes no initial-sort
+     prop, so the default is established the way a user would set it — one
+     synthetic click on the SKU header — and only while no column shows an
+     active sort arrow (a real svg inside a header button), so a sort the user
+     picked is never overridden. It waits for rows: on an empty grid TanStack
+     has no first value to type-sniff, resolves the toggle direction to desc,
+     and the default would land on Z→A. The ref keeps it to one application
+     per tab (StrictMode double-invokes effects in dev, which would otherwise
+     toggle asc → desc). */
+  React.useEffect(() => {
+    if (loading || rows.length === 0) return;
+    if (sortDefaultedForTab.current === tab) return;
+    sortDefaultedForTab.current = tab;
+    const host = gridShellRef.current;
+    if (!host) return;
+    const buttons = Array.from(
+      host.querySelectorAll<HTMLButtonElement>("thead th button")
+    );
+    const hasActiveSort = buttons.some((button) => button.querySelector("svg"));
+    if (hasActiveSort) return;
+    buttons.find((button) => button.textContent?.trim() === "SKU")?.click();
+  }, [tab, loading, rows]);
 
   /* reset paging + selection whenever the result set changes shape */
   React.useEffect(() => {
@@ -329,10 +501,10 @@ export function InventoryPage() {
         tabs={VIEWS.map((view) => ({
           key: view,
           label: TAB_LABELS[view],
-          /* ATP shares Total Inventory's product count, and an identical
-             "70 / 70" badge pair reads as a duplicated number — so the ATP
-             tab carries no count badge. */
-          count: view === "atp" ? undefined : counts[view],
+          /* Every sibling tab follows one pattern: label + gray count badge.
+             ATP's badge is its own row count (one row per promisable
+             product), fetched like the others. */
+          count: counts[view],
         }))}
       />
       <div

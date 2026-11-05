@@ -10,7 +10,7 @@ import { PoDetail, type PoDetailData } from "@/components/receiving/po-detail";
 /**
  * Presentation shim for seeded demo data: when every line on an in-progress PO
  * reads "Partial", the page looks synthetic. Rebalance received units across
- * lines — zeroing one line (Open) and completing the last (Complete) — while
+ * lines — zeroing one line (Open) and completing the last (Completed) — while
  * preserving the PO's total received quantity so the progress card, line
  * totals, and received value all stay reconciled. Returns new objects; the
  * repository rows are never mutated. Falls back to the original lines whenever

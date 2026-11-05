@@ -30,7 +30,7 @@ const ALL = "all";
 
 function dimensionValue(row: JobsTableRow, dim: JobDimension): string {
   if (dim === "type") return row.jobType;
-  if (dim === "status") return "In Progress";
+  if (dim === "status") return row.status;
   return "Standard";
 }
 
@@ -57,6 +57,18 @@ function SummaryStat({ label, value }: { label: string; value: number }) {
 }
 
 function PercentCell({ percent }: { percent: number }) {
+  // Progress bars only earn their place once work has started; a run of
+  // identical empty bars with "0%" reads as dead repetition, so not-started
+  // rows collapse to an em-dash aligned under the percent column.
+  if (percent <= 0) {
+    return (
+      <div className="flex items-center justify-end gap-2">
+        <span aria-label="Not started" className="w-9 text-right text-[12px] text-faint">
+          —
+        </span>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center justify-end gap-2">
       <div className="h-1 w-20 overflow-hidden rounded-full bg-border">
@@ -79,7 +91,13 @@ export function JobsCard({ summary, rows }: JobsCardProps) {
   const [dimension, setDimension] = React.useState<JobDimension>("priority");
   const [filter, setFilter] = React.useState<string>(ALL);
 
-  const chips = React.useMemo(() => chipValues(rows, dimension), [rows, dimension]);
+  // A facet value whose count equals the "All" count is informationally
+  // identical to "All" (single-value facet), so it is suppressed rather than
+  // rendered as a redundant twin chip (e.g. "All 15" + "Standard 15").
+  const chips = React.useMemo(
+    () => chipValues(rows, dimension).filter((chip) => chip.count < rows.length),
+    [rows, dimension]
+  );
   const visible = React.useMemo(
     () => (filter === ALL ? rows : rows.filter((r) => dimensionValue(r, dimension) === filter)),
     [rows, dimension, filter]
@@ -115,13 +133,17 @@ export function JobsCard({ summary, rows }: JobsCardProps) {
               aria-selected={isActive}
               onClick={() => selectDimension(d.key)}
               className={cn(
-                "-mb-px border-b-2 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-[0.04em] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                isActive
-                  ? "border-primary text-primary"
-                  : "border-transparent text-faint hover:border-border-strong hover:text-secondary"
+                "relative pb-2 pt-1 text-[11px] font-semibold uppercase tracking-[0.04em] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                isActive ? "text-primary" : "text-faint hover:text-secondary"
               )}
             >
               {d.label}
+              {/* 2px selected indicator painted over the tab row's 1px hairline
+                  (-bottom-px), per enterprise tab convention. Absolutely
+                  positioned so it cannot be swallowed by flex margin collapsing. */}
+              {isActive ? (
+                <span aria-hidden className="absolute inset-x-0 -bottom-px h-0.5 bg-primary" />
+              ) : null}
             </button>
           );
         })}
@@ -178,9 +200,10 @@ export function JobsCard({ summary, rows }: JobsCardProps) {
                     >
                       {job.code}
                     </Link>
+                    {/* Every row keeps the same two-segment "Type · Assignee"
+                        pattern; unassigned jobs say so instead of truncating. */}
                     <p className="text-[11px] leading-4 text-faint">
-                      {job.jobType}
-                      {job.assigneeName ? ` · ${job.assigneeName}` : ""}
+                      {job.jobType} · {job.assigneeName ?? "Unassigned"}
                     </p>
                   </td>
                   <td className="px-4 py-1.5 text-right text-[13px] tabular-nums text-body">

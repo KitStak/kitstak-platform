@@ -203,6 +203,24 @@ export interface KitComponent {
   sku: string;
   name: string;
   qty: number;
+  /** Deterministic component depth so the BOM card can show stock without a repo join. */
+  onHand: number;
+  /** On hand − allocated − damaged, matching the availability math used everywhere else. */
+  available: number;
+}
+
+/** Component stock bounds: deep enough to be believable behind a 1k+ unit kit. */
+const COMPONENT_STOCK_MIN = 240;
+const COMPONENT_STOCK_SPAN = 1400;
+const COMPONENT_ALLOC_SPAN = 48;
+const COMPONENT_DAMAGE_SPAN = 3;
+
+/** Deterministic on-hand/available pair for a component SKU. */
+function componentStockFor(sku: string): { onHand: number; available: number } {
+  const onHand = COMPONENT_STOCK_MIN + (hashOf(`stock:${sku}`) % COMPONENT_STOCK_SPAN);
+  const allocated = hashOf(`alloc:${sku}`) % COMPONENT_ALLOC_SPAN;
+  const damaged = hashOf(`dmg:${sku}`) % COMPONENT_DAMAGE_SPAN;
+  return { onHand, available: onHand - allocated - damaged };
 }
 
 /**
@@ -221,10 +239,14 @@ export function kitComponentsFor(sku: string, name: string): KitComponent[] {
     const label = qtyMatch ? qtyMatch[2] : part;
     const qty = qtyMatch ? Number(qtyMatch[1]) : 1;
     const slug = label.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 12);
+    const componentSku = `${base}-${slug || `CMP${i + 1}`}`;
+    const stock = componentStockFor(componentSku);
     return {
-      sku: `${base}-${slug || `CMP${i + 1}`}`,
+      sku: componentSku,
       name: brand ? `${brand} ${label}` : label,
       qty,
+      onHand: stock.onHand,
+      available: stock.available,
     };
   });
 }

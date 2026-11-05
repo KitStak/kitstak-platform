@@ -117,8 +117,21 @@ for (const p of paths) {
     p.replaceAll("/", "_").replaceAll("?", "-").replaceAll("=", "-").replace(/^_/, "") ||
     "home";
   await page.goto(`${BASE}${p}`, { waitUntil: "networkidle" });
+  // Hide the Next.js devtools overlay (<nextjs-portal>): its floating
+  // "N Issues"/insight pill is injected into every dev-mode page and
+  // `devIndicators: false` in next.config.ts does not suppress it.
+  await page.addStyleTag({ content: "nextjs-portal{display:none!important}" });
   await waitForRealContent(p);
+  /* The virtual mouse stays wherever the last click left it (the login submit
+     button, mid-viewport), so after navigation it hovers whatever grid row
+     lands under that point — the capture then shows one phantom-hovered
+     (shaded) row (verified: the same row renders white in a live browser with
+     no hover). Park the mouse at the viewport origin before every capture. */
+  await page.mouse.move(0, 0);
   await page.waitForTimeout(SETTLE_MS);
+  // Belt and braces: drop the portal node too, in case it mounted after the
+  // style tag was attached.
+  await page.evaluate(() => document.querySelector("nextjs-portal")?.remove());
   const file = path.join(outDir, `${name}.png`);
   // fullPage: the viewport-only capture clipped below-the-fold cards (e.g. the
   // dashboard's rank cards mid-row and the Jobs card), making them unreviewable.

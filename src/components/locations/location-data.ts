@@ -11,9 +11,12 @@ import type {
  * near-identical utilization on every row, a single location type per
  * zone, and every bin active. Until that is fixed upstream, these helpers
  * derive deterministic, plausible values locally by hashing the location
- * code: utilization spreads across roughly 8–97% with a few empty bins and
- * a few critically full ones, capacities vary per bin, a small share of
- * bins carry Bulk/Staging roles, and a few bins read as inactive.
+ * code: each row's utilization is biased toward its zone's target (with a
+ * deterministic spread, a few empty bins and a few critically full ones),
+ * capacities vary per bin, a small share of bins carry Bulk/Staging roles,
+ * and a few bins read as inactive. Zone summary cards aggregate these same
+ * normalized rows (sum stored / sum capacity), so cards and grid always
+ * agree to within rounding.
  */
 
 /**
@@ -28,8 +31,11 @@ export interface LocationDisplayRow extends Omit<LocationListRow, "type"> {
   type: LocationDisplayType;
 }
 
-const MIN_UTILIZATION = 0.08;
-const MAX_UTILIZATION = 0.97;
+/** Per-row utilization clamps around the zone target. */
+const MIN_UTILIZATION = 0.05;
+const MAX_UTILIZATION = 0.99;
+/** Full width of the deterministic per-row spread around a zone target. */
+const UTILIZATION_SPREAD = 0.35;
 /** A small share of bins reads as empty (0 stored, 0 SKUs, em-dash bar). */
 const EMPTY_BIN_RATE = 0.05;
 /** A small share of bins is deactivated (gray dot + "No"). */
@@ -66,13 +72,28 @@ const TYPE_CAPACITY_OPTIONS: Record<string, number[]> = {
   Damaged: [100, 150, 200],
 };
 
-/** Primary storage zones get curated, distinct utilization targets. */
+/**
+ * Primary storage zones bias their rows toward curated, distinct
+ * utilization targets. The zone cards no longer read this map directly:
+ * they aggregate the normalized rows, which are centered on these targets.
+ */
 const ZONE_TARGET_UTILIZATION: Record<string, number> = {
   A: 0.92,
   B: 0.78,
   C: 0.64,
   D: 0.41,
 };
+
+/** Zones without a curated target (RECV, RET, SHIP) center here. */
+const DEFAULT_ZONE_TARGET_UTILIZATION = 0.52;
+
+function zoneTargetUtilization(zone: string): number {
+  return ZONE_TARGET_UTILIZATION[zone] ?? DEFAULT_ZONE_TARGET_UTILIZATION;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
 
 /**
  * FNV-1a 32-bit hash with a murmur3-style finalizer for deterministic
@@ -143,9 +164,12 @@ function normalizeLocationRow(row: LocationListRow): LocationDisplayRow {
   if (hash01(`free:${row.code}`) < EMPTY_BIN_RATE) {
     return { ...row, type, capacityUnits, isActive, storedUnits: 0, skuCount: 0 };
   }
-  const utilization =
-    MIN_UTILIZATION +
-    (MAX_UTILIZATION - MIN_UTILIZATION) * hash01(`util:${row.code}`);
+  const utilization = clamp(
+    zoneTargetUtilization(row.zone) +
+      (hash01(`util:${row.code}`) - 0.5) * UTILIZATION_SPREAD,
+    MIN_UTILIZATION,
+    MAX_UTILIZATION
+  );
   return {
     ...row,
     type,
@@ -157,9 +181,9 @@ function normalizeLocationRow(row: LocationListRow): LocationDisplayRow {
 
 /**
  * Normalizes a page of rows: per-row utilization hashed from the location
- * code spreads across ~8–97% (a few empty, a few above 90%), capacities
- * vary per bin, types vary by zone and level (with occasional Bulk and
- * Staging roles), and a few bins read as inactive.
+ * code spreads around the zone's target (a few empty, a few critically
+ * full), capacities vary per bin, types vary by zone and level (with
+ * occasional Bulk and Staging roles), and a few bins read as inactive.
  */
 export function normalizeLocationRows(
   rows: LocationListRow[]
@@ -168,23 +192,35 @@ export function normalizeLocationRows(
 }
 
 /**
- * Gives each zone a distinct, plausible utilization. Curated targets cover
- * the primary storage zones; other zones keep their server-reported ratio
- * when it is sane and fall back to a deterministic derived value otherwise.
+ * Builds the zone summary cards from the same normalized rows the grid
+ * renders: per zone, sum stored / sum capacity over every bin. Because row
+ * utilization is biased toward the zone target, each card lands near its
+ * curated value while agreeing with the visible rows to within rounding.
  */
-export function normalizeZoneSummaries(
-  zones: ZoneSummaryRow[]
+export function summarizeZonesFromRows(
+  rows: LocationDisplayRow[]
 ): ZoneSummaryRow[] {
-  return zones.map((zone) => {
-    const capacity = Math.max(zone.capacityUnits, 1);
-    const serverRatio = zone.storedUnits / capacity;
-    const curated = ZONE_TARGET_UTILIZATION[zone.zone];
-    const ratio =
-      curated ??
-      (serverRatio < 0.99
-        ? serverRatio
-        : MIN_UTILIZATION +
-          (MAX_UTILIZATION - MIN_UTILIZATION) * hash01(`zone:${zone.zone}`));
-    return { ...zone, storedUnits: Math.round(capacity * ratio) };
-  });
+  const byZone = new Map<string, ZoneSummaryRow>();
+  for (const row of rows) {
+    const current = byZone.get(row.zone);
+    byZone.set(
+      row.zone,
+      current
+        ? {
+            ...current,
+            binCount: current.binCount + 1,
+            capacityUnits: current.capacityUnits + row.capacityUnits,
+            storedUnits: current.storedUnits + row.storedUnits,
+          }
+        : {
+            zone: row.zone,
+            binCount: 1,
+            capacityUnits: row.capacityUnits,
+            storedUnits: row.storedUnits,
+          }
+    );
+  }
+  return Array.from(byZone.values()).sort((a, b) =>
+    a.zone.localeCompare(b.zone)
+  );
 }

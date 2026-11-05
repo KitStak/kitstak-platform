@@ -58,8 +58,10 @@ export const totalColumns: ColumnDef<TotalInventoryRow, unknown>[] = [
   {
     accessorKey: "clientName",
     header: "Client",
+    /* 116px content + 2×12px cell padding ≈ a 140px column, trimmed from
+       ~170px so more of the right-hand numeric columns fit at 1440. */
     cell: ({ row }) => (
-      <span className="block max-w-[150px] truncate text-secondary">
+      <span className="block max-w-[116px] truncate text-secondary">
         {row.original.clientName}
       </span>
     ),
@@ -78,8 +80,10 @@ export const totalColumns: ColumnDef<TotalInventoryRow, unknown>[] = [
   {
     accessorKey: "productName",
     header: "Product Name",
+    /* 240px floor with ellipsis (truncate): long names clip in-cell with an
+       ellipsis instead of pushing the reorder columns further off-screen. */
     cell: ({ row }) => (
-      <span className="block max-w-[260px] truncate text-body">
+      <span className="block min-w-[240px] max-w-[240px] truncate text-body">
         {row.original.productName}
       </span>
     ),
@@ -153,10 +157,14 @@ export const totalColumns: ColumnDef<TotalInventoryRow, unknown>[] = [
   {
     id: "reorderPoint",
     header: "Reorder Point",
-    size: 96,
+    /* 120px floor (header width + gutters) so when the grid clips at the
+       right viewport edge the cut lands on the column gutter, never through
+       a digit; the cell enforces the same floor (120 − 2×12px cell padding). */
+    size: 120,
+    minSize: 120,
     accessorFn: (row) => deriveReorderPoint(row.sku),
     cell: ({ row }) => (
-      <div className="text-right tabular-nums text-secondary">
+      <div className="min-w-[96px] text-right tabular-nums text-secondary">
         {formatNumber(deriveReorderPoint(row.original.sku))}
       </div>
     ),

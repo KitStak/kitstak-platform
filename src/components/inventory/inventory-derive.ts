@@ -63,6 +63,59 @@ export function deriveUom(sku: string, category: string, isKit: boolean): string
   return UOM_BY_CATEGORY[deriveDisplayCategory(sku, category)] ?? "Each";
 }
 
+/**
+ * Available-to-pick stock: on hand − allocated − damaged. The inventory
+ * repository (read-only, shared) still reports onHand − allocated; damaged
+ * units are physically present but cannot be promised or picked, so they are
+ * subtracted here before the grid renders, sorts, or exports the value.
+ */
+export function deriveAvailable(
+  onHand: number,
+  allocated: number,
+  damaged: number
+): number {
+  return onHand - allocated - damaged;
+}
+
+/**
+ * Demand-pattern allocation overrides, keyed by SKU.
+ *
+ * The seeded order book allocates ~1–3% of on hand to every product — one
+ * formula across all 15 visible rows, so no low-stock state can ever fire. A
+ * few SKUs carry a pinned allocation *ratio* instead (the share of on-hand
+ * units committed to open orders): two fast movers with heavy-but-healthy
+ * allocation, and three near-sellouts whose available drops below their
+ * reorder point so the BELOW REORDER column shows real signal on the default
+ * page. A ratio (not a unit count) keeps every stock view consistent: the
+ * product-level rows and each per-location row derive from the same share, so
+ * location rows still sum to (±rounding) the product total.
+ */
+const ALLOCATION_RATIO_BY_SKU: Record<string, number> = {
+  // Fast movers mid-campaign — heavily allocated, still above reorder point.
+  "APX-TEE-BLK-M": 0.3328, // ≈412 of 1,238 on hand → 823 available
+  "APX-TEE-WHT-L": 0.2036, // ≈268 of 1,316 on hand
+  // Near-sellouts — available falls below the derived reorder point ("Low").
+  "APX-TEE-BLK-XL": 0.9813, // ≈947 of 965 → 17 available < reorder point 20
+  "APX-TEE-WHT-M": 0.9632, // ≈732 of 760 → 27 available < reorder point 35
+  "APX-TEE-WHT-S": 0.9585, // ≈1,108 of 1,156 → 45 available < reorder point 55
+};
+
+/**
+ * Allocated units for a stock row, after demand-pattern overrides. Clamped so
+ * the derived available (onHand − allocated − damaged) can never go negative,
+ * whatever the seed data does. Rows without an override pass through.
+ */
+export function deriveAllocated(
+  sku: string,
+  serverAllocated: number,
+  onHand: number,
+  damaged = 0
+): number {
+  const ratio = ALLOCATION_RATIO_BY_SKU[sku];
+  if (ratio === undefined) return serverAllocated;
+  return Math.min(Math.round(onHand * ratio), Math.max(onHand - damaged, 0));
+}
+
 export function deriveReorderPoint(sku: string): number {
   return MIN_REORDER_POINT + (skuSeed(sku) % REORDER_POINT_STEPS) * REORDER_POINT_STEP_SIZE;
 }
