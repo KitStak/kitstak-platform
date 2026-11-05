@@ -34,9 +34,9 @@ function TrackingNumber({ value }: { value: string | null }) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[12px] font-semibold text-body">Tracking Number</span>
+      <span className="text-[12px] font-medium text-body">Tracking Number</span>
       <div className="flex items-center gap-1.5">
-        <div className="flex h-8 min-w-0 flex-1 items-center rounded-md border border-border-strong/50 bg-surface-sunken px-2.5">
+        <div className="flex h-9 min-w-0 flex-1 items-center rounded-md border border-border-strong/50 bg-surface-sunken px-2.5">
           {value ? (
             <span className="truncate font-mono text-[12px] tracking-tight text-body">
               {value}

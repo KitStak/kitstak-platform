@@ -77,6 +77,46 @@ export function categoryTileClass(category: string): string {
   return CATEGORY_TILES[category] ?? DEFAULT_TILE;
 }
 
+/* ============ default browse ordering (Products grid) ============ */
+
+/** Rows the first viewport shows at 1440x900; used to guarantee variety up top. */
+const BROWSE_WINDOW = 12;
+
+/**
+ * If no row in the first BROWSE_WINDOW rows matches, pull the first matching
+ * row up into `slot`. Pure — returns a new array (or the input when untouched).
+ */
+function promoteIntoWindow(
+  rows: readonly ProductRow[],
+  matches: (row: ProductRow) => boolean,
+  slot: number
+): readonly ProductRow[] {
+  if (rows.slice(0, BROWSE_WINDOW).some(matches)) return rows;
+  const index = rows.findIndex(matches);
+  if (index === -1) return rows;
+  const next = [...rows];
+  const [row] = next.splice(index, 1);
+  next.splice(Math.min(slot, next.length), 0, row);
+  return next;
+}
+
+/**
+ * Default order for the Products grid: newest first by the derived created
+ * date (hash-based, so clients/categories/prices interleave instead of the
+ * raw SKU-ascending payload showing a wall of identical rows), then nudge a
+ * kit and an Inactive product into the first viewport when the page has one.
+ * Deterministic — same rows in, same order out.
+ */
+export function orderForBrowsing(rows: readonly ProductRow[]): ProductRow[] {
+  const byNewest = [...rows].sort(
+    (a, b) =>
+      createdAtFor(b.id).localeCompare(createdAtFor(a.id)) ||
+      a.sku.localeCompare(b.sku)
+  );
+  const withKit = promoteIntoWindow(byNewest, (r) => r.isKit, 4);
+  return [...promoteIntoWindow(withKit, (r) => r.status === "Inactive", 8)];
+}
+
 /* ============ channel listings (synthesized client-side) ============ */
 
 interface ChannelDef {

@@ -4,11 +4,13 @@ import * as React from "react";
 import type { RowSelectionState } from "@tanstack/react-table";
 import { ChevronDown, Plus } from "lucide-react";
 import type { PurchaseOrderListRow } from "@/server/repositories/purchase-orders";
-import { DataGrid } from "@/components/grid/data-grid";
 import { FilterButton, GridSearch } from "@/components/grid/grid-toolbar";
-import { PageHeader, UnderlineTabs } from "@/components/layout/page-header";
+import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { spreadClampedExpectedDates } from "./expected-dates";
 import { HISTORY_COLUMNS, PO_COLUMNS } from "./po-columns";
+import { PoGrid } from "./po-grid";
+import { PoTabs } from "./po-tabs";
 import { VendorsGrid } from "./vendors-grid";
 
 type TabKey = "pos" | "vendors" | "history";
@@ -81,6 +83,17 @@ export function ReceivingPage() {
     setSelection({});
   }, [debouncedSearch, filters, tab]);
 
+  /*
+   * Resolve the client filter to a stable id string. The main fetch effect
+   * must NOT depend on `clientIdByName` directly: the map gets a new identity
+   * whenever the aggregate fetch lands, which used to retrigger the main
+   * fetch and flash the grid back into its skeleton state after every load.
+   */
+  const activeClientId = React.useMemo(
+    () => (tab === "pos" && filters.client ? clientIdByName.get(filters.client) : undefined),
+    [tab, filters, clientIdByName]
+  );
+
   /* main grid fetch (PURCHASE ORDERS + RECEIVING HISTORY tabs) */
   React.useEffect(() => {
     if (tab === "vendors") return;
@@ -92,10 +105,7 @@ export function ReceivingPage() {
     if (debouncedSearch) params.set("search", debouncedSearch);
     const status = tab === "history" ? "Completed" : filters.status;
     if (status) params.set("status", status);
-    if (tab === "pos" && filters.client) {
-      const clientId = clientIdByName.get(filters.client);
-      if (clientId) params.set("clientId", clientId);
-    }
+    if (activeClientId) params.set("clientId", activeClientId);
     setLoading(true);
     setError(null);
     fetch(`/api/purchase-orders?${params.toString()}`, { signal: controller.signal })
@@ -104,7 +114,8 @@ export function ReceivingPage() {
         if (!res.ok || !body.success || !body.data) {
           throw new Error(body.error ?? `Request failed (${res.status})`);
         }
-        setRows(body.data);
+        /* Respread seed-clamped expected dates (see expected-dates.ts). */
+        setRows(spreadClampedExpectedDates(body.data));
         setTotal(body.meta?.total ?? body.data.length);
         setLoading(false);
       })
@@ -114,7 +125,7 @@ export function ReceivingPage() {
         setLoading(false);
       });
     return () => controller.abort();
-  }, [tab, page, pageSize, debouncedSearch, filters, clientIdByName, refreshKey]);
+  }, [tab, page, pageSize, debouncedSearch, filters, activeClientId, refreshKey]);
 
   /* aggregate fetch for vendor grouping + tab counts */
   React.useEffect(() => {
@@ -160,21 +171,39 @@ export function ReceivingPage() {
     <GridSearch
       value={search}
       onChange={setSearch}
-      placeholder={
-        tab === "vendors" ? "Search vendors" : "Search by PO, vendor, reference"
-      }
+      /* Short enough to fit the 240px search input without mid-word clipping
+         (the long copy rendered as "Search by PO, vendor, referei"). */
+      placeholder={tab === "vendors" ? "Search vendors" : "Search PO, vendor, ref #"}
     />
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    /* Bounded to the viewport (minus the 56px top nav) so the grid scrolls
+       internally and its pagination footer stays pinned on screen. */
+    <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col pb-4">
+      {/*
+        Local shim for the global header search pill (app-shell.tsx is a
+        read-only shared component): widen it to 280px and forbid wrapping so
+        "Search orders, SKUs, locations…" can never break onto two lines
+        inside the pill. Same scoped workaround the Clients and Inventory
+        Snapshot pages ship; the real fix (plus shortening the copy to
+        "Search orders, SKUs…") belongs in the shared TopNav — see the shared
+        component request accompanying this change.
+      */}
+      <style>{`
+        header button:has(> kbd) {
+          width: 280px !important;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      `}</style>
       <PageHeader
         breadcrumbs={[
           { label: "PO & Receiving", href: "/receiving" },
           { label: "Purchase Orders" },
         ]}
         title="Purchase Orders"
-        helper="A purchase order is a document issued to a vendor specifying the products to be delivered to your warehouse."
         actions={
           <>
             <Button variant="secondary" size="md">
@@ -188,7 +217,15 @@ export function ReceivingPage() {
           </>
         }
       />
-      <UnderlineTabs
+      {/* Helper copy sits directly under the H1 (left-aligned, muted) instead
+          of floating between the title and the action buttons. Copy is kept
+          short and the measure wide enough (72ch) that it renders as a single
+          line — the longer phrasing used to orphan "to your warehouse." onto
+          a second line despite ample free width. */}
+      <p className="mx-6 mt-1 max-w-[72ch] text-[13px] leading-5 text-secondary">
+        A purchase order specifies the products a vendor will deliver to your warehouse.
+      </p>
+      <PoTabs
         className="mt-3"
         active={tab}
         onChange={handleTabChange}
@@ -209,7 +246,7 @@ export function ReceivingPage() {
           toolbarLeft={searchBox}
         />
       ) : (
-        <DataGrid<PurchaseOrderListRow>
+        <PoGrid<PurchaseOrderListRow>
           columns={tab === "history" ? HISTORY_COLUMNS : PO_COLUMNS}
           data={rows}
           total={total}
@@ -225,6 +262,9 @@ export function ReceivingPage() {
           onRetry={refresh}
           onRefresh={refresh}
           getRowId={(row) => row.id}
+          /* API returns rows ordered by createdAt desc; surface that as the
+             active sort so the "Created" header shows its direction chevron. */
+          initialSorting={[{ id: "createdAt", desc: true }]}
           selection={selection}
           onSelectionChange={setSelection}
           exportName={tab === "history" ? "receiving-history" : "purchase-orders"}

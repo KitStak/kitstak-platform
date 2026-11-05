@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { JobListRow } from "@/server/repositories/jobs";
 
@@ -112,7 +113,108 @@ export function ProgressCell({
   );
 }
 
-/** Link-styled job code (Logiwa renders these as links; no detail page yet). */
+/** Link-styled job code (Logiwa renders these as links; no detail page yet).
+ *  tabular-nums + tracking-normal so job codes and wave numbers — the two
+ *  code columns sitting side by side — set with identical numeral spacing. */
 export function JobCode({ code }: { code: string }) {
-  return <span className="font-medium text-primary">{code}</span>;
+  return (
+    <span className="font-medium tabular-nums tracking-normal text-primary">
+      {code}
+    </span>
+  );
+}
+
+/**
+ * Jobs-local grid search. The shared GridSearch is fixed at 240px and its
+ * placeholder clips mid-phrase with no ellipsis; this variant is 280px wide
+ * and guards the placeholder with nowrap + hidden overflow + ellipsis.
+ */
+export function JobsGridSearch({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="relative">
+      <Search
+        className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint"
+        aria-hidden
+      />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        className="h-8 w-[280px] overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-border-strong/70 bg-surface pl-8 pr-7 text-[13px] text-body transition-colors placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap placeholder:text-faint hover:border-border-strong focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
+      />
+      {value ? (
+        <button
+          type="button"
+          aria-label="Clear search"
+          onClick={() => onChange("")}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-faint transition-colors hover:text-secondary"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+export interface GridOverflowFade {
+  top: number;
+  height: number;
+}
+
+/**
+ * Watches the grid's horizontal scroller (the shared DataGrid's table
+ * wrapper) and reports where to draw a right-edge fade while more columns
+ * remain off-screen; returns null once scrolled fully right or when the
+ * columns fit. Read-only DOM observation — the shared grid is untouched.
+ */
+export function useGridOverflowFade(
+  rootRef: React.RefObject<HTMLDivElement | null>
+): GridOverflowFade | null {
+  const [fade, setFade] = React.useState<GridOverflowFade | null>(null);
+
+  React.useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const table = root.querySelector("table");
+    const scroller = table?.parentElement;
+    if (!table || !scroller) return;
+
+    const update = () => {
+      const hasMoreRight =
+        scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 1;
+      if (!hasMoreRight) {
+        setFade(null);
+        return;
+      }
+      const next: GridOverflowFade = {
+        top:
+          scroller.getBoundingClientRect().top - root.getBoundingClientRect().top,
+        height: scroller.clientHeight,
+      };
+      setFade((prev) =>
+        prev && prev.top === next.top && prev.height === next.height ? prev : next
+      );
+    };
+
+    update();
+    scroller.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(scroller);
+    observer.observe(table);
+    return () => {
+      scroller.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  }, [rootRef]);
+
+  return fade;
 }

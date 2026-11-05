@@ -29,7 +29,7 @@ function ListingStatusChip({ status }: { status: ListingStatus }) {
 export const listingColumns: ColumnDef<ListingRow, unknown>[] = [
   {
     accessorKey: "listingSku",
-    header: "Listing SKU",
+    header: "LISTING SKU",
     cell: ({ row }) => (
       <Link
         href={`/products/${row.original.productId}`}
@@ -42,14 +42,14 @@ export const listingColumns: ColumnDef<ListingRow, unknown>[] = [
   },
   {
     accessorKey: "channel",
-    header: "Channel",
+    header: "CHANNEL",
     cell: ({ row }) => (
       <ChannelBadge channel={row.original.channel} store={row.original.store} />
     ),
   },
   {
     accessorKey: "productName",
-    header: "Product Name",
+    header: "PRODUCT NAME",
     cell: ({ row }) => (
       <span
         className="block max-w-[260px] truncate text-body"
@@ -61,7 +61,7 @@ export const listingColumns: ColumnDef<ListingRow, unknown>[] = [
   },
   {
     accessorKey: "clientName",
-    header: "Client",
+    header: "CLIENT",
     cell: ({ row }) => (
       <span className="block max-w-[140px] truncate text-body" title={row.original.clientName}>
         {row.original.clientName}
@@ -70,14 +70,14 @@ export const listingColumns: ColumnDef<ListingRow, unknown>[] = [
   },
   {
     accessorKey: "masterSku",
-    header: "Master SKU",
+    header: "MASTER SKU",
     cell: ({ row }) => (
       <span className="font-mono text-[12px] text-secondary">{row.original.masterSku}</span>
     ),
   },
   {
     accessorKey: "price",
-    header: "Listing Price",
+    header: "LISTING PRICE",
     size: 100,
     cell: ({ row }) => (
       <div className="text-right tabular-nums text-body">
@@ -87,7 +87,7 @@ export const listingColumns: ColumnDef<ListingRow, unknown>[] = [
   },
   {
     accessorKey: "qtyAvailable",
-    header: "Available Qty",
+    header: "AVAILABLE QTY",
     size: 100,
     cell: ({ row }) => (
       <div
@@ -102,13 +102,13 @@ export const listingColumns: ColumnDef<ListingRow, unknown>[] = [
   },
   {
     accessorKey: "status",
-    header: "Status",
+    header: "STATUS",
     size: 88,
     cell: ({ row }) => <ListingStatusChip status={row.original.status} />,
   },
   {
     accessorKey: "lastSyncedAt",
-    header: "Last Synced",
+    header: "LAST SYNCED",
     cell: ({ row }) => (
       <span className="text-secondary">{formatDateTime(row.original.lastSyncedAt)}</span>
     ),

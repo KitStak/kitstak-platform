@@ -10,9 +10,25 @@
 
 const UOM_BY_CATEGORY: Record<string, string> = {
   Apparel: "Each",
+  Headwear: "Each",
+  Accessories: "Each",
   Coffee: "Each",
   Electronics: "Unit",
 };
+
+/** Headwear product-type segments (dad caps, headbands). */
+const HEADWEAR_SKU_PATTERN = /-(CAP|BND)-/;
+/** Accessory product-type segments (socks, phone cases/screens/grips/mounts, stands). */
+const ACCESSORY_SKU_PATTERN = /-(SOCK|CASE|SCR|GRIP|MNT|STAND)-/;
+
+/** 12oz coffee bags the warehouse receives and counts case-packed; a stable
+ *  explicit set (2–3 SKUs per page) so the UoM column isn't 100% "Each". */
+const CASE_PACKED_SKUS = new Set([
+  "CPL-BAG-ESP-12",
+  "CPL-BAG-MED-12",
+  "HRB-BAG-HSE-12",
+]);
+const CASE_PACKED_UOM = "Case of 12";
 
 const MIN_REORDER_POINT = 10;
 const REORDER_POINT_STEPS = 11; // 10, 15, … 60 — mirrors the seeded 10–60 range
@@ -29,9 +45,22 @@ export function skuSeed(sku: string): number {
   return Math.abs(hash);
 }
 
-export function deriveUom(category: string, isKit: boolean): string {
+/**
+ * Display category refined from the SKU's product-type segment, so the
+ * CATEGORY column doesn't render a uniform "Apparel" stripe: caps/headbands
+ * surface as Headwear and socks/cases/mounts as Accessories. The server's
+ * coarse category is the fallback.
+ */
+export function deriveDisplayCategory(sku: string, category: string): string {
+  if (HEADWEAR_SKU_PATTERN.test(sku)) return "Headwear";
+  if (ACCESSORY_SKU_PATTERN.test(sku)) return "Accessories";
+  return category;
+}
+
+export function deriveUom(sku: string, category: string, isKit: boolean): string {
   if (isKit) return "Kit";
-  return UOM_BY_CATEGORY[category] ?? "Each";
+  if (CASE_PACKED_SKUS.has(sku)) return CASE_PACKED_UOM;
+  return UOM_BY_CATEGORY[deriveDisplayCategory(sku, category)] ?? "Each";
 }
 
 export function deriveReorderPoint(sku: string): number {

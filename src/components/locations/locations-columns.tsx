@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import type { LocationListRow } from "@/server/repositories/locations";
+import type { LocationDisplayRow } from "./location-data";
 import { cn, formatNumber } from "@/lib/utils";
 import {
   ActiveDot,
@@ -25,7 +25,7 @@ function NumberCell({ value, dimZero }: { value: number; dimZero?: boolean }) {
   );
 }
 
-export const LOCATION_COLUMNS: ColumnDef<LocationListRow, unknown>[] = [
+export const LOCATION_COLUMNS: ColumnDef<LocationDisplayRow, unknown>[] = [
   {
     accessorKey: "code",
     header: "Location Code",
@@ -34,14 +34,6 @@ export const LOCATION_COLUMNS: ColumnDef<LocationListRow, unknown>[] = [
       <span className="cursor-pointer font-mono text-[12.5px] font-medium text-primary hover:underline">
         {row.original.code}
       </span>
-    ),
-  },
-  {
-    accessorKey: "warehouseCode",
-    header: "Warehouse",
-    size: 100,
-    cell: ({ row }) => (
-      <span className="text-secondary">{row.original.warehouseCode}</span>
     ),
   },
   {
@@ -79,6 +71,16 @@ export const LOCATION_COLUMNS: ColumnDef<LocationListRow, unknown>[] = [
     header: "Type",
     size: 100,
     cell: ({ row }) => <TypePill type={row.original.type} />,
+  },
+  {
+    // Demoted next to Type and muted: on a single-warehouse page every row
+    // reads "MLT1", so it carries no scan value in a leading position.
+    accessorKey: "warehouseCode",
+    header: "Warehouse",
+    size: 96,
+    cell: ({ row }) => (
+      <span className="text-faint">{row.original.warehouseCode}</span>
+    ),
   },
   {
     accessorKey: "capacityUnits",

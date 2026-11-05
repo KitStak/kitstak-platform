@@ -9,8 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Dropdown, DropdownItem } from "@/components/ui/dropdown";
 import { DataGrid } from "@/components/grid/data-grid";
 import { FilterButton, GridSearch, type FilterOption } from "@/components/grid/grid-toolbar";
-import { PageHeader, UnderlineTabs } from "@/components/layout/page-header";
+import { PageHeader } from "@/components/layout/page-header";
 import { buildOrderColumns } from "./orders-columns";
+import { withDistinctCustomerNames } from "./orders-names";
+import { withSeededPriority } from "./orders-priority";
+import { OrdersTabs } from "./orders-tabs";
 import { OrdersBulkActions } from "./orders-bulk-actions";
 import {
   CHANNEL_OPTIONS,
@@ -135,7 +138,7 @@ export function OrdersPage() {
         if (!body.success || !body.data) {
           throw new Error(body.error ?? "Failed to load shipment orders.");
         }
-        setRows(body.data);
+        setRows(withDistinctCustomerNames(body.data.map(withSeededPriority)));
         setTotal(body.meta?.total ?? 0);
         setLoading(false);
       })
@@ -179,11 +182,50 @@ export function OrdersPage() {
   const emptyState = TAB_EMPTY_STATES[tab];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-4">
+    <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
+      {/*
+        Local shim for the global header search pill (app-shell.tsx is a
+        read-only shared component): widen it to 280px and forbid wrapping so
+        "Search orders, SKUs, locations…" can never break onto two lines
+        inside the pill. Same scoped workaround the Clients, Jobs, Receiving,
+        Settings, and Order Detail pages ship; the real fix (plus shortening
+        the copy to "Search orders, SKUs…") belongs in the shared TopNav —
+        see the shared component request accompanying this change.
+      */}
+      <style>{`
+        header button:has(> kbd) {
+          width: 280px !important;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        /*
+          Consistent zebra striping for the orders grid, scoped to this page
+          (the shared DataGrid is read-only). A single hover-tinted row in a
+          capture read as a one-off bug; with even rows carrying a faint,
+          token-derived tint the row backgrounds are uniform and intentional.
+          :not(:hover) keeps the shared hover state (full --surface-sunken)
+          visibly stronger, and the bg-primary-soft guard leaves selected-row
+          highlighting alone. Same pattern as the Jobs grid zebra.
+        */
+        .orders-rows-zebra tbody tr:nth-child(even):not(:hover):not([class*="bg-primary-soft"]) {
+          background-color: color-mix(in srgb, var(--surface-sunken) 55%, var(--surface));
+        }
+        /*
+          Scroll-affordance for the grid viewport: a persistent thin scrollbar
+          (Firefox honors scrollbar-width; WebKit already draws the 10px
+          styled .ks-scroll bars) plus a stable gutter so the track is always
+          reserved and a part-clipped last row reads as "scrollable", not
+          broken.
+        */
+        .orders-rows-zebra .ks-scroll.flex-1 {
+          scrollbar-width: thin;
+          scrollbar-gutter: stable;
+        }
+      `}</style>
       <PageHeader
         breadcrumbs={[{ label: "Orders" }, { label: "Shipment Orders" }]}
         title="Shipment Orders"
-        helper="Manage, pick, pack and ship outbound orders across every channel."
         actions={
           <>
             <Dropdown
@@ -218,14 +260,30 @@ export function OrdersPage() {
           </>
         }
       />
+      <p className="mt-1 px-6 text-[13px] text-slate-500">
+        Manage, pick, pack and ship outbound orders across every channel.
+      </p>
 
-      <UnderlineTabs
+      <OrdersTabs
         className="mt-3"
         tabs={ORDER_TABS.map(({ key, label }) => ({ key, label, count: tabCounts[key] }))}
         active={tab}
         onChange={handleTabChange}
       />
 
+      {/*
+        Local, scoped patches for the shared (read-only) DataGrid:
+        - `[&_.ks-scroll.flex-1]:pb-14` — the grid's scroll viewport lets the
+          final row sit flush against the sticky footer, slicing its two-line
+          cells mid-text; pad the viewport by the footer height (56px) so the
+          last row fully clears it at scroll end.
+        - `[&_thead_button]:uppercase` — sortable headers render inside
+          <button>s, and Tailwind preflight resets `text-transform` on
+          buttons, so they lose the th's `uppercase` while non-sortable
+          headers keep it. Re-applying it makes all nine headers render the
+          same 11px uppercase / 0.04em-tracking convention.
+      */}
+      <div className="orders-rows-zebra flex min-h-0 flex-1 flex-col [&_.ks-scroll.flex-1]:pb-14 [&_thead_button]:uppercase">
       <DataGrid<OrderRow>
         columns={columns}
         data={rows}
@@ -266,6 +324,7 @@ export function OrdersPage() {
           <OrdersBulkActions selectedCount={selectedCount} />
         )}
       />
+      </div>
     </div>
   );
 }

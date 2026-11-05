@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import {
   Globe2,
   type LucideIcon,
@@ -48,9 +47,9 @@ export function ProgressTodayCard({
             <p className="text-[13px] font-semibold text-foreground">Day Shift</p>
             <p className="text-[11px] text-faint">{shiftDate}</p>
           </div>
-          <p className="text-[13px] font-semibold tabular-nums">
-            <span className="text-success">{nowLabel}</span>
-            <span className="text-secondary"> – {shiftEnd}</span>
+          <p className="text-[13px] tabular-nums">
+            <span className="font-semibold text-success">{nowLabel}</span>
+            <span className="font-normal text-faint"> – {shiftEnd}</span>
           </p>
         </div>
         <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-border">
@@ -106,6 +105,20 @@ export interface DonutRow {
   packQty: number;
 }
 
+/** Donut geometry: 180px square per the enterprise-dense card spec. */
+const DONUT_SIZE = 180;
+const DONUT_STROKE = 13;
+const DONUT_RADIUS = (DONUT_SIZE - DONUT_STROKE) / 2;
+const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
+const DONUT_COLOR_IN_PROGRESS = "#2563eb";
+const DONUT_COLOR_OPEN = "#f59e0b";
+
+/** Arc length for a value, normalized against the series sum (never a fixed max). */
+function donutArcLength(value: number, seriesSum: number): number {
+  if (seriesSum <= 0 || value <= 0) return 0;
+  return (value / seriesSum) * DONUT_CIRCUMFERENCE;
+}
+
 export function UnfulfilledCard({
   total,
   rows,
@@ -117,11 +130,11 @@ export function UnfulfilledCard({
   open: number;
   inProgress: number;
 }) {
-  const data = [
-    { name: "Open", value: open },
-    { name: "In Progress", value: inProgress },
-  ];
-  const COLORS = ["#f2a712", "#2e5ce6"];
+  // Value-to-angle mapping normalizes against the series sum so the two
+  // segments always close the ring (e.g. 52 + 11 -> ~297deg + ~63deg).
+  const seriesSum = open + inProgress;
+  const inProgressArc = donutArcLength(inProgress, seriesSum);
+  const openArc = donutArcLength(open, seriesSum);
   const toneClass = {
     foreground: "text-foreground",
     warning: "text-warning",
@@ -129,63 +142,112 @@ export function UnfulfilledCard({
   } as const;
 
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader title="Unfulfilled Orders" info />
-      <div className="flex items-center gap-8 px-6 pb-5">
-        <div className="relative h-44 w-44 shrink-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                dataKey="value"
-                innerRadius={62}
-                outerRadius={74}
-                strokeWidth={0}
-                startAngle={90}
-                endAngle={-270}
-              >
-                {data.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i]} />
-                ))}
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <p className="text-[11px] text-faint">Total Orders</p>
-            <p className="text-[26px] font-bold tabular-nums text-foreground">
-              {formatNumber(total)}
-            </p>
+      {/* CardHeader contributes 12px below the title; pt-1 brings the title-to-content gap to 16px.
+          flex-1 + items-stretch let the table column fill the card's inner height so the
+          rows distribute instead of leaving a dead zone below "In Progress". */}
+      <div className="flex flex-1 items-stretch gap-8 px-6 pb-5 pt-1">
+        <div className="flex shrink-0 flex-col items-center justify-center gap-3">
+          <div className="relative h-[180px] w-[180px]">
+            <svg
+              viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`}
+              className="h-full w-full -rotate-90"
+              role="img"
+              aria-label={`${formatNumber(inProgress)} in progress and ${formatNumber(open)} open of ${formatNumber(total)} unfulfilled orders`}
+            >
+              {/* Neutral track only shows when the series is empty. */}
+              <circle
+                cx={DONUT_SIZE / 2}
+                cy={DONUT_SIZE / 2}
+                r={DONUT_RADIUS}
+                fill="none"
+                stroke="var(--border)"
+                strokeWidth={DONUT_STROKE}
+              />
+              {inProgressArc > 0 ? (
+                <circle
+                  cx={DONUT_SIZE / 2}
+                  cy={DONUT_SIZE / 2}
+                  r={DONUT_RADIUS}
+                  fill="none"
+                  stroke={DONUT_COLOR_IN_PROGRESS}
+                  strokeWidth={DONUT_STROKE}
+                  strokeDasharray={`${inProgressArc} ${DONUT_CIRCUMFERENCE}`}
+                />
+              ) : null}
+              {openArc > 0 ? (
+                <circle
+                  cx={DONUT_SIZE / 2}
+                  cy={DONUT_SIZE / 2}
+                  r={DONUT_RADIUS}
+                  fill="none"
+                  stroke={DONUT_COLOR_OPEN}
+                  strokeWidth={DONUT_STROKE}
+                  strokeDasharray={`${openArc} ${DONUT_CIRCUMFERENCE}`}
+                  strokeDashoffset={-inProgressArc}
+                />
+              ) : null}
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <p className="text-[11px] text-faint">Total Orders</p>
+              <p className="text-[26px] font-bold tabular-nums text-foreground">
+                {formatNumber(total)}
+              </p>
+            </div>
+          </div>
+          {/* Legend carries the data, not just color keys: "In Progress 34 · Open 11". */}
+          <div className="flex items-center justify-center gap-2 text-[12px] text-secondary">
+            <span className="flex items-center gap-1.5">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: DONUT_COLOR_IN_PROGRESS }}
+              />{" "}
+              In Progress{" "}
+              <span className="font-semibold tabular-nums text-foreground">
+                {formatNumber(inProgress)}
+              </span>
+            </span>
+            <span aria-hidden className="text-faint">
+              ·
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: DONUT_COLOR_OPEN }}
+              />{" "}
+              Open{" "}
+              <span className="font-semibold tabular-nums text-foreground">
+                {formatNumber(open)}
+              </span>
+            </span>
           </div>
         </div>
-        <div className="flex flex-1 flex-col divide-y divide-border">
-          <div className="grid grid-cols-[1fr_auto_auto] gap-x-10 pb-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
+        <div className="flex flex-1 flex-col">
+          <div className="grid grid-cols-[1fr_auto_auto] gap-x-10 border-b border-border pb-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
             <span />
             <span className="text-right">Total Orders</span>
             <span className="text-right">Pack Quantity</span>
           </div>
-          {rows.map((row) => (
-            <div
-              key={row.label}
-              className="grid grid-cols-[1fr_auto_auto] items-center gap-x-10 py-2.5"
-            >
-              <span className={cn("text-[13px] font-semibold", toneClass[row.tone])}>
-                {row.label}
-              </span>
-              <span className="text-right text-[15px] font-bold tabular-nums text-foreground">
-                {formatNumber(row.orders)}
-              </span>
-              <span className="text-right text-[15px] font-bold tabular-nums text-foreground">
-                {formatNumber(row.packQty)}
-              </span>
-            </div>
-          ))}
-          <div className="flex items-center gap-4 pt-3 text-[11px] text-secondary">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-[#2e5ce6]" /> In Progress
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-[#f2a712]" /> Open
-            </span>
+          {/* Rows are flex-1 (min 56px) so Total/Open/In Progress distribute across the
+              card's full inner height; divide-y hairlines span the table's full width. */}
+          <div className="flex flex-1 flex-col divide-y divide-border">
+            {rows.map((row) => (
+              <div
+                key={row.label}
+                className="grid min-h-14 flex-1 grid-cols-[1fr_auto_auto] items-center gap-x-10"
+              >
+                <span className={cn("text-[13px] font-semibold", toneClass[row.tone])}>
+                  {row.label}
+                </span>
+                <span className="text-right text-[15px] font-bold tabular-nums text-foreground">
+                  {formatNumber(row.orders)}
+                </span>
+                <span className="text-right text-[15px] font-bold tabular-nums text-foreground">
+                  {formatNumber(row.packQty)}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -242,13 +304,17 @@ export function RankCard({
   title,
   description,
   rows,
+  totalEntries,
 }: {
   icon?: RankIconName;
   title: string;
   description: string;
   rows: { name: string; percent: number; count: number }[];
+  /** Total number of ranked entries available (rows may be a truncated top-N slice). */
+  totalEntries?: number;
 }) {
   const Icon = RANK_ICONS[icon];
+  const moreCount = Math.max(0, (totalEntries ?? rows.length) - rows.length);
   return (
     <Card className="flex flex-col">
       <div className="flex items-start gap-3 px-5 pt-4 pb-3">
@@ -260,7 +326,7 @@ export function RankCard({
           <p className="text-[11px] leading-4 text-faint">{description}</p>
         </div>
       </div>
-      <div className="mx-5 mb-4 flex flex-col divide-y divide-border border-t border-border">
+      <div className="mx-5 flex flex-col divide-y divide-border border-t border-border">
         {rows.length === 0 ? (
           <p className="py-4 text-center text-[12px] text-faint">No orders in range</p>
         ) : (
@@ -281,6 +347,11 @@ export function RankCard({
             </div>
           ))
         )}
+      </div>
+      <div className="mx-5 mt-auto border-t border-border pb-4 pt-2.5 text-[11px] text-faint">
+        {moreCount > 0
+          ? `+ ${formatNumber(moreCount)} more`
+          : `All ${formatNumber(rows.length)} shown`}
       </div>
     </Card>
   );

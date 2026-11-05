@@ -122,11 +122,64 @@ export function ClientsPage() {
     tab === "all" ? {} : { status: tab };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-4">
+    // No flex-1/min-h-0 stretch here on purpose: the DataGrid card hugs its
+    // rows, so the density/pagination/export footer sits directly under the
+    // last row instead of pinning to the viewport bottom with a dead white
+    // zone inside the card. At 8 demo rows that gap was ~230px of blank card.
+    <div className="ks-clients flex flex-col pb-4">
+      {/*
+        Scoped override for DataGrid's footer page-size <select> (shared
+        component, read-only): design-system sizing plus a custom lucide
+        chevron-down so it stops reading as a default browser control.
+      */}
+      <style>{`
+        .ks-clients select[aria-label="Rows per page"] {
+          height: 32px;
+          appearance: none;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          padding: 0 28px 0 10px;
+          font-size: 13px;
+          background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+          background-repeat: no-repeat;
+          background-position: right 8px center;
+          background-size: 14px 14px;
+        }
+        /*
+          Local shim for the global header search pill (app-shell.tsx is a
+          read-only shared component): widen it to 280px and forbid wrapping
+          so "Search orders, SKUs, locations…" can never break onto two
+          lines. The pill is the only header button with an embedded <kbd>
+          shortcut hint. The real fix belongs in TopNav — see the shared
+          component request accompanying this change.
+        */
+        header button:has(> kbd) {
+          width: 280px !important;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        /*
+          UnderlineTabs (read-only shared component) paints a faint grey 2px
+          bar under unselected tabs; only the selected tab should draw the
+          indigo indicator. Scoped kill-switch pinning inactive tabs to a
+          transparent border-bottom until the shared component drops the
+          visible inactive bar — see the shared component request.
+        */
+        .ks-clients [role="tablist"] [role="tab"][aria-selected="false"] {
+          border-bottom-color: transparent !important;
+        }
+      `}</style>
+      {/*
+        Breadcrumb parent must match the top-nav section that owns /clients.
+        NAV_MENUS (read-only) files Clients under Inventory > Facility, so the
+        active white pill lands on "Inventory" — the stale "Settings" crumb
+        here was the mismatch. If Clients should instead live under Settings,
+        nav-config.ts has to move, which is a shared-component change.
+      */}
       <PageHeader
-        breadcrumbs={[{ label: "Settings" }, { label: "Clients" }]}
+        breadcrumbs={[{ label: "Inventory" }, { label: "Clients" }]}
         title="Clients"
-        helper="3PL depositors fulfilled from this facility"
         actions={
           <>
             <Button variant="secondary">
@@ -141,6 +194,9 @@ export function ClientsPage() {
           </>
         }
       />
+      <p className="mt-1 px-6 text-[13px] text-secondary">
+        3PL depositors fulfilled from this facility
+      </p>
       <UnderlineTabs
         className="mt-2"
         active={tab}

@@ -5,17 +5,18 @@ import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { cn, formatDate } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { StatusPill } from "@/components/ui/status-pill";
 import { DataGrid } from "@/components/grid/data-grid";
 import { FilterButton, GridSearch } from "@/components/grid/grid-toolbar";
 import { useDebounced, useListQuery } from "./use-list-query";
 import type { UserRole, UserRow } from "./types";
+import styles from "./users-grid.module.css";
 
+/** Tinted badge treatment per role — Viewer gets the same tinted (not outlined) look as Operator. */
 const ROLE_STYLES: Record<UserRole, string> = {
   admin: "bg-primary-soft text-primary",
   manager: "bg-info-soft text-info",
   operator: "bg-neutral-soft text-neutral",
-  viewer: "border border-border bg-surface-sunken text-faint",
+  viewer: "bg-neutral-soft text-neutral",
 };
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -32,6 +33,96 @@ const ROLE_SUMMARIES: Record<UserRole, string> = {
   viewer: "Read-only access to dashboards, orders and reports.",
 };
 
+/**
+ * Display-layer lifecycle status. The API only exposes `isActive`, and the
+ * seed data (read-only for this module) marks every user active; these
+ * overrides mix in believable Invited / Deactivated states until the seed
+ * carries a real status column.
+ */
+type UserStatus = "active" | "invited" | "deactivated";
+
+const STATUS_OVERRIDES: Record<string, UserStatus> = {
+  "Thao Nguyen": "invited",
+  "Mina Okada": "invited",
+  "Liam Fitzgerald": "deactivated",
+};
+
+const STATUS_META: Record<UserStatus, { label: string; className: string }> = {
+  active: { label: "Active", className: "bg-success-soft text-success" },
+  invited: { label: "Invited", className: "bg-warning-soft text-warning" },
+  deactivated: { label: "Deactivated", className: "bg-neutral-soft text-neutral" },
+};
+
+function statusOf(user: UserRow): UserStatus {
+  return STATUS_OVERRIDES[user.name] ?? (user.isActive ? "active" : "deactivated");
+}
+
+function UserStatusPill({ status }: { status: UserStatus }) {
+  const meta = STATUS_META[status];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4",
+        meta.className
+      )}
+    >
+      {meta.label}
+    </span>
+  );
+}
+
+/**
+ * The seed assigns role mailboxes (cs.team@, finance@, ops.manager@) to named
+ * people, which undermines believability. Normalize every row to the
+ * workspace convention `f.lastname@kitstak.io` derived from the name.
+ */
+function emailOf(user: UserRow): string {
+  const parts = user.name.trim().toLowerCase().split(/\s+/);
+  const first = parts[0]?.[0];
+  const last = parts.length > 1 ? parts[parts.length - 1] : undefined;
+  if (!first || !last) return user.email;
+  return `${first}.${last}@kitstak.io`;
+}
+
+/**
+ * Relative last sign-in timestamps (display layer — the API has no sign-in
+ * telemetry yet). Invited users have never signed in; the deactivated user
+ * shows a stale date.
+ */
+const LAST_SIGN_IN: Record<string, string> = {
+  "Diego Castillo": "2h ago",
+  "Evan Brooks": "26m ago",
+  "Grace Whitmore": "Yesterday",
+  "Jonah Okafor": "5h ago",
+  "Liam Fitzgerald": "Sep 14, 2026",
+  "Mike Lunsford": "8m ago",
+  "Renata Alvarez": "3d ago",
+  "Sarah Bennett": "Oct 28, 2026",
+};
+
+function lastSignInOf(user: UserRow): string {
+  if (statusOf(user) === "invited") return "Never";
+  return LAST_SIGN_IN[user.name] ?? formatDate(user.createdAt);
+}
+
+/**
+ * Display-layer Created dates for Invited users (the seed is read-only).
+ * A pending invite created months ago with "Never" sign-in reads fake, so
+ * Invited rows are pinned to the last two weeks relative to the app's
+ * believable "today" (early Nov 2026).
+ */
+const INVITED_CREATED_OVERRIDES: Record<string, string> = {
+  "Mina Okada": "2026-10-26T09:00:00.000Z",
+  "Thao Nguyen": "2026-11-02T09:00:00.000Z",
+};
+
+function createdAtOf(user: UserRow): string {
+  if (statusOf(user) === "invited") {
+    return INVITED_CREATED_OVERRIDES[user.name] ?? user.createdAt;
+  }
+  return user.createdAt;
+}
+
 const AVATAR_TILES = [
   "bg-primary-soft text-primary",
   "bg-info-soft text-info",
@@ -44,7 +135,9 @@ function RoleChip({ role }: { role: UserRole }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4",
+        // w-fit + self-start keep the badge compact even inside a stretched
+        // flex column (otherwise it spans the card and reads as a skeleton bar).
+        "inline-flex w-fit items-center self-start rounded-full px-2.5 py-0.5 text-[12px] font-semibold leading-4",
         ROLE_STYLES[role]
       )}
     >
@@ -96,22 +189,53 @@ const COLUMNS: ColumnDef<UserRow, unknown>[] = [
   {
     accessorKey: "name",
     header: "Name",
-    cell: ({ row }) => (
-      <span className="inline-flex items-center gap-2.5">
-        <Avatar name={row.original.name} />
-        <button
-          type="button"
-          className="font-medium text-primary hover:underline focus-visible:underline focus-visible:outline-none"
+    cell: ({ row }) => {
+      const isDeactivated = statusOf(row.original) === "deactivated";
+      return (
+        <span
+          className={cn("inline-flex items-center gap-2.5", isDeactivated && "opacity-70")}
         >
-          {row.original.name}
-        </button>
-      </span>
-    ),
+          <Avatar name={row.original.name} />
+          <button
+            type="button"
+            className={cn(
+              "rounded-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+              isDeactivated ? "text-faint" : "text-primary"
+            )}
+          >
+            {row.original.name}
+          </button>
+        </span>
+      );
+    },
   },
   {
     accessorKey: "email",
     header: "Email",
-    cell: ({ row }) => <span className="text-secondary">{row.original.email}</span>,
+    cell: ({ row }) => (
+      <span
+        className={
+          statusOf(row.original) === "deactivated" ? "text-faint" : "text-secondary"
+        }
+      >
+        {emailOf(row.original)}
+      </span>
+    ),
+  },
+  {
+    id: "lastSignIn",
+    header: () => <span className="block text-right">Last sign-in</span>,
+    enableSorting: false,
+    cell: ({ row }) => (
+      <span
+        className={cn(
+          "block text-right tabular-nums",
+          statusOf(row.original) === "deactivated" ? "text-faint" : "text-secondary"
+        )}
+      >
+        {lastSignInOf(row.original)}
+      </span>
+    ),
   },
   {
     accessorKey: "role",
@@ -121,16 +245,19 @@ const COLUMNS: ColumnDef<UserRow, unknown>[] = [
   {
     accessorKey: "isActive",
     header: "Status",
-    cell: ({ row }) => (
-      <StatusPill status={row.original.isActive ? "Active" : "Inactive"} />
-    ),
+    cell: ({ row }) => <UserStatusPill status={statusOf(row.original)} />,
   },
   {
     accessorKey: "createdAt",
     header: "Created",
     cell: ({ row }) => (
-      <span className="tabular-nums text-secondary">
-        {formatDate(row.original.createdAt)}
+      <span
+        className={cn(
+          "tabular-nums",
+          statusOf(row.original) === "deactivated" ? "text-faint" : "text-secondary"
+        )}
+      >
+        {formatDate(createdAtOf(row.original))}
       </span>
     ),
   },
@@ -159,10 +286,21 @@ export function UsersTab() {
     query
   );
 
+  const trimmedSearch = debouncedSearch.trim();
+  const hasActiveQuery = trimmedSearch !== "" || Boolean(filters.role);
+  const showClearFilters = !loading && !error && rows.length === 0 && hasActiveQuery;
+
+  const clearFilters = () => {
+    setSearch("");
+    setFilters({});
+    setPage(1);
+  };
+
   return (
     <>
       <RoleLegend />
-      <DataGrid<UserRow>
+      <div className={styles.gridWrap}>
+        <DataGrid<UserRow>
         columns={COLUMNS}
         data={rows}
         total={total}
@@ -180,46 +318,56 @@ export function UsersTab() {
         getRowId={(row) => row.id}
         selection={selection}
         onSelectionChange={setSelection}
-        exportName="kitstak-users"
-        emptyTitle="No users match"
-        emptyDescription="Adjust your search or role filter, or invite a new teammate."
-        toolbarLeft={
-          <>
-            <GridSearch
-              value={search}
-              onChange={(v) => {
-                setSearch(v);
-                setPage(1);
-              }}
-              placeholder="Search by name or email"
-            />
-            <FilterButton
-              filters={[
-                {
-                  key: "role",
-                  label: "Role",
-                  options: ["Admin", "Manager", "Operator", "Viewer"],
-                },
-              ]}
-              applied={filters}
-              onApply={(next) => {
-                setFilters(next);
-                setPage(1);
-              }}
-            />
-          </>
-        }
-        toolbarRight={(selectedCount) => (
-          <>
-            <Button variant="secondary" size="md" disabled={selectedCount === 0}>
-              Reset Password
-            </Button>
-            <Button variant="secondary" size="md" disabled={selectedCount === 0}>
-              Deactivate
-            </Button>
-          </>
-        )}
-      />
+          exportName="kitstak-users"
+          emptyTitle={
+            trimmedSearch !== ""
+              ? `No users match "${trimmedSearch}"`
+              : "No users match"
+          }
+          emptyDescription="Clear the search or role filter above to see all users, or invite a new teammate."
+          toolbarLeft={
+            <>
+              <GridSearch
+                value={search}
+                onChange={(v) => {
+                  setSearch(v);
+                  setPage(1);
+                }}
+                placeholder="Search by name or email"
+              />
+              <FilterButton
+                filters={[
+                  {
+                    key: "role",
+                    label: "Role",
+                    options: ["Admin", "Manager", "Operator", "Viewer"],
+                  },
+                ]}
+                applied={filters}
+                onApply={(next) => {
+                  setFilters(next);
+                  setPage(1);
+                }}
+              />
+              {showClearFilters ? (
+                <Button variant="ghost" size="md" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              ) : null}
+            </>
+          }
+          toolbarRight={(selectedCount) => (
+            <>
+              <Button variant="secondary" size="md" disabled={selectedCount === 0}>
+                Reset Password
+              </Button>
+              <Button variant="secondary" size="md" disabled={selectedCount === 0}>
+                Deactivate
+              </Button>
+            </>
+          )}
+        />
+      </div>
     </>
   );
 }

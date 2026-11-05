@@ -3,7 +3,9 @@
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
 import { cn, formatDate, formatMoney, formatNumber } from "@/lib/utils";
-import { ChannelBadge, PriorityFlag, StatusPill } from "@/components/ui/status-pill";
+import { ChannelBadge } from "@/components/ui/status-pill";
+import { OrderPriorityPill } from "./order-priority-pill";
+import { OrderStatusPill } from "./order-status-pill";
 import type { OrderRow } from "./orders-types";
 
 const TERMINAL_STATUSES = ["Shipped", "Delivered", "Cancelled"];
@@ -81,13 +83,13 @@ export function buildOrderColumns(): ColumnDef<OrderRow, unknown>[] {
       accessorKey: "status",
       header: "Status",
       size: 130,
-      cell: ({ row }) => <StatusPill status={row.original.status} />,
+      cell: ({ row }) => <OrderStatusPill status={row.original.status} />,
     },
     {
       accessorKey: "priority",
       header: "Priority",
       size: 90,
-      cell: ({ row }) => <PriorityFlag priority={row.original.priority} />,
+      cell: ({ row }) => <OrderPriorityPill priority={row.original.priority} />,
     },
     {
       accessorKey: "totalQuantity",

@@ -12,7 +12,13 @@ import { DataGrid } from "@/components/grid/data-grid";
 import { FilterButton, GridSearch } from "@/components/grid/grid-toolbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { LOCATION_COLUMNS } from "./locations-columns";
+import {
+  normalizeLocationRows,
+  normalizeZoneSummaries,
+  type LocationDisplayRow,
+} from "./location-data";
 import { ZoneSummaryStrip } from "./zone-summary-strip";
+import styles from "./locations-grid.module.css";
 
 interface ListEnvelope<T> {
   success: boolean;
@@ -23,6 +29,14 @@ interface ListEnvelope<T> {
 
 const SEARCH_DEBOUNCE_MS = 300;
 const DEFAULT_PAGE_SIZE = 50;
+
+/**
+ * The repo's turbopack rule pipes every .css file through the Tailwind
+ * loader, which can skip CSS-module name hashing and leave the export map
+ * empty while still injecting the literal selectors. Fall back to the
+ * literal class name so the zebra/fade rules apply either way.
+ */
+const GRID_STYLE_CLASS = styles.locationsGrid ?? "locationsGrid";
 
 /** Mirrors LOCATION_TYPES from the repository (runtime import would pull in the DB). */
 const LOCATION_TYPE_OPTIONS = [
@@ -41,7 +55,7 @@ export function LocationsPage() {
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [zone, setZone] = React.useState("");
   const [type, setType] = React.useState("");
-  const [rows, setRows] = React.useState<LocationListRow[]>([]);
+  const [rows, setRows] = React.useState<LocationDisplayRow[]>([]);
   const [total, setTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -72,7 +86,7 @@ export function LocationsPage() {
         if (!body.success || !body.data) {
           throw new Error(body.error ?? "Failed to load locations.");
         }
-        setRows(body.data);
+        setRows(normalizeLocationRows(body.data));
         setTotal(body.meta?.total ?? body.data.length);
         setLoading(false);
       })
@@ -90,7 +104,7 @@ export function LocationsPage() {
     fetch("/api/locations?view=zones", { signal: controller.signal })
       .then((res) => res.json() as Promise<ListEnvelope<ZoneSummaryRow>>)
       .then((body) => {
-        if (body.success && body.data) setZones(body.data);
+        if (body.success && body.data) setZones(normalizeZoneSummaries(body.data));
         setZonesLoading(false);
       })
       .catch((err: unknown) => {
@@ -123,11 +137,20 @@ export function LocationsPage() {
   ];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-4">
+    // Fixed viewport height (minus the 56px top nav) keeps the grid's
+    // pagination footer pinned on screen instead of below the fold. The
+    // CSS module adds zebra striping and a bottom fade to the shared grid.
+    <div
+      className={`flex h-[calc(100vh-3.5rem)] min-h-0 flex-col pb-4 ${GRID_STYLE_CLASS}`}
+    >
       <PageHeader
-        breadcrumbs={[{ label: "Settings" }, { label: "Locations" }]}
+        // The shared top nav (read-only) derives its active pill from
+        // nav-config, which files /locations under Inventory › Facility —
+        // so the breadcrumb names Inventory to agree with the highlighted
+        // pill. Moving both to Settings needs a nav-config change (see
+        // sharedComponentRequests).
+        breadcrumbs={[{ label: "Inventory" }, { label: "Locations" }]}
         title="Locations"
-        helper="Zones, aisles, bays and bins across MLT1 — Main Fulfillment"
         actions={
           <>
             <Button variant="secondary">
@@ -142,6 +165,9 @@ export function LocationsPage() {
           </>
         }
       />
+      <p className="mt-1 px-6 text-left text-[13px] leading-5 text-secondary">
+        Zones, aisles, bays and bins across MLT1 — Main Fulfillment
+      </p>
       <ZoneSummaryStrip
         zones={zones}
         loading={zonesLoading}
@@ -152,7 +178,7 @@ export function LocationsPage() {
           setSelection({});
         }}
       />
-      <DataGrid<LocationListRow>
+      <DataGrid<LocationDisplayRow>
         columns={LOCATION_COLUMNS}
         data={rows}
         total={total}

@@ -24,7 +24,9 @@ export interface WizardStepperProps {
  * Horizontal 6-step wizard header card (Logiwa "Edit Shipment Order" pattern).
  * Each step: circled icon + "Step N" + name, with a green check when complete
  * or an amber ! when the step needs attention. Clicking switches the section.
+ * Tiles share a fixed 72px height and one-line labels so all six read as one row.
  */
+const TILE_HEIGHT_CLASS = "h-[72px]";
 export function WizardStepper({ steps, activeKey, onSelect, className }: WizardStepperProps) {
   return (
     <div
@@ -46,7 +48,8 @@ export function WizardStepper({ steps, activeKey, onSelect, className }: WizardS
             aria-selected={isActive}
             onClick={() => onSelect(step.key)}
             className={cn(
-              "group relative flex min-w-[150px] flex-1 items-center gap-3 px-4 py-3 text-left outline-none transition-colors",
+              "group relative flex min-w-[140px] flex-1 items-center gap-2.5 px-3 text-left outline-none transition-colors",
+              TILE_HEIGHT_CLASS,
               "hover:bg-surface-sunken/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40",
               isActive && "bg-primary-soft/40"
             )}
@@ -59,7 +62,7 @@ export function WizardStepper({ steps, activeKey, onSelect, className }: WizardS
             ) : null}
             <span
               className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
                 isActive
                   ? "border-primary bg-primary text-white"
                   : step.state === "complete"
@@ -78,7 +81,9 @@ export function WizardStepper({ steps, activeKey, onSelect, className }: WizardS
               <span className="flex items-center gap-1">
                 <span
                   className={cn(
-                    "truncate text-[13px] font-semibold",
+                    // Labels never wrap: every tile keeps a single-line name so
+                    // the state icon sits inline right after the text.
+                    "whitespace-nowrap text-[12px] font-semibold leading-4",
                     isActive
                       ? "text-primary"
                       : step.state === "complete"

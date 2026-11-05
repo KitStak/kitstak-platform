@@ -73,11 +73,29 @@ export interface UnfulfilledView {
   rows: DonutRow[];
 }
 
+/**
+ * Statuses that count as "In Progress" in the Unfulfilled Orders donut.
+ * Exception states (Shortage, On Hold) are deliberately excluded so the card
+ * reconciles with the Order Breakdown card: In Progress = the sum of exactly
+ * these counts (e.g. 7 + 4 + 6 + 7 + 3 = 27), and Total = Open + In Progress.
+ * Enterprise users add these up — an On Hold order is paused, not progressing.
+ */
+const IN_PROGRESS_STATUSES: readonly string[] = [
+  "Ready to Pick",
+  "Picking Started",
+  "Ready to Pack",
+  "Packing Started",
+  "Ready to Ship",
+];
+
 export function buildUnfulfilled(data: DashboardData): UnfulfilledView {
   const statusMap = new Map(data.statusBreakdown.map((s) => [s.status, s.count]));
-  const total = data.unfulfilled.orders;
   const open = statusMap.get("Open") ?? 0;
-  const inProgress = Math.max(0, total - open);
+  const inProgress = IN_PROGRESS_STATUSES.reduce(
+    (sum, status) => sum + (statusMap.get(status) ?? 0),
+    0
+  );
+  const total = open + inProgress;
   // Pack-quantity split: units already picked are "in progress"; the rest are open.
   const inProgressPack = Math.min(data.unfulfilled.pickedUnits, data.unfulfilled.units);
   const openPack = Math.max(0, data.unfulfilled.units - inProgressPack);

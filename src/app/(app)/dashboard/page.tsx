@@ -41,12 +41,18 @@ export default function DashboardPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* The shared PageHeader floats `helper` centered between the H1 and the
+          actions; the subtitle belongs directly under "Dashboard" instead, so it
+          is rendered locally here (left-aligned, 12px, 4px below the H1 row)
+          while the FILTER BY group stays right-aligned on the H1 baseline. */}
       <PageHeader
         breadcrumbs={[{ label: "Dashboard" }]}
         title="Dashboard"
-        helper="Live fulfillment picture across your warehouses"
         actions={<DashboardFilterBar />}
       />
+      <p className="px-6 pt-1 text-[12px] text-secondary">
+        Live fulfillment picture across your warehouses
+      </p>
       <div className="flex-1 space-y-4 px-6 pb-8 pt-4">
         <div className="grid items-stretch gap-4 lg:grid-cols-3">
           <ProgressTodayCard
@@ -73,24 +79,28 @@ export default function DashboardPage() {
             title="Channels"
             description="Order details coming from channels"
             rows={toRankRows(data.channelRank)}
+            totalEntries={data.channelRank.length}
           />
           <RankCard
             icon="users"
             title="Clients"
             description="Client order details and rank"
             rows={toRankRows(data.clientRank)}
+            totalEntries={data.clientRank.length}
           />
           <RankCard
             icon="truck"
             title="Carriers"
             description="Ranking of carriers to which orders are shipped"
             rows={toRankRows(data.carrierRank)}
+            totalEntries={data.carrierRank.length}
           />
           <RankCard
             icon="globe"
             title="Order By Country"
             description="Rank of the regions where orders are shipped"
             rows={toRankRows(data.countryRank)}
+            totalEntries={data.countryRank.length}
           />
         </div>
         <JobsCard

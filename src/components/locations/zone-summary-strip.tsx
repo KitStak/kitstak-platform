@@ -4,7 +4,7 @@ import * as React from "react";
 import type { ZoneSummaryRow } from "@/server/repositories/locations";
 import { cn, formatNumber } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/card";
-import { utilizationPct } from "./location-cells";
+import { utilizationPct, utilizationTone } from "./location-cells";
 
 export interface ZoneSummaryStripProps {
   zones: ZoneSummaryRow[];
@@ -13,9 +13,26 @@ export interface ZoneSummaryStripProps {
   onZoneSelect: (zone: string) => void;
 }
 
-const UTILIZATION_WARNING_PCT = 70;
-const UTILIZATION_DANGER_PCT = 90;
 const SKELETON_CARD_COUNT = 6;
+
+/**
+ * Human-readable card labels. The chip already carries the raw zone code,
+ * so special zones get real names instead of repeating it ("Zone RECV"),
+ * and storage zones get a short role descriptor.
+ */
+const ZONE_LABELS: Record<string, string> = {
+  A: "Zone A — Fast pick",
+  B: "Zone B — Case pick",
+  C: "Zone C — Slow pick",
+  D: "Zone D — Overflow",
+  RECV: "Receiving",
+  RET: "Returns",
+  SHIP: "Shipping",
+};
+
+function zoneLabel(zone: string): string {
+  return ZONE_LABELS[zone] ?? `Zone ${zone}`;
+}
 
 function ZoneCard({
   zone,
@@ -27,12 +44,7 @@ function ZoneCard({
   onSelect: (zone: string) => void;
 }) {
   const pct = utilizationPct(zone.storedUnits, zone.capacityUnits);
-  const tone =
-    pct >= UTILIZATION_DANGER_PCT
-      ? "bg-danger"
-      : pct >= UTILIZATION_WARNING_PCT
-        ? "bg-warning"
-        : "bg-primary";
+  const tone = utilizationTone(pct);
   return (
     <button
       type="button"
@@ -40,7 +52,10 @@ function ZoneCard({
       aria-pressed={active}
       title={`${formatNumber(zone.storedUnits)} of ${formatNumber(zone.capacityUnits)} units stored`}
       className={cn(
-        "flex w-[168px] shrink-0 flex-col gap-2.5 rounded-lg border bg-surface p-3 text-left shadow-xs transition-colors",
+        // flex-1 basis-0 with a 168px floor lets all 7 cards share a 1440px
+        // viewport without clipping; narrower viewports fall back to the
+        // container's horizontal scroll.
+        "flex min-w-[168px] flex-1 basis-0 flex-col gap-2.5 rounded-lg border bg-surface px-3.5 py-3 text-left shadow-xs transition-colors",
         "outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         active
           ? "border-primary bg-primary-soft/40"
@@ -55,8 +70,11 @@ function ZoneCard({
           {zone.zone}
         </span>
         <span className="flex min-w-0 flex-col leading-tight">
-          <span className="text-[12px] font-semibold text-foreground">
-            Zone {zone.zone}
+          <span
+            className="truncate text-[12px] font-semibold text-foreground"
+            title={zoneLabel(zone.zone)}
+          >
+            {zoneLabel(zone.zone)}
           </span>
           <span className="text-[11px] text-faint">
             {formatNumber(zone.binCount)} bins
@@ -66,11 +84,16 @@ function ZoneCard({
       <span className="flex items-center gap-2">
         <span className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-soft">
           <span
-            className={cn("block h-full rounded-full", tone)}
+            className={cn("block h-full rounded-full", tone.bar)}
             style={{ width: `${pct}%` }}
           />
         </span>
-        <span className="w-8 shrink-0 text-right text-[11px] font-medium tabular-nums text-secondary">
+        <span
+          className={cn(
+            "w-8 shrink-0 text-right text-[11px] font-medium tabular-nums",
+            tone.text
+          )}
+        >
           {pct}%
         </span>
       </span>
@@ -93,7 +116,7 @@ export function ZoneSummaryStrip({
           ? Array.from({ length: SKELETON_CARD_COUNT }).map((_, i) => (
               <div
                 key={i}
-                className="flex w-[168px] shrink-0 flex-col gap-2.5 rounded-lg border border-border bg-surface p-3 shadow-xs"
+                className="flex min-w-[168px] flex-1 basis-0 flex-col gap-2.5 rounded-lg border border-border bg-surface px-3.5 py-3 shadow-xs"
               >
                 <div className="flex items-center gap-2.5">
                   <Skeleton className="h-8 w-8 rounded-md" />

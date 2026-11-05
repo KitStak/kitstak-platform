@@ -1,8 +1,9 @@
+"use client";
+
 import * as React from "react";
-import { MapPin, Tag } from "lucide-react";
+import { ChevronRight, MapPin, Tag } from "lucide-react";
 import type { OrderDetailHeader } from "@/server/repositories/orders";
-import { formatDate, formatDateTime } from "@/lib/utils";
-import { PriorityFlag } from "@/components/ui/status-pill";
+import { cn, formatDate, formatDateTime } from "@/lib/utils";
 import { FieldGrid, ReadField, SectionCard } from "./section-card";
 import { warehouseNameOf } from "./order-derive";
 
@@ -11,44 +12,158 @@ export interface OrderSectionProps {
   footer?: React.ReactNode;
 }
 
+const NOTE_MAX_LENGTH = 500;
+const DATE_PLACEHOLDER = "Enter date/time";
+
+/** Logiwa models priority as a numeric stepper defaulting to 0. */
+const PRIORITY_VALUES: Record<string, string> = {
+  None: "0",
+  High: "1",
+  Urgent: "2",
+};
+
+function priorityValueOf(priority: string): string {
+  return PRIORITY_VALUES[priority] ?? "0";
+}
+
+/**
+ * Collapsed-by-default disclosure for the optional scheduling dates. Keeps
+ * the four usually-empty "Enter date/time" rows out of the default reading
+ * path so required content dominates above the fold; pass `defaultOpen`
+ * when a wrapped date carries a value so real data is never hidden.
+ */
+function AdditionalDatesDisclosure({
+  defaultOpen = false,
+  children,
+}: {
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <div className="sm:col-span-2">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full items-center gap-1.5 rounded-md py-1 text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
+      >
+        <ChevronRight
+          className={cn("h-4 w-4 text-faint transition-transform", open && "rotate-90")}
+          aria-hidden
+        />
+        <span className="text-[12px] font-medium text-body">Additional dates</span>
+        <span className="text-[11px] text-faint">
+          Expected delivery, carrier &amp; scheduling — optional
+        </span>
+      </button>
+      {open ? (
+        <div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Note field with an "Enter note" placeholder and a "0 / 500" counter (Logiwa pattern). */
+function NoteField({ note }: { note: string | null }) {
+  const length = note?.length ?? 0;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="flex items-baseline justify-between gap-2">
+        <span className="text-[12px] font-medium text-body">Note</span>
+        <span className="text-[11px] tabular-nums text-faint">
+          {length} / {NOTE_MAX_LENGTH}
+        </span>
+      </span>
+      <div
+        className={cn(
+          "flex h-9 items-center rounded-md border border-border-strong/50 bg-surface-sunken px-2.5 text-[13px]",
+          length > 0 ? "text-body" : "text-faint"
+        )}
+      >
+        <span className="truncate">{note && note.length > 0 ? note : "Enter note"}</span>
+      </div>
+    </div>
+  );
+}
+
 export function OrderDetailsSection({ order, footer }: OrderSectionProps) {
   return (
     <SectionCard
       stepLabel="Step 1"
       title="Order Details"
-      helper="Order identity, dates and handling priority as received from the sales channel."
+      helper="Enter the order details along with mandatory fields to proceed."
       footer={footer}
     >
       <FieldGrid>
-        <ReadField label="Warehouse" value={warehouseNameOf(order.warehouseId)} />
-        <ReadField label="Client" value={order.clientName} />
+        <ReadField
+          label="Warehouse"
+          affordance="select"
+          value={warehouseNameOf(order.warehouseId)}
+        />
+        <ReadField label="Client" affordance="select" value={order.clientName} />
         <ReadField label="Order Code" required value={order.code} />
         <ReadField
           label="Order Type"
           required
+          affordance="select"
           value={order.orderType === "D2C" ? "D2C Order" : "B2B Order"}
         />
-        <ReadField label="Order Date" required value={formatDateTime(order.orderDate)} />
+        <ReadField
+          label="Order Date"
+          required
+          affordance="date"
+          value={formatDateTime(order.orderDate)}
+        />
         <ReadField
           label="Expected Shipment Date"
           required
-          value={order.expectedShipDate ? formatDateTime(order.expectedShipDate) : "—"}
+          affordance="date"
+          placeholder={DATE_PLACEHOLDER}
+          value={order.expectedShipDate ? formatDateTime(order.expectedShipDate) : ""}
         />
         <ReadField
           label="Shipped Date"
-          value={order.shippedAt ? formatDateTime(order.shippedAt) : "—"}
+          affordance="date"
+          placeholder={DATE_PLACEHOLDER}
+          value={order.shippedAt ? formatDateTime(order.shippedAt) : ""}
         />
         <ReadField
           label="Delivered Date"
-          value={order.deliveredAt ? formatDateTime(order.deliveredAt) : "—"}
+          affordance="date"
+          placeholder={DATE_PLACEHOLDER}
+          value={order.deliveredAt ? formatDateTime(order.deliveredAt) : ""}
         />
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[12px] font-semibold text-body">Priority</span>
-          <div className="flex h-8 items-center">
-            <PriorityFlag priority={order.priority} />
-          </div>
-        </div>
-        <ReadField label="Note" value={order.note ?? "—"} />
+        <AdditionalDatesDisclosure>
+          <ReadField
+            label="Expected Delivery Date"
+            affordance="date"
+            placeholder={DATE_PLACEHOLDER}
+            value=""
+          />
+          <ReadField
+            label="Carrier Expected Delivery Date"
+            affordance="date"
+            placeholder={DATE_PLACEHOLDER}
+            value=""
+          />
+          <ReadField
+            label="Scheduled Pickup Date"
+            affordance="date"
+            placeholder={DATE_PLACEHOLDER}
+            value=""
+          />
+          <ReadField
+            label="Scheduled Shipment Date"
+            affordance="date"
+            placeholder={DATE_PLACEHOLDER}
+            value=""
+          />
+        </AdditionalDatesDisclosure>
+        <ReadField label="Priority" value={priorityValueOf(order.priority)} />
+        <NoteField note={order.note} />
       </FieldGrid>
     </SectionCard>
   );
@@ -103,7 +218,7 @@ export function OtherInfoSection({ order, footer }: OrderSectionProps) {
       footer={footer}
     >
       <div className="flex flex-col gap-1.5">
-        <span className="text-[12px] font-semibold text-body">Tags</span>
+        <span className="text-[12px] font-medium text-body">Tags</span>
         <div className="flex min-h-8 flex-wrap items-center gap-1.5">
           {tags.map((tag) => (
             <span
@@ -117,7 +232,7 @@ export function OtherInfoSection({ order, footer }: OrderSectionProps) {
         </div>
       </div>
       <div className="mt-4 flex flex-col gap-1.5">
-        <span className="text-[12px] font-semibold text-body">Internal Notes</span>
+        <span className="text-[12px] font-medium text-body">Internal Notes</span>
         <div className="min-h-[72px] rounded-md border border-border-strong/50 bg-surface-sunken px-2.5 py-2 text-[13px] leading-5 text-body">
           {order.note ?? <span className="text-faint">No notes recorded for this order.</span>}
         </div>

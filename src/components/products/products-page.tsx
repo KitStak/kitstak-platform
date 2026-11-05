@@ -4,12 +4,13 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import type { RowSelectionState } from "@tanstack/react-table";
 import { ChevronDown, FileSpreadsheet, FileUp, Plus, Tags, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { DataGrid } from "@/components/grid/data-grid";
 import { FilterButton, GridSearch, type FilterOption } from "@/components/grid/grid-toolbar";
 import { PageHeader, UnderlineTabs } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Dropdown, DropdownItem, DropdownSeparator } from "@/components/ui/dropdown";
-import { synthesizeListings } from "./derive";
+import { orderForBrowsing, synthesizeListings } from "./derive";
 import { listingColumns } from "./listing-columns";
 import { productColumns } from "./product-columns";
 import type { ApiEnvelope, ClientOption, ListingRow, ProductRow } from "./types";
@@ -142,9 +143,17 @@ export function ProductsPage() {
     setSelection({});
   }, [tab, debouncedSearch, clientId, filters.category, filters.status]);
 
+  /*
+   * Default browse order: the API returns SKU-ascending, which fills the
+   * first viewport with near-identical rows (12 tee variants in a row).
+   * Re-order newest-first by the derived created date so page 1 interleaves
+   * clients, categories, prices, kits, and statuses. Deterministic.
+   */
+  const orderedRows = React.useMemo(() => orderForBrowsing(rows), [rows]);
+
   const listings: ListingRow[] = React.useMemo(
-    () => (tab === "listings" ? synthesizeListings(rows) : []),
-    [tab, rows]
+    () => (tab === "listings" ? synthesizeListings(orderedRows) : []),
+    [tab, orderedRows]
   );
   const pagedListings = React.useMemo(
     () => listings.slice((page - 1) * pageSize, page * pageSize),
@@ -163,11 +172,60 @@ export function ProductsPage() {
   const isProducts = tab === "products";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    /*
+     * h-[calc(100dvh-3.5rem)] (viewport minus the h-14 top nav) caps the page
+     * at the fold so the DataGrid's internal scroll region takes over and its
+     * pagination footer stays pinned on screen. The app layout wraps pages in
+     * min-h-screen (grows past the fold), so the cap must live here.
+     */
+    <div
+      className={cn(
+        "flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col",
+        isProducts && "ks-products-actions-rail"
+      )}
+    >
+      {/*
+        Local shim for the global header search pill (app-shell.tsx is a
+        read-only shared component): widen it to 280px and forbid wrapping so
+        "Search orders, SKUs, locations…" can never break onto two lines
+        inside the pill at 800px or 1440px. Same scoped workaround the
+        Orders, Clients, Jobs, Receiving, Settings and Inventory Snapshot
+        pages ship; the real fix (plus shortening the copy to
+        "Search orders, SKUs…") belongs in the shared TopNav — see the shared
+        component request accompanying this change.
+
+        The .ks-products-actions-rail rules style the kebab actions column of
+        the Products grid as a pinned actions rail (the shared DataGrid has
+        no per-column cell/header class hooks): a hairline slate-200 left
+        border separating it from PRICE, plus 8px right padding so the "…"
+        trigger no longer sits flush against the grid's right edge. The
+        :not([colspan]) guard keeps the border off full-width loading/empty/
+        error cells, and the class is only applied on the Products tab so the
+        Listings grid (whose last column is LAST SYNCED, not actions) is
+        untouched.
+      */}
+      <style>{`
+        header button:has(> kbd) {
+          width: 280px !important;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .ks-products-actions-rail thead th:last-child,
+        .ks-products-actions-rail tbody td:last-child:not([colspan]) {
+          border-left: 1px solid var(--color-slate-200, #e2e8f0);
+          padding-right: 8px;
+        }
+      `}</style>
       <PageHeader
         breadcrumbs={[{ label: "Inventory", href: "/inventory" }, { label: "Products" }]}
         title="Products"
-        helper="You can create, edit, or delete your products here."
+        /*
+         * No helper subtitle: PageHeader centers it in the gap between the H1
+         * and the action buttons, where it floats unanchored. The shared
+         * component has no "left of title, baseline-aligned" slot, and the
+         * Logiwa-equivalent copy is noise anyway — dropped per design review.
+         */
         actions={
           <>
             <BulkImportMenu />
@@ -235,7 +293,7 @@ export function ProductsPage() {
           <DataGrid<ProductRow>
             {...shared}
             columns={productColumns}
-            data={rows}
+            data={orderedRows}
             total={total}
             emptyTitle="No products found"
             emptyDescription="Adjust your search or filters, or create a new product to get started."

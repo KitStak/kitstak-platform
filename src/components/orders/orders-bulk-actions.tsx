@@ -61,7 +61,11 @@ export function OrdersBulkActions({ selectedCount }: OrdersBulkActionsProps) {
       <Button
         variant="secondary"
         disabled={disabled}
-        className="text-danger hover:border-danger/40 hover:bg-danger-soft hover:text-danger"
+        className={cn(
+          disabled
+            ? "border-slate-200 text-slate-400 disabled:pointer-events-auto disabled:cursor-not-allowed"
+            : "text-danger hover:border-danger/40 hover:bg-danger-soft hover:text-danger"
+        )}
       >
         <XCircle className="h-3.5 w-3.5" aria-hidden />
         Cancel Orders

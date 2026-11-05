@@ -14,6 +14,8 @@ const TYPE_STYLES: Record<string, string> = {
   Shipping: "bg-success-soft text-success",
   Returns: "bg-warning-soft text-warning",
   Damaged: "bg-danger-soft text-danger",
+  Bulk: "bg-neutral-soft text-neutral",
+  Staging: "bg-info-soft text-info",
 };
 
 export function TypePill({ type }: { type: string }) {
@@ -30,20 +32,45 @@ export function TypePill({ type }: { type: string }) {
   );
 }
 
+/**
+ * Deliberately quiet: the zone repeats on every row of a filtered page, so
+ * it renders as a borderless gray-50 chip at regular weight. Colored zone
+ * treatment is reserved for the zone-letter avatars in the summary cards.
+ */
 export function ZonePill({ zone }: { zone: string }) {
   return (
-    <span className="inline-flex items-center whitespace-nowrap rounded border border-border bg-surface-sunken px-1.5 py-0.5 text-[11px] font-semibold leading-4 text-secondary">
+    <span className="inline-flex items-center whitespace-nowrap rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] font-normal leading-4 text-secondary">
       Zone {zone}
     </span>
   );
 }
 
-const UTILIZATION_WARNING_PCT = 70;
+/** Red is reserved for critically full bins; amber warns; blue is healthy. */
+const UTILIZATION_WARNING_PCT = 75;
 const UTILIZATION_DANGER_PCT = 90;
+
+export interface UtilizationTone {
+  bar: string;
+  text: string;
+}
 
 export function utilizationPct(stored: number, capacity: number): number {
   if (capacity <= 0) return 0;
   return Math.min(100, Math.round((stored / capacity) * 100));
+}
+
+/**
+ * One semantic tone shared by the bar fill and the % text so they never
+ * disagree: danger >=90%, warning 75-89%, primary (blue) below.
+ */
+export function utilizationTone(pct: number): UtilizationTone {
+  if (pct >= UTILIZATION_DANGER_PCT) {
+    return { bar: "bg-danger", text: "text-danger" };
+  }
+  if (pct >= UTILIZATION_WARNING_PCT) {
+    return { bar: "bg-warning", text: "text-warning" };
+  }
+  return { bar: "bg-primary", text: "text-primary" };
 }
 
 export function UtilizationBar({
@@ -53,22 +80,34 @@ export function UtilizationBar({
   stored: number;
   capacity: number;
 }) {
+  // Empty bins (0 stored / 0 SKUs) read as "nothing here" rather than a
+  // loud 0%: an empty track with a muted em dash.
+  if (capacity <= 0 || stored <= 0) {
+    return (
+      <span className="flex w-28 items-center gap-2">
+        <span className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-soft" />
+        <span className="w-8 shrink-0 text-right text-[11px] font-medium text-faint">
+          —
+        </span>
+      </span>
+    );
+  }
   const pct = utilizationPct(stored, capacity);
-  const tone =
-    pct >= UTILIZATION_DANGER_PCT
-      ? "bg-danger"
-      : pct >= UTILIZATION_WARNING_PCT
-        ? "bg-warning"
-        : "bg-primary";
+  const tone = utilizationTone(pct);
   return (
     <span className="flex w-28 items-center gap-2">
       <span className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-soft">
         <span
-          className={cn("block h-full rounded-full", tone)}
+          className={cn("block h-full rounded-full", tone.bar)}
           style={{ width: `${pct}%` }}
         />
       </span>
-      <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-secondary">
+      <span
+        className={cn(
+          "w-8 shrink-0 text-right text-[11px] font-medium tabular-nums",
+          tone.text
+        )}
+      >
         {pct}%
       </span>
     </span>

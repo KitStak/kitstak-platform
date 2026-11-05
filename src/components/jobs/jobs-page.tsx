@@ -45,6 +45,23 @@ export function JobsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/*
+        Local shim for the global header search pill (app-shell.tsx is a
+        read-only shared component): widen it to 280px and forbid wrapping so
+        "Search orders, SKUs, locations…" can never break onto two lines
+        inside the pill at 1440px. Same scoped workaround the Receiving,
+        Clients and Inventory Snapshot pages ship; the real fix (plus
+        shortening the copy to "Search orders, SKUs…") belongs in the shared
+        TopNav — see the shared component request accompanying this change.
+      */}
+      <style>{`
+        header button:has(> kbd) {
+          width: 280px !important;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      `}</style>
       <PageHeader
         breadcrumbs={[{ label: "Fulfillment" }, { label: "Job Management" }]}
         title="Jobs"

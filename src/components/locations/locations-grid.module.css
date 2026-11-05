@@ -1,0 +1,73 @@
+/*
+ * Page-scoped presentation fixes for the shared DataGrid, which is
+ * read-only shared code (see sharedComponentRequests):
+ *
+ * 1. Consistent even-row zebra striping (#F8FAFC in light mode) across the
+ *    whole table, replacing the stray one-off row highlight. Hover and
+ *    row-selection states keep precedence over the zebra tint.
+ * 2. A bottom fade on the grid's scroll viewport so a partially scrolled
+ *    row fades out instead of hard-clipping into a sliver above the
+ *    pagination footer.
+ *
+ * Element and attribute selectors are used for the shared grid's internals
+ * so nothing here needs :global() or edits to read-only files.
+ */
+
+.locationsGrid {
+  --zebra: #f8fafc;
+}
+
+[data-theme="dark"] .locationsGrid {
+  --zebra: #11161f;
+}
+
+/*
+ * Consistent column-header treatment (Logiwa convention): 11px uppercase
+ * with 0.04em tracking in muted gray. The shared grid styles its <th> this
+ * way already, but sortable headers render inside a <button> whose base
+ * styles reset text-transform, leaving only the non-sortable "Utilization"
+ * uppercase. Re-apply to both so every header matches.
+ */
+.locationsGrid thead th,
+.locationsGrid thead th button {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+[data-theme="dark"] .locationsGrid thead th,
+[data-theme="dark"] .locationsGrid thead th button {
+  color: #94a3b8;
+}
+
+/* Even-row zebra across the whole table (skeleton rows included). */
+.locationsGrid tbody tr:nth-child(even) {
+  background-color: var(--zebra);
+}
+
+/* Hover keeps winning over the zebra tint. */
+.locationsGrid tbody tr:hover {
+  background-color: var(--surface-sunken);
+}
+
+/* Selected rows keep their primary-soft highlight over the zebra tint. */
+.locationsGrid tbody tr:has(input:checked) {
+  background-color: color-mix(in srgb, var(--primary-soft) 60%, transparent);
+}
+
+/* Fade the last ~20px of the scroll viewport so no partial row bleeds
+   through above the footer. Matches only the grid body scroller
+   (ks-scroll + flex-1), not the zone strip or dropdown panels. */
+.locationsGrid div[class*="ks-scroll"][class*="flex-1"] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - 20px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - 20px),
+    transparent 100%
+  );
+}

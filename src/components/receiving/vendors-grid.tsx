@@ -4,8 +4,8 @@ import * as React from "react";
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
 import type { PurchaseOrderListRow } from "@/server/repositories/purchase-orders";
-import { DataGrid } from "@/components/grid/data-grid";
 import { formatDate, formatMoney, formatNumber } from "@/lib/utils";
+import { PoGrid } from "./po-grid";
 
 /** One vendor row, aggregated client-side from the PO dataset. */
 export interface VendorRow {
@@ -67,11 +67,13 @@ const VENDOR_COLUMNS: ColumnDef<VendorRow, unknown>[] = [
   {
     accessorKey: "poCount",
     header: "POs",
+    meta: { align: "right" },
     cell: ({ row }) => <span className={numeric}>{formatNumber(row.original.poCount)}</span>,
   },
   {
     accessorKey: "openCount",
     header: "Open POs",
+    meta: { align: "right" },
     cell: ({ row }) =>
       row.original.openCount > 0 ? (
         <span className="block text-right text-[13px] font-medium tabular-nums text-primary">
@@ -84,16 +86,19 @@ const VENDOR_COLUMNS: ColumnDef<VendorRow, unknown>[] = [
   {
     accessorKey: "unitsOrdered",
     header: "Units Ordered",
+    meta: { align: "right" },
     cell: ({ row }) => <span className={numeric}>{formatNumber(row.original.unitsOrdered)}</span>,
   },
   {
     accessorKey: "unitsReceived",
     header: "Units Received",
+    meta: { align: "right" },
     cell: ({ row }) => <span className={numeric}>{formatNumber(row.original.unitsReceived)}</span>,
   },
   {
     accessorKey: "purchaseValue",
     header: "Purchase Value",
+    meta: { align: "right" },
     cell: ({ row }) => <span className={numeric}>{formatMoney(row.original.purchaseValue)}</span>,
   },
   {
@@ -102,7 +107,7 @@ const VENDOR_COLUMNS: ColumnDef<VendorRow, unknown>[] = [
     cell: ({ row }) => (
       <Link
         href={`/receiving/${row.original.lastPoId}`}
-        className="text-[13px] font-medium text-primary hover:underline focus-visible:underline focus-visible:outline-none"
+        className="text-[13px] font-semibold text-primary hover:underline focus-visible:underline focus-visible:outline-none"
       >
         {row.original.lastPoCode}
       </Link>
@@ -155,7 +160,7 @@ export function VendorsGrid({
   );
 
   return (
-    <DataGrid<VendorRow>
+    <PoGrid<VendorRow>
       columns={VENDOR_COLUMNS}
       data={pageRows}
       total={filtered.length}

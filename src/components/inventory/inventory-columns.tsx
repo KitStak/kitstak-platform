@@ -1,6 +1,6 @@
 "use client";
 
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, Table } from "@tanstack/react-table";
 import type {
   AtpRow,
   LocationInventoryRow,
@@ -17,10 +17,27 @@ import {
   ZoneChip,
 } from "./inventory-cells";
 import {
+  deriveDisplayCategory,
   deriveNextPoEta,
   deriveReorderPoint,
   deriveUom,
 } from "./inventory-derive";
+
+/**
+ * True when this row's derived value exactly repeats the row rendered just
+ * above it (in the current sorted order), so runs of identical values
+ * ("Apparel", "Each", …) can be de-emphasized down the page.
+ */
+function repeatsPreviousValue<TData>(
+  table: Table<TData>,
+  rowId: string,
+  read: (row: TData) => string
+): boolean {
+  const rows = table.getRowModel().rows;
+  const index = rows.findIndex((r) => r.id === rowId);
+  if (index <= 0) return false;
+  return read(rows[index].original) === read(rows[index - 1].original);
+}
 
 /* ============ Total Inventory ============ */
 
@@ -30,7 +47,13 @@ export const totalColumns: ColumnDef<TotalInventoryRow, unknown>[] = [
     header: "Image",
     size: 56,
     enableSorting: false,
-    cell: () => <ImageTile />,
+    cell: ({ row }) => (
+      <ImageTile
+        sku={row.original.sku}
+        category={row.original.category}
+        alt={row.original.productName}
+      />
+    ),
   },
   {
     accessorKey: "clientName",
@@ -62,20 +85,39 @@ export const totalColumns: ColumnDef<TotalInventoryRow, unknown>[] = [
     ),
   },
   {
-    accessorKey: "category",
+    id: "category",
     header: "Category",
-    cell: ({ row }) => (
-      <span className="text-secondary">{row.original.category}</span>
+    accessorFn: (row) => deriveDisplayCategory(row.sku, row.category),
+    cell: ({ row, table }) => (
+      <span
+        className={
+          repeatsPreviousValue(table, row.id, (r) =>
+            deriveDisplayCategory(r.sku, r.category)
+          )
+            ? "text-faint"
+            : "text-secondary"
+        }
+      >
+        {deriveDisplayCategory(row.original.sku, row.original.category)}
+      </span>
     ),
   },
   {
     id: "uom",
     header: "UoM",
     size: 70,
-    accessorFn: (row) => deriveUom(row.category, row.isKit),
-    cell: ({ row }) => (
-      <span className="text-secondary">
-        {deriveUom(row.original.category, row.original.isKit)}
+    accessorFn: (row) => deriveUom(row.sku, row.category, row.isKit),
+    cell: ({ row, table }) => (
+      <span
+        className={
+          repeatsPreviousValue(table, row.id, (r) =>
+            deriveUom(r.sku, r.category, r.isKit)
+          )
+            ? "text-faint"
+            : "text-secondary"
+        }
+      >
+        {deriveUom(row.original.sku, row.original.category, row.original.isKit)}
       </span>
     ),
   },
@@ -111,7 +153,7 @@ export const totalColumns: ColumnDef<TotalInventoryRow, unknown>[] = [
   {
     id: "reorderPoint",
     header: "Reorder Point",
-    size: 110,
+    size: 96,
     accessorFn: (row) => deriveReorderPoint(row.sku),
     cell: ({ row }) => (
       <div className="text-right tabular-nums text-secondary">
@@ -122,7 +164,7 @@ export const totalColumns: ColumnDef<TotalInventoryRow, unknown>[] = [
   {
     id: "belowReorder",
     header: "Below Reorder",
-    size: 115,
+    size: 120,
     accessorFn: (row) => row.available < deriveReorderPoint(row.sku),
     cell: ({ row }) => (
       <ReorderStatus
