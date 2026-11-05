@@ -163,11 +163,13 @@ export function TopNav({ userName, role }: { userName: string; role: string }) {
         <div className="ml-auto flex items-center gap-1.5">
           <button
             type="button"
-            className="flex h-8 w-56 items-center gap-2 rounded-full bg-white/10 px-3 text-[12px] text-white/60 transition-colors hover:bg-white/15 hover:text-white/80"
+            className="flex h-8 w-64 items-center gap-2 rounded-full bg-white/10 px-3 text-[12px] text-white/60 transition-colors hover:bg-white/15 hover:text-white/80"
           >
-            <Search className="h-3.5 w-3.5" aria-hidden />
-            Search orders, SKUs, locations…
-            <kbd className="ml-auto rounded bg-white/10 px-1.5 py-px text-[10px] font-semibold text-white/50">
+            <Search className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">
+              Search orders, SKUs…
+            </span>
+            <kbd className="ml-auto shrink-0 rounded bg-white/10 px-1.5 py-px text-[10px] font-semibold text-white/50">
               /
             </kbd>
           </button>
