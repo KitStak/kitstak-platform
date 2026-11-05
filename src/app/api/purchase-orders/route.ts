@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { z } from "zod";
 import {
   badRequest,
@@ -15,6 +16,7 @@ const querySchema = listQuerySchema.extend({
 });
 
 export async function GET(request: Request): Promise<Response> {
+  await connection();
   try {
     const parsed = querySchema.safeParse(queryOf(request));
     if (!parsed.success) return badRequest(zodMessage(parsed.error));

@@ -6,7 +6,10 @@ import {
   Globe2,
   type LucideIcon,
   Moon,
+  Store,
   Sunrise,
+  Truck,
+  Users2,
 } from "lucide-react";
 import { cn, formatNumber } from "@/lib/utils";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -221,17 +224,31 @@ export function StatusBreakdownCard({
 
 /* ---------- Rank card ---------- */
 
+/**
+ * Icons are referenced by name (not passed as component functions) so server
+ * pages can render RankCard without sending functions across the RSC boundary.
+ */
+const RANK_ICONS: Record<RankIconName, LucideIcon> = {
+  store: Store,
+  users: Users2,
+  truck: Truck,
+  globe: Globe2,
+};
+
+export type RankIconName = "store" | "users" | "truck" | "globe";
+
 export function RankCard({
-  icon: Icon = Globe2,
+  icon = "globe",
   title,
   description,
   rows,
 }: {
-  icon?: LucideIcon;
+  icon?: RankIconName;
   title: string;
   description: string;
   rows: { name: string; percent: number; count: number }[];
 }) {
+  const Icon = RANK_ICONS[icon];
   return (
     <Card className="flex flex-col">
       <div className="flex items-start gap-3 px-5 pt-4 pb-3">

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, like, or, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, inArray, like, or, sql, type SQL } from "drizzle-orm";
 import { db, schema } from "@/server/db";
 import { likePattern, offsetOf, type ListResult } from "./shared";
 
@@ -73,6 +73,10 @@ export interface OrderListRow {
   shippingService: string | null;
   trackingNumber: string | null;
   totalQuantity: number;
+  /** Lowest SKU among the order's lines (display preview); null when no lines. */
+  firstSku: string | null;
+  /** Distinct order-line count (one line per SKU). */
+  skuCount: number;
   salesPrice: number;
   orderDate: string;
   expectedShipDate: string | null;
@@ -109,6 +113,16 @@ function orderConditions(params: OrderListParams): SQL | undefined {
 
 export function listOrders(params: OrderListParams): ListResult<OrderListRow> {
   const where = orderConditions(params);
+  const lineAgg = db
+    .select({
+      orderId: orderLines.orderId,
+      skuCount: count().as("sku_count"),
+      firstSku: sql<string>`min(${products.sku})`.as("first_sku"),
+    })
+    .from(orderLines)
+    .innerJoin(products, eq(orderLines.productId, products.id))
+    .groupBy(orderLines.orderId)
+    .as("line_agg");
   const rows = db
     .select({
       id: shipmentOrders.id,
@@ -129,6 +143,8 @@ export function listOrders(params: OrderListParams): ListResult<OrderListRow> {
       shippingService: shipmentOrders.shippingService,
       trackingNumber: shipmentOrders.trackingNumber,
       totalQuantity: shipmentOrders.totalQuantity,
+      firstSku: sql<string | null>`${lineAgg.firstSku}`,
+      skuCount: sql<number>`coalesce(${lineAgg.skuCount}, 0)`,
       salesPrice: shipmentOrders.salesPrice,
       orderDate: shipmentOrders.orderDate,
       expectedShipDate: shipmentOrders.expectedShipDate,
@@ -137,6 +153,7 @@ export function listOrders(params: OrderListParams): ListResult<OrderListRow> {
     })
     .from(shipmentOrders)
     .innerJoin(clients, eq(shipmentOrders.clientId, clients.id))
+    .leftJoin(lineAgg, eq(lineAgg.orderId, shipmentOrders.id))
     .where(where)
     .orderBy(desc(shipmentOrders.orderDate))
     .limit(params.pageSize)
