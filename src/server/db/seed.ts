@@ -52,11 +52,16 @@ function wipe(): void {
 }
 
 function seed(): void {
+  if (process.env.NODE_ENV === "production" && !process.env.ALLOW_PROD_SEED) {
+    throw new Error(
+      "Refusing to seed demo data in production. Set ALLOW_PROD_SEED=1 to override."
+    );
+  }
   const rng = new Rng(SEED);
   wipe();
 
   /* users */
-  const passwordHash = hashPassword("KitStak!demo2026");
+  const passwordHash = hashPassword(process.env.SEED_PASSWORD ?? "KitStak!demo2026");
   const userRows = USER_SEEDS.map((u, i) => ({
     id: `usr-${String(i + 1).padStart(2, "0")}`,
     email: u.email,

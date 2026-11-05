@@ -1,4 +1,4 @@
-import { notFound, ok, serverError } from "@/server/api-utils";
+import { notFound, ok, requireSession, serverError } from "@/server/api-utils";
 import { getOrderDetail } from "@/server/repositories/orders";
 
 interface RouteContext {
@@ -7,6 +7,8 @@ interface RouteContext {
 
 export async function GET(_request: Request, context: RouteContext): Promise<Response> {
   try {
+    const denied = await requireSession();
+    if (denied) return denied;
     const { id } = await context.params;
     const detail = getOrderDetail(id);
     if (!detail) return notFound("Order not found");

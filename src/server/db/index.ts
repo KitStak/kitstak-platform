@@ -10,7 +10,6 @@ const DB_PATH = path.join(DATA_DIR, "kitstak.db");
 type DB = BetterSQLite3Database<typeof schema>;
 
 declare global {
-  // eslint-disable-next-line no-var
   var __kitstakDb: DB | undefined;
 }
 

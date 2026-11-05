@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/server/db";
-import { verifyPassword } from "@/server/auth/password";
+import { hashPassword, verifyPassword } from "@/server/auth/password";
 import { createSession, type SessionUser } from "@/server/auth/session";
 import { checkRateLimit } from "@/server/auth/rate-limit";
 
@@ -13,6 +13,12 @@ const loginSchema = z.object({
 });
 
 const INVALID_CREDENTIALS = "Invalid email or password";
+
+/**
+ * Dummy bcrypt hash compared against when the user does not exist, so the
+ * response time does not reveal whether an email is registered.
+ */
+const TIMING_PAD_HASH = hashPassword("kitstak-timing-pad");
 
 interface LoginResponseData {
   user: SessionUser;
@@ -59,7 +65,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .where(eq(schema.users.email, email))
       .get();
 
-    if (!user || !user.isActive || !verifyPassword(parsed.data.password, user.passwordHash)) {
+    const passwordOk = verifyPassword(
+      parsed.data.password,
+      user?.passwordHash ?? TIMING_PAD_HASH
+    );
+    if (!user || !user.isActive || !passwordOk) {
       return NextResponse.json(
         { success: false, error: INVALID_CREDENTIALS },
         { status: 401 }

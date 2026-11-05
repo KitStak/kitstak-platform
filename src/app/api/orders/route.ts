@@ -5,6 +5,7 @@ import {
   listQuerySchema,
   ok,
   queryOf,
+  requireSession,
   serverError,
   zodMessage,
 } from "@/server/api-utils";
@@ -20,6 +21,8 @@ const querySchema = listQuerySchema.extend({
 export async function GET(request: Request): Promise<Response> {
   await connection();
   try {
+    const denied = await requireSession();
+    if (denied) return denied;
     const parsed = querySchema.safeParse(queryOf(request));
     if (!parsed.success) return badRequest(zodMessage(parsed.error));
     const { page, pageSize, search, status, channel, clientId, tab } = parsed.data;

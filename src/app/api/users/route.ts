@@ -5,6 +5,7 @@ import {
   listQuerySchema,
   ok,
   queryOf,
+  requireRole,
   serverError,
   zodMessage,
 } from "@/server/api-utils";
@@ -17,6 +18,8 @@ const querySchema = listQuerySchema.extend({
 export async function GET(request: Request): Promise<Response> {
   await connection();
   try {
+    const denied = await requireRole(["admin", "manager"]);
+    if (denied) return denied;
     const parsed = querySchema.safeParse(queryOf(request));
     if (!parsed.success) return badRequest(zodMessage(parsed.error));
     const { page, pageSize, search, role } = parsed.data;

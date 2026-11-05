@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentType } from "react";
+import type { ReactElement } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Coffee, Cpu, Package, Shirt } from "lucide-react";
@@ -13,7 +13,7 @@ const HEADWEAR_SKU_PATTERN = /-(CAP|BND)-/;
 /** SKUs whose product-type segment is worn apparel (tees, hoodies, jackets, socks). */
 const APPAREL_SKU_PATTERN = /-(TEE|HOOD|JKT|SOCK)-/;
 
-type TileGlyph = ComponentType<{ className?: string }>;
+const TILE_GLYPH_CLASS = "h-3.5 w-3.5";
 
 /** Minimal dad-cap glyph (lucide has no cap icon): crown dome + curved brim,
  *  stroke-styled to sit next to lucide's Shirt at 14px. */
@@ -37,14 +37,18 @@ function CapGlyph({ className }: { className?: string }) {
 }
 
 /** Glyph mirrors the product type encoded in the SKU, so a cap row never
- *  shows a tee icon; category is the fallback when the SKU doesn't say. */
-function deriveTileGlyph(sku: string | undefined, category: string | undefined): TileGlyph {
-  if (sku && HEADWEAR_SKU_PATTERN.test(sku)) return CapGlyph;
-  if (sku && APPAREL_SKU_PATTERN.test(sku)) return Shirt;
-  if (category === "Apparel") return Shirt;
-  if (category === "Coffee") return Coffee;
-  if (category === "Electronics") return Cpu;
-  return Package;
+ *  shows a tee icon; category is the fallback when the SKU doesn't say.
+ *  Returns a rendered element (not a component) so render stays static. */
+function deriveTileGlyph(
+  sku: string | undefined,
+  category: string | undefined
+): ReactElement {
+  if (sku && HEADWEAR_SKU_PATTERN.test(sku)) return <CapGlyph className={TILE_GLYPH_CLASS} />;
+  if (sku && APPAREL_SKU_PATTERN.test(sku)) return <Shirt className={TILE_GLYPH_CLASS} />;
+  if (category === "Apparel") return <Shirt className={TILE_GLYPH_CLASS} />;
+  if (category === "Coffee") return <Coffee className={TILE_GLYPH_CLASS} />;
+  if (category === "Electronics") return <Cpu className={TILE_GLYPH_CLASS} />;
+  return <Package className={TILE_GLYPH_CLASS} />;
 }
 
 /** Muted neutral thumbnail treatment (per design critique): the glyph carries
@@ -82,10 +86,9 @@ export function ImageTile({
       />
     );
   }
-  const Icon = deriveTileGlyph(sku, category);
   return (
     <span className={TILE_CLASS} aria-hidden>
-      <Icon className="h-3.5 w-3.5" />
+      {deriveTileGlyph(sku, category)}
     </span>
   );
 }

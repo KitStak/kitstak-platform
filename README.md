@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# KitStak WMS
 
-## Getting Started
+A multi-client warehouse management system for 3PL operations. KitStak covers the core warehouse lifecycle — receiving, inventory, order fulfillment, and reporting — behind a role-aware, client-scoped UI.
 
-First, run the development server:
+## Quickstart
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install        # install dependencies
+npm run db:push    # create the SQLite schema (./.data/kitstak.db)
+npm run db:seed    # load demo data
+npm run dev        # start the dev server at http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Demo credentials:** `admin@kitstak.io` / `KitStak!demo2026`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tech Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Framework:** Next.js 16 (App Router, Turbopack, Partial Prerendering) + React 19
+- **Language:** TypeScript (strict)
+- **Database:** SQLite via better-sqlite3 + Drizzle ORM
+- **Auth:** JWT sessions (jose) with bcrypt password hashing, enforced in proxy middleware
+- **UI:** Tailwind CSS 4, TanStack Table, Recharts, lucide-react
+- **Validation:** Zod at every API boundary
 
-## Learn More
+## Modules
 
-To learn more about Next.js, take a look at the following resources:
+| Module | Description |
+|--------|-------------|
+| Dashboard | Operational KPIs, activity feed, and charts |
+| Inventory | Stock by SKU and location, kit components, adjustments |
+| Products | Product master with per-client catalogs and kit definitions |
+| Orders | Outbound order management with status and shortage tracking |
+| Jobs | Pick/pack job management, allocation exceptions, shortage report |
+| Receiving | Purchase orders, vendor directory, inbound receipts |
+| Clients | 3PL client (depositor) accounts and status |
+| Locations | Warehouse locations by zone and type |
+| Reports | Inventory snapshot and transaction history exports |
+| Settings | Users, roles, and system configuration |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start the development server |
+| `npm run build` | Production build |
+| `npm run start` | Serve the production build |
+| `npm run lint` | Run ESLint |
+| `npm run db:push` | Push the Drizzle schema to SQLite |
+| `npm run db:seed` | Seed the database with demo data |

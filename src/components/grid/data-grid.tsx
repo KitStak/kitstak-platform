@@ -26,7 +26,7 @@ import {
 import { cn, formatNumber } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/input";
-import { Dropdown, DropdownItem } from "@/components/ui/dropdown";
+import { Dropdown } from "@/components/ui/dropdown";
 import { Skeleton } from "@/components/ui/card";
 
 export type Density = "comfortable" | "compact";
@@ -37,7 +37,9 @@ export interface GridColumnMeta {
 }
 
 declare module "@tanstack/react-table" {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // Module augmentation must use declaration merging, so an interface (with
+  // TanStack's required type params) is the only shape that works here.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-object-type
   interface ColumnMeta<TData, TValue> extends GridColumnMeta {}
 }
 

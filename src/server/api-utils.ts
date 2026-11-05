@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getSessionUser } from "@/server/auth/session";
 
 /** Standard API envelope: { success, data?, error?, meta? } */
 export interface ApiMeta {
@@ -26,6 +27,36 @@ export function badRequest(error: string): NextResponse<ApiEnvelope<never>> {
 
 export function notFound(error = "Not found"): NextResponse<ApiEnvelope<never>> {
   return NextResponse.json({ success: false, error }, { status: 404 });
+}
+
+export function unauthorized(error = "Authentication required"): NextResponse<ApiEnvelope<never>> {
+  return NextResponse.json({ success: false, error }, { status: 401 });
+}
+
+/**
+ * Cryptographically verify the session JWT for an API route.
+ * Middleware only checks cookie presence, so every data route must call this.
+ * Returns a 401 response to send when the session is missing/invalid, or null when authenticated.
+ */
+export async function requireSession(): Promise<NextResponse<ApiEnvelope<never>> | null> {
+  const user = await getSessionUser();
+  return user ? null : unauthorized();
+}
+
+export function forbidden(error = "Insufficient permissions"): NextResponse<ApiEnvelope<never>> {
+  return NextResponse.json({ success: false, error }, { status: 403 });
+}
+
+/**
+ * Like requireSession, but additionally requires one of the given roles.
+ * Returns the 401/403 response to send, or null when authorized.
+ */
+export async function requireRole(
+  roles: readonly string[]
+): Promise<NextResponse<ApiEnvelope<never>> | null> {
+  const user = await getSessionUser();
+  if (!user) return unauthorized();
+  return roles.includes(user.role) ? null : forbidden();
 }
 
 export function serverError(context: string, error: unknown): NextResponse<ApiEnvelope<never>> {
