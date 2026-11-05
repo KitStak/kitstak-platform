@@ -1,26 +1,185 @@
 @import "tailwindcss";
 
+/* ================= KitStak WMS design tokens ================= */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* canvas + surfaces */
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --surface-sunken: #f9fafb;
+  --border: #e4e7ec;
+  --border-strong: #d0d5dd;
+
+  /* text */
+  --foreground: #101828;
+  --text-body: #344054;
+  --text-secondary: #667085;
+  --text-faint: #98a2b3;
+
+  /* brand */
+  --nav: #353e6b;
+  --nav-hover: #414b80;
+  --nav-active: #4a549008;
+  --primary: #2e5ce6;
+  --primary-hover: #2449b8;
+  --primary-soft: #eff4ff;
+
+  /* semantic */
+  --success: #027a48;
+  --success-soft: #ecfdf3;
+  --warning: #b54708;
+  --warning-soft: #fff6e6;
+  --danger: #b42318;
+  --danger-soft: #fef3f2;
+  --info: #026aa2;
+  --info-soft: #e0f2fe;
+  --neutral: #475467;
+  --neutral-soft: #f2f4f7;
+
+  --ring: rgba(46, 92, 230, 0.35);
+
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.1), 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.1), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 12px 16px -4px rgba(16, 24, 40, 0.08), 0 4px 6px -2px rgba(16, 24, 40, 0.03);
+}
+
+:root[data-theme="dark"] {
+  --background: #0d1117;
+  --surface: #161b26;
+  --surface-sunken: #11161f;
+  --border: #272e3b;
+  --border-strong: #333c4d;
+  --foreground: #f2f4f7;
+  --text-body: #cdd5e0;
+  --text-secondary: #94a3b8;
+  --text-faint: #64748b;
+  --nav: #11162a;
+  --nav-hover: #1c2340;
+  --primary: #5c82f2;
+  --primary-hover: #7695f5;
+  --primary-soft: #1b2440;
+  --success: #3ccb7f;
+  --success-soft: #0f2a1d;
+  --warning: #f5a623;
+  --warning-soft: #2d2008;
+  --danger: #f97066;
+  --danger-soft: #331210;
+  --info: #38bdf8;
+  --info-soft: #0b2434;
+  --neutral: #94a3b8;
+  --neutral-soft: #1e2532;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-body: var(--text-body);
+  --color-secondary: var(--text-secondary);
+  --color-faint: var(--text-faint);
+  --color-nav: var(--nav);
+  --color-nav-hover: var(--nav-hover);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-neutral: var(--neutral);
+  --color-neutral-soft: var(--neutral-soft);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
+}
+
+html {
+  font-size: 16px;
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text-body);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  font-feature-settings: "cv05", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* keyboard focus */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+/* thin scrollbars for grid regions */
+.ks-scroll::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+.ks-scroll::-webkit-scrollbar-track {
+  background: var(--surface-sunken);
+}
+.ks-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 6px;
+  border: 2px solid var(--surface-sunken);
+}
+.ks-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes ks-shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+.ks-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--neutral-soft) 25%,
+    var(--surface-sunken) 37%,
+    var(--neutral-soft) 63%
+  );
+  background-size: 800px 100%;
+  animation: ks-shimmer 1.4s ease infinite;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
