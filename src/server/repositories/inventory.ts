@@ -1,0 +1,215 @@
+import { and, asc, count, countDistinct, desc, eq, inArray, like, or, sql, type SQL } from "drizzle-orm";
+import { db, schema } from "@/server/db";
+import { likePattern, offsetOf, type ListResult } from "./shared";
+
+const { inventory, products, clients, locations, purchaseOrders, purchaseOrderLines } = schema;
+
+export type InventoryView = "total" | "by-location" | "atp";
+
+export interface InventoryListParams {
+  page: number;
+  pageSize: number;
+  search?: string;
+  clientId?: string;
+  zone?: string;
+}
+
+/* ============ total inventory (per product) ============ */
+
+export interface TotalInventoryRow {
+  productId: string;
+  sku: string;
+  productName: string;
+  clientName: string;
+  category: string;
+  isKit: boolean;
+  onHand: number;
+  allocated: number;
+  available: number;
+  damaged: number;
+  locationCount: number;
+}
+
+function productConditions(params: InventoryListParams): SQL | undefined {
+  const conds: Array<SQL | undefined> = [];
+  if (params.clientId) conds.push(eq(products.clientId, params.clientId));
+  if (params.search) {
+    const p = likePattern(params.search);
+    conds.push(or(like(products.sku, p), like(products.name, p)));
+  }
+  return and(...conds);
+}
+
+function invAggregate() {
+  return db
+    .select({
+      productId: inventory.productId,
+      onHand: sql<number>`coalesce(sum(${inventory.onHand}), 0)`.as("agg_on_hand"),
+      allocated: sql<number>`coalesce(sum(${inventory.allocated}), 0)`.as("agg_allocated"),
+      damaged: sql<number>`coalesce(sum(${inventory.damaged}), 0)`.as("agg_damaged"),
+      locationCount: countDistinct(inventory.locationId).as("agg_locations"),
+    })
+    .from(inventory)
+    .groupBy(inventory.productId)
+    .as("inv_agg");
+}
+
+export function listTotalInventory(params: InventoryListParams): ListResult<TotalInventoryRow> {
+  const where = productConditions(params);
+  const inv = invAggregate();
+  const rows = db
+    .select({
+      productId: products.id,
+      sku: products.sku,
+      productName: products.name,
+      clientName: clients.name,
+      category: products.category,
+      isKit: products.isKit,
+      onHand: sql<number>`coalesce(${inv.onHand}, 0)`,
+      allocated: sql<number>`coalesce(${inv.allocated}, 0)`,
+      available: sql<number>`coalesce(${inv.onHand}, 0) - coalesce(${inv.allocated}, 0)`,
+      damaged: sql<number>`coalesce(${inv.damaged}, 0)`,
+      locationCount: sql<number>`coalesce(${inv.locationCount}, 0)`,
+    })
+    .from(products)
+    .innerJoin(clients, eq(products.clientId, clients.id))
+    .leftJoin(inv, eq(inv.productId, products.id))
+    .where(where)
+    .orderBy(asc(products.sku))
+    .limit(params.pageSize)
+    .offset(offsetOf(params.page, params.pageSize))
+    .all();
+  const total =
+    db
+      .select({ n: count() })
+      .from(products)
+      .innerJoin(clients, eq(products.clientId, clients.id))
+      .where(where)
+      .get()?.n ?? 0;
+  return { rows, total };
+}
+
+/* ============ by location ============ */
+
+export interface LocationInventoryRow {
+  id: string;
+  sku: string;
+  productName: string;
+  clientName: string;
+  locationCode: string;
+  zone: string;
+  locationType: string;
+  lotNumber: string | null;
+  onHand: number;
+  allocated: number;
+  available: number;
+  damaged: number;
+  receivedAt: string;
+}
+
+export function listInventoryByLocation(params: InventoryListParams): ListResult<LocationInventoryRow> {
+  const conds: Array<SQL | undefined> = [];
+  if (params.clientId) conds.push(eq(products.clientId, params.clientId));
+  if (params.zone) conds.push(eq(locations.zone, params.zone));
+  if (params.search) {
+    const p = likePattern(params.search);
+    conds.push(or(like(products.sku, p), like(products.name, p), like(locations.code, p)));
+  }
+  const where = and(...conds);
+  const base = db
+    .select({
+      id: inventory.id,
+      sku: products.sku,
+      productName: products.name,
+      clientName: clients.name,
+      locationCode: locations.code,
+      zone: locations.zone,
+      locationType: locations.type,
+      lotNumber: inventory.lotNumber,
+      onHand: inventory.onHand,
+      allocated: inventory.allocated,
+      available: sql<number>`${inventory.onHand} - ${inventory.allocated}`,
+      damaged: inventory.damaged,
+      receivedAt: inventory.receivedAt,
+    })
+    .from(inventory)
+    .innerJoin(products, eq(inventory.productId, products.id))
+    .innerJoin(clients, eq(products.clientId, clients.id))
+    .innerJoin(locations, eq(inventory.locationId, locations.id));
+  const rows = base
+    .where(where)
+    .orderBy(asc(locations.code), asc(products.sku))
+    .limit(params.pageSize)
+    .offset(offsetOf(params.page, params.pageSize))
+    .all();
+  const total =
+    db
+      .select({ n: count() })
+      .from(inventory)
+      .innerJoin(products, eq(inventory.productId, products.id))
+      .innerJoin(clients, eq(products.clientId, clients.id))
+      .innerJoin(locations, eq(inventory.locationId, locations.id))
+      .where(where)
+      .get()?.n ?? 0;
+  return { rows, total };
+}
+
+/* ============ available-to-promise ============ */
+
+export interface AtpRow {
+  productId: string;
+  sku: string;
+  productName: string;
+  clientName: string;
+  onHand: number;
+  allocated: number;
+  available: number;
+  incoming: number;
+  atp: number;
+}
+
+export function listAtp(params: InventoryListParams): ListResult<AtpRow> {
+  const where = productConditions(params);
+  const inv = invAggregate();
+  const incoming = db
+    .select({
+      productId: purchaseOrderLines.productId,
+      incoming: sql<number>`coalesce(sum(${purchaseOrderLines.orderedQuantity} - ${purchaseOrderLines.receivedQuantity}), 0)`.as(
+        "agg_incoming"
+      ),
+    })
+    .from(purchaseOrderLines)
+    .innerJoin(purchaseOrders, eq(purchaseOrderLines.purchaseOrderId, purchaseOrders.id))
+    .where(inArray(purchaseOrders.status, ["Pending", "Started", "Receiving"]))
+    .groupBy(purchaseOrderLines.productId)
+    .as("po_agg");
+  const rows = db
+    .select({
+      productId: products.id,
+      sku: products.sku,
+      productName: products.name,
+      clientName: clients.name,
+      onHand: sql<number>`coalesce(${inv.onHand}, 0)`,
+      allocated: sql<number>`coalesce(${inv.allocated}, 0)`,
+      available: sql<number>`coalesce(${inv.onHand}, 0) - coalesce(${inv.allocated}, 0)`,
+      incoming: sql<number>`coalesce(${incoming.incoming}, 0)`,
+      atp: sql<number>`coalesce(${inv.onHand}, 0) - coalesce(${inv.allocated}, 0) + coalesce(${incoming.incoming}, 0)`,
+    })
+    .from(products)
+    .innerJoin(clients, eq(products.clientId, clients.id))
+    .leftJoin(inv, eq(inv.productId, products.id))
+    .leftJoin(incoming, eq(incoming.productId, products.id))
+    .where(where)
+    .orderBy(desc(sql`coalesce(${incoming.incoming}, 0)`), asc(products.sku))
+    .limit(params.pageSize)
+    .offset(offsetOf(params.page, params.pageSize))
+    .all();
+  const total =
+    db
+      .select({ n: count() })
+      .from(products)
+      .innerJoin(clients, eq(products.clientId, clients.id))
+      .where(where)
+      .get()?.n ?? 0;
+  return { rows, total };
+}
