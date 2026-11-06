@@ -1,0 +1,100 @@
+/* Dashboards feature motion. Colors and durations come from tokens. */
+
+.ks-dash-grow-x {
+  animation: ks-dash-grow-x var(--duration-slower) var(--ease-enter) both;
+  transform-origin: left center;
+}
+
+@keyframes ks-dash-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* New widget: 1s primary outline pulse after it drops into the grid. */
+.ks-dash-pulse {
+  animation: ks-dash-pulse 1s var(--ease-out) 1;
+}
+
+@keyframes ks-dash-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--focus-ring-soft), 0 0 0 2px var(--primary);
+  }
+  70% {
+    box-shadow: 0 0 0 10px transparent, 0 0 0 2px var(--primary);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent;
+  }
+}
+
+.ks-dash-tick {
+  display: inline-block;
+  animation: ks-dash-tick var(--duration-normal) var(--ease-enter);
+}
+
+@keyframes ks-dash-tick {
+  from {
+    opacity: 0.35;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ks-dash-fade-in {
+  animation: ks-dash-fade-in var(--duration-normal) var(--ease-enter) both;
+}
+
+@keyframes ks-dash-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ks-dash-grow-x,
+  .ks-dash-tick,
+  .ks-dash-fade-in {
+    animation: none;
+  }
+  .ks-dash-pulse {
+    animation-duration: 70ms;
+  }
+}
+
+/* Stale data while a filter change is in flight: a thin moving bar under the widget header. */
+.ks-dash-shimmer {
+  background: linear-gradient(90deg, transparent 0%, var(--primary) 50%, transparent 100%);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: ks-dash-shimmer 1.1s var(--ease-out) infinite;
+  opacity: 0.7;
+}
+
+@keyframes ks-dash-shimmer {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ks-dash-shimmer {
+    animation: none;
+    background: var(--primary);
+    opacity: 0.35;
+  }
+}

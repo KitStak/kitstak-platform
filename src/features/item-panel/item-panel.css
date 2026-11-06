@@ -1,0 +1,286 @@
+/*
+ * Item panel styles that utilities cannot express: rich-text typography shared by the editor
+ * and the read-only update body, the editor placeholder, realtime highlight, the resize
+ * handle and print layout. Token colors only.
+ */
+
+/* ------------------------------------------------------------ Rich text (view + editor) */
+.ks-rich {
+  font-size: var(--type-base);
+  line-height: 1.55;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.ks-rich > * + * {
+  margin-top: 6px;
+}
+.ks-rich p {
+  margin: 0;
+}
+.ks-rich h2,
+.ks-rich h3 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-semibold);
+  line-height: 1.3;
+  margin: 10px 0 2px;
+}
+.ks-rich h2 {
+  font-size: var(--type-lg);
+}
+.ks-rich h3 {
+  font-size: var(--type-md);
+}
+.ks-rich ul,
+.ks-rich ol {
+  padding-left: 22px;
+  margin: 4px 0;
+}
+.ks-rich ul {
+  list-style: disc;
+}
+.ks-rich ol {
+  list-style: decimal;
+}
+.ks-rich li + li {
+  margin-top: 2px;
+}
+.ks-rich li > p {
+  margin: 0;
+}
+.ks-rich ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 2px;
+}
+.ks-rich ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.ks-rich ul[data-type='taskList'] li > label {
+  display: inline-flex;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.ks-rich ul[data-type='taskList'] li > div {
+  flex: 1;
+  min-width: 0;
+}
+.ks-rich ul[data-type='taskList'] li[data-checked='true'] > div {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.ks-rich input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.ks-rich blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 12px;
+  color: var(--text-secondary);
+  margin: 6px 0;
+}
+.ks-rich code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-muted);
+  color: var(--text-primary);
+}
+.ks-rich pre {
+  font-family: var(--font-mono);
+  font-size: var(--type-sm);
+  line-height: 1.5;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  margin: 6px 0;
+}
+.ks-rich pre code {
+  padding: 0;
+  background: transparent;
+}
+.ks-rich a {
+  color: var(--text-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+.ks-rich a:hover {
+  text-decoration-thickness: 2px;
+}
+.ks-rich a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.ks-rich mark {
+  background: var(--warning-subtle);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+.ks-rich hr {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: 10px 0;
+}
+.ks-rich .ks-mention,
+.ks-rich [data-type='mention'] {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-subtle);
+  color: var(--primary-text);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+.ks-rich .ks-mention[data-me='true'] {
+  background: var(--primary-selected);
+}
+
+/* ------------------------------------------------------------ Editor */
+.ks-editor .ProseMirror {
+  outline: none;
+  min-height: var(--ks-editor-min, 72px);
+  max-height: var(--ks-editor-max, 320px);
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+.ks-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--text-placeholder);
+  pointer-events: none;
+}
+.ks-editor .ProseMirror-selectednode {
+  outline: 2px solid var(--focus-ring);
+  border-radius: var(--radius-xs);
+}
+
+/* ------------------------------------------------------------ Realtime + deep-link highlight */
+.ks-update-fresh {
+  animation: ks-update-fresh 2400ms var(--ease-out);
+}
+@keyframes ks-update-fresh {
+  0%,
+  35% {
+    background-color: var(--surface-highlight);
+    box-shadow: 0 0 0 2px var(--primary-selected);
+  }
+}
+
+/* ------------------------------------------------------------ Resize handle */
+.ks-panel-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 2;
+  touch-action: none;
+}
+.ks-panel-resize::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.ks-panel-resize:hover::after,
+.ks-panel-resize[data-dragging='true']::after,
+.ks-panel-resize:focus-visible::after {
+  background: var(--primary);
+}
+.ks-panel-resize:focus-visible {
+  outline: none;
+}
+
+.ks-item-panel[data-resizing='true'] {
+  user-select: none;
+  transition: none;
+}
+.ks-item-panel {
+  transition: width var(--duration-normal) var(--ease-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ks-item-panel,
+  .ks-item-panel[data-state='open'],
+  .ks-item-panel[data-state='closed'] {
+    animation-name: ks-fade-in;
+    animation-duration: 70ms;
+    transition: none;
+  }
+  .ks-item-panel[data-state='closed'] {
+    animation-name: ks-fade-out;
+  }
+  .ks-update-fresh {
+    animation-duration: 70ms;
+  }
+}
+
+/* ------------------------------------------------------------ Print: only the panel */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  .ks-item-panel,
+  .ks-item-panel * {
+    visibility: visible !important;
+  }
+  .ks-item-panel {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    animation: none !important;
+  }
+  .ks-item-panel [data-print-hide] {
+    display: none !important;
+  }
+  .ks-item-panel [data-panel-scroll] {
+    overflow: visible !important;
+    height: auto !important;
+  }
+}
+
+/* ------------------------------------------------------------ Tab strip (scrolls when narrow) */
+.ks-tab-strip {
+  scrollbar-width: none;
+  scroll-padding-inline: 16px;
+}
+.ks-tab-strip::-webkit-scrollbar {
+  display: none;
+}
+.ks-tab-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+.ks-tab-fade[data-on] {
+  opacity: 1;
+}
+.ks-tab-fade-left {
+  left: 0;
+  background: linear-gradient(to right, var(--surface-raised), transparent);
+}
+.ks-tab-fade-right {
+  right: 0;
+  background: linear-gradient(to left, var(--surface-raised), transparent);
+}

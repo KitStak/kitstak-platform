@@ -1,0 +1,12 @@
+/* CRM module styles that need theme selectors (everything else is Tailwind + tokens). */
+
+/* 360 header wash: full strength in light, a restrained tint in dark so it never looks muddy. */
+:root[data-theme='dark'] .crm-record-header {
+  --crm-wash-strength: 35%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .crm-record-header {
+    --crm-wash-strength: 35%;
+  }
+}

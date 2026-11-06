@@ -1,0 +1,11 @@
+.next
+node_modules
+.data
+drizzle
+coverage
+playwright-report
+test-results
+package-lock.json
+src/server/db/schema/auth.ts
+.qa
+e2e/.auth
