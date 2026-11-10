@@ -11,6 +11,8 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
 import { Textarea } from "@/components/ui/textarea";
 import { YesNoToggle } from "@/components/ui/yes-no-toggle";
+import { searchPicker, toOption } from "@/components/shared/entity-pickers";
+import type { PickerItem } from "@/components/shared/contracts";
 
 interface Base<T extends FieldValues> {
   readonly name: FieldPath<T>;
@@ -105,5 +107,40 @@ export function CustomField<T extends FieldValues>({ children, ...p }: Base<T> &
     <FormField<T> {...p}>
       {(c) => children({ id: c.id, value: (c.value as string | null) || null, onChange: (v) => c.onChange(v), onBlur: c.onBlur, invalid: c.invalid, disabled: c.disabled })}
     </FormField>
+  );
+}
+
+/** Area types a loading gate can sit in (Logiwa: dock door or staging lane). */
+export const GATE_AREA_TYPES = ["Loading", "Shipment"] as const;
+
+/** Merges per-area picker results: unique by id, sorted by label. */
+export function mergeGateResults(lists: readonly (readonly PickerItem[])[]): ComboboxOption[] {
+  const byId = new Map<string, ComboboxOption>();
+  for (const list of lists) for (const item of list) if (!byId.has(item.id)) byId.set(item.id, { ...toOption(item), description: item.description ?? (item as { sublabel?: string }).sublabel ?? undefined });
+  return [...byId.values()].sort((a, b) => String(a.label).localeCompare(String(b.label), undefined, { numeric: true }));
+}
+
+/**
+ * Loading gate search. The shared locations picker takes one area type per request,
+ * so this asks once per gate area type and merges the results. Errors are reworded
+ * so raw validation text never reaches the user.
+ */
+export function GatePicker({ id, value, selectedLabel, warehouseId, invalid, disabled, placeholder, onBlur, onChange }: {
+  readonly id?: string; readonly value: string | null; readonly selectedLabel?: string; readonly warehouseId: string | null; readonly invalid?: boolean; readonly disabled?: boolean;
+  readonly placeholder?: string; readonly onBlur?: () => void; readonly onChange: (value: string | null, item: ComboboxOption | null) => void;
+}) {
+  const loadOptions = React.useCallback(async (q: string, signal: AbortSignal) => {
+    try {
+      const lists = await Promise.all(GATE_AREA_TYPES.map((areaType) => searchPicker("locations", q, { warehouseId: warehouseId ?? undefined, areaType }, signal)));
+      return mergeGateResults(lists);
+    } catch (e) {
+      if ((e as Error)?.name === "AbortError") throw e;
+      throw new Error("Couldn't load locations. Try again.");
+    }
+  }, [warehouseId]);
+  return (
+    // minChars 0: the warehouse's gates list as soon as the dropdown opens (Logiwa's Loading Gate select); typing narrows it.
+    <Combobox id={id} aria-label="Loading gate" loadOptions={loadOptions} minChars={0} value={value} onChange={onChange} onBlur={onBlur} disabled={disabled} invalid={invalid} clearable
+      selectedOptions={value && selectedLabel ? [{ value, label: selectedLabel }] : undefined} placeholder={placeholder ?? "Select loading gate"} emptyText="No Loading or Shipment location matches" />
   );
 }

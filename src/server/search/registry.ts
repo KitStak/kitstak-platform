@@ -14,10 +14,12 @@ import { provider as lps } from "./providers/lps";
 import { provider as orders } from "./providers/orders";
 import { provider as pos } from "./providers/pos";
 import { provider as products } from "./providers/products";
+import { provider as roles } from "./providers/roles";
+import { provider as users } from "./providers/users";
 import { RANK_OTHER_FIELD, type SearchContext, type SearchHit, type SearchProvider } from "./types";
 
 export const SEARCH_PROVIDERS: readonly SearchProvider[] = Object.freeze([
-  pagesProvider, orders, pos, products, locations, lps, jobs, clients,
+  pagesProvider, orders, pos, products, locations, lps, jobs, clients, users, roles,
 ]);
 
 export const SEARCH_MIN_LENGTH = 2;

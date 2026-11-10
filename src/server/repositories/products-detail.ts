@@ -69,9 +69,17 @@ export interface InventoryBucketView {
   readonly receivedAt: string;
 }
 
+function omitLegacyCategory<T extends { category?: unknown }>(row: T): Omit<T, "category"> {
+  const { category: _legacy, ...rest } = row;
+  return rest;
+}
+
 export interface ProductDetailData {
-  readonly product: typeof p.$inferSelect & { clientName: string; clientCode: string; productType: string | null; productGroup: string | null; shipPackage: string | null };
+  /** `category` (legacy free-text, always "General") is omitted: `productCategory` is the one category. */
+  readonly product: Omit<typeof p.$inferSelect, "category"> & { clientName: string; clientCode: string; productType: string | null; productGroup: string | null; shipPackage: string | null };
   readonly packTypes: readonly PackTypeView[];
+  /** Same-client products sharing the primary barcode (pre-uniqueness data). */
+  readonly barcodeConflicts: readonly { id: string; sku: string; name: string }[];
   readonly totals: { onHand: number; allocated: number; damaged: number; available: number; openSo: number; openPo: number };
   readonly inventory: readonly InventoryBucketView[];
   readonly atp: readonly { warehouseId: string; warehouseCode: string; onHand: number; undamaged: number; openSo: number; allocatedSo: number; openPo: number; currentAtp: number; plannedAtp: number; pickable: number }[];
@@ -179,8 +187,11 @@ export function getProductDetail(db: AppDb, scope: Scope, viewScope: Scope, id: 
     : null;
 
   return {
-    product: { ...product, clientName: row.clients.name, clientCode: row.clients.code, productType: lookupName(db, product.productTypeId), productGroup: lookupName(db, product.productGroupId), shipPackage },
-    packTypes: loadPackTypes(db, id), totals, inventory: buckets, atp, openOrders, openPos, listings, components,
+    product: { ...omitLegacyCategory(product), clientName: row.clients.name, clientCode: row.clients.code, productType: lookupName(db, product.productTypeId), productGroup: lookupName(db, product.productGroupId), shipPackage },
+    packTypes: loadPackTypes(db, id), barcodeConflicts: product.barcode ? db.all<{ id: string; sku: string; name: string }>(sql`
+      SELECT p2.id, p2.sku, p2.name FROM products p2 WHERE p2.client_id = ${product.clientId} AND p2.id <> ${id}
+        AND (p2.barcode = ${product.barcode} OR EXISTS (SELECT 1 FROM product_barcodes b2 WHERE b2.product_id = p2.id AND b2.barcode = ${product.barcode}))
+      ORDER BY p2.sku LIMIT 20`) : [], totals, inventory: buckets, atp, openOrders, openPos, listings, components,
     usedInKits: kitsUsing(db, id), replenishment, allocations, transactions,
   };
 }

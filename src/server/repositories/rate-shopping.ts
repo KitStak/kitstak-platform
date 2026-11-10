@@ -14,15 +14,18 @@ import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
 import { RATE_SHOPPING_FIELDS, RATE_SHOPPING_SEARCH_FIELDS, RATE_SHOPPING_SORT_FIELDS, type PresetSave } from "@/lib/grid-defs/integrations/rate-shopping";
 import {
-  assertClientInScope, assertFound, assertVersion, assertWarehouseInScope, compileGrid, domainCtxOf, duplicateError, fieldError, labelsOf, listScope,
+  assertClientInScope, assertFound, assertVersion, assertWarehouseInScope, compileGrid, domainCtxOf, duplicateError, fieldError, labelsOf, clientLabelsOf, listScope,
   logCreate, logDelete, logUpdate, type Actor, type GridBinding,
 } from "./integration-logs-kit";
+import { hasClient } from "@/server/auth/scope";
+import { syncAllCarrierCatalogs } from "./carriers";
 
 const t = s.rateShoppingPresets;
 const ps = s.rateShoppingPresetServices;
 const ENTITY = "rate_shopping_preset";
 
-const clientCodeSql = sql<string>`(SELECT c.name FROM clients c WHERE c.id = "rate_shopping_presets"."client_id")`;
+const clientNameSql = sql<string>`(SELECT c.name FROM clients c WHERE c.id = "rate_shopping_presets"."client_id")`;
+const clientCodeSql = sql<string>`(SELECT c.code FROM clients c WHERE c.id = "rate_shopping_presets"."client_id")`;
 const warehouseCodeSql = sql<string>`(SELECT w.code FROM warehouses w WHERE w.id = "rate_shopping_presets"."warehouse_id")`;
 const serviceCountSql = sql<number>`(SELECT COUNT(*) FROM rate_shopping_preset_services x WHERE x.preset_id = "rate_shopping_presets"."id" AND x.is_selected = 1)`;
 
@@ -30,7 +33,7 @@ const BINDING: GridBinding = {
   exprs: {
     name: sql`${t.name}`, description: sql`${t.description}`, method: sql`${t.method}`, showErrors: sql`${t.showErrors}`, useAllServices: sql`${t.useAllServices}`,
     isActive: sql`${t.isActive}`, transitDays: sql`${t.transitDays}`, clientId: sql`${t.clientId}`, warehouseId: sql`${t.warehouseId}`,
-    clientCode: clientCodeSql, warehouseCode: warehouseCodeSql, serviceCount: serviceCountSql,
+    clientCode: clientNameSql, warehouseCode: warehouseCodeSql, serviceCount: serviceCountSql,
   },
   fields: RATE_SHOPPING_FIELDS, sortable: RATE_SHOPPING_SORT_FIELDS, search: RATE_SHOPPING_SEARCH_FIELDS,
   defaultSort: [{ field: "name", dir: "asc" }], tiebreaker: t.id,
@@ -46,7 +49,9 @@ export interface PresetRow {
   readonly useAllServices: boolean;
   readonly isActive: boolean;
   readonly clientId: string;
+  /** Full client name (M12 rule: name everywhere, code alongside). */
   readonly clientName: string;
+  readonly clientCode: string;
   readonly warehouseId: string;
   readonly warehouseCode: string;
   readonly serviceCount: number;
@@ -71,19 +76,19 @@ export interface PresetDetail extends PresetRow {
 }
 
 type Row = typeof t.$inferSelect;
-const toRow = (r: Row, clientName: string, warehouseCode: string, serviceCount: number): PresetRow => ({
+const toRow = (r: Row, client: { name: string | null; code: string | null }, warehouseCode: string, serviceCount: number): PresetRow => ({
   id: r.id, name: r.name, description: r.description, method: r.method, transitDays: r.transitDays, showErrors: r.showErrors, useAllServices: r.useAllServices,
-  isActive: r.isActive, clientId: r.clientId, clientName, warehouseId: r.warehouseId, warehouseCode, serviceCount: Number(serviceCount), version: r.version,
+  isActive: r.isActive, clientId: r.clientId, clientName: client.name || client.code || "", clientCode: client.code ?? "", warehouseId: r.warehouseId, warehouseCode, serviceCount: Number(serviceCount), version: r.version,
 });
 
 export function listPresets(db: AppDb, auth: AuthContext, query: GridQuery): { rows: PresetRow[]; total: number } {
   const grid = compileGrid(BINDING, query, [listScope(t, auth, { warehouseId: t.warehouseId, clientId: t.clientId })]);
   const result = paginate(
-    db.select({ r: t, c: clientCodeSql, w: warehouseCodeSql, n: serviceCountSql }).from(t).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    db.select({ r: t, c: clientNameSql, k: clientCodeSql, w: warehouseCodeSql, n: serviceCountSql }).from(t).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
     () => db.select({ n: sql<number>`count(*)` }).from(t).where(grid.where).get()?.n ?? 0,
     { page: query.page, pageSize: query.pageSize },
   );
-  return { rows: result.rows.map((x) => toRow(x.r, x.c, x.w, x.n)), total: result.total };
+  return { rows: result.rows.map((x) => toRow(x.r, { name: x.c, code: x.k }, x.w, x.n)), total: result.total };
 }
 
 export function loadPreset(db: AppDb, auth: AuthContext, id: string): Row {
@@ -97,6 +102,7 @@ export function loadPreset(db: AppDb, auth: AuthContext, id: string): Row {
 export function availableServices(db: AppDb, auth: AuthContext, warehouseId: string, clientId: string, selected: ReadonlySet<string> = new Set()): PresetService[] {
   assertWarehouseInScope(auth, warehouseId);
   assertClientInScope(auth, clientId);
+  syncAllCarrierCatalogs(db);
   const cc = s.carrierConnections;
   const rows = db.select({ svc: s.carrierServices, conn: cc }).from(s.carrierServices).innerJoin(cc, eq(cc.id, s.carrierServices.connectionId))
     .where(and(eq(cc.warehouseId, warehouseId), eq(cc.isActive, true), eq(s.carrierServices.isActive, true),
@@ -108,6 +114,29 @@ export function availableServices(db: AppDb, auth: AuthContext, warehouseId: str
   }));
 }
 
+/**
+ * Clients the warehouse can rate-shop for: clients in scope with at least one active carrier service
+ * at the warehouse (an all-clients setup or an explicit client grant). Logiwa filters Client by warehouse
+ * the same way; a client outside this list would create a preset that can never compare rates.
+ */
+export function servedClients(db: AppDb, auth: AuthContext, warehouseId: string): { id: string; serviceCount: number }[] {
+  assertWarehouseInScope(auth, warehouseId);
+  syncAllCarrierCatalogs(db);
+  const rows = db.all<{ id: string; n: number }>(sql`
+    SELECT c.id AS id, (
+      SELECT COUNT(*) FROM carrier_services sv JOIN carrier_connections cc ON cc.id = sv.connection_id
+      WHERE cc.warehouse_id = ${warehouseId} AND cc.is_active = 1 AND sv.is_active = 1
+        AND (cc.all_clients = 1 OR EXISTS (SELECT 1 FROM carrier_connection_clients x WHERE x.connection_id = cc.id AND x.client_id = c.id AND x.has_access = 1))
+    ) AS n FROM clients c`);
+  return rows.filter((r) => Number(r.n) > 0 && hasClient(auth.scope, r.id)).map((r) => ({ id: r.id, serviceCount: Number(r.n) }));
+}
+
+function assertClientServed(db: AppDb, auth: AuthContext, body: Pick<PresetSave, "warehouseId" | "clientId">) {
+  if (!servedClients(db, auth, body.warehouseId).some((c) => c.id === body.clientId)) {
+    throw fieldError("clientId", "This client has no carrier services at the selected warehouse. Give it access to a carrier setup in Carrier Integrations first.");
+  }
+}
+
 const openOrdersOf = (db: AppDb, id: string): number =>
   db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM shipment_orders WHERE rate_shopping_preset_id = ${id} AND deleted_at IS NULL AND status NOT IN ('Shipped','Partially Shipped','Delivered','Cancelled')`)?.n ?? 0;
 
@@ -116,7 +145,7 @@ export function getPreset(db: AppDb, auth: AuthContext, id: string): PresetDetai
   const selected = new Set(db.select({ id: ps.carrierServiceId }).from(ps).where(and(eq(ps.presetId, id), eq(ps.isSelected, true))).all().map((x) => x.id));
   const services = availableServices(db, auth, r.warehouseId, r.clientId, selected);
   return {
-    ...toRow(r, labelsOf(db, "clients", [r.clientId]).get(r.clientId) ?? "", labelsOf(db, "warehouses", [r.warehouseId]).get(r.warehouseId) ?? "", selected.size),
+    ...toRow(r, clientLabelsOf(db, [r.clientId]).get(r.clientId) ?? { name: null, code: null }, labelsOf(db, "warehouses", [r.warehouseId]).get(r.warehouseId) ?? "", selected.size),
     services, openOrders: openOrdersOf(db, id),
   };
 }
@@ -150,6 +179,7 @@ export function createPreset(tx: AppDb, auth: AuthContext, actor: Actor, body: P
   assertWarehouseInScope(auth, body.warehouseId);
   assertClientInScope(auth, body.clientId);
   assertUnique(tx, body, null);
+  assertClientServed(tx, auth, body);
   const row = tx.insert(t).values({
     name: body.name, description: body.description, warehouseId: body.warehouseId, clientId: body.clientId, method: body.method,
     transitDays: body.method === "Cheapest In Time" ? body.transitDays : null, showErrors: body.showErrors, useAllServices: body.useAllServices, isActive: body.isActive,

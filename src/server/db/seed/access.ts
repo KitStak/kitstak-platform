@@ -1,10 +1,10 @@
 /**
- * Access: the 4 system roles with their default permissions, a restricted custom "Client"
+ * Access: the 4 system roles with their default permissions, a restricted system "Client"
  * role, 10 users (one per role, two client users, one API user) and their warehouse /
  * client scopes.
  */
 import { hashPassword } from "@/server/auth/password";
-import { DEFAULT_ROLE_PERMISSIONS, DEFAULT_ROLES, PERMISSIONS } from "@/server/auth/permission-catalog";
+import { DEFAULT_ROLE_PERMISSIONS, DEFAULT_ROLES, PERMISSIONS, SELF_SERVICE_PERMISSIONS } from "@/server/auth/permission-catalog";
 import * as schema from "@/server/db/schema";
 import type { Tx } from "@/server/domain/types";
 import type { LEGACY_USER_ROLES, USER_TYPES } from "@/lib/enums";
@@ -53,7 +53,7 @@ const CLIENT_PERMISSION_GROUPS: ReadonlySet<string> = new Set(["fulfillment", "i
 export const CLIENT_ROLE_PERMISSIONS: readonly string[] = DEFAULT_ROLE_PERMISSIONS.viewer
   .filter((key) => {
     const def = PERMISSIONS.find((p) => p.key === key);
-    return !def || CLIENT_PERMISSION_GROUPS.has(def.groupKey) || def.groupKey === "settings" || def.groupKey === "mobile";
+    return !def || CLIENT_PERMISSION_GROUPS.has(def.groupKey) || (def.groupKey === "settings" && SELF_SERVICE_PERMISSIONS.includes(key)) || def.groupKey === "mobile";
   });
 
 export interface AccessRefs {
@@ -78,7 +78,7 @@ function seedRoles(tx: Tx): Map<RoleKey, Id> {
   }
   insertRole(CLIENT_ROLE_KEY, {
     name: "Client", description: "Client portal: read-only orders, inventory and reports for the client's own data. Carrier costs and account numbers are hidden.",
-    category: "Client", isSystem: false, restrictions: ["carrier_cost", "carrier_account_data", "rate_shopping_data"], createdAt: isoOf(utcAt(160, 15)),
+    category: "Client", isSystem: true, restrictions: ["carrier_cost", "carrier_account_data", "rate_shopping_data"], createdAt: isoOf(utcAt(160, 15)),
   }, CLIENT_ROLE_PERMISSIONS);
   return roleIds;
 }
@@ -92,7 +92,7 @@ export function seedAccess(tx: Tx, org: OrgRefs, password: string): AccessRefs {
     const name = `${u.firstName} ${u.lastName}`;
     const id = tx.insert(schema.users).values({
       email: u.email, name, firstName: u.firstName, lastName: u.lastName, passwordHash, role: u.role, userType: u.userType,
-      isApiUser: u.isApiUser ?? false, allClients: !u.clientCodes, passwordChangedAt: createdAt,
+      isApiUser: u.isApiUser ?? false, allClients: !u.clientCodes, passwordChangedAt: isoOf(utcAt(14, 15)), // recent, so the 180-day expiry policy never locks the demo users (admin-settings REQ-R5-2)
       preferences: { dateFormat: "M/D/YYYY h:mm:ss A", timeFormat: "12h", numberFormat: "1,025.00", density: "Large", defaultWarehouseId: whIds[u.warehouses[0]] },
       createdAt,
     }).returning({ id: schema.users.id }).get().id;

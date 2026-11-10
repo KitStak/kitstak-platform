@@ -6,7 +6,7 @@
  * carts only), row ⋯ Show details · Edit · Duplicate · Label · Change log · Delete.
  */
 import * as React from "react";
-import { Copy, Eye, History, Pencil, Plus, Tag, Trash2 } from "lucide-react";
+import { Copy, Eye, History, PackageOpen, Pencil, Plus, ShoppingCart, Tag, Trash2 } from "lucide-react";
 import { DataGrid, GridToolbar, LinkCell, useGrid, type BulkAction, type GridColumnDef, type RowAction } from "@/components/grid";
 import { PageHeader } from "@/components/layout/page-header";
 import { PrintOptionsModal } from "@/components/shared/print-options-modal";
@@ -19,12 +19,14 @@ import { RadioCards } from "@/components/ui/radio-cards";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TextField } from "@/components/ui/text-field";
 import { toast } from "@/components/ui/toast";
-import { DisabledReason } from "@/components/ui/tooltip";
 import { isApiError } from "@/lib/api-client";
 import { useApiQuery } from "@/lib/query-client";
-import { MOBILE_CART_FIELDS, MOBILE_CARTS_GRID_KEY } from "@/lib/grid-defs/facility/mobile-carts";
+import { cellDisplayName, MOBILE_CART_FIELDS, MOBILE_CARTS_GRID_KEY } from "@/lib/grid-defs/facility/mobile-carts";
+import { Select } from "@/components/ui/select";
+import { useCan } from "@/lib/permissions-client";
+import type { AssignJobResult } from "@/server/domain/mobile-cart-cells";
 import type { MobileCartDetail, MobileCartRow } from "@/server/repositories/mobile-carts";
-import { apiErrorMessage, AvailabilityPill, DetailList, EntityChangeLogDrawer, Muted, NO_PERMISSION, Num, StatRow, toastBulk, toFilterFields, useAction, useLookups, usePagePerms, useWarehouseOptions, YesNo, type BulkResponse } from "@/components/facility/facility-shared";
+import { apiErrorMessage, AvailabilityPill, CodeCell, DetailList, EntityChangeLogDrawer, Muted, NO_PERMISSION, Num, StatRow, toastBulk, toFilterFields, useAction, useLookups, usePagePerms, useWarehouseOptions, YesNo, type BulkResponse } from "@/components/facility/facility-shared";
 import { MobileCartWizardDrawer } from "./mobile-cart-wizard";
 
 const PERMS = ["view", "create", "edit", "delete", "label", "duplicate"] as const;
@@ -33,19 +35,19 @@ const right = (v: number) => <div className="text-right"><Num value={v} /></div>
 type LabelScope = "carts" | "cells" | "both";
 
 const COLUMNS: GridColumnDef<MobileCartRow>[] = [
-  { id: "code", header: "Cart code", size: 120, meta: { alwaysVisible: true }, cell: ({ row }) => <span className="font-medium text-foreground">{row.original.code}</span> },
+  { id: "code", header: "Cart code", size: 130, meta: { alwaysVisible: true }, cell: ({ row }) => <CodeCell label={`mobile cart ${row.original.code}`}>{row.original.code}</CodeCell> },
   { id: "description", header: "Cart description", size: 200, cell: ({ row }) => row.original.description ?? <Muted /> },
   { id: "warehouseCode", header: "Warehouse", size: 100, cell: ({ row }) => row.original.warehouseCode },
-  { id: "status", header: "Status", size: 120, meta: { headerTip: "Occupied while an open job holds the cart" }, cell: ({ row }) => <AvailabilityPill status={row.original.status} /> },
-  { id: "cartTypeName", header: "Mobile cart type", size: 150, enableSorting: false, cell: ({ row }) => row.original.cartTypeName ?? <Muted /> },
-  { id: "cellCount", header: "Num. of cells", size: 110, meta: { align: "right" }, cell: ({ row }) => right(row.original.cellCount) },
-  { id: "levels", header: "Num. of levels", size: 110, meta: { align: "right" }, cell: ({ row }) => right(row.original.levels) },
-  { id: "columns", header: "Num. of columns", size: 120, meta: { align: "right" }, cell: ({ row }) => right(row.original.columns) },
-  { id: "taskCount", header: "Num. of tasks", size: 110, meta: { align: "right", headerTip: "Open tasks of the job holding the cart" }, cell: ({ row }) => right(row.original.taskCount) },
+  { id: "status", header: "Status", size: 136, meta: { headerTip: "Occupied while an open job holds the cart" }, cell: ({ row }) => <AvailabilityPill status={row.original.status} /> },
+  { id: "cartTypeName", header: "Cart type", size: 150, meta: { label: "Mobile cart type" }, enableSorting: false, cell: ({ row }) => row.original.cartTypeName ?? <Muted /> },
+  { id: "cellCount", header: "Cells", size: 96, meta: { align: "right", label: "Number of cells" }, cell: ({ row }) => right(row.original.cellCount) },
+  { id: "levels", header: "Levels", size: 96, meta: { align: "right", label: "Number of levels" }, cell: ({ row }) => right(row.original.levels) },
+  { id: "columns", header: "Columns", size: 104, meta: { align: "right", label: "Number of columns" }, cell: ({ row }) => right(row.original.columns) },
+  { id: "taskCount", header: "Open tasks", size: 116, meta: { align: "right", label: "Open tasks of the job holding the cart" }, cell: ({ row }) => right(row.original.taskCount) },
   { id: "jobCode", header: "Job code", size: 120, cell: ({ row }) => (row.original.jobId && row.original.jobCode ? <LinkCell href={`/jobs/${row.original.jobId}`}>{row.original.jobCode}</LinkCell> : <Muted />) },
-  { id: "orderCount", header: "Num. of orders", size: 120, meta: { align: "right" }, cell: ({ row }) => right(row.original.orderCount) },
+  { id: "orderCount", header: "Orders", size: 100, meta: { align: "right", label: "Number of orders" }, cell: ({ row }) => right(row.original.orderCount) },
   { id: "operationType", header: "Operation type", size: 130, cell: ({ row }) => row.original.operationType },
-  { id: "allowMultipleJob", header: "Allow multiple job", size: 140, cell: ({ row }) => <YesNo value={row.original.allowMultipleJob} /> },
+  { id: "allowMultipleJob", header: "Multi-job", size: 110, meta: { label: "Allow multiple jobs" }, cell: ({ row }) => <YesNo value={row.original.allowMultipleJob} /> },
   { id: "isDynamic", header: "Dynamic", size: 100, meta: hidden, cell: ({ row }) => <YesNo value={row.original.isDynamic} /> },
   { id: "createdAt", header: "Created date", size: 130, meta: hidden, cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString("en-US") },
 ];
@@ -54,6 +56,8 @@ function CartDetailDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: 
   const q = useApiQuery<MobileCartDetail>(["mobile-cart", id ?? ""], id ? `/api/mobile-carts/${id}` : null, { staleTime: 0 });
   const d = q.data?.data;
   const levels = d ? Array.from({ length: d.levels }, (_, i) => i + 1) : [];
+  const cellOrder = new Map((d?.orders ?? []).filter((o) => o.cell).map((o) => [o.cell as string, o]));
+  const unsorted = (d?.orders ?? []).filter((o) => !o.cell).length;
   return (
     <Drawer open={id !== null} onOpenChange={onOpenChange} width={60} title={d ? `Mobile cart ${d.code}` : "Mobile cart"} description={d?.description ?? "Cart layout, cells and the job using it"}
       footer={d && canEdit ? <div className="flex justify-end"><Button variant="primary" onClick={() => onEdit(d.id)}><Pencil className="h-4 w-4" />Edit</Button></div> : undefined}>
@@ -66,21 +70,25 @@ function CartDetailDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: 
             { label: "Allow multiple jobs", value: d.allowMultipleJob ? "Yes" : "No" }, { label: "Dynamic", value: d.isDynamic ? "Yes" : "No" },
             { label: "Job", value: d.jobId && d.jobCode ? <LinkCell href={`/jobs/${d.jobId}`}>{d.jobCode}</LinkCell> : "Not in use", wide: true },
           ]} />
+          <CartJobPanel cart={d} />
           <section className="flex flex-col gap-2">
-            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Cells</h3>
+            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Cells <span className="font-normal normal-case text-faint">· level letter + column, scanned as {d.code}-A01</span></h3>
             <div className="overflow-x-auto rounded-lg border border-border bg-surface-sunken/50 p-3">
               <div className="inline-grid gap-1.5" style={{ gridTemplateColumns: `2rem repeat(${Math.max(1, d.columns)}, minmax(5.5rem, 1fr))` }}>
                 <span />
-                {Array.from({ length: d.columns }, (_, c) => <span key={c} className="text-center text-[11px] font-medium text-faint">{c + 1}</span>)}
+                {Array.from({ length: d.columns }, (_, c) => <span key={c} className="text-center text-[11px] font-medium text-faint">{String(c + 1).padStart(2, "0")}</span>)}
                 {levels.map((l) => (
                   <React.Fragment key={l}>
                     <span className="flex items-center text-[11px] font-semibold text-faint">{String.fromCharCode(64 + l)}</span>
                     {Array.from({ length: d.columns }, (_, c) => {
                       const cell = d.cells.find((x) => x.level === l && x.column === c + 1);
+                      const held = cell ? cellOrder.get(cell.barcode.toUpperCase()) : undefined;
+                      const code = held?.orderCode ?? cell?.orderCode ?? null;
                       return (
-                        <span key={c} className={`flex flex-col rounded-md border px-1.5 py-1 text-center shadow-xs ${cell?.orderCode ? "border-info/40 bg-info-soft" : "border-border bg-surface"}`}>
-                          <span className="truncate font-mono text-[10px] text-body" title={cell?.barcode}>{cell?.barcode ?? "—"}</span>
-                          <span className="truncate text-[10px] text-faint">{cell?.orderCode ?? "Empty"}</span>
+                        <span key={c} className={`flex flex-col rounded-md border px-1.5 py-1 text-center shadow-xs ${code ? "border-info/40 bg-info-soft" : "border-border bg-surface"}`}
+                          title={code ? `Cell ${cellDisplayName(l, c + 1)} (scan ${cell?.barcode ?? ""}) holds ${code}${held ? ` · ${held.picked} of ${held.planned} units picked` : ""}` : `Cell ${cellDisplayName(l, c + 1)} (scan ${cell?.barcode ?? ""}) is free`}>
+                          <span className="truncate text-[12px] font-semibold text-foreground">{cellDisplayName(l, c + 1)}</span>
+                          <span className={`truncate text-[10px] ${code ? "font-medium text-info" : "text-faint"}`}>{code ? `${code}${held ? ` · ${held.picked}/${held.planned}` : ""}` : "Free"}</span>
                         </span>
                       );
                     })}
@@ -89,9 +97,99 @@ function CartDetailDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: 
               </div>
             </div>
           </section>
+          {d.status === "Occupied" || d.orders.length > 0 ? (
+            <section className="flex flex-col gap-2">
+              <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Orders on this cart</h3>
+              {d.orders.length === 0 ? (
+                <p className="text-[12px] text-secondary">The job on this cart has no orders yet.</p>
+              ) : (
+                <>
+                  {unsorted > 0 ? (
+                    <p className="text-[12px] text-secondary">
+                      {unsorted === d.orders.length
+                        ? "No order is in a cell yet. Use Put on cart above to give each order a cell."
+                        : `${unsorted} of ${d.orders.length} orders are not in a cell yet.`}
+                    </p>
+                  ) : null}
+                  <div className="overflow-hidden rounded-lg border border-border">
+                    <table className="w-full text-[13px]">
+                      <thead className="bg-surface-sunken text-[11px] uppercase text-secondary">
+                        <tr><th className="px-3 py-2 text-left">Order</th><th className="px-3 py-2 text-left">Job</th><th className="px-3 py-2 text-left">Cell / tote</th><th className="px-3 py-2 text-right">Picked</th><th className="px-3 py-2 text-right">Open tasks</th></tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {d.orders.map((o) => (
+                          <tr key={`${o.jobId}-${o.orderId}`}>
+                            <td className="px-3 py-1.5"><LinkCell href={`/orders/${o.orderId}`}>{o.orderCode}</LinkCell></td>
+                            <td className="px-3 py-1.5"><LinkCell href={`/jobs/${o.jobId}`}>{o.jobCode}</LinkCell></td>
+                            <td className="px-3 py-1.5">{o.cell ? <span><span className="font-semibold">{cellLabel(d.cells, o.cell)}</span> <span className="font-mono text-[11px] text-faint">{o.cell}</span></span> : o.tote ? <span>Tote <span className="font-mono text-[12px]">{o.tote}</span></span> : <Muted>Not assigned yet</Muted>}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums">{o.picked.toLocaleString("en-US")} / {o.planned.toLocaleString("en-US")}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums">{o.openTasks}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </section>
+          ) : null}
         </div>
       )}
     </Drawer>
+  );
+}
+
+/** "A03" for a cell barcode of this cart, or the barcode itself when it isn't one of its cells. */
+function cellLabel(cells: MobileCartDetail["cells"], barcode: string): string {
+  const c = cells.find((x) => x.barcode.toUpperCase() === barcode.toUpperCase());
+  return c ? cellDisplayName(c.level, c.column) : barcode;
+}
+
+interface JobCandidate { readonly id: string; readonly code: string; readonly status: string; readonly jobType: string | null; readonly orderCount: number; readonly cartCode: string | null }
+
+/**
+ * Put-to-cart (REQ-R10-6): put an open picking job on this cart (each order gets a cell, A01 first)
+ * or empty the cart. Shown to whoever can edit carts, assign jobs or execute tasks.
+ */
+function CartJobPanel({ cart }: { readonly cart: MobileCartDetail }) {
+  const { allowed } = useCan(["settings.mobile_carts.edit", "fulfillment.job_management.assign", "fulfillment.task_details.execute_task"], "any");
+  const [jobId, setJobId] = React.useState<string | null>(null);
+  const [confirmEmpty, setConfirmEmpty] = React.useState(false);
+  const busyCart = cart.status === "Occupied" && !cart.allowMultipleJob;
+  const candidates = useApiQuery<JobCandidate[]>(["mobile-cart-jobs", cart.id], allowed ? `/api/mobile-carts/${cart.id}/job` : null, { staleTime: 0 });
+  const action = useAction([["mobile-cart", cart.id], ["mobile-cart-jobs", cart.id], ["grid", MOBILE_CARTS_GRID_KEY]]);
+  if (!allowed) return null;
+  const held = cart.cells.filter((c) => c.orderCode).length;
+  const free = cart.cells.length - held;
+  const options = (candidates.data?.data ?? []).filter((j) => j.id !== cart.jobId).map((j) => ({ value: j.id, label: `${j.code} · ${j.orderCount} order${j.orderCount === 1 ? "" : "s"} · ${j.status}`, textValue: j.code }));
+  const assign = async () => {
+    if (!jobId) return;
+    const r = await action.run<AssignJobResult>(`/api/mobile-carts/${cart.id}/job`, "POST", { jobId });
+    if (!r) return;
+    setJobId(null);
+    const first = r.assignments.slice(0, 3).map((a) => `${a.orderCode} → ${a.display}`).join(", ");
+    toast.success(`${r.jobCode} is on cart ${r.cartCode}`, r.assignments.length > 0 ? `${r.assignments.length} order${r.assignments.length === 1 ? "" : "s"} placed: ${first}${r.assignments.length > 3 ? "…" : ""}` : "Every order already has a cell.");
+  };
+  const empty = async () => {
+    const r = await action.run<{ cartCode: string; freedCells: number; releasedJobs: readonly string[] }>(`/api/mobile-carts/${cart.id}/job`, "DELETE");
+    setConfirmEmpty(false);
+    if (r) toast.success(`Cart ${r.cartCode} is empty`, `${r.freedCells} cell${r.freedCells === 1 ? "" : "s"} freed${r.releasedJobs.length ? ` · ${r.releasedJobs.join(", ")} no longer on the cart` : ""}.`);
+  };
+  return (
+    <section className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-3" aria-label="Put a job on this cart">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-[14rem] flex-1">
+          <label className="mb-1 block text-[12px] font-medium text-secondary" htmlFor="cart-job">Put a picking job on this cart</label>
+          <Select id="cart-job" aria-label="Picking job" options={options} value={jobId} onChange={setJobId} disabled={busyCart || action.pending}
+            placeholder={busyCart ? "In use; this cart takes one job at a time" : candidates.isPending ? "Loading jobs…" : options.length === 0 ? "No open picking job in this warehouse" : "Choose an open picking job"} />
+        </div>
+        <Button variant="primary" disabled={!jobId || action.pending} onClick={() => void assign()}><ShoppingCart className="h-4 w-4" />Put on cart</Button>
+        <Button variant="secondary" disabled={(held === 0 && cart.status !== "Occupied") || action.pending} onClick={() => setConfirmEmpty(true)}><PackageOpen className="h-4 w-4" />Empty cart</Button>
+      </div>
+      <p className="text-[12px] text-faint">{free} of {cart.cells.length} cells free. Each order gets the next free cell (A01, A02, …); the picker scans {cart.code}-A01 to sort into it.</p>
+      <ConfirmDialog open={confirmEmpty} onOpenChange={setConfirmEmpty} title={`Empty cart ${cart.code}?`} description={`Frees ${held} cell${held === 1 ? "" : "s"} and takes the open job off the cart. Picked units are not moved.`}
+        confirmLabel="Empty cart" cancelLabel="Cancel" onConfirm={empty} />
+    </section>
   );
 }
 
@@ -178,7 +276,7 @@ export function MobileCartsPage() {
 
   const bulkActions: readonly BulkAction[] = [
     { key: "label", label: "Label", icon: Tag, onSelect: (ids) => setToLabel(selected(ids)), disabledReason: perms.label ? null : NO_PERMISSION },
-    { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: (ids) => setToDelete(selected(ids)), disabledReason: perms.delete ? null : NO_PERMISSION,
+    { key: "delete", label: "Delete", icon: Trash2, onSelect: (ids) => setToDelete(selected(ids)), disabledReason: perms.delete ? null : NO_PERMISSION,
       eligibility: (ids) => { const rows = selected(ids); return rows.length && rows.every((r) => r.status === "Occupied") ? "Only Available carts can be deleted" : null; } },
   ];
   const rowActions = (row: MobileCartRow): readonly RowAction[] => [
@@ -193,8 +291,8 @@ export function MobileCartsPage() {
   const create = () => setWizard({ open: true, editId: null });
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Mobile Carts" helper="Pick carts and their cells: layout, barcodes, and which job is using each cart right now."
-        actions={<DisabledReason reason={perms.create ? null : NO_PERMISSION}><Button variant="primary" disabled={!perms.create} onClick={create}><Plus className="h-4 w-4" aria-hidden />Create mobile cart</Button></DisabledReason>} />
+      <PageHeader title="Mobile Carts" helpHref="/locations/help#mobile-carts" helper="Pick carts and their cells: layout, barcodes, and which job is using each cart right now."
+        actions={perms.create ? <Button variant="primary" onClick={create}><Plus className="h-4 w-4" aria-hidden />Create mobile cart</Button> : null} />
       <GridToolbar {...g.toolbarProps} searchPlaceholder="Search cart code" bulkActions={bulkActions} bulkNoun="mobile cart" />
       <DataGrid<MobileCartRow>
         {...g.gridProps}

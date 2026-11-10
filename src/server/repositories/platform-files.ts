@@ -14,7 +14,8 @@ import type { AuthContext } from "@/server/auth/context";
 import { can } from "@/server/auth/permissions";
 import { attachments, backgroundTasks, entityNotes, files, importBatches, users } from "@/server/db/schema";
 import { MAX_UPLOAD_BYTES, type FileRecord, type FileStore } from "@/server/files";
-import { getImportDefinition } from "@/server/imports/registry";
+// Leaf map, not the registry: the registry imports every module's handler (see permissions.ts).
+import { IMPORT_PERMISSIONS } from "@/server/imports/permissions";
 import { entityRefSchema, idSchema } from "./platform-common";
 import { canOnEntity, findEntity, getEntityDef, requireEntity } from "./platform-entities";
 
@@ -85,8 +86,8 @@ function canReadOwned(db: AppDb, auth: AuthContext, file: FileRecord): boolean {
   }
   if (type === "import_batch") {
     const batch = db.select({ key: importBatches.importKey }).from(importBatches).where(eq(importBatches.id, id)).get();
-    const def = batch ? getImportDefinition(batch.key) : undefined;
-    return def !== undefined && can(auth, def.permission);
+    const permission = batch ? IMPORT_PERMISSIONS[batch.key] : undefined;
+    return permission !== undefined && can(auth, permission);
   }
   if (!getEntityDef(type)) return false;
   requireEntity(db, auth, type, id, "view");

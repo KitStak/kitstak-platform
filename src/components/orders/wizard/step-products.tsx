@@ -21,11 +21,11 @@ import { KpiChip } from "@/components/ui/kpi-chip";
 import { TextField } from "@/components/ui/text-field";
 import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
-import { ProductSearchAdd } from "@/components/shared/product-search-add";
 import { ProductCreateDrawer } from "@/components/products/product-create-drawer";
 import type { OrderProductFacts } from "@/server/repositories/orders-wizard";
 import { errorMessage } from "../orders-client";
 import { LineDrawer } from "./line-drawer";
+import { OrderProductSearch } from "./order-product-search";
 import { orderTotals, type OrderFormValues, type OrderLineValue } from "./order-form-model";
 import { useOrderWizard } from "./order-wizard-context";
 
@@ -83,13 +83,14 @@ export async function fetchFacts(ids: readonly string[], warehouseId: string): P
 export function StepProducts() {
   const fmt = useFormat();
   const { mode, locks, canCreateProduct } = useOrderWizard();
-  const { control, setValue, getValues, formState } = useFormContext<OrderFormValues>();
+  const { control, setValue, getValues, formState, clearErrors } = useFormContext<OrderFormValues>();
   const lines = useWatch({ control, name: "lines" }) ?? [];
   const clientId = useWatch({ control, name: "clientId" });
   const warehouseId = useWatch({ control, name: "warehouseId" });
   const code = useWatch({ control, name: "code" });
   const [find, setFind] = React.useState("");
-  const [allColumns, setAllColumns] = React.useState(false);
+  // Logiwa shows the full line grid (UOM quantities, original SO, kit SKU, lot, expiry, pinning, notes) by default.
+  const [allColumns, setAllColumns] = React.useState(true);
   const [drawer, setDrawer] = React.useState<{ line: OrderLineValue; readOnly: boolean } | null>(null);
   const [toDelete, setToDelete] = React.useState<OrderLineValue | null>(null);
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -99,14 +100,20 @@ export function StepProducts() {
   const errorText = lineError?.message ?? lineError?.root?.message;
   const visible = find.trim() ? lines.filter((l) => l.sku.toLowerCase().includes(find.trim().toLowerCase()) || l.name.toLowerCase().includes(find.trim().toLowerCase())) : lines;
 
-  const commit = (next: OrderLineValue[]) => setValue("lines", next, { shouldDirty: true, shouldValidate: formState.isSubmitted || Boolean(errorText) });
+  const commit = (next: OrderLineValue[]) => {
+    setValue("lines", next, { shouldDirty: true, shouldValidate: formState.isSubmitted || Boolean(errorText) });
+    // The step-level "Add at least one product" error is set by the wizard, not a resolver: drop it once a line exists.
+    if (next.length > 0) clearErrors("lines");
+  };
 
-  const add = async (productId: string, qty: number) => {
+  // Search results already carry the line facts (price, weight, ATP), so adding is immediate.
+  const add = (facts: OrderProductFacts, qty: number) => {
     try {
-      const [facts] = await fetchFacts([productId], warehouseId);
-      if (!facts) throw new Error("Product not found for this client");
       commit(addToLines(getValues("lines"), facts, qty));
-      toast.success("Product added", `${qty} × ${facts.sku} added to the order.`);
+      const over = facts.atp !== null && qty > facts.atp;
+      (over ? toast.warning : toast.success)("Product added", over
+        ? `${qty} × ${facts.sku} added. Only ${facts.atp} available in this warehouse, so the order may go to Shortage.`
+        : `${qty} × ${facts.sku} added to the order.`);
     } catch (error) {
       toast.error("Couldn't add the product", errorMessage(error));
     }
@@ -129,7 +136,7 @@ export function StepProducts() {
             </DisabledReason>
           </div>
           {noClient ? <p className="text-[12px] text-secondary">{noClient}.</p> : (
-            <ProductSearchAdd clientId={clientId} warehouseId={warehouseId} addedIds={lines.map((l) => l.productId)} allowOverAtp onAdd={(p, qty) => void add(p.id, qty)} />
+            <OrderProductSearch clientId={clientId} warehouseId={warehouseId || null} addedIds={lines.map((l) => l.productId)} onAdd={add} />
           )}
         </div>
       ) : null}
@@ -164,17 +171,17 @@ export function StepProducts() {
           <table className="w-full min-w-[860px] text-[12px]">
             <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
               <tr>
-                <th className="px-3 py-2">Image</th>
-                <th className="px-3 py-2">SKU</th>
-                <th className="px-3 py-2">Name</th>
-                <th className="px-3 py-2">Pack type</th>
-                <th className="px-3 py-2 text-right">UOM ratio</th>
-                <th className="px-3 py-2 text-right">Quantity</th>
-                <th className="px-3 py-2 text-right">ATP</th>
-                <th className="px-3 py-2 text-right">Price per item</th>
-                <th className="px-3 py-2 text-right">Total price</th>
+                <th className="whitespace-nowrap px-3 py-2">Image</th>
+                <th className="whitespace-nowrap px-3 py-2">SKU</th>
+                <th className="whitespace-nowrap px-3 py-2">Name</th>
+                <th className="whitespace-nowrap px-3 py-2">Pack type</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">UOM ratio</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">Quantity</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">ATP</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">Price per item</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">Total price</th>
                 {allColumns ? EXTRA_COLUMNS.map((c) => <th key={c.key} className="whitespace-nowrap px-3 py-2">{c.label}</th>) : null}
-                <th className="w-10 px-2 py-2"><span className="sr-only">Actions</span></th>
+                <th className="w-16 px-2 py-2"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
@@ -188,22 +195,29 @@ export function StepProducts() {
                         {l.imageUrl ? <img src={l.imageUrl} alt="" width={32} height={32} className="h-full w-full object-cover" /> : <ImageIcon className="h-3.5 w-3.5 text-faint" aria-hidden />}
                       </span>
                     </td>
-                    <td className="px-3 py-1.5 font-semibold text-foreground">
-                      {l.sku}
+                    <td className="whitespace-nowrap px-3 py-1.5 font-semibold text-foreground" title={l.sku}>
+                      <button type="button" className="rounded text-left font-semibold text-foreground underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" onClick={() => setDrawer({ line: l, readOnly: Boolean(lineLock) })} aria-label={`${lineLock ? "Show details for" : "Edit"} ${l.sku}`}>
+                        {l.sku}
+                      </button>
                       {l.isKit ? <span className="ml-1.5 rounded bg-primary-soft px-1 py-0.5 text-[10px] font-semibold text-primary">Kit</span> : null}
                     </td>
                     <td className="max-w-[220px] truncate px-3 py-1.5 text-body" title={l.name}>{l.name}</td>
-                    <td className="px-3 py-1.5">{l.packType}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5">{l.packType}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">{fmt.quantity(l.uomRatio)}</td>
                     <td className="px-3 py-1.5 text-right font-semibold tabular-nums">{fmt.quantity(l.quantity)}</td>
                     <td className={cn("px-3 py-1.5 text-right tabular-nums", short ? "font-semibold text-warning" : "text-secondary")} title={short ? "Less stock available than ordered" : undefined}>{l.atp === null ? "—" : fmt.quantity(l.atp)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">{fmt.money(l.unitPrice)}</td>
-                    <td className="px-3 py-1.5 text-right font-medium tabular-nums">{fmt.money(l.quantity * l.unitPrice)}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{fmt.money(l.unitPrice)}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right font-medium tabular-nums">{fmt.money(l.quantity * l.unitPrice)}</td>
                     {allColumns ? EXTRA_COLUMNS.map((c) => {
                       const v = l[c.key];
                       return <td key={c.key} className="whitespace-nowrap px-3 py-1.5 text-secondary">{v === null || v === "" ? "—" : c.bool ? (v ? "Yes" : "No") : c.date ? fmt.date(v as string) : String(v)}</td>;
                     }) : null}
-                    <td className="px-2 py-1.5">
+                    <td className="whitespace-nowrap px-2 py-1.5">
+                      {!lineLock ? (
+                        <Button variant="ghost" size="icon-sm" aria-label={`Edit ${l.sku}`} title="Edit pack type, quantity, notes and inventory pinning" onClick={() => setDrawer({ line: l, readOnly: false })}>
+                          <Pencil className="h-3.5 w-3.5" aria-hidden />
+                        </Button>
+                      ) : null}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${l.sku}`}><MoreHorizontal className="h-4 w-4" aria-hidden /></Button>
@@ -258,7 +272,10 @@ export function StepProducts() {
         defaultClientId={clientId || null}
         onCreated={(p) => {
           setCreateOpen(false);
-          void add(p.id, 1);
+          // A brand-new product: fetch its facts once, then add it like a search result.
+          void fetchFacts([p.id], warehouseId)
+            .then(([facts]) => (facts ? add(facts, 1) : toast.error("Couldn't add the product", "Product not found for this client")))
+            .catch((error: unknown) => toast.error("Couldn't add the product", errorMessage(error)));
         }}
       />
     </div>

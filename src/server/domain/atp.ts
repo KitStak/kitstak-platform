@@ -93,7 +93,7 @@ export function atpComponentsSql(filter: AtpFilter = {}): SQL {
       COALESCE((SELECT SUM(i.on_hand - i.damaged) FROM inventory i JOIN locations loc ON loc.id = i.location_id
         WHERE i.product_id = k.product_id AND i.warehouse_id = k.warehouse_id AND loc.prevent_inventory_sync = 0), 0) AS onHand,
       COALESCE((SELECT SUM(i.on_hand - i.allocated) FROM inventory i JOIN locations loc ON loc.id = i.location_id
-        WHERE i.product_id = k.product_id AND i.warehouse_id = k.warehouse_id AND i.status = 'Stock' AND i.damage_reason IS NULL
+        WHERE i.product_id = k.product_id AND i.warehouse_id = k.warehouse_id AND +i.status = 'Stock' AND i.damage_reason IS NULL
           AND loc.prevent_allocation = 0 AND loc.is_locked = 0 AND loc.is_active = 1), 0) AS pickable
     FROM keys k JOIN products pr ON pr.id = k.product_id
     WHERE 1${inFilter("k.warehouse_id", filter.warehouseIds)}${inFilter("pr.client_id", filter.clientIds)}${inFilter("k.product_id", filter.productIds)}

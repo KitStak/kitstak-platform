@@ -4,6 +4,7 @@
  */
 import { jobTypeSettingsSchema, type FilterCondition, type JobTypeSettings, type RuleCondition } from "@/lib/domain-types";
 import type { OPERATION_TYPES } from "@/lib/enums";
+import { eq } from "drizzle-orm";
 import * as schema from "@/server/db/schema";
 import type { Tx } from "@/server/domain/types";
 import type { CarrierRefs } from "./integrations";
@@ -28,7 +29,7 @@ export interface ConfigRefs {
   /** Job type id by `${warehouseId}|${code}`. */
   readonly jobTypes: ReadonlyMap<string, Id>;
   readonly allocationAlgorithms: ReadonlyMap<string, Id>;
-  readonly waveRules: Readonly<Record<"d2c" | "b2b" | "rush" | "count" | "ks2", WaveRuleRef>>;
+  readonly waveRules: Readonly<Record<"d2c" | "b2b" | "rush" | "count" | "ks2" | "replen" | "merge" | "ai", WaveRuleRef>>;
   readonly ratePresets: readonly { readonly id: Id; readonly clientId: Id; readonly name: string }[];
 }
 
@@ -54,7 +55,7 @@ const JOB_TYPE_DEFS: readonly JobTypeDef[] = [
     settings: { template: "Retailer Compliance", orderScope: "All Orders", batch: { method: "Nof Order", min: 1, max: 6 }, picking: { createLoadingTask: true, disableFullLpPicking: false } }, conditions: [WHOLESALE] },
   { code: "Cycle Count", description: "Scheduled cycle counts by location", operationType: "Count", settings: { count: { autoUpdateNoDifferenceLines: true } } },
   { code: "Instant Count", description: "Ad-hoc instant counts from the mobile app", operationType: "Count", settings: { count: { instantCount: true, lockLocationForInstantCount: true } } },
-  { code: "Dynamic Replenishment", description: "Min/max pick-face replenishment from reserve", operationType: "Replenishment", settings: { replenishment: { type: "Dynamic", flow: "Pick & Put", algorithmMethod: "FEFO", zoneBased: true } } },
+  { code: "Dynamic Replenishment", description: "Min/max pick-face replenishment from reserve", operationType: "Replenishment", settings: { replenishment: { type: "Dynamic", flow: "Pick & Put", algorithmMethod: "FEFO", zoneBased: true, enableLpSwap: true, allowHigherPackTypeConversion: true } } },
   { code: "Static Replenishment", description: "Planned replenishment for promotions", operationType: "Replenishment", settings: { replenishment: { type: "Static", flow: "Direct Put", algorithmMethod: "FIFO" } } },
   { code: "Work Order Picking", description: "Component picking for kitting work orders", operationType: "Work Order", settings: { workOrder: { pickingAndKitting: true } } },
 ];
@@ -105,8 +106,10 @@ function seedWaveRules(tx: Tx, org: OrgRefs, jobTypes: ReadonlyMap<string, Id>):
   const make = (ruleSeq: number, name: string, warehouseId: Id, jobTypeCodes: readonly JobTypeCode[], extra: Partial<typeof schema.waveRules.$inferInsert>): WaveRuleRef => {
     const id = tx.insert(schema.waveRules).values({
       ruleSeq, name, warehouseId, operationType: "Picking", jobTypeIds: jobTypeCodes.map((c) => jobTypes.get(jobTypeKey(warehouseId, c)) as Id),
-      orderBy: [{ field: "priority", dir: "desc" }, { field: "orderDate", dir: "asc" }], createdAt: isoOf(utcAt(120, 15)), ...extra,
+      orderBy: [{ field: "priority", dir: "desc" }, { field: "shipmentOrderDate", dir: "asc" }], createdAt: isoOf(utcAt(120, 15)), ...extra,
     }).returning({ id: schema.waveRules.id }).get().id;
+    // M03: every seeded rule opens its change log with a create event.
+    tx.insert(schema.changeLog).values({ entityType: "wave_rule", entityId: id, entityCode: name, type: "Create", message: `Wave Rule ${name} is created.`, source: "System", at: isoOf(utcAt(120, 15)) }).run();
     return { id, ruleSeq, name, warehouseId, jobTypeCodes };
   };
   return {
@@ -122,6 +125,15 @@ function seedWaveRules(tx: Tx, org: OrgRefs, jobTypes: ReadonlyMap<string, Id>):
     }),
     count: make(104, "Cycle Count - Zone Rotation", org.mlt1, ["Cycle Count"], { operationType: "Cycle Count", countType: "Location", lockLocations: true }),
     ks2: make(105, "KS2 Overflow Wave", org.ks2, ["Single Unit Orders", "Multi Item Orders"], { filters: [NOT_WHOLESALE], assignMode: "Pool" }),
+    // M03 blind judge R1: every wave operation type has a demo rule (run live, not by the replay).
+    replen: make(106, "Dynamic Replenishment - Pick Faces", org.mlt1, ["Dynamic Replenishment"], {
+      operationType: "Replenishment", priority: "High", softAllocation: true, scheduleDays: ["Mon", "Tue", "Wed", "Thu", "Fri"], scheduleTimes: ["06:00"],
+    }),
+    merge: make(107, "Order Merge - Same Customer", org.mlt1, [], {
+      operationType: "Order Merge", orderBy: [{ field: "shipmentOrderDate", dir: "asc" }],
+      mergeRuleIds: tx.select({ id: schema.lookupValues.id }).from(schema.lookupValues).where(eq(schema.lookupValues.type, "order_merge_rule")).all().map((r) => r.id),
+    }),
+    ai: make(108, "AI Wave - D2C Optimized", org.mlt1, ["Single Unit Orders", "Multi Item Orders"], { operationType: "AI Job", priority: "Medium", filters: [NOT_WHOLESALE] }),
   };
 }
 

@@ -147,7 +147,8 @@ export const VAS_OPERATION_COLUMNS: readonly ImportColumn[] = [
 export const USER_COLUMNS: readonly ImportColumn[] = [
   req("email", "Email", "operator@example.com", { maxLength: 254 }),
   req("name", "Full Name", "Sam Operator"),
-  oneOf("userType", "User Type", ["Web", "Mobile", "Web & Mobile"], { required: true }),
+  // KitStak user types; the handler also maps the legacy Logiwa values (Web, Mobile, Web & Mobile) to Operation.
+  oneOf("userType", "User Type", ["Operation", "Client"], { required: true }),
   text("roleName", "Role", "Operator"),
   text("defaultWarehouseCode", "Default Warehouse Code", "MLT1"),
   bool("allClients", "All Clients", "Yes"),

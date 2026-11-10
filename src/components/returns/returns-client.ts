@@ -12,6 +12,13 @@ import { useCan, useMe, type PermissionInput } from "@/lib/permissions-client";
 import { useApiQuery } from "@/lib/query-client";
 import { RETURN_GRID_FIELDS } from "@/lib/grid-defs/returns/return-orders";
 
+/**
+ * Dark-mode treatment for StatusPill on return surfaces: the shared pill paints its light pastel inline,
+ * so on the dark grid the fill becomes a translucent tint of the tone and the text is lifted
+ * (foundation request R6-2 asks for this in StatusPill itself).
+ */
+export const DARK_SAFE_PILL = "[[data-theme=dark]_&]:!bg-[color-mix(in_srgb,currentColor_22%,transparent)] [[data-theme=dark]_&]:brightness-[1.75]";
+
 export const RETURN_KEYS = {
   grid: ["grid", "return-orders"] as const,
   summary: ["returns", "summary"] as const,
@@ -31,13 +38,34 @@ export function useReturnFilterFields(): readonly FilterFieldDef[] {
 
 export function useInvalidateReturns(): () => Promise<void> {
   const qc = useQueryClient();
+  // Fire-and-forget: refetching every active grid can take seconds in dev, and a
+  // committed write must never wait on it (the station screen shows success at once).
   return React.useCallback(async () => {
-    await Promise.all([
+    void Promise.all([
       qc.invalidateQueries({ queryKey: ["grid"] }),
       qc.invalidateQueries({ queryKey: ["returns"] }),
       qc.invalidateQueries({ queryKey: ["return-order"] }),
       qc.invalidateQueries({ queryKey: ["change-log"] }),
     ]);
+  }, [qc]);
+}
+
+export interface StationKpis {
+  readonly returnedOrdersToday: number;
+  readonly returnedProductsToday: number;
+  readonly openReturns: number;
+}
+
+/**
+ * Writes the KPIs a receive returned (computed in the same transaction) straight into the
+ * Return Station tile cache, so the tiles change the moment the receive commits instead of
+ * waiting on a refetch of a busy server. The invalidation that follows reconciles.
+ */
+export function useApplyStationKpis(): (warehouseId: string, kpis: StationKpis | undefined) => void {
+  const qc = useQueryClient();
+  return React.useCallback((warehouseId: string, kpis: StationKpis | undefined) => {
+    if (!kpis) return;
+    qc.setQueriesData<{ data: StationKpis }>({ queryKey: ["returns", "kpis", warehouseId] }, (old) => (old ? { ...old, data: kpis } : { data: kpis }));
   }, [qc]);
 }
 
@@ -94,4 +122,17 @@ export function useHydratedMe(): ReturnType<typeof useMe>["data"] {
   const hydrated = useHydrated();
   const me = useMe();
   return hydrated ? me.data : undefined;
+}
+
+/** "warehouse_manager" → "Warehouse Manager" for the station user cards (Logiwa shows the role). */
+export function roleLabel(role: string | null | undefined): string | null {
+  if (!role) return null;
+  return role.split(/[_\s-]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+/** Like `useLookupOptions`, plus whether the list is still loading (so selects never flash "none set up"). */
+export function useLookupState(type: string, clientId?: string | null): { readonly options: readonly { readonly value: string; readonly label: string }[]; readonly loading: boolean } {
+  const q = useApiQuery<readonly LookupValue[]>(["lookups", type, clientId ?? ""], `/api/lookups/${type}`, { query: clientId ? { clientId } : undefined, staleTime: 60_000 });
+  const options = React.useMemo(() => (q.data?.data ?? []).map((l) => ({ value: l.id, label: l.name })), [q.data]);
+  return { options, loading: q.isPending };
 }

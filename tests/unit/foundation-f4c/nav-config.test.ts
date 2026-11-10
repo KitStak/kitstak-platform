@@ -29,13 +29,13 @@ describe("nav-config (F4.7)", () => {
   it("mirrors the Logiwa column structure and item counts", () => {
     const shape = Object.fromEntries(NAV_MENUS.map((m) => [m.label, m.columns.map((c) => `${c.heading}:${c.items.length}`)]));
     expect(shape).toEqual({
-      Fulfillment: ["Outbound:5", "Task Management:4", "Shipment:2"],
-      Inventory: ["Inbound:5", "Inventory:3", "Count Operations:3"],
+      Fulfillment: ["Outbound:7", "Task Management:4", "Shipment:2"],
+      Inventory: ["Inbound:3", "Inventory:5", "Count Operations:3"],
       Automation: ["Workflows & Algorithms:4"],
       Integrations: ["Plugin Integrations:2", "Channel Logs:4", "Channel Monitoring:6", "Carrier Monitoring:1"],
-      Reports: ["Orders:3", "Inventory:7", "Logs:8", "Receiving:2", "Warehouse Efficiency:1"],
+      Reports: ["Orders:4", "Inventory:7", "Inventory Analysis:2", "Logs:8", "Receiving:2", "Warehouse Efficiency:1"],
       Analytics: ["Labor Analytics:5", "Operational Analytics:4"],
-      Settings: ["Master Data:6", "Configuration:9", "Client Setup:4", "Users:3"],
+      Settings: ["Master Data:6", "Configuration:9", "Client Setup:4", "Company:2", "Users:3"],
     });
   });
 
@@ -54,9 +54,10 @@ describe("nav-config (F4.7)", () => {
     }
   });
 
-  it("marks Retailers as BETA", () => {
+  it("lists Retailers (BETA badge retired once M11 shipped)", () => {
     const retailers = allItems().find((i) => i.href === "/organization/retailers");
-    expect(retailers?.badge).toBe("BETA");
+    expect(retailers).toBeDefined();
+    expect(retailers?.badge).toBeUndefined();
   });
 
   it("feeds the search walker every page with its permission", () => {

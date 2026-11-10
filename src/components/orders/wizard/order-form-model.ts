@@ -7,8 +7,9 @@
  */
 import { z } from "zod";
 import { COUNTRIES, countryName, subdivisionsFor } from "@/lib/countries";
-import { ADDRESS_TYPES, BILLING_PARTY_TYPES, EXPORT_REASONS, PRIORITIES, TAX_TYPES } from "@/lib/enums";
+import { ADDRESS_TYPES, BILLING_PARTY_TYPES, EXPORT_REASONS, TAX_TYPES } from "@/lib/enums";
 import type { OrderDetail } from "@/server/repositories/orders";
+import { effectiveRank, priorityFromRank } from "@/lib/grid-defs/orders/priority";
 
 export const ORDER_CODE_MAX = 50;
 export const NOTE_MAX = 500;
@@ -78,6 +79,8 @@ export interface OrderFormValues {
   clientId: string;
   code: string;
   codeTaken: boolean;
+  /** Last sequence code the server suggested; when `code` still equals it the server assigns the code at save. */
+  codeSuggested: string;
   orderTypeId: string;
   orderTypeName: string;
   orderDate: string | null;
@@ -161,7 +164,7 @@ export const EMPTY_BILLING: BillingValue = { firstName: "", lastName: "", email:
 export function defaultOrderValues(now: Date = new Date()): OrderFormValues {
   const iso = now.toISOString();
   return {
-    warehouseId: "", clientId: "", code: "", codeTaken: false, orderTypeId: "", orderTypeName: "",
+    warehouseId: "", clientId: "", code: "", codeTaken: false, codeSuggested: "", orderTypeId: "", orderTypeName: "",
     orderDate: iso, expectedShipDate: iso, expectedDeliveryDate: null, carrierExpectedDeliveryDate: null,
     scheduledPickupDate: null, scheduledShipmentDate: null, note: "", priorityRank: 0, storeOrderNumber: "",
     customerId: null, customerFirstName: "", customerLastName: "", customerEmail: "", customerPhone: "",
@@ -171,7 +174,7 @@ export function defaultOrderValues(now: Date = new Date()): OrderFormValues {
     lines: [],
     carrierConnectionId: null, carrierServiceId: null, rateShoppingPresetId: null, shippingChargesBillingType: null, taxDutiesBillingType: null,
     useCustomShippingAccount: false, shippingAccountNumber: "", useCustomTaxAccount: false, taxDutiesAccountNumber: "",
-    packingInstructions: "", shipmentPackageId: null, totalShippingCost: null, trackingNumber: "", trackingNumbers: [], reasonForExport: null,
+    packingInstructions: "", shipmentPackageId: null, totalShippingCost: null, trackingNumber: "", trackingNumbers: [], reasonForExport: "Sale",
     returnAddressId: null, returnCarrierConnectionId: null, returnCarrierServiceId: null, returnShippingCost: null, returnTrackingNumbers: [],
     extraNote1: "", extraNote2: "", extraNote3: "", extraNote4: "", extraNote5: "", clientReferenceCode: "", fraud: "",
     packingWarningTypeId: null, isGift: false, giftNote: "", orderCodeGroupingRef: "", retailerId: null, bol: "", pro: "", retailerPo: "",
@@ -217,7 +220,7 @@ export const detailsStepSchema = z.object({
   priorityRank: z.number().int().min(0, "Priority can't be negative").max(9999),
   storeOrderNumber: text(100, "Store order #"),
 }).superRefine((v, ctx) => {
-  if (v.codeTaken) ctx.addIssue({ code: "custom", path: ["code"], message: `Order code ${v.code} already exists` });
+  if (v.codeTaken) ctx.addIssue({ code: "custom", path: ["code"], message: `Order code ${v.code} is already taken` });
 });
 
 function requireRegion(country: string, state: string, path: (string | number)[], ctx: z.RefinementCtx): void {
@@ -319,17 +322,11 @@ export function orderTotals(lines: readonly Pick<OrderLineValue, "productId" | "
   };
 }
 
-/** Logiwa's numeric priority mapped onto the KitStaks priority flag. */
-export function priorityFromRank(rank: number): (typeof PRIORITIES)[number] {
-  if (rank <= 0) return "None";
-  if (rank >= 4) return "Urgent";
-  return (["None", "Low", "Medium", "High"] as const)[rank] ?? "None";
-}
+/** Logiwa's numeric priority mapped onto the KitStaks priority flag (one model: `grid-defs/orders/priority`). */
+export { priorityFromRank };
 
 export function rankFromPriority(priority: string, rank: number): number {
-  if (rank > 0) return rank;
-  const i = (PRIORITIES as readonly string[]).indexOf(priority);
-  return i > 0 ? i : 0;
+  return effectiveRank(priority, rank);
 }
 
 /* --------------------------------------------------------- detail -> form */
@@ -355,7 +352,7 @@ export function valuesFromDetail(detail: OrderDetail): OrderFormValues {
   const [first, ...rest] = (o.customerName ?? "").split(" ");
   return {
     ...defaultOrderValues(),
-    warehouseId: o.warehouseId, clientId: o.clientId, code: o.code, codeTaken: false, orderTypeId: o.orderTypeId ?? "", orderTypeName: detail.orderTypeName,
+    warehouseId: o.warehouseId, clientId: o.clientId, code: o.code, codeTaken: false, codeSuggested: "", orderTypeId: o.orderTypeId ?? detail.orderTypeLookupId ?? "", orderTypeName: detail.orderTypeName,
     orderDate: o.orderDate, expectedShipDate: o.expectedShipDate ?? o.orderDate, expectedDeliveryDate: o.expectedDeliveryDate,
     carrierExpectedDeliveryDate: o.carrierExpectedDeliveryDate, scheduledPickupDate: o.scheduledPickupDate, scheduledShipmentDate: o.scheduledShipmentDate,
     note: s(o.note), priorityRank: rankFromPriority(o.priority, o.priorityRank), storeOrderNumber: s(o.storeOrderNumber),
@@ -428,7 +425,7 @@ export function headerBody(v: OrderFormValues, carriers?: CarrierLookup): Record
     returnAddressId: v.returnAddressId, returnCarrierServiceId: v.returnCarrierServiceId, returnShippingCost: v.returnShippingCost,
     returnTrackingNumbers: v.returnTrackingNumbers.length ? v.returnTrackingNumbers : null,
     fraud: n(v.fraud), packingWarningTypeId: v.packingWarningTypeId, retailerId: v.retailerId, bol: n(v.bol), pro: n(v.pro), retailerPo: n(v.retailerPo),
-    dept: n(v.dept), markFor: n(v.markFor), retailerCustomerAccount: n(v.retailerCustomerAccount), customerId: v.customerId,
+    dept: n(v.dept), markFor: n(v.markFor), retailerCustomerAccount: n(v.retailerCustomerAccount), customerId: linkedCustomerId(v.customerId),
   };
 }
 
@@ -444,6 +441,7 @@ export function lineBody(l: OrderLineValue, withId: boolean): Record<string, unk
 export function createBody(v: OrderFormValues, carriers?: CarrierLookup): Record<string, unknown> {
   return {
     ...headerBody(v, carriers), channel: "Manual", warehouseId: v.warehouseId, clientId: v.clientId, code: v.code.trim(),
+    autoCode: Boolean(v.codeSuggested) && v.code.trim() === v.codeSuggested,
     lines: v.lines.map((l) => lineBody(l, false)),
   };
 }
@@ -467,3 +465,17 @@ export function addressNeedsAttention(v: Pick<OrderFormValues, "skipAddressVerif
 }
 
 export const ADDRESS_KEYS = ["shipAddress", "shipAddress2", "shipCity", "shipState", "shipZip", "shipCountry"] as const;
+
+/* ----------------------------------------------------------- completion */
+
+/** Share of the three required steps (details, customer, products) whose rules pass: 0 on a blank form. */
+export function requiredCompletion(values: OrderFormValues): number {
+  const steps = [detailsStepSchema, customerStepSchema, productsStepSchema];
+  const ok = steps.filter((s) => s.safeParse(values).success).length;
+  return Math.round((ok / steps.length) * 100);
+}
+
+/** A customer picked from a previous order ("order:<id>") is a one-time customer: prefilled, never linked. */
+export function linkedCustomerId(id: string | null | undefined): string | null {
+  return id && !id.startsWith("order:") && !id.startsWith("__") ? id : null;
+}

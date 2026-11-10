@@ -1,12 +1,29 @@
 /**
- * End of the Day report PDFs (M02): the carrier manifest (one section per manifest, every
+ * End Of The Day report PDFs (M02): the carrier manifest (one section per manifest, every
  * package with a Code 128 tracking barcode) and the custom report (totals by client and
  * service). Rendered with the foundation PdfWriter.
  */
 import { PDFDocument } from "pdf-lib";
 import { renderBarcodePng } from "@/server/print/barcode";
 import { PdfWriter, pdfSafe } from "@/server/print/pdf";
-import { formatPrintDate, formatPrintDay } from "@/server/print/types";
+
+/** `11/03/2026` from a warehouse-local `2026-11-03` (the app's zero-padded MM/DD/YYYY). */
+export function formatShipDay(day: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  return m ? `${m[2]}/${m[3]}/${m[1]}` : day;
+}
+
+/** `11/09/2026 9:56 PM CST` in the warehouse time zone: the grid's format, with the zone named. */
+export function formatWarehouseDateTime(iso: string, timeZone: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  let zone = timeZone || "UTC";
+  try { new Intl.DateTimeFormat("en-US", { timeZone: zone }); } catch { zone = "UTC"; }
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "numeric", minute: "2-digit", hour12: true, timeZoneName: "short",
+  }).formatToParts(date).map((p) => [p.type, p.value]));
+  return `${parts.month}/${parts.day}/${parts.year} ${parts.hour}:${parts.minute} ${parts.dayPeriod}${parts.timeZoneName ? ` ${parts.timeZoneName}` : ""}`;
+}
 
 export interface ReportPackage {
   readonly orderCode: string;
@@ -25,11 +42,13 @@ export interface ReportManifest {
   readonly shipFrom: string;
   readonly shipDate: string;
   readonly closeDate: string | null;
+  /** IANA zone of the ship-from warehouse; every time on the report is printed in it. */
+  readonly timezone: string;
   readonly packages: readonly ReportPackage[];
 }
 
 const BARCODE_W = 150;
-const ROW_H = 40;
+const ROW_H = 46;
 
 function header(writer: PdfWriter, m: ReportManifest, subtitle: string): void {
   writer.text(subtitle.toUpperCase(), { size: 16, bold: true });
@@ -37,8 +56,9 @@ function header(writer: PdfWriter, m: ReportManifest, subtitle: string): void {
   writer.moveDown(4);
   writer.keyValues([
     ["Ship from", m.shipFrom],
-    ["Ship date", formatPrintDay(`${m.shipDate}T12:00:00Z`)],
-    ["Close date", m.closeDate ? formatPrintDate(m.closeDate) : "Open"],
+    ["Ship date", formatShipDay(m.shipDate)],
+    ["Close date", m.closeDate ? formatWarehouseDateTime(m.closeDate, m.timezone) : "Open (not closed yet)"],
+    ["Printed", formatWarehouseDateTime(new Date().toISOString(), m.timezone)],
     ["Total packages", m.packages.length],
     ["Total weight", `${(m.packages.reduce((s, p) => s + p.weightOz, 0) / 16).toFixed(2)} lb`],
     ["Orders", new Set(m.packages.map((p) => p.orderCode)).size],
@@ -62,7 +82,11 @@ async function manifestSection(writer: PdfWriter, m: ReportManifest): Promise<vo
     page.drawText(pdfSafe(`${(p.weightOz / 16).toFixed(2)} lb`), { x: x + 200, y: top - 24, size: 8, font: writer.regular });
     const png = await writer.doc.embedPng(await renderBarcodePng({ text: p.trackingNumber, heightMm: 8, scale: 2 }));
     const h = Math.min(30, (png.height / png.width) * BARCODE_W);
-    page.drawImage(png, { x: writer.size[0] - writer.margin - BARCODE_W, y: top - h - 2, width: BARCODE_W, height: h });
+    const bx = writer.size[0] - writer.margin - BARCODE_W;
+    page.drawImage(png, { x: bx, y: top - h - 2, width: BARCODE_W, height: h });
+    const tn = pdfSafe(p.trackingNumber);
+    const tw = writer.regular.widthOfTextAtSize(tn, 7.5);
+    page.drawText(tn, { x: bx + Math.max(0, (BARCODE_W - tw) / 2), y: top - h - 11, size: 7.5, font: writer.regular });
     writer.moveDown(ROW_H);
   }
   writer.moveDown(10);
@@ -71,7 +95,7 @@ async function manifestSection(writer: PdfWriter, m: ReportManifest): Promise<vo
 }
 
 export async function renderManifestReport(manifests: readonly ReportManifest[], companyName = "KitStaks WMS"): Promise<Uint8Array> {
-  const writer = await PdfWriter.create(undefined, 40, "End of the Day Report");
+  const writer = await PdfWriter.create(undefined, 40, "End Of The Day Report");
   for (const [i, m] of manifests.entries()) {
     if (i > 0) writer.newPage();
     await manifestSection(writer, m);
@@ -80,7 +104,7 @@ export async function renderManifestReport(manifests: readonly ReportManifest[],
 }
 
 export async function renderCustomReport(manifests: readonly ReportManifest[], companyName = "KitStaks WMS"): Promise<Uint8Array> {
-  const writer = await PdfWriter.create(undefined, 40, "Custom End of the Day Report");
+  const writer = await PdfWriter.create(undefined, 40, "Custom End Of The Day Report");
   for (const [i, m] of manifests.entries()) {
     if (i > 0) writer.newPage();
     header(writer, m, "Custom end of the day report");

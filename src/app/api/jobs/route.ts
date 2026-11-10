@@ -2,12 +2,16 @@
 import { defineRoute } from "@/server/api/define-route";
 import { listResult } from "@/server/api/envelope";
 import { listJobs } from "@/server/repositories/jobs";
+import { withBusyRetry } from "@/server/repositories/jobs-read-retry";
+import { sweepDeadJobs } from "@/server/repositories/jobs-settle";
 
 export const GET = defineRoute({
   permission: "fulfillment.job_management.view",
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listJobs(db, auth, query);
+    // Self-heal (throttled): jobs whose last live task was cancelled elsewhere close before they are listed.
+    sweepDeadJobs(db);
+    const { rows, total } = await withBusyRetry(() => listJobs(db, auth, query));
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });

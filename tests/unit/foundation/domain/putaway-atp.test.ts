@@ -149,11 +149,13 @@ describe("address verification", () => {
   });
 });
 
-describe("stub handoffs and barrel", () => {
-  it("degrade with a not-configured error", () => {
-    expect(() => createCountPlanFromWave(w.db, w.ctx, { warehouseId: w.warehouseId, waveId: "w", waveRuleId: "r", countType: "Location" })).toThrow(/not configured yet \(owned by M07\)/);
-    expect(() => allocateWorkOrder(w.db, w.ctx, "wo")).toThrow(/owned by M08/);
-    expect(getWorkflowActionExecutor("Block Order")).toBeUndefined();
+describe("handoffs and barrel", () => {
+  it("delegate to the owning modules", () => {
+    // M07 implemented the count-from-wave handoff: an empty wave is refused with a clear message
+    expect(() => createCountPlanFromWave(w.db, w.ctx, { warehouseId: w.warehouseId, waveId: "w", waveRuleId: "r", countType: "Location" })).toThrow(/found no locations to count/);
+    expect(() => allocateWorkOrder(w.db, w.ctx, "wo")).toThrow(/Work order not found/);
+    expect(getWorkflowActionExecutor("Block Order")).toBeTypeOf("function"); // registered by M12
+    expect(getWorkflowActionExecutor("No Such Action" as Parameters<typeof getWorkflowActionExecutor>[0])).toBeUndefined();
     expect(domain.ledger.add).toBeTypeOf("function");
     expect(domain.sequences.next).toBeTypeOf("function");
   });

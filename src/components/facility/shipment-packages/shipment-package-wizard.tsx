@@ -12,7 +12,9 @@ import { useController, type UseFormReturn } from "react-hook-form";
 import { apiRequest, isApiError } from "@/lib/api-client";
 import { applyServerFieldErrors, useApiQuery } from "@/lib/query-client";
 import { CURRENCIES, DIMENSION_UNITS, PACKAGE_REDUCTION_RULES, VOLUME_UNITS, WEIGHT_UNITS } from "@/lib/enums";
-import { boxVolume, packageAccessSchema, packageGeneralSchema, packageTrackingSchema, PACKAGE_CREATED_MESSAGE, SHIPMENT_PACKAGE_DEFAULTS, type ShipmentPackageInput } from "@/lib/grid-defs/facility/shipment-packages";
+import { boxVolume as boxVolumeIn, ERROR_TOAST_MS } from "@/lib/grid-defs/facility/common";
+import { useAvailabilityCheck, useWizardGuard, type WizardGuard } from "@/components/facility/wizard-guard";
+import { packageAccessSchema, packageGeneralSchema, packageTrackingSchema, PACKAGE_CREATED_MESSAGE, PACKAGE_TRACKING_METHOD_LABELS, SHIPMENT_PACKAGE_DEFAULTS, type ShipmentPackageInput } from "@/lib/grid-defs/facility/shipment-packages";
 import { CustomFieldsSection, type CustomFieldValues } from "@/components/shared/custom-fields-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,16 +36,29 @@ import type { ShipmentPackageDetail } from "@/server/repositories/shipment-packa
 
 type F = ShipmentPackageInput;
 
-function GeneralStep({ form, isEdit }: { readonly form: UseFormReturn<F>; readonly isEdit: boolean }) {
+const GENERAL_KEYS: ReadonlySet<string> = new Set(["warehouseId", "code", "description", "weightUnit", "emptyWeight", "maxWeight", "dimensionUnit", "length", "width", "height", "volumeUnit", "maxVolume", "currency", "purchasePrice", "isActive"]);
+const ACCESS_KEYS: ReadonlySet<string> = new Set(["allClients", "clientAccess"]);
+const TRACKING_KEYS: ReadonlySet<string> = new Set(["trackInventory", "trackingMethod", "inventoryClientId", "inventoryProductId", "reductionRule", "reductionLocationId"]);
+const rootKey = (p: string) => p.split(".")[0] ?? p;
+
+function GeneralStep({ form, editId, guard }: { readonly form: UseFormReturn<F>; readonly editId: string | null; readonly guard: WizardGuard }) {
+  const isEdit = Boolean(editId);
   const warehouses = useWarehouseOptions();
+  useAvailabilityCheck<F>(guard, form, {
+    url: "/api/shipment-packages/availability",
+    paths: ["code"],
+    params: (v) => (v.warehouseId && v.code?.trim() ? { warehouseId: v.warehouseId, code: v.code.trim(), excludeId: editId ?? undefined } : null),
+  });
   const dim = form.watch("dimensionUnit");
   const weight = form.watch("weightUnit");
-  const vol = boxVolume(Number(form.watch("length")) || 0, Number(form.watch("width")) || 0, Number(form.watch("height")) || 0);
+  const volumeUnit = form.watch("volumeUnit");
+  const vol = boxVolumeIn(Number(form.watch("length")) || 0, Number(form.watch("width")) || 0, Number(form.watch("height")) || 0, dim, volumeUnit) ?? 0;
+  const volLabel = vol >= 100 ? Math.round(vol).toLocaleString("en-US") : vol.toFixed(2);
   return (
     <div className="flex flex-col gap-5">
-      <FormSection title="General">
+      <FormSection title="Identity">
         <FormGrid>
-          <ComboField<F> name="warehouseId" label="Warehouse" required options={warehouses.options} disabled={isEdit} info={isEdit ? "A package can't move between warehouses" : undefined} />
+          <ComboField<F> name="warehouseId" label="Warehouse" required options={warehouses.selectable(form.watch("warehouseId"))} disabled={isEdit} info={isEdit ? "A package can't move between warehouses" : undefined} />
           <TextInput<F> name="code" label="Code" required maxLength={40} transform={(v) => v.toUpperCase()} placeholder="e.g. 12X10X8" />
           <TextInput<F> name="description" label="Description" maxLength={250} placeholder="e.g. 12 × 10 × 8 branded mailer box" className="md:col-span-2" />
         </FormGrid>
@@ -62,7 +77,7 @@ function GeneralStep({ form, isEdit }: { readonly form: UseFormReturn<F>; readon
           <NumberField<F> name="emptyWeight" label="Empty weight" decimals={2} suffix={weight} />
           <NumberField<F> name="maxWeight" label="Max weight" decimals={2} suffix={weight} nullable info="Leave empty for no limit" />
           <SelectField<F> name="volumeUnit" label="Volume unit" options={enumSelectOptions(VOLUME_UNITS)} />
-          <NumberField<F> name="maxVolume" label="Max volume" decimals={3} nullable info={vol > 0 ? `Box volume is ${vol.toLocaleString("en-US")} cubic ${dim.toLowerCase()}es` : "Leave empty for no limit"} />
+          <NumberField<F> name="maxVolume" label="Max volume" decimals={3} nullable info={vol > 0 ? `Can't exceed the box volume: ${volLabel} ${volumeUnit}` : "Leave empty for no limit"} />
         </FormGrid>
       </FormSection>
       <FormSection title="Cost and status">
@@ -149,6 +164,8 @@ function TrackingStep({ form, productLabel }: { readonly form: UseFormReturn<F>;
   const tracked = form.watch("trackInventory");
   const owner = form.watch("inventoryClientId") ?? null;
   const rule = form.watch("reductionRule");
+  const method = form.watch("trackingMethod") ?? "match";
+  const code = (form.watch("code") ?? "").trim().toUpperCase();
   const warehouseId = form.watch("warehouseId") || null;
   const locations = useWarehouseLocationOptions(rule === "Specific Location" ? warehouseId : null, []);
   const [label, setLabel] = React.useState(productLabel);
@@ -162,10 +179,21 @@ function TrackingStep({ form, productLabel }: { readonly form: UseFormReturn<F>;
           <FormGrid>
             <ComboField<F> name="inventoryClientId" label="Inventory owner" required options={clients}
               onValueChange={() => { form.setValue("inventoryProductId", null, { shouldDirty: true }); setLabel(undefined); }} />
-            <FormField<F> name="inventoryProductId" label="Packaging SKU" required info="Usually a Packaging Material product of the owner">
-              {(c) => <ProductPicker id={c.id} clientId={owner} value={(c.value as string | null) ?? null} selectedLabel={label} invalid={c.invalid} onBlur={c.onBlur}
-                onChange={(v, l) => { c.onChange(v); setLabel(l ?? undefined); }} />}
-            </FormField>
+            <div className="flex flex-col gap-1.5 md:col-span-2">
+              <span className="text-[12px] font-medium text-body">Inventory tracking method<span className="ml-0.5 text-danger" aria-hidden>*</span></span>
+              <RadioCards<"match" | "auto"> ariaLabel="Inventory tracking method" columns={2} value={method}
+                onChange={(v) => { form.setValue("trackingMethod", v, { shouldDirty: true, shouldValidate: true }); if (v === "auto") { form.setValue("inventoryProductId", null, { shouldDirty: true }); setLabel(undefined); form.clearErrors("inventoryProductId"); } }}
+                options={[
+                  { value: "auto", title: PACKAGE_TRACKING_METHOD_LABELS.auto, description: code ? `Creates Packaging Material SKU ${code} for the owner on save (an existing ${code} is matched instead).` : "Creates a Packaging Material SKU named after the package code on save." },
+                  { value: "match", title: PACKAGE_TRACKING_METHOD_LABELS.match, description: "Pick a SKU the owner already stocks." },
+                ]} />
+            </div>
+            {method === "match" ? (
+              <FormField<F> name="inventoryProductId" label="Packaging SKU" required info="Usually a Packaging Material product of the owner">
+                {(c) => <ProductPicker id={c.id} clientId={owner} value={(c.value as string | null) ?? null} selectedLabel={label} invalid={c.invalid} onBlur={c.onBlur}
+                  onChange={(v, l) => { c.onChange(v); setLabel(l ?? undefined); }} />}
+              </FormField>
+            ) : null}
             <SelectField<F> name="reductionRule" label="Inventory reduction location" required options={enumSelectOptions(PACKAGE_REDUCTION_RULES)}
               onValueChange={(v) => { if (v !== "Specific Location") form.setValue("reductionLocationId", null); }} />
             {rule === "Specific Location" ? (
@@ -195,7 +223,7 @@ function OtherStep({ form, canManage }: { readonly form: UseFormReturn<F>; reado
         <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
           <div><dt className="text-[11px] text-faint">Package</dt><dd className="font-medium">{v.code || "—"} · {v.length} × {v.width} × {v.height} {v.dimensionUnit}</dd></div>
           <div><dt className="text-[11px] text-faint">Clients</dt><dd>{v.allClients ? "All clients" : `${(v.clientAccess ?? []).filter((a) => a.hasAccess).length} selected`}</dd></div>
-          <div><dt className="text-[11px] text-faint">Inventory tracking</dt><dd>{v.trackInventory ? `Yes · ${v.reductionRule ?? ""}` : "No"}</dd></div>
+          <div><dt className="text-[11px] text-faint">Inventory tracking</dt><dd>{v.trackInventory ? `Yes · ${v.trackingMethod === "auto" && !v.inventoryProductId ? "new SKU" : "matched SKU"} · ${v.reductionRule ?? ""}` : "No"}</dd></div>
           <div><dt className="text-[11px] text-faint">Status</dt><dd>{v.isActive ? "Active" : "Inactive"}</dd></div>
         </dl>
       </section>
@@ -208,7 +236,7 @@ function detailToForm(d: ShipmentPackageDetail): F {
     warehouseId: d.warehouseId, code: d.code, description: d.description ?? "", weightUnit: d.weightUnit as F["weightUnit"], emptyWeight: d.emptyWeight, maxWeight: d.maxWeight,
     dimensionUnit: d.dimensionUnit as F["dimensionUnit"], length: d.length, width: d.width, height: d.height, volumeUnit: d.volumeUnit as F["volumeUnit"], maxVolume: d.maxVolume,
     currency: d.currency as F["currency"], purchasePrice: d.purchasePrice, isActive: d.isActive, allClients: d.allClients,
-    clientAccess: d.access.map((a) => ({ clientId: a.clientId, hasAccess: a.hasAccess })), trackInventory: d.trackInventory,
+    clientAccess: d.access.map((a) => ({ clientId: a.clientId, hasAccess: a.hasAccess })), trackInventory: d.trackInventory, trackingMethod: "match",
     inventoryClientId: d.inventoryClientId, inventoryProductId: d.inventoryProductId, reductionRule: d.reductionRule as F["reductionRule"], reductionLocationId: d.reductionLocationId,
     customFields: (d.customFields ?? {}) as F["customFields"],
   };
@@ -220,26 +248,32 @@ function Body({ initial, detail, onDone, onCancel, onDirtyChange }: { readonly i
   const [conflict, setConflict] = React.useState(false);
   const editId = detail?.id ?? null;
   const productLabel = detail?.inventorySku ? `${detail.inventorySku}${detail.inventoryProductName ? ` · ${detail.inventoryProductName}` : ""}` : undefined;
+  const guard = useWizardGuard();
   const steps = React.useMemo<readonly WizardStep<F>[]>(() => [
-    { key: "general", label: "General", icon: Box, schema: packageGeneralSchema, render: ({ form }) => { formRef.current = form; return <GeneralStep form={form} isEdit={Boolean(editId)} />; } },
-    { key: "access", label: "Client access", icon: Users, schema: packageAccessSchema, render: ({ form }) => { formRef.current = form; return <AccessStep form={form} />; } },
-    { key: "tracking", label: "Inv. tracking", icon: Boxes, schema: packageTrackingSchema, render: ({ form }) => { formRef.current = form; return <TrackingStep form={form} productLabel={productLabel} />; } },
-    { key: "other", label: "Other info", icon: FileText, isOptional: true, render: ({ form }) => { formRef.current = form; return <OtherStep form={form} canManage={perms.custom_field_management} />; } },
+    { key: "general", label: "General", icon: Box, schema: guard.guard(packageGeneralSchema, (p) => GENERAL_KEYS.has(rootKey(p))), render: ({ form }) => { formRef.current = form; return <GeneralStep form={form} editId={editId} guard={guard} />; } },
+    { key: "access", label: "Client access", icon: Users, schema: guard.guard(packageAccessSchema, (p) => ACCESS_KEYS.has(rootKey(p))), render: ({ form }) => { formRef.current = form; return <AccessStep form={form} />; } },
+    { key: "tracking", label: "Inv. tracking", icon: Boxes, schema: guard.guard(packageTrackingSchema, (p) => TRACKING_KEYS.has(rootKey(p))), render: ({ form }) => { formRef.current = form; return <TrackingStep form={form} productLabel={productLabel} />; } },
+    { key: "other", label: "Other info", icon: FileText, isOptional: true, schema: guard.guard(undefined, (p) => rootKey(p) === "customFields"), render: ({ form }) => { formRef.current = form; return <OtherStep form={form} canManage={perms.custom_field_management} />; } },
+    // `guard` is stable for the life of the body.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [editId, productLabel, perms.custom_field_management]);
   const submit = async (values: F) => {
+    guard.dismissBanner();
     try {
       const { data } = await apiRequest<{ code: string }>(editId ? `/api/shipment-packages/${editId}` : "/api/shipment-packages", { method: editId ? "PATCH" : "POST", body: { ...values, version: detail?.version } });
       toast.success("Success", editId ? `Shipment package ${data.code} updated.` : `${PACKAGE_CREATED_MESSAGE}: ${data.code}.`);
       onDone();
     } catch (error) {
       if (isApiError(error) && error.code === "CONFLICT") setConflict(true);
-      if (formRef.current) applyServerFieldErrors(formRef.current, error);
-      toast.error("Couldn't save the shipment package", apiErrorMessage(error));
+      const routed = guard.handleServerError(error, values);
+      if (!routed && formRef.current) applyServerFieldErrors(formRef.current, error);
+      toast.error("Couldn't save the shipment package", apiErrorMessage(error), { duration: ERROR_TOAST_MS });
       throw error;
     }
   };
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={guard.rootRef} className="flex flex-col gap-3">
+      {guard.banner && !conflict ? <Callout variant="error" title="Couldn't save the shipment package" onDismiss={guard.dismissBanner}>{guard.banner}</Callout> : null}
       {conflict ? <Callout variant="attention" title="This record changed since you opened it" action={<Button size="sm" onClick={() => window.location.reload()}>Reload</Button>}>Someone else saved this package. Reload to see their changes.</Callout> : null}
       <Wizard<F> steps={steps} variant="drawer" mode={editId ? "free" : "linear"} defaultValues={initial} draftScope={false} guardUnsaved={false} onDirtyChange={onDirtyChange}
         submitLabel={editId ? "Save" : "Finish"} onCancel={onCancel} onComplete={submit} />
@@ -253,7 +287,7 @@ export function ShipmentPackageWizardDrawer({ open, onOpenChange, editId, defaul
   const close = () => { setDirty(false); onOpenChange(false); };
   const initial = editId ? (detail.data ? detailToForm(detail.data.data) : null) : { ...SHIPMENT_PACKAGE_DEFAULTS, warehouseId: defaultWarehouseId ?? "" };
   return (
-    <Drawer open={open} onOpenChange={(o) => (o ? onOpenChange(o) : close())} dirty={dirty} width={60}
+    <Drawer open={open} onOpenChange={(o) => (o ? onOpenChange(o) : close())} dirty={dirty} width={60} bodyClassName="pb-0"
       title={editId ? `Edit shipment package ${detail.data?.data.code ?? ""}`.trim() : "Create shipment package"}
       description={editId ? "Every step is editable; Save applies all of them." : "General, client access, inventory tracking, then other info."}>
       {editId && detail.isError ? (

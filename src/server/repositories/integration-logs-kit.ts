@@ -106,6 +106,22 @@ export function labelsOf(db: AppDb, table: "warehouses" | "clients" | "carrier_c
   return out;
 }
 
+/**
+ * M12 client display rule (critic R4): every API returns `clientName` = the client's full name
+ * and `clientCode` = its short code, for list, detail and create/update responses alike. Grids
+ * show the name and put "CODE · Name" in the tooltip.
+ */
+export interface ClientLabel { readonly code: string; readonly name: string }
+
+export function clientLabelsOf(db: AppDb, ids: readonly (string | null | undefined)[]): Map<string, ClientLabel> {
+  const list = [...new Set(ids.filter((v): v is string => Boolean(v)))];
+  const out = new Map<string, ClientLabel>();
+  if (list.length === 0) return out;
+  const rows = db.all<{ id: string; code: string; name: string }>(sql`SELECT id, code, name FROM clients WHERE id IN (${sql.join(list.map((id) => sql`${id}`), sql`, `)})`);
+  for (const r of rows) out.set(r.id, { code: r.code, name: r.name || r.code });
+  return out;
+}
+
 export const changeLogPageSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   ps: z.coerce.number().int().min(1).max(100).default(20),

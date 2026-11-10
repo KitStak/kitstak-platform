@@ -13,7 +13,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { FormField, FormGrid } from "@/components/ui/form";
 import { ComboField, SelectField, TextInput } from "@/components/facility/form-controls";
 import { useWarehouseOptions } from "@/components/facility/facility-shared";
-import { FREQUENCY_LABELS, useActiveClients } from "./billing-shared";
+import { FREQUENCY_LABELS, PickerLoadError, useActiveClients, useBillingDates } from "./billing-shared";
 
 type F = ContractInput;
 
@@ -24,20 +24,22 @@ const fromDay = (s: string | null | undefined): Date | null => {
   return new Date(y, m - 1, d);
 };
 const addDays = (s: string, n: number) => new Date(Date.parse(`${s}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
-const pretty = (s: string) => new Date(`${s}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 export function ContractFields({ lockedScope }: { readonly lockedScope?: string | null }) {
   const clients = useActiveClients();
   const warehouses = useWarehouseOptions();
   return (
     <FormGrid>
-      <TextInput<F> name="name" label="Billing form name" required maxLength={120} placeholder="e.g. Copperline - 3PL Services 2027" />
-      <ComboField<F> name="clientId" label="Client" required options={clients.options} disabled={Boolean(lockedScope)} info={lockedScope ?? "Only active clients are listed"} emptyText="No active clients" />
+      <TextInput<F> name="name" label="Billing form name" required maxLength={100} placeholder="e.g. Copperline - 3PL Services 2027" />
+      <div className="flex flex-col">
+        <ComboField<F> name="clientId" label="Client" required options={clients.options} disabled={Boolean(lockedScope)} info={lockedScope ?? "Only active clients are listed"} placeholder={clients.placeholder} emptyText={clients.emptyText} />
+        {clients.error ? <PickerLoadError message={clients.error} onRetry={clients.retry} retrying={clients.retrying} /> : null}
+      </div>
       <ComboField<F> name="warehouseId" label="Warehouse" required options={warehouses.options} disabled={Boolean(lockedScope)} info={lockedScope ?? undefined} />
-      <FormField<F> name="calcStartDate" label="Calc. start date" required info="The first billing period starts on this day">
-        {(c) => <DatePicker id={c.id} value={fromDay(c.value as string)} onChange={(d) => c.onChange(toDay(d))} onBlur={c.onBlur} invalid={c.invalid} aria-label="Calc. start date" />}
+      <FormField<F> name="calcStartDate" label="Calc. start date" required disabled={Boolean(lockedScope)} info={lockedScope ? `${lockedScope}: the billing schedule is fixed` : "The first billing period starts on this day"}>
+        {(c) => <DatePicker id={c.id} value={fromDay(c.value as string)} onChange={(d) => c.onChange(toDay(d))} onBlur={c.onBlur} invalid={c.invalid} disabled={c.disabled} aria-label="Calc. start date" />}
       </FormField>
-      <SelectField<F> name="frequency" label="Billing frequency" required options={BILLING_FREQUENCIES.map((f) => ({ value: f, label: FREQUENCY_LABELS[f] ?? f }))} />
+      <SelectField<F> name="frequency" label="Billing frequency" required disabled={Boolean(lockedScope)} info={lockedScope ? `${lockedScope}: the billing schedule is fixed` : undefined} options={BILLING_FREQUENCIES.map((f) => ({ value: f, label: FREQUENCY_LABELS[f] ?? f }))} />
     </FormGrid>
   );
 }
@@ -48,6 +50,7 @@ export function ContractSummary({ feeCount, extra }: { readonly feeCount?: numbe
   const v = useWatch({ control }) as Partial<F>;
   const clients = useActiveClients();
   const warehouses = useWarehouseOptions();
+  const pretty = useBillingDates().day;
   const client = clients.options.find((o) => o.value === v.clientId)?.label;
   const wh = warehouses.options.find((o) => o.value === v.warehouseId)?.label;
   const periods: { start: string; end: string }[] = [];

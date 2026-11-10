@@ -10,6 +10,7 @@ import { searchPicker, ShipmentPackageSelect, toOption, UserPicker } from "@/com
 import { Combobox } from "@/components/ui/combobox";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
+import { FieldError } from "@/components/ui/form/form-field";
 import { Textarea } from "@/components/ui/textarea";
 import { useLookups, useWarehouseOptions } from "@/components/integrations/shared/shared";
 
@@ -60,7 +61,7 @@ export function ActionParamField({ id, action, def, value, onChange, error, ware
     <div className="flex min-w-0 flex-col gap-1">
       <label htmlFor={id} className="text-[11px] font-medium text-secondary">{def.label}{def.required ? <span className="text-danger"> *</span> : null}</label>
       {control}
-      {error ? <p role="alert" className="text-[11px] text-danger">{error}</p> : null}
+      <FieldError id={`${id}-error`} message={error ?? undefined} />
       {action === "Set Rate Shopping Preset" && !clientId ? <p className="text-[11px] text-faint">Tip: scope the workflow to a client to list only its presets.</p> : null}
     </div>
   );

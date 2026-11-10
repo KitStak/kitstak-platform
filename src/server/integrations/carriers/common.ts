@@ -87,9 +87,23 @@ function tracking(def: CarrierDef, seed: string): string {
   return `${def.trackingPrefix}${digits}`;
 }
 
+/**
+ * Credentials for a real carrier call, or null for the offline simulation.
+ * - Production: the carrier's live API.
+ * - Test with stored credentials: the carrier's own test API (UPS CIE, FedEx sandbox, EasyPost / Shippo test
+ *   keys, Stamps testing), so a carrier-certified test account creates and voids labels end to end.
+ *   KITSTAK_CARRIER_SIMULATE=1 forces the simulation (CI / offline dev).
+ * - Test without credentials: the simulation.
+ */
 function liveCreds(connection: RateRequest["connection"]): Credentials | null {
-  if (connection.environment !== "Production") return null;
+  if (connection.environment !== "Production" && process.env.KITSTAK_CARRIER_SIMULATE === "1") return null;
   return decryptCredentials(connection.credentialsEnc);
+}
+
+/** How a connection's calls are served: "live", "carrier-test" (the carrier's sandbox API) or "simulated". */
+export function carrierCallMode(connection: Pick<RateRequest["connection"], "environment" | "credentialsEnc">): "live" | "carrier-test" | "simulated" {
+  if (!liveCreds(connection as RateRequest["connection"])) return "simulated";
+  return connection.environment === "Production" ? "live" : "carrier-test";
 }
 
 /** Builds the registered adapter for a provider. */

@@ -53,7 +53,7 @@ async function ShellOrFrame() {
     );
   }
   return (
-    <AppShell user={shell.user} permissions={shell.permissions} initialContext={shell.initialContext}>
+    <AppShell user={shell.user} permissions={shell.permissions} initialContext={shell.initialContext} activeApps={shell.activeApps}>
       <NotFoundBody />
     </AppShell>
   );

@@ -15,7 +15,7 @@ async function readError(res: Response): Promise<string> {
   }
 }
 
-export async function fetchPdfUrl(path: string, body: unknown, signal?: AbortSignal): Promise<string> {
+async function postJson(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
   const send = async (token: string) => fetch(path, {
     method: "POST", credentials: "same-origin", cache: "no-store", signal,
     headers: { "content-type": "application/json", [CSRF_HEADER]: token },
@@ -24,8 +24,18 @@ export async function fetchPdfUrl(path: string, body: unknown, signal?: AbortSig
   let res = await send(await getCsrfToken());
   if (res.status === 403) res = await send(await getCsrfToken(true));
   if (!res.ok) throw new PdfError(await readError(res));
+  return res;
+}
+
+export async function fetchPdfUrl(path: string, body: unknown, signal?: AbortSignal): Promise<string> {
+  const res = await postJson(path, body, signal);
   const blob = await res.blob();
   return URL.createObjectURL(new Blob([blob], { type: "application/pdf" }));
+}
+
+/** POSTs JSON and returns the response body as text (ZPL preview). */
+export async function fetchText(path: string, body: unknown, signal?: AbortSignal): Promise<string> {
+  return (await postJson(path, body, signal)).text();
 }
 
 /** Opens a rendered PDF in a new tab (falls back to same-tab download when popups are blocked). */

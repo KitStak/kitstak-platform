@@ -11,7 +11,7 @@ import { JOB_TEMPLATE_DEFS } from "@/lib/grid-defs/jobs/conditions";
 import * as schema from "@/server/db/schema";
 import type { AuthContext } from "@/server/auth/context";
 import { ledger } from "@/server/domain/ledger";
-import { createOrder } from "@/server/domain/orders";
+import { createOrder, unmergeOrder } from "@/server/domain/orders";
 import { updatePriority } from "@/server/domain/jobs";
 import { assertSameWarehouse, cancelJobs } from "@/server/repositories/jobs";
 import { createWaveRule, deleteWaveRule } from "@/server/repositories/wave-rules";
@@ -65,7 +65,7 @@ describe("wave run (acceptance KS-E2E Picking)", () => {
     expect(res.wave.ordersMet).toBe(10);
     expect(res.wave.ordersMet).toBe(res.wave.allocatedOrders + res.wave.shortageOrders);
     expect(res.wave.allocatedOrders).toBe(10);
-    expect(res.summary).toMatch(/completed: 10 met · 10 allocated · \d+ jobs · 0 shortage/);
+    expect(res.summary).toMatch(/completed: 10 met · 10 allocated · \d+ jobs? · 0 shortage/);
 
     const jobs = w.db.select().from(schema.jobs).all();
     expect(new Set(jobs.map((j) => j.jobTypeId))).toEqual(new Set([singleType, multiType]));
@@ -92,6 +92,10 @@ describe("wave run (acceptance KS-E2E Picking)", () => {
     const ex = w.db.select().from(schema.allocationExceptions).all();
     expect(ex.filter((e) => e.explanation === eliminatedByJobTypes(["Single Unit Orders"])).map((e) => e.orderId).sort()).toEqual([short.id, outOfFilter.id].sort());
     expect(orderRow(ok.id)?.status).toBe("Ready to Pick");
+    // eliminated orders are not shortages: met = allocated + shortage + eliminated
+    expect(res.wave.allocatedOrders).toBe(1);
+    expect(res.wave.shortageOrders).toBe(0);
+    expect(res.wave.message).toMatch(/2 orders eliminated/);
 
     const multiRule = createWaveRule(w.db, auth, w.ctx, waveRuleInputSchema.parse({ name: "Multi", warehouseId: w.warehouseId, operationType: "Picking", jobTypeIds: [multiType] }));
     const res2 = runWave(w.db, w.ctx, multiRule.id, { runBy: "Admin" });
@@ -108,10 +112,55 @@ describe("wave run (acceptance KS-E2E Picking)", () => {
     expect(res.summary).toMatch(/failed: The rule has no replenishment job type/);
   });
 
+  it("merges same-customer Open orders through orders.mergeOrders and unmerges symmetrically", () => {
+    const a = mkOrder(1);
+    const b = mkOrder(2);
+    const c = mkOrder(3);
+    const mr = w.db.insert(schema.lookupValues).values({ type: "order_merge_rule", name: "Same customer + address", meta: { criteria: ["client", "customerName", "shipAddress"] } }).returning().get();
+    const rule = createWaveRule(w.db, auth, w.ctx, waveRuleInputSchema.parse({ name: "Merge", warehouseId: w.warehouseId, operationType: "Order Merge", mergeRuleIds: [mr.id] }));
+    const res = runWave(w.db, w.ctx, rule.id, { runBy: "Admin" });
+    expect(res.wave.status).toBe("Completed");
+    expect(res.wave.ordersMet).toBe(3);
+    expect(res.wave.mergedOrders).toBe(2);
+    expect(res.summary).toBe(`Wave ${res.wave.waveNo} completed: 3 met · 2 merged`);
+    const rows = [a, b, c].map((o) => orderRow(o.id));
+    const master = rows.find((r) => r?.isMerged);
+    expect(master?.status).toBe("Open");
+    expect(master?.totalQuantity).toBe(6);
+    const children = rows.filter((r) => r && r.id !== master?.id);
+    expect(children.every((r) => r?.status === "On Hold" && r.mergedIntoOrderId === master?.id)).toBe(true);
+    const copied = w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, master?.id ?? "")).all().filter((l) => l.originalOrderCode);
+    expect(copied.map((l) => l.originalOrderCode).sort()).toEqual(children.map((r) => r?.code).sort());
+
+    // A second run finds nothing left to merge (children are On Hold, the master is merged).
+    const again = runWave(w.db, w.ctx, rule.id, { runBy: "Admin" });
+    expect(again.wave.mergedOrders).toBe(0);
+
+    unmergeOrder(w.db, w.ctx, { orderId: master?.id ?? "" });
+    for (const r of children) expect(orderRow(r?.id ?? "")?.mergedIntoOrderId).toBeNull();
+  });
+
+  it("stamps cycle-count wave jobs with the wave no and rule", () => {
+    stock(5);
+    const countType = w.db.insert(schema.jobTypes).values({ code: "Cycle Count", description: "Cycle Count", warehouseId: w.warehouseId, operationType: "Count", settings: jobTypeSettingsSchema.parse({}) }).returning().get().id;
+    const parsed = waveRuleInputSchema.safeParse({ name: "Cycle", warehouseId: w.warehouseId, operationType: "Cycle Count", countType: "Location", jobTypeIds: [countType] });
+    expect(parsed.success ? [] : parsed.error.issues.map((i) => i.path.join("."))).toEqual([]);
+    if (!parsed.success) return;
+    const rule = createWaveRule(w.db, auth, w.ctx, parsed.data);
+    const res = runWave(w.db, w.ctx, rule.id, { runBy: "Admin" });
+    expect(res.wave.status).toBe("Completed");
+    expect(res.jobIds.length).toBeGreaterThan(0);
+    const jobs = w.db.select().from(schema.jobs).all().filter((j) => res.jobIds.includes(j.id));
+    expect(jobs.every((j) => j.waveNumber === res.wave.waveNo && j.waveId === res.wave.id && j.ruleName === "Cycle")).toBe(true);
+    expect(res.summary).toMatch(new RegExp(`^Wave ${res.wave.waveNo} completed: \\d+ jobs? · Count plan CNT\\d+ created with \\d+ lines?$`));
+  });
+
   it("summarizes per operation type", () => {
     const base = { waveNo: "20522-95", ordersMet: 35, allocatedOrders: 15, jobsCreated: 3, shortageOrders: 20, mergedOrders: 4, status: "Completed" as const, message: "x" };
     expect(summarize(base, "Picking")).toBe("Wave 20522-95 completed: 35 met · 15 allocated · 3 jobs · 20 shortage");
     expect(summarize(base, "Order Merge")).toBe("Wave 20522-95 completed: 35 met · 4 merged");
+    expect(summarize({ ...base, jobsCreated: 1, message: "Count plan CNT000146 created with 50 lines" }, "Cycle Count")).toBe("Wave 20522-95 completed: 1 job · Count plan CNT000146 created with 50 lines");
+    expect(summarize({ ...base, jobsCreated: 0, message: null }, "Replenishment")).toBe("Wave 20522-95 completed: 0 jobs");
   });
 });
 

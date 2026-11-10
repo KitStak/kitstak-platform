@@ -2,13 +2,15 @@
 
 import * as React from "react";
 import { useFormContext, useWatch } from "react-hook-form";
-import { RotateCcw } from "lucide-react";
+import { AlertTriangle, RotateCcw } from "lucide-react";
 import { DIMENSION_UNITS, VOLUME_UNITS, WEIGHT_UNITS, computeVolume, packingFlagsFor } from "@/lib/grid-defs/products/catalog-options";
+import { ownDimsGaps } from "@/lib/grid-defs/products/pack-derivation";
 import { INSTRUCTIONS_MAX } from "@/lib/grid-defs/products/product-form";
-import { FormGrid, FormGridFull, FormSection } from "@/components/ui/form";
+import { FormGrid, FormSection } from "@/components/ui/form";
+import { ROW } from "./pack-type-modal";
 import { Button } from "@/components/ui/button";
 import { useProductWizard } from "./context";
-import { AreaF, NumF, SelectF, YesNoF, opts } from "./fields";
+import { AreaF, FlagRow, NumF, SelectF, opts } from "./fields";
 
 /**
  * Keeps `<prefix>volume` = L×W×H (converted) until the user types a volume. Beyond Logiwa,
@@ -50,24 +52,49 @@ export function VolumeField({ prefix = "" }: { readonly prefix?: string }) {
   );
 }
 
+/** Same amber notice as the pack-type modal: missing dims / weight do not block saving. */
+function OwnDimsNotice() {
+  const { category } = useProductWizard();
+  const [length, width, height, weight, weightUnit] = useWatch({ name: ["length", "width", "height", "weight", "weightUnit"] }) as [number | null, number | null, number | null, number | null, string];
+  const gaps = ownDimsGaps(category, { length, width, height, weight, weightUnit: weightUnit || "Pound" });
+  if (gaps.length === 0) return null;
+  return (
+    <ul data-testid="own-dims-gaps" className="flex flex-col gap-0.5 rounded-md border border-warning/30 bg-warning-soft px-2.5 py-1.5 text-[12px] text-body" aria-live="polite">
+      {gaps.map((m) => (
+        <li key={m} className="flex items-start gap-1.5">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
+          <span>{m} You can save now and add it later.</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function KitDims() {
   const { options } = useProductWizard();
   return (
     <FormSection title="Dimensions and weight" description="Kits and packaging carry their own dims (no pack type step).">
-      <FormGrid columns={3}>
-        <SelectF name="weightUnit" label="Weight unit" required options={opts(WEIGHT_UNITS)} />
-        <NumF name="weight" label="Weight" decimals={2} />
-        <span className="hidden xl:block" />
-        <SelectF name="dimensionUnit" label="Dimension unit" required options={opts(DIMENSION_UNITS)} />
-        <NumF name="length" label="Length" decimals={2} />
-        <NumF name="width" label="Width" decimals={2} />
-        <NumF name="height" label="Height" decimals={2} />
-        <SelectF name="volumeUnit" label="Volume unit" required options={opts(VOLUME_UNITS)} />
-        <VolumeField />
-        <FormGridFull>
+      {/* Same fixed rows as the pack-type modals: no orphan cells, L × W × H on one row. */}
+      <div className="flex flex-col gap-y-4">
+        <div className={ROW}>
+          <SelectF name="dimensionUnit" label="Dimension unit" required options={opts(DIMENSION_UNITS)} />
+        </div>
+        <div className={ROW}>
+          <NumF name="length" label="Length" decimals={2} />
+          <NumF name="width" label="Width" decimals={2} />
+          <NumF name="height" label="Height" decimals={2} />
+        </div>
+        <div className={ROW}>
+          <SelectF name="volumeUnit" label="Volume unit" required options={opts(VOLUME_UNITS)} />
+          <VolumeField />
           <SelectF name="useShipPackageId" label="Use this shipping box only" clearable placeholder="Any box" options={options.shipmentPackages.map((o) => ({ value: o.value, label: o.label, description: o.description }))} />
-        </FormGridFull>
-      </FormGrid>
+        </div>
+        <div className={ROW}>
+          <SelectF name="weightUnit" label="Weight unit" required options={opts(WEIGHT_UNITS)} />
+          <NumF name="weight" label="Weight" decimals={2} />
+        </div>
+        <OwnDimsNotice />
+      </div>
     </FormSection>
   );
 }
@@ -85,9 +112,9 @@ export function StepPacking() {
         </FormGrid>
       </FormSection>
       <FormSection title="Handling" description="Flags drive packing prompts, box selection and carrier surcharges.">
-        <div className="grid grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-2 md:grid-cols-2">
           {flags.map((f) => (
-            <YesNoF key={f.key} name={f.key} label={f.label} className="flex items-center justify-between gap-3" />
+            <FlagRow key={f.key} name={f.key} label={f.label} />
           ))}
         </div>
       </FormSection>

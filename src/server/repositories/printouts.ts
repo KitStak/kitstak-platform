@@ -16,10 +16,17 @@ import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
 import {
   normalizeLayout, PRINTOUT_FIELDS, PRINTOUT_SEARCH_FIELDS, PRINTOUT_SORT_FIELDS, printoutOptionsSchema, templatesFor, typeTitle,
-  type PrintoutLayout, type PrintoutSave,
-} from "@/lib/grid-defs/admin/printouts";
+  type PrintoutLayout, type PrintoutSave, blockSummary } from "@/lib/grid-defs/admin/printouts";
 import { getCompany, readCompanyLogo } from "./company";
-import { recordsForPreview, renderLayoutPdf } from "./printouts-render";
+import { customBindableFields, recordsForPreview, renderLayoutPdf, renderLayoutZpl } from "./printouts-render";
+import { getBranding } from "./apps-branding";
+
+/** Custom Branding on printouts: heading accent and logo on/off (identity when the app is inactive). */
+function branded(db: AppDb, layout: PrintoutLayout): { layout: PrintoutLayout; showLogo: boolean; accent: string | null } {
+  const b = getBranding(db);
+  if (!b) return { layout, showLogo: true, accent: null };
+  return { layout: b.printoutAccent ? { ...layout, accentColor: b.accentColor } : layout, showLogo: b.logoOnPrintouts, accent: b.printoutAccent ? b.accentColor : null };
+}
 import { assertFound, assertVersion, compileGrid, domainCtxOf, duplicateError, logCreate, logDelete, logUpdate, qc, type Actor, type GridBinding } from "./users-shared";
 
 const p = s.printoutTemplates;
@@ -70,12 +77,33 @@ const toRow = (r: Record<string, unknown>): PrintoutRow => ({
   ...(r as unknown as PrintoutRow), typeName: typeTitle(String(r.typeKey)), isActive: Boolean(r.isActive), isDefault: Boolean(r.isDefault), allClients: Boolean(r.allClients),
 });
 
+/**
+ * Every print type ships with a locked system default (Logiwa parity): it can be
+ * duplicated and edited but not deleted/deactivated. Idempotent; runs on read so a new
+ * tenant (or a DB seeded before defaults existed) always has something to print.
+ */
+export function ensureDefaultPrintouts(db: AppDb): number {
+  const have = new Set(db.select({ k: p.typeKey }).from(p).where(eq(p.isDefault, true)).all().map((r) => r.k));
+  const missing = PRINT_TYPES.filter((t) => !have.has(t.key));
+  if (!missing.length) return 0;
+  db.insert(p).values(missing.map((t) => ({
+    typeKey: t.key, name: `${t.name} (Default)`, description: `System default ${t.name.toLowerCase()} template`,
+    recordsPerPage: (t.category === "labels" ? "Single Record" : "Multiple Records") as (typeof p.$inferInsert)["recordsPerPage"],
+    printMode: (t.printerType === "Label Printer" ? "Direct Print" : "PDF Preview") as (typeof p.$inferInsert)["printMode"],
+    printerType: t.printerType, baseTemplate: t.renderer ?? t.key, layout: { ...normalizeLayout(t.key, null) },
+    options: { useRetailerPackingList: false, groupBy: "none", labelCopies: 1 }, allClients: true, isActive: true, isDefault: true,
+  }))).run();
+  return missing.length;
+}
+
 export function printoutTypes(db: AppDb): { key: string; name: string; category: string; beta: boolean; printerType: string; count: number; implemented: boolean }[] {
+  ensureDefaultPrintouts(db);
   const counts = new Map(db.select({ k: p.typeKey, n: sql<number>`count(*)` }).from(p).groupBy(p.typeKey).all().map((r) => [r.k, r.n]));
   return PRINT_TYPES.map((t) => ({ key: t.key, name: t.name, category: t.category, beta: Boolean(t.beta), printerType: t.printerType, count: counts.get(t.key) ?? 0, implemented: Boolean(t.renderer) }));
 }
 
 export function listPrintouts(db: AppDb, query: GridQuery, typeKey?: string): { rows: PrintoutRow[]; total: number } {
+  ensureDefaultPrintouts(db);
   const grid = compileGrid(BINDING, query, [typeKey ? eq(p.typeKey, typeKey) : undefined]);
   const result = paginate(
     db.select(COLUMNS).from(p).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
@@ -123,7 +151,8 @@ function snapshot(db: AppDb, id: string): Record<string, unknown> {
     name: d.name, description: d.description, recordsPerPage: d.recordsPerPage, printMode: d.printMode, printerType: d.printerType, status: d.status,
     template: templatesFor(d.typeKey).find((t) => t.key === d.baseTemplate)?.name ?? d.baseTemplate,
     paper: d.layout.paper, font: `${d.layout.font} ${d.layout.fontSize} pt`, logoPosition: d.layout.logoPosition, title: d.layout.title, footerText: d.layout.footerText,
-    sections: d.layout.sections.filter((x) => x.enabled).map((x) => x.key).join(" > "), columns: d.layout.columns.filter((x) => x.enabled).map((x) => x.key).join(", "),
+    barcode: d.layout.barcodeType, printerLanguage: d.layout.family === "label" ? d.layout.labelLanguage : undefined,
+    sections: d.layout.sections.filter((x) => x.enabled).map((x) => { const b = d.layout.blocks.find((blk) => `block:${blk.id}` === x.key); return b ? blockSummary(b) : x.key; }).join(" > "), columns: d.layout.columns.filter((x) => x.enabled).map((x) => x.key).join(", "),
     retailerPackingList: d.options.useRetailerPackingList, clientAccess: d.allClients ? "All clients" : names,
   };
 }
@@ -191,12 +220,34 @@ export function printTemplatesFor(db: AppDb, typeKeys: readonly string[], client
     .filter((r) => r.allClients || !clientId || r.clientIds.includes(clientId));
 }
 
+/** Bindable fields for the designer: built-in record fields plus active custom fields of the type's entity. */
+export function printoutCustomFields(db: AppDb, typeKey: string) {
+  const entity = typeKey === "product-label" ? "product" : typeKey === "location-label" ? "location" : "shipment_order";
+  return customBindableFields(db, entity);
+}
+
+/** Records + branding for the designer's in-browser canvas preview (same data the PDF uses). */
+export function previewRecords(db: AppDb, auth: AuthContext, typeKey: string, sampleIds: readonly string[]) {
+  if (!getPrintType(typeKey)) throw notFoundError("Printout type");
+  const company = getCompany(db);
+  const b = getBranding(db);
+  return { records: recordsForPreview(db, auth, typeKey, sampleIds), companyName: company.displayName, logoUrl: b && !b.logoOnPrintouts ? null : company.logoUrl, brandAccent: b?.printoutAccent ? b.accentColor : null };
+}
+
+/** ZPL II preview for label templates (raw text the printer receives). */
+export function previewZpl(db: AppDb, auth: AuthContext, typeKey: string, layout: PrintoutLayout, sampleIds: readonly string[], copies = 1): string {
+  if (!getPrintType(typeKey)) throw notFoundError("Printout type");
+  const company = getCompany(db);
+  return renderLayoutZpl(normalizeLayout(typeKey, layout), recordsForPreview(db, auth, typeKey, sampleIds), { companyName: company.displayName }, copies);
+}
+
 /** Live preview PDF for the designer (or a saved template). */
 export async function previewPdf(db: AppDb, auth: AuthContext, typeKey: string, layout: PrintoutLayout, sampleIds: readonly string[]): Promise<Uint8Array> {
   if (!getPrintType(typeKey)) throw notFoundError("Printout type");
   const company = getCompany(db);
-  const logo = readCompanyLogo(db, fileStore());
-  return renderLayoutPdf(typeKey, normalizeLayout(typeKey, layout), recordsForPreview(db, auth, typeKey, sampleIds), {
+  const brand = branded(db, normalizeLayout(typeKey, layout));
+  const logo = brand.showLogo ? readCompanyLogo(db, fileStore()) : null;
+  return renderLayoutPdf(typeKey, brand.layout, recordsForPreview(db, auth, typeKey, sampleIds), {
     companyName: company.displayName, logo: logo ? { bytes: new Uint8Array(logo.bytes), mime: logo.mime } : null,
   });
 }

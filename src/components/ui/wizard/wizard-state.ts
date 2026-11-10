@@ -66,6 +66,7 @@ export function stepMetas(
     isOptional: s.isOptional,
     status: stepStatus(state, s.key, i, liveValid[i] ?? false, mode),
     clickable: canSelectStep(state, i, mode, steps.length),
+    current: i === state.current,
   }));
 }
 
@@ -79,10 +80,12 @@ export function completionPercent(state: WizardNavState, stepCount: number): num
  * Rail ring from validity, not from visited steps: required steps whose schema passes on
  * the current values, over all required steps (optional steps never block 100%).
  */
-export function validityPercent(steps: readonly { readonly isOptional?: boolean }[], liveValid: readonly boolean[]): number {
+export function validityPercent(steps: readonly { readonly isOptional?: boolean }[], liveValid: readonly boolean[], reached?: number): number {
   const required = steps.map((s, i) => ({ s, i })).filter(({ s }) => !s.isOptional);
   if (required.length === 0) return 100;
-  const valid = required.filter(({ i }) => liveValid[i] === true).length;
+  // With `reached`, a step counts only once the user has visited it, so an untouched create
+  // wizard starts at 0% whatever its defaults are (free/edit mode reaches every step).
+  const valid = required.filter(({ i }) => liveValid[i] === true && (reached === undefined || i <= reached)).length;
   return Math.round((valid / required.length) * 100);
 }
 

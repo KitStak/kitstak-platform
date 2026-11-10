@@ -6,7 +6,8 @@ import { defineRoute } from "@/server/api/define-route";
 import { result } from "@/server/api/envelope";
 import { workOrderInputSchema } from "@/lib/grid-defs/work-orders/work-order-model";
 import { createWorkOrder, getWorkOrderRow, listWorkOrders } from "@/server/repositories/work-orders";
-import { WO_PERMISSIONS, woCtx } from "@/server/repositories/work-orders-api";
+import { z } from "zod";
+import { plannerBody, WO_PERMISSIONS, woCtx } from "@/server/repositories/work-orders-api";
 
 export const GET = defineRoute({
   permission: WO_PERMISSIONS.view,
@@ -19,8 +20,9 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: WO_PERMISSIONS.create,
-  body: workOrderInputSchema,
-  handler: ({ db, auth, actor, body }) => {
+  body: z.unknown(),
+  handler: ({ db, auth, actor, body: raw }) => {
+    const body = plannerBody(auth, workOrderInputSchema, raw);
     const record = createWorkOrder(db, woCtx(actor, auth), body);
     return result(getWorkOrderRow(db, auth.scope, record.id), { status: 201 });
   },

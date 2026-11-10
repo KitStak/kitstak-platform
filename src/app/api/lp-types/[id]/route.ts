@@ -6,7 +6,7 @@ import { idParamsSchema } from "@/server/repositories/platform-common";
 import { deleteLpTypes, getLpType, updateLpType } from "@/server/repositories/lp-types";
 
 export const GET = defineRoute({
-  permission: "settings.lp_types.view",
+  permission: ["settings.lp_types.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   handler: ({ db, auth, params }) => getLpType(db, auth, params.id),
 });

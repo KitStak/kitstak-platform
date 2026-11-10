@@ -63,6 +63,17 @@ describe("listing exceptions", () => {
     expect(LISTING_GRID_FIELDS.find((f) => f.field === "exception")?.options?.map((o) => o.value)).toEqual(["unlinked", "sku_difference", "multi_listing"]);
   });
 
+  it("suggests the same-client product whose SKU matches the seller SKU (Logiwa Suggested state)", () => {
+    seed("mlt-widget-01", "gid-s");
+    seed("NO-SUCH-SKU", "gid-n");
+    const rows = listListings(w.db, scope, q(), "unlinked").rows;
+    const bySku = Object.fromEntries(rows.map((r) => [r.sellerSku, r]));
+    expect(bySku["mlt-widget-01"]).toMatchObject({ suggestedProductId: w.productId, suggestedProductSku: "MLT-WIDGET-01" });
+    expect(bySku["NO-SUCH-SKU"]).toMatchObject({ suggestedProductId: null, suggestedProductSku: null });
+    linkListing(w.db, ctx(), bySku["mlt-widget-01"]!.id, w.productId);
+    expect(listListings(w.db, scope, q(), "linked").rows[0]).toMatchObject({ suggestedProductId: null });
+  });
+
   it("respects client scope", () => {
     seed("MLT-WIDGET-01", "gid-1");
     expect(listListingExceptions(w.db, { warehouseIds: [w.warehouseId], clientIds: [w.otherClientId] }).rows).toEqual([]);

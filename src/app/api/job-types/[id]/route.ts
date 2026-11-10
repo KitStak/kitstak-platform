@@ -1,5 +1,6 @@
 /** `GET|PATCH|DELETE /api/job-types/[id]` — delete is blocked while rules or open jobs use the type. */
 import { defineRoute } from "@/server/api/define-route";
+import { withM03Actor } from "@/server/repositories/jobs-actor";
 import { jobTypeInputSchema } from "@/lib/grid-defs/jobs/forms";
 import { domainCtx, idParamsSchema } from "@/server/repositories/platform-common";
 import { deleteJobType, getJobTypeDetail, updateJobType } from "@/server/repositories/job-types";
@@ -14,14 +15,14 @@ export const PATCH = defineRoute({
   permission: "settings.job_types.edit",
   params: idParamsSchema,
   body: jobTypeInputSchema,
-  handler: ({ db, auth, actor, params, body }) => updateJobType(db, auth, domainCtx(actor, auth), params.id, body),
+  handler: ({ db, auth, actor, params, body }) => withM03Actor(db, actor, auth, () => updateJobType(db, auth, domainCtx(actor, auth), params.id, body)),
 });
 
 export const DELETE = defineRoute({
   permission: "settings.job_types.delete",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
+  handler: ({ db, auth, actor, params }) => withM03Actor(db, actor, auth, () => {
     deleteJobType(db, auth, domainCtx(actor, auth), params.id);
     return { deleted: params.id };
-  },
+  }),
 });

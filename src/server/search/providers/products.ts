@@ -2,6 +2,7 @@
  * Search provider "products" (Products / SKUs), owner M09. Matches SKU, primary barcode,
  * any pack-type barcode, FNSKU and name inside the caller's client scope.
  */
+import { PRODUCT_READ_PERMISSIONS } from "@/lib/grid-defs/products/permissions";
 import { and, asc, eq, or, sql, type SQL } from "drizzle-orm";
 import { scopedWhere } from "@/server/auth/scope";
 import { clients, products } from "@/server/db/schema";
@@ -30,7 +31,7 @@ export const provider: SearchProvider = {
   singular: "Product",
   owner: "M09",
   configured: true,
-  permission: "settings.products.view",
+  permission: PRODUCT_READ_PERMISSIONS,
   seeAllHref: (q) => listSearchHref("/products", q),
   count: (ctx) => ctx.db.select({ n: COUNT_ALL }).from(products).innerJoin(clients, eq(clients.id, products.clientId)).where(where(ctx)).get()?.n ?? 0,
   search: (ctx) =>

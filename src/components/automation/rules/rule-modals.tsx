@@ -12,7 +12,7 @@ import * as React from "react";
 import type { ConditionValue, OrderByClause, RuleCondition } from "@/lib/domain-types";
 import type { RuleComparator } from "@/lib/enums";
 import {
-  CONDITION_CATALOGS, PUTAWAY_ACTION_DEFS, VALUELESS, comparatorLabel, comparatorsFor, fieldDef, putawayActionDef,
+  CONDITION_CATALOGS, DATE_PRESETS, DATE_SPEC_COMPARATOR, PUTAWAY_ACTION_DEFS, RELATIVE_DATES_SUPPORTED, VALUELESS, comparatorLabel, comparatorsFor, datePresetValue, fieldDef, parseDatePresetValue, putawayActionDef,
   type ConditionCatalog, type OrderByMethod, type RuleFieldDef,
 } from "@/lib/grid-defs/integrations/rule-fields";
 import { splitCamel } from "@/lib/grid-defs/integrations/common";
@@ -25,7 +25,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
 import { DisabledReason } from "@/components/ui/tooltip";
-import { useClientOptions, useLookups, useWarehouseOptions } from "@/components/integrations/shared/shared";
+import { useClientOptions, useEntityOptions, useLookups, useWarehouseOptions } from "@/components/integrations/shared/shared";
 import type { AlgorithmAction } from "@/server/db/schema";
 
 function Field({ id, label, required, error, children }: { readonly id: string; readonly label: string; readonly required?: boolean; readonly error?: string | null; readonly children: React.ReactNode }) {
@@ -44,7 +44,9 @@ function useKindOptions(def: RuleFieldDef | undefined): readonly ComboboxOption[
   const clients = useClientOptions();
   const warehouses = useWarehouseOptions();
   const lookup = useLookups(def?.kind === "lookup" ? (def.lookup ?? "product_group") : "product_group");
+  const entities = useEntityOptions(def?.kind === "retailer" || def?.kind === "package" ? def.kind : null);
   if (!def) return [];
+  if (def.kind === "retailer" || def.kind === "package") return entities;
   if (def.kind === "client") return clients;
   if (def.kind === "warehouse") return warehouses.short;
   if (def.kind === "lookup") return lookup.options;
@@ -54,13 +56,15 @@ function useKindOptions(def: RuleFieldDef | undefined): readonly ComboboxOption[
 
 const EMPTY_OPTION: ComboboxOption = { value: "Empty", label: "Empty (no value)" };
 
-export function ConditionValueEditor({ id, def, comparator, value, onChange, invalid }: {
+export function ConditionValueEditor({ id, def, comparator, value, onChange, invalid, presetInComparator = false }: {
   readonly id: string; readonly def: RuleFieldDef; readonly comparator: RuleComparator; readonly value: ConditionValue;
   readonly onChange: (v: ConditionValue) => void; readonly invalid?: boolean;
+  /** The relative-date preset was already picked in the comparator list. */
+  readonly presetInComparator?: boolean;
 }) {
   const options = useKindOptions(def);
   if (VALUELESS.has(comparator)) return <p className="rounded-md bg-surface-sunken px-3 py-2 text-[12px] text-secondary">No value needed.</p>;
-  if (def.kind === "enum" || def.kind === "lookup" || def.kind === "client" || def.kind === "warehouse") {
+  if (def.kind === "enum" || def.kind === "lookup" || def.kind === "client" || def.kind === "warehouse" || def.kind === "retailer" || def.kind === "package") {
     const list = Array.isArray(value) ? value.map(String) : value === null || value === "" ? [] : [String(value)];
     return <Combobox id={id} multiple aria-label={def.label} options={[...options, EMPTY_OPTION]} value={list} onChange={(v) => onChange([...v])} placeholder={`Select ${def.label.toLowerCase()}`} invalid={invalid} />;
   }
@@ -81,6 +85,35 @@ export function ConditionValueEditor({ id, def, comparator, value, onChange, inv
       );
     }
     return <NumberInput id={id} aria-label={def.label} value={num(Array.isArray(value) ? value[0] : value)} onChange={(n) => onChange(n)} decimals={2} invalid={invalid} />;
+  }
+  if (def.kind === "date" && comparator === DATE_SPEC_COMPARATOR) {
+    const parsed = parseDatePresetValue(value);
+    const presetKey = parsed?.preset.key ?? null;
+    const days = parsed?.days ?? null;
+    // The condition modal lists the presets as comparators, so only the day count is left here.
+    if (presetInComparator) {
+      if (!parsed?.preset.needsDays) return <p className="rounded-md bg-surface-sunken px-3 py-2 text-[12px] text-secondary">No value needed. Resolved each time the rule runs, so it never goes stale.</p>;
+      return (
+        <div className="flex items-center gap-2">
+          <div className="w-28 shrink-0"><NumberInput id={id} aria-label="Number of days" value={days} min={0} max={3650} onChange={(n) => onChange(datePresetValue(parsed.preset.key, n ?? 0))} invalid={invalid} /></div>
+          <span className="text-[12px] text-secondary">{(days ?? 0) === 1 ? "day" : "days"}</span>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <Select id={id} aria-label="Date range" value={presetKey} placeholder="Select a date range"
+            onChange={(k) => { if (k) onChange(datePresetValue(k, DATE_PRESETS.find((p) => p.key === k)?.needsDays ? (days ?? 7) : null)); }}
+            options={DATE_PRESETS.map((p) => ({ value: p.key, label: p.label }))} />
+        </div>
+        {parsed?.preset.needsDays ? (
+          <div className="w-28 shrink-0">
+            <NumberInput aria-label="Number of days" value={days} min={0} max={3650} onChange={(n) => onChange(datePresetValue(parsed.preset.key, n ?? 0))} invalid={invalid} />
+          </div>
+        ) : null}
+      </div>
+    );
   }
   if (def.kind === "date") {
     const d = (x: unknown) => (typeof x === "string" ? x.slice(0, 10) : "");
@@ -103,6 +136,7 @@ export function conditionValueError(def: RuleFieldDef | undefined, comparator: R
   if (!def) return "Choose a field";
   if (!comparator) return "Choose a comparator";
   if (VALUELESS.has(comparator) || def.kind === "boolean") return null;
+  if (comparator === DATE_SPEC_COMPARATOR) return parseDatePresetValue(value) ? null : "Choose a date range";
   if (Array.isArray(value)) {
     if (comparator === "between") return value.length === 2 && value.every((v) => v !== "" && v !== null) ? null : "Enter both values";
     return value.length > 0 ? null : "Choose at least one value";
@@ -113,12 +147,38 @@ export function conditionValueError(def: RuleFieldDef | undefined, comparator: R
 function defaultValue(def: RuleFieldDef, comparator: RuleComparator): ConditionValue {
   if (VALUELESS.has(comparator)) return null;
   if (def.kind === "boolean") return true;
+  if (comparator === DATE_SPEC_COMPARATOR) return "today";
   if (comparator === "between") return ["", ""];
   if (comparator === "in" || comparator === "notIn") return [];
   return def.kind === "number" ? null : "";
 }
 
 /* ---------------- condition modal ---------------- */
+
+const PRESET_PREFIX = "preset:";
+const WEEKDAY_KEYS = new Set(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
+const EXACT_DATE_COMPARATORS: readonly RuleComparator[] = ["between", "gt", "lt", "isEmpty", "isNotEmpty"];
+
+/**
+ * Comparator choices. Date fields list Logiwa's relative presets (Today, Last 3/7/30/90 Days,
+ * Last 12 Months, X Days Ahead/Before, Within Next/Past X Days, weekdays) as first-class
+ * comparators, then the exact-date ones (between / after / before / empty).
+ */
+export function comparatorChoices(def: RuleFieldDef): { value: string; label: string; group?: string }[] {
+  if (def.kind === "date" && RELATIVE_DATES_SUPPORTED) {
+    return [
+      ...DATE_PRESETS.map((p) => ({ value: `${PRESET_PREFIX}${p.key}`, label: p.needsDays ? p.label.replace("X Days", "X days") : p.label, group: p.needsDays ? "Relative to today" : WEEKDAY_KEYS.has(p.key) ? "Weekday" : "Date range" })),
+      ...EXACT_DATE_COMPARATORS.map((c) => ({ value: c, label: comparatorLabel(def.kind, c), group: "Exact date" })),
+    ];
+  }
+  return comparatorsFor(def.kind).map((c) => ({ value: c, label: comparatorLabel(def.kind, c) }));
+}
+
+/** Select value for a comparator (+ value): relative dates read as `preset:<key>`. */
+function comparatorChoiceValue(comparator: RuleComparator | null, value: ConditionValue): string | null {
+  if (comparator !== DATE_SPEC_COMPARATOR) return comparator;
+  return `${PRESET_PREFIX}${parseDatePresetValue(value)?.preset.key ?? "today"}`;
+}
 
 export interface ConditionModalState {
   readonly title: string;
@@ -178,13 +238,24 @@ export function ConditionModal({ state, onClose, onSubmit }: { readonly state: C
               </Field>
               {def ? (
                 <Field id="cond-cmp" label="Comparator" required error={touched && !comparator ? "Choose a comparator" : null}>
-                  <Select id="cond-cmp" value={comparator} onChange={(c) => { setComparator(c); if (c) setValue(defaultValue(def, c)); }}
-                    options={comparatorsFor(def.kind).map((c) => ({ value: c, label: comparatorLabel(def.kind, c) }))} />
+                  <Select id="cond-cmp" value={comparatorChoiceValue(comparator, value)} onChange={(c) => {
+                    if (!c) return;
+                    if (c.startsWith(PRESET_PREFIX)) {
+                      const key = c.slice(PRESET_PREFIX.length);
+                      setComparator(DATE_SPEC_COMPARATOR);
+                      setValue(datePresetValue(key, DATE_PRESETS.find((p) => p.key === key)?.needsDays ? 7 : null));
+                      return;
+                    }
+                    const next = c as RuleComparator;
+                    setComparator(next);
+                    setValue(defaultValue(def, next));
+                  }}
+                    options={comparatorChoices(def)} />
                 </Field>
               ) : null}
               {def && comparator ? (
-                <Field id="cond-value" label="Value" required={!VALUELESS.has(comparator)} error={touched ? error : null}>
-                  <ConditionValueEditor id="cond-value" def={def} comparator={comparator} value={value} onChange={setValue} invalid={touched && Boolean(error)} />
+                <Field id="cond-value" label={comparator === DATE_SPEC_COMPARATOR && parseDatePresetValue(value)?.preset.needsDays ? "Number of days" : "Value"} required={!VALUELESS.has(comparator)} error={touched ? error : null}>
+                  <ConditionValueEditor id="cond-value" def={def} comparator={comparator} value={value} onChange={setValue} invalid={touched && Boolean(error)} presetInComparator={def.kind === "date"} />
                 </Field>
               ) : null}
             </>
@@ -192,7 +263,8 @@ export function ConditionModal({ state, onClose, onSubmit }: { readonly state: C
         </DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <DisabledReason reason={touched && error ? error : null}><Button variant="primary" onClick={submit} disabled={touched && Boolean(error)}>{state?.initial ? "Save condition" : "Add"}</Button></DisabledReason>
+          {/* Guarded like Next/Save elsewhere: disabled, with the reason, until field, comparator and value are complete. */}
+          <DisabledReason reason={error}><Button variant="primary" onClick={submit} disabled={Boolean(error)}>{state?.initial ? "Save condition" : "Add"}</Button></DisabledReason>
         </DialogFooter>
       </DialogContent>
     </Dialog>

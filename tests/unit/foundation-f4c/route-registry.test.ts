@@ -25,7 +25,7 @@ describe("route-registry", () => {
   });
 
   it("derives Logiwa-style breadcrumbs (menu text, linked parents, plain current page)", () => {
-    expect(breadcrumbsFor("/orders/shipped")).toEqual([{ label: "Fulfillment" }, { label: "Shipped Orders" }]);
+    expect(breadcrumbsFor("/orders/shipped")).toEqual([{ label: "Fulfillment" }, { label: "Shipped & Canceled Orders" }]);
     expect(breadcrumbsFor("/orders/abc", "SO010421")).toEqual([{ label: "Fulfillment" }, { label: "Shipment Orders", href: "/orders" }, { label: "SO010421" }]);
     expect(breadcrumbsFor("/automation/algorithms/putaway/new")).toEqual([
       { label: "Automation" },
@@ -57,10 +57,10 @@ describe("nav-access", () => {
   it("drops forbidden items, empty columns and empty menus", () => {
     const granted = new Set(["fulfillment.shipment_orders.view", "settings.users.view"]);
     const menus = visibleMenus(NAV_MENUS, granted);
-    expect(menus.map((m) => m.key)).toEqual(["fulfillment", "settings"]);
+    expect(menus.map((m) => m.key)).toEqual(["fulfillment", "reports", "settings"]);
     expect(menus[0]?.columns.map((c) => c.items.map((i) => i.href))).toEqual([["/orders", "/orders/shipped"]]);
-    expect(menus[1]?.columns.map((c) => c.heading)).toEqual(["Users"]);
-    expect(menus[1]?.footer?.href).toBe("/settings");
+    expect(menus[2]?.columns.map((c) => c.heading)).toEqual(["Users"]);
+    expect(menus[2]?.footer?.href).toBe("/settings");
     expect(visibleMenus(NAV_MENUS, new Set())).toEqual([]);
   });
 
@@ -79,7 +79,7 @@ describe("nav-access", () => {
     expect(isItemActive({ href: "/orders" }, "/orders/abc")).toBe(true);
     expect(isItemActive({ href: "/orders" }, "/orders-x")).toBe(false);
     expect(activeMenuKey(NAV_MENUS, "/shipments/history")).toBe("fulfillment");
-    expect(activeMenuKey(NAV_MENUS, "/products/123")).toBe("settings");
+    expect(activeMenuKey(NAV_MENUS, "/products/123")).toBe("inventory");
     expect(activeMenuKey(NAV_MENUS, "/integrations/channels/shopify")).toBe("integrations");
     expect(activeMenuKey(NAV_MENUS, "/dashboard")).toBeNull();
   });

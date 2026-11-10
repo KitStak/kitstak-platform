@@ -23,6 +23,9 @@ import { useProductWizard } from "./context";
 import { AllocationModal, ReplenishmentModal, type LevelDraft } from "./advanced-modals";
 import { NumF, SelectF, TextF, YesNoF, opts } from "./fields";
 
+/** One disabled look for every control in a switched-off group (inputs, selects, steppers). */
+const DISABLED_GROUP = "[&_button:disabled]:cursor-not-allowed [&_button:disabled]:bg-surface-sunken [&_button:disabled]:text-faint [&_input:disabled]:text-faint [&_label]:text-secondary";
+
 type SectionKey = "customs" | "expiry" | "hazmat" | "channels" | "lot" | "production" | "replenishment" | "serial";
 
 const SECTION_FIELDS: Record<SectionKey, readonly string[]> = {
@@ -257,7 +260,7 @@ export function StepAdvanced() {
           <FormField name="isHazmat" label="Mark this item as hazardous" inline>
             {(c) => <Switch id={c.id} checked={Boolean(c.value)} onCheckedChange={(x) => c.onChange(x)} aria-label="Mark this item as hazardous" />}
           </FormField>
-          <FormGrid columns={2}>
+          <FormGrid columns={2} className={hz ? undefined : DISABLED_GROUP}>
             <TextF name="hazmat.hazmatId" label="Hazmat ID" disabled={!hz} info="UN/NA identification number, e.g. UN3481" maxLength={100} />
             <SelectF name="hazmat.type" label="Hazmat type" required={hz} disabled={!hz} options={opts(HAZMAT_TYPES)} info="Carrier hazmat category" />
             <SelectF name="hazmat.attribute" label="Hazmat attribute" disabled={!hz} clearable options={opts(HAZMAT_ATTRIBUTES)} info="Lithium battery configuration" />

@@ -6,9 +6,10 @@
 import { and, eq, sql } from "drizzle-orm";
 import * as schema from "@/server/db/schema";
 import { hasClient, hasWarehouse } from "@/server/auth/scope";
-import { changeLog } from "@/server/domain";
+import * as changeLog from "@/server/domain/change-log";
 import { DomainError } from "@/server/domain/errors";
 import type { ImportApplyContext, ImportApplyResult, ImportRowValues } from "@/server/imports/types";
+import { openCountConflicts } from "./counts-conflicts";
 import { COUNT_NAME_MAX } from "./counts-plans";
 
 const str = (v: ImportRowValues[string] | undefined): string | null => (v === null || v === undefined || v === "" ? null : String(v).trim());
@@ -56,6 +57,8 @@ export function importLocationRow(ctx: ImportApplyContext, row: ImportRowValues)
   const loc = ctx.db.select().from(schema.locations).where(and(eq(schema.locations.warehouseId, warehouseId), eq(schema.locations.code, code))).get() ?? fail(`Location "${code}" was not found`);
   const dup = ctx.db.select({ id: schema.countPlanLines.id }).from(schema.countPlanLines).where(and(eq(schema.countPlanLines.planId, plan.id), eq(schema.countPlanLines.locationId, loc.id))).get();
   if (dup) fail(`Location ${code} is already in count plan ${plan.code}`);
+  const other = openCountConflicts(ctx.db, { warehouseId, locationIds: [loc.id], exceptPlanId: plan.id })[0];
+  if (other) fail(`Location ${code} is already in open count plan ${other.planCode}`);
   ctx.db.insert(schema.countPlanLines).values({ planId: plan.id, locationId: loc.id, status: "Pending", initialStockQty: stock(ctx, sql`location_id = ${loc.id}`), createdBy: ctx.actor.userId, updatedBy: ctx.actor.userId }).run();
   return { entityId: plan.id, message: created ? `Count plan ${plan.code} created` : `Added to ${plan.code}` };
 }
@@ -69,6 +72,8 @@ export function importSkuRow(ctx: ImportApplyContext, row: ImportRowValues): Imp
   const { plan, warehouseId, created } = planFor(ctx, row, "SKU");
   const dup = ctx.db.select({ id: schema.countPlanLines.id }).from(schema.countPlanLines).where(and(eq(schema.countPlanLines.planId, plan.id), eq(schema.countPlanLines.productId, product.id))).get();
   if (dup) fail(`SKU ${sku} is already in count plan ${plan.code}`);
+  const other = openCountConflicts(ctx.db, { warehouseId, productIds: [product.id], exceptPlanId: plan.id })[0];
+  if (other) fail(`SKU ${sku} is already in open count plan ${other.planCode}`);
   ctx.db.insert(schema.countPlanLines).values({ planId: plan.id, productId: product.id, status: "Pending", initialStockQty: stock(ctx, sql`product_id = ${product.id} AND warehouse_id = ${warehouseId}`), createdBy: ctx.actor.userId, updatedBy: ctx.actor.userId }).run();
   return { entityId: plan.id, message: created ? `Count plan ${plan.code} created` : `Added to ${plan.code}` };
 }

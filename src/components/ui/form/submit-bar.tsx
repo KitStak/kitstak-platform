@@ -42,7 +42,7 @@ export function SubmitBar({ submitLabel = "Save", cancelLabel = "Cancel", onCanc
   const busy = isSubmitting || pending;
 
   return (
-    <div className={cn("flex items-center justify-between gap-2", sticky && "sticky bottom-0 -mx-5 border-t border-border bg-surface px-5 py-3", className)}>
+    <div data-sticky-footer={sticky ? "" : undefined} className={cn("flex items-center justify-between gap-2", sticky && "sticky bottom-0 z-10 -mx-5 border-t border-border bg-surface px-5 py-3 shadow-[0_-4px_8px_-6px_rgba(16,24,40,0.15)]", className)}>
       <div className="flex items-center gap-2">{secondary}</div>
       <div className="flex items-center gap-2">
         {onCancel ? (

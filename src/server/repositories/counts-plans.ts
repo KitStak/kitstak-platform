@@ -9,11 +9,13 @@ import type { AppDb } from "@/server/api/db";
 import { AppError, conflictError, notFoundError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
 import { hasClient, hasWarehouse, type Scope } from "@/server/auth/scope";
-import { changeLog, sequences } from "@/server/domain";
+import * as changeLog from "@/server/domain/change-log";
+import * as sequences from "@/server/domain/sequences";
 import { DomainError } from "@/server/domain/errors";
 import type { DomainCtx, Tx } from "@/server/domain/types";
 import type { GridQuery } from "@/server/query/grid-query";
-import { planDeleteReason, planEditReason } from "@/lib/grid-defs/counts/count-math";
+import { planDeleteReason, planEditReason, planNameLockedReason } from "@/lib/grid-defs/counts/count-math";
+import { assertNoOpenCountConflicts } from "./counts-conflicts";
 import { gridRowsById, raw, runGrid, type GridPage } from "./counts-grid";
 import { lineGrid, lineRow, planGrid, planRow, type CountLineListRow, type CountPlanListRow } from "./counts-grids";
 
@@ -29,14 +31,19 @@ export const countPlanInputSchema = z.object({
   description: z.string().trim().max(COUNT_DESCRIPTION_MAX, `Use at most ${COUNT_DESCRIPTION_MAX} characters`).nullish(),
   scheduledAt: z.string().trim().min(1, "Scheduled count date is required").refine((v) => !Number.isNaN(Date.parse(v)), "Enter a valid date and time"),
   lockLocations: z.boolean().default(false),
-  countType: z.enum(["Location", "SKU"]),
+  countType: z.enum(["Location", "SKU", "LP"]),
   locationIds: idList.default([]),
   productIds: idList.default([]),
+  /** LP count: the license plates to count (each line = one LP in its current location). */
+  lpIds: idList.default([]),
+  /** Lines came from Suggest (AI Count Plan): risk-ranked locations / SKUs. Shown as "AI Count Plan = Yes". */
+  isAi: z.boolean().default(false),
 }).superRefine((v, ctx) => {
-  const n = v.countType === "Location" ? v.locationIds.length : v.productIds.length;
-  if (n === 0) ctx.addIssue({ code: "custom", path: [v.countType === "Location" ? "locationIds" : "productIds"], message: `Add at least one ${v.countType === "Location" ? "location" : "product"}` });
+  const field = v.countType === "Location" ? "locationIds" : v.countType === "LP" ? "lpIds" : "productIds";
+  const noun = v.countType === "Location" ? "location" : v.countType === "LP" ? "license plate" : "product";
+  if (v[field].length === 0) ctx.addIssue({ code: "custom", path: [field], message: `Add at least one ${noun}` });
 });
-export type CountPlanInput = z.output<typeof countPlanInputSchema>;
+export type CountPlanInput = Omit<z.output<typeof countPlanInputSchema>, "lpIds" | "isAi"> & { readonly lpIds?: readonly string[]; readonly isAi?: boolean };
 
 export const countPlanUpdateSchema = z.object({ version: z.number().int().min(1) }).and(countPlanInputSchema);
 
@@ -80,6 +87,8 @@ export interface CountJobRow {
   readonly assigneeName: string | null;
   readonly taskCount: number;
   readonly completedTaskCount: number;
+  /** Task rows cancelled with the job or line (not part of taskCount). */
+  readonly cancelledTaskCount: number;
   readonly createdAt: string;
 }
 
@@ -109,12 +118,17 @@ export function getCountPlanDetail(db: AppDb, scope: Scope, idOrCode: string): C
   const lines = linesOfPlan(db, scope, id);
   const entries = db.all<CountEntryRow>(sql`
     SELECT e.id, e.line_id AS lineId, pr.sku, pr.name AS productName, lo.code AS locationCode, lp.number AS lpNumber, e.lot_number AS lotNumber,
-      e.expiry_date AS expiryDate, e.pack_type AS packType, e.system_qty AS systemQty, e.counted_qty AS countedQty, e.counted_by AS countedBy, e.counted_at AS countedAt
+      e.expiry_date AS expiryDate, e.pack_type AS packType, e.system_qty AS systemQty, e.counted_qty AS countedQty,
+      COALESCE((SELECT u.name FROM users u WHERE lower(u.email) = lower(e.counted_by)), e.counted_by) AS countedBy, e.counted_at AS countedAt
     FROM count_line_entries e JOIN count_plan_lines l ON l.id = e.line_id JOIN products pr ON pr.id = e.product_id
     JOIN locations lo ON lo.id = e.location_id LEFT JOIN license_plates lp ON lp.id = e.lp_id
     WHERE l.plan_id = ${id} ORDER BY lo.code, pr.sku, e.lot_number`);
   const jobs = db.all<CountJobRow>(sql`
-    SELECT j.id, j.code, j.job_type AS jobType, j.status, u.name AS assigneeName, j.task_count AS taskCount, j.completed_task_count AS completedTaskCount, j.created_at AS createdAt
+    SELECT j.id, j.code, j.job_type AS jobType, j.status, u.name AS assigneeName,
+      -- Counters come from the task rows (same rule as rollupJob), so a stale jobs.task_count can never show.
+      (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status <> 'Cancelled') AS taskCount,
+      (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status = 'Completed') AS completedTaskCount,
+      (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status = 'Cancelled') AS cancelledTaskCount, j.created_at AS createdAt
     FROM jobs j LEFT JOIN users u ON u.id = j.assigned_to_user_id WHERE j.count_plan_id = ${id} ORDER BY j.created_at, j.code`);
   const wh = db.select({ m: schema.warehouses.mandatoryCountReason }).from(schema.warehouses).where(eq(schema.warehouses.id, plan.warehouseId)).get();
   const ids = db.select({ locationId: schema.countPlanLines.locationId, productId: schema.countPlanLines.productId }).from(schema.countPlanLines)
@@ -133,6 +147,15 @@ export function linesOfPlan(db: AppDb, scope: Scope, planId: string): CountLineL
 
 export function nextCountCode(db: AppDb): string {
   return sequences.peek(db, "count");
+}
+
+/** Wizard default warehouse when no working context is set: the in-scope warehouse holding the most stock. */
+export function busiestWarehouseId(db: AppDb, scope: Scope): string | null {
+  if (scope.warehouseIds.length === 0) return null;
+  const row = db.select({ id: schema.inventory.warehouseId, n: sql<number>`SUM(${schema.inventory.onHand})` }).from(schema.inventory)
+    .where(and(inArray(schema.inventory.warehouseId, [...scope.warehouseIds]), gt(schema.inventory.onHand, 0)))
+    .groupBy(schema.inventory.warehouseId).orderBy(sql`2 DESC`).limit(1).all()[0];
+  return row?.id ?? null;
 }
 
 /* ----------------------------------------------------------------- writes */
@@ -158,7 +181,8 @@ function stockOf(tx: Tx, productId: string, warehouseId: string): number {
 type LineInsert = typeof schema.countPlanLines.$inferInsert;
 
 /** Validated line rows for a plan's locations / products (warehouse + client scope). */
-export function buildPlanLines(tx: Tx, scope: Scope, planId: string, input: Pick<CountPlanInput, "countType" | "warehouseId" | "locationIds" | "productIds">, userId: string | null): LineInsert[] {
+export function buildPlanLines(tx: Tx, scope: Scope, planId: string, input: Pick<CountPlanInput, "countType" | "warehouseId" | "locationIds" | "productIds"> & { readonly lpIds?: readonly string[] }, userId: string | null): LineInsert[] {
+  if (input.countType === "LP") return buildLpLines(tx, scope, planId, input.warehouseId, input.lpIds ?? [], userId);
   if (input.countType === "Location") {
     const ids = [...new Set(input.locationIds)];
     const locs = ids.length ? tx.select().from(schema.locations).where(inArray(schema.locations.id, ids)).all() : [];
@@ -175,6 +199,38 @@ export function buildPlanLines(tx: Tx, scope: Scope, planId: string, input: Pick
   return ids.map((productId) => ({ planId, productId, status: "Pending" as const, initialStockQty: stockOf(tx, productId, input.warehouseId), createdBy: userId, updatedBy: userId }));
 }
 
+/**
+ * LP count lines (Logiwa Count Type "LP"): one line per license plate, placed at the LP's
+ * current location with `lp_id` set, so the sheet, jobs and Update Inv. only see that LP's
+ * buckets. The LP must be in the plan's warehouse, sit in a location, and belong to a client
+ * the viewer can access (or to no client).
+ */
+function buildLpLines(tx: Tx, scope: Scope, planId: string, warehouseId: string, lpIds: readonly string[], userId: string | null): LineInsert[] {
+  const ids = [...new Set(lpIds)];
+  const lps = ids.length ? tx.select().from(schema.licensePlates).where(inArray(schema.licensePlates.id, ids)).all() : [];
+  const bad = (msg: string) => new AppError("VALIDATION", msg, { fieldErrors: { lpIds: [msg] } });
+  if (lps.length !== ids.length || lps.some((l) => l.warehouseId !== warehouseId)) throw bad("Some license plates are not in the selected warehouse");
+  if (lps.some((l) => l.clientId && !hasClient(scope, l.clientId))) throw bad("Some license plates are not available to you");
+  const unplaced = lps.find((l) => !l.locationId);
+  if (unplaced) throw bad(`License plate ${unplaced.number} is not in a location, so it can't be counted`);
+  const byId = new Map(lps.map((l) => [l.id, l]));
+  return ids.map((lpId) => {
+    const lp = byId.get(lpId)!;
+    const qty = tx.get<{ n: number | null }>(sql`SELECT SUM(on_hand) AS n FROM inventory WHERE lp_id = ${lpId} AND on_hand > 0`)?.n ?? 0;
+    return { planId, locationId: lp.locationId, lpId, status: "Pending" as const, initialStockQty: qty, createdBy: userId, updatedBy: userId };
+  });
+}
+
+/** A location / SKU / LP may be in only one open count plan (the pickers flag them; this is the server guard). */
+export function assertPlanScopeFree(tx: Tx, input: Pick<CountPlanInput, "countType" | "warehouseId" | "locationIds" | "productIds"> & { readonly lpIds?: readonly string[] }, exceptPlanId: string | null): void {
+  assertNoOpenCountConflicts(tx, {
+    warehouseId: input.warehouseId, exceptPlanId,
+    locationIds: input.countType === "Location" ? input.locationIds : [],
+    productIds: input.countType === "SKU" ? input.productIds : [],
+    lpIds: input.countType === "LP" ? (input.lpIds ?? []) : [],
+  });
+}
+
 function consumeCodeIfSuggested(tx: Tx, code: string): void {
   if (code.toUpperCase() === sequences.peek(tx, "count").toUpperCase()) sequences.next(tx, "count");
 }
@@ -182,10 +238,11 @@ function consumeCodeIfSuggested(tx: Tx, code: string): void {
 export function createCountPlan(tx: Tx, ctx: DomainCtx, auth: AuthContext, input: CountPlanInput): CountPlanListRow {
   assertWarehouse(auth.scope, input.warehouseId);
   assertUniqueCode(tx, input.warehouseId, input.code);
+  assertPlanScopeFree(tx, input, null);
   consumeCodeIfSuggested(tx, input.code);
   const plan = tx.insert(schema.countPlans).values({
     code: input.code, warehouseId: input.warehouseId, description: input.description || null, scheduledAt: new Date(input.scheduledAt).toISOString(),
-    lockLocations: input.lockLocations, countType: input.countType, operationType: "Cycle Count", status: "Pending",
+    lockLocations: input.lockLocations, countType: input.countType, operationType: "Cycle Count", status: "Pending", isAi: input.isAi ?? false,
     createdBy: ctx.userId, updatedBy: ctx.userId,
   }).returning().get();
   const lines = buildPlanLines(tx, auth.scope, plan.id, input, ctx.userId);
@@ -213,6 +270,7 @@ export function updateCountPlan(tx: Tx, ctx: DomainCtx, auth: AuthContext, id: s
   if (reason) throw new DomainError("INVALID_STATE", reason);
   assertWarehouse(auth.scope, input.warehouseId);
   if (input.code.toLowerCase() !== plan.code.toLowerCase() || input.warehouseId !== plan.warehouseId) assertUniqueCode(tx, input.warehouseId, input.code, plan.id);
+  assertPlanScopeFree(tx, input, id);
   const before = tx.select().from(schema.countPlanLines).where(eq(schema.countPlanLines.planId, id)).all();
   const updated = tx.update(schema.countPlans).set({
     code: input.code, warehouseId: input.warehouseId, description: input.description || null, scheduledAt: new Date(input.scheduledAt).toISOString(),
@@ -220,7 +278,7 @@ export function updateCountPlan(tx: Tx, ctx: DomainCtx, auth: AuthContext, id: s
   }).where(and(eq(schema.countPlans.id, id), eq(schema.countPlans.version, input.version))).returning().get();
   if (!updated) throw conflictError();
   const wanted = buildPlanLines(tx, auth.scope, id, input, ctx.userId);
-  const keyOf = (l: { locationId?: string | null; productId?: string | null }) => `${l.locationId ?? ""}|${l.productId ?? ""}`;
+  const keyOf = (l: { locationId?: string | null; productId?: string | null; lpId?: string | null }) => `${l.locationId ?? ""}|${l.productId ?? ""}|${l.lpId ?? ""}`;
   const wantedKeys = new Set(wanted.map(keyOf));
   const keep = new Set(before.filter((l) => wantedKeys.has(keyOf(l))).map(keyOf));
   const removed = before.filter((l) => !wantedKeys.has(keyOf(l)));
@@ -231,6 +289,33 @@ export function updateCountPlan(tx: Tx, ctx: DomainCtx, auth: AuthContext, id: s
     entityType: "count_plan", entityId: id, entityCode: updated.code,
     before: { code: plan.code, warehouseId: whCode(tx, plan.warehouseId), description: plan.description, scheduledAt: plan.scheduledAt, lockLocations: plan.lockLocations, countType: plan.countType, countLines: before.length },
     after: { code: updated.code, warehouseId: whCode(tx, updated.warehouseId), description: updated.description, scheduledAt: updated.scheduledAt, lockLocations: updated.lockLocations, countType: updated.countType, countLines: wanted.length },
+  });
+  return getCountPlanSummary(tx, auth.scope, id);
+}
+
+/** Header-only edit (name + description) - allowed at any status, like Logiwa's Edit Count drawer. Lines, warehouse, date and lock stay as they are. */
+export const countPlanHeaderSchema = z.object({
+  version: z.number().int().min(1),
+  code: countPlanInputSchema.shape.code,
+  description: countPlanInputSchema.shape.description,
+});
+
+export function updateCountPlanHeader(tx: Tx, ctx: DomainCtx, auth: AuthContext, id: string, input: z.infer<typeof countPlanHeaderSchema>): CountPlanListRow {
+  const plan = loadOwnPlan(tx, auth.scope, id);
+  if (plan.version !== input.version) throw conflictError();
+  // Inventory Updated: the description stays editable (Logiwa parity); the name is locked.
+  const nameLocked = planNameLockedReason(plan.status);
+  if (nameLocked && input.code !== plan.code) throw new DomainError("INVALID_STATE", nameLocked);
+  if (input.code.toLowerCase() !== plan.code.toLowerCase()) assertUniqueCode(tx, plan.warehouseId, input.code, plan.id);
+  const description = input.description || null;
+  if (input.code === plan.code && description === plan.description) return getCountPlanSummary(tx, auth.scope, id);
+  const updated = tx.update(schema.countPlans).set({ code: input.code, description, updatedBy: ctx.userId, version: sql`${schema.countPlans.version} + 1` })
+    .where(and(eq(schema.countPlans.id, id), eq(schema.countPlans.version, input.version))).returning().get();
+  if (!updated) throw conflictError();
+  changeLog.recordUpdate(tx, ctx, {
+    entityType: "count_plan", entityId: id, entityCode: updated.code,
+    before: { code: plan.code, description: plan.description },
+    after: { code: updated.code, description: updated.description },
   });
   return getCountPlanSummary(tx, auth.scope, id);
 }

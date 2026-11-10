@@ -90,6 +90,11 @@ export function rollupJob(tx: Tx, ctx: DomainCtx, jobId: string): void {
     if (p.taskCount > 0 && p.completedTaskCount === p.taskCount) {
       status = stateMachines.job.transition(status, "Completed");
       patch.completedAt = nowIso();
+      // Pending -> Completed in one step (one-task jobs, instant counts) still gets an Actual Start.
+      if (!job.startedAt) {
+        const first = tx.get<{ at: string | null }>(sql`SELECT MIN(COALESCE(started_at, finished_at)) AS at FROM tasks WHERE job_id = ${jobId} AND status <> 'Cancelled'`)?.at;
+        patch.startedAt = first ?? patch.completedAt;
+      }
     } else if (status === "Pending" && p.completedTaskCount > 0) {
       status = stateMachines.job.transition(status, "Started");
       patch.startedAt = job.startedAt ?? nowIso();

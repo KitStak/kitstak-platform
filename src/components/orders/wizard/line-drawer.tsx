@@ -98,7 +98,7 @@ export function LineDrawer({ line, warehouseId, readOnly, onOpenChange, onApply 
           </Field>
           <ReadValue label="Total price">{fmt.money(draft.quantity * draft.unitPrice)}</ReadValue>
           <ReadValue label="Available pack quantity">
-            {facts.isLoading ? "Loading…" : atp === null || atp === undefined ? "—" : (
+            {facts.isLoading && (atp === null || atp === undefined) ? "Loading…" : atp === null || atp === undefined ? "—" : (
               <span className={atp <= 0 ? "font-semibold text-danger" : atp < draft.quantity ? "font-semibold text-warning" : "font-semibold text-success"}>
                 {fmt.quantity(Math.floor(atp / Math.max(1, ratio)))} {draft.packType}
               </span>

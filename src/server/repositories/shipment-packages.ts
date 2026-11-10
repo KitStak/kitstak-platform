@@ -10,6 +10,7 @@ import type { AuthContext } from "@/server/auth/context";
 import { hasClient } from "@/server/auth/scope";
 import * as s from "@/server/db/schema";
 import { runBulk } from "@/server/domain/bulk";
+import { createProduct } from "@/server/domain/products";
 import type { BulkResult } from "@/server/domain/types";
 import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
@@ -159,6 +160,7 @@ function assertReferences(db: AppDb, auth: AuthContext, input: ShipmentPackageSa
   }
   if (!input.trackInventory) return;
   if (!input.inventoryClientId || !hasClient(auth.scope, input.inventoryClientId)) throw fieldError("inventoryClientId", "Inventory owner is not available to you");
+  if (input.trackingMethod === "auto" && !input.inventoryProductId) return; // created by ensurePackagingSku
   const product = input.inventoryProductId ? db.select({ clientId: s.products.clientId, category: s.products.productCategory }).from(s.products).where(eq(s.products.id, input.inventoryProductId)).get() : undefined;
   if (!product || product.clientId !== input.inventoryClientId) throw fieldError("inventoryProductId", "Choose a SKU of the inventory owner");
   if (input.reductionRule === "Specific Location") {
@@ -211,22 +213,43 @@ function display(db: AppDb, row: typeof t.$inferSelect): Record<string, unknown>
   };
 }
 
-export function createShipmentPackage(tx: AppDb, auth: AuthContext, actor: Actor, input: ShipmentPackageSave): { id: string; code: string } {
-  assertWarehouseInScope(auth, input.warehouseId);
-  assertCodeFree(tx, input.warehouseId, input.code.trim());
-  assertReferences(tx, auth, input);
+/**
+ * "Auto-create new SKU" (Logiwa's Inventory Tracking Method): the owner gets a Packaging Material
+ * product named after the package (SKU = package code, box dimensions and empty weight). An
+ * existing SKU with that code for the owner is matched instead of duplicated.
+ */
+export function ensurePackagingSku(tx: AppDb, auth: AuthContext, actor: Actor, input: ShipmentPackageSave): ShipmentPackageSave {
+  if (!input.trackInventory || input.trackingMethod !== "auto" || input.inventoryProductId || !input.inventoryClientId) return input;
+  const sku = input.code.trim().toUpperCase();
+  const existing = tx.select({ id: s.products.id }).from(s.products).where(and(eq(s.products.clientId, input.inventoryClientId), sql`upper(${s.products.sku}) = ${sku}`)).get();
+  if (existing) return { ...input, inventoryProductId: existing.id };
+  const inch = ({ Inch: 1, Foot: 12, Centimeter: 1 / 2.54, Meter: 100 / 2.54 } as Record<string, number>)[input.dimensionUnit] ?? 1;
+  const ounce = ({ Ounce: 1, Pound: 16, Gram: 1 / 28.3495, Kilogram: 35.274 } as Record<string, number>)[input.weightUnit] ?? 1;
+  const product = createProduct(tx, domainCtxOf(actor, auth), {
+    clientId: input.inventoryClientId, sku, name: input.description?.trim() || `Shipment package ${sku}`, category: "Packaging", productCategory: "Packaging Material",
+    lengthIn: round(input.length * inch), widthIn: round(input.width * inch), heightIn: round(input.height * inch), weightOz: round(input.emptyWeight * ounce), purchasePrice: round(input.purchasePrice),
+  });
+  return { ...input, inventoryProductId: product.id };
+}
+
+export function createShipmentPackage(tx: AppDb, auth: AuthContext, actor: Actor, raw: ShipmentPackageSave): { id: string; code: string } {
+  assertWarehouseInScope(auth, raw.warehouseId);
+  assertCodeFree(tx, raw.warehouseId, raw.code.trim());
+  assertReferences(tx, auth, raw);
+  const input = ensurePackagingSku(tx, auth, actor, raw);
   const row = tx.insert(t).values({ ...columnsFor(input), createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: t.id, code: t.code }).get();
   writeAccess(tx, row.id, input);
   logCreate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: row.id, entityCode: row.code });
   return row;
 }
 
-export function updateShipmentPackage(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: ShipmentPackageSave): { id: string; code: string; version: number } {
+export function updateShipmentPackage(tx: AppDb, auth: AuthContext, actor: Actor, id: string, raw: ShipmentPackageSave): { id: string; code: string; version: number } {
   const before = loadShipmentPackage(tx, auth, id);
-  assertVersion(before.version, input.version);
-  if (input.warehouseId !== before.warehouseId) throw fieldError("warehouseId", "A shipment package can't move to another warehouse");
-  assertCodeFree(tx, before.warehouseId, input.code.trim(), id);
-  assertReferences(tx, auth, input);
+  assertVersion(before.version, raw.version);
+  if (raw.warehouseId !== before.warehouseId) throw fieldError("warehouseId", "A shipment package can't move to another warehouse");
+  assertCodeFree(tx, before.warehouseId, raw.code.trim(), id);
+  assertReferences(tx, auth, raw);
+  const input = ensurePackagingSku(tx, auth, actor, raw);
   const snapshot = display(tx, before);
   const after = tx.update(t).set({ ...columnsFor(input), updatedBy: actor.userId, version: sql`${t.version} + 1` }).where(eq(t.id, id)).returning().get();
   writeAccess(tx, id, input);
@@ -250,6 +273,6 @@ export function deleteShipmentPackages(tx: AppDb, auth: AuthContext, actor: Acto
     const reason = packageDeleteBlocker(inner, id);
     if (reason) throw new AppError("INVALID_STATE", `${row.code} ${reason}`);
     inner.delete(t).where(eq(t.id, id)).run();
-    logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.code });
+    logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.code, warehouseId: row.warehouseId });
   });
 }

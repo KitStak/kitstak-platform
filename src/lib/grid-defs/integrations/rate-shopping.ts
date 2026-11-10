@@ -60,3 +60,15 @@ export type PresetSave = z.output<typeof presetSaveSchema>;
 export const PRESET_DEFAULTS: PresetSaveInput = {
   name: "", description: "", warehouseId: "", clientId: "", isActive: true, method: "Cheapest", transitDays: null, showErrors: false, useAllServices: true, serviceIds: [],
 };
+
+/**
+ * Client options for the preset wizard, narrowed to the clients the selected warehouse serves
+ * (at least one carrier service there). `served === null` means the list is still loading: nothing
+ * is hidden yet. The currently selected client is kept so an edit never blanks its own value.
+ */
+export function servedClientOptions<O extends { readonly value: string }>(options: readonly O[], served: readonly { readonly id: string; readonly serviceCount: number }[] | null, keep?: string | null): { options: O[]; hidden: number } {
+  if (!served) return { options: [...options], hidden: 0 };
+  const ids = new Set(served.map((c) => c.id));
+  const kept = options.filter((o) => ids.has(o.value) || o.value === keep);
+  return { options: kept, hidden: options.length - kept.length };
+}

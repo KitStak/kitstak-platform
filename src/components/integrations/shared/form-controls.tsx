@@ -10,7 +10,7 @@ import { FormField } from "@/components/ui/form";
 import { NumberInput } from "@/components/ui/number-input";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
-import { YesNoToggle } from "@/components/ui/yes-no-toggle";
+import { YesNoToggle, type YesNoToggleProps } from "@/components/ui/yes-no-toggle";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { splitCamel } from "@/lib/grid-defs/integrations/common";
@@ -129,10 +129,20 @@ export function ComboField<T extends FieldValues>({ options, placeholder, onValu
   );
 }
 
+/**
+ * Settings Yes / No: green Yes, NEUTRAL No. "No" on a configuration toggle is a choice, not an
+ * error, so it must not render in danger red (the shared toggle reserves red for destructive use).
+ */
+const NEUTRAL_NO = "self-start [&>button:last-child[data-state=on]]:bg-neutral-soft [&>button:last-child[data-state=on]]:text-body";
+export const SettingYesNo = React.forwardRef<HTMLDivElement, YesNoToggleProps>(({ className, ...p }, ref) => (
+  <YesNoToggle ref={ref} {...p} className={[NEUTRAL_NO, className].filter(Boolean).join(" ")} />
+));
+SettingYesNo.displayName = "SettingYesNo";
+
 export function YesNoField<T extends FieldValues>(p: Base<T>) {
   return (
     <FormField<T> {...p}>
-      {(c) => <YesNoToggle id={c.id} value={(c.value as boolean | null) ?? false} onChange={c.onChange} disabled={c.disabled} ariaLabel={typeof p.label === "string" ? p.label : undefined} aria-invalid={c["aria-invalid"]} />}
+      {(c) => <SettingYesNo id={c.id} value={(c.value as boolean | null) ?? false} onChange={c.onChange} disabled={c.disabled} ariaLabel={typeof p.label === "string" ? p.label : undefined} aria-invalid={c["aria-invalid"]} />}
     </FormField>
   );
 }

@@ -10,6 +10,7 @@ import {
   WEIGHT_UNITS, computeVolume, hierarchicalUomQty,
 } from "./catalog-options";
 import { COUNTRIES } from "@/lib/countries";
+import { isDemoImageUrl } from "./demo-images";
 
 export const SKU_MAX = 100;
 export const NAME_MAX = 200;
@@ -24,8 +25,8 @@ const PACK_KINDS = ["Primary", "Hierarchical", "Irregular"] as const;
 export type PackKind = (typeof PACK_KINDS)[number];
 
 /** Nullable number from a NumberInput: null/blank → 0. */
-const num = (max = 1_000_000_000) => z.preprocess((v) => (v === null || v === undefined || v === "" ? 0 : v), z.number({ error: "Enter a number" }).min(0, "Must be 0 or more").max(max));
-const int = (max = 1_000_000_000) => z.preprocess((v) => (v === null || v === undefined || v === "" ? 0 : v), z.number({ error: "Enter a whole number" }).int("Enter a whole number").min(0, "Must be 0 or more").max(max));
+const num = (max = 1_000_000_000) => z.preprocess((v) => (v === null || v === undefined || v === "" ? 0 : v), z.number({ error: "Enter a number" }).min(0, "Must be 0 or more").max(max, `Must be ${max.toLocaleString("en-US")} or less`));
+const int = (max = 1_000_000_000) => z.preprocess((v) => (v === null || v === undefined || v === "" ? 0 : v), z.number({ error: "Enter a whole number" }).int("Enter a whole number").min(0, "Must be 0 or more").max(max, `Must be ${max.toLocaleString("en-US")} or less`));
 const optText = (max: number) => z.preprocess((v) => (typeof v === "string" ? v.trim() : v ?? ""), z.string().max(max, `At most ${max} characters`)).transform((v) => (v === "" ? null : v));
 /**
  * Customs origin is stored as an ISO 3166-1 alpha-2 code. Legacy/imported values may hold the
@@ -101,9 +102,20 @@ export const componentSchema = z.object({
 });
 export type ComponentValue = z.output<typeof componentSchema>;
 
+export const IMAGE_URL_MESSAGE = "Enter a full image URL (https://…)";
+const IMAGE_URL_RE = /^https?:\/\/\S+$/i;
+/** Full http(s) URL, or a built-in demo illustration path (seed catalog). */
+const isImageUrl = (v: string): boolean => IMAGE_URL_RE.test(v) || isDemoImageUrl(v);
+
+/** The image-URL rule as a plain check (the wizard runs it on blur with the same message as Next). */
+export function imageUrlError(value: string | null | undefined): string | null {
+  const v = (value ?? "").trim();
+  return v === "" || isImageUrl(v) ? null : IMAGE_URL_MESSAGE;
+}
+
 const imageUrl = z.preprocess(
   (v) => (typeof v === "string" ? v.trim() : v ?? ""),
-  z.string().max(2000).refine((v) => v === "" || /^https?:\/\/\S+$/i.test(v), "Enter a full image URL (https://…)"),
+  z.string().max(2000).refine((v) => v === "" || isImageUrl(v), IMAGE_URL_MESSAGE),
 ).transform((v) => (v === "" ? null : v));
 
 /* ------------------------------------------------------------------ step schemas */
@@ -124,7 +136,7 @@ export const generalStepSchema = z.object({
   currency: z.enum(CURRENCIES).default("USD"),
   purchasePrice: num(10_000_000),
   salesPrice: num(10_000_000),
-  taxRate: num(100),
+  taxRate: z.preprocess((v) => (v === null || v === undefined || v === "" ? 0 : v), z.number({ error: "Enter a number" }).min(0, "Tax rate must be 0–100%").max(100, "Tax rate must be 0–100%")),
   minSafetyStock: int(10_000_000),
   fnsku: optText(BARCODE_MAX),
   isActive: z.boolean().default(true),
@@ -226,10 +238,13 @@ const isRegex = (v: string | null): boolean => {
   }
 };
 
+/** Optional sub-objects: API callers may omit them (a non-hazardous product needs no hazmat block). */
+const orEmpty = (v: unknown) => (v === undefined || v === null ? {} : v);
+
 export const advancedStepSchema = z.object({
-  customs: customsSchema,
+  customs: z.preprocess(orEmpty, customsSchema),
   isHazmat: z.boolean().default(false),
-  hazmat: hazmatSchema,
+  hazmat: z.preprocess(orEmpty, hazmatSchema),
   channelAllocations: z.array(channelAllocationSchema).max(100).default([]),
   trackExpiry: z.boolean().default(false),
   expiryReceivingOnly: z.boolean().default(false),
@@ -444,4 +459,15 @@ export function newPackType(kind: PackKind, packs: readonly PackTypeFormValue[])
     weightUnit: primary?.weightUnit ?? "Pound", weight: null,
     useShipPackageId: null, useOwnBox: false, usePrimaryBarcodes: false, barcodes: [],
   };
+}
+
+/** Barcodes repeated across this product's own pack types (case-sensitive, trimmed). Returns `[barcode, packTypes[]]`. */
+export function duplicateBarcodesWithin(packs: readonly { packType: string; barcodes: readonly string[] }[]): [string, string[]][] {
+  const seen = new Map<string, string[]>();
+  for (const pack of packs) {
+    for (const code of new Set(pack.barcodes.map((b) => b.trim()).filter(Boolean))) {
+      seen.set(code, [...(seen.get(code) ?? []), pack.packType]);
+    }
+  }
+  return [...seen].filter(([, owners]) => owners.length > 1);
 }

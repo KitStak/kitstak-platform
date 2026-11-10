@@ -98,11 +98,27 @@ describe("sandbox store", () => {
     expect(a.map((o) => o.number)).toEqual(b.map((o) => o.number));
     expect(await sandboxAdapter(skus).fetchOrders(ctx(7), null)).toHaveLength(0);
   });
-  it("adds an unknown SKU every 3rd run and re-fetches it by id", async () => {
-    const orders = await sandboxAdapter(skus).fetchOrders(ctx(3), null);
-    expect(orders[0]?.lines.some((l) => l.sku === "APX-NEW-3")).toBe(true);
+  it("never sells an unknown SKU on a scheduled run (R5: errors only on demand)", async () => {
+    for (let run = 1; run <= 30; run++) {
+      const orders = await sandboxAdapter(skus).fetchOrders(ctx(run), null);
+      expect(orders.flatMap((o) => o.lines).every((l) => skus.some((s) => s.sku === l.sku))).toBe(true);
+    }
+  });
+  it("Simulate error adds one unknown-SKU order, flagged simulated, and re-fetches it by id", async () => {
+    const orders = await sandboxAdapter(skus).fetchOrders({ ...ctx(3), simulateError: true }, null);
+    expect(orders[0]?.id).toBe("sbx-3-0-sim");
+    expect(orders[0]?.lines.some((l) => l.sku === "APX-SIM-3")).toBe(true);
+    expect((orders[0]?.raw as { simulated?: boolean }).simulated).toBe(true);
+    expect(orders.slice(1).flatMap((o) => o.lines).every((l) => !l.sku?.includes("-SIM-"))).toBe(true);
     const again = await sandboxAdapter(skus).fetchOrdersById(ctx(0), [orders[0]?.id ?? ""]);
     expect(again[0]?.number).toBe(orders[0]?.number);
+    expect(again[0]?.lines.some((l) => l.sku === "APX-SIM-3")).toBe(true);
+    // Even a "no data" run (every 7th) returns orders when an error is simulated.
+    expect(await sandboxAdapter(skus).fetchOrders({ ...ctx(7), simulateError: true }, null)).not.toHaveLength(0);
+  });
+  it("re-fetches a pre-R5 error order (sbx-<run>-0) without the unknown SKU, so Retry Download clears it", async () => {
+    const again = await sandboxAdapter(skus).fetchOrdersById(ctx(0), ["sbx-15-0"]);
+    expect(again[0]?.lines.every((l) => skus.some((s) => s.sku === l.sku))).toBe(true);
   });
   it("ships one order per 4th run to a PO Box", async () => {
     const orders = await sandboxAdapter(skus).fetchOrders(ctx(5), null);

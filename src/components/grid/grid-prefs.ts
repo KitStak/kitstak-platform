@@ -31,6 +31,8 @@ export interface PrefColumn {
   readonly id: string;
   readonly defaultVisible: boolean;
   readonly alwaysVisible: boolean;
+  /** Pinned left until the user changes pins (column meta `defaultPinned`). */
+  readonly defaultPinned?: boolean;
 }
 
 export function defaultGridPrefs(columns: readonly PrefColumn[]): GridPrefs {
@@ -40,7 +42,7 @@ export function defaultGridPrefs(columns: readonly PrefColumn[]): GridPrefs {
     widths: {},
     density: DEFAULT_DENSITY,
     pageSize: DEFAULT_PAGE_SIZE,
-    pinned: [],
+    pinned: columns.filter((c) => c.defaultPinned).map((c) => c.id),
   };
 }
 
@@ -81,7 +83,8 @@ export function reconcileGridPrefs(raw: unknown, columns: readonly PrefColumn[])
     widths,
     density: stored.density,
     pageSize: nearestPageSize(stored.pageSize),
-    pinned: (stored.pinned ?? []).filter((id) => known.has(id)),
+    // No stored pins yet: start from the columns pinned by default.
+    pinned: stored.pinned === undefined ? defaults.pinned : stored.pinned.filter((id) => known.has(id)),
   };
 }
 

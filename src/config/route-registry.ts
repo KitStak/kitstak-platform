@@ -43,6 +43,10 @@ const EXTRA_ROUTES: readonly ExtraRoute[] = [
   { pattern: "/receiving/new", label: "New Purchase Order", owner: "M05", parent: "/receiving", permission: "inventory.purchase_orders.create" },
   { pattern: "/receiving/[id]", label: "Purchase Order Details", owner: "M05", parent: "/receiving" },
   { pattern: "/receiving/vendors", label: "Vendors", owner: "M05", parent: "/receiving", permission: P.vendors },
+  { pattern: "/receiving/putaway", label: "Putaway", owner: "M05", parent: "/receiving", permission: P.purchaseOrders },
+  { pattern: "/receiving/transactions", label: "Receiving Transactions", owner: "M05", parent: "/receiving/history", permission: "reports.transaction_history.view" },
+  { pattern: "/receiving/import", label: "Import Purchase Orders", owner: "M05", parent: "/receiving", permission: "inventory.purchase_orders.import_file" },
+  { pattern: "/receiving/rf", label: "RF Receiving", owner: "M05", parent: "/receiving", permission: "inventory.purchase_orders.receive_po" },
   { pattern: "/work-orders/[id]", label: "Work Order Details", owner: "M08", parent: "/work-orders" },
   { pattern: "/counts/[id]", label: "Count Plan Details", owner: "M07", parent: "/counts" },
   { pattern: "/products/[id]", label: "Product Details", owner: "M09", parent: "/products" },
@@ -75,8 +79,21 @@ const EXTRA_ROUTES: readonly ExtraRoute[] = [
   { pattern: "/forbidden", label: "Access denied", owner: "Foundation", parent: "/dashboard" },
 ];
 
+/**
+ * Routes whose menu item lives in one mega-menu (Settings > Master Data) but which belong to
+ * another section for highlight + breadcrumbs (Logiwa parity: Products sit under Inventory).
+ */
+const SECTION_OVERRIDES: Readonly<Record<string, string>> = {
+  "/products": "Inventory",
+  "/products/listings": "Inventory",
+  // Kit reports sit in the Inventory tab strip; the crumb must match it.
+  "/inventory/kits": "Inventory",
+  "/inventory/kit-components": "Inventory",
+  "/inventory/atp": "Inventory",
+};
+
 function fromNav(navItem: NavItem, section: string | null): RouteInfo {
-  return { pattern: navItem.href, label: navItem.label, owner: navItem.owner, permission: navItem.permission, section };
+  return { pattern: navItem.href, label: navItem.label, owner: navItem.owner, permission: navItem.permission, section: SECTION_OVERRIDES[navItem.href] ?? section };
 }
 
 function buildRegistry(): ReadonlyMap<string, RouteInfo> {

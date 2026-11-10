@@ -25,7 +25,7 @@ const ALLOCATE_PERM = "fulfillment.shipment_orders.picking_job_operations";
 /** `/jobs?f.waveNumber=eq:<wave>` — the jobs a wave created. */
 export const jobsOfWaveHref = (waveNo: string): string => `/jobs?f.waveNumber=${encodeURIComponent(`eq:${waveNo}`)}`;
 
-const orderLink = (code: unknown) => (code ? <LinkCell href={`/orders/${encodeURIComponent(String(code))}`}>{String(code)}</LinkCell> : <Dash />);
+const orderLink = (code: unknown) => (code ? <span className="block min-w-0 truncate" title={String(code)}><LinkCell href={`/orders/${encodeURIComponent(String(code))}`}>{String(code)}</LinkCell></span> : <Dash />);
 
 /* ---------------------------------------------------------------- wave log */
 
@@ -42,7 +42,7 @@ export function WaveLogPage() {
   return (
     <ListShell<GridRow>
       title="Wave log report"
-      helper="Every wave run: what met the rule set, what was allocated, short or merged, and how many jobs it created."
+      helper="Every wave run: orders met, allocated, short, eliminated or merged, and jobs created."
       tabs="jobs"
       gridKey={WAVE_LOG_GRID.gridKey}
       path="/api/waves"
@@ -136,9 +136,9 @@ function ReasonCell({ value }: { readonly value: unknown }) {
   const reason = str(value);
   if (!reason) return <Dash />;
   return (
-    <span className="inline-flex items-center gap-1 font-medium text-[#C8102E]">
-      <span className="truncate">{reason}</span>
-      {SHORTAGE_REASON_TIPS[reason] ? <InfoTip content={SHORTAGE_REASON_TIPS[reason]} label={`About ${reason}`} /> : null}
+    <span className="flex min-w-0 max-w-full items-center gap-1.5 font-medium text-[#C8102E] [[data-theme=dark]_&]:text-[#F28B95]">
+      <span className="min-w-0 truncate" title={reason}>{reason}</span>
+      {SHORTAGE_REASON_TIPS[reason] ? <span className="shrink-0"><InfoTip content={SHORTAGE_REASON_TIPS[reason]} label={`About ${reason}`} /></span> : null}
     </span>
   );
 }
@@ -182,8 +182,8 @@ function ShortageActions({ selected, onDone }: { readonly selected: readonly Gri
         title={`Create backorders for ${plural(partialOnly.length, "order")}?`}
         description="The short quantity moves to a new backorder; the original order keeps what is allocated and can ship now."
         records={{ columns: [{ key: "code", label: "Order code" }, { key: "sku", label: "Short SKU" }, { key: "qty", label: "Shortage" }], rows: partialOnly.map((o) => ({ code: str(o.orderCode), sku: str(o.sku), qty: str(o.shortageQty) })) }}
-        cancelLabel="No"
-        confirmLabel="Yes"
+        cancelLabel="Go back"
+        confirmLabel="Create backorders"
         onConfirm={async () => {
           try {
             const res = await postJson<BulkOutcome>("/api/shortages/actions", { action: "backorder", ids: partialOnly.map((o) => o.id) });
@@ -202,7 +202,7 @@ export function ShortagePage() {
   return (
     <ListShell<GridRow>
       title="Shortage report"
-      helper="Order lines that could not be allocated, with the stock picture at the last allocation trial."
+      helper="Order lines that could not be allocated, with stock at the last allocation trial."
       tabs="jobs"
       gridKey={SHORTAGES_GRID.gridKey}
       path="/api/shortages"

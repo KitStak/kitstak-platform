@@ -7,16 +7,17 @@ import { Calculator, PackagePlus, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/api-client";
 import { useApiQuery } from "@/lib/query-client";
 import type { ShipmentPlanStatus } from "@/lib/enums";
+import { editableLifecycleTimes } from "@/lib/grid-defs/shipping/shipment-plans";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormGrid, FormGridFull, FormSection } from "@/components/ui/form";
 import { StatusPill } from "@/components/ui/status-pill";
 import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
-import { ClientSelect, CustomerPicker, CustomFieldsSection, LocationPicker, WarehouseSelect } from "@/components/shared";
+import { ClientSelect, CustomerPicker, CustomFieldsSection, WarehouseSelect } from "@/components/shared";
 import { PlanOrderPicker } from "./plan-order-picker";
 import type { EligibleOrderRow } from "@/server/repositories/shipment-plans-lists";
-import { ComboField, CustomField, DateTimeField, NoteInput, NumberField, SelectField, TextInput, YesNoField } from "./plan-form-controls";
+import { ComboField, CustomField, DateTimeField, GatePicker, NoteInput, NumberField, SelectField, TextInput, YesNoField } from "./plan-form-controls";
 import { totalsFollowOrders, type PlanFormValues, type PlanOrderItem } from "./plan-form-model";
 import type { PlanFormOptions } from "./plans-client";
 
@@ -46,6 +47,8 @@ export function GeneralStep({ form, statuses, isEdit, lastEstimate, onApplyEstim
   const options = usePlanOptions(warehouseId, null);
   const carriers = options.data?.data.carriers ?? [];
   const hasOrders = orders.length > 0;
+  // Lifecycle times open for correction once the stored status reached their stage.
+  const editableTimes = editableLifecycleTimes(isEdit ? String(form.formState.defaultValues?.status ?? "Open") : "Open");
   return (
     <div className="flex flex-col gap-5">
       <FormSection title="Plan">
@@ -64,23 +67,29 @@ export function GeneralStep({ form, statuses, isEdit, lastEstimate, onApplyEstim
           <TextInput<F> name="truckPlateNumber" label="Truck plate number" maxLength={40} placeholder="e.g. 7KTR412" />
           <CustomField<F> name="loadingGateLocationId" label="Loading gate" info="A location in a Loading or Shipment area of the warehouse.">
             {(c) => (
-              <LocationPicker id={c.id} value={c.value} selectedLabel={form.watch("loadingGateLabel") || undefined} warehouseId={warehouseId} areaTypes={["Loading", "Shipment"]} aria-label="Loading gate" invalid={c.invalid} onBlur={c.onBlur} disabled={!warehouseId}
+              <GatePicker id={c.id} value={c.value} selectedLabel={form.watch("loadingGateLabel") || undefined} warehouseId={warehouseId} invalid={c.invalid} onBlur={c.onBlur} disabled={!warehouseId}
                 placeholder={warehouseId ? "Search a dock or staging location" : "Select a warehouse first"}
-                onChange={(v, item) => { c.onChange(v); form.setValue("loadingGateLabel", item?.label ?? ""); }}
-                onScanMiss={(code) => toast.warning("Location not found", `${code} is not a Loading or Shipment location in this warehouse.`)} />
+                onChange={(v, item) => { c.onChange(v); form.setValue("loadingGateLabel", item ? String(item.label) : ""); }} />
             )}
           </CustomField>
-          <SelectField<F> name="status" label="Status" required options={statuses.map((s) => ({ value: s, label: s }))} info={isEdit ? "Only the legal next statuses are offered. Use Ship to ship the plan." : "A new plan starts as Open or In Progress."} />
+          <SelectField<F> name="status" label="Status" required disabled={!isEdit} options={statuses.map((s) => ({ value: s, label: s }))} info={isEdit ? "Only the legal next statuses are offered. Use Ship to ship the plan." : "A new plan always starts as Open. Its status moves through the lifecycle after it is saved."} />
           <YesNoField<F> name="preventLpnEditDuringLoading" label="Prevent LPN edit during loading" info="Locks the plan's license plates while the truck is being loaded." />
         </FormGrid>
       </FormSection>
       <FormSection title="Schedule">
         <FormGrid>
           <DateTimeField<F> name="plannedShipmentAt" label="Planned shipment date" />
-          <DateTimeField<F> name="actualShipmentAt" label="Actual shipment date" info="Set automatically when the plan ships." />
-          <DateTimeField<F> name="loadingStartedAt" label="Loading started date" info="Set automatically when the status moves to Loading Started." />
-          <DateTimeField<F> name="loadingCompletedAt" label="Loading completed date" />
-          <DateTimeField<F> name="truckDepartedAt" label="Truck departed date" />
+          {isEdit ? (
+            <>
+              <DateTimeField<F> name="actualShipmentAt" label="Actual shipment date" disabled info="Set automatically when the plan ships." />
+              <DateTimeField<F> name="loadingStartedAt" label="Loading started date" disabled={!editableTimes.has("loadingStartedAt")}
+                info={editableTimes.has("loadingStartedAt") ? "Stamped when loading started. Correct it if the dock recorded a different time; the change is logged." : "Set automatically when the status moves to Loading Started."} />
+              <DateTimeField<F> name="loadingCompletedAt" label="Loading completed date" disabled={!editableTimes.has("loadingCompletedAt")}
+                info={editableTimes.has("loadingCompletedAt") ? "Stamped when loading completed. Correct it if needed; the change is logged." : "Set automatically when the status moves to Loading Completed."} />
+              <DateTimeField<F> name="truckDepartedAt" label="Truck departed date" disabled={!editableTimes.has("truckDepartedAt")}
+                info={editableTimes.has("truckDepartedAt") ? "Enter when the truck left the gate. Ship stamps it if it is still empty." : "Can be entered once loading is completed. Ship stamps it automatically."} />
+            </>
+          ) : <p className="col-span-full text-[12px] text-secondary">Loading, departure and actual shipment times are recorded automatically as the plan moves through its lifecycle.</p>}
         </FormGrid>
       </FormSection>
       <FormSection title="Load">
@@ -157,6 +166,9 @@ function OrdersTable({ orders, selected, onToggle, onToggleAll }: { readonly ord
   );
 }
 
+/** Picked, packed and labelled (or already gone): Ship can move it. */
+export const isShipReady = (status: string): boolean => ["Ready to Ship", "Shipped", "Partially Shipped", "Delivered"].includes(status);
+
 export function OrdersStep({ form, planId, lastEstimate, onEstimate }: { readonly form: UseFormReturn<F>; readonly planId: string | null; readonly lastEstimate: Estimate | null; readonly onEstimate: (e: Estimate) => void }) {
   const orders = form.watch("orders");
   const warehouseId = form.watch("warehouseId");
@@ -191,7 +203,8 @@ export function OrdersStep({ form, planId, lastEstimate, onEstimate }: { readonl
     if (skipped > 0) toast.warning(`${skipped} ${skipped === 1 ? "order was" : "orders were"} not added`, "They are already in another active shipment plan or are no longer eligible.");
     if (ok.length === 0) return;
     await setOrders([...orders, ...ok.map((o) => ({ id: o.id, code: o.code, status: o.status, totalQuantity: o.totalQuantity }))]);
-    toast.success("Success", `${ok.length} ${ok.length === 1 ? "order" : "orders"} added to the plan.`);
+    // Draft-only change: nothing is persisted until Save, so say so (no "Success").
+    toast.info("Added to draft", `${ok.length} ${ok.length === 1 ? "order" : "orders"} will join the plan when you save.`);
   };
 
   const remove = async () => {
@@ -228,6 +241,13 @@ export function OrdersStep({ form, planId, lastEstimate, onEstimate }: { readonl
       ) : (
         <OrdersTable orders={orders} selected={selected} onToggle={toggle} onToggleAll={() => setSelected(orders.every((o) => selected.has(o.id)) ? new Set() : new Set(orders.map((o) => o.id)))} />
       )}
+      {orders.some((o) => !isShipReady(o.status)) ? (
+        <p role="status" className="rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-[12px] text-foreground">
+          <strong>{orders.filter((o) => !isShipReady(o.status)).length} of {orders.length}</strong> orders are not Ready to Ship yet
+          ({[...new Set(orders.filter((o) => !isShipReady(o.status)).map((o) => o.status))].join(', ')}). They can ride on the plan, but Ship only ships
+          orders that are picked and packed.
+        </p>
+      ) : null}
       {error ? <p role="alert" className="text-[12px] text-danger">{error}</p> : null}
       {picking ? (
         <PlanOrderPicker open onOpenChange={(o) => (o ? undefined : setPicking(false))} title="Add order(s)" warehouseId={warehouseId} clientId={clientId} planId={planId}

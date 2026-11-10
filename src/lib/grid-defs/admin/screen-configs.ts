@@ -134,3 +134,60 @@ export const SCREEN_CONFIG_FIELDS: readonly AdminField[] = [
 
 export const SCREEN_CONFIG_SORT_FIELDS = ["name", "warehouseName", "operationType", "screenName", "isActive", "createdAt", "createdByName", "updatedAt"] as const;
 export const SCREEN_CONFIG_SEARCH_FIELDS = ["name"] as const;
+
+/* ---------------- runtime receiving plan (consumed by M05 receive, RP-2) ---------------- */
+
+export interface ProductTrackingFacts {
+  readonly lot: boolean;
+  readonly expiry: boolean;
+  readonly production: boolean;
+  readonly serial: boolean;
+}
+
+export interface ReceivingStepPlan {
+  readonly key: string;
+  /** Ask for / show this step on the receiving screen. */
+  readonly show: boolean;
+  /** The line can't be received until the step is completed. */
+  readonly required: boolean;
+}
+
+export interface ReceivingPlan {
+  /** The single matching configuration (null = no active config, catalog + product defaults). */
+  readonly configId: string | null;
+  readonly configName: string | null;
+  readonly steps: readonly ReceivingStepPlan[];
+  /** What the receive command must enforce for this product (drop-in for `receivingRequirements`). */
+  readonly tracking: ProductTrackingFacts;
+}
+
+const TRACKING_STEP: Readonly<Record<string, keyof ProductTrackingFacts>> = { lot: "lot", expiry: "expiry", productionDate: "production" };
+
+/**
+ * Resolves the receiving steps for one product on one PO from the ONE configuration that
+ * matched the PO (see `configForPurchaseOrder`), honouring both `enabled` (show) and
+ * `required` for every step:
+ * - Tracking steps (lot, expiry, production date) only apply when the product tracks that
+ *   attribute. Without a matching config a tracked attribute is shown and required.
+ * - Other steps (scan LP, photo, dimensions, print label) follow the config, else the catalog.
+ * - Serial capture is always driven by the product (one serial per unit).
+ */
+export function receivingPlan(config: { readonly id: string; readonly name: string; readonly steps: readonly ScreenStep[] } | null, product: ProductTrackingFacts): ReceivingPlan {
+  const steps = config ? normalizeSteps(config.steps) : defaultSteps();
+  const plan = steps.map((step): ReceivingStepPlan => {
+    const attr = TRACKING_STEP[step.key];
+    if (attr) {
+      if (!product[attr]) return { key: step.key, show: false, required: false };
+      if (!config) return { key: step.key, show: true, required: true };
+      return { key: step.key, show: step.enabled, required: step.enabled && step.required };
+    }
+    return { key: step.key, show: step.enabled, required: step.enabled && step.required };
+  });
+  const req = (key: string) => plan.find((p) => p.key === key)?.required ?? false;
+  return {
+    configId: config?.id ?? null,
+    configName: config?.name ?? null,
+    steps: plan,
+    tracking: { lot: req("lot"), expiry: req("expiry"), production: req("productionDate"), serial: product.serial },
+  };
+}

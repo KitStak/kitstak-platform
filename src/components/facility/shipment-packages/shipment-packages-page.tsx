@@ -8,17 +8,17 @@ import * as React from "react";
 import { Eye, History, Pencil, Plus, Trash2 } from "lucide-react";
 import { DataGrid, GridToolbar, useGrid, type BulkAction, type GridColumnDef, type RowAction } from "@/components/grid";
 import { PageHeader } from "@/components/layout/page-header";
+import { CustomFieldsLink } from "@/components/admin/custom-fields/custom-fields-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Drawer } from "@/components/ui/drawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DisabledReason } from "@/components/ui/tooltip";
 import { useApiQuery } from "@/lib/query-client";
-import { packageDeleteReason, SHIPMENT_PACKAGE_FIELDS, SHIPMENT_PACKAGES_GRID_KEY } from "@/lib/grid-defs/facility/shipment-packages";
+import { packageDeleteCopy, packageDeleteReason, SHIPMENT_PACKAGE_FIELDS, SHIPMENT_PACKAGES_GRID_KEY } from "@/lib/grid-defs/facility/shipment-packages";
 import type { ShipmentPackageDetail, ShipmentPackageRow } from "@/server/repositories/shipment-packages";
-import { DetailList, EntityChangeLogDrawer, Muted, NO_PERMISSION, Num, StatRow, toastBulk, toFilterFields, useAction, usePagePerms, useWarehouseOptions, YesNo, type BulkResponse } from "@/components/facility/facility-shared";
+import { CodeCell, DetailList, EntityChangeLogDrawer, Muted, NO_PERMISSION, Num, StatRow, toastBulk, toFilterFields, useAction, usePagePerms, useWarehouseOptions, YesNo, type BulkResponse } from "@/components/facility/facility-shared";
 import { ShipmentPackageWizardDrawer } from "./shipment-package-wizard";
 
 const PERMS = ["view", "create", "edit", "delete"] as const;
@@ -26,21 +26,21 @@ const hidden = { defaultVisible: false } as const;
 const right = (v: number | null, decimals = 2) => <div className="text-right"><Num value={v} decimals={decimals} /></div>;
 
 const COLUMNS: GridColumnDef<ShipmentPackageRow>[] = [
-  { id: "code", header: "Code", size: 120, meta: { alwaysVisible: true }, cell: ({ row }) => <span className="font-medium text-foreground">{row.original.code}</span> },
-  { id: "description", header: "Description", size: 240, cell: ({ row }) => row.original.description ?? <Muted /> },
+  { id: "code", header: "Code", size: 160, meta: { alwaysVisible: true }, cell: ({ row }) => <CodeCell label={`shipment package ${row.original.code} (${row.original.warehouseCode})`}>{row.original.code}</CodeCell> },
+  { id: "description", header: "Description", size: 300, cell: ({ row }) => row.original.description ? <span className="block truncate" title={row.original.description}>{row.original.description}</span> : <Muted /> },
   { id: "warehouseCode", header: "Warehouse", size: 100, cell: ({ row }) => row.original.warehouseCode },
-  { id: "trackInventory", header: "Track inventory", size: 120, cell: ({ row }) => <YesNo value={row.original.trackInventory} /> },
-  { id: "reductionRule", header: "Inventory reduction location", size: 200, cell: ({ row }) => row.original.trackInventory ? (row.original.reductionRule === "Specific Location" ? `${row.original.reductionRule} · ${row.original.reductionLocationCode ?? ""}` : row.original.reductionRule) : <Muted /> },
+  { id: "trackInventory", header: "Tracked", size: 112, meta: { label: "Track inventory", headerTip: "Packing reduces this box's packaging stock" }, cell: ({ row }) => <YesNo value={row.original.trackInventory} /> },
+  { id: "reductionRule", header: "Reduced from", size: 230, meta: { label: "Inventory reduction location" }, cell: ({ row }) => row.original.trackInventory ? (row.original.reductionRule === "Specific Location" ? `${row.original.reductionRule} · ${row.original.reductionLocationCode ?? ""}` : row.original.reductionRule) : <Muted /> },
   { id: "inventorySku", header: "Packaging SKU", size: 140, enableSorting: false, meta: hidden, cell: ({ row }) => row.original.inventorySku ?? <Muted /> },
   { id: "length", header: "Length", size: 90, meta: { align: "right" }, cell: ({ row }) => right(row.original.length) },
   { id: "width", header: "Width", size: 90, meta: { align: "right" }, cell: ({ row }) => right(row.original.width) },
   { id: "height", header: "Height", size: 90, meta: { align: "right" }, cell: ({ row }) => right(row.original.height) },
-  { id: "dimensionUnit", header: "Dimension unit", size: 120, cell: ({ row }) => row.original.dimensionUnit },
-  { id: "emptyWeight", header: "Empty weight", size: 110, meta: { align: "right" }, cell: ({ row }) => right(row.original.emptyWeight) },
-  { id: "maxWeight", header: "Max weight", size: 110, meta: { align: "right" }, cell: ({ row }) => right(row.original.maxWeight) },
-  { id: "weightUnit", header: "Weight unit", size: 110, cell: ({ row }) => row.original.weightUnit },
-  { id: "maxVolume", header: "Max volume", size: 110, meta: { align: "right" }, cell: ({ row }) => right(row.original.maxVolume, 0) },
-  { id: "volumeUnit", header: "Volume unit", size: 110, cell: ({ row }) => row.original.volumeUnit },
+  { id: "dimensionUnit", header: "Dimension unit", size: 136, cell: ({ row }) => row.original.dimensionUnit },
+  { id: "emptyWeight", header: "Empty weight", size: 136, meta: { align: "right" }, cell: ({ row }) => right(row.original.emptyWeight) },
+  { id: "maxWeight", header: "Max weight", size: 136, meta: { align: "right" }, cell: ({ row }) => right(row.original.maxWeight) },
+  { id: "weightUnit", header: "Weight unit", size: 136, cell: ({ row }) => row.original.weightUnit },
+  { id: "maxVolume", header: "Max volume", size: 136, meta: { align: "right" }, cell: ({ row }) => right(row.original.maxVolume, 0) },
+  { id: "volumeUnit", header: "Volume unit", size: 136, cell: ({ row }) => row.original.volumeUnit },
   { id: "purchasePrice", header: "Purchase price", size: 120, meta: { ...hidden, align: "right" }, cell: ({ row }) => <div className="text-right tabular-nums">{row.original.purchasePrice.toFixed(2)} {row.original.currency}</div> },
   { id: "allClients", header: "Client access", size: 130, meta: hidden, cell: ({ row }) => (row.original.allClients ? "All clients" : `${row.original.clientCount} clients`) },
   { id: "isActive", header: "Active?", size: 90, cell: ({ row }) => <YesNo value={row.original.isActive} /> },
@@ -83,9 +83,6 @@ function PackageDetailDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly i
   );
 }
 
-const usedReason = "This package has been used; set it inactive instead";
-
-
 
 export function ShipmentPackagesPage() {
   const perms = usePagePerms("settings.shipment_packages", PERMS);
@@ -100,7 +97,7 @@ export function ShipmentPackagesPage() {
   const selected = (ids: readonly string[]) => g.rows.filter((r) => ids.includes(r.id));
 
   const bulkActions: readonly BulkAction[] = [
-    { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: (ids) => setToDelete(selected(ids)), disabledReason: perms.delete ? null : NO_PERMISSION,
+    { key: "delete", label: "Delete", icon: Trash2, onSelect: (ids) => setToDelete(selected(ids)), disabledReason: perms.delete ? null : NO_PERMISSION,
       eligibility: (ids) => { const rows = selected(ids); return rows.length > 0 && rows.every((r) => packageDeleteReason(r) !== null) ? (rows.length === 1 ? packageDeleteReason(rows[0]!) : "These packages have been used; set them inactive instead") : null; } },
   ];
   const rowActions = (row: ShipmentPackageRow): readonly RowAction[] => [
@@ -113,8 +110,8 @@ export function ShipmentPackagesPage() {
   const create = () => setWizard({ open: true, editId: null });
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Shipment Packages" helper="Create and list the boxes, mailers and envelopes you pack orders into."
-        actions={<DisabledReason reason={perms.create ? null : NO_PERMISSION}><Button variant="primary" disabled={!perms.create} onClick={create}><Plus className="h-4 w-4" aria-hidden />Create shipment package</Button></DisabledReason>} />
+      <PageHeader title="Shipment Packages" helpHref="/locations/help#shipment-packages" helper="Create and list the boxes, mailers and envelopes you pack orders into."
+        actions={<><CustomFieldsLink entity="shipment_package" />{perms.create ? <Button variant="primary" onClick={create}><Plus className="h-4 w-4" aria-hidden />Create shipment package</Button> : null}</>} />
       <GridToolbar {...g.toolbarProps} searchPlaceholder="Search package code or description" bulkActions={bulkActions} bulkNoun="shipment package" />
       <DataGrid<ShipmentPackageRow>
         {...g.gridProps}
@@ -134,7 +131,7 @@ export function ShipmentPackagesPage() {
         onOpenChange={(o) => !o && setToDelete(null)}
         variant="danger"
         title={`Delete ${toDelete?.length === 1 ? `shipment package ${toDelete[0]?.code}` : `${toDelete?.length ?? 0} shipment packages`}?`}
-        description={`Packages already used by shipments, orders or products are skipped. ${usedReason}.`}
+        description={packageDeleteCopy(toDelete ?? [])}
         confirmLabel="Yes, delete"
         cancelLabel="No"
         records={{ columns: [{ key: "code", label: "Package" }, { key: "warehouse", label: "Warehouse" }, { key: "dims", label: "Dimensions" }], rows: (toDelete ?? []).map((r) => ({ code: r.code, warehouse: r.warehouseCode, dims: `${r.length} × ${r.width} × ${r.height} ${r.dimensionUnit}` })) }}

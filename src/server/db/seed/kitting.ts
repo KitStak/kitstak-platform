@@ -7,6 +7,7 @@ import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 import type { WorkOrderStatus } from "@/lib/enums";
 import * as schema from "@/server/db/schema";
 import { changeLog, ledger, sequences, stateMachines } from "@/server/domain";
+import { rollupJob } from "@/server/domain/progress";
 import type { DomainCtx, Tx } from "@/server/domain/types";
 import { KIT_DEFS } from "./catalog-data";
 import { jobTypeKey } from "./config";
@@ -47,16 +48,24 @@ function setStatus(tx: Tx, ctx: DomainCtx, id: Id, code: string, from: WorkOrder
   return status;
 }
 
+/** Picking slice of an allocated component (one Picking task each, like live allocation). */
+interface PickSlice { readonly allocationId: Id; readonly bucket: typeof schema.inventory.$inferSelect; readonly qty: number }
+
 /** Takes `qty` units of a component out of stock (FEFO) as Kitting, or allocates them to the work order. */
-function takeComponent(tx: Tx, ctx: DomainCtx, warehouseId: Id, productId: Id, qty: number, wo: { id: Id; componentId: Id }, mode: "consume" | "allocate"): void {
+function takeComponent(tx: Tx, ctx: DomainCtx, warehouseId: Id, productId: Id, qty: number, wo: { id: Id; componentId: Id; jobId?: Id }, mode: "consume" | "allocate"): PickSlice[] {
+  const slices: PickSlice[] = [];
   let left = qty;
   for (const b of freeBuckets(tx, warehouseId, productId)) {
     if (left <= 0) break;
     const take = Math.min(left, b.onHand - b.allocated);
     if (mode === "consume") ledger.consume(tx, ctx, { inventoryId: b.id, qty: take, type: "Kitting", refs: { workOrderId: wo.id, note: "Component consumed by work order" } });
-    else ledger.allocate(tx, ctx, { inventoryId: b.id, qty: take, workOrderId: wo.id, workOrderComponentId: wo.componentId, ruleName: "Work order components" });
+    else {
+      const { allocation } = ledger.allocate(tx, ctx, { inventoryId: b.id, qty: take, workOrderId: wo.id, workOrderComponentId: wo.componentId, jobId: wo.jobId, ruleName: "Work order components" });
+      slices.push({ allocationId: allocation.id, bucket: b, qty: take });
+    }
     left -= take;
   }
+  return slices;
 }
 
 function kittingJob(w: World, tx: Tx, woId: Id, spec: WoSpec, atMs: number, done: boolean, userId: Id): Id {
@@ -104,16 +113,28 @@ function runWorkOrder(w: World, tx: Tx, spec: WoSpec, atMs: number): void {
   const done = spec.target === "Completed";
   const jobId = kittingJob(w, tx, wo.id, spec, atMs, done, builder.id);
   setStatus(tx, ctx, wo.id, code, "Open", "In Process", { jobId, actualStartAt: isoOf(atMs) });
+  let taskNo = (tx.get<{ n: number | null }>(sql`SELECT MAX(task_no) AS n FROM tasks`)?.n ?? 0) + 1;
+  let sequence = 0;
   for (const c of components) {
-    takeComponent(tx, ctx, fac.id, c.productId, c.total, { id: wo.id, componentId: c.id }, done ? "consume" : "allocate");
+    const slices = takeComponent(tx, ctx, fac.id, c.productId, c.total, { id: wo.id, componentId: c.id, jobId }, done ? "consume" : "allocate");
     tx.update(schema.workOrderComponents).set(done ? { consumedQty: c.total, pickedQty: c.total, allocatedQty: c.total } : { allocatedQty: c.total }).where(eq(schema.workOrderComponents.id, c.id)).run();
+    // In Process: the picking job holds one Picking task per allocated slice (bin -> kitting area), as live allocation writes.
+    for (const s of slices) {
+      sequence += 1;
+      const task = tx.insert(schema.tasks).values({
+        taskNo: taskNo++, jobId, warehouseId: fac.id, clientId: kit.clientId, taskType: "Picking", status: "Pending", sequence, workOrderId: wo.id, allocationId: s.allocationId,
+        productId: s.bucket.productId, packType: s.bucket.packType, plannedQty: s.qty, sourceLocationId: s.bucket.locationId, sourceLpId: s.bucket.lpId, targetLocationId: fac.kit,
+        lotNumber: s.bucket.lotNumber, expiryDate: s.bucket.expiryDate, productionDate: s.bucket.productionDate, assigneeUserId: builder.id,
+      }).returning({ id: schema.tasks.id }).get();
+      tx.update(schema.inventoryAllocations).set({ taskId: task.id }).where(eq(schema.inventoryAllocations.id, s.allocationId)).run();
+    }
   }
-  const taskNo = (tx.get<{ n: number | null }>(sql`SELECT MAX(task_no) AS n FROM tasks`)?.n ?? 0) + 1;
   tx.insert(schema.tasks).values({
-    taskNo, jobId, warehouseId: fac.id, clientId: kit.clientId, taskType: "Kitting", status: done ? "Completed" : "Pending", workOrderId: wo.id, productId: kit.id,
+    taskNo: taskNo++, sequence: sequence + 1, jobId, warehouseId: fac.id, clientId: kit.clientId, taskType: "Kitting", status: done ? "Completed" : "Pending", workOrderId: wo.id, productId: kit.id,
     packType: kit.uom, plannedQty: spec.qty, actualQty: done ? spec.qty : 0, targetLocationId: fac.kit, assigneeUserId: builder.id,
     executedByUserId: done ? builder.id : null, startedAt: done ? isoOf(atMs) : null, finishedAt: done ? isoOf(atMs + 3 * HOUR_MS) : null,
   }).run();
+  if (sequence > 0) rollupJob(tx, ctx, jobId);
   if (!done || !fac.kit) return;
   const lot = kit.trackLot ? `K${dateOf(atMs).replaceAll("-", "").slice(2)}` : null;
   const made = ledger.add(tx, ctx, { warehouseId: fac.id, clientId: kit.clientId, productId: kit.id, locationId: fac.kit, qty: spec.qty, packType: kit.uom, lotNumber: lot,

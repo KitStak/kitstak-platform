@@ -19,7 +19,7 @@ import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
-import { searchPicker, toOption } from "@/components/shared/entity-pickers";
+import type { ComboboxOption } from "@/components/ui/combobox";
 import type { CustomerPrefill } from "@/server/repositories/orders-wizard";
 import { errorMessage } from "../orders-client";
 import { ComboF, SelectF, TextF, YesNoF } from "./fields";
@@ -102,6 +102,25 @@ function useAddressVerification() {
   return { busy, verify };
 }
 
+interface CustomerSearchItem {
+  readonly value: string;
+  readonly label: string;
+  readonly description: string;
+}
+
+/** "No customers match …" row: the list always starts with New, so the plain empty text would never show. */
+export function noCustomerMatch(q: string): ComboboxOption {
+  return { value: "__none", label: `No customers match "${q.trim()}"`, description: "Keep New to enter a one-time customer", disabled: true };
+}
+
+/** New + saved customers + one-time customers from this client's previous orders (`/api/orders/customer-search`). */
+async function loadCustomerOptions(clientId: string, q: string, signal: AbortSignal): Promise<readonly ComboboxOption[]> {
+  if (!clientId) return [NEW_CUSTOMER];
+  const res = await apiFetch<{ items: readonly CustomerSearchItem[] }>("/api/orders/customer-search", { query: { clientId, q }, signal });
+  const items = res.items.map((i) => ({ value: i.value, label: i.label, description: i.description }));
+  return items.length > 0 ? [NEW_CUSTOMER, ...items] : [NEW_CUSTOMER, noCustomerMatch(q)];
+}
+
 function CustomerPicker({ disabled }: { readonly disabled: boolean }) {
   const { control, setValue } = useFormContext<OrderFormValues>();
   const clientId = useWatch({ control, name: "clientId" });
@@ -109,7 +128,7 @@ function CustomerPicker({ disabled }: { readonly disabled: boolean }) {
   const [prefill, setPrefill] = React.useState<CustomerPrefill | null>(null);
   const [selectedLabel, setSelectedLabel] = React.useState<string | null>(null);
 
-  const load = React.useCallback(async (q: string, signal: AbortSignal) => [NEW_CUSTOMER, ...(await searchPicker("customers", q, { clientId }, signal)).map(toOption)], [clientId]);
+  const load = React.useCallback((q: string, signal: AbortSignal) => loadCustomerOptions(clientId, q, signal), [clientId]);
 
   React.useEffect(() => {
     if (!customerId) {
@@ -161,14 +180,14 @@ function CustomerPicker({ disabled }: { readonly disabled: boolean }) {
         name="customerId"
         label="Customer"
         disabled={disabled || !clientId}
-        description={!clientId ? "Choose a client in Step 1 to search its customers." : "New, or search existing customers (at least 3 characters)."}
+        description={!clientId ? "Choose a client in Step 1 to search its customers." : "New, or search saved customers and customers from this client's orders (at least 3 characters)."}
         loadOptions={load}
         minChars={3}
         selectedOptions={customerId && selectedLabel ? [{ value: customerId, label: selectedLabel }] : [NEW_CUSTOMER]}
         placeholder="New"
         clearable
         onValue={(v, option) => {
-          if (!v || v === NEW_CUSTOMER.value) {
+          if (!v || v === NEW_CUSTOMER.value || v.startsWith("__")) {
             setValue("customerId", null, { shouldDirty: true });
             return;
           }

@@ -7,7 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
-import { AppError } from "@/server/api/errors";
+import { AppError, fromZodError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
 import { hashPassword } from "@/server/auth/password";
 import { getPasswordPolicy, validatePassword } from "@/server/auth/password-policy";
@@ -18,7 +18,7 @@ import { runBulk } from "@/server/domain/bulk";
 import type { BulkResult } from "@/server/domain/types";
 import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
-import { USER_FIELDS, USER_SEARCH_FIELDS, USER_SORT_FIELDS, type UserSave } from "@/lib/grid-defs/admin/users";
+import { USER_FIELDS, USER_SEARCH_FIELDS, USER_SORT_FIELDS, userSaveSchemaWithPolicy, type UserSave } from "@/lib/grid-defs/admin/users";
 import { assertFound, assertVersion, compileGrid, domainCtxOf, duplicateError, fieldError, logCreate, logUpdate, qc, type Actor, type GridBinding } from "./users-shared";
 
 const u = s.users;
@@ -170,14 +170,30 @@ function resolveClients(db: AppDb, ids: readonly string[]): { id: string; code: 
   return rows;
 }
 
+/** True when another user (not `exceptId`) already signs in with `email` (case-insensitive). */
+export function isEmailTaken(db: AppDb, email: string, exceptId?: string): boolean {
+  const clash = db.select({ id: u.id }).from(u).where(eq(u.email, email.trim().toLowerCase())).get();
+  return Boolean(clash && clash.id !== exceptId);
+}
+
 function assertEmailFree(db: AppDb, email: string, exceptId?: string): void {
-  const clash = db.select({ id: u.id }).from(u).where(eq(u.email, email.toLowerCase())).get();
-  if (clash && clash.id !== exceptId) throw duplicateError("email", `A user with ${email} already exists`);
+  if (isEmailTaken(db, email, exceptId)) throw duplicateError("email", `A user with ${email} already exists`);
 }
 
 export function assertPasswordPolicy(db: AppDb, password: string, email: string, field = "password"): void {
   const issues = validatePassword(password, getPasswordPolicy(db), { email });
   if (issues.length > 0) throw new AppError("VALIDATION", issues[0] ?? "Password does not meet the policy", { fieldErrors: { [field]: issues } });
+}
+
+/**
+ * Parses a create / edit body against the save schema AND the company password policy in one
+ * pass, so the response lists every field error together (no staged validation).
+ */
+export function parseUserSave(db: AppDb, mode: "create" | "update", raw: unknown): UserSave {
+  const policy = getPasswordPolicy(db);
+  const parsed = userSaveSchemaWithPolicy(mode, (password, email) => validatePassword(password, policy, { email })).safeParse(raw);
+  if (!parsed.success) throw fromZodError(parsed.error);
+  return parsed.data;
 }
 
 /** Display snapshot for the change log (names, never ids). */

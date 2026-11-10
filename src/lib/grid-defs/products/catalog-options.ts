@@ -97,3 +97,35 @@ export function toInches(value: number, unit: string): number {
 export function hierarchicalUomQty(childQty: number, parentUomQty: number): number {
   return Math.max(1, Math.floor(childQty)) * Math.max(1, Math.floor(parentUomQty));
 }
+
+/**
+ * One volume format for every catalog surface (wizard cards, detail tab): 3 decimals, more only
+ * when that would print 0.000 for a real (tiny) volume.
+ */
+export function formatVolume(v: number | null | undefined): string {
+  const x = typeof v === "number" && Number.isFinite(v) ? v : 0;
+  if (x > 0 && x < 0.001) return x.toPrecision(2);
+  return x.toFixed(3);
+}
+
+/** A pack type is "incomplete" when any of L / W / H is missing or 0 (cubing and box selection need all three). */
+export function hasIncompleteDimensions(pack: { readonly length?: number | null; readonly width?: number | null; readonly height?: number | null }): boolean {
+  return [pack.length, pack.width, pack.height].some((d) => typeof d !== "number" || !(d > 0));
+}
+
+/** Converts a weight between units (via ounces), 4 dp. Unknown units are treated as pounds. */
+export function convertWeight(weight: number, fromUnit: string, toUnit: string): number {
+  const oz = Math.max(0, weight) * (OUNCES_PER_UNIT[fromUnit] ?? 16);
+  return Math.round((oz / (OUNCES_PER_UNIT[toUnit] ?? 16)) * 10_000) / 10_000;
+}
+
+/** Converts a volume between volume units (via cubic inches), 5 dp. */
+export function convertVolume(volume: number, fromUnit: string, toUnit: string): number {
+  const ci = Math.max(0, volume) * (CUBIC_INCHES_PER_VOLUME[fromUnit] ?? 1);
+  return Math.round((ci / (CUBIC_INCHES_PER_VOLUME[toUnit] ?? 1)) * 100_000) / 100_000;
+}
+
+/** A pack has no usable weight when it is missing or 0 (rate shopping and labels would use 0). */
+export function hasMissingWeight(pack: { readonly weight?: number | null }): boolean {
+  return typeof pack.weight !== "number" || !(pack.weight > 0);
+}

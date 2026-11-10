@@ -6,7 +6,7 @@ import {
 import { canTransitionBill } from "@/lib/grid-defs/organization/billing-reports";
 import { normalizeDefaults, moneyGrid, moneyRail } from "@/lib/grid-defs/organization/common";
 import { customerSchema } from "@/lib/grid-defs/organization/customers";
-import { CLIENT_SETTING_COUNT, enabledSwitchCount, fullSettings, suggestClientCode } from "@/lib/grid-defs/organization/clients";
+import { CLIENT_SETTING_COUNT, clientSsccSchema, enabledSwitchCount, fullSettings, previewSscc, readSscc, ssccCheckDigit, suggestClientCode } from "@/lib/grid-defs/organization/clients";
 import { vasCalculationType, vasSchema } from "@/lib/grid-defs/organization/vas";
 import { referenceTypeOf } from "@/server/imports/handlers/vas-operations";
 
@@ -28,7 +28,7 @@ describe("graduated tiers", () => {
 
   it("validates contiguous tiers with only the last open-ended", () => {
     expect(validateTiers([{ fromQty: 1, toQty: 100, rate: 3 }, { fromQty: 101, toQty: null, rate: 2.5 }])).toBeNull();
-    expect(validateTiers([{ fromQty: 1, toQty: 100, rate: 3 }, { fromQty: 50, toQty: null, rate: 2.5 }])).toBe("Charge 2: From quantity should be 101");
+    expect(validateTiers([{ fromQty: 1, toQty: 100, rate: 3 }, { fromQty: 50, toQty: null, rate: 2.5 }])).toBe("Charge 2: should start at 100 (where charge 1 ends)");
     expect(validateTiers([{ fromQty: 1, toQty: null, rate: 3 }, { fromQty: 101, toQty: null, rate: 2.5 }])).toBe("Charge 1: only the last charge can be open-ended");
     expect(validateTiers([])).toBe("Add at least one charge");
   });
@@ -50,15 +50,15 @@ describe("operation → Fee By → Charge By matrix", () => {
   });
 
   it("rejects a Charge By outside the matrix and requires the VAS type and storage calc type", () => {
-    const bad = feeSchema.safeParse({ ...FEE_DEFAULTS, name: "x", operationType: "Receiving", feeBy: "Per LP", chargeBy: "SO" });
+    const bad = feeSchema.safeParse({ ...FEE_DEFAULTS, tiers: [{ fromQty: 1, toQty: null, rate: 1 }], name: "x", operationType: "Receiving", feeBy: "Per LP", chargeBy: "SO" });
     expect(bad.error?.issues.map((i) => i.path[0])).toContain("chargeBy");
-    const vas = feeSchema.safeParse({ ...FEE_DEFAULTS, name: "x", operationType: "VAS", feeBy: "Operation", chargeBy: "Operation Value", vasTypeId: null });
+    const vas = feeSchema.safeParse({ ...FEE_DEFAULTS, tiers: [{ fromQty: 1, toQty: null, rate: 1 }], name: "x", operationType: "VAS", feeBy: "Operation", chargeBy: "Operation Value", vasTypeId: null });
     expect(vas.error?.issues.map((i) => i.path[0])).toContain("vasTypeId");
-    const storage = feeSchema.safeParse({ ...FEE_DEFAULTS, name: "x", operationType: "Storage", calculationType: null, feeBy: "Location", chargeBy: "Location" });
+    const storage = feeSchema.safeParse({ ...FEE_DEFAULTS, tiers: [{ fromQty: 1, toQty: null, rate: 1 }], name: "x", operationType: "Storage", calculationType: null, feeBy: "Location", chargeBy: "Location" });
     expect(storage.error?.issues.map((i) => i.path[0])).toContain("calculationType");
-    const split = feeSchema.safeParse({ ...FEE_DEFAULTS, name: "x", operationType: "Storage", calculationType: "Split Month Storage", feeBy: "LP", chargeBy: "LP", splitDay: 15, standardRate: null, alternateRate: 4 });
+    const split = feeSchema.safeParse({ ...FEE_DEFAULTS, tiers: [{ fromQty: 1, toQty: null, rate: 1 }], name: "x", operationType: "Storage", calculationType: "Split Month Storage", feeBy: "LP", chargeBy: "LP", splitDay: 15, standardRate: null, alternateRate: 4 });
     expect(split.error?.issues.map((i) => i.path[0])).toEqual(["standardRate"]);
-    const minMax = feeSchema.safeParse({ ...FEE_DEFAULTS, name: "x", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", useMinPrice: true, minPrice: 500, useMaxPrice: true, maxPrice: 100 });
+    const minMax = feeSchema.safeParse({ ...FEE_DEFAULTS, tiers: [{ fromQty: 1, toQty: null, rate: 1 }], name: "x", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", useMinPrice: true, minPrice: 500, useMaxPrice: true, maxPrice: 100 });
     expect(minMax.error?.issues.map((i) => i.path[0])).toEqual(["maxPrice"]);
   });
 });
@@ -122,5 +122,29 @@ describe("organization helpers", () => {
     expect(referenceTypeOf("WO000007")).toBe("Work Order");
     expect(vasSchema.safeParse({ clientId: "c", warehouseId: "w", vasTypeId: "t", operationAt: "2026-11-05T15:00:00Z", value: 2, referenceNumber: "SO1" }).error?.issues[0]?.path).toEqual(["referenceOrderType"]);
     expect(vasSchema.safeParse({ clientId: "c", warehouseId: "w", vasTypeId: "t", operationAt: "2026-11-05T15:00:00Z", value: 2, note: "x".repeat(201) }).success).toBe(false);
+    expect(vasSchema.safeParse({ clientId: "c", warehouseId: "w", vasTypeId: "t", operationAt: "2026-11-05T15:00:00Z", value: 2, referenceOrderType: "Shipment Order" }).error?.issues[0]?.path).toEqual(["referenceNumber"]);
+    expect(vasSchema.safeParse({ clientId: "c", warehouseId: "w", vasTypeId: "t", operationAt: "2026-11-05T15:00:00Z", value: 2, referenceOrderType: "Work Order", referenceNumber: "W".repeat(100) }).success).toBe(true);
+    expect(vasSchema.safeParse({ clientId: "c", warehouseId: "w", vasTypeId: "t", operationAt: "2026-11-05T15:00:00Z", value: 2, referenceOrderType: "Work Order", referenceNumber: "W".repeat(101) }).success).toBe(false);
+  });
+});
+
+describe("client SSCC-18 settings", () => {
+  it("computes the GS1 check digit (GS1 reference example)", () => {
+    expect(ssccCheckDigit("00614141123456789")).toBe(0);
+    expect(previewSscc({ extensionDigit: "0", gs1CompanyPrefix: "0614141", serialNumber: "123456789" })).toBe("006141411234567890");
+  });
+  it("pads the serial to 17 digits and leaves blank settings valid", () => {
+    expect(previewSscc({ extensionDigit: "1", gs1CompanyPrefix: "0614141", serialNumber: "1" })).toMatch(/^10614141000000001\d$/);
+    expect(clientSsccSchema.safeParse({ extensionDigit: "", gs1CompanyPrefix: "", serialNumber: "" }).success).toBe(true);
+    expect(previewSscc({})).toBeNull();
+  });
+  it("requires all three values once one is set and caps the serial by prefix length", () => {
+    const partial = clientSsccSchema.safeParse({ extensionDigit: "", gs1CompanyPrefix: "0614141", serialNumber: "" });
+    expect(partial.success).toBe(false);
+    expect(partial.error?.issues.map((i) => i.path[0]).sort()).toEqual(["extensionDigit", "serialNumber"]);
+    expect(clientSsccSchema.safeParse({ extensionDigit: "0", gs1CompanyPrefix: "0614141234", serialNumber: "1234567" }).success).toBe(false);
+    expect(clientSsccSchema.safeParse({ extensionDigit: "0", gs1CompanyPrefix: "061414", serialNumber: "1" }).success).toBe(false);
+    expect(readSscc({ packing: {}, sscc: { extensionDigit: "2", gs1CompanyPrefix: "0614141", serialNumber: "5" } })).toEqual({ extensionDigit: "2", gs1CompanyPrefix: "0614141", serialNumber: "5" });
+    expect(readSscc(null)).toEqual({ extensionDigit: "", gs1CompanyPrefix: "", serialNumber: "" });
   });
 });

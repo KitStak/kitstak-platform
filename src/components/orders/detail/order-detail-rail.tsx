@@ -6,6 +6,7 @@
  * Every action is gated by the domain reason (tooltip) and the user's permission.
  */
 import * as React from "react";
+import { OrderStatusPill } from "../order-status-pill";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,22 +14,24 @@ import {
 } from "lucide-react";
 import { apiFetch } from "@/lib/api-client";
 import { useFormat } from "@/lib/format";
-import { usePermissionSet } from "@/lib/permissions-client";
 import { ORDER_BULK_PERMISSIONS, ORDER_PERMISSIONS } from "@/lib/grid-defs/orders/shipment-orders";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { StatusPill } from "@/components/ui/status-pill";
+import { Spinner } from "@/components/ui/spinner";
+import { usePermissionSet } from "@/lib/permissions-client";
+import { TERMINAL_ORDER_STATUSES } from "./order-detail-tabs";
 import { toast } from "@/components/ui/toast";
 import { DisabledReason, Tooltip } from "@/components/ui/tooltip";
 import { ChangeLogDrawer, PrintOptionsModal } from "@/components/shared";
 import { OrderJobModal } from "../bulk/order-job-modal";
-import { bulkToast, errorMessage, fetchPrintRecords, openFiles, ORDER_INVALIDATE, runBulk, useInvalidateOrders, type OrderDetail, type OrderRow } from "../orders-client";
-import { CancelOrdersModal, GuardModal, type GuardState } from "../bulk/order-modals";
+import { bulkToast, errorMessage, fetchPrintRecords, openFiles, runBulk, useInvalidateOrders, type OrderDetail, type OrderRow } from "../orders-client";
+import { CancelOrdersModal, GuardModal, HoldReasonField, SuccessResultDialog, type GuardState } from "../bulk/order-modals";
 import { RailCard } from "../wizard/order-summary";
 import { orderTotals } from "../wizard/order-form-model";
 
-const NO_PERMISSION = "You don't have permission for this action";
+import { CHECKING_PERMISSIONS, useOrderPermissions } from "../use-order-permissions";
 
 export function rowFromDetail(d: OrderDetail): OrderRow {
   const o = d.order;
@@ -39,7 +42,7 @@ export function rowFromDetail(d: OrderDetail): OrderRow {
   };
 }
 
-type Pending = "ship" | "delete" | "cancel" | "jobs" | { kind: "unassign"; jobId: string; code: string } | { kind: "void"; shipmentId: string; tracking: string } | null;
+type Pending = "ship" | "delete" | "cancel" | "jobs" | "hold" | "release" | "duplicate" | { kind: "unassign"; jobId: string; code: string } | { kind: "void"; shipmentId: string; tracking: string } | null;
 
 function Row({ label, value, action }: { readonly label: React.ReactNode; readonly value: React.ReactNode; readonly action?: React.ReactNode }) {
   return (
@@ -49,6 +52,8 @@ function Row({ label, value, action }: { readonly label: React.ReactNode; readon
     </div>
   );
 }
+
+const BUSY_LABEL: Readonly<Record<string, string>> = { hold: "Putting on hold…", release: "Releasing…", duplicate: "Duplicating…" };
 
 function Availability({ ok }: { readonly ok: boolean }) {
   return <span className={ok ? "text-[12px] font-semibold text-success" : "text-[12px] text-faint"}>{ok ? "Available" : "Not available"}</span>;
@@ -62,43 +67,55 @@ export interface OrderDetailRailProps {
 export function OrderActionsMenu({ detail, onChanged }: OrderDetailRailProps) {
   const router = useRouter();
   const invalidate = useInvalidateOrders();
-  const { permissions } = usePermissionSet();
+  const perms = useOrderPermissions();
   const [pending, setPending] = React.useState<Pending>(null);
-  const [busy, setBusy] = React.useState(false);
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [holdReason, setHoldReason] = React.useState("");
+  // Ship preview note: undefined while loading, null = ships in full.
+  const [shipNote, setShipNote] = React.useState<string | null | undefined>(undefined);
+  const [duplicated, setDuplicated] = React.useState<{ id: string; code: string } | null>(null);
   const o = detail.order;
   const a = detail.actions;
-  const gate = (permission: string, reason: string | null | undefined) => (permissions.has(permission) ? reason ?? null : NO_PERMISSION);
+  const gate = (permission: string, reason: string | null | undefined) => perms.reason(permission) ?? reason ?? null;
+  /** Disabled items show their reason inline (not only as a tooltip), matching the bulk menus. */
+  const why = (reason: string | null, hint?: string) => ({ disabledReason: reason, description: reason && reason !== CHECKING_PERMISSIONS ? reason : hint });
   const row = rowFromDetail(detail);
   const codes = new Map([[o.id, o.code]]);
 
+  /** Runs inside the confirm dialog (its button shows progress); a failure keeps the dialog open with the reason. */
   const simple = async (action: "hold" | "release", verb: string) => {
-    setBusy(true);
+    setBusy(action);
     try {
-      bulkToast(await runBulk(action, { ids: [o.id] }), verb, codes);
+      const reason = holdReason.trim();
+      const result = await runBulk(action, action === "hold" && reason ? { ids: [o.id], reason } : { ids: [o.id] });
+      setHoldReason("");
+      bulkToast(result, verb, codes);
       onChanged();
-    } catch (error) {
-      toast.error("Action failed", errorMessage(error));
+      if (result.failed.length > 0) throw new Error(result.failed[0]?.message ?? "Action failed");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   const duplicate = async () => {
-    setBusy(true);
+    setBusy("duplicate");
     try {
       const copy = await apiFetch<{ id: string; code: string }>(`/api/orders/${o.id}/duplicate`, { method: "POST" });
       await invalidate();
-      toast.success("Order duplicated", `${copy.code} was created from ${o.code}.`, { action: { label: "Open", onClick: () => router.push(`/orders/${encodeURIComponent(copy.code)}`) } });
+      setDuplicated(copy);
     } catch (error) {
       toast.error("Couldn't duplicate the order", errorMessage(error));
+      throw error;
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   const ship = async () => {
     const result = await apiFetch<{ succeeded: string[]; failed: { id: string; code: string; message: string }[] }>("/api/ops/shipping/ship", { method: "POST", body: { ids: [o.id] } });
-    bulkToast(result, "shipped", codes);
+    const partial = shipNote;
+    if (partial && result.failed.length === 0) toast.warning("Order partially shipped", `${o.code}: ${partial}. It stays in the backlog as Partially Shipped.`);
+    else bulkToast(result, "shipped", codes);
     onChanged();
   };
 
@@ -113,22 +130,30 @@ export function OrderActionsMenu({ detail, onChanged }: OrderDetailRailProps) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="secondary" className="w-full justify-between" disabled={busy}>
-            <span className="flex items-center gap-1.5"><MoreHorizontal className="h-4 w-4" aria-hidden />Other actions</span>
+          <Button variant="secondary" className="w-full justify-between" aria-busy={busy ? true : undefined}>
+            <span className="flex items-center gap-1.5">
+              {busy ? <Spinner className="h-3.5 w-3.5" label={BUSY_LABEL[busy] ?? "Working"} /> : <MoreHorizontal className="h-4 w-4" aria-hidden />}
+              {busy ? BUSY_LABEL[busy] ?? "Working…" : "Other actions"}
+            </span>
             <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-[260px]">
-          <DropdownMenuItem icon={Truck} disabledReason={gate(ORDER_PERMISSIONS.ship, a.ship ?? (o.status !== "Ready to Ship" ? `Only Ready to Ship orders can be shipped; this order is ${o.status}.` : null))} onSelect={() => setPending("ship")}>Ship order</DropdownMenuItem>
+          <DropdownMenuItem icon={Truck} {...why(gate(ORDER_PERMISSIONS.ship, a.ship ?? (o.status !== "Ready to Ship" ? `Only Ready to Ship orders can be shipped; this order is ${o.status}.` : null)))} onSelect={() => {
+            setShipNote(undefined);
+            setPending("ship");
+            void apiFetch<{ partial: Record<string, string> }>("/api/orders/ship-preview", { method: "POST", body: { ids: [o.id] } })
+              .then((r) => setShipNote(r.partial[o.id] ?? null)).catch(() => setShipNote(null));
+          }}>Ship order</DropdownMenuItem>
           {o.status === "On Hold" ? (
-            <DropdownMenuItem icon={PlayCircle} disabledReason={gate(ORDER_BULK_PERMISSIONS.release, a.release)} onSelect={() => void simple("release", "released")}>Release hold</DropdownMenuItem>
+            <DropdownMenuItem icon={PlayCircle} {...why(gate(ORDER_BULK_PERMISSIONS.release, a.release))} onSelect={() => setPending("release")}>Release hold</DropdownMenuItem>
           ) : (
-            <DropdownMenuItem icon={PauseCircle} disabledReason={gate(ORDER_BULK_PERMISSIONS.hold, a.hold)} onSelect={() => void simple("hold", "put on hold")}>Put on hold</DropdownMenuItem>
+            <DropdownMenuItem icon={PauseCircle} {...why(gate(ORDER_BULK_PERMISSIONS.hold, a.hold))} onSelect={() => setPending("hold")}>Put on hold</DropdownMenuItem>
           )}
-          <DropdownMenuItem icon={Copy} disabledReason={gate(ORDER_PERMISSIONS.create, a.duplicate)} onSelect={() => void duplicate()} description="New Open order with the same lines">Duplicate order</DropdownMenuItem>
+          <DropdownMenuItem icon={Copy} {...why(gate(ORDER_PERMISSIONS.create, a.duplicate), "New Open order with the same lines")} onSelect={() => setPending("duplicate")}>Duplicate order</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem icon={Ban} destructive disabledReason={gate(ORDER_BULK_PERMISSIONS.cancel, a.cancel)} onSelect={() => setPending("cancel")}>Cancel order</DropdownMenuItem>
-          <DropdownMenuItem icon={Trash2} destructive disabledReason={gate(ORDER_PERMISSIONS.delete, a.delete)} onSelect={() => setPending("delete")}>Delete order</DropdownMenuItem>
+          <DropdownMenuItem icon={Ban} destructive {...why(gate(ORDER_BULK_PERMISSIONS.cancel, a.cancel))} onSelect={() => setPending("cancel")}>Cancel order</DropdownMenuItem>
+          <DropdownMenuItem icon={Trash2} destructive {...why(gate(ORDER_PERMISSIONS.delete, a.delete))} onSelect={() => setPending("delete")}>Delete order</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <ConfirmDialog
@@ -137,7 +162,11 @@ export function OrderActionsMenu({ detail, onChanged }: OrderDetailRailProps) {
         variant="info"
         icon={Truck}
         title="Are you sure you want to ship this order?"
-        description={`${o.code} will move to Shipped & Canceled Orders and its inventory leaves the warehouse.`}
+        description={shipNote === undefined
+          ? `${o.code} will be shipped. Checking packed quantities…`
+          : shipNote
+            ? `${o.code} is only partly packed. ${shipNote}. The packed units ship and the order becomes Partially Shipped, staying in the backlog.`
+            : `${o.code} will move to Shipped & Canceled Orders and its inventory leaves the warehouse.`}
         cancelLabel="No"
         confirmLabel="Yes"
         onConfirm={ship}
@@ -152,6 +181,51 @@ export function OrderActionsMenu({ detail, onChanged }: OrderDetailRailProps) {
         confirmLabel="Yes"
         onConfirm={remove}
       />
+      <ConfirmDialog
+        open={pending === "hold"}
+        onOpenChange={(v) => !v && setPending(null)}
+        variant="info"
+        icon={PauseCircle}
+        title="Put this order on hold?"
+        description={`${o.code} stops in its current step until the hold is released. Allocated stock stays allocated.`}
+        cancelLabel="No"
+        confirmLabel="Put on hold"
+        onConfirm={() => simple("hold", "put on hold")}
+      >
+        <HoldReasonField id="detail-hold-reason" value={holdReason} onChange={setHoldReason} />
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={pending === "release"}
+        onOpenChange={(v) => !v && setPending(null)}
+        variant="info"
+        icon={PlayCircle}
+        title="Release the hold on this order?"
+        description={`${o.code} returns to the status it had before the hold.`}
+        cancelLabel="No"
+        confirmLabel="Release hold"
+        onConfirm={() => simple("release", "released")}
+      />
+      <ConfirmDialog
+        open={pending === "duplicate"}
+        onOpenChange={(v) => !v && setPending(null)}
+        variant="info"
+        icon={Copy}
+        title="Duplicate this order?"
+        description={`A new Open order is created with the same customer, address, shipping and ${detail.lines.length} ${detail.lines.length === 1 ? "line" : "lines"}. ${o.code} is not changed.`}
+        cancelLabel="No"
+        confirmLabel="Duplicate"
+        onConfirm={duplicate}
+      />
+      <SuccessResultDialog
+        open={Boolean(duplicated)}
+        onClose={() => setDuplicated(null)}
+        title={duplicated ? `${duplicated.code} was created` : "Order duplicated"}
+        description={duplicated ? `${duplicated.code} is an Open copy of ${o.code}. Its order date is now and its expected shipment date keeps the same lead time. Its change log records where it came from.` : ""}
+        primaryLabel={duplicated ? `Open ${duplicated.code}` : "Open"}
+        onPrimary={() => {
+          if (duplicated) router.push(`/orders/${encodeURIComponent(duplicated.code)}`);
+        }}
+      />
       <CancelOrdersModal rows={[row]} open={pending === "cancel"} onOpenChange={(v) => setPending(v ? "cancel" : null)} onDone={() => onChanged()} />
     </>
   );
@@ -159,16 +233,18 @@ export function OrderActionsMenu({ detail, onChanged }: OrderDetailRailProps) {
 
 export function SummaryCard({ detail }: { readonly detail: OrderDetail }) {
   const fmt = useFormat();
-  const { permissions } = usePermissionSet();
+  const perms = useOrderPermissions();
   const [logOpen, setLogOpen] = React.useState(false);
   const o = detail.order;
   const t = orderTotals(detail.lines.map((l) => ({ productId: l.productId, isKit: l.isKit, quantity: l.quantity, unitPrice: l.unitPrice, weightOz: l.weightOz })), o.discount);
-  const canLog = permissions.has(ORDER_PERMISSIONS.changeLog);
+  const { permissions } = usePermissionSet();
+  // Read-only history: the same rule as the grid row kebab (anyone who can see the order).
+  const logReason = !perms.ready ? CHECKING_PERMISSIONS : permissions.has(ORDER_PERMISSIONS.changeLog) || permissions.has(ORDER_PERMISSIONS.view) ? null : "You don't have permission to view the change log";
   return (
     <RailCard title="Summary">
       <div className="flex items-start justify-between gap-2">
         <p className="min-w-0 truncate text-[20px] font-semibold tracking-[-0.01em] text-foreground" title={o.code}>{o.code}</p>
-        <StatusPill status={o.status} domain="shipmentOrder" />
+        <OrderStatusPill status={o.status} />
       </div>
       <div className="flex flex-col gap-1.5">
         <Row label="Warehouse" value={detail.warehouseLabel} action={
@@ -186,8 +262,8 @@ export function SummaryCard({ detail }: { readonly detail: OrderDetail }) {
         {detail.backOrders.length ? <Row label="Backorders" value={detail.backOrders.map((b) => <Link key={b.id} className="text-primary hover:underline" href={`/orders/${encodeURIComponent(b.code)}`}>{b.code}</Link>)} /> : null}
         {o.status === "Cancelled" ? <Row label="Cancel reason" value={detail.cancelReasonName ?? "—"} /> : null}
       </div>
-      <DisabledReason reason={canLog ? null : NO_PERMISSION}>
-        <Button variant="ghost" size="sm" className="w-fit" onClick={() => setLogOpen(true)} disabled={!canLog}>
+      <DisabledReason reason={logReason}>
+        <Button variant="ghost" size="sm" className="w-fit" onClick={() => setLogOpen(true)} disabled={Boolean(logReason)}>
           <History className="h-3.5 w-3.5" aria-hidden />
           Show change log
         </Button>
@@ -203,12 +279,15 @@ export function SummaryCard({ detail }: { readonly detail: OrderDetail }) {
 }
 
 export function JobsCard({ detail, onChanged }: OrderDetailRailProps) {
-  const { permissions } = usePermissionSet();
+  const perms = useOrderPermissions();
   const [modal, setModal] = React.useState(false);
   const [unassign, setUnassign] = React.useState<{ jobId: string; code: string } | null>(null);
   const o = detail.order;
-  const addReason = permissions.has(ORDER_PERMISSIONS.jobs) ? detail.actions.jobs ?? (o.jobId ? "This order already has a picking job. Unassign it first." : null) : NO_PERMISSION;
-  const removeReason = permissions.has(ORDER_PERMISSIONS.jobs) ? null : NO_PERMISSION;
+  const terminal = TERMINAL_ORDER_STATUSES.has(o.status);
+  const addReason = terminal
+    ? `A ${o.status} order can't get a picking job.`
+    : perms.reason(ORDER_PERMISSIONS.jobs) ?? detail.actions.jobs ?? (o.jobId ? "This order already has a picking job. Unassign it first." : null);
+  const removeReason = perms.reason(ORDER_PERMISSIONS.jobs);
   return (
     <RailCard
       title="Assigned jobs"
@@ -224,7 +303,17 @@ export function JobsCard({ detail, onChanged }: OrderDetailRailProps) {
         <div className="flex flex-col items-center gap-1 rounded-md border border-dashed border-border px-3 py-4 text-center">
           <ClipboardList className="h-5 w-5 text-faint" aria-hidden />
           <p className="text-[13px] font-semibold text-foreground">No job assigned</p>
-          <p className="text-[12px] text-secondary">Press the + button to assign a new job.</p>
+          <p className="text-[12px] text-secondary">
+            {terminal
+              ? o.status === "Cancelled" ? "The order is cancelled, so no job can be assigned." : `The order is ${o.status}; it was fulfilled without a job on record.`
+              : o.status === "Ready to Pick" ? "Stock is allocated. Create a picking job to start picking and print the picking list." : "Press the + button to assign a new job."}
+          </p>
+          {!addReason ? (
+            <Button variant="secondary" size="sm" className="mt-1" onClick={() => setModal(true)}>
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              Create picking job
+            </Button>
+          ) : null}
         </div>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -235,11 +324,13 @@ export function JobsCard({ detail, onChanged }: OrderDetailRailProps) {
                 <span className="block truncate text-[12px] text-secondary">{j.jobType}</span>
               </div>
               <StatusPill status={j.status} domain="job" size="sm" />
-              <DisabledReason reason={removeReason ?? (j.status === "Pending" ? null : "Only pending jobs can be unassigned")}>
-                <Button variant="ghost" size="icon-sm" aria-label={`Unassign ${j.code}`} disabled={Boolean(removeReason) || j.status !== "Pending"} onClick={() => setUnassign({ jobId: j.id, code: j.code })}>
-                  <X className="h-3.5 w-3.5" aria-hidden />
-                </Button>
-              </DisabledReason>
+              {j.status === "Pending" ? (
+                <DisabledReason reason={removeReason}>
+                  <Button variant="ghost" size="icon-sm" aria-label={`Unassign ${j.code}`} disabled={Boolean(removeReason)} onClick={() => setUnassign({ jobId: j.id, code: j.code })}>
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                </DisabledReason>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -270,7 +361,7 @@ interface Charge {
 
 export function DocumentsCards({ detail, onChanged }: OrderDetailRailProps) {
   const fmt = useFormat();
-  const { permissions } = usePermissionSet();
+  const perms = useOrderPermissions();
   const [print, setPrint] = React.useState<{ typeKey: string; records: readonly unknown[]; title: string } | null>(null);
   const [guard, setGuard] = React.useState<GuardState | null>(null);
   const [voiding, setVoiding] = React.useState<{ shipmentId: string; tracking: string } | null>(null);
@@ -278,6 +369,10 @@ export function DocumentsCards({ detail, onChanged }: OrderDetailRailProps) {
   const o = detail.order;
   const label = detail.shipments.find((s) => s.labelStatus === "Active" && s.labelType === "Shipping Label");
   const hasJob = detail.jobs.length > 0 || Boolean(o.jobId);
+  // A released job has active pick tasks; a completed job's list can still be reprinted.
+  const pickListReady = hasJob && (detail.hasPickTask || detail.jobs.some((j) => j.status === "Completed"));
+  const cancelled = o.status === "Cancelled";
+  const pickListState = cancelled ? "na" : pickListReady ? "ready" : TERMINAL_ORDER_STATUSES.has(o.status) ? "na" : hasJob ? "unreleased" : "nojob";
 
   const downloadCharges = async () => {
     setBusy("billing");
@@ -316,7 +411,7 @@ export function DocumentsCards({ detail, onChanged }: OrderDetailRailProps) {
     }
   };
 
-  const perm = (k: string) => (permissions.has(k) ? null : NO_PERMISSION);
+  const perm = (k: string) => perms.reason(k);
 
   return (
     <>
@@ -333,28 +428,28 @@ export function DocumentsCards({ detail, onChanged }: OrderDetailRailProps) {
       <RailCard title="Printouts">
         <div className="flex flex-col gap-2">
           <Row label="Shipment label" value={<Availability ok={Boolean(label)} />} action={
-            <DisabledReason reason={label?.labelFileId ? perm(ORDER_PERMISSIONS.reprintLabel) : "The orders which you have selected has no label to reprint."}>
+            <DisabledReason reason={label?.labelFileId ? perm(ORDER_PERMISSIONS.reprintLabel) : "This order has no label to reprint."}>
               <Button variant="ghost" size="icon-sm" aria-label="Reprint shipment label" disabled={!label?.labelFileId || Boolean(perm(ORDER_PERMISSIONS.reprintLabel))} onClick={() => label?.labelFileId && openFiles([label.labelFileId])}>
                 <Printer className="h-3.5 w-3.5" aria-hidden />
               </Button>
             </DisabledReason>
           } />
-          <Row label="Packing slip" value={<Availability ok />} action={
-            <DisabledReason reason={perm(ORDER_PERMISSIONS.printPackingSlip)}>
-              <Button variant="ghost" size="icon-sm" aria-label="Print packing slip" disabled={busy === "packing-slip" || Boolean(perm(ORDER_PERMISSIONS.printPackingSlip))} onClick={() => void printType("packing-slip", "Print packing slip")}>
+          <Row label="Packing slip" value={<Availability ok={!cancelled} />} action={
+            <DisabledReason reason={cancelled ? "Not available on a cancelled order" : perm(ORDER_PERMISSIONS.printPackingSlip)}>
+              <Button variant="ghost" size="icon-sm" aria-label="Print packing slip" disabled={cancelled || busy === "packing-slip" || Boolean(perm(ORDER_PERMISSIONS.printPackingSlip))} onClick={() => void printType("packing-slip", "Print packing slip")}>
                 <Printer className="h-3.5 w-3.5" aria-hidden />
               </Button>
             </DisabledReason>
           } />
-          <Row label="Picking list" value={<Availability ok={hasJob && detail.hasPickTask} />} action={
-            <DisabledReason reason={!hasJob ? "Available once a picking job exists" : !detail.hasPickTask ? "The picking list cannot be printed for the orders that have no active picking task." : perm(ORDER_PERMISSIONS.printPickList)}>
-              <Button variant="ghost" size="icon-sm" aria-label="Print picking list" disabled={!hasJob || !detail.hasPickTask || busy === "picking-list" || Boolean(perm(ORDER_PERMISSIONS.printPickList))} onClick={() => void printType("picking-list", "Print picking list")}>
+          <Row label="Picking list" value={pickListState === "ready" ? <Availability ok /> : pickListState === "na" ? <Availability ok={false} /> : <span className="text-[12px] text-warning">{pickListState === "unreleased" ? "Job not released" : "Needs a job"}</span>} action={
+            <DisabledReason reason={pickListState === "na" ? `Not available on a ${o.status} order` : !hasJob ? "Available once a picking job exists" : !pickListReady ? "The picking list is available once the job is released." : perm(ORDER_PERMISSIONS.printPickList)}>
+              <Button variant="ghost" size="icon-sm" aria-label="Print picking list" disabled={pickListState !== "ready" || busy === "picking-list" || Boolean(perm(ORDER_PERMISSIONS.printPickList))} onClick={() => void printType("picking-list", "Print picking list")}>
                 <Printer className="h-3.5 w-3.5" aria-hidden />
               </Button>
             </DisabledReason>
           } />
           <Row label="Other documents" value={<span className="text-[12px] text-secondary">Upload or view</span>} action={
-            <Button variant="ghost" size="icon-sm" aria-label="Go to documents" onClick={() => document.getElementById("order-documents")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+            <Button variant="ghost" size="icon-sm" aria-label="Go to documents" onClick={() => window.dispatchEvent(new CustomEvent("order:show-documents"))}>
               <FileText className="h-3.5 w-3.5" aria-hidden />
             </Button>
           } />

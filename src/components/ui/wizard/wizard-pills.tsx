@@ -13,13 +13,15 @@ export function WizardPills({ steps, onSelect, className }: { readonly steps: re
           key={step.key}
           type="button"
           disabled={!step.clickable}
-          aria-current={step.status === "active" ? "step" : undefined}
+          aria-current={step.current ? "step" : undefined}
           onClick={() => onSelect(step.key)}
           className={cn(
-            "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[12px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed",
-            step.status === "active" && "border-primary bg-primary text-white",
+            "inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[12px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-info/30 disabled:cursor-not-allowed",
+            // The current step keeps the solid active fill; failed validation adds a warning ring.
+            (step.status === "active" || (step.current && step.status === "attention")) && "border-primary bg-primary text-white",
+            step.current && step.status === "attention" && "ring-2 ring-warning/60 ring-offset-1",
             step.status === "complete" && "border-success/40 bg-success-soft text-success enabled:hover:border-success",
-            step.status === "attention" && "border-warning/50 bg-warning-soft text-warning",
+            !step.current && step.status === "attention" && "border-warning/50 bg-warning-soft text-warning",
             step.status === "upcoming" && "border-border bg-surface text-secondary enabled:hover:border-border-strong enabled:hover:text-body disabled:text-faint"
           )}
         >

@@ -24,6 +24,7 @@ import { apiRequest } from "@/lib/api-client";
 import { useApiQuery } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
 import { matchesReport, REPORT_CATALOG, REPORT_HUB_PREFS_KEY, type CatalogItem } from "@/lib/grid-defs/reports/catalog";
+import { ScheduledReportsCard } from "./report-schedules";
 import { ReportPill } from "./report-cells";
 
 interface HubPrefs {
@@ -95,7 +96,11 @@ function ReportCard({ item, favorite, onToggle }: { readonly item: CatalogItem; 
 }
 
 function RecentExports() {
-  const q = useApiQuery<RecentExport[]>(["hub-recent-exports"], "/api/reports/export-history", { query: "sort=-createdAt&ps=100", refetchInterval: 15000 });
+  const q = useApiQuery<RecentExport[]>(["hub-recent-exports"], "/api/reports/export-history", {
+    query: "sort=-createdAt&ps=10",
+    // Poll only while one of the shown exports is still being generated, so the hub settles.
+    refetchInterval: (query) => ((query.state.data?.data ?? []).slice(0, 6).some((r) => r.status !== "completed" && r.status !== "error") ? 5000 : false),
+  });
   const rows = (q.data?.data ?? []).slice(0, 6);
   return (
     <section aria-labelledby="recent-exports" className="rounded-lg border border-border bg-surface">
@@ -115,13 +120,16 @@ function RecentExports() {
             <li key={r.id} className="flex items-center gap-3 px-4 py-2.5">
               <FileSpreadsheet className="h-4 w-4 shrink-0 text-[#1B8A55]" aria-hidden />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-medium text-foreground" title={r.title}>{r.title}</div>
-                <div className="flex items-center gap-2 text-[11.5px] text-faint">
-                  <DateCell value={r.createdAt} />
-                  {r.rowCount !== null ? <span className="whitespace-nowrap">· {r.rowCount.toLocaleString("en-US")} rows</span> : null}
+                {/* Title + status pill share the first line; the meta line below has the full width (never runs under the pill). */}
+                <div className="flex min-w-0 items-start gap-2">
+                  <span className="line-clamp-2 min-w-0 flex-1 break-words text-[13px] font-medium leading-snug text-foreground" title={r.title}>{r.title}</span>
+                  <span className="shrink-0"><ReportPill status={r.status} domain="export" /></span>
+                </div>
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden text-[11.5px] text-faint" data-testid="export-meta">
+                  <span className="min-w-0 truncate"><DateCell value={r.createdAt} /></span>
+                  {r.rowCount !== null ? <span className="shrink-0 whitespace-nowrap">· {r.rowCount.toLocaleString("en-US")} rows</span> : null}
                 </div>
               </div>
-              <ReportPill status={r.status} domain="export" />
               {r.downloadHref ? (
                 <a href={r.downloadHref} download className="rounded-md p-1 text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" aria-label={`Download ${r.title}`} title="Download">
                   <Download className="h-4 w-4" aria-hidden />
@@ -137,8 +145,13 @@ function RecentExports() {
 
 type View = "all" | "favorites";
 
-export function ReportsHub() {
-  const { permissions, isLoading } = usePermissionSet();
+export function ReportsHub({ initialPermissions = null }: { readonly initialPermissions?: readonly string[] | null } = {}) {
+  const live = usePermissionSet();
+  // Server-resolved permissions paint the catalog immediately; the live set replaces them once
+  // /api/me arrives (a role change is picked up on the next refetch).
+  const serverSet = React.useMemo(() => (initialPermissions ? new Set(initialPermissions) : null), [initialPermissions]);
+  const permissions = live.isLoading && serverSet ? serverSet : live.permissions;
+  const isLoading = live.isLoading && !serverSet;
   const { favorites, toggle } = useFavorites();
   const [term, setTerm] = React.useState("");
   const [view, setView] = React.useState<View>("all");
@@ -217,6 +230,7 @@ export function ReportsHub() {
             )}
           </section>
           <RecentExports />
+          <ScheduledReportsCard />
         </aside>
       </div>
     </div>

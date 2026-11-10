@@ -70,7 +70,8 @@ function parseSave(input: LocationSaveInput) {
 
 /* ---------------- lookups ---------------- */
 
-const actorOf = (ctx: ImportApplyContext): Actor => ({ userId: ctx.actor.userId, source: ctx.actor.source });
+/** Import rows record their channel ("Import · <email>") so the change log can show Logiwa's SOURCE column. */
+const actorOf = (ctx: ImportApplyContext): Actor => ({ userId: ctx.actor.userId, source: ctx.actor.source.startsWith("Import · ") ? ctx.actor.source : `Import · ${ctx.actor.source}` });
 
 export function findWarehouseByCode(db: AppDb, auth: AuthContext, code: string): { id: string; code: string } {
   const row = db.select({ id: s.warehouses.id, code: s.warehouses.code }).from(s.warehouses).where(sql`lower(${s.warehouses.code}) = lower(${code})`).get();

@@ -32,6 +32,8 @@ export interface NavItem {
   readonly badge?: NavBadge;
   /** Extra search terms for the Pages group of global search. */
   readonly aliases?: readonly string[];
+  /** Key of the add-on app (Settings → Apps) that must be active for the item to show. */
+  readonly app?: string;
 }
 
 export interface NavColumn {
@@ -158,10 +160,13 @@ export const NAV_MENUS: readonly NavMenu[] = [
         icon: "outbound",
         items: [
           item({ label: "Shipment Orders", href: "/orders", permission: P.shipmentOrders, owner: "M01", aliases: ["orders", "sales orders", "backlog"] }),
-          item({ label: "Shipped Orders", href: "/orders/shipped", permission: P.shipmentOrders, owner: "M01", aliases: ["canceled orders"] }),
+          item({ label: "Shipped & Canceled Orders", href: "/orders/shipped", permission: P.shipmentOrders, owner: "M01", aliases: ["shipped orders", "canceled orders"] }),
+          item({ label: "Return Orders", href: "/orders/returns", permission: P.returnOrders, owner: "M04", aliases: ["returns", "rma"] }),
           item({ label: "Carrier Shipment Details", href: "/shipments", permission: P.carrierShipments, owner: "M02", aliases: ["labels", "tracking"] }),
           item({ label: "End Of The Day", href: "/shipments/end-of-day", permission: P.endOfDay, owner: "M02", aliases: ["eod", "manifest"] }),
           item({ label: "Packing Station", href: "/packing-station", permission: P.packingStation, owner: "M04", aliases: ["pack"] }),
+          // One home for returns: Return Station sits with Return Orders and Packing Station (M04).
+          item({ label: "Return Station", href: "/return-station", permission: P.returnStation, owner: "M04", aliases: ["rma", "receive return"] }),
         ],
       },
       {
@@ -179,7 +184,7 @@ export const NAV_MENUS: readonly NavMenu[] = [
         icon: "shipment",
         items: [
           shipmentHistory,
-          item({ label: "Shipment Plan", href: "/shipment-plans", permission: P.shipmentPlan, owner: "M02", aliases: ["loading", "bol"] }),
+          item({ label: "Shipment Plan", href: "/shipment-plans", permission: P.shipmentPlan, owner: "M02", aliases: ["shipment plan", "loading", "bol"] }),
         ],
       },
     ],
@@ -194,8 +199,6 @@ export const NAV_MENUS: readonly NavMenu[] = [
         items: [
           item({ label: "Purchase Orders", href: "/receiving", permission: P.purchaseOrders, owner: "M05", aliases: ["po", "receiving", "asn"] }),
           receivingHistory,
-          item({ label: "Return Station", href: "/return-station", permission: P.returnStation, owner: "M04", aliases: ["rma"] }),
-          item({ label: "Return Orders", href: "/orders/returns", permission: P.returnOrders, owner: "M04", aliases: ["returns", "rma"] }),
           item({ label: "Work Orders", href: "/work-orders", permission: P.workOrders, owner: "M08", aliases: ["kitting", "assembly"] }),
         ],
       },
@@ -206,6 +209,9 @@ export const NAV_MENUS: readonly NavMenu[] = [
           item({ label: "Total Inventory", href: "/inventory", permission: P.totalInventory, owner: "M06", aliases: ["stock", "on hand"] }),
           item({ label: "Inventory by Location", href: "/inventory/by-location", permission: P.inventoryByLocation, owner: "M06", aliases: ["bins", "lp"] }),
           atp,
+          // Kit pages live in the Inventory tab strip, so they belong to the Inventory menu (Reports keeps shortcuts).
+          item({ label: "Kit Inventory", href: "/inventory/kits", permission: P.kitInventory, owner: "M08", aliases: ["kit inventory report", "kits"] }),
+          item({ label: "Kit Component Inventory", href: "/inventory/kit-components", permission: P.kitComponents, owner: "M08", aliases: ["kit component inventory availability report", "components"] }),
         ],
       },
       {
@@ -289,6 +295,7 @@ export const NAV_MENUS: readonly NavMenu[] = [
           item({ label: "Channel Sales Report", href: "/reports/channel-sales", permission: P.channelSales, owner: "M13" }),
           shipmentHistory,
           item({ label: "Shortage Report", href: "/jobs/shortage", permission: P.shortage, owner: "M03" }),
+          item({ label: "Order Line Progress", href: "/reports/order-lines", permission: P.shipmentOrders, owner: "M13", aliases: ["order lines", "picked", "packed", "line progress"] }),
         ],
       },
       {
@@ -302,6 +309,14 @@ export const NAV_MENUS: readonly NavMenu[] = [
           item({ label: "Order Inventory", href: "/reports/order-inventory", permission: P.orderInventory, owner: "M13" }),
           item({ label: "Dynamic Replenishment Report", href: "/reports/replenishment", permission: P.replenishmentReport, owner: "M13" }),
           item({ label: "Inventory Snapshot Report", href: "/reports/inventory-snapshot", permission: P.inventorySnapshot, owner: "M13" }),
+        ],
+      },
+      {
+        heading: "Inventory Analysis",
+        icon: "monitoring",
+        items: [
+          item({ label: "Inventory Aging Report", href: "/reports/inventory-aging", permission: "inventory.total_inventory.view", owner: "M13", aliases: ["aging", "slow movers", "stock age"] }),
+          item({ label: "Location Utilization Report", href: "/reports/location-utilization", permission: "settings.locations.view", owner: "M13", aliases: ["capacity", "utilization", "space"] }),
         ],
       },
       {
@@ -344,21 +359,21 @@ export const NAV_MENUS: readonly NavMenu[] = [
         heading: "Labor Analytics",
         icon: "labor",
         items: [
-          item({ label: "Average Task Analysis", href: "/analytics/labor/average-task", permission: P.laborAnalytics, owner: "M13" }),
-          item({ label: "Associate Task Analysis", href: "/analytics/labor/associate-task", permission: P.laborAnalytics, owner: "M13" }),
-          item({ label: "Performance Quadrant Analysis", href: "/analytics/labor/performance-quadrant", permission: P.laborAnalytics, owner: "M13" }),
-          item({ label: "Associate Analysis", href: "/analytics/labor/associate", permission: P.laborAnalytics, owner: "M13" }),
-          item({ label: "Receiving Performance Analysis", href: "/analytics/labor/receiving-performance", permission: P.laborAnalytics, owner: "M13" }),
+          item({ label: "Average Task Analysis", href: "/analytics/labor/average-task", permission: P.laborAnalytics, owner: "M13", app: "labor-analytics" }),
+          item({ label: "Associate Task Analysis", href: "/analytics/labor/associate-task", permission: P.laborAnalytics, owner: "M13", app: "labor-analytics" }),
+          item({ label: "Performance Quadrant Analysis", href: "/analytics/labor/performance-quadrant", permission: P.laborAnalytics, owner: "M13", app: "labor-analytics" }),
+          item({ label: "Associate Analysis", href: "/analytics/labor/associate", permission: P.laborAnalytics, owner: "M13", app: "labor-analytics" }),
+          item({ label: "Receiving Performance Analysis", href: "/analytics/labor/receiving-performance", permission: P.laborAnalytics, owner: "M13", app: "labor-analytics" }),
         ],
       },
       {
         heading: "Operational Analytics",
         icon: "operational",
         items: [
-          item({ label: "Inbound & Inventory Dashboard", href: "/analytics/operational/inbound-inventory", permission: P.operationalAnalytics, owner: "M13" }),
-          item({ label: "Fulfillment Dashboard", href: "/analytics/operational/fulfillment", permission: P.operationalAnalytics, owner: "M13" }),
-          item({ label: "Management Dashboard", href: "/analytics/operational/management", permission: P.operationalAnalytics, owner: "M13" }),
-          item({ label: "Productivity Dashboard", href: "/analytics/operational/productivity", permission: P.operationalAnalytics, owner: "M13" }),
+          item({ label: "Inbound & Inventory Dashboard", href: "/analytics/operational/inbound-inventory", permission: P.operationalAnalytics, owner: "M13", app: "operational-analytics" }),
+          item({ label: "Fulfillment Dashboard", href: "/analytics/operational/fulfillment", permission: P.operationalAnalytics, owner: "M13", app: "operational-analytics" }),
+          item({ label: "Management Dashboard", href: "/analytics/operational/management", permission: P.operationalAnalytics, owner: "M13", app: "operational-analytics" }),
+          item({ label: "Productivity Dashboard", href: "/analytics/operational/productivity", permission: P.operationalAnalytics, owner: "M13", app: "operational-analytics" }),
         ],
       },
     ],
@@ -376,7 +391,7 @@ export const NAV_MENUS: readonly NavMenu[] = [
           item({ label: "Locations", href: "/locations", permission: P.locations, owner: "M10", aliases: ["bins"] }),
           item({ label: "Vendors", href: "/organization/vendors", permission: P.vendors, owner: "M05", aliases: ["suppliers"] }),
           item({ label: "Customers", href: "/organization/customers", permission: P.customers, owner: "M11" }),
-          item({ label: "Retailers", href: "/organization/retailers", permission: P.retailers, owner: "M11", badge: "BETA" }),
+          item({ label: "Retailers", href: "/organization/retailers", permission: P.retailers, owner: "M11" }),
         ],
       },
       {
@@ -402,6 +417,14 @@ export const NAV_MENUS: readonly NavMenu[] = [
           item({ label: "3PL Billing", href: "/billing", permission: P.billing, owner: "M11", aliases: ["invoices", "billing"] }),
           item({ label: "Billing Report", href: "/billing/reports", permission: P.billingReport, owner: "M11" }),
           item({ label: "VAS Operations", href: "/billing/vas", permission: P.vas, owner: "M11", aliases: ["value added services"] }),
+        ],
+      },
+      {
+        heading: "Company",
+        icon: "company",
+        items: [
+          item({ label: "Company Settings", href: "/settings/company", permission: P.companySettings, owner: "M14", aliases: ["company", "security", "email delivery"] }),
+          item({ label: "Apps", href: "/settings/apps", permission: P.apps, owner: "M14", aliases: ["add-ons", "marketplace"] }),
         ],
       },
       {

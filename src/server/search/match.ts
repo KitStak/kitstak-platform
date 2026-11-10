@@ -12,9 +12,32 @@ export function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (ch) => `${LIKE_ESCAPE}${ch}`);
 }
 
-/** `column LIKE '%q%'` (case-insensitive for ASCII in SQLite). */
+/**
+ * A document-code query such as `PO0002`, `so-10916` or `PO 22`: a letter prefix plus a number.
+ * Returns the upper-cased prefix and the number without leading zeros, or null. PURE.
+ */
+export function parseCodeQuery(q: string): { readonly prefix: string; readonly digits: string } | null {
+  const m = /^([A-Za-z]{1,6})[-_ ]?0*(\d{1,12})$/.exec(q.trim());
+  if (!m || !m[1] || m[2] === undefined) return null;
+  return { prefix: m[1].toUpperCase(), digits: m[2] };
+}
+
+/**
+ * Zero-insensitive code prefix: `PO0002` and `PO22` both find `PO002210`, because codes are
+ * zero-padded to different widths than people type them.
+ */
+function codeNumberMatch(column: SQLiteColumn, q: string): SQL | null {
+  const code = parseCodeQuery(q);
+  if (!code) return null;
+  const n = code.prefix.length;
+  return sql`(upper(substr(${column}, 1, ${n})) = ${code.prefix} AND ltrim(substr(${column}, ${n + 1}), '0') LIKE ${`${escapeLike(code.digits)}%`} ESCAPE ${LIKE_ESCAPE})`;
+}
+
+/** `column LIKE '%q%'` (case-insensitive for ASCII in SQLite), plus zero-insensitive code prefixes. */
 export function containsText(column: SQLiteColumn, q: string): SQL {
-  return sql`${column} LIKE ${`%${escapeLike(q)}%`} ESCAPE ${LIKE_ESCAPE}`;
+  const contains = sql`${column} LIKE ${`%${escapeLike(q)}%`} ESCAPE ${LIKE_ESCAPE}`;
+  const code = codeNumberMatch(column, q);
+  return code ? sql`(${contains} OR ${code})` : contains;
 }
 
 /** Sort key: 0 = exact, 1 = prefix, 2 = contains (lower ranks first). */

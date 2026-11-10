@@ -97,8 +97,8 @@ describe("/api/orders grid grammar", () => {
     expect(p.where).toBeDefined();
     expect(p.orderBy).toHaveLength(2);
   });
-  it("rejects unknown filter and sort fields", () => {
-    expect(() => orderGridParams(new URLSearchParams("f.bogus=eq:1"))).toThrow(/Unknown filter field/);
+  it("drops unknown filter fields (logged) and rejects unknown sort fields", () => {
+    expect(orderGridParams(new URLSearchParams("f.bogus=eq:1")).where).toBeUndefined();
     expect(() => orderGridParams(new URLSearchParams("sort=firstSku"))).toThrow(/Cannot sort/);
   });
 });

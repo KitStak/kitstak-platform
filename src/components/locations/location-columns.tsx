@@ -6,7 +6,7 @@ import { Lock } from "lucide-react";
 import { LinkCell, type GridColumnDef } from "@/components/grid";
 import { splitCamel } from "@/lib/grid-defs/facility/common";
 import type { LocationRow } from "@/server/repositories/locations";
-import { AvailabilityPill, Muted, Num, YesNo } from "@/components/facility/facility-shared";
+import { AvailabilityPill, Muted, Num, LockedPill, YesNo } from "@/components/facility/facility-shared";
 
 const text = (v: string | null | undefined) => (v ? v : <Muted />);
 const hidden = { defaultVisible: false } as const;
@@ -31,7 +31,7 @@ export const LOCATION_COLUMNS: GridColumnDef<LocationRow>[] = [
   { id: "replenishmentType", header: "Replenishment type", size: 150, meta: hidden, cell: ({ row }) => text(row.original.replenishmentType) },
   { id: "areaType", header: "Area type", size: 110, cell: ({ row }) => text(row.original.areaType) },
   { id: "assignedMobileCart", header: "Assigned mobile cart", size: 150, meta: hidden, cell: ({ row }) => text(row.original.assignedMobileCart) },
-  { id: "walkingPathPriority", header: "Walking path", size: 110, meta: { align: "right", headerTip: "Pick-path sequence: lower is visited first" }, cell: ({ row }) => <div className="text-right"><Num value={row.original.walkingPathPriority} /></div> },
+  { id: "walkingPathPriority", header: () => <span title="Walking path priority: pick-path sequence, lower is visited first">Walking path</span>, size: 110, meta: { align: "right", label: "Walking path priority" }, cell: ({ row }) => <div className="text-right"><Num value={row.original.walkingPathPriority} /></div> },
   { id: "level", header: "Level", size: 70, meta: hidden, cell: ({ row }) => text(row.original.level) },
   { id: "mezzanine", header: "Mezzanine", size: 100, meta: hidden, cell: ({ row }) => text(row.original.mezzanine) },
   { id: "aisle", header: "Aisle", size: 70, meta: hidden, cell: ({ row }) => text(row.original.aisle) },
@@ -42,7 +42,7 @@ export const LOCATION_COLUMNS: GridColumnDef<LocationRow>[] = [
   { id: "volume", header: "Volume", size: 110, meta: { ...hidden, align: "right" }, cell: ({ row }) => <div className="text-right">{row.original.volume > 0 ? <Num value={row.original.volume} decimals={2} unit={VOLUME_ABBR[row.original.volumeUnit] ?? row.original.volumeUnit} /> : <Muted />}</div> },
   { id: "abcCode", header: "ABC code", size: 90, meta: hidden, cell: ({ row }) => text(row.original.abcCode === "None" ? null : row.original.abcCode) },
   { id: "dedicatedClient", header: "Dedicated client", size: 160, meta: hidden, cell: ({ row }) => text(row.original.dedicatedClient) },
-  { id: "isLocked", header: "Locked", size: 80, meta: hidden, cell: ({ row }) => <YesNo value={row.original.isLocked} /> },
+  { id: "isLocked", header: "Locked", size: 80, meta: hidden, cell: ({ row }) => <LockedPill value={row.original.isLocked} /> },
   { id: "inventoryStatus", header: "Inventory status", size: 130, meta: { clip: false }, cell: ({ row }) => <AvailabilityPill status={row.original.inventoryStatus} /> },
   { id: "preventAllocation", header: "Prevent allocation", size: 140, meta: hidden, cell: ({ row }) => <YesNo value={row.original.preventAllocation} /> },
   { id: "storedUnits", header: "Stored units", size: 110, meta: { ...hidden, align: "right" }, cell: ({ row }) => <div className="text-right"><Num value={row.original.storedUnits} /></div> },

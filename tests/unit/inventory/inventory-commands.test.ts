@@ -99,7 +99,10 @@ describe("Allocated rows", () => {
     // Open SO deep link resolves exactly this order
     const open = openOrdersFor(w.db, auth, { productId: w.productId, warehouseId: w.warehouseId });
     expect(open.map((o) => o.code)).toEqual([order.code]);
-    expect(decodeURIComponent(openOrdersHref(open, { sku: "MLT-WIDGET-01" }))).toBe(`/orders?f.code=in:${order.code}`);
+    const href = new URL(openOrdersHref(open, { sku: "MLT-WIDGET-01" }), "http://x");
+    expect(href.pathname).toBe("/orders");
+    expect(Object.fromEntries(href.searchParams)).toEqual({ "f.sku": "eq:MLT-WIDGET-01", "f.status": `in:${open[0]!.status}` });
+    expect(new URL(openOrdersHref([], { sku: "X", warehouseId: "w1" }), "http://x").searchParams.get("f.status")?.startsWith("in:Open,Shortage,On Hold,")).toBe(true);
     const nonStock = rows.find((r) => r.status !== "Stock");
     if (nonStock) expect(() => changeQuantity(w.db, ctx(), nonStock.id, { mode: "add", qty: 1 })).toThrow(/can't be changed/);
   });
@@ -124,6 +127,14 @@ describe("Transfers", () => {
     expect(() => transferProduct(w.db, ctx(), { inventoryId: b.id, qty: 2, target: { kind: "location", id: strict } }))
       .toThrow("Location MLT1-A-01 allows only 1 SKU (holds MLT-GADGET-02).");
     expect(onHandAt(w.loc.storageA)).toBe(10);
+  });
+
+  it("rejects an over-quantity transfer with the Logiwa copy and leaves stock untouched", () => {
+    const b = stock(21);
+    expect(() => transferProduct(w.db, ctx(), { inventoryId: b.id, qty: 99, target: { kind: "location", id: w.loc.storageB } }))
+      .toThrow("The entered transfer quantity exceeds the existing inventory amount.");
+    expect(onHandAt(w.loc.storageA)).toBe(21);
+    clean();
   });
 
   it("rejects moving to the same place", () => {
@@ -167,6 +178,7 @@ describe("Change attributes", () => {
   });
 
   it("changes the lot on every selected row and reports per-row failures", () => {
+    w.db.update(schema.products).set({ trackLot: true }).where(eq(schema.products.id, w.productId)).run();
     const a = stock(5);
     const b = stock(5, w.loc.storageB);
     const res = changeAttributes(w.db, ctx(), { ids: [a.id, b.id, "missing"], attribute: "lotNumber", value: "LOT-7" });
@@ -221,5 +233,116 @@ describe("Grid reads", () => {
     const none = { ...auth, scope: { warehouseIds: [], clientIds: "all" }, viewScope: { warehouseIds: [], clientIds: "all" } } as unknown as AuthContext;
     expect(listBuckets(w.db, none, q()).total).toBe(0);
     expect(() => getBucketDetail(w.db, none, listBuckets(w.db, auth, q()).rows[0].id)).toThrow();
+  });
+});
+
+describe("count-plan location locks (critic R2 #1)", () => {
+  const lock = (locationId: string) => {
+    const p = w.db.insert(schema.countPlans).values({ code: "KS-LOCK-1", warehouseId: w.warehouseId, scheduledAt: "2026-11-09", lockLocations: true, countType: "Location" as never }).returning().get();
+    w.db.insert(schema.countPlanLines).values({ planId: p.id, locationId }).run();
+    return p;
+  };
+
+  it("blocks Add / Adjust / Remove / header Add / Change Attributes in a locked location, like transfers", () => {
+    const b = stock(21);
+    lock(w.loc.storageA);
+    expect(() => changeQuantity(w.db, ctx(), b.id, { mode: "add", qty: 1 })).toThrow(/locked by count plan KS-LOCK-1/);
+    expect(() => changeQuantity(w.db, ctx(), b.id, { mode: "adjust", qty: 20, reasonId })).toThrow(/locked by count plan/);
+    expect(() => changeQuantity(w.db, ctx(), b.id, { mode: "remove", qty: 1 })).toThrow(/locked by count plan/);
+    expect(() => addInventory(w.db, ctx(), { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 1, packType: "Each" } as never)).toThrow(/locked by count plan/);
+    const res = changeAttributes(w.db, ctx(), { ids: [b.id], attribute: "lotNumber", value: "LOT-9" } as never);
+    expect(res.failed.length).toBe(1);
+    expect(bucket(b.id)?.onHand).toBe(21);
+    expect(listBuckets(w.db, auth, q()).rows.find((r) => r.id === b.id)?.countLockPlan).toBe("KS-LOCK-1");
+    clean();
+  });
+
+  it("leaves other locations writable and exposes no lock", () => {
+    const b = stock(5);
+    lock(w.loc.storageB);
+    expect(changeQuantity(w.db, ctx(), b.id, { mode: "add", qty: 1 }).to).toBe(6);
+    expect(listBuckets(w.db, auth, q()).rows.find((r) => r.id === b.id)?.countLockPlan).toBeNull();
+  });
+});
+
+describe("calendar date validation (round 3)", () => {
+  it("rejects impossible dates and accepts real ones", async () => {
+    const { isValidIsoDate } = await import("@/server/repositories/inventory-commands");
+    expect(isValidIsoDate("2026-13-45")).toBe(false);
+    expect(isValidIsoDate("2026-02-31")).toBe(false);
+    expect(isValidIsoDate("2026-02-29")).toBe(false);
+    expect(isValidIsoDate("2028-02-29")).toBe(true);
+    expect(isValidIsoDate("2026-12-31")).toBe(true);
+    expect(changeAttributesSchema.safeParse({ ids: ["x"], attribute: "expiryDate", value: "2026-13-45" }).success).toBe(false);
+    expect(changeAttributesSchema.safeParse({ ids: ["x"], attribute: "expiryDate", value: "2026-11-30" }).success).toBe(true);
+  });
+});
+
+describe("critic round 2 (parity loop) fixes", () => {
+  const txns = () => w.db.select().from(schema.inventoryTransactions).all();
+
+  it("Remove all units posts −qty, deletes the emptied record and keeps the ledger reconciled", () => {
+    const b = stock(1);
+    const res = changeQuantity(w.db, ctx(), b.id, { mode: "remove", qty: 1, reasonId });
+    expect(res).toMatchObject({ from: 1, to: 0, delta: -1 });
+    expect(bucket(b.id)).toBeUndefined();
+    const t = txns().at(-1);
+    expect(t).toMatchObject({ type: "Inventory Adjustment", uomQty: -1, toInventoryId: b.id, fromInventoryId: null });
+    clean();
+  });
+
+  it("Adjust to 0 succeeds and deletes the record; adjust-down and remove share the sign convention", () => {
+    const a = stock(10);
+    changeQuantity(w.db, ctx(), a.id, { mode: "remove", qty: 2 });
+    changeQuantity(w.db, ctx(), a.id, { mode: "adjust", qty: 6 });
+    const [remove, adjust] = txns().slice(-2);
+    expect(Math.sign(remove.uomQty)).toBe(-1);
+    expect(Math.sign(adjust.uomQty)).toBe(-1);
+    expect(changeQuantity(w.db, ctx(), a.id, { mode: "adjust", qty: 0 }).to).toBe(0);
+    expect(bucket(a.id)).toBeUndefined();
+    clean();
+  });
+
+  it("keeps an emptied bucket that allocations still point at", async () => {
+    const { pruneEmptyBuckets } = await import("@/server/repositories/inventory-commands");
+    const b = stock(4);
+    const order = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 4 }]));
+    allocateOrders(w.db, w.ctx, { orderIds: [order.id], warehouseId: w.warehouseId });
+    // Force an empty-looking row that still has allocation history: pruning must leave it alone.
+    const allocatedBucket = w.db.select().from(schema.inventoryAllocations).all()[0]?.inventoryId ?? b.id;
+    expect(pruneEmptyBuckets(w.db, [allocatedBucket])).toEqual([]);
+    expect(bucket(allocatedBucket)).toBeDefined();
+  });
+
+  it("Transfer Product of the whole row leaves no ghost Stock 0 row behind", () => {
+    const b = stock(5);
+    transferProduct(w.db, ctx(), { inventoryId: b.id, qty: 5, target: { kind: "location", id: w.loc.storageB } });
+    expect(bucket(b.id)).toBeUndefined();
+    expect(onHandAt(w.loc.storageB)).toBe(5);
+    clean();
+  });
+
+  it("validates lot values and refuses lot/expiry on products that don't track them", () => {
+    expect(changeAttributesSchema.safeParse({ ids: ["x"], attribute: "lotNumber", value: "<img src=x onerror=alert(1)>" }).success).toBe(false);
+    expect(changeAttributesSchema.safeParse({ ids: ["x"], attribute: "lotNumber", value: "LOT-2026/01 #4" }).success).toBe(true);
+    const a = stock(5);
+    const res = changeAttributes(w.db, ctx(), { ids: [a.id], attribute: "expiryDate", value: "2027-01-31" });
+    expect(res.failed[0]?.message).toMatch(/doesn't track expiry dates/);
+    expect(bucket(a.id)?.expiryDate ?? null).toBeNull();
+  });
+
+  it("placement check flags a count-locked target and an only-1-SKU location that holds another SKU", async () => {
+    const { placementCheck } = await import("@/server/repositories/inventory-lookups");
+    const strict = w.db.insert(schema.locations).values(locationRow(w.warehouseId, "MLT1-A-01", { onlyOneSku: true })).returning().get().id;
+    stock(3, strict, w.product2Id);
+    expect(placementCheck(w.db, auth, { kind: "location", id: strict, productIds: [w.productId] }).blocking).toBe("Location MLT1-A-01 allows only 1 SKU (holds MLT-GADGET-02).");
+    expect(placementCheck(w.db, auth, { kind: "location", id: strict, productIds: [w.product2Id] }).blocking).toBeNull();
+    stock(2, w.loc.storageB);
+    const p = w.db.insert(schema.countPlans).values({ code: "KS-LOCK-2", warehouseId: w.warehouseId, scheduledAt: "2026-11-09", lockLocations: true, countType: "Location" as never }).returning().get();
+    w.db.insert(schema.countPlanLines).values({ planId: p.id, locationId: w.loc.storageB }).run();
+    const locked = placementCheck(w.db, auth, { kind: "location", id: w.loc.storageB, productIds: [w.productId] });
+    expect(locked).toMatchObject({ countLockPlan: "KS-LOCK-2" });
+    expect(locked.blocking).toMatch(/locked by count plan KS-LOCK-2/);
+    expect(locationSummary(w.db, auth, w.loc.storageB).lockMessage).toMatch(/KS-LOCK-2/);
   });
 });

@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 /**
  * Status pill color maps (BUILD_PLAN 0.5). Logiwa semantics in the KitStaks palette.
  * Every status in the product renders through `<StatusPill domain=… status=…>` using
@@ -47,18 +49,19 @@ export const TONE_ACCENTS: Readonly<Partial<Record<ToneName, string>>> = {
 
 type StatusMap = Readonly<Record<string, ToneName>>;
 
+// Logiwa shipment-order palette: Open green, every in-process status blue (#0D36A3 on
+// #D5E5F2), Ready to Ship purple, Shortage rust, On Hold slate, Cancelled red.
 const SHIPMENT_ORDER: StatusMap = {
   open: "green",
-  // Queue states vs in-progress states vs loading are told apart at a glance.
-  "ready to pick": "readyBlue",
-  "picking started": "indigo",
-  "ready to pack": "readyBlue",
-  "packing started": "indigo",
-  "ready to sort": "readyBlue",
-  "sorting started": "indigo",
-  "loading started": "teal",
+  "ready to pick": "blue",
+  "picking started": "blue",
+  "ready to pack": "blue",
+  "packing started": "blue",
+  "ready to sort": "blue",
+  "sorting started": "blue",
+  "ready to load": "blue",
+  "loading started": "blue",
   "ready to ship": "purple",
-  "ready to load": "purple",
   shipped: "green",
   "partially shipped": "green",
   delivered: "green",
@@ -73,9 +76,10 @@ const COUNT: StatusMap = {
   pending: "grey",
   "ready to count": "blue",
   "count started": "blue",
-  "count completed": "green",
+  // Counted-but-not-posted, posted and superseded must read differently.
+  "count completed": "teal",
   "inventory updated": "green",
-  "recount created": "green",
+  "recount created": "purple",
   cancelled: "red",
 };
 // "Started" is blue everywhere (PO, job, wave, return) so one word means one colour.
@@ -91,7 +95,7 @@ const SHIPMENT_PLAN: StatusMap = {
 const EOD: StatusMap = { open: "teal", closed: "green" };
 const LABEL_TYPE: StatusMap = { shipping: "blue", return: "purple" };
 const EXPORT: StatusMap = { queued: "grey", started: "blue", processing: "blue", completed: "exportDone", error: "red", failed: "red" };
-const WORK_ORDER: StatusMap = { open: "green", "in process": "blue", completed: "green", shortage: "shortage", cancelled: "red" };
+const WORK_ORDER: StatusMap = { open: "teal", "in process": "blue", completed: "green", shortage: "shortage", cancelled: "red" };
 const WAVE: StatusMap = {
   pending: "grey",
   "preparing for optimization": "blue",
@@ -104,7 +108,10 @@ const WAVE: StatusMap = {
 };
 const INTEGRATION: StatusMap = {
   successful: "green",
-  "no data": "red",
+  // A run that found nothing to download is not a failure.
+  "no data": "grey",
+  unauthorized: "red",
+  "already processing": "blue",
   error: "red",
   "partially successful": "amber",
   failed: "red",
@@ -166,6 +173,14 @@ export function statusToneName(status: string | null | undefined, domain: Status
 
 export function statusTone(status: string | null | undefined, domain: StatusDomain = "generic"): StatusTone {
   return TONES[statusToneName(status, domain)];
+}
+
+/**
+ * Inline style for a pill. Carries `--pill-fg` so the dark theme (globals.css) can swap the
+ * light pastel fill for a translucent tint of the same hue with a lifted foreground.
+ */
+export function pillStyle(tone: StatusTone): CSSProperties {
+  return { backgroundColor: tone.bg, color: tone.fg, "--pill-fg": tone.fg } as CSSProperties;
 }
 
 /** Receiving difference pill: negative red-orange, positive green, zero grey. */

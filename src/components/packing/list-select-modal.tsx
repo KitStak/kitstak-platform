@@ -5,7 +5,8 @@
  * filters (order code, client, job, note, expected ship date). Pick one → Start Packing.
  */
 import * as React from "react";
-import { PackageOpen } from "lucide-react";
+import { Lock, PackageOpen } from "lucide-react";
+import { DisabledReason } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
@@ -19,6 +20,18 @@ import { useMe } from "@/lib/permissions-client";
 import { useApiQuery } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
 import type { ReadyOrderRow } from "./pack-types";
+import { DatePicker } from "@/components/ui/date-picker";
+
+/** YYYY-MM-DD (local) ⇄ Date for the shared DatePicker. */
+function dayToDate(day: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+}
+function dateToDay(d: Date | null): string {
+  if (!d) return "";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
 function useDebounced<T>(value: T, ms = 250): T {
   const [v, setV] = React.useState(value);
@@ -29,7 +42,7 @@ function useDebounced<T>(value: T, ms = 250): T {
   return v;
 }
 
-export function ListSelectModal({ open, onOpenChange, warehouseId, onStart }: { readonly open: boolean; readonly onOpenChange: (o: boolean) => void; readonly warehouseId: string; readonly onStart: (orderCode: string) => void }) {
+export function ListSelectModal({ open, onOpenChange, warehouseId, stationId, onStart }: { readonly open: boolean; readonly onOpenChange: (o: boolean) => void; readonly warehouseId: string; readonly stationId?: string; readonly onStart: (orderCode: string) => void }) {
   const fmt = useFormat();
   const me = useMe();
   const clients = me.data?.data.contextOptions.clients ?? [];
@@ -37,6 +50,7 @@ export function ListSelectModal({ open, onOpenChange, warehouseId, onStart }: { 
   const [selected, setSelected] = React.useState<string | null>(null);
   const df = useDebounced(f);
   const query: Record<string, string> = { warehouseId };
+  if (stationId) query.stationId = stationId;
   if (df.q) query.q = df.q;
   if (df.clientId) query.clientId = df.clientId;
   if (df.jobCode) query.jobCode = df.jobCode;
@@ -45,6 +59,9 @@ export function ListSelectModal({ open, onOpenChange, warehouseId, onStart }: { 
   const list = useApiQuery<readonly ReadyOrderRow[]>(["packing", "ready", query], open ? "/api/packing/orders" : null, { query, staleTime: 0 });
   const rows = list.data?.data ?? [];
   const chosen = rows.find((r) => r.id === selected) ?? null;
+  const lockedCount = rows.filter((r) => r.countLock).length;
+  const startReason = !chosen ? "Select an order" : chosen.countLock ? chosen.countLock.reason : null;
+  const start = (r: ReadyOrderRow) => { if (!r.countLock) onStart(r.code); };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -56,7 +73,7 @@ export function ListSelectModal({ open, onOpenChange, warehouseId, onStart }: { 
             <Select aria-label="Client" value={f.clientId} clearable options={clients.map((c) => ({ value: c.id, label: c.name }))} onChange={(v) => setF({ ...f, clientId: v })} placeholder="All clients" />
             <TextField aria-label="Job code" placeholder="Job code" value={f.jobCode} onChange={(e) => setF({ ...f, jobCode: e.target.value })} />
             <TextField aria-label="Note" placeholder="Note contains" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
-            <TextField aria-label="Expected ship date" type="date" value={f.expectedShipDate} onChange={(e) => setF({ ...f, expectedShipDate: e.target.value })} />
+            <DatePicker aria-label="Expected ship date" clearable placeholder="Expected ship date" value={dayToDate(f.expectedShipDate)} onChange={(d) => setF({ ...f, expectedShipDate: dateToDay(d) })} />
           </div>
           {list.isPending ? <div className="space-y-1.5">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-10" />)}</div>
             : list.error ? <Callout variant="error" title="Could not load orders" action={<Button size="sm" onClick={() => void list.refetch()}>Retry</Button>}>{list.error.message}</Callout>
@@ -69,11 +86,12 @@ export function ListSelectModal({ open, onOpenChange, warehouseId, onStart }: { 
                   </thead>
                   <tbody>
                     {rows.map((r) => (
-                      <tr key={r.id} role="radio" aria-checked={selected === r.id} tabIndex={0} onClick={() => setSelected(r.id)} onDoubleClick={() => onStart(r.code)}
-                        onKeyDown={(e) => { if (e.key === " ") { e.preventDefault(); setSelected(r.id); } if (e.key === "Enter") onStart(r.code); }}
+                      <tr key={r.id} role="radio" aria-checked={selected === r.id} tabIndex={0} onClick={() => setSelected(r.id)} onDoubleClick={() => start(r)}
+                        onKeyDown={(e) => { if (e.key === " ") { e.preventDefault(); setSelected(r.id); } if (e.key === "Enter") start(r); }}
                         className={cn("cursor-pointer border-b border-border last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40", selected === r.id ? "bg-primary-soft" : "hover:bg-surface-sunken")}>
                         <td className="px-3 py-2"><span className={cn("block h-4 w-4 rounded-full border-2", selected === r.id ? "border-primary bg-primary shadow-[inset_0_0_0_2px_white]" : "border-border-strong")} aria-hidden /></td>
-                        <td className="px-3 py-2 font-semibold">{r.code}{r.priority === "High" ? <span className="ml-1.5 rounded bg-danger-soft px-1 text-[10px] font-semibold text-danger">High</span> : null}</td>
+                        <td className="px-3 py-2 font-semibold">{r.code}{r.priority === "High" ? <span className="ml-1.5 rounded bg-danger-soft px-1 text-[10px] font-semibold text-danger">High</span> : null}
+                          {r.countLock ? <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-danger-soft px-1.5 py-0.5 text-[10px] font-semibold text-danger" title={r.countLock.reason} data-testid="list-lock-pill"><Lock className="h-3 w-3" aria-hidden />Locked by {r.countLock.planCode}</span> : null}</td>
                         <td className="px-3 py-2">{r.clientName}</td>
                         <td className="px-3 py-2">{r.customerName}</td>
                         <td className="px-3 py-2">{r.jobCode ?? "—"}</td>
@@ -86,11 +104,14 @@ export function ListSelectModal({ open, onOpenChange, warehouseId, onStart }: { 
                 </table>
               </div>
             )}
+          {chosen?.countLock ? <Callout variant="error" title={`Locked by count plan ${chosen.countLock.planCode}`}>{chosen.countLock.reason}</Callout> : null}
         </DialogBody>
         <DialogFooter>
-          <span className="mr-auto text-[12px] text-secondary">{rows.length} order{rows.length === 1 ? "" : "s"}</span>
+          <span className="mr-auto text-[12px] text-secondary" aria-live="polite">{list.isPending ? "Loading orders…" : list.error ? "Not loaded" : `${rows.length} order${rows.length === 1 ? "" : "s"}${lockedCount ? ` · ${lockedCount} count-locked` : ""}${list.isFetching ? " · updating…" : ""}`}</span>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button variant="primary" disabled={!chosen} onClick={() => chosen && onStart(chosen.code)} title={chosen ? undefined : "Select an order"}>Start packing</Button>
+          <DisabledReason reason={startReason}>
+            <Button variant="primary" disabled={Boolean(startReason)} data-testid="list-start" onClick={() => chosen && start(chosen)}>Start packing</Button>
+          </DisabledReason>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -12,7 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { DisabledReason } from "@/components/ui/tooltip";
-import { UserPicker } from "@/components/shared";
+import { toOption } from "@/components/shared";
+import { parseList, pickerItemSchema } from "@/components/shared/contracts";
+import { Combobox } from "@/components/ui/combobox";
+import { apiFetch } from "@/lib/api-client";
 import { labelClass } from "@/components/ui/control-styles";
 import { JOB_PRIORITY_CHOICES } from "@/lib/grid-defs/jobs/jobs";
 
@@ -48,10 +51,11 @@ export function DifferentWarehousesDialog({ open, onClose, noun = "jobs" }: { re
 }
 
 const PRIORITY_COPY: Readonly<Record<(typeof JOB_PRIORITY_CHOICES)[number], { readonly hint: string; readonly tone: string }>> = {
-  None: { hint: "No priority tag", tone: "text-secondary" },
+  None: { hint: "Default order, no tag", tone: "text-secondary" },
   Low: { hint: "Picked after everything else", tone: "text-[#2E7D32]" },
   Medium: { hint: "Ahead of low and untagged jobs", tone: "text-[#B26A00]" },
   High: { hint: "Pickers see these first", tone: "text-[#E55B56]" },
+  Urgent: { hint: "Ahead of every other job", tone: "text-[#A13406]" },
 };
 
 export function UpdatePriorityModal({ open, count, onClose, onSave }: { readonly open: boolean; readonly count: number; readonly onClose: () => void; readonly onSave: (priority: string) => Promise<void> }) {
@@ -72,12 +76,12 @@ export function UpdatePriorityModal({ open, count, onClose, onSave }: { readonly
   };
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? undefined : onClose())}>
-      <DialogContent size="md">
+      <DialogContent size="lg">
         <AttentionBand title="Attention" />
         <DialogBody className="flex flex-col gap-3">
           <p className="text-[13px] leading-5 text-body">Previously assigned/selected priorities will change after your new priority selection.</p>
           <p className="text-[13px] font-semibold text-foreground">Set priority for {count === 1 ? "the selected job" : `${count} selected jobs`}.</p>
-          <div role="radiogroup" aria-label="Priority" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div role="radiogroup" aria-label="Priority" className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {JOB_PRIORITY_CHOICES.map((p) => {
               const active = choice === p;
               const Icon = p === "High" ? ArrowUp : p === "None" ? Minus : null;
@@ -124,6 +128,14 @@ export function AssignUserModal({ open, warehouseId, noun, onClose, onAssign }: 
   React.useEffect(() => {
     if (open) setUserId(null);
   }, [open]);
+  const loadOptions = React.useCallback(
+    async (q: string, signal: AbortSignal) => {
+      if (!warehouseId) return [];
+      const data = await apiFetch<unknown>("/api/jobs/assignees", { query: { warehouseId, q, limit: 50 }, signal });
+      return parseList(pickerItemSchema, data).map(toOption);
+    },
+    [warehouseId],
+  );
   const assign = async () => {
     if (!userId) return;
     setSaving(true);
@@ -140,8 +152,19 @@ export function AssignUserModal({ open, warehouseId, noun, onClose, onAssign }: 
         <DialogHeader title="Assign user" description={`Assign a user to the selected ${noun}.`} />
         <DialogBody className="flex flex-col gap-1.5">
           <label className={labelClass} htmlFor="assign-user">User <span className="text-danger">*</span></label>
-          <UserPicker id="assign-user" warehouseId={warehouseId} value={userId} onChange={(v) => setUserId(v)} placeholder="Search user" />
-          <p className="text-[11px] text-faint">Only users with access to this warehouse are listed.</p>
+          <Combobox
+            id="assign-user"
+            aria-label="User"
+            loadOptions={loadOptions}
+            minChars={3}
+            value={userId}
+            onChange={(v) => setUserId(v)}
+            placeholder="Search user (at least 3 characters)"
+            emptyText="No eligible user matches"
+            disabled={!warehouseId}
+            clearable
+          />
+          <p className="text-[11px] text-faint">Only active users of this warehouse who can execute tasks are listed.</p>
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>

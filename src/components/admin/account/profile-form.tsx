@@ -80,9 +80,9 @@ export function ProfileForm({ profile }: { readonly profile: ProfileData }) {
       <dl className="grid grid-cols-[140px_minmax(0,1fr)] gap-y-2 border-t border-border pt-4 text-[13px]">
         <dt className="text-secondary">Warehouses</dt><dd className="text-foreground">{profile.warehouses.join(", ") || "None assigned"}</dd>
         <dt className="text-secondary">Clients</dt><dd className="text-foreground">{profile.allClients ? "All clients" : `${profile.clientCount} assigned`}</dd>
-        <dt className="text-secondary">Last sign-in</dt><dd className="text-foreground">{profile.lastLoginAt ? fmt.dateTime(profile.lastLoginAt) : "—"}</dd>
+        <dt className="text-secondary">Last sign-in</dt><dd className="text-foreground">{profile.lastLoginAt ? fmt.gridDateTime(profile.lastLoginAt) : "—"}</dd>
         <dt className="text-secondary">Password changed</dt>
-        <dd className="text-foreground">{profile.passwordChangedAt ? fmt.dateTime(profile.passwordChangedAt) : "Change required"} · <Link href="/account/password" className="font-medium text-primary hover:underline">Change password</Link></dd>
+        <dd className="text-foreground">{profile.passwordChangedAt ? fmt.gridDateTime(profile.passwordChangedAt) : "Change required"} · <Link href="/account/password" className="font-medium text-primary hover:underline">Change password</Link></dd>
       </dl>
       <p className="text-[12px] text-faint">Roles, warehouses and client access are managed by an administrator in Users & Roles.</p>
     </div>

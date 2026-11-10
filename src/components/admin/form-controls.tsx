@@ -25,7 +25,7 @@ interface Base<T extends FieldValues> {
   readonly className?: string;
 }
 
-export function TextInput<T extends FieldValues>({ placeholder, maxLength, showCount, transform, ...p }: Base<T> & { readonly placeholder?: string; readonly maxLength?: number; readonly showCount?: boolean; readonly transform?: (v: string) => string }) {
+export function TextInput<T extends FieldValues>({ placeholder, maxLength, showCount, transform, type, autoComplete, inputMode, ...p }: Base<T> & { readonly placeholder?: string; readonly maxLength?: number; readonly showCount?: boolean; readonly transform?: (v: string) => string; readonly type?: "text" | "email" | "tel" | "url"; readonly autoComplete?: string; readonly inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"] }) {
   return (
     <FormField<T> {...p}>
       {(c) => (
@@ -42,6 +42,9 @@ export function TextInput<T extends FieldValues>({ placeholder, maxLength, showC
           aria-describedby={c["aria-describedby"]}
           aria-required={c["aria-required"]}
           placeholder={placeholder}
+          type={type}
+          autoComplete={autoComplete}
+          inputMode={inputMode}
           maxLength={maxLength}
           showCount={showCount && Boolean(maxLength)}
         />
@@ -132,7 +135,7 @@ export function ComboField<T extends FieldValues>({ options, placeholder, onValu
 export function YesNoField<T extends FieldValues>(p: Base<T>) {
   return (
     <FormField<T> {...p}>
-      {(c) => <YesNoToggle id={c.id} value={(c.value as boolean | null) ?? false} onChange={c.onChange} disabled={c.disabled} ariaLabel={typeof p.label === "string" ? p.label : undefined} aria-invalid={c["aria-invalid"]} />}
+      {(c) => <YesNoToggle id={c.id} value={(c.value as boolean | null) ?? false} onChange={c.onChange} disabled={c.disabled} className="grid w-32 grid-cols-2 self-start justify-self-start" ariaLabel={typeof p.label === "string" ? p.label : undefined} aria-invalid={c["aria-invalid"]} />}
     </FormField>
   );
 }

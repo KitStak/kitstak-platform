@@ -1,4 +1,4 @@
-/** `GET /api/counts/[id]/sheet` — countable lines + expected stock. `POST` — submit one line (executes its Count task). */
+/** `GET /api/counts/[id]/sheet` — countable lines + expected stock (orphaned lines carry no task). `POST` — submit one line (executes its Count task). */
 import { defineRoute } from "@/server/api/define-route";
 import { COUNT_ANY_VIEW, COUNT_EXECUTE_PERMISSIONS } from "@/lib/grid-defs/counts/count-grids";
 import { resolvePlanId } from "@/server/repositories/counts-plans";

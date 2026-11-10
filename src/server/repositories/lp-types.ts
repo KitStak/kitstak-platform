@@ -13,7 +13,8 @@ import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
 import { round } from "@/lib/grid-defs/facility/common";
 import { LP_TYPE_FIELDS, LP_TYPE_SEARCH_FIELDS, LP_TYPE_SORT_FIELDS, lpNumberPreview, type LpTypeSave } from "@/lib/grid-defs/facility/lp-types";
-import { assertFound, assertVersion, assertWarehouseInScope, compileGrid, domainCtxOf, duplicateError, listScope, logCreate, logDelete, logUpdate, resolveIds, type Actor, type GridBinding, qc } from "./locations-shared";
+import { assertFound, assertVersion, assertWarehouseInScope, compileGrid, domainCtxOf, duplicateError, listScope, logCreate, logDelete, logUpdate, resolveIds, type Actor, type GridBinding, qc, flattenCustomFields } from "./locations-shared";
+import { customFieldSql } from "./custom-field-sql";
 
 const t = s.lpTypes;
 const ENTITY = "lp_type";
@@ -38,8 +39,18 @@ export const LP_TYPE_SQL: Readonly<Record<string, SQL>> = {
   useForAiJob: sql`${t.useForAiJob}`,
   onlyOneSku: sql`${t.onlyOneSku}`,
   onlyOneClient: sql`${t.onlyOneClient}`,
+  onlyOneExpiry: sql`${t.onlyOneExpiry}`,
+  onlyOneProductionDate: sql`${t.onlyOneProductionDate}`,
+  onlyOneLot: sql`${t.onlyOneLot}`,
+  onlyOneOrder: sql`${t.onlyOneOrder}`,
+  onlyOneJob: sql`${t.onlyOneJob}`,
+  dimensionUnit: sql`${t.dimensionUnit}`,
+  weightUnit: sql`${t.weightUnit}`,
+  volumeUnit: sql`${t.volumeUnit}`,
+  maxVolume: sql`${t.maxVolume}`,
   lpCount: lpCountSql,
   createdAt: sql`${t.createdAt}`,
+  ...customFieldSql(t.customFields),
 };
 
 const BINDING: GridBinding = {
@@ -49,7 +60,7 @@ const BINDING: GridBinding = {
 
 const BOOLS = ["onlyOneExpiry", "onlyOneProductionDate", "onlyOneLot", "onlyOneSku", "onlyOneClient", "onlyOneOrder", "onlyOneJob", "suitableForParentLp", "useForAiJob"] as const;
 
-export type LpTypeRow = Omit<typeof t.$inferSelect, "customFields" | "createdBy" | "updatedBy"> & {
+export type LpTypeRow = Omit<typeof t.$inferSelect, "createdBy" | "updatedBy"> & {
   readonly warehouseCode: string;
   readonly lpCount: number;
   readonly occupiedCount: number;
@@ -58,8 +69,8 @@ export type LpTypeRow = Omit<typeof t.$inferSelect, "customFields" | "createdBy"
 
 export function listLpTypes(db: AppDb, auth: AuthContext, query: GridQuery): { rows: LpTypeRow[]; total: number } {
   const grid = compileGrid(BINDING, query, [listScope(t, auth)]);
-  const { customFields: _cf, createdBy: _cb, updatedBy: _ub, ...cols } = getTableColumns(t);
-  void _cf; void _cb; void _ub;
+  const { createdBy: _cb, updatedBy: _ub, ...cols } = getTableColumns(t);
+  void _cb; void _ub;
   const result = paginate(
     db.select({ ...cols, warehouseCode: warehouseCodeSql, lpCount: lpCountSql, occupiedCount: occupiedSql }).from(t).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
     () => db.select({ n: sql<number>`count(*)` }).from(t).where(grid.where).get()?.n ?? 0,
@@ -101,6 +112,7 @@ function columnsFor(input: LpTypeSave) {
     onlyOneExpiry: input.onlyOneExpiry, onlyOneProductionDate: input.onlyOneProductionDate, onlyOneLot: input.onlyOneLot,
     onlyOneSku: input.onlyOneSku, onlyOneClient: input.onlyOneClient, onlyOneOrder: input.onlyOneOrder, onlyOneJob: input.onlyOneJob,
     suitableForParentLp: input.suitableForParentLp, useForAiJob: input.useForAiJob,
+    customFields: input.customFields,
   };
 }
 
@@ -118,8 +130,8 @@ function assertPrefixFree(db: AppDb, warehouseId: string, prefix: string, except
 function display(db: AppDb, row: typeof t.$inferSelect): Record<string, unknown> {
   const wh = resolveIds(db, "warehouses", [row.warehouseId]);
   const { id: _i, warehouseId, customFields: _c, nextSequence: _n, createdAt: _a, createdBy: _b, updatedAt: _u, updatedBy: _ub, version: _v, ...rest } = row;
-  void _i; void _c; void _n; void _a; void _b; void _u; void _ub; void _v;
-  return { ...rest, warehouse: wh.get(warehouseId) ?? "" };
+  void _i; void _n; void _a; void _b; void _u; void _ub; void _v;
+  return { ...rest, ...flattenCustomFields(_c), warehouse: wh.get(warehouseId) ?? "" };
 }
 
 export function createLpType(tx: AppDb, auth: AuthContext, actor: Actor, input: LpTypeSave): { id: string; code: string } {
@@ -152,8 +164,14 @@ export function updateLpType(tx: AppDb, auth: AuthContext, actor: Actor, id: str
 
 /** Why an LP type can't be deleted, or null. */
 export function lpTypeDeleteBlocker(db: AppDb, id: string): string | null {
-  const lps = db.select({ n: sql<number>`count(*)` }).from(s.licensePlates).where(eq(s.licensePlates.lpTypeId, id)).get()?.n ?? 0;
-  if (lps > 0) return `has ${lps.toLocaleString("en-US")} LP ${lps === 1 ? "number" : "numbers"}`;
+  const counts = db.select({ n: sql<number>`count(*)`, voided: sql<number>`COALESCE(SUM(CASE WHEN ${s.licensePlates.status} = 'Removed' THEN 1 ELSE 0 END), 0)` }).from(s.licensePlates).where(eq(s.licensePlates.lpTypeId, id)).get();
+  const lps = counts?.n ?? 0;
+  if (lps > 0) {
+    const voided = counts?.voided ?? 0;
+    const base = `has ${lps.toLocaleString("en-US")} LP ${lps === 1 ? "number" : "numbers"}`;
+    if (voided === lps) return `${base}, voided but kept for their stock history`;
+    return voided > 0 ? `${base} (${voided} voided); delete the unused ones from LP Numbers first` : `${base}; delete the unused ones from LP Numbers first`;
+  }
   const caps = db.select({ n: sql<number>`count(*)` }).from(s.locationLpCapacity).where(eq(s.locationLpCapacity.lpTypeId, id)).get()?.n ?? 0;
   if (caps > 0) return `is used by ${caps} location LP ${caps === 1 ? "capacity" : "capacities"}`;
   return null;
@@ -166,7 +184,7 @@ export function deleteLpTypes(tx: AppDb, auth: AuthContext, actor: Actor, ids: r
     const reason = lpTypeDeleteBlocker(inner, id);
     if (reason) throw new AppError("INVALID_STATE", `${row.code} ${reason}`);
     inner.delete(t).where(eq(t.id, id)).run();
-    logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.code });
+    logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.code, warehouseId: row.warehouseId });
   });
 }
 

@@ -3,16 +3,17 @@
  * cart, detail (cells with their current orders), create/edit (cart + cell list), duplicate,
  * guarded delete (only Available carts) and label records (cart and cell barcodes).
  */
-import { and, asc, eq, getTableColumns, inArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, notInArray, sql, type SQL } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import { AppError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
 import * as s from "@/server/db/schema";
 import { runBulk } from "@/server/domain/bulk";
+import { assignJobToCart, CART_RELEASED_ORDER_STATUSES, releaseCart, type AssignJobResult } from "@/server/domain/mobile-cart-cells";
 import type { BulkResult } from "@/server/domain/types";
 import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
-import { buildCells, cellBarcode, MOBILE_CART_FIELDS, MOBILE_CART_SEARCH_FIELDS, MOBILE_CART_SORT_FIELDS, type MobileCartSave } from "@/lib/grid-defs/facility/mobile-carts";
+import { buildCells, cellBarcode, cellDisplayName, MOBILE_CART_FIELDS, MOBILE_CART_SEARCH_FIELDS, MOBILE_CART_SORT_FIELDS, type MobileCartSave } from "@/lib/grid-defs/facility/mobile-carts";
 import { assertFound, assertVersion, assertWarehouseInScope, compileGrid, domainCtxOf, duplicateError, listScope, logCreate, logDelete, logUpdate, resolveIds, type Actor, type GridBinding, qc } from "./locations-shared";
 
 const t = s.mobileCarts;
@@ -112,11 +113,37 @@ export function getMobileCart(db: AppDb, auth: AuthContext, id: string) {
   const cells = db
     .select({ id: s.mobileCartCells.id, level: s.mobileCartCells.level, column: s.mobileCartCells.column, barcode: s.mobileCartCells.barcode, orderCode: s.shipmentOrders.code })
     .from(s.mobileCartCells)
-    .leftJoin(s.shipmentOrders, eq(s.shipmentOrders.id, s.mobileCartCells.orderId))
+    // A cell whose order already left the cart (packed, shipped, cancelled) reads as free.
+    .leftJoin(s.shipmentOrders, and(eq(s.shipmentOrders.id, s.mobileCartCells.orderId), notInArray(s.shipmentOrders.status, [...CART_RELEASED_ORDER_STATUSES])))
     .where(eq(s.mobileCartCells.cartId, id))
     .orderBy(asc(s.mobileCartCells.level), asc(s.mobileCartCells.column))
     .all();
-  return { ...row, cells };
+  return { ...row, cells, orders: cartOrders(db, id, cells) };
+}
+
+/**
+ * Orders the open job(s) on this cart are working (critic R5: an occupied cart showed every cell
+ * "Empty" with no order view). The cell comes from the cell's own order link, else from the job's
+ * tote/cell scan (matched by barcode); null = not sorted into a cell yet.
+ */
+function cartOrders(db: AppDb, cartId: string, cells: readonly { readonly barcode: string; readonly orderCode: string | null }[]) {
+  const rows = db.all<{ orderId: string; orderCode: string; jobId: string; jobCode: string; toteOrCell: string | null; cellBarcode: string | null; planned: number; picked: number; openTasks: number }>(sql`
+    SELECT so.id AS orderId, so.code AS orderCode, j.id AS jobId, j.code AS jobCode, jo.tote_or_cell AS toteOrCell,
+      (SELECT c.barcode FROM mobile_cart_cells c WHERE c.cart_id = ${cartId} AND c.order_id = so.id LIMIT 1) AS cellBarcode,
+      COALESCE((SELECT SUM(tk.planned_qty) FROM tasks tk WHERE tk.job_id = j.id AND tk.order_id = so.id AND tk.status <> 'Cancelled'), 0) AS planned,
+      COALESCE((SELECT SUM(tk.actual_qty) FROM tasks tk WHERE tk.job_id = j.id AND tk.order_id = so.id AND tk.status <> 'Cancelled'), 0) AS picked,
+      (SELECT COUNT(*) FROM tasks tk WHERE tk.job_id = j.id AND tk.order_id = so.id AND tk.status NOT IN ('Completed','Cancelled')) AS openTasks
+    FROM jobs j
+    JOIN job_orders jo ON jo.job_id = j.id
+    JOIN shipment_orders so ON so.id = jo.order_id
+    WHERE (j.mobile_cart_id = ${cartId} OR j.id = (SELECT current_job_id FROM mobile_carts WHERE id = ${cartId})) AND j.status IN ${OPEN_JOB}
+    ORDER BY so.code
+    LIMIT 500`);
+  const byBarcode = new Set(cells.map((c) => c.barcode.toUpperCase()));
+  return rows.map((r) => {
+    const scanned = r.toteOrCell && byBarcode.has(r.toteOrCell.toUpperCase()) ? r.toteOrCell.toUpperCase() : null;
+    return { ...r, cell: r.cellBarcode ?? scanned, tote: r.toteOrCell && !scanned ? r.toteOrCell : null };
+  });
 }
 
 export type MobileCartDetail = ReturnType<typeof getMobileCart>;
@@ -245,7 +272,7 @@ export function deleteMobileCarts(tx: AppDb, auth: AuthContext, actor: Actor, id
     const referenced = inner.select({ n: sql<number>`count(*)` }).from(s.jobs).where(eq(s.jobs.mobileCartId, id)).get()?.n ?? 0;
     if (referenced > 0) inner.update(s.jobs).set({ mobileCartId: null }).where(eq(s.jobs.mobileCartId, id)).run();
     inner.delete(t).where(eq(t.id, id)).run();
-    logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.code });
+    logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.code, warehouseId: row.warehouseId });
   });
 }
 
@@ -265,7 +292,7 @@ export function mobileCartLabelRecords(db: AppDb, auth: AuthContext, ids: readon
     if (include !== "cells") out.push({ code: cart.code, ...(cart.description ? { name: cart.description } : {}), ...(cart.cartType ? { cartType: cart.cartType } : {}) });
     if (include === "carts") continue;
     for (const cell of cellsOf(db, cart.id)) {
-      out.push({ code: cell.barcode, name: `${cart.code} · Level ${String.fromCharCode(64 + cell.level)} · Column ${cell.column}`, ...(cart.cartType ? { cartType: cart.cartType } : {}) });
+      out.push({ code: cell.barcode, name: `${cart.code} · Cell ${cellDisplayName(cell.level, cell.column)}`, ...(cart.cartType ? { cartType: cart.cartType } : {}) });
     }
   }
   return out;
@@ -273,3 +300,34 @@ export function mobileCartLabelRecords(db: AppDb, auth: AuthContext, ids: readon
 
 /** Re-exported for the export provider and tests. */
 export const MOBILE_CART_COLUMNS = getTableColumns(t);
+
+/* ---------------- put-to-cart (REQ-R10-6) ---------------- */
+
+/** Open picking jobs of the cart's warehouse that could take this cart (for the drawer's Assign job picker). */
+export function cartJobCandidates(db: AppDb, auth: AuthContext, cartId: string) {
+  const cart = loadMobileCart(db, auth, cartId);
+  return db.all<{ id: string; code: string; status: string; jobType: string | null; orderCount: number; cartCode: string | null }>(sql`
+    SELECT j.id, j.code, j.status, j.job_type AS jobType,
+      (SELECT COUNT(*) FROM job_orders jo WHERE jo.job_id = j.id) AS orderCount,
+      (SELECT m.code FROM mobile_carts m WHERE m.id = j.mobile_cart_id) AS cartCode
+    FROM jobs j
+    WHERE j.warehouse_id = ${cart.warehouseId} AND j.operation_type = 'Picking' AND j.status IN ${OPEN_JOB}
+      AND (j.mobile_cart_id IS NULL OR j.mobile_cart_id = ${cart.id})
+    ORDER BY j.created_at DESC
+    LIMIT 100`);
+}
+
+/** Puts an open picking job on the cart; each order gets a cell (domain `assignJobToCart`). */
+export function assignCartJob(db: AppDb, auth: AuthContext, actor: Actor, cartId: string, jobId: string): AssignJobResult {
+  const cart = loadMobileCart(db, auth, cartId);
+  const job = db.select({ warehouseId: s.jobs.warehouseId }).from(s.jobs).where(eq(s.jobs.id, jobId)).get();
+  if (!job) throw new AppError("NOT_FOUND", "Job not found");
+  assertWarehouseInScope(auth, job.warehouseId, "Job");
+  return assignJobToCart(db, domainCtxOf(actor, auth), { cartId: cart.id, jobId });
+}
+
+/** Empties the cart: frees every cell and unlinks its open jobs. */
+export function releaseMobileCart(db: AppDb, auth: AuthContext, actor: Actor, cartId: string) {
+  const cart = loadMobileCart(db, auth, cartId);
+  return releaseCart(db, domainCtxOf(actor, auth), cart.id);
+}

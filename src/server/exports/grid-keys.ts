@@ -39,6 +39,7 @@ const ROWS: readonly Row[] = [
   ["purchase-orders", "Purchase Orders", "/api/purchase-orders", "inventory.purchase_orders.view", "M05", "purchase-orders"],
   ["receiving-history", "Receiving History", "/api/receipts", "inventory.receiving_history.view", "M05", "receipts"],
   ["vendors", "Vendors", "/api/vendors", "settings.vendors.view", "M05", "vendors"],
+  ["putaway-worklist", "Putaway Worklist", "/api/putaway", "inventory.purchase_orders.view", "M05", "putaway"],
   // M06 — inventory
   ["inventory-total", "Total Inventory", "/api/inventory", "inventory.total_inventory.view", "M06", "inventory"],
   ["inventory-by-location", "Inventory by Location", "/api/inventory/by-location", "inventory.inventory_by_location.view", "M06", "inventory"],
@@ -88,8 +89,13 @@ const ROWS: readonly Row[] = [
   ["carrier-errors-rate-call", "Carrier Errors · Rate Call", "/api/carriers/call-logs", "integrations.carrier_monitoring.view", "M12", "carriers", { step: "RateCall" }],
   ["carrier-errors-void-label", "Carrier Errors · Void/Cancel Label", "/api/carriers/call-logs", "integrations.carrier_monitoring.view", "M12", "carriers", { step: "VoidLabel" }],
   // M13 — reports
+  ["report-inventory-aging", "Inventory Aging Report", "/api/reports/inventory-aging", "inventory.total_inventory.view", "M13", "reports"],
+  ["report-location-utilization", "Location Utilization Report", "/api/reports/location-utilization", "settings.locations.view", "M13", "reports"],
+  ["report-order-lines", "Order Line Progress", "/api/reports/order-lines", "fulfillment.shipment_orders.view", "M13", "reports"],
   ["report-channel-sales", "Channel Sales Report", "/api/reports/channel-sales", "reports.channel_sales_report.view", "M13", "reports"],
   ["report-serial-numbers", "Serial Number Report", "/api/reports/serial-numbers", "reports.serial_number_tracking_report.view", "M13", "reports"],
+  ["report-serial-shipments", "Serial Number Shipment History", "/api/reports/serial-numbers/shipment-history", "reports.serial_number_tracking_report.view", "M13", "reports"],
+  ["report-serial-receipts", "Serial Number Receiving History", "/api/reports/serial-numbers/receiving-history", "reports.serial_number_tracking_report.view", "M13", "reports"],
   ["report-order-inventory", "Order Inventory", "/api/reports/order-inventory", "reports.order_inventory_report.view", "M13", "reports"],
   ["report-replenishment", "Dynamic Replenishment Report", "/api/reports/replenishment", "reports.dynamic_replenishment_report.view", "M13", "reports"],
   ["report-inventory-snapshot", "Inventory Snapshot Report", "/api/reports/inventory-snapshot", "reports.inventory_snapshot_report.view", "M13", "reports"],

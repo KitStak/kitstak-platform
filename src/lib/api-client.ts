@@ -73,6 +73,8 @@ export interface ApiResponse<T> {
   readonly meta?: ApiMeta;
 }
 
+/** Mirrors `TZ_OFFSET_HEADER` in server/query/request-tz (not imported: that module is server-only). */
+const TZ_HEADER = "x-tz-offset";
 const CSRF_ENDPOINT = "/api/auth/csrf";
 const LOGIN_PATH = "/login";
 const NETWORK_ERROR_MESSAGE = "Could not reach the server. Check your connection and try again.";
@@ -152,6 +154,8 @@ async function send(path: string, options: ApiRequestOptions, csrfToken: string 
   const headers: Record<string, string> = { accept: "application/json", ...options.headers };
   if (encoded.contentType) headers["content-type"] = encoded.contentType;
   if (csrfToken) headers[CSRF_HEADER] = csrfToken;
+  // Viewer's UTC offset (minutes east), so server date chips cut at local midnight.
+  if (!(TZ_HEADER in headers)) headers[TZ_HEADER] = String(-new Date().getTimezoneOffset());
   try {
     return await fetch(buildUrl(path, options.query), {
       method,
@@ -214,6 +218,33 @@ export function redirectToLogin(): void {
   window.location.href = `${LOGIN_PATH}?next=${next}`;
 }
 
+const SESSION_RECHECK_MS = 5000;
+let sessionRecheck: Promise<boolean> | null = null;
+
+/**
+ * True when `GET /api/me` also answers 401 (the session really ended). One slow or garbled
+ * 401 under load must not log the user out; concurrent 401s share one re-check.
+ */
+export function sessionReallyEnded(): Promise<boolean> {
+  if (sessionRecheck) return sessionRecheck;
+  sessionRecheck = (async () => {
+    const controller = typeof AbortController === "undefined" ? null : new AbortController();
+    const timer = controller ? setTimeout(() => controller.abort(), SESSION_RECHECK_MS) : null;
+    try {
+      const res = await fetch("/api/me", { headers: { accept: "application/json" }, signal: controller?.signal, credentials: "same-origin" });
+      return res.status === 401;
+    } catch {
+      return false;
+    } finally {
+      if (timer) clearTimeout(timer);
+      setTimeout(() => {
+        sessionRecheck = null;
+      }, 1000);
+    }
+  })();
+  return sessionRecheck;
+}
+
 /**
  * Full request: returns `{ data, meta }`. Throws `ApiError` on any failure
  * (network failures use code `NETWORK`, status 0).
@@ -231,7 +262,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     body = await readBody(res);
   }
 
-  if (res.status === 401 && !options.skipAuthRedirect) redirectToLogin();
+  // Confirm with /api/me before leaving: redirect only when the session is really gone.
+  if (res.status === 401 && !options.skipAuthRedirect && (path.startsWith("/api/me") || (await sessionReallyEnded()))) redirectToLogin();
 
   if (!res.ok || !isRecord(body) || body.success !== true) {
     if (res.ok && body === null) return { data: undefined as T };

@@ -8,6 +8,9 @@ import * as React from "react";
 import { useFormContext, useFormState, useWatch } from "react-hook-form";
 import { Box, Boxes, Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { normalizePackTypes, newPackType, type PackKind, type PackTypeFormValue } from "@/lib/grid-defs/products/product-form";
+import { formatVolume, hasIncompleteDimensions, hasMissingWeight } from "@/lib/grid-defs/products/catalog-options";
+import { rederiveDependentWeights } from "@/lib/grid-defs/products/pack-derivation";
+import { Badge } from "@/components/ui/badge";
 import { Barcode } from "@/components/ui/barcode";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -31,7 +34,7 @@ function DetailRow({ label, children }: { readonly label: string; readonly child
   );
 }
 
-function PackCard({ pack, all, onEdit, onDelete }: { readonly pack: PackTypeFormValue; readonly all: readonly PackTypeFormValue[]; readonly onEdit: () => void; readonly onDelete: () => void }) {
+export function PackCard({ pack, all, onEdit, onDelete }: { readonly pack: PackTypeFormValue; readonly all: readonly PackTypeFormValue[]; readonly onEdit?: () => void; readonly onDelete?: () => void }) {
   const { options } = useProductWizard();
   const normalized = normalizePackTypes(all);
   const qty = normalized.find((p) => p.key === pack.key)?.uomQty ?? pack.uomQty ?? 1;
@@ -51,21 +54,24 @@ function PackCard({ pack, all, onEdit, onDelete }: { readonly pack: PackTypeForm
             </span>
           </p>
         </div>
-        <Button variant="ghost" size="icon-sm" aria-label={`Edit ${pack.packType}`} onClick={onEdit}><Pencil className="h-3.5 w-3.5" aria-hidden /></Button>
-        <Button variant="ghost" size="icon-sm" aria-label={`Delete ${pack.packType}`} onClick={onDelete}><Trash2 className="h-3.5 w-3.5 text-danger" aria-hidden /></Button>
+        {hasIncompleteDimensions(pack) ? <Badge tone="warning" size="sm" title="Length, width or height is 0. Cubing and box selection need all three.">Incomplete dimensions</Badge> : null}
+        {hasMissingWeight(pack) ? <Badge tone="warning" size="sm" title="Weight is 0. Rate shopping and shipping labels need a weight.">No weight</Badge> : null}
+        {onEdit ? <Button variant="ghost" size="icon-sm" aria-label={`Edit ${pack.packType}`} title={`Edit ${pack.packType}`} onClick={onEdit}><Pencil className="h-3.5 w-3.5" aria-hidden /></Button> : null}
+        {onDelete ? <Button variant="ghost" size="icon-sm" aria-label={`Delete ${pack.packType}`} title={`Delete ${pack.packType}`} onClick={onDelete}><Trash2 className="h-3.5 w-3.5 text-danger" aria-hidden /></Button> : null}
       </header>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 px-4 py-3 md:grid-cols-4">
         <DetailRow label="L × W × H">{fmt(pack.length)} × {fmt(pack.width)} × {fmt(pack.height)} {pack.dimensionUnit.toLowerCase()}</DetailRow>
         <DetailRow label="Weight">{fmt(pack.weight)} {pack.weightUnit.toLowerCase()}</DetailRow>
-        <DetailRow label="Volume">{fmt(pack.volume, 5)} {pack.volumeUnit.toLowerCase()}</DetailRow>
+        <DetailRow label="Volume">{formatVolume(pack.volume)} {pack.volumeUnit.toLowerCase()}</DetailRow>
         <DetailRow label="Shipping box">{box}</DetailRow>
         <DetailRow label="Own box for shipping">{pack.useOwnBox ? "Yes" : "No"}</DetailRow>
         {pack.kind !== "Primary" ? <DetailRow label="Uses primary barcodes">{pack.usePrimaryBarcodes ? "Yes" : "No"}</DetailRow> : null}
       </dl>
       <div className="flex flex-wrap gap-3 border-t border-border px-4 py-3">
         {pack.barcodes.length ? pack.barcodes.map((b) => (
-          <div key={b} className="rounded-md border border-border bg-white px-2 py-1">
-            <Barcode value={b} height={8} scale={1} aria-label={`Barcode ${b}`} />
+          <div key={b} className="flex flex-col items-center rounded-md border border-border bg-white px-1 pb-1">
+            <Barcode value={b} height={8} scale={1} showText={false} className="px-2.5 pt-1.5 pb-0.5" aria-label={`Barcode ${b}`} />
+            <span className="font-mono text-[11px] leading-4 text-body" aria-hidden>{b}</span>
           </div>
         )) : <p className="text-[12px] text-faint">No barcodes. Add one so this pack can be scanned.</p>}
       </div>
@@ -73,7 +79,7 @@ function PackCard({ pack, all, onEdit, onDelete }: { readonly pack: PackTypeForm
   );
 }
 
-function AddCard({ icon: Icon, title, description, onAdd, disabledReason }: { readonly icon: React.ComponentType<{ className?: string }>; readonly title: string; readonly description: string; readonly onAdd: () => void; readonly disabledReason?: string | null }) {
+export function AddCard({ icon: Icon, title, description, onAdd, disabledReason }: { readonly icon: React.ComponentType<{ className?: string }>; readonly title: string; readonly description: string; readonly onAdd: () => void; readonly disabledReason?: string | null }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-dashed border-border-strong/70 bg-surface-sunken/60 px-4 py-3">
       <Icon className="h-6 w-6 text-faint" aria-hidden />
@@ -88,9 +94,24 @@ function AddCard({ icon: Icon, title, description, onAdd, disabledReason }: { re
   );
 }
 
+/** Adds or replaces `pack`, re-deriving calculated case/pallet weights (typed weights are kept). */
+export function packsAfterSave(packs: readonly PackTypeFormValue[], pack: PackTypeFormValue): PackTypeFormValue[] {
+  const exists = packs.some((p) => p.key === pack.key);
+  const next = exists ? packs.map((p) => (p.key === pack.key ? pack : p)) : [...packs, pack];
+  return normalizePackTypes(rederiveDependentWeights(packs, next));
+}
+
+/** Removes `pack`; packs nested in it re-parent to its parent (or the primary). */
+export function packsAfterRemove(packs: readonly PackTypeFormValue[], pack: PackTypeFormValue): PackTypeFormValue[] {
+  const fallback = pack.parentKey ?? packs.find((p) => p.kind === "Primary")?.key ?? null;
+  const next = packs.filter((p) => p.key !== pack.key).map((p) => (p.parentKey === pack.key ? { ...p, parentKey: fallback } : p));
+  return normalizePackTypes(rederiveDependentWeights(packs, next));
+}
+
 export function StepPackTypes() {
   const form = useFormContext();
   const packs = (useWatch({ name: "packTypes" }) as PackTypeFormValue[] | undefined) ?? [];
+  const clientId = (useWatch({ name: "clientId" }) as string | null | undefined) ?? null;
   const { errors } = useFormState({ name: "packTypes" });
   const [tab, setTab] = React.useState<Tab>("uom");
   const [modal, setModal] = React.useState<{ kind: PackKind; value: PackTypeFormValue } | null>(null);
@@ -101,18 +122,14 @@ export function StepPackTypes() {
   const error = (errors.packTypes as { message?: string; root?: { message?: string } } | undefined);
   const errorMessage = error?.message ?? error?.root?.message;
 
-  const commit = (next: PackTypeFormValue[]) => form.setValue("packTypes", normalizePackTypes(next), { shouldDirty: true, shouldValidate: false });
+  // Calculated case/pallet weights follow their contained pack (typed weights are kept).
+  const commit = (next: PackTypeFormValue[]) => form.setValue("packTypes", next, { shouldDirty: true, shouldValidate: false });
   const open = (kind: PackKind, value?: PackTypeFormValue) => setModal({ kind, value: value ?? newPackType(kind, packs) });
   const save = (pack: PackTypeFormValue) => {
-    const exists = packs.some((p) => p.key === pack.key);
-    commit(exists ? packs.map((p) => (p.key === pack.key ? pack : p)) : [...packs, pack]);
+    commit(packsAfterSave(packs, pack));
     if (form.getFieldState("packTypes").error) form.clearErrors("packTypes");
   };
-  const remove = (pack: PackTypeFormValue) => {
-    // Children of a removed pack re-parent to the removed pack's parent (or the primary).
-    const fallback = pack.parentKey ?? primary?.key ?? null;
-    commit(packs.filter((p) => p.key !== pack.key).map((p) => (p.parentKey === pack.key ? { ...p, parentKey: fallback } : p)));
-  };
+  const remove = (pack: PackTypeFormValue) => commit(packsAfterRemove(packs, pack));
   const noPrimary = primary ? null : "Add the primary (UOM) pack type first";
 
   return (
@@ -156,7 +173,7 @@ export function StepPackTypes() {
       ) : null}
       <FieldError id="pack-types-error" message={errorMessage} />
       {modal ? (
-        <PackTypeModal open onOpenChange={(o) => (o ? null : setModal(null))} kind={modal.kind} initial={modal.value} packs={packs} onSave={save} />
+        <PackTypeModal open onOpenChange={(o) => (o ? null : setModal(null))} kind={modal.kind} initial={modal.value} packs={packs} clientId={clientId} onSave={save} />
       ) : null}
       <ConfirmDialog
         open={toDelete !== null}

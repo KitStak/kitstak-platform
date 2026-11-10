@@ -2,7 +2,7 @@
 import { defineRoute } from "@/server/api/define-route";
 import { created, listResult } from "@/server/api/envelope";
 import { contractSchema } from "@/lib/grid-defs/organization/billing";
-import { createContract, listContracts } from "@/server/repositories/billing";
+import { createContract, getContract, listContracts } from "@/server/repositories/billing";
 
 export const GET = defineRoute({
   permission: "settings.billing.view",
@@ -16,5 +16,6 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.billing.create",
   body: contractSchema,
-  handler: ({ db, auth, actor, body }) => created(createContract(db, auth, actor, body)),
+  // Returns the full detail so /billing/[id] renders instantly from the seeded cache.
+  handler: ({ db, auth, actor, body }) => { const row = createContract(db, auth, actor, body); return created({ ...getContract(db, auth, row.id), id: row.id, name: row.name }); },
 });

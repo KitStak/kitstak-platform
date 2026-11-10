@@ -6,13 +6,15 @@
  * Delete; Connect Store drawer; Edit Store Connection drawer.
  */
 import * as React from "react";
+import { pauseLabel } from "@/lib/grid-defs/integrations/monitoring";
+import { DEMO_FEED_NOTE } from "@/lib/grid-defs/integrations/logs";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, Eye, History, MoreHorizontal, Pencil, Play, Plus, Store, Trash2 } from "lucide-react";
 import { apiRequest } from "@/lib/api-client";
 import { useApiQuery } from "@/lib/query-client";
-import { useFormat } from "@/lib/format";
 import { CHANNELS, svgDataUri } from "@/lib/channel-catalog";
+import { brandMarkSvg } from "@/components/integrations/shared/brand-marks";
 import { maskSecret } from "@/lib/grid-defs/integrations/common";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -24,8 +26,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonTable, Skeleton } from "@/components/ui/skeleton";
 import { StatusPill } from "@/components/ui/status-pill";
 import { toast } from "@/components/ui/toast";
+import { Callout } from "@/components/ui/callout";
 import { DisabledReason, Tooltip } from "@/components/ui/tooltip";
-import { DetailList, EntityChangeLogDrawer, Muted, NO_PERMISSION, StatRow, useAction, usePagePerms, type BulkResponse } from "@/components/integrations/shared/shared";
+import { DateTimeText, DetailList, EntityChangeLogDrawer, Muted, NO_PERMISSION, StatRow, useAction, useModuleDates, usePagePerms, usePrefetchDetails, type BulkResponse } from "@/components/integrations/shared/shared";
 import type { CatalogCard, ChannelConnectionDetail, ChannelConnectionRow } from "@/server/repositories/channels";
 import type { RunSummary } from "@/server/integrations/runtime/channel-runtime";
 import { ConnectStoreDrawer } from "./connect-store-drawer";
@@ -34,11 +37,11 @@ import { EditStoreDrawer } from "./edit-store-drawer";
 const PERMS = ["create_setup", "edit_setup", "delete_setup"] as const;
 
 function DetailsDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: string | null; readonly onOpenChange: (o: boolean) => void; readonly onEdit: () => void; readonly canEdit: boolean }) {
-  const fmt = useFormat();
+  const dates = useModuleDates();
   const q = useApiQuery<ChannelConnectionDetail>(["channel-connection", id ?? ""], id ? `/api/channels/${id}` : null, { staleTime: 0 });
   const d = q.data?.data;
   return (
-    <Drawer open={id !== null} onOpenChange={onOpenChange} width={45} title={d ? d.storeName : "Store connection"} description={d ? `${d.clientName} · ${d.isSandbox ? "KitStaks Sandbox" : d.distribution}` : undefined}
+    <Drawer open={id !== null} onOpenChange={onOpenChange} width={45} title={d ? d.storeName : "Store connection"} description={d ? `${d.clientName} · ${d.isSandbox ? "KitStak Sandbox" : d.distribution}` : undefined}
       footer={d && canEdit ? <div className="flex justify-end"><Button variant="primary" onClick={onEdit}><Pencil className="h-4 w-4" />Edit</Button></div> : undefined}>
       {q.isPending ? <Skeleton className="h-64 w-full" /> : !d ? <EmptyState title="Couldn't load this connection" description={q.error?.message} action={<Button onClick={() => void q.refetch()}>Retry</Button>} /> : (
         <div className="flex flex-col gap-5">
@@ -46,7 +49,8 @@ function DetailsDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: str
             { label: "Status", value: <StatusPill status={d.status === "Completed" ? "Completed" : d.status} /> },
             { label: "Orders", value: d.counts.orders }, { label: "Listings", value: d.counts.listings }, { label: "Missing orders", value: d.openMissing, tone: d.openMissing > 0 ? "danger" : undefined },
           ]} />
-          {d.pauseReason ? <p className="rounded-lg bg-warning-soft px-3 py-2 text-[12px] text-warning">Paused: {d.pauseReason}</p> : null}
+          {d.demoFeed ? <p className="rounded-lg bg-info-soft px-3 py-2 text-[12px] text-body">{DEMO_FEED_NOTE}</p> : null}
+          {d.pauseReason ? <p className={pauseLabel(d.pauseReason)?.tone === "neutral" ? "rounded-lg bg-surface-sunken px-3 py-2 text-[12px] text-secondary" : "rounded-lg bg-warning-soft px-3 py-2 text-[12px] text-warning"}>{pauseLabel(d.pauseReason)?.label ?? "Paused"}: {d.pauseReason.replace(/^Demo store: /, "")}</p> : null}
           <DetailList title="General" items={[
             { label: "Client", value: d.clientName }, { label: "Connection", value: d.isActive ? "Activated" : "Deactivated" },
             { label: "Authorization", value: d.isSandbox ? "Not needed" : `${d.authMethod}${Object.values(d.credentialHints).length > 0 ? ` · ${Object.values(d.credentialHints).map(maskSecret).join(" ")}` : " · none stored"}` },
@@ -59,7 +63,7 @@ function DetailsDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: str
                 <li key={m.id} className="flex items-center gap-3 px-3 py-2 text-[13px]">
                   <span className="flex-1 font-medium">{m.method}</span>
                   <span className="text-[11px] text-secondary">every {m.intervalMinutes >= 60 ? `${Math.round(m.intervalMinutes / 60)} h` : `${m.intervalMinutes} min`}</span>
-                  <span className="w-36 text-right text-[11px] text-faint">{m.lastRunAt ? `Last ${fmt.dateTime(m.lastRunAt)}` : "Never run"}</span>
+                  <span className="w-36 text-right text-[11px] text-faint">{m.lastRunAt ? `Last ${dates.dateTime(m.lastRunAt)}` : "Never run"}</span>
                   <StatusPill status={m.status} domain="active" size="sm" />
                 </li>
               ))}
@@ -74,14 +78,21 @@ function DetailsDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: str
 export function ChannelConnectionsPage({ provider }: { readonly provider: string }) {
   const router = useRouter();
   const params = useSearchParams();
-  const fmt = useFormat();
   const perms = usePagePerms("integrations.integrations", PERMS);
   const entry = CHANNELS.find((c) => c.key === provider);
   const catalog = useApiQuery<CatalogCard[]>(["integration-catalog"], "/api/channels/catalog", { staleTime: 15_000 });
   const card = catalog.data?.data.find((c) => c.kind === "channel" && c.key === provider);
   const list = useApiQuery<ChannelConnectionRow[]>(["channel-connections", provider], `/api/channels`, { query: { provider } });
   const [connect, setConnect] = React.useState(params.get("connect") === "1");
-  const [editing, setEditing] = React.useState<{ id: string; tab?: "general" | "warehouse" | "advanced" | "configuration" } | null>(null);
+  // Back from the Shopify Public App install: ?connected=<id> opens Warehouse mapping; ?oauthError= explains what failed.
+  const connectedId = params.get("connected");
+  const [oauthError, setOauthError] = React.useState(params.get("oauthError"));
+  const [editing, setEditing] = React.useState<{ id: string; tab?: "general" | "warehouse" | "advanced" | "configuration" } | null>(connectedId ? { id: connectedId, tab: "warehouse" } : null);
+  React.useEffect(() => {
+    if (!connectedId && !params.get("oauthError")) return;
+    if (connectedId) toast.success("Store connected", "Shopify approved the KitStak app. Link the store's locations to warehouses, then turn on its methods.");
+    router.replace(`/integrations/channels/${provider}`, { scroll: false });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [details, setDetails] = React.useState<string | null>(null);
   const [log, setLog] = React.useState<ChannelConnectionRow | null>(null);
   const [toDelete, setToDelete] = React.useState<ChannelConnectionRow | null>(null);
@@ -90,6 +101,7 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
   const name = entry?.name ?? provider;
   const rows = list.data?.data ?? [];
   const refresh = () => { void list.refetch(); void catalog.refetch(); };
+  usePrefetchDetails("channel-connection", "/api/channels", perms.edit_setup ? rows.map((r) => r.id) : []);
 
   const runDownload = async (row: ChannelConnectionRow) => {
     setRunning(row.id);
@@ -110,28 +122,32 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
   }
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title={`${name} Connection List`} crumbLabel={`${name} Connections`}
+      <PageHeader title={`${name} Connection List`} crumbLabel={`${name} Connections`} helpHref={`/integrations/help#${provider}`}
         helper={`Your connected ${name} stores. Create another connection or configure an existing one.`}
         actions={
           <div className="flex items-center gap-3">
             <Link href="/integrations/channels" className="inline-flex items-center gap-1 text-[13px] text-secondary hover:text-primary"><ChevronLeft className="h-4 w-4" />Go back to integration list</Link>
-            <DisabledReason reason={perms.create_setup ? (entry.availability === "coming-soon" ? "This integration isn't available yet" : null) : NO_PERMISSION}>
-              <Button variant="primary" disabled={!perms.create_setup || entry.availability === "coming-soon"} onClick={() => setConnect(true)}><Plus className="h-4 w-4" />Connect Store</Button>
-            </DisabledReason>
+            {perms.create_setup ? <DisabledReason reason={entry.availability === "coming-soon" ? "This integration isn't available yet" : null}>
+              <Button variant="primary" disabled={entry.availability === "coming-soon"} onClick={() => setConnect(true)}><Plus className="h-4 w-4" />Connect Store</Button>
+            </DisabledReason> : null}
           </div>
         } />
       <div className="flex flex-col gap-3 px-6 pb-6">
+        {oauthError ? <Callout variant="error" title="Shopify install didn't finish" onDismiss={() => setOauthError(null)}>{oauthError}</Callout> : null}
         <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={svgDataUri(entry.logoSvg)} alt="" width={40} height={40} className="rounded-lg" />
+          <img src={svgDataUri(brandMarkSvg("channel", entry.key, entry.logoSvg))} alt="" width={40} height={40} className="rounded-lg" />
           <div className="min-w-0 flex-1"><p className="text-[14px] font-semibold">{name}</p><p className="truncate text-[12px] text-secondary">{entry.description}</p></div>
-          {card && !card.hasLiveApi ? <Badge tone="neutral">Sandbox stores only</Badge> : null}
-          <Badge tone={rows.length > 0 ? "success" : "neutral"}>{rows.length} connected</Badge>
+          {card && !card.hasLiveApi ? <Badge tone="neutral" title="KitStak has no live API adapter for this channel yet: connections are simulated KitStak Sandbox stores">Sandbox only · no live API yet</Badge> : null}
+          {card?.hasLiveApi && !card.liveVerified ? <Badge tone="warning" title="The live adapter has not yet completed a successful call against a real store in this workspace. Connect a store with its credentials and Run a method to verify it.">Beta · live adapter not yet verified</Badge> : null}
+          {card?.liveVerified ? <Badge tone="success" title="A credentialed store in this workspace has completed successful live API calls">Live API · verified</Badge> : null}
+          <Link href={`/integrations/help#${provider}`} target="_blank" className="text-[12px] font-medium text-primary hover:underline">Learn more</Link>
+          {list.isPending ? <Skeleton className="h-5 w-24 rounded-full" aria-label="Loading connections" /> : list.isError ? null : <Badge tone={rows.length > 0 ? "success" : "neutral"}>{rows.length} connected</Badge>}
         </div>
         {list.isPending ? <SkeletonTable rows={4} columns={6} /> : list.isError ? (
           <EmptyState title="Couldn't load connections" description={list.error.message} action={<Button onClick={() => void list.refetch()}>Retry</Button>} />
         ) : rows.length === 0 ? (
-          <EmptyState icon={Store} title={`No ${name} stores connected`} description="Connect a store with a custom app, or try the flow with a KitStaks Sandbox store." action={perms.create_setup ? <Button variant="primary" onClick={() => setConnect(true)}><Plus className="h-4 w-4" />Connect Store</Button> : undefined} />
+          <EmptyState icon={Store} title={`No ${name} stores connected`} description="Connect a store with a custom app, or try the flow with a KitStak Sandbox store." action={perms.create_setup ? <Button variant="primary" onClick={() => setConnect(true)}><Plus className="h-4 w-4" />Connect Store</Button> : undefined} />
         ) : (
           <div className="overflow-x-auto rounded-xl border border-border bg-surface">
             <table className="w-full text-[13px]">
@@ -144,14 +160,15 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
                     <td className="px-4 py-2.5">
                       <button type="button" className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:underline" onClick={() => (perms.edit_setup ? setEditing({ id: r.id }) : setDetails(r.id))}>{r.storeName}</button>
                       {r.isSandbox ? <Badge size="sm" tone="info" className="ml-2">Sandbox</Badge> : null}
+                      {r.demoFeed ? <Tooltip content={DEMO_FEED_NOTE}><span tabIndex={0} className="ml-2 rounded-full"><Badge size="sm" tone="neutral">Demo feed</Badge></span></Tooltip> : null}
                       {r.openMissing > 0 ? <Link href={`/integrations/monitoring/missing-orders?f.connectionId=in:${r.id}`} className="ml-2"><Badge size="sm" tone="danger">{r.openMissing} missing</Badge></Link> : null}
                     </td>
                     <td className="px-3 py-2.5">{r.clientName}</td>
                     <td className="px-3 py-2.5">{r.warehouses.length > 0 ? r.warehouses.join(", ") : <Tooltip content="Link store locations in Edit → Warehouse"><span className="text-warning">Not linked</span></Tooltip>}</td>
                     <td className="px-3 py-2.5"><StatusPill status={r.status} /></td>
                     <td className="px-3 py-2.5">{r.isActive ? <span className="font-medium text-success">Activated</span> : <span className="text-secondary">Deactivated</span>}</td>
-                    <td className="px-3 py-2.5">{r.pauseReason ? <Tooltip content={r.pauseReason}><span><Badge size="sm" tone="warning">Paused</Badge></span></Tooltip> : <span className="tabular-nums">{r.activeMethods} of 4 active</span>}</td>
-                    <td className="px-3 py-2.5 text-[12px] text-secondary">{r.lastOrderAt ? fmt.dateTime(r.lastOrderAt) : <Muted>None yet</Muted>}</td>
+                    <td className="px-3 py-2.5">{r.pauseReason ? <Tooltip content={r.pauseReason}><span tabIndex={0}><Badge size="sm" tone={pauseLabel(r.pauseReason)?.tone ?? "warning"}>{pauseLabel(r.pauseReason)?.label ?? "Paused"}</Badge></span></Tooltip> : <span className="tabular-nums">{r.activeMethods} of 4 active</span>}</td>
+                    <td className="px-3 py-2.5 text-[12px] text-secondary"><DateTimeText value={r.lastOrderAt} empty="None yet" /></td>
                     <td className="px-2 py-1.5 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button size="icon-sm" variant="ghost" aria-label={`Actions for ${r.storeName}`}><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
@@ -173,7 +190,7 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
           </div>
         )}
       </div>
-      <ConnectStoreDrawer open={connect} onOpenChange={setConnect} provider={provider} providerName={name} hasLiveApi={card?.hasLiveApi ?? false} publicAppEnabled={false}
+      <ConnectStoreDrawer open={connect} onOpenChange={setConnect} provider={provider} providerName={name} hasLiveApi={card?.hasLiveApi ?? false} publicAppEnabled={card?.publicApp ?? false}
         onConnected={(d) => { setConnect(false); refresh(); setEditing({ id: d.id, tab: "warehouse" }); }} />
       <EditStoreDrawer id={editing?.id ?? null} initialTab={editing?.tab} onOpenChange={(o) => !o && setEditing(null)} onSaved={refresh} />
       <DetailsDrawer id={details} onOpenChange={(o) => !o && setDetails(null)} canEdit={perms.edit_setup} onEdit={() => { const id = details; setDetails(null); if (id) setEditing({ id }); }} />

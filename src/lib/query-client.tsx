@@ -34,16 +34,50 @@ const NON_RETRYABLE_CODES: ReadonlySet<string> = new Set([
 export function shouldRetry(failureCount: number, error: unknown): boolean {
   if (failureCount >= MAX_QUERY_RETRIES) return false;
   if (!isApiError(error) || NON_RETRYABLE_CODES.has(error.code)) return false;
-  return error.code === "NETWORK" || error.status >= 500;
+  if (error.code === "NETWORK") return true;
+  // Server errors retry once so the grid's error + Retry state shows quickly (work-orders R2-4).
+  return error.status >= 500 && failureCount < 1;
+}
+
+/** Short, capped backoff: 500 ms, 1 s, 2 s. */
+export function retryDelay(attempt: number): number {
+  return Math.min(2000, 500 * 2 ** attempt);
+}
+
+/**
+ * Queries whose invalidation must also refresh `GET /api/me` (shell nav, context switcher):
+ *   apps        -> `activeApps` hides add-on nav items (reports-analytics REQ-2, admin-settings REQ-F1)
+ *   clients     -> `contextOptions.clients` lists Active clients only (organization-billing REQ-1)
+ *   warehouses  -> `contextOptions.warehouses`
+ * Keyed by the first query-key segment, so any page invalidating e.g. `["apps"]` updates the
+ * shell without a reload and without each module having to know about `["me"]`.
+ */
+export const ME_DEPENDENT_QUERY_ROOTS: ReadonlySet<string> = new Set(["apps", "clients", "warehouses"]);
+const ME_KEY: QueryKey = ["me"];
+
+export function cascadesToMe(queryKey: QueryKey): boolean {
+  const root = queryKey[0];
+  return typeof root === "string" && ME_DEPENDENT_QUERY_ROOTS.has(root);
 }
 
 export function createQueryClient(): QueryClient {
-  return new QueryClient({
+  const client = new QueryClient({
     defaultOptions: {
-      queries: { staleTime: DEFAULT_STALE_MS, retry: shouldRetry, refetchOnWindowFocus: false },
+      queries: { staleTime: DEFAULT_STALE_MS, retry: shouldRetry, retryDelay, refetchOnWindowFocus: false },
       mutations: { retry: false },
     },
   });
+  // One /api/me refresh per tick, however many dependent queries were invalidated together.
+  let mePending = false;
+  client.getQueryCache().subscribe((event) => {
+    if (event.type !== "updated" || event.action.type !== "invalidate" || !cascadesToMe(event.query.queryKey) || mePending) return;
+    mePending = true;
+    queueMicrotask(() => {
+      mePending = false;
+      void client.invalidateQueries({ queryKey: ME_KEY });
+    });
+  });
+  return client;
 }
 
 let browserClient: QueryClient | undefined;
@@ -68,6 +102,8 @@ export interface ApiQueryData<T> {
 
 export type UseApiQueryOptions<T> = Omit<UseQueryOptions<ApiQueryData<T>, ApiError>, "queryKey" | "queryFn"> & {
   readonly query?: ApiRequestOptions["query"];
+  /** Optional: a request slower than this fails with code TIMEOUT (error state + Retry) instead of loading forever. */
+  readonly timeoutMs?: number;
 };
 
 /**
@@ -75,10 +111,20 @@ export type UseApiQueryOptions<T> = Omit<UseQueryOptions<ApiQueryData<T>, ApiErr
  * pages get `meta.total`. Pass `enabled: false` to defer; `path: null` also disables.
  */
 export function useApiQuery<T>(key: QueryKey, path: string | null, options: UseApiQueryOptions<T> = {}): UseQueryResult<ApiQueryData<T>, ApiError> {
-  const { query, enabled, ...rest } = options;
+  const { query, enabled, timeoutMs, ...rest } = options;
   return useQuery<ApiQueryData<T>, ApiError>({
     queryKey: query === undefined ? key : [...key, query],
-    queryFn: ({ signal }) => apiRequest<T>(path ?? "", { query, signal }),
+    queryFn: async ({ signal }) => {
+      if (!timeoutMs || typeof AbortSignal.any !== "function") return apiRequest<T>(path ?? "", { query, signal });
+      const timer = AbortSignal.timeout(timeoutMs);
+      try {
+        return await apiRequest<T>(path ?? "", { query, signal: AbortSignal.any([signal, timer]) });
+      } catch (error) {
+        // Not retried (TIMEOUT is neither NETWORK nor 5xx), so the error state shows right away.
+        if (timer.aborted && !signal.aborted) throw new ApiError({ code: "TIMEOUT", message: "The server took too long to respond. Try again.", status: 0 });
+        throw error;
+      }
+    },
     enabled: path !== null && (enabled ?? true),
     ...rest,
   });
@@ -150,7 +196,9 @@ export function useApiMutation<TVars = void, TData = unknown, TForm extends Fiel
       }
     },
     onSuccess: async (data, vars) => {
-      await Promise.all((options.invalidate ?? []).map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+      // Refresh in the background: awaiting the refetch kept drawers open for up to a minute
+      // under load after a 200 (inventory REQ-R2-12). The toast and onSuccess run at once.
+      for (const queryKey of options.invalidate ?? []) void queryClient.invalidateQueries({ queryKey });
       const { successMessage } = options;
       if (successMessage !== false && successMessage !== undefined) {
         const message = typeof successMessage === "function" ? successMessage(data, vars) : successMessage;

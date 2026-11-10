@@ -36,9 +36,20 @@ describe("Import Inventory handler", () => {
   });
 
   it("stores damage reason and lot attributes", () => {
+    w.db.update(schema.products).set({ trackLot: true }).where(eq(schema.products.sku, "MLT-WIDGET-01")).run();
     const res = handler.apply(ctx, row({ status: "Damaged", damageReason: "Crushed", lotNumber: "L9" }));
     const b = w.db.select().from(schema.inventory).where(eq(schema.inventory.id, res.entityId ?? "")).get();
     expect(b).toMatchObject({ damageReason: "Crushed", lotNumber: "L9", damaged: 12 });
+  });
+
+  it("refuses attributes the product does not track, and impossible dates", () => {
+    expect(() => handler.apply(ctx, row({ lotNumber: "L9" }))).toThrow("doesn't track lot/batch numbers");
+    expect(() => handler.apply(ctx, row({ expiryDate: "2027-01-01" }))).toThrow(/doesn't track expiry dates/);
+    w.db.update(schema.products).set({ trackExpiry: true }).where(eq(schema.products.sku, "MLT-WIDGET-01")).run();
+    expect(() => handler.apply(ctx, row({ expiryDate: "2026-02-31" }))).toThrow(/not a real date/);
+    expect(() => handler.apply(ctx, row({ expiryDate: "2026-13-45" }))).toThrow(/not a real date/);
+    const res = handler.apply(ctx, row({ expiryDate: "2027/1/5" }));
+    expect(w.db.select().from(schema.inventory).where(eq(schema.inventory.id, res.entityId ?? "")).get()?.expiryDate).toBe("2027-01-05");
   });
 
   it("fails a row with a clear message", () => {

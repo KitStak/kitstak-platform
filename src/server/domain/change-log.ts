@@ -4,18 +4,21 @@
  */
 import { and, desc, eq, sql } from "drizzle-orm";
 import * as schema from "@/server/db/schema";
+import { formatLogDateTime, isIsoDateTime } from "@/lib/format-zone";
 import type { DomainCtx, Tx } from "./types";
 
 /** Display names per entity type (used in messages, e.g. "Shipment Order SO000123 is created."). */
 export const ENTITY_LABELS: Readonly<Record<string, string>> = {
   shipment_order: "Shipment Order",
-  order_line: "Order Line",
+  // Logiwa: "MLT-WIDGET-01 -> Shipment Order Line is created."
+  order_line: "Shipment Order Line",
   purchase_order: "Purchase Order",
   product: "Product",
   location: "Location",
   job: "Job",
   task: "Task",
   return_order: "Return Order",
+  return_order_line: "Return Order Line",
   shipment: "Shipment",
   end_of_day_manifest: "End Of Day",
   work_order: "Work Order",
@@ -24,6 +27,18 @@ export const ENTITY_LABELS: Readonly<Record<string, string>> = {
   purchase_order_line: "Purchase Order Line",
   vendor: "Vendor",
   license_plate: "License Plate",
+  lp_type: "LP Type",
+  warehouse: "Warehouse",
+  mobile_cart: "Mobile Cart",
+  shipment_package: "Shipment Package",
+  shipment_plan: "Shipment Plan",
+  wave_rule: "Wave Rule",
+  job_type: "Job Type",
+  rate_shopping_preset: "Rate Shopping Preset",
+  workflow: "Workflow",
+  algorithm: "Algorithm",
+  channel_connection: "Channel Connection",
+  carrier_connection: "Carrier Connection",
 };
 
 /** Field labels shared by every entity; per-entity overrides win. */
@@ -39,6 +54,7 @@ const COMMON_LABELS: Readonly<Record<string, string>> = {
   cancelReasonId: "Cancel Reason", isBackOrder: "Is Back Order", masterOrderId: "Master Order",
   addressVerificationStatus: "Address Verification Status", workflowBlocked: "Workflow Blocked",
   pickShortStatus: "Pick Short Status", packShortStatus: "Pack Short Status", labelStatus: "Label Status",
+  shipmentPackageId: "Shipment Package", mergedIntoOrderId: "Merged Into Order",
 };
 
 const ENTITY_FIELD_LABELS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
@@ -94,9 +110,36 @@ export function resolveFieldValue(tx: Tx, field: string, value: string): string 
 /** Columns that never produce change-log rows. */
 const IGNORED_FIELDS = new Set(["id", "createdAt", "createdBy", "updatedAt", "updatedBy", "version"]);
 
+/** Acronyms kept upper-case in generated labels ("Max SKU Qty", "LP Type"). */
+const ACRONYMS = new Set(["sku", "lp", "lpn", "uom", "ucc", "sscc", "po", "rma", "eod", "id", "vas", "atp", "fefo", "fifo", "lifo", "api", "url"]);
+
+/**
+ * camelCase / snake_case → "Title Case" label: a leading "Is " and a trailing " Id" are
+ * dropped ("isLocked" → "Locked", "jobId" → "Job"), acronyms stay upper-case.
+ */
 export function humanize(field: string): string {
   const spaced = field.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_.]+/g, " ").trim();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  const words = spaced.split(/\s+/).filter(Boolean);
+  if (words.length > 1 && words[0]?.toLowerCase() === "is") words.shift();
+  if (words.length > 1 && words[words.length - 1]?.toLowerCase() === "id") words.pop();
+  return words.map((w, i) => (ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w)).join(" ");
+}
+
+/** Message side: empty → "—", ISO date-time → "M/D/YYYY h:mm:ss AM TZ" in `timeZone`. */
+export function messageSide(value: string, timeZone?: string): string {
+  if (value.trim() === "") return "—";
+  return isIsoDateTime(value) ? formatLogDateTime(value, timeZone ?? "UTC") : value;
+}
+
+/** IANA zone of the warehouse a snapshot belongs to (for message datetimes), or undefined. */
+function snapshotZone(tx: Tx, snapshot: Readonly<Record<string, unknown>>): string | undefined {
+  const warehouseId = snapshot.warehouseId;
+  if (typeof warehouseId !== "string" || warehouseId === "") return undefined;
+  try {
+    return tx.get<{ tz: string | null }>(sql`SELECT timezone AS tz FROM warehouses WHERE id = ${warehouseId}`)?.tz ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function fieldLabel(entityType: string, field: string): string {
@@ -166,10 +209,13 @@ export function recordUpdate(
 ): number {
   const changes = diffRows(ref.entityType, ref.before, ref.after)
     .map((c) => (ID_RESOLVERS[c.field] ? { ...c, from: resolveFieldValue(tx, c.field, c.from), to: resolveFieldValue(tx, c.field, c.to) } : c));
+  if (changes.length === 0) return 0;
+  // from/to stay machine-readable; the message gets "—" for an empty side and zoned datetimes.
+  const zone = changes.some((c) => isIsoDateTime(c.from) || isIsoDateTime(c.to)) ? snapshotZone(tx, { ...ref.before, ...ref.after }) : undefined;
   return insert(tx, ctx, changes.map((c) => ({
     entityType: ref.entityType, entityId: ref.entityId, entityCode: ref.entityCode ?? null, type: "Update",
     field: c.field, fieldLabel: c.label, fromValue: c.from, toValue: c.to,
-    message: `${c.label} is modified. ${c.from} --> ${c.to}`, source: ctx.source,
+    message: `${c.label} is modified. ${messageSide(c.from, zone)} --> ${messageSide(c.to, zone)}`, source: ctx.source,
   })));
 }
 
@@ -194,7 +240,7 @@ export function recordLine(
     entityType: ref.lineEntityType, entityId: ref.lineEntityId, entityCode: ref.entityCode ?? null,
     parentEntityType: ref.entityType, parentEntityId: ref.entityId, type: "Update",
     field: ref.field, fieldLabel: label, fromValue: from, toValue: to,
-    message: `${ref.lineLabel} -> ${label} is modified. ${from} --> ${to}`, source: ctx.source,
+    message: `${ref.lineLabel} -> ${label} is modified. ${messageSide(from)} --> ${messageSide(to)}`, source: ctx.source,
   }]);
 }
 

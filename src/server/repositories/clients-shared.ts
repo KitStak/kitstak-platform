@@ -27,6 +27,8 @@ export interface OwnedAddress {
   readonly id: string;
   readonly name: string;
   readonly usageType: "Shipping" | "Billing" | "Return";
+  readonly firstName: string | null;
+  readonly lastName: string | null;
   readonly companyName: string | null;
   readonly line1: string;
   readonly line2: string | null;
@@ -44,7 +46,7 @@ export interface OwnedAddress {
 function toOwned(r: AddressRow): OwnedAddress {
   const code = countryCode(r.country);
   return {
-    id: r.id, name: r.name ?? "", usageType: r.usageType, companyName: r.companyName, line1: r.line1, line2: r.line2, city: r.city, state: r.state,
+    id: r.id, name: r.name ?? "", usageType: r.usageType, firstName: r.firstName, lastName: r.lastName, companyName: r.companyName, line1: r.line1, line2: r.line2, city: r.city, state: r.state,
     postalCode: r.postalCode, country: code, countryName: countryName(code) || r.country, phone: r.phone, email: r.email, isDefault: Boolean(r.isDefault), isActive: Boolean(r.isActive),
   };
 }
@@ -80,7 +82,7 @@ export function saveAddresses(tx: AppDb, ctx: DomainCtx, owner: { type: OwnerTyp
   for (const a of existing) before[`address.${a.id}`] = `${addressLabel(a)}${a.isDefault ? " · default" : ""}${a.isActive ? "" : " · inactive"}`;
   for (const a of normalized) {
     const values = {
-      ownerType: owner.type, ownerId: owner.id, name: a.name, usageType: a.usageType, companyName: a.companyName ?? null, line1: a.line1, line2: a.line2 ?? null,
+      ownerType: owner.type, ownerId: owner.id, name: a.name, usageType: a.usageType, firstName: a.firstName || null, lastName: a.lastName || null, companyName: a.companyName ?? null, line1: a.line1, line2: a.line2 ?? null,
       city: a.city, state: a.state || null, postalCode: a.postalCode.trim().toUpperCase(), country: countryName(a.country) || a.country, phone: a.phone ?? null,
       email: a.email ?? null, isDefault: a.isDefault, isActive: a.isActive, updatedBy: owner.userId,
     };
@@ -92,18 +94,21 @@ export function saveAddresses(tx: AppDb, ctx: DomainCtx, owner: { type: OwnerTyp
   }
   const removed = existing.filter((a) => !keep.has(a.id)).map((a) => a.id);
   if (removed.length) tx.delete(s.addresses).where(inArray(s.addresses.id, removed)).run();
-  // Diff on label "Address": every changed/new/removed address is one row.
-  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
-  const b2: Record<string, unknown> = {};
-  const a2: Record<string, unknown> = {};
-  let i = 0;
-  for (const k of keys) {
+  // One explicit row per added / modified / removed address: "Shipping address Dock 2 added".
+  const names = new Map<string, { name: string; usage: string }>();
+  for (const a of existing) names.set(`address.${a.id}`, { name: a.name || a.usageType, usage: a.usageType });
+  normalized.forEach((a, idx) => { const id = [...keep][idx]; if (id) names.set(`address.${id}`, { name: a.name || a.usageType, usage: a.usageType }); });
+  for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
     if (before[k] === after[k]) continue;
-    i += 1;
-    b2[`Address ${i}`] = before[k] ?? "";
-    a2[`Address ${i}`] = after[k] ?? "(removed)";
+    const n = names.get(k) ?? { name: "Address", usage: "" };
+    const what = `${n.usage ? `${n.usage} address` : "Address"} ${n.name}`;
+    const verb = before[k] === undefined ? "added" : after[k] === undefined ? "removed" : "modified";
+    tx.insert(s.changeLog).values({
+      entityType: owner.type, entityId: owner.id, entityCode: owner.code, type: "Update", field: "address", fieldLabel: what,
+      fromValue: before[k] === undefined ? null : String(before[k]), toValue: after[k] === undefined ? null : String(after[k]),
+      message: `${what} ${verb}.`, userId: ctx.userId, source: ctx.source,
+    }).run();
   }
-  if (i > 0) recordUpdate(tx, ctx, { entityType: owner.type, entityId: owner.id, entityCode: owner.code, before: b2, after: a2 });
 }
 
 export function deleteAddresses(tx: AppDb, ownerType: OwnerType, ownerId: string): void {

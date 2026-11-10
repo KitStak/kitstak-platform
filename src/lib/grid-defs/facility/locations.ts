@@ -4,7 +4,7 @@
  */
 import { z } from "zod";
 import { ABC_CODES, AREA_TYPES, CAPACITY_TYPES, DIMENSION_UNITS, LOCATION_TYPES, VOLUME_UNITS } from "@/lib/enums";
-import { nonNegative, nonNegativeInt, optionalId, optionalText, requiredId, requiredText, versionField, type FacilityField } from "./common";
+import { CUSTOM_FIELD_FILTER_FIELDS, customFieldValuesSchema, nonNegative, nonNegativeInt, optionalId, optionalText, requiredId, requiredPattern, requiredText, versionField, type FacilityField } from "./common";
 
 export const LOCATIONS_GRID_KEY = "locations";
 export const REPLENISHMENT_TYPES = ["Source", "Target"] as const;
@@ -37,12 +37,14 @@ export const LOCATION_FIELDS: readonly FacilityField[] = [
   { field: "preventAllocation", label: "Prevent allocation", type: "boolean" },
   { field: "dedicatedClientId", label: "Client", type: "enum" },
   { field: "createdAt", label: "Created date", type: "date" },
+  ...CUSTOM_FIELD_FILTER_FIELDS,
 ];
 
 export const LOCATION_SORT_FIELDS = [
   "code", "displayMember", "barcode", "warehouseCode", "locationGroup", "locationZone", "locationType", "replenishmentType",
   "areaType", "assignedMobileCart", "walkingPathPriority", "level", "mezzanine", "aisle", "rack", "position", "column",
   "height", "volume", "abcCode", "isLocked", "inventoryStatus", "preventAllocation", "dedicatedClient", "storedUnits", "createdAt",
+  ...CUSTOM_FIELD_FILTER_FIELDS.map((f) => f.field),
 ] as const;
 
 /**
@@ -80,7 +82,7 @@ export type LocationRuleKey = (typeof LOCATION_RULES)[number]["key"];
 const rules = Object.fromEntries(LOCATION_RULES.map((r) => [r.key, z.boolean().default(false)])) as Record<LocationRuleKey, z.ZodDefault<z.ZodBoolean>>;
 
 export const locationInfoSchema = z.object({
-  code: requiredText("Location code", 60).regex(/^[A-Za-z0-9][A-Za-z0-9._\-/ ]*$/, "Use letters, numbers, dot, dash, slash or underscore"),
+  code: requiredPattern("Location code", 60, /^[A-Za-z0-9][A-Za-z0-9._\-/ ]*$/, "Use letters, numbers, dot, dash, slash or underscore"),
   warehouseId: requiredId("Warehouse"),
   locationGroupId: optionalId(),
   locationZoneId: optionalId(),
@@ -88,8 +90,8 @@ export const locationInfoSchema = z.object({
   areaType: z.enum(AREA_TYPES, { error: "Area type is required" }),
   replenishmentType: z.enum(REPLENISHMENT_TYPES).nullable().optional().transform((v) => v ?? null),
   walkingPathPriority: optionalInt("Walking path priority", 999_999),
-  capacityType: z.enum(CAPACITY_TYPES),
-  maxCapacityQty: nonNegativeInt("Maximum capacity quantity"),
+  capacityType: z.enum(CAPACITY_TYPES).default("None"),
+  maxCapacityQty: nonNegativeInt("Maximum capacity quantity").default(0),
   maxSkuQty: nonNegativeInt("Maximum SKU quantity", 10_000).nullable().optional().transform((v) => v ?? null),
   mezzanine: optionalText(100),
   aisle: optionalText(40),
@@ -97,19 +99,19 @@ export const locationInfoSchema = z.object({
   column: optionalInt("Column", 9999),
   level: optionalInt("Level", 999),
   position: optionalText(40),
-  dimensionUnit: z.enum(DIMENSION_UNITS),
-  height: nonNegative("Height"),
-  width: nonNegative("Width"),
-  length: nonNegative("Length"),
-  volumeUnit: z.enum(VOLUME_UNITS),
-  volume: nonNegative("Volume", 1_000_000_000),
+  dimensionUnit: z.enum(DIMENSION_UNITS).default("Inch"),
+  height: nonNegative("Height").default(0),
+  width: nonNegative("Width").default(0),
+  length: nonNegative("Length").default(0),
+  volumeUnit: z.enum(VOLUME_UNITS).default("Cubic Inch"),
+  volume: nonNegative("Volume", 1_000_000_000).default(0),
   displayMember: optionalText(100),
   barcode: optionalText(120),
-  abcCode: z.enum(ABC_CODES),
-  singleClient: z.boolean(),
-  isLocked: z.boolean(),
+  abcCode: z.enum(ABC_CODES).default("None"),
+  singleClient: z.boolean().default(false),
+  isLocked: z.boolean().default(false),
   dedicatedClientId: optionalId(),
-  printApplyOnPacking: z.boolean(),
+  printApplyOnPacking: z.boolean().default(false),
   colorCode: optionalText(20),
   ...rules,
 }).superRefine((v, ctx) => {
@@ -148,6 +150,7 @@ export const locationSaveSchema = z.object({
   info: locationInfoSchema,
   productCapacities: z.array(productCapacitySchema).max(200).default([]),
   lpCapacities: z.array(lpCapacitySchema).max(200).default([]),
+  customFields: customFieldValuesSchema,
   version: versionField,
 }).superRefine((v, ctx) => {
   const seen = new Set<string>();
@@ -184,6 +187,66 @@ export function legacyRoleFor(areaType: (typeof AREA_TYPES)[number]): "Picking" 
     case "Loading": return "Shipping";
     default: return "Reserve";
   }
+}
+
+/** PATCH body: any subset of the save document; the server merges it onto the stored record. */
+export const locationPatchSchema = z.object({
+  info: z.record(z.string(), z.unknown()).optional(),
+  productCapacities: z.array(z.unknown()).max(200).optional(),
+  lpCapacities: z.array(z.unknown()).max(200).optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
+  version: z.number().int().nonnegative().optional(),
+});
+export type LocationPatch = z.infer<typeof locationPatchSchema>;
+
+/** Stored location fields (repository detail shape) that the merge reads. */
+export interface LocationRecordForMerge {
+  readonly code: string; readonly warehouseId: string; readonly locationGroupId: string | null; readonly locationZoneId: string | null;
+  readonly locationType: string | null; readonly areaType: string | null; readonly replenishmentType: string | null;
+  readonly walkingPathPriority: number | null; readonly capacityType: string; readonly maxCapacityQty: number; readonly maxSkuQty: number | null;
+  readonly mezzanine: string | null; readonly aisle: string | null; readonly rack: string | null; readonly bay?: string | null;
+  readonly column: number | null; readonly level: string | number | null; readonly position: string | null;
+  readonly dimensionUnit: string | null; readonly height: number; readonly width: number; readonly length: number;
+  readonly volumeUnit: string | null; readonly volume: number; readonly displayMember: string | null; readonly barcode: string | null;
+  readonly abcCode: string; readonly singleClient: boolean; readonly isLocked: boolean; readonly dedicatedClientId: string | null;
+  readonly printApplyOnPacking: boolean; readonly colorCode: string | null; readonly version: number;
+  readonly customFields?: Readonly<Record<string, unknown>> | null;
+  readonly productCapacities: readonly { readonly clientId: string; readonly productId: string; readonly packType: string; readonly minQty: number; readonly maxQty: number }[];
+  readonly lpCapacities: readonly { readonly lpTypeId: string; readonly minQty: number; readonly maxQty: number; readonly clientId: string | null; readonly productId: string | null }[];
+}
+
+/** Stored record → full save-document `info` (inverse of the repository column mapping). */
+export function locationRecordToInfo(d: LocationRecordForMerge): LocationInfoInput {
+  const bag = d as unknown as Record<string, unknown>;
+  const rulesOf = Object.fromEntries(LOCATION_RULES.map((r) => [r.key, Boolean(bag[r.key])])) as Record<LocationRuleKey, boolean>;
+  return {
+    code: d.code, warehouseId: d.warehouseId, locationGroupId: d.locationGroupId, locationZoneId: d.locationZoneId,
+    locationType: (d.locationType ?? "Shelves") as LocationInfoInput["locationType"],
+    areaType: (d.areaType ?? "Storage") as LocationInfoInput["areaType"],
+    replenishmentType: d.replenishmentType as LocationInfoInput["replenishmentType"],
+    walkingPathPriority: d.walkingPathPriority, capacityType: d.capacityType as LocationInfoInput["capacityType"], maxCapacityQty: d.maxCapacityQty, maxSkuQty: d.maxSkuQty,
+    mezzanine: d.mezzanine ?? "", aisle: d.aisle ?? "", rack: d.rack ?? d.bay ?? "", column: d.column, level: Number(d.level) || null, position: d.position ?? "",
+    dimensionUnit: (d.dimensionUnit ?? "Inch") as LocationInfoInput["dimensionUnit"], height: d.height, width: d.width, length: d.length,
+    volumeUnit: (d.volumeUnit ?? "Cubic Inch") as LocationInfoInput["volumeUnit"], volume: d.volume,
+    displayMember: d.displayMember ?? "", barcode: d.barcode ?? "", abcCode: d.abcCode as LocationInfoInput["abcCode"], singleClient: Boolean(d.singleClient), isLocked: Boolean(d.isLocked),
+    dedicatedClientId: d.dedicatedClientId, printApplyOnPacking: Boolean(d.printApplyOnPacking), colorCode: d.colorCode ?? "",
+    ...rulesOf,
+  };
+}
+
+/**
+ * Merge a partial PATCH onto the stored record → full (still unvalidated) save document.
+ * Omitted `info` fields keep their stored value, omitted capacity arrays are kept as stored,
+ * and an omitted `version` targets the stored version.
+ */
+export function mergeLocationPatch(d: LocationRecordForMerge, patch: LocationPatch): Record<string, unknown> {
+  return {
+    info: { ...locationRecordToInfo(d), ...(patch.info ?? {}) },
+    productCapacities: patch.productCapacities ?? d.productCapacities.map((c) => ({ clientId: c.clientId, productId: c.productId, packType: c.packType, minQty: c.minQty, maxQty: c.maxQty })),
+    lpCapacities: patch.lpCapacities ?? d.lpCapacities.map((c) => ({ lpTypeId: c.lpTypeId, minQty: c.minQty, maxQty: c.maxQty, assignProduct: Boolean(c.productId), clientId: c.clientId, productId: c.productId })),
+    customFields: patch.customFields ?? d.customFields ?? {},
+    version: patch.version ?? d.version,
+  };
 }
 
 export const lockBodySchema = z.object({

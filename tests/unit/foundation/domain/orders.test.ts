@@ -54,7 +54,7 @@ describe("updateOrder", () => {
     expect(u.totalQuantity).toBe(6);
     const lineMsgs = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.parentEntityId, o.id)).all().map((c) => c.message);
     // createOrder logs one entry per line (orders-outbound REQ-2), then the replacement entries.
-    expect(lineMsgs).toEqual(["MLT-WIDGET-01 -> Quantity is modified. 0 --> 2", "MLT-WIDGET-01 -> Quantity is modified. 2 --> 5", "MLT-GADGET-02 -> Quantity is modified. 0 --> 1"]);
+    expect(lineMsgs).toEqual(["MLT-WIDGET-01 -> Shipment Order Line is created.", "MLT-WIDGET-01 -> Quantity is modified. 2 --> 5", "MLT-GADGET-02 -> Quantity is modified. 0 --> 1"]);
     const u2 = updateOrder(w.db, w.ctx, { id: o.id, version: u.version, lines: [{ productId: w.productId, quantity: 1 }] });
     expect(w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, o.id)).all()).toHaveLength(1);
     stock(5);
@@ -80,7 +80,8 @@ describe("status commands", () => {
     allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
     expect(() => cancelOrders(w.db, w.ctx, { ids: [o.id], reasonId: "" })).toThrow(/reason/);
     expect(cancelOrders(w.db, w.ctx, { ids: [o.id, "nope"], reasonId: "r1", note: "dup" }).succeeded).toEqual([o.id]);
-    expect(row(o.id)).toMatchObject({ status: "Cancelled", cancelReasonId: "r1", note: "dup" });
+    expect(row(o.id)).toMatchObject({ status: "Cancelled", cancelReasonId: "r1" });
+    expect(row(o.id)?.note).not.toBe("dup");
     expect(w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, o.id)).get()).toMatchObject({ allocatedQuantity: 0, cancelledQuantity: 2 });
     expect(ledger.reconcileLedger(w.db)).toEqual([]);
   });
@@ -178,7 +179,7 @@ describe("workflows", () => {
     const big = mkOrder(5);
     const runs = w.db.select().from(schema.workflowRuns).where(eq(schema.workflowRuns.entityId, big.id)).all();
     expect(runs).toHaveLength(1);
-    expect(runs[0]).toMatchObject({ workflowId: first.id, matched: true, error: "Action 'Set Priority' is not configured yet." });
+    expect(runs[0]).toMatchObject({ workflowId: first.id, matched: true, error: null }); // M12 registered the Set Priority executor
     const small = mkOrder(1);
     const summary = runWorkflows(w.db, w.ctx, "Shipment Order Created", { type: "shipment_order", id: small.id }, {
       executors: {

@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Drawer } from "@/components/ui/drawer";
 import { Select } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { TextField } from "@/components/ui/text-field";
 import { toast } from "@/components/ui/toast";
-import { YesNoToggle } from "@/components/ui/yes-no-toggle";
+import { SettingYesNo as YesNoToggle } from "@/components/integrations/shared/form-controls";
 import { useWarehouseOptions } from "@/components/integrations/shared/shared";
 import type { CarrierConnectionDetail } from "@/server/repositories/carriers";
 
@@ -33,6 +34,7 @@ export function AddCarrierDrawer({ open, onOpenChange, provider, providerName, o
   const cat = useApiQuery<unknown>(["carrier-catalog", provider], open ? "/api/carriers/catalog" : null, { query: { provider }, staleTime: 60_000 });
   const parsed = catalogSchema.safeParse(cat.data?.data);
   const fields = parsed.success ? parsed.data.credentialFields : [];
+  const catalogLoading = open && cat.isPending;
   const [setupName, setSetupName] = React.useState("");
   const [warehouseId, setWarehouseId] = React.useState<string | null>(warehouses.defaultId);
   const [isTest, setIsTest] = React.useState(true);
@@ -69,11 +71,13 @@ export function AddCarrierDrawer({ open, onOpenChange, provider, providerName, o
   };
   return (
     <Drawer open={open} onOpenChange={onOpenChange} dirty={Boolean(setupName || payor || Object.values(creds).some(Boolean))} width={35}
-      title={provider === "kitstaks-sandbox" ? "KitStaks Sandbox carrier" : `${providerName} Carrier API Keys`} description={`This is where you set up your ${providerName} integration for shipping.`}
-      footer={<div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button><Button variant="primary" disabled={pending || (parsed.success && !parsed.data.live)} onClick={() => void submit()}>{pending ? <Spinner className="h-3.5 w-3.5" /> : null}Continue</Button></div>}>
+      title={provider === "kitstaks-sandbox" ? "KitStak Sandbox carrier" : `${providerName} Carrier API Keys`} description={`This is where you set up your ${providerName} integration for shipping.`}
+      footer={<div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button><Button variant="primary" disabled={pending || !parsed.success || !parsed.data.live} title={catalogLoading ? "Loading the carrier's API fields…" : undefined} onClick={() => void submit()}>{pending ? <Spinner className="h-3.5 w-3.5" /> : null}Continue</Button></div>}>
       <div className="flex flex-col gap-4">
-        {parsed.success && !parsed.data.live ? <Callout variant="attention" title="No API adapter yet">{providerName} can't be connected yet. Use the KitStaks Sandbox carrier, UPS, FedEx, EasyPost or Shippo.</Callout> : null}
+        {parsed.success && !parsed.data.live ? <Callout variant="attention" title="No API adapter yet">{providerName} can’t be connected yet. Use the KitStak Sandbox carrier, UPS, FedEx, Stamps.com, EasyPost, Shippo or a Custom Carrier.</Callout> : null}
+        {cat.isError ? <Callout variant="attention" title="Couldn't load the carrier's API fields" action={<Button size="sm" onClick={() => void cat.refetch()}>Retry</Button>}>{cat.error.message}</Callout> : null}
         <F id="setupName" error={errors["setupName"]} label="Setup name" required><TextField id="ac-setupName" value={setupName} maxLength={60} placeholder={`e.g. ${providerName.toUpperCase()}-MLT1`} invalid={Boolean(errors.setupName)} onChange={(e) => setSetupName(e.target.value)} /></F>
+        {catalogLoading ? <div className="flex flex-col gap-3" aria-busy="true" aria-label="Loading API fields"><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /></div> : null}
         {fields.map((f) => (
           <F key={f.key} id={`credentials.${f.key}`} error={errors[`credentials.${f.key}`]} label={f.label} required>
             <TextField id={`ac-credentials-${f.key}`} type={f.secret ? "password" : "text"} autoComplete="off" value={creds[f.key] ?? ""} invalid={Boolean(errors[`credentials.${f.key}`])} onChange={(e) => setCreds((c) => ({ ...c, [f.key]: e.target.value }))} />

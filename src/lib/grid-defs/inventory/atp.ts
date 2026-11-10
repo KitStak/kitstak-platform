@@ -44,8 +44,8 @@ export const ATP_TIPS: Readonly<Record<string, string>> = {
   openPoQty: "Units still to receive on open purchase orders.",
   currentAtp: "Undamaged Quantity − Open SO Qty. What you can promise from stock today.",
   plannedAtp: "Current ATP + Open PO Qty. What you can promise once open POs arrive.",
-  onHandQty: "Undamaged units in locations that sync inventory to channels.",
-  sellableQty: "On Hand Qty − Open SO Qty. The quantity published to sales channels.",
+  onHandQty: "Every unit physically on hand in the warehouse (= Total Quantity, damaged included; Logiwa parity). Damaged is shown separately.",
+  sellableQty: "Undamaged units in locations that sync inventory to channels, minus Open SO Qty. The quantity published to sales channels.",
   pickableQty: "Unallocated, undamaged Stock in active, unlocked locations that allow allocation.",
   unallocatedSoQty: "Open SO Qty − Allocated SO Item Qty. Demand still waiting for stock.",
 };

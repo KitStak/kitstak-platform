@@ -11,9 +11,9 @@ import { hasClient } from "@/server/auth/scope";
 import * as s from "@/server/db/schema";
 import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
-import { pauseReason, runChannelMethod, type RunSummary } from "@/server/integrations/runtime/channel-runtime";
+import { isDemoFeed, isSimulated, pauseReason, runChannelMethod, type RunSummary } from "@/server/integrations/runtime/channel-runtime";
 import {
-  HISTORY_FIELDS, HISTORY_SORT_FIELDS, ITEM_SORT_FIELDS, METHOD_FIELDS, METHOD_SORT_FIELDS, ORDER_ITEM_FIELDS, PRODUCT_ITEM_FIELDS,
+  canSimulateError, HISTORY_FIELDS, HISTORY_SORT_FIELDS, ITEM_SORT_FIELDS, METHOD_FIELDS, METHOD_SORT_FIELDS, ORDER_ITEM_FIELDS, PRODUCT_ITEM_FIELDS,
 } from "@/lib/grid-defs/integrations/logs";
 import { assertFound, compileGrid, type GridBinding } from "./integration-logs-kit";
 
@@ -53,6 +53,10 @@ export interface MethodRow {
   readonly lastSuccessAt: string | null;
   readonly pauseReason: string | null;
   readonly lastRunStatus: string | null;
+  /** A live-channel store saved without credentials: it runs on the KitStak demo feed. */
+  readonly demoFeed: boolean;
+  /** Sandbox / demo-feed Download Orders: the row offers "Simulate error". */
+  readonly canSimulateError: boolean;
 }
 
 export function listMethods(db: AppDb, auth: AuthContext, query: GridQuery): { rows: MethodRow[]; total: number } {
@@ -64,6 +68,7 @@ export function listMethods(db: AppDb, auth: AuthContext, query: GridQuery): { r
     rows: result.rows.map(({ m: x, c, last }) => ({
       id: x.id, connectionId: c.id, method: x.method, storeName: c.storeName, provider: c.provider, isSandbox: c.distribution === "API", status: x.status, jobStatus: x.jobStatus,
       intervalMinutes: x.intervalMinutes, nextRunAt: x.status === "Active" ? x.nextRunAt : null, lastRunAt: x.lastRunAt, lastSuccessAt: x.lastSuccessAt, pauseReason: pauseReason(c), lastRunStatus: last ?? null,
+      demoFeed: isDemoFeed(c), canSimulateError: canSimulateError(isSimulated(c), x.method),
     })),
     total: result.total,
   };
@@ -75,9 +80,17 @@ export function loadMethod(db: AppDb, auth: AuthContext, id: string) {
   return row;
 }
 
-export async function runMethodNow(db: AppDb, auth: AuthContext, id: string): Promise<RunSummary> {
-  loadMethod(db, auth, id);
-  return runChannelMethod(db, id, { manual: true });
+/**
+ * Run a method now. `simulateError` (KitStak Sandbox › Download Orders only) makes this one run
+ * include an order with an unknown SKU, so Missing Orders and Retry Download can be demonstrated
+ * on demand; scheduled sandbox runs never fail on purpose.
+ */
+export async function runMethodNow(db: AppDb, auth: AuthContext, id: string, opts: { readonly simulateError?: boolean } = {}): Promise<RunSummary> {
+  const row = loadMethod(db, auth, id);
+  if (opts.simulateError && !canSimulateError(isSimulated(row.c), row.m.method)) {
+    throw new AppError("VALIDATION", "Simulate error is available only for Download Orders on a KitStak Sandbox or demo-feed store");
+  }
+  return runChannelMethod(db, id, { manual: true, simulateError: opts.simulateError === true });
 }
 
 /* ---------------- history ---------------- */

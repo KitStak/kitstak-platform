@@ -53,23 +53,28 @@ function Card({ title, icon: Icon, action, children, className }: { readonly tit
   );
 }
 
-export function StepConfirm({ form, duplicate, onDismissDuplicate, goTo, receiving }: {
+export function StepConfirm({ form, duplicate, onDismissDuplicate, goTo, receiving, readOnly = false, vendorFallback = null }: {
   readonly form: UseFormReturn<PoFormValues>;
   readonly duplicate: string | null;
   readonly onDismissDuplicate: () => void;
   readonly goTo: (key: string) => void;
   /** Show received / difference columns (edit after receiving started). */
   readonly receiving: boolean;
+  /** Hide the Edit links (view-only roles). */
+  readonly readOnly?: boolean;
+  /** The vendor loaded with the PO detail: shown at once and kept if the vendor fetch fails. */
+  readonly vendorFallback?: VendorDetail | null;
 }) {
   const fmt = useFormat();
   const me = useMe();
   const v = useWatch({ control: form.control }) as PoFormValues;
-  const vendor = useApiQuery<VendorDetail>(["vendor", v.vendorId], v.vendorId ? `/api/vendors/${v.vendorId}` : null, { retry: false });
+  const fallback = vendorFallback && vendorFallback.id === v.vendorId ? vendorFallback : null;
+  const vendor = useApiQuery<VendorDetail>(["vendor", v.vendorId], v.vendorId ? `/api/vendors/${v.vendorId}` : null, { retry: 2, staleTime: 60_000 });
   const warehouse = me.data?.data.contextOptions.warehouses.find((w) => w.id === v.warehouseId);
   const client = me.data?.data.contextOptions.clients.find((c) => c.id === v.clientId);
   const lines = v.lines ?? [];
-  const vd = vendor.data?.data;
-  const editLink = (key: string, label: string) => (
+  const vd = vendor.data?.data ?? fallback ?? undefined;
+  const editLink = (key: string, label: string) => readOnly ? null : (
     <Button variant="ghost" size="sm" onClick={() => goTo(key)} aria-label={`Edit ${label}`}><Pencil className="h-3.5 w-3.5" aria-hidden />Edit</Button>
   );
 
@@ -80,7 +85,7 @@ export function StepConfirm({ form, duplicate, onDismissDuplicate, goTo, receivi
           {duplicate}
         </Callout>
       ) : null}
-      <div className="overflow-x-auto rounded-lg border border-border ks-scroll">
+      <div className="relative max-w-full overflow-x-auto rounded-lg border border-border ks-scroll">
         <table className="w-full border-collapse text-[12px]">
           <thead className="bg-surface-sunken">
             <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
@@ -106,8 +111,8 @@ export function StepConfirm({ form, duplicate, onDismissDuplicate, goTo, receivi
                 <td className="px-3 py-2 text-right tabular-nums">{l.orderedQuantity.toLocaleString()}</td>
                 {receiving ? <td className="px-3 py-2 text-right tabular-nums">{l.receivedQuantity.toLocaleString()}</td> : null}
                 {receiving ? <td className="px-3 py-2 text-right"><DiffPill value={receivingDifference(l.orderedQuantity, l.receivedQuantity)} /></td> : null}
-                <td className="px-3 py-2 text-right tabular-nums">{fmt.money(l.unitCost)}</td>
-                <td className="px-3 py-2 text-right font-semibold tabular-nums text-foreground">{fmt.money(Math.round(l.orderedQuantity * l.unitCost * 100) / 100)}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmt.money(l.unitCost)}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums text-foreground">{fmt.money(Math.round(l.orderedQuantity * l.unitCost * 100) / 100)}</td>
               </tr>
             ))}
           </tbody>
@@ -118,14 +123,28 @@ export function StepConfirm({ form, duplicate, onDismissDuplicate, goTo, receivi
               {receiving ? <td className="px-3 py-2 text-right tabular-nums">{lines.reduce((s, l) => s + l.receivedQuantity, 0).toLocaleString()}</td> : null}
               {receiving ? <td className="px-3 py-2 text-right"><DiffPill value={lines.reduce((s, l) => s + l.receivedQuantity - l.orderedQuantity, 0)} /></td> : null}
               <td />
-              <td className="px-3 py-2 text-right tabular-nums">{fmt.money(linesTotal(lines))}</td>
+              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">{fmt.money(linesTotal(lines))}</td>
             </tr>
           </tfoot>
         </table>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Vendor" icon={Building2} action={editLink("vendor", "vendor")}>
-          {vendor.isPending && v.vendorId ? <Skeleton className="h-20 w-full" /> : vd ? (
+          {vendor.isPending && v.vendorId && !vd ? (
+            <div className="flex flex-col gap-3" aria-busy="true">
+              {v.vendorLabel ? <p className="text-[15px] font-semibold text-foreground">{v.vendorLabel}</p> : <Skeleton className="h-5 w-1/2" />}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Skeleton className="h-[92px] w-full" />
+                <Skeleton className="h-[92px] w-full" />
+              </div>
+            </div>
+          ) : vendor.isError && v.vendorId && !vd ? (
+            <div className="flex flex-col gap-2">
+              {v.vendorLabel ? <p className="text-[15px] font-semibold text-foreground">{v.vendorLabel}</p> : null}
+              <p role="alert" className="text-[13px] text-secondary">{"Couldn't load the vendor's addresses."}</p>
+              <div><Button variant="secondary" size="sm" onClick={() => void vendor.refetch()}>Retry</Button></div>
+            </div>
+          ) : vd ? (
             <div className="flex flex-col gap-3">
               <div>
                 <p className="text-[15px] font-semibold text-foreground">{vd.displayName}</p>

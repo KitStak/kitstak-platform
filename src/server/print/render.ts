@@ -10,7 +10,7 @@ import type { AppDb } from "@/server/api/db";
 import { AppError, fromZodError, notFoundError } from "@/server/api/errors";
 import { fileStore, type FileRecord, type FileStore } from "@/server/files/files";
 import { getPrintType, type PrintTypeDef } from "./catalog";
-import { locationLabelTemplate, lpLabelTemplate, mobileCartLabelTemplate, productLabelTemplate } from "./templates/barcode-label";
+import { locationLabelTemplate, retailerLabelTemplate, lpLabelTemplate, mobileCartLabelTemplate, productLabelTemplate } from "./templates/barcode-label";
 import { manifestBolTemplate } from "./templates/manifest-bol";
 import { packingSlipTemplate } from "./templates/packing-slip";
 import { pickListTemplate } from "./templates/pick-list";
@@ -41,6 +41,8 @@ const TEMPLATES: ReadonlyMap<string, AnyTemplate> = new Map<string, AnyTemplate>
   ["location-label", erase(locationLabelTemplate)],
   ["product-label", erase(productLabelTemplate)],
   ["mobile-cart-label", erase(mobileCartLabelTemplate)],
+  ["retailer-case-label", erase(retailerLabelTemplate)],
+  ["retailer-parent-lp-label", erase(retailerLabelTemplate)],
   ["shipping-label", erase(shippingLabelTemplate)],
   ["purchase-order-list", erase(purchaseOrderTemplate)],
   ["po-billing-charges", erase(poBillingChargesTemplate)],

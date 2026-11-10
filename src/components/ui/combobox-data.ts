@@ -18,6 +18,8 @@ export type LoadOptions = (query: string, signal: AbortSignal) => Promise<readon
 
 export const DEFAULT_ASYNC_MIN_CHARS = 3;
 export const SEARCH_DEBOUNCE_MS = 250;
+/** Generic list error: server or validation text never reaches the options list. */
+export const COMBOBOX_LOAD_ERROR = "Couldn't load options. Try again.";
 
 export function minCharsMessage(minChars: number): string {
   return `You have to enter at least ${minChars} characters to search.`;
@@ -76,7 +78,8 @@ export function useOptionSource({
         (items) => setAsyncState({ query: trimmed, items, error: null }),
         (error: unknown) => {
           if (controller.signal.aborted) return;
-          setAsyncState({ query: trimmed, items: [], error: error instanceof Error ? error.message : "Search failed" });
+          // Never show raw server / validation text in the list; the request id is in the console.
+          setAsyncState({ query: trimmed, items: [], error: COMBOBOX_LOAD_ERROR });
         }
       );
     }, SEARCH_DEBOUNCE_MS);

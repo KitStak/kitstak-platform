@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { NavigationMenu } from "radix-ui";
 import { ArrowRight, ChevronDown } from "lucide-react";
 import type { NavItem, NavMenu } from "@/config/nav-config";
-import { activeMenuKey, isItemActive } from "@/config/nav-access";
+import { activeItemHref, activeMenuKey } from "@/config/nav-access";
 import { cn } from "@/lib/utils";
 import { NAV_ICONS } from "./nav-icons";
 
@@ -21,8 +21,8 @@ function NavBadgeTag({ badge }: { readonly badge: NonNullable<NavItem["badge"]> 
   );
 }
 
-function MenuLink({ navItem, pathname }: { readonly navItem: NavItem; readonly pathname: string }) {
-  const active = isItemActive(navItem, pathname);
+function MenuLink({ navItem, activeHref }: { readonly navItem: NavItem; readonly activeHref: string | null }) {
+  const active = activeHref === navItem.href;
   return (
     <li>
       <NavigationMenu.Link asChild active={active}>
@@ -31,7 +31,7 @@ function MenuLink({ navItem, pathname }: { readonly navItem: NavItem; readonly p
           aria-current={active ? "page" : undefined}
           className={cn(
             "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] font-medium outline-none transition-colors",
-            "hover:bg-primary-soft hover:text-primary focus-visible:bg-primary-soft focus-visible:text-primary focus-visible:ring-2 focus-visible:ring-primary/60",
+            "hover:bg-primary-soft hover:text-primary focus-visible:bg-primary-soft focus-visible:text-primary focus-visible:ring-2 focus-visible:ring-info/60",
             active ? "bg-primary-soft text-primary" : "text-body",
           )}
         >
@@ -44,6 +44,7 @@ function MenuLink({ navItem, pathname }: { readonly navItem: NavItem; readonly p
 }
 
 function MenuPanel({ menu, pathname }: { readonly menu: NavMenu; readonly pathname: string }) {
+  const activeHref = activeItemHref(menu, pathname);
   return (
     <div className="max-h-[calc(100vh-80px)] overflow-y-auto">
       <div className="flex flex-wrap divide-x divide-border py-4">
@@ -57,7 +58,7 @@ function MenuPanel({ menu, pathname }: { readonly menu: NavMenu; readonly pathna
               </h3>
               <ul className="flex flex-col gap-px">
                 {column.items.map((navItem) => (
-                  <MenuLink key={`${column.heading}:${navItem.href}`} navItem={navItem} pathname={pathname} />
+                  <MenuLink key={`${column.heading}:${navItem.href}`} navItem={navItem} activeHref={activeHref} />
                 ))}
               </ul>
             </section>
@@ -67,7 +68,7 @@ function MenuPanel({ menu, pathname }: { readonly menu: NavMenu; readonly pathna
       {menu.footer ? (
         <div className="border-t border-border bg-surface-sunken px-5 py-2">
           <NavigationMenu.Link asChild>
-            <Link href={menu.footer.href} className="inline-flex items-center gap-1 rounded px-2 py-1 text-[12px] font-semibold text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-primary/60">
+            <Link href={menu.footer.href} className="inline-flex items-center gap-1 rounded px-2 py-1 text-[12px] font-semibold text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-info/60">
               {menu.footer.label}
               <ArrowRight className="h-3 w-3" aria-hidden />
             </Link>

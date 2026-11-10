@@ -34,6 +34,6 @@ export function applyLpNumberImport(ctx: ImportApplyContext, row: ImportRowValue
     const issue = parsed.error.issues[0];
     throw new AppError("VALIDATION", `${issue?.path.join(".") || "row"}: ${issue?.message ?? "invalid"}`);
   }
-  const created = createLpNumbers(db, auth, { userId: ctx.actor.userId, source: ctx.actor.source }, parsed.data);
+  const created = createLpNumbers(db, auth, { userId: ctx.actor.userId, source: ctx.actor.source.startsWith("Import · ") ? ctx.actor.source : `Import · ${ctx.actor.source}` }, parsed.data);
   return { entityId: created.ids[0] ?? null, message: `Created LP ${created.numbers[0] ?? ""}` };
 }

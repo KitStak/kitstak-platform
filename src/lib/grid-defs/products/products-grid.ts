@@ -38,7 +38,7 @@ export const PRODUCT_GRID_FIELDS: readonly ProductGridField[] = [
   { field: "isOversized", label: "Oversized", type: "boolean" },
   { field: "packType", label: "Pack type", type: "enum", optionsFrom: "packTypes" },
   { field: "isPackagingMaterial", label: "Packaging material", type: "boolean" },
-  { field: "purchasePrice", label: "Price", type: "number", decimals: 2 },
+  { field: "purchasePrice", label: "Purchase price", type: "number", decimals: 2 },
   { field: "productCategory", label: "Product category", type: "enum", options: PRODUCT_CATEGORIES },
   { field: "productGroup", label: "Product group", type: "enum", optionsFrom: "productGroups" },
   { field: "productType", label: "Product type", type: "enum", optionsFrom: "productTypes" },

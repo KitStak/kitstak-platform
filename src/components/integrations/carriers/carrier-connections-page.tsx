@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { AlertTriangle, ChevronLeft, History, MoreHorizontal, Pencil, Plus, Trash2, Truck } from "lucide-react";
 import { useApiQuery } from "@/lib/query-client";
 import { CARRIERS, monogramSvg, svgDataUri } from "@/lib/channel-catalog";
+import { brandMarkSvg } from "@/components/integrations/shared/brand-marks";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { StatusPill } from "@/components/ui/status-pill";
 import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
-import { EntityChangeLogDrawer, NO_PERMISSION, useAction, usePagePerms, type BulkResponse } from "@/components/integrations/shared/shared";
+import { EntityChangeLogDrawer, NO_PERMISSION, useAction, usePagePerms, usePrefetchDetails, type BulkResponse, integrationDomain } from "@/components/integrations/shared/shared";
 import type { CarrierConnectionRow } from "@/server/repositories/carriers";
 import { AddCarrierDrawer } from "./add-carrier-drawer";
 import { EditCarrierDrawer } from "./edit-carrier-drawer";
@@ -29,11 +30,12 @@ export function CarrierConnectionsPage({ provider: slug }: { readonly provider: 
   const params = useSearchParams();
   const perms = usePagePerms("integrations.integrations", PERMS);
   const sandbox = slug === "kitstaks-sandbox";
-  const entry = sandbox ? { name: "KitStaks Sandbox", logoSvg: monogramSvg("KS", "#2E6BE6"), description: "Built-in test carrier: realistic rates, labels and voids with no account needed.", availability: "available" } : CARRIERS.find((c) => c.key === slug);
+  const entry = sandbox ? { name: "KitStak Sandbox", logoSvg: monogramSvg("KS", "#2E6BE6"), description: "Built-in test carrier: realistic rates, labels and voids with no account needed.", availability: "available" } : CARRIERS.find((c) => c.key === slug);
   const provider = PROVIDER_OF[slug] ?? slug;
   const list = useApiQuery<CarrierConnectionRow[]>(["carrier-connections", provider], "/api/carriers", { query: { provider } });
   const [add, setAdd] = React.useState(params.get("connect") === "1");
   const [edit, setEdit] = React.useState<string | null>(null);
+  usePrefetchDetails("carrier-connection", "/api/carriers", (list.data?.data ?? []).map((r) => r.id));
   const [log, setLog] = React.useState<CarrierConnectionRow | null>(null);
   const [toDelete, setToDelete] = React.useState<CarrierConnectionRow | null>(null);
   const action = useAction([["carrier-connections", provider], ["integration-catalog"]]);
@@ -42,17 +44,17 @@ export function CarrierConnectionsPage({ provider: slug }: { readonly provider: 
   const soon = entry.availability === "coming-soon";
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title={`${entry.name} Integration`} crumbLabel={entry.name} helper={`Connect ${entry.name} to KitStaks to get its carriers, services and packages for rating and labels.`}
+      <PageHeader title={`${entry.name} Integration`} crumbLabel={entry.name} helpHref={`/integrations/help#carrier-${slug}`} helper={`Connect ${entry.name} to KitStak to get its carriers, services and packages for rating and labels.`}
         actions={
           <div className="flex items-center gap-3">
             <Link href="/integrations/carriers" className="inline-flex items-center gap-1 text-[13px] text-secondary hover:text-primary"><ChevronLeft className="h-4 w-4" />Carrier integrations</Link>
-            <DisabledReason reason={!perms.create_setup ? NO_PERMISSION : soon ? "This carrier isn't available yet" : null}><Button variant="success-outline" disabled={!perms.create_setup || soon} onClick={() => setAdd(true)}><Plus className="h-4 w-4" />Add New Connection</Button></DisabledReason>
+            {perms.create_setup ? <DisabledReason reason={soon ? "This carrier isn't available yet" : null}><Button variant="success-outline" disabled={soon} onClick={() => setAdd(true)}><Plus className="h-4 w-4" />Add New Connection</Button></DisabledReason> : null}
           </div>
         } />
       <div className="flex flex-col gap-3 px-6 pb-6">
         <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={svgDataUri(entry.logoSvg)} alt="" width={40} height={40} className="rounded-lg" />
+          <img src={svgDataUri(sandbox ? entry.logoSvg : brandMarkSvg("carrier", slug, entry.logoSvg))} alt="" width={40} height={40} className="rounded-lg" />
           <div className="min-w-0 flex-1"><p className="text-[14px] font-semibold">{entry.name}</p><p className="truncate text-[12px] text-secondary">{entry.description}</p></div>
           <Badge tone={rows.length > 0 ? "success" : "neutral"}>{rows.length} setup{rows.length === 1 ? "" : "s"}</Badge>
         </div>
@@ -68,7 +70,7 @@ export function CarrierConnectionsPage({ provider: slug }: { readonly provider: 
                       {!r.hasCredentials && r.environment === "Production" ? <Badge size="sm" tone="danger" className="ml-2">No credentials</Badge> : null}</td>
                     <td className="px-3 py-2.5">{r.warehouseCode}</td>
                     <td className="px-3 py-2.5"><StatusPill status={r.isActive ? "Active" : "Inactive"} domain="active" /></td>
-                    <td className="px-3 py-2.5"><StatusPill status={r.environment} domain="integration" /></td>
+                    <td className="px-3 py-2.5"><StatusPill status={r.environment} domain={integrationDomain(r.environment)} /></td>
                     <td className="px-3 py-2.5 text-secondary">{r.connectionLabel}</td>
                     <td className="px-3 py-2.5 tabular-nums">{r.activeServices}/{r.serviceCount}</td>
                     <td className="px-3 py-2.5">{r.allClients ? "All clients" : `${r.clientCount} client${r.clientCount === 1 ? "" : "s"}`}</td>

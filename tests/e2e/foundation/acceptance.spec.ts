@@ -22,7 +22,7 @@ const SENTINEL_ID = "00000000-0000-4000-8000-000000000000";
 const DYNAMIC_SEGMENT = /\[[^\]/]+\]/g;
 const ERROR_BOUNDARY_TEXT = "Something went wrong";
 const PLACEHOLDER_TEXT = "Module in progress";
-const FORBIDDEN_TEXT = "You don't have access to this page";
+const FORBIDDEN_TEXT = /You don't have access to/;
 const ROUTE_TIMEOUT_MS = 120_000;
 const DB_PATH = process.env.KITSTAK_DB_PATH ?? path.join(process.cwd(), ".data", "kitstak.db");
 
@@ -63,7 +63,9 @@ test.describe("F8.2 every registered route resolves", () => {
       test.setTimeout(ROUTE_TIMEOUT_MS);
       const res = await adminPage.request.get(`${baseUrl}${url}`, { timeout: ROUTE_TIMEOUT_MS });
       const html = await res.text();
-      expect(res.status(), `${pattern} status`).toBeLessThan(isDynamic ? 500 : 400);
+      // /forbidden is the access-denied screen: the proxy serves it with a real 403 status.
+      if (pattern === "/forbidden") expect(res.status(), `${pattern} status`).toBe(403);
+      else expect(res.status(), `${pattern} status`).toBeLessThan(isDynamic ? 500 : 400);
       expect(html, `${pattern} rendered the error boundary`).not.toContain(ERROR_BOUNDARY_TEXT);
       if (html.includes(PLACEHOLDER_TEXT)) {
         const label = ROUTE_REGISTRY.get(pattern)?.label ?? "";
@@ -85,20 +87,24 @@ test.describe("F8.2 legacy ?tab= URLs redirect", () => {
 });
 
 test.describe("F8.3 access control", () => {
-  test("admin sees the Settings menu; viewer does not", async ({ adminPage, viewerPage }) => {
+  test("admin sees Settings > Users; viewer sees only the master-data entries it can view", async ({ adminPage, viewerPage }) => {
     const settingsTrigger = (page: Page) =>
       page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Settings", exact: true });
     await adminPage.goto("/dashboard");
     await expect(settingsTrigger(adminPage)).toBeVisible();
     await viewerPage.goto("/dashboard");
     await expect(viewerPage.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
-    await expect(settingsTrigger(viewerPage)).toHaveCount(0);
+    // Settings also hosts Master Data (Products, Locations), which viewers can read, so the
+    // menu shows; its admin entries must not.
+    await settingsTrigger(viewerPage).click();
+    await expect(viewerPage.getByRole("link", { name: "Products", exact: true }).first()).toBeVisible();
+    await expect(viewerPage.getByRole("link", { name: "Users", exact: true })).toHaveCount(0);
   });
 
   test("viewer opening /settings/users lands on the 403 page", async ({ viewerPage }) => {
     await viewerPage.goto("/settings/users");
     await expect(viewerPage).toHaveURL(/\/forbidden/);
-    await expect(viewerPage.getByText(FORBIDDEN_TEXT)).toBeVisible();
+    await expect(viewerPage.getByText(FORBIDDEN_TEXT).first()).toBeVisible();
   });
 
   test("viewer POST /api/tags is forbidden (with a valid CSRF token)", async ({ viewerPage }) => {

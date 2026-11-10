@@ -77,9 +77,9 @@ export function PrintoutTypesPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader title="Printouts & Labels" helper="Choose a printout type to list, design and assign its templates." />
-      <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-6 lg:flex-row lg:px-6">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-6 pt-4 lg:flex-row lg:gap-6 lg:px-6">
         <aside className="shrink-0 lg:w-[220px]">
-          <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-faint">Categories</p>
+          <p className="mb-3 flex h-9 items-center px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-faint">Categories</p>
           <VerticalNav ariaLabel="Printout categories" items={navItems} active={category} onChange={select} />
         </aside>
         <section className="flex min-w-0 flex-1 flex-col gap-3" aria-label={`${CATEGORY_LABELS[category]} printout types`}>

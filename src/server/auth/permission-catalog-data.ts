@@ -197,7 +197,7 @@ export const PERMISSION_TREE: readonly GroupSpec[] = [
           page("locations", "Locations", [
             "View", "Create", "Edit", "Delete", "Import File", "Change Log", "Custom Field Management", "Assign Capacity", "Label",
           ]),
-          page("vendors", "Vendors", ["View", "Create", "Edit", "Change Log"]),
+          page("vendors", "Vendors", ["View", "Create", "Edit", "Delete", "Change Log"]),
           page("customers", "Customers", ["View", "Create", "Edit", "Delete"]),
         ],
       },
@@ -207,7 +207,7 @@ export const PERMISSION_TREE: readonly GroupSpec[] = [
           page("warehouse", "Warehouse", ["View", "Create", "Edit", "Delete", "Change Log"]),
           page("mobile_carts", "Mobile Carts", ["View", "Create", "Edit", "Delete", "Label", "Duplicate"]),
           page("lp_types", "LP Types", ["View", "Create", "Edit", "Delete", "Custom Field Management"]),
-          page("lp_numbers", "LP Numbers", ["View", "Create", "Edit", "Import File", "Change Log", "Print Barcode"]),
+          page("lp_numbers", "LP Numbers", ["View", "Create", "Edit", "Delete", "Import File", "Change Log", "Print Barcode"]),
           page("shipment_packages", "Shipment Packages", ["View", "Create", "Edit", "Delete", "Custom Field Management"]),
           page("printouts_labels", "Printouts & Labels", ["View", "Create", "Edit", "Delete", "Change Log", "Duplicate"]),
           viewOnly("data_setup", "Data Setup"),

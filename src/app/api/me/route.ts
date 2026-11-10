@@ -9,6 +9,7 @@ import { AppError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
 import { CONTEXT_CLIENT_COOKIE, CONTEXT_WAREHOUSE_COOKIE, hasClient, hasWarehouse } from "@/server/auth/scope";
 import { clients, users, warehouses } from "@/server/db/schema";
+import { listActiveAppKeys } from "@/server/shell/active-apps";
 
 const MAX_CONTEXT_CLIENTS = 1000;
 const CONTEXT_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
@@ -41,7 +42,8 @@ function loadProfile(db: AppDb, auth: AuthContext) {
 function contextOptions(db: AppDb, auth: AuthContext) {
   const whRows = auth.scope.warehouseIds.length
     ? db.select({ id: warehouses.id, code: warehouses.code, name: warehouses.name }).from(warehouses)
-        .where(inArray(warehouses.id, [...auth.scope.warehouseIds])).orderBy(asc(warehouses.name)).all()
+        // Deactivated warehouses are left out of the context picker and every picker fed by it (facility-config REQ-R8-4).
+        .where(and(inArray(warehouses.id, [...auth.scope.warehouseIds]), eq(warehouses.isActive, true))).orderBy(asc(warehouses.name)).all()
     : [];
   // Inactive clients are excluded from context options and every client select fed by them (M11 §2).
   const active = eq(clients.status, "Active");
@@ -71,6 +73,7 @@ export const GET = defineRoute({
       scope: auth.scope,
       context: auth.context,
       contextOptions: contextOptions(db, auth),
+      activeApps: listActiveAppKeys(db),
       preferences,
       session: { id: auth.user.sessionId, expiresAt: auth.user.sessionExpiresAt },
     };

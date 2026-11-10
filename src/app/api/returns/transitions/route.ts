@@ -12,6 +12,6 @@ export const GET = defineRoute({
   handler: ({ db, auth, query }) => {
     const ids = query.ids.length ? query.ids : returnIdsForLines(db, auth.scope, query.lineIds);
     if (ids.length === 0) throw validationError("Select at least one return");
-    return selectionTransitions(db, auth.scope, ids.slice(0, 1000));
+    return selectionTransitions(db, auth.scope, ids.slice(0, 1000), query.ids.length ? [] : query.lineIds);
   },
 });

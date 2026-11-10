@@ -141,7 +141,8 @@ export function runJobsCommand(db: AppDb, auth: AuthContext, ctx: DomainCtx, inp
 
 class DryRunRollback extends Error {}
 
-type IneligibleRow = BulkResult["failed"][number] & { readonly reason: string };
+/** `code` is the error code (INVALID_STATE…); `recordCode` is the record's own code (e.g. SO010850) for display. */
+type IneligibleRow = BulkResult["failed"][number] & { readonly reason: string; readonly recordCode?: string | null };
 
 export interface EligibilityResult {
   readonly total: number;
@@ -201,7 +202,7 @@ function orderPreEligibility(db: AppDb, auth: AuthContext, ids: readonly string[
     const reason = !r ? "Shipment order not found"
       : r.jobId ? `Order ${r.code} is already in a job.`
         : !JOBBABLE_STATUSES.has(r.status) ? `Order ${r.code} is ${r.status}; only Open, Shortage or Ready to Pick orders can be added to a job.` : null;
-    if (reason) ineligible.push({ id, code: r ? "INVALID_STATE" : "NOT_FOUND", message: reason, reason });
+    if (reason) ineligible.push({ id, code: r ? "INVALID_STATE" : "NOT_FOUND", message: reason, reason, recordCode: r?.code ?? null });
     else eligible.push(id);
   }
   const warehouseIds = [...new Set(rows.map((r) => r.warehouseId))];
@@ -326,6 +327,13 @@ export const createLabelSchema = z.object({
   format: z.enum(LABEL_FORMATS).optional(),
   rateShoppingPresetId: idSchema.nullish(),
   source: z.enum(["BatchPacking", "PackingStation", "OrderGrid", "ShipmentPlan"]).optional(),
+  insuranceType: z.string().trim().max(40).nullish(),
+  insuranceValue: z.number().min(0).max(1_000_000).nullish(),
+  confirmationType: z.string().trim().max(40).nullish(),
+  allowSaturdayDelivery: z.boolean().optional(),
+  otherCost: z.number().min(0).max(100_000).optional(),
+  externalReference: z.string().trim().max(120).nullish(),
+  scheduledPickupAt: z.string().trim().max(40).nullish(),
 });
 
 export const voidLabelSchema = z.object({ shipmentId: idSchema });
@@ -333,7 +341,9 @@ export const voidLabelSchema = z.object({ shipmentId: idSchema });
 export const shipOrdersSchema = z.object({
   ids: bulkIdsSchema,
   shipDate: z.iso.datetime().optional(),
-  requireLabel: z.boolean().default(true),
+  // The HTTP surface always requires an active label (db:verify shipped_without_label); label-less
+  // shipping exists only for in-process tests and seeds.
+  requireLabel: z.literal(true).default(true),
 });
 
 export const returnLabelSchema = z.object({

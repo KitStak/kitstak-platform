@@ -14,11 +14,13 @@ import type { BulkResult } from "@/server/domain/types";
 import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
 import {
-  CLIENT_FIELDS, CLIENT_SEARCH_FIELDS, CLIENT_SORT_FIELDS, flattenSettings, fullSettings, settingLabel, type ClientSave, type ClientSettingsForm,
+  CLIENT_FIELDS, CLIENT_SEARCH_FIELDS, CLIENT_SORT_FIELDS, flattenSettings, fullSettings, readSscc, settingLabel, type ClientSave, type ClientSettingsForm, type ClientSscc,
 } from "@/lib/grid-defs/organization/clients";
-import { BACKLOG_STATUSES } from "./orders";
+// Constant only. Importing it from the orders repository pulled that module graph into every
+// clients request, so an orders 500 also took /api/clients and the client pickers down.
+import { BACKLOG_VIEW_STATUSES as BACKLOG_STATUSES } from "@/lib/grid-defs/orders/shipment-orders";
 import { assertVersion, compileGrid, domainCtxOf, listAddresses, logCreate, logDelete, logUpdate, saveAddresses, type Actor, type GridBinding, type OwnedAddress } from "./clients-shared";
-import { contractsForClient, type ContractRow } from "./billing";
+import { contractsForClient, logContractEvent, type ContractRow } from "./billing";
 
 const c = s.clients;
 export const CLIENT_ENTITY = "client";
@@ -126,16 +128,28 @@ export interface ClientUserRow {
   readonly access: "All clients" | "Assigned";
 }
 
+/**
+ * Accounts created by automated QA runs (critic / e2e suites: "KS-CRIT …", "KS-E2E …", "KS-TEST …",
+ * `ks-crit-…@example.com`). They are hidden from the client's "Users with access" tab so demos
+ * show only real people; Settings › Users still lists them for cleanup.
+ */
+const TEST_NAME = /^KS-(CRIT|E2E|TEST|QA)\b/i;
+const TEST_EMAIL = /^ks-(crit|e2e|test|qa)[-.@]/i;
+export function isTestIdentity(name: string, email: string): boolean {
+  return TEST_NAME.test(name.trim()) || TEST_EMAIL.test(email.trim());
+}
+
 export function usersWithAccess(db: AppDb, clientId: string): ClientUserRow[] {
   const rows = db.all<{ id: string; name: string; email: string; role: string; isActive: number; allClients: number }>(sql`
     SELECT u.id, u.name, u.email, u.role, u.is_active AS isActive, u.all_clients AS allClients FROM users u
     WHERE u.all_clients = 1 OR EXISTS (SELECT 1 FROM user_clients uc WHERE uc.user_id = u.id AND uc.client_id = ${clientId})
     ORDER BY u.all_clients ASC, u.name ASC`);
-  return rows.map((r) => ({ id: r.id, name: r.name, email: r.email, role: r.role, isActive: Boolean(r.isActive), access: r.allClients ? "All clients" : "Assigned" }));
+  return rows.filter((r) => !isTestIdentity(r.name, r.email)).map((r) => ({ id: r.id, name: r.name, email: r.email, role: r.role, isActive: Boolean(r.isActive), access: r.allClients ? "All clients" : "Assigned" }));
 }
 
 export interface ClientDetail extends ClientListRow {
   readonly settings: ClientSettingsForm;
+  readonly sscc: ClientSscc;
   readonly customFields: Readonly<Record<string, unknown>>;
   readonly addresses: readonly OwnedAddress[];
   readonly kpis: ClientKpis;
@@ -148,7 +162,7 @@ export function getClient(db: AppDb, auth: AuthContext, id: string): ClientDetai
   const row = loadClient(db, auth, id);
   const view = db.select(ROW).from(c).where(eq(c.id, id)).get() as Omit<ClientListRow, "fullName">;
   return {
-    ...view, fullName: fullName(view), settings: fullSettings(row.settings), customFields: row.customFields ?? {}, addresses: listAddresses(db, "client", id),
+    ...view, fullName: fullName(view), settings: fullSettings(row.settings), sscc: readSscc(row.settings), customFields: row.customFields ?? {}, addresses: listAddresses(db, "client", id),
     kpis: clientKpis(db, auth, id), contracts: contractsForClient(db, auth, id), users: usersWithAccess(db, id), updatedAt: row.updatedAt,
   };
 }
@@ -161,8 +175,34 @@ function snapshot(row: typeof c.$inferSelect): Record<string, unknown> {
     phone: row.phone, currency: row.currency, taxId: row.taxId ?? "", billingPlan: row.billingPlan,
   };
   for (const [k, v] of Object.entries(flattenSettings(fullSettings(row.settings)))) out[settingLabel(k) ?? k] = v ? "On" : "Off";
+  const sscc = readSscc(row.settings);
+  out["SSCC-18 extension digit"] = sscc.extensionDigit;
+  out["SSCC-18 GS1 company prefix"] = sscc.gs1CompanyPrefix;
+  out["SSCC-18 serial number"] = sscc.serialNumber;
   for (const [k, v] of Object.entries(row.customFields ?? {})) out[`Custom field ${k}`] = v ?? "";
   return out;
+}
+
+const codeTaken = (db: AppDb, code: string, exceptId?: string): boolean => {
+  const clash = db.select({ id: c.id }).from(c).where(sql`upper(${c.code}) = upper(${code})`).get();
+  return Boolean(clash && clash.id !== exceptId);
+};
+
+/**
+ * Wizard step 1: is `code` free (case-insensitive, across every client, not only the caller's
+ * scope, since codes are globally unique), and the nearest free variant (APX → APX2 … APX99).
+ */
+export function clientCodeCheck(db: AppDb, raw: string, exceptId?: string): { code: string; available: boolean; suggestion: string | null } {
+  const code = raw.trim().toUpperCase();
+  if (!code) return { code, available: false, suggestion: null };
+  const available = !codeTaken(db, code, exceptId);
+  if (available) return { code, available, suggestion: code };
+  for (let n = 2; n < 1000; n += 1) {
+    const tail = String(n);
+    const candidate = `${code.slice(0, Math.max(2, 20 - tail.length))}${tail}`;
+    if (!codeTaken(db, candidate, exceptId)) return { code, available, suggestion: candidate };
+  }
+  return { code, available, suggestion: null };
 }
 
 function assertCodeFree(db: AppDb, code: string, exceptId?: string): void {
@@ -175,11 +215,19 @@ function assertNameFree(db: AppDb, name: string, exceptId?: string): void {
   if (clash && clash.id !== exceptId) throw new AppError("DUPLICATE", `A client named ${name} already exists`, { fieldErrors: { name: ["A client with this display name already exists"] } });
 }
 
+type StoredSettings = (typeof c.$inferInsert)["settings"];
+
+/** Switch groups plus `sscc` in one settings JSON (blank SSCC is dropped). */
+function withSscc(settings: ClientSettingsForm, sscc: ClientSscc | undefined): StoredSettings {
+  const any = sscc && (sscc.extensionDigit || sscc.gs1CompanyPrefix || sscc.serialNumber);
+  return (any ? { ...settings, sscc } : { ...settings }) as StoredSettings;
+}
+
 function columns(input: ClientSave) {
   return {
     name: input.name.trim(), code: input.code, officialName: input.officialName.trim(), status: input.status, contactName: input.contactName ?? "",
     contactEmail: input.contactEmail ?? "", phone: input.phone ?? "", currency: input.currency, taxId: input.taxId, billingPlan: input.billingPlan,
-    settings: input.settings, customFields: input.customFields,
+    settings: withSscc(input.settings, input.sscc), customFields: input.customFields,
   };
 }
 
@@ -216,7 +264,7 @@ export function updateClient(tx: AppDb, auth: AuthContext, actor: Actor, id: str
 export function updateClientSettings(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: { currency: ClientSave["currency"]; settings: ClientSettingsForm; version?: number }): { id: string; version: number } {
   const before = loadClient(tx, auth, id);
   assertVersion(before.version, input.version);
-  const after = tx.update(c).set({ currency: input.currency, settings: input.settings, updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, id)).returning().get();
+  const after = tx.update(c).set({ currency: input.currency, settings: withSscc(input.settings, readSscc(before.settings)), updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, id)).returning().get();
   logUpdate(tx, domainCtxOf(actor, auth), CLIENT_ENTITY, id, after.code, snapshot(before), snapshot(after));
   return { id, version: after.version };
 }
@@ -232,6 +280,15 @@ export function setClientStatus(tx: AppDb, auth: AuthContext, actor: Actor, ids:
     }
     inner.update(c).set({ status, updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, id)).run();
     logUpdate(inner, ctx, CLIENT_ENTITY, id, row.code, { status: row.status }, { status });
+    // The billing-periods scheduler skips contracts of Inactive clients: say so on each Approved contract's change log.
+    const approved = inner.select({ id: s.billingContracts.id, name: s.billingContracts.name }).from(s.billingContracts)
+      .where(and(eq(s.billingContracts.clientId, id), eq(s.billingContracts.approvalStatus, "Approved"))).all();
+    for (const k of approved) {
+      logContractEvent(inner, ctx, k.id, k.name, {
+        type: "Update", field: "autoCalculation", label: "Automatic calculation", from: status === "Inactive" ? "Running" : "Paused", to: status === "Inactive" ? "Paused" : "Running",
+        message: status === "Inactive" ? `Client ${row.name} was deactivated; automatic billing is paused. Calculate a final bill manually if needed.` : `Client ${row.name} was activated; automatic billing resumes.`,
+      });
+    }
   });
 }
 
@@ -266,9 +323,33 @@ export function deleteClients(tx: AppDb, auth: AuthContext, actor: Actor, ids: r
   });
 }
 
-/** Lightweight id → label options for other module screens (Active only by default). */
-export function clientOptions(db: AppDb, auth: AuthContext, includeInactive = false): { id: string; code: string; name: string; status: ClientStatus }[] {
-  return db.select({ id: c.id, code: c.code, name: c.name, status: c.status }).from(c)
+/**
+ * GET /api/clients for any caller: holders of settings.clients.view get the full grid row, everyone
+ * else (operators / viewers using client pickers) only the picker-safe fields.
+ */
+export function listClientsForCaller(db: AppDb, auth: AuthContext, query: GridQuery): { rows: (ClientListRow | ReturnType<typeof slimClientRow>)[]; total: number } {
+  if (auth.permissions.has("settings.clients.view")) return listClients(db, auth, query);
+  // Never select PII for these callers: the SQL itself only reads the picker-safe columns.
+  const { query: q, activeOnly } = pickerFilter(query);
+  const grid = compileGrid(BINDING, q, [clientScope(auth), activeOnly ? eq(c.status, "Active") : undefined]);
+  const result = paginate(db.select(SLIM_ROW).from(c).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    () => db.select({ n: sql<number>`count(*)` }).from(c).where(grid.where).get()?.n ?? 0, { page: q.page, pageSize: q.pageSize });
+  const rows = (result.rows as Omit<SlimClientRow, "fullName">[]).map((r) => slimClientRow({ ...r, fullName: fullName(r) }));
+  return { rows, total: result.total };
+}
+
+const SLIM_ROW = { id: c.id, code: c.code, name: c.name, officialName: c.officialName, status: c.status, currency: c.currency };
+export const SLIM_CLIENT_KEYS = ["id", "code", "name", "officialName", "fullName", "status", "currency"] as const;
+export type SlimClientRow = Pick<ClientListRow, (typeof SLIM_CLIENT_KEYS)[number]>;
+
+/** The picker-safe subset of a client row (no tax ID or contact data) for roles without Clients view. */
+export function slimClientRow(r: SlimClientRow): SlimClientRow {
+  return { id: r.id, code: r.code, name: r.name, officialName: r.officialName, fullName: r.fullName, status: r.status, currency: r.currency };
+}
+
+/** Lightweight id → label options for pickers (Active only by default); one indexed query, no KPIs. */
+export function clientOptions(db: AppDb, auth: AuthContext, includeInactive = false): { id: string; code: string; name: string; status: ClientStatus; currency: string }[] {
+  return db.select({ id: c.id, code: c.code, name: c.name, status: c.status, currency: c.currency }).from(c)
     .where(and(clientScope(auth, false), includeInactive ? undefined : eq(c.status, "Active"))).orderBy(asc(c.name)).all();
 }
 

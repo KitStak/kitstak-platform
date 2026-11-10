@@ -20,9 +20,16 @@ export const SHIPPED_ORDERS_GRID_KEY = "orders-shipped";
 export const ORDER_VIEWS = ["backlog", "shipped"] as const;
 export type OrderView = (typeof ORDER_VIEWS)[number];
 
-/** Statuses on the Shipped & Canceled tab; every other status is backlog. */
+/** Statuses on the Shipped & Canceled tab. */
 export const SHIPPED_VIEW_STATUSES: readonly SoStatus[] = ["Shipped", "Partially Shipped", "Delivered", "Cancelled"];
-export const BACKLOG_VIEW_STATUSES: readonly SoStatus[] = SO_STATUSES.filter((s) => !SHIPPED_VIEW_STATUSES.includes(s));
+/** Fully closed statuses: only on Shipped & Canceled. */
+export const CLOSED_ORDER_STATUSES: readonly SoStatus[] = ["Shipped", "Delivered", "Cancelled"];
+/**
+ * Backlog: every status that still has work left. Partially Shipped is on both tabs, as in
+ * Logiwa: it has shipped packages (RMA / return info) and units still to ship.
+ */
+export const BACKLOG_VIEW_STATUSES: readonly SoStatus[] = SO_STATUSES.filter((s) => !CLOSED_ORDER_STATUSES.includes(s));
+export const BACKLOG_STATUS_NOTE = "Shipped, Delivered and Cancelled orders are on the Shipped & Canceled tab.";
 
 export const ORDER_CHANNEL_VALUES = ORDER_CHANNELS;
 
@@ -67,7 +74,8 @@ const CUSTOM_GROUP = "Custom fields";
 const RAW_FILTER_FIELDS: readonly OrderFilterField[] = [
   { field: "shippedAt", label: "Actual Shipment Date", type: "date", description: "Cancelled orders use their cancel date" },
   { field: "addressVerificationStatus", label: "Address Verification Status", type: "enum", options: opts(ADDRESS_VERIFICATION_STATUSES) },
-  { field: "age", label: "Age", type: "number", description: "Days since the order date" },
+  { field: "age", label: "Age", type: "number", description: "Days from the order date to shipment (or today while open)" },
+  { field: "daysSinceShipped", label: "Days Since Shipped", type: "number", description: "Days since the order shipped or was cancelled" },
   { field: "bol", label: "BOL", type: "text" },
   { field: "cancelledAt", label: "Cancel Date", type: "date" },
   { field: "canceledByMerge", label: "Canceled By Merge", type: "boolean", group: YES_NO_GROUP },
@@ -111,7 +119,8 @@ const RAW_FILTER_FIELDS: readonly OrderFilterField[] = [
   { field: "pickListPrinted", label: "Pick List Printed", type: "boolean", group: YES_NO_GROUP },
   { field: "pickShortStatus", label: "Pick Short Status", type: "enum", options: opts(SHORT_STATUSES) },
   { field: "retailerPo", label: "PO", type: "text" },
-  { field: "priority", label: "Priority", type: "enum", options: opts(PRIORITIES) },
+  { field: "priorityRank", label: "Priority", type: "number", description: "The order priority number (higher is picked first)" },
+  { field: "priority", label: "Priority Level", type: "enum", options: opts(PRIORITIES), description: "0 None · 1 Low · 2 Medium · 3 High · 4+ Urgent" },
   { field: "pro", label: "PRO", type: "text" },
   { field: "processingAge", label: "Processing Age", type: "number", description: "Days since the order was created" },
   { field: "rate", label: "Rate", type: "number", decimals: 2 },
@@ -139,7 +148,9 @@ export const ORDER_FILTER_FIELDS: readonly OrderFilterField[] = RAW_FILTER_FIELD
 /** Status choices offered per view (the other view's statuses would always match nothing). */
 export function filterFieldsForView(view: OrderView): readonly OrderFilterField[] {
   const statuses = view === "shipped" ? SHIPPED_VIEW_STATUSES : BACKLOG_VIEW_STATUSES;
-  return ORDER_FILTER_FIELDS.map((f) => (f.field === "status" ? { ...f, options: opts(statuses) } : f));
+  return ORDER_FILTER_FIELDS.map((f) => (f.field === "status"
+    ? { ...f, options: opts(statuses), ...(view === "backlog" ? { description: BACKLOG_STATUS_NOTE } : {}) }
+    : f));
 }
 
 /* ----------------------------------------------------------------- columns */
@@ -200,7 +211,7 @@ const RAW_COLUMNS: readonly OrderColumnDef[] = [
   col("shippingAccountNumber", "Charged Account Number", "text"),
   col("taxDutiesAccountNumber", "Tax & Duties Account Number", "text"),
   col("isPrime", "Prime Order", "boolean"),
-  col("priority", "Priority", "text", true),
+  col("priority", "Priority", "integer", true),
   col("scheduledPickupDate", "Scheduled Pickup Date", "datetime"),
   col("expectedDeliveryDate", "Expected Delivery Date", "datetime"),
   col("extraNote1", "Extra Note 1", "text"),
@@ -223,6 +234,7 @@ const RAW_COLUMNS: readonly OrderColumnDef[] = [
   col("mergedOrderStatus", "Merged Order Status", "text", false, { view: "shipped" }),
   col("cancelReason", "Cancel Reason", "text", true, { view: "shipped" }),
   col("cancelledAt", "Cancel Date", "datetime", true, { view: "shipped" }),
+  col("daysSinceShipped", "Days Since Shipped", "integer", true, { view: "shipped" }),
 ];
 
 export const ORDER_COLUMNS: readonly OrderColumnDef[] = RAW_COLUMNS.map((c) => ({ ...c, label: sentenceCase(c.label) }));
@@ -231,11 +243,18 @@ export function columnsForView(view: OrderView): readonly OrderColumnDef[] {
   return ORDER_COLUMNS.filter((c) => !c.view || c.view === view);
 }
 
-/** Shipped tab: the merge/cancel extras are default-visible; Pick/Pack short are not. */
+/**
+ * Logiwa parity: every one of the 58 columns is visible by default on both tabs (the Shipped &
+ * Canceled tab adds its 4 merge/cancel columns, Merged Order Status included). Users trim the set
+ * with the column chooser; their choice is saved per grid. `defaultVisible` on the def marks the
+ * compact "core" set (used by narrow layouts and exports that ask for it).
+ */
+/** Columns available in the chooser but hidden by default (mostly empty on D2C orders). */
+export const DEFAULT_HIDDEN_COLUMNS: ReadonlySet<string> = new Set(["companyName"]);
+
 export function defaultVisibleFor(view: OrderView, c: OrderColumnDef): boolean {
-  if (view === "shipped" && (c.id === "pickShortStatus" || c.id === "packShortStatus" || c.id === "jobCode")) return false;
-  if (view === "shipped" && c.id === "shippedAt") return true;
-  return c.defaultVisible;
+  if (DEFAULT_HIDDEN_COLUMNS.has(c.id)) return false;
+  return !c.view || c.view === view;
 }
 
 /** Sortable columns (grid column id = sort field). */

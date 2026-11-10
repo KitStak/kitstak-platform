@@ -5,7 +5,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import type { AuthContext } from "@/server/auth/context";
-import type { GridQuery } from "@/server/query/grid-query";
+import { serializeGridQuery, type GridFilter, type GridQuery } from "@/server/query/grid-query";
 import { CHANNEL_SALES_DEF, ORDER_INVENTORY_DEF } from "@/lib/grid-defs/reports/orders";
 import { clientIn, inList, runReport, warehouseLabel, type ReportPage } from "./reports-grid";
 
@@ -15,9 +15,9 @@ const SHIPPED = sql.raw(`('Shipped','Partially Shipped','Delivered')`);
 
 /**
  * Channel Sales: one row per Warehouse × Client × Channel × Store × SKU × pack type,
- * aggregated from shipped order lines. Channel listings that never sold still appear
- * (0 / 0 / $0.00) under the warehouse that stocks them, so the Warehouse column is
- * never blank (Logiwa leaves it empty).
+ * aggregated from shipped order lines; the Warehouse is the shipping warehouse (Logiwa
+ * leaves it empty). Channel listings that never sold are rows with Has Sales = No and no
+ * warehouse (none shipped them, so none is attributed); the page hides them by default.
  */
 export function channelSalesSql(auth: AuthContext): SQL {
   const wh = auth.viewScope.warehouseIds;
@@ -43,30 +43,50 @@ export function channelSalesSql(auth: AuthContext): SQL {
       WHERE ${clientIn(sql`pl.client_id`, cl)}
     ),
     unsold AS (
-      SELECT COALESCE((SELECT i.warehouse_id FROM inventory i WHERE i.product_id = ls.pid AND ${inList(sql`i.warehouse_id`, wh)} GROUP BY i.warehouse_id ORDER BY SUM(i.on_hand) DESC LIMIT 1),
-                      (SELECT w.id FROM warehouses w WHERE ${inList(sql`w.id`, wh)} ORDER BY w.is_default DESC, w.code LIMIT 1)) AS wid,
-             ls.cid, ls.channel, ls.store, ls.pid, p.uom AS pack, 0 AS sold, 0 AS orders, 0 AS revenue, NULL AS last_at
+      SELECT NULL AS wid, ls.cid, ls.channel, ls.store, ls.pid, p.uom AS pack, 0 AS sold, 0 AS orders, 0 AS revenue, NULL AS last_at
       FROM listings ls JOIN products p ON p.id = ls.pid
       WHERE NOT EXISTS (SELECT 1 FROM sales s WHERE s.cid = ls.cid AND s.pid = ls.pid AND lower(s.store) = lower(ls.store))
+        AND ${wh.length > 0 ? sql`1 = 1` : sql`0 = 1`}
     ),
-    rowsx AS (SELECT * FROM sales UNION ALL SELECT * FROM unsold WHERE wid IS NOT NULL)
-    SELECT r.wid || ':' || r.cid || ':' || COALESCE(r.channel, '') || ':' || r.store || ':' || r.pid || ':' || r.pack AS "rowId",
-           r.wid AS "warehouseId", ${warehouseLabel("w")} AS "warehouse",
+    rowsx AS (SELECT * FROM sales UNION ALL SELECT * FROM unsold)
+    SELECT COALESCE(r.wid, '-') || ':' || r.cid || ':' || COALESCE(r.channel, '') || ':' || r.store || ':' || r.pid || ':' || r.pack AS "rowId",
+           r.wid AS "warehouseId", CASE WHEN r.wid IS NULL THEN 'Not sold yet' ELSE ${warehouseLabel("w")} END AS "warehouse",
+           CASE WHEN r.orders > 0 THEN 1 ELSE 0 END AS "hasSales",
            r.cid AS "clientId", c.name AS "client",
            NULLIF(r.channel, '') AS "channel", NULLIF(r.store, '') AS "storeName",
            p.sku AS "sku", p.name AS "productName", p.barcode AS "barcode", r.pack AS "packType",
            r.sold AS "soldQty", r.orders AS "shipmentOrderCount", r.revenue AS "revenue", r.last_at AS "lastShippedAt",
            '/products/' || p.id AS "productHref",
-           CASE WHEN r.orders > 0 THEN '/orders/shipped?f.warehouseId=in:' || r.wid || '&f.clientId=in:' || r.cid || '&f.sku=eq:' || p.sku
-             || CASE WHEN r.channel IS NOT NULL AND r.channel <> '' THEN '&f.channel=in:' || replace(r.channel, ' ', '%20') ELSE '' END END AS "ordersHref"
+           r.orders AS "ordersForHref"
     FROM rowsx r
-    JOIN warehouses w ON w.id = r.wid
+    LEFT JOIN warehouses w ON w.id = r.wid
     JOIN clients c ON c.id = r.cid
     JOIN products p ON p.id = r.pid`;
 }
 
 export function listChannelSales(db: AppDb, auth: AuthContext, query: GridQuery): ReportPage<Row> {
-  return runReport<Row>(db, channelSalesSql(auth), CHANNEL_SALES_DEF, query);
+  const page = runReport<Row>(db, channelSalesSql(auth), CHANNEL_SALES_DEF, query);
+  return {
+    rows: page.rows.map(({ ordersForHref, ...r }) => ({ ...r, hasSales: Boolean(r.hasSales), ordersHref: Number(ordersForHref) > 0 ? channelSalesOrdersHref(r) : null })),
+    total: page.total,
+  };
+}
+
+/**
+ * Drilldown for "# Shipment Orders": the shipped-orders grid filtered on the row's warehouse,
+ * client, SKU, channel AND store, so the opened grid's total equals the cell even when a client
+ * runs two stores on one channel. Values are escaped by the grid grammar (spaces, commas, &).
+ */
+export function channelSalesOrdersHref(r: Readonly<Record<string, unknown>>): string {
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const filters: GridFilter[] = [
+    { field: "warehouseId", op: "in", values: [str(r.warehouseId)] },
+    { field: "clientId", op: "in", values: [str(r.clientId)] },
+    { field: "sku", op: "eq", value: str(r.sku) },
+  ];
+  if (str(r.channel)) filters.push({ field: "channel", op: "in", values: [str(r.channel)] });
+  filters.push(str(r.storeName) ? { field: "storeName", op: "eq", value: str(r.storeName) } : { field: "storeName", op: "empty" });
+  return `/orders/shipped?${serializeGridQuery({ filters })}`;
 }
 
 /** Order Inventory: one row per active allocation record (order line × inventory bucket). */
@@ -79,7 +99,7 @@ export function orderInventorySql(auth: AuthContext): SQL {
            o.store_order_number AS "storeOrderNumber",
            j.code AS "jobCode", CASE WHEN j.id IS NOT NULL THEN '/jobs/' || j.id END AS "jobHref",
            wo.code AS "workOrderCode", CASE WHEN wo.id IS NOT NULL THEN '/work-orders/' || wo.id END AS "workOrderHref",
-           COALESCE(wv.wave_no, j.wave_number) AS "waveNo",
+           COALESCE(wv.wave_no, j.wave_number) AS "waveNo", CASE WHEN COALESCE(wv.wave_no, j.wave_number) IS NOT NULL THEN '/jobs/wave-log?f.waveNo=eq:' || COALESCE(wv.wave_no, j.wave_number) END AS "waveHref",
            p.sku AS "sku", '/products/' || p.id AS "productHref",
            COALESCE(ol.pack_type, i.pack_type) AS "packType", p.uom AS "uomPackType", p.barcode AS "barcode",
            a.qty AS "allocatedUomQty",

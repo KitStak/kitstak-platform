@@ -11,15 +11,19 @@
 import { and, asc, eq, gt, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import type { OrderByClause, RuleCondition } from "@/lib/domain-types";
 import * as schema from "@/server/db/schema";
-import { recordUpdate } from "./change-log";
+import { recordLine, recordUpdate } from "./change-log";
 import { evaluateConditions } from "./conditions";
 import { DomainError, describeError } from "./errors";
 import { bucketFacts, orderFacts, sortByClauses, type OrderLineRow, type OrderRow } from "./facts";
+import { planFullLps, rankByPackType, splitAllocationPreferences } from "./allocation-preferences";
 import { allocate, releaseAllocation } from "./ledger/allocations";
 import { notCountLocked } from "./ledger/count-locks";
 import { ACTIVE_ALLOCATION_STATUSES, type InventoryRow } from "./ledger/bucket";
 import type { LocationRow } from "./ledger/rules";
 import { stateMachines } from "./state-machines";
+import { orderTypeFlags } from "./so-type-flags";
+// Runtime-only use (inside allocateOne), so the orders ⇄ allocation module cycle is safe.
+import { createBackorder } from "./orders/commands";
 import { checkScope, nowIso, type BulkResult, type DomainCtx, type Tx } from "./types";
 
 export { evaluateConditions } from "./conditions";
@@ -98,10 +102,21 @@ interface LinePlan { readonly line: OrderLineRow; readonly need: number; readonl
 
 function planLine(tx: Tx, order: OrderRow, line: OrderLineRow, rule: AllocationRule, used: Map<string, number>, exclude: readonly string[] = []): LinePlan {
   const need = remainingNeed(line);
+  // Pack-type / full-LP preferences are line-dependent, so they are split from the bucket filters (M12).
+  const { conditions: filters, prefs } = splitAllocationPreferences(rule.inventoryConditions);
   const eligible = candidates(tx, order, line, exclude)
-    .filter((c) => evaluateConditions(rule.inventoryConditions, bucketFacts(c.bucket, c.location, c.lpNumber)));
-  const ranked = sortByClauses(eligible, rule.orderBy, (c) => bucketFacts(c.bucket, c.location, c.lpNumber));
+    .filter((c) => evaluateConditions(filters, bucketFacts(c.bucket, c.location, c.lpNumber)));
+  const ranked = rankByPackType(tx, line, sortByClauses(eligible, rule.orderBy, (c) => bucketFacts(c.bucket, c.location, c.lpNumber)), prefs);
   const slices: PlannedSlice[] = [];
+  if (prefs.onlyAllocateFullLps) {
+    let taken = 0;
+    for (const s of planFullLps(tx, line, ranked, need, used)) {
+      used.set(s.candidate.bucket.id, (used.get(s.candidate.bucket.id) ?? 0) + s.qty);
+      slices.push({ line, inventoryId: s.candidate.bucket.id, qty: s.qty });
+      taken += s.qty;
+    }
+    return { line, need, slices, short: need - taken };
+  }
   let left = need;
   for (const c of ranked) {
     if (left <= 0) break;
@@ -213,6 +228,15 @@ function setOrderStatus(tx: Tx, ctx: DomainCtx, order: OrderRow, status: OrderRo
   recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { status: order.status }, after: { status: after.status } });
 }
 
+/** Logs "SKU -> Allocated Qty is modified. a --> b" on the order (REQ-R4-1, Logiwa AllocatedUOMQuantity). */
+function logLineAllocation(tx: Tx, ctx: DomainCtx, order: OrderRow, lineId: string, before: number, after: number): void {
+  if (before === after) return;
+  const row = tx.select({ sku: schema.products.sku }).from(schema.orderLines)
+    .innerJoin(schema.products, eq(schema.products.id, schema.orderLines.productId)).where(eq(schema.orderLines.id, lineId)).get();
+  recordLine(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, lineEntityType: "order_line",
+    lineEntityId: lineId, lineLabel: row?.sku ?? "Line", field: "allocatedQuantity", from: before, to: after });
+}
+
 /** Commits planned slices: allocation rows, ledger Allocation txns, line allocated qty. */
 function commitSlices(tx: Tx, ctx: DomainCtx, order: OrderRow, slices: readonly PlannedSlice[], meta: { algorithmId: string | null; algorithmName: string; ruleName: string; waveId?: string | null; jobId?: string | null }): void {
   const perLine = new Map<string, number>();
@@ -224,8 +248,9 @@ function commitSlices(tx: Tx, ctx: DomainCtx, order: OrderRow, slices: readonly 
     perLine.set(s.line.id, (perLine.get(s.line.id) ?? 0) + s.qty);
   }
   for (const [lineId, qty] of perLine) {
-    tx.update(schema.orderLines).set({ allocatedQuantity: sql`${schema.orderLines.allocatedQuantity} + ${qty}`, updatedBy: ctx.userId })
-      .where(eq(schema.orderLines.id, lineId)).run();
+    const row = tx.update(schema.orderLines).set({ allocatedQuantity: sql`${schema.orderLines.allocatedQuantity} + ${qty}`, updatedBy: ctx.userId })
+      .where(eq(schema.orderLines.id, lineId)).returning({ q: schema.orderLines.allocatedQuantity }).get();
+    if (row) logLineAllocation(tx, ctx, order, lineId, row.q - qty, row.q);
   }
 }
 
@@ -236,8 +261,11 @@ function recordShortages(tx: Tx, run: RunInfo, order: OrderRow, plans: readonly 
   for (const { plan, stock } of summaries) {
     if (plan.short <= 0) continue;
     const reason = stock.free < plan.need ? "Insufficient Inventory" : "No Eligible Stock Found";
+    // Logiwa's "Missing triggered": a pick-short (missing log) on this order + product led here.
+    const missingTriggered = Boolean(tx.select({ id: schema.missingLog.id }).from(schema.missingLog)
+      .where(and(eq(schema.missingLog.orderId, order.id), eq(schema.missingLog.productId, plan.line.productId))).limit(1).get());
     const values = {
-      orderId: order.id, orderLineId: plan.line.id, reason, shortageQty: plan.short, freeQty: Math.max(0, stock.free),
+      orderId: order.id, orderLineId: plan.line.id, reason, missingTriggered, shortageQty: plan.short, freeQty: Math.max(0, stock.free),
       damagedQty: stock.damaged, onHandQty: stock.onHand, lastTrialAt: now, resolvedAt: null,
     } as const;
     tx.insert(schema.orderLineShortages).values(values)
@@ -274,10 +302,19 @@ function allocateOne(tx: Tx, ctx: DomainCtx, run: RunInfo, orderId: string): Ord
   const plans = lines.map((line) => planLine(tx, order, line, rule, used));
   const short = plans.some((p) => p.short > 0);
   const meta = { algorithmId: run.algo.id, algorithmName: run.algo.name, ruleName: rule.name, waveId: run.input.waveId };
-  if (!short || run.input.mode === "partial") commitSlices(tx, ctx, order, plans.flatMap((p) => p.slices), meta);
+  // Shipment Order Type: "Allow partial allocation" / "Create back order" keep what is available.
+  const typeFlags = orderTypeFlags(tx, order.orderTypeId);
+  const keepPartial = run.input.mode === "partial" || typeFlags.has("allowPartialAllocation") || typeFlags.has("createBackOrder");
+  const slices = plans.flatMap((p) => p.slices);
+  if (!short || keepPartial) commitSlices(tx, ctx, order, slices, meta);
   if (short) {
     recordShortages(tx, run, order, plans, rule.name);
     setOrderStatus(tx, ctx, order, "Shortage");
+    // "Create back order": the short quantity moves to <code>-BO<n>; the order itself is released to picking.
+    if (typeFlags.has("createBackOrder") && slices.length > 0) {
+      createBackorder(tx, ctx, { orderId: order.id });
+      return "allocated";
+    }
     return "shortage";
   }
   resolveShortages(tx, order.id);
@@ -330,8 +367,10 @@ export function deallocateOrder(tx: Tx, ctx: DomainCtx, order: OrderRow): number
     if (a.orderLineId) perLine.set(a.orderLineId, (perLine.get(a.orderLineId) ?? 0) + a.qty);
   }
   for (const [lineId, qty] of perLine) {
+    const prev = tx.select({ q: schema.orderLines.allocatedQuantity }).from(schema.orderLines).where(eq(schema.orderLines.id, lineId)).get()?.q ?? 0;
     tx.update(schema.orderLines).set({ allocatedQuantity: sql`MAX(${schema.orderLines.allocatedQuantity} - ${qty}, 0)`, updatedBy: ctx.userId })
       .where(eq(schema.orderLines.id, lineId)).run();
+    logLineAllocation(tx, ctx, order, lineId, prev, Math.max(prev - qty, 0));
   }
   resolveShortages(tx, order.id);
   const stillHeld = tx.select({ id: schema.inventoryAllocations.id }).from(schema.inventoryAllocations)

@@ -22,6 +22,19 @@ const dateIso = (v: unknown): string | null => {
   return new Date(t).toISOString();
 };
 
+/** Calendar-date cell (expiry): stored as YYYY-MM-DD, never an instant (no timezone drift). Excel serials and "5/28/2027" are read as that local day. */
+export const dayOf = (v: unknown): string | null => {
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
+  const s = str(v);
+  if (!s) return null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const t = Date.parse(s);
+  if (Number.isNaN(t)) throw new AppError("VALIDATION", `"${s}" is not a valid date`);
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 const PO_TYPE_ALIASES: Readonly<Record<string, (typeof PO_TYPES)[number]>> = { standard: "Purchase Order", po: "Purchase Order", transfer: "Transfer Order", return: "Return Order", open: "Open Order" };
 
 export function resolvePoType(raw: string): (typeof PO_TYPES)[number] {
@@ -51,7 +64,7 @@ export const handler: ImportHandler = {
     const packType = str(row.packType) || product.uom;
     const line = {
       productId: product.id, packType, orderedQuantity: quantity, unitCost, receivingLocationId: null,
-      lotNumber: str(row.lotNumber) || null, expiryDate: dateIso(row.expiryDate), productionDate: null, lpTypeId: null, lpNumber: null,
+      lotNumber: str(row.lotNumber) || null, expiryDate: dayOf(row.expiryDate), productionDate: null, lpTypeId: null, lpNumber: null,
       note: str(row.notes) || null,
     };
     const existing = db.select().from(schema.purchaseOrders).where(sql`lower(${schema.purchaseOrders.code}) = lower(${code})`).get();
@@ -78,8 +91,8 @@ export const handler: ImportHandler = {
       totalQuantity: lines.reduce((s, l) => s + l.q, 0), purchasePrice: Math.round(lines.reduce((s, l) => s + l.q * l.c, 0) * 100) / 100,
       version: existing.version + 1, updatedBy: ctx.actor.userId,
     }).where(eq(schema.purchaseOrders.id, existing.id)).run();
-    changeLog.recordLine(db, dctx, { entityType: "purchase_order", entityId: existing.id, entityCode: existing.code, lineEntityType: "purchase_order_line",
-      lineEntityId: inserted.id, lineLabel: product.sku, field: "orderedQuantity", from: "", to: quantity });
+    changeLog.recordLineCreate(db, dctx, { entityType: "purchase_order", entityId: existing.id, entityCode: existing.code, lineEntityType: "purchase_order_line",
+      lineEntityId: inserted.id, lineLabel: product.sku });
     return { entityId: existing.id, message: `Added ${product.sku} to ${code}` };
   },
 };

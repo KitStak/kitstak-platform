@@ -171,12 +171,15 @@ export function parseGridQuery(source: ParamSource): GridQueryParseResult {
   let sort: SortSpec[] = [];
   let page = 1;
   let pageSize = DEFAULT_PAGE_SIZE;
+  let psSeen = false;
 
   for (const [key, rawValue] of toEntries(source)) {
-    if (key === "q") {
+    if (key === "q" || key === "search") {
+      // `search` is accepted as an alias of `q`; an explicit `q` wins.
+      if (key === "search" && q !== undefined) continue;
       const text = rawValue.trim();
-      if (text.length > MAX_VALUE_LENGTH) issues.push({ param: "q", message: "Search text is too long" });
-      else q = text || undefined;
+      if (text.length > MAX_VALUE_LENGTH) issues.push({ param: key, message: "Search text is too long" });
+      else if (key === "q" || text) q = text || undefined;
     } else if (key === "qm") {
       if ((QUICK_SEARCH_MODES as readonly string[]).includes(rawValue)) qm = rawValue as QuickSearchMode;
       else issues.push({ param: "qm", message: 'Search mode must be "eq" or "sw"' });
@@ -186,10 +189,13 @@ export function parseGridQuery(source: ParamSource): GridQueryParseResult {
       const n = parsePositiveInt(rawValue, 1_000_000);
       if (n === null) issues.push({ param: "page", message: "Page must be a positive integer" });
       else page = n;
-    } else if (key === "ps") {
+    } else if (key === "ps" || key === "pageSize" || key === "limit") {
+      // `pageSize` / `limit` are aliases of `ps`; an explicit `ps` wins.
+      if (key !== "ps" && psSeen) continue;
       const n = parsePositiveInt(rawValue, MAX_PAGE_SIZE);
-      if (n === null) issues.push({ param: "ps", message: `Page size must be between 1 and ${MAX_PAGE_SIZE}` });
+      if (n === null) issues.push({ param: key, message: `Page size must be between 1 and ${MAX_PAGE_SIZE}` });
       else pageSize = n;
+      if (key === "ps") psSeen = true;
     } else if (key.startsWith("f.")) {
       if (filters.length >= MAX_FILTERS) {
         issues.push({ param: key, message: `At most ${MAX_FILTERS} filters` });
@@ -229,7 +235,8 @@ export function serializeFilterValue(filter: GridFilter): string {
 export function serializeGridQuery(query: Partial<GridQuery>): string {
   const params = new URLSearchParams();
   if (query.q) params.set("q", query.q);
-  if (query.q && query.qm && query.qm !== "sw") params.set("qm", query.qm);
+  // The mode is kept even before any text is typed ("pick Equal, then type").
+  if (query.qm && query.qm !== "sw") params.set("qm", query.qm);
   for (const filter of query.filters ?? []) params.append(`f.${filter.field}`, serializeFilterValue(filter));
   if (query.sort && query.sort.length > 0) params.set("sort", query.sort.map((s) => (s.dir === "desc" ? `-${s.field}` : s.field)).join(","));
   if (query.page && query.page > 1) params.set("page", String(query.page));

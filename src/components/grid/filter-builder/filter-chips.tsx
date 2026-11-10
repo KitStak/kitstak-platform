@@ -26,7 +26,7 @@ interface ChipProps {
 const ChipBody = React.forwardRef<HTMLButtonElement, { readonly chip: FilterChipModel } & React.ButtonHTMLAttributes<HTMLButtonElement>>(function ChipBody({ chip, className, ...props }, ref) {
   return (
     <button ref={ref} type="button" title={`${chip.label}: ${chip.value}`} className={cn("flex min-w-0 max-w-[220px] flex-col items-start py-0.5 pl-2.5 pr-1 text-left leading-tight focus-visible:outline-none", className)} {...props}>
-      <span className="text-[10px] font-semibold uppercase tracking-[0.04em] text-primary/80">{chip.label}</span>
+      <span className="block w-full truncate whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.04em] text-info/80">{chip.label}</span>
       <span className="w-full truncate text-[12px] font-medium text-foreground">{chip.value}</span>
     </button>
   );
@@ -35,9 +35,9 @@ const ChipBody = React.forwardRef<HTMLButtonElement, { readonly chip: FilterChip
 function Chip({ chip, onRemove, editor }: ChipProps) {
   const body = <ChipBody chip={chip} aria-label={`Edit ${chip.label} filter`} />;
   return (
-    <span className="inline-flex h-9 min-w-0 shrink items-center rounded-lg border border-primary/30 bg-primary-soft transition-colors focus-within:ring-2 focus-within:ring-primary/30 hover:border-primary/60">
+    <span className="inline-flex h-9 shrink-0 items-center rounded-lg border border-info/30 bg-info-soft transition-colors focus-within:ring-2 focus-within:ring-info/30 hover:border-info/60">
       {editor ? editor(body) : body}
-      <button type="button" aria-label={`Remove ${chip.label} filter`} onClick={onRemove} className="mr-1.5 flex h-5 w-5 items-center justify-center rounded text-primary/70 transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+      <button type="button" aria-label={`Remove ${chip.label} filter`} onClick={onRemove} className="mr-1.5 flex h-5 w-5 items-center justify-center rounded text-info/70 transition-colors hover:bg-info/10 hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
         <X className="h-3 w-3" aria-hidden />
       </button>
     </span>
@@ -65,14 +65,14 @@ export function FilterChips({ gridKey, fields, filters, onRemove, onApply, onCle
       : undefined;
 
   return (
-    <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden p-0.5" aria-label="Applied filters">
+    <div className="flex min-w-[8.5rem] flex-nowrap items-center gap-1.5 overflow-x-auto p-0.5 [scrollbar-width:thin]" aria-label="Applied filters">
       {visible.map((chip) => (
         <Chip key={chip.key} chip={chip} onRemove={() => onRemove(chip.field)} editor={editorFor(chip)} />
       ))}
       {overflow.length > 0 ? (
         <Popover>
           <PopoverTrigger asChild>
-            <button type="button" aria-label={`Show ${overflow.length} more filters`} className="inline-flex h-9 shrink-0 items-center rounded-lg border border-primary/30 bg-surface px-2.5 text-[12px] font-semibold text-primary hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+            <button type="button" aria-label={`Show ${overflow.length} more filters`} className="inline-flex h-9 shrink-0 items-center rounded-lg border border-info/30 bg-surface px-2.5 text-[12px] font-semibold text-info hover:bg-info-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
               +{overflow.length}
             </button>
           </PopoverTrigger>

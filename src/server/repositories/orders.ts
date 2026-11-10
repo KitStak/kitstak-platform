@@ -45,6 +45,8 @@ export interface OrderGridRow {
   readonly channel: string;
   readonly isMerged: boolean;
   readonly hasLabel: boolean;
+  /** An active return label exists (shipped tab: void / reprint return label). */
+  readonly hasReturnLabel?: boolean;
   readonly hasActiveTask: boolean;
   readonly hasSerials: boolean;
   readonly allocatedQuantity: number;
@@ -67,6 +69,7 @@ const EXTRA_SQL: Readonly<Record<string, SQL>> = {
   channel: sql`${q.channel}`,
   isMerged: ORDER_SQL.isMerged as SQL,
   hasLabel: ORDER_SQL.hasLabel as SQL,
+  hasReturnLabel: sql`EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = ${q.id} AND s.label_status = 'Active' AND s.label_type = 'Return Label')`,
   hasActiveTask: sql`EXISTS (SELECT 1 FROM tasks t WHERE t.order_id = ${q.id} AND t.status IN ('Pending','Started') AND t.task_type IN ('Picking','Packing','Sorting'))`,
   hasSerials: sql`EXISTS (SELECT 1 FROM serial_numbers sn JOIN order_lines ol ON ol.id = sn.order_line_id WHERE ol.order_id = ${q.id})`,
   allocatedQuantity: sql`(SELECT COALESCE(SUM(l.allocated_quantity), 0) FROM order_lines l WHERE l.order_id = ${q.id})`,
@@ -75,7 +78,7 @@ const EXTRA_SQL: Readonly<Record<string, SQL>> = {
   trackingNumbersJson: sql`${q.trackingNumbers}`,
 };
 
-const BOOLEAN_EXTRAS = new Set(["isMerged", "hasLabel", "hasActiveTask", "hasSerials"]);
+const BOOLEAN_EXTRAS = new Set(["isMerged", "hasLabel", "hasReturnLabel", "hasActiveTask", "hasSerials"]);
 
 function selection(): Record<string, SQL> {
   const fields: Record<string, SQL> = { ...EXTRA_SQL };
@@ -227,6 +230,8 @@ export interface OrderDetail {
   readonly warehouseLabel: string;
   readonly warehouseCode: string;
   readonly orderTypeName: string;
+  /** The order-type lookup id; legacy rows with only "D2C"/"B2B" resolve to the matching lookup by name. */
+  readonly orderTypeLookupId: string | null;
   readonly cancelReasonName: string | null;
   readonly retailerName: string | null;
   readonly packingWarningName: string | null;
@@ -247,6 +252,19 @@ export interface OrderDetail {
   readonly actions: Readonly<Record<string, string | null>>;
   /** Latest blocking workflow run while the order is workflow-blocked. */
   readonly workflowBlock: { readonly workflowName: string; readonly blockType: string; readonly at: string; readonly actions: readonly string[] } | null;
+  /** While On Hold: when, by whom and the optional reason (latest "Hold Reason" entry since the hold). */
+  readonly hold: { readonly at: string | null; readonly by: string | null; readonly reason: string | null } | null;
+}
+
+function holdOf(db: AppDb, order: OrderRecord): OrderDetail["hold"] {
+  if (order.status !== "On Hold") return null;
+  const cl = schema.changeLog;
+  const mine = and(eq(cl.entityType, "shipment_order"), eq(cl.entityId, order.id));
+  const since = db.select({ at: cl.at, source: cl.source }).from(cl)
+    .where(and(mine, eq(cl.field, "status"), eq(cl.toValue, "On Hold"))).orderBy(sql`${cl.at} DESC`).limit(1).get();
+  const reason = db.select({ value: cl.toValue }).from(cl)
+    .where(and(mine, eq(cl.field, "holdReason"), since ? sql`${cl.at} >= ${since.at}` : undefined)).orderBy(sql`${cl.at} DESC`).limit(1).get();
+  return { at: since?.at ?? null, by: since?.source ?? null, reason: reason?.value ?? null };
 }
 
 function workflowBlockOf(db: AppDb, order: OrderRecord): OrderDetail["workflowBlock"] {
@@ -264,6 +282,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function lookupName(db: AppDb, id: string | null): string | null {
   if (!id) return null;
   return db.select({ name: schema.lookupValues.name }).from(schema.lookupValues).where(eq(schema.lookupValues.id, id)).get()?.name ?? null;
+}
+
+function orderTypeIdByName(db: AppDb, name: string): string | null {
+  const l = schema.lookupValues;
+  return db.select({ id: l.id }).from(l).where(and(eq(l.type, "so_type"), eq(l.name, name), isNull(l.clientId))).get()?.id ?? null;
 }
 
 export function orderTypeLabel(db: AppDb, order: Pick<OrderRecord, "orderTypeId" | "orderType">): string {
@@ -393,6 +416,7 @@ export function getOrderDetail(db: AppDb, auth: Pick<AuthContext, "scope">, key:
     warehouseLabel: wh ? codeNameLabel(wh.code, wh.name) : "",
     warehouseCode: wh?.code ?? "",
     orderTypeName: orderTypeLabel(db, order),
+    orderTypeLookupId: order.orderTypeId ?? orderTypeIdByName(db, orderTypeLabel(db, order)),
     cancelReasonName: lookupName(db, order.cancelReasonId),
     retailerName: retailer?.name ?? null,
     packingWarningName: lookupName(db, order.packingWarningTypeId),
@@ -412,6 +436,7 @@ export function getOrderDetail(db: AppDb, auth: Pick<AuthContext, "scope">, key:
     lastUpdatedBy: updater?.email ?? null,
     actions: orderActionReasons(order, { hasActiveTask, hasLabel }),
     workflowBlock: workflowBlockOf(db, order),
+    hold: holdOf(db, order),
   };
 }
 

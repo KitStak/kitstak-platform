@@ -12,6 +12,13 @@ export const RESTRICTION_DEFS: readonly { readonly key: (typeof ROLE_RESTRICTION
   { key: "rate_shopping_data", label: "Rate shopping data", description: "Hides rate shopping usage and selected shipping options." },
 ];
 
+/**
+ * What a data restriction actually hides today. Shown wherever restrictions are set or listed, so
+ * the control never claims more coverage than it has (API-boundary + export redaction is REQ-R4-1/2).
+ */
+export const RESTRICTION_COVERAGE =
+  "Restricted users see an empty value for these fields everywhere: every screen and API response, and Excel exports (the columns are left out).";
+
 export const restrictionLabel = (key: string): string => RESTRICTION_DEFS.find((r) => r.key === key)?.label ?? key;
 
 export const ROLE_FIELDS: readonly AdminField[] = [
@@ -96,6 +103,59 @@ export function filterMatrix(matrix: readonly MatrixGroup[], search: string): re
 }
 
 /** Toggling a page's "all" box: grant all when any is missing, otherwise revoke all. */
+/** Page id of a permission (`group|page|section`), or null for an unknown key. */
+function pageIdOf(key: string): string | null {
+  const def = PERMISSIONS.find((p) => p.key === key);
+  return def ? `${def.groupKey}|${def.pageKey}|${def.section}` : null;
+}
+
+/** page id -> that page's View permission key (pages without a View action are absent). */
+const VIEW_KEY_BY_PAGE: ReadonlyMap<string, string> = new Map(
+  PERMISSIONS.filter((p) => p.action === "view").map((p) => [`${p.groupKey}|${p.pageKey}|${p.section}`, p.key] as const),
+);
+
+/** The View key that `key` depends on, or null when `key` is a View itself or its page has no View. PURE. */
+export function requiredViewOf(key: string): string | null {
+  const page = pageIdOf(key);
+  if (!page) return null;
+  const view = VIEW_KEY_BY_PAGE.get(page);
+  return view && view !== key ? view : null;
+}
+
+/**
+ * Actions imply View: adds the page's View permission for every granted action, so a role can
+ * never mutate records on a screen it cannot open. Order-preserving and idempotent. PURE.
+ */
+export function withImpliedViews(keys: readonly string[]): string[] {
+  const out = [...new Set(keys)];
+  const set = new Set(out);
+  for (const k of [...out]) {
+    const view = requiredViewOf(k);
+    if (view && !set.has(view)) { set.add(view); out.push(view); }
+  }
+  return out;
+}
+
+/**
+ * Matrix toggle with the View rule: ticking any action ticks the page's View; unticking View
+ * clears that page's actions. Returns the new keys plus the page labels whose actions were cleared
+ * (so the UI can say so). PURE.
+ */
+export function toggleWithViewRule(current: readonly string[], keys: readonly string[]): { keys: string[]; clearedPages: string[] } {
+  const next = new Set(togglePermissions(current, keys));
+  const clearedPages: string[] = [];
+  for (const k of current) {
+    const def = PERMISSIONS.find((p) => p.key === k);
+    if (!def || def.action !== "view" || next.has(k)) continue;
+    // View was removed: drop the page's other actions too.
+    const page = `${def.groupKey}|${def.pageKey}|${def.section}`;
+    let cleared = false;
+    for (const other of [...next]) if (pageIdOf(other) === page) { next.delete(other); cleared = true; }
+    if (cleared) clearedPages.push(def.pageLabel);
+  }
+  return { keys: withImpliedViews([...next]), clearedPages };
+}
+
 export function togglePermissions(current: readonly string[], keys: readonly string[]): string[] {
   const set = new Set(current);
   const allOn = keys.every((k) => set.has(k));

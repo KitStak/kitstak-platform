@@ -38,7 +38,10 @@ export function fromDateOnly(s: string | null | undefined): Date | null {
 export function focusFirst(root: HTMLElement | null, keys: readonly string[]): void {
   const first = keys[0];
   if (!first || !root) return;
-  requestAnimationFrame(() => root.querySelector<HTMLElement>(`[data-field="${CSS.escape(first)}"] input, [data-field="${CSS.escape(first)}"] button, [data-field="${CSS.escape(first)}"] textarea`)?.focus());
+  // The control itself first (input / textarea), then a button-based control. A selector list would
+  // match the label's (i) info button first (document order) and pop its tooltip over the drawer.
+  const f = `[data-field="${CSS.escape(first)}"]`;
+  requestAnimationFrame(() => (root.querySelector<HTMLElement>(`${f} input:not([type=hidden]), ${f} textarea`) ?? root.querySelector<HTMLElement>(`${f} [role=combobox], ${f} button:not([data-audit-skip])`))?.focus());
 }
 
 export function TrackFlag({ label, on }: { readonly label: string; readonly on: boolean }) {
@@ -57,4 +60,9 @@ export function MetaChip({ label, value }: { readonly label: string; readonly va
       <span className={cn("font-medium", empty ? "text-faint" : "text-foreground")}>{empty ? "–" : value}</span>
     </span>
   );
+}
+
+/** Unit adornment for kit quantity inputs: "kit" / "kits", set apart from the number. */
+export function KitUnit({ qty }: { readonly qty: number | null | undefined }) {
+  return <span className="ml-1.5 rounded border-l border-border px-1.5 text-[11px] font-medium text-faint">{qty === 1 ? "kit" : "kits"}</span>;
 }

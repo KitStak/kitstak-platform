@@ -13,7 +13,9 @@ import { OPEN_PO_STATUSES, OPEN_SO_STATUSES } from "@/server/domain/atp";
 import type { DomainCtx } from "@/server/domain/types";
 import { CUSTOM_FIELD_SLOTS } from "@/lib/enums";
 import { toInches, toOunces } from "@/lib/grid-defs/products/catalog-options";
-import { derivedVolume, normalizePackTypes, productInputSchema, type ProductInput, type ProductValue } from "@/lib/grid-defs/products/product-form";
+import { derivedVolume, duplicateBarcodesWithin, normalizePackTypes, productInputSchema, type ProductInput, type ProductValue } from "@/lib/grid-defs/products/product-form";
+import { fillDerivedPackWeights } from "@/lib/grid-defs/products/pack-derivation";
+import { getProductForm } from "./products-detail";
 import { productSnapshot } from "./products-snapshot";
 
 const { products: p, productPackTypes: ppt, productBarcodes: pb, kitComponents: kc, productReplenishmentLevels: prl, productChannelAllocations: pca } = schema;
@@ -34,7 +36,7 @@ function validate(tx: AppDb, ctx: ScopedCtx, raw: ProductInput, existing: Produc
     const fieldErrors: Record<string, string[]> = {};
     for (const i of parsed.error.issues) {
       const k = i.path.map(String).join(".") || "_";
-      fieldErrors[k] = [...(fieldErrors[k] ?? []), i.message];
+      if (!(fieldErrors[k] ?? []).includes(i.message)) fieldErrors[k] = [...(fieldErrors[k] ?? []), i.message];
     }
     throw new AppError("VALIDATION", parsed.error.issues[0]?.message ?? "Invalid product", { fieldErrors });
   }
@@ -48,6 +50,8 @@ function validate(tx: AppDb, ctx: ScopedCtx, raw: ProductInput, existing: Produc
   const dup = tx.select({ id: p.id }).from(p)
     .where(and(eq(p.clientId, v.clientId), sql`lower(${p.sku}) = lower(${v.sku})`, existing ? sql`${p.id} <> ${existing.id}` : undefined)).get();
   if (dup) throw new AppError("DUPLICATE", `SKU ${v.sku} already exists for client ${client.code}`, { fieldErrors: { sku: [`SKU ${v.sku} already exists for this client`] } });
+
+  assertBarcodesUnique(tx, v, existing?.id ?? null);
 
   for (const [key, type] of [["productTypeId", "product_type"], ["productGroupId", "product_group"]] as const) {
     const id = v[key];
@@ -81,6 +85,55 @@ function validate(tx: AppDb, ctx: ScopedCtx, raw: ProductInput, existing: Produc
   return v;
 }
 
+/**
+ * A pack-type barcode has one meaning per client: reject codes already on another product of the
+ * same client (409) and codes repeated across this product's own pack types (scans would be ambiguous).
+ */
+export function assertBarcodesUnique(tx: AppDb, v: ProductValue, productId: string | null): void {
+  const packs = packsFor(v);
+  const within = duplicateBarcodesWithin(packs);
+  if (within.length) {
+    const [code, owners] = within[0] as [string, string[]];
+    throw new AppError("DUPLICATE", `Barcode ${code} is used on more than one pack type (${owners.join(", ")})`, { fieldErrors: { packTypes: [`Barcode ${code} is used on more than one pack type`] } });
+  }
+  const packCodes = [...new Set(packs.flatMap((x) => x.barcodes.map((b) => b.trim()).filter(Boolean)))];
+  // Kits / packaging carry a product-level barcode instead of pack-type barcodes.
+  const own = v.productCategory !== "Product" && v.barcode ? v.barcode.trim() : "";
+  const codes = own && !packCodes.includes(own) ? [...packCodes, own] : packCodes;
+  if (!codes.length) return;
+  const field = (code: string) => (packCodes.includes(code) ? "packTypes" : "barcode");
+  const clash = tx.select({ barcode: pb.barcode, sku: p.sku, packType: ppt.packType }).from(pb)
+    .innerJoin(p, eq(p.id, pb.productId)).innerJoin(ppt, eq(ppt.id, pb.packTypeId))
+    .where(and(inArray(pb.barcode, codes), eq(p.clientId, v.clientId), productId ? sql`${p.id} <> ${productId}` : undefined)).get();
+  if (clash) {
+    const msg = `Barcode ${clash.barcode} is already used by ${clash.sku} (${clash.packType})`;
+    throw new AppError("DUPLICATE", msg, { fieldErrors: { [field(clash.barcode)]: [msg] } });
+  }
+  // Product-level barcode column of other products (kits, packaging, listing-created products).
+  const col = tx.select({ barcode: p.barcode, sku: p.sku }).from(p)
+    .where(and(inArray(p.barcode, codes), eq(p.clientId, v.clientId), sql`${p.barcode} <> ${p.sku}`, productId ? sql`${p.id} <> ${productId}` : undefined)).get();
+  if (col) {
+    const msg = `Barcode ${col.barcode} is already used by ${col.sku}`;
+    throw new AppError("DUPLICATE", msg, { fieldErrors: { [field(col.barcode)]: [msg] } });
+  }
+}
+
+/** Fields the wizard payload carries; a PATCH that omits some keeps the stored values. */
+function mergePartial(stored: Record<string, unknown>, raw: Record<string, unknown>): ProductInput {
+  const out: Record<string, unknown> = { ...stored };
+  for (const [k, value] of Object.entries(raw)) {
+    if (value === undefined) continue;
+    const prev = out[k];
+    // customs / hazmat / customFields may be sent partially.
+    if ((k === "customs" || k === "hazmat" || k === "customFields") && value && typeof value === "object" && !Array.isArray(value) && prev && typeof prev === "object") {
+      out[k] = { ...(prev as Record<string, unknown>), ...(value as Record<string, unknown>) };
+    } else out[k] = value;
+  }
+  delete out.id;
+  delete out.clientName;
+  return out as ProductInput;
+}
+
 function cleanCustomFields(values: Readonly<Record<string, unknown>>): Record<string, string | boolean | null> {
   const out: Record<string, string | boolean | null> = {};
   for (const slot of CUSTOM_FIELD_SLOTS) {
@@ -98,7 +151,9 @@ export function productColumns(v: ProductValue): Omit<typeof p.$inferInsert, "id
   const dims = v.productCategory === "Product" && primary
     ? { unit: primary.dimensionUnit, l: primary.length, w: primary.width, h: primary.height, wu: primary.weightUnit, wt: primary.weight }
     : { unit: v.dimensionUnit, l: v.length, w: v.width, h: v.height, wu: v.weightUnit, wt: v.weight };
-  const barcode = primary?.barcodes[0] ?? v.barcode ?? v.sku;
+  // No silent SKU fallback: a blank barcode stays blank (a SKU stored as barcode could later
+  // collide with a real barcode). Labels print the SKU when the barcode is empty.
+  const barcode = primary?.barcodes[0] ?? (v.barcode?.trim() || "");
   const isKit = v.productCategory === "Kit";
   const isPackaging = v.productCategory === "Packaging Material";
   const tracking = isKit
@@ -170,7 +225,8 @@ export function productColumns(v: ProductValue): Omit<typeof p.$inferInsert, "id
 
 /** Pack types for kits/packaging: a single primary carrying the packing-step dims. */
 function packsFor(v: ProductValue): ProductValue["packTypes"] {
-  if (v.productCategory === "Product") return normalizePackTypes(v.packTypes);
+  // Hierarchical packs saved without a weight take child qty × the contained pack weight.
+  if (v.productCategory === "Product") return fillDerivedPackWeights(normalizePackTypes(v.packTypes));
   const existing = v.packTypes.find((x) => x.kind === "Primary");
   return [{
     key: existing?.key ?? "primary", id: existing?.id ?? null, packType: v.uom, kind: "Primary", parentKey: null, childQty: undefined, uomQty: 1,
@@ -268,7 +324,9 @@ export function loadProduct(tx: AppDb, ctx: ScopedCtx, id: string): ProductRow {
 export function updateProductFromWizard(tx: AppDb, ctx: ScopedCtx, id: string, raw: ProductInput): ProductRow {
   const existing = loadProduct(tx, ctx, id);
   if (raw.version !== undefined && raw.version !== existing.version) throw conflictError();
-  const v = validate(tx, ctx, raw, existing);
+  // Partial PATCH: keys the caller omits keep their stored values (the wizard always sends everything).
+  const stored = getProductForm(tx, ctx.scope, id);
+  const v = validate(tx, ctx, stored ? mergePartial(stored as unknown as Record<string, unknown>, raw as Record<string, unknown>) : raw, existing);
   const before = productSnapshot(tx, id);
   tx.update(p).set({ ...productColumns(v), updatedBy: ctx.userId, version: existing.version + 1 }).where(eq(p.id, id)).run();
   syncPackTypes(tx, ctx, id, v);

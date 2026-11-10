@@ -34,6 +34,9 @@ export function create(tx: Tx, ctx: DomainCtx, input: CreateLicensePlateInput): 
   const row = tx.insert(schema.licensePlates).values({
     number: nextLpNumber(tx, type.id), warehouseId: input.warehouseId, lpTypeId: type.id, locationId: input.locationId ?? null,
     clientId: input.clientId ?? null, status: "Empty", createdBy: ctx.userId, updatedBy: ctx.userId,
+    // A new LP starts with its type's dimensions and empty weight (facility-config REQ-R9-2).
+    length: type.length, width: type.width, height: type.height, weight: type.emptyWeight,
+    actualVolume: type.length * type.width * type.height,
   }).returning().get();
   recordCreate(tx, ctx, { entityType: "license_plate", entityId: row.id, entityCode: row.number });
   return row;

@@ -1,5 +1,5 @@
 /**
- * Workflows repository (M12; KitStaks-designed): grid with drag sequence, builder load/save,
+ * Workflows repository (M12; KitStak-designed): grid with drag sequence, builder load/save,
  * bulk activate/deactivate/delete, run history and Test against order — the real condition
  * evaluator and action executors run inside a savepoint that is always rolled back.
  */
@@ -11,22 +11,24 @@ import { hasClient, hasWarehouse } from "@/server/auth/scope";
 import * as s from "@/server/db/schema";
 import { runBulk } from "@/server/domain/bulk";
 import { fieldLabel } from "@/server/domain/change-log";
-import { evaluateCondition, evaluateConditions, type Facts } from "@/server/domain/conditions";
+import { evaluateConditionNode, evaluateConditions, type Facts } from "@/server/domain/conditions";
 import { describeError } from "@/server/domain/errors";
 import { orderFacts } from "@/server/domain/facts";
+import { workflowEntityScope } from "@/server/domain/workflows";
 import type { BulkResult } from "@/server/domain/types";
 import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
 import { getWorkflowActionExecutor } from "@/server/workflows/actions";
-import { describeCondition } from "@/lib/grid-defs/integrations/rule-fields";
+import { conditionLeaves, describeConditionNode } from "@/lib/grid-defs/integrations/rule-fields";
 import {
-  WORKFLOW_FIELDS, WORKFLOW_RUN_FIELDS, WORKFLOW_RUN_SORT_FIELDS, WORKFLOW_SEARCH_FIELDS, WORKFLOW_SORT_FIELDS, type WorkflowSave,
+  PO_TRIGGERS, WORKFLOW_FIELDS, WORKFLOW_RUN_FIELDS, WORKFLOW_RUN_SORT_FIELDS, WORKFLOW_SEARCH_FIELDS, WORKFLOW_SORT_FIELDS, type WorkflowSave,
 } from "@/lib/grid-defs/integrations/workflows";
 import {
-  assertFound, assertVersion, compileGrid, domainCtxOf, dryRun, duplicateError, fieldError, labelsOf, logCreate, logDelete, logUpdate,
+  assertFound, assertVersion, compileGrid, domainCtxOf, dryRun, duplicateError, fieldError, labelsOf, clientLabelsOf, logCreate, logDelete, logUpdate,
   type Actor, type GridBinding,
 } from "./integration-logs-kit";
 
+type OrderStatus = (typeof s.shipmentOrders.$inferSelect)["status"];
 const t = s.workflows;
 const ENTITY = "workflow";
 type Row = typeof t.$inferSelect;
@@ -48,7 +50,9 @@ export interface WorkflowRow {
   readonly warehouseId: string | null;
   readonly warehouseCode: string | null;
   readonly clientId: string | null;
+  /** Full client name (M12 rule: name everywhere, code alongside). */
   readonly clientName: string | null;
+  readonly clientCode: string | null;
   readonly match: Row["match"];
   readonly conditionCount: number;
   readonly conditionSummary: string;
@@ -78,7 +82,7 @@ function scopeWhere(auth: AuthContext) {
 }
 
 function names(db: AppDb, rows: readonly Row[]) {
-  return { wh: labelsOf(db, "warehouses", rows.map((r) => r.warehouseId)), cl: labelsOf(db, "clients", rows.map((r) => r.clientId)) };
+  return { wh: labelsOf(db, "warehouses", rows.map((r) => r.warehouseId)), cl: clientLabelsOf(db, rows.map((r) => r.clientId)) };
 }
 
 function blockedCounts(db: AppDb, ids: readonly string[]): Map<string, number> {
@@ -93,8 +97,8 @@ function blockedCounts(db: AppDb, ids: readonly string[]): Map<string, number> {
 function toRow(r: Row, n: ReturnType<typeof names>, blocked: Map<string, number>): WorkflowRow {
   return {
     id: r.id, name: r.name, description: r.description, trigger: r.trigger, warehouseId: r.warehouseId, warehouseCode: r.warehouseId ? n.wh.get(r.warehouseId) ?? null : null,
-    clientId: r.clientId, clientName: r.clientId ? n.cl.get(r.clientId) ?? null : null, match: r.match, conditionCount: r.conditions.length,
-    conditionSummary: r.conditions.length === 0 ? "Every order" : r.conditions.map((c) => describeCondition("order", c)).join(r.match === "All" ? " AND " : " OR "),
+    clientId: r.clientId, clientName: r.clientId ? n.cl.get(r.clientId)?.name ?? null : null, clientCode: r.clientId ? n.cl.get(r.clientId)?.code ?? null : null, match: r.match, conditionCount: conditionLeaves(r.conditions).length,
+    conditionSummary: r.conditions.length === 0 ? "Every order" : r.conditions.map((c) => describeConditionNode("order", c)).join(r.match === "All" ? " AND " : " OR "),
     actions: r.actions.map((a) => a.action), isActive: r.isActive, stopProcessing: r.stopProcessing, sequence: r.sequence, runCount: r.runCount, lastRunAt: r.lastRunAt,
     blockedOpen: blocked.get(r.id) ?? 0, version: r.version,
   };
@@ -135,7 +139,7 @@ function snapshot(db: AppDb, v: Pick<Row, "name" | "description" | "trigger" | "
   const cl = v.clientId ? labelsOf(db, "clients", [v.clientId]).get(v.clientId) ?? v.clientId : "All clients";
   return {
     name: v.name, description: v.description, trigger: v.trigger, warehouse: wh, client: cl, match: v.match,
-    conditions: v.conditions.map((c) => describeCondition("order", c)).join(" · ") || "Every order",
+    conditions: v.conditions.map((c) => describeConditionNode("order", c)).join(v.match === "All" ? " AND " : " OR ") || "Every order",
     actions: v.actions.map((a) => a.action).join(" → "), active: v.isActive, stopProcessing: v.stopProcessing,
   };
 }
@@ -249,7 +253,37 @@ export interface WorkflowTestResult {
 
 const WATCH = ["priority", "workflowBlocked", "carrier", "shippingService", "rateShoppingPresetId", "shipmentPackageId", "orderTypeId", "note", "warehouseId"] as const;
 
+/** Purchase Order Created: conditions on PO facts, Notify Users only (no order fields change). */
+function testPoWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: WorkflowSave, poId: string): WorkflowTestResult {
+  const po = assertFound(db.select().from(s.purchaseOrders).where(eq(s.purchaseOrders.id, poId)).get(), "Purchase order");
+  if (!hasWarehouse(auth.scope, po.warehouseId) || !hasClient(auth.scope, po.clientId)) throw new AppError("NOT_FOUND", "Purchase order not found");
+  const notes: string[] = [];
+  if (body.warehouseId && body.warehouseId !== po.warehouseId) notes.push("the purchase order is in another warehouse");
+  if (body.clientId && body.clientId !== po.clientId) notes.push("the purchase order belongs to another client");
+  return dryRun(db, (tx) => {
+    const { facts } = workflowEntityScope(tx, { type: "purchase_order", id: po.id });
+    const conditions = body.conditions.map((c) => ({ text: describeConditionNode("purchaseOrder", c), passed: evaluateConditionNode(c, facts) }));
+    const matched = evaluateConditions(body.conditions, facts, body.match);
+    const actions: { action: string; applied: boolean; message: string | null }[] = [];
+    if (matched) {
+      const ctx = { ...domainCtxOf(actor, auth), source: "Workflow test" };
+      for (const a of body.actions) {
+        const exec = getWorkflowActionExecutor(a.action);
+        if (!exec) { actions.push({ action: a.action, applied: false, message: "Not configured" }); continue; }
+        try {
+          const res = tx.transaction((inner) => exec(inner, ctx, { entity: { type: "purchase_order", id: po.id }, params: a.params, workflowId: "test", workflowName: body.name }));
+          actions.push({ action: a.action, applied: res.applied, message: res.message ?? null });
+        } catch (error) {
+          actions.push({ action: a.action, applied: false, message: describeError(error).message });
+        }
+      }
+    }
+    return { orderCode: po.code, inScope: notes.length === 0, scopeNote: notes.length > 0 ? `In production this workflow would skip the purchase order: ${notes.join(" and ")}.` : null, matched, conditions, actions, changes: [], blockType: null };
+  });
+}
+
 export function testWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: WorkflowSave, orderId: string): WorkflowTestResult {
+  if (PO_TRIGGERS.has(body.trigger)) return testPoWorkflow(db, auth, actor, body, orderId);
   const order = assertFound(db.select().from(s.shipmentOrders).where(eq(s.shipmentOrders.id, orderId)).get(), "Shipment order");
   if (!hasWarehouse(auth.scope, order.warehouseId) || !hasClient(auth.scope, order.clientId)) throw new AppError("NOT_FOUND", "Shipment order not found");
   const notes: string[] = [];
@@ -258,7 +292,7 @@ export function testWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: W
   return dryRun(db, (tx) => {
     // Local adapter until REQ-1 lands: address lines are not in foundation orderFacts yet.
     const facts: Facts = { shipAddress: order.shipAddress, shipAddress2: order.shipAddress2, ...orderFacts(tx, order) };
-    const conditions = body.conditions.map((c) => ({ text: describeCondition("order", c), passed: evaluateCondition(c, facts) }));
+    const conditions = body.conditions.map((c) => ({ text: describeConditionNode("order", c), passed: evaluateConditionNode(c, facts) }));
     const matched = evaluateConditions(body.conditions, facts, body.match);
     const actions: { action: string; applied: boolean; message: string | null }[] = [];
     let blockType: "Fully" | "Partially" | null = null;
@@ -295,9 +329,21 @@ export function testWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: W
   });
 }
 
-export function testOrderOptions(db: AppDb, auth: AuthContext, q: string | null): { id: string; label: string }[] {
+/** Records to test against: open orders, shipped orders (Order Shipped) or purchase orders. */
+export type TestEntityKind = "open" | "shipped" | "po";
+
+export function testOrderOptions(db: AppDb, auth: AuthContext, q: string | null, kind: TestEntityKind = "open"): { id: string; label: string }[] {
+  if (kind === "po") {
+    const p = s.purchaseOrders;
+    const conds = [inArray(p.warehouseId, [...auth.viewScope.warehouseIds])];
+    if (auth.viewScope.clientIds !== "all") conds.push(inArray(p.clientId, auth.viewScope.clientIds.length > 0 ? [...auth.viewScope.clientIds] : ["-"]));
+    if (q) conds.push(sql`(${p.code} LIKE ${`%${q}%`} OR ${p.vendorName} LIKE ${`%${q}%`} OR ${p.referenceNumber} LIKE ${`%${q}%`})`);
+    return db.select({ id: p.id, code: p.code, vendor: p.vendorName, status: p.status }).from(p).where(and(...conds)).orderBy(desc(p.createdAt)).limit(30).all()
+      .map((x) => ({ id: x.id, label: `${x.code} · ${x.vendor ?? "No vendor"} · ${x.status}` }));
+  }
   const o = s.shipmentOrders;
-  const conds = [inArray(o.status, ["Open", "Shortage", "On Hold", "Ready to Pick"]), sql`${o.deletedAt} IS NULL`, inArray(o.warehouseId, [...auth.viewScope.warehouseIds])];
+  const statuses: OrderStatus[] = kind === "shipped" ? ["Shipped", "Partially Shipped", "Delivered", "Ready to Ship"] : ["Open", "Shortage", "On Hold", "Ready to Pick"];
+  const conds = [inArray(o.status, statuses), sql`${o.deletedAt} IS NULL`, inArray(o.warehouseId, [...auth.viewScope.warehouseIds])];
   if (auth.viewScope.clientIds !== "all") conds.push(inArray(o.clientId, auth.viewScope.clientIds.length > 0 ? [...auth.viewScope.clientIds] : ["-"]));
   if (q) conds.push(sql`(${o.code} LIKE ${`%${q}%`} OR ${o.customerName} LIKE ${`%${q}%`} OR ${o.shipAddress} LIKE ${`%${q}%`})`);
   return db.select({ id: o.id, code: o.code, customer: o.customerName, addr: o.shipAddress }).from(o).where(and(...conds)).orderBy(desc(o.orderDate)).limit(30).all()

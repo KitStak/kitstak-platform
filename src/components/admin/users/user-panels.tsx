@@ -20,18 +20,34 @@ import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
 import { StatusPill } from "@/components/ui/status-pill";
 import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
-import type { UserDetail, UserSession } from "@/server/repositories/users";
-import { DetailList, NO_PERMISSION, StatRow, useAction } from "../admin-shared";
+import type { UserDetail, UserRow, UserSession } from "@/server/repositories/users";
+import { UnderlineTabs } from "@/components/ui/tabs";
+import { ChangeLogList, DetailList, NO_PERMISSION, StatRow, useAction } from "../admin-shared";
 
-export function UserDetailDrawer({ id, onOpenChange, onEdit, onSessions, canEdit }: { readonly id: string | null; readonly onOpenChange: (o: boolean) => void; readonly onEdit: (id: string) => void; readonly onSessions: (id: string) => void; readonly canEdit: boolean }) {
+/**
+ * Grid row → provisional detail, so Show details paints the profile at once (no skeleton
+ * flash) while `/api/users/:id` loads the role, warehouse and client lists.
+ */
+export function detailFromRow(row: UserRow): UserDetail {
+  const split = (v: string | null) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  const roles = split(row.roleNames).map((name) => ({ id: name, name, key: "", isSystem: false }));
+  const warehouses = split(row.warehouseCodes).map((code) => ({ id: code, code, name: code }));
+  return { ...row, roles, warehouses, clients: [], roleIds: [], warehouseIds: [], clientIds: [] };
+}
+
+export function UserDetailDrawer({ id, seed, onOpenChange, onEdit, onSessions, canEdit }: { readonly id: string | null; readonly seed?: UserRow | null; readonly onOpenChange: (o: boolean) => void; readonly onEdit: (id: string) => void; readonly onSessions: (id: string) => void; readonly canEdit: boolean }) {
   const fmt = useFormat();
-  const q = useApiQuery<UserDetail>(["user", id ?? ""], id ? `/api/users/${id}` : null, { staleTime: 0 });
+  const placeholder = React.useMemo(() => (seed && seed.id === id ? { data: detailFromRow(seed) } : undefined), [seed, id]);
+  const q = useApiQuery<UserDetail>(["user", id ?? ""], id ? `/api/users/${id}` : null, { staleTime: 0, placeholderData: placeholder });
   const d = q.data?.data;
+  const provisional = q.isPlaceholderData;
+  const [tab, setTab] = React.useState<"details" | "access" | "sessions" | "log">("details");
+  const sessionsQ = useApiQuery<readonly UserSession[]>(["user-sessions", id ?? ""], id && tab === "sessions" ? `/api/users/${id}/sessions` : null, { staleTime: 0 });
   return (
-    <Drawer open={id !== null} onOpenChange={onOpenChange} width={45} title={d ? d.name : "User"} description={d?.email ?? "User details"}
+    <Drawer open={id !== null} onOpenChange={(o) => { if (!o) setTab("details"); onOpenChange(o); }} width={45} title={d ? d.name : "User"} description={d?.email ?? "User details"}
       footer={d ? (
         <div className="flex justify-between">
-          <Button variant="secondary" onClick={() => onSessions(d.id)}><Laptop className="h-4 w-4" aria-hidden />Sessions ({d.activeSessions})</Button>
+          <Button variant="secondary" onClick={() => onSessions(d.id)}><Laptop className="h-4 w-4" aria-hidden />Manage sessions ({d.activeSessions})</Button>
           <DisabledReason reason={canEdit ? null : NO_PERMISSION}><Button variant="primary" disabled={!canEdit} onClick={() => onEdit(d.id)}><Pencil className="h-4 w-4" aria-hidden />Edit</Button></DisabledReason>
         </div>
       ) : undefined}>
@@ -49,25 +65,44 @@ export function UserDetailDrawer({ id, onOpenChange, onEdit, onSessions, canEdit
           <StatRow stats={[
             { label: "Roles", value: d.roles.length },
             { label: "Warehouses", value: d.warehouses.length },
-            { label: "Clients", value: d.allClients ? "All" : d.clients.length },
+            { label: "Clients", value: d.allClients ? "All" : provisional ? "…" : d.clients.length },
             { label: "Live sessions", value: d.activeSessions, tone: d.activeSessions > 0 ? "success" : undefined },
           ]} />
-          <DetailList title="Profile" items={[
+          <UnderlineTabs ariaLabel="User detail sections" className="-mx-6" active={tab} onChange={(k) => setTab(k as typeof tab)}
+            tabs={[{ key: "details", label: "Details" }, { key: "access", label: "Access" }, { key: "sessions", label: "Sessions", count: d.activeSessions }, { key: "log", label: "Change log" }]} />
+          {tab === "details" ? <DetailList title="Profile" items={[
             { label: "First name", value: d.firstName }, { label: "Last name", value: d.lastName },
             { label: "User type", value: d.userType }, { label: "API user", value: d.isApiUser ? "Yes" : "No" },
-            { label: "Last sign-in", value: d.lastLoginAt ? fmt.dateTime(d.lastLoginAt) : "Never signed in" },
-            { label: "Password changed", value: d.passwordChangedAt ? fmt.dateTime(d.passwordChangedAt) : <Badge tone="warning" size="sm">Change required at next sign-in</Badge> },
-            { label: "Locked until", value: d.lockedUntil && d.lockedUntil > new Date().toISOString() ? fmt.dateTime(d.lockedUntil) : "Not locked" },
+            { label: "Last sign-in", value: d.lastLoginAt ? fmt.gridDateTime(d.lastLoginAt) : "Never signed in" },
+            { label: "Password changed", value: d.passwordChangedAt ? fmt.gridDateTime(d.passwordChangedAt) : <Badge tone="warning" size="sm">Change required at next sign-in</Badge> },
+            { label: "Locked until", value: d.lockedUntil && d.lockedUntil > new Date().toISOString() ? fmt.gridDateTime(d.lockedUntil) : "Not locked" },
             { label: "Member since", value: fmt.date(d.createdAt) },
-          ]} />
-          <section className="flex flex-col gap-2">
+          ]} /> : null}
+          {tab === "access" ? <section className="flex flex-col gap-2">
             <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Access</h3>
             <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-3 text-[13px]">
               <AccessRow label="Roles" values={d.roles.map((r) => r.name)} />
               <AccessRow label="Warehouses" values={d.warehouses.map((w) => w.name)} />
-              <AccessRow label="Clients" values={d.allClients ? ["All existing and future clients"] : d.clients.map((c) => c.name)} />
+              <AccessRow label="Clients" values={d.allClients ? ["All existing and future clients"] : provisional ? ["Loading…"] : d.clients.map((c) => c.name)} />
             </div>
-          </section>
+          </section> : null}
+          {tab === "sessions" ? (
+            sessionsQ.isPending ? <SkeletonTable rows={2} columns={2} /> : sessionsQ.isError ? (
+              <EmptyState title="Couldn't load sessions" description={sessionsQ.error.message} action={<Button onClick={() => void sessionsQ.refetch()}>Retry</Button>} compact />
+            ) : (sessionsQ.data?.data ?? []).length === 0 ? (
+              <EmptyState icon={Laptop} title="No live sessions" description="This user isn't signed in on any device." compact />
+            ) : (
+              <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
+                {(sessionsQ.data?.data ?? []).map((sess) => (
+                  <li key={sess.id} className="px-3 py-2.5">
+                    <p className="flex items-center gap-2 text-[13px] font-medium text-foreground">{deviceOf(sess.userAgent).label}{sess.isCurrent ? <Badge tone="success" size="sm">This device</Badge> : null}</p>
+                    <p className="text-[11.5px] text-faint">{sess.ip ?? "Unknown IP"} · signed in {fmt.gridDateTime(sess.createdAt)}</p>
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : null}
+          {tab === "log" ? <ChangeLogList key={d.id} path={`/api/users/${d.id}/change-log`} /> : null}
         </div>
       )}
     </Drawer>
@@ -125,7 +160,7 @@ export function UserSessionsDrawer({ user, onOpenChange, canEdit, onChanged }: {
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><Icon className="h-4 w-4" aria-hidden /></span>
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-2 text-[13px] font-medium text-foreground">{device.label}{sess.isCurrent ? <Badge tone="success" size="sm">This device</Badge> : null}</p>
-                  <p className="text-[11.5px] text-faint">{sess.ip ?? "Unknown IP"} · signed in {fmt.dateTime(sess.createdAt)} · last active {sess.lastSeenAt ? fmt.age(sess.lastSeenAt) : "—"} ago</p>
+                  <p className="text-[11.5px] text-faint">{sess.ip ?? "Unknown IP"} · signed in {fmt.gridDateTime(sess.createdAt)} · last active {sess.lastSeenAt ? (fmt.age(sess.lastSeenAt) === "now" ? "just now" : `${fmt.age(sess.lastSeenAt)} ago`) : "—"}</p>
                 </div>
                 <DisabledReason reason={!canEdit ? NO_PERMISSION : sess.isCurrent ? "Use Log out to end your current session" : null}>
                   <Button size="sm" variant="secondary" disabled={!canEdit || sess.isCurrent || action.pending} onClick={() => void revoke(sess.id)}>Revoke</Button>

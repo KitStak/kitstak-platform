@@ -5,7 +5,7 @@
  * field list. All of them show the inline error under the control (0.3).
  */
 import * as React from "react";
-import type { FieldValues, Path } from "react-hook-form";
+import { useWatch, type FieldValues, type Path } from "react-hook-form";
 import { FormField } from "@/components/ui/form";
 import { NumberInput } from "@/components/ui/number-input";
 import { Select, type SelectOption } from "@/components/ui/select";
@@ -37,9 +37,11 @@ export function TextF({ maxLength, placeholder, showCount, trailing, onBlurExtra
             onBlurExtra?.(String(c.value ?? ""));
           }}
           maxLength={maxLength}
-          showCount={showCount ?? Boolean(maxLength)}
+          // The counter sits inside the input (trailing) so a field error renders directly
+          // under the input instead of below a separate counter row (REQ-8 workaround).
+          showCount={false}
           placeholder={placeholder}
-          trailing={trailing}
+          trailing={trailing ?? ((showCount ?? Boolean(maxLength)) && maxLength ? <span className="tabular-nums text-[11px] text-faint" aria-hidden>{String(c.value ?? "").length}/{maxLength}</span> : undefined)}
         />
       )}
     </FormField>
@@ -54,29 +56,38 @@ export function AreaF({ maxLength, placeholder, rows = 3, ...base }: Base & { re
   );
 }
 
-export function NumF({ decimals = 0, min = 0, max, suffix, placeholder, onValue, ...base }: Base & { readonly decimals?: number; readonly min?: number; readonly max?: number; readonly suffix?: React.ReactNode; readonly placeholder?: string; readonly onValue?: (v: number | null) => void }) {
+export function NumF({ decimals = 0, min = 0, max, suffix, placeholder, onValue, rangeText, unclamped: _unclamped, ...base }: Base & { readonly unclamped?: boolean; readonly rangeText?: string; readonly decimals?: number; readonly min?: number; readonly max?: number; readonly suffix?: React.ReactNode; readonly placeholder?: string; readonly onValue?: (v: number | null) => void }) {
+  // Bounds are NOT passed to NumberInput (it would silently clamp -5 to 0). The value is kept as
+  // typed; a range message shows inline as soon as it is committed, and the step schema blocks
+  // Next with the same message. Kept in local state because RHF's blur re-validation (no
+  // resolver) would clear a manually set field error.
+  const rangeMessage = (v: number | null): string | null =>
+    v === null ? null : v < min ? rangeText ?? `Must be ${min} or more` : max !== undefined && v > max ? rangeText ?? `Must be ${max} or less` : null;
+  const watched = useWatch({ name: base.name }) as number | null | undefined;
+  const live = rangeMessage(typeof watched === "number" ? watched : null);
   return (
     <FormField<Values> name={base.name as Path<Values>} label={base.label} required={base.required} info={base.info} description={base.description} disabled={base.disabled} className={base.className}>
-      {(c) => (
-        <NumberInput
-          id={c.id}
-          name={c.name}
-          value={(c.value as number | null) ?? null}
-          onChange={(v) => {
-            c.onChange(v);
-            onValue?.(v);
-          }}
-          onBlur={c.onBlur}
-          invalid={c.invalid}
-          aria-invalid={c["aria-invalid"]}
-          aria-describedby={c["aria-describedby"]}
-          disabled={c.disabled}
-          decimals={decimals}
-          min={min}
-          max={max}
-          suffix={suffix}
-          placeholder={placeholder ?? (decimals ? (0).toFixed(decimals) : "0")}
-        />
+      {(c, fieldState) => (
+        <>
+          <NumberInput
+            id={c.id}
+            name={c.name}
+            value={(c.value as number | null) ?? null}
+            onChange={(v) => {
+              c.onChange(v);
+              onValue?.(v);
+            }}
+            onBlur={c.onBlur}
+            invalid={c.invalid || Boolean(live)}
+            aria-invalid={c["aria-invalid"] ?? (live ? true : undefined)}
+            aria-describedby={c["aria-describedby"]}
+            disabled={c.disabled}
+            decimals={decimals}
+            suffix={suffix}
+            placeholder={placeholder ?? (decimals ? (0).toFixed(decimals) : "0")}
+          />
+          {live && !fieldState.error ? <p role="alert" className="text-[12px] text-danger">{live}</p> : null}
+        </>
       )}
     </FormField>
   );
@@ -120,6 +131,32 @@ export function YesNoF({ onValue, ...base }: Base & { readonly onValue?: (v: boo
           }}
           disabled={c.disabled}
           ariaLabel={typeof base.label === "string" ? base.label : undefined}
+          className={NEUTRAL_NO}
+        />
+      )}
+    </FormField>
+  );
+}
+
+/**
+ * The shared toggle paints a selected "No" solid red; for neutral defaults (handling flags,
+ * Active?/Digital?) "No" reads as a quiet grey selection and red stays reserved for errors
+ * (shared change filed as REQ-15).
+ */
+export const NEUTRAL_NO = "w-fit [&>[data-state=on]:last-child]:bg-neutral-soft [&>[data-state=on]:last-child]:text-body";
+
+/** Left-aligned "label · toggle" row for flag lists (Packing handling flags). */
+export function FlagRow({ name, label, info }: { readonly name: string; readonly label: string; readonly info?: React.ReactNode }) {
+  return (
+    <FormField<Values> name={name as Path<Values>} label={label} info={info} inline className="rounded-md border border-border px-3 py-2">
+      {(c) => (
+        <YesNoToggle
+          id={c.id}
+          value={(c.value as boolean | null) ?? false}
+          onChange={(v) => c.onChange(v)}
+          disabled={c.disabled}
+          ariaLabel={label}
+          className={`${NEUTRAL_NO} shrink-0`}
         />
       )}
     </FormField>

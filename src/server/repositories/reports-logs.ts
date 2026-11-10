@@ -8,6 +8,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import type { AuthContext } from "@/server/auth/context";
+import { can } from "@/server/auth/permissions";
 import type { GridQuery } from "@/server/query/grid-query";
 import {
   CHANGE_LOG_DEF, CHANGE_LOG_MODULES, EXPORT_HISTORY_DEF, MISSING_LOG_DEF, SERIAL_TRANSACTIONS_DEF, TRANSACTION_HISTORY_DEF,
@@ -152,19 +153,41 @@ export function humanizeProperty(raw: string | null | undefined): string | null 
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+/** Line-level change rows → the SKU of the changed line (order / PO / return / count lines). */
+export const LINE_TABLES: Readonly<Record<string, string>> = {
+  order_line: "order_lines", purchase_order_line: "purchase_order_lines", return_order_line: "return_order_lines", count_line: "count_plan_lines",
+};
+function lineSkuExpr(): SQL {
+  const whens = Object.entries(LINE_TABLES)
+    .map(([type, table]) => `WHEN ${quote(type)} THEN (SELECT p.sku FROM ${table} x JOIN products p ON p.id = x.product_id WHERE x.id = cl.entity_id)`).join(" ");
+  return sql.raw(`CASE cl.entity_type ${whens} END`);
+}
+
+/**
+ * Change Log audience (RA-R4): the full audit trail (every user's edits) is for roles that
+ * manage users (admin / supervisor). Everyone else sees only the changes they made.
+ */
+export const CHANGE_LOG_ALL_USERS_PERMISSION = "settings.users.view";
+export function seesAllChangeLog(auth: AuthContext): boolean {
+  return can(auth, CHANGE_LOG_ALL_USERS_PERMISSION);
+}
+
 export function changeLogSql(auth: AuthContext): SQL {
   const wh = warehouseExpr();
+  const ownOnly = seesAllChangeLog(auth) ? sql`1 = 1` : sql`cl.user_id = ${auth.user.id}`;
   const allClients = auth.viewScope.clientIds === "all";
   return sql`
     SELECT cl.id AS "id", cl.type AS "type", ${moduleExpr()} AS "module", cl.entity_type AS "entityType",
-           COALESCE(cl.entity_code, '—') AS "code", ${hrefExpr()} AS "href",
+           COALESCE(cl.entity_code, '—') || COALESCE(' / ' || ${lineSkuExpr()}, '') AS "code", ${lineSkuExpr()} AS "lineSku", ${hrefExpr()} AS "href",
+           EXISTS (SELECT 1 FROM change_log d WHERE d.entity_type = cl.entity_type AND d.entity_id = cl.entity_id AND d.type = 'Delete') AS "recordDeleted",
            COALESCE(cl.field_label, cl.field) AS "property", cl.field AS "field",
            cl.from_value AS "fromValue", cl.to_value AS "toValue", cl.message AS "message",
-           cl.at AS "at", COALESCE(cl.source, u.email) AS "source", u.name AS "userName"
+           cl.at AS "at", COALESCE(NULLIF(u.name, ''), cl.source, u.email) AS "source", COALESCE(u.email, cl.source) AS "sourceDetail", u.name AS "userName"
     FROM change_log cl
     LEFT JOIN users u ON u.id = cl.user_id
     WHERE ((${wh} IS NULL AND ${allClients ? sql`1 = 1` : sql`0 = 1`}) OR ${inList(wh, auth.viewScope.warehouseIds)})
-      AND ${allClients ? sql`1 = 1` : inList(clientExpr(), auth.viewScope.clientIds as readonly string[])}`;
+      AND ${allClients ? sql`1 = 1` : inList(clientExpr(), auth.viewScope.clientIds as readonly string[])}
+      AND ${ownOnly}`;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -194,7 +217,8 @@ export function resolveIds(db: AppDb, ids: readonly string[]): Map<string, strin
 }
 
 export function presentChangeLogRows(db: AppDb, rows: readonly Row[]): Row[] {
-  const ids = rows.flatMap((r) => [r.fromValue, r.toValue]).filter((v): v is string => typeof v === "string" && UUID_RE.test(v));
+  const inMessages = rows.flatMap((r) => (typeof r.message === "string" ? r.message.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? [] : []));
+  const ids = [...rows.flatMap((r) => [r.fromValue, r.toValue]).filter((v): v is string => typeof v === "string" && UUID_RE.test(v)), ...inMessages];
   const names = resolveIds(db, ids);
   const show = (v: unknown): string | null => {
     if (typeof v !== "string" || v === "") return null;
@@ -204,14 +228,43 @@ export function presentChangeLogRows(db: AppDb, rows: readonly Row[]): Row[] {
     const field = typeof r.field === "string" ? r.field : "";
     const label = humanizeProperty(typeof r.property === "string" ? r.property : field);
     const isIdField = /Id$/.test(field) && field.length > 2;
+    const base = isIdField && label ? label.replace(/\s+Id$/i, "") : label;
+    const sku = typeof r.lineSku === "string" ? r.lineSku : null;
+    const raw = lineSubject(r.message);
+    // The SKU is already in Code ("SO010847 / APX-TEE-BLK-L"); keep other subjects (e.g. a count location).
+    const subject = raw && raw !== sku ? raw : null;
     return {
       ...r,
-      href: changeLogHref(String(r.entityType ?? ""), typeof r.code === "string" ? r.code : null, typeof r.href === "string" ? r.href : null),
-      property: isIdField && label ? label.replace(/\s+Id$/i, "") : label,
+      // A deleted record has no page to open: its rows render as plain text (every Delete row, and
+      // the earlier history of that record), never a link to a missing record.
+      href: Number(r.recordDeleted) ? null : changeLogHref(String(r.entityType ?? ""), typeof r.code === "string" ? r.code.split(" / ")[0] ?? r.code : null, typeof r.href === "string" ? r.href : null),
+      // Line-level rows (order / PO / return lines, inventory buckets) name the SKU they changed,
+      // so four "Quantity" rows on one order are told apart without opening the message.
+      property: base && subject ? `${base} · ${subject}` : base,
       fromValue: show(r.fromValue),
       toValue: show(r.toValue),
+      message: presentMessage(r.message, names),
     };
   });
+}
+
+/** "APX-TEE-NVY-M -> Quantity is modified. 0 --> 1" → "APX-TEE-NVY-M". */
+export function lineSubject(message: unknown): string | null {
+  if (typeof message !== "string") return null;
+  const m = /^(.{1,80}?) -> /.exec(message);
+  return m?.[1]?.trim() || null;
+}
+
+/** Readable message: raw ids replaced by codes / names, i18n keys humanized, `-->` as an arrow. */
+export function presentMessage(message: unknown, names: ReadonlyMap<string, string>): string | null {
+  if (typeof message !== "string" || message.trim() === "") return null;
+  return message
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, (id) => names.get(id) ?? "removed record")
+    .replace(/\b[A-Za-z]+\.NameKey\.([A-Za-z0-9_]+)/g, (_, k: string) => humanizeProperty(k) ?? k)
+    .replace(/\s+-->\s+/g, " → ")
+    .replace(/\.\s+→/g, ". (empty) →")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 export function listChangeLog(db: AppDb, auth: AuthContext, query: GridQuery): ReportPage<Row> {
@@ -220,6 +273,34 @@ export function listChangeLog(db: AppDb, auth: AuthContext, query: GridQuery): R
 }
 
 /* ------------------------------------------------------ transaction history */
+
+/**
+ * Signed quantity of a ledger row (RA-R2-3). The ledger stores moves unsigned with
+ * from/to; a row with only a source location is a decrement (shipment, kitting out,
+ * cancel receiving), a row with only a target keeps its stored sign (receipts, and the
+ * already-signed adjust/count deltas), and a move keeps its quantity.
+ */
+export function signedLedgerQty(uomQty: number, hasFrom: boolean, hasTo: boolean): number {
+  if (hasFrom && !hasTo) return -Math.abs(uomQty);
+  return uomQty;
+}
+
+/** Warehouse on-hand change of a ledger row: moves inside the warehouse net to zero. */
+export function onHandDelta(uomQty: number, hasFrom: boolean, hasTo: boolean): number {
+  if (hasFrom && hasTo) return 0;
+  return signedLedgerQty(uomQty, hasFrom, hasTo);
+}
+
+/** Running on-hand (client + warehouse + product) after each row; before = after - delta. */
+export function runningBalances(rows: readonly { readonly delta: number }[]): { before: number; after: number }[] {
+  let bal = 0;
+  return rows.map((r) => { const before = bal; bal += r.delta; return { before, after: bal }; });
+}
+
+const SIGNED_QTY = sql.raw(`CASE WHEN t.from_location_id IS NOT NULL AND t.to_location_id IS NULL THEN -ABS(t.uom_qty) ELSE t.uom_qty END`);
+const SIGNED_PACK_QTY = sql.raw(`CASE WHEN t.from_location_id IS NOT NULL AND t.to_location_id IS NULL THEN -ABS(t.pack_qty) ELSE t.pack_qty END`);
+const ON_HAND_DELTA = sql.raw(`CASE WHEN t.from_location_id IS NOT NULL AND t.to_location_id IS NOT NULL THEN 0 WHEN t.from_location_id IS NOT NULL THEN -ABS(t.uom_qty) ELSE t.uom_qty END`);
+const ON_HAND_AFTER = sql.raw(`SUM(CASE WHEN t.from_location_id IS NOT NULL AND t.to_location_id IS NOT NULL THEN 0 WHEN t.from_location_id IS NOT NULL THEN -ABS(t.uom_qty) ELSE t.uom_qty END) OVER (PARTITION BY t.warehouse_id, t.client_id, t.product_id ORDER BY t.seq ROWS UNBOUNDED PRECEDING)`);
 
 export function transactionsSql(auth: AuthContext): SQL {
   return sql`
@@ -241,7 +322,8 @@ export function transactionsSql(auth: AuthContext): SQL {
            fplp.number AS "sourceParentLp", fplp.original_number AS "fromOriginalParentLp", fplt.code AS "sourceParentLpType",
            tplp.number AS "targetParentLp", tplp.original_number AS "toOriginalParentLp", tplt.code AS "targetParentLpType",
            cp.code AS "countPlanCode", CASE WHEN cp.id IS NOT NULL THEN '/counts/' || cp.id END AS "countHref",
-           t.uom_qty AS "uomQty", t.pack_qty AS "packQty",
+           ${SIGNED_QTY} AS "uomQty", ${SIGNED_PACK_QTY} AS "packQty", ${ON_HAND_DELTA} AS "netChange",
+           (${ON_HAND_AFTER}) - (${ON_HAND_DELTA}) AS "qtyBefore", ${ON_HAND_AFTER} AS "qtyAfter",
            t.from_damage_reason AS "fromDamageReason", t.to_damage_reason AS "toDamageReason",
            t.from_expiry AS "fromExpiry", t.to_expiry AS "toExpiry", t.from_lot AS "fromLot", t.to_lot AS "toLot",
            t.at AS "at", COALESCE(u.name, t.source) AS "user",
@@ -317,7 +399,7 @@ export const listSerialTransactions = (db: AppDb, auth: AuthContext, q: GridQuer
 
 export function missingLogSql(auth: AuthContext): SQL {
   return sql`
-    SELECT m.id AS "id", m.wave_no AS "waveNo", j.code AS "jobCode", CASE WHEN j.id IS NOT NULL THEN '/jobs/' || j.id END AS "jobHref",
+    SELECT m.id AS "id", m.wave_no AS "waveNo", CASE WHEN m.wave_no IS NOT NULL THEN '/jobs/wave-log?f.waveNo=eq:' || m.wave_no END AS "waveHref", j.code AS "jobCode", CASE WHEN j.id IS NOT NULL THEN '/jobs/' || j.id END AS "jobHref",
            o.code AS "orderCode", CASE WHEN o.id IS NOT NULL THEN '/orders/' || o.id END AS "orderHref",
            p.sku AS "sku", p.name AS "productName", p.barcode AS "barcode", '/products/' || p.id AS "productHref",
            m.pack_type AS "packType", lp.number AS "lpNumber", plp.number AS "parentLp", plt.code AS "parentLpType",
@@ -356,18 +438,54 @@ export function exportTypeExpr(): SQL {
   return sql.raw(`CASE b.grid_key ${whens} ELSE b.title END`);
 }
 
+/** gridKey → the page the export was started from (checked against src/app routes). */
+export const EXPORT_SOURCE_PAGES: Readonly<Record<string, string>> = { "orders-backlog": "/orders", "orders-shipped": "/orders", "shipments": "/shipments", "shipment-history": "/shipments/history", "shipment-plans": "/shipment-plans", "shipment-plan-orders": "/shipment-plans/orders", "shipment-plan-lps": "/shipment-plans/lps", "jobs": "/jobs", "wave-rules": "/jobs/wave-rules", "allocation-exceptions": "/jobs/allocation-exceptions", "tasks-order-operations": "/tasks/order-operations", "tasks-count": "/tasks/count", "tasks-replenishment": "/tasks/replenishment", "job-types": "/settings/job-types", "return-orders": "/orders/returns", "vendors": "/organization/vendors", "inventory-total": "/inventory", "inventory-by-location": "/inventory/by-location", "inventory-atp": "/inventory/atp", "count-plans": "/counts", "count-locations": "/counts/locations", "count-skus": "/counts/skus", "work-orders": "/work-orders", "kit-inventory": "/inventory/kits", "products": "/products", "locations": "/locations", "warehouses": "/settings/warehouses", "mobile-carts": "/settings/mobile-carts", "lp-types": "/settings/lp-types", "lp-numbers": "/settings/lp-numbers", "shipment-packages": "/settings/shipment-packages", "clients": "/clients", "billing-contracts": "/billing", "integration-monitoring": "/integrations/monitoring/missing-orders", "algorithms-putaway": "/automation/algorithms", "algorithms-allocation": "/automation/algorithms", "workflows": "/automation/workflows", "monitoring-recent-errors": "/integrations/monitoring/recent-errors", "monitoring-workflow-blocked": "/integrations/monitoring/workflow-blocked", "monitoring-listing-exceptions": "/integrations/monitoring/listing-exceptions", "end-of-day": "/shipments/end-of-day", "wave-log": "/jobs/wave-log", "shortages": "/jobs/shortage", "purchase-orders": "/receiving", "receiving-history": "/receiving/history", "kit-components": "/inventory/kit-components", "product-listings": "/products/listings", "customers": "/organization/customers", "retailers": "/organization/retailers", "billing-reports": "/billing/reports", "vas-operations": "/billing/vas", "integration-logs": "/integrations/logs/history", "integration-orders": "/integrations/logs/orders", "integration-products": "/integrations/logs/products", "channel-methods": "/integrations/logs/methods", "monitoring-health": "/integrations/monitoring", "carrier-errors": "/integrations/carrier-errors/label-generation", "carrier-errors-rate-call": "/integrations/carrier-errors/rate-call", "carrier-errors-void-label": "/integrations/carrier-errors/void-label", "rate-shopping-presets": "/automation/rate-shopping", "screen-configs": "/settings/screen-configuration", "report-inventory-aging": "/reports/inventory-aging", "report-location-utilization": "/reports/location-utilization", "report-order-lines": "/reports/order-lines","report-export-history": "/reports/export-history", "report-channel-sales": "/reports/channel-sales", "report-serial-numbers": "/reports/serial-numbers", "report-serial-shipments": "/reports/serial-numbers/shipment-history", "report-serial-receipts": "/reports/serial-numbers/receiving-history", "report-order-inventory": "/reports/order-inventory", "report-replenishment": "/reports/replenishment", "report-inventory-snapshot": "/reports/inventory-snapshot", "report-change-log": "/reports/change-log", "report-transaction-history": "/reports/transaction-history", "report-serial-transactions": "/reports/transaction-history/serial", "report-missing-log": "/reports/missing-log", "report-po-receiving": "/reports/po-receiving", "report-user-performance": "/reports/user-performance", "users": "/settings/users", "roles": "/settings/roles", "audit-log": "/settings/audit", "printouts": "/settings/printouts" };
+
+/** Link back to the originating grid with the exact filter set that was exported. */
+export function exportSourceHref(gridKey: unknown, query: unknown): string | null {
+  if (typeof gridKey !== "string") return null;
+  const page = EXPORT_SOURCE_PAGES[gridKey];
+  if (!page) return null;
+  const params = new URLSearchParams(typeof query === "string" ? query : "");
+  params.delete("page");
+  const qs = params.toString();
+  return qs ? `${page}?${qs}` : page;
+}
+
+/** Plain-language summary of the exported filter set ("2 filters · search \"ABC\""). */
+export function exportFilterSummary(query: unknown): string | null {
+  if (typeof query !== "string" || query.trim() === "") return null;
+  const params = new URLSearchParams(query);
+  const filters = [...params.keys()].filter((k) => k.startsWith("f.")).length;
+  const parts: string[] = [];
+  if (filters) parts.push(`${filters} filter${filters === 1 ? "" : "s"}`);
+  const q = params.get("q");
+  if (q) parts.push(`search "${q}"`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
 /** The viewer's own exports (the tray and this page show the same rows). */
 export function exportHistorySql(auth: AuthContext): SQL {
   return sql`
     SELECT b.id AS "id", ${exportTypeExpr()} AS "title", b.grid_key AS "gridKey", b.created_at AS "createdAt", b.finished_at AS "finishedAt",
            b.row_count AS "rowCount", b.error_message AS "errorMessage", b.status AS "status", b.progress AS "progress",
-           b.file_id AS "fileId", f.name AS "fileName",
+           b.file_id AS "fileId", f.name AS "fileName", b.query AS "query", COALESCE(u.name, u.email) AS "exportedBy",
+           CASE WHEN ('&' || COALESCE(b.query, '')) LIKE '%&f.%' OR ('&' || COALESCE(b.query, '')) LIKE '%&q=_%' THEN 1 ELSE 0 END AS "hasFilters",
            CASE WHEN b.file_id IS NOT NULL AND b.status = 'completed' THEN '/api/files/' || b.file_id END AS "downloadHref",
            CASE WHEN b.file_id IS NOT NULL AND b.status = 'completed' THEN 'Download' WHEN b.status = 'error' THEN 'No file' ELSE 'Preparing' END AS "action"
     FROM background_tasks b
     LEFT JOIN files f ON f.id = b.file_id
+    LEFT JOIN users u ON u.id = b.user_id
     WHERE b.kind = 'export' AND b.user_id = ${auth.user.id} AND (b.grid_key IS NULL OR b.grid_key NOT LIKE ${`${DEV_GRID_KEY_PREFIX}%`})`;
 }
 
-export const listExportHistory = (db: AppDb, auth: AuthContext, q: GridQuery): ReportPage<Row> =>
-  runReport<Row>(db, exportHistorySql(auth), EXPORT_HISTORY_DEF, q);
+export function listExportHistory(db: AppDb, auth: AuthContext, q: GridQuery): ReportPage<Row> {
+  const page = runReport<Row>(db, exportHistorySql(auth), EXPORT_HISTORY_DEF, q);
+  return {
+    rows: page.rows.map((r) => {
+      const { query, ...rest } = r as Row & { query?: unknown };
+      return { ...rest, sourceHref: exportSourceHref(r.gridKey, query), filterSummary: exportFilterSummary(query) ?? "No filters" };
+    }),
+    total: page.total,
+  };
+}

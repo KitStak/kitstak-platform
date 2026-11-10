@@ -2,8 +2,8 @@
 
 /**
  * Picking / Job Operations for shipment orders (Logiwa "Picking/Job Operations"):
- *   1. allocates the selected Open / Shortage orders (`/api/ops/allocate`, full mode, per
- *      warehouse) — Logiwa allocates while it creates the job;
+ *   1. pre-check (one warehouse, statuses that can join a job) — nothing is written on open;
+ *      `/api/ops/jobs` allocates Open / Shortage orders while it creates the job, like Logiwa;
  *   2. eligibility summary + choice: Merge into existing job / Create new job;
  *   3a. merge: pending picking jobs of the warehouse (job code, type, qty, progress, assignee);
  *   3b. create: job type (picking types of the warehouse), batch size, assignee, a live dry run
@@ -13,6 +13,7 @@
  * `ids` while `/api/ops/jobs` expects `orderIds`, so orders use this modal until it lands.
  */
 import * as React from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CheckCircle2, GitMerge, ListPlus, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -41,11 +42,6 @@ export interface JobOrderRef {
 interface BulkFailure {
   readonly id: string;
   readonly message: string;
-}
-
-interface AllocationResult {
-  readonly succeeded: readonly string[];
-  readonly failed: readonly BulkFailure[];
 }
 
 interface DryRun {
@@ -89,6 +85,22 @@ export function jobBatches(count: number, batchSize: number | null): readonly nu
   return [...Array.from({ length: full }, () => batchSize), ...(rest ? [rest] : [])];
 }
 
+/** The job type matching the most orders; ties (or all failing) keep `fallbackId`. */
+export function bestJobType(scores: readonly { readonly id: string; readonly n: number }[], fallbackId: string): string {
+  const fallback = scores.find((s) => s.id === fallbackId);
+  let best = fallback ?? scores[0];
+  for (const s of scores) if (best === undefined || s.n > best.n) best = s;
+  return best && best.n > 0 ? best.id : fallbackId;
+}
+
+/** Keeps the entered batch size (default 1) inside the job type's min–max; never empty. */
+export function clampBatch(current: number | null, type: { readonly batchMin: number; readonly batchMax: number }): number {
+  const min = Math.max(1, type.batchMin || 1);
+  const max = Math.max(min, type.batchMax || min);
+  const value = current && Number.isInteger(current) && current > 0 ? current : 1;
+  return Math.min(max, Math.max(min, value));
+}
+
 export interface OrderJobModalProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
@@ -118,8 +130,10 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
   const [path, setPath] = React.useState<"merge" | "create" | null>(null);
   const [mergeJobId, setMergeJobId] = React.useState<string | null>(null);
   const [jobTypeId, setJobTypeId] = React.useState<string | null>(null);
-  const [batchSize, setBatchSize] = React.useState<number | null>(null);
+  // Logiwa parity: Batch Size starts at 1, so Create job is usable as soon as a job type is set.
+  const [batchSize, setBatchSize] = React.useState<number | null>(1);
   const [assigneeUserId, setAssigneeUserId] = React.useState<string | null>(null);
+  const [assigneeName, setAssigneeName] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const ordersRef = React.useRef(orders);
   ordersRef.current = orders;
@@ -129,38 +143,49 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
       setPhase("ready");
       return;
     }
-    let cancelled = false;
-    const run = async () => {
-      const skippedIds = new Set(precheck.skipped.map((s) => s.id));
-      const candidates = ordersRef.current.filter((o) => !skippedIds.has(o.id));
-      const fails = new Map<string, string>(precheck.skipped.map((s) => [s.id, s.message]));
-      for (const [wh, orderIds] of allocationBatches(candidates)) {
-        try {
-          const res = await apiFetch<AllocationResult>("/api/ops/allocate", { method: "POST", body: { action: "allocate", orderIds, warehouseId: wh, mode: "full" } });
-          for (const f of res.failed) fails.set(f.id, f.message);
-        } catch (error) {
-          for (const id of orderIds) fails.set(id, errorMessage(error));
-        }
-      }
-      if (cancelled) return;
-      await Promise.all(ORDER_INVALIDATE.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
-      setFailed([...fails].map(([id, message]) => ({ id, message })));
-      setReady(candidates.map((o) => o.id).filter((id) => !fails.has(id)));
-      setPhase("ready");
-    };
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [precheck, queryClient]);
+    // No writes on open: `/api/ops/jobs` allocates Open / Shortage orders inside the same
+    // transaction that creates or merges the job (REQ-5 applied), and the eligibility dry run
+    // (rolled back) reports shortages per order. Cancelling the modal therefore leaves every
+    // order exactly as it was (previously it stayed allocated as Ready to Pick with no job).
+    const skippedIds = new Set(precheck.skipped.map((s) => s.id));
+    setFailed(precheck.skipped);
+    setReady(ordersRef.current.filter((o) => !skippedIds.has(o.id)).map((o) => o.id));
+    setPhase("ready");
+  }, [precheck]);
 
   const options = useApiQuery<OrderJobOptions>(["order-job-options", warehouseId ?? ""], warehouseId && phase === "ready" ? "/api/orders/job-options" : null, {
     query: { warehouseId: warehouseId ?? undefined },
     staleTime: 0,
   });
-  const jobTypes = options.data?.data.jobTypes ?? [];
+  const jobTypes = React.useMemo(() => options.data?.data.jobTypes ?? [], [options.data]);
   const mergeable = options.data?.data.mergeableJobs ?? [];
   const jobType = jobTypes.find((t) => t.id === jobTypeId) ?? null;
+  // Job Type is pre-selected as the type whose rules match the most selected orders (critic r5:
+  // "Multi Item Orders" was pre-picked for a single-unit order while "Single Unit Orders" existed).
+  // Each type gets a rolled-back dry run; ties keep the warehouse's last-used type.
+  const defaultType = jobTypes.find((t) => t.id === options.data?.data.defaultJobTypeId) ?? jobTypes[0] ?? null;
+  const [pickingType, setPickingType] = React.useState(false);
+  const autoPicked = React.useRef(false);
+  React.useEffect(() => {
+    if (step !== "create" || autoPicked.current || jobTypeId || !defaultType || ready.length === 0) return;
+    autoPicked.current = true;
+    if (jobTypes.length === 1) {
+      setJobTypeId(defaultType.id);
+      setBatchSize((b) => clampBatch(b, defaultType));
+      return;
+    }
+    setPickingType(true);
+    void Promise.all(jobTypes.map((t) => apiFetch<DryRun>("/api/ops/jobs/eligibility", { method: "POST", body: { operation: "order", orderIds: ready, jobTypeId: t.id } })
+      .then((d) => ({ id: t.id, n: d.eligible.length }))
+      .catch(() => ({ id: t.id, n: -1 }))))
+      .then((scores) => {
+        const id = bestJobType(scores, defaultType.id);
+        const t = jobTypes.find((x) => x.id === id) ?? defaultType;
+        setJobTypeId((cur) => cur ?? t.id);
+        setBatchSize((b) => clampBatch(b, t));
+      })
+      .finally(() => setPickingType(false));
+  }, [step, jobTypeId, defaultType, jobTypes, ready]);
 
   const dryRun = useQuery<DryRun, ApiError>({
     queryKey: ["order-job-dry-run", ready.join(","), step === "merge" ? `job:${mergeJobId}` : `type:${jobTypeId}`],
@@ -175,7 +200,8 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
   const eligibleIds = dryRun.data?.eligible ?? null;
 
   const submit = async () => {
-    const orderIds = eligibleIds && eligibleIds.length > 0 ? eligibleIds : ready;
+    const orderIds = eligibleIds ?? ready;
+    if (orderIds.length === 0) return;
     setSubmitting(true);
     try {
       const body = step === "merge"
@@ -188,8 +214,13 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
         const first = result.failed[0];
         toast.warning(step === "merge" ? "Merged with exceptions" : "Jobs created with exceptions", `${summary}. ${codes.get(first.id) ?? "An order"}: ${first.message}`);
       } else {
-        toast.success(step === "merge" ? "Merged into job" : "Job created", summary);
+        // Logiwa parity: a tasks toast plus an allocation tally toast.
+        toast.success(
+          step === "merge" ? "Merged into job" : "Picking tasks created",
+          step === "merge" ? summary : `Picking tasks have been created. You can now start the picking process. ${summary}.`,
+        );
       }
+      if (ok > 0) toast.info("Allocation", `${ok} out of ${orders.length} order(s) allocated.`);
       await Promise.all([...ORDER_INVALIDATE, ["order-job-options"]].map((queryKey) => queryClient.invalidateQueries({ queryKey })));
       onDone?.(result.jobIds ?? (mergeJobId ? [mergeJobId] : []));
       onOpenChange(false);
@@ -208,8 +239,8 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
       <>
         <DialogHeader title={title} description={description} />
         <DialogBody className="flex items-center gap-3 py-8 text-[13px] text-body">
-          <Spinner className="size-4" label="Allocating" />
-          Allocating inventory for the selected orders…
+          <Spinner className="size-4" label="Checking" />
+          Checking the selected orders…
         </DialogBody>
       </>
     );
@@ -220,7 +251,10 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
     ? "Saving…"
     : step === "merge"
       ? (mergeJobId ? null : "Select a job")
-      : !jobTypeId ? "Choose a job type" : !batchSize || batchSize < 1 ? "Enter a batch size" : null;
+      : pickingType ? "Finding the job type that fits…" : !jobTypeId ? "Choose a job type" : !batchSize || batchSize < 1 ? "Enter a batch size" : null;
+  // Never submit what the (rolled-back) dry run just rejected: wait for it, and block when nothing qualifies.
+  const dryRunReason = finishReason
+    ?? (dryRun.isFetching ? "Checking the job type rules…" : eligibleIds && eligibleIds.length === 0 ? "None of the selected orders is eligible for this job" : null);
   const batches = jobBatches(eligibleIds?.length ?? ready.length, batchSize);
 
   return (
@@ -241,14 +275,14 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
                 <span>Job type <span className="text-danger">*</span></span>
                 <Select
                   aria-label="Job type"
-                  placeholder={options.isPending ? "Loading…" : jobTypes.length ? "Select job type" : "No picking job types in this warehouse"}
+                  placeholder={options.isPending || pickingType ? "Finding the best match…" : jobTypes.length ? "Select job type" : "No picking job types in this warehouse"}
                   disabled={jobTypes.length === 0}
                   value={jobTypeId}
                   options={jobTypes.map((t) => ({ value: t.id, label: t.code, description: t.description }))}
                   onChange={(id) => {
                     setJobTypeId(id);
                     const t = jobTypes.find((x) => x.id === id);
-                    if (t) setBatchSize(t.batchMax || 1);
+                    if (t) setBatchSize((b) => clampBatch(b, t));
                   }}
                 />
               </label>
@@ -259,7 +293,17 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
               </label>
               <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
                 Assign to
-                <UserPicker warehouseId={warehouseId} value={assigneeUserId} onChange={setAssigneeUserId} placeholder="Leave unassigned" />
+                <UserPicker
+                  aria-label="Assign to"
+                  warehouseId={warehouseId}
+                  value={assigneeUserId}
+                  selectedLabel={assigneeName ?? undefined}
+                  onChange={(v, item) => {
+                    setAssigneeUserId(v);
+                    setAssigneeName(item ? String(item.label) : null);
+                  }}
+                  placeholder="Search users (leave empty for unassigned)"
+                />
               </label>
               <DryRunNote query={dryRun} codes={codes} />
             </div>
@@ -268,14 +312,23 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
               {batches.length === 0 ? (
                 <p className="text-[12px] text-faint">Choose a job type and batch size to preview.</p>
               ) : (
-                <ul className="ks-scroll flex max-h-48 flex-col gap-1 overflow-auto">
-                  {batches.map((size, i) => (
-                    <li key={i} className="flex items-center justify-between rounded-md bg-surface px-2.5 py-1.5 text-[12px]">
-                      <span className="font-semibold text-foreground">{jobType?.code ?? "Job"} #{i + 1}</span>
-                      <span className="text-secondary">{size} order{size === 1 ? "" : "s"}</span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="ks-scroll flex max-h-48 flex-col gap-1 overflow-auto">
+                    {batches.map((size, i) => (
+                      <li key={i} className="flex flex-col gap-0.5 rounded-md bg-surface px-2.5 py-1.5 text-[12px]">
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-foreground">{jobType?.code ?? "Job"} #{i + 1}</span>
+                          <span className="text-secondary">{size} order{size === 1 ? "" : "s"}</span>
+                        </span>
+                        <span className="text-faint">{assigneeName ? `Assigned to ${assigneeName}` : "Unassigned · anyone can start it"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="border-t border-border pt-2 text-[12px] text-secondary">
+                    {batches.reduce((a, b) => a + b, 0)} order{batches.reduce((a, b) => a + b, 0) === 1 ? "" : "s"} in {batches.length} job{batches.length === 1 ? "" : "s"}
+                    {jobType ? ` · ${jobType.batchMethod === "Nof Item" ? "units" : "orders"} per job ${batchSize ?? 1}` : ""}
+                  </p>
+                </>
               )}
             </aside>
           </div>
@@ -299,8 +352,8 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
             <Button variant="secondary" disabled={submitting} onClick={() => setStep("choose")}>
               <ArrowLeft className="size-3.5" aria-hidden /> Back
             </Button>
-            <DisabledReason reason={finishReason}>
-              <Button variant="primary" disabled={Boolean(finishReason)} onClick={() => void submit()}>
+            <DisabledReason reason={dryRunReason}>
+              <Button variant="primary" disabled={Boolean(dryRunReason)} onClick={() => void submit()}>
                 {submitting ? <Spinner className="size-3.5" /> : null}
                 {step === "merge" ? "Merge into job" : "Create job"}
               </Button>
@@ -329,7 +382,7 @@ function ChooseStep({ blocked, ready, total, failed, codes, path, onPath }: {
       <div className={cn("flex items-center gap-3 rounded-lg border p-3", ready ? "border-success/30 bg-success-soft" : "border-danger/30 bg-danger-soft")}>
         {ready ? <CheckCircle2 className="size-5 text-success" aria-hidden /> : <XCircle className="size-5 text-danger" aria-hidden />}
         <p className="text-[14px] font-semibold text-foreground">
-          {ready} of {total} order{total === 1 ? "" : "s"} {ready === 1 ? "is" : "are"} allocated and ready for a picking job
+          {ready} of {total} order{total === 1 ? "" : "s"} can get a picking job. Open and Shortage orders are allocated when the job is saved.
         </p>
       </div>
       <FailureList failed={failed} codes={codes} title="Not eligible" />
@@ -377,7 +430,49 @@ function DryRunNote({ query, codes }: { readonly query: ReturnType<typeof useQue
       <p className="text-[12px] text-secondary">
         <strong className="text-foreground">{d.eligible.length} of {d.total}</strong> order{d.total === 1 ? "" : "s"} match this job&apos;s rules.
       </p>
-      <FailureList failed={d.ineligible} codes={codes} title="Excluded by the job rules" />
+      <FailureList failed={d.ineligible.filter((f) => !isShortage(f.message))} codes={codes} title="Excluded by the job rules" />
+      <ShortageList failed={d.ineligible.filter((f) => isShortage(f.message))} codes={codes} />
+    </div>
+  );
+}
+
+/** A dry-run failure caused by allocation (not by the job type's rules). */
+export function isShortage(message: string): boolean {
+  return /could not be (fully )?allocated|shortage|insufficient/i.test(message);
+}
+
+interface ShortageExplain { readonly summary: string }
+
+/**
+ * Orders the dry run couldn't allocate, with the real reason (locked location, storage-only stock
+ * excluded by the allocation rule, other client, …) and a link to Allocation Exceptions (critic r5).
+ */
+function ShortageList({ failed, codes }: { readonly failed: readonly BulkFailure[]; readonly codes: ReadonlyMap<string, string> }) {
+  const ids = failed.map((f) => f.id);
+  const reasons = useQuery<Readonly<Record<string, ShortageExplain>>, ApiError>({
+    queryKey: ["order-shortage-reasons", ids.join(",")],
+    queryFn: () => apiFetch("/api/orders/shortage-reasons", { method: "POST", body: { ids } }),
+    enabled: ids.length > 0,
+    retry: false,
+    staleTime: 0,
+  });
+  if (failed.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[12px] font-semibold text-secondary">Not enough allocatable stock</p>
+        <Link href="/jobs/allocation-exceptions" className="text-[12px] font-semibold text-primary hover:underline">Allocation Exceptions</Link>
+      </div>
+      <ul className="ks-scroll max-h-48 divide-y divide-border overflow-auto rounded-md border border-warning/40 bg-warning-soft/40 text-[12px]">
+        {failed.map((r) => (
+          <li key={r.id} className="flex gap-3 px-3 py-1.5">
+            <span className="w-28 shrink-0 font-semibold text-foreground">{codes.get(r.id) ?? "Order"}</span>
+            <span className="text-secondary">
+              {reasons.isPending ? "Checking stock…" : reasons.data?.[r.id]?.summary ?? r.message}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

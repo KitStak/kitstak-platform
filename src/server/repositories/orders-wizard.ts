@@ -2,7 +2,7 @@
  * Create/edit wizard helpers (M01): customer prefill (Step 2) and draft rate shopping
  * (Step 4 "Get Rates" before the order exists). Reads only; scoped.
  */
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDb } from "@/server/api/db";
 import type { Scope } from "@/server/auth/scope";
@@ -42,7 +42,81 @@ export interface CustomerPrefill {
   readonly addresses: readonly CustomerPrefillAddress[];
 }
 
+/** Prefix for a one-time customer taken from a previous order (no customers row): `order:<orderId>`. */
+export const ORDER_CUSTOMER_PREFIX = "order:";
+
+export interface CustomerSearchItem {
+  readonly value: string;
+  readonly label: string;
+  readonly description: string;
+  readonly source: "customer" | "order";
+}
+
+function likeTerm(q: string): string {
+  return `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+}
+
+/**
+ * Step 2 customer search for one client: saved customers (name / email / phone contain the term),
+ * then one-time customers from the client's previous orders (latest order per name + postal code).
+ * Logiwa lists both, so typing "Oli" finds Olivia Martinez even when she only exists on orders.
+ */
+export function customerSearch(db: AppDb, scope: Scope, clientId: string, q: string, limit = 20): readonly CustomerSearchItem[] {
+  if (!hasClient(scope, clientId)) return [];
+  const term = likeTerm(q.trim());
+  const cu = schema.customers;
+  const saved = db
+    .select({ id: cu.id, firstName: cu.firstName, lastName: cu.lastName, email: cu.email })
+    .from(cu)
+    .where(and(eq(cu.clientId, clientId), eq(cu.isActive, true), sql`(${cu.firstName} || ' ' || ${cu.lastName} LIKE ${term} ESCAPE '\\' OR ${cu.email} LIKE ${term} ESCAPE '\\' OR ${cu.phone} LIKE ${term} ESCAPE '\\')`))
+    .orderBy(asc(cu.firstName), asc(cu.lastName))
+    .limit(limit)
+    .all()
+    .map((c): CustomerSearchItem => ({ value: c.id, label: `${c.firstName} ${c.lastName}`.trim(), description: c.email || "Saved customer", source: "customer" }));
+  const so = schema.shipmentOrders;
+  const savedNames = new Set(saved.map((s) => s.label.toLowerCase()));
+  const fromOrders = db
+    .select({ id: so.id, code: so.code, name: so.customerName, city: so.shipCity, state: so.shipState, zip: so.shipZip, at: sql<string>`MAX(${so.orderDate})` })
+    .from(so)
+    .where(and(eq(so.clientId, clientId), isNull(so.deletedAt), isNull(so.customerId), sql`(${so.customerName} LIKE ${term} ESCAPE '\\' OR ${so.customerEmail} LIKE ${term} ESCAPE '\\')`))
+    .groupBy(sql`lower(${so.customerName})`, sql`lower(COALESCE(${so.shipZip}, ''))`)
+    .orderBy(sql`MAX(${so.orderDate}) DESC`)
+    .limit(limit)
+    .all()
+    .filter((r) => r.name && !savedNames.has(r.name.toLowerCase()))
+    .map((r): CustomerSearchItem => ({
+      value: `${ORDER_CUSTOMER_PREFIX}${r.id}`,
+      label: r.name ?? "",
+      description: `From order ${r.code} · ${[r.city, r.state].filter(Boolean).join(", ")}`,
+      source: "order",
+    }));
+  return [...saved, ...fromOrders].slice(0, limit);
+}
+
+/** Contact + ship-to of a previous order, shaped like a saved customer with one address. */
+function orderCustomerPrefill(db: AppDb, scope: Scope, orderId: string): CustomerPrefill | null {
+  const so = schema.shipmentOrders;
+  const o = db.select().from(so).where(and(eq(so.id, orderId), isNull(so.deletedAt))).get();
+  if (!o || !hasClient(scope, o.clientId)) return null;
+  const [first, ...rest] = (o.customerName ?? "").trim().split(/\s+/);
+  return {
+    id: `${ORDER_CUSTOMER_PREFIX}${o.id}`,
+    firstName: o.customerFirstName ?? first ?? "",
+    lastName: o.customerLastName ?? rest.join(" "),
+    email: o.customerEmail ?? "",
+    phone: o.customerPhone ?? "",
+    addresses: o.shipAddress && o.shipCity
+      ? [{
+          id: `ship-${o.id}`, title: `Ship-to on ${o.code}`, usageType: "Shipping", isDefault: true, firstName: o.customerFirstName, lastName: o.customerLastName,
+          companyName: o.companyName, line1: o.shipAddress, line2: o.shipAddress2, city: o.shipCity, state: o.shipState, postalCode: o.shipZip ?? "",
+          country: o.shipCountry ?? "US", phone: o.customerPhone, email: o.customerEmail, addressType: o.addressType,
+        }]
+      : [],
+  };
+}
+
 export function customerPrefill(db: AppDb, scope: Scope, customerId: string): CustomerPrefill | null {
+  if (customerId.startsWith(ORDER_CUSTOMER_PREFIX)) return orderCustomerPrefill(db, scope, customerId.slice(ORDER_CUSTOMER_PREFIX.length));
   const c = db.select().from(schema.customers).where(eq(schema.customers.id, customerId)).get();
   if (!c || !hasClient(scope, c.clientId)) return null;
   const a = schema.addresses;
@@ -144,6 +218,12 @@ export interface OrderProductFacts {
   readonly weightOz: number;
   readonly isKit: boolean;
   readonly atp: number | null;
+  /**
+   * Of the ATP, units allocation can actually take now: active, unlocked, allocation-enabled,
+   * undamaged locations (allocation-rule area filters can narrow it further per order). The
+   * wizard labels the gap so "ATP 625" never hides "0 allocatable" (critic r5).
+   */
+  readonly allocatable: number | null;
   readonly packTypes: readonly { readonly packType: string; readonly uomQty: number }[];
 }
 
@@ -156,16 +236,25 @@ export function productFacts(db: AppDb, scope: Scope, input: { ids: readonly str
   const packs = db.select().from(schema.productPackTypes).where(inArray(schema.productPackTypes.productId, rows.map((r) => r.id))).all();
   const wh = input.warehouseId && hasWarehouse(scope, input.warehouseId) ? input.warehouseId : null;
   const atp = new Map<string, number>();
+  const allocatable = new Map<string, number>();
   if (wh) {
     const i = schema.inventory;
     for (const r of db.select({ productId: i.productId, n: sql<number>`COALESCE(SUM(${i.onHand} - ${i.allocated} - ${i.damaged}), 0)` }).from(i)
       .where(and(inArray(i.productId, rows.map((x) => x.id)), eq(i.warehouseId, wh), eq(i.status, "Stock"))).groupBy(i.productId).all()) {
       atp.set(r.productId, Math.max(0, Number(r.n)));
     }
+    const l = schema.locations;
+    for (const r of db.select({ productId: i.productId, n: sql<number>`COALESCE(SUM(${i.onHand} - ${i.allocated}), 0)` }).from(i)
+      .innerJoin(l, eq(l.id, i.locationId))
+      .where(and(inArray(i.productId, rows.map((x) => x.id)), eq(i.warehouseId, wh), eq(i.status, "Stock"), isNull(i.damageReason),
+        eq(l.isActive, true), eq(l.isLocked, false), eq(l.preventAllocation, false), sql`${i.onHand} - ${i.allocated} > 0`)).groupBy(i.productId).all()) {
+      allocatable.set(r.productId, Math.max(0, Number(r.n)));
+    }
   }
   return rows.map((r) => ({
     id: r.id, sku: r.sku, name: r.name, imageUrl: r.imageUrl ?? null, uom: r.uom, price: r.price, weightOz: r.weightOz, isKit: Boolean(r.isKit),
     atp: wh ? atp.get(r.id) ?? 0 : null,
+    allocatable: wh ? Math.min(atp.get(r.id) ?? 0, allocatable.get(r.id) ?? 0) : null,
     packTypes: [{ packType: r.uom, uomQty: 1 }, ...packs.filter((x) => x.productId === r.id && x.packType !== r.uom).map((x) => ({ packType: x.packType, uomQty: x.uomQty }))],
   }));
 }

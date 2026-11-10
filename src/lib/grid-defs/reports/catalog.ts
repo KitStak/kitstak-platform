@@ -15,7 +15,7 @@ export const REPORT_DESCRIPTIONS: Readonly<Record<string, string>> = {
   "/reports/serial-numbers": "Primary and secondary serial status, plus shipment and receiving history.",
   "/reports/order-inventory": "Where the stock allocated to open orders sits: location, LP, lot and status.",
   "/reports/replenishment": "How much to move from reserve into pick faces to cover demand.",
-  "/reports/inventory-snapshot": "Nightly point-in-time copy of every inventory bucket.",
+  "/reports/inventory-snapshot": "Daily 00:02 point-in-time copy of every inventory bucket.",
   "/reports/change-log": "Who changed what, from which value to which, with links to the record.",
   "/reports/transaction-history": "The inventory ledger: every move with its before and after state.",
   "/integrations/logs/history": "Channel downloads and syncs with their success and error counts.",
@@ -27,6 +27,18 @@ export const REPORT_DESCRIPTIONS: Readonly<Record<string, string>> = {
   "/reports/po-receiving": "Received versus ordered quantity per PO line, with difference pills.",
   "/receiving/history": "Every receipt line with location, LP, lot and receiving user.",
   "/reports/user-performance": "Picks, packs, receipts, counts and returns per user per day.",
+  "/reports/inventory-aging": "How long on-hand stock has sat, bucketed 0-30 through over 365 days.",
+  "/reports/location-utilization": "Units and SKUs per location against its capacity, with over-full and empty bins.",
+  "/reports/order-lines": "Every open and shipped-today order line with its pick and pack progress (the dashboard's Order Lines drilldown).",
+  "/analytics/labor/average-task": "Average time per task type over time, by job type and client.",
+  "/analytics/labor/associate-task": "Tasks and time per associate, split by task type.",
+  "/analytics/labor/performance-quadrant": "Speed versus volume per associate, plotted in four quadrants.",
+  "/analytics/labor/associate": "One associate's throughput and trend.",
+  "/analytics/labor/receiving-performance": "Units and lines received per user and day.",
+  "/analytics/operational/inbound-inventory": "Open receipts, dock-to-stock and inventory health at a glance.",
+  "/analytics/operational/fulfillment": "Orders by status, shipping performance and backlog.",
+  "/analytics/operational/management": "Daily volumes and service levels for warehouse managers.",
+  "/analytics/operational/productivity": "Throughput by task, user and hour.",
 };
 
 export interface CatalogGroup {
@@ -53,11 +65,38 @@ const toItem = (group: string) => (n: NavItem): CatalogItem => ({
   aliases: n.aliases ?? [],
 });
 
-export const REPORT_CATALOG: readonly CatalogGroup[] = (NAV_MENUS.find((m) => m.key === "reports")?.columns ?? []).map((c) => ({
+const menuGroups = (key: string): readonly CatalogGroup[] => (NAV_MENUS.find((m) => m.key === key)?.columns ?? []).map((c) => ({
   heading: c.heading,
   icon: c.icon,
   items: c.items.map(toItem(c.heading)),
 }));
+
+/** Analytics dashboards (Labor + Operational); also drives the /analytics landing pages. */
+export const ANALYTICS_CATALOG: readonly CatalogGroup[] = menuGroups("analytics");
+
+/**
+ * M13 analysis reports not yet in the Reports mega-menu (nav-config is foundation-owned;
+ * menu entries requested in docs/requests/reports-analytics.md). Skipped once the menu has them.
+ */
+const ANALYSIS_ITEMS: readonly Omit<CatalogItem, "description" | "group">[] = [
+  { label: "Inventory Aging Report", href: "/reports/inventory-aging", permission: ["inventory.total_inventory.view"], aliases: ["aging", "slow movers", "stock age"] },
+  { label: "Location Utilization Report", href: "/reports/location-utilization", permission: ["settings.locations.view"], aliases: ["capacity", "utilization", "space"] },
+  { label: "Order Line Progress", href: "/reports/order-lines", permission: ["fulfillment.shipment_orders.view"], aliases: ["order lines", "picked", "packed", "line progress"] },
+];
+
+export function analysisGroup(existing: readonly CatalogGroup[]): readonly CatalogGroup[] {
+  const known = new Set(existing.flatMap((g) => g.items.map((i) => i.href)));
+  const heading = "Inventory Analysis";
+  const items = ANALYSIS_ITEMS.filter((i) => !known.has(i.href)).map((i) => ({ ...i, group: heading, description: REPORT_DESCRIPTIONS[i.href] ?? "" }));
+  // Its own icon (Activity): it must not reuse the Orders cart of the first menu column.
+  const icon: NavIconName = "monitoring";
+  return items.length > 0 && existing.length > 0 ? [{ heading, icon, items }] : [];
+}
+
+const REPORT_MENU_GROUPS = menuGroups("reports");
+
+/** Reports menu columns, the analysis reports, then the Analytics columns, so the hub indexes all. */
+export const REPORT_CATALOG: readonly CatalogGroup[] = [...REPORT_MENU_GROUPS, ...analysisGroup(REPORT_MENU_GROUPS), ...ANALYTICS_CATALOG];
 
 /** Case-insensitive match on label, description, group and aliases. */
 export function matchesReport(item: CatalogItem, term: string): boolean {

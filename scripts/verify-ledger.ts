@@ -26,9 +26,10 @@ function main(): number {
   const sqlite = new Database(DB_PATH, { readonly: true, fileMustExist: true });
   try {
     sqlite.pragma("busy_timeout = 10000");
-    const { issues, stats } = verifyDatabase(drizzle(sqlite, { schema }));
+    const { issues, stats, warnings = [] } = verifyDatabase(drizzle(sqlite, { schema }));
     out(`db:verify - ${path.relative(process.cwd(), DB_PATH)}`);
     out(`  ${Object.entries(stats).map(([k, v]) => `${k}=${v}`).join("  ")}`);
+    if (warnings.length > 0) out(`  warnings (not failing): ${warnings.length} (${[...new Set(warnings.map((w) => w.check))].join(", ")})`);
     if (issues.length === 0) {
       out("  OK: every invariant reconciles.");
       return 0;

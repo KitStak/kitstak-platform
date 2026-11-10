@@ -21,7 +21,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { NumberInput } from "@/components/ui/number-input";
 import { SegmentedTabs } from "@/components/ui/tabs";
 import { Spinner } from "@/components/ui/spinner";
-import type { PutawayTestResult } from "@/server/repositories/algorithms";
+import { DateTimeText, Muted, useClientOptions, useModuleDates } from "@/components/integrations/shared/shared";
+import { useApiQuery } from "@/lib/query-client";
+import type { PutawayInventoryRow, PutawayTestResult } from "@/server/repositories/algorithms";
+
+/** Condition fields that read the CURRENT (source) location: without one they cannot match. */
+const LOCATION_FACTS = new Set(["abcCode", "aisle", "areaType", "column", "level", "location", "locationGroup", "locationType", "locationZone", "replenishmentType", "isPreventAllocation"]);
+const usesLocationFacts = (rules: readonly AlgorithmRuleInput[] | undefined): boolean =>
+  (rules ?? []).some((r) => (r.conditions ?? []).some((c) => LOCATION_FACTS.has(c.field) || c.field.startsWith("locationCustomField.")));
 
 export interface PutawayTestTarget {
   readonly algorithmId: string | null;
@@ -37,6 +44,9 @@ function Label({ htmlFor, children, required }: { readonly htmlFor: string; read
 
 export function PutawayTestDialog({ target, onOpenChange }: { readonly target: PutawayTestTarget | null; readonly onOpenChange: (open: boolean) => void }) {
   const [tab, setTab] = React.useState<"product" | "lp">("product");
+  const clients = useClientOptions();
+  const [clientId, setClientId] = React.useState<string | null>(null);
+  const [fromLabel, setFromLabel] = React.useState<string | null>(null);
   const [productId, setProductId] = React.useState<string | null>(null);
   const [productLabel, setProductLabel] = React.useState<string | null>(null);
   const [fromLocationId, setFromLocationId] = React.useState<string | null>(null);
@@ -47,11 +57,29 @@ export function PutawayTestDialog({ target, onOpenChange }: { readonly target: P
   const [pending, setPending] = React.useState(false);
   const [result, setResult] = React.useState<PutawayTestResult | null>(null);
   const [failure, setFailure] = React.useState<string | null>(null);
-  const loadProducts = React.useCallback(async (q: string, signal: AbortSignal) => (await searchPicker("products", q, {}, signal)).map(toOption), []);
+  const [bucket, setBucket] = React.useState<PutawayInventoryRow | null>(null);
+  const inv = useApiQuery<PutawayInventoryRow[]>(["putaway-test-inventory", target?.warehouseId ?? "", productId ?? ""], target && productId && tab === "product" ? "/api/algorithms/test/inventory" : null, { query: { warehouseId: target?.warehouseId, productId: productId ?? undefined }, staleTime: 10_000 });
+  const pickBucket = (b: PutawayInventoryRow | null) => {
+    setBucket(b);
+    setResult(null);
+    if (!b) return;
+    setFromLocationId(b.locationId);
+    setFromLabel(b.locationCode);
+    setQty(Math.max(1, b.onHand));
+    setIsReceiving(false);
+  };
+  const loadProducts = React.useCallback(async (q: string, signal: AbortSignal) => (await searchPicker("products", q, clientId ? { clientId } : {}, signal)).map(toOption), [clientId]);
 
   React.useEffect(() => {
-    if (!target) { setResult(null); setFailure(null); setErrors({}); }
+    if (!target) { setResult(null); setFailure(null); setErrors({}); return; }
+    // Pre-fill a Receiving location (the usual putaway source) so location-based conditions can match.
+    const controller = new AbortController();
+    void searchPicker("locations", "", { warehouseId: target.warehouseId, areaType: "Receiving" }, controller.signal)
+      .then((items) => { const first = items[0]; if (first) { setFromLocationId((cur) => cur ?? first.id); setFromLabel((cur) => cur ?? String(toOption(first).label)); } })
+      .catch(() => undefined);
+    return () => controller.abort();
   }, [target]);
+  const needsLocation = !fromLocationId && usesLocationFacts(target?.draftRules);
 
   const run = async () => {
     if (!target) return;
@@ -68,7 +96,8 @@ export function PutawayTestDialog({ target, onOpenChange }: { readonly target: P
     setFailure(null);
     try {
       const body = {
-        productId, qty, fromLocationId: fromLocationId ?? null, lpId: tab === "lp" ? lpId : null, isReceiving,
+        productId, qty, fromLocationId: fromLocationId ?? null, lpId: tab === "lp" ? lpId : bucket?.lpId ?? null, isReceiving,
+        ...(tab === "product" && bucket ? { lot: bucket.lotNumber, expiry: bucket.expiryDate, damageReason: bucket.damageReason, packType: bucket.packType, productionDate: bucket.productionDate, receivedAt: bucket.receivedAt, allocatedQty: Math.min(bucket.allocated, qty ?? 0) } : {}),
         ...(target.draftRules ? { draft: { warehouseId: target.warehouseId, rules: target.draftRules } } : {}),
       };
       const { data } = await apiRequest<PutawayTestResult>(target.algorithmId && !target.draftRules ? `/api/algorithms/${target.algorithmId}/test` : "/api/algorithms/test", { method: "POST", body });
@@ -89,10 +118,15 @@ export function PutawayTestDialog({ target, onOpenChange }: { readonly target: P
           <SegmentedTabs ariaLabel="Test type" tabs={[{ key: "product", label: "Product Putaway" }, { key: "lp", label: "LP Putaway" }]} active={tab} onChange={(k) => { setTab(k as "product" | "lp"); setResult(null); }} />
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
+              <Label htmlFor="pt-client">Client</Label>
+              <Combobox id="pt-client" aria-label="Client" options={clients} value={clientId} placeholder="Select client" clearable
+                onChange={(v) => { setClientId(v); setProductId(null); setProductLabel(null); setResult(null); }} />
+            </div>
+            <div className="flex flex-col gap-1">
               <Label htmlFor="pt-product" required>Product</Label>
               <Combobox id="pt-product" aria-label="Product" loadOptions={loadProducts} minChars={0} value={productId}
                 selectedOptions={productId && productLabel ? [{ value: productId, label: productLabel }] : undefined}
-                onChange={(v, o) => { setProductId(v); setProductLabel(o ? String(o.label) : null); setErrors((e) => ({ ...e, product: "" })); }}
+                onChange={(v, o) => { setProductId(v); setProductLabel(o ? String(o.label) : null); setBucket(null); setErrors((e) => ({ ...e, product: "" })); }}
                 placeholder="Search SKU or name" invalid={Boolean(errors.product)} clearable />
               {errors.product ? <p role="alert" className="text-[12px] text-danger">{errors.product}</p> : null}
             </div>
@@ -110,12 +144,14 @@ export function PutawayTestDialog({ target, onOpenChange }: { readonly target: P
             ) : null}
             <div className="flex flex-col gap-1">
               <Label htmlFor="pt-from">Current location</Label>
-              <LocationPicker id="pt-from" warehouseId={target?.warehouseId} value={fromLocationId} onChange={(v) => setFromLocationId(v)} placeholder="Optional · e.g. a receiving dock" clearable />
+              <LocationPicker id="pt-from" warehouseId={target?.warehouseId} value={fromLocationId} selectedLabel={fromLabel ?? undefined} onChange={(v, o) => { setFromLocationId(v); setFromLabel(o ? String(o.label) : null); }} placeholder="e.g. a receiving dock" clearable />
             </div>
             <div className="flex items-end pb-1">
               <Checkbox checked={isReceiving} onCheckedChange={(v) => setIsReceiving(v === true)} label="Receiving process" description="Evaluates rules as a PO receipt putaway" />
             </div>
           </div>
+          {tab === "product" && productId ? <InventoryRows rows={inv.data?.data ?? []} loading={inv.isPending} selected={bucket?.id ?? null} onPick={pickBucket} /> : null}
+          {needsLocation ? <Callout variant="attention" title="Choose a current location">This algorithm has conditions on the current location (area type, zone, aisle…). Without one those rules cannot match.</Callout> : null}
           {failure ? <Callout variant="error" title="Test failed">{failure}</Callout> : null}
           {pending ? <div className="flex items-center gap-2 py-6 text-[13px] text-secondary"><Spinner className="h-4 w-4" />Running the rule chain…</div> : result ? <TestResult result={result} hasCurrentLocation={fromLocationId !== null} /> : (
             <EmptyState compact icon={FlaskConical} title="No test run yet" description="Pick a product and quantity, then press Test to see the suggested locations and which rule chose them." />
@@ -175,5 +211,52 @@ function TestResult({ result, hasCurrentLocation }: { readonly result: PutawayTe
         ) : null}
       </section>
     </div>
+  );
+}
+
+/**
+ * Product Putaway › the product's inventory rows (Logiwa parity): pick one to test moving it
+ * from where it sits, with its status, pack type, LP, lot, dates, PO, damage and quantities.
+ */
+function InventoryRows({ rows, loading, selected, onPick }: {
+  readonly rows: readonly PutawayInventoryRow[]; readonly loading: boolean; readonly selected: string | null; readonly onPick: (row: PutawayInventoryRow | null) => void;
+}) {
+  const dates = useModuleDates();
+  return (
+    <section aria-labelledby="pt-inventory" className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <h3 id="pt-inventory" className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Inventory to put away</h3>
+        <span className="text-[11px] text-faint">Optional · pick a row to test moving that stock; leave empty to test a new receipt</span>
+        {selected ? <Button size="sm" variant="ghost" className="ml-auto" onClick={() => onPick(null)}>Clear</Button> : null}
+      </div>
+      <div className="max-h-48 overflow-auto rounded-lg border border-border">
+        <table className="w-full text-[12px]">
+          <thead className="sticky top-0 bg-surface-sunken text-[10px] uppercase text-secondary">
+            <tr>{["", "Location", "Status", "Pack type", "LP", "Lot", "Expiry", "Production", "Received", "PO", "Damage", "Allocated", "Qty"].map((h, i) => <th key={i} className={cn("px-2 py-1.5 text-left font-semibold", i >= 11 && "text-right")}>{h}</th>)}</tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {loading ? <tr><td colSpan={13} className="px-2 py-4 text-center text-faint"><Spinner className="mx-auto h-4 w-4" /></td></tr>
+              : rows.length === 0 ? <tr><td colSpan={13} className="px-2 py-4 text-center text-faint">No stock of this product in the warehouse. The test runs as a new receipt.</td></tr>
+              : rows.map((r) => (
+                <tr key={r.id} className={cn("cursor-pointer hover:bg-surface-sunken", selected === r.id && "bg-primary-soft/50")} onClick={() => onPick(r)}>
+                  <td className="px-2 py-1.5"><input type="radio" name="pt-bucket" aria-label={`Use ${r.locationCode}${r.lotNumber ? ` lot ${r.lotNumber}` : ""}`} checked={selected === r.id} onChange={() => onPick(r)} /></td>
+                  <td className="px-2 py-1.5 font-medium">{r.locationCode}</td>
+                  <td className="px-2 py-1.5">{r.status}</td>
+                  <td className="px-2 py-1.5">{r.packType}</td>
+                  <td className="px-2 py-1.5">{r.lpNumber ?? <Muted />}</td>
+                  <td className="px-2 py-1.5">{r.lotNumber ?? <Muted />}</td>
+                  <td className="px-2 py-1.5 tabular-nums">{r.expiryDate ? dates.date(r.expiryDate) : <Muted />}</td>
+                  <td className="px-2 py-1.5 tabular-nums">{r.productionDate ? dates.date(r.productionDate) : <Muted />}</td>
+                  <td className="px-2 py-1.5"><DateTimeText value={r.receivedAt} /></td>
+                  <td className="px-2 py-1.5">{r.poNumber ?? <Muted />}</td>
+                  <td className="px-2 py-1.5">{r.damageReason ?? <Muted />}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{r.allocated}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{r.onHand}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

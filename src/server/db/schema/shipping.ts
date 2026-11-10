@@ -43,6 +43,9 @@ export const shipments = sqliteTable("shipments", {
   carrierExpectedDeliveryAt: text("carrier_expected_delivery_at"),
   labelCreatedAt: text("label_created_at").notNull().$defaultFn(nowIso),
   actualShipmentAt: text("actual_shipment_at"),
+  /** Customer notification stamps, set by whatever sends the emails (shipping R6-2 / R8-1). */
+  shipmentMailSentAt: text("shipment_mail_sent_at"),
+  deliveryMailSentAt: text("delivery_mail_sent_at"),
   deliveredAt: text("delivered_at"),
   voidedAt: text("voided_at"),
   scheduledPickupAt: text("scheduled_pickup_at"),

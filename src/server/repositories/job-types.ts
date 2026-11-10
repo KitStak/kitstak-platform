@@ -4,7 +4,7 @@
  * still reference the type.
  */
 import { and, count, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
-import type { JobTypeInput } from "@/lib/grid-defs/jobs/forms";
+import { retailerOf, type JobTypeInput } from "@/lib/grid-defs/jobs/forms";
 import { JOB_TYPES_GRID } from "@/lib/grid-defs/jobs/reports";
 import type { AppDb } from "@/server/api/db";
 import { AppError, conflictError, notFoundError } from "@/server/api/errors";
@@ -107,6 +107,9 @@ function snapshot(row: JobTypeRow): Record<string, unknown> {
     code: row.code, description: row.description, allocationAlgorithmId: row.allocationAlgorithmId, orderScope: s.orderScope,
     ...Object.fromEntries(Object.entries(s.picking ?? {}).map(([k, v]) => [k, v])),
     batchMethod: s.batch?.method, batchMin: s.batch?.min, batchMax: s.batch?.max,
+    ...(row.operationType === "Picking" ? (({ flowType, uccLabelScanningType, defaultLabelPrintOption }) => ({
+      retailerFlowType: flowType, uccLabelScanningType, defaultRetailerLabelPrintOption: defaultLabelPrintOption,
+    }))(retailerOf(s)) : {}),
     conditions: row.conditions.map((c) => c.label).join("; "), orderBy: row.orderBy.map((o) => `${o.field} ${o.dir}`).join(", "),
     groupBy: (row.groupBy ?? []).join(", "),
   };

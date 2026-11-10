@@ -30,7 +30,8 @@ export interface RunWorkflowsOptions {
   readonly executors?: Partial<Record<WorkflowActionName, WorkflowActionExecutor>>;
 }
 
-function entityScope(tx: Tx, entity: WorkflowEntityRef): { facts: Facts; warehouseId: string; clientId: string } {
+/** Facts + scope of a workflow entity (also used by the M12 builder test). */
+export function workflowEntityScope(tx: Tx, entity: WorkflowEntityRef): { facts: Facts; warehouseId: string; clientId: string } {
   if (entity.type === "shipment_order") {
     const order = tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, entity.id)).get();
     if (!order) throw new DomainError("NOT_FOUND", "Shipment order not found");
@@ -38,14 +39,22 @@ function entityScope(tx: Tx, entity: WorkflowEntityRef): { facts: Facts; warehou
   }
   const po = tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, entity.id)).get();
   if (!po) throw new DomainError("NOT_FOUND", "Purchase order not found");
+  // Purchase-order facts (M12 workflow catalog `purchaseOrder`, rule-fields.ts).
+  const lines = tx.select({ sku: schema.products.sku }).from(schema.purchaseOrderLines)
+    .innerJoin(schema.products, eq(schema.products.id, schema.purchaseOrderLines.productId))
+    .where(eq(schema.purchaseOrderLines.purchaseOrderId, po.id)).all();
   return {
-    facts: { client: po.clientId, warehouse: po.warehouseId, vendor: po.vendorId, vendorName: po.vendorName, poType: po.poType, orderQuantity: po.totalQuantity },
+    facts: {
+      client: po.clientId, warehouse: po.warehouseId, vendor: po.vendorId, vendorName: po.vendorName, poType: po.poType, orderQuantity: po.totalQuantity,
+      code: po.code, referenceNumber: po.referenceNumber, poDate: po.poDate, plannedReceivingDate: po.plannedReceivingDate,
+      plannedArrivalDate: po.plannedArrivalDate, sku: [...new Set(lines.map((l) => l.sku))], lineCount: lines.length, purchasePrice: po.purchasePrice,
+    },
     warehouseId: po.warehouseId, clientId: po.clientId,
   };
 }
 
 export function runWorkflows(tx: Tx, ctx: DomainCtx, trigger: WorkflowTrigger, entity: WorkflowEntityRef, opts: RunWorkflowsOptions = {}): WorkflowRunSummary[] {
-  const { facts, warehouseId, clientId } = entityScope(tx, entity);
+  const { facts, warehouseId, clientId } = workflowEntityScope(tx, entity);
   const w = schema.workflows;
   const active = tx.select().from(w).where(and(
     eq(w.trigger, trigger), eq(w.isActive, true),

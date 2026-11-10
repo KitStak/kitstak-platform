@@ -17,6 +17,8 @@ import { defaultGridPrefs, prefsEqual, reconcileGridPrefs, type PrefColumn } fro
 import type { GridPrefs } from "./grid-types";
 
 export const PREFS_SAVE_DEBOUNCE_MS = 600;
+/** A slow prefs read never holds the grid: after this the defaults apply (stations-returns R4-3). */
+export const PREFS_LOAD_TIMEOUT_MS = 3000;
 
 export function gridPrefsPath(gridKey: string): string {
   return `/api/grid-prefs/${encodeURIComponent(gridKey)}`;
@@ -63,6 +65,12 @@ function useRemotePrefs(gridKey: string | undefined): { readonly raw: unknown; r
   React.useEffect(() => {
     if (!gridKey || remoteCache.has(gridKey)) return;
     const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      setState({ key: gridKey, raw: null });
+    }, PREFS_LOAD_TIMEOUT_MS);
     apiRequest<unknown>(gridPrefsPath(gridKey), { signal: controller.signal, skipAuthRedirect: true })
       .then(({ data }) => {
         const raw = extractPrefs(data);
@@ -70,10 +78,15 @@ function useRemotePrefs(gridKey: string | undefined): { readonly raw: unknown; r
         setState({ key: gridKey, raw });
       })
       .catch(() => {
-        // Missing endpoint or no saved prefs: defaults apply; not worth a toast.
-        if (!controller.signal.aborted) setState({ key: gridKey, raw: null });
-      });
-    return () => controller.abort();
+        // Missing endpoint, a 5xx or no saved prefs: defaults apply silently (a prefs failure
+        // must never affect the grid, so no toast and no console error).
+        if (!controller.signal.aborted && !timedOut) setState({ key: gridKey, raw: null });
+      })
+      .finally(() => clearTimeout(timer));
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [gridKey]);
   if (!gridKey) return { raw: null, loaded: true };
   if (remoteCache.has(gridKey)) return { raw: remoteCache.get(gridKey), loaded: true };
@@ -82,7 +95,7 @@ function useRemotePrefs(gridKey: string | undefined): { readonly raw: unknown; r
 
 export function useGridPrefs(gridKey: string | undefined, columns: readonly PrefColumn[]): GridPrefsState {
   const remote = useRemotePrefs(gridKey);
-  const columnsKey = columns.map((c) => `${c.id}:${c.defaultVisible ? 1 : 0}:${c.alwaysVisible ? 1 : 0}`).join("|");
+  const columnsKey = columns.map((c) => `${c.id}:${c.defaultVisible ? 1 : 0}:${c.alwaysVisible ? 1 : 0}:${c.defaultPinned ? 1 : 0}`).join("|");
   // eslint-disable-next-line react-hooks/exhaustive-deps -- columnsKey captures the column identity
   const stableColumns = React.useMemo(() => columns, [columnsKey]);
   const base = React.useMemo(() => reconcileGridPrefs(remote.raw, stableColumns), [remote.raw, stableColumns]);

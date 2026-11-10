@@ -112,12 +112,14 @@ describe("labels and shipping", () => {
 
   it("rejects labels for unready orders and bad carriers; logs carrier errors", async () => {
     const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    await expect(createLabel(w.db, w.ctx, { orderId: o.id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, packages: [pkg] })).rejects.toThrow(/Open status/);
+    // Pre-pack labels are allowed on Open orders (REQ-R4-4); a second active label is refused.
+    await createLabel(w.db, w.ctx, { orderId: o.id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, packages: [pkg] });
+    await expect(createLabel(w.db, w.ctx, { orderId: o.id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, packages: [pkg] })).rejects.toThrow(/already has an active shipping label/);
     const id = packedOrder();
     await expect(createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: "nope", carrierServiceId: w.serviceIds.ground, packages: [pkg] })).rejects.toThrow(/Carrier connection not found/);
     await expect(createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: "nope", packages: [pkg] })).rejects.toThrow(/service not found/);
     await expect(createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, packages: [{ ...pkg, weightOz: 99999 }] }, { files: w.files })).rejects.toThrow(/150 lb/);
-    expect(w.db.select().from(schema.carrierCallLogs).all().find((l) => l.step === "LabelGeneration")?.status).toBe("Error");
+    expect(w.db.select().from(schema.carrierCallLogs).all().find((l) => l.step === "LabelGeneration" && l.status === "Error")).toBeDefined();
     const other = w.db.insert(schema.carrierConnections).values({ provider: "acme-freight", setupName: "Acme Freight", accountPrefix: "ACM", warehouseId: w.warehouseId, settings: {} }).returning().get();
     await expect(createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: other.id, carrierServiceId: w.serviceIds.ground, packages: [pkg] })).rejects.toThrow(/not configured yet/);
     w.db.update(schema.carrierConnections).set({ allClients: false }).where(eq(schema.carrierConnections.id, w.carrierConnectionId)).run();

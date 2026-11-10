@@ -47,7 +47,7 @@ export function ColorSwatchPicker({ value, onChange, swatches = DEFAULT_SWATCHES
             value={swatch.toUpperCase()}
             aria-label={swatch}
             style={{ backgroundColor: swatch }}
-            className="relative inline-flex h-6 w-6 items-center justify-center rounded-full shadow-[inset_0_0_0_1px_rgba(16,24,40,0.12)] outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 data-[state=checked]:ring-2 data-[state=checked]:ring-foreground/70 data-[state=checked]:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="relative inline-flex h-6 w-6 items-center justify-center rounded-full shadow-[inset_0_0_0_1px_rgba(16,24,40,0.12)] outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-info/40 focus-visible:ring-offset-2 data-[state=checked]:ring-2 data-[state=checked]:ring-foreground/70 data-[state=checked]:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RadioGroup.Indicator>
               <Check className="h-3.5 w-3.5" style={{ color: contrastOn(swatch) }} strokeWidth={3} aria-hidden />
@@ -70,7 +70,7 @@ export function ColorSwatchPicker({ value, onChange, swatches = DEFAULT_SWATCHES
               if (isHexColor(next)) onChange(next.toUpperCase());
             }}
             aria-invalid={custom !== "" && !isHexColor(custom) ? true : undefined}
-            className={cn("h-7 w-[92px] rounded-md border border-border-strong/70 bg-surface px-2 font-mono text-[12px] uppercase focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 aria-[invalid=true]:border-danger")}
+            className={cn("h-7 w-[92px] rounded-md border border-border-strong/70 bg-surface px-2 font-mono text-[12px] uppercase focus:border-info focus:outline-none focus:ring-2 focus:ring-info/25 aria-[invalid=true]:border-danger")}
           />
         </label>
       ) : null}

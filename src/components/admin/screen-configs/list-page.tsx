@@ -19,7 +19,7 @@ import { DisabledReason } from "@/components/ui/tooltip";
 import { useApiQuery } from "@/lib/query-client";
 import { SCREEN_CONFIG_FIELDS, SCREEN_CONFIGS_GRID_KEY } from "@/lib/grid-defs/admin/screen-configs";
 import type { ScreenConfigRow } from "@/server/repositories/screen-configs";
-import { EntityChangeLogDrawer, Muted, NO_PERMISSION, toastBulk, toFilterFields, useAction, usePagePerms, type BulkResponse } from "../admin-shared";
+import { armDestructive, EntityChangeLogDrawer, Muted, NO_PERMISSION, toastBulk, toFilterFields, useAction, useGridPatch, usePagePerms, type BulkResponse } from "../admin-shared";
 
 const PERMS = ["view", "create", "edit", "delete", "duplicate"] as const;
 const BASE = "/settings/screen-configuration/receiving";
@@ -64,6 +64,7 @@ export function ScreenConfigListPage() {
   const [toDelete, setToDelete] = React.useState<readonly ScreenConfigRow[] | null>(null);
   const [status, setStatus] = React.useState<{ rows: readonly ScreenConfigRow[]; isActive: boolean } | null>(null);
   const action = useAction([["grid", SCREEN_CONFIGS_GRID_KEY], ["screen-configs-count"]]);
+  const patchRows = useGridPatch<ScreenConfigRow>(SCREEN_CONFIGS_GRID_KEY);
   const selected = (ids: readonly string[]) => g.rows.filter((r) => ids.includes(r.id));
   const edit = (id: string) => router.push(`${BASE}/${id}`);
   const create = () => router.push(`${BASE}/new`);
@@ -93,12 +94,12 @@ export function ScreenConfigListPage() {
         breadcrumbs={[{ label: "Settings" }, { label: "Screen Configuration", href: "/settings/screen-configuration" }, { label: "List" }]}
         helper="You can list your screen configuration setups and create new ones."
         actions={<DisabledReason reason={perms.create ? null : NO_PERMISSION}><Button variant="primary" disabled={!perms.create} onClick={create}><Plus className="h-4 w-4" aria-hidden />Create receiving configuration</Button></DisabledReason>} />
-      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by configuration name" bulkActions={bulkActions} bulkNoun="configuration" />
+      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by configuration name" bulkActions={bulkActions.map((a) => armDestructive(a, g.toolbarProps.selectedIds))} bulkNoun="configuration" />
       <DataGrid<ScreenConfigRow>
         {...g.gridProps}
         columns={cols}
         getRowId={(r) => r.id}
-        rowActions={rowActions}
+        rowActions={(row) => rowActions(row).map((a) => armDestructive(a))}
         onRowClick={(r) => edit(r.id)}
         emptyTitle={filtered ? "No configurations match these filters" : "No receiving configurations yet"}
         emptyDescription={filtered ? "Clear a filter or search for another name." : "Without a configuration, receiving uses the product's tracking settings for every step."}
@@ -131,7 +132,7 @@ export function ScreenConfigListPage() {
         records={{ columns: [{ key: "name", label: "Configuration" }, { key: "wh", label: "Warehouse" }, { key: "active", label: "Active" }], rows: (toDelete ?? []).map((r) => ({ name: r.name, wh: r.warehouseName, active: r.isActive ? "Yes" : "No" })) }}
         onConfirm={async () => {
           const result = await action.run<BulkResponse>("/api/screen-configs/bulk-delete", "POST", { ids: (toDelete ?? []).map((r) => r.id) });
-          if (result) { toastBulk(result, "configuration", "deleted"); g.clearSelection(); }
+          if (result) { const done = new Set(result.succeeded); patchRows((rs) => rs.filter((r) => !done.has(r.id))); toastBulk(result, "configuration", "deleted"); g.clearSelection(); }
           setToDelete(null);
         }}
       />

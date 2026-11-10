@@ -15,6 +15,8 @@ export interface OrderWizardContextValue {
   readonly mode: "create" | "edit";
   readonly options: OrderFormOptions | undefined;
   readonly optionsLoading: boolean;
+  /** A warehouse/client-scoped refetch is running; the lists shown are the previous scope's. */
+  readonly optionsRefreshing: boolean;
   readonly locks: OrderLocks;
   readonly detail: OrderDetail | null;
   readonly canCreateProduct: boolean;

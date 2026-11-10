@@ -1,10 +1,17 @@
 /**
- * Import handler "po-serials" — STUB (BUILD_PLAN 0.6), owner M05.
- *
- * Foundation owns the template columns (`../registry`) and the pipeline; M05 replaces
- * this file with a configured handler whose `apply` writes through its repositories
- * and the foundation domain functions. Until then uploads are refused as "not configured".
+ * Import handler "po-serials" (owner M05): Import PO Serial Numbers. Each row pre-advises one
+ * serial on the first line of the SKU on the PO that still has room (one serial per ordered
+ * unit). Rules and the change log live in `purchase-orders-serials.ts`.
  */
-import { createStubHandler, type ImportHandler } from "../types";
+import { domainCtx } from "@/server/repositories/platform-common";
+import { preAdviseSerial } from "@/server/repositories/purchase-orders-serials";
+import type { ImportHandler, ImportRowValues } from "../types";
 
-export const handler: ImportHandler = createStubHandler("M05", "Purchase order serial number import");
+export const handler: ImportHandler = {
+  configured: true,
+  owner: "M05",
+  apply(ctx, row: ImportRowValues) {
+    const result = preAdviseSerial(ctx.db, domainCtx(ctx.actor, ctx.auth), ctx.auth.scope, { poCode: row.poCode, sku: row.sku, serial: row.serialNumber });
+    return { entityId: result.purchaseOrderId, message: `Serial ${String(row.serialNumber ?? "").trim()} added to ${result.code} (${result.sku})` };
+  },
+};

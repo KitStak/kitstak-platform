@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * Retailers (`/organization/retailers`, BETA): company-wide big-box retailers for B2B
+ * Retailers (`/organization/retailers`): company-wide big-box retailers for B2B
  * labeling. Grid (Name, Logo, Country, Address, Status, Case labels, Orders), bulk Delete
- * (blocked while orders reference the retailer), row ⋯ Edit · Change log · Delete, and the
+ * (blocked while orders reference the retailer), row ⋯ Show details · Edit · Change log · Delete, and the
  * 3-step Create / Edit drawer: General (logo upload + address) · Advanced (case-label
  * switch, print quantities, documents) · Other info (custom fields).
  */
 import * as React from "react";
-import { FileText, History, ImageUp, Pencil, Plus, Settings2, Store, Trash2, X } from "lucide-react";
+import { Eye, FileText, History, ImageUp, Pencil, Plus, Settings2, Store, Trash2, X } from "lucide-react";
 import { useController, useFormContext, useWatch, type UseFormReturn } from "react-hook-form";
 import { DataGrid, GridToolbar, useGrid, type BulkAction, type GridColumnDef, type RowAction } from "@/components/grid";
 import { PageHeader } from "@/components/layout/page-header";
@@ -27,14 +27,18 @@ import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
 import { Combobox } from "@/components/ui/combobox";
 import { Wizard, type WizardStep } from "@/components/ui/wizard";
+import { useFrozenWhileDirty } from "@/components/organization/use-stable-form-key";
 import { apiRequest, isApiError } from "@/lib/api-client";
 import { applyServerFieldErrors, useApiQuery } from "@/lib/query-client";
 import { countryOptions, subdivisionsFor } from "@/lib/countries";
-import { RETAILER_DEFAULTS, RETAILER_FIELDS, RETAILERS_GRID_KEY, retailerAdvancedSchema, retailerGeneralSchema, retailerOtherSchema, type RetailerInput } from "@/lib/grid-defs/organization/retailers";
+import { RETAILER_DEFAULTS, RETAILER_FIELDS, RETAILER_FILTER_PRESET, RETAILERS_GRID_KEY, retailerAdvancedSchema, retailerGeneralSchema, retailerOtherSchema, type RetailerInput } from "@/lib/grid-defs/organization/retailers";
 import type { RetailerDetail, RetailerDocument, RetailerRow } from "@/server/repositories/retailers";
 import { CustomFieldsSection, type CustomFieldValues } from "@/components/shared/custom-fields-section";
 import { ATTACHMENT_ACCEPT, MAX_UPLOAD_BYTES, uploadFile } from "@/components/shared/upload-file";
+import { KvList } from "@/components/shared/kv-list";
 import { EntityChangeLogDrawer, Muted, NO_PERMISSION, toastBulk, toFilterFields, useAction, usePagePerms, type BulkResponse } from "@/components/facility/facility-shared";
+import { withFilterPreset } from "@/components/organization/filter-preset";
+import { permitted, permittedRowActions } from "@/components/organization/permitted";
 import { NumberField, TextInput, YesNoField } from "@/components/facility/form-controls";
 
 type F = RetailerInput;
@@ -52,8 +56,8 @@ function Logo({ fileId, name, size = 28 }: { readonly fileId: string | null; rea
   return <img src={fileUrl(fileId)} alt={`${name} logo`} width={size} height={size} onError={() => setBroken(true)} className="rounded-md border border-border bg-surface object-contain" style={{ width: size, height: size }} />;
 }
 
-const COLUMNS: GridColumnDef<RetailerRow>[] = [
-  { id: "name", header: "Name", size: 210, meta: { alwaysVisible: true }, cell: ({ row }) => <span className="font-medium text-foreground">{row.original.name}</span> },
+const buildColumns = (openDetails: (id: string) => void): GridColumnDef<RetailerRow>[] => [
+  { id: "name", header: "Name", size: 210, meta: { alwaysVisible: true }, cell: ({ row }) => <button type="button" onClick={(e) => { e.stopPropagation(); openDetails(row.original.id); }} className="truncate rounded text-left font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">{row.original.name}</button> },
   { id: "logo", header: "Logo", size: 70, enableSorting: false, cell: ({ row }) => <Logo fileId={row.original.logoFileId} name={row.original.name} /> },
   { id: "businessName", header: "Business name", size: 200, cell: ({ row }) => row.original.businessName ?? <Muted /> },
   { id: "country", header: "Country", size: 140, cell: ({ row }) => row.original.country ?? <Muted /> },
@@ -97,7 +101,7 @@ function GeneralStep() {
   const subs = subdivisionsFor(country);
   return (
     <div className="flex flex-col gap-5">
-      <FormSection title="General">
+      <FormSection title="Retailer details">
         <FormGrid>
           <TextInput<F> name="name" label="Name" required maxLength={100} placeholder="e.g. Target" />
           <TextInput<F> name="businessName" label="Business name" maxLength={150} placeholder="e.g. Target Corporation" />
@@ -233,23 +237,68 @@ function RetailerDrawer({ open, editId, onOpenChange, onSaved }: { readonly open
   const [dirty, setDirty] = React.useState(false);
   const detail = useApiQuery<RetailerDetail>(["retailer", editId ?? ""], open && editId ? `/api/retailers/${editId}` : null, { staleTime: 0 });
   const close = () => { setDirty(false); onOpenChange(false); };
-  const initial = editId ? (detail.data ? toForm(detail.data.data) : null) : RETAILER_DEFAULTS;
+  const snap = useFrozenWhileDirty({ key: `${editId ?? "new"}-${detail.dataUpdatedAt}`, data: detail.data?.data }, dirty);
+  const initial = editId ? (snap.data ? toForm(snap.data) : null) : RETAILER_DEFAULTS;
   return (
-    <Drawer open={open} onOpenChange={(o) => (o ? onOpenChange(o) : close())} dirty={dirty} width={60}
+    <Drawer open={open} onOpenChange={(o) => (o ? onOpenChange(o) : close())} dirty={dirty} width={60} bodyClassName="pb-0"
       title={editId ? `Edit retailer ${detail.data?.data.name ?? ""}`.trim() : "Create retailer"} description="General and address, label settings and documents, then custom fields.">
       {editId && detail.isError ? <EmptyState title="Couldn't load this retailer" description={detail.error.message} action={<Button onClick={() => void detail.refetch()}>Retry</Button>} />
         : !initial ? <div className="flex flex-col gap-3"><Skeleton className="h-8 w-full" /><Skeleton className="h-64 w-full" /></div>
-        : <Body key={`${editId ?? "new"}-${detail.dataUpdatedAt}`} initial={initial} detail={editId ? detail.data?.data ?? null : null} onDirtyChange={setDirty} onCancel={close} onDone={() => { setDirty(false); onSaved(); onOpenChange(false); }} />}
+        : <Body key={snap.key} initial={initial} detail={editId ? snap.data ?? null : null} onDirtyChange={setDirty} onCancel={close} onDone={() => { setDirty(false); onSaved(); onOpenChange(false); }} />}
+    </Drawer>
+  );
+}
+
+/** Read-only Show details (Logiwa row menu: Show Details · Edit · Change log · Delete). */
+function RetailerDetailsDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: string | null; readonly onOpenChange: (o: boolean) => void; readonly onEdit: (id: string) => void; readonly canEdit: boolean }) {
+  const detail = useApiQuery<RetailerDetail>(["retailer", id ?? ""], id ? `/api/retailers/${id}` : null, { staleTime: 0 });
+  const d = detail.data?.data;
+  return (
+    <Drawer open={id !== null} onOpenChange={onOpenChange} width={45} title={d ? d.name : "Retailer details"} description={d ? `${d.businessName ?? "Retailer"} · ${d.isActive ? "Active" : "Inactive"}` : undefined}
+      footer={d ? (
+        <div className="flex w-full justify-end gap-2">
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>Close</Button>
+          <DisabledReason reason={canEdit ? null : NO_PERMISSION}><Button variant="primary" disabled={!canEdit} onClick={() => onEdit(d.id)}><Pencil className="h-4 w-4" />Edit</Button></DisabledReason>
+        </div>
+      ) : undefined}>
+      {detail.isError ? <EmptyState title="Couldn't load this retailer" description={detail.error.message} action={<Button onClick={() => void detail.refetch()}>Retry</Button>} />
+        : !d ? <div className="flex flex-col gap-3"><Skeleton className="h-8 w-full" /><Skeleton className="h-40 w-full" /></div>
+        : (
+          <div className="flex flex-col gap-5">
+            <KvList columns={2} items={[
+              { key: "name", label: "Retailer name", value: d.name },
+              { key: "status", label: "Status", value: <StatusPill status={d.isActive ? "Active" : "Inactive"} domain="active" /> },
+              { key: "business", label: "Business name", value: d.businessName ?? "—" },
+              { key: "address", label: "Address", value: d.address || "—" },
+              { key: "email", label: "E-mail", value: d.email ?? "—" },
+              { key: "phone", label: "Phone", value: d.phone ?? "—" },
+              { key: "case", label: "Create case labels", value: d.createCaseLabels ? `Yes · ${d.caseLabelPrintQty} per case` : "No" },
+              { key: "lp", label: "LP label print qty", value: String(d.lpLabelPrintQty) },
+              { key: "orders", label: "Shipment orders", value: d.orderCount.toLocaleString("en-US") },
+              { key: "desc", label: "Description", value: d.description ?? "—" },
+            ]} />
+            <section className="flex flex-col gap-2" aria-label="Documents">
+              <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Documents ({d.documents.length})</h3>
+              {d.documents.length === 0 ? <p className="text-[13px] text-faint">No documents.</p> : (
+                <ul className="divide-y divide-border rounded-lg border border-border">
+                  {d.documents.map((doc) => <li key={doc.fileId} className="flex items-center justify-between px-3 py-2 text-[13px]"><a className="text-primary hover:underline" href={fileUrl(doc.fileId)} target="_blank" rel="noreferrer">{doc.name}</a><span className="text-secondary">{Math.max(1, Math.round(doc.size / 1024))} KB</span></li>)}
+                </ul>
+              )}
+            </section>
+          </div>
+        )}
     </Drawer>
   );
 }
 
 export function RetailersPage() {
   const perms = usePagePerms("settings.retailers", PERMS);
-  const fields = React.useMemo(() => toFilterFields(RETAILER_FIELDS), []);
+  const fields = React.useMemo(() => withFilterPreset(toFilterFields(RETAILER_FIELDS), RETAILER_FILTER_PRESET), []);
   const g = useGrid<RetailerRow>({ gridKey: RETAILERS_GRID_KEY, path: "/api/retailers", fields });
   const [drawer, setDrawer] = React.useState<{ open: boolean; editId: string | null }>({ open: false, editId: null });
   const [log, setLog] = React.useState<RetailerRow | null>(null);
+  const [details, setDetails] = React.useState<string | null>(null);
+  const columns = React.useMemo(() => buildColumns(setDetails), []);
   const [toDelete, setToDelete] = React.useState<readonly RetailerRow[] | null>(null);
   const action = useAction([["grid", RETAILERS_GRID_KEY]]);
   const selected = (ids: readonly string[]) => g.rows.filter((r) => ids.includes(r.id));
@@ -258,6 +307,7 @@ export function RetailersPage() {
       eligibility: (ids) => (selected(ids).every((r) => r.orderCount > 0) ? "Retailers used on shipment orders can't be deleted" : null) },
   ];
   const rowActions = (row: RetailerRow): readonly RowAction[] => [
+    { key: "details", label: "Show details", icon: Eye, onSelect: () => setDetails(row.id) },
     { key: "edit", label: "Edit", icon: Pencil, onSelect: () => setDrawer({ open: true, editId: row.id }), disabledReason: perms.edit ? null : NO_PERMISSION },
     { key: "log", label: "Change log", icon: History, onSelect: () => setLog(row) },
     { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: () => setToDelete([row]), disabledReason: !perms.delete ? NO_PERMISSION : row.orderCount > 0 ? `Used by ${row.orderCount} shipment orders` : null },
@@ -265,14 +315,15 @@ export function RetailersPage() {
   const filtered = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Organization" tabs="organization" helper="Big-box retailers you ship B2B for: logos, case-label rules and routing documents."
-        actions={<DisabledReason reason={perms.create ? null : NO_PERMISSION}><Button variant="primary" disabled={!perms.create} onClick={() => setDrawer({ open: true, editId: null })}><Plus className="h-4 w-4" aria-hidden />Create retailer</Button></DisabledReason>} />
-      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search retailer or business name" bulkActions={bulkActions} bulkNoun="retailer" />
-      <DataGrid<RetailerRow> {...g.gridProps} columns={COLUMNS} getRowId={(r) => r.id} rowActions={rowActions} onRowClick={(r) => perms.edit && setDrawer({ open: true, editId: r.id })}
+      <PageHeader title="Retailers" tabs="organization" helper="Big-box retailers you ship B2B for: logos, case-label rules and routing documents."
+        actions={<>{perms.create ? <Button variant="primary" onClick={() => setDrawer({ open: true, editId: null })}><Plus className="h-4 w-4" aria-hidden />Create retailer</Button> : null}</>} />
+      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search retailer or business name" bulkActions={permitted(bulkActions)} bulkNoun="retailer" />
+      <DataGrid<RetailerRow> {...g.gridProps} columns={columns} getRowId={(r) => r.id} rowActions={permittedRowActions(rowActions)} onRowClick={(r) => perms.edit && setDrawer({ open: true, editId: r.id })}
         emptyTitle={filtered ? "No retailers match these filters" : "No retailers yet"}
         emptyDescription={filtered ? "Clear a filter or search for another name." : "Add the retailers you ship to with their label requirements."}
         emptyAction={perms.create && !filtered ? <Button variant="primary" onClick={() => setDrawer({ open: true, editId: null })}><ImageUp className="h-4 w-4" />Create retailer</Button> : undefined} />
       <RetailerDrawer open={drawer.open} editId={drawer.editId} onOpenChange={(o) => setDrawer((d) => ({ ...d, open: o }))} onSaved={() => g.refetch()} />
+      <RetailerDetailsDrawer id={details} onOpenChange={(o) => !o && setDetails(null)} canEdit={perms.edit} onEdit={(id) => { setDetails(null); setDrawer({ open: true, editId: id }); }} />
       <EntityChangeLogDrawer open={log !== null} onOpenChange={(o) => !o && setLog(null)} path={log ? `/api/retailers/${log.id}/change-log` : null} title={`Change log · ${log?.name ?? ""}`} />
       <ConfirmDialog open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)} variant="danger"
         title={`Delete ${toDelete?.length === 1 ? `retailer ${toDelete[0]?.name}` : `${toDelete?.length ?? 0} retailers`}?`}

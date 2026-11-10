@@ -46,4 +46,10 @@ export function postJson<T>(path: string, body: Record<string, unknown>): Promis
   return apiFetch<T>(path, { method: "POST", body });
 }
 
+/** Task Details filtered to one job, without the default "Pending, Started" chip (Logiwa: job code → its tasks). */
+export function jobTasksHref(code: string, operationType?: string | null): string {
+  const tab = operationType === "Count" ? "count" : operationType === "Replenishment" ? "replenishment" : "order-operations";
+  return `/tasks/${tab}?f.jobCode=eq:${encodeURIComponent(code)}`;
+}
+
 export const str = (v: unknown): string => (v === null || v === undefined ? "" : String(v));

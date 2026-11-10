@@ -6,8 +6,9 @@ import { AppError } from "@/server/api/errors";
 import { generateCsrfToken, isSameOriginRequest, setCsrfCookie } from "@/server/auth/csrf";
 import { authenticate, INVALID_CREDENTIALS_MESSAGE, LOCKED_MESSAGE } from "@/server/auth/login";
 import { issueSession, setSessionCookie } from "@/server/auth/session";
-import { users } from "@/server/db/schema";
+import { roles, userRoles, users } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
+import { passwordLoginBlockedBySso } from "@/server/repositories/apps-sso";
 
 /**
  * The browser login form sends this header: a wrong password is an *expected* outcome there,
@@ -54,14 +55,28 @@ export const POST = defineRoute({
       throw failure;
     }
 
+    // Apps › Single sign-on with "Require SSO": password sign-in stays open to admins only (break-glass).
+    if (passwordLoginBlockedBySso(db, outcome.userId)) {
+      const blocked = new AppError("UNAUTHENTICATED", "Your company signs in with single sign-on. Use the SSO button below.");
+      if (request.headers.get(SOFT_AUTH_FAILURE_HEADER) === "1") return NextResponse.json(failureBody(blocked), { status: 200 });
+      throw blocked;
+    }
     const issued = await issueSession(db, outcome.userId, { ip, userAgent });
     const user = db
       .select({ id: users.id, email: users.email, name: users.name, role: users.role })
       .from(users)
       .where(eq(users.id, outcome.userId))
       .get();
+    // Every role the user holds (custom roles included); `user.role` is the legacy base role
+    // (deprecated: a user whose only role is custom still reads "operator" there).
+    const held = db
+      .select({ key: roles.key, name: roles.name })
+      .from(userRoles)
+      .innerJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(eq(userRoles.userId, outcome.userId))
+      .all();
     const csrfToken = generateCsrfToken();
-    const response = NextResponse.json(successBody({ user, csrfToken }));
+    const response = NextResponse.json(successBody({ user: user ? { ...user, roleKeys: held.map((r) => r.key), roleNames: held.map((r) => r.name) } : user, csrfToken }));
     setCsrfCookie(response, csrfToken);
     setSessionCookie(response, issued.token, issued.maxAgeSeconds);
     return response;

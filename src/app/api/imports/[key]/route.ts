@@ -34,7 +34,7 @@ export const POST = defineRoute({
     const fields = importUploadFieldsSchema.safeParse(upload.fields);
     if (!fields.success) throw validationError("Invalid dryRun flag", { dryRun: ["Use true or false"] });
     const input = { def, auth, fileName: upload.fileName, bytes: upload.bytes };
-    if (fields.data.dryRun) return result(await previewImport(input));
+    if (fields.data.dryRun) return result(await previewImport(input, db));
     return created(await runImport(db, input));
   },
 });

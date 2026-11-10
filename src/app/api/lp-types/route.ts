@@ -5,7 +5,7 @@ import { lpTypeSchema } from "@/lib/grid-defs/facility/lp-types";
 import { createLpType, listLpTypes } from "@/server/repositories/lp-types";
 
 export const GET = defineRoute({
-  permission: ["settings.lp_types.view", "settings.lp_numbers.view", "settings.locations.view"],
+  permission: ["settings.lp_types.view", "settings.lp_numbers.view", "settings.locations.view", "inventory.inventory_by_location.view"],
   handler: ({ db, auth, grid }) => {
     const query = grid();
     const { rows, total } = listLpTypes(db, auth, query);

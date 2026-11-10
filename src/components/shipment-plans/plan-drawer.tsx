@@ -56,7 +56,15 @@ function Body({ initial, detail, onDone, onCancel, onDirtyChange }: { readonly i
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [editId, estimate, statusKey, permissions]);
 
+  const [emptyConfirm, setEmptyConfirm] = React.useState<((ok: boolean) => void) | null>(null);
+
   const submit = async (values: F) => {
+    if (values.orders.length === 0) {
+      // A plan without orders can't be loaded, picked or shipped: make the user confirm it on purpose.
+      const ok = await new Promise<boolean>((resolve) => setEmptyConfirm(() => resolve));
+      setEmptyConfirm(null);
+      if (!ok) throw new Error("Save cancelled");
+    }
     try {
       const { data } = await apiRequest<PlanRow>(editId ? `/api/shipment-plans/${encodeURIComponent(editId)}` : "/api/shipment-plans", { method: editId ? "PATCH" : "POST", body: formToBody(values, detail?.version) });
       toast.success("Success", editId ? `Shipment plan ${data.code} updated.` : `Shipment plan ${data.code} created with ${data.orderCount} ${data.orderCount === 1 ? "order" : "orders"}.`);
@@ -78,6 +86,10 @@ function Body({ initial, detail, onDone, onCancel, onDirtyChange }: { readonly i
       ) : null}
       <Wizard<F> steps={steps} variant="drawer" mode={editId ? "free" : "linear"} defaultValues={initial} draftScope={false} guardUnsaved={false} onDirtyChange={onDirtyChange}
         submitLabel={editId ? "Save" : "Save plan"} onCancel={onCancel} onComplete={submit} />
+      <ConfirmDialog open={emptyConfirm !== null} onOpenChange={(o) => { if (!o) emptyConfirm?.(false); }} variant="attention"
+        title="Save a plan with no orders?"
+        description="This plan has no orders yet, so it can't be picked, loaded or shipped. You can add orders later from the plan page or with Edit."
+        cancelLabel="Add orders first" confirmLabel="Save without orders" onConfirm={() => emptyConfirm?.(true)} />
     </div>
   );
 }
@@ -106,6 +118,8 @@ export function PlanDrawer({ open, onOpenChange, editId, onSaved }: PlanDrawerPr
   const editBlocked = d?.editBlockedReason ?? null;
   return (
     <Drawer open={open} onOpenChange={(o) => (o ? onOpenChange(o) : close())} dirty={dirty} width={60}
+      // The wizard footer is sticky inside the body: no bottom padding under it, so nothing scrolls below the bar.
+      bodyClassName="pb-0 [&_.sticky]:pb-4"
       title={editId ? `Edit shipment plan ${d?.code ?? ""}`.trim() : "Create shipment plan"}
       description={editId ? "Every tab is editable; Save applies all of them." : "General details, then the consignee, then the orders on the truck."}>
       {(editId && detail.isError) || (!editId && options.isError) ? (

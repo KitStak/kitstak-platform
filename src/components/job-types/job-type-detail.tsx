@@ -12,6 +12,7 @@ import { YesNoPill } from "@/components/ui/status-pill";
 import { useApiQuery } from "@/lib/query-client";
 import type { FilterCondition, JobTypeSettings } from "@/lib/domain-types";
 import { COUNT_METHOD_OPTIONS, GROUPING_OPTIONS, PICKING_FLAG_DEFS, PICKING_METHOD_OPTIONS } from "@/lib/grid-defs/jobs/conditions";
+import { retailerOf } from "@/lib/grid-defs/jobs/forms";
 import type { getJobTypeDetail } from "@/server/repositories/job-types";
 import type { GridRow } from "@/components/jobs/jobs-client";
 
@@ -61,6 +62,10 @@ export function JobTypeDetailDrawer({ row, onClose, onEdit }: { readonly row: Gr
               <>
                 <Row label="Template">{d.template ?? "Custom"}</Row>
                 <Row label="Order scope">{s.orderScope}</Row>
+                {(() => {
+                  const r = retailerOf(s);
+                  return <Row label="Retailer flow">{r.flowType === "None" ? "None" : `${r.flowType} · scan ${r.uccLabelScanningType} · print ${r.defaultLabelPrintOption}`}</Row>;
+                })()}
                 <Row label="Flags">
                   <span className="grid grid-cols-1 gap-1 sm:grid-cols-2">{PICKING_FLAG_DEFS.map((f) => <span key={f.key} className="flex items-center justify-between gap-2 text-[12px]"><span className="text-secondary">{f.label}</span><YesNoPill value={s.picking[f.key]} /></span>)}</span>
                 </Row>

@@ -66,7 +66,7 @@ function PickerBody<T>({ onOpenChange, title, description, gridKey, path, column
   return (
     <>
       <DialogHeader title={title} description={description} />
-      <div className="flex h-[65vh] min-h-0 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col">
         <GridToolbar {...g.toolbarProps} searchPlaceholder={searchPlaceholder} views={undefined} />
         <DataGrid<T> {...g.gridProps} gridKey={undefined} queryString={undefined} columns={columns} getRowId={getRowId} onSelectionChange={onSelectionChange} canSelectRow={(row) => !excluded.has(getRowId(row))} onAllMatchingSelectedChange={undefined} className="pb-3" />
       </div>

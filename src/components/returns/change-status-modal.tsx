@@ -20,7 +20,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
-import { bulkMessage, type BulkOutcome, type SelectionTransitions } from "./return-types";
+import { bulkMessage, partialRmaNotes, type BulkOutcome, type SelectionTransitions } from "./return-types";
 
 export interface ChangeStatusModalProps {
   readonly open: boolean;
@@ -28,10 +28,12 @@ export interface ChangeStatusModalProps {
   /** RMA ids, or grid line ids (resolved server-side). */
   readonly selection: { readonly ids?: readonly string[]; readonly lineIds?: readonly string[] };
   readonly version?: number;
+  /** Current statuses of the selection (known from the grid rows), shown while the legal moves load. */
+  readonly currentStatuses?: readonly string[];
   readonly onDone: () => void;
 }
 
-export function ChangeStatusModal({ open, onOpenChange, selection, version, onDone }: ChangeStatusModalProps) {
+export function ChangeStatusModal({ open, onOpenChange, selection, version, currentStatuses, onDone }: ChangeStatusModalProps) {
   const query = selection.ids?.length ? { ids: selection.ids.join(",") } : { lineIds: (selection.lineIds ?? []).join(",") };
   const transitions = useApiQuery<SelectionTransitions>(["returns", "transitions", query], open ? "/api/returns/transitions" : null, { query, staleTime: 0 });
   const [target, setTarget] = React.useState<ReturnStatus | null>(null);
@@ -44,8 +46,8 @@ export function ChangeStatusModal({ open, onOpenChange, selection, version, onDo
   }, [open]);
 
   const data = transitions.data?.data;
-  const count = data?.returns.length ?? 0;
-  const statuses = [...new Set(data?.returns.map((r) => r.status) ?? [])];
+  const count = data?.returns.length ?? selection.ids?.length ?? 0;
+  const statuses = data ? [...new Set(data.returns.map((r) => r.status))] : [...new Set(currentStatuses ?? [])];
 
   const submit = async (): Promise<void> => {
     if (!target) { setError("Choose the new status."); return; }
@@ -70,13 +72,22 @@ export function ChangeStatusModal({ open, onOpenChange, selection, version, onDo
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
-        <DialogHeader title="Change status" description={count ? `${count} ${count === 1 ? "return" : "returns"} selected · current ${statuses.join(", ")}` : "Checking which statuses are allowed…"} />
+        <DialogHeader title="Change status" description={count ? `${count} ${count === 1 ? "return" : "returns"} selected${statuses.length ? ` · current ${statuses.join(", ")}` : ""}` : "Checking which statuses are allowed…"} />
         <DialogBody className="space-y-3">
           {transitions.isPending ? (
-            <div className="space-y-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+            <div className="space-y-2" aria-busy="true">
+              <p role="status" className="flex items-center gap-2 text-[12px] text-secondary"><Spinner className="h-3.5 w-3.5" label="Loading" />Checking which statuses are allowed for this selection…</p>
+              {[0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+            </div>
           ) : transitions.error ? (
             <Callout variant="error" title="Could not load statuses" action={<Button size="sm" onClick={() => void transitions.refetch()}>Retry</Button>}>{transitions.error.message}</Callout>
           ) : (
+            <>
+            {data && partialRmaNotes(data.returns).length ? (
+              <Callout variant="info" title="Status is set per RMA">
+                <ul className="list-disc space-y-0.5 pl-4">{partialRmaNotes(data.returns).slice(0, 5).map((n) => <li key={n}>{n}</li>)}</ul>
+              </Callout>
+            ) : null}
             <div role="radiogroup" aria-label="New status" className="space-y-1.5">
               {data?.options.filter((o) => !(statuses.length === 1 && statuses[0] === o.status)).map((o) => (
                 <button
@@ -104,6 +115,7 @@ export function ChangeStatusModal({ open, onOpenChange, selection, version, onDo
                 </button>
               ))}
             </div>
+            </>
           )}
           <label className="block">
             <span className="mb-1 block text-[12px] font-medium text-body">Note <span className="font-normal text-secondary">(optional, added to the RMA)</span></span>
@@ -113,9 +125,9 @@ export function ChangeStatusModal({ open, onOpenChange, selection, version, onDo
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
-          <Button variant={target === "Cancelled" ? "danger" : "primary"} onClick={() => void submit()} disabled={saving || !target}>
-            {saving ? <Spinner className="h-3.5 w-3.5" label="Saving" /> : null}
-            {target ? `Move to ${target}` : "Change status"}
+          <Button variant={target === "Cancelled" ? "danger" : "primary"} onClick={() => void submit()} disabled={saving || !target} title={transitions.isPending ? "Checking which statuses are allowed…" : !target ? "Choose the new status" : undefined}>
+            {saving || transitions.isPending ? <Spinner className="h-3.5 w-3.5" label={saving ? "Saving" : "Loading"} /> : null}
+            {target ? `Move to ${target}` : transitions.isPending ? "Checking…" : "Choose a status"}
           </Button>
         </DialogFooter>
       </DialogContent>

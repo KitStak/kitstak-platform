@@ -11,10 +11,11 @@ import { z } from "zod";
 import { Hash, ListOrdered } from "lucide-react";
 import { apiRequest, isApiError } from "@/lib/api-client";
 import { applyServerFieldErrors, useApiQuery } from "@/lib/query-client";
-import { plural } from "@/lib/grid-defs/facility/common";
+import { ERROR_TOAST_MS, plural } from "@/lib/grid-defs/facility/common";
 import { buildSscc18, companyPrefixFor, LP_CREATE_DEFAULTS, lpCreateSchema, lpUpdateSchema, MAX_LP_BATCH, type LpCreateInput, type LpUpdateInput } from "@/lib/grid-defs/facility/lp-numbers";
 import { lpNumberPreview } from "@/lib/grid-defs/facility/lp-types";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Callout } from "@/components/ui/callout";
 import { Drawer } from "@/components/ui/drawer";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -34,7 +35,14 @@ const warehouseDefaults = z.object({ defaultReceivingLocationId: z.string().null
 
 export function CreateLpNumberDrawer({ open, onOpenChange, defaultWarehouseId, onCreated }: { readonly open: boolean; readonly onOpenChange: (o: boolean) => void; readonly defaultWarehouseId: string | null; readonly onCreated: (numbers: readonly string[]) => void }) {
   const form = useZodForm(lpCreateSchema, { ...LP_CREATE_DEFAULTS, warehouseId: defaultWarehouseId ?? "" });
-  React.useEffect(() => { if (open) form.reset({ ...LP_CREATE_DEFAULTS, warehouseId: defaultWarehouseId ?? "" }); }, [open, defaultWarehouseId, form]);
+  // Reset only when the drawer opens. The default warehouse can resolve a moment later; fill it in
+  // without wiping what the user already picked (a late reset used to swallow the first click).
+  const defaultWarehouseRef = React.useRef(defaultWarehouseId);
+  defaultWarehouseRef.current = defaultWarehouseId;
+  React.useEffect(() => { if (open) form.reset({ ...LP_CREATE_DEFAULTS, warehouseId: defaultWarehouseRef.current ?? "" }); }, [open, form]);
+  React.useEffect(() => {
+    if (open && defaultWarehouseId && !form.getValues("warehouseId")) form.setValue("warehouseId", defaultWarehouseId);
+  }, [open, defaultWarehouseId, form]);
   const warehouses = useWarehouseOptions();
   const clients = useClientOptions();
   const warehouseId = form.watch("warehouseId") || null;
@@ -51,6 +59,30 @@ export function CreateLpNumberDrawer({ open, onOpenChange, defaultWarehouseId, o
   const type = types.options.find((t) => t.value === typeId);
   const clientCode = clients.find((c) => c.value === clientId)?.label.split(" · ")[0] ?? "";
 
+  // Debounced uniqueness pre-check for custom numbers (same rule as the server: unique per warehouse).
+  const customNumber = method === "custom" ? (form.watch("number") ?? "").trim() : "";
+  const altBarcode = method === "custom" ? (form.watch("alternateBarcode") ?? "").trim() : "";
+  const [checking, setChecking] = React.useState(false);
+  React.useEffect(() => {
+    if (!warehouseId || (!customNumber && !altBarcode)) return undefined;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setChecking(true);
+      apiRequest<{ taken: Record<string, string> }>("/api/lp-numbers/availability", { query: { warehouseId, code: customNumber || undefined, alternateBarcode: altBarcode || undefined }, signal: controller.signal })
+        .then(({ data }) => {
+          for (const path of ["number", "alternateBarcode"] as const) {
+            const message = data.taken[path];
+            const current = form.getFieldState(path).error;
+            if (message) form.setError(path, { type: "taken", message });
+            else if (current?.type === "taken") form.clearErrors(path);
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => { if (!controller.signal.aborted) setChecking(false); });
+    }, 350);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [warehouseId, customNumber, altBarcode, form]);
+
   const preview = method === "custom"
     ? []
     : sscc
@@ -66,7 +98,7 @@ export function CreateLpNumberDrawer({ open, onOpenChange, defaultWarehouseId, o
       onOpenChange(false);
     } catch (error) {
       applyServerFieldErrors(form, error);
-      toast.error("Couldn't create LP numbers", apiErrorMessage(error));
+      toast.error("Couldn't create LP numbers", apiErrorMessage(error), { duration: ERROR_TOAST_MS });
     }
   };
 
@@ -75,28 +107,30 @@ export function CreateLpNumberDrawer({ open, onOpenChange, defaultWarehouseId, o
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button variant="primary" type="submit" form="lp-create-form" disabled={form.formState.isSubmitting}>{method === "custom" ? "Create LP number" : `Create ${count > 1 ? `${count} LP numbers` : "LP number"}`}</Button>
+          <Button variant="primary" type="submit" form="lp-create-form" disabled={form.formState.isSubmitting} aria-busy={form.formState.isSubmitting}>{form.formState.isSubmitting ? <Spinner className="h-3.5 w-3.5" label="Creating" /> : null}{method === "custom" ? "Create LP number" : count > 1 ? `Create ${count.toLocaleString("en-US")} LP numbers` : count === 1 ? "Create LP number" : "Create LP numbers"}</Button>
         </div>
       }>
       <Form form={form} onSubmit={submit} id="lp-create-form" className="flex flex-col gap-5">
         <FormSection title="Type and location">
           <FormGrid>
-            <ComboField<C> name="warehouseId" label="Warehouse" required options={warehouses.options} onValueChange={() => { form.setValue("lpTypeId", ""); form.setValue("locationId", null); }} />
+            <ComboField<C> name="warehouseId" label="Warehouse" required options={warehouses.selectable(form.watch("warehouseId"))} onValueChange={() => { form.setValue("lpTypeId", ""); form.setValue("locationId", null); }} />
             <SelectField<C> name="lpTypeId" label="LP type" required options={types.options} placeholder={!warehouseId ? "Select a warehouse first" : types.loading ? "Loading…" : types.options.length ? "Select LP type" : "No LP types in this warehouse"} disabled={!warehouseId} />
             <ComboField<C> name="locationId" label="Location" options={locations.options} placeholder={receivingCode ? `Defaults to ${receivingCode}` : "No default receiving location"} disabled={!warehouseId} info="Where the empty LPs start; the warehouse's default receiving location when left blank" />
           </FormGrid>
         </FormSection>
         <div className="flex flex-col gap-3">
-          <SegmentedControl<C["method"]> ariaLabel="Create method" value={method} onChange={(v) => form.setValue("method", v, { shouldDirty: true })} options={[{ value: "sequence", label: "From sequence", icon: ListOrdered }, { value: "custom", label: "Custom numbers", icon: Hash }]} />
+          <SegmentedControl<C["method"]> ariaLabel="Create method" value={method} onChange={(v) => { form.setValue("method", v, { shouldDirty: true }); if (v === "custom") form.setValue("clientId", null); }} options={[{ value: "sequence", label: "From sequence", icon: ListOrdered }, { value: "custom", label: "Custom numbers", icon: Hash }]} />
           {method === "sequence" ? (
             <FormGrid>
               <NumberField<C> name="count" label="LP number count" required min={1} max={MAX_LP_BATCH} nullable />
               <YesNoField<C> name="isSscc18" label="SSCC18" info="GS1 serial shipping container code with a check digit; requires a client" />
-              {sscc ? <ComboField<C> name="clientId" label="Client" required options={clients} placeholder="Select client" className="md:col-span-2" /> : null}
+              <ComboField<C> name="clientId" label="Client" required={sscc} options={clients} placeholder={sscc ? "Select client" : "Any client"} className="md:col-span-2"
+                info={sscc ? "The client's GS1 company prefix is part of every SSCC18 number" : "Optional: pre-assign the new LPs to one client"} />
             </FormGrid>
           ) : (
             <FormGrid>
-              <TextInput<C> name="number" label="LP number" required maxLength={40} transform={(v) => v.toUpperCase()} placeholder="e.g. PLT-CUSTOM-01" />
+              <TextInput<C> name="number" label="LP number" required maxLength={40} transform={(v) => v.toUpperCase()} placeholder="e.g. PLT-CUSTOM-01"
+                description={checking ? "Checking availability…" : "Must be unique in this warehouse, across every LP type"} />
               <TextInput<C> name="alternateBarcode" label="Alternate barcode" maxLength={60} placeholder="Optional second scan code" />
             </FormGrid>
           )}
@@ -130,7 +164,7 @@ function EditForm({ detail, onDone, onCancel, onDirty }: { readonly detail: LpDe
     } catch (error) {
       if (isApiError(error) && error.code === "CONFLICT") setConflict(true);
       applyServerFieldErrors(form, error);
-      toast.error("Couldn't save the LP number", apiErrorMessage(error));
+      toast.error("Couldn't save the LP number", apiErrorMessage(error), { duration: ERROR_TOAST_MS });
     }
   };
   return (

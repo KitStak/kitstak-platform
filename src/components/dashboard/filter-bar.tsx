@@ -28,7 +28,11 @@ export function MultiSelect({ label, options, value, onApply }: {
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<readonly string[]>(value);
   const [term, setTerm] = React.useState("");
-  React.useEffect(() => { if (open) { setDraft(value); setTerm(""); } }, [open, value]);
+  // Reset the draft only when the popover opens or the applied selection really changes.
+  // Keyed by content, not identity: the parent rebuilds `value` on every render (60 s
+  // auto-refresh, header context), which used to wipe a half-made selection.
+  const valueKey = value.join(",");
+  React.useEffect(() => { if (open) { setDraft(valueKey ? valueKey.split(",") : []); setTerm(""); } }, [open, valueKey]);
   const dirty = draft.length !== value.length || draft.some((d) => !value.includes(d));
   const shown = options.filter((o) => o.label.toLowerCase().includes(term.trim().toLowerCase()));
   const selectedLabels = options.filter((o) => value.includes(o.id)).map((o) => o.label);

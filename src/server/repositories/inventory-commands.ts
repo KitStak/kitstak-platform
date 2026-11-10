@@ -8,7 +8,7 @@
  * Quantities in inputs are in the row's PACK TYPE (what the drawer shows as Pack Qty);
  * the ledger works in UOM units.
  */
-import { and, eq, gt, ne } from "drizzle-orm";
+import { and, eq, gt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import * as schema from "@/server/db/schema";
 import type { AppDb } from "@/server/api/db";
@@ -18,13 +18,29 @@ import { DomainError, invalidState, ruleViolation } from "@/server/domain/errors
 import { ledger, type InventoryRow } from "@/server/domain/ledger";
 import { getBucket, packRatio } from "@/server/domain/ledger/bucket";
 import { getLocation, getLp } from "@/server/domain/ledger/rules";
+import { assertNotCountLocked } from "@/server/domain/ledger/count-locks";
 import { checkScope, type DomainCtx, type BulkResult } from "@/server/domain/types";
 import { runBulk } from "@/server/domain/bulk";
+import { LOT_MESSAGE, isValidLot } from "@/lib/grid-defs/inventory/lot-rules";
+import { reasonAllows, reasonDirection, reasonDirectionMessage } from "@/lib/grid-defs/inventory/reason-direction";
+
+export { LOT_MESSAGE, LOT_PATTERN, isValidLot } from "@/lib/grid-defs/inventory/lot-rules";
 
 const id = z.string().trim().min(1).max(64);
 const note = z.string().trim().max(400).optional().nullable();
 const qty = z.number({ error: "Enter a quantity" }).int("Use a whole number").positive("Must be greater than 0").max(10_000_000);
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
+/** True only for a real calendar date in YYYY-MM-DD form (rejects 2026-13-45, 2026-02-31). */
+export function isValidIsoDate(v: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) return false;
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  if (y < 1900 || y > 2200 || mo < 1 || mo > 12 || d < 1) return false;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+const isoDate = z.string().refine(isValidIsoDate, "Enter a real date (YYYY-MM-DD)");
+
+const lot = z.string().trim().max(60, "At most 60 characters").refine((v) => v === "" || isValidLot(v), LOT_MESSAGE);
 
 export const targetSchema = z.object({ kind: z.enum(["location", "lp"]), id });
 export type TransferTarget = z.infer<typeof targetSchema>;
@@ -48,7 +64,7 @@ export const addInventorySchema = z.object({
   reasonId: id.optional().nullable(),
   damageReason: z.string().trim().max(120).optional().nullable(),
   qty,
-  lotNumber: z.string().trim().max(60).optional().nullable(),
+  lotNumber: lot.optional().nullable(),
   expiryDate: isoDate.optional().nullable(),
   productionDate: isoDate.optional().nullable(),
   note,
@@ -67,8 +83,11 @@ export const changeAttributesSchema = z.object({
   /** Pack units; only with a single row selected. Default: every free unit. */
   qty: qty.optional(),
 }).superRefine((v, ctx) => {
-  if ((v.attribute === "expiryDate" || v.attribute === "productionDate") && v.value && !/^\d{4}-\d{2}-\d{2}$/.test(v.value)) {
-    ctx.addIssue({ code: "custom", path: ["value"], message: "Use YYYY-MM-DD" });
+  if ((v.attribute === "expiryDate" || v.attribute === "productionDate") && v.value && !isValidIsoDate(v.value)) {
+    ctx.addIssue({ code: "custom", path: ["value"], message: "Enter a real date (YYYY-MM-DD)" });
+  }
+  if (v.attribute === "lotNumber" && v.value && !isValidLot(v.value)) {
+    ctx.addIssue({ code: "custom", path: ["value"], message: LOT_MESSAGE });
   }
   if (v.qty !== undefined && v.ids.length !== 1) ctx.addIssue({ code: "custom", path: ["qty"], message: "A quantity can only be set for one row" });
 });
@@ -89,7 +108,8 @@ function productOf(tx: AppDb, productId: string) {
   return p;
 }
 
-function assertReason(tx: AppDb, warehouseId: string, reasonId: string | null | undefined, required: boolean): void {
+/** `delta` (UOM units, signed) checks the reason's direction (increase / decrease / both). */
+function assertReason(tx: AppDb, warehouseId: string, reasonId: string | null | undefined, required: boolean, delta?: number): void {
   if (!reasonId) {
     if (required) throw new DomainError("VALIDATION", "An adjustment reason is required by this warehouse's settings", { fieldErrors: { reasonId: ["Select an adjustment reason"] } });
     return;
@@ -97,6 +117,11 @@ function assertReason(tx: AppDb, warehouseId: string, reasonId: string | null | 
   const r = tx.select().from(schema.lookupValues).where(eq(schema.lookupValues.id, reasonId)).get();
   if (!r || r.type !== "adjustment_reason" || !r.isActive || (r.warehouseId && r.warehouseId !== warehouseId)) {
     throw new DomainError("VALIDATION", "Select a valid adjustment reason", { fieldErrors: { reasonId: ["Select a valid adjustment reason"] } });
+  }
+  const direction = reasonDirection(r.name, r.meta);
+  if (delta !== undefined && !reasonAllows(direction, delta)) {
+    const message = reasonDirectionMessage(r.name, direction);
+    throw new DomainError("VALIDATION", message, { fieldErrors: { reasonId: [message] } });
   }
 }
 
@@ -155,12 +180,63 @@ export function explainSkuRule(tx: AppDb, input: { locationId: string; lpId: str
   }
 }
 
+/** "MLT-WIDGET-01 (1 unit)" / "MLT-WIDGET-01 (12 units)": the line label of an attribute change-log row. */
+export function attributeChangeLineLabel(sku: string, units: number): string {
+  return `${sku} (${units.toLocaleString("en-US")} ${units === 1 ? "unit" : "units"})`;
+}
+
+/**
+ * An empty attribute is logged as "(none)", so the stored sentence reads
+ * "Damage Reason is modified. (none) --> Damaged" instead of "is modified.  --> Damaged".
+ */
+export function changeLogValue(value: string | null | undefined): string {
+  const v = value?.trim();
+  return v ? v : "(none)";
+}
+
 function logQty(tx: AppDb, ctx: DomainCtx, bucket: InventoryRow, from: number, to: number): void {
   const loc = getLocation(tx, bucket.locationId);
   recordLine(tx, ctx, {
     entityType: "location", entityId: loc.id, entityCode: loc.code, lineEntityType: "inventory", lineEntityId: bucket.id,
     lineLabel: skuOf(tx, bucket.productId), field: "quantity", from, to,
   });
+}
+
+/**
+ * Deletes buckets this page emptied (on hand 0), as Logiwa does ("Setting the quantity to 0
+ * will delete this inventory record"), so ghost "Stock 0" rows don't pile up. Ledger rows keep
+ * their from/to ids, so history is untouched and reconcile still holds (Σ = 0). A bucket stays
+ * when anything still points at it: allocation rows (FK), serial numbers, or the posted txn of a
+ * live receipt (Cancel Receiving reads that bucket). Returns the ids that were deleted.
+ */
+export function pruneEmptyBuckets(tx: AppDb, ids: readonly string[]): string[] {
+  const deleted: string[] = [];
+  for (const bucketId of new Set(ids)) {
+    const b = tx.select().from(schema.inventory).where(eq(schema.inventory.id, bucketId)).get();
+    if (!b || b.onHand !== 0 || b.allocated !== 0 || b.bucketKey.startsWith("legacy:")) continue;
+    const held = tx.get<{ n: number }>(sql`SELECT
+        (SELECT COUNT(*) FROM inventory_allocations a WHERE a.inventory_id = ${bucketId})
+      + (SELECT COUNT(*) FROM serial_numbers s WHERE s.inventory_id = ${bucketId})
+      + (SELECT COUNT(*) FROM receipts r JOIN inventory_transactions t ON t.id = r.inventory_transaction_id
+          WHERE r.cancelled_at IS NULL AND t.to_inventory_id = ${bucketId}) AS n`);
+    if ((held?.n ?? 0) > 0) continue;
+    tx.delete(schema.inventory).where(eq(schema.inventory.id, bucketId)).run();
+    deleted.push(bucketId);
+  }
+  return deleted;
+}
+
+const TRACKED_ATTRIBUTE: Partial<Record<(typeof ATTRIBUTE_KEYS)[number], { flag: "trackLot" | "trackExpiry" | "trackProductionDate"; noun: string }>> = {
+  lotNumber: { flag: "trackLot", noun: "lot/batch numbers" },
+  expiryDate: { flag: "trackExpiry", noun: "expiry dates" },
+  productionDate: { flag: "trackProductionDate", noun: "production dates" },
+};
+
+/** Lot / expiry / production can only be SET on a product that tracks them (clearing is always allowed). */
+export function untrackedAttributeMessage(product: { sku: string; trackLot: boolean; trackExpiry: boolean; trackProductionDate: boolean }, attribute: (typeof ATTRIBUTE_KEYS)[number]): string | null {
+  const t = TRACKED_ATTRIBUTE[attribute];
+  if (!t || product[t.flag]) return null;
+  return `${product.sku} doesn't track ${t.noun}. Turn tracking on in the product first.`;
 }
 
 interface ResolvedTarget {
@@ -197,10 +273,13 @@ export function changeQuantity(tx: AppDb, ctx: DomainCtx, inventoryId: string, i
   checkScope(ctx, bucket, "Inventory");
   assertStock(bucket);
   assertVersion(bucket, input.version);
-  assertReason(tx, bucket.warehouseId, input.reasonId, warehouseRequiresReason(tx, bucket.warehouseId));
+  // Quantity changes mid-count would corrupt the variance: same lock as transfers.
+  assertNotCountLocked(tx, getLocation(tx, bucket.locationId));
   if (!bucket.clientId) throw invalidState("This row has no client.");
   const refs = { adjustmentReasonId: input.reasonId ?? null, note: input.note ?? null };
   const units = toUom(tx, bucket, input.qty);
+  const delta = input.mode === "add" ? units : input.mode === "remove" ? -units : units - bucket.onHand;
+  assertReason(tx, bucket.warehouseId, input.reasonId, warehouseRequiresReason(tx, bucket.warehouseId), delta);
   let after: InventoryRow;
   if (input.mode === "add") {
     explainSkuRule(tx, { locationId: bucket.locationId, lpId: bucket.lpId, productId: bucket.productId, excludeInventoryId: bucket.id });
@@ -210,12 +289,19 @@ export function changeQuantity(tx: AppDb, ctx: DomainCtx, inventoryId: string, i
       damageReason: bucket.damageReason, packType: bucket.packType, status: "Stock", qty: units, refs,
     }).bucket;
   } else if (input.mode === "remove") {
-    after = ledger.remove(tx, ctx, { inventoryId: bucket.id, qty: units, refs }).bucket;
+    const free = bucket.onHand - bucket.allocated;
+    if (units > free) {
+      throw new DomainError("INSUFFICIENT_STOCK", `Only ${free} unallocated units can be removed; ${units} requested.`, { fieldErrors: { qty: [`Only ${free} unallocated units can be removed`] } });
+    }
+    // Remove posts the same signed delta as Adjust down (−qty, "Inventory Adjustment"), so sums per
+    // type / reason and shrink reports add up (Logiwa shows removals as negative).
+    after = ledger.adjustTo(tx, ctx, { inventoryId: bucket.id, targetQty: bucket.onHand - units, adjustmentReasonId: input.reasonId ?? null, refs }).bucket;
   } else {
     if (units === bucket.onHand) throw new DomainError("VALIDATION", "The new quantity equals the current quantity", { fieldErrors: { qty: ["Enter a different quantity"] } });
     after = ledger.adjustTo(tx, ctx, { inventoryId: bucket.id, targetQty: units, adjustmentReasonId: input.reasonId ?? null, refs }).bucket;
   }
   logQty(tx, ctx, after, bucket.onHand, after.onHand);
+  if (after.onHand === 0) pruneEmptyBuckets(tx, [after.id]);
   return { inventoryId: after.id, from: bucket.onHand, to: after.onHand, delta: after.onHand - bucket.onHand };
 }
 
@@ -225,17 +311,25 @@ export function addInventory(tx: AppDb, ctx: DomainCtx, input: AddInventoryInput
   checkScope(ctx, { warehouseId: input.warehouseId, clientId: input.clientId }, "Inventory");
   const location = getLocation(tx, input.locationId);
   if (location.warehouseId !== input.warehouseId) throw new DomainError("VALIDATION", "The location belongs to another warehouse", { fieldErrors: { locationId: ["Pick a location in this warehouse"] } });
+  assertNotCountLocked(tx, location);
   if (input.lpId) {
     const lp = getLp(tx, input.lpId);
     if (lp.warehouseId !== input.warehouseId) throw new DomainError("VALIDATION", "The LP belongs to another warehouse", { fieldErrors: { lpId: ["Pick an LP in this warehouse"] } });
   }
-  assertReason(tx, input.warehouseId, input.reasonId, warehouseRequiresReason(tx, input.warehouseId));
+  assertReason(tx, input.warehouseId, input.reasonId, warehouseRequiresReason(tx, input.warehouseId), input.qty);
   assertDamageReason(tx, input.damageReason);
   const missing: Record<string, string[]> = {};
   if (product.trackLot && !input.lotNumber) missing.lotNumber = ["This product tracks lot/batch numbers"];
   if (product.trackExpiry && !input.expiryDate) missing.expiryDate = ["This product tracks expiry dates"];
   if (product.trackProductionDate && !input.productionDate) missing.productionDate = ["This product tracks production dates"];
   if (Object.keys(missing).length > 0) throw new DomainError("VALIDATION", "Fill in the tracked attributes", { fieldErrors: missing });
+  // Untracked attributes are never written (db invariant: no lot / expiry / production on untracked products).
+  const untracked: Record<string, string[]> = {};
+  for (const key of ["lotNumber", "expiryDate", "productionDate"] as const) {
+    const msg = input[key] ? untrackedAttributeMessage(product, key) : null;
+    if (msg) untracked[key] = [msg];
+  }
+  if (Object.keys(untracked).length > 0) throw new DomainError("VALIDATION", "This product doesn't track some of the attributes entered", { fieldErrors: untracked });
   const ratio = packRatio(tx, product.id, input.packType);
   explainSkuRule(tx, { locationId: location.id, lpId: input.lpId ?? null, productId: product.id });
   const { bucket } = ledger.add(tx, ctx, {
@@ -285,12 +379,17 @@ export function transferProduct(tx: AppDb, ctx: DomainCtx, input: z.infer<typeof
     throw new DomainError("VALIDATION", `The stock is already in ${target.label}.`, { fieldErrors: { target: ["Pick a different location or LP"] } });
   }
   explainSkuRule(tx, { locationId: target.locationId, lpId: target.lpId ?? null, productId: bucket.productId, excludeInventoryId: bucket.id });
+  const moveUnits = toUom(tx, bucket, input.qty);
+  if (moveUnits > bucket.onHand) {
+    throw new DomainError("INSUFFICIENT_STOCK", "The entered transfer quantity exceeds the existing inventory amount.", { fieldErrors: { qty: ["The entered transfer quantity exceeds the existing inventory amount."] } });
+  }
   const { txn, target: to } = ledger.move(tx, ctx, {
-    inventoryId: bucket.id, qty: toUom(tx, bucket, input.qty), toLocationId: target.locationId, toLpId: target.lpId,
+    inventoryId: bucket.id, qty: moveUnits, toLocationId: target.locationId, toLpId: target.lpId,
     refs: { note: input.note ?? null },
   });
   logQty(tx, ctx, bucket, bucket.onHand, getBucket(tx, bucket.id).onHand);
   logQty(tx, ctx, to, to.onHand - txn.uomQty, to.onHand);
+  pruneEmptyBuckets(tx, [bucket.id]);
   return summarize(tx, [txn]);
 }
 
@@ -322,10 +421,14 @@ export function transferLocation(tx: AppDb, ctx: DomainCtx, input: z.infer<typeo
   if (input.target.kind === "location") {
     if (target.locationId === from.id) throw new DomainError("VALIDATION", "Source and target locations are the same.", { fieldErrors: { target: ["Pick a different location"] } });
     for (const pid of new Set(buckets.map((b) => b.productId))) explainSkuRule(tx, { locationId: target.locationId, lpId: null, productId: pid });
-    return summarize(tx, ledger.moveLocation(tx, ctx, { fromLocationId: from.id, toLocationId: target.locationId, refs: { note: input.note ?? null } }));
+    const moved = summarize(tx, ledger.moveLocation(tx, ctx, { fromLocationId: from.id, toLocationId: target.locationId, refs: { note: input.note ?? null } }));
+    pruneEmptyBuckets(tx, buckets.map((b) => b.id));
+    return moved;
   }
   for (const pid of new Set(buckets.map((b) => b.productId))) explainSkuRule(tx, { locationId: target.locationId, lpId: target.lpId ?? null, productId: pid });
-  return summarize(tx, buckets.flatMap((b) => moveBucketTo(tx, ctx, b, target.locationId, target.lpId, input.note ?? null)));
+  const moved = summarize(tx, buckets.flatMap((b) => moveBucketTo(tx, ctx, b, target.locationId, target.lpId, input.note ?? null)));
+  pruneEmptyBuckets(tx, buckets.map((b) => b.id));
+  return moved;
 }
 
 export function transferLp(tx: AppDb, ctx: DomainCtx, input: z.infer<typeof transferLpSchema>): TransferResult {
@@ -342,7 +445,9 @@ export function transferLp(tx: AppDb, ctx: DomainCtx, input: z.infer<typeof tran
   if (buckets.length === 0) throw invalidState(`LP ${lp.number} is empty.`);
   const target = resolveTarget(tx, ctx, lp.warehouseId, input.target, lp.locationId ?? buckets[0].locationId);
   for (const pid of new Set(buckets.map((b) => b.productId))) explainSkuRule(tx, { locationId: target.locationId, lpId: target.lpId ?? null, productId: pid });
-  return summarize(tx, buckets.flatMap((b) => moveBucketTo(tx, ctx, b, target.locationId, target.lpId, input.note ?? null)));
+  const moved = summarize(tx, buckets.flatMap((b) => moveBucketTo(tx, ctx, b, target.locationId, target.lpId, input.note ?? null)));
+  pruneEmptyBuckets(tx, buckets.map((b) => b.id));
+  return moved;
 }
 
 /* -------------------------------------------------------- change attributes */
@@ -354,6 +459,11 @@ export function changeAttributes(tx: AppDb, ctx: DomainCtx, input: ChangeAttribu
     const bucket = getBucket(inner, bucketId);
     checkScope(ctx, bucket, "Inventory");
     assertStock(bucket);
+    assertNotCountLocked(inner, getLocation(inner, bucket.locationId));
+    if (value !== null) {
+      const untracked = untrackedAttributeMessage(productOf(inner, bucket.productId), input.attribute);
+      if (untracked) throw ruleViolation(untracked);
+    }
     const current = bucket[input.attribute];
     if ((current ?? null) === value) throw new DomainError("VALIDATION", `${ATTRIBUTE_LABELS[input.attribute]} is already ${value ?? "empty"}.`);
     const free = bucket.onHand - bucket.allocated;
@@ -364,7 +474,9 @@ export function changeAttributes(tx: AppDb, ctx: DomainCtx, input: ChangeAttribu
     const loc = getLocation(inner, bucket.locationId);
     recordLine(inner, ctx, {
       entityType: "location", entityId: loc.id, entityCode: loc.code, lineEntityType: "inventory", lineEntityId: target.id,
-      lineLabel: `${skuOf(inner, bucket.productId)} (${units} units)`, field: input.attribute, from: current ?? "", to: value ?? "",
+      lineLabel: attributeChangeLineLabel(skuOf(inner, bucket.productId), units), field: input.attribute,
+      from: changeLogValue(current), to: changeLogValue(value),
     });
+    pruneEmptyBuckets(inner, [bucket.id]);
   });
 }

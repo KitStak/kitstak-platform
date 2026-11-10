@@ -44,6 +44,10 @@ export const billingFees = sqliteTable("billing_fees", {
   splitDay: integer("split_day"),
   standardRate: real("standard_rate"),
   alternateRate: real("alternate_rate"),
+  /** Logiwa "Charge One Time" (Recurring only): billed on the first successful bill, then skipped. */
+  chargeOneTime: bool("charge_one_time").notNull().default(false),
+  /** Logiwa Charge radio: For Each Unit / From Quantity / Tier Base / graduated tiers (organization-billing R2-8). */
+  pricingMode: text("pricing_mode", { enum: ["perUnit", "fromQuantity", "tierBase", "graduated"] }).notNull().default("graduated"),
   conditions: json<RuleCondition[]>("conditions").notNull().default(EMPTY_JSON_ARRAY),
   ...stamps(),
 }, (t) => [index("billing_fees_contract_idx").on(t.contractId)]);

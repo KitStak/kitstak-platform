@@ -59,12 +59,16 @@ export interface DropdownMenuItemProps extends Omit<React.ComponentPropsWithoutR
 export const DropdownMenuItem = React.forwardRef<React.ElementRef<typeof Menu.Item>, DropdownMenuItemProps>(
   ({ className, icon: Icon, description, destructive, disabledReason, disabled, shortcut, href, children, ...props }, ref) => {
     const isDisabled = Boolean(disabled || disabledReason);
+    // A disabled item reads as disabled: muted icon, no destructive colours, and the
+    // reason as its sub-line when no description is given (the tooltip stays too).
+    const danger = destructive && !isDisabled;
+    const subline = description ?? (disabledReason ? disabledReason : null);
     const content = (
       <>
-        {Icon ? <Icon className={cn("h-4 w-4 shrink-0", description ? "mt-0.5" : null, destructive ? "text-danger" : "text-secondary")} aria-hidden /> : null}
+        {Icon ? <Icon className={cn("h-4 w-4 shrink-0", subline ? "mt-0.5" : null, isDisabled ? "text-faint" : danger ? "text-danger" : "text-secondary")} aria-hidden /> : null}
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate">{children}</span>
-          {description ? <span className="mt-0.5 text-[11px] leading-4 text-faint">{description}</span> : null}
+          {subline ? <span className="mt-0.5 text-[11px] leading-4 text-faint">{subline}</span> : null}
         </span>
         {shortcut ? <span className="ml-auto pl-3 text-[11px] tracking-wide text-faint">{shortcut}</span> : null}
       </>
@@ -76,8 +80,8 @@ export const DropdownMenuItem = React.forwardRef<React.ElementRef<typeof Menu.It
         asChild={href !== undefined && !isDisabled}
         className={cn(
           itemClass,
-          description ? "items-start py-2" : null,
-          destructive && "text-danger data-[highlighted]:bg-danger-soft data-[highlighted]:text-danger",
+          subline ? "items-start py-2" : null,
+          danger && "text-danger data-[highlighted]:bg-danger-soft data-[highlighted]:text-danger",
           className
         )}
         {...props}

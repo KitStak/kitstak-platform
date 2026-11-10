@@ -82,6 +82,8 @@ async function clickAndObserve(page: Page, control: ControlDescriptor): Promise<
     popups += 1;
     void popup.close().catch(() => undefined);
   };
+  // "Add file" / "Upload" buttons open the native file picker, which is not a DOM overlay.
+  const onFileChooser = (): void => void (popups += 1);
 
   const overlaysBefore = await countOverlays(page);
   await startMutationProbe(page);
@@ -89,6 +91,7 @@ async function clickAndObserve(page: Page, control: ControlDescriptor): Promise<
   page.on("framenavigated", onNavigated);
   page.on("download", onDownload);
   page.on("popup", onPopup);
+  page.on("filechooser", onFileChooser);
   try {
     await locator.click({ timeout: CLICK_TIMEOUT_MS, noWaitAfter: true });
     await page.waitForTimeout(EFFECT_WAIT_MS);
@@ -99,6 +102,7 @@ async function clickAndObserve(page: Page, control: ControlDescriptor): Promise<
     page.off("framenavigated", onNavigated);
     page.off("download", onDownload);
     page.off("popup", onPopup);
+    page.off("filechooser", onFileChooser);
   }
 
   const mutations = await stopMutationProbe(page);

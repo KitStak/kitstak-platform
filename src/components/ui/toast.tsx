@@ -3,7 +3,7 @@
 /**
  * Toast store (BUILD_PLAN F4.2). Framework-free so non-React code (query-client,
  * api helpers) can raise toasts: `toast.success("Saved", "Order SO000123 updated")`.
- * Rendered by `<Toaster />` (toaster.tsx), bottom-right, 5 s auto-dismiss, paused on hover.
+ * Rendered by `<Toaster />` (toaster.tsx), top centre below the header, 5 s auto-dismiss, paused on hover.
  */
 import * as React from "react";
 

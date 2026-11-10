@@ -61,5 +61,5 @@ export function countLockMessage(locationCode: string, planCode: string): string
 /** Throws RULE_VIOLATION naming the count plan when the location is count-locked. */
 export function assertNotCountLocked(tx: Tx, location: { readonly id: string; readonly code: string }): void {
   const plan = countLockFor(tx, location.id);
-  if (plan) throw ruleViolation(countLockMessage(location.code, plan), { countPlanCode: plan });
+  if (plan) throw ruleViolation(countLockMessage(location.code, plan), { countPlanCode: plan, locationId: location.id, locationCode: location.code });
 }

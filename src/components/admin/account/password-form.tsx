@@ -5,6 +5,7 @@
  * /api/account/password ends every other session and re-issues this browser's session.
  */
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { useWatch } from "react-hook-form";
 import { useApiMutation } from "@/lib/query-client";
 import { accountPasswordSchema, type AccountPasswordValues } from "@/lib/grid-defs/admin/account";
@@ -28,7 +29,8 @@ function Field({ name, label, autoComplete, describedBy }: { readonly name: K; r
   );
 }
 
-export function AccountPasswordForm({ mustChange, maxAgeDays }: { readonly mustChange: boolean; readonly maxAgeDays: number | null }) {
+export function AccountPasswordForm({ mustChange, reason = null, maxAgeDays }: { readonly mustChange: boolean; readonly reason?: "reset" | "expired" | null; readonly maxAgeDays: number | null }) {
+  const router = useRouter();
   const policy = usePasswordPolicy();
   const form = useZodForm(accountPasswordSchema, EMPTY);
   const newPassword = useWatch({ control: form.control, name: "newPassword" }) ?? "";
@@ -38,11 +40,21 @@ export function AccountPasswordForm({ mustChange, maxAgeDays }: { readonly mustC
     form,
     successTitle: "Password changed",
     successMessage: "Every other device was signed out. This browser stays signed in.",
-    onSuccess: () => form.reset(EMPTY),
+    onSuccess: () => {
+      form.reset(EMPTY);
+      // A forced change (reset or expiry) unlocks the rest of the app: re-run the shell gate.
+      if (mustChange) router.refresh();
+    },
   });
   return (
     <div className="flex flex-col gap-4">
-      {mustChange ? <Callout variant="attention" title="Choose a new password">An administrator reset your password or it expired. Pick a new one to keep working.</Callout> : null}
+      {mustChange ? (
+        <Callout variant="attention" title="Choose a new password to keep working">
+          {reason === "reset"
+            ? "An administrator reset your password. Choose your own password to unlock the rest of KitStaks."
+            : `Your password is older than ${maxAgeDays ?? "the allowed number of"} days, your company's limit. Choose a new one to unlock the rest of KitStaks.`}
+        </Callout>
+      ) : null}
       <Form form={form} onSubmit={(v) => mutation.mutateAsync(v)} className="flex flex-col gap-4" guardUnsaved>
         <Field name="currentPassword" label="Current password" autoComplete="current-password" />
         <div>
@@ -50,7 +62,7 @@ export function AccountPasswordForm({ mustChange, maxAgeDays }: { readonly mustC
           <PasswordMeter id="account-password-meter" password={newPassword} policy={policy} />
         </div>
         <Field name="confirmPassword" label="Re-enter new password" autoComplete="new-password" />
-        {maxAgeDays ? <p className="text-[12px] text-faint">Passwords expire every {maxAgeDays} days under your company's policy.</p> : null}
+        {maxAgeDays ? <p className="text-[12px] text-faint">Passwords expire every {maxAgeDays} days under your company&apos;s policy.</p> : null}
         <SubmitBar submitLabel="Change password" cancelLabel="Clear" onCancel={() => form.reset(EMPTY)} pending={mutation.isPending} />
       </Form>
     </div>

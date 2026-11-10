@@ -32,6 +32,9 @@ export interface DataGridBodyProps<T> {
   readonly renderExpanded?: (row: T) => React.ReactNode;
   readonly stickyRightOffset: number;
   readonly scrollRef: React.RefObject<HTMLDivElement | null>;
+  /** Absolute index of the first row on this page (for aria-rowindex). */
+  readonly rowOffset?: number;
+  readonly highlightRowId?: string | null;
 }
 
 function FullRow({ colSpan, children }: { readonly colSpan: number; readonly children: React.ReactNode }) {
@@ -53,16 +56,20 @@ interface BodyRowProps<T> {
   readonly stickyRightOffset: number;
   readonly measureRef?: (el: HTMLTableRowElement | null) => void;
   readonly index?: number;
+  readonly rowOffset?: number;
 }
 
-function BodyRow<T>({ row, table, height, onRowClick, renderExpanded, stickyRightOffset, measureRef, index }: BodyRowProps<T>) {
+function BodyRow<T>({ row, table, height, onRowClick, renderExpanded, stickyRightOffset, measureRef, index, rowOffset = 0 }: BodyRowProps<T>) {
   const selected = row.getIsSelected();
   const cells = row.getVisibleCells();
   return (
     <>
       <tr
         ref={measureRef}
-        data-index={index}
+        role="row"
+        data-index={index ?? row.index}
+        data-row-id={row.id}
+        aria-rowindex={rowOffset + row.index + 2}
         aria-selected={selected || undefined}
         onClick={onRowClick ? () => onRowClick(row.original) : undefined}
         style={{ height }}
@@ -75,6 +82,7 @@ function BodyRow<T>({ row, table, height, onRowClick, renderExpanded, stickyRigh
           return (
             <td
               key={cell.id}
+              role="cell"
               style={placement.style}
               className={cn(
                 "whitespace-nowrap align-middle",
@@ -93,8 +101,9 @@ function BodyRow<T>({ row, table, height, onRowClick, renderExpanded, stickyRigh
       </tr>
       {renderExpanded && row.getIsExpanded() ? (
         <tr className="border-t border-border bg-surface-sunken/60">
-          <td colSpan={cells.length} className="px-4 py-2">
-            {renderExpanded(row.original)}
+          <td colSpan={cells.length} className="px-0 py-2">
+            {/* Pinned to the visible width so the panel does not scroll away with wide grids. */}
+            <div className="sticky left-0 w-[var(--grid-visible-width,100%)] max-w-full px-4">{renderExpanded(row.original)}</div>
           </td>
         </tr>
       ) : null}
@@ -135,7 +144,27 @@ function VirtualRows<T>({ rows, scrollRef, height, ...rest }: Omit<BodyRowProps<
   );
 }
 
-export function DataGridBody<T>({ table, density, loading, error, onRetry, emptyTitle, emptyDescription, emptyAction, onRowClick, renderExpanded, stickyRightOffset, scrollRef }: DataGridBodyProps<T>) {
+/** After 6s of skeletons, say so and offer Retry instead of an endless shimmer. */
+function SlowLoadNotice({ colSpan, onRetry }: { readonly colSpan: number; readonly onRetry?: () => void }) {
+  const [slow, setSlow] = React.useState(false);
+  React.useEffect(() => {
+    const t = window.setTimeout(() => setSlow(true), 6000);
+    return () => window.clearTimeout(t);
+  }, []);
+  if (!slow) return null;
+  return (
+    <tr>
+      <td colSpan={Math.max(1, colSpan)} className="px-3 py-2">
+        <div role="status" className="flex items-center gap-3 text-[12px] text-secondary">
+          <span>This is taking longer than usual. The server may be busy.</span>
+          {onRetry ? <Button variant="secondary" size="sm" onClick={onRetry}>Retry</Button> : null}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+export function DataGridBody<T>({ table, density, loading, error, onRetry, emptyTitle, emptyDescription, emptyAction, onRowClick, renderExpanded, stickyRightOffset, scrollRef, rowOffset = 0 }: DataGridBodyProps<T>) {
   const columns = table.getVisibleLeafColumns();
   const height = ROW_HEIGHT[density];
   const rows = table.getRowModel().rows;
@@ -143,6 +172,7 @@ export function DataGridBody<T>({ table, density, loading, error, onRetry, empty
   if (loading) {
     return (
       <tbody aria-busy="true">
+        <SlowLoadNotice colSpan={columns.length} onRetry={onRetry} />
         {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
           <tr key={i} style={{ height }} className="border-t border-border">
             {columns.map((col) => (
@@ -187,7 +217,7 @@ export function DataGridBody<T>({ table, density, loading, error, onRetry, empty
       </tbody>
     );
   }
-  const rowProps = { table, height, onRowClick, renderExpanded, stickyRightOffset };
+  const rowProps = { table, height, onRowClick, renderExpanded, stickyRightOffset, rowOffset };
   return (
     <tbody>
       {rows.length > VIRTUALIZE_ABOVE ? (

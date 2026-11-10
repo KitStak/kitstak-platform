@@ -37,4 +37,10 @@ export function reportSaveError(error: unknown, wizard: WizardController<OrderFo
     if (step) wizard.goTo(step);
     applyServerFieldErrors(wizard.form as unknown as UseFormReturn<FieldValues>, error);
   }
+  if (isApiError(error) && error.code === "DUPLICATE" && wizard) {
+    const form = wizard.form;
+    form.setError("code", { type: "server", message: "Code already taken. Click \"auto generated\" for the next free code." });
+    // After the step switch renders, put the caret on the offending field (not the first field of the step).
+    setTimeout(() => form.setFocus("code"), 50);
+  }
 }

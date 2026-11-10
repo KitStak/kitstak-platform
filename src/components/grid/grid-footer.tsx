@@ -46,7 +46,7 @@ function PageInput({ page, pageCount, onPageChange }: { readonly page: number; r
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setText(null);
         }}
-        className="h-7 w-11 rounded-md border border-border-strong/70 bg-surface text-center text-[12px] font-semibold tabular-nums text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
+        className="h-7 w-11 rounded-md border border-border-strong/70 bg-surface text-center text-[12px] font-semibold tabular-nums text-foreground focus:border-info focus:outline-none focus:ring-2 focus:ring-info/25"
       />
       <span className="tabular-nums">/ {pageCount.toLocaleString()}</span>
     </span>
@@ -63,17 +63,21 @@ export interface GridFooterProps {
   readonly onPageChange: (page: number) => void;
   readonly onPageSizeChange?: (size: number) => void;
   readonly trailing?: React.ReactNode;
+  /** True while the first page has not arrived (or the list failed): Total shows an em dash instead of 0. */
+  readonly loading?: boolean;
+  /** Show the "Selected: N" counter (DataGrid passes `selectable`). Default true. */
+  readonly showSelected?: boolean;
 }
 
-export function GridFooter({ total, page, pageSize, selectedCount, density, onDensityChange, onPageChange, onPageSizeChange, trailing }: GridFooterProps) {
+export function GridFooter({ total, page, pageSize, selectedCount, density, onDensityChange, onPageChange, onPageSizeChange, trailing, loading = false, showSelected = true }: GridFooterProps) {
   const fmt = useFormat();
   const pageCount = pageCountOf(total, pageSize);
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-surface px-4 py-2">
-      <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-border bg-surface px-4 py-2 lg:flex-nowrap">
+      <div className="flex min-w-0 items-center gap-2 lg:gap-3">
         <div role="radiogroup" aria-label="Row density" className="flex rounded-md border border-border p-0.5">
           {GRID_DENSITIES.map((d) => (
-            <button key={d} type="button" role="radio" aria-checked={density === d} onClick={() => onDensityChange(d)} className={cn("rounded px-2 py-0.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", density === d ? "bg-primary text-white" : "text-secondary hover:bg-surface-sunken")}>
+            <button key={d} type="button" role="radio" aria-checked={density === d} onClick={() => onDensityChange(d)} className={cn("rounded px-2 py-0.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30", density === d ? "bg-neutral-soft text-foreground" : "text-secondary hover:bg-surface-sunken")}>
               {d}
             </button>
           ))}
@@ -93,13 +97,17 @@ export function GridFooter({ total, page, pageSize, selectedCount, density, onDe
             />
           </div>
         ) : null}
-        <span className="text-[12px] text-secondary" aria-live="polite">
-          Total: <span className="font-semibold tabular-nums text-foreground">{fmt.number(total)}</span>
-          <span className="mx-2 text-border-strong">|</span>
-          Selected: <span className={cn("font-semibold tabular-nums", selectedCount > 0 ? "text-primary" : "text-foreground")}>{fmt.number(selectedCount)}</span>
+        <span className="whitespace-nowrap text-[12px] text-secondary" aria-live="polite" aria-busy={loading || undefined}>
+          Total: <span className="font-semibold tabular-nums text-foreground">{loading ? "—" : fmt.number(total)}</span>
+          {showSelected ? (
+            <span>
+              <span className="mx-2 text-border-strong">|</span>
+              Selected: <span className={cn("font-semibold tabular-nums", selectedCount > 0 ? "text-primary" : "text-foreground")}>{fmt.number(selectedCount)}</span>
+            </span>
+          ) : null}
         </span>
       </div>
-      <nav aria-label="Pagination" className="flex items-center gap-0.5">
+      <nav aria-label="Pagination" className="flex shrink-0 items-center gap-0.5">
         <Button variant="ghost" size="icon-sm" aria-label="First page" disabled={page <= 1} onClick={() => onPageChange(1)}>
           <ChevronsLeft className="h-3.5 w-3.5" aria-hidden />
         </Button>

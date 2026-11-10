@@ -53,7 +53,8 @@ function AddressBlock({ prefix, form }: { readonly prefix: "shipping" | "billing
   const country = useWatch({ control: form.control, name: `${prefix}.country` }) as string | undefined;
   return (
     <FormGrid>
-      <TextF name={`${prefix}.name`} label="Contact name" maxLength={50} />
+      <TextF name={`${prefix}.name`} label="Address name" maxLength={50} placeholder="e.g. Main warehouse" info="A short name for this address, shown on purchase orders." />
+      <TextF name={`${prefix}.contactName`} label="Contact name" maxLength={100} />
       <TextF name={`${prefix}.phone`} label="Phone" maxLength={40} />
       <TextF name={`${prefix}.line1`} label="Address line 1" maxLength={256} className="md:col-span-2" />
       <TextF name={`${prefix}.line2`} label="Address line 2" maxLength={256} className="md:col-span-2" />

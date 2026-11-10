@@ -15,6 +15,8 @@ export const CUSTOMER_FIELDS: readonly OrgField[] = [
   { field: "orderCount", label: "Orders", type: "number" },
   { field: "createdAt", label: "Created date", type: "date" },
 ];
+/** Customer list preset: Client, Full name, Email, Active. */
+export const CUSTOMER_FILTER_PRESET = ["clientId", "fullName", "email", "isActive"] as const;
 export const CUSTOMER_SORT_FIELDS = ["fullName", "email", "phone", "clientName", "city", "country", "state", "isActive", "orderCount", "createdAt"] as const;
 export const CUSTOMER_SEARCH_FIELDS = ["fullName", "email", "phone"] as const;
 

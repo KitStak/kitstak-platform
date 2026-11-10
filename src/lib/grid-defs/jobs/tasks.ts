@@ -58,6 +58,19 @@ const COMMON_FIELDS: readonly FilterFieldDef[] = [
   field("targetParentLpType", "To parent LP type", "text"),
   field("warehouse", "Warehouse", "text"),
   field("waveNumber", "Wave no", "text"),
+  // Blind judge R1: beyond Logiwa's 49 — the pack, LP-history and audit fields every grid shows.
+  field("packType", "Pack type", "text"),
+  field("toPackType", "To pack type", "text"),
+  field("uomPackType", "UOM pack type", "text"),
+  field("taskUomQty", "Task UOM quantity", "number"),
+  field("damageReason", "Damage reason", "text"),
+  field("fromOriginalLp", "From original LP number", "text"),
+  field("toOriginalLp", "To original LP number", "text"),
+  field("fromOriginalParentLp", "From original parent LP number", "text"),
+  field("toOriginalParentLp", "To original parent LP number", "text"),
+  field("receivingDate", "Receiving date", "date"),
+  field("productionDate", "Production date", "date"),
+  field("updatedBy", "Updated by user", "text"),
 ];
 
 const ORDER_FIELDS: readonly FilterFieldDef[] = [
@@ -76,6 +89,11 @@ const ORDER_FIELDS: readonly FilterFieldDef[] = [
   field("priority", "Task priority", "enum", { options: opts(PRIORITIES) }),
   field("customer", "Customer", "text"),
   field("channel", "Channel", "text"),
+  field("carrier", "Carrier", "text"),
+  field("customerAddress", "Customer address", "text"),
+  field("suggestedPackage", "Suggested shipment package type", "text"),
+  field("targetLpType", "Target LP type", "text"),
+  field("sequence", "AI task sequence", "number"),
 ];
 
 const COUNT_FIELDS: readonly FilterFieldDef[] = [

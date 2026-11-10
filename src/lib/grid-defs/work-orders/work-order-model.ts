@@ -35,16 +35,16 @@ export const componentSourceSchema = z.object({
 export type ComponentSource = z.output<typeof componentSourceSchema>;
 
 export const workOrderInputSchema = z.object({
-  warehouseId: z.string({ message: "Select warehouse is required." }).trim().min(1, "Select warehouse is required."),
-  clientId: z.string({ message: "Select client is required." }).trim().min(1, "Select client is required."),
-  code: z.string({ message: "Enter Work Order Code is required." }).trim().min(1, "Enter Work Order Code is required.").max(WO_CODE_MAX, `At most ${WO_CODE_MAX} characters`)
+  warehouseId: z.string({ message: "Warehouse is required" }).trim().min(1, "Warehouse is required"),
+  clientId: z.string({ message: "Client is required" }).trim().min(1, "Client is required"),
+  code: z.string({ message: "Work order code is required" }).trim().min(1, "Work order code is required").max(WO_CODE_MAX, `At most ${WO_CODE_MAX} characters`)
     .regex(/^[A-Za-z0-9._\-/]+$/, "Use letters, numbers, dot, dash, slash or underscore"),
-  type: z.enum(WORK_ORDER_TYPES, { message: "Select Work Order Type is required." }),
+  type: z.enum(WORK_ORDER_TYPES, { message: "Work order type is required" }),
   extraNote: optionalText(WO_NOTE_MAX),
   buildFor: z.enum(BUILD_FOR).default("Stock"),
   shipmentOrderId: optionalId,
   kitProductId: z.string({ message: "Select a kit" }).trim().min(1, "Select a kit"),
-  requestedQty: z.number({ message: "Enter the kit quantity" }).int("Whole numbers only").min(1, "At least 1").max(MAX_KIT_QTY, `At most ${MAX_KIT_QTY}`),
+  requestedQty: z.number({ message: "Enter the kit quantity" }).int("Whole kits only").min(1, "At least 1").max(MAX_KIT_QTY, `At most ${MAX_KIT_QTY.toLocaleString("en-US")}`),
   components: z.array(componentSourceSchema).max(200).default([]),
   kittingInstructions: optionalText(WO_INSTRUCTIONS_MAX),
   plannedStartAt: optionalIso,
@@ -53,7 +53,7 @@ export const workOrderInputSchema = z.object({
   actualFinishAt: optionalIso,
   customFields: z.record(z.string(), z.union([z.string().max(500), z.boolean(), z.null()])).default({}),
 }).superRefine((v, ctx) => {
-  if (v.buildFor === "SO" && !v.shipmentOrderId) ctx.addIssue({ code: "custom", path: ["shipmentOrderId"], message: "Select Shipment Order is required." });
+  if (v.buildFor === "SO" && !v.shipmentOrderId) ctx.addIssue({ code: "custom", path: ["shipmentOrderId"], message: "Shipment order is required" });
   if (v.plannedStartAt && v.plannedFinishAt && Date.parse(v.plannedFinishAt) < Date.parse(v.plannedStartAt)) {
     ctx.addIssue({ code: "custom", path: ["plannedFinishAt"], message: "Planned finish must be after planned start" });
   }
@@ -76,8 +76,46 @@ export const createKitSchema = z.object({
   lotNumber: optionalText(120),
   expiryDate: optionalText(40),
   productionDate: optionalText(40),
+  /** Kitting task time range (Logiwa Create Kit step 2); the server stamps now when omitted. */
+  actualStartAt: optionalIso,
+  actualFinishAt: optionalIso,
+  /**
+   * Source Location / LP confirmed on step 1 of the Create Kit drawer. When present the server
+   * re-checks it against the components' chosen sources (or the kitting area with picking).
+   * Several sources (one scan per source location) are sent comma-separated; each is checked.
+   */
+  sourceScan: optionalText(600),
+  /**
+   * Client-generated key, one per Create Kit drawer submit. A retry with the same key replays the
+   * first result instead of consuming components twice.
+   */
+  idempotencyKey: z.string().trim().min(8).max(80).regex(/^[A-Za-z0-9_-]+$/).optional(),
+  /**
+   * With picking only: explicitly confirm "Complete pending picks and build". Without it the
+   * server refuses to build while component picking tasks are still open. Needs the picking
+   * permission and a planner role.
+   */
+  completePendingPicks: z.boolean().optional(),
+}).superRefine((v, ctx) => {
+  if (v.actualStartAt && v.actualFinishAt && Date.parse(v.actualFinishAt) < Date.parse(v.actualStartAt)) {
+    ctx.addIssue({ code: "custom", path: ["actualFinishAt"], message: "Actual finish must be after actual start" });
+  }
 });
-export type CreateKitInput = z.output<typeof createKitSchema>;
+type CreateKitParsed = z.output<typeof createKitSchema>;
+export type CreateKitInput = Omit<CreateKitParsed, "actualStartAt" | "actualFinishAt" | "sourceScan"> & {
+  readonly actualStartAt?: string | null;
+  readonly actualFinishAt?: string | null;
+  readonly sourceScan?: string | null;
+};
+
+/** Per-component attributes on Disassemble (Logiwa "••• Add Attribute"). */
+export const componentAttributeSchema = z.object({
+  productId: z.string().trim().min(1).max(64),
+  lotNumber: optionalText(120),
+  expiryDate: optionalText(40),
+  productionDate: optionalText(40),
+});
+export type ComponentAttribute = z.output<typeof componentAttributeSchema>;
 
 export const disassembleSchema = z.object({
   workOrderId: z.string().trim().min(1).max(64),
@@ -87,8 +125,20 @@ export const disassembleSchema = z.object({
   sourceInventoryId: z.string({ message: "Select the kit stock to disassemble" }).trim().min(1, "Select the kit stock to disassemble"),
   targetLocationId: z.string({ message: "Select a component location" }).trim().min(1, "Select a component location"),
   targetLpId: optionalId,
+  componentAttributes: z.array(componentAttributeSchema).max(200).optional(),
 });
 export type DisassembleInput = z.output<typeof disassembleSchema>;
+
+/** Standalone Disassemble Kit (Logiwa toolbar, no work order selected): kit stock broken down by its BOM. */
+export const disassembleStockSchema = z.object({
+  kitProductId: z.string({ message: "Select a kit" }).trim().min(1, "Select a kit").max(64),
+  qty: qtySchema,
+  sourceInventoryId: z.string({ message: "Select the kit stock to disassemble" }).trim().min(1, "Select the kit stock to disassemble"),
+  targetLocationId: z.string({ message: "Select a component location" }).trim().min(1, "Select a component location"),
+  targetLpId: optionalId,
+  componentAttributes: z.array(componentAttributeSchema).max(200).optional(),
+});
+export type DisassembleStockInput = z.output<typeof disassembleStockSchema>;
 
 /* ------------------------------------------------------------ formulas */
 
@@ -131,21 +181,45 @@ export interface WoActionRow {
   readonly processedQty: number;
 }
 
+/**
+ * Edit stays available after Open (Logiwa's Show Details drawer): core fields lock, while notes,
+ * instructions, dates, tags and custom fields can still change. Only Cancelled is read-only.
+ */
 export function editReason(wo: WoActionRow): string | null {
-  if (wo.status === "Completed" || wo.status === "Cancelled") return `${wo.status} work orders can't be edited`;
+  if (wo.status === "Cancelled") return "Cancelled work orders can't be edited";
   return null;
 }
 
-export function deleteReason(wo: WoActionRow): string | null {
-  return wo.status === "Open" ? null : "Only Open work orders can be deleted";
+/** Core fields (warehouse, client, type, kit, qty, component sources) are locked once the work order leaves Open. */
+export function coreLocked(wo: Pick<WoActionRow, "status">): boolean {
+  return wo.status !== "Open";
 }
 
-export function createKitReason(wo: WoActionRow): string | null {
+export function deleteReason(wo: WoActionRow): string | null {
+  if (wo.status !== "Open") return "Only Open work orders can be deleted";
+  return wo.processedQty > 0 ? "Kits were already built from this work order" : null;
+}
+
+/**
+ * With picking, components must be picked to the kitting area before kitting (Logiwa sequence).
+ * `canForcePicks` (supervisor with picking permission) keeps Create kit open; the drawer then
+ * requires an explicit "Complete pending picks and build" confirmation.
+ */
+export function createKitReason(wo: WoActionRow & { readonly pickTaskCount?: number; readonly pickDoneCount?: number; readonly inKittingAreaQty?: number }, opts: { readonly canForcePicks?: boolean } = {}): string | null {
   if (wo.status === "Completed") return "This work order is already completed";
   if (wo.status === "Cancelled") return "Cancelled work orders can't build kits";
   if (wo.status === "Shortage") return "Components are short; allocate them first";
   if (wo.type === "Work Order with Picking" && wo.status === "Open") return "Run Picking/Job Operations first to allocate the components";
   if (remainingQty(wo) <= 0) return "Every requested kit is built";
+  const total = wo.pickTaskCount ?? 0;
+  const done = wo.pickDoneCount ?? 0;
+  // Allocated with a job that holds no Picking tasks: nothing reached the kitting area (not forceable).
+  if (wo.type === "Work Order with Picking" && wo.status === "In Process" && wo.pickTaskCount === 0 && (wo.inKittingAreaQty ?? 0) <= 0) {
+    return "Components are allocated but no picking tasks exist yet (0 picked). Run Picking/Job Operations first";
+  }
+  if (wo.type === "Work Order with Picking" && total > 0 && done < total && !opts.canForcePicks) {
+    return `Components not yet picked to kitting area (${done}/${total} picked)`;
+  }
   return null;
 }
 
@@ -170,6 +244,8 @@ export function cancelPickingReason(wo: WoActionRow): string | null {
 
 export function printReason(wo: WoActionRow): string | null {
   if (wo.status === "Cancelled") return "Cancelled work orders have no picking list";
+  if (wo.type !== "Work Order with Picking") return "Built without picking: no picking list";
+  // Completed with picking: allowed as a reprint of what was picked (audit / rework).
   return null;
 }
 
@@ -187,5 +263,14 @@ export function selectionReason<T extends WoActionRow & { readonly code: string 
 export function cancelReason(wo: WoActionRow): string | null {
   if (wo.status === "Completed" || wo.status === "Cancelled") return `${wo.status} work orders can't be cancelled`;
   if (wo.processedQty > 0) return "Kits were already built from this work order";
+  return null;
+}
+
+/** Live Kit quantity check for the wizard (never clamps: the typed value stays and the reason shows). */
+export function kitQtyError(qty: number | null | undefined): string | null {
+  if (qty === null || qty === undefined || Number.isNaN(qty)) return "Enter the kit quantity";
+  if (!Number.isInteger(qty)) return "Whole kits only";
+  if (qty < 1) return "At least 1";
+  if (qty > MAX_KIT_QTY) return `At most ${MAX_KIT_QTY.toLocaleString("en-US")}`;
   return null;
 }

@@ -9,9 +9,12 @@ import type { AppDb } from "@/server/api/db";
 import { notFoundError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
 import { assertInScope, hasClient } from "@/server/auth/scope";
+import { countLockFor, countLockMessage } from "@/server/domain/ledger/count-locks";
 import { inList } from "./inventory-grid";
+import { reasonDirection, type ReasonDirection } from "@/lib/grid-defs/inventory/reason-direction";
 
 export interface ContentLine {
+  readonly productId: string;
   readonly sku: string;
   readonly productName: string;
   readonly qty: number;
@@ -39,6 +42,9 @@ export interface ContentSummary {
   readonly expiryLabel: string;
   readonly productionLabel: string;
   readonly allocatedQty: number;
+  /** Count plan locking the source location (moves out would fail), with the server's message. */
+  readonly countLockPlan: string | null;
+  readonly lockMessage: string | null;
   readonly lines: readonly ContentLine[];
 }
 
@@ -53,7 +59,7 @@ function single(values: readonly (string | null)[]): string {
 
 function linesWhere(db: AppDb, auth: AuthContext, where: ReturnType<typeof sql>): ContentLine[] {
   const rows = db.all<ContentLine & { clientId: string | null }>(sql`
-    SELECT p.sku AS "sku", p.name AS "productName", i.on_hand AS "qty", i.allocated AS "allocated", i.pack_type AS "packType",
+    SELECT i.product_id AS "productId", p.sku AS "sku", p.name AS "productName", i.on_hand AS "qty", i.allocated AS "allocated", i.pack_type AS "packType",
       i.status AS "status", i.lot_number AS "lotNumber", i.expiry_date AS "expiryDate", i.production_date AS "productionDate",
       lp.number AS "lpNumber", i.client_id AS "clientId"
     FROM inventory i JOIN products p ON p.id = i.product_id LEFT JOIN license_plates lp ON lp.id = i.lp_id
@@ -61,9 +67,15 @@ function linesWhere(db: AppDb, auth: AuthContext, where: ReturnType<typeof sql>)
   return rows.filter((r) => !r.clientId || hasClient(auth.scope, r.clientId)).map(({ clientId: _c, ...r }) => r);
 }
 
-function build(kind: "location" | "lp", id: string, code: string, warehouseId: string, locationCode: string | null, lines: readonly ContentLine[]): ContentSummary {
+function lockOf(db: AppDb, location: { id: string; code: string } | null | undefined): { countLockPlan: string | null; lockMessage: string | null } {
+  if (!location) return { countLockPlan: null, lockMessage: null };
+  const plan = countLockFor(db, location.id);
+  return { countLockPlan: plan, lockMessage: plan ? countLockMessage(location.code, plan) : null };
+}
+
+function build(kind: "location" | "lp", id: string, code: string, warehouseId: string, locationCode: string | null, lines: readonly ContentLine[], lock: { countLockPlan: string | null; lockMessage: string | null }): ContentSummary {
   return {
-    kind, id, code, warehouseId, locationCode,
+    kind, id, code, warehouseId, locationCode, ...lock,
     lpLabel: kind === "lp" ? code : single(lines.map((l) => l.lpNumber)),
     lotLabel: single(lines.map((l) => l.lotNumber)),
     packTypeLabel: single(lines.map((l) => l.packType)),
@@ -81,17 +93,75 @@ export function locationSummary(db: AppDb, auth: AuthContext, locationId: string
   const loc = db.select().from(schema.locations).where(eq(schema.locations.id, locationId)).get();
   if (!loc) throw notFoundError("Location");
   assertInScope(auth.scope, loc, "Location");
-  return build("location", loc.id, loc.code, loc.warehouseId, loc.code, linesWhere(db, auth, sql`i.location_id = ${loc.id}`));
+  return build("location", loc.id, loc.code, loc.warehouseId, loc.code, linesWhere(db, auth, sql`i.location_id = ${loc.id}`), lockOf(db, loc));
 }
 
 export function lpSummary(db: AppDb, auth: AuthContext, lpId: string): ContentSummary {
   const lp = db.select().from(schema.licensePlates).where(eq(schema.licensePlates.id, lpId)).get();
   if (!lp) throw notFoundError("LP");
   assertInScope(auth.scope, { warehouseId: lp.warehouseId }, "LP");
-  const loc = lp.locationId ? db.select({ code: schema.locations.code }).from(schema.locations).where(eq(schema.locations.id, lp.locationId)).get() : undefined;
+  const loc = lp.locationId ? db.select({ id: schema.locations.id, code: schema.locations.code }).from(schema.locations).where(eq(schema.locations.id, lp.locationId)).get() : undefined;
   const children = db.select({ id: schema.licensePlates.id }).from(schema.licensePlates).where(eq(schema.licensePlates.parentLpId, lp.id)).all().map((c) => c.id);
   const ids = [lp.id, ...children];
-  return build("lp", lp.id, lp.number, lp.warehouseId, loc?.code ?? null, linesWhere(db, auth, sql`i.lp_id IN (${sql.join(ids.map((x) => sql`${x}`), sql`, `)})`));
+  return build("lp", lp.id, lp.number, lp.warehouseId, loc?.code ?? null, linesWhere(db, auth, sql`i.lp_id IN (${sql.join(ids.map((x) => sql`${x}`), sql`, `)})`), lockOf(db, loc));
+}
+
+/* ------------------------------------------------------------ placement check */
+
+export interface PlacementCheck {
+  readonly kind: "location" | "lp";
+  readonly id: string;
+  readonly code: string;
+  /** Count plan locking the target (or the LP's location). */
+  readonly countLockPlan: string | null;
+  /** First rule that would make Save fail, in the server's words; null when the move/add is allowed. */
+  readonly blocking: string | null;
+  /** Non-blocking facts worth showing (e.g. "Only 1 SKU location, empty"). */
+  readonly notes: readonly string[];
+}
+
+/**
+ * Pre-flight for a location / LP picked as a destination (Add Inventory, Transfer Product,
+ * Transfer LP / Location): count-plan lock and the "only 1 SKU" rules, checked against the
+ * SKUs about to land there. Mirrors the server guards, so the drawer can flag the pick
+ * before Submit instead of after a 422.
+ */
+export function placementCheck(db: AppDb, auth: AuthContext, input: { kind: "location" | "lp"; id: string; productIds: readonly string[]; excludeInventoryIds?: readonly string[] }): PlacementCheck {
+  const notes: string[] = [];
+  const products = [...new Set(input.productIds)];
+  const exclude = input.excludeInventoryIds ?? [];
+  const otherSku = (where: ReturnType<typeof sql>): string | null => {
+    const notIn = products.length ? sql` AND i.product_id NOT IN (${sql.join(products.map((p) => sql`${p}`), sql`, `)})` : sql``;
+    const excl = exclude.length ? sql` AND i.id NOT IN (${sql.join(exclude.map((p) => sql`${p}`), sql`, `)})` : sql``;
+    return db.get<{ sku: string }>(sql`SELECT p.sku AS "sku" FROM inventory i JOIN products p ON p.id = i.product_id WHERE i.on_hand > 0 AND ${where}${notIn}${excl} ORDER BY p.sku LIMIT 1`)?.sku ?? null;
+  };
+  const oneSku = (label: string, where: ReturnType<typeof sql>): string | null => {
+    const holds = otherSku(where);
+    if (holds) return `${label} allows only 1 SKU (holds ${holds}).`;
+    if (products.length > 1) return `${label} allows only 1 SKU; this move has ${products.length} SKUs.`;
+    notes.push(`${label} allows only 1 SKU.`);
+    return null;
+  };
+
+  if (input.kind === "location") {
+    const loc = db.select().from(schema.locations).where(eq(schema.locations.id, input.id)).get();
+    if (!loc) throw notFoundError("Location");
+    assertInScope(auth.scope, loc, "Location");
+    const { countLockPlan, lockMessage } = lockOf(db, loc);
+    const blocking = lockMessage ?? (loc.onlyOneSku ? oneSku(`Location ${loc.code}`, sql`i.location_id = ${loc.id}`) : null);
+    return { kind: "location", id: loc.id, code: loc.code, countLockPlan, blocking, notes };
+  }
+  const lp = db.select().from(schema.licensePlates).where(eq(schema.licensePlates.id, input.id)).get();
+  if (!lp) throw notFoundError("LP");
+  assertInScope(auth.scope, { warehouseId: lp.warehouseId }, "LP");
+  const loc = lp.locationId ? db.select().from(schema.locations).where(eq(schema.locations.id, lp.locationId)).get() : undefined;
+  const { countLockPlan, lockMessage } = lockOf(db, loc);
+  const type = db.select().from(schema.lpTypes).where(eq(schema.lpTypes.id, lp.lpTypeId)).get();
+  let blocking = lockMessage;
+  if (!blocking && type?.onlyOneSku) blocking = oneSku(`LP ${lp.number} (${type.code})`, sql`i.lp_id = ${lp.id}`);
+  if (!blocking && loc?.onlyOneSku) blocking = oneSku(`Location ${loc.code}`, sql`i.location_id = ${loc.id}`);
+  if (loc) notes.push(`LP is in ${loc.code}.`);
+  return { kind: "lp", id: lp.id, code: lp.number, countLockPlan, blocking, notes };
 }
 
 export interface ProductOptions {
@@ -134,9 +204,10 @@ export interface InventoryReasons {
 export function inventoryReasons(db: AppDb, auth: AuthContext): InventoryReasons {
   const lv = schema.lookupValues;
   const list = (type: "adjustment_reason" | "damage_reason") =>
-    db.select({ id: lv.id, name: lv.name }).from(lv)
+    db.select({ id: lv.id, name: lv.name, meta: lv.meta }).from(lv)
       .where(and(eq(lv.type, type), eq(lv.isActive, true), or(isNull(lv.warehouseId), inList(sql`${lv.warehouseId}`, auth.scope.warehouseIds))))
-      .orderBy(lv.sortOrder, lv.name).all();
+      .orderBy(lv.sortOrder, lv.name).all()
+      .map((r) => (type === "adjustment_reason" ? { id: r.id, name: r.name, direction: reasonDirection(r.name, r.meta) } : { id: r.id, name: r.name }));
   const whs = db.select({ id: schema.warehouses.id, mandatory: schema.warehouses.mandatoryAdjustmentReason }).from(schema.warehouses).all()
     .filter((w) => auth.scope.warehouseIds.includes(w.id));
   return {
@@ -144,4 +215,101 @@ export function inventoryReasons(db: AppDb, auth: AuthContext): InventoryReasons
     damageReasons: list("damage_reason"),
     mandatoryReason: Object.fromEntries(whs.map((w) => [w.id, Boolean(w.mandatory)])),
   };
+}
+
+/* ------------------------------------------------------------ default reasons (existing tenants) */
+
+/**
+ * Reasons every tenant needs so Add / Remove / Adjust always has a one-way choice. Fresh installs
+ * get them from the seed; `ensureDefaultInventoryReasons` adds them to databases seeded before
+ * they existed. "Found" is the increase-only reason, "Damaged" the decrease-only one.
+ */
+export const DEFAULT_INVENTORY_REASONS: readonly { readonly type: "adjustment_reason" | "damage_reason"; readonly name: string; readonly direction?: ReasonDirection }[] = [
+  { type: "adjustment_reason", name: "Found", direction: "increase" },
+  { type: "adjustment_reason", name: "Import", direction: "both" },
+  { type: "adjustment_reason", name: "Damaged", direction: "decrease" },
+  { type: "damage_reason", name: "Damaged" },
+];
+
+/**
+ * Idempotent: inserts each default reason that has no global row yet (active or not, so a value
+ * an admin deactivated stays deactivated). Returns the names it added.
+ */
+export function ensureDefaultInventoryReasons(db: AppDb): string[] {
+  const lv = schema.lookupValues;
+  const added: string[] = [];
+  for (const r of DEFAULT_INVENTORY_REASONS) {
+    const exists = db.select({ id: lv.id }).from(lv)
+      .where(and(eq(lv.type, r.type), eq(lv.name, r.name), isNull(lv.clientId), isNull(lv.warehouseId))).get();
+    if (exists) continue;
+    const max = db.select({ n: sql<number>`coalesce(max(${lv.sortOrder}), -1)` }).from(lv).where(eq(lv.type, r.type)).get()?.n ?? -1;
+    db.insert(lv).values({ type: r.type, name: r.name, sortOrder: max + 1, clientId: null, warehouseId: null, meta: r.direction ? { direction: r.direction } : null })
+      .onConflictDoNothing().run();
+    added.push(`${r.type}:${r.name}`);
+  }
+  return added;
+}
+
+/* ------------------------------------------------------------ destination options */
+
+export interface DestinationOption {
+  readonly id: string;
+  readonly label: string;
+  /** "Storage · Zone A" plus the restriction, e.g. "Only 1 SKU (holds MLT-WIDGET-01)". */
+  readonly description: string;
+  /** The rule that would make Save fail for this move (same text as placement-check). */
+  readonly blocking: string | null;
+  /** Short badge for the option list: "Count CNT0001", "1 SKU · holds X", "1 SKU". */
+  readonly badge: string | null;
+  readonly countLockPlan: string | null;
+  /** The placement check this option was built from (seeds the drawer's pre-flight, no second round-trip). */
+  readonly notes: readonly string[];
+}
+
+export const DESTINATION_LIMIT = 50;
+
+/**
+ * Destination options for Add Inventory / Transfer Product / Transfer LP-Location, with each
+ * option's restriction already evaluated (count-plan lock, "only 1 SKU" location / LP type) for
+ * the SKUs about to land there. The pickers badge and disable blocked rows up front, so a
+ * count-locked or occupied only-1-SKU location never looks selectable (REQ-R2-9b, M06-side).
+ */
+export function destinationOptions(
+  db: AppDb,
+  auth: AuthContext,
+  input: { kind: "location" | "lp"; q: string; warehouseId: string | null; productIds: readonly string[]; excludeInventoryIds?: readonly string[]; exact?: boolean; limit?: number },
+): DestinationOption[] {
+  const limit = Math.min(input.limit ?? DESTINATION_LIMIT, DESTINATION_LIMIT);
+  const warehouses = input.warehouseId ? auth.scope.warehouseIds.filter((w) => w === input.warehouseId) : auth.scope.warehouseIds;
+  const q = input.q.trim();
+  const esc = q.replace(/[!%_]/g, (c) => `!${c}`);
+  const starts = `${esc}%`;
+  const contains = `%${esc}%`;
+  const candidates = input.kind === "location"
+    ? db.all<{ id: string; code: string; areaType: string | null; zone: string | null }>(sql`
+        SELECT l.id AS "id", l.code AS "code", l.area_type AS "areaType", l.zone AS "zone"
+        FROM locations l
+        WHERE l.is_active = 1 AND ${inList(sql`l.warehouse_id`, warehouses)}
+          ${q ? (input.exact ? sql`AND (l.code = ${q} COLLATE NOCASE OR l.barcode = ${q} COLLATE NOCASE)` : sql`AND (l.code LIKE ${contains} ESCAPE '!' OR l.barcode LIKE ${starts} ESCAPE '!')`) : sql``}
+        ORDER BY ${q ? sql`CASE WHEN l.code LIKE ${starts} ESCAPE '!' THEN 0 ELSE 1 END,` : sql``} l.code
+        LIMIT ${limit}`)
+    : db.all<{ id: string; code: string; areaType: string | null; zone: string | null }>(sql`
+        SELECT lp.id AS "id", lp.number AS "code", lp.status AS "areaType", loc.code AS "zone"
+        FROM license_plates lp LEFT JOIN locations loc ON loc.id = lp.location_id
+        WHERE ${inList(sql`lp.warehouse_id`, warehouses)}
+          ${q ? (input.exact ? sql`AND (lp.number = ${q} COLLATE NOCASE OR lp.alternate_barcode = ${q} COLLATE NOCASE)` : sql`AND (lp.number LIKE ${contains} ESCAPE '!' OR lp.alternate_barcode LIKE ${starts} ESCAPE '!')`) : sql``}
+        ORDER BY ${q ? sql`CASE WHEN lp.number LIKE ${starts} ESCAPE '!' THEN 0 ELSE 1 END,` : sql``} lp.number
+        LIMIT ${limit}`);
+  return candidates.map((c) => {
+    const check = placementCheck(db, auth, { kind: input.kind, id: c.id, productIds: input.productIds, excludeInventoryIds: input.excludeInventoryIds });
+    const facts = input.kind === "location" ? [c.areaType, c.zone ? `Zone ${c.zone}` : null] : [c.areaType, c.zone ? `in ${c.zone}` : "Not in a location"];
+    const holds = check.blocking ? /holds ([^)]+)\)/.exec(check.blocking)?.[1] ?? null : null;
+    const oneSku = check.notes.some((n) => /only 1 SKU/.test(n)) || /only 1 SKU/.test(check.blocking ?? "");
+    const badge = check.countLockPlan ? `Count ${check.countLockPlan}` : holds ? `1 SKU · holds ${holds}` : oneSku ? "1 SKU" : null;
+    const restriction = check.countLockPlan ? `Locked by count ${check.countLockPlan}` : check.blocking ?? (oneSku ? "Only 1 SKU" : null);
+    return {
+      id: c.id, label: c.code, blocking: check.blocking, badge, countLockPlan: check.countLockPlan, notes: check.notes,
+      description: [...facts.filter(Boolean), restriction].filter(Boolean).join(" · "),
+    };
+  });
 }

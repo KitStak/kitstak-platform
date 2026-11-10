@@ -3,15 +3,16 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-[13px] font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-45 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 select-none",
+  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-[13px] font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-45 outline-none focus-visible:ring-2 focus-visible:ring-info/40 select-none",
   {
     variants: {
       variant: {
-        primary: "bg-primary text-white hover:bg-primary-hover shadow-xs",
+        // Filled variants switch to a neutral fill when disabled; a faded red fill read as live.
+        primary: "bg-primary text-white hover:bg-primary-hover shadow-xs disabled:bg-neutral-soft disabled:text-faint disabled:border disabled:border-border disabled:shadow-none disabled:opacity-100",
         secondary:
           "bg-surface text-body border border-border-strong/70 hover:bg-surface-sunken hover:border-border-strong shadow-xs",
         ghost: "text-secondary hover:bg-neutral-soft hover:text-body",
-        danger: "bg-danger text-white hover:opacity-90 shadow-xs",
+        danger: "bg-danger text-white hover:opacity-90 shadow-xs disabled:bg-neutral-soft disabled:text-faint disabled:border disabled:border-border disabled:shadow-none disabled:opacity-100",
         "success-outline":
           "bg-surface text-success border border-success/40 hover:bg-success-soft shadow-xs",
         nav: "text-white/85 hover:bg-nav-hover hover:text-white",

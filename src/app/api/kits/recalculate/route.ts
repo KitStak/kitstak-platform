@@ -1,24 +1,34 @@
 /**
  * `GET /api/kits/recalculate`: when `kit_inventory_stats` was last recalculated.
- * `POST /api/kits/recalculate`: Recalculate Now.
+ * `POST /api/kits/recalculate`: Recalculate Now. It rewrites a shared derived table, so it needs
+ * the Work Orders create permission (the role that acts on the report), not just report view.
+ * Repeated clicks within RECALC_COOLDOWN_MS return the fresh stamp instead of recomputing.
  */
 import { defineRoute } from "@/server/api/define-route";
 import { KIT_RECALC_EVERY_MS } from "@/lib/grid-defs/work-orders/kits";
 import { lastKitRecalcAt, recalcKitInventory } from "@/server/repositories/kits";
-import { KIT_PERMISSIONS } from "@/server/repositories/work-orders-api";
+import { KIT_PERMISSIONS, WO_PERMISSIONS } from "@/server/repositories/work-orders-api";
+
+const RECALC_COOLDOWN_MS = 3_000;
 
 export const GET = defineRoute({
   permission: KIT_PERMISSIONS.inventory,
-  handler: ({ db }) => ({ updatedAt: lastKitRecalcAt(db), everyMs: KIT_RECALC_EVERY_MS }),
+  // The first read on a fresh install computes the snapshot, so the stamp never reads "never".
+  transaction: false,
+  handler: ({ db }) => ({ updatedAt: lastKitRecalcAt(db) ?? recalcKitInventory(db).updatedAt, everyMs: KIT_RECALC_EVERY_MS }),
 });
 
 export const POST = defineRoute({
-  permission: KIT_PERMISSIONS.inventory,
+  permission: WO_PERMISSIONS.create,
   // recalcKitInventory opens its own transaction.
   transaction: false,
   handler: ({ db, audit }) => {
+    const last = lastKitRecalcAt(db);
+    if (last && Date.now() - Date.parse(last) < RECALC_COOLDOWN_MS) {
+      return { rows: null, updatedAt: last, throttled: true };
+    }
     const res = recalcKitInventory(db);
     audit({ action: "kit_inventory.recalculate", entity: "kit_inventory_stats", entityId: "all", detail: { rows: res.rows } });
-    return res;
+    return { ...res, throttled: false };
   },
 });

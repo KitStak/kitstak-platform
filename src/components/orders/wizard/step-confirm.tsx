@@ -9,7 +9,7 @@ import { countryName } from "@/lib/countries";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { ReadValue } from "./fields";
-import { addressNeedsAttention, orderTotals, type OrderFormValues } from "./order-form-model";
+import { addressNeedsAttention, orderTotals, priorityFromRank, type OrderFormValues } from "./order-form-model";
 import { useOrderWizard } from "./order-wizard-context";
 
 function Card({ title, onEdit, children, className }: { readonly title: string; readonly onEdit: () => void; readonly children: React.ReactNode; readonly className?: string }) {
@@ -98,7 +98,7 @@ export function StepConfirm({ goTo }: { readonly goTo: (key: string) => void }) 
             <ReadValue label="Client">{client}</ReadValue>
             <ReadValue label="Order date">{fmt.dateTime(v.orderDate)}</ReadValue>
             <ReadValue label="Expected shipment date">{fmt.dateTime(v.expectedShipDate)}</ReadValue>
-            <ReadValue label="Priority">{v.priorityRank}</ReadValue>
+            <ReadValue label="Priority">{`${v.priorityRank} · ${priorityFromRank(v.priorityRank)}`}</ReadValue>
           </div>
           <div className="hidden w-32 shrink-0 flex-col items-center justify-center gap-2 rounded-lg bg-gradient-to-b from-primary-soft to-surface p-3 text-center sm:flex">
             <Warehouse className="h-10 w-10 text-primary" strokeWidth={1.5} aria-hidden />

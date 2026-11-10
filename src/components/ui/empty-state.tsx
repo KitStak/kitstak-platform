@@ -26,7 +26,7 @@ export interface EmptyStateProps {
 function ActionCard({ card }: { readonly card: EmptyStateAction }) {
   const Icon = card.icon;
   const classes =
-    "group flex w-full items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left shadow-xs transition-[border-color,box-shadow] hover:border-primary/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 active:bg-surface-sunken";
+    "group flex w-full items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left shadow-xs transition-[border-color,box-shadow] hover:border-primary/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30 active:bg-surface-sunken";
   const inner = (
     <>
       {Icon ? (
@@ -52,7 +52,7 @@ function ActionCard({ card }: { readonly card: EmptyStateAction }) {
 /** Grid of CTA cards (empty states, wizard success "What can you do next?"). */
 export function ActionCards({ cards, className }: { readonly cards: readonly EmptyStateAction[]; readonly className?: string }) {
   return (
-    <div className={cn("grid w-full max-w-[640px] gap-2.5", cards.length > 1 ? "sm:grid-cols-2" : "", className)}>
+    <div className={cn("grid w-full max-w-[640px] gap-2.5", cards.length >= 3 ? "sm:grid-cols-3" : cards.length > 1 ? "sm:grid-cols-2" : "", className)}>
       {cards.map((card) => (
         <ActionCard key={card.title} card={card} />
       ))}

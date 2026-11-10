@@ -12,8 +12,8 @@ import { DENSITIES, GRID_PAGE_SIZES } from "@/lib/enums";
 export const FILTER_FIELD_TYPES = ["enum", "text", "number", "boolean", "date"] as const;
 export type FilterFieldType = (typeof FILTER_FIELD_TYPES)[number];
 
-/** The six text operators the field editor offers (Logiwa parity). */
-export const TEXT_FILTER_OPS = ["ct", "eq", "sw", "ew", "ex", "empty"] as const;
+/** The text operators the field editor offers (Logiwa parity). "nin" is Exclude: none of the listed values. */
+export const TEXT_FILTER_OPS = ["ct", "eq", "sw", "ew", "nin", "ex", "empty"] as const;
 export type TextFilterOp = (typeof TEXT_FILTER_OPS)[number];
 
 export const TEXT_FILTER_OP_LABELS: Readonly<Record<TextFilterOp, string>> = {
@@ -21,6 +21,7 @@ export const TEXT_FILTER_OP_LABELS: Readonly<Record<TextFilterOp, string>> = {
   eq: "Equals",
   sw: "Starts With",
   ew: "Ends With",
+  nin: "Exclude",
   ex: "Is Not Empty",
   empty: "Is Empty",
 };
@@ -45,6 +46,8 @@ export interface FilterFieldDef {
   readonly group?: string;
   /** Shown under the label in the field list. */
   readonly description?: string;
+  /** Part of the list's default filter preset: pinned at the top of the field list until the viewer pins their own. */
+  readonly preset?: boolean;
 }
 
 /* ---------------- columns ---------------- */
@@ -52,6 +55,10 @@ export interface FilterFieldDef {
 export interface GridColumnMeta {
   /** Freeze the column at the grid's right edge. */
   sticky?: "right";
+  /** Frozen at the left edge by default (in addition to any user pins). */
+  pinLeft?: boolean;
+  /** Pinned left by default, but the user can unpin it in the column chooser (stored in grid prefs). */
+  defaultPinned?: boolean;
   /** Plain-text label for the column chooser / export when `header` is not a string. */
   label?: string;
   /** Server sort field; defaults to the column id. Set `enableSorting: false` to disable. */
@@ -116,6 +123,10 @@ export interface BulkAction {
   readonly eligibility?: (ids: readonly string[]) => string | null;
   /** Override the default "Select at least one record" reason. */
   readonly emptyReason?: string;
+  /** While true the action shows a spinner and is disabled ("Working…"). */
+  readonly pending?: boolean;
+  /** Short explanation: the button tooltip, or the sub-line in the Actions menu. */
+  readonly info?: string;
 }
 
 /* ---------------- preferences ---------------- */

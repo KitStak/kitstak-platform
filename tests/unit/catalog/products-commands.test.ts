@@ -8,7 +8,7 @@ import { EMPTY_GRID_QUERY, type GridQuery } from "@/server/query/grid-query";
 import { emptyProductForm, newPackType, type ProductFormValues, type ProductInput } from "@/lib/grid-defs/products/product-form";
 import { createProductFromWizard, deleteBlockerFor, deleteCheck, deleteProduct, setProductStatus, updateProductFromWizard } from "@/server/repositories/products-commands";
 import { getProductDetail, getProductForm } from "@/server/repositories/products-detail";
-import { checkSku, searchComponents } from "@/server/repositories/products-options";
+import { checkBarcodes, checkSku, searchComponents, searchLinkProducts } from "@/server/repositories/products-options";
 import { listProducts } from "@/server/repositories/products";
 import { createProductFromListing, linkListing, listListings, setNeverSync, unlinkListing } from "@/server/repositories/listings";
 import { linkStateOf, productsExport } from "@/server/repositories/products-export";
@@ -48,6 +48,39 @@ describe("create product (acceptance KS-E2E-PROD-1)", () => {
     expect(detail?.product).toMatchObject({ trackLot: true, trackExpiry: true, expiryFormat: "yyyy-MM-dd", expiryScanMethod: "During Picking", weightOz: 32, barcode: "B-1" });
     expect(changeLog(row.id).some((c) => String(c.type).toLowerCase() === "create")).toBe(true);
     expect(listProducts(w.db, auth.viewScope, q()).rows[0]?.sku).toBe("KS-E2E-PROD-1");
+  });
+
+  it("rejects a barcode already used by another product of the same client (409), allows other clients and self-edit", () => {
+    const first = createProductFromWizard(w.db, ctx(), productInput("BC-1", { packTypes: [unit(["850012300011"])] }));
+    expect(() => createProductFromWizard(w.db, ctx(), productInput("BC-2", { packTypes: [unit(["850012300011"])] }))).toThrow(/already used by BC-1 .Unit./);
+    expect(() => createProductFromWizard(w.db, ctx(), productInput("BC-3", { packTypes: [unit(["850012300011"])] }, w.otherClientId))).not.toThrow();
+    const form = getProductForm(w.db, auth.scope, first.id);
+    expect(() => updateProductFromWizard(w.db, ctx(), first.id, { ...(form as unknown as ProductInput), name: "renamed" })).not.toThrow();
+    const second = createProductFromWizard(w.db, ctx(), productInput("BC-4", { packTypes: [unit(["OTHER"])] }));
+    const f2 = getProductForm(w.db, auth.scope, second.id) as unknown as ProductInput;
+    expect(() => updateProductFromWizard(w.db, ctx(), second.id, { ...f2, packTypes: [unit(["850012300011"])] } as ProductInput)).toThrow(/already used/);
+  });
+
+  it("check-barcodes reports the owning client so the wizard can block same-client reuse", () => {
+    createProductFromWizard(w.db, ctx(), productInput("BC-6", { packTypes: [unit(["CB-1"])] }));
+    expect(checkBarcodes(w.db, auth.scope, { barcodes: "CB-1" })[0]).toMatchObject({ sku: "BC-6", clientId: w.clientId, packType: "Unit" });
+  });
+
+  it("link search matches name/SKU contains and ranks exact > SKU prefix > name prefix > contains", () => {
+    createProductFromWizard(w.db, ctx(), productInput("ZZ-WIDGET", { name: "Blue thing" }));
+    createProductFromWizard(w.db, ctx(), productInput("WIDGET-2", { name: "Other" }));
+    createProductFromWizard(w.db, ctx(), productInput("AAA-1", { name: "Widget deluxe" }));
+    createProductFromWizard(w.db, ctx(), productInput("WIDGET", { name: "Exact" }));
+    const skus = searchLinkProducts(w.db, auth.scope, { clientId: w.clientId, q: "widget" }).map((r) => r.sku).filter((s) => ["WIDGET", "WIDGET-2", "AAA-1", "ZZ-WIDGET"].includes(s));
+    expect(skus).toEqual(["WIDGET", "WIDGET-2", "AAA-1", "ZZ-WIDGET"]);
+    expect(searchLinkProducts(w.db, auth.scope, { clientId: w.clientId, q: "deluxe" }).map((r) => r.sku)).toEqual(["AAA-1"]);
+    expect(searchLinkProducts(w.db, { ...auth.scope, clientIds: [w.otherClientId] }, { clientId: w.clientId, q: "widget" })).toEqual([]);
+  });
+
+  it("rejects the same barcode on two pack types of one product", () => {
+    expect(() => createProductFromWizard(w.db, ctx(), productInput("BC-5", {
+      packTypes: [unit(["X1"]), { ...newPackType("Hierarchical", []), key: "c", packType: "Case", parentKey: "u", childQty: 12, barcodes: ["X1"] }],
+    }))).toThrow(/two pack types|more than one pack type/);
   });
 
   it("rejects a duplicate SKU for the same client but allows it under another client", () => {

@@ -9,7 +9,7 @@ import type { AppDb } from "@/server/api/db";
 import { AppError } from "@/server/api/errors";
 import type { Scope } from "@/server/auth/scope";
 import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/server/query/filters";
-import type { GridQuery } from "@/server/query/grid-query";
+import { EMPTY_GRID_QUERY, type GridQuery } from "@/server/query/grid-query";
 
 const raw = (expr: string): SQL => sql.raw(expr);
 
@@ -59,6 +59,9 @@ export const RETURN_COLUMN_SQL: Readonly<Record<string, string>> = {
   customerReturnReason: "(SELECT lv.name FROM lookup_values lv WHERE lv.id = rl.customer_return_reason_id)",
   actualReturnReason: "(SELECT lv.name FROM lookup_values lv WHERE lv.id = rl.actual_return_reason_id)",
   version: "ro.version",
+  labelShipmentId: "ro.return_label_shipment_id",
+  labelFileId: "(SELECT s.label_file_id FROM shipments s WHERE s.id = ro.return_label_shipment_id)",
+  labelStatus: "(SELECT s.label_status FROM shipments s WHERE s.id = ro.return_label_shipment_id)",
 };
 
 const FROM = `FROM return_order_lines rl
@@ -123,6 +126,9 @@ export interface ReturnGridRow {
   readonly customerReturnReason: string | null;
   readonly actualReturnReason: string | null;
   readonly version: number;
+  readonly labelShipmentId: string | null;
+  readonly labelFileId: string | null;
+  readonly labelStatus: string | null;
 }
 
 function inList(column: string, ids: readonly string[]): SQL {
@@ -137,9 +143,37 @@ export function returnScopeSql(scope: Scope): SQL {
   return sql.join(parts, sql` AND `);
 }
 
+/**
+ * An RMA can carry several tracking numbers ("1ZRET0001, 1ZRET0002" in `tracking_number`), so
+ * exact matches compare against each number, not the whole stored value.
+ */
+const TRACKING_TOKENS = "(',' || replace(lower(coalesce(ro.tracking_number, '')), ' ', '') || ',')";
+export function trackingTokenSql(values: readonly string[], mode: "exact" | "prefix" = "exact"): SQL {
+  const clean = values.map((v) => v.trim().toLowerCase().replace(/\s+/g, "")).filter(Boolean);
+  if (clean.length === 0) return sql`0`;
+  const parts = clean.map((v) => sql`instr(${raw(TRACKING_TOKENS)}, ${mode === "exact" ? `,${v},` : `,${v}`}) > 0`);
+  return parts.length === 1 ? (parts[0] as SQL) : sql`(${sql.join(parts, sql` OR `)})`;
+}
+
+function trackingFilterSql(f: GridQuery["filters"][number]): SQL | undefined {
+  if (f.field !== "trackingNumber") return undefined;
+  if (f.op === "eq") return trackingTokenSql([f.value]);
+  if (f.op === "in") return trackingTokenSql(f.values);
+  if (f.op === "nin") return sql`NOT ${trackingTokenSql(f.values)}`;
+  return undefined;
+}
+
 export function compileReturnWhere(query: GridQuery, scope: Scope, extra: readonly (SQL | undefined)[] = []): SQL {
-  const search = compileQuickSearch(query.q, query.qm, RETURN_SEARCH_FIELDS.map(exprFor));
-  const filters = compileFilters(RETURN_FILTER_DEFS, query.filters);
+  const baseSearch = compileQuickSearch(query.q, query.qm, RETURN_SEARCH_FIELDS.map(exprFor));
+  const q = query.q?.trim();
+  const search = baseSearch && q && (RETURN_SEARCH_FIELDS as readonly string[]).includes("trackingNumber")
+    ? sql`(${baseSearch} OR ${trackingTokenSql([q], query.qm === "eq" ? "exact" : "prefix")})`
+    : baseSearch;
+  const tracking = query.filters.map(trackingFilterSql);
+  const rest = query.filters.filter((_, i) => tracking[i] === undefined);
+  const generic = compileFilters(RETURN_FILTER_DEFS, rest);
+  const trackingParts = tracking.filter((p): p is SQL => p !== undefined);
+  const filters = trackingParts.length ? sql.join([...(generic ? [generic] : []), ...trackingParts].map((p) => sql`(${p})`), sql` AND `) : generic;
   const parts = [returnScopeSql(scope), search, filters, ...extra].filter((p): p is SQL => p !== undefined);
   return sql.join(parts.map((p) => sql`(${p})`), sql` AND `);
 }
@@ -166,8 +200,13 @@ export function listReturnLines(db: AppDb, scope: Scope, query: GridQuery, extra
   return { rows, total };
 }
 
-/** Count of RMAs (not lines) per status in scope, for the status pills. */
-export function returnStatusCounts(db: AppDb, scope: Scope): Readonly<Record<string, number>> {
-  const rows = db.all<{ status: string; n: number }>(sql`SELECT ro.status AS status, COUNT(*) AS n FROM return_orders ro WHERE ${returnScopeSql(scope)} GROUP BY ro.status`);
+/**
+ * Grid rows (RMA lines) per RMA status, for the status pills. Uses the grid's own FROM and
+ * WHERE (search + every filter except status), so "All lines" always equals the unfiltered
+ * grid Total and each pill equals the Total after picking it.
+ */
+export function returnStatusCounts(db: AppDb, scope: Scope, query: GridQuery = EMPTY_GRID_QUERY): Readonly<Record<string, number>> {
+  const where = compileReturnWhere({ ...query, filters: query.filters.filter((f) => f.field !== "status") }, scope);
+  const rows = db.all<{ status: string; n: number }>(sql`SELECT ro.status AS status, COUNT(*) AS n ${raw(FROM)} WHERE ${where} GROUP BY ro.status`);
   return Object.fromEntries(rows.map((r) => [r.status, r.n]));
 }

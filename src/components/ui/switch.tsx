@@ -21,7 +21,7 @@ export const Switch = React.forwardRef<React.ElementRef<typeof SwitchPrimitive.R
         className={cn(
           "peer relative inline-flex shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors outline-none",
           "bg-border-strong hover:bg-faint data-[state=checked]:bg-primary data-[state=checked]:hover:bg-primary-hover",
-          "focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-1",
+          "focus-visible:ring-2 focus-visible:ring-info/35 focus-visible:ring-offset-1",
           "disabled:cursor-not-allowed disabled:opacity-45",
           size === "sm" ? "h-4 w-7" : "h-5 w-9",
           className

@@ -5,6 +5,36 @@
  */
 import type { LocationRow } from "./ledger/rules";
 
+/**
+ * REQ-J1-1: a zone matches a product group when the zone lists that group in Data Setup.
+ * Zones with no matched groups keep the legacy rule (zone name equals group name). PURE.
+ */
+export function zoneMatchesProductGroup(
+  stats: { readonly zoneName: string | null; readonly zoneProductGroupIds?: ReadonlySet<string> },
+  productGroupId: string | null,
+  productGroupName: string | null,
+): boolean {
+  const ids = stats.zoneProductGroupIds;
+  if (ids && ids.size > 0) return productGroupId !== null && ids.has(productGroupId);
+  return productGroupName !== null && stats.zoneName !== null && productGroupName.toLowerCase() === stats.zoneName.toLowerCase();
+}
+
+/**
+ * Zone "Max locations per SKU" (Data Setup): a location that doesn't hold the product yet is
+ * refused once the product already sits in that many locations of the same zone. Locations that
+ * already hold it stay eligible (topping up never spreads the SKU). PURE.
+ */
+export function zoneSpreadAllows(
+  stats: { readonly location: { readonly id: string; readonly locationZoneId: string | null }; readonly zoneMaxLocationsPerSku?: number | null },
+  productLocationIds: ReadonlySet<string>,
+  productLocationsByZone: ReadonlyMap<string, number>,
+): boolean {
+  const max = stats.zoneMaxLocationsPerSku;
+  const zoneId = stats.location.locationZoneId;
+  if (!max || !zoneId || productLocationIds.has(stats.location.id)) return true;
+  return (productLocationsByZone.get(zoneId) ?? 0) < max;
+}
+
 export interface PutawayItem {
   readonly productId: string;
   readonly clientId: string;
@@ -23,6 +53,12 @@ export interface PutawayItem {
 export interface LocationStats {
   readonly location: LocationRow;
   readonly zoneName: string | null;
+  /** Product groups matched to the location's zone in Data Setup (meta.productGroupIds). */
+  readonly zoneProductGroupIds?: ReadonlySet<string>;
+  /** Data Setup zone priority (lower is visited first); null when the zone has none. */
+  readonly zonePriority?: number | null;
+  /** Data Setup "Max locations per SKU" for the location's zone; null = no limit. */
+  readonly zoneMaxLocationsPerSku?: number | null;
   readonly totalQty: number;
   readonly allocatedQty: number;
   readonly usedVolume: number;
@@ -99,7 +135,7 @@ export const PUTAWAY_ACTIONS: readonly { readonly key: string; readonly label: s
     return has(max <= 0 || after <= max, `allows at most ${max} SKUs`);
   } },
   { key: "checkProductGroupLocationZoneMatch", label: "Check Product Group&Location Zone Match", fn: (c) =>
-    has(c.productGroupName !== null && c.stats.zoneName !== null && c.productGroupName.toLowerCase() === c.stats.zoneName.toLowerCase(), "zone does not match the product group") },
+    has(zoneMatchesProductGroup(c.stats, c.item.productGroupId, c.productGroupName), "zone does not match the product group") },
   { key: "checkSameClient", label: "Check Same Client", fn: (c) => has((c.stats.clients.size === 0 || (c.stats.clients.size === 1 && c.stats.clients.has(c.item.clientId)))
     && (!c.stats.location.dedicatedClientId || c.stats.location.dedicatedClientId === c.item.clientId), "holds another client's stock") },
   { key: "checkSameDamagedReason", label: "Check Same Damaged Reason", fn: (c) => sameAs(c.stats.damageReasons, c.item.damageReason, "damage reason") },

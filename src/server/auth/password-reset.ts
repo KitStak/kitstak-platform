@@ -16,6 +16,7 @@ import { writeAudit } from "./audit";
 import { hashPassword } from "./password";
 import { getPasswordPolicy, validatePassword } from "./password-policy";
 import { bumpSessionVersion } from "./session-store";
+import { sendCompanyMail } from "@/server/repositories/company-mail";
 
 export const RESET_TOKEN_TTL_MINUTES = 30;
 
@@ -36,9 +37,18 @@ export const devLogMailAdapter: MailAdapter = {
   },
 };
 
-let mailAdapter: MailAdapter = devLogMailAdapter;
-export function setMailAdapter(adapter: MailAdapter): void {
+/**
+ * Explicit transport (tests, custom deployments). When none is set, reset emails go through the
+ * company transport (Settings › Company › Email delivery: SMTP, or the server log when SMTP is
+ * not configured), the same path user invites use (admin-settings REQ-R6-3).
+ */
+let mailAdapter: MailAdapter | null = null;
+export function setMailAdapter(adapter: MailAdapter | null): void {
   mailAdapter = adapter;
+}
+
+function adapterFor(db: AppDb): MailAdapter {
+  return mailAdapter ?? { send: (m) => sendCompanyMail(db, m).then(() => undefined) };
 }
 
 export function hashResetToken(token: string): string {
@@ -75,7 +85,7 @@ export async function requestPasswordReset(db: AppDb, input: ResetRequest, now: 
   });
   writeAudit(db, { action: "auth.password_reset.request", entity: "user", entityId: user.id, userId: user.id, ip: input.ip }, now);
   const link = `${input.baseUrl.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(token)}`;
-  await mailAdapter.send({
+  await adapterFor(db).send({
     to: user.email,
     subject: "Reset your KitStak password",
     text: `Use this link within ${RESET_TOKEN_TTL_MINUTES} minutes to set a new password:\n${link}\nIf you did not ask for this, ignore this email.`,

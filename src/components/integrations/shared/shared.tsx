@@ -11,7 +11,11 @@ import { ChevronLeft, ChevronRight, FilePlus2, PencilLine, Trash2 } from "lucide
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { apiRequest, isApiError } from "@/lib/api-client";
 import { useApiQuery } from "@/lib/query-client";
-import { useFormat } from "@/lib/format";
+import { formatPattern, gridDateTimePattern, useFormat } from "@/lib/format";
+import { browserTimeZone } from "@/lib/grid-defs/integrations/time";
+import { PAGE_TAB_GROUPS, type PageTabGroupKey } from "@/config/page-tabs";
+import { useShellAllows } from "@/components/layout/shell-context";
+import type { PageTabItem } from "@/components/ui/tabs";
 import { useMe, usePermissionSet } from "@/lib/permissions-client";
 import { cn } from "@/lib/utils";
 import { bulkSummary, splitCamel, type IntegrationField } from "@/lib/grid-defs/integrations/common";
@@ -57,6 +61,19 @@ export function useLookups(type: string, warehouseId?: string | null): { readonl
   return { rows, options: rows.map((r) => ({ value: r.id, label: r.name })), loading: query.isPending };
 }
 
+const entityRow = z.object({ id: z.string(), name: z.string().nullish(), code: z.string().nullish(), displayName: z.string().nullish() });
+const ENTITY_SOURCES = { retailer: "/api/retailers", package: "/api/shipment-packages" } as const;
+
+/**
+ * Options for rule values that reference records (Retailer, Shipment Package). Users without
+ * the list permission get an empty list (the API answers 403), never an error state.
+ */
+export function useEntityOptions(kind: keyof typeof ENTITY_SOURCES | null): readonly Option[] {
+  const query = useApiQuery<unknown>(["rule-entities", kind ?? "none"], kind ? ENTITY_SOURCES[kind] : null, { query: { ps: 500 }, staleTime: 60_000, retry: false });
+  const parsed = z.array(entityRow).safeParse(query.data?.data);
+  return parsed.success ? parsed.data.map((r) => ({ value: r.id, label: r.name ?? r.displayName ?? r.code ?? r.id })) : [];
+}
+
 /** Pure field list -> filter-builder defs, with page-supplied options for id enums. */
 export function toFilterFields(fields: readonly IntegrationField[], dynamic: Readonly<Record<string, readonly Option[]>> = {}): readonly FilterFieldDef[] {
   return fields.map((f) => {
@@ -68,7 +85,10 @@ export function toFilterFields(fields: readonly IntegrationField[], dynamic: Rea
 /** Permission flags for one catalog page, e.g. `settings.locations`. */
 export function usePagePerms<A extends string>(page: string, actions: readonly A[]): Readonly<Record<A, boolean>> & { readonly loading: boolean } {
   const { permissions, isLoading } = usePermissionSet();
-  const out = Object.fromEntries(actions.map((a) => [a, permissions.has(`${page}.${a}`)])) as Record<A, boolean>;
+  // Optimistic while /api/me is still loading: a slow permissions call must not make the page look
+  // read-only for tens of seconds. Every API re-checks the permission (403 → toast), and controls
+  // settle to the real answer as soon as permissions arrive.
+  const out = Object.fromEntries(actions.map((a) => [a, isLoading || permissions.has(`${page}.${a}`)])) as Record<A, boolean>;
   return { ...out, loading: isLoading };
 }
 
@@ -76,8 +96,16 @@ export const NO_PERMISSION = "You don't have permission for this action";
 
 /* ---------------- cells ---------------- */
 
+/**
+ * Status domain for integration run/call statuses. "No Data" (a run with nothing to send) is not a
+ * failure, so it renders neutral grey through the generic map instead of the integration map's red.
+ */
+export function integrationDomain(status: string | null | undefined): "integration" | "generic" {
+  return (status ?? "").trim().toLowerCase() === "no data" ? "generic" : "integration";
+}
+
 export function YesNo({ value }: { readonly value: boolean | null | undefined }) {
-  return value ? <Badge tone="success" size="sm" shape="pill">Yes</Badge> : <span className="text-[12px] text-faint">No</span>;
+  return value ? <Badge tone="success" size="sm" shape="pill">Yes</Badge> : <Badge tone="neutral" size="sm" shape="pill">No</Badge>;
 }
 
 export function Muted({ children }: { readonly children?: React.ReactNode }) {
@@ -92,6 +120,68 @@ export function Num({ value, decimals = 0, unit }: { readonly value: number | nu
       {unit ? <span className="ml-0.5 text-[11px] text-faint">{unit}</span> : null}
     </span>
   );
+}
+
+/* ---------------- stable route tabs ---------------- */
+
+/**
+ * The page-tab strip of a config group, filtered to what the role can open but never hidden:
+ * the shared `GroupTabs` drops the strip when one tab is left, which shifts the page shell
+ * for viewers. M12 pages keep the bar so the layout is the same for every role.
+ */
+export function useStableGroupTabs(group: PageTabGroupKey): readonly PageTabItem[] {
+  const allows = useShellAllows();
+  return React.useMemo(
+    () => PAGE_TAB_GROUPS[group].filter((t) => allows(t.permission)).map((t) => ({ href: t.href, exact: t.exact, match: t.match, label: t.label })),
+    [group, allows],
+  );
+}
+
+/* ---------------- dates (one formatter for the whole module) ---------------- */
+
+export interface ModuleDates {
+  /** Grid/detail date-time: "11/09/2026 9:21 PM" (user pattern, padded, no seconds). */
+  readonly dateTime: (value: string | number | Date | null | undefined) => string;
+  /** Full precision for tooltips: "11/9/2026 9:21:14 PM". */
+  readonly full: (value: string | number | Date | null | undefined) => string;
+  /** Date only, same padding: "11/09/2026". */
+  readonly date: (value: string | number | Date | null | undefined) => string;
+  /** A `YYYY-MM-DD` local-day key → "11/09/2026" (no zone shift). */
+  readonly day: (key: string) => string;
+}
+
+/**
+ * The single date/time formatter of M12 pages, so Missing Orders, Recent Errors, Setup Details and
+ * the logs all read the same ("11/09/2026 9:21 PM"). Built on the user's format preferences.
+ */
+export function useModuleDates(): ModuleDates {
+  const fmt = useFormat();
+  return React.useMemo(() => {
+    const datePattern = gridDateTimePattern(fmt.prefs.dateFormat).split(/\s+[Hh]/)[0] ?? "MM/DD/YYYY";
+    const day = (key: string) => {
+      const [y, m, d] = key.split("-").map(Number);
+      return y && m && d ? formatPattern(new Date(y, m - 1, d), datePattern) : key;
+    };
+    return {
+      dateTime: (v) => fmt.gridDateTime(v),
+      full: (v) => fmt.dateTime(v),
+      // A date-only value ("2026-12-01": expiry, order date) is a calendar day, not UTC midnight.
+      date: (v) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? day(v) : formatPattern(v, datePattern)),
+      day,
+    };
+  }, [fmt]);
+}
+
+/** A date-time cell: compact text, full timestamp on hover, never truncated. */
+export function DateTimeText({ value, empty = "—" }: { readonly value: string | null | undefined; readonly empty?: string }) {
+  const dates = useModuleDates();
+  if (!value) return <Muted>{empty}</Muted>;
+  return <span className="whitespace-nowrap tabular-nums" title={dates.full(value)}>{dates.dateTime(value)}</span>;
+}
+
+/** The viewer's IANA time zone, sent as `tz` so the server buckets days the way the UI renders them. */
+export function useViewerTimeZone(): string {
+  return React.useMemo(() => browserTimeZone(), []);
 }
 
 /* ---------------- mutations ---------------- */
@@ -185,7 +275,7 @@ export function EntityChangeLogDrawer({ open, onOpenChange, path, title }: { rea
                     ) : (
                       <p className="text-[13px] text-body">{r.message}</p>
                     )}
-                    <p className="mt-0.5 text-[11px] text-faint">{fmt.dateTime(r.at)} · {r.source}</p>
+                    <p className="mt-0.5 text-[11px] text-faint"><span title={fmt.dateTime(r.at)}>{fmt.gridDateTime(r.at)}</span> · {r.source}</p>
                   </div>
                 </li>
               );
@@ -242,4 +332,22 @@ export function StatRow({ stats }: { readonly stats: readonly { readonly label: 
       ))}
     </div>
   );
+}
+
+/** How long a prefetched edit-drawer detail stays fresh, so the drawer opens populated without a remounting refetch. */
+export const DRAWER_DETAIL_STALE_MS = 30_000;
+
+/**
+ * Warms the detail query for each listed connection (same key the edit drawer uses), so opening
+ * Edit renders the tabs immediately instead of a skeleton. Small lists only (connection lists are
+ * per provider); capped at 25 rows.
+ */
+export function usePrefetchDetails(keyPrefix: string, pathPrefix: string, ids: readonly string[]): (id: string) => void {
+  const qc = useQueryClient();
+  const prefetch = React.useCallback((id: string) => {
+    void qc.prefetchQuery({ queryKey: [keyPrefix, id], queryFn: ({ signal }) => apiRequest(`${pathPrefix}/${id}`, { signal }), staleTime: DRAWER_DETAIL_STALE_MS });
+  }, [qc, keyPrefix, pathPrefix]);
+  const joined = ids.slice(0, 25).join(",");
+  React.useEffect(() => { if (joined) for (const id of joined.split(",")) prefetch(id); }, [joined, prefetch]);
+  return prefetch;
 }

@@ -10,7 +10,7 @@
  * `ProductEditDrawer` reuses the same wizards in free mode with the client locked.
  */
 import * as React from "react";
-import { Box, Boxes, Package } from "lucide-react";
+import { Box, Boxes, Info, Package } from "lucide-react";
 import { useApiQuery } from "@/lib/query-client";
 import type { ProductCategory } from "@/lib/grid-defs/products/catalog-options";
 import { emptyProductForm, type ProductFormValues } from "@/lib/grid-defs/products/product-form";
@@ -20,7 +20,8 @@ import { Callout } from "@/components/ui/callout";
 import { Drawer } from "@/components/ui/drawer";
 import { RadioCards } from "@/components/ui/radio-cards";
 import { SkeletonText } from "@/components/ui/skeleton";
-import { ProductWizard } from "./wizard/product-wizard";
+import { DRAWER_WIZARD_BODY, ProductWizard } from "./wizard/product-wizard";
+import { useSlow } from "./catalog-shared";
 
 export interface CreatedProduct {
   readonly id: string;
@@ -48,7 +49,7 @@ export function CategoryChooser({ onPick }: { readonly onPick: (c: ProductCatego
 }
 
 export function categoryBadge(category: ProductCategory): React.ReactNode {
-  return <Badge tone={category === "Kit" ? "info" : category === "Packaging Material" ? "warning" : "primary"} className="ml-2 align-middle">{category === "Packaging Material" ? "Packaging material" : category}</Badge>;
+  return <Badge tone={category === "Kit" ? "info" : category === "Packaging Material" ? "warning" : "neutral"} className="ml-2 align-middle">{category === "Packaging Material" ? "Packaging material" : category}</Badge>;
 }
 
 export interface ProductCreateDrawerProps {
@@ -90,10 +91,11 @@ export function ProductCreateDrawer({ open, onOpenChange, defaultClientId = null
         </span>
       ) : "Product category"}
       description={category ? undefined : "Choose what you are creating."}
+      bodyClassName={category && defaults ? DRAWER_WIZARD_BODY : undefined}
     >
       {category && defaults ? (
-        <div className="flex flex-col gap-3">
-          {initialValues ? <Callout variant="info" title="Duplicating">Every setting was copied. Enter a new SKU and barcodes, then save.</Callout> : null}
+        <div className="flex flex-1 flex-col gap-3">
+          {initialValues ? <div role="status" className="flex items-start gap-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-2.5 text-[13px] leading-5"><Info className="mt-0.5 h-4 w-4 shrink-0 text-secondary" aria-hidden /><div><p className="font-semibold text-foreground">Duplicating</p><p className="mt-0.5 text-secondary">Every setting was copied. Enter a new SKU and barcodes, then save.</p></div></div> : null}
           <ProductWizard
             key={category}
             category={category}
@@ -119,9 +121,10 @@ export function ProductCreateDrawer({ open, onOpenChange, defaultClientId = null
 type FormPayload = ProductFormValues & { id: string; version: number; clientName: string };
 
 export function ProductEditDrawer({ productId, onOpenChange, onSaved }: { readonly productId: string | null; readonly onOpenChange: (open: boolean) => void; readonly onSaved?: (r: { id: string; sku: string; version: number }) => void }) {
-  const q = useApiQuery<FormPayload>(["product-form", productId ?? ""], productId ? `/api/products/${productId}` : null, { query: { view: "form" }, staleTime: 0, gcTime: 0 });
+  const q = useApiQuery<FormPayload>(["product-form", productId ?? ""], productId ? `/api/products/${productId}` : null, { query: { view: "form" }, staleTime: 60_000 });
   const [dirty, setDirty] = React.useState(false);
   const data = q.data?.data;
+  const slow = useSlow(q.isPending && productId !== null);
   return (
     <Drawer
       open={productId !== null}
@@ -131,9 +134,15 @@ export function ProductEditDrawer({ productId, onOpenChange, onSaved }: { readon
       }}
       width={60}
       dirty={dirty}
+      bodyClassName={data && !q.isPending && !q.error ? DRAWER_WIZARD_BODY : undefined}
       title={data ? <span>Edit product <span className="font-mono text-[14px] text-secondary">{data.sku}</span>{categoryBadge(data.productCategory)}</span> : "Edit product"}
     >
-      {q.isPending ? <SkeletonText lines={8} /> : q.error ? (
+      {q.isPending ? (
+        <div className="flex flex-col gap-3">
+          {slow ? <Callout variant="attention" title="This is taking longer than usual" action={<Button size="sm" onClick={() => void q.refetch()}>Retry</Button>}>The server is slow to respond. You can keep waiting or retry.</Callout> : null}
+          <SkeletonText lines={8} />
+        </div>
+      ) : q.error ? (
         <Callout variant="error" title="Could not load the product" action={<Button size="sm" onClick={() => void q.refetch()}>Retry</Button>}>{q.error.message}</Callout>
       ) : data ? (
         <ProductWizard

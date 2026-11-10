@@ -9,13 +9,21 @@ export type AppTone = "violet" | "blue" | "teal" | "amber" | "rose" | "slate" | 
 export interface AppSettingField {
   readonly key: string;
   readonly label: string;
-  readonly type: "number" | "boolean" | "enum" | "text" | "textarea" | "color";
+  readonly type: "number" | "boolean" | "enum" | "text" | "textarea" | "color" | "secret";
   readonly options?: readonly string[];
   readonly min?: number;
   readonly max?: number;
   readonly suffix?: string;
   readonly help?: string;
   readonly required?: boolean;
+  /** Shown (and required, when `required`) only while another field has this value. */
+  readonly showWhen?: { readonly key: string; readonly equals: string };
+  readonly placeholder?: string;
+}
+
+/** True when the field applies to these values (no `showWhen` = always). */
+export function fieldApplies(f: AppSettingField, values: Readonly<Record<string, unknown>>): boolean {
+  return !f.showWhen || values[f.showWhen.key] === f.showWhen.equals;
 }
 
 export interface AppDef {
@@ -43,11 +51,15 @@ export const APP_CATALOG: readonly AppDef[] = [
   },
   {
     key: "custom-branding", icon: "palette", tone: "rose", popular: false,
-    unlocks: ["Your logo and accent color on printouts and emails"],
-    openHref: "/settings/company", openLabel: "Company settings",
+    unlocks: ["Your accent color across the app, on printouts and in emails", "Your logo on printouts and a sign-in page message"],
+    openHref: "/settings/company", openLabel: "Company settings (logo)",
     settings: [
-      { key: "accentColor", label: "Accent color", type: "color", required: true, help: "Used for headings on printouts" },
-      { key: "logoOnPrintouts", label: "Show the company logo on printouts", type: "boolean" },
+      { key: "accentColor", label: "Accent color", type: "color", required: true, help: "Buttons, links and active navigation; printout headings" },
+      { key: "applyToApp", label: "Use the accent color in the app", type: "boolean", help: "Every user sees it after their next page load" },
+      { key: "logoOnPrintouts", label: "Show the company logo on printouts", type: "boolean", help: "The logo comes from Company Settings" },
+      { key: "printoutAccent", label: "Use the accent color for printout headings", type: "boolean" },
+      { key: "loginMessage", label: "Sign-in page message", type: "text", help: "Shown under the sign-in form, e.g. your support contact", placeholder: "Need access? Contact it-help@yourcompany.com" },
+      { key: "emailFooter", label: "Email footer", type: "text", help: "Appended to invites and password emails" },
     ],
   },
   {
@@ -78,13 +90,19 @@ export const APP_CATALOG: readonly AppDef[] = [
   },
   {
     key: "sso", icon: "key", tone: "indigo", popular: false,
-    unlocks: ["Sign-in through your identity provider (SAML 2.0)"],
+    unlocks: ["\"Sign in with SSO\" on the sign-in page (OpenID Connect: Okta, Microsoft Entra ID, Google Workspace, Auth0)", "SAML 2.0 service-provider metadata for your identity provider", "Optionally require SSO for every non-admin user"],
     settings: [
-      { key: "provider", label: "Identity provider", type: "enum", options: ["Okta", "Microsoft Entra ID", "Google Workspace", "Other SAML 2.0"], required: true },
-      { key: "entityId", label: "Identity provider entity ID", type: "text", required: true },
-      { key: "ssoUrl", label: "Single sign-on URL", type: "text", required: true, help: "Starts with https://" },
-      { key: "certificate", label: "X.509 signing certificate", type: "textarea", required: true },
-      { key: "enforce", label: "Require SSO for every non-admin user", type: "boolean" },
+      { key: "protocol", label: "Protocol", type: "enum", options: ["OpenID Connect", "SAML 2.0"], required: true },
+      { key: "provider", label: "Identity provider", type: "enum", options: ["Okta", "Microsoft Entra ID", "Google Workspace", "Auth0", "Other"], required: true },
+      { key: "buttonLabel", label: "Sign-in button label", type: "text", placeholder: "Sign in with Okta", help: "Defaults to \"Sign in with <provider>\"" },
+      { key: "issuer", label: "Issuer URL", type: "text", required: true, showWhen: { key: "protocol", equals: "OpenID Connect" }, help: "KitStak reads <issuer>/.well-known/openid-configuration", placeholder: "https://yourcompany.okta.com" },
+      { key: "clientId", label: "Client ID", type: "text", required: true, showWhen: { key: "protocol", equals: "OpenID Connect" } },
+      { key: "clientSecret", label: "Client secret", type: "secret", required: true, showWhen: { key: "protocol", equals: "OpenID Connect" }, help: "Stored encrypted; never shown again" },
+      { key: "entityId", label: "Identity provider entity ID", type: "text", required: true, showWhen: { key: "protocol", equals: "SAML 2.0" } },
+      { key: "ssoUrl", label: "Single sign-on URL", type: "text", required: true, showWhen: { key: "protocol", equals: "SAML 2.0" }, help: "Starts with https://" },
+      { key: "certificate", label: "X.509 signing certificate", type: "textarea", required: true, showWhen: { key: "protocol", equals: "SAML 2.0" } },
+      { key: "allowedDomains", label: "Allowed email domains", type: "text", help: "Comma-separated, e.g. yourcompany.com. Empty = any domain", placeholder: "yourcompany.com" },
+      { key: "enforce", label: "Require SSO for every non-admin user", type: "boolean", help: "Password sign-in keeps working for admins (break-glass)" },
     ],
   },
   {
@@ -118,11 +136,25 @@ export function getAppDef(key: string): AppDef | undefined {
 export const APP_TABS = ["popular", "active", "all"] as const;
 export type AppTab = (typeof APP_TABS)[number];
 
+/** https://, or http:// on localhost (a local test identity provider). */
+export const isSecureUrl = (raw: string): boolean => /^https:\/\/\S+$/i.test(raw) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/\S*)?$/i.test(raw);
+
 /** zod schema for an app's settings panel, built from its field list. */
-export function appSettingsSchema(def: AppDef) {
+export function appSettingsSchema(def: AppDef, opts: { readonly savedSecrets?: ReadonlySet<string> } = {}) {
   const shape: Record<string, z.ZodType> = {};
+  const conditional: AppSettingField[] = [];
   for (const f of def.settings) {
     let s: z.ZodType;
+    if (f.required && (f.showWhen || f.type === "secret")) conditional.push(f);
+    if (f.type === "secret") {
+      // Blank keeps the saved secret; the server stores it encrypted and returns only a hint.
+      shape[f.key] = z.string().trim().max(2000, "Too long").default("");
+      continue;
+    }
+    if (f.showWhen) {
+      shape[f.key] = f.type === "boolean" ? z.boolean().default(false) : f.type === "number" ? z.number().nullable().optional() : z.string().trim().max(f.type === "textarea" ? 8000 : 300, "Too long").nullable().optional().default("");
+      continue;
+    }
     if (f.type === "number") {
       let n = z.number({ error: `${f.label} must be a number` }).int("Whole number");
       if (f.min !== undefined) n = n.min(f.min, `At least ${f.min}`);
@@ -134,12 +166,23 @@ export function appSettingsSchema(def: AppDef) {
     else {
       let t = z.string().trim().max(f.type === "textarea" ? 8000 : 300, "Too long");
       if (f.required) t = t.min(1, `${f.label} is required`);
-      if (f.key === "ssoUrl") t = t.regex(/^https:\/\//, "Use an https:// URL");
-      s = t;
+      s = f.required ? t : t.optional().default("");
     }
     shape[f.key] = s;
   }
-  return z.object(shape);
+  return z.object(shape).superRefine((v, ctx) => {
+    const values = v as Record<string, unknown>;
+    for (const f of conditional) {
+      if (!fieldApplies(f, values)) continue;
+      const raw = values[f.key];
+      const empty = raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "");
+      if (empty && f.type === "secret" && opts.savedSecrets?.has(f.key)) continue;
+      if (empty) ctx.addIssue({ code: "custom", path: [f.key], message: `${f.label} is required` });
+      else if ((f.key === "ssoUrl" || f.key === "issuer") && typeof raw === "string" && !isSecureUrl(raw)) {
+        ctx.addIssue({ code: "custom", path: [f.key], message: "Use an https:// URL" });
+      }
+    }
+  });
 }
 
 /** Defaults shown the first time a panel opens. */
@@ -150,6 +193,7 @@ export function defaultAppSettings(def: AppDef): Record<string, unknown> {
     else if (f.type === "number") out[f.key] = f.min ?? 1;
     else if (f.type === "enum") out[f.key] = f.options?.[0] ?? "";
     else if (f.type === "color") out[f.key] = "#4F46E5";
+    else if (f.type === "secret") out[f.key] = "";
     else out[f.key] = "";
   }
   return out;

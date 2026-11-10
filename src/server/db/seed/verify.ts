@@ -6,6 +6,10 @@
 import { sql } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import { reconcileLedger } from "@/server/domain/ledger";
+import { countIntegrityIssues } from "@/server/repositories/counts-integrity";
+import { findInventoryHygieneIssues } from "@/server/repositories/inventory-hygiene";
+import { jobsInvariants } from "@/server/repositories/jobs-invariants";
+import { poStatusDrift } from "@/server/repositories/purchase-orders-integrity";
 
 export interface VerifyIssue {
   readonly check: string;
@@ -16,6 +20,27 @@ export interface VerifyIssue {
 export interface VerifyResult {
   readonly issues: readonly VerifyIssue[];
   readonly stats: Readonly<Record<string, number>>;
+  /** Reported but not failing (e.g. empty unreferenced buckets). */
+  readonly warnings?: readonly VerifyIssue[];
+}
+
+/**
+ * Module integrity checks (Round 2 requests): count plans / count jobs / open-count overlaps
+ * (counts REQ-21/26), live jobs without open tasks and stale job orders (fulfillment-jobs R5-2),
+ * POs fully received but not Completed or stuck in Receiving (inbound REQ-R2-9), and bucket
+ * attributes on untracked products or impossible dates (inventory REQ-R2-24).
+ */
+function moduleChecks(db: AppDb): { readonly issues: VerifyIssue[]; readonly warnings: VerifyIssue[] } {
+  const issues: VerifyIssue[] = [...countIntegrityIssues(db)];
+  for (const [check, n] of Object.entries(jobsInvariants(db))) {
+    if (Number(n) > 0) issues.push({ check, id: "jobs", message: `${n} row(s) violate ${check}` });
+  }
+  for (const d of poStatusDrift(db)) {
+    issues.push({ check: "po-status-drift", id: d.code, message: `PO is ${d.status} but should be ${d.expected} (${d.received} of ${d.ordered} received)` });
+  }
+  const warnings: VerifyIssue[] = [];
+  for (const h of findInventoryHygieneIssues(db)) (h.check === "empty-bucket" ? warnings : issues).push({ check: h.check, id: h.id, message: h.message });
+  return { issues, warnings };
 }
 
 interface RawCheck {
@@ -80,5 +105,6 @@ export function verifyDatabase(db: AppDb): VerifyResult {
   const ledgerIssues: VerifyIssue[] = reconcileLedger(db).map((i) => ({ check: i.check, id: i.id, message: i.message }));
   const extra = EXTRA_CHECKS.flatMap((c) => db.all<Record<string, unknown>>(sql.raw(c.sql)).map((row) => ({ check: c.check, id: String(row.id), message: c.message(row) })));
   const stats = Object.fromEntries(Object.entries(STATS).map(([k, q]) => [k, Number(db.get<{ n: number }>(sql.raw(q))?.n ?? 0)]));
-  return { issues: [...ledgerIssues, ...extra], stats };
+  const mod = moduleChecks(db);
+  return { issues: [...ledgerIssues, ...extra, ...mod.issues], stats, warnings: mod.warnings };
 }

@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { EmptyState } from "@/components/ui/empty-state";
 import { DisabledReason } from "@/components/ui/tooltip";
 import { DataGrid, GridToolbar, useGrid, type BulkAction, type RowAction } from "@/components/grid";
-import { ChangeLogDrawer } from "@/components/shared";
+import { PlanChangeLogDrawer } from "./plan-change-log-drawer";
 import { PageHeader } from "@/components/layout/page-header";
 import { useFilterFields, useSeenRows } from "@/components/shipping/shipping-client";
 import { PLAN_EXPORT_COLUMNS, planColumns, planHref } from "./plans-columns";
@@ -55,7 +55,7 @@ export function PlansPage() {
     g.clearSelection();
   }, [g]);
   const a = usePlanActions({ onChanged: refresh });
-  const columns = planColumns({ statusDisabledReason: a.statusReason, onStatus: a.requestStatus });
+  const columns = planColumns({ statusDisabledReason: a.statusReason, onStatus: a.requestStatus, canChangeStatus: a.can.status, canEdit: a.can.edit, onInlineSaved: a.changed, extrasFor: a.departExtra });
 
   const rowActions = (row: PlanRow): readonly RowAction[] => [
     { key: "details", label: "Show details", icon: Eye, href: planHref(row) },
@@ -64,9 +64,10 @@ export function PlansPage() {
     { key: "delete", label: "Delete", icon: Trash2, destructive: true, disabledReason: a.deleteReason([row]), onSelect: () => a.requestDelete([row]) },
   ];
 
+  // Hidden without the permission; red only once a plan is selected (neutral idle toolbar).
   const bulkActions: readonly BulkAction[] = [
-    { key: "delete", label: "Delete", icon: Trash2, destructive: true, emptyReason: "Select at least one shipment plan", eligibility: () => a.deleteReason(selected), onSelect: () => a.requestDelete(selected) },
-    { key: "ship", label: "Ship", icon: Truck, emptyReason: "Select at least one shipment plan", eligibility: () => a.shipReason(selected), onSelect: () => a.requestShip(selected) },
+    ...(a.can.delete ? [{ key: "delete", label: "Delete", icon: Trash2, destructive: selected.length > 0 && !a.deleteReason(selected), emptyReason: "Select at least one shipment plan", eligibility: () => a.deleteReason(selected), onSelect: () => a.requestDelete(selected) } satisfies BulkAction] : []),
+    ...(a.can.ship ? [{ key: "ship", label: "Ship", icon: Truck, emptyReason: "Select at least one shipment plan", eligibility: () => a.shipReason(selected), onSelect: () => a.requestShip(selected) } satisfies BulkAction] : []),
   ];
   const printReason = selected.length === 0 ? "Select at least one shipment plan" : a.printReason(selected);
   const jobsReason = selected.length === 0 ? "Select at least one shipment plan" : a.jobsReason(selected);
@@ -75,10 +76,10 @@ export function PlansPage() {
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
-        title="Shipment plan"
+        title="Shipment Plan"
         helper="Plan trucks and loads: group orders, assign a gate and carrier, track loading and ship the whole load at once."
         tabs="shipment-plans"
-        actions={a.can.create ? <Button onClick={() => setDrawer({ editId: null })}><Plus className="h-3.5 w-3.5" aria-hidden />Create shipment plan</Button> : null}
+        actions={a.can.create ? <Button variant="primary" onClick={() => setDrawer({ editId: null })}><Plus className="h-3.5 w-3.5" aria-hidden />Create shipment plan</Button> : null}
       />
       <GridToolbar
         {...g.toolbarProps}
@@ -89,10 +90,12 @@ export function PlansPage() {
         bulkNoun="shipment plan"
         trailing={
           <>
-            <PrintMenu reason={printReason} onManifest={() => a.print(selected)} />
-            <DisabledReason reason={jobsReason}>
-              <Button variant="secondary" disabled={Boolean(jobsReason)} onClick={() => a.openJobs(selected)}><ListPlus className="h-3.5 w-3.5" aria-hidden />Picking/job operations</Button>
-            </DisabledReason>
+            {a.can.print ? <PrintMenu reason={printReason} onManifest={() => a.print(selected)} /> : null}
+            {a.can.jobs ? (
+              <DisabledReason reason={jobsReason}>
+                <Button variant="secondary" disabled={Boolean(jobsReason)} onClick={() => a.openJobs(selected)}><ListPlus className="h-3.5 w-3.5" aria-hidden />Picking/job operations</Button>
+              </DisabledReason>
+            ) : null}
           </>
         }
       />
@@ -115,7 +118,7 @@ export function PlansPage() {
         />
       </div>
       {drawer ? <PlanDrawer open onOpenChange={(o) => (o ? undefined : setDrawer(null))} editId={drawer.editId} onSaved={refresh} /> : null}
-      {changeLog ? <ChangeLogDrawer open onOpenChange={(o) => (o ? undefined : setChangeLog(null))} entityType="shipment_plan" entityId={changeLog.id} entityCode={changeLog.code} /> : null}
+      {changeLog ? <PlanChangeLogDrawer open onOpenChange={(o) => (o ? undefined : setChangeLog(null))} entityId={changeLog.id} entityCode={changeLog.code} /> : null}
       {a.dialogs}
       <span className="sr-only" aria-live="polite">{g.isFetching ? "Loading shipment plans" : `${g.total} shipment plans`}</span>
     </div>

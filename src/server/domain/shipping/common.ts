@@ -81,7 +81,7 @@ export function applyMarkup(db: AppDb, connection: CarrierConnectionRow, clientI
 }
 
 export interface CallLogInput {
-  readonly step: "LabelGeneration" | "RateCall" | "VoidLabel";
+  readonly step: "LabelGeneration" | "RateCall" | "VoidLabel" | "Tracking" | "Pickup";
   readonly connection: CarrierConnectionRow;
   readonly order: OrderRow | null;
   readonly shipmentId?: string | null;

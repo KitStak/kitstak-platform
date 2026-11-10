@@ -13,6 +13,8 @@ import { consume } from "../ledger/operations";
 import { shipSerials } from "../ledger/serials";
 import { stateMachines } from "../state-machines";
 import { checkScope, type BulkResult, type DomainCtx, type Tx } from "../types";
+import { runWorkflows } from "../workflows";
+import { orderTypeFlags } from "../so-type-flags";
 import { localDate } from "./common";
 
 type ShipmentRow = typeof schema.shipments.$inferSelect;
@@ -87,7 +89,10 @@ export function detachVoidedFromManifest(tx: Tx, ctx: DomainCtx, shipments: read
     const manifest = tx.select().from(m).where(eq(m.id, manifestId)).get();
     if (!manifest || manifest.status !== "Open") continue;
     tx.update(schema.shipments).set({ endOfDayManifestId: null }).where(inArray(schema.shipments.id, ids)).run();
-    tx.update(m).set({ totalPackages: sql`MAX(0, ${m.totalPackages} - ${ids.length})`, updatedBy: ctx.userId }).where(eq(m.id, manifestId)).run();
+    const remaining = tx.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM shipments WHERE end_of_day_manifest_id = ${manifestId}`)?.n ?? 0;
+    // An Open manifest whose every label was voided has nothing to close: drop it (End Of The Day never lists empty manifests).
+    if (Number(remaining) === 0) tx.delete(m).where(and(eq(m.id, manifestId), eq(m.status, "Open"))).run();
+    else tx.update(m).set({ totalPackages: sql`MAX(0, ${m.totalPackages} - ${ids.length})`, updatedBy: ctx.userId }).where(eq(m.id, manifestId)).run();
   }
 }
 
@@ -99,7 +104,19 @@ function shipOne(tx: Tx, ctx: DomainCtx, orderId: string, input: ShipOrdersInput
   const labels = tx.select().from(schema.shipments).where(and(
     eq(schema.shipments.orderId, order.id), eq(schema.shipments.labelType, "Shipping Label"), eq(schema.shipments.labelStatus, "Active"), isNull(schema.shipments.actualShipmentAt),
   )).all();
-  if ((input.requireLabel ?? true) && labels.length === 0) throw new DomainError("INVALID_STATE", `Order ${order.code} has no active shipping label.`);
+  // Shipment Order Type "Allow shipment without label": Ship Order never requires a carrier label for this type.
+  const requireLabel = (input.requireLabel ?? true) && !orderTypeFlags(tx, order.orderTypeId).has("allowShipWithoutLabel");
+  if (requireLabel && labels.length === 0) throw new DomainError("INVALID_STATE", `Order ${order.code} has no active shipping label.`);
+  if (labels.length === 0) {
+    // "Ship without label" is for orders that never had one: a voided label means the parcel
+    // was never handed to the carrier (db:verify shipped_without_label; orders REQ-R6-2).
+    const voided = tx.select({ id: schema.shipments.id }).from(schema.shipments).where(and(
+      eq(schema.shipments.orderId, order.id), eq(schema.shipments.labelType, "Shipping Label"), eq(schema.shipments.labelStatus, "Voided"),
+    )).all();
+    if (voided.length > 0) {
+      throw new DomainError("INVALID_STATE", `Order ${order.code} has no active shipping label (its label was voided). Create a new label before shipping.`);
+    }
+  }
   const allocs = tx.select().from(schema.inventoryAllocations)
     .where(and(eq(schema.inventoryAllocations.orderId, order.id), inArray(schema.inventoryAllocations.status, ["Packed", "Loaded"]))).all();
   if (allocs.length === 0) throw new DomainError("INVALID_STATE", `Nothing is packed for order ${order.code}.`);
@@ -126,6 +143,8 @@ function shipOne(tx: Tx, ctx: DomainCtx, orderId: string, input: ShipOrdersInput
     // Labels are normally linked when they are created; this covers labels created before that.
     attachLabelsToManifest(tx, ctx, labels, at);
   }
+  // M12 "Order Shipped" workflows (Shipped and Partially Shipped; conditions can test Status).
+  runWorkflows(tx, ctx, "Order Shipped", { type: "shipment_order", id: order.id });
 }
 
 export function shipOrders(tx: Tx, ctx: DomainCtx, input: ShipOrdersInput): BulkResult {

@@ -92,9 +92,22 @@ export const generatorSchema = z.object({
     const message = rangeError(v[key] as RangeSpec, label, required);
     if (message) ctx.addIssue({ code: "custom", path: [key, "from"], message });
   }
-  const total = generatorCount(v);
-  if (total > GENERATOR_MAX) ctx.addIssue({ code: "custom", path: ["aisles", "from"], message: `This pattern makes ${total.toLocaleString("en-US")} locations; the limit is ${GENERATOR_MAX.toLocaleString("en-US")}` });
+  const limit = generatorLimitMessage(generatorCount(v));
+  if (limit) ctx.addIssue({ code: "custom", path: ["aisles", "from"], message: limit });
 });
+
+/** "23,166 locations exceeds the 5,000 limit; narrow a range", or null within the limit. */
+export function generatorLimitMessage(count: number): string | null {
+  return count > GENERATOR_MAX ? `${count.toLocaleString("en-US")} locations exceeds the ${GENERATOR_MAX.toLocaleString("en-US")} limit; narrow a range` : null;
+}
+
+/** Collision summary copy. "All 4 codes already exist; nothing to create." when nothing is left. */
+export function generatorCollisionCopy(total: number, collisionCount: number): { readonly title: string; readonly skipLabel: string | null } {
+  const codes = (n: number) => `${n.toLocaleString("en-US")} ${n === 1 ? "code" : "codes"}`;
+  const rest = Math.max(0, total - collisionCount);
+  if (collisionCount > 0 && rest === 0) return { title: collisionCount === 1 ? "This code already exists; nothing to create." : `All ${codes(collisionCount)} already exist; nothing to create.`, skipLabel: null };
+  return { title: `${codes(collisionCount)} already ${collisionCount === 1 ? "exists" : "exist"}`, skipLabel: `Skip existing codes and create the other ${rest.toLocaleString("en-US")}` };
+}
 
 export type GeneratorInput = z.input<typeof generatorSchema>;
 export type GeneratorSpec = z.output<typeof generatorSchema>;
@@ -105,7 +118,10 @@ function safeExpand(range: RangeSpec): readonly (string | null)[] {
   return rangeError(range, "x", false) ? [] : expandRange(range);
 }
 
+/** Aisle × rack × level × position count; can exceed GENERATOR_MAX (the schema rejects that). */
 export function generatorCount(spec: PatternParts): number {
+  // Aisle and rack are required segments: until both are typed the pattern makes nothing.
+  if (rangeError(spec.aisles, "x", true) || rangeError(spec.racks, "x", true)) return 0;
   return safeExpand(spec.aisles).length * safeExpand(spec.racks).length * safeExpand(spec.levels).length * safeExpand(spec.positions).length;
 }
 
@@ -140,9 +156,10 @@ export const GENERATOR_DEFAULTS: GeneratorInput = {
   warehouseId: "",
   zone: "",
   separator: "-",
-  aisles: { from: "A", to: "B" },
-  racks: { from: "01", to: "03" },
-  levels: { from: "1", to: "2" },
+  // Empty on purpose: the preview stays at 0 until a range is typed (no accidental sample bins).
+  aisles: { from: "", to: "" },
+  racks: { from: "", to: "" },
+  levels: { from: "", to: "" },
   positions: { from: "", to: "" },
   locationType: "Shelves",
   areaType: "Picking",

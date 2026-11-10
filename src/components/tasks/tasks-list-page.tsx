@@ -6,7 +6,7 @@
  * the count plan) and replenishment (50, Cancel Task). Default chip: Job status in Pending, Started.
  */
 import * as React from "react";
-import { Info, Workflow } from "lucide-react";
+import { Info, Sparkles, Workflow } from "lucide-react";
 import { LinkCell } from "@/components/grid/cells";
 import { EmptyState } from "@/components/ui/empty-state";
 import { COUNT_TASK_COLUMNS, ORDER_TASK_COLUMNS, REPLEN_TASK_COLUMNS, exportColumns, type JobsColumnDef } from "@/lib/grid-defs/jobs/columns";
@@ -15,6 +15,19 @@ import { buildColumns, Dash, ShortPill, type CellRenderer } from "@/components/j
 import type { GridRow } from "@/components/jobs/jobs-client";
 import { ListShell } from "@/components/jobs/list-shell";
 import { TaskActions, type TaskFacts } from "./task-actions";
+
+/**
+ * Count rows are location/SKU lines (row id "task:product"); actions work on the task, so the
+ * selection is folded back to one entry per task id.
+ */
+function byTask<T extends { readonly id: string; readonly taskId?: unknown }>(rows: readonly T[]): T[] {
+  const seen = new Map<string, T>();
+  for (const r of rows) {
+    const id = typeof r.taskId === "string" && r.taskId ? r.taskId : r.id;
+    if (!seen.has(id)) seen.set(id, { ...r, id });
+  }
+  return [...seen.values()];
+}
 
 export type TaskRow = GridRow & TaskFacts & { readonly orderId: string | null; readonly countPlanId: string | null; readonly productImage?: string | null };
 
@@ -28,6 +41,19 @@ const CELLS: Readonly<Record<string, CellRenderer<TaskRow>>> = {
   // Task ID is an identifier: no thousands separator ("1397", not "1,397").
   taskNo: ({ getValue }) => <span className="font-medium tabular-nums text-foreground">{getValue() == null ? "—" : String(getValue())}</span>,
   jobCode: link((r) => (r.jobId ? `/jobs/${encodeURIComponent(r.jobId)}` : null), "jobCode"),
+  // Critic R3: Wave ID opens the wave log filtered to that wave, like Job code and Order code open their records.
+  waveNumber: link((r) => (r.waveNumber && !String(r.waveNumber).startsWith("Manual") ? `/jobs/wave-log?q=${encodeURIComponent(String(r.waveNumber))}&qm=eq` : null), "waveNumber"),
+  jobType: ({ row }) => {
+    const v = row.original.jobType;
+    if (!v) return <Dash />;
+    const ai = String(v).startsWith("AI-");
+    return (
+      <span className="flex min-w-0 items-center gap-1" title={ai && row.original.aiJobDescription ? String(row.original.aiJobDescription) : String(v)}>
+        {ai ? <Sparkles className="h-3 w-3 shrink-0 text-[#5B3DB5] dark:text-[#C7B5FF]" aria-label="AI job" /> : null}
+        <span className="truncate">{String(v)}</span>
+      </span>
+    );
+  },
   orderCode: link((r) => (r.orderCode ? `/orders/${encodeURIComponent(String(r.orderCode))}` : null), "orderCode"),
   countPlanCode: link((r) => (r.countPlanId ? `/counts/${encodeURIComponent(r.countPlanId)}` : null), "countPlanCode"),
   sku: link((r) => (r.sku ? `/products?q=${encodeURIComponent(String(r.sku))}&qm=eq` : null), "sku"),
@@ -84,9 +110,9 @@ export function TasksListPage({ kind }: { readonly kind: TaskKind }) {
       searchPlaceholder={spec.searchPlaceholder}
       defaultFilters={[TASK_DEFAULT_FILTER]}
       noun={copy.noun}
-      selectable={kind !== "count"}
+      selectable
       rowHref={kind === "count" ? (row) => (row.countPlanId ? `/counts/${encodeURIComponent(row.countPlanId)}` : null) : undefined}
-      trailing={kind === "count" ? undefined : ({ selected, refresh }) => <TaskActions tasks={selected} onChanged={refresh} mode={kind === "replenishment" ? "replenishment" : "order"} />}
+      trailing={({ selected, refresh }) => <TaskActions tasks={byTask(selected)} onChanged={refresh} mode={kind} />}
       emptyTitle={copy.empty}
       emptyDescription="Tasks appear here when a wave or a manual allocation creates jobs."
       emptyAction={<EmptyState compact title="" cards={[{ title: "Run a wave rule", description: "Create jobs and their tasks from open orders.", icon: Workflow, href: "/jobs/wave-rules" }]} />}

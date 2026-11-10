@@ -2,10 +2,10 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertCircle, Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Tooltip } from "@/components/ui/tooltip";
+import { SsoButton } from "./sso-sign-in";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { validateLogin, type LoginField, type LoginFieldErrors } from "./login-schema";
@@ -33,7 +33,6 @@ function isLoginResponse(value: unknown): value is LoginResponse {
   );
 }
 
-const SSO_DISABLED_REASON = "SSO isn't configured for this workspace";
 
 /** Only allow same-origin relative paths as a post-login destination. */
 function safeNextPath(raw: string | null): string {
@@ -239,15 +238,7 @@ export function LoginForm({ showDemoCredentials = false }: LoginFormProps): Reac
           <span className="h-px flex-1 bg-border" />
         </div>
 
-        <Tooltip content={SSO_DISABLED_REASON}>
-          <span tabIndex={0} aria-label={SSO_DISABLED_REASON} className="mt-5 flex w-full cursor-not-allowed rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
-            {/* pointer-events-none: a disabled button swallows hover, so the span drives the tooltip. */}
-            <Button type="button" size="lg" className="pointer-events-none w-full" disabled>
-              <KeyRound className="h-4 w-4 text-secondary" aria-hidden />
-              Log in with SSO
-            </Button>
-          </span>
-        </Tooltip>
+        <SsoButton />
       </div>
 
       {showDemoCredentials ? (

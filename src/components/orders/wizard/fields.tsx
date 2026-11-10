@@ -5,8 +5,8 @@
  * reads as a field list. Every wrapper shows the inline error under its control (0.3).
  */
 import * as React from "react";
-import type { FieldValues, Path } from "react-hook-form";
-import { FormField } from "@/components/ui/form";
+import { useFormContext, type FieldValues, type Path } from "react-hook-form";
+import { FieldLabel, FormField } from "@/components/ui/form";
 import { Combobox, type ComboboxOption, type LoadOptions } from "@/components/ui/combobox";
 import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { NumberInput } from "@/components/ui/number-input";
@@ -30,7 +30,7 @@ export interface FieldBase {
 
 const p = (name: string) => name as Path<V>;
 
-export function TextF({ maxLength, placeholder, trailing, onValue, readOnly, ...b }: FieldBase & { readonly maxLength?: number; readonly placeholder?: string; readonly trailing?: React.ReactNode; readonly onValue?: (v: string) => void; readonly readOnly?: boolean }) {
+export function TextF({ maxLength, placeholder, trailing, onValue, readOnly, hideCount, ...b }: FieldBase & { readonly hideCount?: boolean; readonly maxLength?: number; readonly placeholder?: string; readonly trailing?: React.ReactNode; readonly onValue?: (v: string) => void; readonly readOnly?: boolean }) {
   return (
     <FormField<V> name={p(b.name)} label={b.label} required={b.required} info={b.info} description={b.description} disabled={b.disabled} className={b.className}>
       {(c) => (
@@ -42,7 +42,7 @@ export function TextF({ maxLength, placeholder, trailing, onValue, readOnly, ...
             onValue?.((e as unknown as React.ChangeEvent<HTMLInputElement>).target.value);
           }}
           maxLength={maxLength}
-          showCount={Boolean(maxLength) && !readOnly}
+          showCount={Boolean(maxLength) && !readOnly && !hideCount}
           placeholder={placeholder}
           trailing={trailing}
           readOnly={readOnly}
@@ -61,6 +61,7 @@ export function AreaF({ maxLength, placeholder, rows = 3, ...b }: FieldBase & { 
 }
 
 export function NumF({ decimals = 0, min = 0, max, suffix, placeholder, hideStepper, ...b }: FieldBase & { readonly decimals?: number; readonly min?: number; readonly max?: number; readonly suffix?: React.ReactNode; readonly placeholder?: string; readonly hideStepper?: boolean }) {
+  const form = useFormContext<V>();
   return (
     <FormField<V> name={p(b.name)} label={b.label} required={b.required} info={b.info} description={b.description} disabled={b.disabled} className={b.className}>
       {(c) => (
@@ -68,7 +69,19 @@ export function NumF({ decimals = 0, min = 0, max, suffix, placeholder, hideStep
           id={c.id}
           ref={c.ref as React.Ref<HTMLInputElement>}
           value={(c.value as number | null) ?? null}
-          onChange={(v) => c.onChange(v)}
+          onChange={(v) => {
+            c.onChange(v);
+            // Out-of-range entry shows its inline error while typing (the input clamps on blur).
+            // (The wizard validates per step on Next, so the range error is set here directly.)
+            const label = typeof b.label === "string" ? b.label : "Value";
+            if (v !== null && min !== undefined && v < min) {
+              form.setError(p(b.name), { type: "range", message: min === 0 ? `${label} can't be negative` : `${label} must be at least ${min}` });
+            } else if (v !== null && max !== undefined && v > max) {
+              form.setError(p(b.name), { type: "range", message: `${label} can be at most ${max}` });
+            } else if (form.getFieldState(p(b.name)).error?.type === "range") {
+              form.clearErrors(p(b.name));
+            }
+          }}
           onBlur={c.onBlur}
           invalid={c.invalid}
           disabled={c.disabled}
@@ -202,6 +215,19 @@ export function ChipsF({ placeholder, maxItems = 50, ...b }: FieldBase & { reado
         />
       )}
     </FormField>
+  );
+}
+
+/** A form-aligned read-only value (Logiwa shows locked header fields as plain text, not disabled dropdowns). */
+export function StaticF({ label, value, info, description }: { readonly label: React.ReactNode; readonly value: React.ReactNode; readonly info?: React.ReactNode; readonly description?: React.ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <FieldLabel info={info}>{label}</FieldLabel>
+      <span className="flex h-8 min-w-0 items-center truncate text-[13px] font-medium text-foreground" title={typeof value === "string" ? value : undefined}>
+        {value === null || value === undefined || value === "" ? "—" : value}
+      </span>
+      {description ? <p className="text-[11px] text-faint">{description}</p> : null}
+    </div>
   );
 }
 

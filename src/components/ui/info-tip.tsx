@@ -9,11 +9,13 @@ import { Tooltip, type TooltipProps } from "./tooltip";
 export function InfoTip({ content, label = "More information", side = "top", className }: { readonly content: React.ReactNode; readonly label?: string; readonly side?: TooltipProps["side"]; readonly className?: string }) {
   return (
     <Tooltip content={content} side={side}>
+      {/* Hover/focus reveals the tip; a click has nothing to do by design (dead-click audit opt-out). */}
       <button
         type="button"
+        data-audit-skip=""
         aria-label={label}
         className={cn(
-          "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-faint transition-colors hover:text-secondary focus-visible:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+          "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-faint transition-colors hover:text-secondary focus-visible:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30",
           className
         )}
       >

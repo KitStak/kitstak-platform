@@ -12,6 +12,10 @@ import type { AppDb } from "@/server/api/db";
 import * as s from "@/server/db/schema";
 import { recordUpdate } from "@/server/domain/change-log";
 import { describeError } from "@/server/domain/errors";
+import { notify } from "@/server/domain/notify";
+import { catalogError } from "@/lib/grid-defs/integrations/monitoring";
+import { brandText } from "@/lib/grid-defs/integrations/common";
+import { classifyImportError, isInternalDbText, repeatedFailures, type ClassifiedImportError } from "@/lib/grid-defs/integrations/import-errors";
 import { createOrder } from "@/server/domain/orders/create-update";
 import { ensureProductForListing } from "@/server/domain/products";
 import { systemCtx, type DomainCtx } from "@/server/domain/types";
@@ -20,6 +24,14 @@ import { decryptCredentials } from "../crypto";
 import { sandboxAdapter } from "../sandbox";
 import { shipstationAdapter } from "../shipstation";
 import { shopifyAdapter } from "../shopify";
+import { amazonAdapter } from "../amazon";
+import { ebayAdapter } from "../ebay";
+import { walmartAdapter } from "../walmart";
+import { woocommerceAdapter } from "../woocommerce";
+import { bigcommerceAdapter } from "../bigcommerce";
+import { etsyAdapter } from "../etsy";
+import { magentoAdapter } from "../magento";
+import { tiktokAdapter } from "../tiktok";
 
 export type ChannelMethod = (typeof CHANNEL_METHODS)[number];
 export type MethodRow = typeof s.channelMethods.$inferSelect;
@@ -29,16 +41,27 @@ export const DEFAULT_INTERVALS: Readonly<Record<ChannelMethod, number>> = {
   "Download Orders": 15, "Download Products": 1440, "Sync Inventory": 60, "Send Shipment Info": 30,
 };
 
-const LIVE_ADAPTERS: Readonly<Record<string, ChannelAdapter>> = { shopify: shopifyAdapter, shipstation: shipstationAdapter };
+const LIVE_ADAPTERS: Readonly<Record<string, ChannelAdapter>> = {
+  shopify: shopifyAdapter, shipstation: shipstationAdapter, amazon: amazonAdapter, walmart: walmartAdapter, woocommerce: woocommerceAdapter, ebay: ebayAdapter,
+  tiktok: tiktokAdapter, magento: magentoAdapter, bigcommerce: bigcommerceAdapter, etsy: etsyAdapter,
+};
 export const LIVE_PROVIDERS: ReadonlySet<string> = new Set(Object.keys(LIVE_ADAPTERS));
 export const isSandbox = (c: Pick<ChannelConnectionRow, "distribution">) => c.distribution === "API";
+/**
+ * Demo feed: a store of a live channel saved without credentials (the seeded demo stores). It is
+ * runnable: Run, Simulate error and the scheduler use KitStak's deterministic demo feed against the
+ * client's real SKUs, until real credentials are saved and the live adapter takes over.
+ * Connecting through the wizard always stores credentials, so a user's live store never falls back.
+ */
+export const isDemoFeed = (c: Pick<ChannelConnectionRow, "distribution" | "credentialsEnc">) => !isSandbox(c) && !c.credentialsEnc;
+/** A sandbox or demo-feed store: simulated traffic, so Download Orders offers "Simulate error". */
+export const isSimulated = (c: Pick<ChannelConnectionRow, "distribution" | "credentialsEnc">) => isSandbox(c) || isDemoFeed(c);
 
 /** Why the scheduler can't run a connection (null = runnable). */
 export function pauseReason(c: Pick<ChannelConnectionRow, "distribution" | "credentialsEnc" | "provider" | "isActive">): string | null {
   if (!c.isActive) return "The store connection is inactive";
-  if (isSandbox(c)) return null;
+  if (isSimulated(c)) return null;
   if (!LIVE_PROVIDERS.has(c.provider)) return "This channel has no live API adapter yet";
-  if (!c.credentialsEnc) return "No credentials stored — reconnect the store";
   return null;
 }
 
@@ -48,12 +71,22 @@ function sandboxSkus(db: AppDb, clientId: string) {
     .map((p) => ({ sku: p.sku, title: p.title, price: p.price ?? 0 }));
 }
 
+/** A demo feed keeps the store's own mapped locations and listing ids. */
+function demoFeedOptions(db: AppDb, c: ChannelConnectionRow) {
+  const locations = db.select({ id: s.channelLocationMappings.channelLocationId, name: s.channelLocationMappings.channelLocationName }).from(s.channelLocationMappings)
+    .where(eq(s.channelLocationMappings.connectionId, c.id)).all();
+  const listingIds = new Map(db.select({ sku: s.productListings.sellerSku, id: s.productListings.channelProductId }).from(s.productListings)
+    .where(eq(s.productListings.channelConnectionId, c.id)).all().map((x) => [x.sku, x.id] as const));
+  return { demo: true, locations, listingIds };
+}
+
 export function adapterFor(db: AppDb, c: ChannelConnectionRow): ChannelAdapter | null {
   if (isSandbox(c)) return sandboxAdapter(sandboxSkus(db, c.clientId));
+  if (isDemoFeed(c)) return sandboxAdapter(sandboxSkus(db, c.clientId), demoFeedOptions(db, c));
   return LIVE_ADAPTERS[c.provider] ?? null;
 }
 
-const CHANNEL_OF: Readonly<Record<string, (typeof ORDER_CHANNELS)[number]>> = { shopify: "Shopify", amazon: "Amazon", tiktok: "TikTok Shop", walmart: "Walmart" };
+const CHANNEL_OF: Readonly<Record<string, (typeof ORDER_CHANNELS)[number]>> = { shopify: "Shopify", amazon: "Amazon", tiktok: "TikTok Shop", walmart: "Walmart", ebay: "eBay", woocommerce: "WooCommerce", shipstation: "ShipStation", etsy: "Etsy", bigcommerce: "BigCommerce" };
 const PREFIX: Readonly<Record<string, string>> = { shopify: "SPY", shipstation: "SS", amazon: "AMZ", woocommerce: "WOO", walmart: "WMT", tiktok: "TTS", ebay: "EBY", etsy: "ETS" };
 const refOf = (c: ChannelConnectionRow, o: ChannelOrder) => `${isSandbox(c) ? "SBX" : PREFIX[c.provider] ?? "CH"}-${o.id.replace(/\D/g, "").slice(-13) || o.id}`;
 const channelOrderIdOf = (raw: unknown): string | null => {
@@ -61,6 +94,12 @@ const channelOrderIdOf = (raw: unknown): string | null => {
   const v = r.kitstaks_ref ?? r.id ?? r.orderId;
   return typeof v === "string" || typeof v === "number" ? String(v) : null;
 };
+
+/** Error text safe to show operators: database/driver internals are replaced by a plain-language message. */
+function safeMessage(error: unknown): string {
+  const { message } = describeError(error);
+  return isInternalDbText(message) ? classifyImportError(error).message : message;
+}
 
 class OrderSkip extends Error {
   readonly code: string;
@@ -71,7 +110,7 @@ interface RunCounters { success: number; error: number; total: number }
 
 function addItem(db: AppDb, runId: string, item: { success: boolean; properties: Record<string, unknown>; error?: string | null; storeOrderNumber?: string | null; sellerSku?: string | null; qty?: number | null }) {
   db.insert(s.channelRunItems).values({
-    runId, success: item.success, properties: JSON.stringify(item.properties), errorMessage: item.error ?? null,
+    runId, success: item.success, properties: JSON.stringify(item.properties), errorMessage: item.error ? brandText(item.error) : null,
     storeOrderNumber: item.storeOrderNumber ?? null, sellerSku: item.sellerSku ?? null, qty: item.qty ?? null,
   }).run();
 }
@@ -80,7 +119,7 @@ function upsertMissing(db: AppDb, c: ChannelConnectionRow, o: ChannelOrder, code
   const m = s.channelMissingOrders;
   const raw = o.raw && typeof o.raw === "object" ? o.raw : { order: o.raw };
   const existing = db.select().from(m).where(and(eq(m.connectionId, c.id), eq(m.channelOrderNumber, o.number))).get();
-  const values = { lastErrorCode: code, payload: JSON.stringify(raw), lastUpdated: new Date().toISOString(), status: "Error" as const };
+  const values = { lastErrorCode: brandText(code), payload: JSON.stringify(raw), lastUpdated: new Date().toISOString(), status: "Error" as const };
   if (existing) db.update(m).set(values).where(eq(m.id, existing.id)).run();
   else db.insert(m).values({ connectionId: c.id, orderCode: refOf(c, o), channelOrderNumber: o.number, orderDate: o.createdAt, ...values }).run();
 }
@@ -127,12 +166,12 @@ function importOrder(db: AppDb, ctx: DomainCtx, c: ChannelConnectionRow, setting
       try {
         products.set(sku, ensureProductForListing(db, ctx, { clientId: c.clientId, sellerSku: sku, name: l.title, price: l.price }).product.id);
       } catch {
-        throw new OrderSkip("One or more SKUs could not be created in KitStaks", `'${sku}' could not be created`);
+        throw new OrderSkip("One or more SKUs could not be created in KitStak", `'${sku}' could not be created`);
       }
     } else missing.push(sku);
   }
   if (missing.length > 0 && (!settings.orders.partialOrders || missing.length === open.length)) {
-    throw new OrderSkip("One or more SKUs in the order were not found in KitStaks", `SKU not found: ${missing.join(", ")}`);
+    throw new OrderSkip("One or more SKUs in the order were not found in KitStak", `SKU not found: ${missing.join(", ")}`);
   }
   const lines = open.filter((l) => products.has(l.sku as string)).map((l) => ({ productId: products.get(l.sku as string) as string, quantity: l.quantity - l.fulfilledQuantity, unitPrice: l.price }));
   const type = settings.orders.shipmentOrderType.toUpperCase().includes("B2B") ? "B2B" : "D2C";
@@ -143,7 +182,7 @@ function importOrder(db: AppDb, ctx: DomainCtx, c: ChannelConnectionRow, setting
     shipCountry: o.shipTo.country || "United States", orderType: type, priority: "None", orderDate: o.createdAt, note: [o.note, missing.length > 0 ? `Partial order: ${missing.join(", ")} not found` : null].filter(Boolean).join("\n") || null,
     skipAddressVerification: settings.orders.skipAddressVerification, isGift: o.isGift, warehouseId: mapping.warehouseId, clientId: c.clientId, lines,
     channelConnectionId: c.id, channelPaymentStatus: o.financialStatus ? o.financialStatus.slice(0, 50) : null,
-  }, { trigger: "Shipment Order Created" });
+  }, { trigger: "Shipment Order Imported" });
   return { code: created.code, lines: lines.length };
 }
 
@@ -153,24 +192,67 @@ async function downloadOrders(db: AppDb, c: ChannelConnectionRow, adapter: Chann
   const since = settings.orders.downloadFrom ?? method.lastSuccessAt ?? null;
   const orders = onlyOrders ?? (await adapter.fetchOrders(actx, since));
   const ctx = systemCtx("Integration");
+  const failedCodes: string[] = [];
   for (const o of orders) {
     if (settings.paymentStatuses.length > 0 && !settings.paymentStatuses.map((p) => p.toLowerCase()).includes(o.financialStatus.toLowerCase())) continue;
     try {
-      const res = db.transaction((tx) => importOrder(tx, ctx, c, settings, o));
+      const res = importWithRetry(db, ctx, c, settings, o);
       counters.success++; counters.total++;
       db.transaction((tx) => { resolveMissing(tx, c, o.number); addItem(tx, runId, { success: true, properties: { orderCode: res.code, storeOrderNumber: o.number, lines: res.lines }, storeOrderNumber: o.number }); });
     } catch (error) {
       if (error instanceof OrderSkip && error.code === "__duplicate") continue;
-      const code = error instanceof OrderSkip ? error.code : "Unexpected Error";
-      const message = error instanceof OrderSkip ? error.message : describeError(error).message;
+      // Never surface SQL/driver text: classify into a catalog code + plain-language message.
+      const classified: ClassifiedImportError = error instanceof OrderSkip ? { code: error.code, message: error.message, retryable: false } : classifyImportError(error);
+      const { code, message } = classified;
       counters.error++; counters.total++;
+      failedCodes.push(code);
       db.transaction((tx) => {
         upsertMissing(tx, c, o, code);
         addItem(tx, runId, { success: false, properties: { storeOrderNumber: o.number, channelOrderId: o.id }, error: message === code ? code : `${code}: ${message}`, storeOrderNumber: o.number });
       });
     }
   }
+  alertRepeatedFailures(db, c, failedCodes);
   return counters;
+}
+
+const IMPORT_ATTEMPTS = 3;
+const ALERT_DEDUPE_HOURS = 6;
+const ALERT_KIND = "integration.repeated_failure";
+
+/** Imports one order in its own transaction; transient failures (order-code collision, busy DB) are retried. */
+function importWithRetry(db: AppDb, ctx: DomainCtx, c: ChannelConnectionRow, settings: ChannelSettings, o: ChannelOrder): { code: string; lines: number } {
+  let last: unknown = null;
+  for (let attempt = 0; attempt < IMPORT_ATTEMPTS; attempt++) {
+    try {
+      return db.transaction((tx) => importOrder(tx, ctx, c, settings, o));
+    } catch (error) {
+      if (error instanceof OrderSkip || !classifyImportError(error).retryable) throw error;
+      last = error;
+    }
+  }
+  throw last;
+}
+
+/** One alert per store + code every few hours when the same failure repeats within a run. */
+function alertRepeatedFailures(db: AppDb, c: ChannelConnectionRow, codes: readonly string[]) {
+  for (const { code, count } of repeatedFailures(codes)) {
+    const marker = `[${c.id}:${code}]`;
+    const since = new Date(Date.now() - ALERT_DEDUPE_HOURS * 3_600_000).toISOString();
+    try {
+      const n = s.notifications;
+      const recent = db.select({ id: n.id }).from(n)
+        .where(and(eq(n.kind, ALERT_KIND), sql`instr(${n.body}, ${marker}) > 0`, sql`${n.createdAt} >= ${since}`)).get();
+      if (recent) continue;
+      db.transaction((tx) => notify(tx, { roleKey: "admin" }, {
+        kind: ALERT_KIND, severity: "error", title: `${c.storeName}: ${count} orders failed with "${code}"`.slice(0, 200),
+        body: `${catalogError(code).recommendedAction} ${marker}`.slice(0, 2000),
+        href: `/integrations/monitoring/missing-orders?f.connectionId=in:${encodeURIComponent(c.id)}`,
+      }));
+    } catch {
+      // Alerting must never fail the run.
+    }
+  }
 }
 
 async function downloadProducts(db: AppDb, c: ChannelConnectionRow, adapter: ChannelAdapter, actx: AdapterContext, runId: string): Promise<RunCounters> {
@@ -199,7 +281,7 @@ async function downloadProducts(db: AppDb, c: ChannelConnectionRow, adapter: Cha
       counters.success++;
     } catch (error) {
       counters.error++;
-      addItem(db, runId, { success: false, properties: { sku: p.sku, channelProductId: p.id }, error: `'${p.sku}' could not be created: ${describeError(error).message}`, sellerSku: p.sku });
+      addItem(db, runId, { success: false, properties: { sku: p.sku, channelProductId: p.id }, error: `'${p.sku}' could not be created: ${safeMessage(error)}`, sellerSku: p.sku });
     }
   }
   return counters;
@@ -271,8 +353,8 @@ async function sendShipments(db: AppDb, c: ChannelConnectionRow, adapter: Channe
       counters.success++;
     } catch (error) {
       counters.error++;
-      db.update(ol).set({ storeUpdateNotes: describeError(error).message.slice(0, 300) }).where(inArray(ol.id, lines.map((x) => x.l.id))).run();
-      addItem(db, runId, { success: false, properties: { orderCode: o.code, trackingNumber: tracking }, error: describeError(error).message, storeOrderNumber: o.storeOrderNumber });
+      db.update(ol).set({ storeUpdateNotes: safeMessage(error).slice(0, 300) }).where(inArray(ol.id, lines.map((x) => x.l.id))).run();
+      addItem(db, runId, { success: false, properties: { orderCode: o.code, trackingNumber: tracking }, error: safeMessage(error), storeOrderNumber: o.storeOrderNumber });
     }
   }
   return counters;
@@ -296,7 +378,7 @@ function nextRunAt(intervalMinutes: number, from: Date): string {
 }
 
 /** Runs one channel method now (scheduler or manual Run). Never throws; failures become a run row. */
-export async function runChannelMethod(db: AppDb, methodId: string, opts: { readonly manual: boolean; readonly now?: Date; readonly onlyOrders?: readonly ChannelOrder[] } = { manual: true }): Promise<RunSummary> {
+export async function runChannelMethod(db: AppDb, methodId: string, opts: { readonly manual: boolean; readonly now?: Date; readonly onlyOrders?: readonly ChannelOrder[]; readonly simulateError?: boolean } = { manual: true }): Promise<RunSummary> {
   const now = opts.now ?? new Date();
   const m = s.channelMethods;
   const method = db.select().from(m).where(eq(m.id, methodId)).get();
@@ -322,7 +404,7 @@ export async function runChannelMethod(db: AppDb, methodId: string, opts: { read
   const run = startRun("Processing");
   const settings = channelSettingsSchema.parse(c.settings ?? {});
   const runNumber = db.select({ n: sql<number>`COUNT(*)` }).from(s.channelRuns).where(eq(s.channelRuns.methodId, method.id)).get()?.n ?? 1;
-  const actx: AdapterContext = { connection: c, credentials: decryptCredentials(c.credentialsEnc), settings, runNumber: Number(runNumber), now };
+  const actx: AdapterContext = { connection: c, credentials: decryptCredentials(c.credentialsEnc), settings, runNumber: Number(runNumber), now, simulateError: opts.simulateError === true && isSimulated(c), manual: opts.manual };
   let counters: RunCounters = { success: 0, error: 0, total: 0 };
   let status: RunStatus;
   let message: string | null = null;
@@ -335,7 +417,7 @@ export async function runChannelMethod(db: AppDb, methodId: string, opts: { read
   } catch (error) {
     const unauthorized = error instanceof ChannelApiError && (error.status === 401 || error.status === 403);
     status = unauthorized ? "Unauthorized" : "Failed";
-    message = describeError(error).message;
+    message = safeMessage(error);
     counters = { success: counters.success, error: counters.error + 1, total: counters.total + 1 };
     addItem(db, run.id, { success: false, properties: { method: method.method }, error: message });
   }
@@ -369,14 +451,14 @@ export async function retryMissingOrders(db: AppDb, ids: readonly string[]): Pro
     }
     for (const r of list) db.update(mo).set({ status: "Retrying", lastUpdated: new Date().toISOString() }).where(eq(mo.id, r.id)).run();
     const settings = channelSettingsSchema.parse(c.settings ?? {});
-    const actx: AdapterContext = { connection: c, credentials: decryptCredentials(c.credentialsEnc), settings, runNumber: 0, now: new Date() };
+    const actx: AdapterContext = { connection: c, credentials: decryptCredentials(c.credentialsEnc), settings, runNumber: 0, now: new Date(), manual: true };
     let orders: readonly ChannelOrder[] = [];
     try {
       orders = await adapter.fetchOrdersById(actx, list.map((r) => channelOrderIdOf(JSON.parse(r.payload)) ?? r.channelOrderNumber));
     } catch (error) {
       for (const r of list) {
         db.update(mo).set({ status: "Error" }).where(eq(mo.id, r.id)).run();
-        failed.push({ id: r.id, code: "INVALID_STATE", message: describeError(error).message });
+        failed.push({ id: r.id, code: "INVALID_STATE", message: safeMessage(error) });
       }
       continue;
     }

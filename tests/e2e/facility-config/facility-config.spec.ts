@@ -61,12 +61,15 @@ test.describe("facility config", () => {
       await warehouse.click();
       await page.getByRole("option", { name: new RegExp(`^${wh.code}`) }).click();
     }
+    // Area type is required (Logiwa parity).
+    await drawer.getByRole("combobox", { name: "Area type" }).click();
+    await page.getByRole("option", { name: /^Picking/ }).first().click();
     await drawer.getByRole("button", { name: /^Next/ }).click();
     await drawer.getByRole("button", { name: /^Next/ }).click();
     await drawer.getByRole("button", { name: /^Back/ }).click(); // every step can go back
     await drawer.getByRole("button", { name: /^Next/ }).click();
     await drawer.getByRole("button", { name: "Create location" }).click();
-    await expect(page.getByText(`Location ${LOC_CODE} created.`)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(`Location ${LOC_CODE} created.`).first()).toBeVisible({ timeout: 30_000 });
 
     const after = await api<{ id: string; code: string; barcode: string; walkingPathPriority: number | null; level: string | null }[]>(page, "GET", `/api/locations?q=${LOC_CODE}&qm=eq`);
     const row = after.body.data.find((r) => r.code === LOC_CODE);
@@ -102,8 +105,15 @@ test.describe("facility config", () => {
     await page.goto("/locations", { timeout: 120_000 });
     await page.getByRole("button", { name: "Generate locations" }).first().click();
     const drawer = page.getByRole("dialog", { name: /Generate locations/ });
-    await drawer.getByLabel("Zone / code prefix").fill(prefix);
-    await expect(drawer.getByText("12 codes already exist")).toBeVisible({ timeout: 30_000 });
+    await drawer.getByLabel("Code prefix").fill(prefix);
+    // The collision check runs once the aisle and rack ranges are filled.
+    await drawer.getByLabel("Aisles from").fill("A");
+    await drawer.getByLabel("Aisles to").fill("B");
+    await drawer.getByLabel("Racks from").fill("01");
+    await drawer.getByLabel("Racks to").fill("03");
+    await drawer.getByLabel("Levels from").fill("1");
+    await drawer.getByLabel("Levels to").fill("2");
+    await expect(drawer.getByText(/12 codes already exist/).first()).toBeVisible({ timeout: 30_000 });
     await drawer.getByLabel("Aisles to").fill("A");
     await drawer.getByLabel("Racks to").fill("01");
     await drawer.getByLabel("Levels from").fill("");
@@ -137,8 +147,9 @@ test.describe("facility config", () => {
     const print = await api<{ url: string; mime: string }>(page, "POST", "/api/print", { typeKey: "lp-label", records: labels.body.data, options: { copies: 1 } });
     expect(print.body.data.mime).toBe("application/pdf");
     const pdf = await page.request.get(`${base}${print.body.data.url}`);
-    const text = (await pdf.body()).toString("latin1");
-    expect((text.match(/\/Type\s*\/Page[^s]/g) ?? []).length).toBe(3);
+    // The renderer writes compressed object streams, so count pages with a real parser.
+    const { PDFDocument } = await import("pdf-lib");
+    expect((await PDFDocument.load(await pdf.body())).getPageCount()).toBe(3);
   });
 
   test("SSCC18 without a client: inline error, no raw field key", async ({ adminPage: page }) => {
@@ -153,7 +164,13 @@ test.describe("facility config", () => {
     await page.goto("/settings/lp-numbers", { timeout: 120_000 });
     await page.getByRole("button", { name: /Create LP number/ }).first().click();
     const drawer = page.getByRole("dialog", { name: /Create LP number/ });
-    await drawer.getByRole("switch", { name: /SSCC18/ }).or(drawer.getByLabel("SSCC18")).first().click();
+    // The drawer's warehouse defaults load right after it opens and shift the layout, so retry
+    // the toggle until it sticks instead of racing that first paint.
+    const ssccYes = drawer.getByRole("radiogroup", { name: "SSCC18" }).getByRole("radio", { name: "Yes" });
+    await expect(async () => {
+      await ssccYes.click();
+      await expect(ssccYes).toHaveAttribute("aria-checked", "true", { timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
     await drawer.getByRole("button", { name: /^Create/ }).click();
     await expect(drawer.getByText(/Client is required/)).toBeVisible();
     await expect(page.getByText(/clientId/)).toHaveCount(0);
@@ -171,10 +188,10 @@ test.describe("facility config", () => {
       await warehouse.click();
       await page.getByRole("option", { name: new RegExp(`^${wh.code}`) }).click();
     }
-    for (const label of ["Length", "Width", "Height"]) await drawer.getByLabel(label, { exact: true }).fill("10");
+    for (const label of ["Length", "Width", "Height"]) await drawer.getByRole("spinbutton", { name: label, exact: true }).fill("10");
     for (let step = 0; step < 3; step += 1) await drawer.getByRole("button", { name: /^Next/ }).click();
-    await drawer.getByRole("button", { name: /^Create/ }).click();
-    await expect(page.getByText(`${PACKAGE_CREATED_MESSAGE}: ${code}.`)).toBeVisible({ timeout: 30_000 });
+    await drawer.getByRole("button", { name: "Finish", exact: true }).click();
+    await expect(page.getByText(`${PACKAGE_CREATED_MESSAGE}: ${code}.`).first()).toBeVisible({ timeout: 30_000 });
 
     const list = await api<{ id: string; code: string }[]>(page, "GET", `/api/shipment-packages?q=${code}`);
     const id = list.body.data.find((r) => r.code === code)?.id;

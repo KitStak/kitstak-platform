@@ -26,6 +26,21 @@ export interface ProductGridOptions {
   readonly packTypes: readonly Option[];
 }
 
+/**
+ * "Use this shipping box only" options. Packages are per warehouse, so the same code exists
+ * once per warehouse: a code that repeats is labelled with its warehouse ("BOX-L-1612 · MLT1"),
+ * a unique code stays bare. The description keeps the box description / L×W×H.
+ */
+export function shipmentPackageOptions(rows: readonly { id: string; code: string; description: string | null; l: number; w: number; h: number; warehouse: string | null }[]): Option[] {
+  const count = new Map<string, number>();
+  for (const r of rows) count.set(r.code, (count.get(r.code) ?? 0) + 1);
+  return rows.map((s) => ({
+    value: s.id,
+    label: (count.get(s.code) ?? 0) > 1 && s.warehouse ? `${s.code} · ${s.warehouse}` : s.code,
+    description: s.description ?? `${s.l}×${s.w}×${s.h}`,
+  }));
+}
+
 function clientOptions(db: AppDb, scope: Scope): Option[] {
   return db.select({ id: clients.id, code: clients.code, name: clients.name }).from(clients)
     .where(scope.clientIds === "all" ? undefined : inArray(clients.id, [...scope.clientIds, "__none__"]))
@@ -74,11 +89,12 @@ export function getWizardOptions(db: AppDb, scope: Scope, clientId: string | nul
       .where(and(eq(lv.type, type), eq(lv.isActive, true), or(eq(lv.clientId, forClient), isNull(lv.clientId))))
       .orderBy(asc(lv.name)).all().map((r) => ({ value: r.id, label: r.name }))
     : [];
-  const packages = db.select({ id: shipmentPackages.id, code: shipmentPackages.code, description: shipmentPackages.description, l: shipmentPackages.length, w: shipmentPackages.width, h: shipmentPackages.height })
+  const packageRows = db.select({ id: shipmentPackages.id, code: shipmentPackages.code, description: shipmentPackages.description, l: shipmentPackages.length, w: shipmentPackages.width, h: shipmentPackages.height, warehouse: warehouses.code })
     .from(shipmentPackages)
+    .leftJoin(warehouses, eq(warehouses.id, shipmentPackages.warehouseId))
     .where(and(eq(shipmentPackages.isActive, true), scopedWhere(shipmentPackages, scope)))
-    .orderBy(asc(shipmentPackages.code)).all()
-    .map((s) => ({ value: s.id, label: s.code, description: s.description ?? `${s.l}×${s.w}×${s.h}` }));
+    .orderBy(asc(shipmentPackages.code), asc(warehouses.code)).all();
+  const packages = shipmentPackageOptions(packageRows);
   const channels = forClient
     ? db.select({ id: channelConnections.id, store: channelConnections.storeName, provider: channelConnections.provider }).from(channelConnections)
       .where(and(eq(channelConnections.clientId, forClient), eq(channelConnections.isActive, true)))
@@ -130,7 +146,7 @@ export function checkBarcodes(db: AppDb, scope: Scope, input: z.output<typeof ba
   const codes = [...new Set(input.barcodes.split(",").map((b) => b.trim()).filter(Boolean))].slice(0, 100);
   if (codes.length === 0) return [];
   const pt = schema.productPackTypes;
-  return db.select({ barcode: productBarcodes.barcode, productId: p.id, sku: p.sku, clientName: clients.name, packType: pt.packType })
+  return db.select({ barcode: productBarcodes.barcode, productId: p.id, sku: p.sku, clientId: p.clientId, clientName: clients.name, packType: pt.packType })
     .from(productBarcodes)
     .innerJoin(p, eq(p.id, productBarcodes.productId))
     .innerJoin(clients, eq(clients.id, p.clientId))
@@ -177,4 +193,50 @@ export function kitsUsing(db: AppDb, productId: string): { id: string; sku: stri
   return db.select({ id: p.id, sku: p.sku, name: p.name, quantity: kitComponents.quantity }).from(kitComponents)
     .innerJoin(p, eq(p.id, kitComponents.kitProductId))
     .where(eq(kitComponents.componentProductId, productId)).orderBy(asc(p.sku)).all();
+}
+
+export const linkSearchSchema = z.object({
+  /** Optional: omitted → every client the caller can see. */
+  clientId: z.string().trim().min(1).max(64).optional(),
+  q: z.string().trim().max(100).default(""),
+});
+
+export interface LinkSearchOption {
+  readonly id: string;
+  readonly sku: string;
+  readonly name: string;
+  readonly imageUrl: string | null;
+  readonly status: string;
+}
+
+/**
+ * Listing "Search Product Name & SKU": one client's products whose SKU, name or any barcode
+ * contains the text, ranked exact SKU/barcode > SKU prefix > name prefix > contains. Max 50.
+ */
+export function searchLinkProducts(db: AppDb, scope: Scope, input: z.output<typeof linkSearchSchema>): LinkSearchOption[] {
+  if (input.clientId && !hasClient(scope, input.clientId)) return [];
+  const clientCond = input.clientId
+    ? sql`p.client_id = ${input.clientId}`
+    : scope.clientIds === "all"
+      ? sql`1 = 1`
+      : sql`p.client_id IN (${sql.join([...scope.clientIds, "__none__"].map((id) => sql`${id}`), sql`, `)})`;
+  const q = input.q;
+  if (!q) {
+    return db.all<LinkSearchOption>(sql`SELECT p.id, p.sku, p.name, p.image_url AS imageUrl, p.status FROM products p
+      WHERE ${clientCond} ORDER BY p.status = 'Active' DESC, p.sku COLLATE NOCASE LIMIT 50`);
+  }
+  const contains = `%${escapeLike(q)}%`;
+  const prefix = `${escapeLike(q)}%`;
+  return db.all<LinkSearchOption>(sql`
+    SELECT p.id, p.sku, p.name, p.image_url AS imageUrl, p.status FROM products p
+    WHERE ${clientCond} AND (
+      p.sku LIKE ${contains} ESCAPE '\\' OR p.name LIKE ${contains} ESCAPE '\\' OR p.barcode LIKE ${contains} ESCAPE '\\'
+      OR EXISTS (SELECT 1 FROM product_barcodes b WHERE b.product_id = p.id AND b.barcode LIKE ${contains} ESCAPE '\\'))
+    ORDER BY CASE
+      WHEN lower(p.sku) = lower(${q}) OR EXISTS (SELECT 1 FROM product_barcodes b WHERE b.product_id = p.id AND b.barcode = ${q}) THEN 0
+      WHEN p.sku LIKE ${prefix} ESCAPE '\\' THEN 1
+      WHEN p.name LIKE ${prefix} ESCAPE '\\' THEN 2
+      ELSE 3 END,
+      p.status = 'Active' DESC, p.sku COLLATE NOCASE
+    LIMIT 50`);
 }

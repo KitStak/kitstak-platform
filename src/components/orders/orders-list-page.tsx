@@ -8,7 +8,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, Edit3, Eye, FileSpreadsheet, History, PackagePlus, Plus, RotateCcw, ScanLine, Trash2, Upload } from "lucide-react";
+import { ChevronDown, Edit3, Eye, FileSpreadsheet, History, MoreHorizontal, PackagePlus, Plus, RotateCcw, ScanLine, Trash2, Upload } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -19,18 +19,21 @@ import { DisabledReason } from "@/components/ui/tooltip";
 import { DataGrid, GridToolbar, useGrid, type FilterFieldDef, type RowAction } from "@/components/grid";
 import { ChangeLogDrawer } from "@/components/shared";
 import { PageHeader } from "@/components/layout/page-header";
+import { orderCrumbs } from "./order-crumbs";
 import { usePermissionSet } from "@/lib/permissions-client";
 import {
   filterFieldsForView, ORDER_PERMISSIONS, SHIPMENT_ORDERS_GRID_KEY, SHIPPED_ORDERS_GRID_KEY, type OrderFilterField, type OrderView,
 } from "@/lib/grid-defs/orders/shipment-orders";
 import { exportColumnsForView } from "./orders-export-columns";
 import { buildOrderColumns } from "./orders-columns";
-import { bulkToast, errorMessage, runBulk, useOrderOptions, type OrderFormOptions, type OrderRow } from "./orders-client";
+import { bulkToast, errorMessage, runBulk, useInvalidateOrders, useOrderOptions, type OrderFormOptions, type OrderRow } from "./orders-client";
+import { eligibility } from "./bulk/order-eligibility";
+import { CHECKING_PERMISSIONS } from "./use-order-permissions";
 import { OrderBulkMenus } from "./bulk/order-bulk-menus";
 
 const COPY: Readonly<Record<OrderView, { readonly title: string; readonly helper: string; readonly gridKey: string }>> = {
-  backlog: { title: "Shipment orders", helper: "Every open order across channels — allocate, pick, pack and ship from one place.", gridKey: SHIPMENT_ORDERS_GRID_KEY },
-  shipped: { title: "Shipped & canceled orders", helper: "Orders that left the building or were cancelled. Create RMAs and return labels here.", gridKey: SHIPPED_ORDERS_GRID_KEY },
+  backlog: { title: "Shipment Orders", helper: "Every open order across channels — allocate, pick, pack and ship from one place.", gridKey: SHIPMENT_ORDERS_GRID_KEY },
+  shipped: { title: "Shipped & Canceled Orders", helper: "Orders that left the building or were cancelled. Create RMAs and return labels here.", gridKey: SHIPPED_ORDERS_GRID_KEY },
 };
 
 /** Builds client filter defs: dynamic enums get their options from the option lists. */
@@ -73,9 +76,43 @@ function ImportMenu() {
   );
 }
 
-function HeaderActions({ view, canCreate, canImport, selected, onReturnInfo }: { readonly view: OrderView; readonly canCreate: boolean; readonly canImport: boolean; readonly selected: number; readonly onReturnInfo: () => void }) {
+/** Header controls while /api/me loads: present and disabled, so the header never jumps. */
+function PendingHeaderActions({ view }: { readonly view: OrderView }) {
   if (view === "shipped") {
-    const reason = selected === 0 ? "Select at least one shipped order" : null;
+    return (
+      <DisabledReason reason={CHECKING_PERMISSIONS}>
+        <Button variant="secondary" disabled>
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+          Bulk update return info
+        </Button>
+      </DisabledReason>
+    );
+  }
+  return (
+    <>
+      <DisabledReason reason={CHECKING_PERMISSIONS}>
+        <Button variant="secondary" disabled>
+          <Upload className="h-3.5 w-3.5" aria-hidden />
+          Import
+          <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
+        </Button>
+      </DisabledReason>
+      <DisabledReason reason={CHECKING_PERMISSIONS}>
+        <Button variant="primary" disabled>
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+          Create shipment order
+        </Button>
+      </DisabledReason>
+    </>
+  );
+}
+
+function HeaderActions({ view, ready, canCreate, canImport, canEdit, selected, onReturnInfo }: { readonly view: OrderView; readonly ready: boolean; readonly canCreate: boolean; readonly canImport: boolean; readonly canEdit: boolean; readonly selected: readonly OrderRow[]; readonly onReturnInfo: () => void }) {
+  if (!ready) return <PendingHeaderActions view={view} />;
+  if (view === "shipped") {
+    // Read-only roles never see a control they can't use (the drawer lives with the bulk menus).
+    if (!canEdit) return null;
+    const reason = eligibility.returnInfo(selected);
     return (
       <span className="flex items-center gap-1.5">
         <DisabledReason reason={reason}>
@@ -85,19 +122,50 @@ function HeaderActions({ view, canCreate, canImport, selected, onReturnInfo }: {
           </Button>
         </DisabledReason>
         <InfoTip content="Set the return carrier, shipping option, cost and tracking numbers for the selected orders in one step." />
+        {reason ? <span className="text-[12px] text-faint">{selected.length === 0 ? "Select shipped orders to enable" : "Cancelled orders have no return info"}</span> : null}
       </span>
     );
   }
   return (
     <>
-      {canImport ? <ImportMenu /> : null}
-      {canCreate ? (
-        <Link href="/orders/new" className={buttonVariants({ variant: "primary" })}>
-          <Plus className="h-3.5 w-3.5" aria-hidden />
-          Create shipment order
-        </Link>
-      ) : null}
+      {/* Desktop / tablet: Import menu + primary CTA. */}
+      <span className="hidden items-center gap-2 sm:flex">
+        {canImport ? <ImportMenu /> : null}
+        {canCreate ? (
+          <Link href="/orders/new" className={buttonVariants({ variant: "primary" })}>
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            Create shipment order
+          </Link>
+        ) : null}
+      </span>
+      {/* Phones: one compact primary + an overflow menu, stacked under the title. */}
+      <span className="flex items-center gap-2 sm:hidden" data-testid="orders-mobile-actions">
+        {canCreate ? (
+          <Link href="/orders/new" className={buttonVariants({ variant: "primary" })}>
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            New order
+          </Link>
+        ) : null}
+        {canImport ? <MobileOverflowMenu /> : null}
+      </span>
     </>
+  );
+}
+
+function MobileOverflowMenu() {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="secondary" size="icon" aria-label="More order actions">
+          <MoreHorizontal className="h-4 w-4" aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[240px]">
+        <DropdownMenuItem icon={FileSpreadsheet} href="/imports/shipment-orders" description="Create orders from an Excel file">Bulk import shipment orders</DropdownMenuItem>
+        <DropdownMenuItem icon={FileSpreadsheet} href="/imports/shipment-orders-update" description="Update existing orders by order code">Bulk update shipment orders</DropdownMenuItem>
+        <DropdownMenuItem icon={ScanLine} href="/imports/so-serials" description="Attach serial numbers to order lines">Import serial numbers</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -118,7 +186,7 @@ function useShippedDefault(view: OrderView, g: ReturnType<typeof useGrid<OrderRo
 export function OrdersListPage({ view }: { readonly view: OrderView }) {
   const router = useRouter();
   const copy = COPY[view];
-  const { permissions } = usePermissionSet();
+  const { permissions, isLoading: permissionsLoading } = usePermissionSet();
   const options = useOrderOptions();
   const fields = React.useMemo(() => resolveFilterFields(filterFieldsForView(view), options.data?.data), [view, options.data]);
   const extraQuery = React.useMemo(() => ({ view }), [view]);
@@ -134,14 +202,19 @@ export function OrdersListPage({ view }: { readonly view: OrderView }) {
   for (const r of g.rows) seen.current.set(r.id, r);
   const selectedRows = g.selectedIds.map((id) => seen.current.get(id)).filter((r): r is OrderRow => Boolean(r));
 
+  const invalidateOrders = useInvalidateOrders();
+  // Refetch the grid now and invalidate counts/detail caches so status chips and pills update at once.
   const refresh = () => {
-    g.refetch();
     g.clearSelection();
+    g.refetch();
+    void invalidateOrders();
   };
 
   const rowActions = (row: OrderRow): readonly RowAction[] => {
     const href = `/orders/${encodeURIComponent(row.code)}`;
-    const deleteReason = !permissions.has(ORDER_PERMISSIONS.delete)
+    const deleteReason = permissionsLoading
+      ? CHECKING_PERMISSIONS
+      : !permissions.has(ORDER_PERMISSIONS.delete)
       ? "You don't have permission to delete orders"
       : row.status !== "Open"
         ? `Only Open orders can be deleted; this order is ${row.status}.`
@@ -150,28 +223,31 @@ export function OrdersListPage({ view }: { readonly view: OrderView }) {
           : null;
     return [
       { key: "details", label: "Show details", icon: Eye, href },
-      { key: "edit", label: "Edit", icon: Edit3, href: `${href}?step=details`, disabledReason: permissions.has(ORDER_PERMISSIONS.edit) ? null : "You don't have permission to edit orders" },
+      { key: "edit", label: "Edit", icon: Edit3, href: `${href}?tab=edit&step=details`, disabledReason: permissionsLoading ? CHECKING_PERMISSIONS : permissions.has(ORDER_PERMISSIONS.edit) ? null : "You don't have permission to edit orders" },
       { key: "log", label: "Change log", icon: History, onSelect: () => setChangeLog(row) },
       { key: "delete", label: "Delete", icon: Trash2, destructive: true, disabledReason: deleteReason, onSelect: () => setDeleteRow(row) },
     ];
   };
 
   const hasState = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
-  const canMutate = [...permissions].some((p) => p.startsWith("fulfillment.shipment_orders.") && !p.endsWith(".view"));
+  // While permissions load the bulk menus render disabled ("Checking permissions…") instead of being absent.
+  const canMutate = permissionsLoading || [...permissions].some((p) => p.startsWith("fulfillment.shipment_orders.") && !p.endsWith(".view"));
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
         title={copy.title}
-        helper={copy.helper}
+        breadcrumbs={orderCrumbs(copy.title)}
+        // The helper sentence is hidden on phones so the grid keeps its rows.
+        helper={<span className="hidden sm:inline">{copy.helper}</span>}
         tabs="orders"
-        actions={<HeaderActions view={view} canCreate={permissions.has(ORDER_PERMISSIONS.create)} canImport={permissions.has(ORDER_PERMISSIONS.import)} selected={selectedRows.length} onReturnInfo={() => setReturnInfoOpen(true)} />}
+        actions={<HeaderActions view={view} ready={!permissionsLoading} canCreate={permissions.has(ORDER_PERMISSIONS.create)} canImport={permissions.has(ORDER_PERMISSIONS.import)} canEdit={permissions.has(ORDER_PERMISSIONS.edit)} selected={selectedRows} onReturnInfo={() => setReturnInfoOpen(true)} />}
       />
       <GridToolbar
         {...g.toolbarProps}
         searchPlaceholder="Order code, store order #, customer, tracking"
         onRefresh={refresh}
-        trailing={canMutate ? <OrderBulkMenus view={view} rows={selectedRows} onChanged={refresh} returnInfoOpen={returnInfoOpen} onReturnInfoOpenChange={setReturnInfoOpen} /> : null}
+        trailing={canMutate ? <span className={selectedRows.length === 0 ? "hidden sm:contents" : "contents"}><OrderBulkMenus view={view} rows={selectedRows} onChanged={refresh} returnInfoOpen={returnInfoOpen} onReturnInfoOpenChange={setReturnInfoOpen} /></span> : null}
       />
       <div className="flex min-h-0 flex-1 flex-col">
         <DataGrid<OrderRow>

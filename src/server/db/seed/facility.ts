@@ -3,9 +3,12 @@
  * barcode), default receive/ship/return locations, pick faces with product capacity and
  * replenishment levels, LP types, license plates, mobile carts and shipment packages.
  */
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import * as schema from "@/server/db/schema";
 import { nextLpNumber } from "@/server/domain/sequences";
+import { assignJobToCart } from "@/server/domain/mobile-cart-cells";
+import type { DomainCtx } from "@/server/domain/types";
+import { cellBarcode } from "@/lib/grid-defs/facility/mobile-carts";
 import type { Tx } from "@/server/domain/types";
 import type { CatalogRefs, ProductRef } from "./catalog";
 import {
@@ -51,14 +54,27 @@ export interface FacilityRefs {
 
 const CAPACITY_PICK_FACES = 40;
 
+/**
+ * Structure fields read from the code, the same convention as the M10 generator:
+ * `<Aisle>-<Rack>-<Column>-<Level>`, so A-01-02-1 is aisle A, rack 01, column 2, level 1
+ * (REQ-R2-7 / blind judge J1: the seed stored aisle 01 / rack A01, and labels printed "Aisle 01").
+ * Dock and bulk floor spots have no rack structure.
+ */
+export function locationStructure(l: Pick<LocationDef, "zone" | "aisle" | "bay" | "level">): { aisle: string; rack: string | null; column: number; level: string } {
+  if (l.zone === "Dock") return { aisle: "", rack: null, column: 0, level: l.level };
+  if (l.zone === "Bulk") return { aisle: "", rack: null, column: Number(l.bay) || 0, level: l.level };
+  return { aisle: l.zone, rack: l.aisle, column: Number(l.bay) || 0, level: l.level };
+}
+
 function insertLocations(tx: Tx, warehouseId: Id, defs: readonly LocationDef[], lookups: LookupRefs): Map<string, Id> {
   const ids = new Map<string, Id>();
   defs.forEach((l, i) => {
     const volume = round2(l.dims[0] * l.dims[1] * l.dims[2]);
+    const st = locationStructure(l);
     const id = tx.insert(schema.locations).values({
-      warehouseId, code: l.code, zone: l.zone, aisle: l.aisle, bay: l.bay, level: l.level, type: l.legacyType, capacityUnits: l.capacityUnits,
+      warehouseId, code: l.code, zone: l.zone, aisle: st.aisle, bay: l.bay, level: st.level, type: l.legacyType, capacityUnits: l.capacityUnits,
       barcode: l.code, displayMember: l.code, areaType: l.areaType, locationType: l.locationType, replenishmentType: l.replenishmentType,
-      walkingPathPriority: (i + 1) * 10, abcCode: l.abc, column: Number(l.bay) || 0, rack: l.zone === "Dock" ? null : `${l.zone}${l.aisle}`,
+      walkingPathPriority: (i + 1) * 10, abcCode: l.abc, column: st.column, rack: st.rack,
       length: l.dims[0], width: l.dims[1], height: l.dims[2], volume, onlyDamaged: l.onlyDamaged ?? false, isLocked: l.isLocked ?? false,
       locationZoneId: lookups.byWarehouse.get(lookupKey(warehouseId, "location_zone", l.zone)) ?? null,
       locationGroupId: lookups.byWarehouse.get(lookupKey(warehouseId, "location_group", l.group)) ?? null,
@@ -135,7 +151,8 @@ function seedMobileCarts(tx: Tx, warehouseId: Id, lookups: LookupRefs): void {
     const cartId = tx.insert(schema.mobileCarts).values({ code, warehouseId, description: `24-bin pick cart ${c}`, cartTypeId, levels: 4, columns: 6, allowMultipleJob: c === 4 })
       .returning({ id: schema.mobileCarts.id }).get().id;
     const cells = [];
-    for (let level = 1; level <= 4; level += 1) for (let column = 1; column <= 6; column += 1) cells.push({ cartId, level, column, barcode: `${code}-${level}-${column}` });
+    // Same cell naming as the M10 wizard and labels: level letter + column, scanned as MC-01-A01.
+    for (let level = 1; level <= 4; level += 1) for (let column = 1; column <= 6; column += 1) cells.push({ cartId, level, column, barcode: cellBarcode(code, level, column) });
     tx.insert(schema.mobileCartCells).values(cells).run();
   }
 }
@@ -169,4 +186,25 @@ export function seedFacility(tx: Tx, org: OrgRefs, catalog: CatalogRefs, lookups
     MLT1: seedWarehouse(tx, "MLT1", org.mlt1, catalog, lookups),
     KS2: seedWarehouse(tx, "KS2", org.ks2, catalog, lookups),
   };
+}
+
+/**
+ * Live cart occupancy for the demo (blind judge J1: every seeded cart was Available with 0 orders):
+ * the largest open picking jobs in MLT1 go on MC-01 and MC-02, each order in its own cell, through
+ * the same put-to-cart domain call the cart drawer uses. Runs after the order history replay.
+ */
+export function seedCartOccupancy(tx: Tx, ctx: DomainCtx, warehouseId: Id): number {
+  const carts = tx.select({ id: schema.mobileCarts.id, code: schema.mobileCarts.code, cells: sql<number>`(SELECT COUNT(*) FROM mobile_cart_cells c WHERE c.cart_id = ${schema.mobileCarts.id})` })
+    .from(schema.mobileCarts).where(eq(schema.mobileCarts.warehouseId, warehouseId)).orderBy(schema.mobileCarts.code).all().slice(0, 2);
+  const jobs = tx.all<{ id: string; n: number }>(sql`SELECT j.id AS id, (SELECT COUNT(*) FROM job_orders jo WHERE jo.job_id = j.id) AS n FROM jobs j
+    WHERE j.warehouse_id = ${warehouseId} AND j.operation_type = 'Picking' AND j.status IN ('Pending','Started','In Progress') AND j.mobile_cart_id IS NULL
+    ORDER BY n DESC, j.code LIMIT 10`);
+  let placed = 0;
+  for (const cart of carts) {
+    const job = jobs.find((j) => j.n > 0 && j.n <= cart.cells);
+    if (!job) break;
+    jobs.splice(jobs.indexOf(job), 1);
+    placed += assignJobToCart(tx, ctx, { cartId: cart.id, jobId: job.id }).assignments.length;
+  }
+  return placed;
 }

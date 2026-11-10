@@ -1,4 +1,5 @@
 "use client";
+import * as React from "react";
 
 /**
  * Products grid: the 29 Logiwa columns in Logiwa order (Image … Production date
@@ -18,8 +19,17 @@ const text = (v: unknown) => (v === null || v === undefined || v === "" ? dash :
 
 const flag = (id: keyof ProductListRow & string, header: string, opts: { defaultVisible?: boolean } = {}): Col => ({
   id, accessorKey: id, header, size: Math.max(104, header.length * 8 + 36), meta: { clip: false, ...(opts.defaultVisible === false ? { defaultVisible: false } : {}) },
-  cell: ({ getValue }) => <YesNoPill value={Boolean(getValue())} />,
+  // Yes is the exception: show it as a pill; No is a muted dash so the grid isn't a wall of pills.
+  cell: ({ getValue }) => (getValue() ? <YesNoPill value /> : <span className="text-faint" aria-label="No" title="No">—</span>),
 });
+
+/** Id of the product just created/duplicated: its row shows a "New" badge (context keeps columns stable). */
+export const NewProductContext = React.createContext<string | null>(null);
+
+function NewBadge({ id }: { readonly id: string }) {
+  const newId = React.useContext(NewProductContext);
+  return newId === id ? <Badge tone="success" size="sm" className="shrink-0">New</Badge> : null;
+}
 
 export function buildProductColumns(): Col[] {
   return [
@@ -31,13 +41,21 @@ export function buildProductColumns(): Col[] {
     {
       id: "sku", accessorKey: "sku", header: "SKU", size: 168, meta: { alwaysVisible: true, clip: false },
       cell: ({ row }) => (
-        <span className="flex min-w-0 items-center gap-1.5" title={row.original.barcodes ? `Barcodes: ${row.original.barcodes}` : undefined}>
-          <LinkCell href={`/products/${row.original.id}`}>{row.original.sku}</LinkCell>
-          {row.original.productCategory === "Kit" ? <Badge tone="info" size="sm">Kit</Badge> : null}
+        <span className="flex w-full min-w-0 max-w-full items-center gap-1.5 overflow-hidden" title={row.original.barcodes ? `${row.original.sku} · Barcodes: ${row.original.barcodes}` : row.original.sku}>
+          <LinkCell href={`/products/${row.original.id}`} className="block min-w-0 truncate">{row.original.sku}</LinkCell>
+          {row.original.productCategory === "Kit" ? <Badge tone="info" size="sm" className="shrink-0">Kit</Badge> : null}
+          <NewBadge id={row.original.id} />
         </span>
       ),
     },
-    { id: "barcode", accessorKey: "barcode", header: "Barcode", size: 140, cell: ({ getValue }) => <span className="truncate font-mono text-[12px]">{String(getValue() ?? "")}</span> },
+    { id: "barcode", accessorKey: "barcode", header: "Barcode", size: 170, meta: { clip: false }, cell: ({ row }) => (
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate font-mono text-[12px]">{row.original.barcode}</span>
+        {row.original.barcodeConflictCount > 0 ? (
+          <span title={`Barcode shared with ${row.original.barcodeConflictCount} other product${row.original.barcodeConflictCount === 1 ? "" : "s"} of this client — scans are ambiguous`}><Badge tone="warning" size="sm">Conflict</Badge></span>
+        ) : null}
+      </span>
+    ) },
     { id: "name", accessorKey: "name", header: "Name", size: 240, cell: ({ getValue }) => text(getValue()) },
     { id: "status", accessorKey: "status", header: "Status", size: 100, meta: { clip: false }, cell: ({ row }) => <StatusPill status={row.original.status} domain="active" size="sm" /> },
     flag("isFragile", "Fragile"),

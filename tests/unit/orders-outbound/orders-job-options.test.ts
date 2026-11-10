@@ -21,6 +21,6 @@ describe("orderJobOptions", () => {
   });
 
   it("returns nothing for a warehouse outside the caller's scope", () => {
-    expect(orderJobOptions(w.db, { warehouseIds: [], clientIds: "all" }, w.warehouseId)).toEqual({ jobTypes: [], mergeableJobs: [] });
+    expect(orderJobOptions(w.db, { warehouseIds: [], clientIds: "all" }, w.warehouseId)).toEqual({ jobTypes: [], mergeableJobs: [], defaultJobTypeId: null });
   });
 });

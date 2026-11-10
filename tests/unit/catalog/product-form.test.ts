@@ -53,6 +53,17 @@ describe("step schemas", () => {
     expect(paths).toEqual(expect.arrayContaining(["clientId", "sku", "name"]));
   });
 
+  it("rejects negative prices and out-of-range tax with inline messages (never coerced)", () => {
+    const base = { ...emptyProductForm("Product", "c1"), sku: "NEG-1", name: "x" };
+    const r = generalStepSchema.safeParse({ ...base, salesPrice: -5, purchasePrice: -1, taxRate: 150 });
+    expect(r.success).toBe(false);
+    const byPath = Object.fromEntries((r.success ? [] : r.error.issues).map((i) => [i.path.join("."), i.message]));
+    expect(byPath.salesPrice).toBe("Must be 0 or more");
+    expect(byPath.purchasePrice).toBe("Must be 0 or more");
+    expect(byPath.taxRate).toBe("Tax rate must be 0–100%");
+    expect(generalStepSchema.safeParse({ ...base, salesPrice: 12.5, taxRate: 8 }).success).toBe(true);
+  });
+
   it("rejects spaces in SKU", () => {
     const r = generalStepSchema.safeParse({ ...emptyProductForm("Product", "c1"), sku: "A B", name: "x" });
     expect(r.success).toBe(false);

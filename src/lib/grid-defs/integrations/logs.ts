@@ -50,3 +50,9 @@ export const RUN_DETAIL_TITLE: Readonly<Record<(typeof CHANNEL_METHODS)[number],
   "Sync Inventory": "Inventory Sync Details",
   "Send Shipment Info": "Shipment Update Details",
 };
+
+/** "Simulate error" (one unknown-SKU order on demand) exists only for Download Orders on a simulated store (KitStak Sandbox or a demo feed). */
+export const canSimulateError = (simulated: boolean, method: string): boolean => simulated && method === "Download Orders";
+
+/** Shown wherever a store runs on the demo feed (live channel, no credentials saved yet). */
+export const DEMO_FEED_NOTE = "Demo feed: no store credentials are saved yet, so this store runs on KitStak’s built-in demo feed (simulated orders for the client’s real SKUs). Add the store’s access token to switch to live syncing.";

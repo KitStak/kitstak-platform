@@ -9,7 +9,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       ref={ref}
       className={cn(
         "h-8 w-full rounded-md border border-border-strong/70 bg-surface px-2.5 text-[13px] text-body placeholder:text-faint",
-        "transition-colors hover:border-border-strong focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25",
+        "transition-colors hover:border-border-strong focus:border-info focus:outline-none focus:ring-2 focus:ring-info/25",
         "disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-faint",
         className
       )}
@@ -58,7 +58,7 @@ export const Select = React.forwardRef<
     ref={ref}
     className={cn(
       "h-8 w-full appearance-none rounded-md border border-border-strong/70 bg-surface bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23667085%22%20stroke-width%3D%222.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[position:right_8px_center] bg-no-repeat pl-2.5 pr-7 text-[13px] text-body",
-      "transition-colors hover:border-border-strong focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25",
+      "transition-colors hover:border-border-strong focus:border-info focus:outline-none focus:ring-2 focus:ring-info/25",
       className
     )}
     {...props}
@@ -79,7 +79,7 @@ export const Checkbox = React.forwardRef<
       "h-4 w-4 shrink-0 cursor-pointer appearance-none rounded border border-border-strong bg-surface align-middle",
       "checked:border-primary checked:bg-primary checked:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%223.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M20%206%209%2017l-5-5%22%2F%3E%3C%2Fsvg%3E')] checked:bg-center checked:bg-no-repeat",
       "indeterminate:border-primary indeterminate:bg-primary indeterminate:bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2210%22%20height%3D%2210%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%3E%3Cpath%20d%3D%22M5%2012h14%22%2F%3E%3C%2Fsvg%3E')] indeterminate:bg-center indeterminate:bg-no-repeat",
-      "transition-colors hover:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/30",
+      "transition-colors hover:border-primary/60 focus-visible:ring-2 focus-visible:ring-info/30",
       className
     )}
     {...props}

@@ -1,21 +1,22 @@
 "use client";
 
 /**
- * Company Settings (`/settings/company?section=info|defaults|security`): company information
+ * Company Settings (`/settings/company?section=info|defaults|security|email`): company information
  * with logo upload (JPG/PNG < 2 MB, shown in the shell and on printouts), account defaults
  * (currency, units, date format) and security (password policy, expiry, lockout).
  */
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Building2, History, ImageUp, Lock, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Building2, History, ImageUp, Lock, Mail, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useWatch } from "react-hook-form";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiRequest, isApiError } from "@/lib/api-client";
 import { applyServerFieldErrors, useApiQuery } from "@/lib/query-client";
 import { CURRENCIES, DIMENSION_UNITS, WEIGHT_UNITS } from "@/lib/enums";
 import { createFormatter } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
-  COMPANY_DATE_FORMATS, companyDefaultsSchema, companyInfoSchema, companySecuritySchema, LOGO_MAX_BYTES, policySummary,
+  COMPANY_BRANDING_QUERY_KEY, COMPANY_DATE_FORMATS, companyDefaultsSchema, companyInfoSchema, companySecuritySchema, IDLE_MAX_MINUTES, IDLE_MIN_MINUTES, IDLE_WARNING_SECONDS, LOGO_MAX_BYTES, policySummary,
   type CompanyDefaultsValues, type CompanyInfoValues, type CompanySecurityValues,
 } from "@/lib/grid-defs/admin/company";
 import { PageHeader } from "@/components/layout/page-header";
@@ -31,12 +32,15 @@ import { DisabledReason } from "@/components/ui/tooltip";
 import type { CompanySettings } from "@/server/repositories/company";
 import { EntityChangeLogDrawer, NO_PERMISSION, usePagePerms } from "../admin-shared";
 import { NumberField, SelectField, TextInput, YesNoField } from "../form-controls";
+import { useShell } from "@/components/layout/shell-context";
+import { MailSection } from "./mail-section";
 
-type Section = "info" | "defaults" | "security";
+type Section = "info" | "defaults" | "security" | "email";
 const SECTIONS: readonly { key: Section; label: string; icon: React.ComponentType<{ className?: string }>; title: string; description: string }[] = [
   { key: "info", label: "Company information", icon: Building2, title: "Company information", description: "Create a profile for your company. The logo appears in the header and on every printout." },
   { key: "defaults", label: "Account defaults", icon: SlidersHorizontal, title: "Account defaults", description: "Defaults for new clients, products and users." },
-  { key: "security", label: "Security", icon: Lock, title: "Security", description: "Password rules and account lockout for every user." },
+  { key: "security", label: "Security", icon: Lock, title: "Security", description: "Password rules, account lockout and idle sign-out for every user." },
+  { key: "email", label: "Email delivery", icon: Mail, title: "Email delivery", description: "The mail server KitStaks uses for welcome invites and password reset emails." },
 ];
 
 const QUERY_KEY = ["company"];
@@ -68,6 +72,8 @@ function LogoBlock({ company, canEdit, onChanged }: { readonly company: CompanyS
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [confirm, setConfirm] = React.useState(false);
+  const qc = useQueryClient();
+  const refreshShell = () => void qc.invalidateQueries({ queryKey: COMPANY_BRANDING_QUERY_KEY });
   const upload = async (file: File) => {
     setError(null);
     if (!["image/png", "image/jpeg"].includes(file.type)) { setError("Only JPG and PNG images are accepted."); return; }
@@ -79,6 +85,7 @@ function LogoBlock({ company, canEdit, onChanged }: { readonly company: CompanyS
       const { data } = await apiRequest<CompanySettings>("/api/company/logo", { method: "POST", body });
       toast.success("Logo updated", "It now shows in the header and on printouts.");
       onChanged(data);
+      refreshShell();
     } catch (e) {
       setError(isApiError(e) ? e.message : "Upload failed");
     } finally {
@@ -105,9 +112,9 @@ function LogoBlock({ company, canEdit, onChanged }: { readonly company: CompanyS
           <span className={cn("text-[11.5px]", error ? "text-danger" : "text-faint")} role={error ? "alert" : undefined}>{error ?? "JPG, JPEG or PNG, smaller than 2 MB."}</span>
         </div>
       </div>
-      <ConfirmDialog open={confirm} onOpenChange={setConfirm} variant="danger" title="Remove the company logo?" description="The header and printouts fall back to your company name." confirmLabel="Yes, remove" cancelLabel="No"
+      <ConfirmDialog open={confirm} onOpenChange={setConfirm} variant="danger" title="Remove the company logo?" description="The header falls back to the KitStak logo and printouts to your company name." confirmLabel="Yes, remove" cancelLabel="No"
         onConfirm={async () => {
-          try { const { data } = await apiRequest<CompanySettings>("/api/company/logo", { method: "DELETE" }); onChanged(data); toast.success("Logo removed", "Printouts now show your company name."); }
+          try { const { data } = await apiRequest<CompanySettings>("/api/company/logo", { method: "DELETE" }); onChanged(data); refreshShell(); toast.success("Logo removed", "The header shows the KitStak logo again and printouts show your company name."); }
           catch (e) { toast.error("Couldn't remove the logo", isApiError(e) ? e.message : "Something went wrong"); }
           setConfirm(false);
         }} />
@@ -138,6 +145,9 @@ function DefaultsSection({ company, canEdit, onSaved }: { readonly company: Comp
   const { save, conflict } = useSave<CompanyDefaultsValues>("defaults", onSaved);
   const w = useWatch({ control: form.control });
   const fmt = createFormatter({ dateFormat: w.dateFormat ?? initial.dateFormat });
+  // Today's date, set after mount (a server-rendered "now" would not match the client's).
+  const [today, setToday] = React.useState<Date | null>(null);
+  React.useEffect(() => { setToday(new Date()); }, []);
   return (
     <Form form={form} onSubmit={async (v) => { const r = await save(form, v, company.version); if (r) form.reset(v); }} className="flex flex-col gap-5" guardUnsaved>
       <ConflictCallout show={conflict} />
@@ -149,7 +159,7 @@ function DefaultsSection({ company, canEdit, onSaved }: { readonly company: Comp
       </FormGrid>
       <div className="rounded-lg border border-border bg-surface-sunken px-4 py-3 text-[13px]">
         <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-faint">Example</p>
-        <p className="mt-1 text-foreground">A new product weighs <b>2.5 {w.weightUnit}</b>, measures <b>12 × 8 × 4 {w.dimensionUnit}</b>, sells for <b>{fmt.money(24.99, w.currency)}</b> and was created <b>{fmt.date(new Date(2026, 10, 5))}</b>.</p>
+        <p className="mt-1 text-foreground">A new product weighs <b>2.5 {w.weightUnit}</b>, measures <b>12 × 8 × 4 {w.dimensionUnit}</b>, sells for <b>{fmt.money(24.99, w.currency)}</b> and was created <b>{today ? fmt.date(today) : "today"}</b>.</p>
       </div>
       {canEdit ? <SubmitBar submitLabel="Save defaults" cancelLabel="Reset" requireDirty onCancel={() => form.reset(initial)} /> : null}
     </Form>
@@ -158,7 +168,7 @@ function DefaultsSection({ company, canEdit, onSaved }: { readonly company: Comp
 
 function SecuritySection({ company, canEdit, onSaved }: { readonly company: CompanySettings; readonly canEdit: boolean; readonly onSaved: (c: CompanySettings) => void }) {
   const p = company.passwordPolicy;
-  const initial: CompanySecurityValues = { minLength: p.minLength, requireUpper: p.requireUpper, requireNumber: p.requireNumber, requireSymbol: p.requireSymbol, expires: Boolean(p.maxAgeDays), maxAgeDays: p.maxAgeDays ?? 90, lockoutThreshold: p.lockoutThreshold, lockoutMinutes: p.lockoutMinutes };
+  const initial: CompanySecurityValues = { minLength: p.minLength, requireUpper: p.requireUpper, requireNumber: p.requireNumber, requireSymbol: p.requireSymbol, expires: Boolean(p.maxAgeDays), maxAgeDays: p.maxAgeDays ?? 90, lockoutThreshold: p.lockoutThreshold, lockoutMinutes: p.lockoutMinutes, idleTimeout: company.sessionIdleMinutes !== null, idleMinutes: company.sessionIdleMinutes ?? 30 };
   const form = useZodForm(companySecuritySchema, initial);
   const { save, conflict } = useSave<CompanySecurityValues>("security", onSaved);
   const w = useWatch({ control: form.control });
@@ -181,6 +191,12 @@ function SecuritySection({ company, canEdit, onSaved }: { readonly company: Comp
           <NumberField<CompanySecurityValues> name="lockoutMinutes" label="Lock for" required min={1} max={1440} disabled={!canEdit} suffix="minutes" />
         </FormGrid>
       </FormSection>
+      <FormSection title="Idle sign-out" description={w.idleTimeout ? `Web users are signed out after ${w.idleMinutes ?? "—"} minutes without activity in any tab, with a ${IDLE_WARNING_SECONDS}-second warning first.` : "Web sessions stay signed in until they expire or the user signs out."}>
+        <FormGrid>
+          <YesNoField<CompanySecurityValues> name="idleTimeout" label="Sign out idle users" disabled={!canEdit} info="Activity in any open KitStaks tab keeps the session alive" />
+          {w.idleTimeout ? <NumberField<CompanySecurityValues> name="idleMinutes" label="Sign out after" required min={IDLE_MIN_MINUTES} max={IDLE_MAX_MINUTES} disabled={!canEdit} suffix="minutes idle" /> : null}
+        </FormGrid>
+      </FormSection>
       {canEdit ? <SubmitBar submitLabel="Save security settings" cancelLabel="Reset" requireDirty onCancel={() => form.reset(initial)} /> : null}
     </Form>
   );
@@ -190,7 +206,8 @@ export function CompanyPage() {
   const perms = usePagePerms("settings.company_settings", ["view", "update"] as const);
   const router = useRouter();
   const params = useSearchParams();
-  const section: Section = (["info", "defaults", "security"] as const).find((s) => s === params.get("section")) ?? "info";
+  const section: Section = (["info", "defaults", "security", "email"] as const).find((s) => s === params.get("section")) ?? "info";
+  const { user } = useShell();
   const q = useApiQuery<CompanySettings>(QUERY_KEY, "/api/company", { staleTime: 0 });
   const [local, setLocal] = React.useState<CompanySettings | null>(null);
   const [log, setLog] = React.useState(false);
@@ -198,21 +215,21 @@ export function CompanyPage() {
   const meta = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0]!;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Company Settings" helper="Define your company with a display name, full name and logo, plus defaults and security rules."
+      <PageHeader breadcrumbs={[{ label: "Settings" }, { label: "Company Settings" }]} title="Company Settings" helper="Define your company with a display name, full name and logo, plus defaults and security rules."
         actions={<Button variant="secondary" onClick={() => setLog(true)}><History className="h-4 w-4" aria-hidden />Change log</Button>} />
-      <div className="grid gap-6 px-6 py-5 md:grid-cols-[minmax(0,720px)_220px]">
+      <div className="grid max-w-[1280px] gap-6 px-6 py-5 md:grid-cols-[220px_minmax(0,1fr)]">
         <section aria-labelledby="company-section-title" className="rounded-xl border border-border bg-surface p-5 shadow-xs">
           <h2 id="company-section-title" className="text-[16px] font-semibold text-foreground">{meta.title}</h2>
           <p className="mt-0.5 text-[12px] text-secondary">{meta.description}</p>
           <div className="mt-5">
-            {q.isPending ? <Skeleton className="h-64 w-full" /> : q.isError || !company ? (
+            {section === "email" ? <MailSection canEdit={perms.update} defaultTo={user?.email ?? ""} /> : q.isPending ? <Skeleton className="h-64 w-full" /> : q.isError || !company ? (
               <EmptyState title="Couldn't load company settings" description={q.error?.message} action={<Button onClick={() => void q.refetch()}>Retry</Button>} />
             ) : section === "info" ? <InfoSection key={`i${company.version}`} company={company} canEdit={perms.update} onSaved={setLocal} />
               : section === "defaults" ? <DefaultsSection key={`d${company.version}`} company={company} canEdit={perms.update} onSaved={setLocal} />
               : <SecuritySection key={`s${company.version}`} company={company} canEdit={perms.update} onSaved={setLocal} />}
           </div>
         </section>
-        <VerticalNav ariaLabel="Company settings sections" active={section} className="md:pt-1"
+        <VerticalNav ariaLabel="Company settings sections" active={section} className="self-start md:sticky md:top-4 md:order-first md:pt-1"
           items={SECTIONS.map((s) => ({ key: s.key, label: s.label, icon: s.icon }))}
           onChange={(key) => router.replace(`/settings/company?section=${key}`, { scroll: false })} />
       </div>

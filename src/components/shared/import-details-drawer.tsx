@@ -18,15 +18,31 @@ import { Switch } from "@/components/ui/switch";
 import { fileUrl, importBatchSchema, importRowSchema, type ImportBatch } from "./contracts";
 
 const detailsSchema = z.object({ batch: importBatchSchema, rows: z.array(importRowSchema).default([]) });
+const rowsSchema = z.array(importRowSchema);
+
+/**
+ * The endpoint answers the list envelope (rows in `data`, the batch in `meta.batch`); the older
+ * `{ batch, rows }` body is still accepted. Exported for tests.
+ */
+export function parseImportDetails(body: { readonly data?: unknown; readonly meta?: unknown } | undefined): { readonly batch: ImportBatch | null; readonly rows: z.infer<typeof rowsSchema> } | null {
+  if (!body) return null;
+  const legacy = detailsSchema.safeParse(body.data);
+  if (legacy.success) return legacy.data;
+  const rows = rowsSchema.safeParse(body.data);
+  if (!rows.success) return null;
+  const batch = importBatchSchema.safeParse((body.meta as { batch?: unknown } | undefined)?.batch);
+  return { batch: batch.success ? batch.data : null, rows: rows.data };
+}
 
 export function ImportDetailsDrawer({ batch, onOpenChange }: { readonly batch: ImportBatch | null; readonly onOpenChange: (open: boolean) => void }) {
   const fmt = useFormat();
   const [errorsOnly, setErrorsOnly] = React.useState(false);
   const query = useApiQuery<unknown>(["import-batch", batch?.id ?? ""], batch ? `/api/imports/batches/${encodeURIComponent(batch.id)}` : null);
-  const parsed = detailsSchema.safeParse(query.data?.data);
-  const rows = parsed.success ? parsed.data.rows : [];
+  const parsed = parseImportDetails(query.data);
+  const rows = parsed?.rows ?? [];
   const shown = errorsOnly ? rows.filter((r) => !r.success) : rows;
-  const current = parsed.success ? parsed.data.batch : batch;
+  // The details endpoint carries the raw uploader id; keep the history row's display name.
+  const current = parsed?.batch ? { ...parsed.batch, uploadedByName: parsed.batch.uploadedByName ?? batch?.uploadedByName ?? null } : batch;
 
   return (
     <Drawer
@@ -36,10 +52,19 @@ export function ImportDetailsDrawer({ batch, onOpenChange }: { readonly batch: I
       title="Import details"
       description={current ? `Uploaded ${fmt.dateTime(current.createdAt)} by ${current.uploadedByName ?? current.uploadedBy ?? "Unknown"}` : undefined}
       footer={
-        current?.errorFileId ? (
-          <a href={fileUrl(current.errorFileId, true)} download className={cn(buttonVariants({ variant: "secondary" }), "ml-auto")}>
-            Download Error File
-          </a>
+        current?.errorFileId || current?.fileId ? (
+          <div className="ml-auto flex items-center gap-2">
+            {current.fileId ? (
+              <a href={fileUrl(current.fileId, true)} download className={buttonVariants({ variant: "secondary" })}>
+                Download Original File
+              </a>
+            ) : null}
+            {current.errorFileId ? (
+              <a href={fileUrl(current.errorFileId, true)} download className={buttonVariants({ variant: "secondary" })}>
+                Download Error File
+              </a>
+            ) : null}
+          </div>
         ) : undefined
       }
     >

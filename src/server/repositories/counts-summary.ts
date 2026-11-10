@@ -1,11 +1,13 @@
 /**
  * Status summary for the count grids (M07): how many plans / lines sit in each status,
- * within the viewer's scope. Drives the status chips above each grid.
+ * within the viewer's scope. Drives the status chips above each grid. Row sets are the grids'
+ * own (`SKU_LINES_SOURCE`, `LOCATION_LINES_ONLY`), so a chip always equals its filtered grid total.
  */
 import { sql } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import type { Scope } from "@/server/auth/scope";
 import { inList, raw } from "./counts-grid";
+import { LOCATION_LINES_ONLY, SKU_LINES_SOURCE } from "./counts-grids";
 
 export type SummaryKind = "plans" | "locations" | "skus";
 
@@ -27,8 +29,8 @@ export function countStatusSummary(db: AppDb, scope: Scope, kind: SummaryKind): 
         SELECT l.status AS status, COUNT(*) AS n,
           SUM(CASE WHEN p.lock_locations = 1 AND p.status IN ('Pending','Ready To Count','Count Started','Count Completed')
             AND l.status NOT IN ('Cancelled','Inventory Updated','Recount Created') THEN 1 ELSE 0 END) AS locked
-        FROM count_plan_lines l JOIN count_plans p ON p.id = l.plan_id
-        WHERE ${scoped} ${kind === "skus" ? sql`AND l.product_id IS NOT NULL` : sql``} GROUP BY l.status`);
+        FROM ${kind === "skus" ? raw(`${SKU_LINES_SOURCE} l`) : raw("count_plan_lines l")} JOIN count_plans p ON p.id = l.plan_id
+        WHERE ${scoped} ${kind === "locations" ? sql`AND ${raw(LOCATION_LINES_ONLY)}` : sql``} GROUP BY l.status`);
   const byStatus: Record<string, number> = {};
   let total = 0;
   let locked = 0;

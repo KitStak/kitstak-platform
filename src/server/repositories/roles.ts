@@ -14,7 +14,7 @@ import { runBulk } from "@/server/domain/bulk";
 import type { BulkResult } from "@/server/domain/types";
 import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
-import { RESTRICTION_DEFS, ROLE_FIELDS, ROLE_SEARCH_FIELDS, ROLE_SORT_FIELDS, roleKeyFromName, type RoleSave } from "@/lib/grid-defs/admin/roles";
+import { RESTRICTION_DEFS, ROLE_FIELDS, ROLE_SEARCH_FIELDS, ROLE_SORT_FIELDS, roleKeyFromName, withImpliedViews, type RoleSave } from "@/lib/grid-defs/admin/roles";
 import type { ROLE_RESTRICTIONS } from "@/lib/enums";
 import { assertFound, assertVersion, compileGrid, domainCtxOf, duplicateError, logCreate, logDelete, logUpdate, qc, type Actor, type GridBinding } from "./users-shared";
 
@@ -157,7 +157,7 @@ export function createRole(tx: AppDb, auth: AuthContext, actor: Actor, input: Ro
     key: uniqueKey(tx, input.name), name: input.name.trim(), description: input.description, category: input.category,
     isSystem: false, restrictions: [], createdBy: actor.userId, updatedBy: actor.userId,
   }).returning({ id: r.id, name: r.name }).get();
-  writePermissions(tx, row.id, input.permissions);
+  writePermissions(tx, row.id, withImpliedViews(input.permissions));
   logCreate(tx, domainCtxOf(actor, auth), { entityType: ROLE_ENTITY, entityId: row.id, entityCode: row.name });
   return row;
 }
@@ -176,12 +176,13 @@ export function updateRole(tx: AppDb, auth: AuthContext, actor: Actor, id: strin
     name: input.name.trim(), description: input.description, category: input.category,
     updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${r.version} + 1`,
   }).where(eq(r.id, id)).returning().get();
-  writePermissions(tx, id, input.permissions);
+  const perms = withImpliedViews(input.permissions);
+  writePermissions(tx, id, perms);
   const ctx = domainCtxOf(actor, auth);
   logUpdate(tx, ctx, { entityType: ROLE_ENTITY, entityId: id, entityCode: after.name },
     { name: before.name, description: before.description, category: before.category },
     { name: after.name, description: after.description, category: after.category });
-  logPermissionDiff(tx, auth, actor, id, after.name, prevPerms, input.permissions);
+  logPermissionDiff(tx, auth, actor, id, after.name, prevPerms, perms);
   return { id, version: after.version };
 }
 
@@ -193,7 +194,7 @@ export function duplicateRole(tx: AppDb, auth: AuthContext, actor: Actor, id: st
     key: uniqueKey(tx, name), name, description: source.description ?? `Copy of ${source.name}`, category: source.category,
     isSystem: false, restrictions: source.restrictions ?? [], createdBy: actor.userId, updatedBy: actor.userId,
   }).returning({ id: r.id, name: r.name }).get();
-  writePermissions(tx, row.id, rolePermissionKeys(tx, id));
+  writePermissions(tx, row.id, withImpliedViews(rolePermissionKeys(tx, id)));
   logCreate(tx, domainCtxOf(actor, auth), { entityType: ROLE_ENTITY, entityId: row.id, entityCode: row.name });
   return row;
 }

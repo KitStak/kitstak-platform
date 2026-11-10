@@ -9,8 +9,8 @@ export const controlVariants = cva(
     "w-full rounded-md border bg-surface text-[13px] text-body placeholder:text-faint",
     "transition-[border-color,box-shadow,background-color] duration-150",
     "border-border-strong/70 hover:border-border-strong",
-    "focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/25",
-    "focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25",
+    "focus-visible:outline-none focus-visible:border-info focus-visible:ring-2 focus-visible:ring-info/25",
+    "focus-within:border-info focus-within:ring-2 focus-within:ring-info/25",
     "aria-[invalid=true]:border-danger aria-[invalid=true]:hover:border-danger aria-[invalid=true]:focus-visible:ring-danger/20",
     "data-[invalid=true]:border-danger data-[invalid=true]:focus-within:ring-danger/20",
     "disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-faint disabled:hover:border-border-strong/70",
@@ -38,7 +38,7 @@ export const panelClass =
 export const itemClass =
   "relative flex w-full cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-body outline-none " +
   "transition-colors data-[highlighted]:bg-surface-sunken data-[highlighted]:text-foreground " +
-  "data-[disabled]:cursor-not-allowed data-[disabled]:text-faint data-[disabled]:hover:bg-transparent";
+  "data-[disabled]:cursor-not-allowed data-[disabled]:text-faint data-[disabled]:opacity-70 data-[disabled]:hover:bg-transparent";
 
 export const labelClass = "text-[12px] font-semibold text-body";
 export const helpTextClass = "text-[11px] leading-4 text-faint";

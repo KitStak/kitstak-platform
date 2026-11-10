@@ -7,12 +7,13 @@
  */
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Copy, Eye, FileSearch, History, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { DataGrid, DateCell, GridToolbar, useGrid, type BulkAction, type GridColumnDef, type RowAction } from "@/components/grid";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Drawer } from "@/components/ui/drawer";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -22,7 +23,7 @@ import { DisabledReason } from "@/components/ui/tooltip";
 import { useApiQuery } from "@/lib/query-client";
 import { PRINTOUT_FIELDS, PRINTOUTS_GRID_KEY, sectionsFor, templatesFor, typeTitle, columnsFor } from "@/lib/grid-defs/admin/printouts";
 import type { PrintoutDetail, PrintoutRow } from "@/server/repositories/printouts";
-import { DetailList, EntityChangeLogDrawer, Muted, NO_PERMISSION, toastBulk, toFilterFields, useAction, useAdminOptions, usePagePerms, type BulkResponse } from "../admin-shared";
+import { armDestructive, DetailList, EntityChangeLogDrawer, Muted, NO_PERMISSION, toastBulk, toFilterFields, useAction, useAdminOptions, useGridPatch, usePagePerms, type BulkResponse } from "../admin-shared";
 import { openPdf } from "./pdf-fetch";
 
 const PERMS = ["view", "create", "edit", "delete", "change_log", "duplicate"] as const;
@@ -43,14 +44,14 @@ function columns(onOpen: (id: string) => void): GridColumnDef<PrintoutRow>[] {
         </button>
       ),
     },
-    { id: "description", header: "Description", size: 280, cell: ({ row }) => row.original.description || <Muted /> },
+    { id: "description", header: "Description", size: 220, cell: ({ row }) => row.original.description ? <span className="block truncate" title={row.original.description}>{row.original.description}</span> : <Muted /> },
     { id: "status", header: "Status", size: 100, cell: ({ row }) => <StatusBadge active={row.original.isActive} /> },
-    { id: "printMode", header: "Print mode", size: 130, cell: ({ row }) => row.original.printMode },
-    { id: "printerType", header: "Printer type", size: 130, cell: ({ row }) => row.original.printerType },
-    { id: "isDefault", header: "Default", size: 90, cell: ({ row }) => row.original.isDefault ? <Badge tone="warning" size="sm">Default</Badge> : <Muted>No</Muted> },
-    { id: "clientCount", header: "Client access", size: 130, enableSorting: false, cell: ({ row }) => row.original.allClients ? "All clients" : `${row.original.clientCount} ${row.original.clientCount === 1 ? "client" : "clients"}` },
-    { id: "createdAt", header: "Creation date", size: 172, cell: ({ row }) => <DateCell value={row.original.createdAt} /> },
-    { id: "createdByName", header: "Created by", size: 150, cell: ({ row }) => row.original.createdByName ?? <Muted>System</Muted> },
+    { id: "printMode", header: "Print mode", size: 120, cell: ({ row }) => row.original.printMode },
+    { id: "printerType", header: "Printer type", size: 120, cell: ({ row }) => row.original.printerType },
+    { id: "isDefault", header: "Default", size: 90, meta: hidden, cell: ({ row }) => row.original.isDefault ? <Badge tone="warning" size="sm">Default</Badge> : <Muted>No</Muted> },
+    { id: "clientCount", header: "Client access", size: 120, enableSorting: false, cell: ({ row }) => row.original.allClients ? "All clients" : `${row.original.clientCount} ${row.original.clientCount === 1 ? "client" : "clients"}` },
+    { id: "createdAt", header: "Creation date", size: 184, cell: ({ row }) => <DateCell value={row.original.createdAt} /> },
+    { id: "createdByName", header: "Created by", size: 140, cell: ({ row }) => row.original.createdByName ? <span className="block truncate" title={row.original.createdByName}>{row.original.createdByName}</span> : <Muted>System</Muted> },
     { id: "updatedAt", header: "Updated", size: 172, meta: hidden, cell: ({ row }) => <DateCell value={row.original.updatedAt} /> },
   ];
 }
@@ -96,6 +97,7 @@ function DetailDrawer({ id, onOpenChange, onEdit, canEdit, onPreview }: { readon
 
 export function PrintoutListPage({ typeKey }: { readonly typeKey: string }) {
   const router = useRouter();
+  const params = useSearchParams();
   const perms = usePagePerms("settings.printouts_labels", PERMS);
   const fields = React.useMemo(() => toFilterFields(PRINTOUT_FIELDS.filter((f) => f.field !== "typeKey")), []);
   const extraQuery = React.useMemo(() => ({ typeKey }), [typeKey]);
@@ -104,6 +106,7 @@ export function PrintoutListPage({ typeKey }: { readonly typeKey: string }) {
   const [log, setLog] = React.useState<PrintoutRow | null>(null);
   const [toDelete, setToDelete] = React.useState<readonly PrintoutRow[] | null>(null);
   const action = useAction([["grid", PRINTOUTS_GRID_KEY], ["printout-types"]]);
+  const patchRows = useGridPatch<PrintoutRow>(PRINTOUTS_GRID_KEY);
   const title = typeTitle(typeKey);
   const base = `/settings/printouts/${typeKey}`;
   const selected = (ids: readonly string[]) => g.rows.filter((r) => ids.includes(r.id));
@@ -131,19 +134,32 @@ export function PrintoutListPage({ typeKey }: { readonly typeKey: string }) {
     { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: () => setToDelete([row]), disabledReason: !perms.delete ? NO_PERMISSION : row.isDefault ? "The default template can't be deleted" : null },
   ];
   const filtered = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
+  // `?saved=<id>` arrives from the wizard: name the saved template above the grid (Logiwa shows
+  // the new row on top) until dismissed, so nobody re-creates it thinking the save failed.
+  const savedId = params.get("saved");
+  const savedRow = savedId ? g.rows.find((r) => r.id === savedId) ?? null : null;
+  const dismissSaved = () => router.replace(base, { scroll: false });
   const createButton = <DisabledReason reason={perms.create ? null : NO_PERMISSION}><Button variant="primary" disabled={!perms.create} onClick={create}><Plus className="h-4 w-4" aria-hidden />Create {title}</Button></DisabledReason>;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title={`${title} list`}
+      <PageHeader title={`${title} templates`}
         breadcrumbs={[{ label: "Settings" }, { label: "Printouts & Labels", href: "/settings/printouts" }, { label: title }]}
         helper={`List, design and assign the ${title.toLowerCase()} templates your team prints.`}
         actions={createButton} />
-      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by name or description" bulkActions={bulkActions} bulkNoun="printout" />
+      {savedId ? (
+        <div className="px-6 pb-2">
+          <Callout variant="success" title={savedRow ? `${savedRow.name} saved` : "Template saved"} onDismiss={dismissSaved}
+            action={<Button size="sm" onClick={() => setDetailId(savedId)}>Show details</Button>}>
+            {savedRow ? `It is in the list below${savedRow.isDefault ? " as the default" : ""}.` : "Loading the saved template…"}
+          </Callout>
+        </div>
+      ) : null}
+      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by name or description" bulkActions={bulkActions.map((a) => armDestructive(a, g.toolbarProps.selectedIds))} bulkNoun="printout" />
       <DataGrid<PrintoutRow>
         {...g.gridProps}
         columns={cols}
         getRowId={(r) => r.id}
-        rowActions={rowActions}
+        rowActions={(row) => rowActions(row).map((a) => armDestructive(a))}
         onRowClick={(r) => setDetailId(r.id)}
         emptyTitle={filtered ? "No printouts match these filters" : `No ${title.toLowerCase()} templates yet`}
         emptyDescription={filtered ? "Clear a filter or search for another name." : "Create a template to control what this printout looks like."}
@@ -162,7 +178,7 @@ export function PrintoutListPage({ typeKey }: { readonly typeKey: string }) {
         records={{ columns: [{ key: "name", label: "Report name" }, { key: "status", label: "Status" }, { key: "def", label: "Default" }], rows: (toDelete ?? []).map((r) => ({ name: r.name, status: r.status, def: r.isDefault ? "Yes" : "No" })) }}
         onConfirm={async () => {
           const result = await action.run<BulkResponse>("/api/printouts/bulk-delete", "POST", { ids: (toDelete ?? []).map((r) => r.id) });
-          if (result) { toastBulk(result, "printout", "deleted"); g.clearSelection(); }
+          if (result) { const done = new Set(result.succeeded); patchRows((rows) => rows.filter((r) => !done.has(r.id))); toastBulk(result, "printout", "deleted"); g.clearSelection(); }
           setToDelete(null);
         }}
       />

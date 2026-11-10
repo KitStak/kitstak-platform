@@ -2,7 +2,7 @@
  * Wave Log, Allocation Exceptions and Shortage Report repositories (M03, Logiwa 02 §3–§5)
  * plus the KitStaks additions Retry Allocation and Create Backorder.
  */
-import { count, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, count, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { ALLOCATION_EXCEPTIONS_GRID, SHORTAGES_GRID, WAVE_LOG_GRID } from "@/lib/grid-defs/jobs/reports";
 import type { AppDb } from "@/server/api/db";
 import type { AuthContext } from "@/server/auth/context";
@@ -14,6 +14,7 @@ import type { BulkResult, DomainCtx } from "@/server/domain/types";
 import type { GridQuery } from "@/server/query/grid-query";
 import { pageOffset } from "@/server/query/paginate";
 import { asBool, compileGrid, type FieldSqlMap, qc } from "./jobs-grid";
+import { runByDisplay } from "./waves-run-by";
 
 const w = schema.waves;
 const e = schema.allocationExceptions;
@@ -30,8 +31,10 @@ export const WAVE_SQL: FieldSqlMap = {
   jobsCreated: sql`${qc(w.jobsCreated)}`,
   allocatedOrders: sql`${qc(w.allocatedOrders)}`,
   mergedOrders: sql`${qc(w.mergedOrders)}`,
+  // Not stored: picking waves keep the invariant met = allocated + shortage + eliminated (see waves-run.ts).
+  eliminatedOrders: sql`(CASE WHEN (SELECT r.operation_type FROM wave_rules r WHERE r.id = ${qc(w.waveRuleId)}) IN ('Picking', 'AI Job') AND ${qc(w.status)} = 'Completed' THEN MAX(0, ${qc(w.ordersMet)} - ${qc(w.allocatedOrders)} - ${qc(w.shortageOrders)}) ELSE 0 END)`,
   runAt: sql`${qc(w.runAt)}`,
-  runBy: sql`${qc(w.runBy)}`,
+  runBy: sql`COALESCE((SELECT u.name FROM users u WHERE u.email = ${qc(w.runBy)}), ${qc(w.runBy)})`,
   message: sql`${qc(w.message)}`,
   warehouse: sql`(SELECT x.name FROM warehouses x WHERE x.id = ${qc(w.warehouseId)})`,
   operationType: sql`(SELECT r.operation_type FROM wave_rules r WHERE r.id = ${qc(w.waveRuleId)})`,
@@ -60,15 +63,22 @@ export const EXCEPTION_SQL: FieldSqlMap = {
   algorithmName: sql`${qc(e.algorithmName)}`,
   explanation: sql`${qc(e.explanation)}`,
   isRolledBack: sql`${qc(e.isRolledBack)}`,
-  runBy: sql`${qc(e.runBy)}`,
+  // Display name, not the raw email (Logiwa shows names); the email stays filterable via the name.
+  runBy: sql`COALESCE((SELECT u.name FROM users u WHERE u.email = ${qc(e.runBy)}), ${qc(e.runBy)})`,
   runAt: sql`${qc(e.runAt)}`,
   client: sql`(SELECT c.name FROM clients c WHERE c.id = ${qc(e.clientId)})`,
   warehouse: sql`(SELECT x.name FROM warehouses x WHERE x.id = ${qc(e.warehouseId)})`,
 };
 
+/**
+ * One explanation per order per wave (critic R4): the order-level "Order bypassed: all items out of
+ * stock" row is hidden when the same wave already lists the order's line-level SKU shortages.
+ */
+export const NOT_REDUNDANT_BYPASS: SQL = sql`NOT (${qc(e.shortageProductId)} IS NULL AND ${qc(e.explanation)} LIKE 'Order bypassed:%' AND EXISTS (SELECT 1 FROM allocation_exceptions x WHERE x.order_id = ${qc(e.orderId)} AND x.wave_id IS ${qc(e.waveId)} AND x.shortage_product_id IS NOT NULL))`;
+
 export function listAllocationExceptions(db: AppDb, auth: AuthContext, query: GridQuery) {
   const { where, orderBy } = compileGrid(query, ALLOCATION_EXCEPTIONS_GRID, EXCEPTION_SQL, {
-    defaultSort: [{ field: "runAt", dir: "desc" }], tiebreaker: sql`${qc(e.id)}`, extra: [scopedWhere(e, auth.viewScope)],
+    defaultSort: [{ field: "runAt", dir: "desc" }], tiebreaker: sql`${qc(e.id)}`, extra: [scopedWhere(e, auth.viewScope), NOT_REDUNDANT_BYPASS],
   });
   const select: Record<string, SQL> = {
     id: sql`${qc(e.id)}`, orderId: sql`${qc(e.orderId)}`, waveId: sql`${qc(e.waveId)}`, warehouseId: sql`${qc(e.warehouseId)}`,
@@ -84,7 +94,8 @@ export function listAllocationExceptions(db: AppDb, auth: AuthContext, query: Gr
  * through `allocation.allocateOrders` as "Manual Allocation"; Ready to Pick orders that
  * no longer need stock report success without re-allocating.
  */
-export function retryAllocation(db: AppDb, ctx: DomainCtx, orderIds: readonly string[], runBy: string): BulkResult & { readonly allocated: readonly string[] } {
+export function retryAllocation(db: AppDb, ctx: DomainCtx, orderIds: readonly string[], runByInput: string): BulkResult & { readonly allocated: readonly string[] } {
+  const runBy = runByDisplay(db, runByInput);
   const orders = db.select().from(schema.shipmentOrders).where(inArray(schema.shipmentOrders.id, [...new Set(orderIds)])).all();
   const failed: { id: string; code: string; message: string }[] = [];
   const succeeded: string[] = [];
@@ -125,7 +136,7 @@ export const SHORTAGE_SQL: FieldSqlMap = {
   sku: productCol("sku"),
   productName: productCol("name"),
   orderDate: orderCol("order_date"),
-  orderType: sql`(SELECT COALESCE(lv.name, o.order_type) FROM shipment_orders o LEFT JOIN lookup_values lv ON lv.id = o.order_type_id WHERE o.id = ${qc(s.orderId)})`,
+  orderType: sql`(SELECT COALESCE(lv.name, (SELECT lx.name FROM lookup_values lx WHERE lx.type = 'so_type' AND (lx.name = o.order_type OR lx.code = o.order_type OR lx.name LIKE o.order_type || ' %') ORDER BY lx.sort_order LIMIT 1), o.order_type) FROM shipment_orders o LEFT JOIN lookup_values lv ON lv.id = o.order_type_id WHERE o.id = ${qc(s.orderId)})`,
   reason: sql`${qc(s.reason)}`,
   missingTriggered: asBool(sql`${qc(s.missingTriggered)} = 1`),
   orderStatus: orderCol("status"),
@@ -163,6 +174,19 @@ export function listShortages(db: AppDb, auth: AuthContext, query: GridQuery) {
   const rows = db.select(select).from(s).where(where).orderBy(...orderBy).limit(query.pageSize).offset(pageOffset(query)).all() as Record<string, unknown>[];
   const total = db.select({ n: count() }).from(s).where(where).get()?.n ?? 0;
   return { rows: rows.map((r) => ({ ...r, missingTriggered: Boolean(r.missingTriggered) })), total };
+}
+
+/**
+ * Maps shortage-line ids to their distinct open orders inside the caller's scope. Ids that
+ * do not exist, are already resolved, or are out of scope come back in `missing`.
+ */
+export function resolveShortageIds(db: AppDb, auth: AuthContext, shortageIds: readonly string[]): { orderIds: string[]; missing: string[] } {
+  const ids = [...new Set(shortageIds)];
+  if (ids.length === 0) return { orderIds: [], missing: [] };
+  const rows = db.select({ id: s.id, orderId: s.orderId }).from(s)
+    .where(and(inArray(s.id, ids), sql`${qc(s.resolvedAt)} IS NULL`, shortageScope(auth))).all();
+  const found = new Set(rows.map((r) => r.id));
+  return { orderIds: [...new Set(rows.map((r) => r.orderId))], missing: ids.filter((id) => !found.has(id)) };
 }
 
 export function shortageOrderIds(db: AppDb, shortageIds: readonly string[]): string[] {

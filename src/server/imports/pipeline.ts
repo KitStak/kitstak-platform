@@ -14,13 +14,16 @@ import type { AppDb } from "@/server/api/db";
 import { AppError, toAppError, validationError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
 import { can } from "@/server/auth/permissions";
-import { importBatches, importRows, users } from "@/server/db/schema";
+import { files, importBatches, importRows, users } from "@/server/db/schema";
 import { fileStore, type FileStore } from "@/server/files/files";
 import { log } from "@/server/log";
 import { parseImportFile, type ParsedImportFile } from "./parser";
 import { buildErrorFile, errorFileName, type FailedRow } from "./template";
 import type { ImportDefinition, ImportRowValues } from "./types";
 import { buildPreview, validateRows, type ImportPreview, type RowValidation } from "./validate";
+
+/** Prefix of the actor source for rows written by an import (Logiwa change-log SOURCE: UI / import / integration). */
+export const IMPORT_SOURCE_PREFIX = "Import · ";
 
 export const IMPORT_CHUNK_SIZE = 200;
 
@@ -52,10 +55,47 @@ async function parseAndValidate(upload: ImportUpload): Promise<{ file: ParsedImp
   return { file, rows: validation.rows, preview: buildPreview(upload.def, validation) };
 }
 
-/** Validation preview: parses and validates, writes nothing. */
-export async function previewImport(upload: ImportUpload): Promise<ImportPreview> {
+/** Rows a dry run applies (inside a rolled-back transaction) to catch referential errors. */
+export const PREVIEW_APPLY_LIMIT = 2000;
+
+class PreviewRollback extends Error {}
+
+/**
+ * Validation preview, writes nothing. With `db` (the API route passes it) every column-valid
+ * row is also run through the handler inside a transaction that is always rolled back, so the
+ * preview reports the same referential errors as the real run (unknown client, warehouse, SKU…).
+ */
+export async function previewImport(upload: ImportUpload, db?: AppDb): Promise<ImportPreview> {
   assertCanImport(upload.def, upload.auth);
-  return (await parseAndValidate(upload)).preview;
+  const { rows, preview } = await parseAndValidate(upload);
+  if (!db || !upload.def.handler.configured || preview.missingColumns.length > 0) return preview;
+  const valid = rows.filter((r) => r.errors.length === 0).slice(0, PREVIEW_APPLY_LIMIT);
+  if (valid.length === 0) return preview;
+  const failures = new Map<number, string>();
+  try {
+    db.transaction((tx) => {
+      const file = tx.insert(files).values({ name: upload.fileName, mime: "application/octet-stream", size: upload.bytes.length, sha256: "dry-run", storagePath: "dry-run", uploadedBy: upload.auth.user.id, ownerEntityType: "import_batch" }).returning({ id: files.id }).get();
+      const batch = tx.insert(importBatches).values({ importKey: upload.def.key, status: "Processing", masterRowCount: valid.length, fileId: file.id, uploadedBy: upload.auth.user.id }).returning({ id: importBatches.id }).get();
+      for (const row of valid) {
+        const outcome = applyRow(tx, upload, batch.id, row);
+        if (!outcome.success) failures.set(row.rowNumber, outcome.message ?? "Failed");
+      }
+      throw new PreviewRollback("dry run");
+    });
+  } catch (error: unknown) {
+    if (!(error instanceof PreviewRollback)) throw error;
+  }
+  return mergeApplyFailures(preview, failures);
+}
+
+/** Folds dry-run apply failures into the column-validation preview (errors first). */
+export function mergeApplyFailures(preview: ImportPreview, failures: ReadonlyMap<number, string>): ImportPreview {
+  if (failures.size === 0) return preview;
+  const rows = preview.rows.map((r) => {
+    const message = failures.get(r.rowNumber);
+    return message && r.valid ? { ...r, valid: false, errors: [message] } : r;
+  }).sort((a, b) => Number(!a.valid) === Number(!b.valid) ? a.rowNumber - b.rowNumber : Number(!b.valid) - Number(!a.valid));
+  return { ...preview, validCount: Math.max(0, preview.validCount - failures.size), errorCount: preview.errorCount + failures.size, rows };
 }
 
 interface RowOutcome {
@@ -73,7 +113,8 @@ function applyRow(tx: AppDb, upload: ImportUpload, batchId: string, row: RowVali
     const result = tx.transaction((savepoint) => upload.def.handler.apply({
       db: savepoint,
       auth: upload.auth,
-      actor: { userId: upload.auth.user.id, source: upload.auth.user.email },
+      // The channel is part of the source, so change-log rows written by imports read "Import · <user>".
+      actor: { userId: upload.auth.user.id, source: `${IMPORT_SOURCE_PREFIX}${upload.auth.user.email}` },
       batchId,
       rowNumber: row.rowNumber,
     }, row.values as ImportRowValues));

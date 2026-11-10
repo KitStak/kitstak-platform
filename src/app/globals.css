@@ -234,3 +234,41 @@ html[data-route-pending] #main-content {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Grid: indeterminate progress bar while stale rows are shown (DataGrid `refreshing`). */
+.ks-grid-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 30%;
+  background: var(--info);
+  animation: ks-grid-progress 1.1s ease-in-out infinite;
+}
+@keyframes ks-grid-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+/* Grid: a row the page points at (DataGrid `highlightRowId`) flashes once. */
+tr[data-highlight] > td {
+  animation: ks-row-flash 2s ease-out 1;
+}
+@keyframes ks-row-flash {
+  0%,
+  40% {
+    background-color: var(--info-soft);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Status pills (pillStyle): in dark mode a light pastel fill glares, so use a translucent
+   tint of the pill hue with a lifted foreground. */
+:root[data-theme="dark"] [style*="--pill-fg"] {
+  background-color: color-mix(in srgb, var(--pill-fg) 24%, transparent) !important;
+  color: color-mix(in srgb, var(--pill-fg) 45%, #ffffff) !important;
+}

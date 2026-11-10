@@ -40,7 +40,7 @@ export const FILE_POLICIES: Readonly<Record<FilePurpose, FilePolicy>> = {
     description: "an image (PNG, JPEG, GIF, WebP) or a PDF",
   },
   import: { maxBytes: MAX_UPLOAD_BYTES, mimes: [MIME.xlsx, MIME.csv], description: "an Excel (.xlsx) or CSV file" },
-  export: { maxBytes: MAX_GENERATED_BYTES, mimes: [MIME.xlsx], description: "an Excel (.xlsx) file" },
+  export: { maxBytes: MAX_GENERATED_BYTES, mimes: [MIME.xlsx, MIME.csv], description: "an Excel (.xlsx) or CSV file" }, // CSV: scheduled report deliveries (M13)
   "import-errors": { maxBytes: MAX_GENERATED_BYTES, mimes: [MIME.xlsx], description: "an Excel (.xlsx) file" },
   print: { maxBytes: MAX_GENERATED_BYTES, mimes: [MIME.pdf, MIME.zpl, MIME.png], description: "a PDF, ZPL or PNG file" },
 };

@@ -30,6 +30,8 @@ export default defineConfig({
     screenshot: "only-on-failure",
     viewport: { width: 1440, height: 900 },
     actionTimeout: 10_000,
+    // Optional override when the pinned Playwright browser build is not installed locally.
+    ...(process.env.PW_CHROMIUM_PATH ? { launchOptions: { executablePath: process.env.PW_CHROMIUM_PATH } } : {}),
     navigationTimeout: 30_000,
   },
   projects: [

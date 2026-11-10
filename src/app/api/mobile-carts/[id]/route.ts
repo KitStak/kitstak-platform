@@ -6,7 +6,7 @@ import { idParamsSchema } from "@/server/repositories/platform-common";
 import { deleteMobileCarts, getMobileCart, updateMobileCart } from "@/server/repositories/mobile-carts";
 
 export const GET = defineRoute({
-  permission: "settings.mobile_carts.view",
+  permission: ["settings.mobile_carts.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   handler: ({ db, auth, params }) => getMobileCart(db, auth, params.id),
 });

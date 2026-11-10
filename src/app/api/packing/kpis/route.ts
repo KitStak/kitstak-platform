@@ -1,11 +1,14 @@
-/** `GET /api/packing/kpis?warehouseId=` — orders / products the user packed today, orders to be packed. */
+/**
+ * `GET /api/packing/kpis?warehouseId=&stationId=` — orders / products the user packed today, orders to be packed,
+ * pack-short orders held in hospitals, orders with packing warnings, and (with a station) that station's totals today.
+ */
 import { z } from "zod";
 import { defineRoute } from "@/server/api/define-route";
 import { idSchema } from "@/server/repositories/platform-common";
-import { PACKING_PERMISSIONS, packingKpis } from "@/server/repositories/packing-scan";
+import { PACKING_PERMISSIONS, packingKpis, warehouseIdParam } from "@/server/repositories/packing-scan";
 
 export const GET = defineRoute({
   permission: PACKING_PERMISSIONS.view,
-  query: z.object({ warehouseId: idSchema }),
-  handler: ({ db, auth, query }) => packingKpis(db, auth.scope, query.warehouseId, auth.user.id),
+  query: z.object({ warehouseId: warehouseIdParam, stationId: idSchema.optional() }),
+  handler: ({ db, auth, query }) => packingKpis(db, auth.scope, query.warehouseId, auth.user.id, new Date(), query.stationId ?? null),
 });

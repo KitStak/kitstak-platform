@@ -36,7 +36,9 @@ describe("formulas", () => {
 describe("action guards", () => {
   it("edit / delete / cancel", () => {
     expect(editReason(row())).toBeNull();
-    expect(editReason(row({ status: "Completed" }))).toMatch(/can't be edited/);
+    expect(editReason(row({ status: "Completed" }))).toBeNull();
+    expect(editReason(row({ status: "In Process" }))).toBeNull();
+    expect(editReason(row({ status: "Cancelled" }))).toMatch(/can't be edited/);
     expect(deleteReason(row())).toBeNull();
     expect(deleteReason(row({ status: "In Process" }))).toBe("Only Open work orders can be deleted");
     expect(cancelReason(row({ processedQty: 1, status: "In Process" }))).toMatch(/already built/);
@@ -69,8 +71,8 @@ describe("contracts", () => {
     const res = workOrderInputSchema.safeParse({});
     expect(res.success).toBe(false);
     const messages = res.success ? [] : res.error.issues.map((i) => i.message);
-    expect(messages).toContain("Select warehouse is required.");
-    expect(messages).toContain("Select client is required.");
+    expect(messages).toContain("Warehouse is required");
+    expect(messages).toContain("Client is required");
   });
   it("Build For SO needs an order; dates must be ordered", () => {
     expect(workOrderInputSchema.safeParse({ ...base, buildFor: "SO" }).success).toBe(false);

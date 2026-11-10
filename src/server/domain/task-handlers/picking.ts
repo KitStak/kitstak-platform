@@ -34,6 +34,9 @@ function handleShort(tx: Tx, ctx: DomainCtx, task: TaskRow, input: TaskExecuteIn
     isRetain: retain, notes: input.note ?? null, warehouseId: bucket.warehouseId, clientId: bucket.clientId ?? "", enteredBy: ctx.source,
   }).run();
   if (task.orderId) markOrderShort(tx, ctx, task.orderId, "pick");
+  if (task.orderLineId) {
+    tx.update(schema.orderLineShortages).set({ missingTriggered: true }).where(eq(schema.orderLineShortages.orderLineId, task.orderLineId)).run();
+  }
   if (retain) return null;
   releaseForLine(tx, ctx, alloc, shortQty);
   if (!input.createResolutionJob || !task.orderLineId || !task.orderId) {

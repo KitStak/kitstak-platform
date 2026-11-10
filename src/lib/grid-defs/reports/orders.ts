@@ -1,6 +1,6 @@
 /** Orders-group report grids: Channel Sales (spec 07 §Channel Sales), Order Inventory (§Order Inventory). */
 import { INVENTORY_STATUSES, ORDER_CHANNELS } from "@/lib/enums";
-import { CLIENT_FIELD, WAREHOUSE_FIELD, col, date, enumOf, num, text, type ReportDef } from "./types";
+import { CLIENT_FIELD, WAREHOUSE_FIELD, bool, col, date, enumOf, num, text, type ReportDef } from "./types";
 
 export const CHANNEL_SALES_DEF: ReportDef = {
   gridKey: "report-channel-sales",
@@ -11,6 +11,7 @@ export const CHANNEL_SALES_DEF: ReportDef = {
   fields: [
     enumOf("channel", "Channel", ORDER_CHANNELS, { allowEmpty: true }),
     CLIENT_FIELD,
+    bool("hasSales", "Has Sales?", { description: "No = channel listings that have not shipped yet (no warehouse attributed)." }),
     num("shipmentOrderCount", "No. of Shipment Orders"),
     text("productName", "Product Name"),
     num("revenue", "Revenue"),
@@ -21,24 +22,29 @@ export const CHANNEL_SALES_DEF: ReportDef = {
     date("lastShippedAt", "Last Shipment Date"),
   ],
   columns: [
-    col("warehouse", "Warehouse", { width: 190 }),
-    col("client", "Client", { width: 170 }),
-    col("channel", "Channel", { width: 120 }),
-    col("storeName", "Store Name", { width: 180 }),
-    col("sku", "SKU", { width: 170, hrefKey: "productHref", alwaysVisible: true }),
-    col("productName", "Product Name", { width: 220 }),
-    col("barcode", "Barcode", { width: 140, kind: "mono" }),
+    // The three metrics this report exists for sit right after the product, so they are visible at 1440 px without scrolling.
+    col("sku", "SKU", { width: 160, hrefKey: "productHref", alwaysVisible: true }),
+    col("productName", "Product Name", { width: 210 }),
+    col("soldQty", "Sold Quantity", { kind: "number", width: 140, tip: "Total shipped quantity of the product (UOM) on shipped, partially shipped and delivered orders." }),
+    col("shipmentOrderCount", "# Shipment Orders", { kind: "number", width: 150, hrefKey: "ordersHref", tip: "Number of distinct shipped orders that contain the product. Click to open those orders." }),
+    col("revenue", "Revenue", { kind: "money", width: 132, tip: "Shipped quantity × line unit price, summed over the shipped orders that contain the product." }),
+    col("channel", "Channel", { width: 110 }),
+    col("storeName", "Store Name", { width: 150 }),
+    col("warehouse", "Warehouse", { width: 150 }),
+    col("client", "Client", { width: 140 }),
+    col("barcode", "Barcode", { width: 130, kind: "mono" }),
     col("packType", "Pack Type", { width: 100 }),
-    col("soldQty", "Sold Quantity", { kind: "number", width: 130, tip: "Total shipped quantity of the product (UOM) on shipped, partially shipped and delivered orders." }),
-    col("shipmentOrderCount", "# Shipment Order", { kind: "number", width: 150, hrefKey: "ordersHref", tip: "Number of distinct shipped orders that contain the product. Click to open those orders." }),
-    col("revenue", "Revenue", { kind: "money", width: 130, tip: "Shipped quantity × line unit price, summed over the shipped orders that contain the product." }),
     col("lastShippedAt", "Last Shipment Date", { kind: "datetime", width: 172 }),
+    col("hasSales", "Has Sales?", { kind: "yesNo", width: 110, defaultHidden: true }),
   ],
   search: ["sku", "productName"],
   searchPlaceholder: "Search by SKU or product name",
   defaultSort: ["-revenue", "sku"],
   rowKey: "rowId",
 };
+
+/** Default chip "Has Sales?: Yes": listings that never shipped are opt-in (remove the chip). */
+export const CHANNEL_SALES_DEFAULT_FILTER = "f.hasSales=bool:true";
 
 export const ORDER_INVENTORY_DEF: ReportDef = {
   gridKey: "report-order-inventory",
@@ -67,11 +73,11 @@ export const ORDER_INVENTORY_DEF: ReportDef = {
   columns: [
     col("orderCode", "Order Code", { width: 130, hrefKey: "orderHref", alwaysVisible: true, kind: "strong" }),
     col("warehouse", "Warehouse", { width: 180 }),
-    col("client", "Client", { width: 160 }),
+    col("client", "Client", { width: 210 }),
     col("storeOrderNumber", "Store Order Number", { width: 160 }),
     col("jobCode", "Job Code", { width: 120, hrefKey: "jobHref" }),
     col("workOrderCode", "Work Order Code", { width: 140, hrefKey: "workOrderHref" }),
-    col("waveNo", "Wave No", { width: 110 }),
+    col("waveNo", "Wave No", { width: 110, hrefKey: "waveHref" }),
     col("sku", "SKU", { width: 170, hrefKey: "productHref" }),
     col("packType", "Pack Type", { width: 100 }),
     col("uomPackType", "UOM Pack Type", { width: 120 }),

@@ -29,7 +29,9 @@ import { Switch } from "@/components/ui/switch";
 import { UnderlineTabs } from "@/components/ui/tabs";
 import { TextField } from "@/components/ui/text-field";
 import { toast } from "@/components/ui/toast";
-import { YesNoToggle } from "@/components/ui/yes-no-toggle";
+import { SettingYesNo as YesNoToggle } from "@/components/integrations/shared/form-controls";
+import { DRAWER_DETAIL_STALE_MS } from "@/components/integrations/shared/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import type { CarrierConnectionDetail } from "@/server/repositories/carriers";
 
 type Tab = "general" | "clients" | "services" | "packages" | "advanced";
@@ -101,14 +103,17 @@ function TokenPicker({ tokens, onPick }: { readonly tokens: readonly string[]; r
   );
 }
 
+const DETAIL_KEY = "carrier-connection";
+
 export function EditCarrierDrawer({ id, onOpenChange, onSaved }: { readonly id: string | null; readonly onOpenChange: (o: boolean) => void; readonly onSaved: () => void }) {
-  const q = useApiQuery<CarrierConnectionDetail>(["carrier-connection", id ?? ""], id ? `/api/carriers/${id}` : null, { staleTime: 0 });
+  const qc = useQueryClient();
+  const q = useApiQuery<CarrierConnectionDetail>([DETAIL_KEY, id ?? ""], id ? `/api/carriers/${id}` : null, { staleTime: DRAWER_DETAIL_STALE_MS });
   const d = q.data?.data;
   const [dirty, setDirty] = React.useState(false);
   return (
     <Drawer open={id !== null} onOpenChange={(o) => { if (!o) setDirty(false); onOpenChange(o); }} dirty={dirty} width={60} title={d ? `Edit ${d.setupName}` : "Edit carrier connection"} description={d ? `${d.connectionLabel} · ${d.warehouseCode}` : undefined}>
       {q.isPending ? <Skeleton className="h-72 w-full" /> : !d ? <EmptyState title="Couldn't load this carrier setup" description={q.error?.message} action={<Button onClick={() => void q.refetch()}>Retry</Button>} />
-        : <Body key={`${d.id}-${q.dataUpdatedAt}`} detail={d} onDirtyChange={setDirty} onCancel={() => onOpenChange(false)} onSaved={() => { setDirty(false); onSaved(); onOpenChange(false); }} />}
+        : <Body key={`${d.id}-${q.dataUpdatedAt}`} detail={d} onDirtyChange={setDirty} onCancel={() => onOpenChange(false)} onSaved={() => { setDirty(false); void qc.invalidateQueries({ queryKey: [DETAIL_KEY, d.id] }); onSaved(); onOpenChange(false); }} />}
     </Drawer>
   );
 }
@@ -179,7 +184,7 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
           ))}
           {!sandbox ? <div className="flex flex-col gap-1"><L htmlFor="ec-payor">Payor account number</L><TextField id="ec-payor" value={form.payorAccountNumber} maxLength={40} onChange={(e) => setForm((f) => ({ ...f, payorAccountNumber: e.target.value }))} /></div> : null}
           <div className="flex flex-col gap-1"><L>Active</L><YesNoToggle value={form.isActive} onChange={(v) => setForm((f) => ({ ...f, isActive: v }))} ariaLabel="Active" /></div>
-          {!sandbox ? <div className="flex flex-col gap-1"><L>Environment</L><SegmentedControl ariaLabel="Environment" value={form.environment} onChange={(v) => setForm((f) => ({ ...f, environment: v }))} options={[{ value: "Test", label: "Test" }, { value: "Production", label: "Production" }]} />
+          {!sandbox ? <div className="flex flex-col gap-1"><L>Environment</L><SegmentedControl className="w-full [&>button]:flex-1" ariaLabel="Environment" value={form.environment} onChange={(v) => setForm((f) => ({ ...f, environment: v }))} options={[{ value: "Test", label: "Test" }, { value: "Production", label: "Production" }]} />
             <p className="text-[11px] text-faint">{form.environment === "Test" ? "Requests are validated like the carrier; labels and rates are sandbox." : "Live carrier API. Credentials are checked when you save."}</p></div> : null}
         </div>
       ) : null}
@@ -259,7 +264,7 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
           <section className="rounded-lg border border-border p-4">
             <h3 className="text-[13px] font-semibold">Label settings</h3>
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <SegmentedControl ariaLabel="Label format" value={st.label.format} onChange={(v) => setSt((s) => ({ ...s, label: { ...s.label, format: v } }))} options={LABEL_FORMATS.map((f) => ({ value: f, label: f }))} />
+              <SegmentedControl className="w-full [&>button]:flex-1" ariaLabel="Label format" value={st.label.format} onChange={(v) => setSt((s) => ({ ...s, label: { ...s.label, format: v } }))} options={LABEL_FORMATS.map((f) => ({ value: f, label: f }))} />
               <Select size="sm" value={st.label.size} onChange={(v) => v && setSt((s) => ({ ...s, label: { ...s.label, size: v } }))} options={[{ value: "4x6", label: "4 × 6 in" }, { value: "4x8", label: "4 × 8 in" }, { value: "6x4", label: "6 × 4 in" }]} className="w-36" />
             </div>
             <div className="mt-3 flex flex-col gap-2">
@@ -275,7 +280,7 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
           <section className="rounded-lg border border-border p-4">
             <h3 className="text-[13px] font-semibold">International settings</h3>
             <div className="mt-2 grid gap-3 md:grid-cols-2">
-              <div className="flex flex-col gap-1"><L>Tax type</L><SegmentedControl ariaLabel="Tax type" value={st.international.taxType ?? "EIN"} onChange={(v) => setSt((s) => ({ ...s, international: { ...s.international, taxType: v } }))} options={[{ value: "EIN", label: "EIN" }, { value: "DNS", label: "DNS" }, { value: "FGN", label: "FGN" }]} /></div>
+              <div className="flex flex-col gap-1"><L>Tax type</L><SegmentedControl className="w-full [&>button]:flex-1" ariaLabel="Tax type" value={st.international.taxType ?? "EIN"} onChange={(v) => setSt((s) => ({ ...s, international: { ...s.international, taxType: v } }))} options={[{ value: "EIN", label: "EIN" }, { value: "DNS", label: "DNS" }, { value: "FGN", label: "FGN" }]} /></div>
               <div className="flex flex-col gap-1"><L htmlFor="ec-taxid">Tax ID</L><TextField id="ec-taxid" size="sm" value={st.international.taxId ?? ""} onChange={(e) => setSt((s) => ({ ...s, international: { ...s.international, taxId: e.target.value || null } }))} /></div>
               <div className="flex flex-col gap-1"><L>Use components on commercial invoice</L><YesNoToggle value={st.international.useComponentsOnCommercialInvoice} onChange={(v) => setSt((s) => ({ ...s, international: { ...s.international, useComponentsOnCommercialInvoice: v } }))} ariaLabel="Use components on commercial invoice" /></div>
               <div className="flex flex-col gap-1"><L>Customer reference (invoice number)</L><Select size="sm" value={st.international.customerReferenceInvoice} clearable placeholder="None" options={REFERENCE_TOKENS.map((t) => ({ value: t, label: t }))} onChange={(v) => setSt((s) => ({ ...s, international: { ...s.international, customerReferenceInvoice: v } }))} /></div>

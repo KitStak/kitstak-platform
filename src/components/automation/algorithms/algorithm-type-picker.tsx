@@ -2,7 +2,8 @@
 
 /** `/automation/algorithms` — Select Algorithm Type (spec 06 §1) with a full-page circuit illustration. */
 import Link from "next/link";
-import { ArrowRight, Boxes, PackageSearch } from "lucide-react";
+import { ArrowRight, Boxes, PackageSearch, Plus } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
 
@@ -48,19 +49,23 @@ const CARDS = [
 export function AlgorithmTypePicker() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Select Algorithm Type" helper="Select an algorithm type to build your own algorithm." />
+      <PageHeader title="Select Algorithm Type" helper="Select an algorithm type to build your own algorithm."
+        actions={<>
+          <Link href="/automation/algorithms/putaway/new" className={buttonVariants({ variant: "secondary", size: "sm" })}><Plus className="h-3.5 w-3.5" aria-hidden />Create Putaway Algorithm</Link>
+          <Link href="/automation/algorithms/allocation/new" className={buttonVariants({ variant: "primary", size: "sm" })}><Plus className="h-3.5 w-3.5" aria-hidden />Create Allocation Algorithm</Link>
+        </>} />
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center gap-8 px-6 py-8">
         <CircuitArt />
-        <div className="grid w-full gap-4 sm:grid-cols-2">
+        <nav aria-label="Algorithm types" className="grid w-full gap-4 sm:grid-cols-2">
           {CARDS.map((c) => (
-            <Link key={c.href} href={c.href}
+            <Link key={c.href} href={c.href} aria-label={`${c.title}: open the ${c.title.toLowerCase()} list`}
               className={cn("group flex flex-col gap-3 rounded-xl p-5 shadow-sm transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 hover:-translate-y-0.5", c.tone)}>
               <span className="flex items-center gap-2 text-[16px] font-semibold"><c.icon className="h-5 w-5" aria-hidden />{c.title}
                 <ArrowRight className="ml-auto h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden /></span>
               <span className="text-[13px] leading-5 text-white/85">{c.body}</span>
             </Link>
           ))}
-        </div>
+        </nav>
       </div>
     </div>
   );

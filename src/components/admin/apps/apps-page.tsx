@@ -21,7 +21,8 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
-import { DisabledReason } from "@/components/ui/tooltip";
+import { DisabledReason, Tooltip } from "@/components/ui/tooltip";
+import { Callout } from "@/components/ui/callout";
 import type { AppRow } from "@/server/repositories/apps";
 import { EntityChangeLogDrawer, NO_PERMISSION, useAction, usePagePerms } from "../admin-shared";
 import { AppSettingsDrawer } from "./app-settings-drawer";
@@ -42,7 +43,7 @@ function AppCard({ app, canManage, onDetails, onSettings, onActivate, onDeactiva
           <h3 className="truncate text-[14px] font-semibold text-foreground">{app.name}</h3>
           <p className="text-[11px] uppercase tracking-wide text-faint">{app.category}</p>
         </div>
-        {app.isActive && hasSettings ? (
+        {hasSettings ? (
           <DisabledReason reason={canManage ? null : NO_PERMISSION}>
             <Button size="icon-sm" variant="ghost" aria-label={`${app.name} settings`} disabled={!canManage} onClick={onSettings}><Settings2 className="h-4 w-4" /></Button>
           </DisabledReason>
@@ -52,12 +53,20 @@ function AppCard({ app, canManage, onDetails, onSettings, onActivate, onDeactiva
       <div className="mt-4 flex items-center justify-between gap-2 border-t border-border pt-3">
         <Button size="sm" variant="ghost" onClick={onDetails}>Details</Button>
         {app.isActive ? (
-          <DisabledReason reason={canManage ? "Click to deactivate" : NO_PERMISSION}>
-            <button type="button" disabled={!canManage || busy} onClick={onDeactivate}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-semibold text-success transition-colors hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-success">
-              <Check className="h-3.5 w-3.5" aria-hidden />Activated
-            </button>
-          </DisabledReason>
+          canManage ? (
+            <Tooltip content="Click to deactivate">
+              <button type="button" disabled={busy} onClick={onDeactivate} aria-label={`${app.name} is activated. Click to deactivate`}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-semibold text-success transition-colors hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-wait disabled:opacity-60">
+                <Check className="h-3.5 w-3.5" aria-hidden />Activated
+              </button>
+            </Tooltip>
+          ) : (
+            <DisabledReason reason={NO_PERMISSION}>
+              <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-semibold text-success">
+                <Check className="h-3.5 w-3.5" aria-hidden />Activated
+              </span>
+            </DisabledReason>
+          )
         ) : (
           <DisabledReason reason={canManage ? null : NO_PERMISSION}>
             <Button size="sm" variant="primary" disabled={!canManage || busy} onClick={onActivate}>Activate</Button>
@@ -68,7 +77,10 @@ function AppCard({ app, canManage, onDetails, onSettings, onActivate, onDeactiva
   );
 }
 
-function DetailsDialog({ app, onClose, onLog, onSettings, canManage }: { readonly app: AppRow | null; readonly onClose: () => void; readonly onLog: () => void; readonly onSettings: () => void; readonly canManage: boolean }) {
+function DetailsDialog({ app, onClose, onLog, onSettings, onActivate, onDeactivate, canManage, busy }: {
+  readonly app: AppRow | null; readonly onClose: () => void; readonly onLog: () => void; readonly onSettings: () => void;
+  readonly onActivate: () => void; readonly onDeactivate: () => void; readonly canManage: boolean; readonly busy: boolean;
+}) {
   const fmt = useFormat();
   return (
     <Dialog open={app !== null} onOpenChange={(o) => !o && onClose()}>
@@ -88,11 +100,17 @@ function DetailsDialog({ app, onClose, onLog, onSettings, canManage }: { readonl
                 </ul>
               </section>
               <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[12.5px] text-secondary">
-                {app.isActive ? <>Activated {app.activatedAt ? fmt.dateTime(app.activatedAt) : ""}{app.activatedByName ? ` by ${app.activatedByName}` : ""}.</> : "Not activated yet."}
+                {app.isActive ? <>Activated {app.activatedAt ? fmt.gridDateTime(app.activatedAt) : ""}{app.activatedByName ? ` by ${app.activatedByName}` : ""}.</> : "Not activated yet."}
               </p>
             </DialogBody>
             <DialogFooter>
               <Button variant="ghost" onClick={onLog}><History className="h-4 w-4" aria-hidden />Change log</Button>
+              <span className="flex-1" aria-hidden />
+              <DisabledReason reason={canManage ? null : NO_PERMISSION}>
+                {app.isActive
+                  ? <Button variant="secondary" className="text-danger hover:text-danger" disabled={!canManage || busy} onClick={onDeactivate}>Deactivate</Button>
+                  : <Button variant="secondary" disabled={!canManage || busy} onClick={onActivate}>Activate</Button>}
+              </DisabledReason>
               {app.isActive && (app.def?.settings.length ?? 0) > 0 ? <DisabledReason reason={canManage ? null : NO_PERMISSION}><Button variant="secondary" disabled={!canManage} onClick={onSettings}><Settings2 className="h-4 w-4" aria-hidden />Settings</Button></DisabledReason> : null}
               {app.isActive && app.def?.openHref ? <Link href={app.def.openHref} className={buttonVariants({ variant: "primary" })}>{app.def.openLabel ?? "Open"}<ExternalLink className="h-3.5 w-3.5" aria-hidden /></Link> : <Button variant="primary" onClick={onClose}>Close</Button>}
             </DialogFooter>
@@ -111,7 +129,7 @@ export function AppsPage() {
   const tab: AppTab = APP_TABS.find((t) => t === params.get("tab")) ?? "popular";
   const [search, setSearch] = React.useState(params.get("q") ?? "");
   const q = useApiQuery<readonly AppRow[]>(["apps"], "/api/apps", { staleTime: 0 });
-  const action = useAction([["apps"]]);
+  const action = useAction([["apps"], ["me"]]);
   const [details, setDetails] = React.useState<string | null>(null);
   const [settingsFor, setSettingsFor] = React.useState<string | null>(null);
   const [deactivate, setDeactivate] = React.useState<AppRow | null>(null);
@@ -130,6 +148,13 @@ export function AppsPage() {
   const byKey = (key: string | null) => apps.find((a) => a.key === key) ?? null;
 
   const activate = async (app: AppRow) => {
+    // SSO can't go live unconfigured: open its settings first instead of a refused activation.
+    const ssoReady = app.key !== "sso" || Boolean(app.secretHints?.clientSecret || (typeof app.settings.certificate === "string" && app.settings.certificate.trim()));
+    if (!ssoReady) {
+      toast.info("Set up single sign-on first", "Enter your identity provider details, save, then activate.");
+      setSettingsFor(app.key);
+      return;
+    }
     const res = await action.run<AppRow>(`/api/apps/${app.key}`, "PATCH", { isActive: true });
     if (res) {
       toast.success(`${app.name} activated`, app.def?.unlocks[0] ? `${app.def.unlocks[0]} is now available.` : "The app is ready to use.");
@@ -139,13 +164,16 @@ export function AppsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Apps" helper="Turn on add-ons for your account. Each app unlocks screens and actions as soon as it is activated." />
+      <PageHeader breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "Apps" }]} title="Apps" helper="Turn on add-ons for your account. Each app unlocks screens and actions as soon as it is activated." />
+      {!perms.loading && !perms.update ? (
+        <div className="mx-6 mt-2"><Callout variant="info" title="Read-only access">You can browse apps, but only users with Company Settings update permission can activate, deactivate or configure them.</Callout></div>
+      ) : null}
       <div className="mx-6 mt-2 overflow-hidden rounded-2xl border border-border bg-[radial-gradient(120%_140%_at_0%_0%,#EFE7FB_0%,#E2E5FB_45%,#F5F7FA_100%)] px-6 py-6">
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div className="max-w-xl">
             <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#621DB8]">App directory</p>
             <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.01em] text-foreground">Discover apps for KitStaks</h2>
-            <p className="mt-1 text-[13px] text-secondary">{counts.active} of {counts.all} apps active. Activate one to unlock it for every user with access.</p>
+            <p className="mt-1 text-[13px] text-secondary">{q.isLoading ? "Loading the app catalog…" : q.isError ? "The app catalog could not be loaded." : counts.all === 0 ? "No apps are installed on this account yet." : <>{counts.active} of {counts.all} apps active. Activate one to unlock it for every user with access.</>}</p>
             <label className="relative mt-4 flex max-w-md items-center">
               <Search className="pointer-events-none absolute left-3 h-4 w-4 text-faint" aria-hidden />
               <span className="sr-only">Search apps</span>
@@ -186,7 +214,10 @@ export function AppsPage() {
         )}
         {!perms.update && !perms.loading ? <p className="mt-4 text-[12px] text-faint">Ask an administrator with Company Settings access to activate apps.</p> : null}
       </div>
-      <DetailsDialog app={byKey(details)} canManage={perms.update} onClose={() => setDetails(null)} onLog={() => { setLog(byKey(details)); setDetails(null); }} onSettings={() => { setSettingsFor(details); setDetails(null); }} />
+      <DetailsDialog app={byKey(details)} canManage={perms.update} busy={action.pending}
+        onActivate={() => { const a = byKey(details); setDetails(null); if (a) void activate(a); }}
+        onDeactivate={() => { setDeactivate(byKey(details)); setDetails(null); }}
+        onClose={() => setDetails(null)} onLog={() => { setLog(byKey(details)); setDetails(null); }} onSettings={() => { setSettingsFor(details); setDetails(null); }} />
       <AppSettingsDrawer app={byKey(settingsFor)} onClose={() => setSettingsFor(null)} />
       <EntityChangeLogDrawer open={log !== null} onOpenChange={(o) => !o && setLog(null)} path={log ? `/api/apps/${log.key}/change-log` : null} title={`App change log · ${log?.name ?? ""}`} />
       <ConfirmDialog open={deactivate !== null} onOpenChange={(o) => !o && setDeactivate(null)} variant="danger"

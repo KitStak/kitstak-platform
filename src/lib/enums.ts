@@ -131,7 +131,9 @@ export const PRINTER_TYPES = ["Label Printer", "Laser Printer"] as const;
 /** Grid query grammar filter ops (BUILD_PLAN 0.2), shared by saved filters and rule conditions. */
 export const GRID_FILTER_OPS = ["in", "nin", "eq", "ct", "sw", "ew", "ex", "empty", "rng", "bool", "date"] as const;
 export const RULE_COMPARATORS = ["equals", "notEquals", "contains", "notContains", "startsWith", "endsWith",
-  "in", "notIn", "gt", "gte", "lt", "lte", "between", "isEmpty", "isNotEmpty"] as const;
+  "in", "notIn", "gt", "gte", "lt", "lte", "between", "isEmpty", "isNotEmpty",
+  // Relative date (value = date-spec grammar of server/query/date-presets: "today", "last7d", "withinNext30d", "mon", …).
+  "dateIs"] as const;
 
 /* -------------------------------------------------------------- automation */
 export const ALGORITHM_KINDS = ["Putaway", "Allocation"] as const;
@@ -157,7 +159,7 @@ export const CHANNEL_MISSING_ORDER_STATUSES = ["Error", "Retrying", "Resolved"] 
 export const CARRIER_PROVIDERS = ["ups", "fedex", "usps-stamps", "dhl", "easypost", "shippo", "shipstation", "custom", "kitstaks-sandbox"] as const;
 export const CARRIER_ENVIRONMENTS = ["Test", "Production"] as const;
 export const MARKUP_TYPES = ["Percentage", "Fixed Price"] as const;
-export const CARRIER_CALL_STEPS = ["LabelGeneration", "RateCall", "VoidLabel"] as const;
+export const CARRIER_CALL_STEPS = ["LabelGeneration", "RateCall", "VoidLabel", "Tracking", "Pickup"] as const;
 export const DESTINATION_TYPES = ["Domestic", "International"] as const;
 export const CALL_STATUSES = ["Success", "Error"] as const;
 export const LABEL_TYPES = ["Shipping Label", "Return Label"] as const;

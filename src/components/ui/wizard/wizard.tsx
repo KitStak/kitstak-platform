@@ -46,13 +46,24 @@ export interface WizardProps<T extends FieldValues> {
   /** Notified when the form becomes dirty / clean (e.g. to confirm a mode switch). */
   readonly onDirtyChange?: (dirty: boolean) => void;
   readonly className?: string;
+  /** Header navigation: "pills" (drawer default) or "steps" (numbered stepper; page default, also usable in a drawer). */
+  readonly stepper?: "pills" | "steps";
+  /** Page rail status line (e.g. "Started · 6 of 30 received") instead of "Ready to save" / "In progress". */
+  readonly railStatusLabel?: React.ReactNode;
+  /** Overrides the rail Save disabled reason (e.g. "No changes to save"); omitted = the wizard's own. */
+  readonly saveDisabledReason?: string | null;
+  /** Fields left out of the session draft (transient flags). */
+  readonly transientFields?: readonly string[];
 }
 
-function Footer<T extends FieldValues>({ wizard, mode, submitLabel, onCancel, sticky, railOwnsSave, nextBlocked }: { readonly wizard: WizardController<T>; readonly mode: WizardMode; readonly submitLabel: string; readonly onCancel?: () => void; readonly sticky: boolean; readonly railOwnsSave: boolean; readonly nextBlocked: string | null }) {
+function Footer<T extends FieldValues>({ wizard, mode, submitLabel, onCancel, sticky, railOwnsSave, nextBlocked, nextBusy }: { readonly wizard: WizardController<T>; readonly mode: WizardMode; readonly submitLabel: string; readonly onCancel?: () => void; readonly sticky: boolean; readonly railOwnsSave: boolean; readonly nextBlocked: string | null; readonly nextBusy: boolean }) {
   // One primary Save: when the right rail shows Save, the footer only navigates.
   const showSave = !railOwnsSave && (mode === "free" || wizard.isLast);
+  const reasonId = React.useId();
+  const blocked = nextBusy ? null : nextBlocked;
   return (
-    <div className={cn("flex items-center justify-between gap-2 border-t border-border pt-3", sticky && "sticky bottom-0 bg-surface pb-1")}>
+    // Sticky in drawers: a solid bar with a top shadow; the Drawer drops its bottom padding (data-sticky-footer) so nothing scrolls visibly under it.
+    <div data-sticky-footer={sticky ? "" : undefined} className={cn("flex items-center justify-between gap-2 border-t border-border pt-3", sticky && "sticky bottom-0 z-10 bg-surface pb-3 shadow-[0_-4px_8px_-6px_rgba(16,24,40,0.15)]")}>
       <div>
         {onCancel ? (
           <Button variant="ghost" onClick={onCancel} disabled={wizard.submitting}>
@@ -66,9 +77,16 @@ function Footer<T extends FieldValues>({ wizard, mode, submitLabel, onCancel, st
             Back
           </Button>
         ) : null}
+        {!wizard.isLast && blocked ? (
+          // Visible reason next to a blocked Next (also wired to the button for assistive tech).
+          <span id={reasonId} className="hidden max-w-[280px] truncate text-[11px] text-secondary sm:inline" title={blocked}>
+            {blocked}
+          </span>
+        ) : null}
         {!wizard.isLast ? (
-          <DisabledReason reason={nextBlocked}>
-            <Button type="submit" variant={showSave ? "secondary" : "primary"} disabled={wizard.submitting || Boolean(nextBlocked)}>
+          <DisabledReason reason={blocked}>
+            <Button type="submit" variant={showSave ? "secondary" : "primary"} title={blocked ?? undefined} aria-describedby={blocked ? reasonId : undefined} aria-busy={nextBusy || undefined} disabled={wizard.submitting || nextBusy || Boolean(blocked)}>
+              {nextBusy ? <Spinner className="h-3.5 w-3.5" label="Loading" /> : null}
               Next
             </Button>
           </DisabledReason>
@@ -132,10 +150,16 @@ export function Wizard<T extends FieldValues>({
   guardUnsaved = true,
   onDirtyChange,
   className,
+  stepper,
+  railStatusLabel,
+  saveDisabledReason,
+  transientFields,
 }: WizardProps<T>) {
   const rootRef = React.useRef<HTMLDivElement>(null);
   const sectionRef = React.useRef<HTMLElement>(null);
-  const wizard = useWizard<T>({ steps, mode, defaultValues, draftScope, onComplete, rootRef });
+  const wizard = useWizard<T>({ steps, mode, defaultValues, draftScope, onComplete, rootRef, transientFields });
+  const railSaveReason = saveDisabledReason === undefined ? wizard.saveDisabledReason : saveDisabledReason;
+  const stepperKind = stepper ?? (variant === "page" ? "steps" : "pills");
   const values = wizard.form.watch();
   useFocusStepOnChange(wizard.nav.current, sectionRef);
   const railOwnsSave = variant === "page" && Boolean(railSummary);
@@ -148,11 +172,12 @@ export function Wizard<T extends FieldValues>({
     event.stopPropagation();
     if (wizard.submitting) return;
     if (wizard.isLast) void wizard.submit();
-    else if (!proceedReason(wizard.current, values)) void wizard.next();
+    else if (!proceedReason(wizard.current, values) && !wizard.current.busy?.(values)) void wizard.next();
   };
 
   const step = wizard.current;
   const nextBlocked = proceedReason(step, values);
+  const nextBusy = Boolean(step.busy?.(values));
   const body = (
     <form noValidate onSubmit={onFormSubmit} className="flex min-w-0 flex-col gap-4">
       {wizard.restoredDraft ? (
@@ -174,34 +199,35 @@ export function Wizard<T extends FieldValues>({
       ) : null}
       <section ref={sectionRef} aria-labelledby={`wizard-step-${step.key}`} className="flex flex-col gap-4">
         <header>
-          <h2 id={`wizard-step-${step.key}`} tabIndex={-1} data-step-heading className="text-[15px] font-semibold text-foreground outline-none">
+          <h2 id={`wizard-step-${step.key}`} tabIndex={-1} data-step-heading className={cn("text-[15px] font-semibold text-foreground outline-none", step.hideHeading && "sr-only")}>
             {step.label}
             {step.isOptional ? <span className="ml-2 text-[12px] font-normal text-faint">Optional</span> : null}
           </h2>
           {step.description ? <p className="mt-0.5 text-[12px] text-secondary">{step.description}</p> : null}
         </header>
-        {step.render({ form: wizard.form, values, goTo: wizard.goTo })}
+        {step.render({ form: wizard.form, values, goTo: wizard.goTo, applyServerErrors: wizard.applyServerErrors })}
       </section>
-      <Footer wizard={wizard} mode={mode} submitLabel={submitLabel} onCancel={onCancel} sticky={variant === "drawer"} railOwnsSave={railOwnsSave} nextBlocked={nextBlocked} />
+      <Footer wizard={wizard} mode={mode} submitLabel={submitLabel} onCancel={onCancel} sticky={variant === "drawer"} railOwnsSave={railOwnsSave} nextBlocked={nextBlocked} nextBusy={nextBusy} />
     </form>
   );
 
   return (
     <FormProvider {...wizard.form}>
       <div ref={rootRef} className={cn("flex flex-col gap-5", className)}>
-        {variant === "page" ? <WizardStepper steps={wizard.metas} onSelect={wizard.goTo} /> : <WizardPills steps={wizard.metas} onSelect={wizard.goTo} />}
+        {stepperKind === "steps" ? <WizardStepper steps={wizard.metas} onSelect={wizard.goTo} /> : <WizardPills steps={wizard.metas} onSelect={wizard.goTo} />}
         {variant === "page" && railSummary ? (
-          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="rounded-lg border border-border bg-surface p-5 shadow-xs">{body}</div>
+          // Explicit base track: an implicit auto column would grow to the widest step table and scroll the page at 768px.
+          <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="min-w-0 rounded-lg border border-border bg-surface p-5 shadow-xs">{body}</div>
             {railExtra ? (
               <div className="flex min-w-0 flex-col gap-4">
-                <WizardRail title={railTitle} percent={wizard.percent} saveLabel={submitLabel} onSave={() => void wizard.submit()} saving={wizard.submitting} saveDisabledReason={wizard.saveDisabledReason}>
+                <WizardRail title={railTitle} percent={wizard.percent} saveLabel={submitLabel} onSave={() => void wizard.submit()} saving={wizard.submitting} saveDisabledReason={railSaveReason} statusLabel={railStatusLabel}>
                   {railSummary(values)}
                 </WizardRail>
                 {railExtra(values)}
               </div>
             ) : (
-              <WizardRail title={railTitle} percent={wizard.percent} saveLabel={submitLabel} onSave={() => void wizard.submit()} saving={wizard.submitting} saveDisabledReason={wizard.saveDisabledReason}>
+              <WizardRail title={railTitle} percent={wizard.percent} saveLabel={submitLabel} onSave={() => void wizard.submit()} saving={wizard.submitting} saveDisabledReason={railSaveReason} statusLabel={railStatusLabel}>
                 {railSummary(values)}
               </WizardRail>
             )}

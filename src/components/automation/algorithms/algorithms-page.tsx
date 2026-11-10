@@ -16,10 +16,9 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusPill } from "@/components/ui/status-pill";
 import { DisabledReason, Tooltip } from "@/components/ui/tooltip";
-import { useFormat } from "@/lib/format";
 import { ALGORITHM_FIELDS, ALGORITHMS_GRID_KEY, type AlgorithmSlug } from "@/lib/grid-defs/integrations/algorithms";
 import type { AlgorithmRow } from "@/server/repositories/algorithms";
-import { EntityChangeLogDrawer, NO_PERMISSION, toastBulk, toFilterFields, useAction, usePagePerms, useWarehouseOptions, type BulkResponse } from "@/components/integrations/shared/shared";
+import { DateTimeText, EntityChangeLogDrawer, NO_PERMISSION, toastBulk, toFilterFields, useAction, usePagePerms, useWarehouseOptions, type BulkResponse } from "@/components/integrations/shared/shared";
 import { PutawayTestDialog, type PutawayTestTarget } from "./putaway-test-dialog";
 import { DryRunDialog, type DryRunTarget } from "./dry-run-dialog";
 
@@ -27,7 +26,6 @@ const PERMS = ["view", "create", "edit", "delete", "change_log", "test"] as cons
 
 export function AlgorithmsPage({ slug }: { readonly slug: AlgorithmSlug }) {
   const router = useRouter();
-  const fmt = useFormat();
   const isPutaway = slug === "putaway";
   const perms = usePagePerms("automation.algorithms", PERMS);
   const warehouses = useWarehouseOptions();
@@ -54,7 +52,7 @@ export function AlgorithmsPage({ slug }: { readonly slug: AlgorithmSlug }) {
     { id: "warehouseCode", header: "Warehouse", size: 110, cell: ({ row }) => row.original.warehouseCode },
     { id: "status", header: "Active", size: 100, cell: ({ row }) => <StatusPill status={row.original.status} domain="active" /> },
     { id: "ruleCount", header: "Rule quantity", size: 120, meta: { align: "right" }, cell: ({ row }) => <div className="text-right tabular-nums">{row.original.ruleCount}</div> },
-    { id: "updatedAt", header: "Last updated", size: 170, meta: { defaultVisible: false }, cell: ({ row }) => fmt.dateTime(row.original.updatedAt) },
+    { id: "updatedAt", header: "Last updated", size: 170, meta: { defaultVisible: false }, cell: ({ row }) => <DateTimeText value={row.original.updatedAt} /> },
   ];
 
   const bulkActions: readonly BulkAction[] = [
@@ -83,7 +81,7 @@ export function AlgorithmsPage({ slug }: { readonly slug: AlgorithmSlug }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader title="Algorithms" tabs="algorithms" helper="You can view a list of your algorithms and create new ones here."
-        actions={<DisabledReason reason={perms.create ? null : NO_PERMISSION}><Button variant="primary" disabled={!perms.create} onClick={() => router.push(createHref)}><Plus className="h-4 w-4" aria-hidden />Create {isPutaway ? "Putaway" : "Allocation"} Algorithm</Button></DisabledReason>} />
+        actions={perms.create ? <Button variant="primary" onClick={() => router.push(createHref)}><Plus className="h-4 w-4" aria-hidden />Create {isPutaway ? "Putaway" : "Allocation"} Algorithm</Button> : undefined} />
       <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by name" bulkActions={bulkActions} bulkNoun="algorithm" />
       <DataGrid<AlgorithmRow>
         {...g.gridProps}

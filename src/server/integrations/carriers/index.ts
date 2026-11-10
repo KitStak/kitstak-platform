@@ -1,6 +1,7 @@
 /**
- * M12 carrier adapters. Importing this module registers UPS, FedEx, EasyPost and Shippo with the
- * foundation carrier registry (the KitStaks Sandbox is registered by foundation).
+ * M12 carrier adapters. Importing this module registers UPS, FedEx, EasyPost, Shippo, Stamps.com,
+ * ShipStation and Custom Carrier with the
+ * foundation carrier registry (the KitStak Sandbox is registered by foundation).
  */
 import { registerCarrierAdapter } from "@/server/domain/carriers";
 import { SANDBOX_PROVIDER, SANDBOX_SERVICES } from "@/server/domain/carriers/sandbox";
@@ -9,10 +10,13 @@ import { EASYPOST_DEF, easypostAdapter } from "./easypost";
 import { FEDEX_DEF, fedexAdapter } from "./fedex";
 import { SHIPPO_DEF, shippoAdapter } from "./shippo";
 import { UPS_DEF, upsAdapter } from "./ups";
+import { CUSTOM_DEF, customAdapter } from "./custom";
+import { STAMPS_DEF, stampsAdapter } from "./stamps";
+import { SHIPSTATION_DEF, shipstationCarrierAdapter } from "./shipstation";
 
-for (const adapter of [upsAdapter, fedexAdapter, easypostAdapter, shippoAdapter]) registerCarrierAdapter(adapter);
+for (const adapter of [upsAdapter, fedexAdapter, easypostAdapter, shippoAdapter, stampsAdapter, shipstationCarrierAdapter, customAdapter]) registerCarrierAdapter(adapter);
 
-export const CARRIER_DEFS: Readonly<Record<string, CarrierDef>> = { ups: UPS_DEF, fedex: FEDEX_DEF, easypost: EASYPOST_DEF, shippo: SHIPPO_DEF };
+export const CARRIER_DEFS: Readonly<Record<string, CarrierDef>> = { ups: UPS_DEF, fedex: FEDEX_DEF, easypost: EASYPOST_DEF, shippo: SHIPPO_DEF, "usps-stamps": STAMPS_DEF, shipstation: SHIPSTATION_DEF, custom: CUSTOM_DEF };
 
 export interface CatalogService { readonly carrierCode: string; readonly code: string; readonly name: string; readonly transitDays: number; readonly international: boolean }
 

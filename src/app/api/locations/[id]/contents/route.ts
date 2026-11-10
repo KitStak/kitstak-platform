@@ -4,7 +4,7 @@ import { idParamsSchema } from "@/server/repositories/platform-common";
 import { getLocationContents } from "@/server/repositories/locations";
 
 export const GET = defineRoute({
-  permission: "settings.locations.view",
+  permission: ["settings.locations.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   handler: ({ db, auth, params }) => getLocationContents(db, auth, params.id),
 });

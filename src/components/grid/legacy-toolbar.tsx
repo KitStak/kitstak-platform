@@ -28,7 +28,7 @@ export function GridSearch({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={placeholder}
-        className="h-8 w-60 rounded-md border border-border-strong/70 bg-surface pl-8 pr-7 text-[13px] text-body placeholder:text-faint transition-colors hover:border-border-strong focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
+        className="h-8 w-60 rounded-md border border-border-strong/70 bg-surface pl-8 pr-7 text-[13px] text-body placeholder:text-faint transition-colors hover:border-border-strong focus:border-info focus:outline-none focus:ring-2 focus:ring-info/25"
       />
       {value ? (
         <button
@@ -92,7 +92,7 @@ export function FilterButton({
                   onChange={(e) =>
                     onApply({ ...applied, [filter.key]: e.target.value })
                   }
-                  className="h-8 rounded-md border border-border-strong/70 bg-surface px-2 text-[13px] text-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
+                  className="h-8 rounded-md border border-border-strong/70 bg-surface px-2 text-[13px] text-body focus:border-info focus:outline-none focus:ring-2 focus:ring-info/25"
                 >
                   <option value="">All</option>
                   {filter.options.map((o) => (

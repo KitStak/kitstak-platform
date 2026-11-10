@@ -18,7 +18,8 @@ const SKU_A = process.env.E2E_PACK_SKU_A ?? "APX-TEE-WHT-M";
 const SKU_B = process.env.E2E_PACK_SKU_B ?? "APX-TEE-NVY-M";
 const WRONG_SKU = process.env.E2E_PACK_WRONG_SKU ?? "APX-TEE-BLK-M";
 const RETURN_STATION = process.env.E2E_RETURN_STATION ?? "RET-01";
-const RETURN_TARGET = process.env.E2E_RETURN_TARGET ?? "MLT1-RTN";
+// Virtual locations (e.g. MLT1-RTN) are never return targets, so use a physical Returns-area bin.
+const RETURN_TARGET = process.env.E2E_RETURN_TARGET ?? "RET-02";
 
 // The shared dev server compiles routes on first hit and serves many agents.
 test.use({ actionTimeout: 45_000 });
@@ -144,7 +145,7 @@ test.describe("stations & returns", () => {
     await page.keyboard.press("Enter");
     await page.getByRole("option", { name: /BOX-S/ }).first().click();
     await page.getByLabel("Package 2 weight ounces").fill("10");
-    await page.getByRole("button", { name: "Get rate" }).click();
+    await page.getByRole("button", { name: "Get rate" }).first().click();
     await expect(page.getByText(/\$\d+\.\d{2}/).first()).toBeVisible({ timeout: 60_000 });
 
     await page.locator("#pack-product").focus();
@@ -162,8 +163,9 @@ test.describe("stations & returns", () => {
     test.skip(!target, "No shipped order with returnable units");
 
     await page.goto("/orders/returns/new", { timeout: 120_000 });
-    await page.getByRole("button", { name: "Next" }).click();
-    await expect(page.getByRole("button", { name: /Choose a shipped order/ })).toBeVisible();
+    // Next stays disabled until an order is chosen.
+    await expect(page.getByRole("button", { name: /Choose a shipped order/ })).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole("button", { name: "Next" })).toBeDisabled();
     await page.getByRole("button", { name: /Choose a shipped order/ }).click();
     const picker = page.getByRole("dialog");
     await expect(picker.getByRole("option").first()).toBeVisible({ timeout: 90_000 });
@@ -175,14 +177,21 @@ test.describe("stations & returns", () => {
     await page.getByRole("button", { name: "Next" }).click();
     await expect(page.getByText(/units? selected/)).toBeVisible();
     if (await page.getByText(/^0 units selected/).isVisible()) {
-      await page.getByRole("button", { name: "Next" }).click();
-      await expect(page.getByText("Select at least one item to return")).toBeVisible();
+      // Next validates on click: with nothing selected the wizard stays on the Items step.
+      await page.getByRole("button", { name: "Next", exact: true }).click();
+      await expect(page.getByText(/^0 units selected/)).toBeVisible();
       await page.getByRole("checkbox", { name: /^Return / }).first().click();
     }
-    await page.getByRole("button", { name: "Back" }).click();
+    await page.getByRole("button", { name: "Back", exact: true }).click();
     await page.getByRole("button", { name: "Next" }).click();
     await expect(page.getByText(/^[1-9]\d* units? selected/)).toBeVisible();
-    await page.getByRole("button", { name: "Next" }).click();
+    // A customer return reason is required on every selected line.
+    for (const reason of await page.getByRole("combobox", { name: /^Return reason for / }).all()) {
+      if (!(await reason.isEnabled())) continue;
+      await reason.click();
+      await page.getByRole("option").first().click();
+    }
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await page.locator("#rma-note").fill("KS-TEST e2e return");
     await page.getByRole("button", { name: "Create RMA" }).click();
     await expect(page.getByText(/RMA\d{6}/).first()).toBeVisible({ timeout: 90_000 });
@@ -190,14 +199,18 @@ test.describe("stations & returns", () => {
     expect(rmaCode).not.toBe("");
 
     await page.goto("/return-station", { timeout: 120_000 });
-    await expect(page.getByRole("button", { name: /Return with RMA/ })).toBeDisabled();
-    await pickOption(page, "#rs-warehouse", new RegExp(WAREHOUSE));
-    await page.locator("#rs-station").click();
-    await page.keyboard.type(RETURN_STATION);
-    await page.getByRole("option", { name: new RegExp(RETURN_STATION) }).first().click();
-    await page.getByRole("combobox", { name: "Return target" }).click();
-    await page.keyboard.type(RETURN_TARGET);
-    await page.getByRole("option", { name: new RegExp(RETURN_TARGET) }).first().click();
+    // The station remembers the last warehouse/station/target; set them only when it has none.
+    const start = page.getByRole("button", { name: /Return with RMA/ });
+    await expect(start).toBeVisible({ timeout: 90_000 });
+    if (await start.isDisabled()) {
+      await pickOption(page, "#rs-warehouse", new RegExp(WAREHOUSE));
+      await page.locator("#rs-station").click();
+      await page.keyboard.type(RETURN_STATION);
+      await page.getByRole("option", { name: new RegExp(RETURN_STATION) }).first().click();
+      await page.getByRole("combobox", { name: "Return target" }).click();
+      await page.keyboard.type(RETURN_TARGET);
+      await page.getByRole("option", { name: new RegExp(RETURN_TARGET) }).first().click();
+    }
     await page.getByRole("button", { name: /Return with RMA/ }).click();
     await expect(page.locator("#rma-lookup")).toBeFocused({ timeout: 60_000 });
     await scan(page, rmaCode);
@@ -209,6 +222,16 @@ test.describe("stations & returns", () => {
     await page.keyboard.press("F9");
     await expect(page.getByText(`Return ${rmaCode} received`)).toBeVisible({ timeout: 120_000 });
     await expect(page.getByText(/Status: Completed/)).toBeVisible();
+  });
+
+  test("status pills count grid rows: All equals the grid total", async ({ adminPage: page }) => {
+    await page.goto("/orders/returns", { timeout: 120_000 });
+    const all = page.getByRole("button", { name: /\bAll( lines)?\s*\d/ }).first();
+    await expect(all).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByText(/Total:\s*\d+/).first()).toBeVisible({ timeout: 60_000 });
+    const pill = Number((await all.innerText()).replace(/\D+/g, ""));
+    const total = Number(((await page.getByText(/Total:\s*\d+/).first().innerText()).match(/Total:\s*(\d+)/) ?? [])[1]);
+    expect(pill).toBe(total);
   });
 
   test("Change status offers only legal moves; a cancelled RMA can't be received", async ({ adminPage: page }) => {
@@ -237,5 +260,12 @@ test.describe("stations & returns", () => {
     const lookup = await getJson<{ receivable: boolean; reason: string | null }[]>(page.request, `/api/returns/lookup?warehouseId=${x.warehouseId}&code=${cancelledCode}`);
     expect(lookup[0]?.receivable).toBe(false);
     expect(lookup[0]?.reason).toMatch(/cancelled/i);
+  });
+
+  test("viewer can't open Create RMA (server-side gate) and the API rejects the post", async ({ viewerPage: page }) => {
+    await page.goto("/orders/returns/new", { timeout: 120_000 });
+    await expect(page).toHaveURL(/\/forbidden/, { timeout: 90_000 });
+    const res = await page.request.post(`${base}/api/returns`, { data: {}, headers: { "x-csrf-token": await csrf(page), Origin: base }, timeout: 120_000 });
+    expect(res.status()).toBe(403);
   });
 });

@@ -16,7 +16,7 @@ import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
 import type { LookupType } from "@/lib/enums";
 import {
-  LOOKUP_FIELDS, LOOKUP_SEARCH_FIELDS, LOOKUP_SORT_FIELDS, lookupIssues, lookupMeta, mergeCriteriaLabel, type LookupDef, type LookupSave,
+  LOOKUP_FIELDS, LOOKUP_SEARCH_FIELDS, LOOKUP_SORT_FIELDS, lookupIssues, lookupMeta, lookupMetaDisplay, type LookupDef, type LookupSave,
 } from "@/lib/grid-defs/admin/lookups";
 import { assertVersion, compileGrid, domainCtxOf, duplicateError, logCreate, logDelete, logUpdate, qc, type Actor, type GridBinding } from "./users-shared";
 
@@ -136,6 +136,16 @@ function validate(db: AppDb, auth: AuthContext, def: LookupDef, input: LookupSav
     warehouseId ? eq(l.warehouseId, warehouseId) : isNull(l.warehouseId), clientId ? eq(l.clientId, clientId) : isNull(l.clientId),
   )).get();
   if (clash && clash.id !== exceptId) throw duplicateError("name", `"${input.name.trim()}" already exists`);
+  if (def.hasCode && input.code) {
+    const codeClash = db.select({ id: l.id }).from(l).where(and(
+      eq(l.type, def.type), sql`lower(${l.code}) = ${input.code.trim().toLowerCase()}`, warehouseId ? eq(l.warehouseId, warehouseId) : isNull(l.warehouseId),
+    )).get();
+    if (codeClash && codeClash.id !== exceptId) throw duplicateError("code", `Code ${input.code.trim()} already exists`);
+  }
+  if (def.type === "return_reason" && input.linkDamageReason && input.linkedDamageReasonId) {
+    const dr = db.select({ id: l.id }).from(l).where(and(eq(l.id, input.linkedDamageReasonId), eq(l.type, "damage_reason"))).get();
+    if (!dr) throw new AppError("VALIDATION", "Damage reason not found", { fieldErrors: { linkedDamageReasonId: ["Damage reason not found"] } });
+  }
   return { warehouseId, clientId };
 }
 
@@ -144,13 +154,13 @@ function display(db: AppDb, def: LookupDef, r: { name: string; code: string | nu
   const wh = r.warehouseId ? db.select({ code: s.warehouses.code }).from(s.warehouses).where(eq(s.warehouses.id, r.warehouseId)).get()?.code : null;
   const cl = r.clientId ? db.select({ name: s.clients.name }).from(s.clients).where(eq(s.clients.id, r.clientId)).get()?.name : null;
   const m = r.meta ?? {};
+  const linked = typeof m.linkedDamageReasonId === "string"
+    ? db.select({ name: l.name }).from(l).where(eq(l.id, m.linkedDamageReasonId)).get()?.name ?? null
+    : null;
   return {
     name: r.name, code: r.code, status: r.isActive ? "Active" : "Inactive", sortOrder: r.sortOrder,
-    ...(def.scope === "warehouse" ? { warehouse: wh ?? "" } : {}), ...(def.scope === "client" ? { client: cl ?? "All clients" } : {}),
-    ...(def.type === "vas_type" ? { calculationType: m.calculationType } : {}),
-    ...(def.type === "mobile_cart_type" ? { levels: m.levels, columns: m.columns, operation: m.operation } : {}),
-    ...(def.type === "order_merge_rule" ? { criteria: mergeCriteriaLabel((m.criteria as string[] | undefined) ?? []) } : {}),
-    ...(def.type === "damage_reason" ? { countsAsDamaged: m.countsAsDamaged !== false } : {}),
+    ...(def.scope === "warehouse" ? { warehouse: wh ?? (def.scopeRequired ? "" : "All warehouses") } : {}), ...(def.scope === "client" ? { client: cl ?? "All clients" } : {}),
+    ...lookupMetaDisplay(def, r.meta, { damageReason: linked }),
   };
 }
 
@@ -171,7 +181,9 @@ export function updateLookupValue(tx: AppDb, auth: AuthContext, actor: Actor, de
   if (before.usageCount > 0 && before.name !== input.name.trim() && ["pack_type", "po_type", "damage_reason", "custom_carrier"].includes(def.type)) {
     throw new AppError("VALIDATION", `${before.usageCount} records use "${before.name}" by name; it can't be renamed`, { fieldErrors: { name: ["In use by name; deactivate it and create a new value instead"] } });
   }
-  const meta = lookupMeta(def, input);
+  // Keys maintained elsewhere (Location Zone › Match With Product Groups) survive a drawer edit.
+  const kept = def.type === "location_zone" && Array.isArray(before.meta?.productGroupIds) ? { productGroupIds: before.meta.productGroupIds } : {};
+  const meta = "productGroupIds" in kept ? { ...lookupMeta(def, input), ...kept } : lookupMeta(def, input);
   tx.update(l).set({
     name: input.name.trim(), code: def.hasCode ? input.code : null, ...scope, isActive: input.isActive, sortOrder: input.sortOrder, meta,
     updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${l.version} + 1`,

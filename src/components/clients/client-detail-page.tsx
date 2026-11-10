@@ -14,9 +14,9 @@ import { useForm, FormProvider } from "react-hook-form";
 import { apiRequest, isApiError } from "@/lib/api-client";
 import { useApiQuery } from "@/lib/query-client";
 import { urlParam, useUrlState } from "@/lib/use-url-state";
-import { enabledSwitchCount, type ClientInput, type ClientSettingsForm } from "@/lib/grid-defs/organization/clients";
+import { enabledSwitchCount, parseClientDetail, type ClientInput, type ClientSettingsForm } from "@/lib/grid-defs/organization/clients";
 import { normalizeDefaults, type OrgAddressInput } from "@/lib/grid-defs/organization/common";
-import { PageHeader } from "@/components/layout/page-header";
+import { AutoBreadcrumbs } from "@/components/layout/page-header";
 import { DetailHeader } from "@/components/shared/detail-header";
 import { ActivityTimeline } from "@/components/shared/activity-timeline";
 import { KvList } from "@/components/shared/kv-list";
@@ -32,10 +32,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatTile } from "@/components/ui/stat-tile";
 import { StatusPill } from "@/components/ui/status-pill";
 import { UnderlineTabs } from "@/components/ui/tabs";
+import { TabFocusGuard } from "@/components/organization/tab-focus-guard";
 import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
 import { EntityChangeLogDrawer, NO_PERMISSION, toastBulk, useAction, usePagePerms, type BulkResponse } from "@/components/facility/facility-shared";
 import { AddressesEditor, addressLines } from "@/components/organization/addresses-editor";
+import { At, Day } from "@/components/billing/billing-shared";
 import type { ClientDetail } from "@/server/repositories/clients";
 import { CURRENCY_OPTIONS, ClientWizardDrawer, SettingsSwitches, detailToClientForm } from "./client-wizard";
 
@@ -134,7 +136,20 @@ function Table({ head, children, empty }: { readonly head: readonly string[]; re
   );
 }
 
-function Overview({ client }: { readonly client: ClientDetail }) {
+/** The client's billing comes from its 3PL billing forms: show the approved (else latest) form, not a free-text plan. */
+function BillingFormValue({ client }: { readonly client: ClientDetail }) {
+  const approved = client.contracts.filter((k) => k.approvalStatus === "Approved");
+  const pick = approved[0] ?? client.contracts[0];
+  if (!pick) return <span className="text-faint">No billing form yet</span>;
+  return (
+    <span>
+      <Link href={`/billing/${pick.id}`} className="font-medium text-primary hover:underline">{pick.name}</Link>
+      <span className="text-faint"> · {pick.approvalStatus}{approved.length > 1 ? ` · +${approved.length - 1} more` : ""}</span>
+    </span>
+  );
+}
+
+function Overview({ client, canEdit, onAddAddress }: { readonly client: ClientDetail; readonly canEdit: boolean; readonly onAddAddress: () => void }) {
   const def = (usage: string) => client.addresses.find((a) => a.usageType === usage && a.isDefault) ?? client.addresses.find((a) => a.usageType === usage);
   const on = enabledSwitchCount(client.settings);
   return (
@@ -147,9 +162,10 @@ function Overview({ client }: { readonly client: ClientDetail }) {
           { key: "code", label: "Client code", value: <code className="font-mono">{client.code}</code> },
           { key: "tax", label: "Tax ID", value: client.taxId },
           { key: "currency", label: "Currency", value: client.currency },
-          { key: "plan", label: "Billing plan", value: client.billingPlan === "per-order" ? "Per order" : client.billingPlan === "per-unit" ? "Per unit" : "Monthly flat" },
+          { key: "plan", label: "Billing form", value: <BillingFormValue client={client} /> },
+          { key: "sscc", label: "SSCC-18", value: client.sscc?.gs1CompanyPrefix ? <span className="font-mono tabular-nums">ext {client.sscc.extensionDigit} · prefix {client.sscc.gs1CompanyPrefix} · serial from {client.sscc.serialNumber}</span> : null },
           { key: "contact", label: "Contact", value: [client.contactName, client.contactEmail, client.phone].filter(Boolean).join(" · ") },
-          { key: "created", label: "Created", value: `${new Date(client.createdAt).toLocaleDateString("en-US")}${client.createdByName ? ` by ${client.createdByName}` : ""}` },
+          { key: "created", label: "Created", value: <span><Day value={client.createdAt.slice(0, 10)} />{client.createdByName ? ` by ${client.createdByName}` : ""}</span> },
         ]} />
       </section>
       <section className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
@@ -159,7 +175,12 @@ function Overview({ client }: { readonly client: ClientDetail }) {
           return (
             <div key={u} className="flex flex-col gap-0.5">
               <span className="text-[11px] font-semibold text-faint">{u}</span>
-              {a ? <span className="text-[13px] leading-5 text-body">{a.name ? <strong className="font-semibold">{a.name}: </strong> : null}{addressLines(a).join(", ")}</span> : <span className="text-[13px] text-faint">Not set</span>}
+              {a ? <span className="text-[13px] leading-5 text-body">{a.name ? <strong className="font-semibold">{a.name}: </strong> : null}{addressLines(a).join(", ")}</span> : (
+                <span className="flex items-center gap-2 text-[13px] text-faint">
+                  Not set
+                  {canEdit ? <button type="button" className="font-medium text-primary hover:underline" onClick={onAddAddress}>Add {u.toLowerCase()} address</button> : null}
+                </span>
+              )}
             </div>
           );
         })}
@@ -180,7 +201,8 @@ export function ClientDetailPage({ id }: { readonly id: string }) {
   const [log, setLog] = React.useState(false);
   const [confirm, setConfirm] = React.useState<"delete" | "Active" | "Inactive" | null>(null);
   const action = useAction([["client", id], ["me"]]);
-  const c = q.data?.data;
+  // Parsed with defaults: a missing optional block (sscc, kpis, addresses…) never takes the page down.
+  const c = React.useMemo(() => (q.data ? parseClientDetail<ClientDetail>(q.data.data) : undefined) ?? undefined, [q.data]);
 
   if (q.isPending) return <div className="flex flex-col gap-4 p-6"><Skeleton className="h-10 w-80" /><div className="grid grid-cols-4 gap-3">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}</div><Skeleton className="h-72 w-full" /></div>;
   if (q.isError || !c) {
@@ -188,6 +210,7 @@ export function ClientDetailPage({ id }: { readonly id: string }) {
     return <div className="p-6"><EmptyState title={missing ? "Client not found" : "Couldn't load this client"} description={missing ? "It may have been deleted, or it isn't in your client scope." : q.error?.message} action={missing ? <Button onClick={() => router.push("/clients")}>Back to clients</Button> : <Button onClick={() => void q.refetch()}>Retry</Button>} /></div>;
   }
   const refetch = () => void q.refetch();
+  const approvedContracts = c.contracts.filter((b) => b.approvalStatus === "Approved").length;
   const deleteReason = !perms.delete ? NO_PERMISSION : c.kpis.products > 0 || c.totalOrders > 0 || c.contracts.length > 0 ? "Clients with products, orders or billing forms can't be deleted; deactivate instead" : null;
   const statusTarget = c.status === "Active" ? "Inactive" : "Active";
   const tabs = [
@@ -201,9 +224,11 @@ export function ClientDetailPage({ id }: { readonly id: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Client details" crumbLabel={c.name} />
-      <div className="flex flex-col gap-4 px-6 pb-8">
-        <DetailHeader title={c.name} backHref="/clients" backLabel="Clients" status={c.status} statusDomain="active"
+      {/* One title block: breadcrumb → client name + status pill + actions (no separate "Client details" H1 or back link). */}
+      <div className="flex flex-col gap-4 px-6 pb-8 pt-3">
+        <div className="flex flex-col">
+        <AutoBreadcrumbs currentLabel={c.name} />
+        <DetailHeader className="px-0 pt-1.5 pb-0" title={c.name} status={c.status} statusDomain="active"
           meta={<span>{c.officialName ?? c.name} · <code className="font-mono">{c.code}</code> · {c.currency}</span>}
           badges={c.taxId ? <Badge tone="outline">Tax ID {c.taxId}</Badge> : undefined}
           actions={
@@ -221,14 +246,15 @@ export function ClientDetailPage({ id }: { readonly id: string }) {
               </DropdownMenu>
             </div>
           } />
+        </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatTile label="Orders · 30 days" value={c.kpis.orders30d.toLocaleString("en-US")} icon={ClipboardList} tone="primary" sublabel={`${c.kpis.openOrders} open now`} href={`/orders?f.clientId=in:${c.id}`} />
           <StatTile label="Units shipped · 30 days" value={c.kpis.unitsShipped30d.toLocaleString("en-US")} icon={Truck} tone="success" href={`/orders/shipped?f.clientId=in:${c.id}`} />
           <StatTile label="Inventory units" value={c.kpis.inventoryUnits.toLocaleString("en-US")} icon={Boxes} sublabel={`${c.kpis.skusInStock} SKUs in stock · ${c.kpis.products} products`} href={`/inventory?f.clientId=in:${c.id}`} />
           <StatTile label="Open POs" value={c.kpis.openPos.toLocaleString("en-US")} icon={PackageCheck} tone={c.kpis.openPos > 0 ? "warning" : "default"} href={`/purchase-orders?f.clientId=in:${c.id}`} />
         </div>
-        <UnderlineTabs tabs={tabs} active={url.tab} onChange={(k) => setUrl({ tab: k as (typeof TABS)[number] })} className="px-0" ariaLabel="Client sections" />
-        {url.tab === "overview" ? <Overview client={c} /> : null}
+        <TabFocusGuard><UnderlineTabs tabs={tabs} active={url.tab} onChange={(k) => setUrl({ tab: k as (typeof TABS)[number] })} className="px-0" ariaLabel="Client sections" /></TabFocusGuard>
+        {url.tab === "overview" ? <Overview client={c} canEdit={perms.edit} onAddAddress={() => setUrl({ tab: "addresses" })} /> : null}
         {url.tab === "settings" ? <SettingsTab key={`s-${c.version}`} client={c} canEdit={perms.edit} onSaved={refetch} /> : null}
         {url.tab === "addresses" ? <AddressesTab key={`a-${c.version}`} client={c} canEdit={perms.edit} onSaved={refetch} /> : null}
         {url.tab === "users" ? (
@@ -255,10 +281,10 @@ export function ClientDetailPage({ id }: { readonly id: string }) {
               {c.contracts.map((b) => (
                 <tr key={b.id} className="hover:bg-surface-sunken/50">
                   <td className="px-3 py-2"><Link className="font-medium text-primary hover:underline" href={`/billing/${b.id}`}>{b.name}</Link></td>
-                  <td className="px-3 py-2">{b.warehouseCode}</td><td className="px-3 py-2">{b.frequency}</td><td className="px-3 py-2 tabular-nums">{b.calcStartDate}</td>
+                  <td className="px-3 py-2">{b.warehouseCode}</td><td className="px-3 py-2">{b.frequency}</td><td className="px-3 py-2"><Day value={b.calcStartDate} /></td>
                   <td className="px-3 py-2 tabular-nums">{b.feeCount}</td>
                   <td className="px-3 py-2 tabular-nums">{b.reportCount > 0 ? <Link className="text-primary hover:underline" href={`/billing/reports?f.contractName=eq:${encodeURIComponent(b.name)}`}>{b.reportCount}</Link> : 0}</td>
-                  <td className="px-3 py-2 tabular-nums">{b.lastCalculatedAt ? new Date(b.lastCalculatedAt).toLocaleString("en-US") : "Never"}</td>
+                  <td className="px-3 py-2"><At value={b.lastCalculatedAt} /></td>
                   <td className="px-3 py-2"><Badge tone={b.approvalStatus === "Approved" ? "success" : "neutral"} shape="pill">{b.approvalStatus}</Badge></td>
                 </tr>
               ))}
@@ -268,15 +294,15 @@ export function ClientDetailPage({ id }: { readonly id: string }) {
         {url.tab === "activity" ? (
           <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
             <section className="rounded-lg border border-border bg-surface p-4"><h3 className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-secondary">Change history</h3><ActivityTimeline entityType="client" entityId={c.id} /></section>
-            <section className="rounded-lg border border-border bg-surface p-4"><h3 className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-secondary">Notes</h3><NotesPanel entityType="client" entityId={c.id} canEdit={perms.edit} /></section>
+            <section className="rounded-lg border border-border bg-surface p-4"><NotesPanel entityType="client" entityId={c.id} canEdit={perms.edit} /></section>
           </div>
         ) : null}
       </div>
       <ClientWizardDrawer open={edit} editId={c.id} onOpenChange={setEdit} onSaved={refetch} />
-      <EntityChangeLogDrawer open={log} onOpenChange={setLog} path={`/api/clients/${c.id}/change-log`} title={`Change log · ${c.name}`} />
+      <EntityChangeLogDrawer open={log} onOpenChange={setLog} path={log ? `/api/clients/${c.id}/change-log` : null} title={`Change log · ${c.name}`} />
       <ConfirmDialog open={confirm !== null} onOpenChange={(o) => !o && setConfirm(null)} variant={confirm === "delete" ? "danger" : confirm === "Inactive" ? "attention" : "info"}
         title={confirm === "delete" ? `Delete client ${c.name}?` : `${confirm === "Active" ? "Activate" : "Deactivate"} ${c.name}?`}
-        description={confirm === "delete" ? "The client, its addresses and customers are removed. This can't be undone." : confirm === "Inactive" ? "The client disappears from order, PO and billing client selects." : "The client becomes selectable on new orders, POs and billing forms."}
+        description={confirm === "delete" ? "The client, its addresses and customers are removed. This can't be undone." : confirm === "Inactive" ? `The client disappears from order, PO and billing client selects.${approvedContracts > 0 ? ` Automatic billing pauses for its ${approvedContracts} approved billing ${approvedContracts === 1 ? "form" : "forms"}; you can still calculate a final bill manually.` : ""}` : "The client becomes selectable on new orders, POs and billing forms."}
         confirmLabel={confirm === "delete" ? "Yes, delete" : "Yes"} cancelLabel="No"
         onConfirm={async () => {
           if (confirm === "delete") {

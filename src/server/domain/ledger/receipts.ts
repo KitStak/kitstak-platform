@@ -3,7 +3,7 @@
  * posts a Receiving / Return Receiving transaction and keeps PO / return lines in sync.
  */
 import { eq, sql } from "drizzle-orm";
-import type { RECEIVING_TYPES } from "@/lib/enums";
+import type { RECEIVING_TYPES, TxnType } from "@/lib/enums";
 import * as schema from "@/server/db/schema";
 import { recordLine } from "../change-log";
 import { DomainError } from "../errors";
@@ -46,6 +46,19 @@ export interface RecordReceiptInput {
   readonly note?: string | null;
   readonly lineNote?: string | null;
   readonly serials?: readonly { readonly primary: string; readonly secondary?: string | null }[];
+  /** Ledger transaction type; defaults from `type` (see `receiptTxnType`). */
+  readonly txnType?: TxnType;
+  /** Putaway algorithm / rule that suggested the location (Transaction History columns). */
+  readonly algorithmName?: string | null;
+  readonly algorithmRuleName?: string | null;
+}
+
+/** Ledger type a receipt posts under (Logiwa: kit output "Kitting", breakdown returns "Disassemble Kit"). */
+export function receiptTxnType(type: ReceivingType): TxnType {
+  if (type === "Return") return "Return Receiving";
+  if (type === "Kitting") return "Kitting";
+  if (type === "DisassembleKit") return "Disassemble Kit";
+  return "Receiving";
 }
 
 const RECEIPT_SEQUENCE = "receipt";
@@ -126,8 +139,11 @@ export function recordReceipt(tx: Tx, ctx: DomainCtx, input: RecordReceiptInput)
     warehouseId: input.warehouseId, clientId: input.clientId, productId: product.id, locationId: input.locationId,
     lpId: input.lpId, lotNumber: input.lotNumber, expiryDate: input.expiryDate, productionDate: input.productionDate,
     damageReason: input.damageReason, packType, qty: uomQuantity, poNumber: poCode,
-    type: input.type === "Return" ? "Return Receiving" : "Receiving",
-    refs: { receiptId: receipt.id, purchaseOrderId: input.purchaseOrderId, returnOrderId: input.returnOrderId, workOrderId: input.workOrderId, orderId: input.shipmentOrderId, note: input.note },
+    type: input.txnType ?? receiptTxnType(input.type),
+    refs: {
+      receiptId: receipt.id, purchaseOrderId: input.purchaseOrderId, returnOrderId: input.returnOrderId, workOrderId: input.workOrderId, orderId: input.shipmentOrderId, note: input.note,
+      algorithmName: input.algorithmName ?? null, algorithmRuleName: input.algorithmRuleName ?? null,
+    },
   });
   if (!txn) throw new DomainError("INVALID_STATE", "Receipt did not post a transaction");
   const updated = tx.update(schema.receipts).set({ inventoryTransactionId: txn.id }).where(eq(schema.receipts.id, receipt.id)).returning().get();

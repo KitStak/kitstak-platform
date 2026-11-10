@@ -176,7 +176,11 @@ export function TagPopover({ entityType, ids, scope = "any", appliedTagIds = [],
           )}
         </PopoverContent>
       </Popover>
-      <CreateTagModal open={createOpen} onOpenChange={setCreateOpen} scope={scope} onCreated={(tag) => setSelected(new Set([...selected, tag.id]))} />
+      {/* The popover closes while the modal has focus; reopen it with the new tag ticked so Apply is one click away. */}
+      <CreateTagModal open={createOpen} onOpenChange={setCreateOpen} scope={scope} onCreated={(tag) => {
+        setSelected(new Set([...selected, tag.id]));
+        if (ids.length > 0) setOpen(true);
+      }} />
     </>
   );
 }

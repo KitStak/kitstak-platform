@@ -18,7 +18,7 @@ describe("wizard step schemas", () => {
     const paths = bad.error?.issues.map((i) => i.path.join("."));
     expect(paths).toEqual(expect.arrayContaining(["warehouseId", "clientId", "code", "orderTypeId"]));
     const taken = detailsStepSchema.safeParse({ ...v, warehouseId: "w", clientId: "c", code: "SO1", orderTypeId: "t", codeTaken: true });
-    expect(taken.error?.issues[0]).toMatchObject({ path: ["code"], message: "Order code SO1 already exists" });
+    expect(taken.error?.issues[0]).toMatchObject({ path: ["code"], message: "Order code SO1 is already taken" });
   });
 
   it("step 2 validates name, US state and ZIP, tax id needs a type, and billing when not shared", () => {
@@ -44,7 +44,8 @@ describe("wizard step schemas", () => {
     expect(orderTotals([{ productId: "a", isKit: false, quantity: 1, unitPrice: 1, weightOz: 0 }], 9).total).toBe(0);
     expect([0, 1, 3, 7].map(priorityFromRank)).toEqual(["None", "Low", "High", "Urgent"]);
     expect(rankFromPriority("High", 0)).toBe(3);
-    expect(rankFromPriority("High", 12)).toBe(12);
+    expect(rankFromPriority("Urgent", 12)).toBe(12);
+    expect(rankFromPriority("High", 12)).toBe(3); // level changed after the rank: the level wins
   });
 
   it("flags the address step until verified or skipped", () => {

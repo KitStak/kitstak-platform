@@ -18,6 +18,7 @@ import type { GridQuery } from "@/server/query/grid-query";
 import { CARRIER_DEFS, providerCatalog } from "@/server/integrations/carriers";
 import { credentialHints, decryptCredentials, encryptCredentials, mergeCredentials } from "@/server/integrations/crypto";
 import { CALL_LOG_FIELDS, CALL_LOG_SORT_FIELDS, type CallStep, type EditCarrierSave } from "@/lib/grid-defs/integrations/carriers";
+import type { CARRIER_CALL_STEPS } from "@/lib/enums";
 import type { createCarrierSchema } from "@/lib/grid-defs/integrations/carriers";
 import type { z } from "zod";
 import {
@@ -61,7 +62,14 @@ export interface CarrierConnectionDetail extends CarrierConnectionRow {
   readonly openOrders: number;
 }
 
-const providerName = (p: string) => (p === "kitstaks-sandbox" ? "KitStaks Sandbox" : p === "usps-stamps" ? "Stamps.com" : p.toUpperCase());
+const providerName = (p: string) => (p === "kitstaks-sandbox" ? "KitStak Sandbox" : p === "usps-stamps" ? "Stamps.com" : p === "shipstation" ? "ShipStation" : p.toUpperCase());
+
+/** "Main UPS - UPS"; just the setup name when it already is the carrier name ("KitStak Sandbox", not "KitStak Sandbox - KitStak Sandbox"). */
+export function connectionLabelOf(setupName: string, provider: string): string {
+  const carrier = providerName(provider);
+  const name = setupName.trim();
+  return !name ? carrier : name.toLowerCase().includes(carrier.toLowerCase()) ? name : `${name} - ${carrier}`;
+}
 
 function enrich(db: AppDb, rows: readonly Row[]): CarrierConnectionRow[] {
   if (rows.length === 0) return [];
@@ -73,7 +81,7 @@ function enrich(db: AppDb, rows: readonly Row[]): CarrierConnectionRow[] {
   const err = db.select({ cid: s.carrierCallLogs.connectionId, n: sql<number>`COUNT(*)` }).from(s.carrierCallLogs).where(and(inArray(s.carrierCallLogs.connectionId, ids), eq(s.carrierCallLogs.status, "Error"), sql`${s.carrierCallLogs.at} >= ${since}`)).groupBy(s.carrierCallLogs.connectionId).all();
   return rows.map((r) => ({
     id: r.id, provider: r.provider, setupName: r.setupName, warehouseId: r.warehouseId, warehouseCode: wh.get(r.warehouseId) ?? "", environment: r.environment, isActive: r.isActive,
-    connectionLabel: `${r.setupName} - ${providerName(r.provider)}`, serviceCount: Number(svc.find((x) => x.cid === r.id)?.n ?? 0), activeServices: Number(svc.find((x) => x.cid === r.id)?.a ?? 0),
+    connectionLabel: connectionLabelOf(r.setupName, r.provider), serviceCount: Number(svc.find((x) => x.cid === r.id)?.n ?? 0), activeServices: Number(svc.find((x) => x.cid === r.id)?.a ?? 0),
     allClients: r.allClients, clientCount: Number(cl.find((x) => x.cid === r.id)?.n ?? 0), hasCredentials: Boolean(r.credentialsEnc) || r.provider === "kitstaks-sandbox",
     errors24h: Number(err.find((x) => x.cid === r.id)?.n ?? 0), version: r.version,
   }));
@@ -90,8 +98,34 @@ export function loadCarrierConnection(db: AppDb, auth: AuthContext, id: string):
   return row;
 }
 
+/**
+ * Adds catalog services / packages a connection is missing (the carrier catalog grew after it was
+ * created, e.g. the full 21-service UPS list). Idempotent. New rows start active when the setup
+ * uses "All services" / "All packages", otherwise inactive so a curated list stays curated.
+ */
+export function syncCarrierCatalog(db: AppDb, row: Pick<typeof t.$inferSelect, "id" | "provider" | "allServices" | "allPackages">): number {
+  const catalog = providerCatalog(row.provider);
+  if (catalog.services.length === 0 && catalog.packages.length === 0) return 0;
+  const haveSvc = new Set(db.select({ c: s.carrierServices.serviceCode, k: s.carrierServices.carrierCode }).from(s.carrierServices).where(eq(s.carrierServices.connectionId, row.id)).all().map((x) => `${x.k}|${x.c}`));
+  const havePkg = new Set(db.select({ c: s.carrierPackages.code }).from(s.carrierPackages).where(eq(s.carrierPackages.connectionId, row.id)).all().map((x) => x.c));
+  const svc = catalog.services.filter((x) => !haveSvc.has(`${x.carrierCode}|${x.code}`));
+  const pkg = catalog.packages.filter((p) => !havePkg.has(p.code));
+  if (svc.length === 0 && pkg.length === 0) return 0;
+  db.transaction((tx) => {
+    if (svc.length > 0) tx.insert(s.carrierServices).values(svc.map((x) => ({ connectionId: row.id, carrierCode: x.carrierCode, serviceCode: x.code, name: x.name, transitDays: x.transitDays, isInternational: x.international, isActive: row.allServices }))).run();
+    if (pkg.length > 0) tx.insert(s.carrierPackages).values(pkg.map((p) => ({ connectionId: row.id, code: p.code, name: p.name, isActive: row.allPackages }))).run();
+  });
+  return svc.length + pkg.length;
+}
+
+/** Syncs every connection's catalog rows (cheap; used before listing services for rate shopping). */
+export function syncAllCarrierCatalogs(db: AppDb): number {
+  return db.select({ id: t.id, provider: t.provider, allServices: t.allServices, allPackages: t.allPackages }).from(t).all().reduce((n, r) => n + syncCarrierCatalog(db, r), 0);
+}
+
 export function getCarrierConnection(db: AppDb, auth: AuthContext, id: string): CarrierConnectionDetail {
   const r = loadCarrierConnection(db, auth, id);
+  syncCarrierCatalog(db, r);
   const base = enrich(db, [r])[0] as CarrierConnectionRow;
   const access = db.select().from(s.carrierConnectionClients).where(eq(s.carrierConnectionClients.connectionId, id)).all();
   const clientList = db.select({ id: s.clients.id, code: s.clients.code, name: s.clients.name }).from(s.clients).where(eq(s.clients.status, "Active")).orderBy(asc(s.clients.name)).all()
@@ -129,7 +163,7 @@ async function liveCheck(provider: string, environment: "Test" | "Production", c
 export async function createCarrierConnection(db: AppDb, auth: AuthContext, actor: Actor, body: z.output<typeof createCarrierSchema>): Promise<CarrierConnectionDetail> {
   assertWarehouseInScope(auth, body.warehouseId);
   const catalog = providerCatalog(body.provider);
-  if (!catalog.live) throw fieldError("provider", "This carrier has no API adapter yet; use the KitStaks Sandbox or another carrier");
+  if (!catalog.live) throw fieldError("provider", "This carrier has no API adapter yet; use the KitStak Sandbox or another carrier");
   for (const f of catalog.credentialFields) if (!body.credentials[f.key]) throw fieldError(`credentials.${f.key}`, `${f.label} is required`);
   if (body.provider !== "kitstaks-sandbox" && !body.payorAccountNumber && (body.provider === "ups" || body.provider === "fedex")) throw fieldError("payorAccountNumber", "Payor account number is required");
   const dup = db.select({ id: t.id }).from(t).where(and(eq(t.warehouseId, body.warehouseId), sql`lower(${t.setupName}) = lower(${body.setupName})`)).get();
@@ -203,7 +237,7 @@ export function deleteCarrierConnections(tx: AppDb, auth: AuthContext, actor: Ac
   const ctx = domainCtxOf(actor, auth);
   return runBulk(tx, ids, (inner, id) => {
     const row = loadCarrierConnection(inner, auth, id);
-    if (row.provider === "kitstaks-sandbox") throw new AppError("INVALID_STATE", "The KitStaks Sandbox carrier is always available; set it inactive instead");
+    if (row.provider === "kitstaks-sandbox") throw new AppError("INVALID_STATE", "The KitStak Sandbox carrier is always available; set it inactive instead");
     const open = Number(inner.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM shipment_orders WHERE carrier_connection_id = ${id} AND deleted_at IS NULL AND status NOT IN ('Shipped','Partially Shipped','Delivered','Cancelled')`)?.n ?? 0);
     if (open > 0) throw new AppError("INVALID_STATE", `${row.setupName} is set on ${open} open order${open === 1 ? "" : "s"}`);
     const labels = Number(inner.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM shipments WHERE carrier_connection_id = ${id}`)?.n ?? 0);
@@ -237,7 +271,8 @@ const CALL_BINDING: GridBinding = {
 export interface CallLogRow {
   readonly id: string;
   readonly at: string;
-  readonly step: CallStep;
+  /** Carrier Errors grids list the three CallStep tabs; shipping also logs Tracking and Pickup calls. */
+  readonly step: (typeof CARRIER_CALL_STEPS)[number];
   readonly orderId: string | null;
   readonly orderCode: string | null;
   readonly trackingNumber: string | null;
@@ -273,9 +308,9 @@ export function listCallLogs(db: AppDb, auth: AuthContext, step: CallStep, query
     () => db.select({ n: sql<number>`count(*)` }).from(lg).innerJoin(t, eq(t.id, lg.connectionId)).where(grid.where).get()?.n ?? 0, { page: query.page, pageSize: query.pageSize });
   return {
     rows: result.rows.map((x) => ({
-      id: x.l.id, at: x.l.at, step: x.l.step, orderId: x.l.orderId, orderCode: x.orderCode ?? null, trackingNumber: x.l.trackingNumber, destinationType: x.l.destinationType,
+      id: x.l.id, at: x.l.at, step: x.l.step as CallStep, orderId: x.l.orderId, orderCode: x.orderCode ?? null, trackingNumber: x.l.trackingNumber, destinationType: x.l.destinationType,
       status: x.l.status, httpCode: x.l.httpCode, error: x.l.error, responseMs: x.l.responseMs, provider: x.provider, serviceName: x.l.serviceName,
-      connectionLabel: `${x.setupName} - ${providerName(x.provider)}`, setupName: x.setupName, warehouseCode: String(x.warehouseCode ?? ""), clientName: (x.clientName as string | null) ?? null,
+      connectionLabel: connectionLabelOf(String(x.setupName), String(x.provider)), setupName: x.setupName, warehouseCode: String(x.warehouseCode ?? ""), clientName: (x.clientName as string | null) ?? null,
       userEmail: (x.userEmail as string | null) ?? null, source: x.l.source, labelType: x.l.labelType, rateShoppingName: x.l.rateShoppingName,
     })),
     total: result.total,
@@ -292,9 +327,9 @@ export function getCallLog(db: AppDb, auth: AuthContext, id: string): CallLogDet
   const user = row.userId ? db.select({ email: s.users.email }).from(s.users).where(eq(s.users.id, row.userId)).get()?.email ?? null : null;
   const client = row.clientId ? db.select({ name: s.clients.name }).from(s.clients).where(eq(s.clients.id, row.clientId)).get()?.name ?? null : null;
   return {
-    id: row.id, at: row.at, step: row.step, orderId: row.orderId, orderCode: code, trackingNumber: row.trackingNumber, destinationType: row.destinationType, status: row.status,
+    id: row.id, at: row.at, step: row.step as CallStep, orderId: row.orderId, orderCode: code, trackingNumber: row.trackingNumber, destinationType: row.destinationType, status: row.status,
     httpCode: row.httpCode, error: row.error, responseMs: row.responseMs, provider: conn?.provider ?? "", serviceName: row.serviceName,
-    connectionLabel: conn ? `${conn.setupName} - ${providerName(conn.provider)}` : "", setupName: conn?.setupName ?? "", warehouseCode: labelsOf(db, "warehouses", [row.warehouseId]).get(row.warehouseId) ?? "",
+    connectionLabel: conn ? connectionLabelOf(conn.setupName, conn.provider) : "", setupName: conn?.setupName ?? "", warehouseCode: labelsOf(db, "warehouses", [row.warehouseId]).get(row.warehouseId) ?? "",
     clientName: client, userEmail: user, source: row.source, labelType: row.labelType, rateShoppingName: row.rateShoppingName, requestJson: row.requestJson, responseJson: row.responseJson,
   };
 }

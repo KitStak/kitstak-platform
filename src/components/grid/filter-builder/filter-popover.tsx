@@ -46,20 +46,22 @@ function FieldList({ fields, pinned, onPin, onPick }: { readonly fields: readonl
         {shown.map((def) => {
           const isPinned = pinned.includes(def.field);
           return (
-            <li key={def.field} className="group flex items-center gap-1 rounded-md hover:bg-surface-sunken">
+            // Stable hooks per field row: the row is labelled by the field, the pick button's
+            // accessible name is exactly the label (the description is its description).
+            <li key={def.field} aria-label={def.label} data-filter-field={def.field} className="group flex items-center gap-1 rounded-md hover:bg-surface-sunken">
               <button
                 type="button"
                 aria-label={isPinned ? `Unpin ${def.label}` : `Pin ${def.label}`}
                 aria-pressed={isPinned}
                 onClick={() => onPin(def.field)}
-                className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", isPinned ? "text-warning" : "text-faint opacity-60 group-hover:opacity-100")}
+                className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30", isPinned ? "text-warning" : "text-faint opacity-60 group-hover:opacity-100")}
               >
                 <Star className={cn("h-3.5 w-3.5", isPinned && "fill-current")} aria-hidden />
               </button>
-              <button type="button" onClick={() => onPick(def)} className="flex min-w-0 flex-1 items-center justify-between gap-2 py-1.5 pr-2 text-left text-[13px] text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+              <button type="button" aria-label={def.label} aria-describedby={def.description ? `ff-desc-${def.field}` : undefined} data-filter-pick={def.field} onClick={() => onPick(def)} className="flex min-w-0 flex-1 items-center justify-between gap-2 py-1.5 pr-2 text-left text-[13px] text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
                 <span className="min-w-0">
                   <span className="block truncate">{def.label}</span>
-                  {def.description ? <span className="block truncate text-[11px] text-faint">{def.description}</span> : null}
+                  {def.description ? <span id={`ff-desc-${def.field}`} className="block truncate text-[11px] text-faint">{def.description}</span> : null}
                 </span>
                 <ChevronRight className="h-3.5 w-3.5 shrink-0 text-faint" aria-hidden />
               </button>
@@ -119,7 +121,7 @@ function SavedList({ views, onApply }: { readonly views: readonly SavedView[]; r
     <ul className="ks-scroll flex max-h-72 flex-col overflow-auto" aria-label="Saved views">
       {views.map((v) => (
         <li key={v.id}>
-          <button type="button" onClick={() => onApply(v)} className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+          <button type="button" onClick={() => onApply(v)} className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
             <span className="truncate">{v.name}</span>
             <span className="flex shrink-0 gap-1 text-[10px] font-semibold uppercase text-faint">
               {v.isDefault ? <span className="text-primary">Default</span> : null}
@@ -136,7 +138,10 @@ export function FilterPopover({ gridKey, fields, filters, onApply, savedViews = 
   const [open, setOpenState] = React.useState(false);
   const [tab, setTab] = React.useState<Tab>("new");
   const [activeField, setActiveField] = React.useState<string | null>(null);
-  const [pinned, setPinned] = useLocalList(`ks:filter-pins:${gridKey}`);
+  const [storedPins, setPinned] = useLocalList(`ks:filter-pins:${gridKey}`);
+  // Until the viewer pins their own fields, the grid's preset fields (FilterFieldDef.preset) are pinned.
+  const presetPins = React.useMemo(() => fields.filter((f) => f.preset).map((f) => f.field), [fields]);
+  const pinned = storedPins.length > 0 ? storedPins : presetPins;
 
   const setOpen = (next: boolean) => {
     if (next) {

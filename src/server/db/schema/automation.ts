@@ -1,6 +1,6 @@
 /** Automation: putaway/allocation algorithms, workflows, rate shopping presets. */
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import type { OrderByClause, RuleCondition } from "../../../lib/domain-types";
+import type { OrderByClause, RuleCondition, RuleConditionNode } from "../../../lib/domain-types";
 import {
   ACTIVE_PASSIVE,
   ALGORITHM_KINDS,
@@ -55,7 +55,7 @@ export const workflows = sqliteTable("workflows", {
   warehouseId: text("warehouse_id"),
   clientId: text("client_id"),
   match: text("match", { enum: MATCH_MODES }).notNull().default("All"),
-  conditions: json<RuleCondition[]>("conditions").notNull().default(EMPTY_JSON_ARRAY),
+  conditions: json<RuleConditionNode[]>("conditions").notNull().default(EMPTY_JSON_ARRAY), // conditions and nested AND/OR groups
   actions: json<WorkflowAction[]>("actions").notNull(),
   sequence: integer("sequence").notNull().default(0),
   isActive: bool("is_active").notNull().default(true),

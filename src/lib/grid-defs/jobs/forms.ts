@@ -7,15 +7,17 @@ import { filterConditionSchema, jobTypeSettingsSchema, orderByClauseSchema } fro
 import { OPERATION_TYPES, WAVE_ASSIGN_MODES, WAVE_DELETE_METHODS, WAVE_OP_TYPES, WEEKDAYS } from "@/lib/enums";
 import { isTime } from "./schedule";
 
-export const WAVE_PRIORITIES = ["None", "High", "Medium", "Low"] as const;
+/** Critic R5: one priority scale for jobs, wave rules and the Update Priority modal. */
+export const WAVE_PRIORITIES = ["None", "Low", "Medium", "High", "Urgent"] as const;
 
-const name = z.string().trim().min(1, "Enter a name").max(100, "At most 100 characters");
+const name = z.string({ error: "Enter a name" }).trim().min(1, "Enter a name").max(100, "At most 100 characters");
 const id = z.string().trim().min(1).max(64);
 
 export const waveRuleBaseSchema = z.object({
   name,
-  warehouseId: z.string().trim().min(1, "Choose a warehouse"),
-  operationType: z.enum(WAVE_OP_TYPES),
+  // Critic R3: human copy instead of raw zod text when the field is missing.
+  warehouseId: z.string({ error: "Choose a warehouse" }).trim().min(1, "Choose a warehouse"),
+  operationType: z.enum(WAVE_OP_TYPES, { error: "Choose an operation type" }),
   priority: z.enum(WAVE_PRIORITIES).default("None"),
   deleteIfNotStarted: z.boolean().default(false),
   deleteMethod: z.enum(WAVE_DELETE_METHODS).default("None"),
@@ -67,14 +69,44 @@ export type WaveRuleFormValues = z.input<typeof waveRuleBaseSchema>;
 
 /* ------------------------------------------------------------- job types */
 
+/*
+ * Retailer compliance settings of a Picking job type (Logiwa 02 §6 step 3 / 08 §Job Types):
+ * Retailer Flow Type, UCC Label Scanning Type, Default Retailer Label Print Option.
+ * The foundation `jobTypeSettingsSchema` (R4-3) does not carry them yet, so M03 stores them
+ * under `settings.retailer` through this extension; domain reads simply ignore the key.
+ */
+export const RETAILER_FLOW_TYPES = ["None", "Retailer Pre-Picking UCC Generation", "Retailer Post-Picking UCC Generation"] as const;
+export const UCC_LABEL_SCANNING_TYPES = ["None", "Scan Parent LP", "Scan Each Carton"] as const;
+export const RETAILER_LABEL_PRINT_OPTIONS = ["None", "Print All UCC Labels", "Print UCC Label Per Parent LP"] as const;
+
+export const retailerSettingsSchema = z.object({
+  flowType: z.enum(RETAILER_FLOW_TYPES).default("None"),
+  uccLabelScanningType: z.enum(UCC_LABEL_SCANNING_TYPES).default("None"),
+  defaultLabelPrintOption: z.enum(RETAILER_LABEL_PRINT_OPTIONS).default("None"),
+}).prefault({});
+export type RetailerSettings = z.output<typeof retailerSettingsSchema>;
+
+/** Retailer flow applies only to the Retailer Compliance template; scanning / print need post-picking UCC. */
+export const RETAILER_TEMPLATE = "Retailer Compliance";
+export const POST_PICKING_FLOW = "Retailer Post-Picking UCC Generation";
+
+export function retailerOf(settings: unknown): RetailerSettings {
+  const raw = settings && typeof settings === "object" ? (settings as { retailer?: unknown }).retailer : undefined;
+  const parsed = retailerSettingsSchema.safeParse(raw ?? {});
+  return parsed.success ? parsed.data : retailerSettingsSchema.parse({});
+}
+
+export const jobTypeSettingsInputSchema = jobTypeSettingsSchema.extend({ retailer: retailerSettingsSchema });
+export type JobTypeSettingsInput = z.output<typeof jobTypeSettingsInputSchema>;
+
 export const jobTypeInputSchema = z.object({
   code: name,
   description: z.string().trim().min(1, "Enter a description").max(300),
-  warehouseId: z.string().trim().min(1, "Choose a warehouse"),
-  operationType: z.enum(OPERATION_TYPES),
+  warehouseId: z.string({ error: "Choose a warehouse" }).trim().min(1, "Choose a warehouse"),
+  operationType: z.enum(OPERATION_TYPES, { error: "Choose an operation type" }),
   allocationAlgorithmId: z.string().trim().max(64).nullish(),
   template: z.string().max(60).nullish(),
-  settings: jobTypeSettingsSchema,
+  settings: jobTypeSettingsInputSchema,
   conditions: z.array(filterConditionSchema).max(50).default([]),
   locationConditions: z.array(filterConditionSchema).max(50).nullish(),
   skuConditions: z.array(filterConditionSchema).max(50).nullish(),
@@ -93,5 +125,12 @@ export const jobTypeInputSchema = z.object({
     ctx.addIssue({ code: "custom", path: ["skuConditions"], message: "Location count conditions can't be combined with SKU count conditions" });
   }
   if (v.settings.batch.max < v.settings.batch.min) ctx.addIssue({ code: "custom", path: ["settings", "batch", "max"], message: "Max must be at least min" });
+  const r = v.settings.retailer;
+  if (r.flowType !== "None" && (v.operationType !== "Picking" || v.settings.template !== RETAILER_TEMPLATE)) {
+    ctx.addIssue({ code: "custom", path: ["settings", "retailer", "flowType"], message: "A retailer flow needs the Retailer Compliance template" });
+  }
+  if (r.flowType !== POST_PICKING_FLOW && (r.uccLabelScanningType !== "None" || r.defaultLabelPrintOption !== "None")) {
+    ctx.addIssue({ code: "custom", path: ["settings", "retailer", "uccLabelScanningType"], message: "UCC scanning and the default label print option need Retailer Post-Picking UCC Generation" });
+  }
 });
 export type JobTypeInput = z.output<typeof jobTypeInputSchema>;

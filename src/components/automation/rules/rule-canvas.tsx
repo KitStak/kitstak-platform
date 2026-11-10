@@ -108,7 +108,7 @@ function RuleNameNode({ data }: NodeProps<Node<{ name: string; index: number; is
       <Handle type="source" position={Position.Bottom} className="!opacity-0" isConnectable={false} />
       <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">{data.index === 0 ? "If" : `${data.index}. If else`} · Rule name</p>
       <div className="nodrag mt-1.5 flex items-center gap-2">
-        <TextField aria-label="Rule name" size="sm" value={data.name} maxLength={80} disabled={data.readOnly} invalid={Boolean(data.error)} onChange={(e) => data.onName(e.target.value)} placeholder="e.g. Same SKU in picking" wrapperClassName="flex-1" />
+        <TextField id="rule-name" aria-label="Rule name" size="sm" value={data.name} maxLength={80} disabled={data.readOnly} invalid={Boolean(data.error)} onChange={(e) => data.onName(e.target.value)} placeholder="e.g. Same SKU in picking" wrapperClassName="flex-1" />
         <Switch aria-label="Rule active" checked={data.isActive} disabled={data.readOnly} onCheckedChange={(v) => data.onActive(v === true)} size="sm" />
       </div>
       {data.error ? <p role="alert" className="mt-1 text-[11px] text-danger">{data.error}</p> : null}
@@ -118,6 +118,15 @@ function RuleNameNode({ data }: NodeProps<Node<{ name: string; index: number; is
 
 const NODE_TYPES = { item: ItemNode, join: JoinNode, section: SectionNode, ruleName: RuleNameNode };
 
+/** Auto-fit never shrinks node text below a readable size: a rule wider than the canvas opens at MIN_FIT_ZOOM pinned to its top-left, and the user pans / scrolls for the rest. */
+const MIN_FIT_ZOOM = 0.85;
+async function readableFit(flow: ReturnType<typeof useReactFlow>): Promise<void> {
+  await flow.fitView({ padding: 0.2, maxZoom: 1 });
+  if (flow.getZoom() >= MIN_FIT_ZOOM) return;
+  const b = flow.getNodesBounds(flow.getNodes());
+  await flow.setViewport({ x: -b.x * MIN_FIT_ZOOM + 32, y: -b.y * MIN_FIT_ZOOM + 48, zoom: MIN_FIT_ZOOM });
+}
+
 function ZoomPanel() {
   const flow = useReactFlow();
   const { zoom } = useViewport();
@@ -126,7 +135,7 @@ function ZoomPanel() {
       <Button size="icon-sm" variant="ghost" aria-label="Zoom out" onClick={() => void flow.zoomOut()}><Minus className="h-3.5 w-3.5" /></Button>
       <button type="button" className="w-12 rounded text-center text-[12px] tabular-nums text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => void flow.zoomTo(1)} aria-label="Reset zoom to 100%">{Math.round(zoom * 100)}%</button>
       <Button size="icon-sm" variant="ghost" aria-label="Zoom in" onClick={() => void flow.zoomIn()}><Plus className="h-3.5 w-3.5" /></Button>
-      <Button size="icon-sm" variant="ghost" aria-label="Fit to screen" onClick={() => void flow.fitView({ padding: 0.2 })}><Maximize2 className="h-3.5 w-3.5" /></Button>
+      <Button size="icon-sm" variant="ghost" aria-label="Fit to screen" onClick={() => void readableFit(flow)}><Maximize2 className="h-3.5 w-3.5" /></Button>
     </div>
   );
 }
@@ -166,7 +175,8 @@ function insertAt<T>(list: readonly T[], index: number, item: T, replace: boolea
 function CanvasInner(p: RuleCanvasProps) {
   const { rule, kind, onChange, names, readOnly } = p;
   const [editing, setEditing] = React.useState<Editing | null>(null);
-  const [showMap, setShowMap] = React.useState(true);
+  // Hidden by default: rules are small enough to fit the view; shown on demand with real node shapes.
+  const [showMap, setShowMap] = React.useState(false);
   const flow = useReactFlow();
   const orderMethods = kind === "Putaway" ? PUTAWAY_ORDER_BY : ALLOCATION_ORDER_BY;
   const sections: readonly { key: SectionKey; label: string; hint: string; tone: Tone; join: string; catalog?: ConditionCatalog }[] = kind === "Putaway"
@@ -247,7 +257,7 @@ function CanvasInner(p: RuleCanvasProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rule, p.index, p.nameError, readOnly, names, kind]);
 
-  React.useEffect(() => { const t = setTimeout(() => void flow.fitView({ padding: 0.2, maxZoom: 1 }), 30); return () => clearTimeout(t); }, [p.index, kind, flow]);
+  React.useEffect(() => { const t = setTimeout(() => void readableFit(flow), 30); return () => clearTimeout(t); }, [p.index, kind, flow]);
 
   const conditionState: ConditionModalState | null = editing && (editing.section === "conditions" || editing.section === "inventoryConditions") ? {
     title: editing.insert ? "Add condition" : "Edit condition",
@@ -259,10 +269,10 @@ function CanvasInner(p: RuleCanvasProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="relative min-h-[420px] flex-1">
-        <ReactFlow nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} fitView minZoom={0.3} maxZoom={1.8} nodesConnectable={false} nodesDraggable={false}
+        <ReactFlow nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} fitView fitViewOptions={{ padding: 0.2, minZoom: MIN_FIT_ZOOM, maxZoom: 1 }} minZoom={0.3} maxZoom={1.8} nodesConnectable={false} nodesDraggable={false}
           proOptions={{ hideAttribution: true }} panOnScroll className="bg-surface-sunken/40">
           <Background variant={BackgroundVariant.Dots} gap={18} size={1.2} color="#C5CBD3" />
-          {showMap ? <MiniMap pannable zoomable position="bottom-left" className="!rounded-lg !border !border-border" nodeColor={(n) => (n.type === "ruleName" ? "#2E6BE6" : n.type === "item" ? "#9AA4B2" : "transparent")} /> : null}
+          {showMap ? <MiniMap pannable zoomable position="bottom-left" className="!rounded-lg !border !border-border" bgColor="var(--color-surface-sunken, #F4F6F8)" maskColor="rgba(46,107,230,0.08)" maskStrokeColor="#2E6BE6" maskStrokeWidth={2} nodeBorderRadius={6} nodeStrokeWidth={2} nodeStrokeColor={(n) => (n.type === "ruleName" ? "#2E6BE6" : n.type === "item" ? "#7B8794" : "transparent")} nodeColor={(n) => (n.type === "ruleName" ? "#2E6BE6" : n.type === "item" ? "#C5CBD3" : "transparent")} /> : null}
           <Panel position="bottom-right">
             <div className="flex items-center gap-1.5">
               <Button size="icon-sm" variant="secondary" aria-label={showMap ? "Hide minimap" : "Show minimap"} aria-pressed={showMap} onClick={() => setShowMap((v) => !v)}><MapIcon className="h-3.5 w-3.5" /></Button>
