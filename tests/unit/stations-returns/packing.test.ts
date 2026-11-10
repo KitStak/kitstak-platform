@@ -8,9 +8,10 @@ import { createJobsFromOrders } from "@/server/domain/jobs";
 import { ledger } from "@/server/domain/ledger";
 import { createOrder } from "@/server/domain/orders";
 import { execute } from "@/server/domain/tasks";
-import { completePacking, completePackingSchema, packContext, reportIssue, validatePackages, type PackLine } from "@/server/repositories/packing";
+import { completePacking, completePackingSchema, packContext, reportIssue, startPacking, validatePackages, type PackLine } from "@/server/repositories/packing";
 import { packingKpis, packingStations, readyToPackOrders, resolveScan } from "@/server/repositories/packing-scan";
 import { createWorld, orderInput, type World } from "../foundation/domain/fixtures";
+import { hospitalOf } from "./hospital-fixture";
 
 let w: World;
 let scope: Scope;
@@ -134,13 +135,13 @@ describe("complete packing", () => {
 describe("report issue", () => {
   it("moves picked stock to the hospital location and opens Pack Short", () => {
     const id = readyToPack([{ productId: w.productId, quantity: 2 }]);
-    const res = w.db.transaction((tx) => reportIssue(tx, ctx(), { orderId: id, hospitalLocationId: w.loc.returns, note: "Box crushed" }));
+    const res = w.db.transaction((tx) => reportIssue(tx, ctx(), { orderId: id, hospitalLocationId: hospitalOf(w), note: "Box crushed" }));
     expect(res.movedUnits).toBe(2);
-    expect(res.hospitalCode).toBe("RET-01");
+    expect(res.hospitalCode).toBe("HOSP-01");
     expect(order(id)?.packShortStatus).toBe("Open");
-    const atHospital = w.db.select().from(schema.inventory).where(eq(schema.inventory.locationId, w.loc.returns)).all().reduce((s, r) => s + r.onHand, 0);
+    const atHospital = w.db.select().from(schema.inventory).where(eq(schema.inventory.locationId, hospitalOf(w))).all().reduce((s, r) => s + r.onHand, 0);
     expect(atHospital).toBe(2);
-    expect(() => w.db.transaction((tx) => reportIssue(tx, ctx(), { orderId: id, hospitalLocationId: w.loc.returns, note: "again" }))).toThrow(/No picked stock/);
+    expect(() => w.db.transaction((tx) => reportIssue(tx, ctx(), { orderId: id, hospitalLocationId: hospitalOf(w), note: "again" }))).toThrow(/No picked stock/);
     expect(ledger.reconcileLedger(w.db)).toEqual([]);
   });
 
@@ -148,10 +149,35 @@ describe("report issue", () => {
     const id = readyToPack([{ productId: w.productId, quantity: 1 }]);
     const code = order(id)?.code as string;
     const c = packContext(w.db, scope, id);
-    w.db.transaction((tx) => reportIssue(tx, ctx(), { orderId: id, hospitalLocationId: w.loc.returns, note: "Torn" }));
+    w.db.transaction((tx) => reportIssue(tx, ctx(), { orderId: id, hospitalLocationId: hospitalOf(w), note: "Torn" }));
     expect(() => resolveScan(w.db, scope, { warehouseId: w.warehouseId, mode: "order", code })).toThrow(/open pack short issue/);
     expect(readyToPackOrders(w.db, scope, { warehouseId: w.warehouseId })).toEqual([]);
     const body = { orderId: id, stationId: w.loc.pack, withLabel: false, packages: [pkg([{ orderLineId: c.lines[0]?.orderLineId as string, qty: 1 }])] };
     await expect(completePacking(w.db, ctx(), completePackingSchema.parse(body))).rejects.toThrow(/open pack short issue/);
+  });
+});
+
+describe("round 2: start packing and KPI parity", () => {
+  it("opening the order moves Ready to Pack → Packing Started (idempotent) and packing still completes", async () => {
+    const id = readyToPack([{ productId: w.productId, quantity: 1 }]);
+    expect(order(id)?.status).toBe("Ready to Pack");
+    expect(startPacking(w.db, ctx(), id)).toMatchObject({ status: "Packing Started", started: 1 });
+    expect(order(id)?.status).toBe("Packing Started");
+    expect(startPacking(w.db, ctx(), id).started).toBe(0);
+    const c = packContext(w.db, scope, id);
+    const res = await completePacking(w.db, ctx(), completePackingSchema.parse({
+      orderId: id, stationId: w.loc.pack, version: c.order.version, withLabel: false,
+      packages: [pkg([{ orderLineId: c.lines[0]?.orderLineId as string, qty: 1 }])],
+    }));
+    expect(res.status).toBe("Ready to Ship");
+    expect(ledger.reconcileLedger(w.db)).toEqual([]);
+  });
+
+  it("KPI 'orders to be packed' equals the List & Select count", () => {
+    readyToPack([{ productId: w.productId, quantity: 1 }]);
+    const id2 = readyToPack([{ productId: w.product2Id, quantity: 1 }]);
+    w.db.transaction((tx) => reportIssue(tx, ctx(), { orderId: id2, hospitalLocationId: hospitalOf(w), note: "Box crushed" }));
+    const k = packingKpis(w.db, scope, w.warehouseId, w.ctx.userId);
+    expect(k.ordersToPack).toBe(readyToPackOrders(w.db, scope, { warehouseId: w.warehouseId }).length);
   });
 });

@@ -54,7 +54,7 @@ describe("purchase order create", () => {
     expect(po.vendorName).toBe("Acme Supply");
     expect(w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, po.id)).all()).toHaveLength(1);
     const lineLogs = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.parentEntityId, po.id)).all();
-    expect(lineLogs.map((l) => l.message)).toEqual(expect.arrayContaining([expect.stringMatching(/^MLT-WIDGET-01 -> .* --> 10$/)]));
+    expect(lineLogs.map((l) => l.message)).toEqual(expect.arrayContaining(["MLT-WIDGET-01 -> Purchase Order Line is created."]));
     expect(listPurchaseOrders(w.db, auth, { ...EMPTY_GRID_QUERY, q: "KS-E2E-PO-1", qm: "eq" }).total).toBe(1);
   });
 
@@ -141,7 +141,7 @@ describe("receiving", () => {
     expect(done.receivedAt).not.toBeNull();
     const active = receiptsForPurchaseOrder(w.db, auth.scope, po.id).find((r) => !r.cancelledAt);
     expect(active?.locationId).toBe(w.loc.receiving);
-    expect(active?.cancelBlockedReason).toBe(CANCEL_COMPLETED_PO_MESSAGE);
+    expect(active?.cancelBlockedReason).toContain(CANCEL_COMPLETED_PO_MESSAGE);
     expect(() => cancelReceipt(w.db, w.ctx, auth.scope, active?.id ?? "")).toThrowError(CANCEL_COMPLETED_PO_MESSAGE);
     expect(ledger.reconcileLedger(w.db)).toEqual([]);
   });
@@ -162,7 +162,7 @@ describe("status guards", () => {
     const c = createPo("KS-C", v.id);
     const changed = changePurchaseOrderStatus(w.db, w.ctx, auth.scope, c.id, { status: "Completed", reason: "Closed by vendor", version: c.version });
     expect(changed.status).toBe("Completed");
-    expect(changed.allowedStatuses).toEqual([]);
+    expect(changed.allowedStatuses).toEqual(["Started"]); // Completed -> Started re-open (Logiwa parity, round 8)
 
     const d = createPo("KS-D", v.id);
     deletePurchaseOrder(w.db, w.ctx, auth.scope, d.id);

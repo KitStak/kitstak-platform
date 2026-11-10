@@ -9,7 +9,7 @@ import { listOrders } from "@/server/repositories/orders";
 import { getLiveDashboard } from "@/server/repositories/dashboard-live";
 import { getLaborAnalytics, getOperationalAnalytics } from "@/server/repositories/analytics";
 import { median, parseRange } from "@/server/repositories/analytics-common";
-import { quadrantOf, speedOf, taskMinutes, QUADRANT_LABELS, MAX_GAP_MINUTES } from "@/server/repositories/analytics-labor";
+import { loadTaskFacts, LOW_SAMPLE, quadrantOf, quadrantPoints, speedOf, taskMinutes, QUADRANT_LABELS, MAX_GAP_MINUTES } from "@/server/repositories/analytics-labor";
 import { agingBucket, onTimePct } from "@/server/repositories/analytics-operational";
 import { chartToCsv } from "@/components/analytics/analytics-export";
 import { createWorld, orderInput, type World } from "../foundation/domain/fixtures";
@@ -20,7 +20,7 @@ let auth: AuthContext;
 beforeEach(() => {
   w = createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
-  auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
+  auth = { scope, viewScope: scope, permissions: new Set<string>(["settings.users.view", "settings.billing.view"]), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
 afterEach(() => w.close());
 
@@ -68,13 +68,13 @@ describe("analytics formulas", () => {
 describe("analytics app gate", () => {
   it("returns the activation gate while Labor Analytics is inactive, and data once active", () => {
     setApp("labor-analytics", false);
-    expect(getLaborAnalytics(w.db, auth, "average-task", { wh: [] }).gate).toMatchObject({ appKey: "labor-analytics" });
+    expect(getLaborAnalytics(w.db, auth, "average-task", { wh: [], cl: [] }).gate).toMatchObject({ appKey: "labor-analytics" });
     setApp("labor-analytics", true);
-    const res = getLaborAnalytics(w.db, auth, "average-task", { wh: [] });
+    const res = getLaborAnalytics(w.db, auth, "average-task", { wh: [], cl: [] });
     expect(res.gate).toBeNull();
     expect(res.charts.length).toBeGreaterThan(0);
     setApp("operational-analytics", false);
-    expect(getOperationalAnalytics(w.db, auth, "fulfillment", { wh: [] }).gate?.appName).toBe("Operational Analytics");
+    expect(getOperationalAnalytics(w.db, auth, "fulfillment", { wh: [], cl: [] }).gate?.appName).toBe("Operational Analytics");
   });
 
   it("Performance Quadrant renders every user with correct medians", () => {
@@ -92,10 +92,13 @@ describe("analytics app gate", () => {
           startedAt: start.toISOString(), finishedAt: new Date(start.getTime() + Number(mins) * 60_000).toISOString() }).run();
       }
     });
-    const chart = getLaborAnalytics(w.db, auth, "performance-quadrant", { wh: [] }).charts[0];
+    const chart = getLaborAnalytics(w.db, auth, "performance-quadrant", { wh: [], cl: [] }).charts[0];
     expect(chart?.rows.map((r) => r.user).sort()).toEqual(["A", "B", "C"]);
-    expect(chart?.medians).toEqual({ x: 4, y: 20 });
-    expect(chart?.rows.find((r) => r.user === "C")).toMatchObject({ volume: 6, speed: 30, quadrant: QUADRANT_LABELS[0] });
+    // Under MIN_QUADRANT_TASKS every associate is low sample: plotted, not ranked.
+    expect(chart?.rows.every((r) => r.quadrant === LOW_SAMPLE)).toBe(true);
+    const { med, points } = quadrantPoints(loadTaskFacts(w.db, parseRange({}), [w.warehouseId]), 1);
+    expect(med).toEqual({ x: 4, y: 20 });
+    expect(points.find((r) => r.user === "C")).toMatchObject({ volume: 6, speed: 30, quadrant: QUADRANT_LABELS[0] });
   });
 });
 

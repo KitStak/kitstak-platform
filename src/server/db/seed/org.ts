@@ -81,6 +81,8 @@ function seedClients(tx: Tx): ClientRef[] {
     const hq = CLIENT_ADDRESSES[c.code];
     if (hq) {
       insertAddress(tx, { type: "client", id }, hq, { usageType: "Billing", companyName: c.name, phone: c.phone, email: c.contactEmail });
+      // Every client has a default Shipping address (the client Overview otherwise reads "Shipping · Not set").
+      insertAddress(tx, { type: "client", id }, hq, { usageType: "Shipping", companyName: c.name, phone: c.phone, email: c.contactEmail });
       insertAddress(tx, { type: "client", id }, hq, { usageType: "Return", companyName: `${c.name} Returns`, isDefault: false });
     }
     // PXP is offboarded at the end of the replay (status flips to Inactive then).

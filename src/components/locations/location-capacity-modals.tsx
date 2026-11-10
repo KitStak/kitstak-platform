@@ -5,11 +5,13 @@ import * as React from "react";
 import { z } from "zod";
 import { lpCapacitySchema, productCapacitySchema } from "@/lib/grid-defs/facility/locations";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Form, FormField, FormGrid, useZodForm } from "@/components/ui/form";
 import { ComboField, NumberField, SelectField } from "@/components/facility/form-controls";
-import { useClientOptions, useLookups } from "@/components/facility/facility-shared";
+import { useClientOptions } from "@/components/facility/facility-shared";
+import { useApiQuery } from "@/lib/query-client";
 import { ProductPicker, useLpTypeOptions } from "@/components/facility/pickers";
 
 export interface ProductCapacityRow extends z.input<typeof productCapacitySchema> {
@@ -22,22 +24,38 @@ export interface LpCapacityRow extends z.input<typeof lpCapacitySchema> {
   readonly sku?: string | null;
 }
 
-const PC_DEFAULTS: ProductCapacityRow = { clientId: "", productId: "", packType: "Each", minQty: 0, maxQty: 0 };
+const PC_DEFAULTS: ProductCapacityRow = { clientId: "", productId: "", packType: "", minQty: 0, maxQty: 0 };
+const packRow = z.object({ packType: z.string(), kind: z.string(), uomQty: z.number() });
 const LP_DEFAULTS: LpCapacityRow = { lpTypeId: "", minQty: 0, maxQty: 1, assignProduct: false, clientId: null, productId: null };
 
 export function ProductCapacityModal({ open, onOpenChange, initial, onSave }: { readonly open: boolean; readonly onOpenChange: (o: boolean) => void; readonly initial: ProductCapacityRow | null; readonly onSave: (row: ProductCapacityRow) => void }) {
   const form = useZodForm(productCapacitySchema, initial ?? PC_DEFAULTS);
   const [sku, setSku] = React.useState<string | undefined>(initial?.sku);
+  const [isKit, setIsKit] = React.useState(false);
   const clients = useClientOptions();
-  const packTypes = useLookups("pack_type");
   const clientId = form.watch("clientId");
+  const productId = form.watch("productId");
+  // Logiwa's UOM model: only the selected product's own pack types are offered.
+  const packTypes = useApiQuery<unknown>(["product-pack-types", productId || ""], open && productId ? "/api/locations/product-pack-types" : null, { query: { productId }, staleTime: 60_000 });
+  const packs = React.useMemo(() => {
+    const parsed = z.array(packRow).safeParse(packTypes.data?.data);
+    return parsed.success ? parsed.data : [];
+  }, [packTypes.data]);
+  const packOptions = packs.map((p) => ({ value: p.packType, label: p.uomQty > 1 ? `${p.packType} (${p.uomQty.toLocaleString("en-US")} units)` : p.packType }));
   React.useEffect(() => {
     if (open) {
       form.reset(initial ?? PC_DEFAULTS);
       setSku(initial?.sku);
+      setIsKit(false);
     }
   }, [open, initial, form]);
-  const packOptions = packTypes.options.length ? packTypes.options.map((o) => ({ value: o.label, label: o.label })) : [{ value: "Each", label: "Each" }];
+  // Default to the product's smallest pack type; drop a pack type the product doesn't define.
+  React.useEffect(() => {
+    if (!packs.length) return;
+    const current = form.getValues("packType");
+    if (!packs.some((p) => p.packType === current)) form.setValue("packType", packs[0]?.packType ?? "", { shouldValidate: Boolean(current) });
+  }, [packs, form]);
+  const packPlaceholder = !productId ? "Select a product first" : packTypes.isPending ? "Loading pack types…" : packOptions.length ? "Select pack type" : "No pack types";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
@@ -45,15 +63,20 @@ export function ProductCapacityModal({ open, onOpenChange, initial, onSave }: { 
         <Form form={form} onSubmit={(values) => { onSave({ ...values, sku, clientName: clients.find((c) => c.value === values.clientId)?.label }); onOpenChange(false); }}>
           <DialogBody>
             <FormGrid>
-              <ComboField<z.input<typeof productCapacitySchema>> name="clientId" label="Client" required options={clients} placeholder="Select client" onValueChange={() => { form.setValue("productId", ""); setSku(undefined); }} />
+              <ComboField<z.input<typeof productCapacitySchema>> name="clientId" label="Client" required options={clients} placeholder="Select client" onValueChange={() => { form.setValue("productId", ""); setSku(undefined); setIsKit(false); }} />
               <FormField<z.input<typeof productCapacitySchema>> name="productId" label="Product" required>
-                {(c) => <ProductPicker id={c.id} clientId={clientId || null} value={(c.value as string) || null} selectedLabel={sku} invalid={c.invalid} onBlur={c.onBlur} onChange={(v, label) => { c.onChange(v ?? ""); setSku(label ?? undefined); }} />}
+                {(c) => <ProductPicker id={c.id} clientId={clientId || null} value={(c.value as string) || null} selectedLabel={sku} invalid={c.invalid} onBlur={c.onBlur} onChange={(v, label, kit) => { c.onChange(v ?? ""); setSku(label ?? undefined); setIsKit(Boolean(kit)); }} />}
               </FormField>
-              <SelectField<z.input<typeof productCapacitySchema>> name="packType" label="Pack type" required options={packOptions} />
+              <SelectField<z.input<typeof productCapacitySchema>> name="packType" label="Pack type" required options={packOptions} placeholder={packPlaceholder} disabled={!productId} info="The product's own units of measure" />
               <div />
               <NumberField<z.input<typeof productCapacitySchema>> name="minQty" label="Min qty" />
               <NumberField<z.input<typeof productCapacitySchema>> name="maxQty" label="Max qty" required />
             </FormGrid>
+            {isKit ? (
+              <Callout variant="attention" className="mt-4" title={`${sku ?? "This product"} is a kit`}>
+                Capacity here counts built kits only. Its component SKUs are replenished from their own pick faces, so add capacity for those SKUs too if you pick them here.
+              </Callout>
+            ) : null}
           </DialogBody>
           <DialogFooter>
             <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>

@@ -6,7 +6,7 @@
  */
 import * as React from "react";
 import { useFormContext, useFormState, useWatch } from "react-hook-form";
-import { ImageIcon, PackageSearch, Plus, Search, Trash2 } from "lucide-react";
+import { PackageSearch, Plus, Search, Trash2 } from "lucide-react";
 import { useApiQuery } from "@/lib/query-client";
 import type { ComponentFormValue } from "@/lib/grid-defs/products/product-form";
 import type { ComponentOption } from "@/server/repositories/products-options";
@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FieldError } from "@/components/ui/form";
 import { NumberInput } from "@/components/ui/number-input";
 import { Spinner } from "@/components/ui/spinner";
+import { ProductThumb } from "../catalog-shared";
 import { useProductWizard } from "./context";
 
 const DEBOUNCE_MS = 250;
@@ -29,15 +30,9 @@ function useDebounced(value: string): string {
   return v;
 }
 
-function Thumb({ url }: { readonly url?: string | null }) {
-  return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-surface-sunken">
-      {url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- arbitrary CDN images
-        <img src={url} alt="" width={36} height={36} className="h-full w-full object-cover" />
-      ) : <ImageIcon className="h-4 w-4 text-faint" aria-hidden />}
-    </span>
-  );
+/** The catalog-wide thumb (image, else two-letter initials), same as the grid / detail / link drawer. */
+function Thumb({ url, label }: { readonly url?: string | null; readonly label: string }) {
+  return <ProductThumb url={url} size={36} label={label} />;
 }
 
 export function StepComponents() {
@@ -98,7 +93,7 @@ export function StepComponents() {
             <ul className="divide-y divide-border">
               {results.map((o) => (
                 <li key={o.id} className="flex items-center gap-3 px-3 py-2 hover:bg-surface-sunken">
-                  <Thumb url={o.imageUrl} />
+                  <Thumb url={o.imageUrl} label={o.name || o.sku} />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5 truncate text-[13px] font-semibold text-foreground">
                       {o.sku}
@@ -128,7 +123,7 @@ export function StepComponents() {
           <tbody className="divide-y divide-border">
             {components.map((c, i) => (
               <tr key={c.productId}>
-                <td className="px-3 py-2"><Thumb url={c.imageUrl} /></td>
+                <td className="px-3 py-2"><Thumb url={c.imageUrl} label={c.name || c.sku} /></td>
                 <td className="px-3 py-2"><span className="block font-semibold text-foreground">{c.sku}</span><span className="block text-[12px] text-secondary">{c.name}</span></td>
                 <td className="px-3 py-2">
                   <NumberInput size="sm" min={1} aria-label={`Quantity of ${c.sku}`} value={c.quantity} invalid={!c.quantity || c.quantity < 1}

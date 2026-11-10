@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Form, FormField, FormGrid, SubmitBar, useZodForm } from "@/components/ui/form";
 import { RadioCards } from "@/components/ui/radio-cards";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TextField } from "@/components/ui/text-field";
 import { toast } from "@/components/ui/toast";
 import type { SequenceRow } from "@/server/repositories/company-sequences";
 import { EntityChangeLogDrawer, usePagePerms } from "../admin-shared";
@@ -58,7 +59,7 @@ function SequenceCard({ row, canEdit, onLog }: { readonly row: SequenceRow; read
           {(c) => (
             <RadioCards<"auto" | "manual"> ariaLabel={`${row.label} code mode`} columns={2} value={c.value ? "auto" : "manual"} onChange={(v) => canEdit && c.onChange(v === "auto")}
               options={[
-                { value: "auto", title: "Auto generate codes as", description: "Every new record gets the next code automatically.", icon: Wand2, disabled: !canEdit },
+                { value: "auto", title: `Auto generate codes as ${sequencePreview(prefix || row.prefix, next, pad)}`, description: "Every new record gets the next code automatically.", icon: Wand2, disabled: !canEdit },
                 { value: "manual", title: "Keep adding codes manually", description: "Users type a unique code each time.", icon: Keyboard, disabled: !canEdit },
               ]} />
           )}
@@ -66,7 +67,14 @@ function SequenceCard({ row, canEdit, onLog }: { readonly row: SequenceRow; read
         {auto ? (
           <FormGrid columns={3}>
             <TextInput<SequenceValues> name="prefix" label="Prefix" required maxLength={12} transform={(v) => v.toUpperCase()} disabled={!canEdit} />
-            <NumberField<SequenceValues> name="nextValue" label="Start number" required min={1} max={999999999} disabled={!canEdit} info="The number the next code uses" />
+            <FormField<SequenceValues> name="nextValue" label="Start number" required info="The number the next code uses">
+              {(c) => (
+                <TextField id={c.id} name={c.name} ref={c.ref as React.Ref<HTMLInputElement>} inputMode="numeric" disabled={!canEdit || c.disabled} invalid={c.invalid}
+                  aria-invalid={c['aria-invalid']} aria-describedby={c['aria-describedby']} className="font-mono tabular-nums"
+                  value={c.value === null || c.value === undefined ? '' : String(c.value)} onBlur={c.onBlur}
+                  onChange={(e) => { const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 9); c.onChange(digits === '' ? 0 : Number(digits)); }} />
+              )}
+            </FormField>
             <NumberField<SequenceValues> name="padding" label="Number length" required min={0} max={12} disabled={!canEdit} info="Zero-padded digits after the prefix" />
           </FormGrid>
         ) : null}

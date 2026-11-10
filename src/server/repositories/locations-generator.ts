@@ -34,8 +34,14 @@ function existingCodes(db: AppDb, warehouseId: string, codes: readonly string[])
   return found;
 }
 
+/**
+ * The legacy `locations.zone` text mirrors the Location Zone lookup name, as the wizard and the
+ * import do. The pattern's code prefix (`spec.zone`) is only the first code segment and never
+ * becomes a zone (critic R4: a prefix showed as "Location zone" that the filter, zone strip and
+ * editor could not find).
+ */
 function zoneName(db: AppDb, spec: GeneratorSpec): string {
-  if (!spec.locationZoneId) return spec.zone.toUpperCase();
+  if (!spec.locationZoneId) return "";
   const row = db.select({ name: s.lookupValues.name, warehouseId: s.lookupValues.warehouseId }).from(s.lookupValues)
     .where(and(eq(s.lookupValues.id, spec.locationZoneId), eq(s.lookupValues.type, "location_zone"))).get();
   if (!row || (row.warehouseId && row.warehouseId !== spec.warehouseId)) {

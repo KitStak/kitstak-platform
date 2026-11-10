@@ -105,14 +105,19 @@ describe("channel runtime (sandbox store)", () => {
   it("downloads orders, records missing SKUs and retries them", async () => {
     const { c, orders } = sandboxConnection();
     w.db.insert(schema.channelRuns).values([1, 2].map(() => ({ methodId: orders.id, connectionId: c.id, method: "Download Orders", status: "No Data" as const, startedAt: new Date().toISOString() }))).run();
-    const run = await runChannelMethod(w.db, orders.id, { manual: true });
+    // Run 3 without Simulate error: the scheduled sandbox never fails on purpose (critic R4).
+    const clean = await runChannelMethod(w.db, orders.id, { manual: true });
+    expect(clean.error).toBe(0);
+    const run = await runChannelMethod(w.db, orders.id, { manual: true, simulateError: true });
     expect(run.success).toBeGreaterThan(0);
     expect(run.error).toBe(1);
     const created = w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.channelConnectionId, c.id)).all();
-    expect(created.length).toBe(run.success);
+    expect(created.length).toBe(clean.success + run.success);
     expect(created.every((o) => o.storeName === "KS-TEST Sandbox")).toBe(true);
     const missing = w.db.select().from(schema.channelMissingOrders).where(eq(schema.channelMissingOrders.connectionId, c.id)).all();
-    expect(missing[0]?.lastErrorCode).toBe("One or more SKUs in the order were not found in KitStaks");
+    // Stored with the product's brand spelling, so API, export and webhooks never say "KitStaks".
+    expect(missing[0]?.lastErrorCode).toBe("One or more SKUs in the order were not found in KitStak");
+    expect(JSON.parse(missing[0]?.payload ?? "{}").simulated).toBe(true);
     const again = await runChannelMethod(w.db, orders.id, { manual: true });
     expect(again.status).not.toBe("Failed");
 

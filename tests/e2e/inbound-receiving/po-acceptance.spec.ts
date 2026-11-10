@@ -58,7 +58,10 @@ test.describe("M05 purchase order acceptance", () => {
     await main.getByRole("combobox", { name: /^Client/ }).click();
     await page.getByRole("option").filter({ hasText: CLIENT }).first().click();
 
-    await codeBox.fill("KS-E2E-PO-1");
+    // Duplicate check against a PO that is known to exist on this DB.
+    const existing = await page.request.get("/api/purchase-orders?pageSize=1", { timeout: LOAD_MS });
+    const existingCode = ((await existing.json()).data?.[0]?.code as string | undefined) ?? "KS-E2E-PO-1";
+    await codeBox.fill(existingCode);
     await codeBox.blur();
     await expect(main.getByText(/already exists/).first()).toBeVisible();
     await codeBox.fill(code);
@@ -67,8 +70,9 @@ test.describe("M05 purchase order acceptance", () => {
     await nextButton(main).click();
 
     await expect(main.getByLabel("Search products")).toBeVisible();
-    await nextButton(main).click();
-    await expect(main.getByText("Add at least one product")).toBeVisible();
+    // Next stays disabled, with its reason, until a product is added.
+    await expect(nextButton(main)).toBeDisabled();
+    await expect(main.getByLabel("Add at least one product")).toBeVisible();
     await addLine(page, main, LOT_SKU, 10, 4.5);
     await addLine(page, main, PLAIN_SKU, 5, 3);
     await expect(main.getByText("60.00 USD").first()).toBeVisible();
@@ -93,7 +97,7 @@ test.describe("M05 purchase order acceptance", () => {
     poUrl = (await main.getByRole("link", { name: code }).getAttribute("href")) ?? "";
     expect(poUrl).toMatch(/^\/receiving\/.+/);
 
-    await main.getByText("Go back to purchase order list").first().click();
+    await main.getByText("Go to the purchase order list").first().click();
     const row = main.locator("tbody tr").filter({ hasText: code }).first();
     await expect(row).toContainText("Pending", { timeout: LOAD_MS });
     await expect(row).toContainText("60.00 USD");
@@ -107,8 +111,8 @@ test.describe("M05 purchase order acceptance", () => {
     await drawer.getByRole("checkbox", { name: `Receive ${PLAIN_SKU}` }).click();
     const card = drawer.getByRole("region", { name: `Receive ${LOT_SKU}` });
     await card.getByRole("textbox", { name: /^Quantity/ }).or(card.getByRole("spinbutton", { name: /^Quantity/ })).first().fill("6");
-    await page.getByRole("button", { name: "Receive", exact: true }).click();
-    await expect(card.getByText(`${LOT_SKU} is lot tracked: enter a lot/batch number.`)).toBeVisible();
+    // Tracking guard: Receive stays disabled until the lot number is entered.
+    await expect(page.getByRole("button", { name: "Receive", exact: true })).toBeDisabled();
 
     await card.getByRole("textbox", { name: /^Lot batch number/ }).fill("L123");
     const expiry = card.getByRole("textbox", { name: /^Expiry date/ }).first();

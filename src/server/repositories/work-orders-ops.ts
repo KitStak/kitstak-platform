@@ -2,7 +2,7 @@
  * Warehouse Ops for work orders: Picking/Job Operations (with a dry-run preview) and the
  * Picking List / Batch Picking List print records.
  */
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import type { Scope } from "@/server/auth/scope";
 import * as schema from "@/server/db/schema";
@@ -59,7 +59,7 @@ export function runPicking(db: AppDb, ctx: DomainCtx & { scope: Scope }, input: 
         const res = tx.transaction((inner) => allocateWorkOrderWith(inner, ctx, id, { jobTypeId: input.jobTypeId, assigneeUserId: input.assigneeUserId, priority: input.priority }));
         outcomes.push(res.status === "In Process"
           ? { id, code, outcome: "allocated", message: "Components allocated; picking job created", shortages: [] }
-          : { id, code, outcome: "shortage", message: `${res.shortageQty} component units short`, shortages });
+          : { id, code, outcome: "shortage", message: `${res.shortageQty} component unit${res.shortageQty === 1 ? "" : "s"} short`, shortages });
       } catch (error) {
         outcomes.push({ id, code, outcome: "failed", message: describeError(error).message, shortages: [] });
       }
@@ -134,6 +134,39 @@ function linesFor(db: AppDb, scope: Scope, id: string): { lines: PickListLine[];
       lines: tasks.map(({ t: task, p, loc, lp }) => ({
         locationCode: loc.code, sku: p.sku, name: p.name, quantity: task.plannedQty - task.actualQty, uom: p.uom, lpNumber: opt(lp),
         lotNumber: opt(task.lotNumber), expiryDate: opt(task.expiryDate), orderCode: wo.code, walkingPathPriority: loc.walkingPathPriority,
+      })).filter((l) => l.quantity > 0),
+    };
+  }
+  // Every pick already done (e.g. Completed with picking): reprint what was picked, for audit or
+  // rework, instead of planning new picks (Logiwa prints whenever there is a selection).
+  const done = db.select({ t, p: schema.products, loc: schema.locations, lp: schema.licensePlates.number }).from(t)
+    .innerJoin(schema.products, eq(schema.products.id, t.productId))
+    .innerJoin(schema.locations, eq(schema.locations.id, t.sourceLocationId))
+    .leftJoin(schema.licensePlates, eq(schema.licensePlates.id, t.sourceLpId))
+    .where(and(eq(t.workOrderId, wo.id), eq(t.taskType, "Picking"), eq(t.status, "Completed"))).all();
+  if (done.length > 0) {
+    return {
+      code: wo.code, warehouseName, jobType: `${job?.j.jobType ?? "Work Order Picking"} (reprint, picked)`, assignee: opt(job?.name), createdAt: wo.createdAt,
+      lines: done.map(({ t: task, p, loc, lp }) => ({
+        locationCode: loc.code, sku: p.sku, name: p.name, quantity: task.actualQty || task.plannedQty, uom: p.uom, lpNumber: opt(lp),
+        lotNumber: opt(task.lotNumber), expiryDate: opt(task.expiryDate), orderCode: wo.code, walkingPathPriority: loc.walkingPathPriority,
+      })).filter((l) => l.quantity > 0),
+    };
+  }
+  // Completed with no pick tasks on record: reprint from the Kitting consumption (where each
+  // component was actually taken from), never a new FEFO plan.
+  if (wo.status === "Completed") {
+    const x = schema.inventoryTransactions;
+    const used = db.select({ x, p: schema.products, loc: schema.locations, lp: schema.licensePlates.number }).from(x)
+      .innerJoin(schema.products, eq(schema.products.id, x.productId))
+      .innerJoin(schema.locations, eq(schema.locations.id, x.fromLocationId))
+      .leftJoin(schema.licensePlates, eq(schema.licensePlates.id, x.fromLpId))
+      .where(and(eq(x.workOrderId, wo.id), eq(x.type, "Kitting"), ne(x.productId, wo.kitProductId), isNull(x.toLocationId))).all();
+    return {
+      code: wo.code, warehouseName, jobType: `${job?.j.jobType ?? "Work Order Picking"} (reprint, consumed)`, assignee: opt(job?.name), createdAt: wo.createdAt,
+      lines: used.map(({ x: row, p, loc, lp }) => ({
+        locationCode: loc.code, sku: p.sku, name: p.name, quantity: Math.abs(row.uomQty), uom: p.uom, lpNumber: opt(lp),
+        lotNumber: opt(row.fromLot), expiryDate: opt(row.fromExpiry), orderCode: wo.code, walkingPathPriority: loc.walkingPathPriority,
       })).filter((l) => l.quantity > 0),
     };
   }

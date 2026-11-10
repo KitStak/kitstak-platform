@@ -11,7 +11,7 @@ import { shipOrders } from "@/server/domain/shipping";
 import { execute } from "@/server/domain/tasks";
 import { EMPTY_GRID_QUERY } from "@/server/query/grid-query";
 import {
-  changeReturnStatus, createRma, getReturnDetail, selectionTransitions, shippableOrder, transitionOptions,
+  bulkUpdateReturnInfo, changeReturnStatus, createRma, getReturnDetail, selectionTransitions, shippableOrder, transitionOptions,
 } from "@/server/repositories/returns";
 import { listReturnLines, returnStatusCounts } from "@/server/repositories/returns-grid";
 import { lookupRmas, receiveManual, receiveManualSchema, receiveRma, receiveRmaSchema, returnStations } from "@/server/repositories/returns-receive";
@@ -152,5 +152,29 @@ describe("return station", () => {
       warehouseId: w.warehouseId, clientId: w.otherClientId, stationLocationId: w.loc.returns, targetLocationId: w.loc.storageB,
       items: [{ productId: w.productId, quantity: 1, disposition: "Restock" }],
     })))).toThrow(/another client/);
+  });
+
+  it("status pill counts agree with the grid total (one row per RMA line)", () => {
+    w.db.transaction((tx) => receiveManual(tx, ctx(), receiveManualSchema.parse({
+      warehouseId: w.warehouseId, clientId: w.clientId, stationLocationId: w.loc.returns,
+      items: [{ productId: w.productId, quantity: 1, disposition: "Restock" }, { productId: w.productId, quantity: 1, disposition: "Quarantine" }],
+    })));
+    const total = listReturnLines(w.db, scope, EMPTY_GRID_QUERY).total;
+    expect(total).toBe(2);
+    expect(Object.values(returnStatusCounts(w.db, scope)).reduce((s, n) => s + n, 0)).toBe(total);
+  });
+
+  it("Bulk Update Return Info edits open RMAs, skips terminal ones and logs the change", async () => {
+    const { orderId, lineId } = shippedOrder(2);
+    const open = await newRma(orderId, lineId, 1);
+    const done = await newRma(orderId, lineId, 1);
+    w.db.transaction((tx) => changeReturnStatus(tx, ctx(), { ids: [done.id], status: "Cancelled" }));
+    const res = w.db.transaction((tx) => bulkUpdateReturnInfo(tx, ctx(), { ids: [open.id, done.id], trackingNumber: "1ZRET", carrierCode: "UPS" }));
+    expect(res.succeeded).toEqual([open.id]);
+    expect(res.failed[0]?.code).toBe("INVALID_STATE");
+    expect(rma(open.id)).toMatchObject({ trackingNumber: "1ZRET", carrierCode: "UPS" });
+    expect(rma(done.id)?.trackingNumber).toBeNull();
+    const counts = returnStatusCounts(w.db, scope, { ...EMPTY_GRID_QUERY, filters: [{ field: "status", op: "in", values: ["Pending"] }] } as never);
+    expect(counts.Cancelled).toBe(1);
   });
 });

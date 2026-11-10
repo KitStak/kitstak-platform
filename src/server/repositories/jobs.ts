@@ -2,6 +2,9 @@
  * Job Management repository (M03): grid list (32 columns), detail, and the job-metadata
  * commands (priority, assign, cancel) that wrap `domain/jobs`.
  */
+import { aiJobFacts } from "./jobs-ai-read";
+import { phaseProgress } from "./jobs-progress";
+import { settleJob } from "./jobs-settle";
 import { and, count, eq, sql, type SQL } from "drizzle-orm";
 import { JOBS_GRID } from "@/lib/grid-defs/jobs/jobs";
 import type { AppDb } from "@/server/api/db";
@@ -17,6 +20,10 @@ import { asBool, compileGrid, n0, type FieldSqlMap, qc } from "./jobs-grid";
 
 const j = schema.jobs;
 
+/** AI jobs carry their AI job type in the job-type snapshot; the original type stays on job_type_id. */
+const IS_AI = sql`(${qc(j.jobType)} LIKE 'AI-%')`;
+/** Live (Pending / Started) job whose stored planned finish is in the past. */
+export const OVERDUE = sql`(${qc(j.status)} IN ('Pending','Started','In Progress') AND ${qc(j.plannedEndAt)} IS NOT NULL AND ${qc(j.plannedEndAt)} < strftime('%Y-%m-%dT%H:%M:%fZ','now'))`;
 const taskCountWhere = (cond: SQL): SQL => sql`(SELECT COUNT(*) FROM tasks t WHERE t.job_id = ${qc(j.id)} AND ${cond})`;
 
 export const JOB_SQL: FieldSqlMap = {
@@ -35,14 +42,17 @@ export const JOB_SQL: FieldSqlMap = {
   taskCount: sql`${qc(j.taskCount)}`,
   pendingTasks: taskCountWhere(sql`t.status IN ('Pending','Started')`),
   completedTasks: sql`${qc(j.completedTaskCount)}`,
-  startedAt: sql`${qc(j.startedAt)}`,
+  // Critic R5: a job completed without a stamped start (e.g. instant counts) shows the first task start.
+  startedAt: sql`COALESCE(${qc(j.startedAt)}, (SELECT MIN(COALESCE(t.started_at, t.finished_at)) FROM tasks t WHERE t.job_id = ${qc(j.id)}), CASE WHEN ${qc(j.status)} = 'Completed' THEN ${qc(j.completedAt)} END)`,
   completedAt: sql`${qc(j.completedAt)}`,
   createdAt: sql`${qc(j.createdAt)}`,
-  createdBy: sql`COALESCE((SELECT u.name FROM users u WHERE u.id = ${qc(j.createdBy)}), 'System')`,
+  createdBy: sql`COALESCE((SELECT u.name FROM users u WHERE u.id = ${qc(j.createdBy)}), 'Integration')`,
   pendingPickingTasks: taskCountWhere(sql`t.task_type = 'Picking' AND t.status IN ('Pending','Started')`),
   pendingPackingTasks: taskCountWhere(sql`t.task_type = 'Packing' AND t.status IN ('Pending','Started')`),
   mobileCart: sql`(SELECT m.code FROM mobile_carts m WHERE m.id = ${qc(j.mobileCartId)})`,
-  pickingZone: sql`${qc(j.pickingZone)}`,
+  // Stored zone wins; otherwise the zone(s) of the job's source locations (Logiwa shows the zone list).
+  pickingZone: sql`COALESCE(${qc(j.pickingZone)}, (SELECT GROUP_CONCAT(z, ', ') FROM (SELECT DISTINCT COALESCE(lv.name, ll.zone) AS z FROM tasks t JOIN locations ll ON ll.id = t.source_location_id LEFT JOIN lookup_values lv ON lv.id = ll.location_zone_id WHERE t.job_id = ${qc(j.id)} AND t.status <> 'Cancelled' AND COALESCE(lv.name, ll.zone) IS NOT NULL ORDER BY z)))`,
+  // Stored SLA window (created + 1h / + 2h), stable across reloads (critic R3).
   plannedStartAt: sql`${qc(j.plannedStartAt)}`,
   plannedEndAt: sql`${qc(j.plannedEndAt)}`,
   locationCount: n0(sql`SELECT COUNT(DISTINCT t.source_location_id) FROM tasks t WHERE t.job_id = ${qc(j.id)} AND t.status <> 'Cancelled'`),
@@ -51,10 +61,12 @@ export const JOB_SQL: FieldSqlMap = {
   pickListStatus: sql`${qc(j.pickListStatus)}`,
   isResolutionJob: sql`${qc(j.isResolutionJob)}`,
   isPrecartonization: sql`${qc(j.isPrecartonization)}`,
-  aiJob: sql`0`,
-  originalJobType: sql`NULL`,
+  aiJob: asBool(IS_AI),
+  originalJobType: sql`(CASE WHEN ${IS_AI} THEN (SELECT jt.code FROM job_types jt WHERE jt.id = ${qc(j.jobTypeId)}) END)`,
   executedBy: sql`(SELECT GROUP_CONCAT(DISTINCT u.name) FROM tasks t JOIN users u ON u.id = t.executed_by_user_id WHERE t.job_id = ${qc(j.id)})`,
   pickingAssignment: sql`(CASE WHEN ${qc(j.assignedToUserId)} IS NULL THEN 'Unassigned' ELSE 'Assigned' END)`,
+  // Critic R5 (beats Logiwa): a live job whose planned finish has passed is overdue.
+  overdue: asBool(OVERDUE),
 };
 
 export interface JobListRow {
@@ -69,7 +81,7 @@ export interface JobListRow {
   readonly [key: string]: unknown;
 }
 
-const LIST_COLUMNS = Object.keys(JOB_SQL).filter((k) => !["aiJob", "executedBy", "pickingAssignment"].includes(k));
+const LIST_COLUMNS = Object.keys(JOB_SQL).filter((k) => !["executedBy", "pickingAssignment"].includes(k));
 
 function selection(): Record<string, SQL> {
   const out: Record<string, SQL> = {
@@ -87,11 +99,12 @@ export function listJobs(db: AppDb, auth: AuthContext, query: GridQuery): { rows
   });
   const rows = db.select(selection()).from(j).where(where).orderBy(...orderBy).limit(query.pageSize).offset(pageOffset(query)).all() as unknown as JobListRow[];
   const total = db.select({ n: count() }).from(j).where(where).get()?.n ?? 0;
-  return { rows: rows.map(normalizeBools), total };
+  const ai = aiJobFacts(db, rows as unknown as { id: string; jobType: unknown; orderCount: unknown }[]);
+  return { rows: rows.map((r) => ({ ...normalizeBools(r), aiJobDescription: ai.get(r.id)?.description ?? null })), total };
 }
 
 function normalizeBools(row: JobListRow): JobListRow {
-  return { ...row, isResolutionJob: Boolean(row.isResolutionJob), isPrecartonization: Boolean(row.isPrecartonization), hasPickShort: Number(row.hasPickShort) };
+  return { ...row, aiJob: Boolean(row.aiJob), isResolutionJob: Boolean(row.isResolutionJob), isPrecartonization: Boolean(row.isPrecartonization), hasPickShort: Number(row.hasPickShort) };
 }
 
 /* ------------------------------------------------------------------ detail */
@@ -111,7 +124,7 @@ export function getJobDetail(db: AppDb, auth: AuthContext, id: string) {
   const orders = db.all<{
     id: string; code: string; status: string; customerName: string; storeOrderNumber: string | null; units: number; picked: number;
     packed: number; pendingTasks: number; startedTasks: number; completedTasks: number; pickShortStatus: string; carrier: string | null;
-    hasLabel: number; clientName: string;
+    hasLabel: number; clientName: string; released: number; cancelledTasks: number;
   }>(sql`SELECT o.id, o.code, o.status, o.customer_name AS customerName, o.store_order_number AS storeOrderNumber,
       COALESCE((SELECT SUM(l.quantity - l.cancelled_quantity) FROM order_lines l WHERE l.order_id = o.id), 0) AS units,
       COALESCE((SELECT SUM(l.picked_quantity) FROM order_lines l WHERE l.order_id = o.id), 0) AS picked,
@@ -121,30 +134,52 @@ export function getJobDetail(db: AppDb, auth: AuthContext, id: string) {
       (SELECT COUNT(*) FROM tasks t WHERE t.job_id = ${id} AND t.order_id = o.id AND t.status = 'Completed') AS completedTasks,
       o.pick_short_status AS pickShortStatus, o.carrier,
       EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id AND s.label_type = 'Shipping Label' AND s.label_status = 'Active') AS hasLabel,
-      (SELECT c.name FROM clients c WHERE c.id = o.client_id) AS clientName
-    FROM job_orders jo JOIN shipment_orders o ON o.id = jo.order_id WHERE jo.job_id = ${id} ORDER BY o.code`);
+      (SELECT c.name FROM clients c WHERE c.id = o.client_id) AS clientName,
+      (SELECT COUNT(*) FROM tasks t WHERE t.job_id = ${id} AND t.order_id = o.id AND t.status = 'Cancelled') AS cancelledTasks,
+      -- Critic R4: an order whose tasks in this job are all cancelled is no longer in the job.
+      (NOT EXISTS (SELECT 1 FROM job_orders jo WHERE jo.job_id = ${id} AND jo.order_id = o.id)
+        OR (EXISTS (SELECT 1 FROM tasks t WHERE t.job_id = ${id} AND t.order_id = o.id)
+            AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.job_id = ${id} AND t.order_id = o.id AND t.status <> 'Cancelled'))) AS released
+    FROM shipment_orders o
+    WHERE o.id IN (SELECT jo.order_id FROM job_orders jo WHERE jo.job_id = ${id}
+                   UNION SELECT t.order_id FROM tasks t WHERE t.job_id = ${id} AND t.order_id IS NOT NULL)
+    ORDER BY o.code`);
   const tasks = db.all<{
     id: string; taskNo: number; taskType: string; status: string; sequence: number; orderId: string | null; orderCode: string | null;
     sku: string | null; productName: string | null; plannedQty: number; actualQty: number; sourceLocation: string | null; sourceLpn: string | null;
     targetLocation: string | null; targetLpn: string | null; walkingPathPriority: number | null; aisle: string | null; zone: string | null;
-    pickShortStatus: string; assignee: string | null; finishedAt: string | null; lotNumber: string | null; version: number;
+    pickShortStatus: string; assignee: string | null; executedBy: string | null; assigneeUserId: string | null; finishedAt: string | null; lotNumber: string | null; version: number;
   }>(sql`SELECT t.id, t.task_no AS taskNo, t.task_type AS taskType, t.status, t.sequence, t.order_id AS orderId,
       (SELECT o.code FROM shipment_orders o WHERE o.id = t.order_id) AS orderCode,
       p.sku, p.name AS productName, t.planned_qty AS plannedQty, t.actual_qty AS actualQty,
       sl.code AS sourceLocation, (SELECT lp.number FROM license_plates lp WHERE lp.id = t.source_lp_id) AS sourceLpn,
       tl.code AS targetLocation, (SELECT lp.number FROM license_plates lp WHERE lp.id = t.target_lp_id) AS targetLpn,
       sl.walking_path_priority AS walkingPathPriority, sl.aisle, sl.zone, t.pick_short_status AS pickShortStatus,
-      (SELECT u.name FROM users u WHERE u.id = t.assignee_user_id) AS assignee, t.finished_at AS finishedAt, t.lot_number AS lotNumber, t.version
+      COALESCE((SELECT u.name FROM users u WHERE u.id = t.assignee_user_id), (SELECT u.name FROM users u WHERE u.id = t.executed_by_user_id)) AS assignee,
+      (SELECT u.name FROM users u WHERE u.id = t.executed_by_user_id) AS executedBy, t.assignee_user_id AS assigneeUserId, t.finished_at AS finishedAt, t.lot_number AS lotNumber, t.version
     FROM tasks t LEFT JOIN products p ON p.id = t.product_id LEFT JOIN locations sl ON sl.id = t.source_location_id
       LEFT JOIN locations tl ON tl.id = t.target_location_id
     WHERE t.job_id = ${id} ORDER BY t.sequence, t.task_no`);
   const progress = jobsDomain.getJobProgress(db, { userId: null, source: "read", scope: auth.scope }, id);
+  // Critic R5: a cancelled job keeps its history. Orders released by the cancel still list (flagged
+  // "released"), and the header counts agree with the tabs instead of the zeroed live counters.
+  const cancelledTaskCount = tasks.filter((t) => t.status === "Cancelled").length;
+  const ai = aiJobFacts(db, [{ id, jobType: job.jobType, orderCount: orders.filter((o) => !o.released).length }]).get(id) ?? null;
+  const releasedOrderCount = orders.filter((o) => Boolean(o.released)).length;
+  const history = { orderCount: orders.length, releasedOrderCount, taskCount: tasks.length, cancelledTaskCount, liveTaskCount: tasks.length - cancelledTaskCount };
+  // A live job counts only the orders still in it; a cancelled job shows what it held.
+  const headerOrderCount = job.status === "Cancelled" ? orders.length : orders.length - releasedOrderCount;
   return {
-    job: { ...normalizeBools(header), operationTypeRaw: job.operationType, waveRuleId: rule?.id ?? null } as JobListRow & { readonly operationTypeRaw: string; readonly waveRuleId: string | null },
+    job: { ...normalizeBools(header), orderCount: headerOrderCount, taskCount: tasks.length, operationTypeRaw: job.operationType, waveRuleId: rule?.id ?? null } as JobListRow & { readonly operationTypeRaw: string; readonly waveRuleId: string | null },
     wave: wave ? { id: wave.id, waveNo: wave.waveNo, status: wave.status, runAt: wave.runAt, runBy: wave.runBy } : null,
+    // REQ-11 (M07): a count job shows its count plan instead of a wave.
+    countPlan: job.countPlanId ? db.get<{ id: string; code: string; status: string }>(sql`SELECT id, code, status FROM count_plans WHERE id = ${job.countPlanId}`) ?? null : null,
     rule,
+    ai,
     progress,
-    orders: orders.map((o) => ({ ...o, hasLabel: Boolean(o.hasLabel) })),
+    history,
+    phases: phaseProgress(tasks),
+    orders: orders.map((o) => ({ ...o, hasLabel: Boolean(o.hasLabel), released: Boolean(o.released) })),
     tasks,
   };
 }
@@ -172,14 +207,15 @@ export function assertSameWarehouse(db: AppDb, ids: readonly string[]): void {
   }
 }
 
-export function cancelJobs(db: AppDb, ctx: DomainCtx, ids: readonly string[]): BulkResult {
-  return runBulk(db, ids, (tx, id) => {
-    jobsDomain.cancelJob(tx, ctx, { jobId: id });
-  });
-}
+/** Job cancel with the full task cascade (see `jobs-commands.ts`). */
+export { cancelJobs } from "./jobs-commands";
 
+/** Removes the order; when it was the job's last order the job closes (settleJob: Cancelled, with a change-log row). */
 export function removeOrder(db: AppDb, ctx: DomainCtx, jobId: string, orderId: string): void {
-  jobsDomain.removeOrderFromJob(db, ctx, { jobId, orderId });
+  db.transaction((tx) => {
+    jobsDomain.removeOrderFromJob(tx, ctx, { jobId, orderId });
+    settleJob(tx, ctx, jobId);
+  });
 }
 
 /** Marks the pick list printed (Pick List Status → Printed) with a change-log row. */

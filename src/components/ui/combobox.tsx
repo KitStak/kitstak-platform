@@ -33,6 +33,8 @@ interface BaseProps {
   readonly clearable?: boolean;
   readonly placeholder?: string;
   readonly emptyText?: string;
+  /** Static options still loading (the caller's query is pending): spinner + "Loading options…". */
+  readonly loading?: boolean;
   readonly disabled?: boolean;
   readonly invalid?: boolean;
   readonly size?: ControlSize;
@@ -251,7 +253,7 @@ export function Combobox(props: ComboboxProps) {
               <X className="h-3.5 w-3.5" aria-hidden />
             </button>
           ) : null}
-          {source.loading && open ? <Spinner className="h-3.5 w-3.5 text-faint" label="Searching" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-secondary" aria-hidden />}
+          {(source.loading || props.loading) && open ? <Spinner className="h-3.5 w-3.5 text-faint" label="Searching" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-secondary" aria-hidden />}
         </div>
       </PopoverPrimitive.Anchor>
       <PopoverPrimitive.Portal>
@@ -271,7 +273,14 @@ export function Combobox(props: ComboboxProps) {
             ) : source.error ? (
               <p role="alert" className="px-2 py-2 text-[12px] text-danger">{source.error}</p>
             ) : rows.length === 0 ? (
-              <p className="px-2 py-2 text-[12px] text-faint">{source.loading ? "Searching…" : emptyText}</p>
+              source.loading || props.loading ? (
+                <p role="status" className="flex items-center gap-2 px-2 py-2 text-[12px] text-faint">
+                  <Spinner className="h-3.5 w-3.5" label="Loading" />
+                  {props.loading || trimmed === "" ? "Loading options…" : "Searching…"}
+                </p>
+              ) : (
+                <p className="px-2 py-2 text-[12px] text-faint">{emptyText}</p>
+              )
             ) : rows.length > VIRTUALIZE_ABOVE ? (
               <VirtualList rows={rows} render={renderRow} />
             ) : (

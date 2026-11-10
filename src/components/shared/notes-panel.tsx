@@ -24,7 +24,8 @@ export function NotesPanel({ entityType, entityId, canEdit = true }: { readonly 
   const fmt = useFormat();
   const me = useMe();
   const key = notesQueryKey(entityType, entityId);
-  const query = useApiQuery<unknown>(key, "/api/notes", { query: { entityType, entityId } });
+  // One retry only: the "could not be loaded · Retry" state shows within seconds on a 5xx.
+  const query = useApiQuery<unknown>(key, "/api/notes", { query: { entityType, entityId }, retry: 1 });
   const notes = [...parseList(noteSchema, query.data?.data)].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const [body, setBody] = React.useState("");
   const [deleting, setDeleting] = React.useState<Note | null>(null);

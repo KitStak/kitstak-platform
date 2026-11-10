@@ -33,6 +33,10 @@ export interface TotalInventoryRow {
   readonly productType: string | null;
   readonly productGroup: string | null;
   readonly damagedQty: number;
+  /** Distinct locations holding stock (drives the "N locations" drilldown label). */
+  readonly locationCount: number;
+  /** Distinct warehouses holding stock (All Warehouses rows). */
+  readonly warehouseCount: number;
 }
 
 const OPEN_SO_LIST: SQL = sql.join(OPEN_SO_STATUSES.map((s) => sql`${s}`), sql`, `);
@@ -56,7 +60,8 @@ export function totalInventorySql(warehouseIds: readonly string[], clientIds: re
     WITH keys AS (${keys}),
     inv AS (
       SELECT i.product_id, ${split ? sql`i.warehouse_id` : sql`NULL`} AS warehouse_id,
-        SUM(i.on_hand) AS total, SUM(i.damaged) AS damaged
+        SUM(i.on_hand) AS total, SUM(i.damaged) AS damaged,
+        COUNT(DISTINCT i.location_id) AS locations, COUNT(DISTINCT i.warehouse_id) AS warehouses
       FROM inventory i WHERE i.on_hand > 0 AND ${whInv} GROUP BY ${invGroup}
     ),
     so AS (
@@ -81,7 +86,9 @@ export function totalInventorySql(warehouseIds: readonly string[], clientIds: re
       COALESCE(inv.total, 0) - COALESCE(inv.damaged, 0) - COALESCE(so.open_so, 0) AS "undamagedAvailableQty",
       p.kit_type AS "kitType",
       pt.name AS "productType", pg.name AS "productGroup",
-      COALESCE(inv.damaged, 0) AS "damagedQty"
+      COALESCE(inv.damaged, 0) AS "damagedQty",
+      COALESCE(inv.locations, 0) AS "locationCount",
+      COALESCE(inv.warehouses, 0) AS "warehouseCount"
     FROM keys k
     JOIN products p ON p.id = k.product_id
     JOIN clients c ON c.id = p.client_id

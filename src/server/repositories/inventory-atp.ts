@@ -49,7 +49,7 @@ export function atpGridSql(warehouseIds: readonly string[], clientIds: readonly 
       a.allocatedSo AS "allocatedSoQty", a.openSo AS "openSoQty", a.openPo AS "openPoQty",
       (a.total - a.damaged - a.openSo) AS "currentAtp",
       (a.total - a.damaged - a.openSo + a.openPo) AS "plannedAtp",
-      a.onHand AS "onHandQty",
+      a.total AS "onHandQty",
       (a.onHand - a.openSo) AS "sellableQty",
       a.pickable AS "pickableQty",
       MAX(a.openSo - a.allocatedSo, 0) AS "unallocatedSoQty"

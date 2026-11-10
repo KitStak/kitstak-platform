@@ -19,7 +19,7 @@ import { writeAudit, type AuditEntry } from "@/server/auth/audit";
 import { buildAuthContext, type AuthContext } from "@/server/auth/context";
 import { isSafeMethod, verifyCsrf } from "@/server/auth/csrf";
 import { canAny } from "@/server/auth/permissions";
-import { clientIp, hitRateLimit, RATE_LIMITS, type RateLimitPolicy } from "@/server/auth/rate-limit";
+import { auditIp, clientIp, hitRateLimit, RATE_LIMITS, type RateLimitPolicy } from "@/server/auth/rate-limit";
 import { CONTEXT_CLIENT_COOKIE, CONTEXT_WAREHOUSE_COOKIE } from "@/server/auth/scope";
 import { getRequestSession, readCookie } from "@/server/auth/session";
 import { log } from "@/server/log";
@@ -27,6 +27,8 @@ import { parseGridQuery, type GridQuery } from "@/server/query/grid-query";
 import { getAppDb, type AppDb } from "./db";
 import { jsonError, jsonOk, isRouteResult } from "./envelope";
 import { AppError, forbiddenError, fromZodError, toAppError, unauthenticatedError } from "./errors";
+import { deepRedactFor } from "@/server/repositories/roles-redaction";
+import { parseTzOffset, runWithTzOffset, TZ_OFFSET_HEADER } from "@/server/query/request-tz";
 
 export const MAX_JSON_BODY_BYTES = 1_000_000;
 
@@ -101,13 +103,19 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
   return typeof value === "object" && value !== null && typeof (value as { then?: unknown }).then === "function";
 }
 
-function toResponse(value: unknown, requestId: string): Response {
+/**
+ * JSON envelope for a handler result. Role data restrictions (Manage Restrictions: carrier
+ * cost, carrier account data, rate shopping data) are applied to every authenticated JSON
+ * payload here, at any depth; raw `Response` values (files, streams) pass through untouched.
+ */
+function toResponse(value: unknown, requestId: string, auth: AuthContext | null): Response {
   if (value instanceof Response) return value;
   const headers = { "x-request-id": requestId };
+  const redact = <T,>(v: T): T => (auth && auth.restrictions.length > 0 ? deepRedactFor(auth, v) : v);
   if (isRouteResult(value)) {
-    return jsonOk(value.data, { status: value.status, meta: value.meta, headers: { ...headers, ...(value.headers ?? {}) } });
+    return jsonOk(redact(value.data), { status: value.status, meta: value.meta, headers: { ...headers, ...(value.headers ?? {}) } });
   }
-  return jsonOk(value ?? null, { headers });
+  return jsonOk(redact(value ?? null), { headers });
 }
 
 interface Guarded {
@@ -118,7 +126,7 @@ async function guard(
   db: AppDb,
   request: NextRequest,
   config: { auth?: AuthMode; permission?: string | readonly string[]; csrf?: boolean; rateLimit?: RateLimitPolicy | false },
-  meta: { ip: string; userAgent: string | null; route: string },
+  meta: { ip: string; rateIp: string; userAgent: string | null; route: string },
 ): Promise<Guarded> {
   const mutation = !isSafeMethod(request.method);
   const session = await getRequestSession(db, request);
@@ -152,7 +160,7 @@ async function guard(
 
   const policy = config.rateLimit === undefined ? (mutation ? RATE_LIMITS.mutation : false) : config.rateLimit;
   if (policy) {
-    const subject = auth?.user.id ?? `ip:${meta.ip}`;
+    const subject = auth?.user.id ?? `ip:${meta.rateIp}`;
     const limit = hitRateLimit(db, policy, subject);
     if (!limit.allowed) {
       throw new AppError("RATE_LIMITED", "Too many requests. Please slow down and try again shortly.", {
@@ -174,7 +182,9 @@ export function defineRoute<
     const started = Date.now();
     const requestId = randomUUID();
     const route = config.name ?? new URL(request.url).pathname;
-    const ip = clientIp(request);
+    // Audit / session rows get the real client address; the rate-limit bucket keeps clientIp.
+    const ip = auditIp(request);
+    const rateIp = clientIp(request);
     const userAgent = request.headers.get("user-agent");
     let userId: string | null = null;
     let status = 500;
@@ -182,7 +192,7 @@ export function defineRoute<
 
     try {
       const db = await getAppDb();
-      const { auth } = await guard(db, request, config, { ip, userAgent, route });
+      const { auth } = await guard(db, request, config, { ip, rateIp, userAgent, route });
       userId = auth?.user.id ?? null;
 
       const rawParams = segment ? await segment.params : {};
@@ -219,15 +229,19 @@ export function defineRoute<
         }) as RouteCtx<Out<QS, Record<string, string>>, Out<BS, undefined>, Out<PS, Record<string, string>>, A>;
 
       const useTx = config.transaction ?? !isSafeMethod(request.method);
-      const value = useTx
-        ? db.transaction((tx) => {
-            const out = config.handler(makeCtx(tx));
-            if (isThenable(out)) throw new Error(`Transactional handler for ${route} must be synchronous`);
-            return out;
-          })
-        : await config.handler(makeCtx(db));
+      // The viewer's UTC offset (x-tz-offset) scopes grid date chips to local days for this request.
+      const tzOffset = parseTzOffset(request.headers.get(TZ_OFFSET_HEADER));
+      const value = await runWithTzOffset(tzOffset, () =>
+        useTx
+          ? db.transaction((tx) => {
+              const out = config.handler(makeCtx(tx));
+              if (isThenable(out)) throw new Error(`Transactional handler for ${route} must be synchronous`);
+              return out;
+            })
+          : config.handler(makeCtx(db))
+      );
 
-      const response = toResponse(value, requestId);
+      const response = toResponse(value, requestId, auth);
       status = response.status;
       return response;
     } catch (error: unknown) {

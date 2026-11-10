@@ -163,7 +163,8 @@ const purchaseOrder = defineMachine<PoStatus>("purchase order", {
   Started: ["Receiving", "Completed", "Cancelled"],
   // Receiving -> Started: a partial receive settles as Started (M05 §4; the ledger marks Receiving in-transaction).
   Receiving: ["Started", "Completed", "Cancelled"],
-  Completed: [],
+  // Re-open (Logiwa "Change Purchase Order Status"): Completed -> Started clears the completion stamps.
+  Completed: ["Started"],
   Cancelled: [],
 }, {
   Completed: "A purchase order in completed status can't be changed.",
@@ -206,7 +207,8 @@ const countLine = defineMachine<CountLineStatus>("count line", {
   "Count Started": ["Count Completed", "Cancelled"],
   "Count Completed": ["Inventory Updated", "Recount Created", "Count Started"],
   "Inventory Updated": [],
-  "Recount Created": [],
+  // REQ-16: a cancelled recount reopens the original line so its count result can still be posted.
+  "Recount Created": ["Count Completed"],
   "Cancelled": [],
 }, {});
 
@@ -231,9 +233,17 @@ const returnOrder = defineMachine<ReturnStatus>("return", {
   "Pending": ["Started", "In Transit", "Cancelled"],
   "In Transit": ["Started", "Completed", "Cancelled"],
   "Started": ["Completed", "Cancelled"],
-  "Completed": [],
+  // Reopen a short-closed return only (guarded below).
+  "Completed": ["Started"],
   "Cancelled": [],
-}, {});
+}, { Completed: "Completed returns can't be changed." }, [
+  {
+    from: ["Completed"], to: ["Started"],
+    check: (_from, _to, ctx) => (typeof ctx.shortQty === "number" && ctx.shortQty > 0
+      ? null
+      : "Only a short-closed return (units still outstanding) can be reopened."),
+  },
+]);
 
 const shipmentPlan = defineMachine<ShipmentPlanStatus>("shipment plan", {
   "Open": ["In Progress", "Loading Started", "Cancelled"],

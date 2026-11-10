@@ -5,7 +5,7 @@ import { idParamsSchema } from "@/server/repositories/platform-common";
 import { getWarehouse, updateWarehouse } from "@/server/repositories/warehouses";
 
 export const GET = defineRoute({
-  permission: "settings.warehouse.view",
+  permission: ["settings.warehouse.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   handler: ({ db, auth, params }) => getWarehouse(db, auth, params.id),
 });

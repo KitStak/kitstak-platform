@@ -4,7 +4,8 @@ import { listResult } from "@/server/api/envelope";
 import { listPlanLps } from "@/server/repositories/shipment-plans-lists";
 
 export const GET = defineRoute({
-  permission: "fulfillment.shipment_plan.view_plan_lps",
+  // Any-of: the plan view permission covers every read-only Shipment Plan tab (Logiwa parity, REQ-6).
+  permission: ["fulfillment.shipment_plan.view_plan_lps", "fulfillment.shipment_plan.view"],
   handler: ({ db, auth, grid }) => {
     const query = grid();
     const { rows, total } = listPlanLps(db, auth, query);

@@ -47,12 +47,15 @@ export const tagUpdateSchema = z.object({
   version: versionSchema.optional(),
 });
 
-export const tagApplySchema = z.object({
-  entityType: entityTypeSchema,
-  ids: bulkIdsSchema,
-  tagIds: z.array(idSchema).min(1, "Select at least one tag").max(50),
-  mode: z.enum(["add", "remove"]),
-});
+export const tagApplySchema = z
+  .object({
+    entityType: entityTypeSchema,
+    ids: bulkIdsSchema,
+    tagIds: z.array(idSchema).max(50),
+    /** "set" replaces the record's tags with `tagIds` (an empty list clears them). */
+    mode: z.enum(["add", "remove", "set"], { message: "Choose add, remove or set" }),
+  })
+  .refine((v) => v.mode === "set" || v.tagIds.length > 0, { path: ["tagIds"], message: "Select at least one tag" });
 
 export type TagApplyInput = z.output<typeof tagApplySchema>;
 
@@ -129,9 +132,14 @@ function loadApplicableTags(db: AppDb, entityType: string, tagIds: readonly stri
 /** Bulk add/remove: per-id result; each record runs in its own savepoint. */
 export function applyTags(db: AppDb, auth: AuthContext, input: TagApplyInput): BulkResult {
   if (!canOnEntity(auth, input.entityType, "tag")) throw forbiddenError();
-  const applicable = loadApplicableTags(db, input.entityType, input.tagIds);
+  const applicable = input.tagIds.length > 0 ? loadApplicableTags(db, input.entityType, input.tagIds) : [];
   return runBulk(db, input.ids, (tx, id) => {
     requireEntity(tx, auth, input.entityType, id, "tag");
+    if (input.mode === "set") {
+      tx.delete(entityTags).where(and(eq(entityTags.entityType, input.entityType), eq(entityTags.entityId, id))).run();
+      for (const tag of applicable) tx.insert(entityTags).values({ tagId: tag.id, entityType: input.entityType, entityId: id }).onConflictDoNothing().run();
+      return;
+    }
     for (const tag of applicable) {
       if (input.mode === "add") {
         tx.insert(entityTags).values({ tagId: tag.id, entityType: input.entityType, entityId: id }).onConflictDoNothing().run();

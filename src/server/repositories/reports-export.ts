@@ -3,11 +3,15 @@ import { CHANNEL_SALES_DEF, ORDER_INVENTORY_DEF } from "@/lib/grid-defs/reports/
 import { REPLENISHMENT_DEF, SERIAL_RECEIPTS_DEF, SERIAL_SHIPMENTS_DEF, SERIAL_TRACKING_DEF, SNAPSHOT_DEF } from "@/lib/grid-defs/reports/inventory";
 import { CHANGE_LOG_DEF, EXPORT_HISTORY_DEF, MISSING_LOG_DEF, SERIAL_TRANSACTIONS_DEF, TRANSACTION_HISTORY_DEF } from "@/lib/grid-defs/reports/logs";
 import { PO_RECEIVING_DEF, USER_PERFORMANCE_DEF } from "@/lib/grid-defs/reports/receiving";
+import { AGING_DEF, UTILIZATION_DEF } from "@/lib/grid-defs/reports/analysis";
 import { reportExportProvider } from "./reports-api";
+import { listAging, listUtilization } from "./reports-analysis";
 import { listChannelSales, listOrderInventory } from "./reports-orders";
 import { listReplenishment, listSerialReceipts, listSerialShipments, listSerialTracking, listSnapshot } from "./reports-inventory";
 import { listChangeLog, listExportHistory, listMissingLog, listSerialTransactions, listTransactions } from "./reports-logs";
 import { listPoReceiving, listUserPerformance } from "./reports-receiving";
+import { ORDER_LINES_DEF } from "@/lib/grid-defs/reports/order-lines";
+import { listOrderLines } from "./reports-order-lines";
 
 export const channelSalesExport = reportExportProvider(CHANNEL_SALES_DEF, listChannelSales);
 export const orderInventoryExport = reportExportProvider(ORDER_INVENTORY_DEF, listOrderInventory);
@@ -23,3 +27,6 @@ export const missingLogExport = reportExportProvider(MISSING_LOG_DEF, listMissin
 export const exportHistoryExport = reportExportProvider(EXPORT_HISTORY_DEF, listExportHistory);
 export const poReceivingExport = reportExportProvider(PO_RECEIVING_DEF, listPoReceiving);
 export const userPerformanceExport = reportExportProvider(USER_PERFORMANCE_DEF, listUserPerformance);
+export const inventoryAgingExport = reportExportProvider(AGING_DEF, listAging);
+export const locationUtilizationExport = reportExportProvider(UTILIZATION_DEF, listUtilization);
+export const orderLinesExport = reportExportProvider(ORDER_LINES_DEF, listOrderLines);

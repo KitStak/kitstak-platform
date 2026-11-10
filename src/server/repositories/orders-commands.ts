@@ -17,6 +17,7 @@ import { DomainError } from "@/server/domain/errors";
 import { checkScope } from "@/server/domain/types";
 import { BILLING_PARTY_TYPES, EXPORT_REASONS, TAX_TYPES } from "@/lib/enums";
 import type { OrderRecord } from "./orders";
+import { changeLogMark, tidyOrderChangeLog } from "./orders-change-log";
 
 const so = schema.shipmentOrders;
 const optText = (max = 500) => z.string().trim().max(max).nullish();
@@ -62,7 +63,8 @@ export const orderExtrasSchema = z.object({
 export type OrderExtras = z.output<typeof orderExtrasSchema>;
 const EXTRA_KEYS = Object.keys(orderExtrasSchema.shape) as (keyof OrderExtras)[];
 
-export const createOrderBodySchema = orders.createOrderSchema.extend(orderExtrasSchema.shape);
+/** `autoCode: true` = the client showed a sequence-generated code: the server assigns the next free one at save. */
+export const createOrderBodySchema = orders.createOrderSchema.extend(orderExtrasSchema.shape).extend({ autoCode: z.boolean().optional() });
 export type CreateOrderBody = z.input<typeof createOrderBodySchema>;
 
 export const updateOrderBodySchema = z.object({
@@ -148,23 +150,31 @@ function loadOrder(tx: AppDb, ctx: DomainCtx, id: string): OrderRecord {
   return orders.loadOrderRow(tx, ctx, id);
 }
 
-export function createOrder(tx: AppDb, ctx: DomainCtx, body: z.output<typeof createOrderBodySchema>): OrderRecord {
-  const { header, extras } = splitExtras(body);
+/** `opts.trigger`: imports pass "Shipment Order Imported" so M12 workflows on that trigger run. */
+export function createOrder(tx: AppDb, ctx: DomainCtx, body: z.output<typeof createOrderBodySchema>, opts: orders.CreateOrderOptions = {}): OrderRecord {
+  const { autoCode, ...rest } = body;
+  const { header, extras } = splitExtras(rest);
+  // A stale auto code (another user saved it first) must never block the save: take the next free value.
+  if (autoCode) delete (header as { code?: string }).code;
   if (extras.customerId) {
     const customer = tx.select().from(schema.customers).where(eq(schema.customers.id, extras.customerId)).get();
     if (!customer || customer.clientId !== header.clientId) throw new DomainError("VALIDATION", "Customer not found for this client");
   }
-  const order = orders.createOrder(tx, ctx, header as orders.CreateOrderInput);
+  const order = orders.createOrder(tx, ctx, header as orders.CreateOrderInput, opts);
   applyExtras(tx, ctx, order, extras, false);
-  // Line entries (Logiwa: "<SKU> -> Shipment Order Line is created.").
-  for (const line of tx.select({ id: schema.orderLines.id, sku: schema.products.sku, qty: schema.orderLines.quantity }).from(schema.orderLines)
-    .innerJoin(schema.products, eq(schema.products.id, schema.orderLines.productId)).where(eq(schema.orderLines.orderId, order.id)).all()) {
-    changeLog.recordLine(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, lineEntityType: "order_line", lineEntityId: line.id, lineLabel: line.sku, field: "quantity", from: 0, to: line.qty });
-  }
+  // One change-log entry per line is written by `orders.createOrder` itself (REQ-2 applied).
   return loadOrder(tx, ctx, order.id);
 }
 
 export function updateOrder(tx: AppDb, ctx: DomainCtx, id: string, body: z.output<typeof updateOrderBodySchema>): OrderRecord {
+  const mark = changeLogMark(tx);
+  const out = updateOrderInner(tx, ctx, id, body);
+  // One readable entry per user-visible field (Priority "3 · High --> 5 · Urgent", formatted dates).
+  tidyOrderChangeLog(tx, [out.id], mark);
+  return out;
+}
+
+function updateOrderInner(tx: AppDb, ctx: DomainCtx, id: string, body: z.output<typeof updateOrderBodySchema>): OrderRecord {
   const before = loadOrder(tx, ctx, id);
   const { header, extras } = splitExtras(body.patch as Record<string, unknown>);
   if ("warehouseId" in header || "clientId" in header) throw new DomainError("VALIDATION", "Warehouse and client can't be changed on an existing order.");
@@ -210,7 +220,7 @@ export function changeLine(tx: AppDb, ctx: DomainCtx, orderId: string, version: 
 /* ----------------------------------------------------------- code / address */
 
 export function peekOrderCode(tx: AppDb): string {
-  return sequences.peek(tx, "so");
+  return tx.transaction((inner) => orders.peekFreeOrderCode(inner));
 }
 
 export function codeAvailable(db: AppDb, code: string, excludeId?: string): boolean {
@@ -245,6 +255,44 @@ export function verifyOrderAddress(tx: AppDb, ctx: DomainCtx, orderId: string, v
   return after;
 }
 
+/* ------------------------------------------------- stranded allocations */
+
+/** An order allocated this long ago without a picking job is stranded (not a Backorder → job hand-off in progress). */
+export const STRANDED_ALLOCATION_MS = 15 * 60_000;
+
+/**
+ * Ready to Pick with no picking job is a state Logiwa never produces: allocation happens when
+ * the job is created. The standalone allocate API (`/api/ops/allocate`) or an abandoned job
+ * modal can still leave one behind, so such orders are deallocated back to Open (the domain
+ * logs the status and line allocation changes). Returns the codes reverted.
+ */
+export function revertStrandedAllocations(db: AppDb, ctx: DomainCtx, opts: { readonly olderThanMs?: number; readonly now?: number; readonly ids?: readonly string[] } = {}): readonly string[] {
+  const cutoff = new Date((opts.now ?? Date.now()) - (opts.olderThanMs ?? STRANDED_ALLOCATION_MS)).toISOString();
+  const conds = [eq(so.status, "Ready to Pick"), isNull(so.jobId), isNull(so.deletedAt), sql`${so.updatedAt} <= ${cutoff}`];
+  if (opts.ids) {
+    if (opts.ids.length === 0) return [];
+    conds.push(inArray(so.id, [...opts.ids]));
+  }
+  const stranded = db.select({ id: so.id, code: so.code }).from(so).where(and(...conds)).all();
+  if (stranded.length === 0) return [];
+  const result = allocation.deallocate(db, ctx, { orderIds: stranded.map((r) => r.id) });
+  const ok = new Set(result.succeeded);
+  return stranded.filter((r) => ok.has(r.id)).map((r) => r.code);
+}
+
+let lastStrandedSweep = 0;
+/** At most once a minute per server process: sweep stranded allocations (called from the backlog list). */
+export function sweepStrandedAllocations(db: AppDb, ctx: DomainCtx, now: number = Date.now()): readonly string[] {
+  if (now - lastStrandedSweep < 60_000) return [];
+  lastStrandedSweep = now;
+  try {
+    return revertStrandedAllocations(db, ctx, { now });
+  } catch (error) {
+    console.warn("[orders] stranded allocation sweep skipped", error);
+    return [];
+  }
+}
+
 /* ---------------------------------------------------------- bulk commands */
 
 export function cancelPicking(tx: AppDb, ctx: DomainCtx, ids: readonly string[]): BulkResult {
@@ -254,10 +302,20 @@ export function cancelPicking(tx: AppDb, ctx: DomainCtx, ids: readonly string[])
       .where(and(eq(schema.tasks.orderId, id), inArray(schema.tasks.status, ["Pending", "Started"]), inArray(schema.tasks.taskType, ["Picking", "Packing", "Sorting"]))).all();
     if (active.length === 0) throw new DomainError("INVALID_STATE", "The Cancel Picking operation is only available for the orders that have active picking/packing tasks.");
     if (active.some((t) => t.status === "Started")) throw new DomainError("INVALID_STATE", `Picking has started for ${order.code}; finish or cancel the started tasks from the job first.`);
+    const mark = changeLogMark(inner);
+    const jobCode = order.jobId ? inner.select({ code: schema.jobs.code }).from(schema.jobs).where(eq(schema.jobs.id, order.jobId)).get()?.code ?? null : null;
     tasks.cancel(inner, ctx, { taskIds: active.map((t) => t.id) });
     const fresh = loadOrder(inner, ctx, id);
     if (!fresh.jobId && ["Ready to Pick", "Shortage"].includes(fresh.status)) allocation.deallocate(inner, ctx, { orderIds: [id] });
+    // Job unassignment is logged symmetrically with assignment ("Job is modified. Job005302 --> —").
+    if (jobCode && !fresh.jobId && !jobRemovalLogged(inner, id, mark)) {
+      changeLog.recordUpdate(inner, ctx, { entityType: "shipment_order", entityId: id, entityCode: order.code, before: { jobId: jobCode }, after: { jobId: null } });
+    }
   });
+}
+
+function jobRemovalLogged(tx: AppDb, orderId: string, mark: number): boolean {
+  return Boolean(tx.get<{ n: number }>(sql`SELECT 1 AS n FROM change_log WHERE rowid > ${mark} AND entity_type = 'shipment_order' AND entity_id = ${orderId} AND field = 'jobId' LIMIT 1`));
 }
 
 function resolveShort(tx: AppDb, ctx: DomainCtx, ids: readonly string[], field: "pickShortStatus" | "packShortStatus"): BulkResult {
@@ -321,7 +379,22 @@ export function unassignJob(tx: AppDb, ctx: DomainCtx, orderId: string, jobId: s
   return loadOrder(tx, ctx, orderId);
 }
 
-/** Copies header + lines into a new Open order with the next code. */
+/**
+ * Duplicate re-bases the expected shipment date on the new order date: the copy keeps the source's
+ * lead time (expected - ordered), so it is never expected to ship before it was ordered (critic r5).
+ * A source with no date, an unparsable one, or a negative lead time gives no expected date.
+ */
+export function rebaseExpectedShipDate(srcOrderDate: string | null | undefined, srcExpected: string | null | undefined, now: Date = new Date()): string | null {
+  if (!srcExpected) return null;
+  const expected = Date.parse(srcExpected);
+  if (Number.isNaN(expected)) return null;
+  const ordered = srcOrderDate ? Date.parse(srcOrderDate) : Number.NaN;
+  const lead = Number.isNaN(ordered) ? 0 : expected - ordered;
+  if (lead < 0) return null;
+  return new Date(now.getTime() + lead).toISOString();
+}
+
+/** Copies header + lines into a new Open order with the next code (dates re-based on now). */
 export function duplicateOrder(tx: AppDb, ctx: DomainCtx, orderId: string): OrderRecord {
   const src = loadOrder(tx, ctx, orderId);
   checkScope(ctx, src, "Shipment order");
@@ -333,7 +406,7 @@ export function duplicateOrder(tx: AppDb, ctx: DomainCtx, orderId: string): Orde
     shipCity: src.shipCity, shipState: src.shipState, shipZip: src.shipZip, shipCountry: src.shipCountry, addressType: src.addressType,
     orderType: src.orderType, orderTypeId: src.orderTypeId, priority: src.priority, carrier: src.carrier, shippingService: src.shippingService,
     carrierConnectionId: src.carrierConnectionId, carrierServiceId: src.carrierServiceId, rateShoppingPresetId: src.rateShoppingPresetId,
-    expectedShipDate: src.expectedShipDate, note: src.note, packingInstructions: src.packingInstructions,
+    expectedShipDate: rebaseExpectedShipDate(src.orderDate, src.expectedShipDate), note: src.note, packingInstructions: src.packingInstructions,
     skipAddressVerification: src.skipAddressVerification, isGift: src.isGift, giftNote: src.giftNote, clientReferenceCode: src.clientReferenceCode,
     extraNote1: src.extraNote1, extraNote2: src.extraNote2, extraNote3: src.extraNote3, extraNote4: src.extraNote4, extraNote5: src.extraNote5,
     customFields: src.customFields ?? {},
@@ -345,7 +418,27 @@ export function duplicateOrder(tx: AppDb, ctx: DomainCtx, orderId: string): Orde
     reasonForExport: src.reasonForExport, packingWarningTypeId: src.packingWarningTypeId, retailerId: src.retailerId, bol: src.bol, pro: src.pro,
     retailerPo: src.retailerPo, dept: src.dept, markFor: src.markFor, retailerCustomerAccount: src.retailerCustomerAccount, customerId: src.customerId,
   };
-  return createOrder(tx, ctx, createOrderBodySchema.parse({ ...header, ...Object.fromEntries(Object.entries(extras).filter(([, v]) => v !== null && v !== undefined)) }));
+  const copy = createOrder(tx, ctx, createOrderBodySchema.parse({
+    ...header, priorityRank: src.priorityRank, ...Object.fromEntries(Object.entries(extras).filter(([, v]) => v !== null && v !== undefined)),
+  }));
+  logOrderComment(tx, ctx, { orderId: copy.id, code: copy.code, field: "duplicatedFrom", label: "Duplicated From", value: src.code, message: `Created as a duplicate of ${src.code}.` });
+  return copy;
+}
+
+/**
+ * A change-log entry that is a statement, not an `old --> new` diff (duplicate origin, cancel
+ * note). Written through the change-log table so it shows on the Activity tab and the drawer.
+ */
+export function logOrderComment(
+  tx: AppDb,
+  ctx: DomainCtx,
+  input: { readonly orderId: string; readonly code: string; readonly field: string; readonly label: string; readonly value: string; readonly message: string },
+): void {
+  tx.insert(schema.changeLog).values({
+    entityType: "shipment_order", entityId: input.orderId, entityCode: input.code, type: "Update",
+    field: input.field, fieldLabel: input.label, fromValue: null, toValue: input.value,
+    message: input.message, userId: ctx.userId, source: ctx.source,
+  }).run();
 }
 
 

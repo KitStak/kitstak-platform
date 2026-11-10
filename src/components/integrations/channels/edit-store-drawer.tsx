@@ -29,8 +29,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UnderlineTabs } from "@/components/ui/tabs";
 import { TextField } from "@/components/ui/text-field";
 import { toast } from "@/components/ui/toast";
-import { YesNoToggle } from "@/components/ui/yes-no-toggle";
-import { useWarehouseOptions } from "@/components/integrations/shared/shared";
+import { SettingYesNo as YesNoToggle } from "@/components/integrations/shared/form-controls";
+import { DRAWER_DETAIL_STALE_MS, useWarehouseOptions } from "@/components/integrations/shared/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ChannelConnectionDetail } from "@/server/repositories/channels";
 
 type Tab = "general" | "warehouse" | "advanced" | "configuration";
@@ -69,8 +70,11 @@ function toForm(d: ChannelConnectionDetail): FormState {
   };
 }
 
+const DETAIL_KEY = "channel-connection";
+
 export function EditStoreDrawer({ id, initialTab, onOpenChange, onSaved }: { readonly id: string | null; readonly initialTab?: Tab; readonly onOpenChange: (o: boolean) => void; readonly onSaved: () => void }) {
-  const detail = useApiQuery<ChannelConnectionDetail>(["channel-connection", id ?? ""], id ? `/api/channels/${id}` : null, { staleTime: 0 });
+  const qc = useQueryClient();
+  const detail = useApiQuery<ChannelConnectionDetail>([DETAIL_KEY, id ?? ""], id ? `/api/channels/${id}` : null, { staleTime: DRAWER_DETAIL_STALE_MS });
   const d = detail.data?.data;
   const [dirty, setDirty] = React.useState(false);
   return (
@@ -78,7 +82,7 @@ export function EditStoreDrawer({ id, initialTab, onOpenChange, onSaved }: { rea
       title={d ? `Edit store connection · ${d.storeName}` : "Edit store connection"} description="General, warehouse mapping, advanced filters and the configuration that drives the channel methods.">
       {detail.isPending ? <div className="flex flex-col gap-3"><Skeleton className="h-8 w-full" /><Skeleton className="h-72 w-full" /></div>
         : detail.isError || !d ? <EmptyState title="Couldn't load this connection" description={detail.error?.message} action={<Button onClick={() => void detail.refetch()}>Retry</Button>} />
-        : <Body key={`${d.id}-${detail.dataUpdatedAt}`} detail={d} initialTab={initialTab ?? "general"} onDirtyChange={setDirty} onCancel={() => onOpenChange(false)} onSaved={() => { setDirty(false); onSaved(); onOpenChange(false); }} />}
+        : <Body key={`${d.id}-${detail.dataUpdatedAt}`} detail={d} initialTab={initialTab ?? "general"} onDirtyChange={setDirty} onCancel={() => onOpenChange(false)} onSaved={() => { setDirty(false); void qc.invalidateQueries({ queryKey: [DETAIL_KEY, d.id] }); onSaved(); onOpenChange(false); }} />}
     </Drawer>
   );
 }
@@ -94,7 +98,9 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
   const [newLoc, setNewLoc] = React.useState<string | null>(null);
   const [newWh, setNewWh] = React.useState<string | null>(null);
   const [rotate, setRotate] = React.useState(false);
-  const locations = useApiQuery<unknown>(["channel-locations", detail.id], `/api/channels/${detail.id}/locations`, { staleTime: 60_000, retry: false });
+  // A paused live store (no/invalid credentials) can't list locations; skip the call instead of logging a 409.
+  const locationsBlocked = !detail.isSandbox && detail.pauseReason !== null;
+  const locations = useApiQuery<unknown>(["channel-locations", detail.id], locationsBlocked ? null : `/api/channels/${detail.id}/locations`, { staleTime: 60_000, retry: false });
   const locs = locList.safeParse(locations.data?.data);
   const locOptions = (locs.success ? locs.data : []).map((l) => ({ value: l.id, label: l.name }));
   const dirty = JSON.stringify(form) !== baseline;
@@ -160,11 +166,11 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
             {!detail.isSandbox ? (
               <div className="flex flex-col gap-1">
                 <span className="text-[12px] font-medium text-body">API version</span>
-                <SegmentedControl ariaLabel="API version" value={form.apiVersion} onChange={(v) => setForm((f) => ({ ...f, apiVersion: v }))} options={[{ value: "Rest API", label: "Rest API" }, { value: "GraphQL", label: "GraphQL" }]} />
+                <SegmentedControl className="w-full [&>button]:flex-1" ariaLabel="API version" value={form.apiVersion} onChange={(v) => setForm((f) => ({ ...f, apiVersion: v }))} options={[{ value: "Rest API", label: "Rest API" }, { value: "GraphQL", label: "GraphQL" }]} />
               </div>
             ) : null}
           </div>
-          {detail.isSandbox ? <Callout variant="info" title="KitStaks Sandbox">No credentials needed. Each Download Orders run creates 2–6 realistic orders from this client's SKUs; every third run includes one unknown SKU so you can practise Missing Orders and Retry Download.</Callout> : (
+          {detail.isSandbox ? <Callout variant="info" title="KitStak Sandbox">No credentials needed. Each Download Orders run creates 2–6 realistic orders from this client’s SKUs. Scheduled runs never fail on purpose; to practise Missing Orders and Retry Download, use Simulate error (flask icon) on the Download Orders row in Channel Methods.</Callout> : (
             <section className="rounded-lg border border-border p-4">
               <div className="flex items-center gap-2">
                 <KeyRound className="h-4 w-4 text-secondary" />
@@ -174,7 +180,7 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
               </div>
               {!rotate ? <Button className="mt-3" size="sm" variant="secondary" onClick={() => setRotate(true)}>Customize authorization method</Button> : (
                 <div className="mt-3 flex flex-col gap-3">
-                  <SegmentedControl ariaLabel="Authorization method" value={form.authMethod === "OAuth" ? "Access Token" : form.authMethod} onChange={(v) => setForm((f) => ({ ...f, authMethod: v }))} options={[{ value: "Access Token", label: "Access Token" }, { value: "Client ID & Secret", label: "Client ID & Secret" }]} />
+                  <SegmentedControl className="w-full [&>button]:flex-1" ariaLabel="Authorization method" value={form.authMethod === "OAuth" ? "Access Token" : form.authMethod} onChange={(v) => setForm((f) => ({ ...f, authMethod: v }))} options={[{ value: "Access Token", label: "Access Token" }, { value: "Client ID & Secret", label: "Client ID & Secret" }]} />
                   {form.authMethod === "Client ID & Secret" ? (
                     <div className="grid gap-3 md:grid-cols-2">
                       <TextField aria-label="Client ID" placeholder="New client ID" autoComplete="off" value={form.apiClientId} onChange={(e) => setForm((f) => ({ ...f, apiClientId: e.target.value }))} />
@@ -193,14 +199,15 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
       {tab === "warehouse" ? (
         <div className="flex flex-col gap-3">
           <div>
-            <h3 className="text-[13px] font-semibold text-foreground">Link store fulfillment locations with KitStaks</h3>
-            <p className="text-[12px] text-secondary">KitStaks downloads orders, syncs inventory and sends fulfillments by location. Match each store location to a warehouse.</p>
+            <h3 className="text-[13px] font-semibold text-foreground">Link store fulfillment locations with KitStak</h3>
+            <p className="text-[12px] text-secondary">KitStak downloads orders, syncs inventory and sends fulfillments by location. Match each store location to a warehouse.</p>
           </div>
+          {locationsBlocked ? <Callout variant="attention" title={detail.isActive ? "Connect credentials to load the store's locations" : "Store locations unavailable"}>{detail.pauseReason}. {detail.isActive ? "Rotate the credentials on the General tab and save; existing mappings stay as they are." : "Turn the connection on and save to load locations."}</Callout> : null}
           {locations.isError ? <Callout variant="error" title="Couldn't load the store's locations">{locations.error.message}</Callout> : null}
           <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-surface-sunken/60 p-3">
             <div className="flex min-w-56 flex-1 flex-col gap-1">
               <label htmlFor="es-loc" className="text-[11px] font-medium text-secondary">Store location</label>
-              <Select id="es-loc" value={newLoc} onChange={setNewLoc} placeholder={locations.isPending ? "Loading locations…" : "Select store location"} options={locOptions.map((o) => ({ ...o, disabled: form.mappings.some((m) => m.channelLocationId === o.value) }))} />
+              <Select id="es-loc" value={newLoc} onChange={setNewLoc} placeholder={locationsBlocked ? "Connect credentials first" : locations.isPending ? "Loading locations…" : "Select store location"} options={locOptions.map((o) => ({ ...o, disabled: form.mappings.some((m) => m.channelLocationId === o.value) }))} />
             </div>
             <div className="flex min-w-48 flex-1 flex-col gap-1">
               <label htmlFor="es-wh" className="text-[11px] font-medium text-secondary">Warehouse</label>
@@ -247,10 +254,10 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
           </div>
           <section className="rounded-lg border border-border p-4">
             <h3 className="text-[13px] font-semibold">Filter orders by order tag</h3>
-            <p className="text-[12px] text-secondary">KitStaks can download only orders with (or without) these tags. Filtered orders appear in Missing Orders as "Order is Blocked by Tag Filter".</p>
+            <p className="text-[12px] text-secondary">KitStak can download only orders with (or without) these tags. Filtered orders appear in Missing Orders as “Order is Blocked by Tag Filter”.</p>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <div className="flex flex-col gap-1"><span className="text-[11px] font-medium text-secondary">Filter method</span>
-                <SegmentedControl ariaLabel="Filter method" value={st.tagFilter.method} onChange={(v) => setSettings((s) => ({ ...s, tagFilter: { ...s.tagFilter, method: v } }))} options={[{ value: "Included", label: "Included order tags" }, { value: "Excluded", label: "Excluded order tags" }]} /></div>
+                <SegmentedControl className="w-full [&>button]:flex-1" ariaLabel="Filter method" value={st.tagFilter.method} onChange={(v) => setSettings((s) => ({ ...s, tagFilter: { ...s.tagFilter, method: v } }))} options={[{ value: "Included", label: "Included order tags" }, { value: "Excluded", label: "Excluded order tags" }]} /></div>
               <div className="flex flex-col gap-1"><label htmlFor="es-cond" className="text-[11px] font-medium text-secondary">Filter condition</label>
                 <Select id="es-cond" value={st.tagFilter.condition} onChange={(v) => v && setSettings((s) => ({ ...s, tagFilter: { ...s.tagFilter, condition: v } }))} options={[{ value: "All Following Tags", label: "All following tags" }, { value: "Any Following Tags", label: "Any following tags" }]} /></div>
               <div className="flex flex-col gap-1 md:col-span-2"><label htmlFor="es-tags" className="text-[11px] font-medium text-secondary">Order tags</label>
@@ -273,9 +280,9 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
           <Section title="Orders" required>
             <Row label="Download orders"><YesNoToggle value={st.orders.download} onChange={(v) => setSettings((s) => ({ ...s, orders: { ...s.orders, download: v } }))} ariaLabel="Download orders" /></Row>
             <Row label="Shipment order type"><Select value={st.orders.shipmentOrderType} onChange={(v) => v && setSettings((s) => ({ ...s, orders: { ...s.orders, shipmentOrderType: v } }))} options={SHIPMENT_ORDER_TYPES.map((u) => ({ value: u, label: u }))} className="w-40" /></Row>
-            <Row label="Download open orders from" hint={st.orders.downloadFrom ? "Orders updated after this date" : "Let KitStaks decide (since the last successful run)"}>
+            <Row label="Download open orders from" hint={st.orders.downloadFrom ? "Orders updated after this date" : "Let KitStak decide (since the last successful run)"}>
               <div className="flex items-center gap-2">
-                <SegmentedControl size="sm" ariaLabel="Download from" value={st.orders.downloadFrom ? "date" : "auto"} onChange={(v) => setSettings((s) => ({ ...s, orders: { ...s.orders, downloadFrom: v === "date" ? new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10) : null } }))} options={[{ value: "auto", label: "Let KitStaks decide" }, { value: "date", label: "Specific date" }]} />
+                <SegmentedControl size="sm" ariaLabel="Download from" value={st.orders.downloadFrom ? "date" : "auto"} onChange={(v) => setSettings((s) => ({ ...s, orders: { ...s.orders, downloadFrom: v === "date" ? new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10) : null } }))} options={[{ value: "auto", label: "Let KitStak decide" }, { value: "date", label: "Specific date" }]} />
                 {st.orders.downloadFrom ? <TextField type="date" aria-label="Download from date" value={st.orders.downloadFrom.slice(0, 10)} onChange={(e) => setSettings((s) => ({ ...s, orders: { ...s.orders, downloadFrom: e.target.value || null } }))} /> : null}
               </div>
             </Row>

@@ -27,6 +27,8 @@ export interface ShippedOrderHit {
   readonly shippedAt: string | null;
   readonly shippedUnits: number;
   readonly returnableUnits: number;
+  /** Shipped with no active outbound label (every label voided): flagged so the RMA is checked first (R6 data integrity). */
+  readonly outboundLabelVoided: number;
 }
 
 function inList(column: string, values: readonly string[]): SQL {
@@ -48,15 +50,23 @@ export function searchShippedOrders(db: AppDb, scope: Scope, input: z.output<typ
     const needle = input.q.toLowerCase();
     parts.push(sql`(instr(lower(o.code), ${needle}) > 0 OR instr(lower(COALESCE(o.store_order_number, '')), ${needle}) > 0 OR instr(lower(o.customer_name), ${needle}) > 0)`);
   }
+  // Pick the page of ids first, then compute the unit sums for those rows only (SQLite would
+  // otherwise evaluate the correlated sums for every candidate order before sorting).
   return db.all<ShippedOrderHit>(sql`
+    WITH hits AS (
+      SELECT o.id, COALESCE(o.shipped_at, o.updated_at) AS sortAt FROM shipment_orders o
+      WHERE ${sql.join(parts, sql` AND `)}
+      ORDER BY sortAt DESC, o.code DESC
+      LIMIT ${SHIPPED_SEARCH_LIMIT}
+    )
     SELECT o.id, o.code, o.status, o.customer_name AS customerName, o.store_order_number AS storeOrderNumber, c.name AS clientName, o.shipped_at AS shippedAt,
       COALESCE((SELECT SUM(l.shipped_quantity) FROM order_lines l WHERE l.order_id = o.id), 0) AS shippedUnits,
       MAX(0, COALESCE((SELECT SUM(l.shipped_quantity) FROM order_lines l WHERE l.order_id = o.id), 0) - COALESCE((
         SELECT SUM(CASE WHEN ro.status = 'Completed' THEN rl.returned_qty ELSE MAX(rl.requested_qty, rl.returned_qty) END)
         FROM return_order_lines rl JOIN return_orders ro ON ro.id = rl.return_order_id
-        WHERE ro.shipment_order_id = o.id AND ro.status <> 'Cancelled'), 0)) AS returnableUnits
-    FROM shipment_orders o JOIN clients c ON c.id = o.client_id
-    WHERE ${sql.join(parts, sql` AND `)}
-    ORDER BY COALESCE(o.shipped_at, o.updated_at) DESC, o.code DESC
-    LIMIT ${SHIPPED_SEARCH_LIMIT}`);
+        WHERE ro.shipment_order_id = o.id AND ro.status <> 'Cancelled'), 0)) AS returnableUnits,
+      (EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id AND s.label_type = 'Shipping Label' AND s.label_status = 'Voided')
+        AND NOT EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id AND s.label_type = 'Shipping Label' AND s.label_status = 'Active')) AS outboundLabelVoided
+    FROM hits h JOIN shipment_orders o ON o.id = h.id JOIN clients c ON c.id = o.client_id
+    ORDER BY h.sortAt DESC, o.code DESC`);
 }

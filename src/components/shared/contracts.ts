@@ -23,6 +23,8 @@ export const changeLogEntrySchema = z.object({
   parentEntityId: nullishString,
   /** Line-level prefix (SKU) when the entry belongs to a line. */
   lineLabel: nullishString,
+  /** Acting user's display name (the stored source stays the tooltip). */
+  userName: nullishString,
 });
 export type ChangeLogEntry = z.infer<typeof changeLogEntrySchema>;
 
@@ -145,7 +147,7 @@ export type JobTypeOption = z.infer<typeof jobTypeOptionSchema>;
 export const eligibilitySchema = z.object({
   total: z.number(),
   eligible: z.array(z.string()),
-  ineligible: z.array(z.object({ id: z.string(), code: nullishString, reason: z.string() })).default([]),
+  ineligible: z.array(z.object({ id: z.string(), code: nullishString, recordCode: nullishString, reason: z.string() })).default([]),
   /** Job types applicable to the eligible records (warehouse + operation). */
   jobTypes: z.array(jobTypeOptionSchema).default([]),
 });

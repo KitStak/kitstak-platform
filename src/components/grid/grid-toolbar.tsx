@@ -59,7 +59,7 @@ export function DebouncedSearch({ value, onCommit, placeholder, className, leadi
           placeholder={placeholder}
           aria-label={placeholder}
           className={cn(
-            "h-8 w-64 text-ellipsis border border-border-strong/70 bg-surface pl-8 pr-7 text-[13px] text-body placeholder:text-faint transition-colors hover:border-border-strong focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 [&::-webkit-search-cancel-button]:hidden",
+            "h-8 w-64 text-ellipsis border border-border-strong/70 bg-surface pl-8 pr-7 text-[13px] text-body placeholder:text-faint transition-colors hover:border-border-strong focus:border-info focus:outline-none focus:ring-2 focus:ring-info/25 [&::-webkit-search-cancel-button]:hidden",
             leading ? "rounded-r-md" : "rounded-md"
           )}
         />
@@ -95,16 +95,18 @@ export interface GridToolbarProps {
   readonly refreshing?: boolean;
   /** Extra controls rendered before Refresh (e.g. primary CTA, column chooser). */
   readonly trailing?: React.ReactNode;
+  /** Bulk actions rendered as buttons before the rest collapse into "Actions" (default 2; 0 = all in the menu). */
+  readonly bulkInline?: number;
 }
 
-export function GridToolbar({ grid, fields, searchPlaceholder = "Search", views, activeViewId, onApplyView, bulkActions = [], selectedIds = [], bulkNoun, onRefresh, refreshing, trailing }: GridToolbarProps) {
+export function GridToolbar({ grid, fields, searchPlaceholder = "Search", views, activeViewId, onApplyView, bulkActions = [], selectedIds = [], bulkNoun, onRefresh, refreshing, trailing, bulkInline }: GridToolbarProps) {
   const { query } = grid;
   const hasState = Boolean(query.q) || query.filters.length > 0 || query.sort.length > 0;
   const applyView = (view: SavedView) => onApplyView?.(view);
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-6 py-3">
       {/* basis keeps the filter group from being squeezed under `trailing`: below ~28rem of room, trailing wraps to its own row. */}
-      <div className="flex min-w-0 flex-1 basis-[28rem] flex-nowrap items-center gap-2">
+      <div className="flex min-w-0 flex-1 basis-[28rem] flex-wrap items-center gap-2">
         <DebouncedSearch value={query.q ?? ""} onCommit={(q) => grid.setSearch(q)} placeholder={searchPlaceholder} className="shrink-0" leading={<SearchMode value={query.qm} onChange={(qm) => grid.setQuery({ qm })} />} />
         <FilterPopover gridKey={grid.gridKey} fields={fields} filters={query.filters} onApply={grid.upsertFilter} savedViews={views?.views} onApplyView={applyView} />
         <FilterChips gridKey={grid.gridKey} fields={fields} filters={query.filters} onRemove={grid.removeFilter} onApply={grid.upsertFilter} savedViews={views?.views} />
@@ -116,8 +118,8 @@ export function GridToolbar({ grid, fields, searchPlaceholder = "Search", views,
           </Button>
         ) : null}
       </div>
-      <div className="flex items-center gap-2">
-        <BulkActions actions={bulkActions} selectedIds={selectedIds} noun={bulkNoun} />
+      <div className="flex flex-wrap items-center gap-2">
+        <BulkActions actions={bulkActions} selectedIds={selectedIds} noun={bulkNoun} inline={bulkInline} />
         {trailing}
         {onRefresh ? (
           <Tooltip content="Refresh">

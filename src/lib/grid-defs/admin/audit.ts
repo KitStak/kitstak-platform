@@ -1,5 +1,6 @@
 /** Audit Log grid (security events) definitions (M14). PURE. */
 import { AUDIT_OUTCOMES } from "@/lib/enums";
+import type { GridFilter } from "@/server/query/grid-query";
 import type { AdminField } from "./common";
 
 export const AUDIT_GRID_KEY = "audit-log";
@@ -26,6 +27,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "auth.logout": "Sign out",
   "auth.logout_all": "Signed out of all devices",
   "auth.password_change": "Password changed",
+  "auth.password_change_rejected": "Password change rejected",
   "auth.password_reset.request": "Password reset requested",
   "auth.password_reset.complete": "Password reset completed",
   "security.csrf_rejected": "Request blocked (CSRF)",
@@ -33,6 +35,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "session.revoke": "Session revoked",
   "session.revoke_all": "All sessions revoked",
   "user.create": "User created",
+  "user.invite_sent": "Invite email",
   "user.update": "User updated",
   "user.activate": "User activated",
   "user.deactivate": "User deactivated",
@@ -47,6 +50,23 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
   "company.security": "Password policy changed",
   "app.activate": "App activated",
   "app.deactivate": "App deactivated",
+  "app.settings": "App settings changed",
+  "company.mail": "Email delivery changed",
+  "company.mail_test": "Test email",
+  "lookup.create": "Data Setup value created",
+  "lookup.update": "Data Setup value updated",
+  "lookup.delete": "Data Setup value deleted",
+  "lookup.zone_product_groups": "Zone product groups matched",
+  "sequence.update": "Number sequence changed",
+  "return_rules.update": "Return process changed",
+  "printout.create": "Printout created",
+  "printout.update": "Printout updated",
+  "printout.delete": "Printout deleted",
+  "printout.duplicate": "Printout duplicated",
+  "screen_config.create": "Screen configuration created",
+  "screen_config.update": "Screen configuration updated",
+  "screen_config.delete": "Screen configuration deleted",
+  "feedback.submitted": "Feedback sent",
 };
 
 export function auditActionLabel(action: string): string {
@@ -66,3 +86,12 @@ export const AUDIT_FIELDS: readonly AdminField[] = [
 
 export const AUDIT_SORT_FIELDS = ["at", "category", "action", "outcome", "userName", "ip"] as const;
 export const AUDIT_SEARCH_FIELDS = ["userEmail", "action", "ip", "entityLabel"] as const;
+
+/**
+ * Filters for a KPI tile click: replaces any category / outcome filter with the tile's, keeps
+ * every other filter (date range, user). One list, applied in a single grid update.
+ */
+export function kpiFilters(current: readonly GridFilter[], category: AuditCategory, outcome?: "failure"): GridFilter[] {
+  const kept = current.filter((f) => f.field !== "category" && f.field !== "outcome");
+  return [...kept, { field: "category", op: "in", values: [category] }, ...(outcome ? [{ field: "outcome", op: "in", values: [outcome] } as const] : [])];
+}

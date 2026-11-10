@@ -38,7 +38,10 @@ const SPEC: GridSpec = {
 };
 
 export interface VendorAddress {
+  /** Address name (Logiwa "Address Name", max 50), e.g. "Main warehouse". */
   readonly name: string;
+  /** Contact person at this address. */
+  readonly contactName: string;
   readonly line1: string;
   readonly line2: string;
   readonly postalCode: string;
@@ -82,7 +85,7 @@ type AddressRow = typeof schema.addresses.$inferSelect;
 function toAddress(row: AddressRow | undefined): VendorAddress | null {
   if (!row) return null;
   return {
-    name: row.name ?? "", line1: row.line1, line2: row.line2 ?? "", postalCode: row.postalCode, city: row.city,
+    name: row.name ?? "", contactName: row.firstName ?? "", line1: row.line1, line2: row.line2 ?? "", postalCode: row.postalCode, city: row.city,
     phone: row.phone ?? "", country: codeForCountry(row.country), state: row.state ?? "",
   };
 }
@@ -146,7 +149,7 @@ export function getVendor(db: AppDb, scope: Scope, id: string): VendorDetail {
 function flatAddress(prefix: string, a: VendorAddress | null): Record<string, string> {
   if (!a) return {};
   return {
-    [`${prefix}Name`]: a.name, [`${prefix}Line1`]: a.line1, [`${prefix}Line2`]: a.line2, [`${prefix}PostalCode`]: a.postalCode,
+    [`${prefix}Name`]: a.name, [`${prefix}Contact`]: a.contactName, [`${prefix}Line1`]: a.line1, [`${prefix}Line2`]: a.line2, [`${prefix}PostalCode`]: a.postalCode,
     [`${prefix}City`]: a.city, [`${prefix}Phone`]: a.phone, [`${prefix}Country`]: countryName(a.country) || a.country, [`${prefix}State`]: a.state,
   };
 }
@@ -159,7 +162,7 @@ function upsertAddress(tx: AppDb, ctx: DomainCtx, vendorId: string, usage: "Ship
     return;
   }
   const values = {
-    name: input.name || null, line1: input.line1 ?? "", line2: input.line2 || null, postalCode: input.postalCode ?? "", city: input.city ?? "",
+    name: input.name || null, firstName: input.contactName || null, line1: input.line1 ?? "", line2: input.line2 || null, postalCode: input.postalCode ?? "", city: input.city ?? "",
     phone: input.phone || null, country: countryName(input.country) || input.country, state: input.state, isActive: true, isDefault: true, updatedBy: ctx.userId,
   };
   if (existing) tx.update(schema.addresses).set(values).where(eq(schema.addresses.id, existing.id)).run();
@@ -241,4 +244,16 @@ export function ensureVendor(tx: AppDb, ctx: DomainCtx, scope: Scope, clientId: 
   }).returning().get();
   changeLog.recordCreate(tx, ctx, { entityType: "vendor", entityId: row.id, entityCode: row.displayName });
   return { id: row.id, created: true };
+}
+
+export const VENDOR_HAS_POS_MESSAGE = "This vendor is used on purchase orders. Deactivate it instead.";
+
+/** Hard-delete a vendor that no purchase order has ever referenced (its addresses go with it). */
+export function deleteVendor(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string): void {
+  const before = getVendor(tx, scope, id);
+  const used = tx.select({ n: sql<number>`count(*)` }).from(schema.purchaseOrders).where(eq(schema.purchaseOrders.vendorId, id)).get();
+  if ((used?.n ?? 0) > 0) throw new AppError("INVALID_STATE", VENDOR_HAS_POS_MESSAGE);
+  tx.delete(schema.addresses).where(and(eq(schema.addresses.ownerType, "vendor"), eq(schema.addresses.ownerId, id))).run();
+  tx.delete(v).where(eq(v.id, id)).run();
+  changeLog.recordDelete(tx, ctx, { entityType: "vendor", entityId: id, entityCode: before.displayName });
 }

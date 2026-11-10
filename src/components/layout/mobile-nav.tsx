@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { Accordion, Dialog as DialogPrimitive } from "radix-ui";
 import { ChevronDown, Menu, X } from "lucide-react";
 import type { NavMenu } from "@/config/nav-config";
-import { activeMenuKey, isItemActive } from "@/config/nav-access";
+import { activeItemHref, activeMenuKey } from "@/config/nav-access";
 import { overlayClass } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { NAV_ICONS } from "./nav-icons";
@@ -66,7 +66,7 @@ export function MobileNav({ menus, dashboardHref }: { readonly menus: readonly N
                             <Link
                               key={`${column.heading}:${navItem.href}`}
                               href={navItem.href}
-                              className={cn("block rounded-md px-3 py-1.5 text-[13px]", isItemActive(navItem, pathname) ? "bg-primary-soft font-semibold text-primary" : "text-body hover:bg-neutral-soft")}
+                              className={cn("block rounded-md px-3 py-1.5 text-[13px]", activeItemHref(menu, pathname) === navItem.href ? "bg-primary-soft font-semibold text-primary" : "text-body hover:bg-neutral-soft")}
                             >
                               {navItem.label}
                               {navItem.badge ? <span className="ml-1.5 text-[9px] font-bold text-[#621db8]">{navItem.badge}</span> : null}

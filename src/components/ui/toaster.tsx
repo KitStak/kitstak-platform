@@ -10,7 +10,8 @@ const VARIANT_STYLES: Readonly<Record<ToastVariant, { readonly bar: string; read
   success: { bar: "bg-success", icon: "text-success", Icon: CheckCircle2 },
   error: { bar: "bg-danger", icon: "text-danger", Icon: XCircle },
   warning: { bar: "bg-warning", icon: "text-warning", Icon: AlertTriangle },
-  info: { bar: "bg-primary", icon: "text-primary", Icon: Info },
+  // Info is blue: brand red reads as an error.
+  info: { bar: "bg-info", icon: "text-info", Icon: Info },
 };
 
 function ToastCard({ item }: { readonly item: ToastItem }) {
@@ -25,9 +26,11 @@ function ToastCard({ item }: { readonly item: ToastItem }) {
       }}
       className={cn(
         "group relative flex w-[360px] max-w-[calc(100vw-32px)] items-start gap-2.5 overflow-hidden rounded-lg border border-border bg-surface py-3 pl-4 pr-9 shadow-lg",
-        "data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=end]:translate-x-full transition-transform"
+        "data-[swipe=move]:translate-y-[var(--radix-toast-swipe-move-y)] data-[swipe=end]:-translate-y-full transition-transform"
       )}
       data-variant={item.variant}
+      data-toast=""
+      role="status"
     >
       <span className={cn("absolute inset-y-0 left-0 w-1", style.bar)} aria-hidden />
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", style.icon)} aria-hidden />
@@ -60,15 +63,20 @@ function ToastCard({ item }: { readonly item: ToastItem }) {
   );
 }
 
-/** Mount once in the root layout. Radix pauses the timer on hover/focus. */
+/**
+ * Mount once in the root layout. Radix pauses the timer on hover/focus.
+ * Toasts stack at the top centre just below the app header (Logiwa parity), so they never
+ * cover grid footers, drawer SubmitBars or station action footers. Pages can push the stack
+ * down with `--toast-offset-top` (default 68px).
+ */
 export function Toaster() {
   const items = useToasts();
   return (
-    <ToastPrimitive.Provider swipeDirection="right" label="Notifications">
+    <ToastPrimitive.Provider swipeDirection="up" label="Notifications">
       {items.map((item) => (
         <ToastCard key={item.id} item={item} />
       ))}
-      <ToastPrimitive.Viewport className="fixed bottom-4 right-4 z-[100] flex max-h-screen flex-col gap-2 outline-none" />
+      <ToastPrimitive.Viewport className="fixed left-1/2 top-[var(--toast-offset-top,68px)] z-[100] flex max-h-[calc(100vh-80px)] -translate-x-1/2 flex-col items-center gap-2 outline-none" />
     </ToastPrimitive.Provider>
   );
 }

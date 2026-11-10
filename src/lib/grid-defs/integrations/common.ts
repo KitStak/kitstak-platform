@@ -67,3 +67,25 @@ export function sentence(text: string): string {
 export function maskSecret(last4: string | null | undefined): string {
   return last4 ? `••••${last4}` : "Not set";
 }
+
+/**
+ * One brand spelling in every M12 surface. The shared error catalog and older stored rows say
+ * "KitStaks" (or the pre-rebrand "LogiwaIO"); the product is "KitStak". Display-only: stored
+ * codes stay as-is so filters and catalog lookups keep matching.
+ */
+export function brandText(text: string): string;
+export function brandText(text: string | null | undefined): string | null | undefined;
+export function brandText(text: string | null | undefined): string | null | undefined {
+  if (!text) return text;
+  return text.replace(/\bLogiwa\s?IO\b/gi, "KitStak").replace(/\bKitStaks\b/g, "KitStak");
+}
+
+/**
+ * M12 client display rule: cells show the client's full name; the tooltip reads
+ * "NVF · NovaForge Electronics". APIs return `clientName` (full name) and `clientCode`.
+ */
+export function clientTitle(code: string | null | undefined, name: string | null | undefined): string {
+  if (!code) return name ?? "";
+  if (!name || name === code) return code;
+  return `${code} · ${name}`;
+}

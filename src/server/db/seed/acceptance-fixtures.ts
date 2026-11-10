@@ -13,19 +13,28 @@
  *   - locations MLT1-A-01 (Only 1 SKU, Storage), MLT1-B-01 (Storage), MLT1-C-01 (Picking);
  *   - stock 20 × WIDGET-01 @ A-01, 4 × WIDGET-02 @ C-01, 22 × KIT-COMP @ C-01 (Net Kitting Capacity 11);
  *   - one open shipment order (2 × WIDGET-01), client reference KS-FIXTURE-M06;
- *   - lookups adjustment_reason "Import" and damage_reason "Damaged".
+ *   - MLT-LP-01 stock on a carton LP nested in a pallet LP, order KS-FIXTURE-PLAN-LP allocated
+ *     from it and an In Progress shipment plan holding that order (shipping.md REQ-5);
+ *   - lookups adjustment_reason "Import" and damage_reason "Damaged";
+ *   - missing Settings → Apps catalog rows (analytics apps active, as in the demo seed).
  */
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import * as schema from "@/server/db/schema";
 import { DEFAULT_ROLE_PERMISSIONS, type DefaultRoleKey } from "@/server/auth/permission-catalog";
+import { allocation, changeLog, licensePlates, sequences } from "@/server/domain";
 import { ledger } from "@/server/domain/ledger";
 import { createOrder } from "@/server/domain/orders";
 import type { DomainCtx } from "@/server/domain/types";
+import { seedStationFixtures } from "@/server/repositories/packing-fixtures";
+import { ensureDemoSuggestedListings } from "@/server/repositories/listings-demo";
+import { SEED_APPS } from "./platform";
 
 export const FIXTURE_WAREHOUSE_CODE = "MLT1";
 export const FIXTURE_CLIENT_CODE = "APX";
 export const FIXTURE_ORDER_REFERENCE = "KS-FIXTURE-M06";
+export const FIXTURE_PLAN_ORDER_REFERENCE = "KS-FIXTURE-PLAN-LP";
+const PLAN_LP_SKU = "MLT-LP-01";
 
 interface ProductFixture {
   readonly sku: string;
@@ -40,6 +49,7 @@ const PRODUCTS: readonly ProductFixture[] = [
   { sku: "MLT-WIDGET-02", name: "MLTest Widget 02", barcode: "850012300028", price: 14 },
   { sku: "MLT-KIT-COMP", name: "MLTest Kit Component", barcode: "850012300035", price: 6.25 },
   { sku: "MLT-KIT-2PK", name: "MLTest 2 Pack Kit", barcode: "850012300042", price: 19.99, kit: true },
+  { sku: PLAN_LP_SKU, name: "MLTest Pallet Item", barcode: "850012300059", price: 9.75 },
 ];
 
 interface LocationFixture {
@@ -99,7 +109,7 @@ function upsertProducts(tx: AppDb, clientId: string, created: string[], skipped:
       clientId, sku: p.sku, barcode: p.barcode, name: p.name, category: "General", uom: "Each",
       weightOz: 8, lengthIn: 6, widthIn: 4, heightIn: 2, price: p.price, purchasePrice: Math.round(p.price * 42) / 100,
       isKit: Boolean(p.kit), status: "Active", productCategory: p.kit ? "Kit" : "Product", kitType: p.kit ? "Kit to Stock" : null,
-      description: p.kit ? "Logiwa acceptance kit: two MLTest kit components." : "Logiwa acceptance fixture SKU.",
+      description: p.kit ? "Acceptance kit: two MLTest kit components." : "Acceptance fixture SKU.",
     }).returning({ id: schema.products.id }).get();
     const pack = tx.insert(schema.productPackTypes).values({
       productId: row.id, packType: "Each", kind: "Primary", uomQty: 1, length: 6, width: 4, height: 2, volume: 48, weight: 0.5,
@@ -165,6 +175,73 @@ function ensureOpenOrder(tx: AppDb, ctx: DomainCtx, refs: { warehouseId: string;
   created.push(`order ${order.code} (2 × MLT-WIDGET-01)`);
 }
 
+/* ------------------------------------------------- shipment plan on LP stock (shipping REQ-5) */
+
+/**
+ * A shipment plan whose order is allocated from license-plate stock, so `/shipment-plans/lps`
+ * and the plan detail "License plates" card have believable data: a pallet (PLT) parent LP
+ * holding a carton (PC) LP with 12 × MLT-LP-01 at MLT1-C-01; order KS-FIXTURE-PLAN-LP for 6 ×
+ * MLT-LP-01 allocated through `allocation.allocateOrders` (the LP bucket is the SKU's only stock)
+ * and an In Progress plan at gate LOAD-01. Everything goes through the ledger / domain, so
+ * `db:verify` stays green.
+ */
+function ensurePlanOnLps(tx: AppDb, ctx: DomainCtx, refs: { warehouseId: string; clientId: string; products: Map<string, string>; locations: Map<string, string> }, created: string[], skipped: string[]): void {
+  const productId = required(refs.products.get(PLAN_LP_SKU), PLAN_LP_SKU);
+  const locationId = required(refs.locations.get("MLT1-C-01"), "MLT1-C-01");
+  const i = schema.inventory;
+  const lpStock = tx.select({ id: i.id }).from(i).where(and(eq(i.productId, productId), isNotNull(i.lpId))).get();
+  if (lpStock) skipped.push(`LP stock ${PLAN_LP_SKU}`);
+  else {
+    const lpType = (code: string) => required(tx.select({ id: schema.lpTypes.id }).from(schema.lpTypes)
+      .where(and(eq(schema.lpTypes.warehouseId, refs.warehouseId), eq(schema.lpTypes.code, code))).get(), `LP type ${code}`).id;
+    const pallet = licensePlates.create(tx, ctx, { warehouseId: refs.warehouseId, lpTypeId: lpType("PLT"), locationId, clientId: refs.clientId });
+    const carton = licensePlates.create(tx, ctx, { warehouseId: refs.warehouseId, lpTypeId: lpType("PC"), locationId, clientId: refs.clientId });
+    tx.update(schema.licensePlates).set({ parentLpId: pallet.id, status: "Occupied" }).where(eq(schema.licensePlates.id, carton.id)).run();
+    ledger.add(tx, ctx, {
+      warehouseId: refs.warehouseId, clientId: refs.clientId, productId, locationId, lpId: carton.id, qty: 12, packType: "Each",
+      type: "Inventory Adjustment", refs: { note: "Acceptance fixture LP stock" },
+    });
+    tx.update(schema.licensePlates).set({ status: "Occupied" }).where(eq(schema.licensePlates.id, pallet.id)).run();
+    created.push(`LPs ${pallet.number} > ${carton.number} with 12 × ${PLAN_LP_SKU} @ MLT1-C-01`);
+  }
+
+  const so = schema.shipmentOrders;
+  let order = tx.select({ id: so.id, code: so.code, status: so.status }).from(so)
+    .where(and(eq(so.clientId, refs.clientId), eq(so.clientReferenceCode, FIXTURE_PLAN_ORDER_REFERENCE), isNull(so.deletedAt))).get();
+  if (order) skipped.push(`order ${FIXTURE_PLAN_ORDER_REFERENCE}`);
+  else {
+    const row = createOrder(tx, ctx, {
+      warehouseId: refs.warehouseId, clientId: refs.clientId, clientReferenceCode: FIXTURE_PLAN_ORDER_REFERENCE,
+      customerName: "Harbor Point Outfitters", customerEmail: "receiving@harborpoint.example.com",
+      shipAddress: "2200 Commerce Pkwy", shipCity: "Louisville", shipState: "KY", shipZip: "40218", shipCountry: "United States",
+      skipAddressVerification: true, note: "Acceptance fixture: wholesale order on a shipment plan, allocated from LP stock.",
+      lines: [{ productId, quantity: 6, unitPrice: 9.75 }],
+    });
+    order = { id: row.id, code: row.code, status: row.status };
+    created.push(`order ${row.code} (6 × ${PLAN_LP_SKU})`);
+  }
+  if (order.status === "Open" || order.status === "Shortage") {
+    const result = allocation.allocateOrders(tx, ctx, { orderIds: [order.id], warehouseId: refs.warehouseId, runBy: "Seed" });
+    if (result.allocated.length !== 1) throw new Error(`Acceptance fixtures: ${FIXTURE_PLAN_ORDER_REFERENCE} did not allocate from LP stock`);
+    created.push(`allocation ${order.code} from LP stock`);
+  }
+
+  const spo = schema.shipmentPlanOrders;
+  if (tx.select({ p: spo.planId }).from(spo).where(eq(spo.orderId, order.id)).get()) { skipped.push(`shipment plan for ${order.code}`); return; }
+  const gate = tx.select({ id: schema.locations.id }).from(schema.locations)
+    .where(and(eq(schema.locations.warehouseId, refs.warehouseId), eq(schema.locations.areaType, "Loading"))).orderBy(schema.locations.code).get();
+  const code = sequences.next(tx, "shipmentPlan");
+  const planned = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+  const plan = tx.insert(schema.shipmentPlans).values({
+    code, warehouseId: refs.warehouseId, clientId: refs.clientId, status: "In Progress", truckPlateNumber: "KY 4318-TR",
+    loadingGateLocationId: gate?.id ?? null, plannedShipmentAt: planned, expectedTotalWeight: 4,
+    note: "Acceptance fixture: plan order allocated from license plates.", createdBy: ctx.userId, updatedBy: ctx.userId,
+  }).returning({ id: schema.shipmentPlans.id }).get();
+  tx.insert(spo).values({ planId: plan.id, orderId: order.id, status: "In Progress" }).run();
+  changeLog.recordCreate(tx, ctx, { entityType: "shipment_plan", entityId: plan.id, entityCode: code });
+  created.push(`shipment plan ${code} (${order.code}, LP-allocated)`);
+}
+
 /**
  * Grants catalog keys added after the seed (e.g. `inventory.return_station.receive_return`) to the
  * system roles that get them by default. Only inserts missing grants; never revokes custom changes.
@@ -182,6 +259,22 @@ export function syncSystemRoleGrants(tx: AppDb, created: string[]): void {
   }
 }
 
+/**
+ * Inserts app catalog rows (Settings → Apps) that are missing, with their demo-seed activation
+ * (Labor / Operational Analytics active). Existing rows, and so any activation change made in
+ * the UI, are never touched.
+ */
+export function upsertAppCatalog(tx: AppDb, created: string[]): void {
+  const have = new Set(tx.select({ key: schema.apps.key }).from(schema.apps).all().map((r) => r.key));
+  const now = new Date().toISOString();
+  const missing = SEED_APPS.filter(([key]) => !have.has(key));
+  if (missing.length === 0) return;
+  tx.insert(schema.apps).values(missing.map(([key, name, description, category, active]) => ({
+    key, name, description, category, isActive: active, activatedAt: active ? now : null, activatedBy: null,
+  }))).run();
+  created.push(`${missing.length} app catalog row(s): ${missing.map(([key]) => key).join(", ")}`);
+}
+
 /** Upserts every fixture. Run inside a transaction. */
 export function seedAcceptanceFixtures(tx: AppDb, ctx: DomainCtx): FixtureReport {
   const created: string[] = [];
@@ -189,10 +282,20 @@ export function seedAcceptanceFixtures(tx: AppDb, ctx: DomainCtx): FixtureReport
   const wh = required(tx.select().from(schema.warehouses).where(eq(schema.warehouses.code, FIXTURE_WAREHOUSE_CODE)).get(), `warehouse ${FIXTURE_WAREHOUSE_CODE}`);
   const client = required(tx.select().from(schema.clients).where(eq(schema.clients.code, FIXTURE_CLIENT_CODE)).get(), `client ${FIXTURE_CLIENT_CODE}`);
   syncSystemRoleGrants(tx, created);
+  upsertAppCatalog(tx, created);
   upsertLookups(tx, created, skipped);
   const products = upsertProducts(tx, client.id, created, skipped);
   const locations = upsertLocations(tx, wh.id, created, skipped);
   addStock(tx, ctx, { warehouseId: wh.id, clientId: client.id, products, locations }, created, skipped);
   ensureOpenOrder(tx, ctx, { warehouseId: wh.id, clientId: client.id, products }, created, skipped);
+  ensurePlanOnLps(tx, ctx, { warehouseId: wh.id, clientId: client.id, products, locations }, created, skipped);
+  // M04: hospital HOSP-01 (Hospital group) + packable tote / location / cart / pack-short orders.
+  const stations = seedStationFixtures(tx, ctx);
+  created.push(...stations.created);
+  skipped.push(...stations.skipped);
+  // M09: Product Listings "Suggested" demo rows (Bluebird & Main Shopify).
+  const listings = ensureDemoSuggestedListings(tx, ctx);
+  created.push(...listings.created.map((sku) => `listing ${sku}`));
+  skipped.push(...listings.skipped.map((sku) => `listing ${sku}`));
   return { created, skipped };
 }

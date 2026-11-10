@@ -11,13 +11,29 @@ import { cn } from "@/lib/utils";
 import { useApiQuery } from "@/lib/query-client";
 import { passwordChecks, type PasswordPolicyHints } from "@/components/layout/password-checks";
 
-const DEFAULT_HINTS: PasswordPolicyHints = { minLength: 10, requireUpper: true, requireNumber: true, requireSymbol: true };
 const hintsSchema = z.object({ minLength: z.number(), requireUpper: z.boolean(), requireNumber: z.boolean(), requireSymbol: z.boolean() });
 
-export function usePasswordPolicy(): PasswordPolicyHints {
+/**
+ * Server-resolved company policy for the current request (set by the page's RSC guard), so
+ * meters show the real rules on first paint even while the API is slow. Never a hard-coded
+ * default: without a seed or a response the hook returns `null` and meters say "loading".
+ */
+const PolicySeedContext = React.createContext<PasswordPolicyHints | null>(null);
+
+export function PasswordPolicySeed({ policy, children }: { readonly policy: PasswordPolicyHints; readonly children: React.ReactNode }) {
+  return <PolicySeedContext.Provider value={policy}>{children}</PolicySeedContext.Provider>;
+}
+
+/** Pure pick: the live API response wins, then the server seed, else `null` (still loading). */
+export function resolvePolicyHints(response: unknown, seed: PasswordPolicyHints | null): PasswordPolicyHints | null {
+  const parsed = hintsSchema.safeParse(response);
+  return parsed.success ? parsed.data : seed;
+}
+
+export function usePasswordPolicy(): PasswordPolicyHints | null {
+  const seed = React.useContext(PolicySeedContext);
   const q = useApiQuery<unknown>(["password-policy"], "/api/account/password-policy", { staleTime: 300_000 });
-  const parsed = hintsSchema.safeParse(q.data?.data);
-  return parsed.success ? parsed.data : DEFAULT_HINTS;
+  return resolvePolicyHints(q.data?.data, seed);
 }
 
 const LEVELS = [
@@ -38,7 +54,15 @@ export function passwordStrength(password: string, policy: PasswordPolicyHints):
   return Math.min(4, 3 + bonus);
 }
 
-export function PasswordMeter({ password, policy, id }: { readonly password: string; readonly policy: PasswordPolicyHints; readonly id?: string }) {
+export function PasswordMeter({ password, policy, id }: { readonly password: string; readonly policy: PasswordPolicyHints | null; readonly id?: string }) {
+  if (!policy) {
+    return (
+      <div id={id} className="mt-1.5 flex items-center gap-2" role="status" aria-live="polite">
+        <span className="h-1 flex-1 animate-pulse rounded-full bg-neutral-soft" aria-hidden />
+        <span className="text-[11.5px] text-faint">Loading your company&apos;s password policy…</span>
+      </div>
+    );
+  }
   const strength = passwordStrength(password, policy);
   const level = LEVELS[strength] ?? LEVELS[0];
   const checks = passwordChecks(password, policy);
@@ -48,7 +72,7 @@ export function PasswordMeter({ password, policy, id }: { readonly password: str
         <div className="grid flex-1 grid-cols-4 gap-1" aria-hidden>
           {[1, 2, 3, 4].map((i) => <span key={i} className={cn("h-1 rounded-full transition-colors", i <= strength ? level.bar : "bg-neutral-soft")} />)}
         </div>
-        <span className={cn("w-16 text-right text-[11px] font-semibold", password ? level.text : "text-faint")} aria-live="polite">{password ? level.label : "—"}</span>
+        <span className={cn("w-16 text-right text-[11px] font-semibold", password ? level.text : "text-faint")} aria-live="polite">{password ? level.label : ""}</span>
       </div>
       <ul aria-label="Password requirements" className="grid grid-cols-1 gap-0.5 sm:grid-cols-2">
         {checks.map((c) => (

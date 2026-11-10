@@ -9,6 +9,13 @@ import { idParamsSchema, idSchema } from "@/server/repositories/platform-common"
 import { getPrintout, previewPdf } from "@/server/repositories/printouts";
 
 export const POST = defineRoute({
+  // Template designers, or anyone allowed to print the source documents. Records are further
+  // scoped to the caller's warehouses and clients in `orderRecord` (out-of-scope ids are dropped).
+  permission: [
+    "settings.printouts_labels.view", "settings.printouts_labels.create", "settings.printouts_labels.edit",
+    "fulfillment.shipment_orders.print_packing_slip", "fulfillment.shipment_orders.print_picking_list",
+    "fulfillment.shipment_orders.batch_picking_list", "fulfillment.packing_station.print_packing_slip",
+  ],
   params: idParamsSchema,
   body: z.object({ orderIds: z.array(idSchema).max(200).default([]) }),
   transaction: false,

@@ -12,12 +12,25 @@ import { DomainError } from "@/server/domain/errors";
 import { ledger } from "@/server/domain/ledger";
 import { packRatio } from "@/server/domain/ledger/bucket";
 import { hasClient, hasWarehouse } from "@/server/auth/scope";
-import { explainSkuRule } from "@/server/repositories/inventory-commands";
+import { explainSkuRule, isValidIsoDate } from "@/server/repositories/inventory-commands";
+import { LOT_MESSAGE, isValidLot } from "@/lib/grid-defs/inventory/lot-rules";
 import type { ImportHandler, ImportRowValues } from "../types";
 
 export const IMPORT_REASON_NAME = "Import";
 
 const str = (v: ImportRowValues[string]): string | null => (v === null || v === undefined || v === "" ? null : String(v).trim());
+
+/**
+ * Calendar date cell → "YYYY-MM-DD" (validate.ts already parsed it; this is the second line of
+ * defence). Impossible dates such as "2026-02-31" or "2026-13-45" fail the row.
+ */
+export function importDate(v: ImportRowValues[string], label: string): string | null {
+  if (v === null || v === undefined || v === "") return null;
+  const m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(String(v).trim());
+  const iso = m ? `${m[1]}-${m[2]!.padStart(2, "0")}-${m[3]!.padStart(2, "0")}` : String(v).trim();
+  if (!isValidIsoDate(iso)) fail(`${label} "${String(v)}" is not a real date (use YYYY-MM-DD)`);
+  return iso;
+}
 
 function fail(message: string): never {
   throw new DomainError("VALIDATION", message);
@@ -71,8 +84,13 @@ export const handler: ImportHandler = {
     }
 
     const lotNumber = str(row.lotNumber);
-    const expiryDate = str(row.expiryDate);
-    const productionDate = str(row.productionDate);
+    const expiryDate = importDate(row.expiryDate, "Expiry Date");
+    const productionDate = importDate(row.productionDate, "Production Date");
+    // A product that does not track an attribute never gets one (see findUntrackedAttributeBuckets).
+    if (lotNumber && !product.trackLot) fail(`${sku} doesn't track lot/batch numbers; leave Lot Number empty or turn tracking on first`);
+    if (expiryDate && !product.trackExpiry) fail(`${sku} doesn't track expiry dates; leave Expiry Date empty or turn tracking on first`);
+    if (productionDate && !product.trackProductionDate) fail(`${sku} doesn't track production dates; leave Production Date empty or turn tracking on first`);
+    if (lotNumber && !isValidLot(lotNumber)) fail(`Lot Number "${lotNumber}": ${LOT_MESSAGE}`);
     if (product.trackLot && !lotNumber) fail(`${sku} tracks lot/batch numbers; Lot Number is required`);
     if (product.trackExpiry && !expiryDate) fail(`${sku} tracks expiry dates; Expiry Date is required`);
     if (product.trackProductionDate && !productionDate) fail(`${sku} tracks production dates; Production Date is required`);

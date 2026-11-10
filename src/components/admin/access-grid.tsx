@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Assign / Unassign grid (Logiwa Users wizard steps 2–4, Printout client access):
- * search, select rows, Assign / Unassign buttons, an Access pill per row and a
- * Total / Selected / Assigned footer. Controlled: `value` holds the assigned ids.
+ * Access grid (Users wizard steps 2–4, Printout client access): search, tick a row to
+ * assign it (selection IS assignment, no separate Assign step), an Access pill per row and
+ * a Total / Assigned footer. Controlled: `value` holds the assigned ids.
  */
 import * as React from "react";
 import { Check, Search, X } from "lucide-react";
@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import { DisabledReason } from "@/components/ui/tooltip";
 
 export interface AccessItem {
   readonly id: string;
@@ -36,21 +35,19 @@ export interface AccessGridProps {
 
 export function AccessGrid({ items, value, onChange, noun, columnLabel, disabled, invalid, describedBy, toggles = false, loading }: AccessGridProps) {
   const [search, setSearch] = React.useState("");
-  const [selected, setSelected] = React.useState<ReadonlySet<string>>(new Set());
   const assigned = React.useMemo(() => new Set(value), [value]);
   const q = search.trim().toLowerCase();
   const visible = q ? items.filter((i) => i.label.toLowerCase().includes(q) || (i.description ?? "").toLowerCase().includes(q)) : items;
-  const allVisibleSelected = visible.length > 0 && visible.every((i) => selected.has(i.id));
-  const someSelected = visible.some((i) => selected.has(i.id));
+  const allVisibleAssigned = visible.length > 0 && visible.every((i) => assigned.has(i.id));
+  const someAssigned = visible.some((i) => assigned.has(i.id));
 
-  const apply = (assign: boolean) => {
+  const setVisible = (assign: boolean) => {
     const next = new Set(assigned);
-    for (const id of selected) {
-      if (assign) next.add(id);
-      else next.delete(id);
+    for (const i of visible) {
+      if (assign) next.add(i.id);
+      else next.delete(i.id);
     }
     onChange([...next]);
-    setSelected(new Set());
   };
   const toggleOne = (id: string) => {
     const next = new Set(assigned);
@@ -58,7 +55,6 @@ export function AccessGrid({ items, value, onChange, noun, columnLabel, disabled
     else next.add(id);
     onChange([...next]);
   };
-  const selectReason = selected.size === 0 ? `Select at least one ${noun}` : null;
 
   return (
     <div className={cn("flex flex-col rounded-lg border bg-surface", invalid ? "border-danger" : "border-border")} aria-describedby={describedBy}>
@@ -73,28 +69,24 @@ export function AccessGrid({ items, value, onChange, noun, columnLabel, disabled
             className="h-8 w-full rounded-md border border-border bg-surface pl-7 pr-2 text-[13px] text-foreground placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           />
         </label>
-        {!toggles ? (
+        {!toggles && visible.length > 0 ? (
           <div className="flex items-center gap-1.5">
-            <DisabledReason reason={disabled ? "Read only" : selectReason}>
-              <Button size="sm" variant="secondary" disabled={disabled || selected.size === 0} onClick={() => apply(false)}><X className="h-3.5 w-3.5" aria-hidden />Unassign</Button>
-            </DisabledReason>
-            <DisabledReason reason={disabled ? "Read only" : selectReason}>
-              <Button size="sm" variant="primary" disabled={disabled || selected.size === 0} onClick={() => apply(true)}><Check className="h-3.5 w-3.5" aria-hidden />Assign</Button>
-            </DisabledReason>
+            <Button size="sm" variant="ghost" disabled={disabled || !someAssigned} onClick={() => setVisible(false)}><X className="h-3.5 w-3.5" aria-hidden />{q ? "Clear shown" : "Clear all"}</Button>
+            <Button size="sm" variant="secondary" disabled={disabled || allVisibleAssigned} onClick={() => setVisible(true)}><Check className="h-3.5 w-3.5" aria-hidden />{q ? "Assign shown" : "Assign all"}</Button>
           </div>
         ) : null}
       </div>
-      <div className="max-h-[340px] overflow-auto">
+      <div className={cn("overflow-auto", items.length > 10 && "max-h-[420px] [scrollbar-gutter:stable]")}>
         <table className="w-full text-[13px]">
           <thead className="sticky top-0 z-[1] bg-surface-sunken text-left text-[10px] font-semibold uppercase tracking-wide text-faint">
             <tr>
               {!toggles ? (
                 <th className="w-10 px-3 py-2">
                   <Checkbox
-                    aria-label={`Select all ${noun}s`}
-                    checked={allVisibleSelected ? true : someSelected ? "indeterminate" : false}
+                    aria-label={`Assign all ${noun}s`}
+                    checked={allVisibleAssigned ? true : someAssigned ? "indeterminate" : false}
                     disabled={disabled || visible.length === 0}
-                    onCheckedChange={() => setSelected(allVisibleSelected ? new Set() : new Set(visible.map((i) => i.id)))}
+                    onCheckedChange={() => setVisible(!allVisibleAssigned)}
                   />
                 </th>
               ) : null}
@@ -111,14 +103,14 @@ export function AccessGrid({ items, value, onChange, noun, columnLabel, disabled
               visible.map((item) => {
                 const on = assigned.has(item.id);
                 return (
-                  <tr key={item.id} className={cn("transition-colors hover:bg-neutral-soft/50", selected.has(item.id) && "bg-primary-soft/40")}>
+                  <tr key={item.id} className={cn("transition-colors hover:bg-neutral-soft/50", on && !toggles && "bg-primary-soft/30")}>
                     {!toggles ? (
                       <td className="px-3 py-1.5">
                         <Checkbox
-                          aria-label={`Select ${item.label}`}
-                          checked={selected.has(item.id)}
+                          aria-label={`Assign ${item.label}`}
+                          checked={on}
                           disabled={disabled}
-                          onCheckedChange={() => setSelected((prev) => { const next = new Set(prev); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}
+                          onCheckedChange={() => toggleOne(item.id)}
                         />
                       </td>
                     ) : null}
@@ -157,7 +149,7 @@ export function AccessGrid({ items, value, onChange, noun, columnLabel, disabled
         </table>
       </div>
       <div className="flex items-center justify-between border-t border-border px-3 py-1.5 text-[11.5px] text-secondary">
-        <span>Total: {items.length}{selected.size ? ` · Selected: ${selected.size}` : ""}</span>
+        <span>Total: {items.length}{q ? ` · Showing: ${visible.length}` : ""}</span>
         <span className="font-medium text-foreground">Assigned: {value.length}</span>
       </div>
     </div>

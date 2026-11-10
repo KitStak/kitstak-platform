@@ -39,6 +39,8 @@ export interface MeResponse {
   readonly context: { readonly warehouseId: string | null; readonly clientId: string | null };
   readonly contextOptions: { readonly warehouses: readonly ContextOption[]; readonly clients: readonly ContextOption[] };
   readonly preferences: Readonly<Record<string, unknown>>;
+  /** Active add-on app keys (Settings → Apps); absent on older responses. */
+  readonly activeApps?: readonly string[];
 }
 
 export type PermissionMode = "all" | "any";

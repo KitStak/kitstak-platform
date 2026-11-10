@@ -20,7 +20,7 @@ import { Rng } from "../seed-data";
 import { DEFAULT_SEED_PASSWORD, seedAccess, seedAuditTrail } from "./access";
 import { retireProducts, seedCatalog } from "./catalog";
 import { seedConfig } from "./config";
-import { seedFacility } from "./facility";
+import { seedCartOccupancy, seedFacility } from "./facility";
 import { seedBilling } from "./billing";
 import { seedChannelHistory, seedShipmentPlans } from "./history";
 import { scheduleInbound } from "./inbound";
@@ -41,7 +41,9 @@ import { scheduleAdjustments, scheduleReplenishment, scheduleSnapshots } from ".
 import { txAt, type SeedEnv } from "./types";
 import { scheduleWaves } from "./waves";
 import { resetWorkState } from "./work";
-import { noteFailure, type World } from "./world";
+import { managerCtx, noteFailure, type World } from "./world";
+import { repairPoStatusDrift } from "@/server/repositories/purchase-orders-integrity";
+import { recalcKitInventory } from "@/server/repositories/kits";
 
 export const DEFAULT_SEED = 20261105;
 
@@ -95,6 +97,11 @@ function finish(w: World): void {
     seedPlatform(w, tx);
     seedAuditTrail(tx, w.access);
     retireProducts(tx, w.catalog);
+    // Fully received seeded POs settle to Completed (and none stays in the transient Receiving),
+    // the same way receiving does (inbound-receiving REQ-R2-9).
+    repairPoStatusDrift(tx, managerCtx(w));
+    // Two open picking jobs on mobile carts, each order in a cell (M10 / REQ-R10-6).
+    seedCartOccupancy(tx, managerCtx(w), w.org.mlt1);
     const pxp = w.org.clientByCode.get("PXP");
     if (pxp) tx.update(schema.clients).set({ status: "Inactive" }).where(eq(schema.clients.id, pxp.id)).run();
   });
@@ -122,6 +129,8 @@ export async function runSeed(db: AppDb, opts: SeedOptions): Promise<SeedReport>
     scheduleHistory(w);
     w.counters.events = await w.queue.drain({ before: setClock, onError: (label, error) => noteFailure(w, label, error) });
     finish(w);
+    // Kit Inventory reads a derived snapshot: stamp it at seed time so a fresh install never reads "Last updated never".
+    try { recalcKitInventory(db); } catch (error) { noteFailure(w, "kit inventory recalc", error); }
     return {
       counts: countRows(db), events: w.counters.events, failures: w.counters.failures, failureSamples: [...w.counters.failureSamples],
       ledgerIssues: ledger.reconcileLedger(db),

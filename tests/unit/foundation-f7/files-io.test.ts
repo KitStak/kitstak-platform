@@ -164,8 +164,10 @@ describe("print, exports, imports", () => {
     const real = new FormData();
     real.set("file", new Blob(["Code\nA-1\n"], { type: "text/csv" }), "locations.csv");
     const run = await call(importRoute.POST, req("POST", "/api/imports/locations", { cookie: admin, form: real }), params);
-    expect(run.status).toBe(409);
-    expect(run.json.code).toBe("INVALID_STATE");
+    // the locations importer (M10) is live: a file without its required columns is rejected up front
+    expect(run.status).toBe(400);
+    expect(run.json.code).toBe("VALIDATION");
+    expect((run.json.fieldErrors as Record<string, string[]> | undefined)?.file?.[0]).toMatch(/Missing column/);
 
     const viewerForm = new FormData();
     viewerForm.set("file", new Blob(["Code\nA\n"], { type: "text/csv" }), "l.csv");

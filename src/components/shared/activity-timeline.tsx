@@ -15,7 +15,7 @@ import { useApiQuery } from "@/lib/query-client";
 import { Button } from "@/components/ui/button";
 import { SkeletonText } from "@/components/ui/skeleton";
 import { changeLogEntrySchema, parseList, type ChangeLogEntry } from "./contracts";
-import { changeLogMessage } from "./change-log-drawer";
+import { changeLogMessage, useChangeLogTime, type ChangeLogMessageOptions } from "./change-log-drawer";
 
 export const ledgerEntrySchema = z.object({
   id: z.string(),
@@ -36,8 +36,8 @@ export interface TimelineItem {
   readonly source: string;
 }
 
-export function buildTimeline(changes: readonly ChangeLogEntry[], ledger: readonly LedgerEntry[]): readonly TimelineItem[] {
-  const fromChanges = changes.map<TimelineItem>((c) => ({ id: `c:${c.id}`, kind: c.type, at: c.at, title: changeLogMessage(c), source: c.source }));
+export function buildTimeline(changes: readonly ChangeLogEntry[], ledger: readonly LedgerEntry[], options: ChangeLogMessageOptions = {}): readonly TimelineItem[] {
+  const fromChanges = changes.map<TimelineItem>((c) => ({ id: `c:${c.id}`, kind: c.type, at: c.at, title: changeLogMessage(c, options), source: c.userName || c.source }));
   const fromLedger = ledger.map<TimelineItem>((l) => ({
     id: `l:${l.id}`,
     kind: "Ledger",
@@ -57,12 +57,12 @@ const KIND_META = {
 
 const PAGE = 50;
 
-export function ActivityTimeline({ entityType, entityId, ledgerPath, limit = PAGE }: { readonly entityType: string; readonly entityId: string; readonly ledgerPath?: string; readonly limit?: number }) {
-  const fmt = useFormat();
+export function ActivityTimeline({ entityType, entityId, ledgerPath, limit = PAGE, timeZone }: { readonly entityType: string; readonly entityId: string; readonly ledgerPath?: string; readonly limit?: number; /** IANA zone: times render there with a zone suffix. */ readonly timeZone?: string | null }) {
+  const timeOf = useChangeLogTime(timeZone);
   const [shown, setShown] = React.useState(limit);
   const changes = useApiQuery<unknown>(["change-log", entityType, entityId, "timeline"], "/api/change-log", { query: { entityType, entityId, ps: 200 } });
   const ledger = useApiQuery<unknown>(["timeline-ledger", ledgerPath ?? ""], ledgerPath ?? null);
-  const items = buildTimeline(parseList(changeLogEntrySchema, changes.data?.data), parseList(ledgerEntrySchema, ledger.data?.data));
+  const items = buildTimeline(parseList(changeLogEntrySchema, changes.data?.data), parseList(ledgerEntrySchema, ledger.data?.data), { formatIso: timeOf });
   const loading = changes.isPending || (Boolean(ledgerPath) && ledger.isPending);
 
   if (loading) return <SkeletonText lines={5} />;
@@ -93,7 +93,7 @@ export function ActivityTimeline({ entityType, entityId, ledgerPath, limit = PAG
               <div className="min-w-0 pt-0.5">
                 <p className="break-words text-[13px] text-body">{item.title}</p>
                 <p className="text-[11px] text-faint">
-                  {fmt.dateTime(item.at)} · {item.source}
+                  {timeOf(item.at)} · {item.source}
                 </p>
               </div>
             </li>

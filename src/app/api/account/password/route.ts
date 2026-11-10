@@ -5,6 +5,7 @@
  */
 import { NextResponse } from "next/server";
 import { defineRoute } from "@/server/api/define-route";
+import { AppError } from "@/server/api/errors";
 import { successBody } from "@/server/api/envelope";
 import { issueSession, setSessionCookie } from "@/server/auth/session";
 import { accountPasswordSchema } from "@/lib/grid-defs/admin/account";
@@ -21,7 +22,9 @@ export const POST = defineRoute({
     try {
       db.transaction((tx) => changeOwnPassword(tx, auth, actor, body.currentPassword, body.newPassword));
     } catch (error: unknown) {
-      audit({ action: "auth.password_change", entity: "user", entityId: auth.user.id, detail: { result: "rejected" } });
+      // A rejected change is a failure row of its own action, never "Password changed · Success".
+      const reason = error instanceof AppError ? (error.fieldErrors?.currentPassword ? "wrong_current_password" : error.code.toLowerCase()) : "error";
+      audit({ action: "auth.password_change_rejected", entity: "user", entityId: auth.user.id, outcome: "failure", detail: { reason } });
       throw error;
     }
     audit({ action: "auth.password_change", entity: "user", entityId: auth.user.id, detail: { otherSessionsEnded: true } });

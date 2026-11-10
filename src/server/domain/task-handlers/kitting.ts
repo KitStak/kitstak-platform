@@ -21,7 +21,7 @@ export const executeKitting: TaskHandler = (tx, ctx, task, input): TaskExecution
   if (!Number.isInteger(qty) || qty < 1 || qty > remaining) throw new DomainError("VALIDATION", `Kitting quantity must be between 1 and ${remaining}.`);
   const kit = tx.select().from(schema.products).where(eq(schema.products.id, wo.kitProductId)).get();
   createKit(tx, ctx, {
-    workOrderId: wo.id, qty, locationId: input.targetLocationId, lpId: input.targetLpId ?? null,
+    workOrderId: wo.id, qty, locationId: input.targetLocationId, lpId: input.targetLpId ?? null, completePendingPicks: true,
     // Scan flows carry no attributes: a lot-tracked kit gets the work order code as its lot.
     lotNumber: kit?.trackLot ? (wo.outputLot ?? wo.code) : null, expiryDate: wo.outputExpiry, productionDate: kit?.trackProductionDate ? new Date().toISOString().slice(0, 10) : null,
   });

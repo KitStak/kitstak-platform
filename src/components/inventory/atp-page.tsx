@@ -7,13 +7,13 @@
  */
 import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { DataGrid, ExternalFilterLink, GridToolbar, useGrid } from "@/components/grid";
+import { DataGrid, GridToolbar, useGrid } from "@/components/grid";
 import { PageHeader } from "@/components/layout/page-header";
-import { Callout } from "@/components/ui/callout";
+import { Info } from "lucide-react";
 import { ATP_DEF, ATP_EXPORT_COLUMNS, ATP_GRID_KEY, ATP_TIPS } from "@/lib/grid-defs/inventory/atp";
 import { useMe } from "@/lib/permissions-client";
-import { productFilters } from "./inventory-links";
-import { OpenSoLink, Qty, headerWidth, useInventoryFilterFields } from "./inventory-shared";
+import { GridStallNotice, OpenPoLink, OpenSoLink, Qty, headerWidth, useInventoryFilterFields, SkuLink, ShortageToggle, rightMeta } from "./inventory-shared";
+import { SearchChip, warehouseCodeOf } from "./inventory-search-chip";
 
 export interface AtpRow {
   readonly rowId: string;
@@ -44,7 +44,7 @@ type Col = ColumnDef<AtpRow, unknown>;
 
 const qty = (id: keyof AtpRow & string, label: string, opts: { sortable?: boolean; emphasis?: boolean; tone?: "warning" } = {}): Col => ({
   id, accessorKey: id, header: label, size: headerWidth(label, 120, Boolean(ATP_TIPS[id])), enableSorting: opts.sortable ?? true,
-  meta: { label, align: "right", headerTip: ATP_TIPS[id] },
+  meta: rightMeta(label, ATP_TIPS[id]),
   cell: ({ row }) => {
     const v = row.original[id] as number;
     return opts.emphasis ? <span className={v < 0 ? "block text-right font-semibold tabular-nums text-danger" : "block text-right font-semibold tabular-nums text-foreground"}>{v.toLocaleString("en-US")}</span> : <Qty value={v} tone={opts.tone} />;
@@ -56,32 +56,41 @@ const text = (id: keyof AtpRow & string, label: string, size = 140, sortable = t
   cell: ({ row }) => (row.original[id] as string | null) ?? <span className="text-faint">—</span>,
 });
 
+/**
+ * The ATP metrics this page exists for (Current ATP, Planned ATP, Sellable, Pickable) come right
+ * after SKU / Product Name, so they are on screen at 1440px without scrolling. Logiwa puts them
+ * after the quantity breakdown, off-screen; the breakdown follows here.
+ */
 export function buildAtpColumns(): Col[] {
   return [
-    text("warehouse", "Warehouse", 200),
-    text("client", "Client", 150),
     {
       id: "sku", accessorKey: "sku", header: "SKU", size: 180, meta: { label: "SKU", alwaysVisible: true },
-      cell: ({ row }) => <ExternalFilterLink path="/products" filters={productFilters(row.original.sku, row.original.clientId)} label={`Product ${row.original.sku}`}>{row.original.sku}</ExternalFilterLink>,
+      cell: ({ row }) => <SkuLink sku={row.original.sku} clientId={row.original.clientId} />,
     },
     text("productName", "Product Name", 220),
-    text("barcode", "Barcode", 140, false),
-    text("kitType", "Kit Type", 110, false),
+    qty("currentAtp", "Current ATP", { emphasis: true }),
+    qty("plannedAtp", "Planned ATP Qty", { emphasis: true }),
+    qty("sellableQty", "Sellable Qty"),
+    qty("pickableQty", "Pickable Qty"),
+    {
+      id: "openSoQty", accessorKey: "openSoQty", header: "Open SO Qty", size: headerWidth("Open SO Qty", 120, true), meta: rightMeta("Open SO Qty", ATP_TIPS.openSoQty),
+      cell: ({ row }) => <OpenSoLink productId={row.original.productId} warehouseId={row.original.warehouseId} sku={row.original.sku} qty={row.original.openSoQty} />,
+    },
+    { ...qty("openPoQty", "Open PO Qty"), cell: ({ row }) => <OpenPoLink productId={row.original.productId} warehouseId={row.original.warehouseId} sku={row.original.sku} qty={row.original.openPoQty} /> },
+    {
+      // The code fits the 1440px viewport next to the ATP metrics; the full "CODE - Name" is the tooltip.
+      id: "warehouse", accessorKey: "warehouse", header: "Warehouse", size: headerWidth("Warehouse", 110), meta: { label: "Warehouse" },
+      cell: ({ row }) => <span title={row.original.warehouse}>{warehouseCodeOf(row.original.warehouse)}</span>,
+    },
+    text("client", "Client", 190),
     qty("totalQty", "Total Quantity"),
     qty("damagedQty", "Damaged Qty", { tone: "warning" }),
     qty("undamagedQty", "Undamaged Quantity"),
     qty("allocatedSoQty", "Allocated SO Item Qty"),
-    {
-      id: "openSoQty", accessorKey: "openSoQty", header: "Open SO Qty", size: 120, meta: { label: "Open SO Qty", align: "right", headerTip: ATP_TIPS.openSoQty },
-      cell: ({ row }) => <OpenSoLink productId={row.original.productId} warehouseId={row.original.warehouseId} sku={row.original.sku} qty={row.original.openSoQty} />,
-    },
-    qty("openPoQty", "Open PO Qty"),
-    qty("currentAtp", "Current ATP", { emphasis: true }),
-    qty("plannedAtp", "Planned ATP Qty", { emphasis: true }),
     qty("onHandQty", "On Hand Qty"),
-    qty("sellableQty", "Sellable Qty"),
-    qty("pickableQty", "Pickable Qty"),
     qty("unallocatedSoQty", "Unallocated SO Item Qty", { tone: "warning" }),
+    text("barcode", "Barcode", 140, false),
+    text("kitType", "Kit Type", 110, false),
   ];
 }
 
@@ -101,11 +110,17 @@ export function AtpPage() {
         tabs="inventory"
       />
       <div className="px-6 pt-3">
-        <Callout variant="info" title={ctxWh ? `Showing ${ctxWh.code ?? ctxWh.name}` : "Showing every warehouse you can access"}>
-            Current ATP = Undamaged − Open SO · Planned ATP = Current ATP + Open PO. Hover any column header for its formula.
-        </Callout>
+        {/* Neutral info note (the shared Callout "info" uses the red brand primary and reads as an error). */}
+        <div role="note" className="flex items-start gap-2.5 rounded-lg border border-info/25 bg-info-soft px-3.5 py-2.5 text-[13px]">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
+          <div>
+            <p className="font-medium text-foreground">{ctxWh ? `Showing ${ctxWh.code ?? ctxWh.name}` : "Showing every warehouse you can access"}</p>
+            <p className="text-secondary">Current ATP = Undamaged − Open SO · Planned ATP = Current ATP + Open PO. Hover any column header for its formula.</p>
+          </div>
+        </div>
       </div>
-      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by SKU or barcode" />
+      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by SKU or barcode" trailing={<><SearchChip grid={g.grid} noun="SKU or barcode" /><ShortageToggle grid={g.grid} field="currentAtp" label="Current ATP" /></>} />
+      <GridStallNotice loading={g.isLoading} onRetry={g.refetch} noun="ATP" />
       <div className="flex min-h-0 flex-1 flex-col">
         <DataGrid<AtpRow>
           {...g.gridProps}

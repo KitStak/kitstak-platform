@@ -121,10 +121,12 @@ function buildTasks(tx: Tx, ctx: DomainCtx, job: JobRow, jobType: JobTypeRow, se
   let taskNo = nextTaskNo(tx);
   let seq = tx.get<{ n: number | null }>(sql`SELECT MAX(sequence) AS n FROM tasks WHERE job_id = ${job.id}`)?.n ?? 0;
   const startMs = opts.start.getTime();
+  const clientOfOrder = new Map(cands.map((c) => [c.order.id, c.order.clientId]));
   const base = (type: TaskInsert["taskType"], extra: Partial<TaskInsert>): TaskInsert => {
     seq += 1;
     const t: TaskInsert = {
-      taskNo: taskNo++, jobId: job.id, warehouseId: job.warehouseId, clientId: job.clientId, taskType: type, status: "Pending",
+      // A multi-client job has no client; each task still carries its own order's client.
+      taskNo: taskNo++, jobId: job.id, warehouseId: job.warehouseId, clientId: job.clientId ?? (extra.orderId ? clientOfOrder.get(extra.orderId) ?? null : null), taskType: type, status: "Pending",
       priority: opts.priority, sequence: seq, assigneeUserId: opts.assigneeUserId,
       plannedStartAt: new Date(startMs).toISOString(), plannedFinishAt: new Date(startMs + seq * opts.minutesPerTask * MINUTE_MS).toISOString(),
       createdBy: ctx.userId, updatedBy: ctx.userId, ...extra,
@@ -323,7 +325,7 @@ export function assign(tx: Tx, ctx: DomainCtx, input: { jobIds: readonly string[
       const job = getJob(tx, ctx, id);
       if (job.status === "Completed" || job.status === "Cancelled") throw new DomainError("INVALID_STATE", `Job ${job.code} is ${job.status}.`);
       if (input.userId) assertUserInWarehouse(tx, input.userId, job.warehouseId);
-      tx.update(schema.jobs).set({ assignedToUserId: input.userId, updatedBy: ctx.userId }).where(eq(schema.jobs.id, id)).run();
+      tx.update(schema.jobs).set({ assignedToUserId: input.userId, version: sql`version + 1`, updatedBy: ctx.userId }).where(eq(schema.jobs.id, id)).run();
       tx.update(schema.tasks).set({ assigneeUserId: input.userId }).where(and(eq(schema.tasks.jobId, id), eq(schema.tasks.status, "Pending"))).run();
       recordUpdate(tx, ctx, { entityType: "job", entityId: id, entityCode: job.code, before: { assignee: userDisplayName(tx, job.assignedToUserId) }, after: { assignee: userDisplayName(tx, input.userId) } });
       succeeded.push(id);
@@ -350,7 +352,7 @@ export function updatePriority(tx: Tx, ctx: DomainCtx, input: { jobIds: readonly
     try {
       const job = getJob(tx, ctx, id);
       if (job.status === "Completed" || job.status === "Cancelled") throw new DomainError("INVALID_STATE", `Job ${job.code} is ${job.status}.`);
-      tx.update(schema.jobs).set({ priority: input.priority, updatedBy: ctx.userId }).where(eq(schema.jobs.id, id)).run();
+      tx.update(schema.jobs).set({ priority: input.priority, version: sql`version + 1`, updatedBy: ctx.userId }).where(eq(schema.jobs.id, id)).run();
       tx.update(schema.tasks).set({ priority: input.priority }).where(and(eq(schema.tasks.jobId, id), ne(schema.tasks.status, "Completed"))).run();
       recordUpdate(tx, ctx, { entityType: "job", entityId: id, entityCode: job.code, before: { priority: job.priority }, after: { priority: input.priority } });
       succeeded.push(id);

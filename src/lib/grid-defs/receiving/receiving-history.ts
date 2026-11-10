@@ -3,6 +3,7 @@
  */
 import { PO_TYPES, RECEIVING_TYPES } from "@/lib/enums";
 import type { ReceivingGridField } from "./purchase-orders";
+import { receivingTypeLabel } from "./receiving-types";
 
 export const RECEIVING_HISTORY_GRID_KEY = "receiving-history";
 
@@ -27,7 +28,7 @@ export const RECEIPT_GRID_FIELDS: readonly ReceivingGridField[] = [
   { field: "poType", label: "Purchase order type", type: "enum", options: PO_TYPES },
   { field: "quantity", label: "Quantity", type: "number" },
   { field: "receivedAt", label: "Receiving date", type: "date" },
-  { field: "type", label: "Receiving type", type: "enum", options: RECEIVING_TYPES },
+  { field: "type", label: "Receiving type", type: "enum", options: RECEIVING_TYPES, optionLabel: receivingTypeLabel },
   { field: "rmaNumber", label: "RMA number", type: "text" },
   { field: "shipmentOrderCode", label: "Shipment order code", type: "text" },
   { field: "sku", label: "SKU", type: "text" },

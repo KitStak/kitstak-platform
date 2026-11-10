@@ -6,7 +6,7 @@ import { idParamsSchema } from "@/server/repositories/platform-common";
 import { deleteShipmentPackages, getShipmentPackage, updateShipmentPackage } from "@/server/repositories/shipment-packages";
 
 export const GET = defineRoute({
-  permission: "settings.shipment_packages.view",
+  permission: ["settings.shipment_packages.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   handler: ({ db, auth, params }) => getShipmentPackage(db, auth, params.id),
 });

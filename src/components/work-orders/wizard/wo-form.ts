@@ -86,8 +86,10 @@ export function toInput(form: WoForm, componentIds: readonly string[]): unknown 
 
 export interface ComponentInfo { readonly productId: string; readonly sku: string }
 
+export const NO_COMPONENTS_PREFIX = "The kit has no components";
+
 /** Full validation, grouped by field key; the kit step also checks "without picking" sources. */
-export function validateForm(form: WoForm, components: readonly ComponentInfo[]): { readonly ok: true; readonly input: WorkOrderInput } | { readonly ok: false; readonly errors: FormErrors } {
+export function validateForm(form: WoForm, components: readonly ComponentInfo[], opts: { readonly componentsLoaded?: boolean } = {}): { readonly ok: true; readonly input: WorkOrderInput } | { readonly ok: false; readonly errors: FormErrors } {
   const parsed = workOrderInputSchema.safeParse(toInput(form, components.map((c) => c.productId)));
   const errors: Record<string, string> = {};
   if (!parsed.success) {
@@ -96,7 +98,8 @@ export function validateForm(form: WoForm, components: readonly ComponentInfo[])
       if (!errors[key]) errors[key] = issue.message;
     }
   }
-  if (form.kitProductId && components.length === 0) errors.kitProductId = errors.kitProductId ?? "The kit has no components; add them on the product first";
+  // Only once the selected kit's components loaded: while it loads, "no components" would be a stale error.
+  if (form.kitProductId && components.length === 0 && opts.componentsLoaded !== false) errors.kitProductId = errors.kitProductId ?? `${NO_COMPONENTS_PREFIX}; add them on the product first`;
   if (form.type === "Work Order without Picking") {
     for (const c of components) {
       if (!form.sources[c.productId]?.locationId) errors[`components.${c.productId}`] = `Choose a source location for ${c.sku}`;
@@ -114,6 +117,49 @@ export function errorsForStep(errors: FormErrors, step: WizardStepKey): FormErro
 export function firstErrorKey(errors: FormErrors): string | null {
   const keys = Object.keys(errors);
   return FIELD_ORDER.find((k) => keys.includes(k)) ?? keys[0] ?? null;
+}
+
+export const FIELD_LABELS: Readonly<Record<string, string>> = {
+  warehouseId: "Warehouse", clientId: "Client", code: "Work order code", type: "Work order type", shipmentOrderId: "Shipment order",
+  extraNote: "Extra note", kitProductId: "Kit SKU", requestedQty: "Kit quantity",
+  plannedStartAt: "Planned start date", plannedFinishAt: "Planned finish date", actualStartAt: "Actual start date", actualFinishAt: "Actual finish date",
+  kittingInstructions: "Kitting instructions",
+};
+
+/** State of the kit fetch the Kit step depends on (the wizard owns the query). */
+export interface KitLoadState {
+  readonly loading: boolean;
+  readonly error: string | null;
+}
+
+/**
+ * Why Next must stay disabled on `step` (Logiwa keeps Next disabled until the step is valid),
+ * or null when the step can be left. Pure: the reason is shown as the disabled button's tooltip.
+ */
+export function stepBlockReason(form: WoForm, components: readonly ComponentInfo[], step: WizardStepKey, kitState: KitLoadState = { loading: false, error: null }): string | null {
+  if (step === "kit") {
+    if (!form.clientId) return "Select a client in step 1 first";
+    if (!form.kitProductId) return "Select a kit to continue";
+    if (kitState.error) return "The kit couldn't be loaded. Retry to continue";
+    if (kitState.loading) return "Loading the kit and its components…";
+  }
+  const res = validateForm(form, components);
+  if (res.ok) return null;
+  const keys = Object.keys(errorsForStep(res.errors, step));
+  if (keys.length === 0) return null;
+  const ordered = [...keys].sort((a, b) => {
+    const ia = FIELD_ORDER.indexOf(a); const ib = FIELD_ORDER.indexOf(b);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+  const sourceKeys = ordered.filter((k) => k.startsWith("components"));
+  if (step === "kit" && ordered.length === sourceKeys.length && sourceKeys.length > 0) {
+    return `Choose a source for ${sourceKeys.length} component${sourceKeys.length === 1 ? "" : "s"}`;
+  }
+  const labels = [...new Set(ordered.map((k) => (k.startsWith("components") ? "Component sources" : FIELD_LABELS[k] ?? k)))];
+  if (labels.length > 1) return `Complete ${labels.join(", ")}`;
+  const label = labels[0] ?? "";
+  const message = res.errors[ordered[0] ?? ""] ?? "is required";
+  return message.toLowerCase().startsWith(label.toLowerCase()) ? message : `${label}: ${message}`;
 }
 
 /** Shallow structural equality used by the unsaved-changes guard. */

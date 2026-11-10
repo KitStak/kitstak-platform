@@ -1,8 +1,9 @@
-/** Workflows grid + builder schemas (M12; KitStaks-designed, spec 06 §5 / Part D). PURE. */
+/** Workflows grid + builder schemas (M12; KitStak-designed, spec 06 §5 / Part D). PURE. */
 import { z } from "zod";
-import { ruleConditionSchema } from "@/lib/domain-types";
+import { isConditionGroup, ruleConditionNodeSchema } from "@/lib/domain-types";
 import { MATCH_MODES, PRIORITIES, WORKFLOW_ACTIONS, WORKFLOW_TRIGGERS } from "@/lib/enums";
 import { optionalId, requiredText, versionField, type IntegrationField } from "./common";
+import { fieldDef } from "./rule-fields";
 
 export const WORKFLOWS_GRID_KEY = "workflows";
 export const WORKFLOW_RUNS_GRID_KEY = "workflow-runs";
@@ -67,10 +68,24 @@ export const ACTION_COPY: Readonly<Record<WorkflowActionName, string>> = {
   "Notify Users": "Sends an in-app notification with a link to the order.",
 };
 
+/** When each trigger fires (every one is dispatched by the server; see TRIGGER_SOURCES in the progress notes). */
+export const TRIGGER_COPY: Readonly<Record<WorkflowTrigger, string>> = {
+  "Shipment Order Created": "Any new order: created in the app, through the API, downloaded from a channel or imported.",
+  "Shipment Order Imported": "Only orders downloaded from a sales channel or imported from Excel/CSV (runs before Created workflows).",
+  "Shipment Order Updated": "An open order's header or lines are edited.",
+  "Purchase Order Created": "A purchase order is created in the app, through the API or by import.",
+  "Order Shipped": "Ship confirm marks an order Shipped or Partially Shipped.",
+};
+
 /** Purchase-order triggers can only notify (order actions don't apply to POs). */
 export const PO_TRIGGERS: ReadonlySet<WorkflowTrigger> = new Set(["Purchase Order Created"]);
+/** After shipping only non-changing actions make sense. */
+const SHIPPED_ACTIONS: readonly WorkflowActionName[] = ["Add Tag", "Notify Users"];
 export const actionsForTrigger = (trigger: WorkflowTrigger | null): readonly WorkflowActionName[] =>
-  trigger && PO_TRIGGERS.has(trigger) ? ["Notify Users"] : WORKFLOW_ACTIONS;
+  trigger && PO_TRIGGERS.has(trigger) ? ["Notify Users"] : trigger === "Order Shipped" ? SHIPPED_ACTIONS : WORKFLOW_ACTIONS;
+/** Condition field catalog for a trigger (rule-fields.ts CONDITION_CATALOGS key). */
+export const conditionCatalogForTrigger = (trigger: WorkflowTrigger | null): "order" | "purchaseOrder" =>
+  trigger && PO_TRIGGERS.has(trigger) ? "purchaseOrder" : "order";
 
 export const workflowActionSchema = z.object({
   action: z.enum(WORKFLOW_ACTIONS),
@@ -84,7 +99,7 @@ export const workflowSaveSchema = z.object({
   warehouseId: optionalId(),
   clientId: optionalId(),
   match: z.enum(MATCH_MODES),
-  conditions: z.array(ruleConditionSchema).max(50).default([]),
+  conditions: z.array(ruleConditionNodeSchema).max(50).default([]),
   actions: z.array(workflowActionSchema).max(20),
   isActive: z.boolean(),
   stopProcessing: z.boolean(),
@@ -92,6 +107,13 @@ export const workflowSaveSchema = z.object({
 }).superRefine((v, ctx) => {
   if (v.actions.length === 0) ctx.addIssue({ code: "custom", path: ["actions"], message: "Add at least one action" });
   const allowed = actionsForTrigger(v.trigger);
+  const catalog = conditionCatalogForTrigger(v.trigger);
+  const badField = (field: string) => `${field} isn't a ${catalog === "purchaseOrder" ? "purchase order" : "shipment order"} field; remove it or change the trigger`;
+  v.conditions.forEach((c, i) => {
+    if (isConditionGroup(c)) {
+      c.conditions.forEach((g, j) => { if (!fieldDef(catalog, g.field)) ctx.addIssue({ code: "custom", path: ["conditions", i, "conditions", j, "field"], message: badField(g.field) }); });
+    } else if (!fieldDef(catalog, c.field)) ctx.addIssue({ code: "custom", path: ["conditions", i, "field"], message: badField(c.field) });
+  });
   v.actions.forEach((a, i) => {
     if (!allowed.includes(a.action)) ctx.addIssue({ code: "custom", path: ["actions", i, "action"], message: `${a.action} isn't available for ${v.trigger}` });
     for (const p of ACTION_PARAMS[a.action]) {
@@ -115,3 +137,29 @@ export const bulkActiveSchema = z.object({ ids: z.array(z.string().trim().min(1)
 export const WORKFLOW_DEFAULTS: WorkflowSaveInput = {
   name: "", description: "", trigger: "Shipment Order Created", warehouseId: null, clientId: null, match: "All", conditions: [], actions: [], isActive: true, stopProcessing: false,
 };
+
+/** Short trigger label for the grid ("Shipment Order Created" → "Order created"); the full name stays in the tooltip/filter. */
+export function shortTriggerLabel(trigger: string): string {
+  const m = /^(Shipment Order|Purchase Order|Order) (\w+)$/.exec(trigger);
+  if (!m) return trigger;
+  const noun = m[1] === "Purchase Order" ? "PO" : "Order";
+  return `${noun} ${(m[2] ?? "").toLowerCase()}`;
+}
+
+/** Compact scope label: "All WH · All clients", "MLT1 · Acme". */
+export function shortScopeLabel(warehouseCode: string | null, clientName: string | null): string {
+  return `${warehouseCode ?? "All WH"} · ${clientName ?? "All clients"}`;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * Compact grid timestamp that fits a ~120px column: "11/09 11:46 PM" within the current
+ * year, "11/09/2025" for older dates. `time` formats the clock part per user prefs.
+ */
+export function compactWhen(value: string | Date, time: (v: Date) => string, now: Date = new Date()): string {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  const md = `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
+  return d.getFullYear() === now.getFullYear() ? `${md} ${time(d)}` : `${md}/${d.getFullYear()}`;
+}

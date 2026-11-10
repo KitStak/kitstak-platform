@@ -9,45 +9,76 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Ban, ChevronDown, Eye, FileText, History, PackageCheck, Pencil, Plus, Printer, Tag as TagIcon, Trash2, Upload } from "lucide-react";
 import { DataGrid, GridToolbar, useGrid, type RowAction } from "@/components/grid";
 import { PageHeader } from "@/components/layout/page-header";
-import { ChangeLogDrawer, PrintOptionsModal, TagPopover } from "@/components/shared";
+import { ChangeLogDrawer, TagPopover } from "@/components/shared";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { StatusPill } from "@/components/ui/status-pill";
 import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
-import { apiRequest } from "@/lib/api-client";
 import { useFormat } from "@/lib/format";
 import { PO_GRID_FIELDS, PURCHASE_ORDERS_GRID_KEY } from "@/lib/grid-defs/receiving/purchase-orders";
 import { buildPoColumns } from "./po-columns";
-import { bulkToast, errorMessage, openFile, postBulk, useFilterFields, useInvalidateReceiving, type PoRow, useCan } from "./receiving-shared";
+import { cancelCopy, cancelReason, deleteReason, partialActionReason, partitionPos, receiveAllReason, removeSerialsReason, skippedSummary, type SkippedPo } from "./po-action-rules";
+
+export { cancelCopy, cancelReason, deleteReason, partialActionReason, partitionPos, receiveAllReason, receiveReason, removeSerialsReason, SERIAL_PREADVICE_REASON, skippedSummary } from "./po-action-rules";
+import { PoLabelPrintModal } from "./po-label-print-modal";
+import { bulkToast, errorMessage, Nowrap, openFile, postBulk, useFilterFields, useInvalidateReceiving, type BulkResult, type PoRow, useCan, ReceivingReportLinks, slowLoadError, useSlowLoad } from "./receiving-shared";
 
 const P = "inventory.purchase_orders.";
-export const SERIAL_PREADVICE_REASON = "Serial number pre-advice isn't set up for purchase orders yet.";
 export const PO_HELPER = "A purchase order is a document issued by a buyer (you), specifying the products to be delivered by a vendor in the future.";
 
-type Dialog = { kind: "cancel" | "receive" | "delete"; rows: readonly PoRow[] } | null;
+/** `skipped`: selected rows the action can't run on (Cancel / Receive PO act on the eligible ones). */
+type Dialog = { kind: "cancel" | "receive" | "delete" | "remove-serials"; rows: readonly PoRow[]; skipped?: readonly SkippedPo[]; selectedCount?: number } | null;
 
-const OPEN = new Set(["Pending", "Started"]);
-export function cancelReason(rows: readonly PoRow[]): string | null {
-  const bad = rows.find((r) => !OPEN.has(r.status));
-  if (bad) return `Only Pending or Started orders can be cancelled (${bad.code} is ${bad.status}).`;
-  const received = rows.find((r) => r.activeReceipts > 0);
-  return received ? `${received.code} has received lines. Cancel its receipts first.` : null;
-}
-export function receiveReason(rows: readonly PoRow[]): string | null {
-  const bad = rows.find((r) => !OPEN.has(r.status));
-  return bad ? `Only Pending or Started orders can be received (${bad.code} is ${bad.status}).` : null;
-}
-export function deleteReason(rows: readonly PoRow[]): string | null {
-  const bad = rows.find((r) => r.status !== "Pending" || r.activeReceipts > 0 || r.receivedQuantity > 0);
-  return bad ? `Only Pending purchase orders without receipts can be deleted (${bad.code}).` : null;
+type Qc = ReturnType<typeof useQueryClient>;
+/** `useGrid` keys are ["grid", gridKey, path, query]. */
+const isPoGridKey = (key: readonly unknown[]): boolean => key[0] === "grid" && key[2] === "/api/purchase-orders";
+
+/** Replaces cached purchase-order grid rows with fresh rows from a mutation response. */
+export function patchPoRows(qc: Qc, rows: readonly PoRow[]): void {
+  if (rows.length === 0) return;
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  qc.setQueriesData<{ data?: unknown }>({ predicate: (q) => isPoGridKey(q.queryKey) }, (old) => {
+    if (!old || !Array.isArray(old.data)) return old;
+    let hit = false;
+    const data = (old.data as PoRow[]).map((r) => {
+      const fresh = r ? byId.get(r.id) : undefined;
+      if (!fresh) return r;
+      hit = true;
+      return fresh;
+    });
+    return hit ? { ...old, data } : old;
+  });
 }
 
-function HeaderActions({ canCreate, canImport, canImportSerials }: { readonly canCreate: boolean; readonly canImport: boolean; readonly canImportSerials: boolean }) {
+/** Drops deleted purchase orders from every cached grid page. */
+export function removePoRows(qc: Qc, ids: readonly string[]): void {
+  if (ids.length === 0) return;
+  const gone = new Set(ids);
+  qc.setQueriesData<{ data?: unknown; meta?: { total?: number } }>({ predicate: (q) => isPoGridKey(q.queryKey) }, (old) => {
+    if (!old || !Array.isArray(old.data)) return old;
+    const data = (old.data as PoRow[]).filter((r) => !gone.has(r?.id));
+    if (data.length === old.data.length) return old;
+    const removed = old.data.length - data.length;
+    return { ...old, data, ...(old.meta && typeof old.meta.total === "number" ? { meta: { ...old.meta, total: Math.max(0, old.meta.total - removed) } } : {}) };
+  });
+}
+
+function HeaderActions({ canCreate, canImport, canImportSerials, loading }: { readonly canCreate: boolean; readonly canImport: boolean; readonly canImportSerials: boolean; readonly loading: boolean }) {
+  // While permissions resolve, reserve the buttons (disabled) so the header never shifts.
+  if (loading) {
+    return (
+      <>
+        <Button variant="secondary" disabled aria-busy><Upload className="h-3.5 w-3.5" aria-hidden />Import<ChevronDown className="h-3.5 w-3.5" aria-hidden /></Button>
+        <Button variant="primary" disabled aria-busy><Plus className="h-3.5 w-3.5" aria-hidden />Create purchase order</Button>
+      </>
+    );
+  }
   return (
     <>
       {canImport || canImportSerials ? (
@@ -60,10 +91,10 @@ function HeaderActions({ canCreate, canImport, canImportSerials }: { readonly ca
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-[220px]">
-            <DropdownMenuItem href="/imports/purchase-orders" icon={FileText} disabledReason={canImport ? null : "You don't have permission to import purchase orders"} description="Purchase orders and vendors from Excel">
+            <DropdownMenuItem href="/receiving/import" icon={FileText} disabledReason={canImport ? null : "You don't have permission to import purchase orders"} description="Template, manual, upload and import history">
               Purchase orders
             </DropdownMenuItem>
-            <DropdownMenuItem href="/imports/po-serials" icon={FileText} disabledReason={canImportSerials ? null : "You don't have permission to import serial numbers"} description="Serial numbers per PO line">
+            <DropdownMenuItem href="/receiving/import?type=po-serials" icon={FileText} disabledReason={canImportSerials ? null : "You don't have permission to import serial numbers"} description="Serial numbers per PO line">
               Serial numbers
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -83,9 +114,12 @@ export function PoListPage() {
   const router = useRouter();
   const fmt = useFormat();
   const invalidate = useInvalidateReceiving();
+  const qc = useQueryClient();
   const fields = useFilterFields(PO_GRID_FIELDS, { customFieldEntity: "purchase_order", tagScope: "purchase_order" });
   const g = useGrid<PoRow>({ gridKey: PURCHASE_ORDERS_GRID_KEY, path: "/api/purchase-orders", fields });
+  const slow = useSlowLoad(g.isLoading);
   const columns = React.useMemo(() => buildPoColumns(), []);
+  const permsLoading = useCan(`${P}create`).isLoading;
   const can = {
     create: useCan(`${P}create`).allowed, edit: useCan(`${P}edit`).allowed, del: useCan(`${P}delete`).allowed, cancel: useCan(`${P}cancel_order`).allowed,
     receive: useCan(`${P}receive_po`).allowed, tag: useCan(`${P}tag`).allowed, productLabel: useCan(`${P}product_label`).allowed,
@@ -103,40 +137,46 @@ export function PoListPage() {
   const codeOf = (id: string) => seen.get(id)?.code ?? g.rows.find((r) => r.id === id)?.code ?? "selected order";
 
   const [dialog, setDialog] = React.useState<Dialog>(null);
-  const [labels, setLabels] = React.useState<readonly unknown[] | null>(null);
+  const [labelIds, setLabelIds] = React.useState<readonly string[] | null>(null);
   const [logFor, setLogFor] = React.useState<PoRow | null>(null);
 
-  const finish = async () => {
+  // Refetch in the background: confirm dialogs close as soon as the mutation resolves.
+  const finish = () => {
     g.clearSelection();
-    await invalidate();
+    void invalidate();
   };
 
-  const runBulk = async (kind: "cancel" | "receive" | "delete", rows: readonly PoRow[]) => {
+  const runBulk = async (kind: "cancel" | "receive" | "delete" | "remove-serials", rows: readonly PoRow[], skipped: readonly SkippedPo[] = []) => {
+    if (rows.length === 0) return;
     try {
       const result = await postBulk(`/api/purchase-orders/bulk/${kind}`, rows.map((r) => r.id));
+      // Patch the visible rows from the response at once, so the grid never shows (or offers
+      // actions on) a stale status while the background refetch runs.
+      if (kind === "delete") removePoRows(qc, result.succeeded);
+      else patchPoRows(qc, (result as BulkResult & { rows?: readonly PoRow[] }).rows ?? []);
+      setSeen((prev) => {
+        const next = new Map(prev);
+        for (const r of (result as BulkResult & { rows?: readonly PoRow[] }).rows ?? []) next.set(r.id, r);
+        if (kind === "delete") for (const id of result.succeeded) next.delete(id);
+        return next;
+      });
       const verbs = {
         cancel: { done: "cancelled", noun: "order", successMessage: rows.length === 1 ? "You have successfully cancelled an order." : undefined },
         receive: { done: "received", noun: "order", successMessage: "You have successfully received orders." },
         delete: { done: "deleted", noun: "purchase order" },
+        "remove-serials": { done: "cleared of pre-advised serials", noun: "purchase order", successMessage: `Removed ${((result as BulkResult & { removed?: number }).removed ?? 0).toLocaleString()} pre-advised serial number${(result as BulkResult & { removed?: number }).removed === 1 ? "" : "s"}.` },
       }[kind];
       bulkToast(result, codeOf, verbs);
+      const skippedText = skippedSummary(skipped, rows.length + skipped.length);
+      if (skippedText) toast.show({ variant: "info", title: "Skipped", message: skippedText, duration: 9000 });
+      const short = (result as BulkResult & { shortClosed?: readonly string[] }).shortClosed ?? [];
+      if (kind === "cancel" && short.length > 0) {
+        toast.info("Open balance cancelled", `${short.map(codeOf).join(", ")} had received stock: the open balance was cancelled, received stock kept, and the order${short.length === 1 ? " is" : "s are"} Completed.`);
+      }
     } catch (error) {
       toast.error("Error", errorMessage(error));
     } finally {
-      await finish();
-    }
-  };
-
-  const printProductLabels = async (ids: readonly string[]) => {
-    try {
-      const { data } = await apiRequest<unknown[]>("/api/purchase-orders/labels", { query: { ids: ids.join(",") } });
-      if (data.length === 0) {
-        toast.info("Nothing to print", "The selected purchase orders have no lines.");
-        return;
-      }
-      setLabels(data);
-    } catch (error) {
-      toast.error("Error", errorMessage(error));
+      finish();
     }
   };
 
@@ -147,32 +187,41 @@ export function PoListPage() {
     ...(can.del ? [{ key: "delete", label: "Delete", icon: Trash2, destructive: true, disabledReason: deleteReason([row]), onSelect: () => setDialog({ kind: "delete", rows: [row] }) }] : []),
   ];
 
-  const none = selected.length === 0 ? "Select at least one purchase order" : null;
-  const reasonCancel = none ?? cancelReason(selected);
-  const reasonReceive = none ?? receiveReason(selected);
+  const none = permsLoading ? "Loading permissions" : selected.length === 0 ? "Select at least one purchase order" : null;
+  // Cancel order and Receive PO act on the eligible rows of a mixed selection (Logiwa parity);
+  // the skipped rows and their reasons are listed in the confirm and in the result toast.
+  const reasonCancel = none ?? partialActionReason(selected, cancelReason);
+  const reasonReceive = none ?? partialActionReason(selected, receiveAllReason);
+  const openPartial = (kind: "cancel" | "receive") => {
+    const { eligible, skipped } = partitionPos(selected, kind === "cancel" ? cancelReason : receiveAllReason);
+    setDialog({ kind, rows: eligible, skipped, selectedCount: selected.length });
+  };
+  const skippedNote = dialog?.skipped && dialog.skipped.length > 0 ? ` ${skippedSummary(dialog.skipped, dialog.selectedCount ?? dialog.rows.length + dialog.skipped.length)}` : "";
   const reasonDelete = none ?? deleteReason(selected);
+  const reasonRemoveSerials = none ?? (can.removeSerials ? removeSerialsReason(selected) : "You don't have permission to remove serial numbers");
+  const serialRows = selected.filter((r) => (r.preAdvisedSerials ?? 0) > 0);
   const targets = [...new Set((dialog?.rows ?? []).map((r) => r.receivingLocationCode ?? "the default receiving location"))];
 
   const trailing = (
     <div className="flex items-center gap-2">
-      {can.tag ? (
+      {can.tag || permsLoading ? (
         <TagPopover entityType="purchase_order" scope="purchase_order" ids={g.selectedIds} appliedTagIds={selected.length === 1 ? selected[0]?.tags.map((t) => t.id) : []}
-          onApplied={() => void finish()} disabledReason={none}
-          trigger={<Button variant="secondary" aria-label="Tag" disabled={Boolean(none)}><TagIcon className="h-3.5 w-3.5" aria-hidden /><span className="hidden xl:inline">Tag</span></Button>} />
+          onApplied={finish} disabledReason={none}
+          trigger={<Button variant="secondary" aria-label="Tag" title={none ?? "Tag"} disabled={Boolean(none)}><TagIcon className="h-3.5 w-3.5" aria-hidden /><span className="hidden lg:inline">Tag</span></Button>} />
       ) : null}
-      {can.productLabel || can.poLabel ? (
+      {can.productLabel || can.poLabel || permsLoading ? (
         <DropdownMenu>
           <DisabledReason reason={none}>
             <DropdownMenuTrigger asChild disabled={Boolean(none)}>
-              <Button variant="secondary" aria-label="Label" disabled={Boolean(none)}>
+              <Button variant="secondary" aria-label="Label" title={none ?? "Label"} disabled={Boolean(none)}>
                 <Printer className="h-3.5 w-3.5" aria-hidden />
-                <span className="hidden xl:inline">Label</span>
+                <span className="hidden lg:inline">Label</span>
                 <ChevronDown className="h-3.5 w-3.5" aria-hidden />
               </Button>
             </DropdownMenuTrigger>
           </DisabledReason>
           <DropdownMenuContent align="end" className="min-w-[220px]">
-            <DropdownMenuItem icon={TagIcon} disabledReason={can.productLabel ? null : "You don't have permission to print product labels"} description="One label per ordered unit" onSelect={() => void printProductLabels(g.selectedIds)}>
+            <DropdownMenuItem icon={TagIcon} disabledReason={can.productLabel ? null : "You don't have permission to print product labels"} description="Per line or per unit (Use as line quantity)" onSelect={() => setLabelIds([...g.selectedIds])}>
               Product label
             </DropdownMenuItem>
             <DropdownMenuItem icon={FileText} disabledReason={can.poLabel ? null : "You don't have permission to print purchase orders"} description="The purchase order document (PDF)" onSelect={() => openFile(`/api/purchase-orders/documents?ids=${encodeURIComponent(g.selectedIds.join(","))}`)}>
@@ -181,38 +230,39 @@ export function PoListPage() {
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
-      {can.cancel ? (
+      {can.cancel || permsLoading ? (
         <DisabledReason reason={reasonCancel}>
-          <Button variant="secondary" aria-label="Cancel order" disabled={Boolean(reasonCancel)} onClick={() => setDialog({ kind: "cancel", rows: selected })}>
+          <Button variant="secondary" aria-label="Cancel order" title={reasonCancel ?? "Cancel order"} disabled={Boolean(reasonCancel)} onClick={() => openPartial("cancel")}>
             <Ban className="h-3.5 w-3.5" aria-hidden />
-            <span className="hidden xl:inline">Cancel order</span>
+            <span className="hidden lg:inline">Cancel order</span>
           </Button>
         </DisabledReason>
       ) : null}
-      {can.receive ? (
+      {can.receive || permsLoading ? (
         <DisabledReason reason={reasonReceive}>
-          <Button variant="secondary" aria-label="Receive PO" disabled={Boolean(reasonReceive)} onClick={() => setDialog({ kind: "receive", rows: selected })}>
+          <Button variant="secondary" aria-label="Receive PO" title={reasonReceive ?? "Receive PO"} disabled={Boolean(reasonReceive)} onClick={() => openPartial("receive")}>
             <PackageCheck className="h-3.5 w-3.5" aria-hidden />
-            <span className="hidden xl:inline">Receive PO</span>
+            <span className="hidden lg:inline">Receive PO</span>
           </Button>
         </DisabledReason>
       ) : null}
-      {can.del || can.removeSerials ? (
+      {can.del || can.removeSerials || permsLoading ? (
         <DropdownMenu>
           <DisabledReason reason={none}>
             <DropdownMenuTrigger asChild disabled={Boolean(none)}>
-              <Button variant="secondary" aria-label="Delete" disabled={Boolean(none)}>
+              <Button variant="secondary" aria-label="Delete" title={none ?? "Delete"} disabled={Boolean(none)}>
                 <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                <span className="hidden xl:inline">Delete</span>
+                <span className="hidden lg:inline">Delete</span>
                 <ChevronDown className="h-3.5 w-3.5" aria-hidden />
               </Button>
             </DropdownMenuTrigger>
           </DisabledReason>
           <DropdownMenuContent align="end" className="min-w-[240px]">
-            <DropdownMenuItem icon={Trash2} destructive disabledReason={can.del ? reasonDelete : "You don't have permission to delete purchase orders"} onSelect={() => setDialog({ kind: "delete", rows: selected })}>
+            {/* Disabled items drop the red tone and say why inline (not only on hover). */}
+            <DropdownMenuItem icon={Trash2} destructive={!(can.del ? reasonDelete : true)} description={can.del ? reasonDelete ?? "Pending orders without receipts" : "You don't have permission to delete purchase orders"} disabledReason={can.del ? reasonDelete : "You don't have permission to delete purchase orders"} onSelect={() => setDialog({ kind: "delete", rows: selected })}>
               Delete purchase order
             </DropdownMenuItem>
-            <DropdownMenuItem icon={Trash2} disabledReason={SERIAL_PREADVICE_REASON}>
+            <DropdownMenuItem icon={Trash2} destructive={!reasonRemoveSerials} description={reasonRemoveSerials ?? `${serialRows.reduce((n, r) => n + (r.preAdvisedSerials ?? 0), 0).toLocaleString()} pre-advised serial number(s)`} disabledReason={reasonRemoveSerials} onSelect={() => setDialog({ kind: "remove-serials", rows: serialRows })}>
               Remove serial number
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -225,7 +275,7 @@ export function PoListPage() {
     ? {
         columns: [{ key: "code", label: "PO number" }, { key: "status", label: "Status" }, { key: "date", label: "PO date" }, { key: "qty", label: "Open qty" }],
         rows: dialog.rows.map((r) => ({
-          code: r.code, status: <StatusPill status={r.status} domain="purchaseOrder" size="sm" />, date: fmt.date(r.poDate),
+          code: <Nowrap mono>{r.code}</Nowrap>, status: <StatusPill status={r.status} domain="purchaseOrder" size="sm" />, date: <Nowrap>{r.poDate ? fmt.date(r.poDate) : "—"}</Nowrap>,
           qty: Math.max(0, r.totalQuantity - r.receivedQuantity).toLocaleString(),
         })),
       }
@@ -233,11 +283,13 @@ export function PoListPage() {
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-      <PageHeader title="Purchase Order" tabs="receiving" helper={PO_HELPER} actions={<HeaderActions canCreate={can.create} canImport={can.imp} canImportSerials={can.impSerials} />} />
+      <PageHeader title="Purchase Orders" tabs="receiving" helper={PO_HELPER} actions={<><ReceivingReportLinks /><HeaderActions canCreate={can.create} canImport={can.imp} canImportSerials={can.impSerials} loading={permsLoading} /></>} />
       <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by code or reference" bulkNoun="purchase order" trailing={trailing} />
       <div className="flex min-h-0 flex-1 flex-col">
         <DataGrid<PoRow>
           {...g.gridProps}
+          loading={g.gridProps.loading && !slow}
+          error={slowLoadError(g.gridProps.error, slow)}
           columns={columns}
           getRowId={(row) => row.id}
           rowActions={rowActions}
@@ -253,12 +305,12 @@ export function PoListPage() {
         onOpenChange={(open) => !open && setDialog(null)}
         variant="danger"
         icon={Ban}
-        title="Are you sure you want to cancel selected order(s)?"
-        description="Cancelled purchase orders can't be received or changed."
+        title={cancelCopy(dialog?.rows ?? []).title}
+        description={`${cancelCopy(dialog?.rows ?? []).description}${skippedNote}`}
         records={confirmRecords}
         confirmLabel="Yes"
         cancelLabel="No"
-        onConfirm={() => runBulk("cancel", dialog?.rows ?? [])}
+        onConfirm={() => runBulk("cancel", dialog?.rows ?? [], dialog?.skipped)}
       />
       <ConfirmDialog
         open={dialog?.kind === "receive"}
@@ -266,11 +318,11 @@ export function PoListPage() {
         variant="info"
         icon={PackageCheck}
         title={`Receive ${dialog?.rows.length ?? 0} purchase order${dialog?.rows.length === 1 ? "" : "s"} in full?`}
-        description={`Every open line is received into ${targets.join(", ")}. Lot, expiry and serial-tracked lines need Receive items on the order instead.`}
+        description={`Every open line is received into ${targets.join(", ")}.${skippedNote}`}
         records={confirmRecords}
         confirmLabel="Receive"
         cancelLabel="No"
-        onConfirm={() => runBulk("receive", dialog?.rows ?? [])}
+        onConfirm={() => runBulk("receive", dialog?.rows ?? [], dialog?.skipped)}
       />
       <ConfirmDialog
         open={dialog?.kind === "delete"}
@@ -283,7 +335,19 @@ export function PoListPage() {
         cancelLabel="No"
         onConfirm={() => runBulk("delete", dialog?.rows ?? [])}
       />
-      <PrintOptionsModal open={labels !== null} onOpenChange={(open) => !open && setLabels(null)} typeKeys={["product-label"]} records={labels ?? []} title="Print product labels" />
+      <ConfirmDialog
+        open={dialog?.kind === "remove-serials"}
+        onOpenChange={(open) => !open && setDialog(null)}
+        variant="danger"
+        icon={Trash2}
+        title={`Remove pre-advised serial numbers from ${dialog?.rows.length ?? 0} purchase order${dialog?.rows.length === 1 ? "" : "s"}?`}
+        description="Only the pre-advice is removed. Serials already received stay on their receipts and in stock."
+        records={dialog ? { columns: [{ key: "code", label: "PO number" }, { key: "status", label: "Status" }, { key: "serials", label: "Serials" }], rows: dialog.rows.map((r) => ({ code: <Nowrap mono>{r.code}</Nowrap>, status: <StatusPill status={r.status} domain="purchaseOrder" size="sm" />, serials: (r.preAdvisedSerials ?? 0).toLocaleString() })) } : undefined}
+        confirmLabel="Remove"
+        cancelLabel="No"
+        onConfirm={() => runBulk("remove-serials", dialog?.rows ?? [])}
+      />
+      <PoLabelPrintModal open={labelIds !== null} onOpenChange={(open) => !open && setLabelIds(null)} ids={labelIds ?? []} />
       {logFor ? <ChangeLogDrawer open onOpenChange={(open) => !open && setLogFor(null)} entityType="purchase_order" entityId={logFor.id} entityCode={logFor.code} /> : null}
     </div>
   );

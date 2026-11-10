@@ -18,3 +18,17 @@ export function openOrdersHref(productId: string, warehouseId: string | null): s
   if (warehouseId) qs.set("warehouseId", warehouseId);
   return `/api/inventory/open-orders?${qs.toString()}`;
 }
+
+/** Open PO Qty link: the route redirects to Purchase Orders filtered to exactly the open POs. */
+export function openPurchaseOrdersLinkHref(productId: string, warehouseId: string | null): string {
+  const qs = new URLSearchParams({ productId });
+  if (warehouseId) qs.set("warehouseId", warehouseId);
+  return `/api/inventory/open-pos?${qs.toString()}`;
+}
+
+/** By Location grid filtered to one SKU (and warehouse when the row is warehouse-scoped). */
+export function byLocationFilters(sku: string, warehouseId: string | null): GridFilter[] {
+  const out: GridFilter[] = [{ field: "sku", op: "eq", value: sku }];
+  if (warehouseId) out.push({ field: "warehouseId", op: "in", values: [warehouseId] });
+  return out;
+}

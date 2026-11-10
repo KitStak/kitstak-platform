@@ -1,7 +1,7 @@
 import * as React from "react";
 import { ArrowUp, ChevronsUp, FileText, ShoppingBag, Store, Truck, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { differenceTone, isPartialStatus, statusLabel, statusTone, type StatusDomain } from "@/lib/status-colors";
+import { differenceTone, isPartialStatus, pillStyle, statusLabel, statusTone, type StatusDomain } from "@/lib/status-colors";
 
 /**
  * Status pill (BUILD_PLAN 0.5). Colours come from `@/lib/status-colors`; pass `domain`
@@ -27,7 +27,7 @@ export function StatusPill({
   return (
     <span
       data-status={status}
-      style={{ backgroundColor: tone.bg, color: tone.fg }}
+      style={pillStyle(tone)}
       className={cn(
         "inline-flex items-center gap-1 rounded-full font-semibold whitespace-nowrap",
         size === "sm" ? "px-1.5 py-px text-[10px] leading-4" : "px-2 py-0.5 text-[11px] leading-4",
@@ -60,7 +60,7 @@ export function PriorityFlag({ priority }: { priority: string | null }) {
   return (
     <span
       data-priority={key}
-      style={{ backgroundColor: tone.bg, color: tone.fg }}
+      style={pillStyle(tone)}
       className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold"
     >
       {Icon ? <Icon className="h-3 w-3" aria-hidden /> : null}
@@ -76,7 +76,7 @@ export const PriorityPill = PriorityFlag;
 export function DifferencePill({ value, className }: { value: number; className?: string }) {
   const tone = differenceTone(value);
   return (
-    <span style={{ backgroundColor: tone.bg, color: tone.fg }} className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums", className)}>
+    <span style={pillStyle(tone)} className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums", className)}>
       {value > 0 ? `+${value}` : value}
     </span>
   );

@@ -47,6 +47,7 @@ export const countPlanLines = sqliteTable("count_plan_lines", {
   ...stamps(),
 }, (t) => [
   index("count_lines_plan_idx").on(t.planId),
+  index("count_lines_plan_status_idx").on(t.planId, t.status),
   index("count_lines_location_idx").on(t.locationId),
 ]);
 

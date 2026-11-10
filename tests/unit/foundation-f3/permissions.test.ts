@@ -13,10 +13,12 @@ import { AppError } from "@/server/api/errors";
 import { assignRole, seededDb, type SeededDb } from "./fixtures";
 
 describe("permission catalog", () => {
-  it("matches the 08 §Roles tree group totals (377 actions)", () => {
+  it("matches the 08 §Roles tree group totals (377 Logiwa actions + Return Station Receive Return)", () => {
     const totals = Object.fromEntries(countByGroup(new Set()).map((g) => [g.groupKey, g.total]));
-    expect(totals).toEqual({ fulfillment: 73, inventory: 67, automation: 22, integrations: 6, reports: 18, settings: 121, mobile: 68, analytics: 2 });
-    expect(PERMISSION_KEYS).toHaveLength(377);
+    // inventory 68 = Logiwa 67 + inventory.return_station.receive_return (stations-returns REQ-1);
+    // settings 123 = 121 + LP Numbers Delete (facility-config REQ-R10-1) + Vendors Delete (inbound round 5).
+    expect(totals).toEqual({ fulfillment: 73, inventory: 68, automation: 22, integrations: 6, reports: 18, settings: 123, mobile: 68, analytics: 2 });
+    expect(PERMISSION_KEYS).toHaveLength(380);
   });
 
   it("has unique, well-formed keys with labels", () => {
@@ -34,7 +36,7 @@ describe("permission catalog", () => {
   it("manager = Supervisor set (Logiwa counts)", () => {
     const manager = new Set(DEFAULT_ROLE_PERMISSIONS.manager);
     const granted = Object.fromEntries(countByGroup(manager).map((g) => [g.groupKey, g.granted]));
-    expect(granted).toEqual({ fulfillment: 70, inventory: 67, automation: 22, integrations: 6, reports: 18, settings: 116, mobile: 66, analytics: 2 });
+    expect(granted).toEqual({ fulfillment: 70, inventory: 68, automation: 22, integrations: 6, reports: 18, settings: 118, mobile: 66, analytics: 2 });
   });
 
   it("admin has everything; viewer only views outside Settings/Mobile (+ self service)", () => {
@@ -45,7 +47,15 @@ describe("permission catalog", () => {
     expect(viewer).not.toContain("settings.users.view");
     expect(viewer).toContain("settings.my_profile.view");
     const settingsKeys = viewer.filter((k) => k.startsWith("settings."));
-    expect(settingsKeys.sort()).toEqual(["settings.change_password.view", "settings.my_profile.view"]);
+    // Self-service, the read-only floor lookups (facility-config REQ-R2-4 / R4-1, catalog REQ-5,
+    // organization-billing R2-20) and finance read access (organization-billing R2-20).
+    expect(settingsKeys.sort()).toEqual([
+      "settings.billing.view", "settings.billing_report.view", "settings.change_password.view",
+      "settings.customers.view", "settings.locations.view", "settings.lp_numbers.view", "settings.lp_types.view",
+      "settings.mobile_carts.view", "settings.my_profile.view", "settings.product_listing.view", "settings.products.view",
+      "settings.retailers.view", "settings.shipment_packages.view", "settings.vas_operations.view", "settings.warehouse.view",
+    ]);
+    expect(viewer.filter((k) => k.startsWith("settings.") && !k.endsWith(".view"))).toEqual([]);
   });
 
   it("operator executes but has no settings, billing, users or deletes", () => {

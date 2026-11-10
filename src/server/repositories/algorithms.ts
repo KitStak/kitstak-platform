@@ -230,9 +230,44 @@ export interface PutawayTestResult extends SuggestResult {
   readonly suggestions: readonly (SuggestResult["suggestions"][number] & { readonly areaType: string | null; readonly zone: string | null; readonly onHand: number })[];
 }
 
+export interface PutawayInventoryRow {
+  readonly id: string;
+  readonly locationId: string;
+  readonly locationCode: string;
+  readonly status: string;
+  readonly packType: string;
+  readonly lpId: string | null;
+  readonly lpNumber: string | null;
+  readonly lotNumber: string | null;
+  readonly expiryDate: string | null;
+  readonly productionDate: string | null;
+  readonly receivedAt: string;
+  readonly poNumber: string | null;
+  readonly damageReason: string | null;
+  readonly onHand: number;
+  readonly allocated: number;
+}
+
+/** Test Algorithm › Product Putaway: the product's inventory rows in the warehouse to test from (Logiwa parity). */
+export function putawayTestInventory(db: AppDb, auth: AuthContext, warehouseId: string, productId: string): PutawayInventoryRow[] {
+  assertWarehouseInScope(auth, warehouseId);
+  const product = assertFound(db.select({ clientId: s.products.clientId }).from(s.products).where(eq(s.products.id, productId)).get(), "Product");
+  if (!hasClient(auth.scope, product.clientId)) throw new AppError("NOT_FOUND", "Product not found");
+  const i = s.inventory;
+  return db.select({ i, code: s.locations.code, lp: s.licensePlates.number }).from(i)
+    .innerJoin(s.locations, eq(s.locations.id, i.locationId)).leftJoin(s.licensePlates, eq(s.licensePlates.id, i.lpId))
+    .where(and(eq(i.warehouseId, warehouseId), eq(i.productId, productId), sql`${i.onHand} > 0`))
+    .orderBy(asc(s.locations.code)).limit(200).all()
+    .map(({ i: r, code, lp }) => ({
+      id: r.id, locationId: r.locationId, locationCode: code, status: r.status, packType: r.packType, lpId: r.lpId, lpNumber: lp ?? null, lotNumber: r.lotNumber,
+      expiryDate: r.expiryDate, productionDate: r.productionDate, receivedAt: r.receivedAt, poNumber: r.poNumber, damageReason: r.damageReason, onHand: r.onHand, allocated: r.allocated,
+    }));
+}
+
 export function testPutaway(db: AppDb, auth: AuthContext, algorithmId: string | null, input: {
   warehouseId: string; productId: string; qty: number; fromLocationId?: string | null; lpId?: string | null; isReceiving: boolean;
-  lot?: string | null; expiry?: string | null; damageReason?: string | null; draft?: { warehouseId: string; rules: readonly AlgorithmRuleSave[] };
+  lot?: string | null; expiry?: string | null; damageReason?: string | null; packType?: string | null; productionDate?: string | null; receivedAt?: string | null; allocatedQty?: number | null;
+  draft?: { warehouseId: string; rules: readonly AlgorithmRuleSave[] };
 }): PutawayTestResult {
   assertWarehouseInScope(auth, input.warehouseId);
   const product = assertFound(db.select().from(s.products).where(eq(s.products.id, input.productId)).get(), "Product");
@@ -240,6 +275,7 @@ export function testPutaway(db: AppDb, auth: AuthContext, algorithmId: string | 
   const result = withDraft(db, "Putaway", input.draft, algorithmId, (tx, id) => suggestLocations(tx, {
     warehouseId: input.warehouseId, productId: input.productId, qty: input.qty, fromLocationId: input.fromLocationId ?? null, lpId: input.lpId ?? null,
     isReceiving: input.isReceiving, lot: input.lot ?? null, expiry: input.expiry ?? null, damageReason: input.damageReason ?? null, algorithmId: id, limit: 10,
+    ...(input.packType ? { packType: input.packType } : {}), productionDate: input.productionDate ?? null, ...(input.receivedAt ? { receivedAt: input.receivedAt } : {}), allocatedQty: input.allocatedQty ?? 0,
   }));
   const ids = result.suggestions.map((x) => x.locationId);
   const locs = ids.length === 0 ? [] : db.select({ id: s.locations.id, areaType: s.locations.areaType, zone: s.locations.zone }).from(s.locations).where(inArray(s.locations.id, ids)).all();

@@ -3,7 +3,7 @@ import { defineRoute } from "@/server/api/define-route";
 import { AppError } from "@/server/api/errors";
 import { roleSchema } from "@/lib/grid-defs/admin/roles";
 import { idParamsSchema } from "@/server/repositories/platform-common";
-import { deleteRoles, getRole, updateRole } from "@/server/repositories/roles";
+import { deleteRoles, getRole, rolesByIds, updateRole } from "@/server/repositories/roles";
 
 export const GET = defineRoute({
   permission: ["settings.roles.view", "settings.users.view"],
@@ -26,10 +26,12 @@ export const DELETE = defineRoute({
   permission: "settings.roles.delete",
   params: idParamsSchema,
   handler: ({ db, auth, actor, params, audit }) => {
+    // Snapshot the name first: after the delete the audit grid can't look it up any more.
+    const name = rolesByIds(db, [params.id])[0]?.name ?? null;
     const result = deleteRoles(db, auth, actor, [params.id]);
     const failure = result.failed[0];
     if (failure) throw new AppError(failure.code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_STATE", failure.message);
-    audit({ action: "role.delete", entity: "role", entityId: params.id });
+    audit({ action: "role.delete", entity: "role", entityId: params.id, detail: { name } });
     return result;
   },
 });

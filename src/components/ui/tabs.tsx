@@ -31,9 +31,20 @@ function CountBadge({ count, active }: { readonly count: number; readonly active
 
 /** The strip draws its baseline as an inset shadow so the 2px active underline
  * paints over it without overflowing the box (no native vertical scrollbar). */
+/**
+ * Radix focuses a trigger on mouse down and Chrome then matches `:focus-visible`, so a ring
+ * stays on a clicked tab. Mark pointer-initiated focus and hide the ring for it; keyboard focus
+ * keeps the ring.
+ */
+const pointerFocusProps = {
+  onPointerDown: (e: React.PointerEvent<HTMLElement>) => { e.currentTarget.dataset.pointer = ""; },
+  onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => { delete e.currentTarget.dataset.pointer; },
+  onBlur: (e: React.FocusEvent<HTMLElement>) => { delete e.currentTarget.dataset.pointer; },
+} as const;
+
 const underlineTrigger =
   "inline-flex items-center gap-1.5 border-b-2 pb-2 pt-2.5 text-[12px] font-semibold uppercase tracking-[0.02em] whitespace-nowrap transition-colors outline-none " +
-  "focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:rounded-sm disabled:cursor-not-allowed disabled:opacity-50";
+  "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-info/40 focus-visible:rounded-sm data-[pointer]:ring-0 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function UnderlineTabs({
   tabs,
@@ -59,6 +70,7 @@ export function UnderlineTabs({
               key={tab.key}
               value={tab.key}
               disabled={tab.disabled}
+              {...pointerFocusProps}
               className={cn(underlineTrigger, isActive ? "border-primary text-primary" : "border-transparent text-secondary hover:border-border-strong hover:text-foreground")}
             >
               {Icon ? <Icon className="h-3.5 w-3.5" aria-hidden /> : null}
@@ -143,9 +155,10 @@ export function SegmentedTabs({
               key={tab.key}
               value={tab.key}
               disabled={tab.disabled}
+              {...pointerFocusProps}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-md font-medium whitespace-nowrap text-secondary transition-[color,background-color,box-shadow] outline-none",
-                "hover:text-body focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50",
+                "hover:text-body focus-visible:ring-2 focus-visible:ring-info/40 data-[pointer]:ring-0 disabled:cursor-not-allowed disabled:opacity-50",
                 "data-[state=active]:bg-surface data-[state=active]:text-foreground data-[state=active]:shadow-xs",
                 size === "sm" ? "h-6 px-2 text-[12px]" : "h-7 px-3 text-[13px]"
               )}
@@ -170,7 +183,7 @@ export interface VerticalNavItem {
 }
 
 const verticalItem =
-  "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-info/30";
 
 export function VerticalNav({
   items,

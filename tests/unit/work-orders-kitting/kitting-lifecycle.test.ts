@@ -5,13 +5,14 @@ import * as schema from "@/server/db/schema";
 import { ledger } from "@/server/domain/ledger";
 import { executeKitting } from "@/server/domain/task-handlers/kitting";
 import { EMPTY_GRID_QUERY } from "@/server/query/grid-query";
+import { createKitSchema } from "@/lib/grid-defs/work-orders/work-order-model";
 import { computeKitStats, listKitComponents, listKitInventory, recalcKitInventory } from "@/server/repositories/kits";
 import {
   createWorkOrder, deleteWorkOrder, getWorkOrderDetail, listWorkOrders, updateWorkOrder, workOrderStatusCounts,
 } from "@/server/repositories/work-orders";
 import { canReopenInProcess, WORK_ORDER_EXCEPTION_WAVE } from "@/server/repositories/work-orders-adapters";
 import {
-  allocateWorkOrderWith, cancelPicking, cancelWorkOrder, createKit, disassembleKit,
+  allocateWorkOrderWith, cancelPicking, cancelWorkOrder, createKit, disassembleKit, disassembleStockKit,
 } from "@/server/repositories/work-orders-commands";
 import { buildPickLists, runPicking } from "@/server/repositories/work-orders-ops";
 import { allocatedOf, createKitWorld, onHandAt, stock, woInput, type KitWorld } from "./kit-world";
@@ -70,7 +71,9 @@ describe("work order without picking (acceptance KS-TEST-WO-E2E)", () => {
     expect(after?.actualStartAt).toBeTruthy();
     expect(after?.actualFinishAt).toBeTruthy();
     const kitting = w.db.select().from(schema.inventoryTransactions).where(and(eq(schema.inventoryTransactions.workOrderId, wo.id), eq(schema.inventoryTransactions.type, "Kitting"))).all();
-    expect(kitting.map((t) => t.productId).sort()).toEqual([w.productId, w.product2Id].sort());
+    // Logiwa parity (round 9): component consumption and the kit output both post as Kitting.
+    expect(kitting.map((t) => t.productId).sort()).toEqual([w.productId, w.product2Id, w.kitId].sort());
+    expect(kitting.find((t) => t.productId === w.kitId)?.uomQty).toBe(5);
     const receipts = w.db.select().from(schema.receipts).where(eq(schema.receipts.workOrderId, wo.id)).all();
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({ type: "Kitting", quantity: 5, productId: w.kitId, locationId: w.kittingLocId });
@@ -80,10 +83,12 @@ describe("work order without picking (acceptance KS-TEST-WO-E2E)", () => {
     expect(codeOf(() => deleteWorkOrder(w.db, w.wctx, wo.id))).toBe("INVALID_STATE");
   });
 
-  it("partial builds move Open → In Process, cap at the remaining qty and honour versions", () => {
+  it("partial builds keep the WO Open (Logiwa), cap at the remaining qty and honour versions", () => {
     const wo = createWorkOrder(w.db, w.wctx, woInput(w));
     const base = { workOrderId: wo.id, locationId: w.kittingLocId, lpId: null, lotNumber: null, expiryDate: null, productionDate: null };
-    expect(createKit(w.db, w.wctx, { ...base, qty: 2 }).status).toBe("In Process");
+    expect(createKit(w.db, w.wctx, { ...base, qty: 2 }).status).toBe("Open");
+    expect(codeOf(() => deleteWorkOrder(w.db, w.wctx, wo.id))).toBe("INVALID_STATE");
+    expect(codeOf(() => cancelWorkOrder(w.db, w.wctx, wo.id))).toBe("INVALID_STATE");
     expect(codeOf(() => createKit(w.db, w.wctx, { ...base, qty: 4 }))).toBe("VALIDATION");
     expect(codeOf(() => createKit(w.db, w.wctx, { ...base, qty: 1, version: 1 }))).toBe("CONFLICT");
     expect(createKit(w.db, w.wctx, { ...base, qty: 3 }).status).toBe("Completed");
@@ -109,8 +114,24 @@ describe("work order without picking (acceptance KS-TEST-WO-E2E)", () => {
     const receipts = w.db.select().from(schema.receipts).where(and(eq(schema.receipts.workOrderId, wo.id), eq(schema.receipts.type, "DisassembleKit"))).all();
     expect(receipts.map((r) => r.quantity).sort()).toEqual([2, 4]);
     const tx = w.db.select().from(schema.inventoryTransactions).where(and(eq(schema.inventoryTransactions.workOrderId, wo.id), eq(schema.inventoryTransactions.type, "Disassemble Kit"))).all();
-    expect(tx.length).toBe(1);
+    // Kit consumed (1 row) and both components returned (2 rows) all post as Disassemble Kit.
+    expect(tx.length).toBe(3);
+    expect(tx.filter((t) => t.productId === w.kitId)).toHaveLength(1);
     expect(codeOf(() => disassembleKit(w.db, w.wctx, { workOrderId: wo.id, qty: 4, sourceInventoryId: bucket.id, targetLocationId: w.loc.storageB, targetLpId: null }))).toBe("VALIDATION");
+    clean();
+  });
+  it("Disassemble requires and stamps per-component attributes on tracked components", () => {
+    const wo = createWorkOrder(w.db, w.wctx, woInput(w));
+    createKit(w.db, w.wctx, { workOrderId: wo.id, qty: 2, locationId: w.kittingLocId, lpId: null, lotNumber: null, expiryDate: null, productionDate: null });
+    const bucket = w.db.select().from(schema.inventory).where(and(eq(schema.inventory.productId, w.kitId), eq(schema.inventory.locationId, w.kittingLocId))).get();
+    if (!bucket) throw new Error("kit bucket");
+    w.db.update(schema.products).set({ trackLot: true }).where(eq(schema.products.id, w.product2Id)).run();
+    const base = { workOrderId: wo.id, qty: 1, sourceInventoryId: bucket.id, targetLocationId: w.loc.storageB, targetLpId: null };
+    expect(codeOf(() => disassembleKit(w.db, w.wctx, base))).toBe("VALIDATION");
+    disassembleKit(w.db, w.wctx, { ...base, componentAttributes: [{ productId: w.product2Id, lotNumber: "LOT-D1", expiryDate: null, productionDate: null }] });
+    const lots = w.db.select().from(schema.inventory).where(and(eq(schema.inventory.productId, w.product2Id), eq(schema.inventory.locationId, w.loc.storageB))).all().map((r) => r.lotNumber);
+    expect(lots).toContain("LOT-D1");
+    w.db.update(schema.products).set({ trackLot: false }).where(eq(schema.products.id, w.product2Id)).run();
     clean();
   });
 });
@@ -234,15 +255,58 @@ describe("kit reports", () => {
   });
 
   it("recalculates kit_inventory_stats and serves both reports", () => {
-    const res = recalcKitInventory(w.db, new Date("2026-11-06T12:00:00Z"));
+    const stamp = new Date();
+    const res = recalcKitInventory(w.db, stamp);
     expect(res.rows).toBeGreaterThan(0);
     const kits = listKitInventory(w.db, w.scope, EMPTY_GRID_QUERY);
     const kit = kits.rows.find((r) => r.kitProductId === w.kitId);
-    expect(kit).toMatchObject({ sku: "MLT-KIT-2PK", netKittingCapacity: 12, updatedAt: "2026-11-06T12:00:00.000Z" });
+    expect(kit).toMatchObject({ sku: "MLT-KIT-2PK", netKittingCapacity: 12, updatedAt: stamp.toISOString() });
     const comps = listKitComponents(w.db, w.scope, EMPTY_GRID_QUERY);
     const widget = comps.rows.find((r) => r.componentProductId === w.productId);
     expect(widget?.includedKits).toEqual(["MLT-KIT-2PK"]);
     expect(widget?.totalAvailableQty).toBe(30);
     expect(widget?.reorderQty).toBe(0);
+  });
+});
+
+describe("standalone Disassemble Kit (no work order, Logiwa toolbar)", () => {
+  it("breaks free kit stock down by the BOM with DisassembleKit receipts", () => {
+    const kitBucket = stock(w, w.kitId, 4);
+    const res = disassembleStockKit(w.db, w.wctx, { kitProductId: w.kitId, qty: 3, sourceInventoryId: kitBucket.id, targetLocationId: w.loc.storageB, targetLpId: null });
+    expect(res.receiptIds).toHaveLength(2);
+    expect(onHandAt(w, w.kitId)).toBe(1);
+    expect(onHandAt(w, w.productId, w.loc.storageB)).toBe(6);
+    expect(onHandAt(w, w.product2Id, w.loc.storageB)).toBe(3);
+    const receipts = w.db.select().from(schema.receipts).where(eq(schema.receipts.type, "DisassembleKit")).all();
+    expect(receipts.map((r) => r.quantity).sort()).toEqual([3, 6]);
+    expect(codeOf(() => disassembleStockKit(w.db, w.wctx, { kitProductId: w.kitId, qty: 2, sourceInventoryId: kitBucket.id, targetLocationId: w.loc.storageB, targetLpId: null }))).toBe("INSUFFICIENT_STOCK");
+    expect(codeOf(() => disassembleStockKit(w.db, w.wctx, { kitProductId: w.productId, qty: 1, sourceInventoryId: kitBucket.id, targetLocationId: w.loc.storageB, targetLpId: null }))).toBe("NOT_FOUND");
+    clean();
+  });
+});
+
+describe("Round 1 parity: kitting time range, LP checks, schema", () => {
+  it("Create Kit stamps the chosen actual start/finish on the work order", () => {
+    const wo = createWorkOrder(w.db, w.wctx, woInput(w));
+    const start = "2026-11-09T08:00:00.000Z";
+    const finish = "2026-11-09T09:30:00.000Z";
+    createKit(w.db, w.wctx, { workOrderId: wo.id, qty: 5, locationId: w.kittingLocId, lpId: null, lotNumber: null, expiryDate: null, productionDate: null, actualStartAt: start, actualFinishAt: finish });
+    const after = woOf(wo.id);
+    expect(after?.actualStartAt).toBe(start);
+    expect(after?.actualFinishAt).toBe(finish);
+    clean();
+  });
+
+  it("createKitSchema rejects a finish before the start", () => {
+    const res = createKitSchema.safeParse({ workOrderId: "x", qty: 1, locationId: "l", actualStartAt: "2026-11-09T10:00:00Z", actualFinishAt: "2026-11-09T09:00:00Z" });
+    expect(res.success).toBe(false);
+    expect(res.error?.issues[0]?.path).toEqual(["actualFinishAt"]);
+  });
+
+  it("Disassemble refuses a component LP from another warehouse or that does not exist", () => {
+    const kitBucket = stock(w, w.kitId, 2);
+    expect(codeOf(() => disassembleStockKit(w.db, w.wctx, { kitProductId: w.kitId, qty: 1, sourceInventoryId: kitBucket.id, targetLocationId: w.loc.storageB, targetLpId: "no-such-lp" }))).toBe("VALIDATION");
+    expect(onHandAt(w, w.kitId)).toBe(2);
+    clean();
   });
 });

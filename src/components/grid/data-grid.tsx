@@ -33,7 +33,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { ColumnChooser, type ChooserColumn } from "./column-chooser";
 import { DataGridBody } from "./data-grid-body";
 import { DataGridHeader, HeaderDndContext } from "./data-grid-header";
-import { actionsColumn, columnLabel, expandColumn, EXPAND_COLUMN_ID, isSystemColumn, SELECT_COLUMN_ID, selectColumn, stickyRightOffsetFor } from "./data-grid-columns";
+import { actionsColumn, columnLabel, expandColumn, EXPAND_COLUMN_ID, gutterColumn, isSystemColumn, SELECT_COLUMN_ID, selectColumn, stickyRightOffsetFor } from "./data-grid-columns";
 import { ExportButton, type ExportColumnSpec } from "./export-button";
 import { GridFooter } from "./grid-footer";
 import { clampWidth, moveColumn, visibilityMap, type PrefColumn } from "./grid-prefs";
@@ -93,6 +93,47 @@ export interface DataGridProps<T> {
   /** Hide the built-in toolbar row (when a page renders `GridToolbar` itself). */
   readonly hideToolbar?: boolean;
   readonly className?: string;
+  /**
+   * True while the rows on screen belong to a previous query (search / filter / page change in
+   * flight): the body dims, a thin progress bar runs under the header and the grid is aria-busy.
+   */
+  readonly refreshing?: boolean;
+  /** Scroll this row into view and flash it for 2 s (e.g. the record just created or saved). */
+  readonly highlightRowId?: string | null;
+  /** Footer export: "auto" (default: Excel when gridKey + queryString, else CSV), "csv", or "none" (the page renders its own). */
+  readonly exportMode?: "auto" | "csv" | "none";
+  /** Excel export key/query when they differ from the prefs `gridKey` / `queryString` (e.g. a detail page lines grid). */
+  readonly exportGridKey?: string;
+  readonly exportQuery?: string;
+}
+
+/** Scroll a row into view and flash it once when `rowId` appears in the rendered page. */
+function useHighlightRow(scrollRef: React.RefObject<HTMLDivElement | null>, rowId: string | null, rowCount: number) {
+  const done = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!rowId || done.current === rowId) return;
+    const root = scrollRef.current;
+    const el = root?.querySelector<HTMLElement>(`tr[data-row-id="${CSS.escape(rowId)}"]`);
+    if (!el) return;
+    done.current = rowId;
+    el.scrollIntoView({ block: "nearest" });
+    el.setAttribute("data-highlight", "");
+    const t = window.setTimeout(() => el.removeAttribute("data-highlight"), 2000);
+    return () => window.clearTimeout(t);
+  }, [scrollRef, rowId, rowCount]);
+}
+
+/** Publishes the scroll box width as `--grid-visible-width` (expanded rows pin their panel to it). */
+function useVisibleWidthVar(scrollRef: React.RefObject<HTMLDivElement | null>) {
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const apply = () => el.style.setProperty("--grid-visible-width", `${el.clientWidth}px`);
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [scrollRef]);
 }
 
 function prefColumnsOf<T>(columns: readonly ColumnDef<T, unknown>[]): readonly PrefColumn[] {
@@ -100,6 +141,7 @@ function prefColumnsOf<T>(columns: readonly ColumnDef<T, unknown>[]): readonly P
     id: columnIdOf(c, i),
     defaultVisible: c.meta?.defaultVisible !== false,
     alwaysVisible: c.meta?.alwaysVisible === true || c.enableHiding === false,
+    defaultPinned: c.meta?.defaultPinned === true,
   }));
 }
 
@@ -153,8 +195,10 @@ export function DataGrid<T>(props: DataGridProps<T>) {
     if (renderExpanded) list.push(expandColumn<T>());
     list.push(...idColumns);
     if (rowActions) list.push(actionsColumn<T>(rowActions));
+    // External toolbar: the column chooser floats over the header right end, so reserve a gutter for it.
+    else if (props.hideToolbar) list.push(gutterColumn<T>());
     return list;
-  }, [idColumns, selectable, renderExpanded, rowActions]);
+  }, [idColumns, selectable, renderExpanded, rowActions, props.hideToolbar]);
 
   const sortingState: SortingState = React.useMemo(() => {
     const byField = new Map(idColumns.map((c) => [c.meta?.sortKey ?? c.id ?? "", c.id ?? ""]));
@@ -172,7 +216,7 @@ export function DataGrid<T>(props: DataGridProps<T>) {
       sorting: sortingState,
       columnVisibility: visibilityMap(prefs.prefs),
       columnOrder: [...systemLeft, ...prefs.prefs.order],
-      columnPinning: { left: [...systemLeft, ...(prefs.prefs.pinned ?? [])] },
+      columnPinning: { left: [...new Set([...systemLeft, ...allColumns.flatMap((c) => (c.meta?.pinLeft && c.id ? [c.id] : [])), ...(prefs.prefs.pinned ?? [])])] },
       columnSizing,
       columnSizingInfo: sizingInfo,
       rowSelection,
@@ -213,6 +257,13 @@ export function DataGrid<T>(props: DataGridProps<T>) {
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const stickyRightOffset = stickyRightOffsetFor(table);
   const chooserColumns: readonly ChooserColumn[] = idColumns.map((c) => ({ id: c.id ?? "", label: columnLabel(c, c.id ?? ""), alwaysVisible: c.meta?.alwaysVisible === true || c.enableHiding === false }));
+
+  useHighlightRow(scrollRef, props.highlightRowId ?? null, data.length);
+  useVisibleWidthVar(scrollRef);
+  const refreshing = Boolean(props.refreshing) && !loading;
+  const exportMode = props.exportMode ?? "auto";
+  const excelKey = props.exportGridKey ?? gridKey;
+  const excelQuery = props.exportQuery ?? props.queryString;
 
   const reorder = (id: string, before: string | null) => prefs.update({ order: moveColumn(prefs.prefs.order, id, before) });
 
@@ -264,8 +315,9 @@ export function DataGrid<T>(props: DataGridProps<T>) {
           </div>
         ) : null}
         {/* Capped at the viewport so long grids scroll inside the frame and the sticky header stays visible. */}
-        <div ref={scrollRef} className="ks-scroll max-h-[calc(100dvh-8rem)] min-h-0 flex-1 overflow-auto">
-          <table className={cn("w-full min-w-max border-collapse text-[13px]", sizingInfo.isResizingColumn && "select-none")}>
+        {refreshing ? <div role="progressbar" aria-label="Updating rows" className="ks-grid-progress pointer-events-none absolute inset-x-0 top-0 z-40 h-0.5 overflow-hidden bg-info/15" /> : null}
+        <div ref={scrollRef} aria-busy={refreshing || undefined} data-refreshing={refreshing || undefined} className="ks-scroll max-h-[calc(100dvh-8rem)] min-h-0 flex-1 overflow-auto">
+          <table aria-rowcount={total + 1} aria-colcount={table.getVisibleLeafColumns().length} className={cn("w-full min-w-max border-collapse text-[13px] transition-opacity", sizingInfo.isResizingColumn && "select-none", refreshing && "[&>tbody]:opacity-60")}>
             <DataGridHeader table={table} sort={sort} onSort={(field, additive) => setSort(nextSort(sort, field, additive))} onReorder={reorder} stickyRightOffset={stickyRightOffset} />
             <DataGridBody
               table={table}
@@ -280,12 +332,16 @@ export function DataGrid<T>(props: DataGridProps<T>) {
               renderExpanded={renderExpanded}
               stickyRightOffset={stickyRightOffset}
               scrollRef={scrollRef}
+              rowOffset={(Math.max(1, page) - 1) * pageSize}
+              highlightRowId={props.highlightRowId ?? null}
             />
           </table>
         </div>
         </div>
         </HeaderDndContext>
         <GridFooter
+          loading={(loading || Boolean(error)) && data.length === 0}
+          showSelected={selectable}
           total={total}
           page={page}
           pageSize={pageSize}
@@ -295,8 +351,8 @@ export function DataGrid<T>(props: DataGridProps<T>) {
           onPageChange={onPageChange}
           onPageSizeChange={changePageSize}
           trailing={
-            gridKey && props.queryString !== undefined ? (
-              <ExportButton gridKey={gridKey} queryString={props.queryString} columns={props.exportColumns} total={total} />
+            exportMode === "none" ? null : exportMode === "auto" && excelKey && excelQuery !== undefined ? (
+              <ExportButton gridKey={excelKey} queryString={excelQuery} columns={props.exportColumns} total={total} disabledReason={loading && data.length === 0 ? "Wait for the rows to load" : null} />
             ) : (
               <Button variant="success-outline" size="sm" disabled={data.length === 0} onClick={() => exportCsv(data, columns, props.exportName ?? "export")}>
                 <Download className="h-3.5 w-3.5" aria-hidden />

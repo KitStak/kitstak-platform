@@ -1,5 +1,5 @@
 /**
- * Count task handler (M07, replaces the 0.6 stub). `tasks.execute()` dispatches every
+ * Count task handler (M07, replaces the 0.6 stub; exports the count lifecycle helpers). `tasks.execute()` dispatches every
  * `Count` task here. One task = one count line (a location, or a SKU in a location).
  *
  * - Records one `count_line_entries` row per bucket counted (SKU / lot / expiry / LP).
@@ -41,6 +41,8 @@ export interface CountEntryInput {
   readonly expiryDate?: string | null;
   readonly lpId?: string | null;
   readonly packType?: string | null;
+  /** Counted units that are damaged: recorded against (and posted to) a damaged bucket with this reason. */
+  readonly damageReason?: string | null;
   readonly countedQty: number;
 }
 
@@ -83,6 +85,17 @@ export function findEntryBucket(tx: Tx, e: { productId: string; locationId: stri
 }
 
 /* ------------------------------------------------------------- lifecycle */
+/**
+ * REQ-16: when a recount line is cancelled (line cancel or its job cancelled), the original line it
+ * superseded goes back from Recount Created to Count Completed, keeping its counted result.
+ */
+export function restoreRecountOriginal(tx: Tx, ctx: DomainCtx, recountLine: CountLineRow): CountLineRow | null {
+  if (!recountLine.isRecountLine || !recountLine.recountOfLineId) return null;
+  const original = tx.select().from(schema.countPlanLines).where(eq(schema.countPlanLines.id, recountLine.recountOfLineId)).get();
+  if (!original || original.status !== "Recount Created") return null;
+  return moveLine(tx, ctx, original, "Count Completed");
+}
+
 /** Moves a line along the count-line machine (multi-step paths allowed) and logs it on the plan. */
 export function moveLine(tx: Tx, ctx: DomainCtx, line: CountLineRow, to: CountLineStatus, patch: Partial<typeof schema.countPlanLines.$inferInsert> = {}): CountLineRow {
   let status = line.status;
@@ -145,6 +158,19 @@ export function autoUpdatesNoDifference(tx: Tx, jobId: string | null): boolean {
   return parseSettings(jobTypeSettingsSchema, row.settings).count.autoUpdateNoDifferenceLines;
 }
 
+/**
+ * Job-type "Blind Count": counters never see the system quantity. Read from the stored settings JSON
+ * (`count.blindCount`) so it works as soon as the job type carries the flag (REQ-9 adds it to
+ * `jobTypeSettingsSchema` and the Job Types settings page).
+ */
+export function isBlindCountJob(tx: Tx, jobId: string | null): boolean {
+  if (!jobId) return false;
+  const row = tx.select({ settings: schema.jobTypes.settings }).from(schema.jobs)
+    .innerJoin(schema.jobTypes, eq(schema.jobTypes.id, schema.jobs.jobTypeId)).where(eq(schema.jobs.id, jobId)).get();
+  const count = (row?.settings as { count?: { blindCount?: unknown } } | null | undefined)?.count;
+  return count?.blindCount === true;
+}
+
 /* ---------------------------------------------------------------- entries */
 interface ResolvedEntry {
   readonly productId: string;
@@ -181,9 +207,9 @@ function resolveEntry(tx: Tx, line: CountLineRow, locationId: string, e: CountEn
   if (line.productId && productId !== line.productId) throw new DomainError("VALIDATION", "This line only counts its own SKU");
   const product = tx.select().from(schema.products).where(eq(schema.products.id, productId)).get();
   if (!product) throw new DomainError("NOT_FOUND", "Product not found");
-  const spec = { productId, locationId, lpId: e.lpId ?? line.lpId ?? null, lotNumber: e.lotNumber?.trim() || null, expiryDate: e.expiryDate || null, packType: e.packType || product.uom };
+  const spec = { productId, locationId, lpId: e.lpId ?? line.lpId ?? null, lotNumber: e.lotNumber?.trim() || null, expiryDate: e.expiryDate || null, packType: e.packType || product.uom, damageReason: e.damageReason?.trim() || null };
   const existing = findEntryBucket(tx, spec);
-  return { ...spec, damageReason: null, systemQty: existing?.onHand ?? 0, countedQty: e.countedQty };
+  return { ...spec, systemQty: existing?.onHand ?? 0, countedQty: e.countedQty };
 }
 
 /** Builds the full entry set for a line: entered rows + expected buckets not entered (counted 0). */
@@ -232,6 +258,9 @@ export const executeCount: TaskHandler = (tx, ctx, task, input) => {
   }
   const counted = entries.reduce((s, e) => s + e.countedQty, 0);
   const system = entries.reduce((s, e) => s + e.systemQty, 0);
+  // The first counted task starts the job, so a one-task job shows Actual Start as well as Actual Finish
+  // (the job rollup only stamps started_at on Pending → Started, not on Pending → Completed).
+  if (task.jobId) tx.update(schema.jobs).set({ startedAt: now }).where(and(eq(schema.jobs.id, task.jobId), isNull(schema.jobs.startedAt))).run();
   completeTask(tx, ctx, task, { doneQty: counted, targetLocationId: locationId });
 
   let updated = moveLine(tx, ctx, line, "Count Completed", {

@@ -17,14 +17,17 @@ import { createWorld, type World } from "../foundation/domain/fixtures";
 let w: World;
 let auth: AuthContext;
 let cycleType: string;
+let rid: string;
 
 beforeEach(() => {
   w = createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
-  auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
+  // Supervisor: may post variances they counted themselves (four-eyes rule, counts-round3.test.ts covers the operator case).
+  auth = { scope, viewScope: scope, permissions: new Set<string>(["inventory.count_plans.delete"]), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   const jt = (code: string, count: Record<string, boolean>) => w.db.insert(schema.jobTypes).values({
     code, description: code, warehouseId: w.warehouseId, operationType: "Count", settings: jobTypeSettingsSchema.parse({ count }),
   }).returning().get().id;
+  rid = w.db.insert(schema.lookupValues).values({ type: "adjustment_reason", name: "Count variance" }).returning().get().id;
   cycleType = jt("Cycle Count", { autoUpdateNoDifferenceLines: true });
   jt("Instant Count", { instantCount: true });
 });
@@ -96,7 +99,7 @@ describe("count plan lifecycle (acceptance KS-E2E-COUNT-1)", () => {
     expect(v.rows).toHaveLength(1);
     expect(v.unitsDown).toBe(2);
 
-    const res = updateInventoryForPlans(w.db, w.ctx, auth, [p.id]);
+    const res = updateInventoryForPlans(w.db, w.ctx, auth, [p.id], rid);
     expect(res.failed).toEqual([]);
     expect(onHandAt(w.loc.storageA)).toBe(18);
     const txn = w.db.select().from(schema.inventoryTransactions).where(and(eq(schema.inventoryTransactions.type, "Count"), eq(schema.inventoryTransactions.countPlanId, p.id))).all();
@@ -109,13 +112,56 @@ describe("count plan lifecycle (acceptance KS-E2E-COUNT-1)", () => {
     clean();
   });
 
-  it("blocks a second Create Job and guards Update Inv. on uncounted plans", () => {
+  it("plan Update Inv. posts Count Completed lines and cancels the uncounted rest (Logiwa parity)", () => {
+    stock(10, w.loc.storageA);
+    stock(4, w.loc.storageB);
+    const p = skuPlan("KS-TEST-CNT-PARTIAL");
+    createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: cycleType, batchSize: 1, assigneeUserId: null });
+    const lineA = linesOf(p.id).find((l) => l.locationId === w.loc.storageA);
+    if (!lineA) throw new Error("line");
+    countLine(p.id, lineA.id, 7);
+    const v = varianceSummary(w.db, auth, { level: "plan", ids: [p.id] });
+    expect(v.linesToCancel).toEqual([{ code: "KS-TEST-CNT-PARTIAL", lines: 1 }]);
+    expect(updateInventoryForPlans(w.db, w.ctx, auth, [p.id], rid).failed).toEqual([]);
+    expect(onHandAt(w.loc.storageA)).toBe(7);
+    expect(onHandAt(w.loc.storageB)).toBe(4);
+    const statuses = linesOf(p.id).map((l) => l.status).sort();
+    expect(statuses).toEqual(["Cancelled", "Inventory Updated"]);
+    expect(w.db.select().from(schema.tasks).where(eq(schema.tasks.status, "Pending")).all().filter((t) => t.countLineId)).toEqual([]);
+    clean();
+  });
+
+  it("blocks a second Create Job", () => {
     stock(3, w.loc.storageA);
     const p = skuPlan();
-    expect(updateInventoryForPlans(w.db, w.ctx, auth, [p.id]).failed[0]?.code).toBe("INVALID_STATE");
     createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: cycleType, batchSize: 10, assigneeUserId: null });
     const again = createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: cycleType, batchSize: 10, assigneeUserId: null });
     expect(again.failed[0]?.code).toBe("INVALID_STATE");
+  });
+});
+
+describe("Update Inv. on open plans (Logiwa parity)", () => {
+  it("on a Pending plan with nothing counted, is refused (Cancel closes it) and stock is untouched", () => {
+    stock(3, w.loc.storageA);
+    const p = skuPlan();
+    const summary = varianceSummary(w.db, auth, { level: "plan", ids: [p.id] });
+    expect(summary.eligible).toBe(0);
+    expect(summary.blocked[0]?.reason).toMatch(/Nothing is counted yet/);
+    expect(updateInventoryForPlans(w.db, w.ctx, auth, [p.id]).failed[0]?.code).toBe("INVALID_STATE");
+    expect(plan(p.id)?.status).toBe("Pending");
+    expect(onHandAt(w.loc.storageA)).toBe(3);
+    clean();
+  });
+
+  it("on a Ready to Count plan with nothing counted, is refused and its count tasks stay live", () => {
+    stock(3, w.loc.storageA);
+    const p = skuPlan();
+    createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: cycleType, batchSize: 10, assigneeUserId: null });
+    expect(plan(p.id)?.status).toBe("Ready To Count");
+    expect(updateInventoryForPlans(w.db, w.ctx, auth, [p.id]).failed[0]?.message).toMatch(/Nothing is counted yet/);
+    expect(plan(p.id)?.status).toBe("Ready To Count");
+    expect(w.db.select().from(schema.tasks).where(eq(schema.tasks.status, "Pending")).all().filter((t) => t.countLineId).length).toBe(1);
+    clean();
   });
 });
 
@@ -184,7 +230,7 @@ describe("update inventory per line + found stock", () => {
     createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: cycleType, batchSize: 10, assigneeUserId: null });
     const [line] = linesOf(p.id);
     submitSheetLine(w.db, w.ctx, auth, p.id, { lineId: line?.id ?? "", entries: [{ productId: w.product2Id, countedQty: 7 }], note: "found on floor" });
-    expect(updateInventoryForLines(w.db, w.ctx, auth, [line?.id ?? ""]).failed).toEqual([]);
+    expect(updateInventoryForLines(w.db, w.ctx, auth, [line?.id ?? ""], rid).failed).toEqual([]);
     expect(onHandAt(w.loc.storageB)).toBe(7);
     expect(plan(p.id)?.status).toBe("Inventory Updated");
     clean();
@@ -203,7 +249,7 @@ describe("instant count", () => {
 
   it("posts an instant count variance when asked", () => {
     const b = stock(9, w.loc.storageA);
-    const r = createInstantCount(w.db, w.ctx, auth, { warehouseId: w.warehouseId, locationId: w.loc.storageA, entries: [{ inventoryId: b.id, countedQty: 6 }], note: null, updateInventory: true, reasonId: null }, true);
+    const r = createInstantCount(w.db, w.ctx, auth, { warehouseId: w.warehouseId, locationId: w.loc.storageA, entries: [{ inventoryId: b.id, countedQty: 6 }], note: null, updateInventory: true, reasonId: rid }, true);
     expect(r.status).toBe("Inventory Updated");
     expect(onHandAt(w.loc.storageA)).toBe(6);
     clean();
@@ -214,6 +260,34 @@ describe("instant count", () => {
     const r = createInstantCount(w.db, w.ctx, auth, { warehouseId: w.warehouseId, locationId: w.loc.storageA, entries: [{ inventoryId: b.id, countedQty: 6 }], note: null, updateInventory: false, reasonId: null }, false);
     expect(r.status).toBe("Count Completed");
     expect(onHandAt(w.loc.storageA)).toBe(9);
+  });
+
+  it("rejects Create Recount on instant count lines (Logiwa: Cycle Count plans only)", () => {
+    const b = stock(9, w.loc.storageA);
+    const r = createInstantCount(w.db, w.ctx, auth, { warehouseId: w.warehouseId, locationId: w.loc.storageA, entries: [{ inventoryId: b.id, countedQty: 6 }], note: null, updateInventory: false, reasonId: null }, false);
+    const [line] = linesOf(r.planId);
+    const rc = createRecounts(w.db, w.ctx, auth, [line?.id ?? ""]);
+    expect(rc.succeeded).toEqual([]);
+    expect(rc.failed[0]?.message).toMatch(/Instant/);
+    expect(linesOf(r.planId)).toHaveLength(1);
+  });
+});
+
+describe("location line delete", () => {
+  it("removes a location from a pending location plan but keeps the last one", () => {
+    const p = createCountPlan(w.db, w.ctx, auth, { code: "LOC-DEL", warehouseId: w.warehouseId, description: null, scheduledAt: new Date().toISOString(), lockLocations: false, countType: "Location", locationIds: [w.loc.storageA, w.loc.storageB], productIds: [] });
+    const [first, second] = linesOf(p.id);
+    deleteCountLine(w.db, w.ctx, auth, first?.id ?? "");
+    expect(linesOf(p.id).map((l) => l.id)).toEqual([second?.id]);
+    expect(() => deleteCountLine(w.db, w.ctx, auth, second?.id ?? "")).toThrow(/at least one line/);
+  });
+
+  it("links plan jobs in the plan grid", () => {
+    stock(4, w.loc.storageA);
+    const p = skuPlan("KS-TEST-CNT-JOBREF");
+    const { jobIds } = createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: cycleType, batchSize: 10, assigneeUserId: null });
+    const row = listCountPlans(w.db, auth.viewScope, EMPTY_GRID_QUERY).rows.find((r) => r.id === p.id);
+    expect(row?.jobRefs?.split(";").map((x) => x.split("|")[0])).toEqual(jobIds);
   });
 });
 
@@ -265,9 +339,53 @@ describe("mandatory reason for cycle count", () => {
     clean();
   });
 
+  it("rejects a non-zero variance without a reason even when the warehouse does not require one", () => {
+    const { p, line } = countedPlan();
+    expect(varianceSummary(w.db, auth, { level: "line", ids: [line.id] }).reasonRequired).toBe(true);
+    const res = updateInventoryForPlans(w.db, w.ctx, auth, [p.id]);
+    expect(res.succeeded).toEqual([]);
+    expect(res.failed[0]?.message).toMatch(/requires a reason/);
+    expect(onHandAt(w.loc.storageA)).toBe(20);
+    expect(linesOf(p.id).every((l) => l.status === "Count Completed")).toBe(true);
+  });
+
   it("rejects an unknown reason id", () => {
     const { line } = countedPlan();
     const res = updateInventoryForLines(w.db, w.ctx, auth, [line.id], "not-a-reason");
     expect(res.failed[0]?.message).toMatch(/valid adjustment reason/);
+  });
+});
+
+describe("Count SKU Details (per-SKU results for every plan type)", () => {
+  it("lists SKUs counted inside a location plan, keyed to the real line", () => {
+    stock(20, w.loc.storageA);
+    const p = createCountPlan(w.db, w.ctx, auth, { code: "LOC-SKU-1", warehouseId: w.warehouseId, description: null, scheduledAt: new Date().toISOString(), lockLocations: false, countType: "Location", locationIds: [w.loc.storageA], productIds: [] });
+    // Before counting, every SKU on hand in scope is listed with its expected qty.
+    const before = listCountLines(w.db, auth.viewScope, "skus", EMPTY_GRID_QUERY).rows.filter((r) => r.planCode === "LOC-SKU-1");
+    expect(before).toHaveLength(1);
+    expect(before[0]?.productId).toBe(w.productId);
+    expect(before[0]?.initialStockQty).toBe(20);
+    expect(before[0]?.countedQty).toBeNull();
+    expect(before[0]?.status).toBe("Pending");
+    createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: cycleType, batchSize: 10, assigneeUserId: null });
+    const line = linesOf(p.id)[0];
+    expect(line).toBeDefined();
+    countLine(p.id, line?.id ?? "", 18);
+    const rows = listCountLines(w.db, auth.viewScope, "skus", EMPTY_GRID_QUERY).rows.filter((r) => r.planCode === "LOC-SKU-1");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.lineId).toBe(line?.id);
+    expect(rows[0]?.id).not.toBe(line?.id);
+    expect(rows[0]?.productId).toBe(w.productId);
+    expect(rows[0]?.countedQty).toBe(18);
+    expect(rows[0]?.approvedStockQty).toBe(20);
+    expect(rows[0]?.difference).toBe(-10);
+    // Location Details keeps one row per location line.
+    const loc = listCountLines(w.db, auth.viewScope, "locations", EMPTY_GRID_QUERY).rows.filter((r) => r.planCode === "LOC-SKU-1");
+    expect(loc.map((r) => r.id)).toEqual([line?.id]);
+  });
+  it("keeps SKU-count lines (no location) off Location Details", () => {
+    skuPlan("SKU-ONLY");
+    expect(listCountLines(w.db, auth.viewScope, "locations", EMPTY_GRID_QUERY).rows.filter((r) => r.planCode === "SKU-ONLY")).toHaveLength(0);
+    expect(listCountLines(w.db, auth.viewScope, "skus", EMPTY_GRID_QUERY).rows.filter((r) => r.planCode === "SKU-ONLY")).toHaveLength(1);
   });
 });

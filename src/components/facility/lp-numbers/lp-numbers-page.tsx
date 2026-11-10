@@ -2,34 +2,40 @@
 
 /**
  * LP Numbers (`/settings/lp-numbers`, LP tab group): grid (search defaults to Starts With),
- * header Import LP Number + Create LP Number, bulk Print Barcode (review table → Print labels
- * → LP label PDF), row ⋯ Show details · Edit · Change log · Print barcode.
+ * header Import LP Number + Create LP Number, bulk Print barcode (one print modal) and Delete,
+ * row ⋯ Show details · Edit · Change log · Print barcode · Delete.
+ *
+ * Delete (critic R5): never-used Empty LPs are deleted, Empty LPs with history are voided
+ * (status Removed, kept for the audit trail), and LPs holding stock, nested on a parent, with
+ * child LPs or shipped are refused. The confirm dialog previews the outcome per LP.
  */
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Eye, History, Pencil, Plus, Printer, Upload } from "lucide-react";
+import { Eye, History, Pencil, Plus, Printer, Trash2, Upload } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/api-client";
 import { DataGrid, GridToolbar, LinkCell, useGrid, type BulkAction, type GridColumnDef, type RowAction } from "@/components/grid";
 import { PageHeader } from "@/components/layout/page-header";
-import { ChangeLogDrawer } from "@/components/shared/change-log-drawer";
 import { PrintOptionsModal } from "@/components/shared/print-options-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { toast } from "@/components/ui/toast";
 import { Drawer } from "@/components/ui/drawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DisabledReason } from "@/components/ui/tooltip";
 import { useApiQuery } from "@/lib/query-client";
 import { LP_NUMBER_FIELDS, LP_NUMBERS_GRID_KEY } from "@/lib/grid-defs/facility/lp-numbers";
-import type { LpNumberDetail, LpNumberRow } from "@/server/repositories/lp-numbers";
-import { DetailList, Muted, NO_PERMISSION, Num, StatRow, toFilterFields, useAction, usePagePerms, useWarehouseOptions, YesNo } from "@/components/facility/facility-shared";
+import type { LpNumberDetail, LpNumberRow, LpRemovalPreview } from "@/server/repositories/lp-numbers";
+import { lpLabelTitle, lpRowRemovalBlocker } from "@/lib/grid-defs/facility/lp-numbers";
+import { CodeCell, DetailList, EntityChangeLogDrawer, Muted, NO_PERMISSION, Num, StatRow, toFilterFields, useAction, usePagePerms, useWarehouseOptions, YesNo, type BulkResponse } from "@/components/facility/facility-shared";
 import { useLpTypeOptions } from "@/components/facility/pickers";
 import { CreateLpNumberDrawer, EditLpNumberDrawer } from "./lp-number-drawers";
 
-const PERMS = ["view", "create", "edit", "import_file", "change_log", "print_barcode"] as const;
+const PERMS = ["view", "create", "edit", "delete", "import_file", "print_barcode"] as const;
 const hidden = { defaultVisible: false } as const;
 
-const STATUS_TONE = { Empty: "neutral", Occupied: "info", Shipped: "success", Removed: "danger" } as const;
+const STATUS_TONE = { Empty: "success", Occupied: "warning", Shipped: "info", Removed: "danger" } as const;
 
 export function LpStatusPill({ status }: { readonly status: LpNumberRow["status"] }) {
   return <Badge tone={STATUS_TONE[status]} size="sm" shape="pill">{status}</Badge>;
@@ -38,18 +44,19 @@ export function LpStatusPill({ status }: { readonly status: LpNumberRow["status"
 const right = (v: number) => <div className="text-right"><Num value={v} decimals={2} /></div>;
 
 const COLUMNS: GridColumnDef<LpNumberRow>[] = [
-  { id: "number", header: "Number", size: 190, meta: { alwaysVisible: true }, cell: ({ row }) => <span className="font-mono text-[12px] font-medium text-foreground">{row.original.number}</span> },
+  { id: "number", header: "Number", size: 190, meta: { alwaysVisible: true }, cell: ({ row }) => <CodeCell mono label={`LP ${row.original.number}`}>{row.original.number}</CodeCell> },
   { id: "warehouseCode", header: "Warehouse", size: 100, cell: ({ row }) => row.original.warehouseCode },
   { id: "lpTypeCode", header: "License plate type", size: 150, cell: ({ row }) => row.original.lpTypeCode },
   { id: "locationCode", header: "Location", size: 130, cell: ({ row }) => row.original.locationCode ?? <Muted /> },
   { id: "status", header: "Status", size: 110, cell: ({ row }) => <LpStatusPill status={row.original.status} /> },
   { id: "units", header: "Units", size: 80, meta: { align: "right" }, cell: ({ row }) => <div className="text-right"><Num value={row.original.units} /></div> },
-  { id: "length", header: "Length", size: 80, meta: { ...hidden, align: "right" }, cell: ({ row }) => right(row.original.length) },
-  { id: "width", header: "Width", size: 80, meta: { ...hidden, align: "right" }, cell: ({ row }) => right(row.original.width) },
-  { id: "height", header: "Height", size: 80, meta: { ...hidden, align: "right" }, cell: ({ row }) => right(row.original.height) },
-  { id: "weight", header: "Weight", size: 80, meta: { ...hidden, align: "right" }, cell: ({ row }) => right(row.original.weight) },
-  { id: "actualVolume", header: "Actual volume", size: 110, meta: { ...hidden, align: "right" }, cell: ({ row }) => right(row.original.actualVolume) },
-  { id: "parentLpNumber", header: "Parent LP number", size: 150, meta: hidden, cell: ({ row }) => row.original.parentLpNumber ?? <Muted /> },
+  { id: "length", header: "Length", size: 80, meta: { align: "right" }, cell: ({ row }) => right(row.original.length) },
+  { id: "width", header: "Width", size: 80, meta: { align: "right" }, cell: ({ row }) => right(row.original.width) },
+  { id: "height", header: "Height", size: 80, meta: { align: "right" }, cell: ({ row }) => right(row.original.height) },
+  { id: "weight", header: "Weight", size: 80, meta: { align: "right" }, cell: ({ row }) => right(row.original.weight) },
+  { id: "actualVolume", header: "Actual volume", size: 136, meta: { align: "right" }, cell: ({ row }) => right(row.original.actualVolume) },
+  { id: "parentLpTypeCode", header: "Parent LP type", size: 144, cell: ({ row }) => row.original.parentLpTypeCode ?? <Muted /> },
+  { id: "parentLpNumber", header: "Parent LP number", size: 150, cell: ({ row }) => row.original.parentLpNumber ?? <Muted /> },
   { id: "originalNumber", header: "Original LP number", size: 150, meta: hidden, cell: ({ row }) => row.original.originalNumber ?? <Muted /> },
   { id: "alternateBarcode", header: "Alternate barcode", size: 150, meta: hidden, cell: ({ row }) => row.original.alternateBarcode ?? <Muted /> },
   { id: "isSscc18", header: "SSCC18", size: 90, cell: ({ row }) => <YesNo value={row.original.isSscc18} /> },
@@ -89,30 +96,70 @@ function LpDetailDrawer({ id, onOpenChange }: { readonly id: string | null; read
   );
 }
 
-/** Bulk Print Barcode: review table of the selected LPs, then Print labels. */
-function PrintBarcodeModal({ rows, onOpenChange, onPrint, pending }: { readonly rows: readonly LpNumberRow[] | null; readonly onOpenChange: (o: boolean) => void; readonly onPrint: () => void; readonly pending: boolean }) {
+const OUTCOME = {
+  delete: <Badge tone="danger" size="sm">Delete</Badge>,
+  void: <Badge tone="warning" size="sm">Void</Badge>,
+  blocked: <Badge tone="neutral" size="sm">Skipped</Badge>,
+} as const;
+
+type RemoveResult = BulkResponse & { readonly deleted: readonly string[]; readonly voided: readonly string[] };
+
+/** Delete / void confirm: previews, per LP, whether it is deleted, voided (kept for history) or skipped and why. */
+function RemoveLpDialog({ rows, onOpenChange, onDone }: { readonly rows: readonly LpNumberRow[] | null; readonly onOpenChange: (o: boolean) => void; readonly onDone: (r: RemoveResult) => void }) {
+  const ids = (rows ?? []).map((r) => r.id);
+  const preview = useQuery({
+    queryKey: ["lp-removal-preview", ids],
+    queryFn: async () => (await apiRequest<LpRemovalPreview>("/api/lp-numbers/removal-preview", { method: "POST", body: { ids } })).data,
+    enabled: ids.length > 0,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const action = useAction([["grid", LP_NUMBERS_GRID_KEY], ["grid", "lp-types"]]);
+  const plan = preview.data ?? [];
+  const actionable = plan.filter((p) => p.mode !== "blocked");
+  const voids = plan.filter((p) => p.mode === "void").length;
+  const skipped = plan.length - actionable.length;
+  const n = rows?.length ?? 0;
+  const description = preview.isPending
+    ? "Checking each LP for stock and history…"
+    : preview.isError
+      ? "Couldn't check these LPs. Close and try again."
+      : actionable.length === 0
+        ? "None of these LPs can be removed. The reasons are listed below."
+        : [
+            "Never-used LPs are deleted.",
+            voids > 0 ? `${voids} with stock history ${voids === 1 ? "is" : "are"} voided instead: status Removed, kept so that history still resolves.` : null,
+            skipped > 0 ? `${skipped} skipped.` : null,
+            "Each change is written to the LP's change log.",
+          ].filter(Boolean).join(" ");
   return (
-    <Dialog open={rows !== null} onOpenChange={onOpenChange}>
-      <DialogContent size="lg">
-        <DialogHeader title="Print barcode" description={`${rows?.length ?? 0} LP ${rows?.length === 1 ? "label" : "labels"} will be printed, one per LP.`} />
-        <DialogBody>
-          <div className="max-h-[50vh] overflow-auto rounded-lg border border-border">
-            <table className="w-full text-[13px]">
-              <thead className="sticky top-0 bg-surface-sunken text-[11px] uppercase text-secondary"><tr><th className="px-3 py-2 text-left">Number</th><th className="px-3 py-2 text-left">LP type</th><th className="px-3 py-2 text-left">Warehouse</th><th className="px-3 py-2 text-left">Location</th><th className="px-3 py-2 text-left">Printed before</th></tr></thead>
-              <tbody className="divide-y divide-border">
-                {(rows ?? []).map((r) => (
-                  <tr key={r.id}><td className="px-3 py-1.5 font-mono text-[12px]">{r.number}</td><td className="px-3 py-1.5">{r.lpTypeCode}</td><td className="px-3 py-1.5">{r.warehouseCode}</td><td className="px-3 py-1.5">{r.locationCode ?? "—"}</td><td className="px-3 py-1.5">{r.labelPrintedAt ? "Yes" : "No"}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </DialogBody>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button variant="primary" onClick={onPrint} disabled={pending}><Printer className="h-4 w-4" />Print labels</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ConfirmDialog
+      open={rows !== null}
+      onOpenChange={onOpenChange}
+      variant="danger"
+      title={n === 1 ? `Delete LP ${rows?.[0]?.number ?? ""}?` : `Delete ${n} LP numbers?`}
+      description={description}
+      confirmLabel={actionable.length === 0 ? "Close" : voids === actionable.length ? "Yes, void" : "Yes, delete"}
+      cancelLabel="No"
+      records={{
+        columns: [{ key: "number", label: "LP number" }, { key: "status", label: "Status" }, { key: "outcome", label: "Outcome" }, { key: "why", label: "Detail" }],
+        rows: (rows ?? []).map((r) => {
+          const p = plan.find((x) => x.id === r.id);
+          return {
+            number: <span className="font-mono text-[12px]">{r.number}</span>,
+            status: <LpStatusPill status={r.status} />,
+            outcome: p ? OUTCOME[p.mode] : <Muted>…</Muted>,
+            why: !p ? "" : p.mode === "blocked" ? `It ${p.reason}` : p.mode === "void" ? `Kept because ${p.because}` : "Never used",
+          };
+        }),
+      }}
+      onConfirm={async () => {
+        if (preview.isPending || actionable.length === 0) { onOpenChange(false); return; }
+        const result = await action.run<RemoveResult>("/api/lp-numbers/bulk-delete", "POST", { ids: actionable.map((p) => p.id) });
+        if (result) onDone(result);
+        onOpenChange(false);
+      }}
+    />
   );
 }
 
@@ -127,37 +174,38 @@ export function LpNumbersPage() {
   const [editId, setEditId] = React.useState<string | null>(null);
   const [detailId, setDetailId] = React.useState<string | null>(null);
   const [log, setLog] = React.useState<LpNumberRow | null>(null);
-  const [toPrint, setToPrint] = React.useState<readonly LpNumberRow[] | null>(null);
-  const [labels, setLabels] = React.useState<readonly unknown[] | null>(null);
+  const [labels, setLabels] = React.useState<{ readonly records: readonly unknown[]; readonly title: string } | null>(null);
+  const [toRemove, setToRemove] = React.useState<readonly LpNumberRow[] | null>(null);
   const action = useAction([["grid", LP_NUMBERS_GRID_KEY]]);
   const selected = (ids: readonly string[]) => g.rows.filter((r) => ids.includes(r.id));
 
-  const printLabels = async () => {
-    const records = await action.run<unknown[]>("/api/lp-numbers/labels", "POST", { ids: (toPrint ?? []).map((r) => r.id) });
-    if (records) { setToPrint(null); setLabels(records); }
+  /** One print modal (critic R5): fetch the label records, then open Print LP labels with the LPs summarized in its title. */
+  const printLabels = async (rows: readonly LpNumberRow[]) => {
+    const records = await action.run<unknown[]>("/api/lp-numbers/labels", "POST", { ids: rows.map((r) => r.id) });
+    if (records) setLabels({ records, title: lpLabelTitle(rows.map((r) => r.number)) });
   };
+  const removeReason = (row: LpNumberRow) => (!perms.delete ? NO_PERMISSION : lpRowRemovalBlocker(row));
 
   const bulkActions: readonly BulkAction[] = [
-    { key: "print", label: "Print barcode", icon: Printer, onSelect: (ids) => setToPrint(selected(ids)), disabledReason: perms.print_barcode ? null : NO_PERMISSION },
+    { key: "print", label: "Print barcode", icon: Printer, onSelect: (ids) => void printLabels(selected(ids)), disabledReason: perms.print_barcode ? null : NO_PERMISSION },
+    { key: "delete", label: "Delete", icon: Trash2, onSelect: (ids) => setToRemove(selected(ids)), disabledReason: perms.delete ? null : NO_PERMISSION,
+      eligibility: (ids) => { const rows = selected(ids); return rows.length > 0 && rows.every((r) => lpRowRemovalBlocker(r)) ? "Only Empty LPs that are not on a parent LP can be deleted" : null; } },
   ];
   const rowActions = (row: LpNumberRow): readonly RowAction[] => [
     { key: "details", label: "Show details", icon: Eye, onSelect: () => setDetailId(row.id) },
     { key: "edit", label: "Edit", icon: Pencil, onSelect: () => setEditId(row.id), disabledReason: perms.edit ? null : NO_PERMISSION },
-    { key: "log", label: "Change log", icon: History, onSelect: () => setLog(row), disabledReason: perms.change_log ? null : NO_PERMISSION },
-    { key: "print", label: "Print barcode", icon: Printer, onSelect: () => setToPrint([row]), disabledReason: perms.print_barcode ? null : NO_PERMISSION },
+    { key: "log", label: "Change log", icon: History, onSelect: () => setLog(row) },
+    { key: "print", label: "Print barcode", icon: Printer, onSelect: () => void printLabels([row]), disabledReason: perms.print_barcode ? null : NO_PERMISSION },
+    { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: () => setToRemove([row]), disabledReason: removeReason(row) },
   ];
   const filtered = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="LP Numbers" tabs="lp" helper="Every license plate in the building: where it is, what type it is and whether its label is printed."
+      <PageHeader title="LP Numbers" helpHref="/locations/help#lp-numbers" tabs="lp" helper="Every license plate in the building: where it is, what type it is and whether its label is printed."
         actions={
           <>
-            <DisabledReason reason={perms.import_file ? null : NO_PERMISSION}>
-              <Button variant="secondary" disabled={!perms.import_file} onClick={() => router.push("/imports/lp-numbers")}><Upload className="h-4 w-4" aria-hidden />Import LP number</Button>
-            </DisabledReason>
-            <DisabledReason reason={perms.create ? null : NO_PERMISSION}>
-              <Button variant="primary" disabled={!perms.create} onClick={() => setCreate(true)}><Plus className="h-4 w-4" aria-hidden />Create LP number</Button>
-            </DisabledReason>
+            {perms.import_file ? <Button variant="secondary" onClick={() => router.push("/imports/lp-numbers")}><Upload className="h-4 w-4" aria-hidden />Import LP number</Button> : null}
+            {perms.create ? <Button variant="primary" onClick={() => setCreate(true)}><Plus className="h-4 w-4" aria-hidden />Create LP number</Button> : null}
           </>
         } />
       <GridToolbar {...g.toolbarProps} searchPlaceholder="Search LP number or alternate barcode" bulkActions={bulkActions} bulkNoun="LP number" />
@@ -174,9 +222,14 @@ export function LpNumbersPage() {
       <CreateLpNumberDrawer open={create} onOpenChange={setCreate} defaultWarehouseId={warehouses.defaultId} onCreated={() => g.refetch()} />
       <EditLpNumberDrawer id={editId} onOpenChange={(o) => !o && setEditId(null)} onSaved={() => g.refetch()} />
       <LpDetailDrawer id={detailId} onOpenChange={(o) => !o && setDetailId(null)} />
-      {log ? <ChangeLogDrawer open onOpenChange={(o) => !o && setLog(null)} entityType="license_plate" entityId={log.id} entityCode={log.number} /> : null}
-      <PrintBarcodeModal rows={toPrint} onOpenChange={(o) => !o && setToPrint(null)} onPrint={() => void printLabels()} pending={action.pending} />
-      <PrintOptionsModal open={labels !== null} onOpenChange={(o) => { if (!o) { setLabels(null); g.refetch(); } }} typeKeys={["lp-label"]} records={labels ?? []} title="Print LP labels" />
+      <EntityChangeLogDrawer open={log !== null} onOpenChange={(o) => !o && setLog(null)} path={log ? `/api/lp-numbers/${log.id}/change-log` : null} title={`Change log · ${log?.number ?? ""}`} />
+      <PrintOptionsModal open={labels !== null} onOpenChange={(o) => { if (!o) { setLabels(null); g.refetch(); } }} typeKeys={["lp-label"]} records={labels?.records ?? []} title={labels?.title ?? "Print LP labels"} />
+      <RemoveLpDialog rows={toRemove} onOpenChange={(o) => !o && setToRemove(null)} onDone={(r) => {
+        const parts = [r.deleted.length ? `${r.deleted.length} deleted` : null, r.voided.length ? `${r.voided.length} voided` : null].filter(Boolean).join(", ");
+        if (r.failed.length === 0) toast.success("Success", `LP numbers: ${parts}`);
+        else (r.succeeded.length ? toast.warning : toast.error)(r.succeeded.length ? "Partly done" : "Nothing changed", [parts, r.failed.slice(0, 3).map((f) => f.message).join(" · ")].filter(Boolean).join(". "));
+        g.clearSelection();
+      }} />
     </div>
   );
 }

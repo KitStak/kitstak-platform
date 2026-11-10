@@ -18,12 +18,12 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { showToast, toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
 import { RecordChangeLogDrawer } from "@/components/jobs/record-change-log-drawer";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, apiRequest } from "@/lib/api-client";
 import { usePermissionSet } from "@/components/jobs/use-permissions";
 import { WAVE_RULE_COLUMNS, exportColumns } from "@/lib/grid-defs/jobs/columns";
 import { WAVE_RULES_GRID } from "@/lib/grid-defs/jobs/reports";
-import { formatWaveCountdown } from "@/lib/grid-defs/jobs/schedule";
-import { buildColumns, Dash } from "@/components/jobs/grid-columns";
+import { formatInZone, formatWaveCountdown } from "@/lib/grid-defs/jobs/schedule";
+import { buildColumns, Dash, JobsStatusPill } from "@/components/jobs/grid-columns";
 import { errorMessage, plural, postJson, str, type GridRow } from "@/components/jobs/jobs-client";
 import { ListShell } from "@/components/jobs/list-shell";
 import { jobsOfWaveHref } from "@/components/jobs/report-pages";
@@ -52,7 +52,7 @@ function NowProvider({ children }: { readonly children: React.ReactNode }) {
   return <NowContext.Provider value={now}>{children}</NowContext.Provider>;
 }
 
-function NextRunCell({ value, onElapsed }: { readonly value: unknown; readonly onElapsed: () => void }) {
+function NextRunCell({ value, timezone, onElapsed }: { readonly value: unknown; readonly timezone?: string | null; readonly onElapsed: () => void }) {
   const now = React.useContext(NowContext);
   const target = value ? Date.parse(String(value)) : NaN;
   const ms = Number.isNaN(target) || now === null ? null : target - now;
@@ -66,19 +66,60 @@ function NextRunCell({ value, onElapsed }: { readonly value: unknown; readonly o
   if (!value) return <Dash />;
   if (ms === null) return <span className="text-faint">…</span>;
   if (ms <= 0) return <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-primary"><Spinner className="h-3 w-3" label="Running" />Running now</span>;
-  return <span className={`font-mono text-[12px] tabular-nums ${ms < 120_000 ? "font-semibold text-[#B26A00]" : "text-body"}`} title={new Date(target).toLocaleString()}>{formatWaveCountdown(ms)}</span>;
+  return <span className={`font-mono text-[12px] tabular-nums ${ms < 120_000 ? "font-semibold text-[#B26A00]" : "text-body"}`} title={timezone ? `Next run ${formatInZone(new Date(target), timezone)} (warehouse time)` : new Date(target).toLocaleString()}>{formatWaveCountdown(ms)}</span>;
+}
+
+const AI_PENDING: ReadonlySet<string> = new Set(["Preparing For Optimization", "Optimizing", "Optimization Completed"]);
+
+interface WaveStatusResult { readonly status: string; readonly summary: string; readonly pending: boolean; readonly waveNo: string }
+
+/** Polls an AI wave until it completes (or 90 s pass), then shows the result toast with View log. */
+async function followAiWave(r: RunResult, router: ReturnType<typeof useRouter>, onDone: () => void): Promise<void> {
+  const deadline = Date.now() + 90_000;
+  let delay = 800;
+  while (Date.now() < deadline) {
+    await new Promise((res) => window.setTimeout(res, delay));
+    delay = Math.min(3_000, Math.round(delay * 1.5));
+    try {
+      const { data } = await apiRequest<WaveStatusResult>(`/api/waves/${encodeURIComponent(r.waveId)}`);
+      if (data.pending) continue;
+      showToast({
+        variant: data.status === "Failed" ? "error" : "success",
+        title: data.status === "Failed" ? `${r.ruleName}: wave failed` : r.ruleName,
+        message: data.summary,
+        duration: 10_000,
+        action: { label: "View log", onClick: () => router.push(`/jobs/wave-log?q=${encodeURIComponent(r.waveNo)}&qm=eq`) },
+      });
+      onDone();
+      return;
+    } catch {
+      // Transient errors: keep polling until the deadline.
+    }
+  }
+  toast.info("Still optimizing", `Wave ${r.waveNo} is taking longer than usual. You'll get a notification when its AI jobs are ready.`);
 }
 
 function RunButton({ selected, onDone }: { readonly selected: readonly GridRow[]; readonly onDone: () => void }) {
   const router = useRouter();
   const { permissions } = usePermissionSet();
   const [busy, setBusy] = React.useState(false);
+  const inFlight = React.useRef(false);
   const reason = selected.length === 0 ? "Select at least one wave rule" : !permissions.has(WAVE_RULE_PERMS.run) ? "You don't have permission to run wave rules" : selected.length > 20 ? "Run at most 20 rules at once" : null;
   const run = async () => {
+    if (inFlight.current) return; // one click = one wave, even on a fast double click before re-render
+    inFlight.current = true;
     setBusy(true);
+    // Long waves keep running server-side; the request survives in-app navigation and the result toast links to the log.
+    const slow = window.setTimeout(() => toast.info("Wave still running", "You can keep working in KitStak; the result appears here with a View log link when the wave finishes."), 4000);
     try {
       const { results } = await postJson<{ results: readonly RunResult[] }>("/api/wave-rules/run", { ids: selected.map((r) => r.id) });
       for (const r of results) {
+        if (AI_PENDING.has(r.status)) {
+          // AI waves return while Optimizing; the optimization finishes server-side and we follow it here.
+          showToast({ variant: "info", title: `${r.ruleName}: optimizing`, message: r.summary, duration: 6_000, action: { label: "View log", onClick: () => router.push(`/jobs/wave-log?q=${encodeURIComponent(r.waveNo)}&qm=eq`) } });
+          void followAiWave(r, router, onDone);
+          continue;
+        }
         showToast({
           variant: r.status === "Failed" ? "error" : "success",
           title: r.status === "Failed" ? `${r.ruleName}: wave failed` : `${r.ruleName}`,
@@ -91,12 +132,15 @@ function RunButton({ selected, onDone }: { readonly selected: readonly GridRow[]
     } catch (error) {
       toast.error("Run failed", errorMessage(error));
     } finally {
+      window.clearTimeout(slow);
+      inFlight.current = false;
       setBusy(false);
     }
   };
+  if (!permissions.can(WAVE_RULE_PERMS.run)) return null;
   return (
     <DisabledReason reason={reason}>
-      <Button variant="primary" disabled={Boolean(reason) || busy} aria-busy={busy} onClick={() => void run()}>
+      <Button variant="secondary" disabled={Boolean(reason) || busy} aria-busy={busy} onClick={() => void run()}>
         {busy ? <Spinner className="h-3.5 w-3.5" label="Running" /> : <Play className="h-3.5 w-3.5" aria-hidden />}
         Run{selected.length > 1 ? ` (${selected.length})` : ""}
       </Button>
@@ -112,7 +156,9 @@ export function WaveRulesPage() {
   const [changeLog, setChangeLog] = React.useState<GridRow | null>(null);
   const [deleting, setDeleting] = React.useState<GridRow | null>(null);
   const refreshGrid = React.useCallback(() => void qc.invalidateQueries({ queryKey: ["grid", WAVE_RULES_GRID.gridKey] }), [qc]);
-  const canEdit = permissions.has(WAVE_RULE_PERMS.edit);
+  const canEdit = permissions.can(WAVE_RULE_PERMS.edit);
+  const canCreate = permissions.can(WAVE_RULE_PERMS.create);
+  const canDelete = permissions.can(WAVE_RULE_PERMS.delete);
 
   const columns = React.useMemo(() => buildColumns<GridRow>(WAVE_RULE_COLUMNS, {
     primary: "name",
@@ -122,9 +168,9 @@ export function WaveRulesPage() {
           {str(row.original.name)}
         </button>
       ),
-      status: ({ getValue }) => <StatusPill status={str(getValue()) || "Pending"} domain="wave" />,
+      status: ({ getValue }) => <JobsStatusPill status={str(getValue()) || "Pending"} domain="wave" />,
       lastWaveNo: ({ getValue }) => (getValue() ? <LinkCell href={jobsOfWaveHref(str(getValue()))}>{str(getValue())}</LinkCell> : <Dash />),
-      nextRunAt: ({ getValue }) => <NextRunCell value={getValue()} onElapsed={refreshGrid} />,
+      nextRunAt: ({ getValue, row }) => <NextRunCell value={getValue()} timezone={str((row.original as Record<string, unknown>).timezone) || null} onElapsed={refreshGrid} />,
     },
   }), [canEdit, refreshGrid]);
 
@@ -132,15 +178,15 @@ export function WaveRulesPage() {
     <NowProvider>
       <ListShell<GridRow>
         title="Job wave rules"
-        helper="Rules select open orders, match them to job types, allocate stock and create jobs, on a schedule or when you press Run."
+        helper="Rules turn open orders into jobs, on a schedule or when you press Run."
         tabs="jobs"
         actions={
-          <DisabledReason reason={permissions.has(WAVE_RULE_PERMS.create) ? null : "You don't have permission to create wave rules"}>
-            <Button variant="primary" disabled={!permissions.has(WAVE_RULE_PERMS.create)} onClick={() => setDrawer({ open: true, editId: null })}>
+          canCreate ? (
+            <Button variant="primary" onClick={() => setDrawer({ open: true, editId: null })}>
               <Plus className="h-3.5 w-3.5" aria-hidden />
               Create a new wave rule
             </Button>
-          </DisabledReason>
+          ) : null
         }
         gridKey={WAVE_RULES_GRID.gridKey}
         path="/api/wave-rules"
@@ -152,13 +198,13 @@ export function WaveRulesPage() {
         trailing={({ selected, refresh }) => <RunButton selected={selected} onDone={refresh} />}
         rowActions={(row) => [
           { key: "details", label: "Show details", icon: Eye, onSelect: () => setDetails(row) },
-          { key: "edit", label: "Edit", icon: Edit3, disabledReason: canEdit ? null : "You don't have permission to edit wave rules", onSelect: () => setDrawer({ open: true, editId: row.id }) },
+          ...(canEdit ? [{ key: "edit", label: "Edit", icon: Edit3, onSelect: () => setDrawer({ open: true, editId: row.id }) }] : []),
           { key: "log", label: "Change log", icon: History, onSelect: () => setChangeLog(row) },
-          { key: "delete", label: "Delete", icon: Trash2, destructive: true, disabledReason: permissions.has(WAVE_RULE_PERMS.delete) ? null : "You don't have permission to delete wave rules", onSelect: () => setDeleting(row) },
+          ...(canDelete ? [{ key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: () => setDeleting(row) }] : []),
         ]}
         emptyTitle="No wave rules yet"
         emptyDescription="A wave rule selects open orders and turns them into jobs."
-        emptyAction={<EmptyState compact title="" cards={[{ title: "Create a new wave rule", description: "Picking, cycle count, replenishment or order merge.", icon: Workflow, onClick: () => setDrawer({ open: true, editId: null }) }]} />}
+        emptyAction={canCreate ? <EmptyState compact title="" cards={[{ title: "Create a new wave rule", description: "Picking, cycle count, replenishment or order merge.", icon: Workflow, onClick: () => setDrawer({ open: true, editId: null }) }]} /> : undefined}
       />
       <WaveRuleDrawer open={drawer.open} editId={drawer.editId} defaultWarehouseId={null} onOpenChange={(o) => setDrawer((d) => ({ ...d, open: o }))} onSaved={refreshGrid} />
       <WaveRuleDetailDrawer rule={details} onClose={() => setDetails(null)} onEdit={canEdit ? (id) => { setDetails(null); setDrawer({ open: true, editId: id }); } : undefined} />
@@ -170,8 +216,8 @@ export function WaveRulesPage() {
         title="Are you sure you want to delete this wave rule?"
         description="Its schedule stops. Waves and jobs it already created are kept; the change log keeps a Delete entry."
         records={deleting ? { columns: [{ key: "name", label: "Wave rule" }, { key: "op", label: "Operation type" }, { key: "runs", label: "Runs" }], rows: [{ name: str(deleting.name), op: str(deleting.operationType), runs: plural(Number(deleting.runCount ?? 0), "run") }] } : undefined}
-        cancelLabel="No"
-        confirmLabel="Yes"
+        cancelLabel="Keep rule"
+        confirmLabel="Delete rule"
         onConfirm={async () => {
           if (!deleting) return;
           try {

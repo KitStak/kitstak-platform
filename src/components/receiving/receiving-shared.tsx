@@ -7,6 +7,10 @@
  */
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { BarChart3, ChevronDown, ClipboardList, MoveRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { FilterFieldDef } from "@/components/grid";
 import { customFieldDefSchema, parseList, tagSchema } from "@/components/shared/contracts";
 import { toast } from "@/components/ui/toast";
@@ -14,6 +18,7 @@ import { apiRequest, isApiError } from "@/lib/api-client";
 import { useCan as useCanRaw, useMe, type PermissionInput, type PermissionMode } from "@/lib/permissions-client";
 import { useApiQuery } from "@/lib/query-client";
 import type { ReceivingGridField } from "@/lib/grid-defs/receiving/purchase-orders";
+import { formatZoned } from "@/lib/grid-defs/receiving/zoned-time";
 
 /* ---------------- row types (mirrors of the server repositories) ---------------- */
 
@@ -48,7 +53,13 @@ export interface PoRow {
   readonly actualArrivalDate: string | null;
   readonly activeReceipts: number;
   readonly version: number;
+  /** Warehouse IANA time zone (module date-time rule). */
+  readonly warehouseTimeZone?: string;
   readonly receivingLocationCode: string | null;
+  /** Why one-click Receive PO can't run (tracked lines need Receive items); null when it can. */
+  readonly receiveAllBlockedReason: string | null;
+  /** Serial numbers pre-advised on the lines (Import Serial Numbers). */
+  readonly preAdvisedSerials?: number;
 }
 
 export interface Tracking {
@@ -84,10 +95,14 @@ export interface PoLineRow {
   readonly note: string | null;
   readonly tracking: Tracking;
   readonly version: number;
+  /** Pre-advised serials (Import PO Serial Numbers), in import order. */
+  readonly preAdvisedSerials?: readonly { readonly serial: string; readonly received: boolean }[];
 }
 
 export interface VendorAddress {
+  /** Address name (max 50). */
   readonly name: string;
+  readonly contactName?: string;
   readonly line1: string;
   readonly line2: string;
   readonly postalCode: string;
@@ -129,6 +144,8 @@ export interface PoDetail extends PoRow {
   readonly defaultReceivingLocation: { readonly id: string; readonly code: string } | null;
   readonly attachmentCount: number;
   readonly allowedStatuses: readonly string[];
+  /** Server state machine: why each manual status is unavailable (null = allowed / current). */
+  readonly statusReasons?: Readonly<Record<string, string | null>>;
 }
 
 export interface ProductInfo {
@@ -210,7 +227,7 @@ export function useFilterFields(fields: readonly ReceivingGridField[], options: 
       const slot = CF_SLOT(f.field);
       const def = slot ? defBySlot.get(slot) : undefined;
       const label = def ? def.name : f.label;
-      let opts: { value: string; label: string }[] | undefined = f.options?.map((v) => ({ value: v, label: v }));
+      let opts: { value: string; label: string }[] | undefined = f.options?.map((v) => ({ value: v, label: f.optionLabel ? f.optionLabel(v) : v }));
       if (f.dynamicOptions === "clients") opts = (clients ?? []).map((c) => ({ value: c.id, label: c.code ? `${c.code} · ${c.name}` : c.name }));
       if (f.dynamicOptions === "warehouses") opts = (warehouses ?? []).map((w) => ({ value: w.id, label: w.code ? `${w.code} · ${w.name}` : w.name }));
       if (f.dynamicOptions === "tags") opts = tagRows.map((t) => ({ value: t.id, label: t.name }));
@@ -264,6 +281,57 @@ export function ProductThumb({ url, size = 32, label }: { readonly url: string |
   );
 }
 
+/** Code-like cell for confirm mini tables: never breaks inside a token (the table scrolls). */
+/** An instant in the warehouse zone, labelled (`2026/11/10 1:02 AM EST`): the module's one date-time rule. */
+export function ZonedTime({ value, timeZone }: { readonly value: string | null | undefined; readonly timeZone: string | null | undefined }) {
+  if (!value) return <span className="text-faint">—</span>;
+  const text = formatZoned(value, timeZone);
+  return <span className="whitespace-nowrap tabular-nums text-body" title={`${text} (warehouse time)`}>{text}</span>;
+}
+
+export function Nowrap({ children, mono = false }: { readonly children: React.ReactNode; readonly mono?: boolean }) {
+  return <span className={`whitespace-nowrap${mono ? " font-medium" : ""}`}>{children}</span>;
+}
+
 export function openFile(href: string): void {
   window.open(href, "_blank", "noopener,noreferrer");
+}
+
+/** Milliseconds a list may stay in its first load before the grid shows a retryable "slow" state. */
+export const SLOW_LOAD_MS = 12_000;
+
+/** True once `loading` has been continuously true for `ms` (first load hung or very slow). */
+export function useSlowLoad(loading: boolean, ms: number = SLOW_LOAD_MS): boolean {
+  const [slow, setSlow] = React.useState(false);
+  React.useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => setSlow(true), ms);
+    return () => { clearTimeout(t); setSlow(false); };
+  }, [loading, ms]);
+  return loading && slow;
+}
+
+/** Grid `error` override: the real error, else a retryable message once the first load is slow. */
+export function slowLoadError(error: string | null, slow: boolean): string | null {
+  return error ?? (slow ? "Loading is taking longer than usual. The server may still be starting; retry to load the list again." : null);
+}
+
+/** "Putaway & reports" menu on the PO list and Receiving History headers. */
+export function ReceivingReportLinks() {
+  const router = useRouter();
+  const putaway = useCan("inventory.purchase_orders.view").allowed;
+  const poReport = useCan("reports.po_receiving_report.view").allowed;
+  const perf = useCan("analytics.labor_analytics.view").allowed;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="secondary">Putaway &amp; reports<ChevronDown className="h-3.5 w-3.5" aria-hidden /></Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[280px]">
+        <DropdownMenuItem icon={MoveRight} description="Received stock still in a receiving location" disabledReason={putaway ? null : "You don't have permission to view purchase orders"} onSelect={() => router.push("/receiving/putaway")}>Putaway worklist</DropdownMenuItem>
+        <DropdownMenuItem icon={ClipboardList} description="Ordered vs received per PO line (partial receipts)" disabledReason={poReport ? null : "You don't have permission to view the PO receiving report"} onSelect={() => router.push("/reports/po-receiving")}>PO receiving report</DropdownMenuItem>
+        <DropdownMenuItem icon={BarChart3} description="Units and lines received per user and hour" disabledReason={perf ? null : "You don't have permission to view labor analytics"} onSelect={() => router.push("/analytics/labor/receiving-performance")}>Receiving performance</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }

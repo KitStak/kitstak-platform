@@ -62,15 +62,16 @@ export function JobTypesPage() {
   return (
     <>
       <ListShell<GridRow>
-        title="Job types"
+        title="Job Types"
         helper="Create and list job types: how orders are batched, allocated, picked, counted or replenished."
         actions={
-          <DisabledReason reason={permissions.has(JOB_TYPE_PERMS.create) ? null : "You don't have permission to create job types"}>
-            <Button variant="primary" disabled={!permissions.has(JOB_TYPE_PERMS.create)} onClick={() => setDrawer({ open: true, editId: null })}>
+          // One rule across M03: actions the role can never perform are hidden, not disabled.
+          permissions.has(JOB_TYPE_PERMS.create) ? (
+            <Button variant="primary" onClick={() => setDrawer({ open: true, editId: null })}>
               <Plus className="h-3.5 w-3.5" aria-hidden />
               Create new job type
             </Button>
-          </DisabledReason>
+          ) : undefined
         }
         gridKey={JOB_TYPES_GRID.gridKey}
         path="/api/job-types"
@@ -107,8 +108,8 @@ export function JobTypesPage() {
         title="Are you sure you want to delete this job type?"
         description="Existing jobs keep their type name; the change log keeps a Delete entry."
         records={deleting ? { columns: [{ key: "code", label: "Code" }, { key: "wh", label: "Warehouse" }, { key: "op", label: "Operation type" }], rows: [{ code: str(deleting.code), wh: str(deleting.warehouse), op: str(deleting.operationType) }] } : undefined}
-        cancelLabel="No"
-        confirmLabel="Yes"
+        cancelLabel="Keep job type"
+        confirmLabel="Delete job type"
         onConfirm={async () => {
           if (!deleting) return;
           try {

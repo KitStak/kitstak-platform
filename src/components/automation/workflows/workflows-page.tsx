@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Workflows list (`/automation/workflows`, KitStaks-designed): sequence, name, trigger, scope,
+ * Workflows list (`/automation/workflows`, KitStak-designed): sequence, name, trigger, scope,
  * conditions, actions, active, runs and last run. Bulk Activate / Deactivate / Delete; Change
  * sequence opens a drag list; row ⋯ Edit · Run history · Change log · Delete.
  */
@@ -20,11 +20,11 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { StatusPill } from "@/components/ui/status-pill";
 import { DisabledReason, Tooltip } from "@/components/ui/tooltip";
-import { useFormat } from "@/lib/format";
 import { useApiQuery } from "@/lib/query-client";
-import { WORKFLOW_FIELDS, WORKFLOWS_GRID_KEY } from "@/lib/grid-defs/integrations/workflows";
+import { WORKFLOW_FIELDS, WORKFLOWS_GRID_KEY, shortScopeLabel, shortTriggerLabel } from "@/lib/grid-defs/integrations/workflows";
+import { clientTitle } from "@/lib/grid-defs/integrations/common";
 import type { WorkflowRow } from "@/server/repositories/workflows";
-import { EntityChangeLogDrawer, Muted, NO_PERMISSION, toastBulk, toFilterFields, useAction, useClientOptions, usePagePerms, useWarehouseOptions, type BulkResponse } from "@/components/integrations/shared/shared";
+import { DateTimeText, EntityChangeLogDrawer, Muted, NO_PERMISSION, toastBulk, toFilterFields, useAction, useClientOptions, usePagePerms, useWarehouseOptions, type BulkResponse } from "@/components/integrations/shared/shared";
 
 const PERMS = ["view", "create", "edit", "delete", "change_log"] as const;
 
@@ -43,9 +43,12 @@ function SortRow({ row, index }: { readonly row: WorkflowRow; readonly index: nu
   );
 }
 
-function SequenceDialog({ open, onOpenChange, onSaved }: { readonly open: boolean; readonly onOpenChange: (o: boolean) => void; readonly onSaved: () => void }) {
+function SequenceDialog({ open, onOpenChange, onSaved, seed }: { readonly open: boolean; readonly onOpenChange: (o: boolean) => void; readonly onSaved: () => void; readonly seed: readonly WorkflowRow[] }) {
   const q = useApiQuery<WorkflowRow[]>(["workflows-all"], open ? "/api/workflows" : null, { query: { ps: 1000, sort: "sequence" }, staleTime: 0 });
+  // Seed from the rows the grid already loaded so the list renders instantly; the full fetch then replaces it.
+  const seedSorted = React.useMemo(() => [...seed].sort((a, b) => a.sequence - b.sequence), [seed]);
   const [rows, setRows] = React.useState<WorkflowRow[]>([]);
+  React.useEffect(() => { if (open && !q.data?.data) setRows(seedSorted); }, [open, seedSorted, q.data]);
   React.useEffect(() => { if (q.data?.data) setRows([...q.data.data]); }, [q.data]);
   const action = useAction([["grid", WORKFLOWS_GRID_KEY]]);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
@@ -53,13 +56,14 @@ function SequenceDialog({ open, onOpenChange, onSaved }: { readonly open: boolea
     if (!e.over || e.active.id === e.over.id) return;
     setRows((list) => arrayMove(list, list.findIndex((r) => r.id === e.active.id), list.findIndex((r) => r.id === e.over?.id)));
   };
-  const changed = q.data?.data ? rows.map((r) => r.id).join() !== q.data.data.map((r) => r.id).join() : false;
+  const baseline = q.data?.data ?? seedSorted;
+  const changed = rows.length > 0 && rows.map((r) => r.id).join() !== baseline.map((r) => r.id).join();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
         <DialogHeader title="Change sequence" description="Workflows run top to bottom for each trigger. A workflow with Stop processing ends the chain when it matches." />
         <DialogBody>
-          {q.isPending ? <p className="py-6 text-center text-[13px] text-secondary">Loading workflows…</p> : (
+          {q.isPending && rows.length === 0 ? <p className="py-6 text-center text-[13px] text-secondary">Loading workflows…</p> : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
               <SortableContext items={rows.map((r) => r.id)} strategy={verticalListSortingStrategy}>
                 <ol className="flex max-h-[55vh] flex-col gap-1.5 overflow-auto">{rows.map((r, i) => <SortRow key={r.id} row={r} index={i} />)}</ol>
@@ -83,7 +87,6 @@ function SequenceDialog({ open, onOpenChange, onSaved }: { readonly open: boolea
 
 export function WorkflowsPage() {
   const router = useRouter();
-  const fmt = useFormat();
   const perms = usePagePerms("automation.workflows", PERMS);
   const warehouses = useWarehouseOptions();
   const clients = useClientOptions();
@@ -101,26 +104,27 @@ export function WorkflowsPage() {
   };
 
   const COLUMNS: GridColumnDef<WorkflowRow>[] = [
-    { id: "sequence", header: "#", size: 56, meta: { align: "right" }, cell: ({ row }) => <div className="text-right tabular-nums text-secondary">{row.original.sequence}</div> },
-    { id: "name", header: "Name", size: 260, meta: { alwaysVisible: true }, cell: ({ row }) => (
+    { id: "sequence", header: "#", size: 52, meta: { align: "right" }, cell: ({ row }) => <div className="text-right tabular-nums text-secondary">{row.original.sequence}</div> },
+    { id: "name", header: "Name", size: 232, meta: { alwaysVisible: true }, cell: ({ row }) => (
       <span className="flex min-w-0 items-center gap-2">
         <Link href={href(row.original.id)} onClick={(e) => e.stopPropagation()} className="truncate font-medium text-primary hover:underline">{row.original.name}</Link>
         {row.original.stopProcessing ? <Tooltip content="Stops the chain when it matches"><span><Badge size="sm" tone="warning">Stop</Badge></span></Tooltip> : null}
       </span>
     ) },
-    { id: "trigger", header: "Trigger", size: 190, cell: ({ row }) => row.original.trigger },
-    { id: "scope", header: "Scope", size: 200, enableSorting: false, cell: ({ row }) => <span className="truncate">{row.original.warehouseCode ?? "All warehouses"} · {row.original.clientName ?? "All clients"}</span> },
-    { id: "conditions", header: "Conditions", size: 240, enableSorting: false, cell: ({ row }) => (
-      <Tooltip content={row.original.conditionSummary}><span className="flex min-w-0 items-center gap-1.5"><Badge size="sm" tone="info">{row.original.match === "All" ? "All" : "Any"} · {row.original.conditionCount}</Badge><span className="truncate text-[12px] text-secondary">{row.original.conditionSummary}</span></span></Tooltip>
+    // Operational columns (state, volume, recency, impact) before the definition columns so they fit at 1440.
+    { id: "isActive", header: "Active", size: 88, cell: ({ row }) => <StatusPill status={row.original.isActive ? "Active" : "Inactive"} domain="active" /> },
+    { id: "runCount", header: "Runs", size: 76, meta: { align: "right" }, cell: ({ row }) => <div className="text-right tabular-nums">{row.original.runCount.toLocaleString("en-US")}</div> },
+    { id: "lastRunAt", header: "Last run", size: 172, cell: ({ row }) => <DateTimeText value={row.original.lastRunAt} empty="Never" /> },
+    { id: "blocked", header: "Blocking", size: 104, enableSorting: false, meta: { align: "right" }, cell: ({ row }) => <div className="text-right">{row.original.blockedOpen > 0 ? <Link onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 font-medium text-danger hover:underline" href={`/integrations/monitoring/workflow-blocked?f.workflowName=eq:${encodeURIComponent(row.original.name)}`}><ShieldAlert className="h-3.5 w-3.5" />{row.original.blockedOpen}</Link> : <Muted>0</Muted>}</div> },
+    { id: "trigger", header: "Trigger", size: 110, cell: ({ row }) => <span className="whitespace-nowrap" title={row.original.trigger}>{shortTriggerLabel(row.original.trigger)}</span> },
+    { id: "scope", header: "Scope", size: 176, enableSorting: false, cell: ({ row }) => <span className="block truncate" title={`${row.original.warehouseCode ?? "All warehouses"} · ${row.original.clientId ? clientTitle(row.original.clientCode, row.original.clientName) : "All clients"}`}>{shortScopeLabel(row.original.warehouseCode, row.original.clientName)}</span> },
+    { id: "conditions", header: "Conditions", size: 150, enableSorting: false, cell: ({ row }) => (
+      <Tooltip content={row.original.conditionSummary}><span tabIndex={0} className="flex min-w-0 items-center gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Badge size="sm" tone="info" className="shrink-0">{row.original.match === "All" ? "All" : "Any"} · {row.original.conditionCount}</Badge><span className="line-clamp-2 whitespace-normal break-words text-[12px] leading-4 text-secondary">{row.original.conditionSummary}</span></span></Tooltip>
     ) },
-    { id: "actions", header: "Actions", size: 240, enableSorting: false, cell: ({ row }) => <span className="truncate text-[12px]" title={row.original.actions.join(" → ")}>{row.original.actions.join(" → ")}</span> },
-    { id: "isActive", header: "Active", size: 90, cell: ({ row }) => <StatusPill status={row.original.isActive ? "Active" : "Inactive"} domain="active" /> },
-    { id: "runCount", header: "Runs", size: 80, meta: { align: "right" }, cell: ({ row }) => <div className="text-right tabular-nums">{row.original.runCount.toLocaleString("en-US")}</div> },
-    { id: "blocked", header: "Blocking now", size: 120, enableSorting: false, meta: { align: "right" }, cell: ({ row }) => <div className="text-right">{row.original.blockedOpen > 0 ? <Link onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 font-medium text-danger hover:underline" href={`/integrations/monitoring/workflow-blocked?f.workflowName=eq:${encodeURIComponent(row.original.name)}`}><ShieldAlert className="h-3.5 w-3.5" />{row.original.blockedOpen}</Link> : <Muted>0</Muted>}</div> },
-    { id: "lastRunAt", header: "Last run", size: 170, cell: ({ row }) => (row.original.lastRunAt ? fmt.dateTime(row.original.lastRunAt) : <Muted>Never</Muted>) },
+    { id: "actions", header: "Actions", size: 104, enableSorting: false, cell: ({ row }) => <span className="block truncate text-[12px]" title={row.original.actions.join(" → ")}>{row.original.actions.join(" → ")}</span> },
   ];
 
-  const bulkActions: readonly BulkAction[] = [
+  const bulkActions: readonly BulkAction[] = !perms.edit && !perms.delete ? [] : [
     { key: "activate", label: "Activate", icon: Power, onSelect: (ids) => void setActive(ids, true), disabledReason: perms.edit ? null : NO_PERMISSION },
     { key: "deactivate", label: "Deactivate", icon: PowerOff, onSelect: (ids) => void setActive(ids, false), disabledReason: perms.edit ? null : NO_PERMISSION },
     { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: (ids) => setToDelete(selected(ids)), disabledReason: perms.delete ? null : NO_PERMISSION },
@@ -138,8 +142,8 @@ export function WorkflowsPage() {
       <PageHeader title="Workflows" helper="Automate what happens when orders arrive: block risky addresses, set carriers and presets, tag, notify."
         actions={
           <div className="flex gap-2">
-            <DisabledReason reason={perms.edit ? null : NO_PERMISSION}><Button variant="secondary" disabled={!perms.edit} onClick={() => setSequence(true)}><ArrowDownUp className="h-4 w-4" />Change sequence</Button></DisabledReason>
-            <DisabledReason reason={perms.create ? null : NO_PERMISSION}><Button variant="primary" disabled={!perms.create} onClick={() => router.push("/automation/workflows/new")}><Plus className="h-4 w-4" />Create Workflow</Button></DisabledReason>
+            {perms.edit ? <Button variant="secondary" onClick={() => setSequence(true)}><ArrowDownUp className="h-4 w-4" />Change sequence</Button> : null}
+            {perms.create ? <Button variant="primary" onClick={() => router.push("/automation/workflows/new")}><Plus className="h-4 w-4" />Create Workflow</Button> : null}
           </div>
         } />
       <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by name or description" bulkActions={bulkActions} bulkNoun="workflow" />
@@ -153,7 +157,7 @@ export function WorkflowsPage() {
         emptyDescription={filtered ? "Clear a filter or search for another name." : "Workflows run on every new order. Start with blocking PO box addresses or tagging VIP clients."}
         emptyAction={perms.create && !filtered ? <Button variant="primary" onClick={() => router.push("/automation/workflows/new")}><Workflow className="h-4 w-4" />Create workflow</Button> : undefined}
       />
-      <SequenceDialog open={sequence} onOpenChange={setSequence} onSaved={() => g.refetch()} />
+      <SequenceDialog open={sequence} onOpenChange={setSequence} onSaved={() => g.refetch()} seed={g.rows} />
       <EntityChangeLogDrawer open={log !== null} onOpenChange={(o) => !o && setLog(null)} path={log ? `/api/workflows/${log.id}/change-log` : null} title={`Change log · ${log?.name ?? ""}`} />
       <ConfirmDialog open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)} variant="danger"
         title={`Delete ${toDelete?.length === 1 ? `workflow ${toDelete[0]?.name}` : `${toDelete?.length ?? 0} workflows`}?`}

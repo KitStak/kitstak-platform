@@ -82,7 +82,8 @@ const DEFS: readonly EntityDef[] = [
   def("return_order", {
     label: "Return Order", table: s.returnOrders, id: s.returnOrders.id, code: s.returnOrders.rmaCode,
     warehouseId: s.returnOrders.warehouseId, clientId: s.returnOrders.clientId,
-    view: ["inventory.return_orders.view"], edit: ["inventory.return_orders.change_status"],
+    // Station operators attach per-line photos while receiving, without Change Status.
+    view: ["inventory.return_orders.view"], edit: ["inventory.return_orders.change_status", "inventory.return_station.receive_return"],
     tag: ["inventory.return_orders.tag"],
   }),
   def("work_order", {
@@ -168,6 +169,34 @@ const DEFS: readonly EntityDef[] = [
   def("customer", {
     label: "Customer", table: s.customers, id: s.customers.id, code: s.customers.email, clientId: s.customers.clientId,
     view: ["settings.customers.view"], edit: ["settings.customers.edit"],
+  }),
+  // M12 automation + integrations (REQ-AI-R4-1): workflows / presets with a null warehouse or
+  // client apply to all, which the scope check treats as unscoped on that axis.
+  def("algorithm", {
+    label: "Algorithm", table: s.algorithms, id: s.algorithms.id, code: s.algorithms.name, warehouseId: s.algorithms.warehouseId,
+    view: ["automation.algorithms.view"], edit: ["automation.algorithms.edit"], changeLog: ["automation.algorithms.change_log"],
+  }),
+  def("workflow", {
+    label: "Workflow", table: s.workflows, id: s.workflows.id, code: s.workflows.name,
+    warehouseId: s.workflows.warehouseId, clientId: s.workflows.clientId,
+    view: ["automation.workflows.view"], edit: ["automation.workflows.edit"], changeLog: ["automation.workflows.change_log"],
+  }),
+  def("rate_shopping_preset", {
+    label: "Rate Shopping Preset", table: s.rateShoppingPresets, id: s.rateShoppingPresets.id, code: s.rateShoppingPresets.name,
+    warehouseId: s.rateShoppingPresets.warehouseId, clientId: s.rateShoppingPresets.clientId,
+    view: ["automation.rate_shopping.view"], edit: ["automation.rate_shopping.edit"], changeLog: ["automation.rate_shopping.change_log"],
+  }),
+  def("channel_connection", {
+    label: "Store Connection", table: s.channelConnections, id: s.channelConnections.id, code: s.channelConnections.storeName,
+    clientId: s.channelConnections.clientId,
+    view: ["integrations.integrations.create_setup", "integrations.integrations.edit_setup", "integrations.integrations.delete_setup"],
+    edit: ["integrations.integrations.edit_setup"],
+  }),
+  def("carrier_connection", {
+    label: "Carrier Setup", table: s.carrierConnections, id: s.carrierConnections.id, code: s.carrierConnections.setupName,
+    warehouseId: s.carrierConnections.warehouseId,
+    view: ["integrations.integrations.create_setup", "integrations.integrations.edit_setup", "integrations.integrations.delete_setup"],
+    edit: ["integrations.integrations.edit_setup"],
   }),
 ];
 

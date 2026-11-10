@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { PageSkeleton } from "@/components/layout/shell-skeleton";
+import { ShipListFallback } from "@/components/shipping/page-fallback";
 import { EndOfDayPage } from "@/components/shipping/end-of-day-page";
 
-export const metadata: Metadata = { title: "End of the day" };
+export const metadata: Metadata = { title: "End Of The Day" };
 
 /** The grid reads its state from the URL (useSearchParams), so it renders inside Suspense. */
 export default function Page() {
   return (
-    <Suspense fallback={<PageSkeleton />}>
+    <Suspense fallback={<ShipListFallback title="End Of The Day" helper="Monitor total packages per carrier account, warehouse and day, then close the manifest for carrier pickup and reconciliation." tabs="shipments" />}>
       <EndOfDayPage />
     </Suspense>
   );

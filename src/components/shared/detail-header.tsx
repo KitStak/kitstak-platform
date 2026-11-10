@@ -25,7 +25,7 @@ export function DetailHeader({ title, backHref, backLabel = "Back", status, stat
   return (
     <header className={cn("flex flex-col gap-2 px-6 pt-5 pb-4", className)}>
       {backHref ? (
-        <Link href={backHref} className="inline-flex w-fit items-center gap-1 text-[12px] font-semibold text-secondary transition-colors hover:text-primary focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+        <Link href={backHref} className="inline-flex w-fit items-center gap-1 text-[12px] font-semibold text-secondary transition-colors hover:text-primary focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
           {backLabel}
         </Link>

@@ -5,7 +5,7 @@ import { idParamsSchema } from "@/server/repositories/platform-common";
 import { getLpNumber, loadLp, lpLocks, updateLpNumber } from "@/server/repositories/lp-numbers";
 
 export const GET = defineRoute({
-  permission: "settings.lp_numbers.view",
+  permission: ["settings.lp_numbers.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   handler: ({ db, auth, params }) => ({ ...getLpNumber(db, auth, params.id), locks: lpLocks(loadLp(db, auth, params.id)) }),
 });

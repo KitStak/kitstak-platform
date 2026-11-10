@@ -18,6 +18,9 @@ export const BILLING_REPORT_FIELDS: readonly OrgField[] = [
   { field: "totalPrice", label: "Price", type: "number", decimals: 2 },
   { field: "exportedToIntegration", label: "Exported to integration", type: "boolean" },
 ];
+/** Logiwa Billing Report filters: Billing Number, Client, Create Date, Name, Warehouse. */
+export const BILLING_REPORT_FILTER_PRESET = ["billNumber", "clientId", "createdAt", "contractName", "warehouseId"] as const;
+export const BILLING_LINE_FILTER_PRESET = ["feeName", "operationType", "referenceNumber", "sku", "activityDate"] as const;
 export const BILLING_REPORT_SORT_FIELDS = ["contractName", "billNumber", "calcStatus", "clientName", "warehouseCode", "calculatedAt", "createdByName", "periodStart", "periodEnd", "billStatus", "totalPrice", "createdAt"] as const;
 export const BILLING_REPORT_SEARCH_FIELDS = ["contractName", "billNumber"] as const;
 
@@ -38,6 +41,8 @@ export const billInfoSchema = z.object({
   billNumber: requiredText("Bill number", 40).regex(/^[A-Za-z0-9-]+$/, "Letters, numbers or dash"),
   billStatus: z.enum(BILL_STATUSES),
   version: versionField,
+  /** Explicit confirmation to approve a bill whose period has not ended yet. */
+  allowOpenPeriod: z.boolean().optional(),
 });
 export type BillInfoInput = z.input<typeof billInfoSchema>;
 

@@ -64,7 +64,10 @@ export async function tagControls(page: Page): Promise<readonly ControlDescripto
           inShell: el.closest("header, nav, aside, [data-app-shell]") !== null,
           isCurrent:
             !(el instanceof HTMLAnchorElement) &&
-            (el.getAttribute("aria-selected") === "true" || el.getAttribute("aria-pressed") === "true"),
+            (el.getAttribute("aria-selected") === "true" ||
+              el.getAttribute("aria-pressed") === "true" ||
+              // A checked radio (segmented control / option card) is already the current choice.
+              (el.getAttribute("role") === "radio" && el.getAttribute("aria-checked") === "true")),
         };
       });
   }, AUDIT_ATTR);

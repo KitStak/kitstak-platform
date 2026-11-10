@@ -11,7 +11,7 @@ import { ChevronDown, Clock, Gauge, PiggyBank, Settings2, Truck } from "lucide-r
 import { useController, type UseFormReturn } from "react-hook-form";
 import { apiRequest, isApiError } from "@/lib/api-client";
 import { applyServerFieldErrors, useApiQuery } from "@/lib/query-client";
-import { METHOD_COPY, PRESET_DEFAULTS, presetGeneralSchema, presetServicesSchema, presetSettingsSchema, type PresetSaveInput } from "@/lib/grid-defs/integrations/rate-shopping";
+import { METHOD_COPY, PRESET_DEFAULTS, presetGeneralSchema, presetServicesSchema, presetSettingsSchema, servedClientOptions, type PresetSaveInput } from "@/lib/grid-defs/integrations/rate-shopping";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -31,18 +31,35 @@ import { useClientOptions, useWarehouseOptions } from "@/components/integrations
 import type { PresetDetail, PresetService } from "@/server/repositories/rate-shopping";
 
 type F = PresetSaveInput;
+const servedList = z.array(z.object({ id: z.string(), serviceCount: z.number() }));
 
 function GeneralStep({ form, isEdit }: { readonly form: UseFormReturn<F>; readonly isEdit: boolean }) {
   const warehouses = useWarehouseOptions();
-  const clients = useClientOptions();
+  const allClients = useClientOptions();
+  const warehouseId = form.watch("warehouseId");
+  const clientId = form.watch("clientId");
+  const servedQ = useApiQuery<unknown>(["rs-clients", warehouseId], warehouseId && !isEdit ? "/api/rate-shopping-presets/clients" : null, { query: { warehouseId }, staleTime: 30_000 });
+  const servedParsed = servedList.safeParse(servedQ.data?.data);
+  const { options: clients, hidden } = servedClientOptions(allClients, servedParsed.success ? servedParsed.data : null, clientId);
+  // Clear a client the newly chosen warehouse doesn't serve.
+  React.useEffect(() => {
+    if (isEdit || !servedParsed.success || !clientId) return;
+    if (!servedParsed.data.some((c) => c.id === clientId)) form.setValue("clientId", "", { shouldDirty: true });
+  }, [isEdit, servedParsed.success, servedParsed.data, clientId, form]);
   const lock = isEdit ? "Locked after the preset is created" : undefined;
+  const clientDescription = isEdit ? undefined
+    : !warehouseId ? "Pick a warehouse first."
+    : servedQ.isPending ? "Loading clients served by this warehouse…"
+    : servedQ.isError ? "Couldn't check which clients this warehouse serves; the server validates on save."
+    : clients.length === 0 ? "No client has carrier services at this warehouse. Set up a carrier in Carrier Integrations first."
+    : hidden > 0 ? `${hidden} client${hidden === 1 ? " is" : "s are"} hidden: no carrier services at this warehouse.` : undefined;
   return (
-    <FormSection title="General">
+    <FormSection title="Preset details" description="Warehouse and client decide which carrier services the preset can compare.">
       <FormGrid>
         <TextInput<F> name="name" label="RS preset name" required maxLength={60} showCount placeholder="Enter RS preset name" />
         <ComboField<F> name="warehouseId" label="Warehouse" required options={warehouses.options} disabled={isEdit} info={lock} onValueChange={() => form.setValue("serviceIds", [])} />
         <TextInput<F> name="description" label="Description" required maxLength={250} placeholder="e.g. Cheapest ground option for D2C orders" className="md:col-span-2" />
-        <ComboField<F> name="clientId" label="Client" required options={clients} disabled={isEdit} info={lock} onValueChange={() => form.setValue("serviceIds", [])} />
+        <ComboField<F> name="clientId" label="Client" required options={isEdit ? allClients : clients} disabled={isEdit || !warehouseId} info={lock} description={clientDescription} emptyText="No client has carrier services at this warehouse" onValueChange={() => form.setValue("serviceIds", [])} />
         <CheckboxField<F> name="isActive" label="Active" hint="Inactive presets can't be chosen on orders" />
       </FormGrid>
     </FormSection>
@@ -100,7 +117,7 @@ function ServicesStep({ form }: { readonly form: UseFormReturn<F> }) {
       {fieldState.error?.message && !useAll ? <p role="alert" className="text-[12px] text-danger">{fieldState.error.message}</p> : null}
       <div className="flex flex-wrap items-center gap-2">
         <TextField aria-label="Search by shipping option" placeholder="Search by shipping option" size="sm" value={search} onChange={(e) => setSearch(e.target.value)} wrapperClassName="w-64" />
-        <span className="text-[12px] text-secondary">{useAll ? `All ${rows.length} services` : `${on.size} of ${rows.length} selected`}</span>
+        <span className="text-[12px] text-secondary" aria-live="polite">{useAll ? (q.isPending && warehouseId && clientId ? "All available services" : `All ${rows.length} service${rows.length === 1 ? "" : "s"}`) : q.isPending && warehouseId && clientId ? "Loading services…" : `${on.size} of ${rows.length} selected`}</span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="secondary" className="ml-auto" disabled={useAll || checked.size === 0} title={useAll ? "Turn off Use all available services to pick options" : checked.size === 0 ? "Tick at least one row" : undefined}>Bulk Actions<ChevronDown className="h-3.5 w-3.5" /></Button>
@@ -111,7 +128,13 @@ function ServicesStep({ form }: { readonly form: UseFormReturn<F> }) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {q.isPending && warehouseId && clientId ? <SkeletonTable rows={6} columns={4} /> : rows.length === 0 ? (
+      {q.isError ? (
+        <Callout variant="attention" title="Couldn't load shipping options" action={<Button size="sm" onClick={() => void q.refetch()}>Retry</Button>}>
+          {useAll ? "You can still save: with Use all available services on, the preset compares every service the client has." : "Retry, or turn on Use all available services to save without a list."}
+        </Callout>
+      ) : q.isPending && warehouseId && clientId ? (useAll
+        ? <p className="rounded-lg border border-dashed border-border px-3 py-4 text-[12px] text-secondary">Every active service from the client&apos;s carrier setups at this warehouse is compared. You can save now; the list below is only needed to pick services one by one.</p>
+        : <SkeletonTable rows={6} columns={4} />) : rows.length === 0 ? (
         <EmptyState compact icon={Truck} title="No shipping options for this client" description="Give the client access to a carrier setup in Carrier Integrations, then come back." />
       ) : (
         <div className="max-h-[48vh] overflow-auto rounded-lg border border-border">

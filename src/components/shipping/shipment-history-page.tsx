@@ -9,10 +9,11 @@ import { SHIPMENT_HISTORY_FIELDS, SHIPMENT_HISTORY_GRID_KEY } from "@/lib/grid-d
 import { DataGrid, GridToolbar, LinkCell, useGrid } from "@/components/grid";
 import { PageHeader } from "@/components/layout/page-header";
 import type { ShipmentHistoryRow } from "@/server/repositories/shipping-history";
+import { ExportHistoryButton } from "./export-history-button";
 import { buildColumns, dash, exportColumnsOf, type ColumnSpec } from "./column-kit";
 import { useFilterFields } from "./shipping-client";
 
-type Row = ShipmentHistoryRow & { readonly orderCode: string | null; readonly sku: string | null; readonly shipmentType: string; readonly masterOrderCode: string | null; readonly packageWeight: number | null };
+type Row = ShipmentHistoryRow & { readonly orderCode: string | null; readonly reference: string | null; readonly adjustmentReason: string | null; readonly sku: string | null; readonly shipmentType: string; readonly masterOrderCode: string | null; readonly packageWeight: number | null };
 
 const orderLink = (code: string | null) => (code ? <LinkCell href={`/orders/${encodeURIComponent(code)}`}>{code}</LinkCell> : dash);
 
@@ -26,7 +27,14 @@ function typePill(type: string) {
 }
 
 const SPECS: readonly ColumnSpec<Row>[] = [
-  { id: "orderCode", label: "Order code", width: 130, always: true, cell: (r) => orderLink(r.orderCode) },
+  {
+    id: "orderCode", label: "Order code", width: 130, always: true,
+    // Remove-inventory rows carry no order: show the adjustment reference instead of a bare dash.
+    cell: (r) => (r.orderId && r.orderCode ? orderLink(r.orderCode) : r.reference ? <span className="truncate font-mono text-[12px] text-secondary" title="Remove inventory adjustment">{r.reference}</span> : dash),
+    exportKey: "reference",
+  },
+  { id: "shipmentType", label: "Shipment type", width: 140, cell: (r) => typePill(r.shipmentType) },
+  { id: "adjustmentReason", label: "Adjustment reason", width: 170 },
   { id: "originalOrderCode", label: "Original order code", width: 150, cell: (r) => orderLink((r.originalOrderCode as string | null) ?? null) },
   { id: "storeOrderNumber", label: "Store order number", width: 150 },
   { id: "sku", label: "SKU", width: 140, cell: (r) => (r.sku ? <LinkCell href={`/products/${encodeURIComponent(r.productId)}`}>{r.sku}</LinkCell> : dash) },
@@ -46,7 +54,6 @@ const SPECS: readonly ColumnSpec<Row>[] = [
   { id: "masterOrderCode", label: "Master shipment order code", width: 180, cell: (r) => orderLink(r.masterOrderCode) },
   { id: "isBackOrder", label: "Is back order", kind: "boolean" },
   { id: "shipmentDate", label: "Shipment date", kind: "datetime" },
-  { id: "shipmentType", label: "Shipment type", width: 140, cell: (r) => typePill(r.shipmentType) },
   { id: "note", label: "Note", width: 200 },
   { id: "clientName", label: "Client", width: 150 },
   { id: "warehouseCode", label: "Warehouse", width: 96 },
@@ -69,12 +76,11 @@ export function ShipmentHistoryPage() {
   const hasState = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
-      <PageHeader title="Shipment history" helper="Every unit that left inventory — shipped orders and remove-inventory actions — by SKU, lot and LPN, straight from the ledger." />
-      <GridToolbar {...g.toolbarProps} searchPlaceholder="Order code, SKU, tracking or store order #" onRefresh={g.refetch} />
+      <PageHeader title="Shipment History" helper="Every unit that left inventory — shipped orders and remove-inventory actions — by SKU, lot and LPN, straight from the ledger." />
+      <GridToolbar {...g.toolbarProps} searchPlaceholder="Order code, SKU, tracking or store order #" onRefresh={g.refetch} trailing={<ExportHistoryButton gridKey="shipment-history" />} />
       <div className="flex min-h-0 flex-1 flex-col">
         <DataGrid<Row>
           {...g.gridProps}
-          selectable={false}
           columns={COLUMNS}
           exportColumns={EXPORT_COLUMNS}
           getRowId={(r) => r.id}

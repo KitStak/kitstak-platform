@@ -5,7 +5,7 @@ import { mobileCartSchema } from "@/lib/grid-defs/facility/mobile-carts";
 import { createMobileCart, listMobileCarts } from "@/server/repositories/mobile-carts";
 
 export const GET = defineRoute({
-  permission: "settings.mobile_carts.view",
+  permission: ["settings.mobile_carts.view", "inventory.inventory_by_location.view"],
   handler: ({ db, auth, grid }) => {
     const query = grid();
     const { rows, total } = listMobileCarts(db, auth, query);

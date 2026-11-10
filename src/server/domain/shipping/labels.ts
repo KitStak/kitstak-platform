@@ -27,7 +27,8 @@ export interface PackageInput extends PackageSpec {
   readonly items?: readonly { readonly orderLineId: string; readonly qty: number }[];
 }
 
-const LABELABLE: readonly OrderRow["status"][] = ["Packing Started", "Ready to Load", "Loading Started", "Ready to Ship", "Partially Shipped"];
+// Open / Ready to Pick allow pre-pack labels (Logiwa carrier batch; REQ-R4-4).
+const LABELABLE: readonly OrderRow["status"][] = ["Open", "Ready to Pick", "Packing Started", "Ready to Load", "Loading Started", "Ready to Ship", "Partially Shipped"];
 
 /* -------------------------------------------------------------- rate shop */
 export interface RateShopInput {
@@ -92,7 +93,18 @@ export interface CreateLabelInput {
   readonly rateShoppingPresetId?: string | null;
   /** BatchPacking | PackingStation | OrderGrid | ShipmentPlan */
   readonly source?: string;
+  readonly insuranceType?: string | null;
+  readonly insuranceValue?: number | null;
+  readonly confirmationType?: string | null;
+  readonly allowSaturdayDelivery?: boolean;
+  readonly otherCost?: number;
+  /** Defaults to the order's store order number. */
+  readonly externalReference?: string | null;
+  readonly scheduledPickupAt?: string | null;
 }
+
+/** Carrier options persisted on every package row of the label (Logiwa Carrier Shipment Details columns). */
+export type LabelOptions = Pick<CreateLabelInput, "insuranceType" | "insuranceValue" | "confirmationType" | "allowSaturdayDelivery" | "otherCost" | "externalReference" | "scheduledPickupAt" | "rateShoppingPresetId">;
 
 export interface CreateLabelResult {
   readonly shipments: readonly ShipmentRow[];
@@ -111,6 +123,7 @@ interface LabelCall {
   readonly packages: readonly PackageInput[];
   readonly format?: LabelFormat;
   readonly source?: string;
+  readonly options?: LabelOptions;
 }
 
 async function callCarrier(db: AppDb, ctx: DomainCtx, call: LabelCall, opts?: ShippingOptions) {
@@ -156,6 +169,11 @@ function insertShipments(
       shipmentPackageId: spec.shipmentPackageId ?? null, packageSeq: i + 1, weight: spec.weightOz, length: spec.length, width: spec.width,
       height: spec.height, rate: pkg.amount, shippingCost: price, currency: result.currency, zone: result.zone,
       carrierExpectedDeliveryAt: result.estimatedDeliveryAt, createdBy: ctx.userId,
+      insuranceType: call.options?.insuranceType ?? null, insuranceValue: call.options?.insuranceValue ?? null,
+      confirmationType: call.options?.confirmationType ?? null, allowSaturdayDelivery: call.options?.allowSaturdayDelivery ?? false,
+      otherCost: i === 0 ? call.options?.otherCost ?? 0 : 0, scheduledPickupAt: call.options?.scheduledPickupAt ?? null,
+      externalReference: call.options?.externalReference ?? call.order.storeOrderNumber ?? null,
+      rateShoppingPresetId: call.options?.rateShoppingPresetId ?? null, isRateShopped: Boolean(call.options?.rateShoppingPresetId),
     }).returning().get();
     const items = spec.items ?? (i === 0 && call.labelType === "Shipping Label"
       ? lines.map((l) => ({ orderLineId: l.id, qty: l.packedQuantity > 0 ? l.packedQuantity : l.quantity - l.cancelledQuantity })).filter((x) => x.qty > 0)
@@ -189,6 +207,11 @@ export async function createLabel(db: AppDb, ctx: DomainCtx, input: CreateLabelI
   const call: LabelCall = {
     labelType: "Shipping Label", order, connectionId: input.carrierConnectionId, serviceId: input.carrierServiceId,
     from: (d, c) => warehouseAddress(d, order.warehouseId, c), to: () => orderAddress(order), packages: input.packages, format: input.format, source: input.source,
+    options: {
+      insuranceType: input.insuranceType, insuranceValue: input.insuranceValue, confirmationType: input.confirmationType,
+      allowSaturdayDelivery: input.allowSaturdayDelivery, otherCost: input.otherCost, externalReference: input.externalReference,
+      scheduledPickupAt: input.scheduledPickupAt, rateShoppingPresetId: input.rateShoppingPresetId ?? order.rateShoppingPresetId,
+    },
   };
   const carrier = await callCarrier(db, ctx, call, opts);
   return db.transaction((tx) => {

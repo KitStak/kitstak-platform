@@ -4,11 +4,13 @@
  */
 import { eq, sql } from "drizzle-orm";
 import * as schema from "@/server/db/schema";
-import { changeLog, sequences } from "@/server/domain";
+import * as changeLog from "@/server/domain/change-log";
+import * as sequences from "@/server/domain/sequences";
 import { DomainError } from "@/server/domain/errors";
 import { getCountPlanRow } from "@/server/domain/task-handlers/count";
 import type { DomainCtx, Tx } from "@/server/domain/types";
 import { createJobsForPlan, defaultCountJobType } from "./counts-jobs";
+import { openCountConflicts } from "./counts-conflicts";
 import { buildPlanLines } from "./counts-plans";
 
 export interface CreateCountPlanFromWaveInput {
@@ -47,16 +49,25 @@ function rotationLocations(tx: Tx, warehouseId: string): string[] {
 
 function rotationProducts(tx: Tx, warehouseId: string): string[] {
   return tx.all<{ id: string }>(sql`
-    SELECT i.product_id AS id FROM inventory i WHERE i.warehouse_id = ${warehouseId} AND i.on_hand > 0 GROUP BY i.product_id
+    SELECT i.product_id AS id FROM inventory i WHERE i.warehouse_id = ${warehouseId} AND i.on_hand > 0
+      AND NOT EXISTS (SELECT 1 FROM count_plan_lines l JOIN count_plans p ON p.id = l.plan_id WHERE l.product_id = i.product_id
+        AND p.status IN ('Pending','Ready To Count','Count Started','Count Completed') AND l.status NOT IN ('Cancelled','Inventory Updated','Recount Created'))
+    GROUP BY i.product_id
     ORDER BY COALESCE((SELECT MAX(l.completed_at) FROM count_plan_lines l WHERE l.product_id = i.product_id), '') ASC, i.product_id
     LIMIT ${ROTATION_SIZE}`).map((r) => r.id);
 }
 
 export const createCountPlanFromWave: CreateCountPlanFromWave = (tx, ctx, input) => {
-  const locationIds = [...new Set(input.locationIds?.length ? input.locationIds : input.countType === "Location" ? rotationLocations(tx, input.warehouseId) : [])];
-  const productIds = [...new Set(input.productIds?.length ? input.productIds : input.countType === "SKU" ? rotationProducts(tx, input.warehouseId) : [])];
+  const wantedLocations = [...new Set(input.locationIds?.length ? input.locationIds : input.countType === "Location" ? rotationLocations(tx, input.warehouseId) : [])];
+  const wantedProducts = [...new Set(input.productIds?.length ? input.productIds : input.countType === "SKU" ? rotationProducts(tx, input.warehouseId) : [])];
+  // A location / SKU already in an open count plan is skipped, so a wave never double-counts stock.
+  const taken = new Set(openCountConflicts(tx, { warehouseId: input.warehouseId, locationIds: input.countType === "Location" ? wantedLocations : [], productIds: input.countType === "SKU" ? wantedProducts : [] }).map((c) => c.id));
+  const locationIds = wantedLocations.filter((id) => !taken.has(id));
+  const productIds = wantedProducts.filter((id) => !taken.has(id));
   if ((input.countType === "Location" ? locationIds : productIds).length === 0) {
-    throw new DomainError("VALIDATION", `The wave found no ${input.countType === "Location" ? "locations" : "SKUs"} to count.`);
+    throw new DomainError("VALIDATION", taken.size > 0
+      ? `Every ${input.countType === "Location" ? "location" : "SKU"} the wave selected is already in an open count plan.`
+      : `The wave found no ${input.countType === "Location" ? "locations" : "SKUs"} to count.`);
   }
   const wave = tx.select().from(schema.waves).where(eq(schema.waves.id, input.waveId)).get();
   const rule = tx.select().from(schema.waveRules).where(eq(schema.waveRules.id, input.waveRuleId)).get();

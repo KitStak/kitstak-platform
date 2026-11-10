@@ -23,7 +23,7 @@ export const WAVE_LOG_GRID: GridSpec = {
   gridKey: "wave-log",
   searchPlaceholder: "Search by wave no",
   searchFields: ["waveNo"],
-  sortKeys: ["ruleName", "waveNo", "status", "ordersMet", "shortageOrders", "jobsCreated", "allocatedOrders", "mergedOrders", "runAt", "runBy"],
+  sortKeys: ["ruleName", "waveNo", "status", "ordersMet", "shortageOrders", "jobsCreated", "allocatedOrders", "eliminatedOrders", "mergedOrders", "runAt", "runBy"],
   fields: [
     field("ruleName", "Rule set", "text"),
     field("runAt", "Run date", "date"),

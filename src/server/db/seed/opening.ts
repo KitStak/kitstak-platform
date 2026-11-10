@@ -1,6 +1,6 @@
 /**
- * Opening balance: the stock migrated from Logiwa Classic before the replay window, posted
- * through the ledger as Inventory Adjustments with the "Classic Migration" reason
+ * Opening balance: the stock on hand before the replay window, posted
+ * through the ledger as Inventory Adjustments with the "Opening Balance" reason
  * (serial-tracked SKUs go through Add Inventory receipts so every unit has a serial).
  */
 import { ledger } from "@/server/domain";
@@ -13,7 +13,7 @@ import { DAY_MS, dateOf, isoOf } from "./runtime";
 import type { Id } from "./types";
 import { adminCtx, type World } from "./world";
 
-const MIGRATION_NOTE = "Opening balance migrated from Logiwa Classic";
+const MIGRATION_NOTE = "Opening balance";
 
 export const lotCode = (ms: number, n: number): string => `L${dateOf(ms).slice(2).replaceAll("-", "")}${String.fromCharCode(65 + (n % 26))}`;
 export const expiryFor = (receivedMs: number, shelfLifeDays = 270): string => dateOf(receivedMs + shelfLifeDays * DAY_MS);
@@ -84,7 +84,7 @@ function postSlot(w: World, tx: Tx, fac: WarehouseFacility, p: ProductRef, s: Sl
 
 /** Posts the opening balance for both warehouses. Returns the number of buckets created. */
 export function postOpeningBalance(w: World, tx: Tx, atMs: number): number {
-  const reasonId = lookupId(w.lookups, "adjustment_reason", "Classic Migration");
+  const reasonId = lookupId(w.lookups, "adjustment_reason", "Opening Balance");
   let buckets = 0;
   for (const fac of [w.facility.MLT1, w.facility.KS2]) {
     const cursor = { reserve: 0, pallet: 0 };

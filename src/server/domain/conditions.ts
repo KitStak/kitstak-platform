@@ -6,7 +6,7 @@
  * Array-valued facts match when ANY element matches (e.g. "SKU equals A").
  * The literal value "Empty" in `in` / `notIn` lists matches null / "".
  */
-import type { ConditionValue, FilterCondition, RuleCondition } from "@/lib/domain-types";
+import { isConditionGroup, type ConditionValue, type FilterCondition, type RuleCondition, type RuleConditionNode } from "@/lib/domain-types";
 import type { RuleComparator } from "@/lib/enums";
 import { parseDateSpec, resolveDateRange } from "@/server/query/date-presets";
 
@@ -64,7 +64,30 @@ function compareScalar(fact: unknown, comparator: RuleComparator, value: Conditi
       if (comparator === "lt") return n < v;
       return n <= v;
     }
+    case "dateIs": return matchesDateSpec(fact, value);
   }
+}
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Relative date comparator ("Expiry Date is Within Next 30 Days"). The spec resolves against
+ * the evaluation time, so a saved rule never goes stale. Date-only facts ("2026-12-01") compare
+ * by calendar day; timestamps compare by instant.
+ */
+export function matchesDateSpec(fact: unknown, value: ConditionValue, now: Date = new Date()): boolean {
+  const spec = parseDateSpec(String(Array.isArray(value) ? value[0] ?? "" : value ?? ""));
+  if (!spec || isBlank(fact)) return false;
+  const raw = String(fact).trim();
+  const range = resolveDateRange(spec, now);
+  if (DATE_ONLY.test(raw)) {
+    const fromDay = range.from ? range.from.slice(0, 10) : null;
+    const toDay = range.to ? range.to.slice(0, 10) : null;
+    return (!fromDay || raw >= fromDay) && (!toDay || raw <= toDay);
+  }
+  const t = Date.parse(raw.replace(" ", "T"));
+  if (Number.isNaN(t)) return false;
+  return (!range.from || t >= Date.parse(range.from)) && (!range.to || t <= Date.parse(range.to));
 }
 
 const NEGATIVE: ReadonlySet<RuleComparator> = new Set(["notEquals", "notContains", "notIn", "isEmpty"]);
@@ -82,10 +105,15 @@ export function evaluateCondition(condition: RuleCondition, facts: Facts): boole
   return compareScalar(fact, condition.comparator, condition.value);
 }
 
-/** `[]` means "Applied to all". */
-export function evaluateConditions(conditions: readonly RuleCondition[] | null | undefined, facts: Facts, match: "All" | "Any" = "All"): boolean {
+/** One condition, or a nested AND/OR group of conditions (workflows). */
+export function evaluateConditionNode(node: RuleConditionNode, facts: Facts): boolean {
+  return isConditionGroup(node) ? evaluateConditions(node.conditions, facts, node.group) : evaluateCondition(node, facts);
+}
+
+/** `[]` means "Applied to all". Items may be nested groups (`{ group, conditions }`). */
+export function evaluateConditions(conditions: readonly RuleConditionNode[] | null | undefined, facts: Facts, match: "All" | "Any" = "All"): boolean {
   if (!conditions || conditions.length === 0) return true;
-  return match === "All" ? conditions.every((c) => evaluateCondition(c, facts)) : conditions.some((c) => evaluateCondition(c, facts));
+  return match === "All" ? conditions.every((c) => evaluateConditionNode(c, facts)) : conditions.some((c) => evaluateConditionNode(c, facts));
 }
 
 /** Evaluates a grid-grammar filter clause (job-type conditions, wave filters). */

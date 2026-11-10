@@ -10,6 +10,7 @@ import type { AuthContext } from "@/server/auth/context";
 import * as schema from "@/server/db/schema";
 import { PdfWriter, type TableColumn } from "@/server/print/pdf";
 import { loadJob } from "./jobs";
+import { cellDisplayName } from "@/lib/grid-defs/facility/mobile-carts";
 
 export const JOB_PRINT_DOCS = ["pick-list", "job-content", "pick-short", "cart-layout", "packing-list"] as const;
 export type JobPrintDoc = (typeof JOB_PRINT_DOCS)[number];
@@ -94,9 +95,13 @@ async function renderDoc(db: AppDb, w: PdfWriter, doc: JobPrintDoc, job: typeof 
       header(w, title, job, [["Cart", cart?.code ?? "-"], ["Layout", cart ? `${cart.levels} levels x ${cart.columns} columns` : "-"]]);
       const orders = [...new Set(lines.map((l) => l.orderCode))];
       const cols = Math.max(1, cart?.columns ?? 4);
+      // The cell each order was put in (put-to-cart, REQ-R10-6), named like the cart's cell grid and
+      // labels (A01 · MC-01-A01); orders not placed yet show the cell they would get, in order.
+      const placed = new Map(cart ? db.all<{ code: string; level: number; col: number; barcode: string }>(sql`SELECT so.code AS code, c.level AS level, c."column" AS col, c.barcode AS barcode
+        FROM mobile_cart_cells c JOIN shipment_orders so ON so.id = c.order_id WHERE c.cart_id = ${cart.id}`).map((r) => [r.code, `${cellDisplayName(r.level, r.col)} · ${r.barcode}`]) : []);
       w.table<{ cell: string; order: string; units: string }>(
-        [{ label: "Cell", width: 0.2, value: (r) => r.cell }, { label: "Order", width: 0.5, value: (r) => r.order }, { label: "Units", width: 0.3, align: "right", value: (r) => r.units }],
-        orders.map((o, i) => ({ cell: `L${Math.floor(i / cols) + 1}-C${(i % cols) + 1}`, order: o, units: String(lines.filter((l) => l.orderCode === o && l.taskType === "Picking").reduce((s, l) => s + l.qty, 0)) })),
+        [{ label: "Cell", width: 0.32, value: (r) => r.cell }, { label: "Order", width: 0.43, value: (r) => r.order }, { label: "Units", width: 0.25, align: "right", value: (r) => r.units }],
+        orders.map((o, i) => ({ cell: placed.get(o) ?? cellDisplayName(Math.floor(i / cols) + 1, (i % cols) + 1), order: o, units: String(lines.filter((l) => l.orderCode === o && l.taskType === "Picking").reduce((s, l) => s + l.qty, 0)) })),
       );
       return;
     }

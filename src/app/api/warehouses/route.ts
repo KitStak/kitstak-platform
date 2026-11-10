@@ -8,7 +8,7 @@ import { warehouseSchema } from "@/lib/grid-defs/facility/warehouses";
 import { createWarehouse, listWarehouses } from "@/server/repositories/warehouses";
 
 export const GET = defineRoute({
-  permission: "settings.warehouse.view",
+  permission: ["settings.warehouse.view", "inventory.inventory_by_location.view"],
   handler: ({ db, auth, grid }) => {
     const query = grid();
     const { rows, total } = listWarehouses(db, auth, query);

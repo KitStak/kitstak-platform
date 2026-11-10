@@ -6,16 +6,19 @@
  * Info drawer. Each one calls the real endpoint and reports per-order outcomes.
  */
 import * as React from "react";
-import { AlertTriangle, Ban, GitMerge, Info, ListPlus, PackageOpen, Warehouse } from "lucide-react";
+import Link from "next/link";
+import { OrderStatusPill } from "../order-status-pill";
+import { Badge } from "@/components/ui/badge";
+import { bulkResultTitle } from "./order-eligibility";
+import { AlertTriangle, Ban, CheckCircle2, GitMerge, Info, ListPlus, PackageOpen, Warehouse, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ChipInput } from "@/components/ui/chip-input";
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Drawer } from "@/components/ui/drawer";
 import { NumberInput } from "@/components/ui/number-input";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import { StatusPill } from "@/components/ui/status-pill";
 import { Textarea } from "@/components/ui/textarea";
 import { DisabledReason } from "@/components/ui/tooltip";
 import { errorTextClass, labelClass } from "@/components/ui/control-styles";
@@ -63,6 +66,107 @@ export function GuardModal({ state, onClose }: { readonly state: GuardState | nu
   );
 }
 
+/* ----------------------------------------------------------------- result */
+
+export interface BulkResultState {
+  readonly verbPast: string;
+  readonly result: BulkOutcome;
+  readonly codes: ReadonlyMap<string, string>;
+  /** Per-order note for succeeded rows (e.g. "Partially shipped: 1 of 2 units of SKU remain"). */
+  readonly notes?: ReadonlyMap<string, string>;
+}
+
+/** Optional hold reason (kept in the change log + order Notes, shown on the detail hold banner). */
+export function HoldReasonField({ value, onChange, id = "hold-reason" }: { readonly value: string; readonly onChange: (v: string) => void; readonly id?: string }) {
+  return (
+    <div className="mt-3 flex flex-col gap-1">
+      <label htmlFor={id} className={labelClass}>Hold reason</label>
+      <Textarea id={id} value={value} maxLength={500} showCount rows={2} onChange={(e) => onChange(e.target.value)} placeholder="Optional, e.g. Address check with customer" />
+    </div>
+  );
+}
+
+/** Neutral/success result window for a completed action (never the red danger band). */
+export function SuccessResultDialog({ open, title, description, primaryLabel, onPrimary, closeLabel = "Stay here", onClose }: {
+  readonly open: boolean; readonly title: string; readonly description: React.ReactNode; readonly primaryLabel: string;
+  readonly onPrimary: () => void; readonly closeLabel?: string; readonly onClose: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(o) => (o ? undefined : onClose())}>
+      <DialogContent size="sm" aria-describedby={undefined}>
+        <div className="flex items-center gap-3 rounded-t-lg bg-success-soft px-5 py-4">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-success text-white"><CheckCircle2 className="h-4 w-4" aria-hidden /></span>
+          <DialogHeader title={title} className="p-0" />
+        </div>
+        <DialogBody><p className="text-[13px] leading-5 text-body">{description}</p></DialogBody>
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose}>{closeLabel}</Button>
+          <Button variant="primary" autoFocus onClick={() => { onPrimary(); onClose(); }}>{primaryLabel}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Bulk result window (Logiwa Ship Order parity, used by every KitStaks bulk action that
+ * reports failures): title, Success N / Error N badges and an SO Code | Description table.
+ */
+export function BulkResultModal({ state, onClose }: { readonly state: BulkResultState | null; readonly onClose: () => void }) {
+  const ok = state?.result.succeeded.length ?? 0;
+  const bad = state?.result.failed.length ?? 0;
+  const rows = state
+    ? [
+        ...state.result.failed.map((f) => ({ id: f.id, code: state.codes.get(f.id) ?? "—", description: f.message, ok: false, warn: false })),
+        ...state.result.succeeded.map((id) => {
+          const note = state.notes?.get(id);
+          return { id, code: state.codes.get(id) ?? "—", description: note ?? `Order ${state.verbPast}.`, ok: true, warn: Boolean(note) };
+        }),
+      ]
+    : [];
+  const title = state ? bulkResultTitle(state.verbPast, ok, bad) : "";
+  return (
+    <Dialog open={state !== null} onOpenChange={(o) => (o ? undefined : onClose())}>
+      <DialogContent size="md" aria-describedby={undefined}>
+        <div className={cn("flex items-center gap-3 rounded-t-lg px-5 py-4", bad > 0 ? "bg-warning-soft" : "bg-success-soft")}>
+          <span className={cn("flex h-9 w-9 items-center justify-center rounded-full text-white", bad > 0 ? "bg-warning" : "bg-success")}>
+            {bad > 0 ? <AlertTriangle className="h-4 w-4" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
+          </span>
+          <DialogHeader title={title} className="p-0" />
+        </div>
+        <DialogBody className="flex flex-col gap-3">
+          <div className="flex items-center gap-2" aria-label="Result counts">
+            <Badge tone="success" shape="pill">Success {ok}</Badge>
+            <Badge tone="danger" shape="pill">Error {bad}</Badge>
+          </div>
+          <div className="ks-scroll max-h-[300px] overflow-auto rounded-md border border-border">
+            <table className="w-full border-collapse text-left text-[12px]">
+              <thead className="sticky top-0 bg-surface-sunken">
+                <tr>
+                  {["SO code", "Description"].map((h) => (
+                    <th key={h} scope="col" className="border-b border-border px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b border-border last:border-b-0">
+                    <td className="w-32 px-2.5 py-1.5 font-semibold text-foreground">{r.code}</td>
+                    <td className={cn("px-2.5 py-1.5", !r.ok ? "text-danger" : r.warn ? "font-semibold text-warning" : "text-success")}>{r.description}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="primary" onClick={onClose} autoFocus>OK</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function OrdersTable({ rows, extra }: { readonly rows: readonly OrderRow[]; readonly extra?: (r: OrderRow) => React.ReactNode }) {
   return (
     <div className="ks-scroll max-h-[220px] overflow-auto rounded-md border border-border">
@@ -78,7 +182,7 @@ function OrdersTable({ rows, extra }: { readonly rows: readonly OrderRow[]; read
           {rows.map((r) => (
             <tr key={r.id} className="border-b border-border last:border-b-0">
               <td className="px-2.5 py-1.5 font-semibold text-foreground">{r.code}</td>
-              <td className="px-2.5 py-1.5"><StatusPill status={r.status} domain="shipmentOrder" size="sm" /></td>
+              <td className="px-2.5 py-1.5"><OrderStatusPill status={r.status} size="sm" /></td>
               <td className="px-2.5 py-1.5 tabular-nums text-secondary">{formatDateTime(String(r.orderDate ?? ""))}</td>
               {extra ? <td className="px-2.5 py-1.5 text-secondary">{extra(r)}</td> : null}
             </tr>
@@ -95,6 +199,17 @@ function codesOf(rows: readonly OrderRow[]): ReadonlyMap<string, string> {
 
 /* ----------------------------------------------------------------- cancel */
 
+/** Rejects with a readable error when `p` has not settled within `ms`. */
+export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`The server did not respond within ${Math.round(ms / 1000)}s. Nothing was changed; try again.`)), ms);
+    p.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e: unknown) => { clearTimeout(t); reject(e); },
+    );
+  });
+}
+
 export function CancelOrdersModal({ rows, open, onOpenChange, onDone }: { readonly rows: readonly OrderRow[]; readonly open: boolean; readonly onOpenChange: (o: boolean) => void; readonly onDone: (r: BulkOutcome) => void }) {
   const clientId = rows.length > 0 && rows.every((r) => r.clientId === rows[0]?.clientId) ? rows[0]?.clientId : undefined;
   const options = useOrderOptions(null, clientId);
@@ -102,6 +217,7 @@ export function CancelOrdersModal({ rows, open, onOpenChange, onDone }: { readon
   const [note, setNote] = React.useState("");
   const [touched, setTouched] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  const [failure, setFailure] = React.useState<string | null>(null);
   const reasons = options.data?.data.cancelReasons ?? [];
   const missing = touched && !reasonId;
 
@@ -110,6 +226,7 @@ export function CancelOrdersModal({ rows, open, onOpenChange, onDone }: { readon
       setReasonId(null);
       setNote("");
       setTouched(false);
+      setFailure(null);
     }
     onOpenChange(o);
   };
@@ -121,13 +238,17 @@ export function CancelOrdersModal({ rows, open, onOpenChange, onDone }: { readon
       return;
     }
     setBusy(true);
+    setFailure(null);
     try {
-      const result = await runBulk("cancel", { ids: rows.map((r) => r.id), reasonId, note: note.trim() || null });
+      // A hung request must not leave the dialog spinning forever.
+      const result = await withTimeout(runBulk("cancel", { ids: rows.map((r) => r.id), reasonId, note: note.trim() || null }), 30_000);
       bulkToast(result, "cancelled", codesOf(rows));
       onDone(result);
       close(false);
     } catch (error) {
-      toast.error("Cancel failed", errorMessage(error));
+      const message = errorMessage(error, "The server did not respond. Nothing was cancelled; try again.");
+      setFailure(message);
+      toast.error("Cancel failed", message);
     } finally {
       setBusy(false);
     }
@@ -135,10 +256,14 @@ export function CancelOrdersModal({ rows, open, onOpenChange, onDone }: { readon
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent size="lg">
+      <DialogContent size="lg" hideClose>
         <div className="flex items-center gap-3 rounded-t-lg bg-danger px-5 py-4 text-white">
-          <Ban className="h-5 w-5" aria-hidden />
-          <p className="text-[15px] font-semibold">Are you sure you want to cancel selected order(s)?</p>
+          <Ban className="h-5 w-5 shrink-0" aria-hidden />
+          <DialogTitle className="flex-1 text-[15px] font-semibold">Are you sure you want to cancel {rows.length === 1 ? "this order" : `${rows.length} orders`}?</DialogTitle>
+          {/* White close on the danger header (the default dark icon is unreadable on red). */}
+          <DialogClose aria-label="Close" className="rounded p-1 text-white/90 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60">
+            <X className="h-4 w-4" aria-hidden />
+          </DialogClose>
         </div>
         <DialogBody className="flex flex-col gap-4">
           <p className="text-[13px] text-body">
@@ -164,6 +289,11 @@ export function CancelOrdersModal({ rows, open, onOpenChange, onDone }: { readon
             <Textarea id="cancel-note" value={note} maxLength={500} showCount onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Optional context for the change log" />
           </div>
           <OrdersTable rows={rows} />
+          {failure ? (
+            <p role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-[12.5px] text-danger">
+              Couldn&apos;t cancel: {failure}
+            </p>
+          ) : null}
         </DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={() => close(false)} disabled={busy}>Go back</Button>
@@ -374,7 +504,7 @@ export function ReturnInfoDrawer({ rows, open, onOpenChange, onDone }: { readonl
       width={35}
       footer={
         <div className="flex w-full items-center justify-between gap-2">
-          <a href="/imports/shipment-orders-update" className="text-[12px] font-medium text-primary hover:underline">Import return info from Excel</a>
+          <Link href="/imports/shipment-orders-update" className="text-[12px] font-medium text-primary hover:underline">Import return info from Excel</Link>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
             <DisabledReason reason={dirty ? null : "Enter at least one return field"}>
@@ -388,7 +518,8 @@ export function ReturnInfoDrawer({ rows, open, onOpenChange, onDone }: { readonl
         <div className="flex items-start gap-2 rounded-md bg-primary-soft px-3 py-2 text-[12px] text-body"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />Return info is used by return labels and RMAs created from these orders.</div>
         <div className="flex flex-col gap-1">
           <label htmlFor="ri-service" className={labelClass}>Return carrier and shipping option</label>
-          <Select id="ri-service" options={services} value={serviceId} onChange={setServiceId} placeholder={services.length ? "Select a service" : "No carrier services for this warehouse"} clearable />
+          <Select id="ri-service" options={services} value={serviceId} onChange={setServiceId} placeholder={options.isPending ? "Loading carrier services…" : !warehouseId ? "Select orders from one warehouse to set a service" : services.length ? "Select a service" : "No carrier services for this warehouse"}
+            disabled={options.isPending || !warehouseId} clearable />
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="ri-cost" className={labelClass}>Return shipping cost</label>
@@ -400,7 +531,7 @@ export function ReturnInfoDrawer({ rows, open, onOpenChange, onDone }: { readonl
         </div>
         <ul className={cn("ks-scroll max-h-48 divide-y divide-border overflow-auto rounded-md border border-border text-[12px]")}>
           {rows.map((r) => (
-            <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-1.5"><span className="font-semibold">{r.code}</span><StatusPill status={r.status} domain="shipmentOrder" size="sm" /></li>
+            <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-1.5"><span className="font-semibold">{r.code}</span><OrderStatusPill status={r.status} size="sm" /></li>
           ))}
         </ul>
       </div>

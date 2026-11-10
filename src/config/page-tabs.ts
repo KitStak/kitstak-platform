@@ -51,6 +51,7 @@ export const PAGE_TAB_GROUPS: Readonly<Record<PageTabGroupKey, readonly PageTab[
     tab({ label: "Allocation Exceptions", href: "/jobs/allocation-exceptions", permission: P.waveExceptions }),
     tab({ label: "Wave Log Report", href: "/jobs/wave-log", permission: P.waveLog }),
     tab({ label: "Shortage Report", href: "/jobs/shortage", permission: P.shortage }),
+    tab({ label: "Job Types", href: "/settings/job-types", permission: P.jobTypes }),
   ],
   tasks: [
     tab({ label: "Order Operations", href: "/tasks/order-operations", permission: P.taskDetails }),
@@ -61,6 +62,7 @@ export const PAGE_TAB_GROUPS: Readonly<Record<PageTabGroupKey, readonly PageTab[
     tab({ label: "Purchase Order", href: "/receiving", permission: P.purchaseOrders, exact: true }),
     tab({ label: "Vendors", href: "/receiving/vendors", permission: P.vendors }),
     tab({ label: "Receiving History", href: "/receiving/history", permission: P.receivingHistory }),
+    tab({ label: "Putaway", href: "/receiving/putaway", permission: P.purchaseOrders }),
   ],
   inventory: [
     tab({ label: "Total Inventory", href: "/inventory", permission: P.totalInventory, exact: true }),
@@ -85,7 +87,7 @@ export const PAGE_TAB_GROUPS: Readonly<Record<PageTabGroupKey, readonly PageTab[
     tab({ label: "Client", href: "/clients", permission: P.clients }),
     tab({ label: "Customer", href: "/organization/customers", permission: P.customers }),
     tab({ label: "Vendors", href: "/organization/vendors", permission: P.vendors }),
-    tab({ label: "Retailers", href: "/organization/retailers", permission: P.retailers, badge: "BETA" }),
+    tab({ label: "Retailers", href: "/organization/retailers", permission: P.retailers }),
   ],
   lp: [
     tab({ label: "LP Types", href: "/settings/lp-types", permission: P.lpTypes }),

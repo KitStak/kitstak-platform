@@ -5,9 +5,10 @@
  * (+ Release) and Product Listing Exceptions. All scoped to clients in the viewer's scope.
  */
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { integrationError, type IntegrationErrorInfo } from "@/lib/integration-errors";
+import type { IntegrationErrorInfo } from "@/lib/integration-errors";
+import { brandText } from "@/lib/grid-defs/integrations/common";
 import { applyLocalGridQuery, type FieldValue } from "@/lib/local-grid-query";
-import { LOW_PERFORMING_PCT, MISSING_FIELDS, MISSING_SORT_FIELDS } from "@/lib/grid-defs/integrations/monitoring";
+import { catalogError, healthStatus, MISSING_FIELDS, MISSING_SORT_FIELDS, successRateOf, summarizeHealth } from "@/lib/grid-defs/integrations/monitoring";
 import type { AppDb } from "@/server/api/db";
 import { AppError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
@@ -18,12 +19,24 @@ import { recordUpdate } from "@/server/domain/change-log";
 import type { BulkResult } from "@/server/domain/types";
 import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
-import { retryMissingOrders } from "@/server/integrations/runtime/channel-runtime";
+import { pauseReason, retryMissingOrders } from "@/server/integrations/runtime/channel-runtime";
 import { assertFound, compileGrid, domainCtxOf, type Actor, type GridBinding } from "./integration-logs-kit";
 import { connectionScope } from "./integration-logs";
+import { dayKeyInZone, lastDaysInZone, safeTimeZone } from "@/lib/grid-defs/integrations/time";
 
 const cc = s.channelConnections;
 const DAY = 86_400_000;
+
+/**
+ * Time zone used to cut per-day buckets: the viewer's zone (sent by the UI as `tz`), else the
+ * context warehouse's zone, else the first warehouse in scope. Matches how timestamps render.
+ */
+export function bucketZone(db: AppDb, auth: AuthContext, tz?: string | null): string {
+  if (tz) return safeTimeZone(tz);
+  const whId = auth.context.warehouseId ?? auth.viewScope.warehouseIds[0];
+  const row = whId ? db.select({ tz: s.warehouses.timezone }).from(s.warehouses).where(eq(s.warehouses.id, whId)).get() : undefined;
+  return safeTimeZone(row?.tz);
+}
 
 function connections(db: AppDb, auth: AuthContext) {
   return db.select({ c: cc, clientName: s.clients.name }).from(cc).innerJoin(s.clients, eq(s.clients.id, cc.clientId)).where(connectionScope(auth)).all();
@@ -41,13 +54,16 @@ export interface HealthRow {
   readonly storeName: string;
   readonly clientId: string;
   readonly clientName: string;
-  readonly downloadStatus: "Active" | "Passive";
-  readonly successRate: number;
+  readonly downloadStatus: "Active" | "Passive" | "Paused";
+  /** Why the scheduler cannot run this setup (missing credentials, no live adapter, inactive). */
+  readonly pauseReason: string | null;
+  readonly successRate: number | null;
   readonly successes24h: number;
   readonly errors24h: number;
   readonly orders24h: number;
   readonly lines24h: number;
   readonly lastSuccessAt: string | null;
+  readonly lastCallAt: string | null;
 }
 
 export function healthRows(db: AppDb, auth: AuthContext, now = new Date()): HealthRow[] {
@@ -71,8 +87,8 @@ export function healthRows(db: AppDb, auth: AuthContext, now = new Date()): Heal
     const m = methods.find((x) => x.connectionId === c.id);
     return {
       id: c.id, provider: c.provider, isSandbox: c.distribution === "API", storeName: c.storeName, clientId: c.clientId, clientName,
-      downloadStatus: m?.status ?? "Passive", successRate: ok + bad === 0 ? 0 : Math.round((ok / (ok + bad)) * 100), successes24h: ok, errors24h: bad,
-      orders24h: Number(o?.n ?? 0), lines24h: Number(o?.lines ?? 0), lastSuccessAt: m?.lastSuccessAt ?? null,
+      ...healthStatus(m?.status ?? "Passive", pauseReason(c)), successRate: successRateOf(ok, bad), successes24h: ok, errors24h: bad,
+      orders24h: Number(o?.n ?? 0), lines24h: Number(o?.lines ?? 0), lastSuccessAt: m?.lastSuccessAt ?? null, lastCallAt: m?.lastRunAt ?? null,
     };
   });
 }
@@ -81,14 +97,11 @@ export function listHealth(db: AppDb, auth: AuthContext, query: GridQuery) {
   return local(healthRows(db, auth), query, ["storeName", "clientName"]);
 }
 
-export interface HealthCard { readonly provider: string | null; readonly setups: number; readonly avgSuccess: number; readonly lowPerforming: number }
+export interface HealthCard { readonly provider: string | null; readonly setups: number; readonly avgSuccess: number | null; readonly lowPerforming: number; readonly noData: number }
 
 export function healthCards(db: AppDb, auth: AuthContext, clientId: string | null): HealthCard[] {
   const rows = healthRows(db, auth).filter((r) => !clientId || r.clientId === clientId);
-  const card = (provider: string | null, list: readonly HealthRow[]): HealthCard => ({
-    provider, setups: list.length, avgSuccess: list.length === 0 ? 0 : Math.round(list.reduce((sum, r) => sum + r.successRate, 0) / list.length),
-    lowPerforming: list.filter((r) => r.successRate < LOW_PERFORMING_PCT).length,
-  });
+  const card = (provider: string | null, list: readonly HealthRow[]): HealthCard => ({ provider, ...summarizeHealth(list.map((r) => r.successRate)) });
   const providers = [...new Set(rows.map((r) => r.provider))].sort();
   return [card(null, rows), ...providers.map((p) => card(p, rows.filter((r) => r.provider === p)))];
 }
@@ -100,7 +113,7 @@ const MISSING_BINDING: GridBinding = {
   exprs: {
     orderCode: sql`${mo.orderCode}`, channelOrderNumber: sql`${mo.channelOrderNumber}`, storeName: sql`${cc.storeName}`, provider: sql`${cc.provider}`,
     connectionId: sql`${mo.connectionId}`, clientId: sql`${cc.clientId}`, clientName: sql`(SELECT c2.name FROM clients c2 WHERE c2.id = ${cc.clientId})`,
-    orderDate: sql`${mo.orderDate}`, lastUpdated: sql`${mo.lastUpdated}`, lastErrorCode: sql`${mo.lastErrorCode}`, status: sql`${mo.status}`,
+    orderDate: sql`${mo.orderDate}`, lastUpdated: sql`${mo.lastUpdated}`, lastErrorCode: sql`REPLACE(${mo.lastErrorCode}, 'KitStaks', 'KitStak')`, status: sql`${mo.status}`,
   },
   fields: MISSING_FIELDS, sortable: MISSING_SORT_FIELDS, search: ["orderCode", "channelOrderNumber"], defaultSort: [{ field: "lastUpdated", dir: "desc" }], tiebreaker: mo.id,
 };
@@ -128,7 +141,7 @@ export function listMissing(db: AppDb, auth: AuthContext, query: GridQuery): { r
   return {
     rows: result.rows.map(({ m, c, clientName }) => ({
       id: m.id, orderCode: m.orderCode, channelOrderNumber: m.channelOrderNumber, connectionId: c.id, storeName: c.storeName, provider: c.provider, isSandbox: c.distribution === "API",
-      clientName, orderDate: m.orderDate, lastUpdated: m.lastUpdated, lastErrorCode: m.lastErrorCode, status: m.status,
+      clientName, orderDate: m.orderDate, lastUpdated: m.lastUpdated, lastErrorCode: brandText(m.lastErrorCode), status: m.status,
     })),
     total: result.total,
   };
@@ -144,8 +157,8 @@ export function getMissing(db: AppDb, auth: AuthContext, id: string): MissingDet
     .where(and(eq(s.channelRuns.connectionId, row.c.id), eq(s.channelRunItems.storeOrderNumber, row.m.channelOrderNumber))).orderBy(desc(s.channelRunItems.at)).limit(10).all();
   return {
     id: row.m.id, orderCode: row.m.orderCode, channelOrderNumber: row.m.channelOrderNumber, connectionId: row.c.id, storeName: row.c.storeName, provider: row.c.provider,
-    isSandbox: row.c.distribution === "API", clientName: row.clientName, orderDate: row.m.orderDate, lastUpdated: row.m.lastUpdated, lastErrorCode: row.m.lastErrorCode, status: row.m.status,
-    payload: row.m.payload, error: integrationError(row.m.lastErrorCode), history,
+    isSandbox: row.c.distribution === "API", clientName: row.clientName, orderDate: row.m.orderDate, lastUpdated: row.m.lastUpdated, lastErrorCode: brandText(row.m.lastErrorCode), status: row.m.status,
+    payload: row.m.payload, error: catalogError(row.m.lastErrorCode), history: history.map((h) => ({ ...h, message: brandText(h.message) ?? null })),
   };
 }
 
@@ -165,6 +178,7 @@ export interface RecentErrorRow {
   readonly connectionId: string;
   readonly storeName: string;
   readonly provider: string;
+  readonly isSandbox: boolean;
   readonly clientId: string;
   readonly clientName: string;
   readonly occurrences: number;
@@ -173,47 +187,74 @@ export interface RecentErrorRow {
   readonly day: string;
 }
 
-export function recentErrorRows(db: AppDb, auth: AuthContext, now = new Date()): RecentErrorRow[] {
+export function recentErrorRows(db: AppDb, auth: AuthContext, now = new Date(), tz: string = safeTimeZone(null)): RecentErrorRow[] {
   const since = new Date(now.getTime() - 14 * DAY).toISOString();
   const conns = new Map(connections(db, auth).map((x) => [x.c.id, x]));
   if (conns.size === 0) return [];
-  const rows = db.all<{ cid: string; msg: string; day: string; n: number; orders: number; last: string }>(sql`
-    SELECT r.connection_id AS cid, i.error_message AS msg, substr(i.at, 1, 10) AS day, COUNT(*) AS n, COUNT(DISTINCT i.store_order_number) AS orders, MAX(i.at) AS last
+  const rows = db.all<{ cid: string; msg: string | null; at: string; num: string | null }>(sql`
+    SELECT r.connection_id AS cid, i.error_message AS msg, i.at AS at, i.store_order_number AS num
     FROM channel_run_items i JOIN channel_runs r ON r.id = i.run_id
-    WHERE i.success = 0 AND r.method = 'Download Orders' AND i.at >= ${since} GROUP BY r.connection_id, i.error_message, substr(i.at, 1, 10)`);
-  const grouped = new Map<string, RecentErrorRow>();
+    WHERE i.success = 0 AND r.method = 'Download Orders' AND i.at >= ${since}`);
+  // Open missing orders are the same download errors (Logiwa groups them here too). Count the ones
+  // that have no failed run item in the window (imports, older runs, pruned logs), so this page
+  // always reconciles with Missing Shipment Orders.
+  const seen = new Set(rows.filter((x) => x.num).map((x) => `${x.cid}|${x.num}`));
+  const missingRows = db.all<{ cid: string; msg: string; at: string; num: string }>(sql`
+    SELECT m.connection_id AS cid, m.last_error_code AS msg, m.last_updated AS at, m.channel_order_number AS num
+    FROM channel_missing_orders m WHERE m.status <> 'Resolved' AND m.last_updated >= ${since}`);
+  for (const x of missingRows) if (!seen.has(`${x.cid}|${x.num}`)) rows.push(x);
+  const grouped = new Map<string, { row: RecentErrorRow; orders: Set<string> }>();
   for (const x of rows) {
     const conn = conns.get(x.cid);
     if (!conn) continue;
-    const reason = (x.msg ?? "Unexpected Error").split(":")[0]?.trim() || "Unexpected Error";
-    const key = `${x.cid}|${reason}|${x.day}`;
+    const reason = brandText((x.msg ?? "Unexpected Error").split(":")[0]?.trim() || "Unexpected Error");
+    // Bucket by the viewer's local day, the same zone the grid renders timestamps in.
+    const day = dayKeyInZone(x.at, tz);
+    const key = `${x.cid}|${reason}|${day}`;
     const prev = grouped.get(key);
+    const orders = prev?.orders ?? new Set<string>();
+    if (x.num) orders.add(x.num);
     grouped.set(key, {
-      id: key, errorReason: reason, connectionId: x.cid, storeName: conn.c.storeName, provider: conn.c.provider, clientId: conn.c.clientId, clientName: conn.clientName,
-      occurrences: (prev?.occurrences ?? 0) + Number(x.n), affectedOrders: (prev?.affectedOrders ?? 0) + Number(x.orders), lastOccurrence: prev && prev.lastOccurrence > x.last ? prev.lastOccurrence : x.last, day: x.day,
+      orders,
+      row: {
+        id: key, errorReason: reason, connectionId: x.cid, storeName: conn.c.storeName, provider: conn.c.provider, isSandbox: conn.c.distribution === "API", clientId: conn.c.clientId, clientName: conn.clientName,
+        occurrences: (prev?.row.occurrences ?? 0) + 1, affectedOrders: orders.size, lastOccurrence: prev && prev.row.lastOccurrence > x.at ? prev.row.lastOccurrence : x.at, day,
+      },
     });
   }
-  return [...grouped.values()].sort((a, b) => b.lastOccurrence.localeCompare(a.lastOccurrence));
+  return [...grouped.values()].map((g) => g.row).sort((a, b) => b.lastOccurrence.localeCompare(a.lastOccurrence));
 }
 
-export function listRecentErrors(db: AppDb, auth: AuthContext, query: GridQuery) {
-  return local(recentErrorRows(db, auth), { ...query, sort: query.sort.length > 0 ? query.sort : [{ field: "lastOccurrence", dir: "desc" }] }, ["errorReason", "storeName"]);
+export function listRecentErrors(db: AppDb, auth: AuthContext, query: GridQuery, tz?: string | null) {
+  return local(recentErrorRows(db, auth, new Date(), bucketZone(db, auth, tz)), { ...query, sort: query.sort.length > 0 ? query.sort : [{ field: "lastOccurrence", dir: "desc" }] }, ["errorReason", "storeName"]);
 }
 
-/** Drilldown: the orders affected by one grouped error (beyond Logiwa). */
-export function recentErrorOrders(db: AppDb, auth: AuthContext, connectionId: string, reason: string, day: string) {
+/** Drilldown: the orders affected by one grouped error (beyond Logiwa). `day` is a local day in `tz`. */
+export function recentErrorOrders(db: AppDb, auth: AuthContext, connectionId: string, reason: string, day: string, tz?: string | null) {
   const conn = assertFound(db.select().from(cc).where(eq(cc.id, connectionId)).get(), "Store connection");
   if (!hasClient(auth.scope, conn.clientId)) throw new AppError("NOT_FOUND", "Store connection not found");
+  const zone = bucketZone(db, auth, tz);
+  const base = Date.parse(`${day}T00:00:00Z`);
+  if (Number.isNaN(base)) throw new AppError("VALIDATION", "Invalid day");
+  // ±1 UTC day window in SQL, then the exact local-day match in JS.
+  const from = new Date(base - DAY).toISOString();
+  const to = new Date(base + 2 * DAY).toISOString();
   const items = db.select({ i: s.channelRunItems }).from(s.channelRunItems).innerJoin(s.channelRuns, eq(s.channelRuns.id, s.channelRunItems.runId))
-    .where(and(eq(s.channelRuns.connectionId, connectionId), eq(s.channelRunItems.success, false), sql`${s.channelRunItems.errorMessage} LIKE ${`${reason}%`}`, sql`substr(${s.channelRunItems.at}, 1, 10) = ${day}`))
-    .orderBy(desc(s.channelRunItems.at)).limit(200).all();
+    .where(and(eq(s.channelRuns.connectionId, connectionId), eq(s.channelRunItems.success, false), sql`REPLACE(${s.channelRunItems.errorMessage}, 'KitStaks', 'KitStak') LIKE ${`${brandText(reason)}%`}`, sql`${s.channelRunItems.at} >= ${from}`, sql`${s.channelRunItems.at} < ${to}`))
+    .orderBy(desc(s.channelRunItems.at)).limit(1000).all().filter((x) => dayKeyInZone(x.i.at, zone) === day).slice(0, 200);
   const numbers = [...new Set(items.map((x) => x.i.storeOrderNumber).filter((v): v is string => Boolean(v)))];
   const missing = numbers.length === 0 ? [] : db.select().from(mo).where(and(eq(mo.connectionId, connectionId), inArray(mo.channelOrderNumber, numbers))).all();
-  return numbers.map((n) => {
+  const fromItems = numbers.map((n) => {
     const m = missing.find((x) => x.channelOrderNumber === n);
     const last = items.find((x) => x.i.storeOrderNumber === n);
-    return { storeOrderNumber: n, missingOrderId: m?.id ?? null, orderCode: m?.orderCode ?? null, status: m?.status ?? "Error", lastErrorCode: m?.lastErrorCode ?? reason, message: last?.i.errorMessage ?? null, at: last?.i.at ?? "" };
+    return { storeOrderNumber: n, missingOrderId: m?.id ?? null, orderCode: m?.orderCode ?? null, status: m?.status ?? "Error", lastErrorCode: brandText(m?.lastErrorCode ?? reason), message: brandText(last?.i.errorMessage) ?? null, at: last?.i.at ?? "" };
   });
+  // Open missing orders with this error and no run item (same rule as recentErrorRows).
+  const have = new Set(numbers);
+  const extra = db.select().from(mo).where(and(eq(mo.connectionId, connectionId), sql`${mo.status} <> 'Resolved'`, sql`REPLACE(${mo.lastErrorCode}, 'KitStaks', 'KitStak') = ${brandText(reason)}`, sql`${mo.lastUpdated} >= ${from}`, sql`${mo.lastUpdated} < ${to}`))
+    .orderBy(desc(mo.lastUpdated)).all().filter((m) => !have.has(m.channelOrderNumber) && dayKeyInZone(m.lastUpdated, zone) === day)
+    .map((m) => ({ storeOrderNumber: m.channelOrderNumber, missingOrderId: m.id, orderCode: m.orderCode, status: m.status, lastErrorCode: brandText(m.lastErrorCode), message: brandText(m.lastErrorCode) ?? null, at: m.lastUpdated }));
+  return [...fromItems, ...extra].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 200);
 }
 
 /* ---------------- workflow blocked ---------------- */
@@ -318,6 +359,25 @@ export function listListingExceptions(db: AppDb, auth: AuthContext, query: GridQ
 
 /* ---------------- setup details ---------------- */
 
+export interface SetupMethodStat {
+  readonly method: string;
+  readonly status: "Active" | "Passive";
+  readonly jobStatus: string;
+  readonly lastCallAt: string | null;
+  readonly lastSuccessAt: string | null;
+  readonly calls14d: number;
+  readonly errors14d: number;
+  readonly successRate: number | null;
+}
+
+/** Most recently active setup visible to the caller (default for Setup Details). */
+export function defaultSetupId(db: AppDb, auth: AuthContext): string | null {
+  const rows = healthRows(db, auth);
+  if (rows.length === 0) return null;
+  const key = (r: HealthRow) => r.lastCallAt ?? r.lastSuccessAt ?? "";
+  return [...rows].sort((a, b) => key(b).localeCompare(key(a)) || a.storeName.localeCompare(b.storeName))[0]!.id;
+}
+
 export interface SetupDetails {
   readonly id: string;
   readonly storeName: string;
@@ -325,9 +385,11 @@ export interface SetupDetails {
   readonly isSandbox: boolean;
   readonly clientName: string;
   readonly warehouses: readonly string[];
-  readonly successRate: number;
+  readonly successRate: number | null;
   readonly successes24h: number;
   readonly errors24h: number;
+  readonly methods: readonly SetupMethodStat[];
+  readonly callTrend: readonly { readonly day: string; readonly ok: number; readonly errors: number }[];
   readonly volume: readonly { readonly day: string; readonly channel: number; readonly kitstaks: number }[];
   readonly missing: readonly MissingRow[];
   readonly blocked: readonly BlockedRow[];
@@ -336,28 +398,54 @@ export interface SetupDetails {
   readonly counts: { readonly missing: number; readonly blocked: number; readonly listingExceptions: number; readonly recentErrors: number };
 }
 
-export function setupDetails(db: AppDb, auth: AuthContext, id: string, now = new Date()): SetupDetails {
+export function setupDetails(db: AppDb, auth: AuthContext, id: string, now = new Date(), tz?: string | null): SetupDetails {
   const conn = assertFound(db.select({ c: cc, clientName: s.clients.name }).from(cc).innerJoin(s.clients, eq(s.clients.id, cc.clientId)).where(eq(cc.id, id)).get(), "Store connection");
   if (!hasClient(auth.scope, conn.c.clientId)) throw new AppError("NOT_FOUND", "Store connection not found");
+  const zone = bucketZone(db, auth, tz);
   const health = healthRows(db, auth, now).find((h) => h.id === id);
-  const since = new Date(now.getTime() - 13 * DAY).toISOString().slice(0, 10);
-  const channelDays = db.all<{ day: string; n: number }>(sql`
-    SELECT substr(i.at, 1, 10) AS day, COUNT(DISTINCT i.store_order_number) AS n FROM channel_run_items i JOIN channel_runs r ON r.id = i.run_id
-    WHERE r.connection_id = ${id} AND r.method = 'Download Orders' AND substr(i.at, 1, 10) >= ${since} GROUP BY day`);
-  const ksDays = db.all<{ day: string; n: number }>(sql`SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS n FROM shipment_orders WHERE channel_connection_id = ${id} AND substr(created_at, 1, 10) >= ${since} GROUP BY day`);
-  const volume = Array.from({ length: 14 }, (_, i) => {
-    const day = new Date(now.getTime() - (13 - i) * DAY).toISOString().slice(0, 10);
-    return { day, channel: Number(channelDays.find((d) => d.day === day)?.n ?? 0), kitstaks: Number(ksDays.find((d) => d.day === day)?.n ?? 0) };
+  // 14 local calendar days (today last). 15 UTC days of rows cover them in any zone.
+  const days = lastDaysInZone(now, 14, zone);
+  const daySet = new Set(days);
+  const sinceIso = new Date(now.getTime() - 15 * DAY).toISOString();
+  const channelItems = db.all<{ at: string; num: string | null }>(sql`
+    SELECT i.at AS at, i.store_order_number AS num FROM channel_run_items i JOIN channel_runs r ON r.id = i.run_id
+    WHERE r.connection_id = ${id} AND r.method = 'Download Orders' AND i.at >= ${sinceIso}`);
+  const channelSets = new Map<string, Set<string>>();
+  channelItems.forEach((r, i) => {
+    const k = dayKeyInZone(r.at, zone);
+    const set = channelSets.get(k) ?? new Set<string>();
+    set.add(r.num ?? `#${i}`);
+    channelSets.set(k, set);
+  });
+  const ksCounts = new Map<string, number>();
+  for (const r of db.all<{ at: string }>(sql`SELECT created_at AS at FROM shipment_orders WHERE channel_connection_id = ${id} AND created_at >= ${sinceIso}`)) {
+    const k = dayKeyInZone(r.at, zone);
+    ksCounts.set(k, (ksCounts.get(k) ?? 0) + 1);
+  }
+  const volume = days.map((day) => ({ day, channel: channelSets.get(day)?.size ?? 0, kitstaks: ksCounts.get(day) ?? 0 }));
+  const methodRows = db.select().from(s.channelMethods).where(eq(s.channelMethods.connectionId, id)).all();
+  const runRows = db.all<{ method: string; at: string; ok: number | null; bad: number | null }>(sql`
+    SELECT method, started_at AS at, success_count AS ok, error_count AS bad FROM channel_runs WHERE connection_id = ${id} AND started_at >= ${sinceIso}`)
+    .map((r) => ({ ...r, day: dayKeyInZone(r.at, zone) })).filter((r) => daySet.has(r.day));
+  const methods: SetupMethodStat[] = methodRows.map((m) => {
+    const mine = runRows.filter((x) => x.method === m.method);
+    const ok = mine.reduce((n, x) => n + Number(x.ok ?? 0), 0);
+    const bad = mine.reduce((n, x) => n + Number(x.bad ?? 0), 0);
+    return { method: m.method, status: m.status, jobStatus: m.jobStatus, lastCallAt: m.lastRunAt, lastSuccessAt: m.lastSuccessAt, calls14d: ok + bad, errors14d: bad, successRate: successRateOf(ok, bad) };
+  }).sort((a, b) => a.method.localeCompare(b.method));
+  const callTrend = days.map((day) => {
+    const mine = runRows.filter((r) => r.day === day);
+    return { day, ok: mine.reduce((n, x) => n + Number(x.ok ?? 0), 0), errors: mine.reduce((n, x) => n + Number(x.bad ?? 0), 0) };
   });
   const missingAll = db.select({ m: mo }).from(mo).where(and(eq(mo.connectionId, id), sql`${mo.status} <> 'Resolved'`)).orderBy(desc(mo.lastUpdated)).all();
   const blocked = blockedRows(db, auth).filter((b) => b.storeName === conn.c.storeName);
   const exceptions = listingExceptionRows(db, auth).filter((e) => e.connectionId === id);
-  const errors = recentErrorRows(db, auth, now).filter((e) => e.connectionId === id);
+  const errors = recentErrorRows(db, auth, now, zone).filter((e) => e.connectionId === id);
   const wh = db.select({ code: s.warehouses.code }).from(s.channelLocationMappings).innerJoin(s.warehouses, eq(s.warehouses.id, s.channelLocationMappings.warehouseId)).where(eq(s.channelLocationMappings.connectionId, id)).all();
   return {
     id, storeName: conn.c.storeName, provider: conn.c.provider, isSandbox: conn.c.distribution === "API", clientName: conn.clientName, warehouses: [...new Set(wh.map((w) => w.code))],
-    successRate: health?.successRate ?? 0, successes24h: health?.successes24h ?? 0, errors24h: health?.errors24h ?? 0, volume,
-    missing: missingAll.slice(0, 5).map(({ m }) => ({ id: m.id, orderCode: m.orderCode, channelOrderNumber: m.channelOrderNumber, connectionId: id, storeName: conn.c.storeName, provider: conn.c.provider, isSandbox: conn.c.distribution === "API", clientName: conn.clientName, orderDate: m.orderDate, lastUpdated: m.lastUpdated, lastErrorCode: m.lastErrorCode, status: m.status })),
+    successRate: health?.successRate ?? null, successes24h: health?.successes24h ?? 0, errors24h: health?.errors24h ?? 0, methods, callTrend, volume,
+    missing: missingAll.slice(0, 5).map(({ m }) => ({ id: m.id, orderCode: m.orderCode, channelOrderNumber: m.channelOrderNumber, connectionId: id, storeName: conn.c.storeName, provider: conn.c.provider, isSandbox: conn.c.distribution === "API", clientName: conn.clientName, orderDate: m.orderDate, lastUpdated: m.lastUpdated, lastErrorCode: brandText(m.lastErrorCode), status: m.status })),
     blocked: blocked.slice(0, 5), listingExceptions: exceptions.slice(0, 5), recentErrors: errors.slice(0, 5),
     counts: { missing: missingAll.length, blocked: blocked.length, listingExceptions: exceptions.length, recentErrors: errors.length },
   };

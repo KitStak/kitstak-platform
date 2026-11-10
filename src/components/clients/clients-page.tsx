@@ -16,9 +16,11 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { StatusPill } from "@/components/ui/status-pill";
 import { DisabledReason } from "@/components/ui/tooltip";
-import { CLIENT_FIELDS, CLIENTS_GRID_KEY } from "@/lib/grid-defs/organization/clients";
+import { CLIENT_FIELDS, CLIENT_FILTER_PRESET, CLIENTS_GRID_KEY } from "@/lib/grid-defs/organization/clients";
 import type { ClientListRow } from "@/server/repositories/clients";
 import { EntityChangeLogDrawer, Muted, NO_PERMISSION, toastBulk, toFilterFields, useAction, usePagePerms, type BulkResponse } from "@/components/facility/facility-shared";
+import { withFilterPreset } from "@/components/organization/filter-preset";
+import { permitted, permittedRowActions } from "@/components/organization/permitted";
 import { ClientWizardDrawer } from "./client-wizard";
 
 const PERMS = ["view", "create", "edit", "delete", "change_log", "import_file"] as const;
@@ -27,14 +29,14 @@ const num = (v: number, href?: string) => <div className="text-right tabular-num
 
 const COLUMNS: GridColumnDef<ClientListRow>[] = [
   { id: "name", header: "Client", size: 200, meta: { alwaysVisible: true }, cell: ({ row }) => <LinkCell href={`/clients/${row.original.id}`}>{row.original.name}</LinkCell> },
-  { id: "code", header: "Code", size: 110, cell: ({ row }) => <code className="font-mono text-[12px] text-secondary">{row.original.code}</code> },
-  { id: "officialName", header: "Official name", size: 240, cell: ({ row }) => row.original.officialName ?? <Muted /> },
-  { id: "fullName", header: "Full name", size: 280, enableSorting: false, cell: ({ row }) => <span className="text-secondary">{row.original.fullName}</span> },
-  { id: "taxId", header: "Tax ID", size: 130, cell: ({ row }) => (row.original.taxId ? <span className="tabular-nums">{row.original.taxId}</span> : <Muted />) },
+  { id: "code", header: "Code", size: 100, cell: ({ row }) => <code className="font-mono text-[12px] text-secondary">{row.original.code}</code> },
+  { id: "officialName", header: "Official name", size: 210, cell: ({ row }) => row.original.officialName ?? <Muted /> },
+  { id: "fullName", header: "Full name", size: 220, enableSorting: false, meta: hidden, cell: ({ row }) => <span className="block truncate text-secondary" title={row.original.fullName}>{row.original.fullName}</span> },
+  { id: "taxId", header: "Tax ID", size: 120, cell: ({ row }) => (row.original.taxId ? <span className="tabular-nums">{row.original.taxId}</span> : <Muted />) },
   { id: "status", header: "Status", size: 110, cell: ({ row }) => <StatusPill status={row.original.status} domain="active" /> },
-  { id: "productCount", header: "# Products", size: 110, meta: { align: "right" }, cell: ({ row }) => num(row.original.productCount, `/products?f.clientId=in:${row.original.id}`) },
+  { id: "productCount", header: "# Products", size: 104, meta: { align: "right" }, cell: ({ row }) => num(row.original.productCount, `/products?f.clientId=in:${row.original.id}`) },
   { id: "openOrders", header: "# Open orders", size: 120, meta: { align: "right" }, cell: ({ row }) => num(row.original.openOrders, `/orders?f.clientId=in:${row.original.id}`) },
-  { id: "currency", header: "Currency", size: 100, cell: ({ row }) => row.original.currency },
+  { id: "currency", header: "Currency", size: 104, cell: ({ row }) => row.original.currency },
   { id: "contactName", header: "Contact", size: 170, meta: hidden, enableSorting: false, cell: ({ row }) => row.original.contactName || <Muted /> },
   { id: "contactEmail", header: "Contact email", size: 210, meta: hidden, enableSorting: false, cell: ({ row }) => row.original.contactEmail || <Muted /> },
   { id: "createdAt", header: "Created date", size: 130, meta: hidden, cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString("en-US") },
@@ -45,7 +47,7 @@ type Pending = { readonly kind: "delete" | "Active" | "Inactive"; readonly rows:
 export function ClientsPage() {
   const router = useRouter();
   const perms = usePagePerms("settings.clients", PERMS);
-  const fields = React.useMemo(() => toFilterFields(CLIENT_FIELDS), []);
+  const fields = React.useMemo(() => withFilterPreset(toFilterFields(CLIENT_FIELDS), CLIENT_FILTER_PRESET), []);
   const g = useGrid<ClientListRow>({ gridKey: CLIENTS_GRID_KEY, path: "/api/clients", fields });
   const [wizard, setWizard] = React.useState<{ open: boolean; editId: string | null }>({ open: false, editId: null });
   const [log, setLog] = React.useState<ClientListRow | null>(null);
@@ -78,7 +80,7 @@ export function ClientsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Organization" tabs="organization" helper="Define your clients (the brands you fulfill for) and set up their preferences."
+      <PageHeader title="Clients" tabs="organization" helper="Define your clients (the brands you fulfill for) and set up their preferences."
         actions={
           <div className="flex items-center gap-2">
             <DropdownMenu>
@@ -86,18 +88,19 @@ export function ClientsPage() {
                 <DropdownMenuTrigger asChild><Button disabled={!perms.import_file}><FileUp className="h-4 w-4" aria-hidden />Bulk import/update<ChevronDown className="h-3.5 w-3.5" aria-hidden /></Button></DropdownMenuTrigger>
               </DisabledReason>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem icon={FileUp} href="/imports/clients" description="Create or update clients from an Excel file">Import clients</DropdownMenuItem>
+                <DropdownMenuItem icon={FileUp} href="/imports/clients" description="Create new clients from an Excel file">Import clients</DropdownMenuItem>
+                <DropdownMenuItem icon={FileUp} href="/imports/clients" description="Update existing clients matched by client code">Update clients</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <DisabledReason reason={perms.create ? null : NO_PERMISSION}><Button variant="primary" disabled={!perms.create} onClick={() => setWizard({ open: true, editId: null })}><Plus className="h-4 w-4" aria-hidden />Create client</Button></DisabledReason>
+            {perms.create ? <Button variant="primary" onClick={() => setWizard({ open: true, editId: null })}><Plus className="h-4 w-4" aria-hidden />Create client</Button> : null}
           </div>
         } />
-      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search client, code, official name or tax ID" bulkActions={bulkActions} bulkNoun="client" />
+      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search client, code, official name or tax ID" bulkActions={permitted(bulkActions)} bulkNoun="client" />
       <DataGrid<ClientListRow>
         {...g.gridProps}
         columns={COLUMNS}
         getRowId={(r) => r.id}
-        rowActions={rowActions}
+        rowActions={permittedRowActions(rowActions)}
         onRowClick={(r) => router.push(`/clients/${r.id}`)}
         emptyTitle={filtered ? "No clients match these filters" : "No clients yet"}
         emptyDescription={filtered ? "Clear a filter or search for another name." : "Create the first brand you fulfill for, then add its products."}
@@ -111,7 +114,7 @@ export function ClientsPage() {
         onOpenChange={(o) => !o && setPending(null)}
         variant={pending?.kind === "delete" ? "danger" : pending?.kind === "Inactive" ? "attention" : "info"}
         title={`${verb} ${count === 1 ? one?.name : `${count} clients`}?`}
-        description={pending?.kind === "delete" ? "Clients with products, orders, POs, stock or billing forms are skipped." : pending?.kind === "Inactive" ? "Inactive clients disappear from order, PO and billing client selects. Clients with open orders are skipped." : "The clients become selectable on new orders, POs and billing forms again."}
+        description={pending?.kind === "delete" ? "Clients with products, orders, POs, stock or billing forms are skipped." : pending?.kind === "Inactive" ? "Inactive clients disappear from order, PO and billing client selects, and automatic billing pauses for their approved billing forms (a final bill can still be calculated manually). Clients with open orders are skipped." : "The clients become selectable on new orders, POs and billing forms again."}
         confirmLabel={`Yes, ${verb.toLowerCase()}`}
         cancelLabel="No"
         records={{ columns: [{ key: "name", label: "Client" }, { key: "status", label: "Status" }, { key: "orders", label: "Open orders" }], rows: (pending?.rows ?? []).map((r) => ({ name: r.name, status: r.status, orders: r.openOrders })) }}

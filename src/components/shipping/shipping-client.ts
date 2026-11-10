@@ -9,6 +9,7 @@ import * as React from "react";
 import { apiFetch, isApiError } from "@/lib/api-client";
 import { useApiQuery } from "@/lib/query-client";
 import { usePermissionSet } from "@/lib/permissions-client";
+import { useShell } from "@/components/layout/shell-context";
 import { withFacets, type ShippingFacets, type ShippingField } from "@/lib/grid-defs/shipping/common";
 import type { FilterFieldDef } from "@/components/grid/grid-types";
 import { toast } from "@/components/ui/toast";
@@ -21,14 +22,20 @@ export interface BulkOutcome {
 const noopSubscribe = () => () => {};
 
 /**
- * Granted permission keys, empty until hydration finishes. The app shell fetches /api/me before
- * the streamed page boundary hydrates, so reading it directly would render mutation controls on
- * the first client pass that the server never rendered (hydration mismatch).
+ * Granted permission keys for gating M02 controls.
+ *
+ * Server render and the hydration pass read the app shell's set, which the (app) layout resolves
+ * on the server for this request (`loadShellProps`). Both passes see the same set, so primary
+ * actions ("Create shipment plan", Delete, Ship, Print, Void...) are in the first paint and there
+ * is no hydration mismatch. After hydration, a loaded /api/me wins (it picks up role changes made
+ * since the page was served). Outside the shell (unit tests) it falls back to /api/me alone.
  */
 export function useHydratedPermissions(): ReadonlySet<string> {
   const hydrated = React.useSyncExternalStore(noopSubscribe, () => true, () => false);
-  const { permissions } = usePermissionSet();
-  return hydrated ? permissions : EMPTY_PERMISSIONS;
+  const { permissions: shellPermissions } = useShell();
+  const { permissions: mePermissions, isLoading } = usePermissionSet();
+  if (hydrated && !isLoading) return mePermissions;
+  return shellPermissions ?? EMPTY_PERMISSIONS;
 }
 const EMPTY_PERMISSIONS: ReadonlySet<string> = new Set<string>();
 

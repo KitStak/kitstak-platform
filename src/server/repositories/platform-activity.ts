@@ -3,21 +3,20 @@
  * background tasks (header Transactions tray and Export History). Rows of other users
  * are never visible (NOT_FOUND).
  */
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { BG_TASK_KINDS, BG_TASK_STATUSES } from "@/lib/enums";
 import type { AppDb } from "@/server/api/db";
 import { notFoundError, validationError } from "@/server/api/errors";
 import { backgroundTasks, files, notifications } from "@/server/db/schema";
 import { idSchema, offsetFor, pagingSchema, type Paged } from "./platform-common";
+import { effectiveSeverity, fixPlurals, kindGroup, matchesSeverity, notificationFilterSchema, sinceIso, type NotificationDeleteSchemaOut, type NotificationSeverity } from "@/lib/grid-defs/admin/notifications";
 
 /* ----------------------------------------------------------- notifications */
 
 export type NotificationRow = typeof notifications.$inferSelect;
 
-export const notificationListQuerySchema = pagingSchema.extend({
-  unread: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
-});
+export const notificationListQuerySchema = pagingSchema.merge(notificationFilterSchema);
 
 export const notificationReadSchema = z.object({
   ids: z.array(idSchema).min(1).max(1000).optional(),
@@ -28,14 +27,48 @@ export function listNotifications(
   db: AppDb,
   userId: string,
   query: z.output<typeof notificationListQuerySchema>,
-): Paged<NotificationRow> & { readonly unread: number } {
+): Paged<NotificationRow> & { readonly unread: number; readonly types: readonly string[] } {
   const mine = eq(notifications.userId, userId);
-  const where = query.unread ? and(mine, isNull(notifications.readAt)) : mine;
+  const since = sinceIso(query.since);
+  const where = and(
+    mine,
+    query.unread ? isNull(notifications.readAt) : undefined,
+    since ? gte(notifications.createdAt, since) : undefined,
+    query.type ? sql`(${notifications.kind} = ${query.type} OR ${notifications.kind} LIKE ${`${query.type}.%`})` : undefined,
+  );
   const count = (w: ReturnType<typeof and>): number => db.select({ n: sql<number>`count(*)` }).from(notifications).where(w).get()?.n ?? 0;
-  const rows = db.select().from(notifications).where(where)
-    .orderBy(desc(notifications.createdAt), desc(notifications.id))
-    .limit(query.ps).offset(offsetFor(query.page, query.ps)).all();
-  return { rows, total: count(where), unread: count(and(mine, isNull(notifications.readAt))) };
+  const unread = count(and(mine, isNull(notifications.readAt)));
+  const types = [...new Set(db.selectDistinct({ kind: notifications.kind }).from(notifications).where(mine).all().map((r) => kindGroup(r.kind)))].sort();
+  if (query.severity === "all") {
+    const rows = db.select().from(notifications).where(where)
+      .orderBy(desc(notifications.createdAt), desc(notifications.id))
+      .limit(query.ps).offset(offsetFor(query.page, query.ps)).all().map(presentNotification);
+    return { rows, total: count(where), unread, types };
+  }
+  // Effective severity is derived from the copy, so this filter runs in memory (bounded per user).
+  const matching = db.select().from(notifications).where(where)
+    .orderBy(desc(notifications.createdAt), desc(notifications.id)).limit(MAX_FILTER_SCAN).all()
+    .map(presentNotification).filter((n) => matchesSeverity(query.severity, n.severity));
+  const start = offsetFor(query.page, query.ps);
+  return { rows: matching.slice(start, start + query.ps), total: matching.length, unread, types };
+}
+
+const MAX_FILTER_SCAN = 5000;
+
+/** Display form: effective severity (a "success" wave with shortages is a warning) and fixed plurals. */
+export function presentNotification(n: NotificationRow): NotificationRow {
+  const title = fixPlurals(n.title);
+  const body = n.body === null ? null : fixPlurals(n.body);
+  return { ...n, title, body, severity: effectiveSeverity(n.severity as NotificationSeverity, title, body) };
+}
+
+/** Deletes the caller's notifications by id, or every read one. Other users' rows are never touched. */
+export function deleteNotifications(db: AppDb, userId: string, input: NotificationDeleteSchemaOut): { deleted: number } {
+  const where = and(
+    eq(notifications.userId, userId),
+    input.ids ? inArray(notifications.id, [...new Set(input.ids)]) : isNotNull(notifications.readAt),
+  );
+  return { deleted: db.delete(notifications).where(where).run().changes };
 }
 
 export function markNotificationsRead(db: AppDb, userId: string, input: z.output<typeof notificationReadSchema>, now: Date = new Date()): { updated: number } {

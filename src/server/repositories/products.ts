@@ -60,11 +60,23 @@ export interface ProductListRow {
   readonly allocated: number;
   readonly available: number;
   readonly version: number;
+  /** Other products of the same client sharing this product's primary barcode (ambiguous scans). */
+  readonly barcodeConflictCount: number;
 }
 
 function warehouseList(scope: Scope): SQL {
   if (scope.warehouseIds.length === 0) return sql`(NULL)`;
   return sql`(${sql.join(scope.warehouseIds.map((w) => sql`${w}`), sql`, `)})`;
+}
+
+/**
+ * Count of OTHER products of the same client whose primary barcode or any pack-type barcode
+ * equals this product's primary barcode. Pre-existing duplicates (written before the uniqueness
+ * rule) surface as a Barcode conflict pill / detail warning instead of silently ambiguous scans.
+ */
+export function barcodeConflictSql(id: SQL, clientId: SQL, barcode: SQL): SQL {
+  return sql`(CASE WHEN COALESCE(${barcode}, '') = '' THEN 0 ELSE (SELECT COUNT(*) FROM products p2 WHERE p2.client_id = ${clientId} AND p2.id <> ${id}
+    AND (p2.barcode = ${barcode} OR EXISTS (SELECT 1 FROM product_barcodes b2 WHERE b2.product_id = p2.id AND b2.barcode = ${barcode}))) END)`;
 }
 
 /** Field → SQL expression (correlated, so it works in the list and the count query). */
@@ -173,7 +185,7 @@ export function mapListRow(r: RawRow): ProductListRow {
     trackProductionDate: bool(r.trackProductionDate), trackSerial: bool(r.trackSerial),
     productType: (r.productType as string | null) ?? null, productGroup: (r.productGroup as string | null) ?? null,
     description: (r.description as string | null) ?? null, taxRate: numOf(r.taxRate), fnsku: (r.fnsku as string | null) ?? null,
-    createdAt: String(r.createdAt), onHand: numOf(r.onHand), allocated: numOf(r.allocated), available: numOf(r.available), version: numOf(r.version),
+    createdAt: String(r.createdAt), onHand: numOf(r.onHand), allocated: numOf(r.allocated), available: numOf(r.available), version: numOf(r.version), barcodeConflictCount: numOf(r.barcodeConflictCount),
   };
 }
 
@@ -184,6 +196,13 @@ export function listProducts(db: AppDb, scope: Scope, query: GridQuery, idsOnly?
   const whereSql = where ? sql`WHERE ${where}` : sql``;
   const order = productOrderBy(scope, query);
   const offset = (Math.max(1, query.page) - 1) * query.pageSize;
+  // Two phases: SQLite evaluates every result column before sorting, so the correlated columns
+  // (stock sums, barcode conflicts) would run for EVERY matching product. Page the ids first
+  // (only the sort expressions run), then build the 50 visible rows. 6.5k SKUs: 8 s -> ms.
+  const pageIds = db.all<{ id: string }>(sql`SELECT ${p.id} AS id FROM ${p} ${whereSql} ORDER BY ${sql.join(order, sql`, `)} LIMIT ${query.pageSize} OFFSET ${offset}`).map((r) => r.id);
+  const total = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM ${p} ${whereSql}`)?.n ?? 0;
+  if (pageIds.length === 0) return { rows: [], total: Number(total) };
+  const position = new Map(pageIds.map((id, i) => [id, i]));
   const rows = db.all<RawRow>(sql`
     SELECT ${p.id} AS id, ${p.clientId} AS clientId, ${e.clientName} AS clientName,
       (SELECT c.code FROM clients c WHERE c.id = ${p.clientId}) AS clientCode,
@@ -198,10 +217,9 @@ export function listProducts(db: AppDb, scope: Scope, query: GridQuery, idsOnly?
       ${p.trackLot} AS trackLot, ${p.trackExpiry} AS trackExpiry, ${p.trackProductionDate} AS trackProductionDate,
       ${p.trackSerial} AS trackSerial, ${e.productType} AS productType, ${e.productGroup} AS productGroup,
       ${p.description} AS description, ${p.taxRate} AS taxRate, ${p.fnsku} AS fnsku, ${p.createdAt} AS createdAt,
-      ${e.onHand} AS onHand, ${e.allocated} AS allocated, ${e.available} AS available, ${p.version} AS version
-    FROM ${p} ${whereSql}
-    ORDER BY ${sql.join(order, sql`, `)}
-    LIMIT ${query.pageSize} OFFSET ${offset}`);
-  const total = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM ${p} ${whereSql}`)?.n ?? 0;
+      ${e.onHand} AS onHand, ${e.allocated} AS allocated, ${e.available} AS available, ${p.version} AS version,
+      ${barcodeConflictSql(sql`${p.id}`, sql`${p.clientId}`, sql`${p.barcode}`)} AS barcodeConflictCount
+    FROM ${p} WHERE ${p.id} IN (${sql.join(pageIds.map((id) => sql`${id}`), sql`, `)})`)
+    .sort((a, b) => (position.get(String(a.id)) ?? 0) - (position.get(String(b.id)) ?? 0));
   return { rows: rows.map(mapListRow), total: Number(total) };
 }

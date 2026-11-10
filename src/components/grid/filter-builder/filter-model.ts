@@ -8,7 +8,7 @@ import { describeDateSpec, dateEditorToSpec, specToDateEditor, EMPTY_DATE_EDITOR
 export const EMPTY_OPTION_VALUE = "__empty__";
 
 export type FilterDraft =
-  | { readonly type: "enum"; readonly values: readonly string[] }
+  | { readonly type: "enum"; readonly values: readonly string[]; /** true = "not in" (exclude the checked values). */ readonly exclude?: boolean }
   | { readonly type: "text"; readonly op: TextFilterOp; readonly value: string }
   | { readonly type: "number"; readonly min: number | null; readonly max: number | null }
   | { readonly type: "boolean"; readonly value: boolean | null }
@@ -35,11 +35,13 @@ export function filterToDraft(def: FilterFieldDef, filter: GridFilter | undefine
   switch (def.type) {
     case "enum":
       if (filter.op === "in") return { type: "enum", values: filter.values };
+      if (filter.op === "nin") return { type: "enum", values: filter.values, exclude: true };
       if (filter.op === "empty") return { type: "enum", values: [EMPTY_OPTION_VALUE] };
       return emptyDraft(def);
     case "text":
       if (filter.op === "eq" || filter.op === "ct" || filter.op === "sw" || filter.op === "ew") return { type: "text", op: filter.op, value: filter.value };
       if (filter.op === "ex" || filter.op === "empty") return { type: "text", op: filter.op, value: "" };
+      if (filter.op === "nin") return { type: "text", op: "nin", value: filter.values.join(", ") };
       return emptyDraft(def);
     case "number":
       if (filter.op === "rng") return { type: "number", min: toNum(filter.min), max: toNum(filter.max) };
@@ -70,12 +72,16 @@ export function draftToFilter(def: FilterFieldDef, draft: FilterDraft): DraftRes
       if (wantsEmpty && values.length === 0) return { ok: true, filter: { field, op: "empty" } };
       if (values.length === 0) return { ok: false, reason: "Select at least one value" };
       if (wantsEmpty) return { ok: false, reason: '"Empty" cannot be combined with other values' };
-      return { ok: true, filter: { field, op: "in", values } };
+      return { ok: true, filter: { field, op: draft.exclude ? "nin" : "in", values } };
     }
     case "text": {
       if (draft.op === "ex" || draft.op === "empty") return { ok: true, filter: { field, op: draft.op } };
       const value = draft.value.trim();
       if (!value) return { ok: false, reason: "Enter a value" };
+      if (draft.op === "nin") {
+        const values = value.split(",").map((v) => v.trim()).filter(Boolean);
+        return values.length ? { ok: true, filter: { field, op: "nin", values } } : { ok: false, reason: "Enter a value" };
+      }
       return { ok: true, filter: { field, op: draft.op, value } };
     }
     case "number": {

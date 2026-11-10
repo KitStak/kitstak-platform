@@ -47,7 +47,7 @@ export function SegmentedControl<V extends string>({ options, value, onChange, s
             className={cn(
               "inline-flex items-center justify-center gap-1.5 font-medium whitespace-nowrap text-secondary outline-none transition-colors",
               index > 0 && "border-l border-border-strong/70",
-              "hover:bg-surface-sunken hover:text-body focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/35",
+              "hover:bg-surface-sunken hover:text-body focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-info/35",
               "data-[state=on]:bg-primary-soft data-[state=on]:text-primary active:bg-neutral-soft",
               "disabled:cursor-not-allowed disabled:text-faint",
               size === "sm" ? "h-7 px-2.5 text-[12px]" : "h-8 px-3 text-[13px]"

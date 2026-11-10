@@ -19,6 +19,8 @@ export const CLIENT_FIELDS: readonly OrgField[] = [
   { field: "openOrders", label: "# Open orders", type: "number" },
   { field: "createdAt", label: "Created date", type: "date" },
 ];
+/** Client list preset: Client, Client code, Status, Created date. */
+export const CLIENT_FILTER_PRESET = ["name", "code", "status", "createdAt"] as const;
 export const CLIENT_SORT_FIELDS = ["code", "name", "officialName", "taxId", "status", "currency", "productCount", "openOrders", "createdAt"] as const;
 export const CLIENT_SEARCH_FIELDS = ["name", "code", "officialName", "taxId"] as const;
 
@@ -131,13 +133,60 @@ export function settingLabel(path: string): string | null {
   return g && sw ? `${g.title.replace(/ settings$/, "")} · ${sw.label}` : null;
 }
 
+/* ---------------- SSCC-18 (Others step, Logiwa "SSCC18 Barcode Creation") ---------------- */
+
+/** GS1 mod-10 check digit (weights 3,1 from the right). */
+export function ssccCheckDigit(digits: string): number {
+  let sum = 0;
+  for (let i = 0; i < digits.length; i += 1) sum += Number(digits[digits.length - 1 - i]) * (i % 2 === 0 ? 3 : 1);
+  return (10 - (sum % 10)) % 10;
+}
+
+/**
+ * Client SSCC-18 settings: extension digit (1) + GS1 company prefix (7–10) + serial
+ * reference (fills to 17 digits) + check digit. All blank = SSCC labels not configured.
+ */
+export const clientSsccSchema = z
+  .object({
+    extensionDigit: z.string().trim().max(1).default(""),
+    gs1CompanyPrefix: z.string().trim().max(10).default(""),
+    serialNumber: z.string().trim().max(10).default(""),
+  })
+  .superRefine((v, ctx) => {
+    const any = Boolean(v.extensionDigit || v.gs1CompanyPrefix || v.serialNumber);
+    if (!any) return;
+    const issue = (path: "extensionDigit" | "gs1CompanyPrefix" | "serialNumber", message: string) => ctx.addIssue({ code: "custom", path: [path], message });
+    if (!/^\d$/.test(v.extensionDigit)) issue("extensionDigit", v.extensionDigit ? "Use one digit (0–9)" : "Extension digit is required for SSCC-18");
+    if (!/^\d{7,10}$/.test(v.gs1CompanyPrefix)) issue("gs1CompanyPrefix", v.gs1CompanyPrefix ? "Use 7 to 10 digits" : "GS1 company prefix is required for SSCC-18");
+    const room = 16 - (v.gs1CompanyPrefix.length || 7);
+    if (!/^\d+$/.test(v.serialNumber)) issue("serialNumber", v.serialNumber ? "Digits only" : "Starting serial number is required for SSCC-18");
+    else if (v.serialNumber.length > room) issue("serialNumber", `With a ${v.gs1CompanyPrefix.length || 7}-digit prefix the serial can have at most ${room} digits`);
+  });
+export type ClientSscc = z.output<typeof clientSsccSchema>;
+export const EMPTY_SSCC: ClientSscc = { extensionDigit: "", gs1CompanyPrefix: "", serialNumber: "" };
+
+/** Reads `settings.sscc` from a stored settings JSON. */
+export function readSscc(stored: unknown): ClientSscc {
+  const raw = (stored as { sscc?: Partial<ClientSscc> } | null | undefined)?.sscc;
+  return { extensionDigit: String(raw?.extensionDigit ?? ""), gs1CompanyPrefix: String(raw?.gs1CompanyPrefix ?? ""), serialNumber: String(raw?.serialNumber ?? "") };
+}
+
+/** The first SSCC-18 the settings produce (serial zero-padded), or null when incomplete. */
+export function previewSscc(v: Partial<ClientSscc> | null | undefined): string | null {
+  const parsed = clientSsccSchema.safeParse(v ?? {});
+  if (!parsed.success || !parsed.data.gs1CompanyPrefix) return null;
+  const { extensionDigit, gs1CompanyPrefix, serialNumber } = parsed.data;
+  const body = `${extensionDigit}${gs1CompanyPrefix}${serialNumber.padStart(16 - gs1CompanyPrefix.length, "0")}`;
+  return `${body}${ssccCheckDigit(body)}`;
+}
+
 /* ---------------- wizard ---------------- */
 
 export const CLIENT_CODE_RE = /^[A-Z0-9][A-Z0-9_-]{1,19}$/;
 
 export const clientInfoShape = {
   name: requiredText("Display name", 100),
-  code: z.string({ error: "Client code is required" }).trim().toUpperCase().regex(CLIENT_CODE_RE, "2–20 letters, numbers, dash or underscore"),
+  code: z.string({ error: "Client code is required" }).trim().toUpperCase().min(1, "Client code is required").regex(CLIENT_CODE_RE, "2–20 letters, numbers, dash or underscore"),
   officialName: requiredText("Official name", 200),
   status: z.enum(ACTIVE_STATUSES).default("Active"),
   contactName: optionalText(100),
@@ -151,6 +200,7 @@ export const clientOthersShape = {
   taxId: optionalText(40),
   billingPlan: z.enum(CLIENT_BILLING_PLANS).default("per-order"),
   customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}),
+  sscc: clientSsccSchema.default(EMPTY_SSCC),
   note: optionalText(1000),
 };
 export const clientOthersSchema = z.object(clientOthersShape);
@@ -171,7 +221,7 @@ export const clientSettingsPatchSchema = z.object({ currency: z.enum(CURRENCIES)
 
 export const CLIENT_DEFAULTS: ClientInput = {
   name: "", code: "", officialName: "", status: "Active", contactName: "", contactEmail: "", phone: "",
-  currency: "USD", settings: emptySettings(), addresses: [], taxId: "", billingPlan: "per-order", customFields: {}, note: "",
+  currency: "USD", settings: emptySettings(), addresses: [], taxId: "", billingPlan: "per-order", customFields: {}, sscc: { ...EMPTY_SSCC }, note: "",
 };
 
 /** "Copperline Coffee Co." -> "COPPER" style code suggestion. */
@@ -180,4 +230,37 @@ export function suggestClientCode(name: string): string {
   if (words.length === 0) return "";
   if (words.length === 1) return words[0]!.slice(0, 6);
   return words.slice(0, 4).map((w) => w[0]).join("") + (words[0]!.length > 1 ? words[0]!.slice(1, 3) : "");
+}
+
+/* ---------------- detail response (UI guard) ---------------- */
+
+const kpiZero = { orders30d: 0, unitsShipped30d: 0, inventoryUnits: 0, openPos: 0, openOrders: 0, products: 0, skusInStock: 0 };
+const addressRow = z.object({
+  firstName: z.string().nullable().catch(null).default(null), lastName: z.string().nullable().catch(null).default(null),
+  isDefault: z.boolean().catch(false).default(false), isActive: z.boolean().catch(true).default(true),
+}).loose();
+
+/**
+ * Parses `GET /api/clients/[id]` with defaults for every optional block, so the detail page never
+ * crashes on an older or partial response (API/UI version skew, a cached payload).
+ */
+export const clientDetailResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  code: z.string().catch("").default(""),
+  status: z.enum(ACTIVE_STATUSES).catch("Active"),
+  totalOrders: z.number().catch(0).default(0),
+  customFields: z.record(z.string(), z.unknown()).catch({}).default({}),
+  addresses: z.array(addressRow).catch([]).default([]),
+  kpis: z.object(Object.fromEntries(Object.keys(kpiZero).map((k) => [k, z.number().catch(0).default(0)]))).catch(kpiZero).default(kpiZero),
+  contracts: z.array(z.unknown()).catch([]).default([]),
+  users: z.array(z.unknown()).catch([]).default([]),
+}).loose();
+
+/** Normalized detail (same shape as the server's ClientDetail) or null when the payload isn't a client. */
+export function parseClientDetail<T>(raw: unknown): T | null {
+  const out = clientDetailResponseSchema.safeParse(raw);
+  if (!out.success) return null;
+  const src = raw as { settings?: unknown; sscc?: unknown };
+  return { ...out.data, settings: fullSettings(src.settings), sscc: readSscc({ sscc: src.sscc }) } as unknown as T;
 }

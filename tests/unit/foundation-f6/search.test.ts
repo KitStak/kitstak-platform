@@ -42,18 +42,19 @@ describe("global search", () => {
   afterEach(() => testDb.close());
 
   it("registers record providers with valid permissions (all live since fix2)", () => {
-    expect(SEARCH_PROVIDERS.map((p) => p.key)).toEqual(["pages", "orders", "pos", "products", "locations", "lps", "jobs", "clients"]);
+    expect(SEARCH_PROVIDERS.map((p) => p.key)).toEqual(["pages", "orders", "pos", "products", "locations", "lps", "jobs", "clients", "users", "roles"]);
     for (const provider of SEARCH_PROVIDERS.slice(1)) {
       expect(provider.configured, provider.key).toBe(true);
       expect(provider.singular, provider.key).toBeTruthy();
       expect(provider.seeAllHref?.("x"), provider.key).toMatch(/^\/[a-z/-]+\?q=x$/);
-      expect(isPermissionKey(provider.permission), String(provider.permission)).toBe(true);
+      const perms = Array.isArray(provider.permission) ? provider.permission : [provider.permission];
+      for (const key of perms) expect(isPermissionKey(key), String(key)).toBe(true);
     }
   });
 
   it("only runs configured providers the user may see and isolates failures", async () => {
     const auth = authFor(testDb, testDb.ids.admin);
-    expect(visibleProviders({ auth }).map((p) => p.key)).toEqual(["pages", "orders", "pos", "products", "locations", "lps", "jobs", "clients"]);
+    expect(visibleProviders({ auth }).map((p) => p.key)).toEqual(["pages", "orders", "pos", "products", "locations", "lps", "jobs", "clients", "users", "roles"]);
     const groups = await globalSearch({ db: testDb.db, auth, q: "inventory", limit: 3 });
     expect(groups).toHaveLength(1);
     expect(groups[0]?.key).toBe("pages");

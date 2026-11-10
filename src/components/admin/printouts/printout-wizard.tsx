@@ -10,13 +10,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Building2, Info, LayoutTemplate, Palette, SlidersHorizontal, Users2 } from "lucide-react";
 import { useWatch, type UseFormReturn } from "react-hook-form";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiRequest, isApiError } from "@/lib/api-client";
 import { PRINT_MODES, PRINT_RECORDS_PER_PAGE, PRINTER_TYPES } from "@/lib/enums";
 import { applyServerFieldErrors, useApiQuery } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
 import {
   familyOf, printoutClientsStepSchema, printoutDefaults, printoutDesignStepSchema, printoutInfoSchema, printoutOptionsSchema,
-  printoutTemplateStepSchema, templatesFor, typeTitle, type PrintoutFormValues,
+  PRINTOUTS_GRID_KEY, printoutTemplateStepSchema, templatesFor, typeTitle, type PrintoutFormValues,
 } from "@/lib/grid-defs/admin/printouts";
 import type { PrintoutDetail } from "@/server/repositories/printouts";
 import { PageHeader } from "@/components/layout/page-header";
@@ -69,11 +70,15 @@ function TemplateStep({ form, typeKey }: { readonly form: UseFormReturn<F>; read
     <FormSection title="Select a template" description="Start from a base layout. You can change every section in the designer next; picking another template resets the design.">
       <FormField<F> name="baseTemplate">
         {(c) => (
-          <div role="radiogroup" aria-label="Base template" aria-invalid={c.invalid} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {templates.map((t) => {
+          <div role="radiogroup" aria-label="Base template" aria-invalid={c.invalid} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {templates.map((t, i) => {
+              const firstRetailer = t.key.startsWith("retailer-") && !templates[i - 1]?.key.startsWith("retailer-");
               const selected = current === t.key;
               return (
-                <button key={t.key} type="button" role="radio" aria-checked={selected} onClick={() => choose(t.key)}
+                <React.Fragment key={t.key}>
+                {i === 0 && templates.some((x) => x.key.startsWith("retailer-")) ? <p className="col-span-full text-[11px] font-bold uppercase tracking-[0.06em] text-faint">Base layouts</p> : null}
+                {firstRetailer ? <p className="col-span-full mt-2 text-[11px] font-bold uppercase tracking-[0.06em] text-faint">Retailer compliant · drop-ship packing lists without prices, with the retailer&apos;s PO barcode and return copy</p> : null}
+                <button type="button" role="radio" aria-checked={selected} onClick={() => choose(t.key)}
                   className={cn("flex flex-col gap-3 rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     selected ? "border-primary bg-primary-soft/40 ring-1 ring-primary" : "border-border bg-surface hover:border-border-strong")}>
                   <span className="flex justify-center rounded-md bg-surface-sunken py-3"><LayoutThumbnail layout={t.layout(typeKey)} /></span>
@@ -85,6 +90,7 @@ function TemplateStep({ form, typeKey }: { readonly form: UseFormReturn<F>; read
                     <span className="mt-0.5 block text-[12px] text-secondary">{t.description}</span>
                   </span>
                 </button>
+                </React.Fragment>
               );
             })}
           </div>
@@ -145,6 +151,7 @@ export function detailToForm(d: PrintoutDetail): F {
 
 function Body({ typeKey, initial, detail }: { readonly typeKey: string; readonly initial: F; readonly detail: PrintoutDetail | null }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const formRef = React.useRef<UseFormReturn<F> | null>(null);
   const [conflict, setConflict] = React.useState(false);
   const isDefault = detail?.isDefault ?? false;
@@ -160,14 +167,23 @@ function Body({ typeKey, initial, detail }: { readonly typeKey: string; readonly
   const submit = async (values: F) => {
     try {
       const body = { ...values, typeKey, clientIds: values.allClients ? [] : values.clientIds, version: detail?.version };
+      let savedId: string;
       if (detail) {
         await apiRequest(`/api/printouts/${detail.id}`, { method: "PATCH", body });
+        savedId = detail.id;
         toast.success("Printout saved", `${values.name} was updated.`);
       } else {
         const { data } = await apiRequest<{ id: string; name: string }>("/api/printouts", { method: "POST", body });
+        savedId = data.id;
         toast.success("Printout created", `${data.name} is ready to print.`);
       }
-      router.push(listHref);
+      // The list and the type counts must show the saved template on arrival, not after a reload.
+      queryClient.removeQueries({ queryKey: ["printout", savedId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["grid", PRINTOUTS_GRID_KEY] }),
+        queryClient.invalidateQueries({ queryKey: ["printout-types"] }),
+      ]);
+      router.push(`${listHref}?saved=${encodeURIComponent(savedId)}`);
     } catch (error) {
       if (isApiError(error) && error.code === "CONFLICT") setConflict(true);
       if (formRef.current) applyServerFieldErrors(formRef.current, error);

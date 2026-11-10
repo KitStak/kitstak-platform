@@ -24,7 +24,7 @@ export function FormSection({ title, description, action, collapsible, defaultOp
       <div className="flex items-start justify-between gap-3 border-b border-border pb-2">
         <div className="min-w-0">
           {collapsible ? (
-            <button type="button" aria-expanded={open} aria-controls={contentId} onClick={() => setOpen((v) => !v)} className="flex items-center gap-1.5 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+            <button type="button" aria-expanded={open} aria-controls={contentId} onClick={() => setOpen((v) => !v)} className="flex items-center gap-1.5 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
               <ChevronDown className={cn("h-4 w-4 text-secondary transition-transform", !open && "-rotate-90")} aria-hidden />
               {heading}
             </button>

@@ -6,10 +6,11 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import * as schema from "@/server/db/schema";
 import { verifyAddress } from "../address-verification";
-import { recordCreate, recordLine, recordUpdate } from "../change-log";
+import { recordCreate, recordLine, recordLineCreate, recordUpdate } from "../change-log";
 import { DomainError } from "../errors";
 import type { OrderLineRow, OrderRow } from "../facts";
-import { next } from "../sequences";
+import { AppError } from "@/server/api/errors";
+import { next, peek } from "../sequences";
 import { checkScope, type DomainCtx, type Tx } from "../types";
 import { runWorkflows } from "../workflows";
 import { ADDRESS_FIELDS, createOrderSchema, updateOrderSchema, type CreateOrderInput, type OrderLineInput, type UpdateOrderInput } from "./schemas";
@@ -64,6 +65,29 @@ function addressCheck(a: { shipAddress: string; shipAddress2?: string | null; sh
   return verifyAddress({ line1: a.shipAddress, line2: a.shipAddress2, city: a.shipCity, state: a.shipState, postalCode: a.shipZip, country: a.shipCountry });
 }
 
+export function orderCodeTaken(tx: Tx, code: string): boolean {
+  return Boolean(tx.select({ id: schema.shipmentOrders.id }).from(schema.shipmentOrders).where(sql`upper(${schema.shipmentOrders.code}) = ${code.trim().toUpperCase()}`).get());
+}
+
+/** Consumes sequence values until one is not used by an existing order (hand-typed codes can collide). */
+export function nextFreeOrderCode(tx: Tx): string {
+  for (let i = 0; i < 10_000; i += 1) {
+    const code = next(tx, "so");
+    if (!orderCodeTaken(tx, code)) return code;
+  }
+  throw new DomainError("CONFLICT", "Could not find a free shipment order code");
+}
+
+/** The next free code without consuming it; burns sequence values that are already taken. */
+export function peekFreeOrderCode(tx: Tx): string {
+  for (let i = 0; i < 10_000; i += 1) {
+    const code = peek(tx, "so");
+    if (!orderCodeTaken(tx, code)) return code;
+    next(tx, "so");
+  }
+  throw new DomainError("CONFLICT", "Could not find a free shipment order code");
+}
+
 export interface CreateOrderOptions {
   readonly trigger?: "Shipment Order Created" | "Shipment Order Imported";
 }
@@ -76,10 +100,12 @@ export function createOrder(tx: Tx, ctx: DomainCtx, raw: CreateOrderInput, opts:
   const client = tx.select().from(schema.clients).where(eq(schema.clients.id, input.clientId)).get();
   if (!client || client.status !== "Active") throw new DomainError("VALIDATION", "Client not found or inactive");
   const products = loadProducts(tx, client.id, input.lines);
-  if (input.code && tx.select({ id: schema.shipmentOrders.id }).from(schema.shipmentOrders).where(eq(schema.shipmentOrders.code, input.code)).get()) {
-    throw new DomainError("DUPLICATE", `Shipment order code ${input.code} already exists.`);
+  // The wizard sends the peeked code back: treat it as "use the sequence" so the sequence advances.
+  const fromSequence = !input.code || input.code.toUpperCase() === peek(tx, "so").toUpperCase();
+  if (!fromSequence && orderCodeTaken(tx, input.code as string)) {
+    throw new AppError("DUPLICATE", `Shipment order code ${input.code} already exists.`, { fieldErrors: { code: ["This order code is already taken"] } });
   }
-  const code = input.code ?? next(tx, "so");
+  const code = fromSequence ? nextFreeOrderCode(tx) : (input.code as string);
   const check = addressCheck(input, input.skipAddressVerification);
   const { lines, customFields, orderDate, ...header } = input;
   const order = tx.insert(schema.shipmentOrders).values({
@@ -95,12 +121,15 @@ export function createOrder(tx: Tx, ctx: DomainCtx, raw: CreateOrderInput, opts:
   recordCreate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code });
   // One entry per line (Logiwa: "<SKU> -> Shipment Order Line is created"), for UI, import and channel creates alike.
   for (const line of inserted) {
-    recordLine(tx, ctx, {
+    recordLineCreate(tx, ctx, {
       entityType: "shipment_order", entityId: order.id, entityCode: order.code, lineEntityType: "order_line", lineEntityId: line.id,
-      lineLabel: products.get(line.productId)?.sku ?? "Line", field: "quantity", from: 0, to: line.quantity,
+      lineLabel: products.get(line.productId)?.sku ?? "Line",
     });
   }
-  runWorkflows(tx, ctx, opts.trigger ?? "Shipment Order Created", { type: "shipment_order", id: order.id });
+  // Imported orders (channel download, Excel/CSV) run their own trigger first, then the
+  // every-new-order "Shipment Order Created" workflows (M12 trigger semantics).
+  if (opts.trigger === "Shipment Order Imported") runWorkflows(tx, ctx, "Shipment Order Imported", { type: "shipment_order", id: order.id });
+  runWorkflows(tx, ctx, "Shipment Order Created", { type: "shipment_order", id: order.id });
   return loadOrderRow(tx, ctx, order.id);
 }
 

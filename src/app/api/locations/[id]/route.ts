@@ -1,12 +1,12 @@
-/** `GET|PATCH /api/locations/[id]` — detail and edit (optimistic `version`). `DELETE` is guarded. */
+/** `GET|PATCH /api/locations/[id]` — detail and partial edit (merge; optimistic `version`). `DELETE` is guarded. */
 import { defineRoute } from "@/server/api/define-route";
-import { AppError } from "@/server/api/errors";
-import { locationSaveSchema } from "@/lib/grid-defs/facility/locations";
+import { AppError, fromZodError } from "@/server/api/errors";
+import { locationPatchSchema, locationSaveSchema, mergeLocationPatch } from "@/lib/grid-defs/facility/locations";
 import { idParamsSchema } from "@/server/repositories/platform-common";
 import { deleteLocations, getLocation, updateLocation } from "@/server/repositories/locations";
 
 export const GET = defineRoute({
-  permission: "settings.locations.view",
+  permission: ["settings.locations.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   handler: ({ db, auth, params }) => getLocation(db, auth, params.id),
 });
@@ -14,8 +14,13 @@ export const GET = defineRoute({
 export const PATCH = defineRoute({
   permission: "settings.locations.edit",
   params: idParamsSchema,
-  body: locationSaveSchema,
-  handler: ({ db, auth, actor, params, body }) => updateLocation(db, auth, actor, params.id, body),
+  body: locationPatchSchema,
+  /** Partial update: the body is merged onto the stored record, then validated as a whole. */
+  handler: ({ db, auth, actor, params, body }) => {
+    const merged = locationSaveSchema.safeParse(mergeLocationPatch(getLocation(db, auth, params.id), body));
+    if (!merged.success) throw fromZodError(merged.error);
+    return updateLocation(db, auth, actor, params.id, merged.data);
+  },
 });
 
 export const DELETE = defineRoute({

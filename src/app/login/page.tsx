@@ -5,6 +5,7 @@ import { PackageCheck, Radio, ScanBarcode } from "lucide-react";
 import { BRAND_COLORS, BrandLogo } from "@/components/layout/brand-logo";
 import { demoCredentialsEnabled } from "./demo-credentials";
 import { LoginForm } from "./login-form";
+import { SsoNotices } from "./sso-sign-in";
 
 const COPYRIGHT_YEAR = 2026;
 
@@ -104,6 +105,7 @@ export default function LoginPage() {
         </div>
         <Suspense fallback={null}>
           <LoginForm showDemoCredentials={showDemoCredentials()} />
+          <SsoNotices />
         </Suspense>
       </main>
     </div>

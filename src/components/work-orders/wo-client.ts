@@ -11,6 +11,7 @@ import { customFieldDefSchema, parseList } from "@/components/shared/contracts";
 import { toast } from "@/components/ui/toast";
 import { apiFetch, isApiError } from "@/lib/api-client";
 import { useMe } from "@/lib/permissions-client";
+import { planningDeniedForRoles } from "@/lib/grid-defs/work-orders/wo-planning";
 import { useApiQuery } from "@/lib/query-client";
 import type { WorkOrderStatus } from "@/lib/enums";
 import type { WoGridField } from "@/lib/grid-defs/work-orders/work-orders";
@@ -24,6 +25,8 @@ export interface WorkOrderRow {
   readonly version: number;
   readonly warehouseId: string;
   readonly warehouseCode: string;
+  /** IANA zone of the warehouse (all M08 timestamps use it, with a zone suffix). */
+  readonly warehouseTimeZone?: string;
   readonly clientId: string;
   readonly clientName: string;
   readonly status: WorkOrderStatus;
@@ -56,6 +59,12 @@ export interface WorkOrderRow {
   readonly outputLot: string | null;
   readonly outputExpiry: string | null;
   readonly customFields: Readonly<Record<string, string | boolean | null>>;
+  /** With picking: non-cancelled Picking tasks and how many are completed. */
+  readonly pickTaskCount?: number;
+  readonly pickDoneCount?: number;
+  /** Shortage only: kits usable stock can build now, and whether that covers what's left. */
+  readonly buildableQty?: number | null;
+  readonly stockNowAvailable?: boolean;
 }
 
 export interface ComponentRow {
@@ -63,13 +72,23 @@ export interface ComponentRow {
   readonly componentProductId: string;
   readonly sku: string;
   readonly name: string;
+  readonly barcode?: string | null;
   readonly packType: string;
   readonly componentQty: number;
   readonly totalQty: number;
   readonly allocatedQty: number;
   readonly pickedQty: number;
   readonly consumedQty: number;
+  /** Usable free stock (lock-aware: count-locked / blocked locations excluded). */
   readonly freeQty: number;
+  /** Free stock in count-locked locations, and the plans locking it. */
+  readonly lockedQty?: number;
+  readonly lockedBy?: readonly string[];
+  /** Free stock at the chosen source bucket (location + LP + lot); null when FEFO picks the source. */
+  readonly sourceFreeQty?: number | null;
+  readonly inKittingAreaQty?: number;
+  /** Stock this WO can draw on: chosen source (0 while count-locked), else usable FEFO stock. */
+  readonly availableQty?: number;
   readonly shortQty: number;
   readonly locationId: string | null;
   readonly locationCode: string | null;
@@ -81,30 +100,40 @@ export interface ComponentRow {
   readonly trackLot: boolean;
   readonly trackExpiry: boolean;
   readonly trackProductionDate: boolean;
+  /** Count plan code locking the chosen source location, if any. */
+  readonly sourceLockedBy?: string | null;
 }
 
 export interface WorkOrderDetail {
   readonly workOrder: WorkOrderRow;
-  readonly kit: { readonly id: string; readonly sku: string; readonly name: string; readonly packType: string; readonly kitType: string | null; readonly trackLot: boolean; readonly trackExpiry: boolean; readonly trackProductionDate: boolean };
+  readonly kit: { readonly id: string; readonly sku: string; readonly name: string; readonly barcode?: string | null; readonly packType: string; readonly kitType: string | null; readonly trackLot: boolean; readonly trackExpiry: boolean; readonly trackProductionDate: boolean };
   readonly outputLocationCode: string | null;
+  readonly warehouseTimeZone?: string;
   readonly components: readonly ComponentRow[];
   readonly job: { readonly id: string; readonly code: string; readonly status: string; readonly jobType: string; readonly taskCount: number; readonly completedTaskCount: number; readonly assigneeName: string | null } | null;
   readonly tasks: readonly { readonly id: string; readonly taskNo: number; readonly taskType: string; readonly status: string; readonly sku: string | null; readonly plannedQty: number; readonly actualQty: number; readonly sourceLocationCode: string | null; readonly targetLocationCode: string | null }[];
   readonly receipts: readonly { readonly id: string; readonly masterId: number; readonly type: string; readonly sku: string; readonly quantity: number; readonly locationCode: string; readonly lotNumber: string | null; readonly receivedAt: string; readonly receivedBy: string; readonly cancelledAt: string | null }[];
-  readonly transactions: readonly { readonly id: string; readonly seq: number; readonly type: string; readonly sku: string; readonly qty: number; readonly fromLocationCode: string | null; readonly toLocationCode: string | null; readonly createdAt: string; readonly source: string }[];
+  readonly transactions: readonly { readonly id: string; readonly seq: number; readonly type: string; readonly ledgerType: string; readonly direction: "in" | "out" | "move"; readonly sku: string; readonly qty: number; readonly fromLocationCode: string | null; readonly toLocationCode: string | null; readonly createdAt: string; readonly source: string }[];
   readonly timeline: readonly { readonly id: string; readonly type: string; readonly message: string; readonly source: string; readonly at: string }[];
   readonly exceptions: readonly { readonly id: string; readonly sku: string | null; readonly explanation: string; readonly inventoryQty: number | null; readonly requiredQty: number | null; readonly runAt: string; readonly runBy: string }[];
   readonly disassembledQty: number;
   readonly canReopenInProcess: boolean;
+  /** Component lots/dates consumed at kitting, largest first (Disassemble prefill). */
+  readonly consumedAttributes?: readonly { readonly productId: string; readonly lotNumber: string | null; readonly expiryDate: string | null; readonly productionDate: string | null; readonly qty: number }[];
 }
 
 export interface KitComponentDetail {
   readonly productId: string;
   readonly sku: string;
+  readonly barcode?: string | null;
   readonly name: string;
   readonly packType: string;
   readonly bomQty: number;
+  /** Usable free stock (lock-aware). */
   readonly freeQty: number;
+  /** Free stock in count-locked locations, and the plans locking it. */
+  readonly lockedQty?: number;
+  readonly lockedBy?: readonly string[];
   readonly onHandQty: number;
   readonly trackLot: boolean;
   readonly trackExpiry: boolean;
@@ -139,6 +168,8 @@ export interface StockBucket {
   readonly onHand: number;
   readonly freeQty: number;
   readonly status: string;
+  /** Count plan code locking the bucket's location (stock can't move out), or null. */
+  readonly lockedBy: string | null;
 }
 
 export interface BulkResult {
@@ -228,4 +259,10 @@ export function bulkToast(result: BulkResult, labelFor: (id: string) => string, 
 
 export function openFile(href: string): void {
   window.open(href, "_blank", "noopener,noreferrer");
+}
+
+/** True when the viewer may plan work orders (create/edit/delete/cancel). See `wo-planning.ts`. */
+export function useWoPlanner(): boolean {
+  const me = useMe();
+  return !planningDeniedForRoles(me.data?.data.roles);
 }

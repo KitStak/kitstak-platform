@@ -39,6 +39,14 @@ const TOKEN_RE = /\[([^\]]*)]|YYYY|YY|MMMM|MMM|MM|M|DD|D|dddd|ddd|HH|H|hh|h|mm|m
 
 export function toDate(value: DateInput): Date | null {
   if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "string") {
+    // A bare calendar date ("YYYY-MM-DD") is a local date, not UTC midnight.
+    const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(value);
+    if (m) {
+      const local = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      return Number.isNaN(local.getTime()) ? null : local;
+    }
+  }
   const d = value instanceof Date ? value : new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
 }

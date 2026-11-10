@@ -93,6 +93,8 @@ export const receipts = sqliteTable("receipts", {
   cancelledBy: text("cancelled_by"),
 }, (t) => [
   index("receipts_po_idx").on(t.purchaseOrderId),
+  // PO list: correlated active-receipt count (inbound-receiving REQ-R2-17).
+  index("receipts_po_active_idx").on(t.purchaseOrderId, t.cancelledAt),
   index("receipts_at_idx").on(t.receivedAt),
   uniqueIndex("receipts_master_idx").on(t.masterId),
   index("receipts_return_idx").on(t.returnOrderId),

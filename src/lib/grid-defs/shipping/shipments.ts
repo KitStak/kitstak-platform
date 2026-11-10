@@ -1,6 +1,6 @@
 /**
  * Carrier Shipment Details grid (`/shipments`, gridKey `shipments`): one row per package /
- * label. 41 Logiwa columns plus package position; 27 filter fields (Logiwa has 22).
+ * label. 41 Logiwa columns plus package position; 28 filter fields (Logiwa has 22).
  */
 import { LABEL_STATUSES, LABEL_TYPES, SO_STATUSES } from "@/lib/enums";
 import { optionsOf, type ShippingField } from "./common";
@@ -13,12 +13,18 @@ export const SHIPMENTS_DEFAULT_FILTER = { field: "labelCreatedAt", param: "f.lab
 
 export const SHIPMENT_CURRENCIES = ["USD", "CAD", "EUR", "GBP"] as const;
 
+/** Tracking states the Refresh tracking action records (carrier_call_logs, step Tracking). */
+export const TRACKING_STATUSES = ["Label created", "Picked up", "In transit", "Delivered"] as const;
+
 export const SHIPMENT_FIELDS: readonly ShippingField[] = [
   { field: "labelCreatedAt", label: "Label create date", type: "date", group: "Dates" },
   { field: "actualShipmentAt", label: "Actual shipment date", type: "date", group: "Dates" },
   { field: "carrierExpectedDeliveryAt", label: "Carrier expected delivery date", type: "date", group: "Dates" },
   { field: "deliveredAt", label: "Delivery date", type: "date", group: "Dates" },
   { field: "voidedAt", label: "Void date/time", type: "date", group: "Dates" },
+  { field: "scheduledPickupAt", label: "Scheduled pickup date", type: "date", group: "Dates" },
+  { field: "actualPickupAt", label: "Actual pickup date", type: "date", group: "Dates" },
+  { field: "manifestShipDate", label: "Manifest ship date", type: "date", description: "End of the day ship date in the warehouse's time zone", group: "Dates" },
   { field: "orderCode", label: "Order code", type: "text", group: "Order" },
   { field: "orderStatus", label: "Order status", type: "enum", options: optionsOf(SO_STATUSES), group: "Order" },
   { field: "customerName", label: "Customer", type: "text", group: "Order" },
@@ -37,6 +43,12 @@ export const SHIPMENT_FIELDS: readonly ShippingField[] = [
   { field: "labelStatus", label: "Label status", type: "enum", options: optionsOf(LABEL_STATUSES), group: "Label" },
   { field: "isVoided", label: "Voided", type: "boolean", group: "Label" },
   { field: "isReturnLabel", label: "Return label", type: "boolean", group: "Label" },
+  { field: "syncedToStore", label: "Sync to store", type: "boolean", group: "Label", description: "Tracking was sent back to the sales channel (Send Shipment Info succeeded for this order)" },
+  { field: "hasCarrierError", label: "Carrier errors", type: "boolean", group: "Carrier activity", description: "The carrier returned an error for this package or its order (label, void, tracking or pickup call)" },
+  { field: "lastCarrierError", label: "Last carrier error", type: "text", group: "Carrier activity" },
+  { field: "trackingStatus", label: "Tracking status", type: "enum", options: optionsOf(TRACKING_STATUSES), group: "Carrier activity", description: "Last Refresh tracking result" },
+  { field: "shipmentMailSent", label: "Shipment mail sent", type: "boolean", group: "Customer notification", description: "The customer was emailed the shipment (tracking) notification" },
+  { field: "deliveryMailSent", label: "Delivery mail sent", type: "boolean", group: "Customer notification", description: "The customer was emailed the delivery notification" },
   { field: "packageCode", label: "Package", type: "text", description: "Shipment package type code", group: "Package" },
   { field: "weight", label: "Weight", type: "number", decimals: 2, group: "Package" },
   { field: "rate", label: "Rate", type: "number", decimals: 2, group: "Cost" },
@@ -51,7 +63,8 @@ export const SHIPMENT_SORT_FIELDS = [
   "masterTrackingNumber", "trackingNumber", "actualShipmentAt", "deliveredAt", "voidedAt", "insuranceType",
   "insuranceValue", "confirmationType", "weight", "height", "width", "length", "dimensionUnit", "packageCode",
   "weightUnit", "shippingCost", "zone", "otherCost", "currency", "allowSaturdayDelivery", "labelStatus",
-  "scheduledPickupAt", "actualPickupAt", "parentLpNumber", "externalReference", "packageSeq",
+  "scheduledPickupAt", "actualPickupAt", "parentLpNumber", "externalReference", "packageSeq", "syncedToStore",
+  "hasCarrierError", "lastCarrierError", "trackingStatus", "shipmentMailSentAt", "deliveryMailSentAt",
 ] as const;
 
 /** Quick search (Equal / Starts With) targets. */
@@ -88,4 +101,10 @@ export function voidBlockReason(row: VoidGuardInput, now: Date = new Date()): st
   const ageDays = (now.getTime() - new Date(row.labelCreatedAt).getTime()) / 86_400_000;
   if (ageDays > CARRIER_VOID_WINDOW_DAYS) return `Past the ${CARRIER_VOID_WINDOW_DAYS}-day carrier void window`;
   return null;
+}
+
+/** "2 labels voided (1 shipment)" — the real package count, master-tracking siblings included. */
+export function voidSummary(labels: number, shipments: number): string {
+  const l = `${labels} ${labels === 1 ? "label" : "labels"} voided`;
+  return labels === shipments ? l : `${l} (${shipments} ${shipments === 1 ? "shipment" : "shipments"})`;
 }

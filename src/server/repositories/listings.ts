@@ -10,6 +10,8 @@ import { assertInScope, hasClient, scopedWhere, type Scope } from "@/server/auth
 import { schema } from "@/server/db";
 import { recordUpdate } from "@/server/domain/change-log";
 import { ensureProductForListing } from "@/server/domain/products";
+import { createProductFromWizard } from "@/server/repositories/products-commands";
+import { listingQuickProductSchema, quickProductToInput, type ListingQuickProductInput } from "@/lib/grid-defs/products/listing-quick-product";
 import type { DomainCtx } from "@/server/domain/types";
 import { compileFilters, escapeLike, type FilterFieldDef } from "@/server/query/filters";
 import type { GridQuery } from "@/server/query/grid-query";
@@ -41,6 +43,15 @@ export interface ListingRow {
   readonly productId: string | null;
   readonly productSku: string | null;
   readonly productName: string | null;
+  /** Logiwa "Suggested" state: unlinked listing whose seller SKU equals a product SKU of the same client. */
+  readonly suggestedProductId: string | null;
+  readonly suggestedProductSku: string | null;
+  readonly suggestedProductName: string | null;
+  readonly suggestedProductImageUrl: string | null;
+  readonly suggestedProductDescription: string | null;
+  readonly productImageUrl: string | null;
+  readonly productDescription: string | null;
+  readonly productStatus: string | null;
   readonly neverSync: boolean;
   readonly productType: string | null;
   readonly productGroup: string | null;
@@ -58,6 +69,23 @@ export function listingExceptionSql(): SQL {
     WHEN lower(${l.sellerSku}) <> lower((SELECT p.sku FROM products p WHERE p.id = ${l.productId})) THEN 'sku_difference'
     WHEN EXISTS (SELECT 1 FROM product_listings o WHERE o.product_id = ${l.productId} AND o.channel_connection_id = ${l.channelConnectionId} AND o.id <> ${l.id}) THEN 'multi_listing'
     ELSE NULL END)`;
+}
+
+/** Change-log field that records "Don't match these products" (audited, newest entry wins). */
+export const DISMISSED_SUGGESTION_FIELD = "dismissedSuggestion";
+
+/** SKU whose suggestion was last dismissed for the listing (null when none / cleared). */
+function dismissedSkuSql(): SQL {
+  return sql`(SELECT cl.to_value FROM change_log cl WHERE cl.entity_type = ${ENTITY} AND cl.entity_id = ${l.id} AND cl.field = ${DISMISSED_SUGGESTION_FIELD} ORDER BY cl.at DESC, cl.rowid DESC LIMIT 1)`;
+}
+
+/**
+ * Suggested product for unlinked listings: same client, active, case-insensitive SKU equality,
+ * unless the user dismissed that suggestion ("Don't match these products").
+ */
+export function suggestionSql(col: "id" | "sku" | "name" | "image_url" | "description"): SQL {
+  return sql`(CASE WHEN ${l.productId} IS NULL THEN (SELECT ${sql.raw(`p.${col}`)} FROM products p WHERE p.client_id = ${l.clientId} AND lower(p.sku) = lower(${l.sellerSku})
+    AND lower(p.sku) IS NOT lower(COALESCE(${dismissedSkuSql()}, '')) LIMIT 1) ELSE NULL END)`;
 }
 
 function asException(value: unknown): ListingException | null {
@@ -131,7 +159,11 @@ export function listListings(db: AppDb, scope: Scope, query: GridQuery, link: Li
   const sortable: SortableMap = Object.fromEntries(LISTING_SORT_FIELDS.map((f) => [f, e[f] as SQL]));
   const order = compileSort(sortable, query.sort, { defaultSort: [{ field: "createdAt", dir: "desc" }], tiebreaker: l.id });
   const offset = (Math.max(1, query.page) - 1) * query.pageSize;
-  const raw = db.all<Raw>(sql`
+  // Two phases (see listProducts): page the ids with only the sort expressions, then build the
+  // visible rows. The suggestion lookup (lower(sku) match) no longer runs for every listing.
+  const pageIds = db.all<{ id: string }>(sql`SELECT ${l.id} AS id FROM ${l} ${whereSql} ORDER BY ${sql.join(order, sql`, `)} LIMIT ${query.pageSize} OFFSET ${offset}`).map((r) => r.id);
+  const position = new Map(pageIds.map((id, i) => [id, i]));
+  const raw = pageIds.length === 0 ? [] : db.all<Raw>(sql`
     SELECT ${l.id} AS id, ${l.name} AS name, ${l.imageUrl} AS imageUrl, ${e.storeName} AS storeName,
       (SELECT c.provider FROM channel_connections c WHERE c.id = ${l.channelConnectionId}) AS provider,
       ${l.channelConnectionId} AS channelConnectionId, ${l.clientId} AS clientId, ${e.clientName} AS clientName,
@@ -139,9 +171,27 @@ export function listListings(db: AppDb, scope: Scope, query: GridQuery, link: Li
       ${l.storePrice} AS storePrice, ${l.productId} AS productId, ${e.productSku} AS productSku,
       (SELECT p.name FROM products p WHERE p.id = ${l.productId}) AS productName, ${l.neverSync} AS neverSync,
       ${e.productType} AS productType, ${e.productGroup} AS productGroup, ${l.linkedAt} AS linkedAt,
-      ${e.exception} AS exception, ${l.createdAt} AS createdAt, ${l.version} AS version
-    FROM ${l} ${whereSql} ORDER BY ${sql.join(order, sql`, `)} LIMIT ${query.pageSize} OFFSET ${offset}`);
+      ${e.exception} AS exception, ${l.createdAt} AS createdAt, ${l.version} AS version,
+      ${suggestionSql("id")} AS suggestedProductId,
+      (SELECT p.image_url FROM products p WHERE p.id = ${l.productId}) AS productImageUrl,
+      (SELECT p.description FROM products p WHERE p.id = ${l.productId}) AS productDescription,
+      (SELECT p.status FROM products p WHERE p.id = ${l.productId}) AS productStatus
+    FROM ${l} WHERE ${l.id} IN (${sql.join(pageIds.map((id) => sql`${id}`), sql`, `)})`)
+    .sort((a, b) => (position.get(String(a.id)) ?? 0) - (position.get(String(b.id)) ?? 0));
   const ids = raw.map((r) => String(r.id));
+  // Suggested product details in one lookup (the SKU match itself runs once per visible row).
+  const suggestedIds = [...new Set(raw.map((r) => r.suggestedProductId).filter((v): v is string => typeof v === "string"))];
+  const suggested = new Map(suggestedIds.length
+    ? db.select({ id: schema.products.id, sku: schema.products.sku, name: schema.products.name, imageUrl: schema.products.imageUrl, description: schema.products.description })
+      .from(schema.products).where(inArray(schema.products.id, suggestedIds)).all().map((x) => [x.id, x] as const)
+    : []);
+  for (const r of raw) {
+    const sp = typeof r.suggestedProductId === "string" ? suggested.get(r.suggestedProductId) : undefined;
+    r.suggestedProductSku = sp?.sku ?? null;
+    r.suggestedProductName = sp?.name ?? null;
+    r.suggestedProductImageUrl = sp?.imageUrl ?? null;
+    r.suggestedProductDescription = sp?.description ?? null;
+  }
   const tagRows = ids.length
     ? db.select({ entityId: schema.entityTags.entityId, id: schema.tags.id, name: schema.tags.name, color: schema.tags.color }).from(schema.entityTags)
       .innerJoin(schema.tags, eq(schema.tags.id, schema.entityTags.tagId))
@@ -155,6 +205,13 @@ export function listListings(db: AppDb, scope: Scope, query: GridQuery, link: Li
       sellerSku: String(r.sellerSku), channelProductId: String(r.channelProductId), description: (r.description as string | null) ?? null,
       storePrice: r.storePrice === null || r.storePrice === undefined ? null : Number(r.storePrice), tagNames: tags.map((t) => t.name).join(", "), tags,
       productId: (r.productId as string | null) ?? null, productSku: (r.productSku as string | null) ?? null, productName: (r.productName as string | null) ?? null,
+      suggestedProductId: (r.suggestedProductId as string | null) ?? null, suggestedProductSku: (r.suggestedProductSku as string | null) ?? null,
+      suggestedProductName: (r.suggestedProductName as string | null) ?? null,
+      suggestedProductImageUrl: (r.suggestedProductImageUrl as string | null) ?? null,
+      suggestedProductDescription: (r.suggestedProductDescription as string | null) ?? null,
+      productImageUrl: (r.productImageUrl as string | null) ?? null,
+      productDescription: (r.productDescription as string | null) ?? null,
+      productStatus: (r.productStatus as string | null) ?? null,
       neverSync: r.neverSync === 1 || r.neverSync === true, productType: (r.productType as string | null) ?? null, productGroup: (r.productGroup as string | null) ?? null,
       linkedAt: (r.linkedAt as string | null) ?? null, createdAt: String(r.createdAt), version: Number(r.version),
       exception: asException(r.exception), exceptionLabel: asException(r.exception) ? LISTING_EXCEPTION_LABELS[asException(r.exception) as ListingException] : null,
@@ -247,6 +304,11 @@ export function linkListing(tx: AppDb, ctx: ScopedCtx, id: string, productId: st
   const linkedAt = new Date().toISOString();
   tx.update(l).set({ productId, linkedAt, updatedBy: ctx.userId, version: row.version + 1 }).where(eq(l.id, id)).run();
   recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { linkedProduct: skuOf(tx, row.productId) }, after: { linkedProduct: product.sku } });
+  // Linking the product whose suggestion was dismissed earlier withdraws the dismissal.
+  const dismissed = dismissedSku(tx, id);
+  if (dismissed && dismissed.toLowerCase() === product.sku.toLowerCase()) {
+    recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { [DISMISSED_SUGGESTION_FIELD]: dismissed }, after: { [DISMISSED_SUGGESTION_FIELD]: null } });
+  }
   return { ...row, productId, linkedAt, version: row.version + 1 };
 }
 
@@ -264,6 +326,50 @@ export function setNeverSync(tx: AppDb, ctx: ScopedCtx, id: string, neverSync: b
   tx.update(l).set({ neverSync, updatedBy: ctx.userId, version: row.version + 1 }).where(eq(l.id, id)).run();
   recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { neverSync: row.neverSync }, after: { neverSync } });
   return { ...row, neverSync, version: row.version + 1 };
+}
+
+function dismissedSku(tx: AppDb, id: string): string | null {
+  const row = tx.get<{ v: string | null }>(sql`SELECT cl.to_value AS v FROM change_log cl WHERE cl.entity_type = ${ENTITY} AND cl.entity_id = ${id} AND cl.field = ${DISMISSED_SUGGESTION_FIELD} ORDER BY cl.at DESC, cl.rowid DESC LIMIT 1`);
+  return row?.v ? row.v : null;
+}
+
+/**
+ * "Don't match these products" (Logiwa's reject icon): hides the SKU suggestion for this
+ * listing so it shows as No match. Audited in the change log; linking that product later
+ * withdraws the dismissal.
+ */
+export function dismissSuggestion(tx: AppDb, ctx: ScopedCtx, id: string): { listing: typeof l.$inferSelect; dismissedSku: string } {
+  const row = loadListing(tx, ctx, id);
+  if (row.productId) throw new AppError("INVALID_STATE", "This listing is already linked to a product");
+  const suggested = tx.get<{ sku: string | null }>(sql`SELECT ${suggestionSql("sku")} AS sku FROM ${l} WHERE ${l.id} = ${id}`)?.sku ?? null;
+  if (!suggested) throw new AppError("INVALID_STATE", "This listing has no suggested product");
+  recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { [DISMISSED_SUGGESTION_FIELD]: null }, after: { [DISMISSED_SUGGESTION_FIELD]: suggested } });
+  tx.update(l).set({ updatedBy: ctx.userId, version: row.version + 1 }).where(eq(l.id, id)).run();
+  return { listing: { ...row, version: row.version + 1 }, dismissedSku: suggested };
+}
+
+/**
+ * "Create New" tab of the Link Product drawer: creates the product through the full wizard
+ * path (validation, SKU uniqueness, pack type, change log), links it and applies Never Sync,
+ * all in the caller's transaction.
+ */
+export function createQuickProductForListing(tx: AppDb, ctx: ScopedCtx, id: string, raw: ListingQuickProductInput, version?: number): { listing: typeof l.$inferSelect; productId: string; created: true } {
+  const row = loadListing(tx, ctx, id);
+  if (version !== undefined && version !== row.version) throw conflictError();
+  if (row.productId) throw new AppError("INVALID_STATE", "This listing is already linked to a product");
+  const parsed = listingQuickProductSchema.safeParse(raw);
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string[]> = {};
+    for (const i of parsed.error.issues) {
+      const k = i.path.map(String).join(".") || "_";
+      fieldErrors[k] = [...(fieldErrors[k] ?? []), i.message];
+    }
+    throw new AppError("VALIDATION", parsed.error.issues[0]?.message ?? "Invalid product", { fieldErrors });
+  }
+  const product = createProductFromWizard(tx, ctx, quickProductToInput(row.clientId, parsed.data));
+  let listing = linkListing(tx, ctx, id, product.id);
+  if (parsed.data.neverSync !== listing.neverSync) listing = setNeverSync(tx, ctx, id, parsed.data.neverSync);
+  return { listing, productId: product.id, created: true };
 }
 
 /** Creates (or finds) the client's product with the seller SKU and links it. Beyond Logiwa. */

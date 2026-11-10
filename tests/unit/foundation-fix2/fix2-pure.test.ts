@@ -55,10 +55,10 @@ describe("shiftWindow", () => {
 });
 
 describe("status pill semantics", () => {
-  it("separates queue, in-progress and loading statuses", () => {
-    expect(statusTone("Ready To Pick", "shipmentOrder")).toEqual(TONES.readyBlue);
-    expect(statusTone("Picking Started", "shipmentOrder")).toEqual(TONES.indigo);
-    expect(statusTone("Loading Started", "shipmentOrder")).toEqual(TONES.teal);
+  it("uses the Logiwa shipment-order palette: every in-process status blue (orders REQ-R2-1)", () => {
+    expect(statusTone("Ready To Pick", "shipmentOrder")).toEqual(TONES.blue);
+    expect(statusTone("Picking Started", "shipmentOrder")).toEqual(TONES.blue);
+    expect(statusTone("Loading Started", "shipmentOrder")).toEqual(TONES.blue);
     expect(statusTone("Ready to Ship", "shipmentOrder")).toEqual(TONES.purple);
     expect(statusTone("Urgent", "priority")).toEqual(statusTone("High", "priority"));
   });

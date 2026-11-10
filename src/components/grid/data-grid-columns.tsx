@@ -15,7 +15,7 @@ import { RowMenu } from "./row-menu";
 export const SELECT_COLUMN_ID = "_select";
 export const EXPAND_COLUMN_ID = "_expand";
 export const ACTIONS_COLUMN_ID = "_actions";
-export const SYSTEM_COLUMN_IDS: readonly string[] = [SELECT_COLUMN_ID, EXPAND_COLUMN_ID, ACTIONS_COLUMN_ID];
+export const SYSTEM_COLUMN_IDS: readonly string[] = [SELECT_COLUMN_ID, EXPAND_COLUMN_ID, ACTIONS_COLUMN_ID, "_gutter"];
 export const SELECT_COLUMN_WIDTH = 40;
 export const EXPAND_COLUMN_WIDTH = 40;
 export const ACTIONS_COLUMN_WIDTH = 44;
@@ -42,6 +42,46 @@ export function pageSelectionState(pageIds: readonly string[], selected: Readonl
   return count === pageIds.length ? true : "indeterminate";
 }
 
+const subscribeNoop = () => () => undefined;
+
+/**
+ * Page "select all" checkbox. Mounted only after hydration: Radix serialises the hidden
+ * bubble input's inline style differently on the server and the client, which logged a
+ * hydration mismatch on every grid page. The placeholder keeps the cell width stable.
+ */
+function HeaderSelectAll<T>({ table }: { readonly table: Table<T> }) {
+  const hydrated = React.useSyncExternalStore(subscribeNoop, () => true, () => false);
+  if (!hydrated) return <span aria-hidden className="inline-block h-4 w-4" />;
+  const pageIds = table.getRowModel().rows.map((r) => r.id);
+  const state = pageSelectionState(pageIds, table.getState().rowSelection);
+  return (
+    <Checkbox
+      aria-label={state === true ? "Deselect all rows on this page" : "Select all rows on this page"}
+      checked={state}
+      disabled={pageIds.length === 0}
+      onCheckedChange={() => table.toggleAllPageRowsSelected(state !== true)}
+    />
+  );
+}
+
+/** Empty sticky-right column that reserves room for the floating column chooser (no kebab column). */
+export const GUTTER_COLUMN_ID = "_gutter";
+export const GUTTER_COLUMN_WIDTH = 40;
+
+export function gutterColumn<T>(): ColumnDef<T, unknown> {
+  return {
+    id: GUTTER_COLUMN_ID,
+    size: GUTTER_COLUMN_WIDTH,
+    minSize: GUTTER_COLUMN_WIDTH,
+    enableSorting: false,
+    enableResizing: false,
+    enableHiding: false,
+    header: () => <span className="sr-only">Column options</span>,
+    cell: () => null,
+    meta: { ...SYSTEM_CELL_META, sticky: "right" },
+  };
+}
+
 export function selectColumn<T>(): ColumnDef<T, unknown> {
   return {
     id: SELECT_COLUMN_ID,
@@ -51,18 +91,7 @@ export function selectColumn<T>(): ColumnDef<T, unknown> {
     enableSorting: false,
     enableResizing: false,
     enableHiding: false,
-    header: ({ table }) => {
-      const pageIds = table.getRowModel().rows.map((r) => r.id);
-      const state = pageSelectionState(pageIds, table.getState().rowSelection);
-      return (
-        <Checkbox
-          aria-label={state === true ? "Deselect all rows on this page" : "Select all rows on this page"}
-          checked={state}
-          disabled={pageIds.length === 0}
-          onCheckedChange={() => table.toggleAllPageRowsSelected(state !== true)}
-        />
-      );
-    },
+    header: ({ table }) => <HeaderSelectAll table={table} />,
     cell: ({ row }) => (
       <span onClick={(e) => e.stopPropagation()} className="inline-flex">
         <Checkbox aria-label="Select row" checked={row.getIsSelected()} disabled={!row.getCanSelect()} onCheckedChange={(c) => row.toggleSelected(c === true)} />
@@ -90,7 +119,7 @@ export function expandColumn<T>(): ColumnDef<T, unknown> {
           e.stopPropagation();
           row.toggleExpanded();
         }}
-        className="flex h-6 w-6 items-center justify-center rounded text-secondary hover:bg-neutral-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        className="flex h-6 w-6 items-center justify-center rounded text-secondary hover:bg-neutral-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
       >
         <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", row.getIsExpanded() && "rotate-90")} aria-hidden />
       </button>
@@ -144,13 +173,26 @@ export function cellPlacement<T>(column: Column<T, unknown>, table: Table<T>, st
     };
   }
   if (column.columnDef.meta?.sticky === "right") {
-    const right = column.id === ACTIONS_COLUMN_ID ? 0 : stickyRightOffset;
-    return { style: { ...base, right }, className: "sticky z-[2] shadow-[inset_1px_0_0_var(--border)]", sticky: true };
+    const right = column.id === ACTIONS_COLUMN_ID || column.id === GUTTER_COLUMN_ID ? 0 : stickyRightOffset;
+    // Left-edge scrim as a positioned ::before gradient (a box-shadow on a sticky td is painted under the
+    // neighbouring cell's content in Chrome), so scrolled content fades out instead of being cut hard.
+    return {
+      style: { ...base, right },
+      className:
+        "sticky z-[2] shadow-[inset_1px_0_0_var(--border)] before:pointer-events-none before:absolute before:inset-y-0 before:-left-3 before:w-3 before:bg-gradient-to-l before:from-[var(--surface)] before:to-transparent before:content-['']",
+      sticky: true,
+    };
   }
   return { style: base, className: "", sticky: false };
 }
 
-/** Offset legacy sticky-right columns need when the kebab column is present. */
+/**
+ * Offset legacy sticky-right columns need when the kebab column (or the column-chooser gutter, which
+ * also sticks at right 0) is present, so a page's own sticky column is not painted under it.
+ */
 export function stickyRightOffsetFor<T>(table: Table<T>): number {
-  return table.getVisibleLeafColumns().some((c) => c.id === ACTIONS_COLUMN_ID) ? ACTIONS_COLUMN_WIDTH : 0;
+  const visible = table.getVisibleLeafColumns();
+  if (visible.some((c) => c.id === ACTIONS_COLUMN_ID)) return ACTIONS_COLUMN_WIDTH;
+  if (visible.some((c) => c.id === GUTTER_COLUMN_ID)) return GUTTER_COLUMN_WIDTH;
+  return 0;
 }

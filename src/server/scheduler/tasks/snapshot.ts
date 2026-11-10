@@ -12,6 +12,7 @@ import type { AppDb } from "@/server/api/db";
 import { inventory, inventorySnapshots, licensePlates, productPackTypes, products, warehouses } from "@/server/db/schema";
 import { isValidTimeZone, localMidnightUtc, localParts } from "../timezone";
 import type { SchedulerTask, SchedulerTaskContext, TaskResult } from "../types";
+import { backfillMissingSnapshots } from "@/server/repositories/reports-snapshot-backfill";
 
 export const SNAPSHOT_LOCAL_TIME = { hour: 0, minute: 2 } as const;
 export const SNAPSHOT_RETENTION_DAYS = 400;
@@ -89,6 +90,13 @@ export function pruneSnapshots(db: AppDb, now: Date): number {
 export function runSnapshots(ctx: SchedulerTaskContext): TaskResult {
   const taken: string[] = [];
   let rows = 0;
+  // Heal nights the server missed (rebuilt from the ledger, stamped 00:02 local, idempotent).
+  try {
+    const healed = backfillMissingSnapshots(ctx.db, { now: ctx.now }).filter((r) => r.days.length > 0);
+    if (healed.length > 0) ctx.log.info("inventory snapshot: rebuilt missed nights", { nights: healed.map((r) => `${r.warehouse}: ${r.days.map((d) => d.businessDate).join(", ")}`) });
+  } catch (err: unknown) {
+    ctx.log.warn("inventory snapshot: backfill failed", { err: err instanceof Error ? err.message : String(err) });
+  }
   for (const wh of ctx.db.select({ id: warehouses.id, code: warehouses.code, timezone: warehouses.timezone }).from(warehouses).all()) {
     const zone = isValidTimeZone(wh.timezone) ? wh.timezone : "UTC";
     if (zone !== wh.timezone) ctx.log.warn("snapshot: invalid warehouse timezone, using UTC", { warehouseId: wh.id, timezone: wh.timezone });

@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { withFacets, type ShippingField } from "@/lib/grid-defs/shipping/common";
-import { closeBlockReason, parsePendingEodId, pendingEodId, reprintBlockReason } from "@/lib/grid-defs/shipping/end-of-day";
+import { closeBlockReason, parsePendingEodId, parseSplitEodId, pendingEodId, reprintBlockReason, splitEodId } from "@/lib/grid-defs/shipping/end-of-day";
 import {
   in3ToFt3, orderEligibilityReason, ozToLb, PLAN_ELIGIBLE_ORDER_FIELDS, planDeleteBlockReason, planEditBlockReason, planShipBlockReason,
 } from "@/lib/grid-defs/shipping/shipment-plans";
@@ -39,7 +39,10 @@ describe("trackingUrl", () => {
 describe("pending EOD ids", () => {
   it("round-trips and rejects malformed ids", () => {
     const id = pendingEodId("wh", "conn", "2026-11-06");
-    expect(parsePendingEodId(id)).toEqual({ warehouseId: "wh", connectionId: "conn", shipDate: "2026-11-06" });
+    expect(parsePendingEodId(id)).toEqual({ warehouseId: "wh", connectionId: "conn", shipDate: "2026-11-06", carrierCode: null });
+    expect(parsePendingEodId(pendingEodId("wh", "conn", "2026-11-06", "USPS"))).toMatchObject({ carrierCode: "USPS" });
+    expect(parseSplitEodId(splitEodId("m1", "UPS"))).toEqual({ manifestId: "m1", carrierCode: "UPS" });
+    expect(parseSplitEodId("m1")).toBeNull();
     expect(parsePendingEodId("6ccc3d35-7c1f")).toBeNull();
     expect(parsePendingEodId("pending~wh~conn~11/06/2026")).toBeNull();
   });
@@ -76,6 +79,13 @@ describe("shipment plan guards", () => {
     expect(planShipBlockReason("Open", 0)).toMatch(/at least one order/);
     expect(planShipBlockReason("Shipped", 2)).toMatch(/already shipped/);
     expect(planShipBlockReason("Cancelled", 2)).toMatch(/Cancelled/);
+  });
+  it("blocks Ship until at least one unshipped order is Ready to Ship", () => {
+    expect(planShipBlockReason("Open", 2, 0, 0)).toMatch(/Ready to Ship/);
+    expect(planShipBlockReason("Open", 2, 1, 0)).toBeNull();
+    // one shipped, the other still unpicked: nothing left that Ship could move
+    expect(planShipBlockReason("Loading Started", 2, 1, 1)).toMatch(/Ready to Ship/);
+    expect(planShipBlockReason("Loading Started", 2, 2, 1)).toBeNull();
   });
   it("converts expected load units", () => {
     expect(ozToLb(44)).toBe(2.75);

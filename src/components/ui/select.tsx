@@ -54,6 +54,9 @@ function SelectInner<V extends string>(
   ref: React.ForwardedRef<HTMLButtonElement>
 ) {
   const groups = groupOptions(options);
+  // The selected label is rendered as the Value's children so it is in the server HTML:
+  // Radix otherwise fills the trigger only after the client mounts the items.
+  const selected = value === null ? undefined : options.find((o) => o.value === value);
   const showClear = clearable && value !== null && !disabled;
   return (
     <div className="relative w-full">
@@ -75,13 +78,13 @@ function SelectInner<V extends string>(
           className={cn(
             controlVariants({ size }),
             "flex items-center justify-between gap-2 text-left data-[placeholder]:text-faint",
-            "data-[state=open]:border-primary data-[state=open]:ring-2 data-[state=open]:ring-primary/25",
+            "data-[state=open]:border-info data-[state=open]:ring-2 data-[state=open]:ring-info/25",
             showClear && "pr-12",
             className
           )}
         >
           <span className="min-w-0 flex-1 truncate">
-            <SelectPrimitive.Value placeholder={placeholder} />
+            <SelectPrimitive.Value placeholder={placeholder}>{selected ? (selected.textValue ?? selected.label) : undefined}</SelectPrimitive.Value>
           </span>
           <SelectPrimitive.Icon asChild>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-secondary" aria-hidden />
@@ -129,7 +132,7 @@ function SelectInner<V extends string>(
           type="button"
           aria-label="Clear selection"
           onClick={() => onChange(null)}
-          className="absolute right-7 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="absolute right-7 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
         >
           <X className="h-3.5 w-3.5" aria-hidden />
         </button>

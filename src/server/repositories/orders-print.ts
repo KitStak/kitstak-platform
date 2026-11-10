@@ -22,7 +22,7 @@ export const printRecordsSchema = z.object({
 
 export const PICK_LIST_GUARD = "The picking list cannot be printed for the orders that have no active picking task.";
 export const PICK_PACK_SHORT_GUARD = "Issue label cannot be printed for the selected order(s). To print an issue label, the order must have an active Pick or Pack Short issue and be in Open or Resolved status.";
-export const REPRINT_GUARD = "The orders which you have selected has no label to reprint.";
+export const REPRINT_GUARD = "The selected orders have no label to reprint.";
 
 export interface PrintRecordsResult {
   readonly typeKey: string;
@@ -54,7 +54,13 @@ function linesOf(db: AppDb, orderId: string) {
     .where(eq(schema.orderLines.orderId, orderId)).all();
 }
 
-function pickLines(db: AppDb, order: OrderRow) {
+/** Active pick tasks; with `reprint`, falls back to the completed tasks so a finished job's pick list can be reprinted. */
+function pickLines(db: AppDb, order: OrderRow, reprint = false): ReturnType<typeof pickLinesFor> {
+  const active = pickLinesFor(db, order, ["Pending", "Started"]);
+  return active.length > 0 || !reprint ? active : pickLinesFor(db, order, ["Completed"]);
+}
+
+function pickLinesFor(db: AppDb, order: OrderRow, statuses: ("Pending" | "Started" | "Completed")[]) {
   const t = schema.tasks;
   return db.select({
     qty: t.plannedQty, lot: t.lotNumber, expiry: t.expiryDate, sku: schema.products.sku, name: schema.products.name,
@@ -63,7 +69,7 @@ function pickLines(db: AppDb, order: OrderRow) {
     .innerJoin(schema.products, eq(schema.products.id, t.productId))
     .leftJoin(schema.locations, eq(schema.locations.id, t.sourceLocationId))
     .leftJoin(schema.licensePlates, eq(schema.licensePlates.id, t.sourceLpId))
-    .where(and(eq(t.orderId, order.id), eq(t.taskType, "Picking"), inArray(t.status, ["Pending", "Started"]))).all()
+    .where(and(eq(t.orderId, order.id), eq(t.taskType, "Picking"), inArray(t.status, statuses))).all()
     .filter((r) => r.qty > 0)
     .map((r) => ({ locationCode: r.location ?? "Unassigned", sku: r.sku, name: r.name, quantity: r.qty, lpNumber: r.lp ?? undefined, lotNumber: r.lot ?? undefined, expiryDate: r.expiry ?? undefined, orderCode: order.code }));
 }
@@ -89,7 +95,7 @@ export function buildPrintRecords(db: AppDb, scope: Scope, input: z.output<typeo
       const records: unknown[] = [];
       const consolidated: ReturnType<typeof pickLines> = [];
       for (const o of rows) {
-        const lines = pickLines(db, o);
+        const lines = pickLines(db, o, input.type === "picking-list");
         if (lines.length === 0) {
           ineligible.push({ id: o.id, code: o.code, reason: PICK_LIST_GUARD });
           continue;

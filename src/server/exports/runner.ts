@@ -16,6 +16,7 @@ import type { AppDb } from "@/server/api/db";
 import { AppError, notFoundError, toAppError, validationError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
 import { can } from "@/server/auth/permissions";
+import { deepRedactFor, restrictedExportColumns } from "@/server/repositories/roles-redaction";
 import { backgroundTasks, files, warehouses } from "@/server/db/schema";
 import { DEFAULT_WAREHOUSE_TIME_ZONE } from "@/lib/context-label";
 import { fileStore, type FileStore } from "@/server/files/files";
@@ -171,8 +172,9 @@ export async function runExport(db: AppDb, taskId: string, deps: RunExportDeps):
       ...(deps.listFetcher ? { listFetcher: deps.listFetcher } : {}),
     };
     const provider = deps.provider ?? resolveExportProvider(def);
-    const rows = await collectRows(ctx, provider, (progress) => setTask(db, taskId, { progress }));
-    const columns = deps.columns && deps.columns.length > 0 ? deps.columns : provider.columns ?? inferColumns(rows);
+    // Role data restrictions: restricted columns are dropped and nested values nulled, as in the JSON API.
+    const rows = deepRedactFor(deps.auth, await collectRows(ctx, provider, (progress) => setTask(db, taskId, { progress })));
+    const columns = restrictedExportColumns(deps.auth, deps.columns && deps.columns.length > 0 ? deps.columns : provider.columns ?? inferColumns(rows));
     const bytes = await buildXlsx({ name: def.title, columns, rows });
     const file = (deps.store ?? fileStore()).store(db, {
       name: exportFileName(def.title, now(), deps.timeZone),

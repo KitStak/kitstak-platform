@@ -8,6 +8,7 @@ import type { AuthContext } from "@/server/auth/context";
 import type { GridQuery } from "@/server/query/grid-query";
 import { BACKLOG_VIEW_STATUSES } from "@/lib/grid-defs/orders/shipment-orders";
 import { REPLENISHMENT_DEF, SERIAL_RECEIPTS_DEF, SERIAL_SHIPMENTS_DEF, SERIAL_TRACKING_DEF, SNAPSHOT_DEF } from "@/lib/grid-defs/reports/inventory";
+import { isValidTimeZone, localParts } from "@/server/scheduler/timezone";
 import { clientIn, inList, runReport, warehouseLabel, type ReportPage } from "./reports-grid";
 
 type Row = Record<string, unknown>;
@@ -142,10 +143,78 @@ export const listReplenishment = (db: AppDb, auth: AuthContext, q: GridQuery): R
 
 /* ----------------------------------------------------------------- snapshot */
 
-export function snapshotSql(auth: AuthContext): SQL {
+/** One snapshot run of one warehouse, stamped with its warehouse-local business day. */
+export interface SnapshotRun {
+  readonly warehouseId: string;
+  readonly snapshotAt: string;
+  /** YYYY-MM-DD in the warehouse's time zone (a late catch-up run keeps its own day). */
+  readonly businessDate: string;
+  /** A later run exists for the same warehouse and business day: its rows are never counted. */
+  readonly superseded: boolean;
+  /** The warehouse's most recent business day (the default "Latest Snapshot" view). */
+  readonly latest: boolean;
+}
+
+/**
+ * Classifies raw snapshot runs. Pure. One canonical run per warehouse × business day (the
+ * latest of that day), so a point-in-time or billing reconciliation never counts a bucket
+ * twice, and the newest business day per warehouse is flagged `latest`.
+ */
+export function classifySnapshotRuns(raw: readonly { warehouseId: string; snapshotAt: string; timezone: string | null }[]): SnapshotRun[] {
+  const withDay = raw.map((r) => {
+    const zone = r.timezone && isValidTimeZone(r.timezone) ? r.timezone : "UTC";
+    const at = new Date(r.snapshotAt);
+    return { ...r, businessDate: Number.isNaN(at.getTime()) ? r.snapshotAt.slice(0, 10) : localParts(at, zone).date };
+  });
+  const canonical = new Map<string, string>();
+  const latestDay = new Map<string, string>();
+  for (const r of withDay) {
+    const key = `${r.warehouseId}|${r.businessDate}`;
+    if ((canonical.get(key) ?? "") < r.snapshotAt) canonical.set(key, r.snapshotAt);
+    if ((latestDay.get(r.warehouseId) ?? "") < r.businessDate) latestDay.set(r.warehouseId, r.businessDate);
+  }
+  return withDay.map((r) => ({
+    warehouseId: r.warehouseId,
+    snapshotAt: r.snapshotAt,
+    businessDate: r.businessDate,
+    superseded: canonical.get(`${r.warehouseId}|${r.businessDate}`) !== r.snapshotAt,
+    latest: latestDay.get(r.warehouseId) === r.businessDate,
+  }));
+}
+
+/** Business days with no snapshot between a warehouse's first and last run (scheduler gaps). */
+export function missingSnapshotDays(runs: readonly SnapshotRun[], warehouseId: string): string[] {
+  const days = [...new Set(runs.filter((r) => r.warehouseId === warehouseId).map((r) => r.businessDate))].sort();
+  const out: string[] = [];
+  for (let i = 1; i < days.length; i += 1) {
+    const prev = Date.parse(`${days[i - 1]}T00:00:00Z`);
+    const next = Date.parse(`${days[i]}T00:00:00Z`);
+    for (let t = prev + 86_400_000; t < next; t += 86_400_000) out.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+export function snapshotRuns(db: AppDb, auth: AuthContext): SnapshotRun[] {
+  const raw = db.all<{ warehouseId: string; snapshotAt: string; timezone: string | null }>(sql`
+    SELECT s.warehouse_id AS "warehouseId", s.snapshot_at AS "snapshotAt", w.timezone AS "timezone"
+    FROM inventory_snapshots s JOIN warehouses w ON w.id = s.warehouse_id
+    WHERE ${inList(sql.raw("s.warehouse_id"), auth.viewScope.warehouseIds)}
+    GROUP BY s.warehouse_id, s.snapshot_at`);
+  return classifySnapshotRuns(raw);
+}
+
+/** Inline table of the canonical runs (warehouse, run time, business day, latest flag). */
+function runsTable(runs: readonly SnapshotRun[]): SQL {
+  const kept = runs.filter((r) => !r.superseded);
+  if (kept.length === 0) return sql`SELECT NULL AS warehouse_id, NULL AS snapshot_at, NULL AS business_date, 0 AS latest WHERE 0 = 1`;
+  return sql.join(kept.map((r) => sql`SELECT ${r.warehouseId} AS warehouse_id, ${r.snapshotAt} AS snapshot_at, ${r.businessDate} AS business_date, ${r.latest ? 1 : 0} AS latest`), sql` UNION ALL `);
+}
+
+export function snapshotSql(auth: AuthContext, runs: readonly SnapshotRun[] = []): SQL {
   return sql`
     SELECT s.id AS "rowId", s.warehouse_id AS "warehouseId", ${warehouseLabel("w")} AS "warehouse",
            s.client_id AS "clientId", c.name AS "client", s.snapshot_at AS "snapshotAt",
+           r.business_date AS "businessDate", r.latest AS "latest",
            p.sku AS "sku", '/products/' || p.id AS "productHref",
            loc.code AS "location", '/locations/' || loc.id AS "locationHref", lp.number AS "lpNumber",
            s.uom_qty AS "uomQty", s.pack_qty AS "packQty", s.lot_number AS "lotNumber", s.expiry_date AS "expiryDate",
@@ -153,6 +222,7 @@ export function snapshotSql(auth: AuthContext): SQL {
            s.status AS "status", s.production_date AS "productionDate",
            p.height_in AS "productHeight", p.length_in AS "productLength", ROUND(p.weight_oz, 2) AS "productWeight", p.width_in AS "productWidth"
     FROM inventory_snapshots s
+    JOIN (${runsTable(runs)}) r ON r.warehouse_id = s.warehouse_id AND r.snapshot_at = s.snapshot_at
     JOIN products p ON p.id = s.product_id
     JOIN clients c ON c.id = s.client_id
     JOIN warehouses w ON w.id = s.warehouse_id
@@ -162,4 +232,33 @@ export function snapshotSql(auth: AuthContext): SQL {
     WHERE ${scoped(auth, "s.warehouse_id", "s.client_id")}`;
 }
 
-export const listSnapshot = (db: AppDb, auth: AuthContext, q: GridQuery): ReportPage<Row> => runReport<Row>(db, snapshotSql(auth), SNAPSHOT_DEF, q);
+export const listSnapshot = (db: AppDb, auth: AuthContext, q: GridQuery): ReportPage<Row> =>
+  runReport<Row>(db, snapshotSql(auth, snapshotRuns(db, auth)), SNAPSHOT_DEF, q);
+
+export interface SnapshotCoverage {
+  readonly warehouseId: string;
+  readonly warehouse: string;
+  readonly latestDay: string | null;
+  readonly days: number;
+  /** Business days (last 30) between the first and latest run that have no snapshot. */
+  readonly missingDays: readonly string[];
+}
+
+export function snapshotCoverage(db: AppDb, auth: AuthContext): SnapshotCoverage[] {
+  const runs = snapshotRuns(db, auth);
+  const names = new Map(db.all<{ id: string; label: string }>(sql`
+    SELECT w.id AS "id", ${warehouseLabel("w")} AS "label" FROM warehouses w
+    WHERE ${inList(sql.raw("w.id"), auth.viewScope.warehouseIds)}`).map((w) => [w.id, w.label]));
+  return [...new Set(runs.map((r) => r.warehouseId))].map((id) => {
+    const own = runs.filter((r) => r.warehouseId === id);
+    const latest = own.find((r) => r.latest)?.businessDate ?? null;
+    const cutoff = latest ? new Date(Date.parse(`${latest}T00:00:00Z`) - 30 * 86_400_000).toISOString().slice(0, 10) : "";
+    return {
+      warehouseId: id,
+      warehouse: names.get(id) ?? id,
+      latestDay: latest,
+      days: new Set(own.map((r) => r.businessDate)).size,
+      missingDays: missingSnapshotDays(runs, id).filter((d) => d >= cutoff),
+    };
+  }).sort((a, b) => a.warehouse.localeCompare(b.warehouse));
+}

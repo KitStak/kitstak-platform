@@ -28,7 +28,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { InfoTip } from "@/components/ui/info-tip";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { TextField } from "@/components/ui/text-field";
 import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
@@ -39,6 +38,7 @@ import { EmptyCanvas, RuleCanvas } from "../rules/rule-canvas";
 import { useRuleNames } from "../rules/rule-names";
 import { PutawayTestDialog, type PutawayTestTarget } from "./putaway-test-dialog";
 import { DryRunDialog, type DryRunTarget } from "./dry-run-dialog";
+import { AlgorithmEditorSkeleton } from "./algorithm-editor-skeleton";
 
 type Rule = AlgorithmRuleInput & { readonly key: string };
 interface Header { name: string; warehouseId: string; status: "Active" | "Passive"; isDynamicReplenishment: boolean; enforceSuggestedLocations: boolean }
@@ -74,10 +74,11 @@ function SortableRule({ rule, index, selected, readOnly, onSelect, onToggle, onD
 
 const replRow = z.array(z.object({ id: z.string(), name: z.string(), status: z.string() }));
 
-export function AlgorithmEditor({ slug, id }: { readonly slug: AlgorithmSlug; readonly id: string | null }) {
+export function AlgorithmEditor({ slug, id, initial = null }: { readonly slug: AlgorithmSlug; readonly id: string | null; readonly initial?: AlgorithmDetail | null }) {
   const kind = slug === "putaway" ? "Putaway" : "Allocation";
-  const detail = useApiQuery<AlgorithmDetail>(["algorithm", id ?? "new"], id ? `/api/algorithms/${id}` : null, { staleTime: 0 });
-  if (id && detail.isPending) return <div className="flex flex-col gap-3 p-6"><Skeleton className="h-10 w-72" /><Skeleton className="h-[480px] w-full" /></div>;
+  // Server-rendered detail paints the editor in the first response; the query still revalidates.
+  const detail = useApiQuery<AlgorithmDetail>(["algorithm", id ?? "new"], id ? `/api/algorithms/${id}` : null, initial ? { initialData: { data: initial }, staleTime: 5_000 } : { staleTime: 0 });
+  if (id && detail.isPending) return <AlgorithmEditorSkeleton title={`Edit ${kind} Algorithm`} />;
   if (id && (detail.isError || !detail.data)) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
@@ -145,15 +146,31 @@ function EditorBody({ slug, kind, detail }: { readonly slug: AlgorithmSlug; read
     return null;
   };
 
+  // Inline (not a toast): a toast sits on top of the canvas footer Cancel / Test / Save Rule buttons.
+  const [openRuleWarning, setOpenRuleWarning] = React.useState<string | null>(null);
+  React.useEffect(() => { if (!draftDirty) setOpenRuleWarning(null); }, [draftDirty]);
+  const warnOpenRule = (message: string) => {
+    setOpenRuleWarning(message);
+    document.getElementById("open-rule-warning")?.scrollIntoView({ block: "nearest" });
+  };
+
+  // A new rule nobody has touched yet (e.g. the one Next opens) is discarded silently, never a "finish the rule" warning.
+  const untouchedNew = draft !== null && pendingNew === draft.key && committed !== null && sameJson(stripKey(draft), stripKey(committed));
+  const focusRuleName = () => setTimeout(() => document.getElementById("rule-name")?.focus(), 0);
   const selectRule = (key: string) => {
-    if (draftDirty) { toast.warning("Finish the open rule", "Save Rule or Cancel Rule before switching to another rule."); return; }
-    const r = rules.find((x) => x.key === key) ?? null;
+    if (key === selected) return;
+    if (draftDirty && !untouchedNew) { warnOpenRule("Save Rule or Cancel Rule before switching to another rule."); return; }
+    const remaining = untouchedNew ? rules.filter((x) => x.key !== pendingNew) : rules;
+    if (untouchedNew) { setRules(remaining); setPendingNew(null); }
+    const r = remaining.find((x) => x.key === key) ?? null;
     setSelected(key);
     setDraft(r);
   };
   const createNew = () => {
-    if (draftDirty) { toast.warning("Finish the open rule", "Save Rule or Cancel Rule before creating another one."); return; }
+    if (untouchedNew) { focusRuleName(); return; }
+    if (draftDirty) { warnOpenRule("Save Rule or Cancel Rule before creating another one."); return; }
     const r = newRule(kind, rules.length + 1);
+    focusRuleName();
     setRules((list) => [...list, r]);
     setPendingNew(r.key);
     setSelected(r.key);
@@ -204,7 +221,7 @@ function EditorBody({ slug, kind, detail }: { readonly slug: AlgorithmSlug; read
 
   const save = async () => {
     if (!validateHeader()) return;
-    if (draftDirty) { toast.warning("Finish the open rule", "Save Rule or Cancel Rule before saving the algorithm."); return; }
+    if (draftDirty) { warnOpenRule("Save Rule or Cancel Rule before saving the algorithm."); return; }
     const list = rules.filter((r) => r.key !== pendingNew);
     const bad = list.map((r) => ruleError(r)).find(Boolean);
     if (bad) { setStep("rules"); toast.error("Fix the rules first", bad); return; }
@@ -261,7 +278,7 @@ function EditorBody({ slug, kind, detail }: { readonly slug: AlgorithmSlug; read
                   <label htmlFor="algo-warehouseId" className="text-[12px] font-medium text-body">Warehouse <span className="text-danger">*</span></label>
                   <Select id="algo-warehouseId" value={header.warehouseId || null} options={warehouses.options} placeholder="Select warehouse" disabled={readOnly || isEdit} invalid={Boolean(errors.warehouseId)}
                     onChange={(v) => { setHeader((h) => ({ ...h, warehouseId: v ?? "" })); setErrors((x) => ({ ...x, warehouseId: "" })); }} />
-                  {errors.warehouseId ? <p role="alert" className="text-[12px] text-danger">{errors.warehouseId}</p> : isEdit ? <p className="text-[11px] text-faint">An algorithm can't move to another warehouse.</p> : null}
+                  {errors.warehouseId ? <p role="alert" className="text-[12px] text-danger">{errors.warehouseId}</p> : isEdit ? <p className="text-[11px] text-faint">An algorithm can’t move to another warehouse.</p> : null}
                 </div>
                 <div className="flex flex-col gap-1">
                   <span id="algo-status-label" className="text-[12px] font-medium text-body">Algorithm status</span>
@@ -299,6 +316,7 @@ function EditorBody({ slug, kind, detail }: { readonly slug: AlgorithmSlug; read
                   </div>
                   <DisabledReason reason={readOnly ? NO_PERMISSION : null}><Button size="sm" variant="secondary" disabled={readOnly} onClick={createNew}><Plus className="h-3.5 w-3.5" />Create New</Button></DisabledReason>
                 </div>
+                <div id="open-rule-warning" aria-live="polite">{openRuleWarning ? <Callout variant="attention" title="Finish the open rule">{openRuleWarning}</Callout> : null}</div>
                 {rules.length === 0 ? <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] text-secondary">No rules yet. Without rules the {kind === "Putaway" ? "default same SKU / empty location" : "default FEFO"} chain is used.</p> : (
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                     <SortableContext items={rules.map((r) => r.key)} strategy={verticalListSortingStrategy}>

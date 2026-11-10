@@ -50,11 +50,20 @@ export const UPS_DEF: CarrierDef = {
     { code: "54", name: "UPS Worldwide Express Plus", transitDays: 1, base: 89, perLb: 6.1, international: true },
     { code: "72", name: "UPS Worldwide Economy DDP", transitDays: 8, base: 26, perLb: 2.6, international: true },
     { code: "17", name: "UPS Worldwide Economy DDU", transitDays: 8, base: 24, perLb: 2.4, international: true },
+    { code: "74", name: "UPS Express 12:00", transitDays: 1, base: 74, perLb: 5.8, international: true },
+    { code: "M2", name: "UPS First Class Mail", transitDays: 5, base: 4.4, perLb: 0.9 },
+    { code: "M3", name: "UPS Priority Mail", transitDays: 3, base: 7.9, perLb: 0.8 },
+    { code: "M4", name: "UPS Expedited Mail Innovations", transitDays: 4, base: 5.6, perLb: 0.6 },
+    { code: "M5", name: "UPS Priority Mail Innovations", transitDays: 6, base: 9.4, perLb: 1.1, international: true },
+    { code: "M6", name: "UPS Economy Mail Innovations", transitDays: 10, base: 7.2, perLb: 0.9, international: true },
   ],
   packages: [
     { code: "02", name: "Customer Supplied Package" }, { code: "01", name: "UPS Letter" }, { code: "03", name: "Tube" }, { code: "04", name: "PAK" },
-    { code: "21", name: "UPS Express Box" }, { code: "24", name: "UPS 25KG Box" }, { code: "25", name: "UPS 10KG Box" }, { code: "30", name: "Pallet" },
-    { code: "2a", name: "Small Express Box" }, { code: "2b", name: "Medium Express Box" }, { code: "2c", name: "Large Express Box" },
+    { code: "21", name: "UPS Express Box" }, { code: "2a", name: "Small Express Box" }, { code: "2b", name: "Medium Express Box" }, { code: "2c", name: "Large Express Box" },
+    { code: "24", name: "UPS 25KG Box" }, { code: "25", name: "UPS 10KG Box" }, { code: "30", name: "Pallet" },
+    { code: "56", name: "Flats" }, { code: "57", name: "Parcels" }, { code: "58", name: "BPM" }, { code: "59", name: "First Class" }, { code: "60", name: "Priority" },
+    { code: "61", name: "Machineables" }, { code: "62", name: "Irregulars" }, { code: "63", name: "Parcel Post" }, { code: "64", name: "BPM Parcel" },
+    { code: "65", name: "Media Mail" }, { code: "66", name: "BPM Flat" }, { code: "67", name: "Standard Flat" },
   ],
   validateRequest: (from, to, packages) => { validate(from, to); assertPackages(packages); },
   live: {
@@ -65,7 +74,7 @@ export const UPS_DEF: CarrierDef = {
     async rate(req, creds) {
       const t = await token(req.connection.environment, creds);
       const body = await carrierFetch(`${host(req.connection.environment)}/api/rating/v2403/Shop`, {
-        method: "POST", headers: { authorization: `Bearer ${t}`, "content-type": "application/json", transId: crypto.randomUUID(), transactionSrc: "KitStaks" },
+        method: "POST", headers: { authorization: `Bearer ${t}`, "content-type": "application/json", transId: crypto.randomUUID(), transactionSrc: "KitStak" },
         body: JSON.stringify({ RateRequest: { Request: { RequestOption: "Shop" }, Shipment: { Shipper: { ...addr(req.from), ShipperNumber: req.connection.payorAccountNumber ?? "" }, ShipTo: addr(req.to), ShipFrom: addr(req.from), Package: pkgs(req) } } }),
       });
       const rated = ((body.RateResponse as Record<string, unknown> | undefined)?.RatedShipment ?? []) as Record<string, unknown>[];
@@ -80,7 +89,7 @@ export const UPS_DEF: CarrierDef = {
     async createLabel(req: LabelRequest, creds) {
       const t = await token(req.connection.environment, creds);
       const body = await carrierFetch(`${host(req.connection.environment)}/api/shipments/v2403/ship`, {
-        method: "POST", headers: { authorization: `Bearer ${t}`, "content-type": "application/json", transId: crypto.randomUUID(), transactionSrc: "KitStaks" },
+        method: "POST", headers: { authorization: `Bearer ${t}`, "content-type": "application/json", transId: crypto.randomUUID(), transactionSrc: "KitStak" },
         body: JSON.stringify({ ShipmentRequest: { Request: { RequestOption: "nonvalidate" }, Shipment: {
           Description: req.orderCode, Shipper: { ...addr(req.from), ShipperNumber: req.connection.payorAccountNumber ?? "" }, ShipTo: addr(req.to), ShipFrom: addr(req.from),
           PaymentInformation: { ShipmentCharge: { Type: "01", BillShipper: { AccountNumber: req.connection.payorAccountNumber ?? "" } } }, Service: { Code: req.service.serviceCode },
@@ -95,7 +104,7 @@ export const UPS_DEF: CarrierDef = {
     },
     async voidLabel(req, creds) {
       const t = await token(req.connection.environment, creds);
-      await carrierFetch(`${host(req.connection.environment)}/api/shipments/v2403/void/cancel/${encodeURIComponent(req.trackingNumber)}`, { method: "DELETE", headers: { authorization: `Bearer ${t}`, transId: crypto.randomUUID(), transactionSrc: "KitStaks" } });
+      await carrierFetch(`${host(req.connection.environment)}/api/shipments/v2403/void/cancel/${encodeURIComponent(req.trackingNumber)}`, { method: "DELETE", headers: { authorization: `Bearer ${t}`, transId: crypto.randomUUID(), transactionSrc: "KitStak" } });
       return { voided: true };
     },
   },

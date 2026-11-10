@@ -36,18 +36,26 @@ function EnumEditor({ def, draft, onChange }: EditorProps<Extract<FilterDraft, {
   }, [def.options, def.allowEmpty, query]);
   const selected = new Set(draft.values);
   const toggle = (value: string, on: boolean) =>
-    onChange({ type: "enum", values: on ? [...draft.values, value] : draft.values.filter((v) => v !== value) });
+    onChange({ ...draft, type: "enum", values: on ? [...draft.values, value] : draft.values.filter((v) => v !== value) });
   const allValues = (def.options ?? []).map((o) => o.value);
   const allOn = allValues.length > 0 && allValues.every((v) => selected.has(v));
 
   return (
     <div className="flex flex-col gap-2">
+      <div role="radiogroup" aria-label={`${def.label} match`} className="inline-flex w-fit rounded-md border border-border p-0.5 text-[12px]">
+        {([[false, "Is any of"], [true, "Is none of"]] as const).map(([ex, label]) => (
+          <button key={label} type="button" role="radio" aria-checked={Boolean(draft.exclude) === ex} onClick={() => onChange({ ...draft, exclude: ex })}
+            className={cn("rounded px-2 py-0.5 font-medium", Boolean(draft.exclude) === ex ? "bg-info-soft text-info" : "text-secondary hover:bg-muted")}>
+            {label}
+          </button>
+        ))}
+      </div>
       {(def.options?.length ?? 0) > ENUM_SEARCH_ABOVE ? (
         <TextField size="sm" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search values" aria-label={`Search ${def.label} values`} leading={<Search className="h-3.5 w-3.5" aria-hidden />} />
       ) : null}
       <div className="flex items-center justify-between text-[11px] text-faint">
         <span>Selected: {draft.values.length}</span>
-        <button type="button" className="font-semibold text-primary hover:underline" onClick={() => onChange({ type: "enum", values: allOn ? [] : allValues })}>
+        <button type="button" className="font-semibold text-primary hover:underline" onClick={() => onChange({ ...draft, type: "enum", values: allOn ? [] : allValues })}>
           {allOn ? "Clear all" : "Select all"}
         </button>
       </div>
@@ -71,7 +79,7 @@ function TextEditor({ def, draft, onChange }: EditorProps<Extract<FilterDraft, {
     <div className="flex flex-col gap-2">
       <Select<TextFilterOp> size="sm" options={TEXT_OP_OPTIONS} value={draft.op} onChange={(op) => onChange({ ...draft, op: op ?? "ct" })} aria-label={`${def.label} operator`} />
       {needsValue ? (
-        <TextField size="sm" autoFocus value={draft.value} maxLength={500} onChange={(e) => onChange({ ...draft, value: e.target.value })} placeholder={`Enter ${def.label.toLowerCase()}`} aria-label={`${def.label} value`} />
+        <TextField size="sm" autoFocus value={draft.value} maxLength={500} onChange={(e) => onChange({ ...draft, value: e.target.value })} placeholder={draft.op === "nin" ? "Values to exclude, comma separated" : `Enter ${def.label.toLowerCase()}`} aria-label={`${def.label} value`} />
       ) : null}
     </div>
   );
@@ -108,7 +116,7 @@ function BooleanEditor({ def, draft, onChange }: EditorProps<Extract<FilterDraft
           aria-pressed={draft.value === o.value}
           onClick={() => onChange({ type: "boolean", value: draft.value === o.value ? null : o.value })}
           className={cn(
-            "h-8 rounded-md border text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+            "h-8 rounded-md border text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30",
             draft.value === o.value ? o.on : "border-border text-secondary hover:bg-surface-sunken"
           )}
         >
@@ -138,7 +146,7 @@ function DateEditor({ def, draft, onChange }: EditorProps<Extract<FilterDraft, {
             aria-checked={value.preset === o.key}
             onClick={() => set({ preset: o.key as DatePresetKey })}
             className={cn(
-              "rounded-md border px-2 py-1.5 text-left text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+              "rounded-md border px-2 py-1.5 text-left text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30",
               value.preset === o.key ? "border-primary bg-primary-soft font-semibold text-primary" : "border-border text-body hover:bg-surface-sunken"
             )}
           >

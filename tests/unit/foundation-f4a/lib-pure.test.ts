@@ -125,8 +125,9 @@ describe("status colors", () => {
 });
 
 describe("integration catalog", () => {
-  it("has 14 error codes with full guidance", () => {
-    expect(INTEGRATION_ERRORS).toHaveLength(14);
+  it("has 15 error codes with full guidance", () => {
+    // 15th: "Shipment order code already in use" (automation-integrations REQ-AI-R5-2).
+    expect(INTEGRATION_ERRORS).toHaveLength(15);
     for (const e of INTEGRATION_ERRORS) {
       expect(e.title && e.explanation && e.recommendedAction && e.guideHref.startsWith("/help/")).toBeTruthy();
     }

@@ -25,6 +25,29 @@ export function fromMinutes(minutes: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+/** "Repeat every n minutes" bounds (validated inline in the wizard, never clamped silently). */
+export const MIN_REPEAT_MINUTES = 5;
+export const MAX_REPEAT_MINUTES = 720;
+/** Above this many runs a day the wizard warns (every run allocates stock and creates jobs). */
+export const HIGH_FREQUENCY_RUNS = 48;
+
+/**
+ * Critic R4: schedule-related instants are shown in the warehouse time zone, labelled, in the
+ * app's grid date shape: "11/10/2026 2:00 PM EST".
+ */
+export function formatInZone(iso: string | Date, timeZone: string): string {
+  const at = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(at.getTime())) return "—";
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-US", { timeZone, month: "2-digit", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).formatToParts(at);
+  } catch {
+    parts = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "2-digit", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).formatToParts(at);
+  }
+  const get = (type: Intl.DateTimeFormatPartTypes): string => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("month")}/${get("day")}/${get("year")} ${get("hour")}:${get("minute")} ${get("dayPeriod")} ${get("timeZoneName")}`.trim();
+}
+
 /** "Repeat every n minutes From/To" → the generated start times (inclusive). */
 export function timesForPeriod(everyMinutes: number, from: string, to: string): string[] {
   if (!Number.isInteger(everyMinutes) || everyMinutes < 1) return [];
@@ -91,5 +114,6 @@ export function formatWaveCountdown(ms: number): string {
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
   const hms = [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
-  return days > 0 ? `${String(days).padStart(4, "0")}:${hms}` : hms;
+  // Critic R3: readable "1d 10:46:40" instead of Logiwa's zero-padded "0001:10:46:40".
+  return days > 0 ? `${days}d ${hms}` : hms;
 }

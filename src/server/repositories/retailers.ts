@@ -157,7 +157,8 @@ function cols(db: AppDb, input: RetailerSave) {
 
 function writeAddress(tx: AppDb, id: string, userId: string | null, input: RetailerSave): void {
   deleteAddresses(tx, "retailer", id);
-  if (!input.line1 && !input.city && !input.postalCode) return;
+  // Country is required on the form, so a retailer always keeps at least its country (grid column, filters).
+  if (!input.line1 && !input.city && !input.postalCode && !input.country) return;
   tx.insert(s.addresses).values({
     ownerType: "retailer", ownerId: id, name: "Main", usageType: "Shipping", companyName: input.businessName, line1: input.line1 ?? "", line2: input.line2,
     city: input.city ?? "", state: input.state || null, postalCode: (input.postalCode ?? "").toUpperCase(), country: countryName(input.country) || input.country,

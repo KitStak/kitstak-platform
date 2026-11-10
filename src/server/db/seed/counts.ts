@@ -21,6 +21,8 @@ interface CountSpec {
   readonly zoneOffset: number;
   readonly instant?: boolean;
   readonly recount?: boolean;
+  /** Saved from the AI suggestion (ABC / velocity), so the AI Plan filter and badge have data. */
+  readonly ai?: boolean;
 }
 
 const SPECS: readonly CountSpec[] = [
@@ -29,7 +31,9 @@ const SPECS: readonly CountSpec[] = [
   { target: "Inventory Updated", daysAgo: 5, description: "Instant count - pick face variance", zoneOffset: 14, instant: true },
   { target: "Count Completed", daysAgo: 2, description: "Weekly cycle count - zone C aisle 3", zoneOffset: 20 },
   { target: "Count Started", daysAgo: 0, description: "Weekly cycle count - zone D aisle 1", zoneOffset: 28 },
-  { target: "Ready To Count", daysAgo: 1, description: "Fast movers spot check - zone A", zoneOffset: 36 },
+  { target: "Ready To Count", daysAgo: 1, description: "Fast movers spot check - zone A", zoneOffset: 36, ai: true },
+  // Offset chosen so no location is held by two open plans (db:verify open_count_overlap).
+  { target: "Pending", daysAgo: 0, description: "AI suggested - class A velocity count", zoneOffset: 60, ai: true },
   { target: "Pending", daysAgo: 0, description: "Month-end count - bulk floor", zoneOffset: 44 },
 ];
 
@@ -84,7 +88,8 @@ function countJob(w: World, tx: Tx, spec: CountSpec, planId: Id, lines: readonly
     id: crypto.randomUUID(), code: sequences.next(tx, "job"), warehouseId: fac.id, jobType: code, jobTypeId: w.config.jobTypes.get(jobTypeKey(fac.id, code)) ?? null,
     operationType: "Count", status: done ? "Completed" : spec.target === "Count Started" ? "Started" : "Pending", assignedToUserId: user.id, countPlanId: planId,
     ruleName: spec.instant ? null : w.config.waveRules.count.name, waveRuleId: spec.instant ? null : w.config.waveRules.count.id, taskCount: lines.length,
-    completedTaskCount: done ? lines.length : 0, plannedStartAt: isoOf(atMs), startedAt: spec.target === "Ready To Count" ? null : isoOf(atMs), completedAt: done ? isoOf(atMs + HOUR_MS) : null,
+    // Matches the task rows below (rollupJob rule): Count Started seeds ceil(n/2) tasks Completed.
+    completedTaskCount: done ? lines.length : spec.target === "Count Started" ? Math.ceil(lines.length / 2) : 0, plannedStartAt: isoOf(atMs), startedAt: spec.target === "Ready To Count" ? null : isoOf(atMs), completedAt: done ? isoOf(atMs + HOUR_MS) : null,
   }).returning({ id: schema.jobs.id }).get();
   const maxNo = tx.get<{ n: number | null }>(sql`SELECT MAX(task_no) AS n FROM tasks`)?.n ?? 0;
   lines.forEach((l, i) => {
@@ -104,7 +109,7 @@ function runCount(w: World, tx: Tx, spec: CountSpec, atMs: number): void {
   const code = spec.instant ? sequences.instantCountCode(new Date(atMs)) : sequences.next(tx, "count");
   const plan = tx.insert(schema.countPlans).values({
     code, warehouseId: w.facility.MLT1.id, description: spec.description, scheduledAt: isoOf(spec.target === "Pending" ? atMs + 26 * HOUR_MS : atMs),
-    countType: "Location", operationType: spec.instant ? "Instant Count" : "Cycle Count", waveRuleId: spec.instant ? null : w.config.waveRules.count.id, createdBy: ctx.userId,
+    countType: "Location", operationType: spec.instant ? "Instant Count" : "Cycle Count", waveRuleId: spec.instant ? null : w.config.waveRules.count.id, isAi: spec.ai ?? false, createdBy: ctx.userId,
   }).returning().get();
   changeLog.recordCreate(tx, ctx, { entityType: "count_plan", entityId: plan.id, entityCode: code });
   const reasonId = lookupId(w.lookups, "adjustment_reason", "Cycle count correction");
@@ -120,7 +125,7 @@ function runCount(w: World, tx: Tx, spec: CountSpec, atMs: number): void {
       setPlanStatus(tx, ctx, plan.id, code, status, to, { completedAt: isoOf(atMs + HOUR_MS) });
     } else if (to === "Inventory Updated") {
       applyCount(w, tx, ctx, spec, plan.id, lines, reasonId);
-      setPlanStatus(tx, ctx, plan.id, code, status, to, { inventoryUpdatedAt: isoOf(atMs + 2 * HOUR_MS), inventoryUpdatedBy: ctx.source });
+      setPlanStatus(tx, ctx, plan.id, code, status, to, { inventoryUpdatedAt: isoOf(atMs + 2 * HOUR_MS), inventoryUpdatedBy: ctx.userId });
     } else setPlanStatus(tx, ctx, plan.id, code, status, to);
     status = to;
   }
@@ -150,7 +155,7 @@ function applyCount(w: World, tx: Tx, ctx: DomainCtx, spec: CountSpec, planId: I
       if (!bucket || e.countedQty === bucket.onHand || e.countedQty < bucket.allocated || serial.has(bucket.productId)) continue;
       ledger.adjustTo(tx, ctx, { inventoryId: bucket.id, targetQty: e.countedQty, type: "Count", adjustmentReasonId: reasonId, refs: { countPlanId: planId, note: "Cycle count variance" } });
     }
-    tx.update(schema.countPlanLines).set({ inventoryUpdatedAt: isoOf(Date.now()), inventoryUpdatedBy: ctx.source })
+    tx.update(schema.countPlanLines).set({ inventoryUpdatedAt: isoOf(Date.now()), inventoryUpdatedBy: ctx.userId })
       .where(and(eq(schema.countPlanLines.planId, planId), eq(schema.countPlanLines.status, "Inventory Updated"))).run();
   });
 }

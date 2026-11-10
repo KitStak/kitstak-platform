@@ -13,6 +13,8 @@ export const SHIPMENT_HISTORY_FIELDS: readonly ShippingField[] = [
   { field: "shipmentDate", label: "Shipment date", type: "date" },
   { field: "shipmentType", label: "Shipment type", type: "enum", options: optionsOf(SHIPMENT_TYPES) },
   { field: "orderCode", label: "Order code", type: "text" },
+  { field: "reference", label: "Reference (order or adjustment code)", type: "text" },
+  { field: "adjustmentReason", label: "Adjustment reason", type: "text" },
   { field: "originalOrderCode", label: "Original shipment order code", type: "text" },
   { field: "storeOrderNumber", label: "Store order number", type: "text" },
   { field: "sku", label: "Product SKU", type: "text" },
@@ -36,7 +38,7 @@ export const SHIPMENT_HISTORY_SORT_FIELDS = [
   "trackingNumber", "expiryDate", "quantity", "packType", "uomPackType", "shipmentPackage", "kitSku", "retailerName",
   "packageWeight", "masterOrderCode", "isBackOrder", "shipmentDate", "shipmentType", "note", "clientName",
   "warehouseCode", "locationCode", "lpNumber", "originalLpNumber", "originalParentLp", "parentLpNumber",
-  "parentLpType", "receivingDate", "productionDate",
+  "parentLpType", "receivingDate", "productionDate", "reference", "adjustmentReason",
 ] as const;
 
-export const SHIPMENT_HISTORY_SEARCH_FIELDS = ["orderCode", "sku", "trackingNumber", "storeOrderNumber"] as const;
+export const SHIPMENT_HISTORY_SEARCH_FIELDS = ["orderCode", "reference", "sku", "trackingNumber", "storeOrderNumber"] as const;

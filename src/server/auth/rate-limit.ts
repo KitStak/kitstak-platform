@@ -76,6 +76,20 @@ function maybePurge(db: AppDb, now: Date): void {
 }
 
 /** Client IP for rate limiting. Without TRUST_PROXY all clients share the "direct" bucket. */
+/**
+ * IP recorded on audit and session rows (never "direct"). With TRUST_PROXY=1 the first
+ * `x-forwarded-for` hop; otherwise the address Next's own router server forwards in
+ * `x-forwarded-for` (dev and `next start`), then `x-real-ip`, falling back to 127.0.0.1.
+ * The rate-limit bucket keeps using `clientIp` (spoof-resistant without a trusted proxy).
+ */
+export function auditIp(request: Request): string {
+  const first = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  if (first) return first.replace(/^::ffff:/, "");
+  const real = request.headers.get("x-real-ip")?.trim();
+  if (real) return real.replace(/^::ffff:/, "");
+  return "127.0.0.1";
+}
+
 export function clientIp(request: Request): string {
   if (process.env.TRUST_PROXY === "1") {
     const first = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
@@ -84,4 +98,13 @@ export function clientIp(request: Request): string {
     if (real) return real;
   }
   return "direct";
+}
+
+/**
+ * Gives back one hit for `subject` (floor 0). Used after a successful login so the shared
+ * per-IP login bucket only throttles failed attempts: a scanner fleet behind one NAT (or
+ * every client in the "direct" bucket without TRUST_PROXY) can all sign in at shift start.
+ */
+export function refundRateLimit(db: AppDb, policy: RateLimitPolicy, subject: string): void {
+  db.run(sql`UPDATE rate_limits SET count = MAX(0, count - 1) WHERE key = ${`${policy.name}:${subject}`}`);
 }

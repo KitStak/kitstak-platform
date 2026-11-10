@@ -12,7 +12,7 @@ import { DEFAULT_PASSWORD_POLICY, passwordPolicySchema } from "@/server/auth/pas
 import * as s from "@/server/db/schema";
 import type { CompanyDefaults } from "@/server/db/schema";
 import type { FileStore } from "@/server/files/files";
-import { LOGO_MAX_BYTES, LOGO_MIMES, type companyDefaultsSchema, type companyInfoSchema, type companySecuritySchema } from "@/lib/grid-defs/admin/company";
+import { idleMinutesFrom, LOGO_MAX_BYTES, LOGO_MIMES, type companyDefaultsSchema, type companyInfoSchema, type companySecuritySchema } from "@/lib/grid-defs/admin/company";
 import { assertVersion, domainCtxOf, logUpdate, type Actor } from "./users-shared";
 
 const c = s.companySettings;
@@ -28,6 +28,8 @@ export interface CompanySettings {
   readonly logoUrl: string | null;
   readonly defaults: CompanyDefaults;
   readonly passwordPolicy: z.output<typeof passwordPolicySchema>;
+  /** Web idle sign-out in minutes (company Security), or null when off. Stored in `defaults.sessionIdleMinutes`. */
+  readonly sessionIdleMinutes: number | null;
   readonly updatedAt: string;
   readonly version: number;
 }
@@ -44,9 +46,28 @@ export function getCompany(db: AppDb): CompanySettings {
   return {
     displayName: row.displayName, fullName: row.fullName, logoFileId: row.logoFileId,
     logoUrl: row.logoFileId ? `/api/company/logo?v=${row.version}` : null,
-    defaults: { ...DEFAULTS, ...(row.defaults ?? {}) }, passwordPolicy: policy.success ? policy.data : DEFAULT_PASSWORD_POLICY,
+    defaults: { ...DEFAULTS, ...publicDefaults(row.defaults) }, passwordPolicy: policy.success ? policy.data : DEFAULT_PASSWORD_POLICY,
+    sessionIdleMinutes: readIdleMinutes(row.defaults),
     updatedAt: row.updatedAt, version: row.version,
   };
+}
+
+/** The defaults JSON without server-only keys (`mail` holds the encrypted SMTP secret). */
+function publicDefaults(defaults: CompanyDefaults | null | undefined): Partial<CompanyDefaults> {
+  if (!defaults) return {};
+  const rest: Record<string, unknown> = { ...(defaults as unknown as Record<string, unknown>) };
+  delete rest.mail;
+  return rest as Partial<CompanyDefaults>;
+}
+
+/** Idle sign-out minutes from the defaults JSON (null = off). */
+function readIdleMinutes(defaults: unknown): number | null {
+  return idleMinutesFrom((defaults as Record<string, unknown> | null | undefined)?.sessionIdleMinutes);
+}
+
+/** Company web idle sign-out for the shell (null = off). */
+export function getSessionIdleMinutes(db: AppDb): number | null {
+  return readIdleMinutes(db.select({ defaults: c.defaults }).from(c).where(eq(c.id, ID)).get()?.defaults);
 }
 
 function bump(tx: AppDb, actor: Actor, set: Partial<typeof c.$inferInsert>): number {
@@ -67,8 +88,11 @@ export function updateCompanyDefaults(tx: AppDb, auth: AuthContext, actor: Actor
   const before = ensureRow(tx);
   assertVersion(before.version, input.version);
   const next: CompanyDefaults = { currency: input.currency, weightUnit: input.weightUnit, dimensionUnit: input.dimensionUnit, dateFormat: input.dateFormat };
-  bump(tx, actor, { defaults: next });
-  const prev = { ...DEFAULTS, ...(before.defaults ?? {}) };
+  // The JSON also carries other settings (e.g. `returnRules`); keep them.
+  bump(tx, actor, { defaults: { ...(before.defaults ?? {}), ...next } });
+  // Only the four account-default keys are compared (the JSON also holds return rules and mail).
+  const was = { ...DEFAULTS, ...(before.defaults ?? {}) };
+  const prev: CompanyDefaults = { currency: was.currency, weightUnit: was.weightUnit, dimensionUnit: was.dimensionUnit, dateFormat: was.dateFormat };
   logUpdate(tx, domainCtxOf(actor, auth), ref, prev as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>);
   return getCompany(tx);
 }
@@ -81,12 +105,17 @@ export function updateCompanySecurity(tx: AppDb, auth: AuthContext, actor: Actor
     ...(input.expires ? { maxAgeDays: input.maxAgeDays } : {}), lockoutThreshold: input.lockoutThreshold, lockoutMinutes: input.lockoutMinutes,
   });
   const prev = passwordPolicySchema.safeParse(before.passwordPolicy ?? {});
-  bump(tx, actor, { passwordPolicy: next });
+  const prevIdle = readIdleMinutes(before.defaults);
+  const nextIdle = input.idleTimeout ? input.idleMinutes : null;
+  // `defaults` also carries account defaults and return rules; only the idle key changes.
+  const defaults = { ...((before.defaults ?? {}) as Record<string, unknown>), sessionIdleMinutes: nextIdle } as unknown as typeof c.$inferInsert.defaults;
+  bump(tx, actor, { passwordPolicy: next, defaults });
   const view = (p: z.output<typeof passwordPolicySchema>) => ({
     minimumLength: p.minLength, requireUppercase: p.requireUpper, requireNumber: p.requireNumber, requireSymbol: p.requireSymbol,
     passwordExpiry: p.maxAgeDays ? `${p.maxAgeDays} days` : "Never", lockoutAfter: `${p.lockoutThreshold} failed attempts`, lockoutDuration: `${p.lockoutMinutes} minutes`,
   });
-  logUpdate(tx, domainCtxOf(actor, auth), ref, view(prev.success ? prev.data : DEFAULT_PASSWORD_POLICY), view(next));
+  const idle = (m: number | null) => (m ? `${m} minutes` : "Off");
+  logUpdate(tx, domainCtxOf(actor, auth), ref, { ...view(prev.success ? prev.data : DEFAULT_PASSWORD_POLICY), idleSignOut: idle(prevIdle) }, { ...view(next), idleSignOut: idle(nextIdle) });
   return getCompany(tx);
 }
 

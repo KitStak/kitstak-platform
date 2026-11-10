@@ -4,7 +4,7 @@ import { field, opts, OPEN_WORK_FILTER, type GridSpec } from "./shared";
 
 export const JOBS_GRID_KEY = "jobs";
 export const JOB_STATUS_VALUES = ["Pending", "Started", "Completed", "Cancelled"] as const;
-export const JOB_PRIORITY_CHOICES = ["None", "Low", "Medium", "High"] as const;
+export const JOB_PRIORITY_CHOICES = ["None", "Low", "Medium", "High", "Urgent"] as const;
 export const PICKING_ASSIGNMENT_VALUES = ["Assigned", "Unassigned"] as const;
 
 export const JOB_DEFAULT_FILTER = OPEN_WORK_FILTER("status");
@@ -17,7 +17,7 @@ export const JOBS_GRID: GridSpec = {
     "warehouse", "client", "waveNumber", "ruleName", "code", "jobType", "status", "priority", "operationType", "assignee",
     "orderCount", "productCount", "taskCount", "pendingTasks", "completedTasks", "startedAt", "completedAt", "createdAt",
     "createdBy", "pendingPickingTasks", "pendingPackingTasks", "mobileCart", "pickingZone", "plannedStartAt", "plannedEndAt",
-    "locationCount", "skuCount", "labelStatus", "pickListStatus", "isResolutionJob", "isPrecartonization",
+    "locationCount", "skuCount", "labelStatus", "pickListStatus", "isResolutionJob", "isPrecartonization", "overdue",
   ],
   fields: [
     field("completedAt", "Actual finish date", "date"),
@@ -41,6 +41,7 @@ export const JOBS_GRID: GridSpec = {
     field("taskCount", "Number of tasks", "number"),
     field("operationType", "Operation type", "enum", { options: opts(OPERATION_TYPES) }),
     field("orderCount", "Order count", "number"),
+    field("overdue", "Overdue", "boolean", { description: "Pending or started past its planned finish date" }),
     field("pickingAssignment", "Picking assignment status", "enum", { options: opts(PICKING_ASSIGNMENT_VALUES) }),
     field("plannedEndAt", "Planned finish date", "date"),
     field("plannedStartAt", "Planned start date", "date"),

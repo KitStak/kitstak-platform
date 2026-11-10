@@ -15,6 +15,7 @@ import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
 import {
   BILLING_FIELDS, BILLING_SEARCH_FIELDS, BILLING_SORT_FIELDS, chargeUnit, conditionText, periodEnd, type ContractSave, type FeeSave,
+  splitOneTime, withOneTime, PRICING_MODE_META, type PricingMode,
 } from "@/lib/grid-defs/organization/billing";
 import { round } from "@/lib/grid-defs/organization/common";
 import { assertVersion, compileGrid, domainCtxOf, logCreate, logDelete, logUpdate, namesOf, type Actor, type GridBinding } from "./clients-shared";
@@ -23,16 +24,30 @@ const c = s.billingContracts;
 const f = s.billingFees;
 export const CONTRACT_ENTITY = "billing_contract";
 
+/**
+ * Contract-level change-log entry with an exact message (fee names are kept verbatim;
+ * the generic field diff would humanize "PickPack" into "Pick Pack").
+ */
+export function logContractEvent(tx: AppDb, ctx: { userId: string | null; source: string }, contractId: string, contractName: string,
+  ev: { type: "Create" | "Update" | "Delete"; message: string; field?: string; label?: string; from?: string; to?: string }): void {
+  tx.insert(s.changeLog).values({
+    entityType: CONTRACT_ENTITY, entityId: contractId, entityCode: contractName, type: ev.type, field: ev.field ?? null, fieldLabel: ev.label ?? null,
+    fromValue: ev.from ?? null, toValue: ev.to ?? null, message: ev.message, userId: ctx.userId, source: ctx.source,
+  }).run();
+}
+
 const clientNameSql = sql<string>`(SELECT cl.name FROM clients cl WHERE cl.id = billing_contracts.client_id)`;
 const warehouseCodeSql = sql<string>`(SELECT w.code FROM warehouses w WHERE w.id = billing_contracts.warehouse_id)`;
 const createdByNameSql = sql<string>`(SELECT u.name FROM users u WHERE u.id = billing_contracts.created_by)`;
 const feeCountSql = sql<number>`(SELECT COUNT(*) FROM billing_fees bf WHERE bf.contract_id = billing_contracts.id)`;
-const reportCountSql = sql<number>`(SELECT COUNT(*) FROM billing_reports br WHERE br.contract_id = billing_contracts.id)`;
+const reportCountSql = sql<number>`(SELECT COUNT(*) FROM billing_reports br WHERE br.contract_id = billing_contracts.id AND br.bill_status <> 'Canceled' AND br.calc_status <> 'Failed')`;
+/** Last calculation = the latest successful, non-canceled bill (a failed run or a deleted bill never stamps it). */
+const lastCalcSql = sql<string | null>`(SELECT MAX(br.calculated_at) FROM billing_reports br WHERE br.contract_id = billing_contracts.id AND br.bill_status <> 'Canceled' AND br.calc_status = 'Successful')`;
 
 const BINDING: GridBinding = {
   exprs: {
     name: sql`${c.name}`, clientId: sql`${c.clientId}`, warehouseId: sql`${c.warehouseId}`, approvalStatus: sql`${c.approvalStatus}`,
-    frequency: sql`${c.frequency}`, calcStartDate: sql`${c.calcStartDate}`, lastCalculatedAt: sql`${c.lastCalculatedAt}`, createdAt: sql`${c.createdAt}`,
+    frequency: sql`${c.frequency}`, calcStartDate: sql`${c.calcStartDate}`, lastCalculatedAt: lastCalcSql, createdAt: sql`${c.createdAt}`,
     nextPeriodStart: sql`${c.nextPeriodStart}`, clientName: clientNameSql, warehouseCode: warehouseCodeSql, createdByName: createdByNameSql, feeCount: feeCountSql,
   },
   fields: BILLING_FIELDS, sortable: BILLING_SORT_FIELDS, search: BILLING_SEARCH_FIELDS,
@@ -60,7 +75,7 @@ export interface ContractRow {
 
 const ROW = {
   id: c.id, name: c.name, clientId: c.clientId, clientName: clientNameSql, warehouseId: c.warehouseId, warehouseCode: warehouseCodeSql,
-  approvalStatus: c.approvalStatus, calcStartDate: c.calcStartDate, lastCalculatedAt: c.lastCalculatedAt, frequency: c.frequency,
+  approvalStatus: c.approvalStatus, calcStartDate: c.calcStartDate, lastCalculatedAt: lastCalcSql, frequency: c.frequency,
   nextPeriodStart: c.nextPeriodStart, createdByName: createdByNameSql, createdAt: c.createdAt, feeCount: feeCountSql, reportCount: reportCountSql, version: c.version,
 };
 
@@ -95,6 +110,8 @@ export interface FeeView {
   readonly splitDay: number | null;
   readonly standardRate: number | null;
   readonly alternateRate: number | null;
+  readonly chargeOneTime: boolean;
+  readonly pricingMode: PricingMode;
   readonly conditions: readonly { field: string; comparator: string; value: unknown; text: string }[];
   readonly tiers: readonly { id: string; fromQty: number | null; toQty: number | null; rate: number }[];
   readonly priceStrip: string;
@@ -114,7 +131,8 @@ export function feesOf(db: AppDb, contractId: string): FeeView[] {
       id: fee.id, name: fee.name, operationType: fee.operationType, calculationType: fee.calculationType, feeBy: fee.feeBy, chargeBy: fee.chargeBy,
       vasTypeId: fee.vasTypeId, vasTypeName: fee.vasTypeId ? vas.get(fee.vasTypeId) ?? null : null, useMinPrice: Boolean(fee.useMinPrice), minPrice: fee.minPrice,
       useMaxPrice: Boolean(fee.useMaxPrice), maxPrice: fee.maxPrice, splitDay: fee.splitDay, standardRate: fee.standardRate, alternateRate: fee.alternateRate,
-      conditions: (fee.conditions ?? []).map((x) => ({ ...x, text: conditionText(x) })),
+      chargeOneTime: Boolean(fee.chargeOneTime) || splitOneTime(fee.conditions).chargeOneTime, pricingMode: splitOneTime(fee.conditions).pricingMode,
+      conditions: splitOneTime(fee.conditions).conditions.map((x) => ({ ...x, text: conditionText(x) })),
       tiers: own.length ? own : [{ id: "standard", fromQty: 1, toQty: null, rate: fee.standardRate ?? 0 }], priceStrip: strip, createdAt: fee.createdAt,
     };
   });
@@ -125,7 +143,8 @@ export function getContract(db: AppDb, auth: AuthContext, id: string) {
   const view = db.select(ROW).from(c).where(eq(c.id, id)).get() as ContractRow;
   const client = db.select({ currency: s.clients.currency }).from(s.clients).where(eq(s.clients.id, row.clientId)).get();
   const lastReport = db.select({ id: s.billingReports.id, billNumber: s.billingReports.billNumber, totalPrice: s.billingReports.totalPrice, billStatus: s.billingReports.billStatus, calculatedAt: s.billingReports.calculatedAt })
-    .from(s.billingReports).where(eq(s.billingReports.contractId, id)).orderBy(sql`${s.billingReports.calculatedAt} DESC`).limit(1).get() ?? null;
+    .from(s.billingReports).where(and(eq(s.billingReports.contractId, id), sql`${s.billingReports.billStatus} <> 'Canceled'`, eq(s.billingReports.calcStatus, "Successful")))
+    .orderBy(sql`${s.billingReports.calculatedAt} DESC`).limit(1).get() ?? null;
   return { ...view, currency: client?.currency ?? "USD", fees: feesOf(db, id), lastReport };
 }
 export type ContractDetail = ReturnType<typeof getContract>;
@@ -169,6 +188,13 @@ export function updateContract(tx: AppDb, auth: AuthContext, actor: Actor, id: s
   if (reports > 0 && (input.clientId !== before.clientId || input.warehouseId !== before.warehouseId)) {
     throw new AppError("VALIDATION", "Client and warehouse are locked once bills exist", { fieldErrors: { clientId: ["Locked: this contract already has bills"] } });
   }
+  // The schedule is fixed by live bills: changing it would re-align every future period against bills already issued.
+  if ((input.calcStartDate !== before.calcStartDate || input.frequency !== before.frequency) && liveBillCount(tx, id) > 0) {
+    const fieldErrors: Record<string, string[]> = {};
+    if (input.calcStartDate !== before.calcStartDate) fieldErrors.calcStartDate = ["Locked: this contract already has bills"];
+    if (input.frequency !== before.frequency) fieldErrors.frequency = ["Locked: this contract already has bills"];
+    throw new AppError("VALIDATION", "Calc start date and frequency are locked once bills exist. Cancel the bills, or duplicate the contract to start a new schedule.", { fieldErrors });
+  }
   const snapshot = display(tx, before);
   const after = tx.update(c).set({
     name: input.name.trim(), clientId: input.clientId, warehouseId: input.warehouseId, calcStartDate: input.calcStartDate, frequency: input.frequency,
@@ -178,6 +204,21 @@ export function updateContract(tx: AppDb, auth: AuthContext, actor: Actor, id: s
   return { id, name: after.name, version: after.version };
 }
 
+/**
+ * Another Approved contract for the same client and warehouse. Contracts are open-ended from their
+ * calc start date, so any two approved for one client/warehouse overlap and would double-bill.
+ */
+export function approvedRival(db: AppDb, row: { id: string; clientId: string; warehouseId: string }): { id: string; name: string; calcStartDate: string } | undefined {
+  return db.select({ id: c.id, name: c.name, calcStartDate: c.calcStartDate }).from(c)
+    .where(and(eq(c.clientId, row.clientId), eq(c.warehouseId, row.warehouseId), eq(c.approvalStatus, "Approved"), sql`${c.id} <> ${row.id}`)).get() ?? undefined;
+}
+
+/** Bills that fix the contract's schedule: Successful and not Canceled. */
+function liveBillCount(db: AppDb, contractId: string): number {
+  return db.select({ n: sql<number>`count(*)` }).from(s.billingReports)
+    .where(and(eq(s.billingReports.contractId, contractId), eq(s.billingReports.calcStatus, "Successful"), sql`${s.billingReports.billStatus} <> 'Canceled'`)).get()?.n ?? 0;
+}
+
 function setApproval(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], to: "Draft" | "Approved"): BulkResult {
   const ctx = domainCtxOf(actor, auth);
   return runBulk(tx, ids, (inner, id) => {
@@ -185,7 +226,9 @@ function setApproval(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly s
     if (row.approvalStatus === to) throw new AppError("INVALID_STATE", `${row.name} is already ${to === "Approved" ? "approved" : "not approved"}`);
     if (to === "Approved") {
       const fees = inner.select({ n: sql<number>`count(*)` }).from(f).where(eq(f.contractId, id)).get()?.n ?? 0;
-      if (fees === 0) throw new AppError("INVALID_STATE", `${row.name} has no fees yet`);
+      if (fees === 0) throw new AppError("INVALID_STATE", `Add at least one fee to ${row.name} before approving`);
+      const rival = approvedRival(inner, row);
+      if (rival) throw new AppError("INVALID_STATE", `${rival.name} is already approved for this client and warehouse from ${rival.calcStartDate}. Approving ${row.name} too would bill the same activity twice; cancel that approval first.`);
     }
     inner.update(c).set({ approvalStatus: to, updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, id)).run();
     logUpdate(inner, ctx, CONTRACT_ENTITY, id, row.name, { approvalStatus: row.approvalStatus }, { approvalStatus: to });
@@ -197,7 +240,7 @@ export const cancelContractApprovals = (tx: AppDb, auth: AuthContext, actor: Act
 
 export function contractDeleteBlocker(db: AppDb, row: typeof c.$inferSelect): string | null {
   if (row.approvalStatus === "Approved") return "is approved; cancel the approval first";
-  const reports = db.select({ n: sql<number>`count(*)` }).from(s.billingReports).where(and(eq(s.billingReports.contractId, row.id), sql`${s.billingReports.billStatus} <> 'Canceled'`)).get()?.n ?? 0;
+  const reports = db.select({ n: sql<number>`count(*)` }).from(s.billingReports).where(and(eq(s.billingReports.contractId, row.id), sql`${s.billingReports.billStatus} <> 'Canceled'`, sql`${s.billingReports.calcStatus} <> 'Failed'`)).get()?.n ?? 0;
   if (reports > 0) return `has ${reports} ${reports === 1 ? "bill" : "bills"}`;
   return null;
 }
@@ -217,16 +260,20 @@ export function deleteContracts(tx: AppDb, auth: AuthContext, actor: Actor, ids:
 
 function copyName(db: AppDb, clientId: string, name: string): string {
   for (let i = 1; i < 100; i += 1) {
-    const candidate = i === 1 ? `${name} (copy)` : `${name} (copy ${i})`;
+    const suffix = i === 1 ? " (copy)" : ` (copy ${i})`;
+    // Names cap at 100 (Logiwa round-trip): trim the base so the suffix always fits.
+    const candidate = `${name.slice(0, 100 - suffix.length).trimEnd()}${suffix}`;
     const clash = db.select({ id: c.id }).from(c).where(and(eq(c.clientId, clientId), sql`lower(${c.name}) = lower(${candidate})`)).get();
     if (!clash) return candidate;
   }
-  return `${name} (copy ${Date.now()})`;
+  const tail = ` (copy ${Date.now()})`;
+  return `${name.slice(0, 100 - tail.length).trimEnd()}${tail}`;
 }
 
 /** Copies the contract header (as Draft) with every fee, tier and condition. */
-export function duplicateContracts(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult & { created: { id: string; name: string }[] } {
+export function duplicateContracts(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult & { created: { id: string; name: string }[]; warnings: string[] } {
   const createdRows: { id: string; name: string }[] = [];
+  const warnings: string[] = [];
   const ctx = domainCtxOf(actor, auth);
   const result = runBulk(tx, ids, (inner, id) => {
     const row = loadContract(inner, auth, id);
@@ -244,8 +291,11 @@ export function duplicateContracts(tx: AppDb, auth: AuthContext, actor: Actor, i
     }
     logCreate(inner, ctx, CONTRACT_ENTITY, copy.id, copy.name);
     createdRows.push(copy);
+    if (approvedRival(inner, { ...row, id: copy.id })) {
+      warnings.push(`${copy.name} is a Draft copy; ${row.name} stays approved. Cancel that approval before approving the copy, or both would bill the same activity.`);
+    }
   });
-  return { ...result, created: createdRows };
+  return { ...result, created: createdRows, warnings };
 }
 
 /* ---------------- fees ---------------- */
@@ -260,18 +310,20 @@ function feeColumns(input: FeeSave) {
     splitDay: split ? input.splitDay ?? 15 : null,
     standardRate: split ? round(input.standardRate ?? 0, 4) : round(input.tiers[0]?.rate ?? 0, 4),
     alternateRate: split ? round(input.alternateRate ?? 0, 4) : null,
-    conditions: input.conditions,
+    chargeOneTime: input.operationType === "Recurring" && input.chargeOneTime,
+    conditions: withOneTime(input.conditions, false, split ? undefined : input.pricingMode) as typeof input.conditions,
   };
 }
 
 function feeSummary(input: FeeSave): string {
   const split = input.calculationType === "Split Month Storage";
   const price = split ? `${(input.standardRate ?? 0).toFixed(2)}/${(input.alternateRate ?? 0).toFixed(2)} split day ${input.splitDay}`
-    : input.tiers.map((t) => `${t.fromQty}–${t.toQty ?? "∞"} @ ${t.rate.toFixed(2)}`).join("; ");
+    : `${PRICING_MODE_META[input.pricingMode ?? "graduated"].title}: ${input.tiers.map((t) => `${t.fromQty}–${t.toQty ?? "∞"} @ ${t.rate.toFixed(2)}`).join("; ")}`;
   const calc = input.calculationType ? ` · ${input.calculationType}` : "";
   const mm = [input.useMinPrice ? `min ${input.minPrice}` : "", input.useMaxPrice ? `max ${input.maxPrice}` : ""].filter(Boolean).join(", ");
+  const once = input.operationType === "Recurring" && input.chargeOneTime ? " · charge one time" : "";
   const cond = input.conditions.length ? ` · if ${input.conditions.map(conditionText).join(" and ")}` : "";
-  return `${input.operationType}${calc} · ${input.feeBy} · ${input.chargeBy} · ${price}${mm ? ` (${mm})` : ""}${cond}`;
+  return `${input.operationType}${calc} · ${input.feeBy} · ${input.chargeBy} · ${price}${mm ? ` (${mm})` : ""}${once}${cond}`;
 }
 
 function assertFeeName(db: AppDb, contractId: string, name: string, exceptId?: string): void {
@@ -303,7 +355,7 @@ export function createFee(tx: AppDb, auth: AuthContext, actor: Actor, contractId
   const row = tx.insert(f).values({ ...feeColumns(input), contractId, createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: f.id, name: f.name }).get();
   writeTiers(tx, row.id, input);
   tx.update(c).set({ updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, contractId)).run();
-  logUpdate(tx, domainCtxOf(actor, auth), CONTRACT_ENTITY, contractId, contract.name, { [`Fee ${row.name}`]: "" }, { [`Fee ${row.name}`]: feeSummary(input) });
+  logContractEvent(tx, domainCtxOf(actor, auth), contractId, contract.name, { type: "Create", field: "fee", label: `Fee ${row.name}`, to: feeSummary(input), message: `Fee ${row.name} is created. ${feeSummary(input)}` });
   return row;
 }
 
@@ -318,7 +370,8 @@ function storedFeeSummary(db: AppDb, fee: typeof f.$inferSelect): string {
   return feeSummary({
     name: fee.name, operationType: fee.operationType, calculationType: fee.calculationType, feeBy: fee.feeBy, chargeBy: fee.chargeBy, vasTypeId: fee.vasTypeId,
     useMinPrice: Boolean(fee.useMinPrice), minPrice: fee.minPrice, useMaxPrice: Boolean(fee.useMaxPrice), maxPrice: fee.maxPrice, splitDay: fee.splitDay,
-    standardRate: fee.standardRate, alternateRate: fee.alternateRate, conditions: fee.conditions ?? [],
+    standardRate: fee.standardRate, alternateRate: fee.alternateRate, ...splitOneTime(fee.conditions),
+    chargeOneTime: Boolean(fee.chargeOneTime) || splitOneTime(fee.conditions).chargeOneTime,
     tiers: tiers.length ? tiers.map((t) => ({ fromQty: t.fromQty ?? 0, toQty: t.toQty, rate: t.rate })) : [{ fromQty: 1, toQty: null, rate: fee.standardRate ?? 0 }],
   });
 }
@@ -334,7 +387,8 @@ export function updateFee(tx: AppDb, auth: AuthContext, actor: Actor, contractId
   writeTiers(tx, feeId, input);
   tx.update(c).set({ updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, contractId)).run();
   const label = before.name === input.name.trim() ? `Fee ${before.name}` : `Fee ${before.name} → ${input.name.trim()}`;
-  logUpdate(tx, domainCtxOf(actor, auth), CONTRACT_ENTITY, contractId, contract.name, { [label]: old }, { [label]: feeSummary(input) });
+  const now = feeSummary(input);
+  if (old !== now || before.name !== input.name.trim()) logContractEvent(tx, domainCtxOf(actor, auth), contractId, contract.name, { type: "Update", field: "fee", label, from: old, to: now, message: `${label} is modified. ${old} --> ${now}` });
   return { id: feeId, name: input.name.trim() };
 }
 
@@ -345,7 +399,7 @@ export function deleteFee(tx: AppDb, auth: AuthContext, actor: Actor, contractId
   const old = storedFeeSummary(tx, fee);
   tx.delete(f).where(eq(f.id, feeId)).run();
   tx.update(c).set({ updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, contractId)).run();
-  logUpdate(tx, domainCtxOf(actor, auth), CONTRACT_ENTITY, contractId, contract.name, { [`Fee ${fee.name}`]: old }, { [`Fee ${fee.name}`]: "(deleted)" });
+  logContractEvent(tx, domainCtxOf(actor, auth), contractId, contract.name, { type: "Delete", field: "fee", label: `Fee ${fee.name}`, from: old, message: `Fee ${fee.name} is deleted.` });
   return { id: feeId };
 }
 

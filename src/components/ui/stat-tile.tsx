@@ -13,6 +13,8 @@ export interface StatTileProps {
   /** Signed change; positive is good unless `invertDelta`. */
   readonly delta?: { readonly value: number; readonly label?: string; readonly invert?: boolean };
   readonly info?: React.ReactNode;
+  /** Accessible name of the info button (default "More information"); name it uniquely when a page has several. */
+  readonly infoLabel?: string;
   /** Drilldown: the whole tile becomes a link to a pre-filtered list. */
   readonly href?: string;
   readonly loading?: boolean;
@@ -28,14 +30,14 @@ const ICON_TONE = {
   danger: "bg-danger-soft text-danger",
 } as const;
 
-export function StatTile({ label, value, sublabel, icon: Icon, delta, info, href, loading, tone = "default", className }: StatTileProps) {
+export function StatTile({ label, value, sublabel, icon: Icon, delta, info, infoLabel, href, loading, tone = "default", className }: StatTileProps) {
   const good = delta ? (delta.invert ? delta.value < 0 : delta.value > 0) : false;
   const body = (
     <>
       <div className="flex items-start justify-between gap-2">
         <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
           {label}
-          {info ? <InfoTip content={info} /> : null}
+          {info ? <InfoTip content={info} label={infoLabel} /> : null}
         </span>
         {Icon ? (
           <span className={cn("flex h-7 w-7 items-center justify-center rounded-md", ICON_TONE[tone])}>
@@ -52,14 +54,14 @@ export function StatTile({ label, value, sublabel, icon: Icon, delta, info, href
             {delta.value}%{delta.label ? <span className="ml-1 font-normal text-faint">{delta.label}</span> : null}
           </span>
         ) : null}
-        {sublabel ? <span className="truncate text-faint">{sublabel}</span> : null}
+        {sublabel ? <span className="truncate text-faint" title={typeof sublabel === "string" ? sublabel : undefined}>{sublabel}</span> : null}
       </div>
     </>
   );
   const classes = cn("block rounded-lg border border-border bg-surface px-4 py-3.5 shadow-xs", className);
   if (!href) return <div className={classes}>{body}</div>;
   return (
-    <Link href={href} className={cn(classes, "transition-[border-color,box-shadow] hover:border-border-strong hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 active:shadow-xs")}>
+    <Link href={href} className={cn(classes, "transition-[border-color,box-shadow] hover:border-border-strong hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30 active:shadow-xs")}>
       {body}
     </Link>
   );

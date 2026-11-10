@@ -11,18 +11,30 @@ const isDev = process.env.NODE_ENV !== "production";
  * Content Security Policy — dev/prod aware.
  * Dev requires 'unsafe-eval' for React Fast Refresh; production does not get it.
  */
-const contentSecurityPolicy = [
+const cspDirectives = (frameAncestors: string): string => [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
+  "frame-src 'self' blob:",
+  // http://127.0.0.1:9101 = the workstation's Direct Print agent (header Printers popover).
+  "connect-src 'self' http://127.0.0.1:9101",
+  `frame-ancestors ${frameAncestors}`,
   "base-uri 'self'",
   "object-src 'none'",
   "form-action 'self'",
 ].join("; ");
+const contentSecurityPolicy = cspDirectives("'none'");
+
+/** Stored files and printout previews are shown in same-origin iframes (print preview). */
+export const FRAMEABLE_PATHS: readonly string[] = ["/api/files/:path*", "/api/printouts/preview/:path*", "/api/printouts/preview"];
+export function buildFrameableHeaders(): readonly HeaderEntry[] {
+  return [
+    { key: "Content-Security-Policy", value: cspDirectives("'self'") },
+    { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  ];
+}
 
 export const HSTS_VALUE = "max-age=63072000; includeSubDomains; preload";
 
@@ -109,6 +121,8 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [...buildSecurityHeaders(!isDev)],
       },
+      // Later entries override the same header keys for these paths.
+      ...FRAMEABLE_PATHS.map((source) => ({ source, headers: [...buildFrameableHeaders()] })),
     ];
   },
   async redirects() {

@@ -45,6 +45,8 @@ export const ORDER_CONDITION_FIELDS: readonly FilterFieldDef[] = [
   field("customField.textBox2", "SO custom field text box 2", "text", { group: "Custom fields" }),
   field("customField.textBox3", "SO custom field text box 3", "text", { group: "Custom fields" }),
   field("customField.toggle1", "SO custom field toggle 1", "boolean", { group: "Custom fields" }),
+  field("customField.toggle2", "SO custom field toggle 2", "boolean", { group: "Custom fields" }),
+  field("customField.date3", "SO custom field date time 3", "date", { group: "Custom fields" }),
   field("store", "Store", "text"),
 ];
 
@@ -63,9 +65,41 @@ export const WAVE_ORDER_BY_OPTIONS: readonly OrderByOption[] = [
   { value: "orderPrice", label: "Order price" },
   { value: "customField.date1", label: "Custom field date time 1" },
   { value: "customField.date2", label: "Custom field date time 2" },
+  { value: "customField.date3", label: "Custom field date time 3" },
   { value: "customField.toggle1", label: "Custom field toggle 1" },
+  { value: "customField.toggle2", label: "Custom field toggle 2" },
   { value: "customField.dropDown1", label: "Custom field drop down 1" },
+  { value: "customField.dropDown2", label: "Custom field drop down 2" },
   { value: "customField.textBox1", label: "Custom field text box 1" },
+  { value: "customField.textBox2", label: "Custom field text box 2" },
+  { value: "customField.textBox3", label: "Custom field text box 3" },
+  { value: "note", label: "Note" },
+  { value: "extraNote1", label: "Extra note 1" },
+  { value: "extraNote2", label: "Extra note 2" },
+];
+
+/** Legacy / internal order-by keys that older rules (seed, imports) still carry. */
+const ORDER_BY_ALIASES: Readonly<Record<string, string>> = { orderDate: "shipmentOrderDate", expectedShipDate: "expectedShipmentDate" };
+
+/** Canonical order-by key (aliases resolved). */
+export function canonicalOrderByField(field: string): string {
+  return ORDER_BY_ALIASES[field] ?? field;
+}
+
+/** Display label of an order-by key, e.g. "orderDate" → "Shipment order date". Never a raw key. */
+export function waveOrderByLabel(field: string): string {
+  const key = canonicalOrderByField(field);
+  const hit = WAVE_ORDER_BY_OPTIONS.find((o) => o.value === key);
+  if (hit) return hit.label;
+  const words = key.replace(/^customField\./, "custom field ").replace(/([a-z])([A-Z0-9])/g, "$1 $2").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+const LOCATION_CUSTOM_SLOT_LABELS: readonly (readonly [string, string])[] = [
+  ["textBox1", "text box 1"], ["textBox2", "text box 2"], ["textBox3", "text box 3"],
+  ["dropDown1", "drop down 1"], ["dropDown2", "drop down 2"],
+  ["toggle1", "toggle 1"], ["toggle2", "toggle 2"],
+  ["date1", "date time 1"], ["date2", "date time 2"], ["date3", "date time 3"],
 ];
 
 /** Job type "Order by Picking Method" (task sequence). Keys are `bucketFacts()` keys. */
@@ -80,6 +114,19 @@ export const PICKING_METHOD_OPTIONS: readonly OrderByOption[] = [
   { value: "lotBatchNumber", label: "Lot / batch number" },
   { value: "receivingDate", label: "Receiving date" },
   { value: "freeInventory", label: "Free inventory" },
+  { value: "locationRack", label: "Location rack" },
+  { value: "locationPosition", label: "Location position" },
+  { value: "sku", label: "SKU" },
+  { value: "itemWeight", label: "Item weight" },
+  { value: "itemVolume", label: "Item volume" },
+  ...[1, 2, 3].flatMap((n) => [
+    { value: `product.textBox${n}`, label: `Product custom field text box ${n}` },
+    { value: `product.dropDown${n}`, label: `Product custom field drop down ${n}` },
+    { value: `product.toggle${n}`, label: `Product custom field toggle ${n}` },
+    { value: `product.date${n}`, label: `Product custom field date time ${n}` },
+  ]),
+  // Logiwa: Location Custom Field Text Box 1-3 / DropDown 1-2 / Toggle 1-2 / DateTime 1-3 (facts.bucketFacts keys).
+  ...LOCATION_CUSTOM_SLOT_LABELS.map(([slot, label]) => ({ value: `locationCustomField.${slot}`, label: `Location custom field ${label}` })),
 ];
 
 export const COUNT_METHOD_OPTIONS: readonly OrderByOption[] = [

@@ -12,6 +12,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DateTimePicker } from "@/components/ui/datetime-picker";
 import { FormField } from "@/components/ui/form";
+import { parseInputDateTime } from "@/lib/format";
 import { NumberInput } from "@/components/ui/number-input";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { TextField } from "@/components/ui/text-field";
@@ -29,7 +30,7 @@ interface Base {
 
 const field = (b: Base) => ({ name: b.name as Path<FieldValues>, label: b.label, required: b.required, info: b.info, description: b.description, disabled: b.disabled, className: b.className });
 
-export function TextF({ maxLength, placeholder, trailing, onBlurExtra, onValue, autoFocus, ...base }: Base & { readonly maxLength?: number; readonly placeholder?: string; readonly trailing?: React.ReactNode; readonly onBlurExtra?: (value: string) => void; readonly onValue?: (value: string) => void; readonly autoFocus?: boolean }) {
+export function TextF({ maxLength, hideCount, placeholder, trailing, onBlurExtra, onValue, autoFocus, ...base }: Base & { readonly maxLength?: number; /** Keep the max length but hide the counter so the error sits right under the input. */ readonly hideCount?: boolean; readonly placeholder?: string; readonly trailing?: React.ReactNode; readonly onBlurExtra?: (value: string) => void; readonly onValue?: (value: string) => void; readonly autoFocus?: boolean }) {
   return (
     <FormField<FieldValues> {...field(base)}>
       {(c) => (
@@ -45,7 +46,7 @@ export function TextF({ maxLength, placeholder, trailing, onBlurExtra, onValue, 
             onBlurExtra?.(String(c.value ?? ""));
           }}
           maxLength={maxLength}
-          showCount={Boolean(maxLength)}
+          showCount={Boolean(maxLength) && !hideCount}
           placeholder={placeholder}
           trailing={trailing}
           autoFocus={autoFocus}
@@ -116,22 +117,37 @@ export function SelectF({ options, placeholder = "Select an option", clearable, 
   );
 }
 
+const DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const toDate = (v: unknown): Date | null => {
   if (typeof v !== "string" || !v) return null;
-  const d = new Date(v);
+  // "2027-05-08" is a calendar day: show it as that local day (new Date() would read UTC midnight).
+  const day = DAY_RE.exec(v);
+  const d = day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : new Date(v);
   return Number.isNaN(d.getTime()) ? null : d;
 };
+/** Local calendar day of a picked date as YYYY-MM-DD (date-only attributes never carry a time). */
+export const localDay = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-/** ISO-string date / date-time field. */
-export function DateF({ withTime = false, placeholder, ...base }: Base & { readonly withTime?: boolean; readonly placeholder?: string }) {
+/** Date-time field (ISO instant) or, without `withTime`, a date-only field (YYYY-MM-DD). */
+export function DateF({ withTime = false, placeholder, liveValidate = false, ...base }: Base & {
+  readonly withTime?: boolean;
+  readonly placeholder?: string;
+  /**
+   * Date-only fields: the form value always mirrors the typed text. Valid text is committed as
+   * YYYY-MM-DD while typing; unparseable text ("2027/06/304") is stored as typed, so the form
+   * schema rejects it and a submit can never post a different date than the one on screen.
+   */
+  readonly liveValidate?: boolean;
+}) {
   const Picker = withTime ? DateTimePicker : DatePicker;
   return (
     <FormField<FieldValues> {...field(base)}>
       {(c) => (
+        <DateInputMirror enabled={liveValidate && !withTime} value={c.value} onText={(next) => c.onChange(next)}>
         <Picker
           id={c.id}
           value={toDate(c.value)}
-          onChange={(d) => c.onChange(d ? d.toISOString() : null)}
+          onChange={(d) => c.onChange(d ? (withTime ? d.toISOString() : localDay(d)) : null)}
           onBlur={c.onBlur}
           invalid={c.invalid}
           aria-describedby={c["aria-describedby"]}
@@ -139,8 +155,34 @@ export function DateF({ withTime = false, placeholder, ...base }: Base & { reado
           placeholder={placeholder ?? (withTime ? "Enter date/time" : "Enter date")}
           clearable={!base.required}
         />
+        </DateInputMirror>
       )}
     </FormField>
+  );
+}
+
+/** Text typed into a date-only picker → the form value (see `DateF.liveValidate`). */
+export function dateTextValue(text: string): string | null {
+  const t = text.trim();
+  if (!t) return null;
+  const d = parseInputDateTime(t);
+  return d && !/[ T]\d/.test(t) ? localDay(d) : t;
+}
+
+function DateInputMirror({ enabled, value, onText, children }: { readonly enabled: boolean; readonly value: unknown; readonly onText: (value: string | null) => void; readonly children: React.ReactNode }) {
+  if (!enabled) return <>{children}</>;
+  return (
+    <div
+      className="contents"
+      onInput={(e) => {
+        const target = e.target as HTMLInputElement;
+        if (target.tagName !== "INPUT") return;
+        const next = dateTextValue(target.value);
+        if (next !== value) onText(next);
+      }}
+    >
+      {children}
+    </div>
   );
 }
 

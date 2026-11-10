@@ -25,28 +25,48 @@ import { apiFetch, apiRequest, isApiError } from "@/lib/api-client";
 import { useFormat } from "@/lib/format";
 import { useApiQuery } from "@/lib/query-client";
 import type { ProductFormValues } from "@/lib/grid-defs/products/product-form";
-import { ProductThumb, errorMessage, useCatalogCan, useInvalidateCatalog, type DeleteCheckRow, type ProductDetailData } from "./catalog-shared";
+import { headerBarcode } from "@/lib/grid-defs/products/header-barcode";
+import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { CATALOG_CRUMBS, ProductThumb, errorMessage, useSlow, useCatalogCan, useInvalidateCatalog, usePrefetchChangeLog, usePrefetchPrintouts, type DeleteCheckRow, type ProductDetailData } from "./catalog-shared";
 import { categoryBadge, duplicateValues, ProductCreateDrawer, ProductEditDrawer } from "./product-create-drawer";
+import { StagedNotices } from "./page-skeletons";
+import { OverflowFade } from "./overflow-fade";
 import { InventoryTab, KitTab, ListingsTab, OrdersTab, OverviewTab, PackTypesTab, PlanningTab, TransactionsTab } from "./product-detail-sections";
 
 const TABS = ["overview", "pack-types", "inventory", "orders", "listings", "kits", "planning", "transactions"] as const;
 type Tab = (typeof TABS)[number];
 
-export function ProductDetailSkeleton() {
+/** `notices` adds the CSS-staged slow/stalled notices (route-level fallback; works before hydration). */
+export function ProductDetailSkeleton({ notices = true }: { readonly notices?: boolean } = {}) {
   return (
-    <div className="flex flex-col gap-4 px-6 pt-5" aria-busy="true" aria-label="Loading product">
+    <div className="relative flex flex-col gap-4 px-6 pt-5" aria-busy="true" aria-label="Loading product">
       <Skeleton className="h-3 w-24" />
       <div className="flex items-center gap-3"><Skeleton className="h-14 w-14" /><Skeleton className="h-7 w-64" /></div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-20" />)}</div>
       <Skeleton className="h-8 w-full" />
       <SkeletonTable rows={8} columns={7} />
+      {notices ? <StagedNotices title="This product" /> : null}
     </div>
   );
 }
 
 export function ProductDetailPage({ id }: { readonly id: string }) {
+  // Warm the Edit drawer's form payload so Edit opens interactive at once.
+  // Only roles that can edit get the form payload (the endpoint 403s for read-only roles).
+  const canEditForm = useCatalogCan("settings.products.edit").allowed;
+  useApiQuery<unknown>(["product-form", id], canEditForm ? `/api/products/${id}` : null, { query: { view: "form" }, staleTime: 60_000 });
   const q = useApiQuery<ProductDetailData>(["product-detail", id], `/api/products/${id}`, { retry: (count, error) => !(isApiError(error) && (error.code === "NOT_FOUND" || error.code === "FORBIDDEN")) && count < 2 });
-  if (q.isPending) return <ProductDetailSkeleton />;
+  const slow = useSlow(q.isPending);
+  if (q.isPending) {
+    return (
+      <>
+        {slow ? (
+          <div className="px-6 pt-4"><Callout variant="attention" title="This is taking longer than usual" action={<Button size="sm" onClick={() => void q.refetch()}>Retry</Button>}>The server is slow to respond. You can keep waiting or retry.</Callout></div>
+        ) : null}
+        <ProductDetailSkeleton notices={false} />
+      </>
+    );
+  }
   if (q.error) {
     const notFound = isApiError(q.error) && q.error.code === "NOT_FOUND";
     return (
@@ -78,21 +98,34 @@ function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
     edit: useCatalogCan("settings.products.edit").allowed, create: useCatalogCan("settings.products.create").allowed, del: useCatalogCan("settings.products.delete").allowed,
     log: useCatalogCan("settings.products.change_log").allowed, label: useCatalogCan("settings.products.label").allowed,
   };
+  usePrefetchPrintouts(can.label, p.clientId);
+  usePrefetchChangeLog("product", p.id, can.log);
   const raw = params.get("tab");
-  const tab: Tab = (TABS as readonly string[]).includes(raw ?? "") ? (raw as Tab) : "overview";
+  const urlTab: Tab = (TABS as readonly string[]).includes(raw ?? "") ? (raw as Tab) : "overview";
+  // Local state drives the render (instant, never lost to a pending router transition); the URL
+  // mirrors it so every tab is shareable, and back/forward or a pasted link resyncs it.
+  const [tab, setTabState] = React.useState<Tab>(urlTab);
+  React.useEffect(() => setTabState(urlTab), [urlTab]);
   const setTab = (t: string) => {
-    const next = new URLSearchParams(params.toString());
+    if (!(TABS as readonly string[]).includes(t)) return;
+    setTabState(t as Tab);
+    const next = new URLSearchParams(window.location.search);
     if (t === "overview") next.delete("tab");
     else next.set("tab", t);
-    router.replace(`${pathname}${next.toString() ? `?${next.toString()}` : ""}`, { scroll: false });
+    // Native history API: syncs useSearchParams without a server round trip (Next docs, "Native History API").
+    window.history.replaceState(window.history.state, "", `${pathname}${next.toString() ? `?${next.toString()}` : ""}`);
   };
 
   const [editing, setEditing] = React.useState(false);
   const [logOpen, setLogOpen] = React.useState(false);
+  const [pointerTabs, setPointerTabs] = React.useState(false);
   const [labels, setLabels] = React.useState<readonly unknown[] | null>(null);
   const [duplicate, setDuplicate] = React.useState<ProductFormValues | null>(null);
   const [confirm, setConfirm] = React.useState<Confirm>(null);
-  const active = p.status === "Active";
+  // Optimistic status: flips the pill as soon as the server replies; the refetch runs in the background.
+  const [statusOverride, setStatusOverride] = React.useState<{ readonly from: string; readonly to: string } | null>(null);
+  const status = statusOverride && statusOverride.from === p.status ? statusOverride.to : p.status;
+  const active = status === "Active";
 
   const labelRecords = () => {
     const packs = data.packTypes.flatMap((pt) => pt.barcodes.map((b) => ({ sku: p.sku, barcode: b, name: p.name, clientCode: p.clientCode, packType: pt.packType })));
@@ -101,13 +134,14 @@ function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
 
   const toggleStatus = async () => {
     try {
-      await apiFetch(`/api/products/${p.id}/status`, { method: "POST", body: { status: active ? "Inactive" : "Active", version: p.version } });
+      const to = active ? "Inactive" : "Active";
+      await apiFetch(`/api/products/${p.id}/status`, { method: "POST", body: { status: to, version: p.version } });
+      setStatusOverride({ from: p.status, to });
       toast.success("Success", active ? `${p.sku} was deactivated.` : `${p.sku} was activated.`);
     } catch (error) {
       toast.error("Error", errorMessage(error));
-    } finally {
-      await invalidate();
     }
+    void invalidate();
   };
 
   const startDelete = async () => {
@@ -157,14 +191,17 @@ function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
   ];
 
   const deleteCheck = confirm?.kind === "delete" ? confirm.check : null;
+  const atpTotal = data.atp.reduce((s, a) => s + a.currentAtp, 0);
+  const undamagedTotal = data.atp.reduce((s, a) => s + a.undamaged, 0);
 
   return (
     <div className="flex min-h-0 flex-col pb-10">
+      <Breadcrumbs items={[...CATALOG_CRUMBS, { label: p.sku }]} className="px-6 pt-3" />
       <DetailHeader
         backHref="/products"
         backLabel="Products"
         title={<span className="flex items-center gap-3"><ProductThumb url={p.imageUrl} size={44} label={p.name} /><span className="font-mono">{p.sku}</span></span>}
-        status={p.status}
+        status={status}
         statusDomain="active"
         badges={(
           <>
@@ -178,7 +215,7 @@ function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
           <>
             <span className="font-medium text-body">{p.name}</span>
             <span>{p.clientName}</span>
-            <span>Barcode <span className="font-mono">{p.barcode}</span></span>
+            <HeaderBarcode productBarcode={p.barcode} packTypes={data.packTypes} conflict={data.barcodeConflicts.length > 0} />
             <span>Created {fmt.date(p.createdAt)}</span>
           </>
         )}
@@ -214,26 +251,51 @@ function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
         )}
       />
 
-      <div className="grid grid-cols-2 gap-3 px-6 md:grid-cols-3 xl:grid-cols-6">
+      {/* Two availability figures, named apart so they never read as a mismatch:
+          Unallocated = on hand − allocated − damaged (pickable now);
+          ATP = undamaged on hand − all open order demand (allocated or not), as on the Inventory tab. */}
+      <div className="grid grid-cols-2 gap-3 px-6 md:grid-cols-4 xl:grid-cols-7">
         <StatTile label="On hand" value={fmt.quantity(data.totals.onHand)} sublabel={`${data.inventory.length} location bucket${data.inventory.length === 1 ? "" : "s"}`} />
-        <StatTile label="Available" value={fmt.quantity(data.totals.available)} tone={data.totals.available > 0 ? "success" : "default"} info="On hand minus allocated and damaged" />
+        <StatTile label="Unallocated" value={fmt.quantity(data.totals.available)} tone={data.totals.available > 0 ? "success" : "default"} infoLabel="How Unallocated is calculated"
+          info={<>On hand − allocated − damaged = {fmt.quantity(data.totals.onHand)} − {fmt.quantity(data.totals.allocated)} − {fmt.quantity(data.totals.damaged)}. Stock on shelves that no order has reserved yet.</>} />
+        <StatTile label="ATP" value={fmt.quantity(atpTotal)} tone={atpTotal < 0 ? "danger" : "default"} infoLabel="How ATP is calculated" sublabel="Available to promise"
+          info={<>Undamaged on hand − open order demand = {fmt.quantity(undamagedTotal)} − {fmt.quantity(data.totals.openSo)}. Unlike Unallocated, it also subtracts open orders that are not allocated yet. Per warehouse on the Inventory tab.</>} />
         <StatTile label="Allocated" value={fmt.quantity(data.totals.allocated)} />
         <StatTile label="Damaged" value={fmt.quantity(data.totals.damaged)} tone={data.totals.damaged ? "danger" : "default"} />
         <StatTile label="Open order demand" value={fmt.quantity(data.totals.openSo)} sublabel={`${data.openOrders.length} order${data.openOrders.length === 1 ? "" : "s"}`} />
         <StatTile label="Inbound" value={fmt.quantity(data.totals.openPo)} sublabel={`${data.openPos.length} open PO${data.openPos.length === 1 ? "" : "s"}`} />
       </div>
 
-      <UnderlineTabs className="mt-5" ariaLabel="Product sections" tabs={tabs} active={tab} onChange={setTab} />
+      {/* Pointer clicks show only the active underline; the focus ring is for keyboard focus. */}
+      <div
+        data-pointer={pointerTabs || undefined}
+        onPointerDown={() => setPointerTabs(true)}
+        onKeyDown={(e) => { if (e.key !== "Enter" && e.key !== " ") setPointerTabs(false); }}
+        className="mt-5 [&[data-pointer]_[role=tab]]:shadow-none [&[data-pointer]_[role=tab]]:outline-none [&[data-pointer]_[role=tab]]:ring-0"
+      >
+        {/* Narrow widths: the tab row scrolls; fades + chevrons show that more tabs exist. */}
+        <OverflowFade selector="[role=tablist]" fadeClassName="from-background" label="tabs">
+        <UnderlineTabs className="gap-4 [&::-webkit-scrollbar]:hidden [scrollbar-width:none] [&_[role=tab]]:shrink-0 [&_[role=tab]]:px-1.5 [&_[role=tab]:focus-visible]:rounded-md [&_[role=tab]:focus-visible]:ring-primary/25 [&_[role=tab]:focus:not(:focus-visible)]:ring-0 [&_[role=tab]:focus:not(:focus-visible)]:outline-none" ariaLabel="Product sections" tabs={tabs} active={tab} onChange={setTab} />
+        </OverflowFade>
+      </div>
       <div className="px-6 pt-4">
-        {!active ? <Callout variant="attention" title="This product is inactive" className="mb-4">It can't be added to new orders or purchase orders. Activate it to use it again.</Callout> : null}
+        {data.barcodeConflicts.length ? (
+          <Callout variant="attention" title={`Barcode ${p.barcode} is also used by ${data.barcodeConflicts.length} other product${data.barcodeConflicts.length === 1 ? "" : "s"}`} className="mb-4">
+            Scanning this barcode at receiving or picking is ambiguous. Change the barcode on one of:{" "}
+            {data.barcodeConflicts.map((c, i) => (
+              <React.Fragment key={c.id}>{i ? ", " : ""}<Link href={`/products/${c.id}`} className="font-medium text-primary hover:underline">{c.sku}</Link></React.Fragment>
+            ))}.
+          </Callout>
+        ) : null}
+        {!active ? <Callout variant="attention" title="This product is inactive" className="mb-4">It can&apos;t be added to new orders or purchase orders. Activate it to use it again.</Callout> : null}
         {tab === "overview" ? <OverviewTab data={data} /> : null}
-        {tab === "pack-types" ? <PackTypesTab data={data} /> : null}
+        {tab === "pack-types" ? <PackTypesTab data={data} canEdit={can.edit} onSaved={() => void invalidate()} /> : null}
         {tab === "inventory" ? <InventoryTab data={data} /> : null}
         {tab === "orders" ? <OrdersTab data={data} /> : null}
         {tab === "listings" ? <ListingsTab data={data} /> : null}
         {tab === "kits" ? <KitTab data={data} /> : null}
-        {tab === "planning" ? <PlanningTab data={data} /> : null}
-        {tab === "transactions" ? <TransactionsTab data={data} onOpenChangeLog={can.log ? () => setLogOpen(true) : undefined} /> : null}
+        {tab === "planning" ? <PlanningTab data={data} onEdit={can.edit ? () => setEditing(true) : undefined} /> : null}
+        {tab === "transactions" ? <TransactionsTab data={data} canAddStock={can.edit} onOpenChangeLog={can.log ? () => setLogOpen(true) : undefined} /> : null}
       </div>
 
       {editing ? <ProductEditDrawer productId={p.id} onOpenChange={(o) => !o && setEditing(false)} onSaved={() => void invalidate()} /> : null}
@@ -259,7 +321,7 @@ function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
         icon={deleteCheck?.reason ? Ban : Trash2}
         title={deleteCheck?.reason ? `${p.sku} can't be deleted` : `Delete ${p.sku}?`}
         description={deleteCheck?.reason ? `${deleteCheck.reason}. Deactivate it instead so it can't be ordered or received.` : "This action cannot be undone. Linked channel listings become unlinked."}
-        records={{ columns: [{ key: "sku", label: "SKU" }, { key: "name", label: "Name" }, { key: "result", label: "Delete" }], rows: [{ sku: p.sku, name: p.name, result: deleteCheck?.reason ? <span className="text-danger">Blocked</span> : <span className="text-success">Can be deleted</span> }] }}
+        records={{ columns: [{ key: "sku", label: "Product" }, { key: "result", label: "Delete" }], rows: [{ sku: <span className="block max-w-[260px]" title={`${p.sku} · ${p.name}`}><span className="block truncate whitespace-nowrap font-mono">{p.sku}</span><span className="block truncate whitespace-nowrap text-[11px] text-secondary">{p.name}</span></span>, result: deleteCheck?.reason ? <span className="whitespace-nowrap text-danger">Blocked</span> : <span className="whitespace-nowrap text-success">Can be deleted</span> }] }}
         confirmLabel={deleteCheck?.reason ? (active && can.edit ? "Deactivate" : "Close") : "Yes"}
         cancelLabel="No"
         onConfirm={async () => {
@@ -268,5 +330,17 @@ function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
         }}
       />
     </div>
+  );
+}
+
+/** Product barcode, else the primary pack type's first barcode (labelled), else a muted "No barcode". */
+function HeaderBarcode({ productBarcode, packTypes, conflict }: { readonly productBarcode: string | null | undefined; readonly packTypes: ProductDetailData["packTypes"]; readonly conflict: boolean }) {
+  const { value, source } = headerBarcode(productBarcode, packTypes);
+  if (!value) return <span className="text-faint" title="No barcode stored on the product or its pack types. Labels print the SKU.">No barcode</span>;
+  return (
+    <span title={source ? `Barcode of the ${source} pack type` : undefined}>
+      Barcode <span className="font-mono">{value}</span>{source ? <span className="text-faint"> ({source})</span> : null}
+      {conflict ? <Badge tone="warning" size="sm" className="ml-1.5">Conflict</Badge> : null}
+    </span>
   );
 }

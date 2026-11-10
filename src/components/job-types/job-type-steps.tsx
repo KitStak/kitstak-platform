@@ -26,7 +26,10 @@ import {
   COUNT_METHOD_OPTIONS, GROUPING_OPTIONS, JOB_TEMPLATE_DEFS, LOCATION_CONDITION_FIELDS, LP_CONDITION_FIELDS, PICKING_FLAG_DEFS,
   PICKING_METHOD_OPTIONS, PRODUCT_CONDITION_FIELDS,
 } from "@/lib/grid-defs/jobs/conditions";
-import type { jobTypeInputSchema } from "@/lib/grid-defs/jobs/forms";
+import {
+  POST_PICKING_FLOW, RETAILER_FLOW_TYPES, RETAILER_LABEL_PRINT_OPTIONS, RETAILER_TEMPLATE, UCC_LABEL_SCANNING_TYPES, retailerOf,
+  type JobTypeSettingsInput, type RetailerSettings, type jobTypeInputSchema,
+} from "@/lib/grid-defs/jobs/forms";
 import type { WaveRuleOptions } from "@/server/repositories/wave-rules-options";
 import { selectionFields } from "@/components/wave-rules/wave-rule-steps";
 import { ConditionsEditor, OrderByEditor, SortableList } from "@/components/wave-rules/rule-editors";
@@ -50,7 +53,7 @@ function settingsOf(form: Form): JobTypeSettings {
   return (form.watch("settings") as JobTypeSettings | undefined) ?? defaultSettings();
 }
 
-function setSettings(form: Form, next: JobTypeSettings): void {
+function setSettings(form: Form, next: JobTypeSettings | JobTypeSettingsInput): void {
   form.setValue("settings", next, { shouldDirty: true, shouldValidate: form.formState.isSubmitted });
 }
 
@@ -70,7 +73,7 @@ export function GeneralStep({ form, isEdit }: { readonly form: Form; readonly is
   }, [algos, needsAlgo, warehouseId, form]);
   const s = settingsOf(form);
   return (
-    <FormSection title="General">
+    <section aria-label="General" className="flex flex-col gap-4">
       <div className="grid gap-4 md:grid-cols-2">
         <FormField<JF> name="code" label="Job type name" required>
           {(c) => <TextField {...c} value={(c.value as string | undefined) ?? ""} onChange={(e) => c.onChange(e.target.value)} placeholder="Enter job type name" maxLength={100} />}
@@ -95,7 +98,7 @@ export function GeneralStep({ form, isEdit }: { readonly form: Form; readonly is
       <FormField<JF> name="description" label="Description" required>
         {(c) => <Textarea id={c.id} value={(c.value as string | undefined) ?? ""} onChange={(e) => c.onChange(e.target.value)} onBlur={c.onBlur} placeholder="Enter your description" maxLength={300} rows={3} aria-invalid={c["aria-invalid"]} />}
       </FormField>
-    </FormSection>
+    </section>
   );
 }
 
@@ -189,6 +192,7 @@ function PickingSettings({ form }: { readonly form: Form }) {
       <FormSection title="Order scope" description="Which orders this job type accepts.">
         <RadioCards ariaLabel="Order scope" columns={3} value={s.orderScope} onChange={(v) => setSettings(form, { ...s, orderScope: v })} options={JOB_ORDER_SCOPES.map((o) => ({ value: o, title: o }))} />
       </FormSection>
+      <RetailerFields form={form} />
       <FormSection title="Picking flow">
         <div className="grid gap-2 md:grid-cols-2">
           {PICKING_FLAG_DEFS.map((f) => {
@@ -200,6 +204,46 @@ function PickingSettings({ form }: { readonly form: Form }) {
       <BatchFields form={form} />
       <MobileScreens form={form} />
     </div>
+  );
+}
+
+const opts = (values: readonly string[]) => values.map((v) => ({ value: v, label: v }));
+
+/**
+ * Retailer Flow Type, UCC Label Scanning Type and Default Retailer Label Print Option (Logiwa 02 §6).
+ * Shown for All Orders and the Retailer Compliance template; disabled until a retailer flow applies.
+ */
+function RetailerFields({ form }: { readonly form: Form }) {
+  const s = settingsOf(form);
+  const r = retailerOf(s);
+  const isRetailer = s.template === RETAILER_TEMPLATE;
+  if (!isRetailer && s.orderScope !== "All Orders") return null;
+  const postPicking = isRetailer && r.flowType === POST_PICKING_FLOW;
+  const set = (patch: Partial<RetailerSettings>) => {
+    const next: RetailerSettings = { ...r, ...patch };
+    // Scanning / print options only exist for post-picking UCC generation.
+    if (next.flowType !== POST_PICKING_FLOW) { next.uccLabelScanningType = "None"; next.defaultLabelPrintOption = "None"; }
+    setSettings(form, { ...s, retailer: next } as JobTypeSettingsInput);
+  };
+  const flowReason = isRetailer ? undefined : `Choose the "${RETAILER_TEMPLATE}" template to use a retailer flow.`;
+  const uccReason = postPicking ? undefined : "Available with Retailer Post-Picking UCC Generation.";
+  const field = (label: string, tip: string, reason: string | undefined, control: React.ReactNode) => (
+    <div className={cn("flex flex-col gap-1", reason && "opacity-70")} title={reason}>
+      <span className="flex items-center gap-1 text-[12px] font-semibold text-body">{label}<InfoTip content={reason ? `${tip} ${reason}` : tip} /></span>
+      {control}
+    </div>
+  );
+  return (
+    <FormSection title="Retailer compliance" description="UCC-128 label flow for retailer (B2B) orders picked with this job type.">
+      <div className="grid gap-3 md:grid-cols-3">
+        {field("Retailer flow type", "When UCC labels are generated for retailer orders: before picking, or after picking when the parent LP is scanned.", flowReason,
+          <Select aria-label="Retailer flow type" value={r.flowType} disabled={!isRetailer} options={opts(RETAILER_FLOW_TYPES)} onChange={(v) => set({ flowType: (v ?? "None") as RetailerSettings["flowType"] })} />)}
+        {field("UCC label scanning type", "What the packer scans to confirm a UCC label.", uccReason,
+          <Select aria-label="UCC label scanning type" value={r.uccLabelScanningType} disabled={!postPicking} options={opts(UCC_LABEL_SCANNING_TYPES)} onChange={(v) => set({ uccLabelScanningType: (v ?? "None") as RetailerSettings["uccLabelScanningType"] })} />)}
+        {field("Default retailer label print option", "For orders using Retailer Post-Picking UCC Generation, scanning the Parent LP Number will automatically generate UCC labels based on this default setting.", uccReason,
+          <Select aria-label="Default retailer label print option" value={r.defaultLabelPrintOption} disabled={!postPicking} options={opts(RETAILER_LABEL_PRINT_OPTIONS)} onChange={(v) => set({ defaultLabelPrintOption: (v ?? "None") as RetailerSettings["defaultLabelPrintOption"] })} />)}
+      </div>
+    </FormSection>
   );
 }
 

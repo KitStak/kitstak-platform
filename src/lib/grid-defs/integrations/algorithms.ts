@@ -64,6 +64,10 @@ export const putawayTestSchema = z.object({
   lot: z.string().max(100).nullish(),
   expiry: z.string().max(40).nullish(),
   damageReason: z.string().max(100).nullish(),
+  packType: z.string().max(50).nullish(),
+  productionDate: z.string().max(40).nullish(),
+  receivedAt: z.string().max(40).nullish(),
+  allocatedQty: z.number().int().min(0).max(1_000_000).nullish(),
   /** Unsaved editor state; when present the test runs on the draft in a rolled-back savepoint. */
   draft: z.object({ warehouseId: z.string().min(1).max(64), rules: z.array(algorithmRuleSchema).max(30) }).optional(),
 });

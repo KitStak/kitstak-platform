@@ -12,7 +12,7 @@ export function ScreenConfigSplashPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader title="Screen Configuration" helper="Build the mobile screens your operators follow, per warehouse and per purchase order." />
-      <div className="mx-4 mb-6 grid flex-1 grid-cols-1 items-center gap-8 rounded-xl border border-border bg-surface px-6 py-10 shadow-xs lg:mx-6 lg:grid-cols-[1fr_minmax(260px,380px)] lg:px-12">
+      <div className="mx-4 mb-6 mt-5 grid max-w-[1100px] grid-cols-1 items-center gap-8 rounded-xl border border-border bg-surface px-6 py-10 shadow-xs lg:mx-6 lg:grid-cols-[1fr_minmax(260px,380px)] lg:px-12">
         <div className="flex max-w-md flex-col gap-4">
           <div>
             <h2 className="text-[20px] font-semibold text-foreground">Select operation type</h2>

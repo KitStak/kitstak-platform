@@ -31,6 +31,7 @@ export function StepVendor({ form }: { readonly form: UseFormReturn<PoFormValues
   const canEdit = useCan("settings.vendors.edit").allowed;
   const [drawer, setDrawer] = React.useState<{ id: string | null } | null>(null);
   const error = form.formState.errors.vendorId?.message;
+  const vendorSelection = React.useMemo<Record<string, boolean>>(() => (vendorId ? { [vendorId]: true } : {}), [vendorId]);
 
   const choose = (row: Pick<VendorRow, "id" | "displayName">) => {
     form.setValue("vendorId", row.id, { shouldDirty: true, shouldValidate: true });
@@ -76,7 +77,7 @@ export function StepVendor({ form }: { readonly form: UseFormReturn<PoFormValues
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[12px] text-secondary">
-          {vendorId ? <>Selected: <span className="font-semibold text-foreground">{form.getValues("vendorLabel")}</span></> : "Select the vendor that ships this order."}
+          {vendorId ? <>Selected: <span className="font-semibold text-foreground">{form.getValues("vendorLabel")}</span></> : null}
         </p>
         <DisabledReason reason={canCreate ? null : "You don't have permission to create vendors"}>
           <Button variant="primary" size="sm" disabled={!canCreate} onClick={() => setDrawer({ id: null })}>
@@ -92,6 +93,8 @@ export function StepVendor({ form }: { readonly form: UseFormReturn<PoFormValues
           columns={columns}
           getRowId={(r) => r.id}
           selectable={false}
+          // Single-select: the footer counter follows the radio (1 when a vendor is chosen).
+          selection={vendorSelection}
           onRowClick={(r) => choose(r)}
           emptyTitle="This client has no active vendors yet"
           emptyDescription="Add the vendor that ships this order."

@@ -28,6 +28,7 @@ export const COUNT_PLAN_FIELDS: readonly CountGridField[] = [
   { field: "countType", label: "Count Plan Type", type: "enum", options: COUNT_TYPES },
   { field: "warehouseId", label: "Warehouse", type: "enum" },
   { field: "lockLocations", label: "Lock Locations", type: "boolean" },
+  { field: "isAi", label: "AI Plan", type: "boolean" },
   { field: "createdByName", label: "Created By", type: "text" },
   { field: "jobCodes", label: "Job Code", type: "text" },
   { field: "scheduledAt", label: "Scheduled Count Date", type: "date" },
@@ -101,6 +102,26 @@ export const COUNT_LOCATION_PICKER_FIELDS: readonly CountGridField[] = [
   { field: "rack", label: "Rack", type: "text" },
   { field: "replenishmentType", label: "Replenishment Type", type: "enum", options: ["Source", "Target"] },
   { field: "volume", label: "Volume", type: "number", decimals: 2 },
+  { field: "width", label: "Width", type: "number", decimals: 2 },
+  { field: "length", label: "Length", type: "number", decimals: 2 },
+  { field: "capacityType", label: "Capacity Type", type: "text" },
+  { field: "maxCapacityQty", label: "Max Capacity Qty", type: "number" },
+  { field: "maxSkuQty", label: "Max SKU Qty", type: "number" },
+  { field: "mezzanine", label: "Mezzanine", type: "text" },
+  { field: "colorCode", label: "Color Code", type: "text" },
+  { field: "clientName", label: "Client (dedicated)", type: "text" },
+  { field: "singleClient", label: "Single Client", type: "boolean" },
+  { field: "onlyOneSku", label: "Only One SKU", type: "boolean" },
+  { field: "onlyOneLot", label: "Only One Lot", type: "boolean" },
+  { field: "onlyOneLp", label: "Only One LP", type: "boolean" },
+  { field: "onlyDamaged", label: "Only Damaged", type: "boolean" },
+  { field: "preventInventorySync", label: "Prevent Inventory Sync", type: "boolean" },
+  { field: "onHand", label: "On Hand", type: "number" },
+  { field: "skuCount", label: "Number of SKU", type: "number" },
+  { field: "customFields", label: "Custom Fields (any value)", type: "text" },
+  { field: "stockClientName", label: "Client (has stock)", type: "text" },
+  { field: "lastCountedAt", label: "Last Counted Date", type: "date" },
+  { field: "inOpenCount", label: "In Another Open Count", type: "boolean" },
 ];
 
 /** Add Product modal filters. */
@@ -127,6 +148,23 @@ export const COUNT_PRODUCT_PICKER_FIELDS: readonly CountGridField[] = [
   { field: "trackProductionDate", label: "Track Production Date", type: "boolean" },
   { field: "trackSerial", label: "Track Serial Number", type: "boolean" },
   { field: "onHand", label: "On Hand (this warehouse)", type: "number" },
+  { field: "hasInventory", label: "Has Inventory (this warehouse)", type: "boolean" },
+  { field: "category", label: "Category", type: "text" },
+  { field: "isHazmat", label: "Hazmat", type: "boolean" },
+  { field: "trackSecondarySerial", label: "Track Secondary Serial", type: "boolean" },
+  { field: "customFields", label: "Custom Fields (any value)", type: "text" },
+  { field: "lastCountedAt", label: "Last Counted Date", type: "date" },
+  { field: "inOpenCount", label: "In Another Open Count", type: "boolean" },
+];
+
+/** Add License Plate modal filters (LP count type). */
+export const COUNT_LP_PICKER_FIELDS: readonly CountGridField[] = [
+  { field: "number", label: "LP Number", type: "text" },
+  { field: "lpType", label: "LP Type", type: "text" },
+  { field: "locationCode", label: "Location", type: "text" },
+  { field: "clientName", label: "Client", type: "text" },
+  { field: "onHand", label: "On Hand", type: "number" },
+  { field: "skuCount", label: "Num. of SKU", type: "number" },
 ];
 
 export const COUNT_PICKER_SORT_FIELDS = ["code", "zone", "aisle", "level", "walkingPathPriority", "sku", "name", "clientName", "onHand"] as const;
@@ -170,7 +208,17 @@ export const COUNT_PERMISSIONS = {
   mobileCountUpdate: "mobile.cycle_count.complete_count_and_update_inventory",
   mobileInstant: "mobile.instant_count.create_new_instant_count",
   mobileInstantUpdate: "mobile.instant_count.complete_count_and_update_inventory",
+  /** Logiwa mobile Cycle Count: "Your jobs" (assigned to me) and "Job pool" (unassigned, Take job). */
+  mobileYourJobs: "mobile.cycle_count.view_your_jobs",
+  mobileJobPool: "mobile.cycle_count.view_job_pool",
 } as const;
+
+/**
+ * Segregation of duties (four-eyes): a user may post a count variance they counted themselves only
+ * when they also hold one of these supervisor permissions (Count Plans Delete: managers and admins by
+ * default, never the default operator). Everyone else needs a second user to run Update Inv.
+ */
+export const COUNT_SELF_APPROVE_PERMISSIONS: readonly string[] = [COUNT_PERMISSIONS.delete];
 
 /** Who may enter counts on the web Count Sheet. */
 export const COUNT_EXECUTE_PERMISSIONS: readonly string[] = [COUNT_PERMISSIONS.edit, COUNT_PERMISSIONS.updateInv, COUNT_PERMISSIONS.mobileCount];

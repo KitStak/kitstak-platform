@@ -302,7 +302,7 @@ function lpTree(tx: Tx, rootId: string): string[] {
 }
 
 /** Moves an LP and all of its child LPs (with their stock) to another location. */
-export function moveLp(tx: Tx, ctx: DomainCtx, input: { lpId: string; toLocationId: string; refs?: TxnRefs }): TxnRow[] {
+export function moveLp(tx: Tx, ctx: DomainCtx, input: { lpId: string; toLocationId: string; refs?: TxnRefs; type?: TxnType }): TxnRow[] {
   const lp = getLp(tx, input.lpId);
   const to = getLocation(tx, input.toLocationId);
   if (lp.warehouseId !== to.warehouseId) throw ruleViolation("The LP and location must be in the same warehouse.");
@@ -311,5 +311,5 @@ export function moveLp(tx: Tx, ctx: DomainCtx, input: { lpId: string; toLocation
   const ids = lpTree(tx, lp.id);
   tx.update(schema.licensePlates).set({ locationId: to.id, updatedBy: ctx.userId }).where(inArray(schema.licensePlates.id, ids)).run();
   const buckets = tx.select().from(schema.inventory).where(and(inArray(schema.inventory.lpId, ids), gt(schema.inventory.onHand, 0))).all();
-  return buckets.flatMap((b) => moveWholeBucket(tx, ctx, b, to.id, "Inventory Movement", input.refs));
+  return buckets.flatMap((b) => moveWholeBucket(tx, ctx, b, to.id, input.type ?? "Inventory Movement", input.refs));
 }

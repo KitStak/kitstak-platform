@@ -8,7 +8,7 @@ import type { AppDb } from "@/server/api/db";
 import { writeAudit } from "./audit";
 import { hashPassword, needsRehash, verifyPassword } from "./password";
 import { getPasswordPolicy, lockoutUntil } from "./password-policy";
-import { hitRateLimit, RATE_LIMITS, resetRateLimit } from "./rate-limit";
+import { hitRateLimit, RATE_LIMITS, refundRateLimit, resetRateLimit } from "./rate-limit";
 
 /** Dummy hash compared when the user does not exist, so timing does not reveal registration. */
 let timingPadHash: string | null = null;
@@ -70,6 +70,8 @@ export function authenticate(db: AppDb, attempt: LoginAttempt, now: Date = new D
     .where(eq(users.id, user.id))
     .run();
   resetRateLimit(db, RATE_LIMITS.loginAccount, email);
+  // Successful sign-ins give back their per-IP hit, so only failures use up the shared budget.
+  refundRateLimit(db, RATE_LIMITS.loginIp, attempt.ip);
   audit("auth.login", "success", user.id, {});
   return { ok: true, userId: user.id };
 }

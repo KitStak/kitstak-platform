@@ -32,10 +32,12 @@ export interface ScanFieldProps {
   readonly hint?: React.ReactNode;
   readonly size?: "md" | "lg";
   readonly className?: string;
+  /** Fires on every keystroke (e.g. to clear a stale error as soon as the value changes). */
+  readonly onValueChange?: (value: string) => void;
 }
 
 export const ScanField = React.forwardRef<ScanFieldHandle, ScanFieldProps>(function ScanField(
-  { id, label, placeholder = "Scan or type, then press Enter", onScan, disabled, busy, autoFocus, clearable = true, error, hint, size = "lg", className },
+  { id, label, placeholder = "Scan or type, then press Enter", onScan, disabled, busy, autoFocus, clearable = true, error, hint, size = "lg", className, onValueChange },
   ref
 ) {
   const input = React.useRef<HTMLInputElement>(null);
@@ -56,7 +58,10 @@ export const ScanField = React.forwardRef<ScanFieldHandle, ScanFieldProps>(funct
     if (!code || disabled || busy) return;
     setValue("");
     await onScan(code);
-    input.current?.focus();
+    // Keep focus for the next scan, unless the scan moved focus on purpose
+    // (an order scan hands focus to the product field).
+    const active = typeof document === "undefined" ? null : document.activeElement;
+    if (!active || active === document.body || active === input.current) input.current?.focus();
   };
 
   return (
@@ -83,7 +88,7 @@ export const ScanField = React.forwardRef<ScanFieldHandle, ScanFieldProps>(funct
           placeholder={placeholder}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-err` : hint ? `${id}-hint` : undefined}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => { setValue(e.target.value); onValueChange?.(e.target.value); }}
           onKeyDown={(e) => {
             if (e.key === "Enter" || (e.key === "Tab" && value.trim())) {
               e.preventDefault();

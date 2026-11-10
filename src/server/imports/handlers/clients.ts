@@ -55,7 +55,7 @@ export const handler: ImportHandler = {
     const saved = updateClient(db, auth, actor, d.id, parse({
       name, code: d.code, officialName: d.officialName ?? name, status, contactName: str(row.contactName) ?? d.contactName, contactEmail: str(row.email) ?? d.contactEmail,
       phone: str(row.phone) ?? d.phone, currency: d.currency as ClientInput["currency"], settings: d.settings, taxId: d.taxId ?? "", billingPlan: d.billingPlan as ClientInput["billingPlan"],
-      customFields: d.customFields as ClientInput["customFields"], note: "", addresses: [...kept, ...billing], version: d.version,
+      customFields: d.customFields as ClientInput["customFields"], sscc: d.sscc, note: "", addresses: [...kept, ...billing], version: d.version,
     }));
     return { entityId: saved.id, message: `Client ${code} updated` };
   },

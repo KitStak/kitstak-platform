@@ -10,11 +10,12 @@ import { PACKING_PERMISSIONS } from "@/server/repositories/packing-scan";
 import { scopedCtx } from "@/server/repositories/returns";
 
 export const POST = defineRoute({
-  permission: [PACKING_PERMISSIONS.view],
+  // Execute key at route level: callers who can't pack get 403 before the body is validated.
+  permission: PACKING_PERMISSIONS.execute,
   transaction: false,
   body: completePackingSchema,
   handler: async ({ db, auth, actor, body }) => {
-    if (!can(auth, PACKING_PERMISSIONS.execute)) throw forbiddenError("You need the Execute Task permission to pack orders.");
+    if (!can(auth, PACKING_PERMISSIONS.view)) throw forbiddenError("You need access to the Packing Station to pack orders.");
     if (body.withLabel && !can(auth, PACKING_PERMISSIONS.createLabel)) throw forbiddenError("You need the Create Label permission to print shipping labels.");
     return completePacking(db, scopedCtx(actor, auth), body);
   },

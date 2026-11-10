@@ -9,8 +9,11 @@ import { and, eq, isNotNull, lte, sql } from "drizzle-orm";
 import { localParts, toMinutes, zonedToUtc } from "@/lib/grid-defs/jobs/schedule";
 import type { AppDb } from "@/server/api/db";
 import * as schema from "@/server/db/schema";
-import { jobs as jobsDomain, systemCtx } from "@/server/domain";
-import { runWave } from "@/server/repositories/waves-run";
+import { systemCtx } from "@/server/domain";
+import { cancelJobCascade } from "@/server/repositories/jobs-commands";
+import { settleDeadJobs } from "@/server/repositories/jobs-settle";
+import { ensureNextRuns } from "@/server/repositories/wave-rules";
+import { resumeStalledAiWaves, runWave } from "@/server/repositories/waves-run";
 import type { SchedulerTask, TaskResult } from "../types";
 
 const TICK_MS = 30_000;
@@ -51,7 +54,7 @@ function applyDeletes(db: AppDb, now: Date): number {
     )).all();
     for (const job of stale) {
       try {
-        db.transaction((tx) => jobsDomain.cancelJob(tx, systemCtx(SCHEDULER_RUN_BY), { jobId: job.id }));
+        db.transaction((tx) => cancelJobCascade(tx, systemCtx(SCHEDULER_RUN_BY), job.id));
         cancelled += 1;
       } catch {
         // A job that started between the read and the cancel is simply kept.
@@ -62,6 +65,8 @@ function applyDeletes(db: AppDb, now: Date): number {
 }
 
 export async function runDueWaveRules(db: AppDb, now: Date): Promise<TaskResult> {
+  // Active scheduled rules always carry a next run (seeded / imported rules arrive without one).
+  ensureNextRuns(db, now);
   const due = dueRules(db, now);
   const results: string[] = [];
   for (const rule of due) {
@@ -71,7 +76,13 @@ export async function runDueWaveRules(db: AppDb, now: Date): Promise<TaskResult>
     results.push(res.summary);
   }
   const deleted = applyDeletes(db, now);
-  if (due.length === 0 && deleted === 0) return { status: "skipped", message: "No wave rules due" };
+  // AI waves a restart left mid-optimization are finished here (the run route normally completes them via after()).
+  const resumed = resumeStalledAiWaves(db, systemCtx(SCHEDULER_RUN_BY), now);
+  if (resumed > 0) results.push(`${resumed} stalled AI ${resumed === 1 ? "wave" : "waves"} completed`);
+  // Jobs left with no open task by cancels in other modules close here (critic R4 zombie jobs).
+  const settled = settleDeadJobs(db, systemCtx(SCHEDULER_RUN_BY)).filter((s) => s.from !== s.to).length;
+  if (settled > 0) results.push(`${settled} ${settled === 1 ? "job" : "jobs"} with no open tasks closed`);
+  if (due.length === 0 && deleted === 0 && resumed === 0 && settled === 0) return { status: "skipped", message: "No wave rules due" };
   return { status: "ok", message: [...results, deleted > 0 ? `${deleted} not-started jobs deleted` : ""].filter(Boolean).join(" | ") };
 }
 

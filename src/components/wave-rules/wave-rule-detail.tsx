@@ -11,10 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PriorityFlag, StatusPill } from "@/components/ui/status-pill";
+import { PriorityFlag } from "@/components/ui/status-pill";
+import { formatInZone } from "@/lib/grid-defs/jobs/schedule";
+import { JobsStatusPill } from "@/components/jobs/grid-columns";
 import { useFormat } from "@/lib/format";
 import { useApiQuery } from "@/lib/query-client";
-import { WAVE_ORDER_BY_OPTIONS } from "@/lib/grid-defs/jobs/conditions";
+import { waveOrderByLabel } from "@/lib/grid-defs/jobs/conditions";
 import type { getWaveRuleDetail } from "@/server/repositories/wave-rules";
 import type { WaveRuleOptions } from "@/server/repositories/wave-rules-options";
 import { jobsOfWaveHref } from "@/components/jobs/report-pages";
@@ -43,7 +45,7 @@ export function WaveRuleDetailDrawer({ rule, onClose, onEdit }: { readonly rule:
   const roleName = new Map((options.data?.data.roles ?? []).map((t) => [t.id, t.name]));
   const userName = new Map((options.data?.data.users ?? []).map((t) => [t.id, t.name]));
   const mergeName = new Map((options.data?.data.mergeRules ?? []).map((t) => [t.value, t.label]));
-  const orderLabel = (f: string) => WAVE_ORDER_BY_OPTIONS.find((o) => o.value === f)?.label ?? f;
+  const orderLabel = waveOrderByLabel;
   return (
     <Drawer
       open={rule !== null}
@@ -72,7 +74,7 @@ export function WaveRuleDetailDrawer({ rule, onClose, onEdit }: { readonly rule:
             <Row label="Filters">{d.filters.length ? <span className="flex flex-wrap gap-1">{d.filters.map((f) => <span key={f.field} className="rounded-full bg-primary-soft px-2 py-0.5 text-[12px] text-primary">{f.label}</span>)}</span> : <span className="text-secondary">Every open order of the warehouse</span>}</Row>
             <Row label="Order by">{d.orderBy.length ? d.orderBy.map((o) => `${orderLabel(o.field)} (${o.dir === "asc" ? "ascending" : "descending"})`).join(" → ") : none}</Row>
             <Row label="Schedule">{d.scheduleDays.length ? `${d.scheduleDays.join(", ")} at ${d.scheduleTimes.join(", ")} (${d.timezone})` : "Not scheduled"}</Row>
-            <Row label="Next run">{d.nextRunAt ? fmt.gridDateTime(d.nextRunAt) : "—"}</Row>
+            <Row label="Next run">{d.nextRunAt ? <span title={`Your time: ${fmt.gridDateTime(d.nextRunAt)}`}>{formatInZone(d.nextRunAt, d.timezone)}</span> : "—"}</Row>
             {d.operationType !== "Order Merge" ? (
               <Row label="Assignment">{d.assignMode === "Pool" ? "Job pool" : d.assignMode === "Roles" ? `Roles: ${(d.assigneeRoleIds ?? []).map((x) => roleName.get(x) ?? "Role").join(", ")}` : `Users: ${(d.assigneeUserIds ?? []).map((x) => userName.get(x) ?? "User").join(", ")}`}</Row>
             ) : null}
@@ -89,7 +91,7 @@ export function WaveRuleDetailDrawer({ rule, onClose, onEdit }: { readonly rule:
                   {d.recentWaves.map((w) => (
                     <tr key={w.id} className="border-b border-border last:border-b-0">
                       <td className="px-2 py-1.5"><Link className="font-medium text-primary hover:underline" href={jobsOfWaveHref(w.waveNo)}>{w.waveNo}</Link></td>
-                      <td className="px-2 py-1.5"><StatusPill status={w.status} domain="wave" size="sm" /></td>
+                      <td className="px-2 py-1.5"><JobsStatusPill status={w.status} domain="wave" size="sm" /></td>
                       <td className="px-2 py-1.5 tabular-nums">{w.ordersMet}</td>
                       <td className="px-2 py-1.5 tabular-nums">{w.allocatedOrders}</td>
                       <td className="px-2 py-1.5 tabular-nums">{w.shortageOrders}</td>

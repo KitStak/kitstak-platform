@@ -11,5 +11,5 @@ export function listCountLines(db: AppDb, scope: Scope, kind: LineGridKind, quer
 }
 
 export function countLinesById(db: AppDb, scope: Scope, ids: readonly string[]): CountLineListRow[] {
-  return gridRowsById<CountLineListRow>(db, lineGrid(scope, "locations"), raw("l.id"), ids).map(lineRow);
+  return gridRowsById<CountLineListRow>(db, lineGrid(scope, "plan"), raw("l.id"), ids).map(lineRow);
 }

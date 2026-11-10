@@ -1,11 +1,12 @@
 /**
  * `GET /api/printouts` — per-type template grid (grid grammar; `?typeKey=`), or, with
  * `?typeKeys=a,b&clientId=`, the print-modal template list (active templates the client may use).
- * `POST` — create a printout from the 5-step wizard.
+ * `POST` — create a printout from the 5-step wizard. The grid needs `settings.printouts_labels.view` (403 otherwise).
  */
 import { z } from "zod";
 import { defineRoute } from "@/server/api/define-route";
 import { created, listResult } from "@/server/api/envelope";
+import { forbiddenError } from "@/server/api/errors";
 import { printoutSchema } from "@/lib/grid-defs/admin/printouts";
 import { createPrintout, listPrintouts, printTemplatesFor } from "@/server/repositories/printouts";
 import { listParam } from "@/server/repositories/users-shared";
@@ -20,9 +21,9 @@ export const GET = defineRoute({
   query,
   handler: ({ db, auth, query: q, grid }) => {
     if (q.typeKeys !== undefined) return printTemplatesFor(db, listParam(q.typeKeys), q.clientId ?? null);
-    if (!auth.permissions.has("settings.printouts_labels.view")) {
-      return listResult([], { total: 0, page: 1, pageSize: 100 });
-    }
+    // The template grid is admin metadata: same gate as the /settings/printouts page. The
+    // `typeKeys` branch above stays open to print callers (active template names only).
+    if (!auth.permissions.has("settings.printouts_labels.view")) throw forbiddenError("You don't have permission to view printout templates");
     const gq = grid();
     const { rows, total } = listPrintouts(db, gq, q.typeKey);
     return listResult(rows, { total, page: gq.page, pageSize: gq.pageSize });

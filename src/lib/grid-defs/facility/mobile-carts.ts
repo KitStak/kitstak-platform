@@ -1,7 +1,7 @@
 /** Mobile Carts grid + wizard schema (M10). PURE. */
 import { z } from "zod";
 import { MOBILE_CART_STATUSES } from "@/lib/enums";
-import { requiredId, requiredText, optionalText, versionField, type FacilityField } from "./common";
+import { requiredId, requiredPattern, requiredText, optionalText, versionField, type FacilityField } from "./common";
 
 export const MOBILE_CARTS_GRID_KEY = "mobile-carts";
 export const CART_OPERATION_TYPES = ["Picking", "Replenishment"] as const;
@@ -47,6 +47,37 @@ export function buildCells(cartCode: string, levels: number, columns: number): C
   return cells;
 }
 
+/** Put-wall colour cycle shown on the cell list (Logiwa parity: Orange, Green, Red, Blue, Pink, Light Blue, Purple). */
+export const CELL_COLORS = [
+  { name: "Orange", hex: "#F28C28" },
+  { name: "Green", hex: "#28B573" },
+  { name: "Red", hex: "#E5484D" },
+  { name: "Blue", hex: "#2F6FEB" },
+  { name: "Pink", hex: "#E86BB0" },
+  { name: "Light Blue", hex: "#5BC0EB" },
+  { name: "Purple", hex: "#7C4DDB" },
+] as const;
+
+/** Suggestion sequence: 1-based, level-major then column (the order operators fill cells). */
+export function cellSequence(level: number, column: number, columns: number): number {
+  return (level - 1) * Math.max(1, columns) + column;
+}
+
+/** Colour for a cell, cycling by suggestion sequence. */
+export function cellColor(sequence: number): (typeof CELL_COLORS)[number] {
+  return CELL_COLORS[(Math.max(1, sequence) - 1) % CELL_COLORS.length];
+}
+
+/** Logiwa CELL NAME: `<Cart>_<column>_<level>`, e.g. MC-01_3_2. */
+export function cellName(cartCode: string, column: number, level: number): string {
+  return `${cartCode.trim() || "CART"}_${column}_${level}`;
+}
+
+/** DISPLAY NAME shown on the mobile screen: level letter + 2-digit column, e.g. B03 — the same suffix as the cell barcode, so what operators read is what they scan. */
+export function cellDisplayName(level: number, column: number): string {
+  return `${String.fromCharCode(64 + Math.max(1, level))}${String(column).padStart(2, "0")}`;
+}
+
 const cellSchema = z.object({
   level: z.number().int().min(1).max(MAX_CART_LEVELS),
   column: z.number().int().min(1).max(MAX_CART_COLUMNS),
@@ -54,7 +85,7 @@ const cellSchema = z.object({
 });
 
 const INFO_SHAPE = {
-  code: requiredText("Code", 40).regex(/^[A-Za-z0-9_-][A-Za-z0-9 _-]*$/, "Letters, numbers, space, dash or underscore"),
+  code: requiredPattern("Code", 40, /^[A-Za-z0-9_-][A-Za-z0-9 _-]*$/, "Letters, numbers, space, dash or underscore"),
   warehouseId: requiredId("Warehouse"),
   description: optionalText(250),
   cartTypeId: requiredId("Mobile cart type"),
@@ -90,4 +121,4 @@ export const MOBILE_CART_DEFAULTS: MobileCartInput = {
   allowMultipleJob: false, isDynamic: false, cells: [],
 };
 
-export const duplicateCartSchema = z.object({ code: requiredText("Code", 40).regex(/^[A-Za-z0-9_-][A-Za-z0-9 _-]*$/, "Letters, numbers, space, dash or underscore") });
+export const duplicateCartSchema = z.object({ code: requiredPattern("Code", 40, /^[A-Za-z0-9_-][A-Za-z0-9 _-]*$/, "Letters, numbers, space, dash or underscore") });

@@ -14,7 +14,9 @@ import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
 import { round } from "@/lib/grid-defs/facility/common";
 import { buildSscc18, companyPrefixFor, LP_NUMBER_FIELDS, LP_NUMBER_SEARCH_FIELDS, LP_NUMBER_SORT_FIELDS, type LpCreate, type LpUpdateInput } from "@/lib/grid-defs/facility/lp-numbers";
-import { assertFound, assertVersion, assertWarehouseInScope, compileGrid, domainCtxOf, duplicateError, listScope, logCreate, logUpdate, type Actor, type GridBinding, qc } from "./locations-shared";
+import { assertFound, assertVersion, assertWarehouseInScope, compileGrid, domainCtxOf, duplicateError, listScope, logCreate, logDelete, logUpdate, type Actor, type GridBinding, qc } from "./locations-shared";
+import { runBulk } from "@/server/domain/bulk";
+import type { BulkResult } from "@/server/domain/types";
 
 const lp = s.licensePlates;
 const ENTITY = "license_plate";
@@ -25,8 +27,23 @@ const warehouseCodeSql = sql<string>`(SELECT w.code FROM warehouses w WHERE w.id
 const lpTypeCodeSql = sql<string>`(SELECT t.code FROM lp_types t WHERE t.id = ${qc(lp.lpTypeId)})`;
 const locationCodeSql = sql<string | null>`(SELECT l.code FROM locations l WHERE l.id = ${qc(lp.locationId)})`;
 const parentSql = sql<string | null>`(SELECT p.number FROM license_plates p WHERE p.id = ${qc(lp.parentLpId)})`;
+const parentTypeSql = sql<string | null>`(SELECT t.code FROM license_plates p JOIN lp_types t ON t.id = p.lp_type_id WHERE p.id = ${qc(lp.parentLpId)})`;
 const clientSql = sql<string | null>`(SELECT c.code FROM clients c WHERE c.id = ${qc(lp.clientId)})`;
 const unitsSql = sql<number>`COALESCE((SELECT SUM(i.on_hand) FROM inventory i WHERE i.lp_id = ${qc(lp.id)}), 0)`;
+
+/*
+ * Effective dimensions (critic R4: LPs created from packing showed 0 × 0 × 0 / 0.00 while siblings of the
+ * same type showed 24 × 16 × 12). An LP with no dimensions of its own inherits its LP type's, an LP with no
+ * weight inherits the type's empty weight, and Actual volume is L × W × H unless a measured volume was saved.
+ */
+const typeCol = (col: "length" | "width" | "height" | "empty_weight") => sql`(SELECT t.${sql.raw(col)} FROM lp_types t WHERE t.id = ${qc(lp.lpTypeId)})`;
+const dimsUnset = sql`(${qc(lp.length)} = 0 AND ${qc(lp.width)} = 0 AND ${qc(lp.height)} = 0)`;
+const effDim = (own: Parameters<typeof qc>[0], col: "length" | "width" | "height") => sql<number>`CASE WHEN ${dimsUnset} THEN COALESCE(${typeCol(col)}, 0) ELSE ${qc(own)} END`;
+const lengthSql = effDim(lp.length, "length");
+const widthSql = effDim(lp.width, "width");
+const heightSql = effDim(lp.height, "height");
+const weightSql = sql<number>`CASE WHEN ${qc(lp.weight)} = 0 THEN COALESCE(${typeCol("empty_weight")}, 0) ELSE ${qc(lp.weight)} END`;
+const volumeSql = sql<number>`CASE WHEN ${qc(lp.actualVolume)} > 0 THEN ${qc(lp.actualVolume)} ELSE round(${lengthSql} * ${widthSql} * ${heightSql}, 3) END`;
 
 export const LP_NUMBER_SQL: Readonly<Record<string, SQL>> = {
   number: sql`${lp.number}`,
@@ -36,12 +53,13 @@ export const LP_NUMBER_SQL: Readonly<Record<string, SQL>> = {
   lpTypeCode: lpTypeCodeSql,
   locationCode: locationCodeSql,
   status: sql`${lp.status}`,
-  length: sql`${lp.length}`,
-  width: sql`${lp.width}`,
-  height: sql`${lp.height}`,
-  weight: sql`${lp.weight}`,
-  actualVolume: sql`${lp.actualVolume}`,
+  length: lengthSql,
+  width: widthSql,
+  height: heightSql,
+  weight: weightSql,
+  actualVolume: volumeSql,
   parentLpNumber: parentSql,
+  parentLpTypeCode: parentTypeSql,
   originalNumber: sql`${lp.originalNumber}`,
   alternateBarcode: sql`${lp.alternateBarcode}`,
   isSscc18: sql`${lp.isSscc18}`,
@@ -70,6 +88,7 @@ export interface LpNumberRow {
   readonly weight: number;
   readonly actualVolume: number;
   readonly parentLpNumber: string | null;
+  readonly parentLpTypeCode: string | null;
   readonly originalNumber: string | null;
   readonly alternateBarcode: string | null;
   readonly isSscc18: boolean;
@@ -83,8 +102,8 @@ export interface LpNumberRow {
 function selection() {
   return {
     id: lp.id, number: lp.number, warehouseId: lp.warehouseId, warehouseCode: warehouseCodeSql, lpTypeId: lp.lpTypeId, lpTypeCode: lpTypeCodeSql,
-    locationId: lp.locationId, locationCode: locationCodeSql, status: lp.status, length: lp.length, width: lp.width, height: lp.height, weight: lp.weight,
-    actualVolume: lp.actualVolume, parentLpNumber: parentSql, originalNumber: lp.originalNumber, alternateBarcode: lp.alternateBarcode, isSscc18: lp.isSscc18,
+    locationId: lp.locationId, locationCode: locationCodeSql, status: lp.status, length: lengthSql, width: widthSql, height: heightSql, weight: weightSql,
+    actualVolume: volumeSql, parentLpNumber: parentSql, parentLpTypeCode: parentTypeSql, originalNumber: lp.originalNumber, alternateBarcode: lp.alternateBarcode, isSscc18: lp.isSscc18,
     clientCode: clientSql, units: unitsSql, labelPrintedAt: lp.labelPrintedAt, createdAt: lp.createdAt, version: lp.version,
   };
 }
@@ -146,9 +165,14 @@ export function createLpNumbers(tx: AppDb, auth: AuthContext, actor: Actor, inpu
   const locationId = resolveLocation(tx, input.warehouseId, input.locationId);
   let clientId: string | null = null;
   let clientCode = "";
-  if (input.isSscc18 && input.method === "sequence") {
+  const sscc = input.isSscc18 && input.method === "sequence";
+  // Client: required for SSCC18 (its GS1 prefix), optional otherwise to pre-assign the LPs (Logiwa shows it in From Sequence mode).
+  if (sscc || input.clientId) {
     const client = input.clientId ? tx.select({ id: s.clients.id, code: s.clients.code }).from(s.clients).where(eq(s.clients.id, input.clientId)).get() : undefined;
-    if (!client || !hasClient(auth.scope, client.id)) throw new AppError("VALIDATION", "Client is required for SSCC18 numbers", { fieldErrors: { clientId: ["Client is required for SSCC18 numbers"] } });
+    if (!client || !hasClient(auth.scope, client.id)) {
+      const message = sscc ? "Client is required for SSCC18 numbers" : "Pick a client you have access to";
+      throw new AppError("VALIDATION", message, { fieldErrors: { clientId: [message] } });
+    }
     clientId = client.id;
     clientCode = client.code;
   }
@@ -220,6 +244,95 @@ export function updateLpNumber(tx: AppDb, auth: AuthContext, actor: Actor, id: s
   const pick = (r: typeof lp.$inferSelect) => ({ number: r.number, alternateBarcode: r.alternateBarcode ?? "", length: r.length, width: r.width, height: r.height, weight: r.weight, actualVolume: r.actualVolume, isSscc18: r.isSscc18, originalNumber: r.originalNumber ?? "" });
   logUpdate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: id, entityCode: after.number }, pick(before), pick(after));
   return { id, number: after.number, version: after.version };
+}
+
+/* ---------------- delete / void ---------------- */
+
+/**
+ * Raw-SQL probes for every place an LP id is recorded without a foreign key. A hit means the LP
+ * carries history: it is voided (status Removed, kept for the audit trail) instead of deleted.
+ */
+const LP_HISTORY_PROBES: readonly { readonly label: string; readonly where: (id: string) => SQL }[] = [
+  { label: "inventory buckets", where: (id) => sql`SELECT 1 FROM inventory WHERE lp_id = ${id}` },
+  { label: "stock movements", where: (id) => sql`SELECT 1 FROM inventory_transactions WHERE from_lp_id = ${id} OR to_lp_id = ${id} OR from_parent_lp_id = ${id} OR to_parent_lp_id = ${id}` },
+  { label: "receipts", where: (id) => sql`SELECT 1 FROM receipts WHERE lp_id = ${id} OR parent_lp_id = ${id}` },
+  { label: "tasks", where: (id) => sql`SELECT 1 FROM tasks WHERE source_lp_id = ${id} OR target_lp_id = ${id}` },
+  { label: "shipments", where: (id) => sql`SELECT 1 FROM shipments WHERE parent_lp_id = ${id}` },
+  { label: "count lines", where: (id) => sql`SELECT 1 FROM count_plan_lines WHERE lp_id = ${id} UNION ALL SELECT 1 FROM count_line_entries WHERE lp_id = ${id}` },
+  { label: "work orders", where: (id) => sql`SELECT 1 FROM work_order_components WHERE lp_id = ${id}` },
+  { label: "order lines", where: (id) => sql`SELECT 1 FROM order_lines WHERE pinned_lp_id = ${id}` },
+  { label: "snapshots", where: (id) => sql`SELECT 1 FROM inventory_snapshots WHERE lp_id = ${id} OR parent_lp_id = ${id}` },
+  { label: "missing log", where: (id) => sql`SELECT 1 FROM missing_log WHERE lp_id = ${id}` },
+];
+
+export interface LpRemovalFacts {
+  readonly status: LpNumberRow["status"];
+  readonly units: number;
+  readonly parentNumber: string | null;
+  readonly childCount: number;
+  /** Where the LP is referenced (empty when it was never used). */
+  readonly history: readonly string[];
+}
+
+export type LpRemoval = { readonly mode: "delete" } | { readonly mode: "void"; readonly because: string } | { readonly mode: "blocked"; readonly reason: string };
+
+/**
+ * Pure rule for removing an LP number (critic R5: LPs could never be removed, so their LP type
+ * could never be deleted):
+ * - blocked while it holds stock, is nested on a parent LP, has child LPs, or has shipped;
+ * - deleted outright when it was never used anywhere;
+ * - otherwise voided: status Removed, location cleared, row kept so its history still resolves.
+ */
+export function lpRemovalPlan(f: LpRemovalFacts): LpRemoval {
+  if (f.units > 0 || f.status === "Occupied") return { mode: "blocked", reason: `holds ${f.units.toLocaleString("en-US")} ${f.units === 1 ? "unit" : "units"}; move or adjust the stock first` };
+  if (f.status === "Shipped") return { mode: "blocked", reason: "has shipped; shipped LPs keep their shipment record" };
+  if (f.parentNumber) return { mode: "blocked", reason: `is nested on parent LP ${f.parentNumber}; take it off the parent first` };
+  if (f.childCount > 0) return { mode: "blocked", reason: `has ${f.childCount} child ${f.childCount === 1 ? "LP" : "LPs"}; take them off first` };
+  if (f.history.length === 0) return { mode: "delete" };
+  if (f.status === "Removed") return { mode: "blocked", reason: `is already voided; it stays for its ${f.history.join(", ")} history` };
+  return { mode: "void", because: `it has ${f.history.join(", ")} history` };
+}
+
+export function lpRemovalFacts(db: AppDb, row: typeof lp.$inferSelect): LpRemovalFacts {
+  const units = db.select({ n: sql<number>`COALESCE(SUM(${s.inventory.onHand}), 0)` }).from(s.inventory).where(eq(s.inventory.lpId, row.id)).get()?.n ?? 0;
+  const parentNumber = row.parentLpId ? db.select({ n: lp.number }).from(lp).where(eq(lp.id, row.parentLpId)).get()?.n ?? null : null;
+  const childCount = db.select({ n: sql<number>`count(*)` }).from(lp).where(eq(lp.parentLpId, row.id)).get()?.n ?? 0;
+  const history = LP_HISTORY_PROBES.filter((p) => db.get<{ x: number } | undefined>(sql`SELECT EXISTS (${p.where(row.id)}) AS x`)?.x === 1).map((p) => p.label);
+  return { status: row.status, units, parentNumber, childCount, history };
+}
+
+/** Per-row removal preview for the confirm dialog: what will happen to each selected LP. */
+export function lpRemovalPreview(db: AppDb, auth: AuthContext, ids: readonly string[]) {
+  return [...new Set(ids)].slice(0, 1000).map((id) => {
+    const row = loadLp(db, auth, id);
+    const plan = lpRemovalPlan(lpRemovalFacts(db, row));
+    return { id, number: row.number, status: row.status, ...plan };
+  });
+}
+
+export type LpRemovalPreview = ReturnType<typeof lpRemovalPreview>;
+
+/** Bulk delete / void (per-id savepoints). Every success writes a Delete row, or a status Update row for a void. */
+export function removeLpNumbers(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult & { readonly deleted: readonly string[]; readonly voided: readonly string[] } {
+  const ctx = domainCtxOf(actor, auth);
+  const deleted: string[] = [];
+  const voided: string[] = [];
+  const result = runBulk(tx, ids, (inner, id) => {
+    const row = loadLp(inner, auth, id);
+    const plan = lpRemovalPlan(lpRemovalFacts(inner, row));
+    if (plan.mode === "blocked") throw new AppError("INVALID_STATE", `${row.number} ${plan.reason}`);
+    if (plan.mode === "delete") {
+      inner.delete(lp).where(eq(lp.id, id)).run();
+      logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.number, warehouseId: row.warehouseId });
+      deleted.push(id);
+      return;
+    }
+    inner.update(lp).set({ status: "Removed", locationId: null, updatedBy: actor.userId, version: sql`${lp.version} + 1` }).where(eq(lp.id, id)).run();
+    const loc = row.locationId ? inner.select({ code: s.locations.code }).from(s.locations).where(eq(s.locations.id, row.locationId)).get()?.code ?? "" : "";
+    logUpdate(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.number }, { status: row.status, location: loc }, { status: "Removed", location: "" });
+    voided.push(id);
+  });
+  return { ...result, deleted, voided };
 }
 
 /* ---------------- labels ---------------- */

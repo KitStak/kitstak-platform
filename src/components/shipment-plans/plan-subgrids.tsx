@@ -10,7 +10,12 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { PageHeader } from "@/components/layout/page-header";
 import type { ShippingField } from "@/lib/grid-defs/shipping/common";
 import { buildColumns, dash, exportColumnsOf, type ColumnSpec } from "@/components/shipping/column-kit";
-import { useFilterFields } from "@/components/shipping/shipping-client";
+import { useFilterFields, useHydratedPermissions } from "@/components/shipping/shipping-client";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Download, Lock } from "lucide-react";
+import { csvEscape } from "@/components/grid/legacy-csv";
+import type { BulkAction } from "@/components/grid/grid-types";
+import { toast } from "@/components/ui/toast";
 import type { PlanOrderRow } from "./plans-client";
 
 type Row = PlanOrderRow & { readonly planCode: string; readonly orderCode: string; readonly orderStatus: string; readonly planStatus: string; readonly lpNumber?: string };
@@ -67,6 +72,7 @@ const LP_COLUMNS = buildColumns(PLAN_LP_SPECS);
 interface SubGridConfig {
   readonly gridKey: string;
   readonly path: string;
+  readonly permission: string;
   readonly fields: readonly ShippingField[];
   readonly specs: readonly ColumnSpec<Row>[];
   readonly columns: ReturnType<typeof buildColumns<Row>>;
@@ -79,32 +85,78 @@ interface SubGridConfig {
 
 const CONFIG: Readonly<Record<"orders" | "lps", SubGridConfig>> = {
   orders: {
-    gridKey: SHIPMENT_PLAN_ORDERS_GRID_KEY, path: "/api/shipment-plans/orders", fields: PLAN_ORDER_FIELDS, specs: PLAN_ORDER_SPECS, columns: ORDER_COLUMNS,
-    title: "Shipment plan orders", helper: "Every order on a shipment plan, with its live order status and the plan it rides on.",
+    gridKey: SHIPMENT_PLAN_ORDERS_GRID_KEY, path: "/api/shipment-plans/orders", permission: "fulfillment.shipment_plan.view_plan_orders", fields: PLAN_ORDER_FIELDS, specs: PLAN_ORDER_SPECS, columns: ORDER_COLUMNS,
+    title: "Shipment Plan Orders", helper: "Every order on a shipment plan, with its live order status and the plan it rides on.",
     search: "Plan code or order code", empty: "No orders on shipment plans yet", emptyHint: "Orders appear here once they are added to a shipment plan.",
   },
   lps: {
-    gridKey: SHIPMENT_PLAN_LPS_GRID_KEY, path: "/api/shipment-plans/lps", fields: PLAN_LP_FIELDS, specs: PLAN_LP_SPECS, columns: LP_COLUMNS,
-    title: "Shipment plan LPs", helper: "License plates allocated to or shipped from the orders of each shipment plan.",
+    gridKey: SHIPMENT_PLAN_LPS_GRID_KEY, path: "/api/shipment-plans/lps", permission: "fulfillment.shipment_plan.view_plan_lps", fields: PLAN_LP_FIELDS, specs: PLAN_LP_SPECS, columns: LP_COLUMNS,
+    title: "Shipment Plan LPs", helper: "License plates allocated to or shipped from the orders of each shipment plan.",
     search: "Plan code, LP or order code", empty: "No license plates on shipment plans yet", emptyHint: "LPs appear once a plan's orders are allocated or shipped from license plates.",
   },
 };
 
 export function PlanSubGridPage({ kind }: { readonly kind: "orders" | "lps" }) {
   const c = CONFIG[kind];
+  const permissions = useHydratedPermissions();
+  // Permissions hydrate after mount: only show the no-access state once they are known.
+  if (permissions.size === 0) return <PageHeader title={c.title} helper={c.helper} tabs="shipment-plans" />;
+  if (!permissions.has(c.permission) && !permissions.has("fulfillment.shipment_plan.view")) {
+    return (
+      <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
+        <PageHeader title={c.title} helper={c.helper} tabs="shipment-plans" />
+        <EmptyState
+          icon={Lock}
+          title="You don't have access to this view"
+          description="Ask an administrator for this Shipment Plan permission. Plans themselves are still available on the Shipment Plan tab."
+        />
+      </div>
+    );
+  }
+  return <PlanSubGrid c={c} />;
+}
+
+/** Plain cell value for CSV (status pills and links export their text). */
+const csvValue = (row: Row, key: string): unknown => (row as unknown as Record<string, unknown>)[key];
+
+/** CSV of the selected rows, columns in grid order (Logiwa "export selected"). */
+export function selectedRowsCsv(rows: readonly Row[], columns: readonly { key: string; label: string }[]): string {
+  return [columns.map((c) => csvEscape(c.label)).join(","), ...rows.map((r) => columns.map((c) => csvEscape(csvValue(r, c.key))).join(","))].join("\r\n");
+}
+
+function downloadCsv(name: string, csv: string): void {
+  const url = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function PlanSubGrid({ c }: { readonly c: SubGridConfig }) {
   const fields = useFilterFields(c.fields);
   const g = useGrid<Row>({ gridKey: c.gridKey, path: c.path, fields });
   const hasState = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
+  const exportColumns = exportColumnsOf(c.specs);
+  const bulkActions: readonly BulkAction[] = [{
+    key: "export-selected", label: "Export selected", icon: Download, emptyReason: "Select rows to export",
+    onSelect: (ids) => {
+      const picked = g.rows.filter((r) => ids.includes(r.id));
+      downloadCsv(`${c.title} (${picked.length} selected).csv`, selectedRowsCsv(picked, exportColumns));
+      toast.success("Export ready", `${picked.length} ${picked.length === 1 ? "row" : "rows"} exported to CSV.`);
+    },
+  }];
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader title={c.title} helper={c.helper} tabs="shipment-plans" />
-      <GridToolbar {...g.toolbarProps} searchPlaceholder={c.search} onRefresh={g.refetch} />
+      <GridToolbar {...g.toolbarProps} searchPlaceholder={c.search} onRefresh={g.refetch} bulkActions={bulkActions} selectedIds={g.selectedIds} bulkNoun="row" />
       <div className="flex min-h-0 flex-1 flex-col">
         <DataGrid<Row>
           {...g.gridProps}
-          selectable={false}
           columns={c.columns}
-          exportColumns={exportColumnsOf(c.specs)}
+          exportColumns={exportColumns}
           getRowId={(r) => r.id}
           emptyTitle={hasState ? "Nothing matches this view" : c.empty}
           emptyDescription={hasState ? "Try changing the filters or search term." : c.emptyHint}

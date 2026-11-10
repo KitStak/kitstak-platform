@@ -5,7 +5,7 @@ import { shipmentPackageSchema } from "@/lib/grid-defs/facility/shipment-package
 import { createShipmentPackage, listShipmentPackages } from "@/server/repositories/shipment-packages";
 
 export const GET = defineRoute({
-  permission: "settings.shipment_packages.view",
+  permission: ["settings.shipment_packages.view", "inventory.inventory_by_location.view"],
   handler: ({ db, auth, grid }) => {
     const query = grid();
     const { rows, total } = listShipmentPackages(db, auth, query);

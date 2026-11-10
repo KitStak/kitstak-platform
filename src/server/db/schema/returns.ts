@@ -1,7 +1,7 @@
 /** Returns: return orders (RMA) and lines. */
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { RETURN_DISPOSITIONS, RETURN_SOURCES, RETURN_STATUSES } from "../../../lib/enums";
-import { pk, stamps } from "../columns";
+import { json, pk, stamps } from "../columns";
 import { shipmentOrders } from "./outbound";
 
 export const returnOrders = sqliteTable("return_orders", {
@@ -22,10 +22,17 @@ export const returnOrders = sqliteTable("return_orders", {
   expectedReturnDate: text("expected_return_date"),
   actualReturnDate: text("actual_return_date"),
   note: text("note"),
+  /** Manual return shipping cost of this RMA (stations-returns R4-1). */
+  returnShippingCost: real("return_shipping_cost"),
+  /** Every return tracking number of this RMA (stations-returns R4-1). */
+  returnTrackingNumbers: json<string[]>("return_tracking_numbers"),
   ...stamps(),
 }, (t) => [
   uniqueIndex("rma_code_idx").on(t.rmaCode),
   index("return_orders_so_idx").on(t.shipmentOrderId),
+  // Return Orders grid / summary: scope filter and default sort (stations-returns REQ-10).
+  index("return_orders_scope_idx").on(t.warehouseId, t.clientId, t.status),
+  index("return_orders_created_idx").on(t.createdAt),
 ]);
 
 export const returnOrderLines = sqliteTable("return_order_lines", {
@@ -41,4 +48,8 @@ export const returnOrderLines = sqliteTable("return_order_lines", {
   disposition: text("disposition", { enum: RETURN_DISPOSITIONS }),
   lineStatus: text("line_status", { enum: RETURN_STATUSES }).notNull().default("Pending"),
   ...stamps(),
-}, (t) => [index("return_lines_return_idx").on(t.returnOrderId)]);
+}, (t) => [
+  index("return_lines_return_idx").on(t.returnOrderId),
+  // committedReturnQty per order line (stations-returns REQ-14).
+  index("return_lines_order_line_idx").on(t.orderLineId),
+]);

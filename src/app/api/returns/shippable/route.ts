@@ -1,4 +1,8 @@
-/** `GET /api/returns/shippable?orderIds=a,b` — shipped lines and returnable quantities (Create RMA). */
+/**
+ * `GET /api/returns/shippable?orderIds=a,b` — shipped lines and returnable quantities (Create RMA).
+ * Query contract: `orderIds` is a comma-separated list of shipment order ids (max 50, deduped).
+ * Repeated `orderId=` params are also accepted and merged. Missing ids come back as `{ id, missing: true }`.
+ */
 import { z } from "zod";
 import { defineRoute } from "@/server/api/define-route";
 import { AppError } from "@/server/api/errors";
@@ -6,9 +10,13 @@ import { RETURN_PERMISSIONS, shippableOrder } from "@/server/repositories/return
 
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.createRma,
-  query: z.object({ orderIds: z.string().min(1, "Choose a shipped order").max(4000) }),
+  query: z.object({
+    orderIds: z.string({ error: "Choose a shipped order (orderIds=id1,id2)" }).max(4000).optional(),
+    orderId: z.union([z.string(), z.array(z.string())]).optional(),
+  }).refine((q) => Boolean(q.orderIds?.trim()) || Boolean(q.orderId), { message: "Choose a shipped order (orderIds=id1,id2)" }),
   handler: ({ db, auth, query }) => {
-    const ids = [...new Set(query.orderIds.split(",").map((s) => s.trim()).filter(Boolean))].slice(0, 50);
+    const raw = [query.orderIds ?? "", ...[query.orderId ?? []].flat()].join(",");
+    const ids = [...new Set(raw.split(",").map((s) => s.trim()).filter(Boolean))].slice(0, 50);
     return ids.map((id) => {
       try {
         return shippableOrder(db, auth.scope, id);

@@ -48,6 +48,10 @@ export function renderBarcodeSvg({ value, type = "code128", height = 12, scale =
       includetext: showText && !TWO_D.has(type),
       textxalign: "center",
       textsize: 9,
+      // Human-readable text sits below the bars with a quiet zone around the symbol (catalog REQ-9).
+      textyoffset: 2,
+      paddingwidth: 4,
+      paddingheight: 2,
     });
     return { svg: withIntrinsicSize(svg), error: null };
   } catch (e) {

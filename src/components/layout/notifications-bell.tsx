@@ -69,8 +69,8 @@ export function NotificationsBell() {
           <Bell className="h-4 w-4" aria-hidden />
         </HeaderIconButton>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[380px] p-0">
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+      <PopoverContent align="end" className="flex w-[380px] flex-col overflow-hidden p-0">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
           <h2 className="text-[14px] font-semibold text-foreground">Notifications</h2>
           {unread > 0 ? <span className="rounded-full bg-primary-soft px-1.5 text-[11px] font-semibold text-primary">{unread} unread</span> : null}
           <button
@@ -93,13 +93,13 @@ export function NotificationsBell() {
         ) : rows.length === 0 ? (
           <p className="px-3 py-8 text-center text-[13px] text-secondary">You&apos;re all caught up.</p>
         ) : (
-          <ul className="ks-scroll max-h-[420px] divide-y divide-border overflow-y-auto">
+          <ul className="ks-scroll max-h-[420px] min-h-0 flex-1 divide-y divide-border overflow-y-auto overscroll-contain">
             {rows.map((n) => (
               <NotificationItem key={n.id} notification={n} onOpen={() => openNotification(n)} onMarkRead={() => markRead.mutate({ ids: [n.id] })} compact />
             ))}
           </ul>
         )}
-        <div className="border-t border-border bg-surface-sunken px-3 py-2">
+        <div className="shrink-0 border-t border-border bg-surface-sunken px-3 py-2">
           <Link href="/notifications" onClick={() => setOpen(false)} className="text-[12px] font-semibold text-primary hover:underline">View all notifications</Link>
         </div>
       </PopoverContent>

@@ -36,10 +36,12 @@ const FROM = raw(`
   LEFT JOIN lp_types plt ON plt.id = plp.lp_type_id
   LEFT JOIN license_plates oplp ON oplp.id = lp.parent_lp_id
   LEFT JOIN inventory b ON b.id = COALESCE(t.from_inventory_id, t.to_inventory_id)
+  LEFT JOIN lookup_values ar ON ar.id = t.adjustment_reason_id
 `);
 
 const SQL_FOR: Readonly<Record<string, SQL>> = {
-  orderCode: raw("o.code"),
+  // Remove Inventory rows have no order: expose their ADJ-<seq> reference so API/CSV consumers never see null.
+  orderCode: raw("COALESCE(o.code, 'ADJ-' || printf('%06d', t.seq))"),
   originalOrderCode: raw("COALESCE(ol.original_order_code, mo.code)"),
   storeOrderNumber: raw("o.store_order_number"),
   sku: raw("p.sku"),
@@ -59,6 +61,8 @@ const SQL_FOR: Readonly<Record<string, SQL>> = {
   masterOrderCode: raw("mo.code"),
   isBackOrder: raw("o.is_back_order"),
   shipmentDate: raw("t.at"),
+  reference: raw("(CASE WHEN t.type = 'Shipment' THEN o.code ELSE 'ADJ-' || printf('%06d', t.seq) END)"),
+  adjustmentReason: raw("ar.name"),
   shipmentType: raw("(CASE WHEN t.type = 'Shipment' THEN 'Shipment Order' ELSE 'Remove Inventory' END)"),
   note: raw("t.note"),
   clientName: raw("c.name"),

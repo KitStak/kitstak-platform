@@ -29,7 +29,7 @@ export function SearchMode({ value, onChange }: { readonly value: QuickSearchMod
         <button
           type="button"
           aria-label={`Search mode: ${SEARCH_MODE_LABELS[value]}`}
-          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-l-md border border-r-0 border-border-strong/70 bg-surface-sunken px-2.5 text-[12px] font-medium text-secondary transition-colors hover:text-body focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-l-md border border-r-0 border-border-strong/70 bg-surface-sunken px-2.5 text-[12px] font-medium text-secondary transition-colors hover:text-body focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
         >
           {SEARCH_MODE_LABELS[value]}
           <ChevronDown className="h-3 w-3" aria-hidden />

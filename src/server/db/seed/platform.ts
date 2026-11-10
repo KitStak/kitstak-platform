@@ -13,7 +13,8 @@ import { setClock, isoOf, utcAt } from "./runtime";
 import type { Id } from "./types";
 import type { World } from "./world";
 
-const APPS: readonly (readonly [string, string, string, string, boolean])[] = [
+/** App catalog rows: key, name, description, category, active in the demo seed. */
+export const SEED_APPS: readonly (readonly [string, string, string, string, boolean])[] = [
   ["ai-jobs", "AI Jobs", "Optimizes pick paths and batches with machine learning.", "Operations", false],
   ["custom-branding", "Custom Branding", "Brand packing slips and the client portal with your logo and colors.", "Branding", false],
   ["labor-analytics", "Labor Analytics", "Task, associate and receiving performance analysis.", "Analytics", true],
@@ -32,7 +33,7 @@ const APPS: readonly (readonly [string, string, string, string, boolean])[] = [
   ["eshipper", "eShipper Carrier Integration", "Cross-border shipping via eShipper.", "Carriers", false],
 ];
 
-const TAGS: readonly (readonly [string, string, (typeof schema.tags.$inferInsert)["scope"]])[] = [
+const TAGS: readonly (readonly [string, string, NonNullable<(typeof schema.tags.$inferInsert)["scope"]>])[] = [
   ["VIP", "#621DB8", "shipment_order"], ["Gift", "#E55B56", "shipment_order"], ["Rush", "#B20B1C", "shipment_order"], ["Prime", "#0D36A3", "shipment_order"],
   ["Wholesale", "#394357", "shipment_order"], ["Fragile", "#A13406", "any"], ["Influencer", "#16C2AA", "shipment_order"], ["Replacement", "#EBAC00", "shipment_order"],
   ["Holiday 2026", "#17874D", "any"], ["Address Check", "#ED634A", "shipment_order"], ["Priority Vendor", "#28B573", "purchase_order"],
@@ -51,7 +52,7 @@ function seedPrintouts(tx: Tx): number {
 }
 
 function seedApps(w: World, tx: Tx): void {
-  tx.insert(schema.apps).values(APPS.map(([key, name, description, category, active]) => ({
+  tx.insert(schema.apps).values(SEED_APPS.map(([key, name, description, category, active]) => ({
     key, name, description, category, isActive: active, activatedAt: active ? isoOf(utcAt(140, 15)) : null, activatedBy: active ? w.access.admin.id : null,
   }))).run();
 }
@@ -69,8 +70,20 @@ function seedCompany(tx: Tx): void {
   ]).run();
 }
 
+/**
+ * Upserts the demo tags. Workflow "Add Tag" actions replayed earlier in the seed may already
+ * have created some by name, so an existing (name, scope) row is reused and given the palette color.
+ */
 function tagIds(tx: Tx): Map<string, Id> {
-  return new Map(TAGS.map(([name, color, scope]) => [name, tx.insert(schema.tags).values({ name, color, scope }).returning({ id: schema.tags.id }).get().id]));
+  return new Map(TAGS.map(([name, color, tagScope]) => {
+    const scope = tagScope ?? "any";
+    const found = tx.select({ id: schema.tags.id }).from(schema.tags).where(and(eq(schema.tags.name, name), eq(schema.tags.scope, scope))).get();
+    if (found) {
+      tx.update(schema.tags).set({ color }).where(eq(schema.tags.id, found.id)).run();
+      return [name, found.id] as const;
+    }
+    return [name, tx.insert(schema.tags).values({ name, color, scope }).returning({ id: schema.tags.id }).get().id] as const;
+  }));
 }
 
 function applyTags(w: World, tx: Tx, tags: ReadonlyMap<string, Id>): number {
@@ -85,7 +98,7 @@ function applyTags(w: World, tx: Tx, tags: ReadonlyMap<string, Id>): number {
     const tagId = tags.get(name);
     if (!tagId) continue;
     const ids = tx.select({ id: o.id }).from(o).where(where).all();
-    if (ids.length > 0) tx.insert(schema.entityTags).values(ids.map((r) => ({ tagId, entityType: "shipment_order", entityId: r.id }))).run();
+    if (ids.length > 0) tx.insert(schema.entityTags).values(ids.map((r) => ({ tagId, entityType: "shipment_order", entityId: r.id }))).onConflictDoNothing().run();
     n += ids.length;
   }
   const pos = tx.select({ id: schema.purchaseOrders.id, poType: schema.purchaseOrders.poType }).from(schema.purchaseOrders).all();
@@ -94,7 +107,7 @@ function applyTags(w: World, tx: Tx, tags: ReadonlyMap<string, Id>): number {
     const name = damaged.has(po.id) ? "Damaged Inbound" : po.poType === "Purchase Order- Non Crossdock" ? "Cross-dock" : i % 4 === 0 ? "Priority Vendor" : null;
     const tagId = name ? tags.get(name) : undefined;
     if (tagId) {
-      tx.insert(schema.entityTags).values({ tagId, entityType: "purchase_order", entityId: po.id }).run();
+      tx.insert(schema.entityTags).values({ tagId, entityType: "purchase_order", entityId: po.id }).onConflictDoNothing().run();
       n += 1;
     }
   });

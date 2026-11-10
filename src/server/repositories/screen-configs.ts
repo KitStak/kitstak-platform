@@ -14,8 +14,8 @@ import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
 import { PO_TYPES } from "@/lib/enums";
 import {
-  conditionsMatch, conditionsSchema, normalizeSteps, RECEIVING_SCREEN_NAME, RECEIVING_STEPS, SCREEN_CONFIG_FIELDS, SCREEN_CONFIG_SEARCH_FIELDS, SCREEN_CONFIG_SORT_FIELDS,
-  type PoFacts, type ScreenConditions, type ScreenConfigSave, type ScreenStep,
+  conditionsMatch, conditionsSchema, normalizeSteps, receivingPlan, RECEIVING_SCREEN_NAME, RECEIVING_STEPS, SCREEN_CONFIG_FIELDS, SCREEN_CONFIG_SEARCH_FIELDS, SCREEN_CONFIG_SORT_FIELDS,
+  type PoFacts, type ProductTrackingFacts, type ReceivingPlan, type ScreenConditions, type ScreenConfigSave, type ScreenStep,
 } from "@/lib/grid-defs/admin/screen-configs";
 import { assertFound, assertVersion, compileGrid, domainCtxOf, duplicateError, fieldError, logCreate, logDelete, logUpdate, qc, type Actor, type GridBinding } from "./users-shared";
 
@@ -230,4 +230,14 @@ export function configForPurchaseOrder(db: AppDb, warehouseId: string, po: PoFac
   const hit = specific.find((r) => conditionsMatch(r.conditions, po)) ?? parsed.find((r) => !specific.includes(r));
   if (!hit) return null;
   return { id: hit.id, name: hit.name, steps: hit.steps };
+}
+
+/**
+ * Receiving plan for one product on one PO: resolves the single matching configuration
+ * (conditions honoured) and returns show / required per step plus the tracking the receive
+ * command must enforce. Drop-in replacement for `purchase-orders.receivingRequirements`
+ * (request RP-2 / REQ-R4-3), which today unions every active config and ignores conditions.
+ */
+export function receivingPlanForPurchaseOrder(db: AppDb, warehouseId: string, po: PoFacts, product: ProductTrackingFacts): ReceivingPlan {
+  return receivingPlan(configForPurchaseOrder(db, warehouseId, po), product);
 }

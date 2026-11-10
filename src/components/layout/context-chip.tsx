@@ -38,7 +38,7 @@ export function ContextChip() {
         <button
           type="button"
           onClick={openContextSwitcher}
-          className="ml-1 rounded font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          className="ml-1 rounded font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/60"
         >
           Change
         </button>

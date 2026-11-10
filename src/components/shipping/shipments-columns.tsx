@@ -4,7 +4,7 @@
 import { LinkCell } from "@/components/grid/cells";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { ShipmentListRow } from "@/server/repositories/shipping";
-import { LabelStatusPill, LabelTypePill, buildColumns, dash, exportColumnsOf, textCell, type ColumnSpec } from "./column-kit";
+import { LabelStatusPill, LabelTypePill, buildColumns, dash, exportColumnsOf, shipDateTime, textCell, type ColumnSpec } from "./column-kit";
 
 export type ShipmentRow = ShipmentListRow & {
   readonly orderStatus: string;
@@ -16,7 +16,21 @@ export type ShipmentRow = ShipmentListRow & {
   readonly masterTrackingNumber: string | null;
   readonly actualShipmentAt: string | null;
   readonly labelCreatedAt: string;
+  readonly carrierConnectionId: string | null;
+  readonly carrierServiceId: string | null;
+  readonly weight: number;
+  readonly length: number;
+  readonly width: number;
+  readonly height: number;
+  readonly lastCarrierError: string | null;
+  readonly trackingStatus: string | null;
+  readonly shipmentMailSentAt: string | null;
+  readonly deliveryMailSentAt: string | null;
 };
+
+function mailCell(at: string | null): React.ReactNode {
+  return at ? <span className="whitespace-nowrap" title={`Sent ${shipDateTime(at)}`}>Yes · {shipDateTime(at)}</span> : <span className="text-faint">No</span>;
+}
 
 function trackingCell(row: ShipmentRow): React.ReactNode {
   const multi = row.packageCount > 1;
@@ -40,26 +54,52 @@ function trackingCell(row: ShipmentRow): React.ReactNode {
 }
 
 export const SHIPMENT_COLUMN_SPECS: readonly ColumnSpec<ShipmentRow>[] = [
-  { id: "warehouseCode", label: "Warehouse", width: 96 },
-  { id: "locationCode", label: "Inventory location", width: 170 },
-  { id: "clientName", label: "Client", width: 150 },
   { id: "orderCode", label: "Order code", width: 130, always: true, cell: (r) => <LinkCell href={`/orders/${encodeURIComponent(r.orderCode)}`}>{r.orderCode}</LinkCell> },
-  { id: "orderStatus", label: "Order status", width: 140, cell: (r) => <StatusPill status={r.orderStatus} domain="shipmentOrder" /> },
-  { id: "customerName", label: "Customer", width: 170 },
-  { id: "products", label: "Products", width: 200, sortable: false },
-  { id: "customerAddress", label: "Customer address", width: 240, sortable: false },
-  { id: "labelCreatedAt", label: "Label create date", kind: "datetime" },
-  { id: "carrierExpectedDeliveryAt", label: "Carrier expected delivery date", kind: "datetime" },
+  { id: "packageSeq", label: "Package", width: 96, sortable: false, exportKey: "packageSeq", cell: (r) => <span className="whitespace-nowrap tabular-nums" title={r.isMaster ? "Master package" : undefined}>{r.packageSeq ?? 1} of {Math.max(r.packageCount, r.packageSeq ?? 1)}{r.isMaster && r.packageCount > 1 ? <span className="ml-1 text-[10px] font-semibold text-secondary">M</span> : null}</span> },
+  { id: "trackingNumber", label: "Tracking number", width: 220, cell: trackingCell },
+  {
+    id: "labelStatus", label: "Label status", width: 150,
+    cell: (r) => (
+      <span className="inline-flex items-center gap-1.5">
+        <LabelStatusPill status={r.labelStatus} />
+        {r.duplicateActiveLabels > 0 ? (
+          <span className="whitespace-nowrap text-[11px] font-medium text-warning" title={`${r.duplicateActiveLabels} other active label(s) exist for this package. Void the extra label before it is handed to the carrier.`}>
+            Duplicate
+          </span>
+        ) : null}
+      </span>
+    ),
+  },
+  {
+    id: "hasCarrierError", label: "Carrier errors", width: 220, exportKey: "lastCarrierError",
+    cell: (r) => (r.hasCarrierError ? (
+      <span className="flex min-w-0 items-center gap-1.5" title={r.lastCarrierError ?? "The carrier returned an error"}>
+        <span className="shrink-0 rounded-full border border-danger/40 bg-danger-soft px-1.5 text-[10px] font-semibold text-danger">Error</span>
+        <span className="truncate text-[12px] text-secondary">{r.lastCarrierError ?? ""}</span>
+      </span>
+    ) : dash),
+  },
   { id: "carrier", label: "Carrier", width: 150 },
   { id: "serviceName", label: "Shipment method", width: 150 },
+  { id: "rate", label: "Rate", kind: "money" },
+  { id: "masterTrackingNumber", label: "Master tracking number", width: 190, cell: (r) => (r.masterTrackingNumber ? <span className="truncate font-mono text-[12px]">{r.masterTrackingNumber}</span> : dash) },
+  { id: "orderStatus", label: "Order status", width: 140, cell: (r) => <StatusPill status={r.orderStatus} domain="shipmentOrder" /> },
+  { id: "products", label: "Products", width: 200, sortable: false },
+  { id: "locationCode", label: "Inventory location", width: 170 },
+  { id: "labelCreatedAt", label: "Label create date", kind: "datetime" },
+  { id: "warehouseCode", label: "Warehouse", width: 96 },
+  { id: "clientName", label: "Client", width: 150 },
+  { id: "customerName", label: "Customer", width: 170 },
+  { id: "customerAddress", label: "Customer address", width: 240, sortable: false },
+  { id: "carrierExpectedDeliveryAt", label: "Carrier expected delivery date", kind: "datetime" },
   { id: "isRateShopped", label: "Rate shopping", kind: "boolean" },
   { id: "rateShoppingName", label: "Rate shopping name", width: 150 },
-  { id: "rate", label: "Rate", kind: "money" },
   { id: "labelType", label: "Label type", width: 124, cell: (r) => <LabelTypePill type={r.labelType} /> },
-  { id: "masterTrackingNumber", label: "Master tracking number", width: 190, cell: (r) => (r.masterTrackingNumber ? <span className="truncate font-mono text-[12px]">{r.masterTrackingNumber}</span> : dash) },
-  { id: "trackingNumber", label: "Tracking number", width: 220, cell: trackingCell },
   { id: "actualShipmentAt", label: "Actual shipment date", kind: "datetime" },
   { id: "deliveredAt", label: "Delivery date", kind: "datetime" },
+  { id: "trackingStatus", label: "Tracking status", width: 130, cell: (r) => textCell(r.trackingStatus) },
+  { id: "shipmentMailSentAt", label: "Shipment mail sent", width: 190, exportKey: "shipmentMailSentAt", cell: (r) => mailCell(r.shipmentMailSentAt) },
+  { id: "deliveryMailSentAt", label: "Delivery mail sent", width: 190, exportKey: "deliveryMailSentAt", cell: (r) => mailCell(r.deliveryMailSentAt) },
   { id: "voidedAt", label: "Void date/time", kind: "datetime" },
   { id: "insuranceType", label: "Insurance type", width: 120 },
   { id: "insuranceValue", label: "Insurance value", kind: "money" },
@@ -76,7 +116,7 @@ export const SHIPMENT_COLUMN_SPECS: readonly ColumnSpec<ShipmentRow>[] = [
   { id: "otherCost", label: "Other cost", kind: "money" },
   { id: "currency", label: "Currency", width: 88 },
   { id: "allowSaturdayDelivery", label: "Is allow Saturday delivery", kind: "boolean", width: 150 },
-  { id: "labelStatus", label: "Label status", width: 110, cell: (r) => <LabelStatusPill status={r.labelStatus} /> },
+  { id: "syncedToStore", label: "Sync to store", kind: "boolean", width: 120 },
   { id: "scheduledPickupAt", label: "Scheduled pickup date", kind: "datetime" },
   { id: "actualPickupAt", label: "Actual pickup date", kind: "datetime" },
   { id: "parentLpNumber", label: "Inventory parent LPN", width: 150 },

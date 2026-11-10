@@ -3,11 +3,14 @@
 /**
  * RMA detail (`/orders/returns/[id]`, M04 §8). Header with status and actions (Change
  * Status, Cancel, Reprint / Create Return Label, Receive at station, Tag, Change log),
- * summary, lines (requested / returned), receipts, label & tracking and the timeline.
+ * summary, lines (requested / returned), receipts, photos & documents, label & tracking and the
+ * timeline. A short-closed RMA (Completed with units outstanding) can be reopened by a supervisor.
  */
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { ArrowRightLeft, Ban, Box, ChevronDown, ExternalLink, FileText, History, PackageCheck, Printer, ScanLine, Tag as TagIcon, Truck } from "lucide-react";
+import { ArrowRightLeft, Ban, Box, Camera, ChevronDown, ExternalLink, FileText, History, PackageCheck, Printer, RotateCcw, ScanLine, Tag as TagIcon, Truck } from "lucide-react";
+import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { ActivityTimeline, ChangeLogDrawer, DetailHeader, KvList, TagPopover } from "@/components/shared";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -15,8 +18,10 @@ import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
+import { localDateFromIso } from "./date-only";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UnderlineTabs, type TabItem } from "@/components/ui/tabs";
 import { StatusPill } from "@/components/ui/status-pill";
 import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
@@ -24,11 +29,21 @@ import { apiRequest, isApiError } from "@/lib/api-client";
 import { useFormat } from "@/lib/format";
 import { useApiQuery } from "@/lib/query-client";
 import { ChangeStatusModal } from "./change-status-modal";
+import { EditReturnInfoModal } from "./edit-return-info-modal";
 import { ReturnLabelDialog } from "./return-label-fields";
+import { RmaPhotos } from "./rma-photos";
+import { TextField } from "@/components/ui/text-field";
 import { bulkMessage, type BulkOutcome, type ReturnDetail } from "./return-types";
 import { errorText, openFileId, RETURN_KEYS, useInvalidateReturns, useHydratedCan } from "./returns-client";
 
 const dash = <span className="text-secondary">—</span>;
+
+const DETAIL_TABS: readonly TabItem[] = [
+  { key: "lines", label: "Lines & receipts", icon: Box },
+  { key: "photos", label: "Photos & documents", icon: Camera },
+  { key: "label", label: "Return label", icon: Truck },
+  { key: "history", label: "History", icon: History },
+];
 
 function Section({ title, icon: Icon, action, children }: { readonly title: string; readonly icon: React.ComponentType<{ className?: string }>; readonly action?: React.ReactNode; readonly children: React.ReactNode }) {
   return (
@@ -60,12 +75,32 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [labelOpen, setLabelOpen] = React.useState(false);
   const [logOpen, setLogOpen] = React.useState(false);
+  const [voidOpen, setVoidOpen] = React.useState(false);
+  const [infoOpen, setInfoOpen] = React.useState(false);
+  const [reopenOpen, setReopenOpen] = React.useState(false);
+  const [reopenReason, setReopenReason] = React.useState("");
+  const [reopenError, setReopenError] = React.useState<string | null>(null);
+
+  const [tab, setTab] = React.useState("lines");
+  // Warm the History tab while the user reads the lines (same query key as ActivityTimeline).
+  const qc = useQueryClient();
+  const loadedId = q.data?.data.id;
+  React.useEffect(() => {
+    if (!loadedId) return;
+    const query = { entityType: "return_order", entityId: loadedId, ps: 200 };
+    void qc.prefetchQuery({ queryKey: ["change-log", "return_order", loadedId, "timeline", query], queryFn: ({ signal }) => apiRequest("/api/change-log", { query, signal }), staleTime: 30_000 });
+  }, [loadedId, qc]);
 
   if (q.isPending) {
+    // Stream the shell at once: header, back link and tabs render before the detail resolves.
     return (
-      <div className="space-y-4 px-6 py-5">
-        <Skeleton className="h-8 w-64" />
+      <div className="pb-8" aria-busy="true">
+        <Breadcrumbs items={[{ label: "Fulfillment" }, { label: "Outbound" }, { label: "Return Orders", href: "/orders/returns" }, { label: "Loading…" }]} className="px-6 pt-3" />
+        <DetailHeader title="Return Order" backHref="/orders/returns" backLabel="Return orders" meta={<Skeleton className="h-4 w-72" />} />
+        <UnderlineTabs ariaLabel="Return order sections" tabs={DETAIL_TABS} active={tab} onChange={setTab} className="mb-4" />
+        <div className="space-y-4 px-6">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]"><Skeleton className="h-72" /><Skeleton className="h-72" /></div>
+        </div>
       </div>
     );
   }
@@ -82,6 +117,22 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
   const anyTransition = r.transitions.some((t) => t.ok);
   const labelReason = !r.order ? "Manual returns have no shipment order to label." : !open ? `A ${r.status.toLowerCase()} return can't get a new label.` : null;
   const pct = r.requestedQty > 0 ? Math.round((r.receivedQty / r.requestedQty) * 100) : 0;
+  const shortQty = r.shortQty ?? Math.max(0, r.requestedQty - r.receivedQty);
+  const shortClosed = r.status === "Completed" && shortQty > 0;
+
+  const reopen = async () => {
+    if (!reopenReason.trim()) { setReopenError("Say why the return is reopened"); throw new Error("Enter a reason to reopen the return."); }
+    try {
+      await apiRequest(`/api/returns/${r.id}/reopen`, { method: "POST", body: { version: r.version, reason: reopenReason.trim() } });
+      toast.success("Return reopened", `${r.rmaCode} is Started again: ${shortQty} unit${shortQty === 1 ? "" : "s"} can be received at the Return Station.`);
+      setReopenReason("");
+      setReopenError(null);
+    } catch (e) {
+      throw new Error(errorText(e, "The return could not be reopened."));
+    } finally {
+      await invalidate();
+    }
+  };
 
   const cancel = async () => {
     try {
@@ -95,10 +146,21 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
     }
   };
 
+  const voidLabel = async () => {
+    try {
+      await apiRequest(`/api/returns/${r.id}/label`, { method: "DELETE" });
+      toast.success("Return label voided", `${r.rmaCode} has no active return label.`);
+    } catch (e) {
+      toast.error("Label not voided", errorText(e));
+    } finally {
+      await invalidate();
+    }
+  };
+
   const actions = (
     <div className="flex flex-wrap items-center gap-2">
       {can.station && open ? (
-        <Link href={`/return-station?rma=${encodeURIComponent(r.rmaCode)}`} className={buttonVariants({ variant: "secondary" })}>
+        <Link href={`/return-station?rma=${encodeURIComponent(r.rmaCode)}&warehouseId=${r.warehouseId}`} className={buttonVariants({ variant: "secondary" })}>
           <ScanLine className="h-3.5 w-3.5" aria-hidden />Receive at station
         </Link>
       ) : null}
@@ -118,10 +180,16 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
             <DropdownMenuItem icon={Truck} disabledReason={labelReason} description={r.label ? "Buys a new label and replaces the tracking number" : "Prepaid label for the customer"} onSelect={() => setLabelOpen(true)}>
               {r.label ? "Create new return label" : "Create return label"}
             </DropdownMenuItem>
+            <DropdownMenuItem icon={Ban} destructive disabledReason={r.label && r.label.labelStatus !== "Voided" ? (r.status === "Completed" ? "The label of a completed return can't be voided" : null) : "No active return label"} description="Voids with the carrier and clears tracking" onSelect={() => setVoidOpen(true)}>
+              Void return label
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
       <Button variant="secondary" onClick={() => setLogOpen(true)}><History className="h-3.5 w-3.5" aria-hidden />Change log</Button>
+      {can.status && shortClosed ? (
+        <Button variant="secondary" onClick={() => { setReopenError(null); setReopenOpen(true); }} data-testid="rma-reopen"><RotateCcw className="h-3.5 w-3.5" aria-hidden />Reopen</Button>
+      ) : null}
       {can.status ? (
         <>
           <DisabledReason reason={cancelReason}>
@@ -137,20 +205,31 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
 
   return (
     <div className="pb-8">
+      <Breadcrumbs items={[{ label: "Fulfillment" }, { label: "Outbound" }, { label: "Return Orders", href: "/orders/returns" }, { label: r.rmaCode }]} className="px-6 pt-3" />
       <DetailHeader
-        title={`RMA ${r.rmaCode}`}
+        title={`Return Order ${r.rmaCode}`}
         backHref="/orders/returns"
         backLabel="Return orders"
         status={r.status}
         statusDomain="return"
-        badges={<span className="rounded-full bg-neutral-soft px-2 py-0.5 text-[11px] font-semibold text-secondary">{r.source === "Manual" ? "Manual return" : r.source}</span>}
-        meta={<span>{r.clientName} · {r.warehouseCode} · Created {fmt.dateTime(r.createdAt)} by {r.createdByName}</span>}
+        badges={<span className="rounded-full bg-neutral-soft px-2 py-0.5 text-[11px] font-semibold text-secondary">{r.source === "Manual" ? "Manual return" : r.source === "RMA" ? "Customer RMA" : r.source}</span>}
+        meta={<span>{r.clientName} · {r.warehouseCode} · Created {fmt.gridDateTime(r.createdAt)} by {r.createdByName}{r.createdByEmail && r.createdByEmail !== r.createdByName ? ` (${r.createdByEmail})` : ""}</span>}
         actions={actions}
       />
       {r.status === "Cancelled" ? <div className="px-6 pb-3"><Callout variant="attention" title="This return is cancelled">Cancelled returns can&apos;t be received at the return station.</Callout></div> : null}
+      {shortClosed ? (
+        <div className="px-6 pb-3">
+          <Callout variant="attention" title={`Closed short: ${shortQty} unit${shortQty === 1 ? "" : "s"} not received`}
+            action={can.status ? <Button size="sm" variant="secondary" onClick={() => { setReopenError(null); setReopenOpen(true); }}><RotateCcw className="h-3.5 w-3.5" aria-hidden />Reopen to receive the rest</Button> : undefined}>
+            This return was completed before every requested unit arrived. {can.status ? "Reopen it to receive the remaining units at the Return Station." : "A supervisor can reopen it to receive the rest."}
+          </Callout>
+        </div>
+      ) : null}
+      <UnderlineTabs ariaLabel="Return order sections" tabs={DETAIL_TABS.map((t) => (t.key === "lines" ? { ...t, count: r.lines.length } : t))} active={tab} onChange={setTab} className="mb-4" />
       <div className="grid gap-4 px-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-4">
-          <Section title={`Lines (${r.lines.length})`} icon={Box} action={<span className="flex items-center gap-2 text-[12px] text-secondary"><span className="tabular-nums">{r.receivedQty} of {r.requestedQty} received</span><ProgressBar value={pct} className="w-24" /></span>}>
+          {tab === "lines" ? (<>
+          <Section title={`Lines (${r.lines.length})`} icon={Box} action={<span className="flex items-center gap-2 text-[12px] text-secondary"><span className="tabular-nums">{r.receivedQty} of {r.requestedQty} received</span><ProgressBar value={pct} tone="success" label="Receiving progress" className="w-24" /></span>}>
             <div className="-m-4 overflow-x-auto">
               <table className="w-full min-w-[720px] text-[13px]">
                 <thead className="border-b border-border bg-surface-sunken/60"><tr><Th>SKU</Th><Th>Pack type</Th><Th right>Shipped</Th><Th right>Requested</Th><Th right>Returned</Th><Th>Line status</Th><Th>Disposition</Th><Th>Customer reason</Th><Th>Actual reason</Th></tr></thead>
@@ -182,14 +261,14 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
                   <tbody>
                     {r.receipts.map((x) => (
                       <tr key={x.id} className={`border-b border-border last:border-0 ${x.cancelledAt ? "text-secondary line-through" : ""}`}>
-                        <td className="px-3 py-2 tabular-nums">#{x.receiptNo}</td>
+                        <td className="px-3 py-2 tabular-nums"><Link href={`/receiving/history?f.masterId=eq:${x.receiptNo}`} className="font-medium text-primary hover:underline" title="Open this receipt in Receiving history" data-testid="rma-receipt-link">Receipt {x.receiptNo}</Link></td>
                         <td className="px-3 py-2 font-medium">{x.sku}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{x.quantity}</td>
                         <td className="px-3 py-2">{x.locationCode}</td>
                         <td className="px-3 py-2">{x.lpNumber ?? dash}</td>
                         <td className="px-3 py-2">{x.damageReason ?? dash}</td>
                         <td className="px-3 py-2">{x.actualReturnReason ?? dash}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{fmt.dateTime(x.receivedAt)}<div className="text-[11px] text-secondary">{x.receivedBy}</div></td>
+                        <td className="px-3 py-2 whitespace-nowrap">{fmt.gridDateTime(x.receivedAt)}<div className="text-[11px] text-secondary">{x.receivedBy}</div></td>
                       </tr>
                     ))}
                   </tbody>
@@ -197,26 +276,16 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
               </div>
             )}
           </Section>
-          <Section title="Timeline" icon={History}>
+          </>) : null}
+          {tab === "photos" ? (
+            <Section title="Photos & documents" icon={Camera}>
+              <RmaPhotos returnOrderId={r.id} rmaCode={r.rmaCode} skus={r.lines.map((l) => l.sku)} canEdit={can.status} />
+            </Section>
+          ) : null}
+          {tab === "history" ? <Section title="History" icon={History} action={<Button size="sm" variant="ghost" onClick={() => setLogOpen(true)}><History className="h-3.5 w-3.5" aria-hidden />Field change log</Button>}>
             <ActivityTimeline entityType="return_order" entityId={r.id} />
-          </Section>
-        </div>
-        <div className="flex min-w-0 flex-col gap-4">
-          <Section title="Summary" icon={FileText}>
-            <KvList columns={1} layout="inline" items={[
-              { key: "order", label: "Shipment order", value: r.order ? <Link href={`/orders/${r.order.id}`} className="font-medium text-primary hover:underline">{r.order.code}</Link> : "Manual return" },
-              { key: "store", label: "Store order #", value: r.order?.storeOrderNumber ?? dash },
-              { key: "channel", label: "Store", value: r.order?.channel ?? dash },
-              { key: "customer", label: "Customer", value: r.customerName ?? dash },
-              { key: "country", label: "From country", value: r.fromCountry ?? dash },
-              { key: "shipped", label: "Shipped", value: r.order?.shippedAt ? fmt.dateTime(r.order.shippedAt) : dash },
-              { key: "delivered", label: "Delivered", value: r.order?.deliveredAt ? fmt.dateTime(r.order.deliveredAt) : dash },
-              { key: "expected", label: "Expected return", value: r.expectedReturnDate ? fmt.date(r.expectedReturnDate) : dash },
-              { key: "actual", label: "Actual return", value: r.actualReturnDate ? fmt.dateTime(r.actualReturnDate) : dash },
-              { key: "updated", label: "Last updated", value: fmt.dateTime(r.updatedAt) },
-            ]} />
-            {r.note ? <p className="mt-3 whitespace-pre-line rounded-md bg-surface-sunken px-3 py-2 text-[12px] text-body">{r.note}</p> : null}
-          </Section>
+          </Section> : null}
+          {tab === "label" ? (
           <Section title="Return label" icon={Truck}>
             {r.label ? (
               <div className="space-y-3">
@@ -226,7 +295,7 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
                   { key: "service", label: "Service", value: r.label.serviceName ?? r.carrierServiceName ?? dash },
                   { key: "cost", label: "Cost", value: fmt.money(r.label.shippingCost, "USD", "summary") },
                   { key: "status", label: "Label status", value: r.label.labelStatus },
-                  { key: "created", label: "Created", value: r.label.createdAt ? fmt.dateTime(r.label.createdAt) : dash },
+                  { key: "created", label: "Created", value: r.label.createdAt ? fmt.gridDateTime(r.label.createdAt) : dash },
                 ]} />
                 <Button variant="secondary" className="w-full" disabled={!r.label.labelFileId} onClick={() => openFileId(r.label?.labelFileId)}><Printer className="h-3.5 w-3.5" aria-hidden />Reprint return label</Button>
               </div>
@@ -241,6 +310,31 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
               </div>
             )}
           </Section>
+          ) : null}
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
+          <Section title="Summary" icon={FileText} action={can.status ? <DisabledReason reason={open ? null : `A ${r.status.toLowerCase()} return can't be edited.`}><Button size="sm" variant="ghost" disabled={!open} onClick={() => setInfoOpen(true)} data-testid="rma-edit-return-info">Edit return info</Button></DisabledReason> : undefined}>
+            {(() => { const addLabel = labelReason ? dash : <button type="button" onClick={() => setLabelOpen(true)} className="rounded text-[12px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Create return label</button>; return (
+            <KvList columns={1} layout="inline" items={[
+              { key: "order", label: "Shipment order", value: r.order ? <Link href={`/orders/${r.order.id}`} className="font-medium text-primary hover:underline">{r.order.code}</Link> : "Manual return" },
+              { key: "store", label: "Store order #", value: r.order?.storeOrderNumber ?? dash },
+              { key: "channel", label: "Store", value: r.order?.channel ?? dash },
+              { key: "customer", label: "Customer", value: r.customerName ?? dash },
+              { key: "country", label: "From country", value: r.fromCountry ?? dash },
+              { key: "warehouse", label: "Warehouse", value: r.warehouseName ? (r.warehouseName.startsWith(r.warehouseCode) ? r.warehouseName : `${r.warehouseCode} - ${r.warehouseName}`) : r.warehouseCode || dash },
+              { key: "address", label: "Return address", value: r.returnAddress ? <span title={r.returnAddress}>{r.returnAddress}</span> : dash },
+              { key: "carrier", label: "Return carrier", value: r.label?.carrierCode ?? r.carrierCode ?? addLabel },
+              { key: "service", label: "Shipping option", value: r.label?.serviceName ?? r.carrierServiceName ?? dash },
+              { key: "tracking", label: (r.trackingNumbers?.length ?? 0) > 1 && !r.label ? `Return tracking (${r.trackingNumbers?.length})` : "Return tracking", value: r.label?.trackingNumber ? <span className="font-mono text-[12px]">{r.label.trackingNumber}</span> : (r.trackingNumbers?.length ? <span className="flex flex-wrap gap-1">{r.trackingNumbers.map((t) => <span key={t} className="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[12px]">{t}</span>)}</span> : r.trackingNumber ? <span className="font-mono text-[12px]">{r.trackingNumber}</span> : addLabel) },
+              { key: "cost", label: "Return shipping cost", value: r.returnShippingCost !== null && r.returnShippingCost !== undefined ? <span className="tabular-nums">{fmt.money(r.returnShippingCost, "USD", "summary")}</span> : dash },
+              { key: "shipped", label: "Shipped", value: r.order?.shippedAt ? fmt.gridDateTime(r.order.shippedAt) : dash },
+              { key: "delivered", label: "Delivered", value: r.order?.deliveredAt ? fmt.gridDateTime(r.order.deliveredAt) : dash },
+              { key: "expected", label: "Expected return", value: r.expectedReturnDate ? fmt.date(localDateFromIso(r.expectedReturnDate)) : dash },
+              { key: "actual", label: "Actual return", value: r.actualReturnDate ? fmt.gridDateTime(r.actualReturnDate) : dash },
+              { key: "updated", label: "Last updated", value: fmt.gridDateTime(r.updatedAt) },
+            ]} />); })()}
+            {r.note ? <p className="mt-3 whitespace-pre-line rounded-md bg-surface-sunken px-3 py-2 text-[12px] text-body">{r.note}</p> : null}
+          </Section>
         </div>
       </div>
       <ChangeStatusModal open={statusOpen} onOpenChange={setStatusOpen} selection={{ ids: [r.id] }} version={r.version} onDone={() => void invalidate()} />
@@ -249,6 +343,23 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
         records={{ columns: [{ key: "rma", label: "RMA" }, { key: "status", label: "Status" }, { key: "qty", label: "Requested" }], rows: [{ rma: r.rmaCode, status: <StatusPill status={r.status} domain="return" size="sm" />, qty: r.requestedQty }] }}
         confirmLabel="Yes" cancelLabel="No" onConfirm={cancel} />
       {labelOpen ? <ReturnLabelDialog open onOpenChange={setLabelOpen} returnId={r.id} rmaCode={r.rmaCode} warehouseId={r.warehouseId} clientId={r.clientId} onDone={() => void invalidate()} /> : null}
+      <ConfirmDialog open={voidOpen} onOpenChange={setVoidOpen} variant="danger" icon={Ban} title={`Void the return label of ${r.rmaCode}?`}
+        description={`Tracking ${r.label?.trackingNumber ?? ""} is voided with the carrier and cleared from the RMA. You can create a new label afterwards.`}
+        confirmLabel="Void" cancelLabel="Keep" onConfirm={voidLabel} />
+      <ConfirmDialog open={reopenOpen} onOpenChange={(o) => { setReopenOpen(o); if (!o) setReopenError(null); }} variant="attention" icon={RotateCcw}
+        title={`Reopen return ${r.rmaCode}?`}
+        description={`${shortQty} unit${shortQty === 1 ? " was" : "s were"} closed as short. Reopening sets the return back to Started so the rest can be received at the Return Station. Received units and receipts are kept.`}
+        records={{ columns: [{ key: "sku", label: "SKU" }, { key: "req", label: "Requested" }, { key: "ret", label: "Returned" }, { key: "short", label: "Not received" }],
+          rows: r.lines.filter((l) => l.requestedQty > l.returnedQty).map((l) => ({ sku: l.sku, req: l.requestedQty, ret: l.returnedQty, short: l.requestedQty - l.returnedQty })) }}
+        confirmLabel="Reopen" cancelLabel="Keep closed" onConfirm={reopen}>
+        <label className="mt-1 flex flex-col gap-1 text-[12px] font-medium text-body" htmlFor="rma-reopen-reason">
+          <span>Reason <span className="text-danger">*</span></span>
+          <TextField id="rma-reopen-reason" className="h-9 w-full" value={reopenReason} maxLength={300} invalid={Boolean(reopenError)} placeholder="e.g. Second box arrived"
+            onChange={(ev) => { setReopenReason(ev.target.value); if (reopenError) setReopenError(null); }} />
+          {reopenError ? <span className="text-[11px] text-danger">{reopenError}</span> : null}
+        </label>
+      </ConfirmDialog>
+      {infoOpen ? <EditReturnInfoModal open onOpenChange={setInfoOpen} detail={r} onDone={() => void invalidate()} /> : null}
       {logOpen ? <ChangeLogDrawer open onOpenChange={setLogOpen} entityType="return_order" entityId={r.id} entityCode={r.rmaCode} /> : null}
     </div>
   );

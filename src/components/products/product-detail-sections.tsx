@@ -10,6 +10,7 @@ import Link from "next/link";
 import { Box, Boxes, Layers, PackageSearch } from "lucide-react";
 import { KvList, type KvItem } from "@/components/shared/kv-list";
 import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Barcode } from "@/components/ui/barcode";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -18,7 +19,10 @@ import { useFormat } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { countryName } from "@/lib/countries";
 import { normalizeCountryCode } from "@/lib/grid-defs/products/product-form";
+import { formatVolume, hasIncompleteDimensions, hasMissingWeight } from "@/lib/grid-defs/products/catalog-options";
+import { buildableFromComponent, kitBuildability } from "@/lib/grid-defs/products/kit-buildability";
 import { ProductThumb, type ProductDetailData } from "./catalog-shared";
+import { PackHierarchy, PackTypesEditor, hierarchyFromView } from "./product-pack-types-editor";
 
 type D = ProductDetailData;
 
@@ -44,8 +48,8 @@ interface Col<T> {
   readonly render: (row: T) => React.ReactNode;
 }
 
-export function MiniTable<T>({ rows, columns, getKey, empty, footer }: { readonly rows: readonly T[]; readonly columns: readonly Col<T>[]; readonly getKey: (row: T) => string; readonly empty: { title: string; description: string }; readonly footer?: React.ReactNode }) {
-  if (rows.length === 0) return <EmptyState compact icon={PackageSearch} title={empty.title} description={empty.description} />;
+export function MiniTable<T>({ rows, columns, getKey, empty, footer }: { readonly rows: readonly T[]; readonly columns: readonly Col<T>[]; readonly getKey: (row: T) => string; readonly empty: { title: string; description: string; action?: React.ReactNode }; readonly footer?: React.ReactNode }) {
+  if (rows.length === 0) return <EmptyState compact icon={PackageSearch} title={empty.title} description={empty.description} action={empty.action} />;
   return (
     <div className="overflow-x-auto rounded-md border border-border ks-scroll">
       <table className="w-full min-w-[560px] text-[13px]">
@@ -80,6 +84,13 @@ export function OverviewTab({ data }: { readonly data: D }) {
     { key: "type", label: "Product type", value: p.productType },
     { key: "group", label: "Product group", value: p.productGroup },
     { key: "uom", label: "UOM pack type", value: p.uom },
+    ...(() => {
+      const primary = data.packTypes.find((pt) => pt.kind === "Primary");
+      return primary ? [
+        { key: "pack-weight", label: `Weight (${primary.packType})`, value: `${n(primary.weight)} ${primary.weightUnit.toLowerCase()}` },
+        { key: "pack-dims", label: `Dimensions (${primary.packType})`, value: `${n(primary.length)} × ${n(primary.width)} × ${n(primary.height)} ${primary.dimensionUnit.toLowerCase()}` },
+      ] : [];
+    })(),
     { key: "fnsku", label: "FNSKU", value: p.fnsku },
     { key: "purchase", label: "Purchase price", value: fmt.money(p.purchasePrice, p.currency, "summary") },
     ...(isPackaging ? [] : [{ key: "sales", label: "Sales price", value: fmt.money(p.price, p.currency, "summary") }, { key: "tax", label: "Tax rate", value: `${p.taxRate}%` }]),
@@ -129,9 +140,16 @@ export function OverviewTab({ data }: { readonly data: D }) {
 
 const KIND_ICON = { Primary: Box, Hierarchical: Layers, Irregular: Boxes } as const;
 
-export function PackTypesTab({ data }: { readonly data: D }) {
+export function PackTypesTab({ data, canEdit = false, onSaved }: { readonly data: D; readonly canEdit?: boolean; readonly onSaved?: () => void }) {
+  // Products edit pack types in place; kit and packaging dimensions live on the Packing step.
+  if (canEdit && data.product.productCategory === "Product") {
+    return <PackTypesEditor productId={data.product.id} category={data.product.productCategory} onSaved={onSaved ?? (() => undefined)} />;
+  }
   if (data.packTypes.length === 0) return <EmptyState icon={Box} title="No pack types" description="Edit the product to add a primary (UOM) pack type." />;
   return (
+    <div className="flex flex-col gap-4">
+    {data.product.productCategory !== "Product" ? <p className="text-[12px] text-secondary">Kit and packaging material dimensions are edited on the product&apos;s Packing step.</p> : null}
+    <PackHierarchy nodes={hierarchyFromView(data.packTypes)} />
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {data.packTypes.map((pt) => {
         const Icon = KIND_ICON[pt.kind];
@@ -146,17 +164,20 @@ export function PackTypesTab({ data }: { readonly data: D }) {
                   <span className="ml-2 text-[12px] font-normal text-secondary">{pt.kind === "Hierarchical" && pt.parentPackType ? `${pt.childQty ?? ""} × ${pt.parentPackType} · ` : ""}UOM qty {pt.uomQty}</span>
                 </p>
               </div>
+              {hasIncompleteDimensions(pt) ? <Badge tone="warning" size="sm" title="Length, width or height is 0. Cubing and box selection need all three.">Incomplete dimensions</Badge> : null}
+              {hasMissingWeight(pt) ? <Badge tone="warning" size="sm" title="Weight is 0. Rate shopping and shipping labels need a weight.">No weight</Badge> : null}
               {pt.shipPackage ? <Badge tone="neutral" size="sm">Box {pt.shipPackage}</Badge> : null}
+              {pt.useOwnBox ? <Badge tone="info" size="sm" title="Packing puts each unit in its own package, with nothing else in it.">Ships in own box</Badge> : null}
             </div>
             <dl className="grid grid-cols-3 gap-3 px-4 py-3 text-[13px]">
               <div><dt className="text-[11px] uppercase tracking-[0.04em] text-faint">L × W × H</dt><dd>{n(pt.length)} × {n(pt.width)} × {n(pt.height)} {pt.dimensionUnit.toLowerCase()}</dd></div>
               <div><dt className="text-[11px] uppercase tracking-[0.04em] text-faint">Weight</dt><dd>{n(pt.weight)} {pt.weightUnit.toLowerCase()}</dd></div>
-              <div><dt className="text-[11px] uppercase tracking-[0.04em] text-faint">Volume</dt><dd>{n(pt.volume, 3)} {pt.volumeUnit.toLowerCase()}</dd></div>
+              <div><dt className="text-[11px] uppercase tracking-[0.04em] text-faint">Volume</dt><dd>{formatVolume(pt.volume)} {pt.volumeUnit.toLowerCase()}</dd></div>
             </dl>
             <div className="flex flex-wrap gap-3 border-t border-border bg-surface-sunken/40 px-4 py-3">
               {pt.barcodes.length ? pt.barcodes.map((b) => (
                 <figure key={b} className="flex flex-col items-center gap-1 rounded-md border border-border bg-white px-3 py-2">
-                  <Barcode value={b} height={10} scale={1} aria-label={`Barcode ${b}`} />
+                  <Barcode value={b} height={10} scale={1} showText={false} className="px-3 pt-2 pb-1" aria-label={`Barcode ${b}`} />
                   <figcaption className="font-mono text-[11px] text-body">{b}</figcaption>
                 </figure>
               )) : <p className="text-[12px] text-faint">{pt.usePrimaryBarcodes ? "Scans with the primary barcodes." : "No barcodes on this pack type."}</p>}
@@ -165,6 +186,7 @@ export function PackTypesTab({ data }: { readonly data: D }) {
         );
       })}
     </div>
+    </div>
   );
 }
 
@@ -172,7 +194,7 @@ export function InventoryTab({ data }: { readonly data: D }) {
   const fmt = useFormat();
   return (
     <div className="flex flex-col gap-4">
-      <Section title="Available to promise by warehouse" description="Current ATP = undamaged on hand − open order demand. Planned adds open purchase orders.">
+      <Section title="Available to promise by warehouse" description="Current ATP = undamaged on hand − open order demand (allocated or not). Planned ATP adds open purchase orders. The header's Unallocated figure is on hand − allocated − damaged, so it can be higher than ATP while orders wait for allocation.">
         <MiniTable rows={data.atp} getKey={(r) => r.warehouseId} empty={{ title: "No stock or demand", description: "Nothing on hand, ordered or inbound in your warehouses." }} columns={[
           { key: "wh", label: "Warehouse", render: (r) => <span className="font-semibold">{r.warehouseCode}</span> },
           { key: "onHand", label: "On hand", align: "right", render: (r) => fmt.quantity(r.onHand) },
@@ -185,7 +207,7 @@ export function InventoryTab({ data }: { readonly data: D }) {
           { key: "planned", label: "Planned ATP", align: "right", render: (r) => fmt.quantity(r.plannedAtp) },
         ]} />
       </Section>
-      <Section title="Inventory by location" description="Every bucket with stock, by location, LP, lot and expiry." action={<Link href={`/inventory/by-location?q=${encodeURIComponent(data.product.sku)}&qm=eq`} className="text-[12px] font-semibold text-primary hover:underline">Open in Inventory by location</Link>}>
+      <Section title="Inventory by location" description="Every bucket with stock, by location, LP, lot and expiry. Unallocated = on hand − allocated − damaged." action={<Link href={`/inventory/by-location?q=${encodeURIComponent(data.product.sku)}&qm=eq`} className="text-[12px] font-semibold text-primary hover:underline">Open in Inventory by location</Link>}>
         <MiniTable rows={data.inventory} getKey={(r) => r.id} empty={{ title: "No stock on hand", description: "Receive a purchase order or adjust inventory to put this product on a location." }} columns={[
           { key: "wh", label: "Warehouse", render: (r) => r.warehouseCode },
           { key: "loc", label: "Location", render: (r) => <span className="font-mono font-semibold">{r.locationCode}</span> },
@@ -198,7 +220,7 @@ export function InventoryTab({ data }: { readonly data: D }) {
           { key: "onHand", label: "On hand", align: "right", render: (r) => fmt.quantity(r.onHand) },
           { key: "alloc", label: "Allocated", align: "right", render: (r) => fmt.quantity(r.allocated) },
           { key: "dmg", label: "Damaged", align: "right", render: (r) => (r.damaged ? <span className="text-danger">{fmt.quantity(r.damaged)}</span> : <span className="text-faint">0</span>) },
-          { key: "avail", label: "Available", align: "right", render: (r) => <span className="font-semibold">{fmt.quantity(r.available)}</span> },
+          { key: "avail", label: "Unallocated", align: "right", render: (r) => <span className="font-semibold">{fmt.quantity(r.available)}</span> },
         ]} footer={data.inventory.length > 1 ? (
           <tr>
             <td colSpan={8} className="px-3 py-2 text-secondary">Total · {data.inventory.length} buckets</td>
@@ -259,19 +281,70 @@ export function ListingsTab({ data }: { readonly data: D }) {
   );
 }
 
+/** Overall buildable figure for the kit, naming the component(s) that cap it. */
+export function KitBuildabilitySummary({ components }: { readonly components: D["components"] }) {
+  const fmt = useFormat();
+  if (components.length === 0) return null;
+  const { buildable, limiting, shortForNext } = kitBuildability(components);
+  const allTie = limiting.length === components.length && components.length > 1;
+  const first = limiting[0];
+  const zero = buildable === 0;
+  return (
+    <div
+      role="status"
+      aria-label="Kit buildability"
+      className={cn("mb-3 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border px-4 py-3", zero ? "border-danger/40 bg-danger-soft" : "border-border bg-surface-sunken")}
+    >
+      <div className="flex items-baseline gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">Buildable kits</span>
+        <span data-testid="kit-buildable-total" className={cn("text-[22px] font-semibold tabular-nums leading-none", zero ? "text-danger" : "text-foreground")}>{fmt.quantity(buildable)}</span>
+      </div>
+      {first ? (
+        <p className="min-w-0 text-[12px] text-secondary">
+          {allTie ? (
+            <>Every component caps the kit at the same quantity.</>
+          ) : (
+            <>
+              Limited by{" "}
+              {limiting.map((c, i) => (
+                <React.Fragment key={c.id}>
+                  {i > 0 ? ", " : null}
+                  <Link href={`/products/${c.id}`} className="font-mono font-semibold text-primary hover:underline">{c.sku}</Link>
+                </React.Fragment>
+              ))}{" "}
+              ({fmt.quantity(Math.max(0, first.available))} available, {fmt.quantity(first.quantity)} per kit).
+            </>
+          )}{" "}
+          {fmt.quantity(shortForNext)} more {shortForNext === 1 ? "unit" : "units"} of {allTie ? "each component" : first.sku} {shortForNext === 1 ? "builds" : "build"} one more kit.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function KitTab({ data }: { readonly data: D }) {
   const isKit = data.product.productCategory === "Kit";
+  const limitingIds = new Set(kitBuildability(data.components).limiting.map((c) => c.id));
+  const showLimiting = limitingIds.size > 0 && limitingIds.size < data.components.length;
   return (
     <div className="flex flex-col gap-4">
       {isKit ? (
         <Section title="Kit components" description={data.product.kitType === "Kit to Stock" ? "Assembled through work orders and stocked as its own SKU." : "Picked from these components per order."}>
+          <KitBuildabilitySummary components={data.components} />
           <MiniTable rows={data.components} getKey={(r) => r.id} empty={{ title: "No components", description: "Edit the kit to add its components." }} columns={[
             { key: "img", label: "Image", render: (r) => <ProductThumb url={r.imageUrl} size={28} label={r.name} /> },
             { key: "sku", label: "SKU", render: (r) => <Link href={`/products/${r.id}`} className="font-semibold text-primary hover:underline">{r.sku}</Link> },
             { key: "name", label: "Name", render: (r) => r.name },
             { key: "qty", label: "Qty per kit", align: "right", render: (r) => r.quantity },
             { key: "avail", label: "Available", align: "right", render: (r) => r.available },
-            { key: "kits", label: "Buildable kits", align: "right", render: (r) => <span className="font-semibold">{Math.floor(Math.max(0, r.available) / Math.max(1, r.quantity))}</span> },
+            {
+              key: "kits", label: "Buildable kits", align: "right", render: (r) => (
+                <span className="inline-flex items-center justify-end gap-1.5">
+                  {showLimiting && limitingIds.has(r.id) ? <Badge tone="warning" size="sm">Limiting</Badge> : null}
+                  <span className="font-semibold tabular-nums">{buildableFromComponent(r)}</span>
+                </span>
+              ),
+            },
           ]} />
         </Section>
       ) : null}
@@ -286,11 +359,11 @@ export function KitTab({ data }: { readonly data: D }) {
   );
 }
 
-export function PlanningTab({ data }: { readonly data: D }) {
+export function PlanningTab({ data, onEdit }: { readonly data: D; readonly onEdit?: () => void }) {
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       <Section title="Replenishment levels" description={`Strategy: ${data.product.replenishmentStrategy === "Per Warehouse" ? "per warehouse" : "global"}.`}>
-        <MiniTable rows={data.replenishment} getKey={(r) => r.warehouseCode} empty={{ title: "No replenishment levels", description: "Edit the product to set min/max levels per warehouse." }} columns={[
+        <MiniTable rows={data.replenishment} getKey={(r) => r.warehouseCode} empty={{ title: "No replenishment levels", description: "Set min/max levels so KitStaks can flag low pick-face stock and create replenishment moves.", action: onEdit ? <Button variant="primary" size="sm" onClick={onEdit}>Set replenishment levels</Button> : undefined }} columns={[
           { key: "wh", label: "Warehouse", render: (r) => r.warehouseCode },
           { key: "min", label: "Min level", align: "right", render: (r) => r.min },
           { key: "max", label: "Max level", align: "right", render: (r) => r.max },
@@ -310,11 +383,20 @@ export function PlanningTab({ data }: { readonly data: D }) {
   );
 }
 
-export function TransactionsTab({ data, onOpenChangeLog }: { readonly data: D; readonly onOpenChangeLog?: () => void }) {
+export function TransactionsTab({ data, onOpenChangeLog, canAddStock }: { readonly data: D; readonly onOpenChangeLog?: () => void; readonly canAddStock?: boolean }) {
   const fmt = useFormat();
   return (
     <Section title="Inventory transactions" description="The last 100 ledger entries in your warehouses." action={onOpenChangeLog ? <button type="button" onClick={onOpenChangeLog} className="text-[12px] font-semibold text-primary hover:underline">View change log</button> : undefined}>
-      <MiniTable rows={data.transactions} getKey={(r) => r.id} empty={{ title: "No transactions yet", description: "Receipts, moves, adjustments and shipments appear here." }} columns={[
+      <MiniTable rows={data.transactions} getKey={(r) => r.id} empty={{
+        title: "No transactions yet",
+        description: "Stock movements for this product show up here once it is received, adjusted, moved or shipped.",
+        action: (
+          <div className="flex flex-wrap justify-center gap-2">
+            <Link href="/receiving/new" className={buttonVariants({ variant: "primary", size: "sm" })}>Create receipt</Link>
+            {canAddStock ? <Link href="/inventory/by-location" className={buttonVariants({ variant: "secondary", size: "sm" })}>Add inventory</Link> : null}
+          </div>
+        ),
+      }} columns={[
         { key: "seq", label: "#", render: (r) => <span className="tabular-nums text-faint">{r.seq}</span> },
         { key: "at", label: "Date", render: (r) => fmt.dateTime(r.at) },
         { key: "type", label: "Type", render: (r) => r.type },

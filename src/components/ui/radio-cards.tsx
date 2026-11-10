@@ -47,7 +47,7 @@ export function RadioCards<V extends string>({ options, value, onChange, columns
             disabled={option.disabled}
             className={cn(
               "group flex w-full items-center gap-3 rounded-lg border bg-surface px-4 py-3 text-left outline-none transition-[border-color,box-shadow,background-color]",
-              "border-border hover:border-border-strong hover:shadow-xs focus-visible:ring-2 focus-visible:ring-primary/30",
+              "border-border hover:border-border-strong hover:shadow-xs focus-visible:ring-2 focus-visible:ring-info/30",
               "data-[state=checked]:border-primary data-[state=checked]:bg-primary-soft/60 data-[state=checked]:shadow-[0_0_0_1px_var(--primary)]",
               "active:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-50",
               invalid && "border-danger"

@@ -41,3 +41,24 @@ export function timezoneLabel(timeZone: string, at: Date = new Date()): string {
     return timeZone;
   }
 }
+
+/* ---------------- Help panel: Feedback & Updates ---------------- */
+
+export const FEEDBACK_TYPES = ["idea", "problem", "praise"] as const;
+export type FeedbackType = (typeof FEEDBACK_TYPES)[number];
+export const FEEDBACK_TYPE_LABELS: Readonly<Record<FeedbackType, string>> = { idea: "Idea or request", problem: "Something isn't working", praise: "Something I like" };
+
+export const feedbackSchema = z.object({
+  type: z.enum(FEEDBACK_TYPES, { error: "Choose a feedback type" }),
+  message: z.string().trim().min(10, "Tell us a bit more (at least 10 characters)").max(2000, "At most 2000 characters"),
+  /** In-app path the feedback is about (never a full URL, so no query strings or hosts leak). */
+  page: z.string().trim().max(300).regex(/^\/[A-Za-z0-9/_\-[\].]*$/, "Must be an app path").default("/"),
+  rating: z.number().int().min(1).max(5).nullable().default(null),
+});
+export type FeedbackValues = z.input<typeof feedbackSchema>;
+
+/** Strips the query string and hash from a path before it is sent as feedback context. PURE. */
+export function feedbackPage(pathname: string): string {
+  const path = pathname.split(/[?#]/)[0] ?? "/";
+  return /^\/[A-Za-z0-9/_\-[\].]*$/.test(path) ? path.slice(0, 300) : "/";
+}

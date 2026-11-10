@@ -15,11 +15,16 @@ import { changeLog, ledger, shipping, tasks } from "@/server/domain";
 import { validationError } from "@/server/api/errors";
 import { DomainError } from "@/server/domain/errors";
 import { markOrderShort } from "@/server/domain/task-handlers/shared";
+import { rollupOrderStatus } from "@/server/domain/progress";
 import type { DomainCtx } from "@/server/domain/types";
 import { printToFile } from "@/server/print";
 import { idSchema } from "./platform-common";
+import { hospitalLocations, isHospitalLocationId } from "./packing-hospitals";
 import { loadStation, PACKABLE_STATUSES } from "./packing-scan";
 import { carrierOptions, type CarrierOption } from "./returns-carriers";
+import { packingWarningOf, type PackingWarning } from "./packing-warnings";
+import { packLock, packLockMessage, type CountLockInfo } from "./packing-locks";
+import { clearPackDraft, draftFits, readPackDraft, type PackDraft } from "./packing-drafts";
 
 type Ctx = DomainCtx & { readonly scope: Scope };
 type OrderRow = typeof schema.shipmentOrders.$inferSelect;
@@ -45,6 +50,8 @@ export interface PackLine {
   readonly expiryDate: string | null;
   readonly pickedSerials: readonly string[];
   readonly packingInstructions: string | null;
+  /** Pack type flag "Use own box" (catalog): every unit ships alone in its own package. */
+  readonly useOwnBox?: boolean;
 }
 
 export interface PackPackageType {
@@ -62,6 +69,7 @@ export interface PackContext {
   readonly order: {
     readonly id: string; readonly code: string; readonly status: string; readonly version: number; readonly warehouseId: string; readonly clientId: string;
     readonly clientName: string; readonly customerName: string; readonly storeOrderNumber: string | null; readonly channel: string;
+    readonly retailerName?: string | null; readonly retailerLabelPrinted?: boolean;
     readonly shipTo: string; readonly isAutoShip: boolean; readonly packShortStatus: string; readonly packingInstructions: string | null;
     readonly giftNote: string | null; readonly carrierServiceId: string | null; readonly carrierConnectionId: string | null;
     readonly defaultPackageId: string | null; readonly jobCode: string | null; readonly priority: string;
@@ -72,11 +80,26 @@ export interface PackContext {
   readonly settings: ClientSettings["packing"];
   readonly activeLabels: readonly { readonly trackingNumber: string; readonly labelFileId: string | null }[];
   readonly hospitalLocationId: string | null;
+  /** The default hospital with its code, so Report Issue shows it before the option list loads. */
+  readonly hospital: HospitalOption | null;
+  /** Packing Warning Type of the order (shown at its trigger; acknowledged unless skip-confirmation). */
+  readonly packingWarning: PackingWarning | null;
+  /** Count-plan lock on the station or the staged stock (Complete would be refused), with operator copy. */
+  readonly countLock: (CountLockInfo & { readonly reason: string }) | null;
+  /** In-progress pack state saved on the server (resumes after a reload / on another device), or null. */
+  readonly draft: PackDraft | null;
 }
 
 function scanCodesOf(db: AppDb, product: typeof schema.products.$inferSelect): string[] {
   const alt = db.select({ b: schema.productBarcodes.barcode }).from(schema.productBarcodes).where(eq(schema.productBarcodes.productId, product.id)).all().map((r) => r.b);
   return [...new Set([product.sku, product.barcode, product.fnsku, ...alt].filter((c): c is string => !!c).map((c) => c.toLowerCase()))];
+}
+
+/** Catalog pack-type flag for the order line's pack type (case-insensitive name match). */
+function ownBoxOf(db: AppDb, productId: string, packType: string | null): boolean {
+  if (!packType) return false;
+  const row = db.get<{ o: number }>(sql`SELECT use_own_box AS o FROM product_pack_types WHERE product_id = ${productId} AND lower(pack_type) = lower(${packType}) LIMIT 1`);
+  return Boolean(row?.o);
 }
 
 export function loadPackOrder(db: AppDb, scope: Scope, orderId: string): OrderRow {
@@ -90,14 +113,20 @@ function pendingPackTasks(db: AppDb, orderId: string) {
   return db.select().from(schema.tasks).where(and(eq(schema.tasks.orderId, orderId), eq(schema.tasks.taskType, "Packing"), inArray(schema.tasks.status, ["Pending", "Started"]))).all();
 }
 
-/** Default hospital: a location coded HOSP*, else the Damaged location, else Returns area. */
-function hospitalLocation(db: AppDb, warehouseId: string): string | null {
-  const row = db.get<{ id: string }>(sql`SELECT id FROM locations WHERE warehouse_id = ${warehouseId} AND is_active = 1 AND only_damaged = 0
-    ORDER BY CASE WHEN upper(code) LIKE 'HOSP%' THEN 0 WHEN area_type = 'Returns' AND location_type <> 'Virtual' THEN 1 WHEN area_type = 'Returns' THEN 2 ELSE 3 END, code LIMIT 1`);
-  return row?.id ?? null;
+/**
+ * Default hospital: the first explicitly designated hospital (Location Group "Hospital", else a
+ * HOSP* code). No fallback to Returns-area bins: null means "no hospital configured".
+ */
+function defaultHospital(db: AppDb, warehouseId: string): HospitalOption | null {
+  const h = hospitalLocations(db, warehouseId)[0];
+  return h ? { id: h.id, code: h.code, detail: hospitalDetail(h), isDefault: true } : null;
 }
 
-export function packContext(db: AppDb, scope: Scope, orderId: string): PackContext {
+function hospitalDetail(h: { readonly areaType: string | null; readonly locationType: string | null; readonly designation: "group" | "code" }): string {
+  return [h.designation === "group" ? "Hospital group" : "HOSP code", h.areaType, h.locationType].filter(Boolean).join(" · ");
+}
+
+export function packContext(db: AppDb, scope: Scope, orderId: string, stationId?: string | null): PackContext {
   const o = loadPackOrder(db, scope, orderId);
   const client = db.select().from(schema.clients).where(eq(schema.clients.id, o.clientId)).get();
   const settings = parseSettings(clientSettingsSchema, client?.settings ?? {}).packing;
@@ -115,9 +144,11 @@ export function packContext(db: AppDb, scope: Scope, orderId: string): PackConte
       toPack: Math.min(planned, picked), packed: l.packedQuantity, weightOz: p.weightOz, scanCodes: scanCodesOf(db, p), trackSerial: p.trackSerial,
       captureLot: p.trackLot && p.lotScanMethod === "During Packing", captureExpiry: p.trackExpiry && p.expiryScanMethod === "During Packing",
       lotNumber: l.lotNumber, expiryDate: l.expiryDate, pickedSerials: serials, packingInstructions: p.packingInstructions,
+      useOwnBox: ownBoxOf(db, p.id, l.packType),
     };
   }).filter((l) => l.toPack > 0 || l.packed > 0);
   const packages = db.select().from(schema.shipmentPackages).where(and(eq(schema.shipmentPackages.warehouseId, o.warehouseId), eq(schema.shipmentPackages.isActive, true))).orderBy(schema.shipmentPackages.code).all()
+    .filter((p) => packageAllowsClient(db, p, o.clientId))
     .map((p): PackPackageType => ({ id: p.id, code: p.code, description: p.description, length: p.length, width: p.width, height: p.height, emptyWeightLb: p.emptyWeight, tracksInventory: p.trackInventory }));
   const productPackage = lines.map((r) => r.p.useShipPackageId).find((id) => !!id) ?? null;
   const labels = db.select({ t: schema.shipments.trackingNumber, f: schema.shipments.labelFileId }).from(schema.shipments)
@@ -130,13 +161,22 @@ export function packContext(db: AppDb, scope: Scope, orderId: string): PackConte
       isAutoShip: o.isAutoShip, packShortStatus: o.packShortStatus, packingInstructions: o.packingInstructions, giftNote: o.isGift ? o.giftNote : null,
       carrierServiceId: o.carrierServiceId, carrierConnectionId: o.carrierConnectionId, defaultPackageId: o.shipmentPackageId ?? productPackage,
       jobCode: job?.code ?? null, priority: o.priority,
+      retailerName: o.retailerId ? (db.select({ n: schema.retailers.name }).from(schema.retailers).where(eq(schema.retailers.id, o.retailerId)).get()?.n ?? null) : null,
+      retailerLabelPrinted: o.isUccLabelGenerated,
     },
     lines: packLines,
     packages,
     carriers: carrierOptions(db, o.warehouseId, o.clientId),
     settings,
     activeLabels: labels.map((l) => ({ trackingNumber: l.t, labelFileId: l.f })),
-    hospitalLocationId: hospitalLocation(db, o.warehouseId),
+    packingWarning: packingWarningOf(db, o.packingWarningTypeId),
+    countLock: (() => { const l = packLock(db, o.id, stationId); return l ? { ...l, reason: packLockMessage(o.code, l, stationId) } : null; })(),
+    ...(() => { const h = defaultHospital(db, o.warehouseId); return { hospitalLocationId: h?.id ?? null, hospital: h }; })(),
+    draft: (() => {
+      if (!(PACKABLE_STATUSES as readonly string[]).includes(o.status)) return null;
+      const d = readPackDraft(db, o.id);
+      return d && draftFits(d.state, packLines.filter((l) => l.toPack > 0)) ? d : null;
+    })(),
   };
 }
 
@@ -194,6 +234,16 @@ export function validatePackages(ctxLines: readonly PackLine[], input: Pick<Comp
     if (!line) throw new DomainError("VALIDATION", "A packed item is not on this order.");
     if (qty > line.toPack) throw new DomainError("VALIDATION", `${line.sku}: ${qty} packed but only ${line.toPack} to pack. Over-packing is blocked.`);
   }
+  // "Use own box" pack types: each unit is its own package, with nothing else in it.
+  for (const p of input.packages) {
+    for (const i of p.items) {
+      const line = ctxLines.find((l) => l.orderLineId === i.orderLineId);
+      if (!line?.useOwnBox) continue;
+      if (p.items.length > 1 || i.qty > 1) {
+        throw new DomainError("VALIDATION", `${line.sku} (${line.packType ?? "pack"}) ships in its own box: put each unit in a separate package with nothing else in it.`);
+      }
+    }
+  }
   const short = ctxLines.filter((l) => l.toPack > 0 && (sums.get(l.orderLineId) ?? 0) < l.toPack);
   if (short.length > 0) {
     throw new DomainError("VALIDATION", `Pack every item before completing (${short.map((l) => `${l.sku} ${sums.get(l.orderLineId) ?? 0}/${l.toPack}`).join(", ")}). Use Report Issue for missing items.`);
@@ -214,6 +264,13 @@ export function validatePackages(ctxLines: readonly PackLine[], input: Pick<Comp
     if (line.captureLot && !cap?.lotNumber) throw new DomainError("VALIDATION", `${line.sku}: enter the lot number.`);
     if (line.captureExpiry && !cap?.expiryDate) throw new DomainError("VALIDATION", `${line.sku}: enter the expiry date.`);
   }
+}
+
+/** M10 client access: "All clients" packages fit every order; "Select manually" only the listed clients. */
+function packageAllowsClient(db: AppDb, pkg: { id: string; allClients: boolean }, clientId: string): boolean {
+  if (pkg.allClients) return true;
+  return !!db.select({ c: schema.shipmentPackageClients.clientId }).from(schema.shipmentPackageClients)
+    .where(and(eq(schema.shipmentPackageClients.packageId, pkg.id), eq(schema.shipmentPackageClients.clientId, clientId))).get();
 }
 
 /** Packaging material: one unit of the package's tracked product per closed box. */
@@ -275,11 +332,19 @@ export async function completePacking(db: AppDb, ctx: Ctx, input: CompletePackin
   if (!input.withLabel && context.settings.disablePackingWithoutLabel) throw new DomainError("INVALID_STATE", `Packing without a label is disabled for ${context.order.clientName}.`);
   if (input.packages.length > 1 && context.settings.disallowMultipleShipmentPackages) throw new DomainError("INVALID_STATE", `${context.order.clientName} does not allow multiple packages per order.`);
   validatePackages(context.lines, input);
+  const lock = packLock(db, order.id, station.id);
+  if (lock) throw new DomainError("INVALID_STATE", packLockMessage(order.code, lock, station.id), { countPlanCode: lock.planCode, locationCode: lock.locationCode });
   const packedUnits = context.lines.reduce((s, l) => s + l.toPack, 0);
   const warnings = db.transaction((tx) => {
     const pending = pendingPackTasks(tx, order.id);
     tasks.execute(tx, ctx, { taskIds: pending.map((t) => t.id), targetLocationId: station.id });
+    clearPackDraft(tx, order.id);
     const pkgIds = input.packages.map((p) => p.shipmentPackageId);
+    for (const pid of pkgIds) {
+      if (!pid) continue;
+      const pkg = tx.select().from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, pid)).get();
+      if (pkg && !packageAllowsClient(tx, pkg, order.clientId)) throw new DomainError("VALIDATION", `Package ${pkg.code} is not available for ${context.order.clientName}.`);
+    }
     if (pkgIds[0] && pkgIds[0] !== order.shipmentPackageId) {
       tx.update(schema.shipmentOrders).set({ shipmentPackageId: pkgIds[0], updatedBy: ctx.userId }).where(eq(schema.shipmentOrders.id, order.id)).run();
       changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { shipmentPackageId: order.shipmentPackageId }, after: { shipmentPackageId: pkgIds[0] } });
@@ -304,8 +369,8 @@ export async function completePacking(db: AppDb, ctx: Ctx, input: CompletePackin
   const fresh = loadPackOrder(db, ctx.scope, order.id);
   const slip = await packingSlip(db, ctx, fresh, context.lines, input, master);
   let shipped = false;
-  if (fresh.isAutoShip && fresh.status === "Ready to Ship" && (shipments.length > 0 || !input.withLabel)) {
-    const r = db.transaction((tx) => shipping.shipOrders(tx, ctx, { orderIds: [order.id], requireLabel: input.withLabel }));
+  if (fresh.isAutoShip && fresh.status === "Ready to Ship" && shipments.length > 0) {
+    const r = db.transaction((tx) => shipping.shipOrders(tx, ctx, { orderIds: [order.id], requireLabel: true }));
     shipped = r.succeeded.length > 0;
     if (!shipped) warnings.push(`Auto-ship failed: ${r.failed[0]?.message ?? "unknown error"}`);
   }
@@ -352,6 +417,7 @@ export function reportIssue(tx: AppDb, ctx: Ctx, input: z.output<typeof reportIs
   if (!(PACKABLE_STATUSES as readonly string[]).includes(order.status)) throw new DomainError("INVALID_STATE", `Order ${order.code} is ${order.status}; only orders being packed can report an issue.`);
   const loc = tx.select().from(schema.locations).where(eq(schema.locations.id, input.hospitalLocationId)).get();
   if (!loc || loc.warehouseId !== order.warehouseId) throw validationError("Choose a hospital location in the order's warehouse", { hospitalLocationId: ["Location is in another warehouse"] });
+  if (!isHospitalLocationId(tx, loc.id)) throw validationError(`${loc.code} is not a hospital location. Choose a location in the "Hospital" location group or coded HOSP…`, { hospitalLocationId: ["Not a hospital location"] });
   const allocs = tx.select().from(schema.inventoryAllocations)
     .where(and(eq(schema.inventoryAllocations.orderId, order.id), inArray(schema.inventoryAllocations.status, ["Picked", "Sorted"]))).all();
   const wanted = input.lines ? new Map(input.lines.map((l) => [l.orderLineId, l.qty])) : null;
@@ -369,6 +435,7 @@ export function reportIssue(tx: AppDb, ctx: Ctx, input: z.output<typeof reportIs
   }
   if (moved === 0) throw new DomainError("INVALID_STATE", "No picked stock left to move for this order.");
   markOrderShort(tx, ctx, order.id, "pack");
+  clearPackDraft(tx, order.id);
   tx.update(schema.shipmentOrders).set({ note: order.note ? `${order.note}\nPack issue: ${input.note}` : `Pack issue: ${input.note}`, version: sql`${schema.shipmentOrders.version} + 1` })
     .where(eq(schema.shipmentOrders.id, order.id)).run();
   changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { packShortStatus: order.packShortStatus }, after: { packShortStatus: "Open" } });
@@ -384,14 +451,10 @@ export interface HospitalOption {
   readonly isDefault: boolean;
 }
 
-/** Locations an issue can be reported to (default hospital first, then Returns area, then the rest). */
+/** Locations an issue can be reported to: the designated hospitals only (default first). Empty = none configured. */
 export function hospitalOptions(db: AppDb, scope: Scope, warehouseId: string): HospitalOption[] {
   if (!scope.warehouseIds.includes(warehouseId)) throw new DomainError("NOT_FOUND", "Warehouse not found");
-  const def = hospitalLocation(db, warehouseId);
-  const rows = db.all<{ id: string; code: string; detail: string }>(sql`SELECT id, code, area_type || ' · ' || location_type AS detail FROM locations
-    WHERE warehouse_id = ${warehouseId} AND is_active = 1 AND area_type IN ('Returns', 'Storage', 'Receiving', 'Picking')
-    ORDER BY CASE WHEN id = ${def ?? ""} THEN 0 WHEN upper(code) LIKE 'HOSP%' THEN 1 WHEN area_type = 'Returns' THEN 2 ELSE 3 END, code LIMIT 200`);
-  return rows.map((r) => ({ ...r, isDefault: r.id === def }));
+  return hospitalLocations(db, warehouseId).map((h, i) => ({ id: h.id, code: h.code, detail: hospitalDetail(h), isDefault: i === 0 }));
 }
 
 /** Prints the packing slip of an order being packed (Print Actions), before completion. */
@@ -402,4 +465,53 @@ export async function printPackingSlip(db: AppDb, ctx: Ctx, orderId: string): Pr
   const fileId = await packingSlip(db, ctx, order, lines, { orderId, stationId: "", withLabel: false, packages: [], captures: [] } as unknown as CompletePackingInput, order.trackingNumber ?? null);
   if (!fileId) throw new DomainError("INVALID_STATE", "The packing slip could not be generated. Check the printout templates.");
   return { fileId };
+}
+
+/**
+ * Opening an order on the pack screen starts packing (Logiwa: Ready to Pack → Packing
+ * Started). Pending Packing tasks become Started, and the order status follows through the
+ * normal task rollup, so the state machine and task progress stay consistent. Idempotent.
+ */
+export function startPacking(db: AppDb, ctx: DomainCtx & { readonly scope: Scope }, orderId: string): { readonly status: string; readonly started: number } {
+  const order = loadPackOrder(db, ctx.scope, orderId);
+  if (order.status !== "Ready to Pack" || order.packShortStatus === "Open") return { status: order.status, started: 0 };
+  return db.transaction((tx) => {
+    const now = new Date().toISOString();
+    const pending = tx.select().from(schema.tasks).where(and(eq(schema.tasks.orderId, orderId), eq(schema.tasks.taskType, "Packing"), eq(schema.tasks.status, "Pending"))).all();
+    if (pending.length === 0) return { status: order.status, started: 0 };
+    tx.update(schema.tasks).set({ status: "Started", startedAt: now, executedByUserId: ctx.userId, updatedBy: ctx.userId })
+      .where(inArray(schema.tasks.id, pending.map((t) => t.id))).run();
+    const status = rollupOrderStatus(tx, ctx, orderId);
+    return { status, started: pending.length };
+  });
+}
+
+export const retailerLabelSchema = z.object({ orderId: idSchema, reprint: z.boolean().default(false), caseCount: z.number().int().min(1).max(500).optional() });
+
+/**
+ * Print Actions › Create / Reprint Retailer Label (Logiwa). One "Retailer Label For Case" per
+ * case (= packages packed so far, or `caseCount`). Create marks the order's UCC label as
+ * generated (change_log); Reprint requires that it was created before.
+ */
+export async function printRetailerLabel(db: AppDb, ctx: Ctx, input: z.output<typeof retailerLabelSchema>): Promise<{ fileId: string; cases: number; reprint: boolean }> {
+  const order = loadPackOrder(db, ctx.scope, input.orderId);
+  if (!order.retailerId) throw new DomainError("INVALID_STATE", `${order.code} has no retailer, so it has no retailer label. Set a retailer on the order first.`);
+  if (input.reprint && !order.isUccLabelGenerated) throw new DomainError("INVALID_STATE", `No retailer label was created for ${order.code} yet. Use Create retailer label.`);
+  const retailer = db.select().from(schema.retailers).where(eq(schema.retailers.id, order.retailerId)).get();
+  const client = db.select({ name: schema.clients.name }).from(schema.clients).where(eq(schema.clients.id, order.clientId)).get();
+  const packed = db.get<{ n: number }>(sql`SELECT count(*) AS n FROM shipments WHERE order_id = ${order.id} AND label_status = 'Active'`)?.n ?? 0;
+  const cases = input.caseCount ?? Math.max(1, packed);
+  const shipTo = [order.customerName, order.shipAddress, `${order.shipCity}, ${order.shipState} ${order.shipZip}`].filter(Boolean).join(", ");
+  const base = { orderCode: order.code, retailerName: retailer?.businessName || retailer?.name || undefined, storeOrderNumber: order.storeOrderNumber ?? undefined,
+    retailerPo: order.retailerPo ?? undefined, dept: order.dept ?? undefined, markFor: order.markFor ?? undefined, shipTo: shipTo.slice(0, 300), clientName: client?.name ?? undefined, caseCount: cases };
+  const records = Array.from({ length: cases }, (_, i) => ({ ...base, caseNumber: i + 1 }));
+  const copies = Math.max(1, retailer?.caseLabelPrintQty ?? 1);
+  const file = await printToFile(db, { request: { typeKey: "retailer-case-label", records, options: { copies } }, userId: ctx.userId ?? "", ownerEntityType: "shipment_order", ownerEntityId: order.id });
+  if (!input.reprint && !order.isUccLabelGenerated) {
+    db.transaction((tx) => {
+      tx.update(schema.shipmentOrders).set({ isUccLabelGenerated: true, updatedBy: ctx.userId }).where(eq(schema.shipmentOrders.id, order.id)).run();
+      changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { isUccLabelGenerated: false }, after: { isUccLabelGenerated: true } });
+    });
+  }
+  return { fileId: file.id, cases, reprint: input.reprint };
 }

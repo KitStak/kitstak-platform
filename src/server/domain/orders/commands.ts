@@ -41,7 +41,8 @@ export function cancelOrders(tx: Tx, ctx: DomainCtx, input: { ids: readonly stri
     inner.update(schema.orderLines).set({ cancelledQuantity: sql`${schema.orderLines.quantity} - ${schema.orderLines.shippedQuantity}`, updatedBy: ctx.userId })
       .where(eq(schema.orderLines.orderId, id)).run();
     setStatus(inner, ctx, fresh, stateMachines.shipmentOrder.transition(fresh.status, "Cancelled", { reason: input.reasonId }), {
-      cancelReasonId: input.reasonId, cancelledAt: nowIso(), ...(input.note ? { note: input.note } : {}),
+      // The cancel note is not written into the order's own Note (orders REQ-R3-2): callers log it as a change-log entry / order note.
+      cancelReasonId: input.reasonId, cancelledAt: nowIso(),
     });
   });
 }

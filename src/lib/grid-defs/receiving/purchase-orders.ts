@@ -16,6 +16,8 @@ export interface ReceivingGridField {
   readonly label: string;
   readonly type: ReceivingFieldType;
   readonly options?: readonly string[];
+  /** Display label per stored option value (the value is still what the filter sends). */
+  readonly optionLabel?: (value: string) => string;
   readonly allowEmpty?: boolean;
   readonly decimals?: number;
   readonly group?: string;

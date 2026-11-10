@@ -7,6 +7,7 @@
  */
 import * as React from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Copy, Eye, History, Lock, Pencil, Plus, ShieldOff, Trash2 } from "lucide-react";
 import { DataGrid, DateCell, GridToolbar, useGrid, type BulkAction, type GridColumnDef, type RowAction } from "@/components/grid";
 import { PageHeader } from "@/components/layout/page-header";
@@ -15,12 +16,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
-import { InfoTip } from "@/components/ui/info-tip";
 import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
-import { RESTRICTION_DEFS, restrictionLabel, ROLE_FIELDS, ROLES_GRID_KEY } from "@/lib/grid-defs/admin/roles";
+import { RESTRICTION_COVERAGE, RESTRICTION_DEFS, restrictionLabel, ROLE_FIELDS, ROLES_GRID_KEY } from "@/lib/grid-defs/admin/roles";
+import { Callout } from "@/components/ui/callout";
+import { USERS_ROLES_HELPER, USERS_ROLES_TITLE } from "@/lib/grid-defs/admin/users";
 import type { RoleRow } from "@/server/repositories/roles";
-import { EntityChangeLogDrawer, Muted, NO_PERMISSION, toastBulk, toFilterFields, useAction, usePagePerms, type BulkResponse } from "../admin-shared";
+import { armDestructive, EntityChangeLogDrawer, Muted, NO_PERMISSION, PermissionPending, toastBulk, toFilterFields, useAction, useGridPatch, usePagePerms, type BulkResponse } from "../admin-shared";
 import { RoleDrawer } from "./role-drawer";
 
 const PERMS = ["view", "create", "edit", "delete", "change_log", "manage_restrictions"] as const;
@@ -41,12 +43,11 @@ function columns(onOpen: (id: string) => void): GridColumnDef<RoleRow>[] {
     { id: "category", header: "Role category", size: 120, cell: ({ row }) => row.original.category },
     {
       id: "restrictions", header: "Restrictions", size: 260,
-      meta: { headerTip: "Data restrictions assigned to the role" },
       cell: ({ row }) => row.original.restrictions.length
         ? <span className="flex flex-wrap gap-1">{row.original.restrictions.map((k) => <Badge key={k} tone="warning" size="sm" shape="pill">{restrictionLabel(k)}</Badge>)}</span>
         : <Muted>None</Muted>,
     },
-    { id: "userCount", header: "Users", size: 80, meta: { align: "right" }, cell: ({ row }) => <span className="block text-right"><Link href={`/settings/users?f.roleId=in:${row.original.id}`} className="tabular-nums text-primary hover:underline">{row.original.userCount}</Link></span> },
+    { id: "userCount", header: "Users", size: 80, cell: ({ row }) => <Link href={`/settings/users?f.roleId=in:${row.original.id}`} aria-label={`${row.original.userCount} users with ${row.original.name}`} className="tabular-nums text-primary hover:underline">{row.original.userCount}</Link> },
     {
       id: "permissionCount", header: "Permissions", size: 150,
       cell: ({ row }) => {
@@ -59,20 +60,20 @@ function columns(onOpen: (id: string) => void): GridColumnDef<RoleRow>[] {
         );
       },
     },
-    { id: "isSystem", header: "Type", size: 90, cell: ({ row }) => row.original.isSystem ? <Badge tone="neutral" size="sm">System</Badge> : <Badge tone="primary" size="sm">Custom</Badge> },
+    { id: "isSystem", header: "Type", size: 90, cell: ({ row }) => row.original.isSystem ? <Badge tone="neutral" size="sm">System</Badge> : <Badge tone="neutral" size="sm" className="bg-transparent ring-1 ring-inset ring-border">Custom</Badge> },
     { id: "updatedAt", header: "Updated", size: 172, meta: hidden, cell: ({ row }) => <DateCell value={row.original.updatedAt} /> },
   ];
 }
 
 function RestrictionsDialog({ roles, onClose, onSaved }: { readonly roles: readonly RoleRow[] | null; readonly onClose: () => void; readonly onSaved: () => void }) {
   const [value, setValue] = React.useState<ReadonlySet<string>>(new Set());
+  const [seenRoles, setSeenRoles] = React.useState<readonly RoleRow[] | null>(null);
   const action = useAction([["grid", ROLES_GRID_KEY]]);
-  React.useEffect(() => {
-    if (!roles) return;
-    // Pre-check restrictions shared by every selected role.
-    const common = RESTRICTION_DEFS.filter((d) => roles.every((r) => r.restrictions.includes(d.key))).map((d) => d.key);
-    setValue(new Set(common));
-  }, [roles]);
+  if (roles !== seenRoles) {
+    // New selection: pre-check the restrictions shared by every selected role (state from props, no effect).
+    setSeenRoles(roles);
+    if (roles) setValue(new Set(RESTRICTION_DEFS.filter((d) => roles.every((r) => r.restrictions.includes(d.key))).map((d) => d.key)));
+  }
   const save = async () => {
     if (!roles) return;
     const result = await action.run<BulkResponse>("/api/roles/restrictions", "POST", { ids: roles.map((r) => r.id), restrictions: [...value] });
@@ -83,7 +84,10 @@ function RestrictionsDialog({ roles, onClose, onSaved }: { readonly roles: reado
       <DialogContent size="md">
         <DialogHeader title="Manage restrictions" description={`Selected role${(roles?.length ?? 0) === 1 ? "" : "s"}: ${(roles ?? []).map((r) => r.name).join(", ")}`} />
         <DialogBody className="flex flex-col gap-3">
-          <p className="text-[13px] text-secondary">Select the restrictions to apply to the selected roles. Restricted fields are hidden in every grid, detail page, export and API response.</p>
+          <p className="text-[13px] text-secondary">Select the restrictions to apply to the selected roles. Changes apply at their next page load.</p>
+          <Callout variant="info" title="Applies app-wide">
+            {RESTRICTION_COVERAGE}
+          </Callout>
           {RESTRICTION_DEFS.map((d) => (
             <div key={d.key} className="rounded-lg border border-border px-3 py-2.5">
               <Checkbox checked={value.has(d.key)} onCheckedChange={() => setValue((prev) => { const next = new Set(prev); if (next.has(d.key)) next.delete(d.key); else next.add(d.key); return next; })}
@@ -104,13 +108,16 @@ export function RolesPage() {
   const perms = usePagePerms("settings.roles", PERMS);
   const fields = React.useMemo(() => toFilterFields(ROLE_FIELDS), []);
   const g = useGrid<RoleRow>({ gridKey: ROLES_GRID_KEY, path: "/api/roles", fields });
-  const [drawer, setDrawer] = React.useState<{ open: boolean; id: string | null }>({ open: false, id: null });
+  // `?id=<roleId>` (global search deep link) opens that role's drawer.
+  const searchParams = useSearchParams();
+  const [drawer, setDrawer] = React.useState<{ open: boolean; id: string | null; view?: boolean }>(() => { const id = searchParams.get("id"); return { open: Boolean(id), id, view: true }; });
   const [log, setLog] = React.useState<RoleRow | null>(null);
   const [toDelete, setToDelete] = React.useState<readonly RoleRow[] | null>(null);
   const [restrict, setRestrict] = React.useState<readonly RoleRow[] | null>(null);
   const action = useAction([["grid", ROLES_GRID_KEY], ["admin-options"]]);
+  const patchRoles = useGridPatch<RoleRow>(ROLES_GRID_KEY);
   const selected = (ids: readonly string[]) => g.rows.filter((r) => ids.includes(r.id));
-  const open = (id: string | null) => setDrawer({ open: true, id });
+  const open = (id: string | null, view = false) => setDrawer({ open: true, id, view });
   const cols = React.useMemo(() => columns((id) => open(id)), []);
   const deleteReason = (row: RoleRow) => (!perms.delete ? NO_PERMISSION : row.isSystem ? "System roles can't be deleted" : row.userCount > 0 ? `Assigned to ${row.userCount} ${row.userCount === 1 ? "user" : "users"}. Reassign them first.` : null);
 
@@ -126,7 +133,7 @@ export function RolesPage() {
       eligibility: (ids) => selected(ids).every((r) => r.isSystem || r.userCount > 0) ? "System roles and roles with users can't be deleted" : null },
   ];
   const rowActions = (row: RoleRow): readonly RowAction[] => [
-    { key: "details", label: "Show details", icon: Eye, onSelect: () => open(row.id) },
+    { key: "details", label: "Show details", icon: Eye, onSelect: () => open(row.id, true) },
     { key: "edit", label: "Edit", icon: Pencil, onSelect: () => open(row.id), disabledReason: !perms.edit ? NO_PERMISSION : row.isSystem ? "System roles are view-only. Duplicate to customize." : null },
     { key: "duplicate", label: "Duplicate", icon: Copy, onSelect: () => void duplicate(row), disabledReason: perms.create ? null : NO_PERMISSION },
     { key: "restrictions", label: "Manage restrictions", icon: ShieldOff, onSelect: () => setRestrict([row]), disabledReason: !perms.manage_restrictions ? NO_PERMISSION : row.key === "admin" ? "The Admin role always sees every field" : null },
@@ -136,31 +143,25 @@ export function RolesPage() {
   const filtered = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Users & Roles" tabs="users"
-        helper="Roles bundle permissions. A user's access is the union of every role assigned to them."
+      <PageHeader title={USERS_ROLES_TITLE} tabs="users"
+        helper={USERS_ROLES_HELPER}
         actions={
           <>
-            <InfoTip content="Hide carrier costs, carrier account data or rate shopping data from the selected roles." />
-            <DisabledReason reason={perms.manage_restrictions ? (g.selectedIds.length ? null : "Select at least one role") : NO_PERMISSION}>
-              <Button variant="secondary" disabled={!perms.manage_restrictions || g.selectedIds.length === 0} onClick={() => setRestrict(selected(g.selectedIds))}>
-                <ShieldOff className="h-4 w-4" aria-hidden />Manage restrictions
-              </Button>
-            </DisabledReason>
-            <DisabledReason reason={perms.create ? null : NO_PERMISSION}><Button variant="primary" disabled={!perms.create} onClick={() => open(null)}><Plus className="h-4 w-4" aria-hidden />Add role</Button></DisabledReason>
+            {perms.loading ? <PermissionPending /> : <DisabledReason reason={perms.create ? null : NO_PERMISSION}><Button variant="primary" disabled={!perms.create} onClick={() => open(null)}><Plus className="h-4 w-4" aria-hidden />Add role</Button></DisabledReason>}
           </>
         } />
-      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by name" bulkActions={bulkActions} bulkNoun="role" />
+      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by name" bulkActions={bulkActions.map((a) => armDestructive(a, g.toolbarProps.selectedIds))} bulkNoun="role" />
       <DataGrid<RoleRow>
         {...g.gridProps}
         columns={cols}
         getRowId={(r) => r.id}
-        rowActions={rowActions}
-        onRowClick={(r) => open(r.id)}
+        rowActions={(row) => rowActions(row).map((a) => armDestructive(a))}
+        onRowClick={(r) => open(r.id, true)}
         emptyTitle={filtered ? "No roles match these filters" : "No roles yet"}
         emptyDescription={filtered ? "Clear a filter or search for another name." : "Create a role to group permissions for a job."}
         emptyAction={perms.create && !filtered ? <Button variant="primary" onClick={() => open(null)}><Plus className="h-4 w-4" />Add role</Button> : undefined}
       />
-      <RoleDrawer open={drawer.open} roleId={drawer.id} canEdit={perms.edit} canCreate={perms.create}
+      <RoleDrawer open={drawer.open} roleId={drawer.id} view={Boolean(drawer.view)} canEdit={perms.edit} canCreate={perms.create}
         onOpenChange={(o) => setDrawer((d) => ({ ...d, open: o }))} onSaved={() => g.refetch()} onDuplicated={(id) => setDrawer({ open: true, id })} />
       <RestrictionsDialog roles={restrict} onClose={() => setRestrict(null)} onSaved={() => { g.refetch(); g.clearSelection(); }} />
       <EntityChangeLogDrawer open={log !== null} onOpenChange={(o) => !o && setLog(null)} path={log ? `/api/roles/${log.id}/change-log` : null} title={`Role change log · ${log?.name ?? ""}`} />
@@ -175,7 +176,12 @@ export function RolesPage() {
         records={{ columns: [{ key: "name", label: "Role" }, { key: "users", label: "Users" }, { key: "type", label: "Type" }], rows: (toDelete ?? []).map((r) => ({ name: r.name, users: r.userCount, type: r.isSystem ? "System" : "Custom" })) }}
         onConfirm={async () => {
           const result = await action.run<BulkResponse>("/api/roles/bulk-delete", "POST", { ids: (toDelete ?? []).map((r) => r.id) });
-          if (result) { toastBulk(result, "role", "deleted"); g.clearSelection(); }
+          if (result) {
+            const done = new Set(result.succeeded);
+            patchRoles((rows) => rows.filter((r) => !done.has(r.id)));
+            toastBulk(result, "role", "deleted");
+            g.clearSelection();
+          }
           setToDelete(null);
         }}
       />

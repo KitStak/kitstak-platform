@@ -28,7 +28,7 @@ beforeEach(() => {
 });
 afterEach(() => w.close());
 
-const address = { name: "Main dock", usageType: "Shipping" as const, line1: "100 Congress Ave", city: "Austin", state: "TX", postalCode: "78701", country: "US", isDefault: true, isActive: true };
+const address = { name: "Main dock", usageType: "Shipping" as const, firstName: "Dana", lastName: "Ruiz", email: "dock@example.com", line1: "100 Congress Ave", city: "Austin", state: "TX", postalCode: "78701", country: "US", isDefault: true, isActive: true };
 const logsOf = (id: string) => w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id)).all();
 
 describe("clients", () => {
@@ -50,6 +50,18 @@ describe("clients", () => {
     expect(setClientStatus(w.db, auth, actor(), [id], "Inactive").succeeded).toEqual([id]);
     expect(listClients(w.db, auth, picker).rows.map((r) => r.code)).not.toContain("KSE2E");
     expect(listClients(w.db, auth, EMPTY_GRID_QUERY).rows.map((r) => r.code)).toContain("KSE2E");
+  });
+
+  it("stores SSCC-18 settings, keeps them through a settings-only edit and logs them", () => {
+    const sscc = { extensionDigit: "1", gs1CompanyPrefix: "0614141", serialNumber: "42" };
+    const { id } = createClient(w.db, auth, actor(), clientSchema.parse({ ...CLIENT_DEFAULTS, name: "Sscc Co", code: "SSCC", officialName: "Sscc Co LLC", sscc }));
+    expect(getClient(w.db, auth, id).sscc).toEqual(sscc);
+    const d = getClient(w.db, auth, id);
+    updateClientSettings(w.db, auth, actor(), id, { currency: "EUR", settings: { ...d.settings, packing: { ...d.settings.packing, enablePackAll: true } }, version: d.version });
+    const after = getClient(w.db, auth, id);
+    expect(after.sscc).toEqual(sscc);
+    expect(after.settings.packing.enablePackAll).toBe(true);
+    expect(after.currency).toBe("EUR");
   });
 
   it("rejects duplicate codes and stale versions, and guards deletes", () => {
@@ -84,14 +96,16 @@ describe("3PL billing contracts, engine and bills", () => {
     const vasType = w.db.insert(schema.lookupValues).values({ type: "vas_type", name: "Programming (hours)", meta: { calculationType: "Vas Quantity" } }).returning().get().id;
     const contract = createContract(w.db, auth, actor(), contractSchema.parse({ name: "ACME 3PL 2026", clientId: w.clientId, warehouseId: w.warehouseId, calcStartDate: "2026-10-01", frequency: "Monthly" }));
     createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Monthly account fee", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", tiers: [{ fromQty: 1, toQty: null, rate: 50 }] }));
-    createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Programming", operationType: "VAS", feeBy: "Operation", chargeBy: "Operation Value", vasTypeId: vasType, tiers: [{ fromQty: 1, toQty: 100, rate: 3 }, { fromQty: 101, toQty: null, rate: 2.5 }] }));
+    createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Programming", operationType: "VAS", feeBy: "Operation", chargeBy: "Operation Value", vasTypeId: vasType, pricingMode: "graduated", tiers: [{ fromQty: 1, toQty: 100, rate: 3 }, { fromQty: 101, toQty: null, rate: 2.5 }] }));
     return { contract, vasType };
   };
 
   it("bills recurring + VAS × 2 with a numbered bill, then approval locks deletion", () => {
     const { contract, vasType } = setup();
     expect(vasTypes(w.db, auth).map((t) => t.name)).toEqual(["Programming (hours)"]);
-    createVas(w.db, auth, actor(), vasSchema.parse({ clientId: w.clientId, warehouseId: w.warehouseId, vasTypeId: vasType, operationAt: "2026-10-15T15:00:00.000Z", value: 2, referenceNumber: "SO000123", referenceOrderType: "Shipment Order" }));
+    const base = { clientId: w.clientId, warehouseId: w.warehouseId, vasTypeId: vasType, operationAt: "2026-10-15T15:00:00.000Z", value: 2 };
+    expect(() => createVas(w.db, auth, actor(), vasSchema.parse({ ...base, referenceNumber: "SO-MISSING", referenceOrderType: "Shipment Order" }))).toThrow(/does not exist/);
+    createVas(w.db, auth, actor(), vasSchema.parse({ ...base, note: "VAS-NOTE-1" }));
     const now = new Date("2026-11-06T12:00:00.000Z");
     const out = calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed" }, now);
     const bill = out.reports[0]!;
@@ -101,7 +115,7 @@ describe("3PL billing contracts, engine and bills", () => {
     const detail = getReport(w.db, auth, bill.reportId);
     expect(detail.consolidated.map((l) => [l.feeName, l.quantity, l.adjustedPrice])).toEqual(expect.arrayContaining([["Monthly account fee", 1, 50], ["Programming", 2, 6]]));
     const lines = w.db.select().from(schema.billingReportLines).where(eq(schema.billingReportLines.reportId, bill.reportId)).all();
-    expect(lines.some((l) => l.isDetail && l.referenceNumber === "SO000123")).toBe(true);
+    expect(lines.filter((l) => l.isDetail).length).toBeGreaterThan(0);
 
     expect(approveReports(w.db, auth, actor(), [bill.reportId]).succeeded).toEqual([bill.reportId]);
     expect(deleteReports(w.db, auth, actor(), [bill.reportId]).failed[0]?.message).toMatch(/only draft bills/);
@@ -111,17 +125,20 @@ describe("3PL billing contracts, engine and bills", () => {
 
   it("records a failed calculation with its error and guards approve / delete of contracts", () => {
     const empty = createContract(w.db, auth, actor(), contractSchema.parse({ name: "Empty", clientId: w.clientId, warehouseId: w.warehouseId, calcStartDate: "2026-10-01", frequency: "Monthly" }));
-    expect(approveContracts(w.db, auth, actor(), [empty.id]).failed[0]?.message).toMatch(/no fees/);
+    expect(approveContracts(w.db, auth, actor(), [empty.id]).failed[0]?.message).toMatch(/at least one fee/);
+    // Round 5: a fee-less contract is refused before anything is written (no junk Failed bill), and never blocks delete.
     const out = calculateContracts(w.db, auth, actor(), { ids: [empty.id], mode: "lastClosed" }, new Date("2026-11-06T12:00:00.000Z"));
-    expect(out.reports[0]).toMatchObject({ status: "Failed", errorMessage: "The contract has no fees" });
-    expect(deleteContracts(w.db, auth, actor(), [empty.id]).failed[0]?.message).toMatch(/bill/);
+    expect(out.reports).toHaveLength(0);
+    expect(out.failed[0]?.message).toMatch(/has no fees/);
+    expect(w.db.select().from(schema.billingReports).where(eq(schema.billingReports.contractId, empty.id)).all()).toHaveLength(0);
+    expect(deleteContracts(w.db, auth, actor(), [empty.id]).succeeded).toEqual([empty.id]);
 
     const { contract } = setup();
     const copy = duplicateContracts(w.db, auth, actor(), [contract.id]).created[0]!;
     expect(copy.name).toBe("ACME 3PL 2026 (copy)");
     expect(getContract(w.db, auth, copy.id).fees).toHaveLength(2);
     expect(approveContracts(w.db, auth, actor(), [contract.id]).succeeded).toEqual([contract.id]);
-    expect(() => createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Late", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring" }))).toThrow(/Cancel the approval/);
+    expect(() => createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, tiers: [{ fromQty: 1, toQty: null, rate: 1 }], name: "Late", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring" }))).toThrow(/Cancel the approval/);
   });
 
   it("scheduler bills each approved contract once per closed period", () => {

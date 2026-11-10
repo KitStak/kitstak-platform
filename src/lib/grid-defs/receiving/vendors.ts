@@ -7,6 +7,9 @@ import type { ReceivingGridField } from "./purchase-orders";
 
 export const VENDORS_GRID_KEY = "vendors";
 
+/** Any of these opens the vendor list (`GET /api/vendors` and the /receiving/vendors, /organization/vendors routes). */
+export const VENDOR_VIEW_PERMISSIONS = ["settings.vendors.view", "inventory.purchase_orders.view", "inventory.purchase_orders.create", "inventory.purchase_orders.edit"] as const;
+
 export const VENDOR_GRID_FIELDS: readonly ReceivingGridField[] = [
   { field: "clientId", label: "Client", type: "enum", dynamicOptions: "clients" },
   { field: "vendorName", label: "Company name", type: "text" },
@@ -23,7 +26,9 @@ export const VENDOR_NAME_MAX = 255;
 const opt = (max: number) => z.string().trim().max(max, `Use at most ${max} characters`).optional().or(z.literal(""));
 
 export const vendorAddressSchema = z.object({
+  /** Address name (Logiwa "Address Name", max 50). */
   name: opt(50),
+  contactName: opt(100),
   line1: opt(256),
   line2: opt(256),
   postalCode: opt(20),
@@ -54,5 +59,5 @@ export type VendorFormInput = z.input<typeof vendorFormSchema>;
 export type VendorFormValues = z.output<typeof vendorFormSchema>;
 
 export const EMPTY_VENDOR_ADDRESS: VendorAddressInput = {
-  name: "", line1: "", line2: "", postalCode: "", city: "", phone: "", country: "US", state: "AL",
+  name: "", contactName: "", line1: "", line2: "", postalCode: "", city: "", phone: "", country: "US", state: "AL",
 };

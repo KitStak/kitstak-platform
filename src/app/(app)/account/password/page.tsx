@@ -9,6 +9,7 @@ import { loadUser } from "@/server/repositories/users";
 import { PageHeader } from "@/components/layout/page-header";
 import { AccountShell } from "@/components/layout/account/account-shell";
 import { AccountPasswordForm } from "@/components/admin/account/password-form";
+import { PasswordPolicySeed } from "@/components/admin/password-meter";
 import { SkeletonText } from "@/components/ui/skeleton";
 
 export const metadata: Metadata = { title: "Change Password" };
@@ -23,7 +24,11 @@ async function PasswordBody() {
   const policy = getPasswordPolicy(db);
   const user = loadUser(db, auth.user.id);
   const mustChange = !user.passwordChangedAt || isPasswordExpired(user.passwordChangedAt, policy);
-  return <AccountPasswordForm mustChange={mustChange} maxAgeDays={policy.maxAgeDays ?? null} />;
+  return (
+    <PasswordPolicySeed policy={{ minLength: policy.minLength, requireUpper: policy.requireUpper, requireNumber: policy.requireNumber, requireSymbol: policy.requireSymbol }}>
+      <AccountPasswordForm mustChange={mustChange} reason={!user.passwordChangedAt ? "reset" : mustChange ? "expired" : null} maxAgeDays={policy.maxAgeDays ?? null} />
+    </PasswordPolicySeed>
+  );
 }
 
 /** `/account/password` — current / new / re-enter with the company password policy. */

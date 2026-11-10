@@ -100,7 +100,7 @@ export function applyShipmentOrderRow(c: ImportApplyContext, row: ImportRowValue
     orderDate: str(row.orderDate) ?? undefined, expectedShipDate: str(row.expectedShipDate), carrier: str(row.carrier), shippingService: str(row.shippingService),
     priority: priorityOf(row.priority) ?? "None", isGift: row.isGift === true, note: str(row.notes), ...shipTo(row), lines: [line],
   });
-  const created = createOrder(c.db, ctx, body);
+  const created = createOrder(c.db, ctx, body, { trigger: "Shipment Order Imported" });
   mine.set(code.toUpperCase(), created.id);
   return { entityId: created.id, message: `Order ${created.code} created` };
 }

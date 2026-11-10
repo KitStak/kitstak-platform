@@ -3,7 +3,7 @@
  * warehouses, clients, Data Setup lookups, carrier connections + services, rate
  * shopping presets, shipment packages, retailers and return addresses.
  */
-import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDb } from "@/server/api/db";
 import type { Scope } from "@/server/auth/scope";
@@ -136,6 +136,8 @@ export interface MergeableJobOption {
 export interface OrderJobOptions {
   readonly jobTypes: readonly JobTypeOption[];
   readonly mergeableJobs: readonly MergeableJobOption[];
+  /** Preselected job type: the one this warehouse used for its latest picking job, else the first. */
+  readonly defaultJobTypeId: string | null;
 }
 
 /**
@@ -143,10 +145,10 @@ export interface OrderJobOptions {
  * batch rules) and the Pending picking jobs an order can be merged into.
  */
 export function orderJobOptions(db: AppDb, scope: Scope, warehouseId: string): OrderJobOptions {
-  if (!hasWarehouse(scope, warehouseId)) return { jobTypes: [], mergeableJobs: [] };
+  if (!hasWarehouse(scope, warehouseId)) return { jobTypes: [], mergeableJobs: [], defaultJobTypeId: null };
   const jt = schema.jobTypes;
   const jobTypes = db.select({ id: jt.id, code: jt.code, description: jt.description, settings: jt.settings }).from(jt)
-    .where(and(eq(jt.warehouseId, warehouseId), eq(jt.operationType, "Picking"))).orderBy(asc(jt.code)).all()
+    .where(and(eq(jt.warehouseId, warehouseId), eq(jt.operationType, "Picking"), eq(jt.isActive, true))).orderBy(asc(jt.code)).all()
     .map((t) => {
       const batch = parseBatch(t.settings);
       return { id: t.id, code: t.code, description: t.description, batchMethod: batch.method, batchMin: batch.min, batchMax: batch.max };
@@ -159,7 +161,10 @@ export function orderJobOptions(db: AppDb, scope: Scope, warehouseId: string): O
   }).from(j).leftJoin(u, eq(u.id, j.assignedToUserId))
     .where(and(eq(j.warehouseId, warehouseId), eq(j.operationType, "Picking"), eq(j.status, "Pending")))
     .orderBy(asc(j.code)).limit(100).all();
-  return { jobTypes, mergeableJobs };
+  const latest = db.select({ id: j.jobTypeId }).from(j)
+    .where(and(eq(j.warehouseId, warehouseId), eq(j.operationType, "Picking"))).orderBy(desc(j.createdAt)).limit(20).all()
+    .map((r) => r.id).find((id) => id && jobTypes.some((t) => t.id === id));
+  return { jobTypes, mergeableJobs, defaultJobTypeId: latest ?? jobTypes[0]?.id ?? null };
 }
 
 function parseBatch(raw: unknown): { method: "Nof Order" | "Nof Item"; min: number; max: number } {

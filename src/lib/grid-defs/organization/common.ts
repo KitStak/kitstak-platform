@@ -35,6 +35,8 @@ export const orgAddressSchema = z
     id: z.string().max(64).optional().nullable(),
     name: txt(50).min(1, "Address name is required"),
     usageType: z.enum(ADDRESS_USAGE_TYPES, { error: "Choose a usage type" }),
+    firstName: txt(60).optional().nullable(),
+    lastName: txt(60).optional().nullable(),
     companyName: txt(120).optional().nullable(),
     line1: txt(256).min(1, "Address line 1 is required"),
     line2: txt(256).optional().nullable(),
@@ -52,13 +54,30 @@ export const orgAddressSchema = z
     if (subs.length > 0 && !a.state) ctx.addIssue({ code: "custom", path: ["state"], message: a.country === "CA" ? "Province is required" : "State is required" });
     if (subs.length > 0 && a.state && !subs.some((s) => s.code === a.state)) ctx.addIssue({ code: "custom", path: ["state"], message: "Choose a valid state" });
     if (a.country === "US" && !/^\d{5}(-\d{4})?$/.test(a.postalCode.trim())) ctx.addIssue({ code: "custom", path: ["postalCode"], message: "Use a 5-digit ZIP or ZIP+4" });
+    // New shipping addresses need a contact for carrier labels (Logiwa parity); saved legacy rows stay editable.
+    if (!a.id) shipmentContactIssues(a).forEach((i) => ctx.addIssue({ code: "custom", ...i }));
   });
+
+/** Shipping addresses print on carrier labels, so they need a contact first name, last name and email. */
+export function shipmentContactIssues(a: { readonly usageType: string; readonly firstName?: string | null; readonly lastName?: string | null; readonly email?: string | null }): { path: string[]; message: string }[] {
+  if (a.usageType !== "Shipping") return [];
+  const out: { path: string[]; message: string }[] = [];
+  if (!a.firstName?.trim()) out.push({ path: ["firstName"], message: "Contact first name is required for shipping addresses" });
+  if (!a.lastName?.trim()) out.push({ path: ["lastName"], message: "Contact last name is required for shipping addresses" });
+  if (!a.email?.trim()) out.push({ path: ["email"], message: "Email is required for shipping addresses (carrier notifications)" });
+  return out;
+}
+
+/** The address modal always requires the shipping contact, including when editing an older address. */
+export const orgAddressModalSchema = orgAddressSchema.superRefine((a, ctx) => {
+  if (a.id) shipmentContactIssues(a).forEach((i) => ctx.addIssue({ code: "custom", ...i }));
+});
 
 export type OrgAddressInput = z.input<typeof orgAddressSchema>;
 export type OrgAddress = z.output<typeof orgAddressSchema>;
 
 export const EMPTY_ORG_ADDRESS: OrgAddressInput = {
-  id: null, name: "", usageType: "Shipping", companyName: "", line1: "", line2: "", city: "", state: "", postalCode: "", country: "US",
+  id: null, name: "", usageType: "Shipping", firstName: "", lastName: "", companyName: "", line1: "", line2: "", city: "", state: "", postalCode: "", country: "US",
   phone: "", email: "", isDefault: false, isActive: true,
 };
 

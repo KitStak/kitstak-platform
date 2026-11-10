@@ -59,14 +59,25 @@ export const setWarehouse: WorkflowActionExecutor = (tx, ctx, input) => {
   return { applied: true };
 };
 
-export const notifyUsers: WorkflowActionExecutor = (tx, _ctx, input) => {
+/** Shipment orders link to the order; purchase orders (Purchase Order Created) to the PO. */
+function notifyTarget(tx: Parameters<WorkflowActionExecutor>[0], input: Parameters<WorkflowActionExecutor>[2]): { noun: string; code: string; href: string } {
+  if (input.entity.type === "purchase_order") {
+    const po = tx.select({ id: schema.purchaseOrders.id, code: schema.purchaseOrders.code }).from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, input.entity.id)).get();
+    if (!po) throw new DomainError("NOT_FOUND", "Purchase order not found");
+    return { noun: "purchase order", code: po.code, href: `/receiving/${po.id}` };
+  }
   const order = loadOrder(tx, input);
+  return { noun: "order", code: order.code, href: `/orders/${order.id}` };
+}
+
+export const notifyUsers: WorkflowActionExecutor = (tx, _ctx, input) => {
+  const target = notifyTarget(tx, input);
   const ids = Array.isArray(input.params.userIds) ? input.params.userIds.filter((v): v is string => typeof v === "string") : [];
   if (ids.length === 0) throw new DomainError("VALIDATION", "Choose at least one user to notify");
   const message = str(input.params.message);
   const sent = notify(tx, ids, {
-    kind: "workflow", title: `${input.workflowName}: order ${order.code}`, body: message ?? `Workflow ${input.workflowName} matched order ${order.code}.`,
-    href: `/orders/${order.id}`, severity: "info",
+    kind: "workflow", title: `${input.workflowName}: ${target.noun} ${target.code}`, body: message ?? `Workflow ${input.workflowName} matched ${target.noun} ${target.code}.`,
+    href: target.href, severity: "info",
   });
   return { applied: sent > 0, message: sent > 0 ? undefined : "None of the selected users are active" };
 };

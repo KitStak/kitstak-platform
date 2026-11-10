@@ -75,7 +75,9 @@ describe("/api/ops — allocate, jobs, tasks, shipping (operator)", () => {
     expect(label.status).toBe(201);
     const shipmentId = String((label.data as { shipments: { id: string }[] }).shipments[0]?.id);
 
-    const voided = await post(voidRoute, "/api/ops/shipping/void", { shipmentId });
+    // Void Label is supervisor-only (shipping R3-1): the operator is refused, the manager voids.
+    expect((await post(voidRoute, "/api/ops/shipping/void", { shipmentId })).status).toBe(403);
+    const voided = await post(voidRoute, "/api/ops/shipping/void", { shipmentId }, w.userId);
     expect(voided.data).toEqual({ voided: 1 });
     const noLabel = await post(shipRoute, "/api/ops/shipping/ship", { ids: [orderId] });
     expect((noLabel.data as { failed: unknown[] }).failed).toHaveLength(1);
@@ -98,7 +100,7 @@ describe("/api/ops — allocate, jobs, tasks, shipping (operator)", () => {
     expect(ledger.reconcileLedger(w.db)).toEqual([]);
   });
 
-  it("merges, cancels tasks per id and reports stub operations as not configured", async () => {
+  it("merges, cancels tasks per id and reports missing work orders / count plans per id", async () => {
     const w = current();
     const first = stockedOrder(1);
     const second = stockedOrder(1);
@@ -109,13 +111,16 @@ describe("/api/ops — allocate, jobs, tasks, shipping (operator)", () => {
     expect(merged.data).toMatchObject({ succeeded: [second], jobIds: [jobId] });
 
     const picking = tasksOf(jobId, "Picking").map((t) => t.id);
-    const cancelled = await post(cancelRoute, "/api/ops/tasks/cancel", { ids: [picking[0], "missing"] });
+    // Task cancel is a supervisor action (operator default no longer holds task_details.cancel_task).
+    const cancelled = await post(cancelRoute, "/api/ops/tasks/cancel", { ids: [picking[0], "missing"] }, w.userId);
     expect(cancelled.data).toMatchObject({ succeeded: [picking[0]], failed: [{ id: "missing", code: "NOT_FOUND" }] });
 
     const wo = await post(jobsRoute, "/api/ops/jobs", { mode: "work-order", workOrderIds: ["wo-1"] });
-    expect(wo.data).toMatchObject({ succeeded: [], failed: [{ id: "wo-1", code: "INVALID_STATE" }] });
-    const count = await post(jobsRoute, "/api/ops/jobs", { mode: "count", countPlanIds: ["c-1"] }, w.userId);
-    expect(count.status).toBe(409);
+    expect(wo.data).toMatchObject({ succeeded: [], failed: [{ id: "wo-1", code: "NOT_FOUND" }] });
+    // count mode delegates to M07 (counts.md REQ-2): jobTypeId + batchSize are required
+    expect((await post(jobsRoute, "/api/ops/jobs", { mode: "count", countPlanIds: ["c-1"] }, w.userId)).status).toBe(400);
+    const count = await post(jobsRoute, "/api/ops/jobs", { mode: "count", countPlanIds: ["c-1"], jobTypeId: w.jobTypeId, batchSize: 10 }, w.userId);
+    expect(count.data).toMatchObject({ succeeded: [], failed: [{ id: "c-1", code: "NOT_FOUND" }] });
 
     const dealloc = await post(allocateRoute, "/api/ops/allocate", { action: "deallocate", orderIds: [second] });
     expect(dealloc.status).toBe(200);
@@ -124,9 +129,10 @@ describe("/api/ops — allocate, jobs, tasks, shipping (operator)", () => {
   it("validates bodies and scope", async () => {
     const w = current();
     expect((await post(jobsRoute, "/api/ops/jobs", { mode: "create", orderIds: [] })).status).toBe(400);
-    expect((await post(eligibilityRoute, "/api/ops/jobs/eligibility", { orderIds: ["a"] })).status).toBe(400);
+    // without jobTypeId / jobId eligibility is the pre-check (orders-outbound REQ-5), so only an empty id list is a 400
+    expect((await post(eligibilityRoute, "/api/ops/jobs/eligibility", { orderIds: [] })).status).toBe(400);
     expect((await post(allocateRoute, "/api/ops/allocate", { orderIds: ["a"], warehouseId: w.otherWarehouseId })).status).toBe(400);
-    expect((await post(voidRoute, "/api/ops/shipping/void", { shipmentId: "missing" })).status).toBe(404);
+    expect((await post(voidRoute, "/api/ops/shipping/void", { shipmentId: "missing" }, w.userId)).status).toBe(404);
     expect((await post(eodRoute, "/api/ops/shipping/close-eod", { manifestId: "missing" }, w.userId)).status).toBe(404);
   });
 });

@@ -34,11 +34,11 @@ describe("MegaMenuBar", () => {
     const menus = visibleMenus(NAV_MENUS, new Set(["fulfillment.shipment_orders.view", "inventory.total_inventory.view"]));
     render(<MegaMenuBar menus={menus} dashboardHref="/dashboard" />);
     const nav = screen.getByRole("navigation", { name: "Main navigation" });
-    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["Fulfillment", "Inventory"]);
+    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["Fulfillment", "Inventory", "Reports"]);
     await user.click(within(nav).getByRole("button", { name: "Fulfillment" }));
     const panel = await screen.findByRole("region", { name: "Outbound" });
     expect(within(panel).getAllByRole("link").map((a) => a.getAttribute("href"))).toEqual(["/orders", "/orders/shipped"]);
-    expect(within(panel).getByRole("link", { name: "Shipped Orders" }).getAttribute("aria-current")).toBe("page");
+    expect(within(panel).getByRole("link", { name: "Shipped & Canceled Orders" }).getAttribute("aria-current")).toBe("page");
   });
 });
 
@@ -50,7 +50,7 @@ describe("PageHeader", () => {
       </ShellProvider>,
     );
     const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
-    expect(crumbs.textContent).toBe("HomeFulfillmentShipped Orders");
+    expect(crumbs.textContent).toBe("HomeFulfillmentShipped & Canceled Orders");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Shipped Orders");
     const tabs = screen.getByRole("navigation", { name: "orders sections" });
     expect(within(tabs).getAllByRole("link").map((a) => a.textContent)).toEqual(["Order Backlog", "Shipped & Canceled Orders"]);
@@ -72,7 +72,7 @@ describe("GlobalSearch", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ success: true, data: [] }), { status: 200, headers: { "content-type": "application/json" } })));
     render(<QueryProvider><GlobalSearch menus={NAV_MENUS} extraPages={USER_MENU_ITEMS} /></QueryProvider>);
     await user.keyboard("{Control>}k{/Control}");
-    const input = await screen.findByPlaceholderText(/Search in pages/);
+    const input = await screen.findByPlaceholderText(/Search pages/);
     await user.type(input, "wave");
     await waitFor(() => expect(screen.getAllByRole("option").length).toBeGreaterThan(0));
     const option = screen.getAllByRole("option").find((o) => o.textContent?.startsWith("Wave Rules"));

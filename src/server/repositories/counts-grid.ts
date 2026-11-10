@@ -52,7 +52,9 @@ export function orderOf(spec: GridSpec, query: GridQuery): SQL {
   const allowed = new Set(spec.sortable);
   const parts = query.sort.map((s) => {
     if (!allowed.has(s.field)) throw new AppError("VALIDATION", `Cannot sort by "${s.field}"`, { fieldErrors: { sort: ["Unknown sort field"] } });
-    return sql`${exprOf(spec, s.field)} ${raw(s.dir === "asc" ? "ASC" : "DESC")}`;
+    // Blanks (uncounted lines, missing dates) sort last in both directions, so an ascending % Difference
+    // sort leads with the worst shortage instead of every "—" (critic r5).
+    return sql`${exprOf(spec, s.field)} ${raw(s.dir === "asc" ? "ASC NULLS LAST" : "DESC NULLS LAST")}`;
   });
   return sql.join([...parts, spec.defaultOrder], sql`, `);
 }

@@ -13,10 +13,13 @@ import type { BulkResult } from "@/server/domain/types";
 import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
 import { round } from "@/lib/grid-defs/facility/common";
+import { capacityLineChanges, type CapacityLine } from "@/lib/grid-defs/facility/change-log-copy";
 import { legacyRoleFor, LOCATION_FIELDS, LOCATION_SEARCH_FIELDS, LOCATION_SORT_FIELDS, unsetAsNull, type LocationSave } from "@/lib/grid-defs/facility/locations";
 import {
-  assertFound, assertVersion, assertWarehouseInScope, compileGrid, domainCtxOf, duplicateError, listScope, logCreate, logDelete, logUpdate,
-  resolveIds, type Actor, type GridBinding, qc } from "./locations-shared";
+  assertFound, assertVersion, assertWarehouseInScope, compileGrid, domainCtxOf, duplicateError, listScope, logCapacityChanges, logCreate, logDelete, logUpdate,
+  resolveIds, type Actor, type GridBinding, qc, flattenCustomFields } from "./locations-shared";
+import { customFieldSql } from "./custom-field-sql";
+import { isReservation, ledgerEffect, RESERVATION_TXN_TYPES, type LedgerDirection, type LedgerKind } from "@/lib/grid-defs/facility/location-ledger";
 
 const l = s.locations;
 
@@ -33,7 +36,7 @@ export const LOCATION_SQL: Readonly<Record<string, SQL>> = {
   locationGroupId: sql`${l.locationGroupId}`,
   locationGroup: sql`(SELECT lv.name FROM lookup_values lv WHERE lv.id = ${qc(l.locationGroupId)})`,
   locationZoneId: sql`${l.locationZoneId}`,
-  locationZone: sql`COALESCE((SELECT lv.name FROM lookup_values lv WHERE lv.id = ${qc(l.locationZoneId)}), NULLIF(${qc(l.zone)}, ''))`,
+  locationZone: sql`(SELECT lv.name FROM lookup_values lv WHERE lv.id = ${qc(l.locationZoneId)})`,
   locationType: sql`${l.locationType}`,
   replenishmentType: sql`${l.replenishmentType}`,
   areaType: sql`${l.areaType}`,
@@ -56,6 +59,7 @@ export const LOCATION_SQL: Readonly<Record<string, SQL>> = {
   dedicatedClientId: sql`${l.dedicatedClientId}`,
   storedUnits: onHandSql,
   createdAt: sql`${l.createdAt}`,
+  ...customFieldSql(l.customFields),
 };
 
 const BINDING: GridBinding = {
@@ -98,6 +102,7 @@ export interface LocationRow {
   readonly storedUnits: number;
   readonly skuCount: number;
   readonly openTaskCount: number;
+  readonly customFields: Readonly<Record<string, string | boolean | null>>;
   readonly version: number;
 }
 
@@ -135,6 +140,7 @@ function selection() {
     storedUnits: onHandSql,
     skuCount: skuCountSql,
     openTaskCount: openTaskSql,
+    customFields: l.customFields,
     version: l.version,
   };
 }
@@ -224,7 +230,7 @@ export function getLocation(db: AppDb, auth: AuthContext, id: string) {
     warehouseCode: wh?.code ?? "",
     warehouseName: wh?.name ?? "",
     locationGroup: row.locationGroupId ? names.get(row.locationGroupId) ?? null : null,
-    locationZone: row.locationZoneId ? names.get(row.locationZoneId) ?? null : row.zone || null,
+    locationZone: row.locationZoneId ? names.get(row.locationZoneId) ?? null : null,
     dedicatedClientName: client ? `${client.code} · ${client.name}` : null,
     storedUnits: stats?.storedUnits ?? 0,
     skuCount: stats?.skuCount ?? 0,
@@ -241,7 +247,7 @@ export type LocationDetail = ReturnType<typeof getLocation>;
 export function getLocationContents(db: AppDb, auth: AuthContext, id: string) {
   loadLocation(db, auth, id);
   const buckets = db
-    .select({ id: s.inventory.id, sku: s.products.sku, productName: s.products.name, clientName: s.clients.name, lotNumber: s.inventory.lotNumber, expiryDate: s.inventory.expiryDate, status: s.inventory.status, packType: s.inventory.packType, onHand: s.inventory.onHand, allocated: s.inventory.allocated, damaged: s.inventory.damaged, lpNumber: s.licensePlates.number, receivedAt: s.inventory.receivedAt })
+    .select({ id: s.inventory.id, productId: s.products.id, sku: s.products.sku, productName: s.products.name, clientName: s.clients.name, lotNumber: s.inventory.lotNumber, expiryDate: s.inventory.expiryDate, status: s.inventory.status, packType: s.inventory.packType, onHand: s.inventory.onHand, allocated: s.inventory.allocated, damaged: s.inventory.damaged, lpNumber: s.licensePlates.number, receivedAt: s.inventory.receivedAt })
     .from(s.inventory)
     .innerJoin(s.products, eq(s.products.id, s.inventory.productId))
     .leftJoin(s.clients, eq(s.clients.id, s.inventory.clientId))
@@ -250,23 +256,61 @@ export function getLocationContents(db: AppDb, auth: AuthContext, id: string) {
     .orderBy(asc(s.products.sku))
     .all();
   const tasks = db
-    .select({ id: s.tasks.id, taskNo: s.tasks.taskNo, taskType: s.tasks.taskType, status: s.tasks.status, jobId: s.tasks.jobId, jobCode: s.jobs.code, sku: sql<string | null>`(SELECT p.sku FROM products p WHERE p.id = ${s.tasks.productId})`, plannedQty: s.tasks.plannedQty, direction: sql<"Source" | "Target">`CASE WHEN ${s.tasks.sourceLocationId} = ${id} THEN 'Source' ELSE 'Target' END` })
+    .select({ id: s.tasks.id, taskNo: s.tasks.taskNo, taskType: s.tasks.taskType, status: s.tasks.status, jobId: s.tasks.jobId, jobCode: s.jobs.code, productId: s.tasks.productId, sku: sql<string | null>`(SELECT p.sku FROM products p WHERE p.id = ${s.tasks.productId})`, plannedQty: s.tasks.plannedQty, direction: sql<"Source" | "Target">`CASE WHEN ${s.tasks.sourceLocationId} = ${id} THEN 'Source' ELSE 'Target' END` })
     .from(s.tasks)
     .innerJoin(s.jobs, eq(s.jobs.id, s.tasks.jobId))
     .where(and(sql`(${s.tasks.sourceLocationId} = ${id} OR ${s.tasks.targetLocationId} = ${id})`, inArray(s.tasks.status, ["Pending", "Started"])))
     .orderBy(asc(s.tasks.taskNo))
     .limit(200)
     .all();
+  const first = ledgerPage(db, id, { page: 1, ps: 25, kind: "movements" });
+  return { buckets, tasks, ledger: first.rows, ledgerTotal: first.total };
+}
+
+export interface LocationLedgerRow {
+  readonly id: string;
+  readonly type: string;
+  readonly productId: string;
+  readonly sku: string;
+  readonly direction: LedgerDirection;
+  /** Units, always positive; read with `direction`. */
+  readonly qty: number;
+  /** Signed change to this location's on-hand. */
+  readonly delta: number;
+  readonly reservation: boolean;
+  readonly lotNumber: string | null;
+  readonly at: string;
+  readonly source: string;
+  readonly note: string | null;
+}
+
+function ledgerPage(db: AppDb, id: string, q: { readonly page: number; readonly ps: number; readonly kind: LedgerKind }): { rows: LocationLedgerRow[]; total: number } {
   const t = s.inventoryTransactions;
-  const ledger = db
-    .select({ id: t.id, type: t.type, sku: s.products.sku, qty: t.uomQty, direction: sql<"In" | "Out" | "Within">`CASE WHEN ${t.fromLocationId} = ${id} AND ${t.toLocationId} = ${id} THEN 'Within' WHEN ${t.toLocationId} = ${id} THEN 'In' ELSE 'Out' END`, at: t.at, source: t.source, note: t.note })
+  const here = sql`(${t.fromLocationId} = ${id} OR ${t.toLocationId} = ${id})`;
+  const list = sql.join(RESERVATION_TXN_TYPES.map((v) => sql`${v}`), sql`, `);
+  const kind = q.kind === "all" ? undefined : q.kind === "reservations" ? sql`${t.type} IN (${list})` : sql`${t.type} NOT IN (${list})`;
+  const where = and(here, kind);
+  const total = db.select({ n: sql<number>`count(*)` }).from(t).where(where).get()?.n ?? 0;
+  const raw = db
+    .select({ id: t.id, type: t.type, productId: s.products.id, sku: s.products.sku, uomQty: t.uomQty, fromLocationId: t.fromLocationId, toLocationId: t.toLocationId, lot: sql<string | null>`COALESCE(${t.toLot}, ${t.fromLot})`, at: t.at, source: t.source, note: t.note })
     .from(t)
     .innerJoin(s.products, eq(s.products.id, t.productId))
-    .where(sql`(${t.fromLocationId} = ${id} OR ${t.toLocationId} = ${id})`)
+    .where(where)
     .orderBy(sql`${t.seq} DESC`)
-    .limit(100)
+    .limit(q.ps)
+    .offset((q.page - 1) * q.ps)
     .all();
-  return { buckets, tasks, ledger };
+  const rows = raw.map((r) => {
+    const effect = ledgerEffect(r.fromLocationId === id, r.toLocationId === id, r.uomQty);
+    return { id: r.id, type: r.type, productId: r.productId, sku: r.sku, ...effect, reservation: isReservation(r.type), lotNumber: r.lot, at: r.at, source: r.source, note: r.note };
+  });
+  return { rows, total };
+}
+
+/** Paged ledger of one location (critic R5: hard-capped at 100 and mixed with reservations). */
+export function listLocationLedger(db: AppDb, auth: AuthContext, id: string, q: { readonly page: number; readonly ps: number; readonly kind: LedgerKind }) {
+  loadLocation(db, auth, id);
+  return ledgerPage(db, id, q);
 }
 
 /* ---------------- writes ---------------- */
@@ -322,6 +366,10 @@ function columnsFor(info: LocationSave["info"], zoneName: string | null) {
   };
 }
 
+function writeColumns(input: LocationSave, zoneName: string | null) {
+  return { ...columnsFor(input.info, zoneName), customFields: input.customFields };
+}
+
 function assertLookup(db: AppDb, id: string | null, type: "location_group" | "location_zone", warehouseId: string, field: string): string | null {
   if (!id) return null;
   const row = db.select({ name: s.lookupValues.name, warehouseId: s.lookupValues.warehouseId }).from(s.lookupValues).where(and(eq(s.lookupValues.id, id), eq(s.lookupValues.type, type))).get();
@@ -336,17 +384,27 @@ function assertCodeFree(db: AppDb, warehouseId: string, code: string, exceptId?:
   if (clash && clash.id !== exceptId) throw duplicateError("info.code", `Location ${code} already exists in this warehouse`);
 }
 
-function capacitySummary(db: AppDb, locationId: string): { product: string; lp: string } {
-  const products = db.select({ sku: s.products.sku, pack: s.locationProductCapacity.packType, min: s.locationProductCapacity.minQty, max: s.locationProductCapacity.maxQty })
+interface CapacityLines { readonly product: readonly CapacityLine[]; readonly lp: readonly CapacityLine[] }
+
+/** Current capacity lines of a location, keyed for the per-line change log. */
+function capacityLines(db: AppDb, locationId: string): CapacityLines {
+  const products = db.select({ productId: s.locationProductCapacity.productId, sku: s.products.sku, pack: s.locationProductCapacity.packType, min: s.locationProductCapacity.minQty, max: s.locationProductCapacity.maxQty })
     .from(s.locationProductCapacity).innerJoin(s.products, eq(s.products.id, s.locationProductCapacity.productId))
     .where(eq(s.locationProductCapacity.locationId, locationId)).orderBy(asc(s.products.sku)).all();
-  const lps = db.select({ code: s.lpTypes.code, min: s.locationLpCapacity.minQty, max: s.locationLpCapacity.maxQty })
+  const lps = db.select({ lpTypeId: s.locationLpCapacity.lpTypeId, productId: s.locationLpCapacity.productId, code: s.lpTypes.code, min: s.locationLpCapacity.minQty, max: s.locationLpCapacity.maxQty, sku: sql<string | null>`(SELECT p.sku FROM products p WHERE p.id = ${s.locationLpCapacity.productId})` })
     .from(s.locationLpCapacity).innerJoin(s.lpTypes, eq(s.lpTypes.id, s.locationLpCapacity.lpTypeId))
     .where(eq(s.locationLpCapacity.locationId, locationId)).orderBy(asc(s.lpTypes.code)).all();
   return {
-    product: products.map((p) => `${p.sku} ${p.pack} ${p.min}-${p.max}`).join(", "),
-    lp: lps.map((p) => `${p.code} ${p.min}-${p.max}`).join(", "),
+    product: products.map((p) => ({ key: `${p.productId}|${p.pack}`, label: p.pack && p.pack !== "Each" ? `${p.sku} (${p.pack})` : p.sku, min: p.min, max: p.max })),
+    lp: lps.map((p) => ({ key: `${p.lpTypeId}|${p.productId ?? ""}`, label: p.sku ? `${p.code} · ${p.sku}` : p.code, min: p.min, max: p.max })),
   };
+}
+
+function logCapacities(tx: AppDb, auth: AuthContext, actor: Actor, ref: { entityId: string; entityCode: string }, before: CapacityLines, after: CapacityLines): void {
+  logCapacityChanges(tx, domainCtxOf(actor, auth), { entityType: "location", ...ref }, [
+    ...capacityLineChanges("productCapacity", before.product, after.product),
+    ...capacityLineChanges("lpCapacity", before.lp, after.lp),
+  ]);
 }
 
 function writeCapacities(tx: AppDb, auth: AuthContext, locationId: string, input: LocationSave): void {
@@ -370,20 +428,21 @@ function writeCapacities(tx: AppDb, auth: AuthContext, locationId: string, input
 }
 
 /** Display snapshot (ids resolved to names) for change-log diffs. */
-function display(db: AppDb, row: typeof l.$inferSelect, caps: { product: string; lp: string }): Record<string, unknown> {
+function display(db: AppDb, row: typeof l.$inferSelect): Record<string, unknown> {
   const names = resolveIds(db, "lookup_values", [row.locationGroupId, row.locationZoneId]);
   const wh = resolveIds(db, "warehouses", [row.warehouseId]);
   const cl = resolveIds(db, "clients", [row.dedicatedClientId]);
   const { id: _id, warehouseId, locationGroupId, locationZoneId, dedicatedClientId, zone: _zone, bay: _bay, type: _type, capacityUnits: _cu, customFields: _cf, ...rest } = row;
-  void _id; void _zone; void _bay; void _type; void _cu; void _cf;
+  void _id; void _zone; void _bay; void _type; void _cu;
   return {
     ...rest,
+    // Same "not set" normalisation as the UI, so the change log reads "— --> 777", never "0 --> 777".
+    ...unsetFields(rest),
+    ...flattenCustomFields(_cf),
     warehouse: wh.get(warehouseId) ?? "",
     locationGroup: locationGroupId ? names.get(locationGroupId) ?? "" : "",
     locationZone: locationZoneId ? names.get(locationZoneId) ?? "" : "",
     dedicatedClient: dedicatedClientId ? cl.get(dedicatedClientId) ?? "" : "",
-    productCapacity: caps.product,
-    lpCapacity: caps.lp,
   };
 }
 
@@ -392,9 +451,10 @@ export function createLocation(tx: AppDb, auth: AuthContext, actor: Actor, input
   assertCodeFree(tx, input.info.warehouseId, input.info.code.trim());
   assertLookup(tx, input.info.locationGroupId, "location_group", input.info.warehouseId, "info.locationGroupId");
   const zoneName = assertLookup(tx, input.info.locationZoneId, "location_zone", input.info.warehouseId, "info.locationZoneId");
-  const row = tx.insert(l).values({ ...columnsFor(input.info, zoneName), createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: l.id, code: l.code }).get();
+  const row = tx.insert(l).values({ ...writeColumns(input, zoneName), createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: l.id, code: l.code }).get();
   writeCapacities(tx, auth, row.id, input);
   logCreate(tx, domainCtxOf(actor, auth), { entityType: "location", entityId: row.id, entityCode: row.code });
+  logCapacities(tx, auth, actor, { entityId: row.id, entityCode: row.code }, { product: [], lp: [] }, capacityLines(tx, row.id));
   return row;
 }
 
@@ -407,11 +467,12 @@ export function updateLocation(tx: AppDb, auth: AuthContext, actor: Actor, id: s
   assertCodeFree(tx, before.warehouseId, input.info.code.trim(), id);
   assertLookup(tx, input.info.locationGroupId, "location_group", before.warehouseId, "info.locationGroupId");
   const zoneName = assertLookup(tx, input.info.locationZoneId, "location_zone", before.warehouseId, "info.locationZoneId");
-  const capsBefore = capacitySummary(tx, id);
-  const snapshotBefore = display(tx, before, capsBefore);
-  const after = tx.update(l).set({ ...columnsFor(input.info, zoneName), updatedBy: actor.userId, version: sql`${l.version} + 1` }).where(eq(l.id, id)).returning().get();
+  const capsBefore = capacityLines(tx, id);
+  const snapshotBefore = display(tx, before);
+  const after = tx.update(l).set({ ...writeColumns(input, zoneName), updatedBy: actor.userId, version: sql`${l.version} + 1` }).where(eq(l.id, id)).returning().get();
   writeCapacities(tx, auth, id, input);
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: "location", entityId: id, entityCode: after.code }, snapshotBefore, display(tx, after, capacitySummary(tx, id)));
+  logUpdate(tx, domainCtxOf(actor, auth), { entityType: "location", entityId: id, entityCode: after.code }, snapshotBefore, display(tx, after));
+  logCapacities(tx, auth, actor, { entityId: id, entityCode: after.code }, capsBefore, capacityLines(tx, id));
   return { id, code: after.code, version: after.version };
 }
 
@@ -438,7 +499,7 @@ export function deleteLocations(tx: AppDb, auth: AuthContext, actor: Actor, ids:
     const reason = deleteBlocker(inner, id);
     if (reason) throw new AppError("INVALID_STATE", `${row.code} ${reason}`);
     inner.delete(l).where(eq(l.id, id)).run();
-    logDelete(inner, ctx, { entityType: "location", entityId: id, entityCode: row.code });
+    logDelete(inner, ctx, { entityType: "location", entityId: id, entityCode: row.code, warehouseId: row.warehouseId });
   });
 }
 
@@ -470,4 +531,19 @@ export function locationLabelRecords(db: AppDb, auth: AuthContext, ids: readonly
     ...(r.level && r.level !== "0" ? { level: r.level } : {}),
     ...(r.locationType ? { locationType: r.locationType.replace(/([a-z])([A-Z])/g, "$1 $2") } : {}),
   }));
+}
+
+/**
+ * The product's own pack types (Logiwa UOM model) for the capacity modal, smallest first.
+ * Falls back to the product's base pack type when it has none defined.
+ */
+export function productPackTypesFor(db: AppDb, productId: string): { packType: string; kind: string; uomQty: number }[] {
+  const product = assertFound(db.select({ id: s.products.id }).from(s.products).where(eq(s.products.id, productId)).get(), "Product");
+  const rows = db
+    .select({ packType: s.productPackTypes.packType, kind: s.productPackTypes.kind, uomQty: s.productPackTypes.uomQty })
+    .from(s.productPackTypes)
+    .where(eq(s.productPackTypes.productId, product.id))
+    .orderBy(asc(s.productPackTypes.uomQty), asc(s.productPackTypes.packType))
+    .all();
+  return rows.length ? rows : [{ packType: "Each", kind: "Primary", uomQty: 1 }];
 }

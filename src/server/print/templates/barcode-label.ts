@@ -92,3 +92,20 @@ export const lpLabelTemplate = createBarcodeLabelTemplate(lpLabelSchema, toLpSpe
 export const locationLabelTemplate = createBarcodeLabelTemplate(locationLabelSchema, toLocationSpec);
 export const productLabelTemplate = createBarcodeLabelTemplate(productLabelSchema, toProductSpec);
 export const mobileCartLabelTemplate = createBarcodeLabelTemplate(mobileCartLabelSchema, toMobileCartSpec);
+
+/**
+ * Retailer labels (Logiwa "Retailer Label For Case" / "Retailer Label For Parent LP"): one label per
+ * case, barcode = order code (or the case/LP number when given). Only `orderCode` is required, so a
+ * bulk menu can send just the code; the packing station fills retailer, PO, ship-to and case n/N.
+ */
+export const retailerLabelSchema = z.object({
+  orderCode: code(), retailerName: opt(), storeOrderNumber: opt(), retailerPo: opt(), dept: opt(), markFor: opt(),
+  shipTo: opt(300), clientName: opt(), caseNumber: z.number().int().min(1).optional(), caseCount: z.number().int().min(1).optional(), lpNumber: opt(),
+});
+export const toRetailerSpec = (r: z.output<typeof retailerLabelSchema>): LabelSpec => ({
+  barcode: r.lpNumber ?? r.orderCode,
+  title: r.retailerName ?? r.orderCode,
+  subtitle: join([r.retailerPo && `PO ${r.retailerPo}`, r.dept && `Dept ${r.dept}`, r.markFor && `Mark for ${r.markFor}`]) || undefined,
+  details: [join([r.orderCode, r.storeOrderNumber]), r.shipTo ?? "", join([r.clientName, r.caseNumber && r.caseCount ? `Case ${r.caseNumber} of ${r.caseCount}` : undefined])].filter(Boolean),
+});
+export const retailerLabelTemplate = createBarcodeLabelTemplate(retailerLabelSchema, toRetailerSpec);

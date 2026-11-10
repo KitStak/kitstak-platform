@@ -7,6 +7,7 @@ import type { ExportProvider, ExportRow } from "@/server/exports/types";
 import { listPurchaseOrders } from "./purchase-orders";
 import { listReceipts } from "./receipts";
 import { listVendors } from "./vendors";
+import { listPutawayTasks } from "./putaway-worklist";
 
 export const purchaseOrdersExport: ExportProvider = {
   columns: [
@@ -57,5 +58,21 @@ export const vendorsExport: ExportProvider = {
     const { rows, total } = listVendors(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
     const out: readonly ExportRow[] = rows.map((r) => ({ ...r }));
     return { rows: out, total };
+  },
+};
+
+/** Putaway worklist (`putaway-worklist`): wired by `src/server/exports/providers/putaway-worklist.ts`. */
+export const putawayWorklistExport: ExportProvider = {
+  columns: [
+    { key: "warehouseName", label: "Warehouse" }, { key: "clientName", label: "Client" }, { key: "sku", label: "SKU" },
+    { key: "productName", label: "Product Name" }, { key: "barcode", label: "Barcode" }, { key: "fromLocationCode", label: "Location" },
+    { key: "qty", label: "Quantity", type: "integer" }, { key: "packType", label: "Pack Type" }, { key: "lotNumber", label: "Lot/Batch Number" },
+    { key: "expiryDate", label: "Expiry Date", type: "date" }, { key: "lpNumber", label: "LPN" }, { key: "poNumber", label: "PO Number" },
+    { key: "receivedAt", label: "Receiving Date", type: "datetime" }, { key: "dwellHours", label: "Waiting (Hours)", type: "integer" },
+    { key: "blockedReason", label: "Blocked Reason" },
+  ],
+  fetchPage(ctx, page, pageSize) {
+    const { rows, total } = listPutawayTasks(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
+    return { rows: rows.map((r) => ({ ...r })) as readonly ExportRow[], total };
   },
 };

@@ -90,7 +90,8 @@ function runPicker(db: AppDb, cfg: PickerConfig, query: PickerQuery): PickerOpti
 }
 
 const extraSchemas = {
-  locations: z.object({ areaType: z.enum(AREA_TYPES).optional() }),
+  // One area type or a comma list ("Loading,Shipment").
+  locations: z.object({ areaType: csv(z.enum(AREA_TYPES)).optional() }),
   lps: z.object({ locationId: idSchema.optional() }),
   orders: z.object({ status: csv(z.enum(SO_STATUSES)).optional() }),
   jobs: z.object({ status: csv(z.enum(JOB_STATUSES)).optional(), jobTypeId: idSchema.optional() }),
@@ -111,7 +112,7 @@ const locations: PickerFn = (db, scope, query, raw) => {
   return runPicker(db, {
     table: t, id: t.id, label: t.code, sublabel: t.areaType, search: [t.code, t.barcode], order: t.code,
     scope: scopedWhere(t, narrow(scope, query)), active: t.isActive,
-    filters: [f.areaType ? eq(t.areaType, f.areaType) : undefined],
+    filters: [f.areaType && f.areaType.length > 0 ? inArray(t.areaType, [...f.areaType]) : undefined],
     meta: { warehouseId: t.warehouseId, areaType: t.areaType, zone: t.zone },
   }, query);
 };
@@ -144,7 +145,13 @@ const products: PickerFn = (db, scope, query) => {
   return runPicker(db, {
     table: t, id: t.id, label: t.sku, sublabel: t.name, search: [t.sku, t.name, t.barcode], order: t.sku,
     scope: scopedWhere(t, narrow(scope, query)),
-    meta: { clientId: t.clientId, name: t.name, uom: t.uom, imageUrl: t.imageUrl, isKit: t.isKit },
+    meta: {
+      clientId: t.clientId, name: t.name, uom: t.uom, imageUrl: t.imageUrl, isKit: t.isKit,
+      // Available to promise in the picked warehouse (free, undamaged units); null without a warehouse.
+      ...(query.warehouseId
+        ? { atp: sql<number>`COALESCE((SELECT SUM(MAX(i.on_hand - i.allocated - i.damaged, 0)) FROM inventory i WHERE i.product_id = ${t.id} AND i.warehouse_id = ${query.warehouseId}), 0)` }
+        : {}),
+    },
   }, query);
 };
 

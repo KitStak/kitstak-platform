@@ -5,7 +5,7 @@
  */
 import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { RETURN_STATUSES, type ReturnStatus } from "@/lib/enums";
+import { RETURN_SOURCES, RETURN_STATUSES, type ReturnStatus } from "@/lib/enums";
 import type { AppDb } from "@/server/api/db";
 import type { AuthContext } from "@/server/auth/context";
 import type { Scope } from "@/server/auth/scope";
@@ -16,6 +16,7 @@ import { validationError } from "@/server/api/errors";
 import { DomainError } from "@/server/domain/errors";
 import type { BulkResult, DomainCtx } from "@/server/domain/types";
 import { assertVersion, bulkIdsSchema, idSchema } from "./platform-common";
+import { shippedAttributes, type ShippedAttributes } from "./returns-shipped";
 
 export const RETURN_PERMISSIONS = {
   view: "inventory.return_orders.view",
@@ -24,8 +25,8 @@ export const RETURN_PERMISSIONS = {
   createRma: "fulfillment.shipment_orders.create_rma",
   returnLabel: "fulfillment.shipment_orders.create_return_label",
   station: "inventory.return_station.view",
-  /** Receiving at the Return Station posts inventory: execution permission (viewers lack it). See docs/requests/stations-returns.md REQ-1. */
-  receive: "fulfillment.task_details.execute_task",
+  /** Receiving at the Return Station posts inventory: dedicated key (viewers lack it). REQ-1. */
+  receive: "inventory.return_station.receive_return",
 } as const;
 
 /** Domain ctx carrying the caller's full scope (cross-scope -> 404). */
@@ -85,6 +86,8 @@ export interface ReturnDetail {
   readonly version: number;
   readonly warehouseId: string;
   readonly warehouseCode: string;
+  readonly warehouseName: string;
+  readonly returnAddress: string | null;
   readonly clientId: string;
   readonly clientName: string;
   readonly customerName: string | null;
@@ -92,19 +95,31 @@ export interface ReturnDetail {
   readonly note: string | null;
   readonly createdAt: string;
   readonly createdByName: string;
+  readonly createdByEmail: string | null;
   readonly updatedAt: string;
   readonly expectedReturnDate: string | null;
   readonly actualReturnDate: string | null;
   readonly carrierCode: string | null;
   readonly carrierServiceName: string | null;
   readonly trackingNumber: string | null;
+  /** `trackingNumber` split into its numbers (several can be recorded without a label). */
+  readonly trackingNumbers: readonly string[];
+  /** Return shipping cost: the bought label's cost, else the manually recorded cost on the order's Return section. */
+  readonly returnShippingCost: number | null;
+  readonly returnAddressId: string | null;
   readonly order: { readonly id: string; readonly code: string; readonly storeOrderNumber: string | null; readonly channel: string; readonly status: string; readonly orderDate: string; readonly shippedAt: string | null; readonly deliveredAt: string | null; readonly shipTo: string } | null;
   readonly label: { readonly shipmentId: string; readonly trackingNumber: string; readonly labelFileId: string | null; readonly labelStatus: string; readonly serviceName: string | null; readonly carrierCode: string | null; readonly shippingCost: number; readonly createdAt: string } | null;
   readonly lines: readonly {
     readonly id: string; readonly productId: string; readonly sku: string; readonly name: string; readonly imageUrl: string | null; readonly packType: string;
     readonly requestedQty: number; readonly returnedQty: number; readonly lineStatus: string; readonly disposition: string | null;
     readonly customerReturnReason: string | null; readonly actualReturnReason: string | null; readonly shippedQty: number | null;
+    /** Tracking flags of the SKU: the station asks for lot / dates / serials when set. */
+    readonly trackLot: boolean; readonly trackExpiry: boolean; readonly trackProductionDate: boolean; readonly trackSerial: boolean;
+    /** What actually shipped for this SKU on the order (ledger), offered as capture choices. */
+    readonly shipped: ShippedAttributes | null;
   }[];
+  /** Units requested but not received; > 0 on a Completed RMA means it was short closed (reopenable). */
+  readonly shortQty: number;
   readonly receipts: readonly {
     readonly id: string; readonly receiptNo: number; readonly sku: string; readonly quantity: number; readonly locationCode: string; readonly lpNumber: string | null;
     readonly damageReason: string | null; readonly actualReturnReason: string | null; readonly note: string | null; readonly receivedBy: string; readonly receivedAt: string; readonly cancelledAt: string | null;
@@ -122,7 +137,11 @@ export function getReturnDetail(db: AppDb, scope: Scope, id: string): ReturnDeta
   const ro = loadReturn(db, scope, id);
   const wh = db.select().from(schema.warehouses).where(eq(schema.warehouses.id, ro.warehouseId)).get();
   const client = db.select().from(schema.clients).where(eq(schema.clients.id, ro.clientId)).get();
-  const creator = ro.createdBy ? db.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, ro.createdBy)).get() : undefined;
+  const creator = ro.createdBy ? db.select({ name: schema.users.name, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, ro.createdBy)).get() : undefined;
+  const addr = ro.returnAddressId ? db.select().from(schema.addresses).where(eq(schema.addresses.id, ro.returnAddressId)).get() : undefined;
+  const returnAddress = addr
+    ? [addr.companyName ?? addr.name, addr.line1, addr.city, [addr.state, addr.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ")
+    : wh ? [wh.name, wh.addressLine, wh.city, [wh.state, wh.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ") : null;
   const so = ro.shipmentOrderId ? db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, ro.shipmentOrderId)).get() : undefined;
   const label = ro.returnLabelShipmentId ? db.select().from(schema.shipments).where(eq(schema.shipments.id, ro.returnLabelShipmentId)).get() : undefined;
   const lines = db.select({ l: schema.returnOrderLines, p: schema.products }).from(schema.returnOrderLines)
@@ -140,13 +159,17 @@ export function getReturnDetail(db: AppDb, scope: Scope, id: string): ReturnDeta
   const tagIds = db.select({ id: schema.entityTags.tagId }).from(schema.entityTags)
     .where(and(eq(schema.entityTags.entityType, "return_order"), eq(schema.entityTags.entityId, ro.id))).all().map((t) => t.id);
   const receivedQty = lines.reduce((s, r) => s + r.l.returnedQty, 0);
+  const extras = readRmaExtras(db, ro.id);
+  const attrs = so ? shippedAttributes(db, so.id) : new Map<string, ShippedAttributes>();
   return {
     id: ro.id, rmaCode: ro.rmaCode, status: ro.status, source: ro.source, version: ro.version,
-    warehouseId: ro.warehouseId, warehouseCode: wh?.code ?? "", clientId: ro.clientId, clientName: client?.name ?? "",
+    warehouseId: ro.warehouseId, warehouseCode: wh?.code ?? "", warehouseName: wh?.name ?? "", returnAddress, clientId: ro.clientId, clientName: client?.name ?? "",
     customerName: ro.customerName ?? so?.customerName ?? null, fromCountry: ro.fromCountry, note: ro.note,
-    createdAt: ro.createdAt, createdByName: creator?.name ?? "System", updatedAt: ro.updatedAt,
+    createdAt: ro.createdAt, createdByName: creator?.name ?? "System", createdByEmail: creator?.email ?? null, updatedAt: ro.updatedAt,
     expectedReturnDate: ro.expectedReturnDate, actualReturnDate: ro.actualReturnDate,
     carrierCode: ro.carrierCode, carrierServiceName: ro.carrierServiceName, trackingNumber: ro.trackingNumber,
+    trackingNumbers: extras.tracking ?? splitTracking(ro.trackingNumber), returnAddressId: ro.returnAddressId,
+    returnShippingCost: label ? label.shippingCost : extras.hasCost ? extras.cost : so?.returnShippingCost ?? null,
     order: so ? {
       id: so.id, code: so.code, storeOrderNumber: so.storeOrderNumber, channel: so.channel, status: so.status, orderDate: so.orderDate,
       shippedAt: so.shippedAt, deliveredAt: so.deliveredAt, shipTo: [so.shipAddress, so.shipCity, so.shipState, so.shipZip].filter(Boolean).join(", "),
@@ -160,7 +183,10 @@ export function getReturnDetail(db: AppDb, scope: Scope, id: string): ReturnDeta
       returnedQty: l.returnedQty, lineStatus: l.lineStatus, disposition: l.disposition,
       customerReturnReason: lookupName(db, l.customerReturnReasonId), actualReturnReason: lookupName(db, l.actualReturnReasonId),
       shippedQty: l.orderLineId ? shipped.get(l.orderLineId) ?? null : null,
+      trackLot: p.trackLot, trackExpiry: p.trackExpiry, trackProductionDate: p.trackProductionDate, trackSerial: p.trackSerial,
+      shipped: attrs.get(p.id) ?? null,
     })),
+    shortQty: lines.reduce((s, r) => s + Math.max(0, r.l.requestedQty - r.l.returnedQty), 0),
     receipts: receipts.map(({ r, sku, loc, lp }) => ({
       id: r.id, receiptNo: r.masterId, sku, quantity: r.quantity, locationCode: loc, lpNumber: lp ?? null, damageReason: r.damageReason,
       actualReturnReason: r.actualReturnReason, note: r.note, receivedBy: r.receivedBy, receivedAt: r.receivedAt, cancelledAt: r.cancelledAt,
@@ -203,6 +229,34 @@ export interface ShippableOrder {
   readonly eligible: boolean;
   readonly reason: string | null;
   readonly lines: readonly ShippableLine[];
+  /** Create RMA "Return address" choices: the warehouse's addresses, then the client's Return addresses. */
+  readonly returnAddresses: readonly ReturnAddressOption[];
+  readonly defaultReturnAddressId: string | null;
+}
+
+export interface ReturnAddressOption {
+  readonly id: string;
+  readonly label: string;
+  readonly description: string;
+  readonly owner: "warehouse" | "client";
+}
+
+/** Return address options for a warehouse + client (active only), warehouse first, default first. */
+export function returnAddressOptions(db: AppDb, warehouseId: string, clientId: string): { options: ReturnAddressOption[]; defaultId: string | null } {
+  const ad = schema.addresses;
+  const wh = db.select({ code: schema.warehouses.code }).from(schema.warehouses).where(eq(schema.warehouses.id, warehouseId)).get();
+  const client = db.select({ name: schema.clients.name }).from(schema.clients).where(eq(schema.clients.id, clientId)).get();
+  const rows = db.select().from(ad).where(and(eq(ad.isActive, true), sql`((${ad.ownerType} = 'warehouse' AND ${ad.ownerId} = ${warehouseId}) OR (${ad.ownerType} = 'client' AND ${ad.ownerId} = ${clientId} AND ${ad.usageType} = 'Return'))`)).all();
+  const rank = (a: (typeof rows)[number]) => (a.ownerType === "warehouse" ? 0 : 10) + (a.usageType === "Return" ? 0 : 2) + (a.isDefault ? 0 : 1);
+  const options = [...rows].sort((a, b) => rank(a) - rank(b)).map((a): ReturnAddressOption => {
+    const owner = a.ownerType === "warehouse" ? "warehouse" : "client";
+    const who = owner === "warehouse" ? `${wh?.code ?? "Warehouse"} warehouse` : `${client?.name ?? "Client"} returns`;
+    return {
+      id: a.id, owner, label: a.name ?? a.companyName ?? who,
+      description: [a.line1, a.city, [a.state, a.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+    };
+  });
+  return { options, defaultId: options[0]?.id ?? null };
 }
 
 /** Quantity already committed to non-cancelled RMAs (Completed: returned; open: requested). */
@@ -217,17 +271,24 @@ export function shippableOrder(db: AppDb, scope: Scope, orderId: string): Shippa
   if (!so || so.deletedAt) throw new DomainError("NOT_FOUND", "Shipment order not found");
   assertInScope(scope, so, "Shipment order");
   const client = db.select({ name: schema.clients.name }).from(schema.clients).where(eq(schema.clients.id, so.clientId)).get();
+  // One grouped query over this order's RMAs (indexed by shipment_order_id) instead of one scan per line.
+  const committed = new Map(db.all<{ id: string; n: number }>(sql`SELECT rl.order_line_id AS id,
+      SUM(CASE WHEN ro.status = 'Completed' THEN rl.returned_qty ELSE MAX(rl.requested_qty, rl.returned_qty) END) AS n
+    FROM return_orders ro JOIN return_order_lines rl ON rl.return_order_id = ro.id
+    WHERE ro.shipment_order_id = ${so.id} AND ro.status <> 'Cancelled' AND rl.order_line_id IS NOT NULL
+    GROUP BY rl.order_line_id`).map((r) => [r.id, r.n]));
   const lines = db.select({ l: schema.orderLines, p: schema.products }).from(schema.orderLines)
     .innerJoin(schema.products, eq(schema.products.id, schema.orderLines.productId))
     .where(eq(schema.orderLines.orderId, so.id)).orderBy(asc(schema.products.sku)).all()
     .map(({ l, p }): ShippableLine => {
-      const already = committedReturnQty(db, l.id);
+      const already = committed.get(l.id) ?? 0;
       return {
         orderLineId: l.id, productId: p.id, sku: p.sku, name: p.name, imageUrl: p.imageUrl, packType: l.packType, shippedQty: l.shippedQuantity,
         alreadyReturned: already, returnable: Math.max(0, l.shippedQuantity - already), isNonReturnable: p.isNonReturnable,
       };
     });
   const shippedStatus = (RETURNABLE_ORDER_STATUSES as readonly string[]).includes(so.status);
+  const addresses = returnAddressOptions(db, so.warehouseId, so.clientId);
   const anyReturnable = lines.some((l) => l.returnable > 0 && !l.isNonReturnable);
   const reason = !shippedStatus ? `Order ${so.code} is ${so.status}. Only shipped orders can be returned.`
     : !anyReturnable ? `Every shipped unit of ${so.code} is already on a return.` : null;
@@ -236,6 +297,7 @@ export function shippableOrder(db: AppDb, scope: Scope, orderId: string): Shippa
     customerName: so.customerName, storeOrderNumber: so.storeOrderNumber, shippedAt: so.shippedAt, deliveredAt: so.deliveredAt,
     shipTo: [so.shipAddress, so.shipCity, so.shipState, so.shipZip].filter(Boolean).join(", "), shipCountry: so.shipCountry,
     eligible: reason === null, reason, lines,
+    returnAddresses: addresses.options, defaultReturnAddressId: addresses.defaultId,
   };
 }
 
@@ -254,6 +316,33 @@ export const returnLabelSchema = z.object({
   package: packageSchema,
 });
 
+/** "YYYY-MM-DD" calendar date (no time, no timezone). */
+export const dateOnlySchema = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a YYYY-MM-DD date").refine((v) => {
+  const [y, m, d] = v.split("-").map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}, "Enter a valid date");
+
+/** Max tracking numbers on one return (Logiwa "Return Tracking Number(s)" with Add). */
+export const MAX_RETURN_TRACKING_NUMBERS = 10;
+
+export const returnInfoSchema = z.object({
+  carrierCode: z.string().trim().max(40).nullish(),
+  carrierServiceName: z.string().trim().max(120).nullish(),
+  shippingCost: z.number().min(0, "Cost can't be negative").max(100_000, "Check the cost").nullish(),
+  trackingNumbers: z.array(z.string().trim().min(1).max(60, "Max 60 characters")).max(MAX_RETURN_TRACKING_NUMBERS, `Up to ${MAX_RETURN_TRACKING_NUMBERS} tracking numbers`).default([])
+    .refine((list) => new Set(list.map((t) => t.toUpperCase())).size === list.length, "Each tracking number once"),
+});
+
+/** Tracking numbers are stored on the RMA as one comma-separated value (column `tracking_number`). */
+export function joinTracking(list: readonly string[] | null | undefined): string | null {
+  const clean = [...new Set((list ?? []).map((t) => t.trim()).filter(Boolean))];
+  return clean.length ? clean.join(", ") : null;
+}
+export function splitTracking(value: string | null | undefined): string[] {
+  return (value ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+}
+
 export const createRmaSchema = z.object({
   shipmentOrderId: idSchema,
   lines: z.array(z.object({
@@ -261,9 +350,12 @@ export const createRmaSchema = z.object({
     quantity: z.number().int().min(1, "Quantity must be at least 1"),
     customerReturnReasonId: idSchema.nullish(),
   })).min(1, "Select at least one line to return"),
-  expectedReturnDate: z.string().trim().max(40).nullish(),
+  expectedReturnDate: dateOnlySchema.nullish(),
   note: z.string().trim().max(1000).nullish(),
   label: returnLabelSchema.nullish(),
+  returnAddressId: idSchema.nullish(),
+  /** Return info recorded without buying a label (customer-supplied or marketplace label). Ignored when `label` is set. */
+  returnInfo: returnInfoSchema.nullish(),
 });
 export type CreateRmaInput = z.output<typeof createRmaSchema>;
 
@@ -276,8 +368,69 @@ export interface CreateRmaResult {
   readonly labelError: string | null;
 }
 
+/* ------------------------------------------- per-RMA cost / tracking columns */
+
+/**
+ * Per-RMA return shipping cost and tracking-number list (REQ R3-1). The columns
+ * `return_orders.return_shipping_cost real` and `return_orders.return_tracking_numbers text` (JSON
+ * array) are added by foundation's schema; until a database has them, cost falls back to the
+ * shipment order's Return section and tracking to the comma-joined `tracking_number`. Detected per
+ * connection (PRAGMA, re-checked every minute) so a migration takes effect without a code change.
+ */
+const COLUMN_CHECK_MS = 60_000;
+const columnCache = new WeakMap<object, { readonly at: number; readonly cost: boolean; readonly tracking: boolean }>();
+export function rmaExtraColumns(db: AppDb): { readonly cost: boolean; readonly tracking: boolean } {
+  const hit = columnCache.get(db as object);
+  if (hit && Date.now() - hit.at < COLUMN_CHECK_MS) return hit;
+  const names = new Set(db.all<{ name: string }>(sql`SELECT name FROM pragma_table_info('return_orders')`).map((r) => r.name));
+  const next = { at: Date.now(), cost: names.has("return_shipping_cost"), tracking: names.has("return_tracking_numbers") };
+  columnCache.set(db as object, next);
+  return next;
+}
+
+/** Per-RMA extras (null when the column is absent or empty). */
+export function readRmaExtras(db: AppDb, id: string): { readonly cost: number | null; readonly tracking: string[] | null; readonly hasCost: boolean } {
+  const cols = rmaExtraColumns(db);
+  if (!cols.cost && !cols.tracking) return { cost: null, tracking: null, hasCost: false };
+  const row = db.get<{ cost?: number | null; tracking?: string | null }>(sql`SELECT ${sql.raw(cols.cost ? "return_shipping_cost" : "NULL")} AS cost, ${sql.raw(cols.tracking ? "return_tracking_numbers" : "NULL")} AS tracking FROM return_orders WHERE id = ${id}`);
+  let tracking: string[] | null = null;
+  if (row?.tracking) {
+    try { const v: unknown = JSON.parse(row.tracking); if (Array.isArray(v)) tracking = v.filter((t): t is string => typeof t === "string" && t.trim() !== ""); } catch { tracking = null; }
+  }
+  return { cost: row?.cost ?? null, tracking, hasCost: cols.cost };
+}
+
+/** Writes the tracking list per RMA (JSON) when the column exists; `tracking_number` keeps the joined value either way. */
+export function writeRmaTracking(tx: AppDb, id: string, list: readonly string[]): void {
+  if (!rmaExtraColumns(tx).tracking) return;
+  const clean = [...new Set(list.map((t) => t.trim()).filter(Boolean))];
+  tx.run(sql`UPDATE return_orders SET return_tracking_numbers = ${clean.length ? JSON.stringify(clean) : null} WHERE id = ${id}`);
+}
+
+/**
+ * Records the return shipping cost on the RMA itself when `return_orders.return_shipping_cost`
+ * exists (change log on the return order). Otherwise it is kept where Logiwa keeps it: the shipment
+ * order's Return section (`shipment_orders.return_shipping_cost`), with a change-log row on the order.
+ */
+export function recordReturnShippingCost(tx: AppDb, ctx: ScopedCtx, rma: { readonly id: string; readonly rmaCode: string; readonly shipmentOrderId: string | null }, cost: number): void {
+  if (rmaExtraColumns(tx).cost) {
+    const before = readRmaExtras(tx, rma.id).cost;
+    if (before === cost) return;
+    tx.run(sql`UPDATE return_orders SET return_shipping_cost = ${cost} WHERE id = ${rma.id}`);
+    changeLog.recordUpdate(tx, ctx, { entityType: "return_order", entityId: rma.id, entityCode: rma.rmaCode, before: { returnShippingCost: before }, after: { returnShippingCost: cost } });
+    return;
+  }
+  if (!rma.shipmentOrderId) return;
+  const so = tx.select({ id: schema.shipmentOrders.id, code: schema.shipmentOrders.code, cost: schema.shipmentOrders.returnShippingCost }).from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, rma.shipmentOrderId)).get();
+  if (!so || so.cost === cost) return;
+  tx.update(schema.shipmentOrders).set({ returnShippingCost: cost, updatedBy: ctx.userId }).where(eq(schema.shipmentOrders.id, so.id)).run();
+  changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: so.id, entityCode: so.code, before: { returnShippingCost: so.cost }, after: { returnShippingCost: cost } });
+  // The RMA's own History shows the change too ("Return Shipping Cost is modified. — --> 0.00").
+  changeLog.recordUpdate(tx, ctx, { entityType: "return_order", entityId: rma.id, entityCode: rma.rmaCode, before: { returnShippingCost: so.cost }, after: { returnShippingCost: cost } });
+}
+
 /** Synchronous part (inside a transaction): validates quantities and inserts the RMA as Pending. */
-export function insertRma(tx: AppDb, ctx: ScopedCtx, input: CreateRmaInput): { id: string; rmaCode: string; orderId: string } {
+export function insertRma(tx: AppDb, ctx: ScopedCtx, input: CreateRmaInput, opts: { readonly source?: (typeof RETURN_SOURCES)[number] } = {}): { id: string; rmaCode: string; orderId: string } {
   const order = shippableOrder(tx, ctx.scope, input.shipmentOrderId);
   if (!(RETURNABLE_ORDER_STATUSES as readonly string[]).includes(order.status)) {
     throw new DomainError("INVALID_STATE", `Order ${order.code} is ${order.status}. Only shipped orders can be returned.`);
@@ -296,20 +449,30 @@ export function insertRma(tx: AppDb, ctx: ScopedCtx, input: CreateRmaInput): { i
     const first = Object.values(fieldErrors)[0]?.[0] ?? "Invalid lines";
     throw validationError(first, fieldErrors);
   }
+  if (input.returnAddressId && !order.returnAddresses.some((a) => a.id === input.returnAddressId)) {
+    throw validationError("Choose a return address of this warehouse or client", { returnAddressId: ["Not an address of this warehouse or client"] });
+  }
+  const manual = input.label ? null : input.returnInfo ?? null;
   const rmaCode = sequences.next(tx, "rma");
   const ro = tx.insert(schema.returnOrders).values({
-    rmaCode, shipmentOrderId: order.id, warehouseId: order.warehouseId, clientId: order.clientId, source: "RMA", status: "Pending",
+    rmaCode, shipmentOrderId: order.id, warehouseId: order.warehouseId, clientId: order.clientId, source: opts.source ?? "RMA", status: "Pending",
     customerName: order.customerName, fromCountry: order.shipCountry, expectedReturnDate: input.expectedReturnDate ?? null,
+    returnAddressId: input.returnAddressId ?? order.defaultReturnAddressId ?? null,
+    carrierCode: manual?.carrierCode || null, carrierServiceName: manual?.carrierServiceName || null, trackingNumber: joinTracking(manual?.trackingNumbers),
     note: input.note ?? null, createdBy: ctx.userId, updatedBy: ctx.userId,
   }).returning().get();
+  changeLog.recordCreate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: rmaCode });
   for (const l of input.lines) {
     const line = order.lines.find((x) => x.orderLineId === l.orderLineId) as ShippableLine;
-    tx.insert(schema.returnOrderLines).values({
+    const created = tx.insert(schema.returnOrderLines).values({
       returnOrderId: ro.id, orderLineId: line.orderLineId, productId: line.productId, packType: line.packType, requestedQty: l.quantity,
       customerReturnReasonId: l.customerReturnReasonId ?? null, createdBy: ctx.userId,
-    }).run();
+    }).returning({ id: schema.returnOrderLines.id }).get();
+    // Logiwa writes "<SKU> -> Return Order Line is created." per line.
+    changeLog.recordLineCreate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: rmaCode, lineEntityType: "return_order_line", lineEntityId: created.id, lineLabel: line.sku });
   }
-  changeLog.recordCreate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: rmaCode });
+  if (manual?.trackingNumbers?.length) writeRmaTracking(tx, ro.id, manual.trackingNumbers);
+  if (manual?.shippingCost !== null && manual?.shippingCost !== undefined) recordReturnShippingCost(tx, ctx, { id: ro.id, rmaCode, shipmentOrderId: order.id }, manual.shippingCost);
   return { id: ro.id, rmaCode, orderId: order.id };
 }
 
@@ -330,6 +493,7 @@ export async function attachReturnLabel(db: AppDb, ctx: ScopedCtx, returnOrderId
       trackingNumber: res.trackingNumber, returnLabelShipmentId: res.shipment.id, carrierCode: res.shipment.carrierCode,
       carrierServiceName: res.shipment.serviceName, updatedBy: ctx.userId, version: sql`${schema.returnOrders.version} + 1`,
     }).where(eq(schema.returnOrders.id, ro.id)).returning().get();
+    writeRmaTracking(tx, ro.id, [res.trackingNumber]);
     changeLog.recordUpdate(tx, ctx, {
       entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode,
       before: { trackingNumber: ro.trackingNumber, carrierCode: ro.carrierCode, carrierServiceName: ro.carrierServiceName },
@@ -394,7 +558,7 @@ export function changeReturnStatus(tx: AppDb, ctx: ScopedCtx, input: z.output<ty
 }
 
 /** Per-status eligibility for a selection (the Change Status modal only offers legal moves). */
-export function selectionTransitions(db: AppDb, scope: Scope, ids: readonly string[]): { readonly returns: readonly { id: string; rmaCode: string; status: ReturnStatus }[]; readonly options: readonly (TransitionOption & { readonly eligible: number })[] } {
+export function selectionTransitions(db: AppDb, scope: Scope, ids: readonly string[], selectedLineIds: readonly string[] = []): { readonly returns: readonly { id: string; rmaCode: string; status: ReturnStatus; lineCount: number; selectedLines: number | null }[]; readonly options: readonly (TransitionOption & { readonly eligible: number })[] } {
   const rows = [...new Set(ids)].map((id) => loadReturn(db, scope, id));
   const per = rows.map((ro) => transitionOptions(ro.status, receivedTotal(db, ro.id)));
   const options = RETURN_STATUSES.map((status) => {
@@ -403,7 +567,17 @@ export function selectionTransitions(db: AppDb, scope: Scope, ids: readonly stri
     const firstReason = results.find((r) => !r.ok)?.reason ?? null;
     return { status, ok: eligible > 0, eligible, reason: eligible === rows.length ? null : eligible === 0 ? firstReason : `${rows.length - eligible} of ${rows.length} can't move: ${firstReason ?? ""}` };
   });
-  return { returns: rows.map((r) => ({ id: r.id, rmaCode: r.rmaCode, status: r.status })), options };
+  // Line counts let the modal say "applies to RMA X (2 lines)" when only some of its lines were selected.
+  const lineRows = rows.length ? db.select({ id: schema.returnOrderLines.id, ro: schema.returnOrderLines.returnOrderId }).from(schema.returnOrderLines)
+    .where(inArray(schema.returnOrderLines.returnOrderId, rows.map((r) => r.id))).all() : [];
+  const picked = new Set(selectedLineIds);
+  return {
+    returns: rows.map((r) => {
+      const mine = lineRows.filter((l) => l.ro === r.id);
+      return { id: r.id, rmaCode: r.rmaCode, status: r.status, lineCount: mine.length, selectedLines: selectedLineIds.length ? mine.filter((l) => picked.has(l.id)).length : null };
+    }),
+    options,
+  };
 }
 
 /** Line ids → their return order ids (grid rows are RMA lines; bulk actions act on RMAs). */
@@ -418,3 +592,96 @@ export function returnIdsForLines(db: AppDb, scope: Scope, lineIds: readonly str
 }
 
 export type { LineRow as ReturnLineRow, ReturnRow };
+
+/* ------------------------------------------------- bulk update return info */
+
+/** Logiwa "Bulk Update Return Info": fields set on every selected open RMA (omitted = unchanged, null = clear). */
+export const bulkReturnInfoSchema = z.object({
+  ids: bulkIdsSchema,
+  expectedReturnDate: z.string().trim().max(40).nullish(),
+  carrierCode: z.string().trim().max(60).nullish(),
+  carrierServiceName: z.string().trim().max(120).nullish(),
+  trackingNumber: z.string().trim().max(80).nullish(),
+  fromCountry: z.string().trim().max(80).nullish(),
+  note: z.string().trim().max(1000).nullish(),
+}).refine((v) => ["expectedReturnDate", "carrierCode", "carrierServiceName", "trackingNumber", "fromCountry", "note"].some((k) => (v as Record<string, unknown>)[k] !== undefined), {
+  message: "Choose at least one field to update", path: ["expectedReturnDate"],
+});
+
+export const RETURN_INFO_FIELDS = ["expectedReturnDate", "carrierCode", "carrierServiceName", "trackingNumber", "fromCountry", "note"] as const;
+
+/** Builds the update patch from the request (empty strings clear the field). Pure; unit tested. */
+export function returnInfoPatch(input: Partial<Record<(typeof RETURN_INFO_FIELDS)[number], string | null | undefined>>): Partial<Record<(typeof RETURN_INFO_FIELDS)[number], string | null>> {
+  const patch: Partial<Record<(typeof RETURN_INFO_FIELDS)[number], string | null>> = {};
+  for (const k of RETURN_INFO_FIELDS) {
+    const v = input[k];
+    if (v === undefined) continue;
+    patch[k] = v === null || v === "" ? null : v;
+  }
+  return patch;
+}
+
+export function bulkUpdateReturnInfo(tx: AppDb, ctx: ScopedCtx, input: z.output<typeof bulkReturnInfoSchema>): BulkResult {
+  const patch = returnInfoPatch(input);
+  return runBulk(tx, input.ids, (inner, id) => {
+    const ro = loadReturn(inner, ctx.scope, id);
+    if (ro.status === "Completed" || ro.status === "Cancelled") throw new DomainError("INVALID_STATE", `${ro.rmaCode} is ${ro.status.toLowerCase()} and can't be edited.`);
+    const before = Object.fromEntries(Object.keys(patch).map((k) => [k, (ro as Record<string, unknown>)[k] ?? null]));
+    inner.update(schema.returnOrders).set({ ...patch, updatedBy: ctx.userId, version: sql`${schema.returnOrders.version} + 1` })
+      .where(eq(schema.returnOrders.id, ro.id)).run();
+    if (patch.trackingNumber !== undefined) writeRmaTracking(inner, ro.id, splitTracking(patch.trackingNumber));
+    changeLog.recordUpdate(inner, ctx, { entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, before, after: patch });
+  });
+}
+
+/* ------------------------------------------------------- void return label */
+
+export async function voidReturnLabel(db: AppDb, ctx: ScopedCtx, returnOrderId: string): Promise<{ voided: number }> {
+  const ro = loadReturn(db, ctx.scope, returnOrderId);
+  if (!ro.returnLabelShipmentId) throw new DomainError("INVALID_STATE", `${ro.rmaCode} has no return label to void.`);
+  if (ro.status === "Completed") throw new DomainError("INVALID_STATE", "The label of a completed return can't be voided.");
+  const res = await shipping.voidLabel(db, ctx, { shipmentId: ro.returnLabelShipmentId });
+  db.transaction((tx) => {
+    tx.update(schema.returnOrders).set({ trackingNumber: null, returnLabelShipmentId: null, updatedBy: ctx.userId, version: sql`${schema.returnOrders.version} + 1` })
+      .where(eq(schema.returnOrders.id, ro.id)).run();
+    writeRmaTracking(tx, ro.id, []);
+    changeLog.recordUpdate(tx, ctx, {
+      entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode,
+      before: { trackingNumber: ro.trackingNumber, returnLabel: "Active" }, after: { trackingNumber: null, returnLabel: "Voided" },
+    });
+  });
+  return res;
+}
+
+/* ------------------------------------------------- per-RMA return info edit */
+
+/** Logiwa order › Return section, per RMA: carrier, option, cost and several tracking numbers (Add row). */
+export const editReturnInfoSchema = z.object({
+  carrierCode: z.string().trim().max(40).nullable(),
+  carrierServiceName: z.string().trim().max(120).nullable(),
+  shippingCost: z.number().min(0, "Cost can't be negative").max(100_000, "Check the cost").nullable(),
+  trackingNumbers: returnInfoSchema.shape.trackingNumbers,
+  expectedReturnDate: dateOnlySchema.nullish(),
+  fromCountry: z.string().trim().max(80).nullish(),
+  version: z.number().int().optional(),
+});
+
+export function editReturnInfo(db: AppDb, ctx: ScopedCtx, id: string, input: z.output<typeof editReturnInfoSchema>): { readonly id: string; readonly trackingNumbers: readonly string[] } {
+  return db.transaction((tx) => {
+    const ro = loadReturn(tx, ctx.scope, id);
+    if (ro.status === "Completed" || ro.status === "Cancelled") throw new DomainError("INVALID_STATE", `${ro.rmaCode} is ${ro.status.toLowerCase()} and its return info can't be edited.`);
+    if (input.version !== undefined && input.version !== ro.version) throw new DomainError("CONFLICT", `${ro.rmaCode} was changed by someone else. Reload and try again.`);
+    if (ro.returnLabelShipmentId && (input.carrierCode ?? null) !== (ro.carrierCode ?? null)) throw new DomainError("INVALID_STATE", `${ro.rmaCode} has a purchased return label. Void it before changing the carrier.`);
+    const after: Record<string, string | null> = {
+      carrierCode: input.carrierCode || null, carrierServiceName: input.carrierServiceName || null, trackingNumber: joinTracking(input.trackingNumbers),
+      ...(input.expectedReturnDate !== undefined ? { expectedReturnDate: input.expectedReturnDate || null } : {}),
+      ...(input.fromCountry !== undefined ? { fromCountry: input.fromCountry || null } : {}),
+    };
+    const before = Object.fromEntries(Object.keys(after).map((k) => [k, (ro as Record<string, unknown>)[k] ?? null]));
+    tx.update(schema.returnOrders).set({ ...after, updatedBy: ctx.userId, version: sql`${schema.returnOrders.version} + 1` }).where(eq(schema.returnOrders.id, ro.id)).run();
+    changeLog.recordUpdate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, before, after });
+    writeRmaTracking(tx, ro.id, input.trackingNumbers);
+    if (input.shippingCost !== null) recordReturnShippingCost(tx, ctx, ro, input.shippingCost);
+    return { id: ro.id, trackingNumbers: input.trackingNumbers };
+  });
+}

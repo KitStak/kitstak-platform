@@ -7,7 +7,7 @@
  */
 import * as React from "react";
 import Link from "next/link";
-import { Ban, ExternalLink, PackageCheck } from "lucide-react";
+import { Ban, ExternalLink, PackageCheck, ScrollText } from "lucide-react";
 import { KvList, type KvItem } from "@/components/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusPill } from "@/components/ui/status-pill";
 import { DisabledReason } from "@/components/ui/tooltip";
 import { useFormat } from "@/lib/format";
+import { calendarDay } from "@/lib/grid-defs/receiving/po-schemas";
+import { formatZoned } from "@/lib/grid-defs/receiving/zoned-time";
+import { receivingTypeLabel } from "@/lib/grid-defs/receiving/receiving-types";
+import { receivingLedgerHref } from "@/lib/grid-defs/receiving/receiving-ledger";
 import { useApiQuery } from "@/lib/query-client";
 import type { ReceiptRow } from "./receipt-columns";
 import { errorMessage, ProductThumb } from "./receiving-shared";
@@ -29,30 +33,37 @@ export interface ReceiptDetail extends ReceiptRow {
 
 export const receiptKey = (id: string) => ["receipt", id] as const;
 
-export function ReceiptDrawer({ receiptId, onOpenChange, onCancel, canCancel, onOpenReceipt }: {
+export function ReceiptDrawer({ receiptId, onOpenChange, onCancel, canCancel, onOpenReceipt, seed }: {
   readonly receiptId: string | null;
+  /** The grid row of this receipt: the drawer renders from it at once while the detail loads. */
+  readonly seed?: ReceiptRow | null;
   readonly onOpenChange: (open: boolean) => void;
   readonly onCancel?: (row: ReceiptRow) => void;
   readonly canCancel: boolean;
   readonly onOpenReceipt?: (id: string) => void;
 }) {
   const fmt = useFormat();
-  const q = useApiQuery<ReceiptDetail>(receiptKey(receiptId ?? ""), receiptId ? `/api/receipts/${receiptId}` : null, { retry: false });
+  const seeded = seed && seed.id === receiptId ? seed : null;
+  const q = useApiQuery<ReceiptDetail>(receiptKey(receiptId ?? ""), receiptId ? `/api/receipts/${receiptId}` : null, {
+    retry: false,
+    // Instant render from the cached grid row; serials, siblings and the ledger row fill in after.
+    placeholderData: seeded ? { data: { ...seeded, serials: [], transaction: null, siblings: [] } } : undefined,
+  });
   const r = q.data?.data;
 
   const facts: KvItem[] = (r
     ? [
-        { label: "Receiving type", value: r.type },
+        { label: "Receiving type", value: receivingTypeLabel(r.type) },
         { label: "Purchase order", value: r.purchaseOrderId && r.poCode ? <Link className="text-primary hover:underline" href={`/receiving/${r.purchaseOrderId}`}>{r.poCode}</Link> : "—" },
         { label: "PO status", value: r.poStatus ? <StatusPill status={r.poStatus} domain="purchaseOrder" size="sm" /> : "—" },
         { label: "Quantity", value: `${r.quantity.toLocaleString()} ${r.packType}${r.uomQuantity !== r.quantity ? ` (${r.uomQuantity.toLocaleString()} ${r.uomPackType})` : ""}` },
         { label: "Location", value: r.locationCode },
         { label: "LPN", value: r.lpNumber ? `${r.lpNumber}${r.lpType ? ` · ${r.lpType}` : ""}` : "—" },
         { label: "Lot/batch number", value: r.lotNumber ?? "—" },
-        { label: "Expiry date", value: r.expiryDate ? fmt.date(r.expiryDate) : "—" },
-        { label: "Production date", value: r.productionDate ? fmt.date(r.productionDate) : "—" },
+        { label: "Expiry date", value: r.expiryDate ? fmt.date(calendarDay(r.expiryDate)) : "—" },
+        { label: "Production date", value: r.productionDate ? fmt.date(calendarDay(r.productionDate)) : "—" },
         { label: "Damage reason", value: r.damageReason ? <Badge tone="warning" size="sm">{r.damageReason}</Badge> : "—" },
-        { label: "Received", value: `${fmt.dateTime(r.receivedAt)} · ${r.receivedBy}` },
+        { label: "Received", value: `${formatZoned(r.receivedAt, r.timeZone)} · ${r.receivedBy}` },
         { label: "Client / warehouse", value: `${r.clientName} · ${r.warehouseName}` },
         { label: "Note", value: r.note ?? "—" },
       ]
@@ -89,6 +100,7 @@ export function ReceiptDrawer({ receiptId, onOpenChange, onCancel, canCancel, on
     >
       {q.isPending ? (
         <div className="flex flex-col gap-3" aria-busy>
+          <p className="text-[12px] text-secondary" aria-live="polite">Loading the receipt, its ledger transaction and serial numbers…</p>
           {Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-6 w-full" />)}
         </div>
       ) : q.error || !r ? (
@@ -111,7 +123,7 @@ export function ReceiptDrawer({ receiptId, onOpenChange, onCancel, canCancel, on
           </div>
           {r.cancelledAt ? (
             <Callout variant="attention" title="This receipt was cancelled">
-              Cancelled {fmt.dateTime(r.cancelledAt)}{r.cancelledBy ? ` by ${r.cancelledBy}` : ""}. The inventory was reversed.
+              Cancelled {formatZoned(r.cancelledAt, r.timeZone)}{r.cancelledBy ? ` by ${r.cancelledBy}` : ""}. The inventory was reversed.
             </Callout>
           ) : null}
           <KvList items={facts} />
@@ -125,10 +137,15 @@ export function ReceiptDrawer({ receiptId, onOpenChange, onCancel, canCancel, on
             <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-[0.04em] text-faint">Ledger transaction</h3>
             {r.transaction ? (
               <p className="text-[12px] text-body">
-                {r.transaction.type} · {r.transaction.uomQty > 0 ? "+" : ""}{r.transaction.uomQty.toLocaleString()} units · {fmt.dateTime(r.transaction.at)}{" "}
-                <Link href={`/reports/transaction-history?f.receiptId=eq:${r.id}`} className="text-primary hover:underline">Transaction history</Link>
+                {r.transaction.type} · {r.transaction.uomQty > 0 ? "+" : ""}{r.transaction.uomQty.toLocaleString()} units · {formatZoned(r.transaction.at, r.timeZone)}{" "}
               </p>
-            ) : <p className="text-[12px] text-faint">No ledger transaction recorded.</p>}
+            ) : q.isPlaceholderData ? <Skeleton className="h-4 w-3/4" /> : <p className="text-[12px] text-faint">No ledger transaction recorded.</p>}
+            <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px]" aria-label="Receiving ledger">
+              <li><Link href={receivingLedgerHref({ poCode: r.poCode, sku: r.sku })} className="inline-flex items-center gap-1 font-medium text-primary hover:underline"><ScrollText className="h-3.5 w-3.5" aria-hidden />{r.poCode ? `${r.sku} on ${r.poCode}` : `${r.sku} receiving`} ledger</Link></li>
+              {r.poCode ? <li><Link href={receivingLedgerHref({ poCode: r.poCode })} className="font-medium text-primary hover:underline">All {r.poCode} transactions</Link></li> : null}
+              {r.poCode ? <li><Link href={receivingLedgerHref({ poCode: r.poCode, types: ["Cancel Receiving"] })} className="font-medium text-primary hover:underline">Cancelled receipts</Link></li> : null}
+              <li><Link href={receivingLedgerHref({ user: r.receivedBy })} className="font-medium text-primary hover:underline">By {r.receivedBy}</Link></li>
+            </ul>
           </section>
           {r.serials.length > 0 ? (
             <section>
@@ -147,7 +164,7 @@ export function ReceiptDrawer({ receiptId, onOpenChange, onCancel, canCancel, on
                     <button type="button" className="font-medium tabular-nums text-primary hover:underline" onClick={() => onOpenReceipt?.(s.id)}>{s.masterId}</button>
                     <span className="min-w-0 flex-1 truncate text-body">{s.sku}</span>
                     <span className="tabular-nums">{s.quantity.toLocaleString()}</span>
-                    <span className="text-faint">{fmt.date(s.receivedAt)}</span>
+                    <span className="text-faint">{formatZoned(s.receivedAt, r.timeZone)}</span>
                     {s.cancelledAt ? <Badge tone="danger" size="sm">Cancelled</Badge> : null}
                   </li>
                 ))}

@@ -59,7 +59,7 @@ test.describe("F8.4 /dev/ui showcase", () => {
     await expect(wizard.getByRole("button", { name: /^Step 2/ })).toBeDisabled();
     await expect(wizard.getByRole("button", { name: /^Step 3/ })).toBeDisabled();
     await wizard.getByRole("button", { name: "Next", exact: true }).first().click();
-    await expect(wizard.getByRole("alert").filter({ hasText: "SKU needs at least 3 characters" }).first()).toBeVisible();
+    await expect(wizard.getByRole("alert").filter({ hasText: "SKU is required" }).first()).toBeVisible();
     await expect(wizard.getByRole("alert").filter({ hasText: "Name is required" }).first()).toBeVisible();
     await expect(wizard.locator('input[name="sku"]').first()).toBeFocused();
   });

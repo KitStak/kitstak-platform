@@ -20,7 +20,7 @@ export const labelBulkSchema = z.object({
 });
 
 export const VOID_GUARD = "You can't void the labels for orders without a tracking number.";
-export const REPRINT_GUARD = "The orders which you have selected has no label to reprint.";
+export const REPRINT_GUARD = "The selected orders have no label to reprint.";
 
 export interface LabelOutcome {
   readonly id: string;
@@ -37,6 +37,9 @@ export interface LabelBulkResult {
   readonly outcomes: readonly LabelOutcome[];
   readonly fileIds: readonly string[];
 }
+
+/** The grid opens the label in a browser tab (Logiwa: PDF), so it always asks for PDF even when the connection prints ZPL. */
+export const GRID_LABEL_FORMAT = "PDF" as const;
 
 const DEFAULT_DIMS = { length: 10, width: 8, height: 4 };
 
@@ -77,7 +80,7 @@ async function runOne(db: AppDb, ctx: DomainCtx, action: LabelAction, id: string
     case "create": {
       const pkg = packageFor(db, order);
       const carrier = await carrierFor(db, ctx, order, pkg);
-      const res = await shipping.createLabel(db, ctx, { orderId: order.id, carrierConnectionId: carrier.connectionId, carrierServiceId: carrier.serviceId, packages: [pkg], source: "OrderGrid" });
+      const res = await shipping.createLabel(db, ctx, { orderId: order.id, carrierConnectionId: carrier.connectionId, carrierServiceId: carrier.serviceId, packages: [pkg], source: "OrderGrid", format: GRID_LABEL_FORMAT });
       return { id, code: order.code, ok: true, message: `Label created · ${res.masterTrackingNumber}`, trackingNumber: res.masterTrackingNumber, fileIds: res.shipments.flatMap((s) => (s.labelFileId ? [s.labelFileId] : [])) };
     }
     case "reprint": {

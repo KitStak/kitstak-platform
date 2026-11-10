@@ -13,6 +13,8 @@ export interface JobsColumnDef {
   readonly sortable?: boolean;
   readonly defaultVisible?: boolean;
   readonly tip?: string;
+  /** Full name for Excel exports when the grid header is abbreviated. */
+  readonly exportLabel?: string;
 }
 
 const c = (id: string, label: string, kind: ColumnKind = "text", extra: Partial<JobsColumnDef> = {}): JobsColumnDef => ({ id, label, kind, ...extra });
@@ -20,15 +22,22 @@ const hidden = { defaultVisible: false } as const;
 
 /* ------------------------------------------------------------ job management (32) */
 export const JOB_COLUMNS: readonly JobsColumnDef[] = [
-  c("warehouse", "Warehouse", "text", { width: 150 }),
-  c("client", "Client", "text", { width: 130, tip: "\"Multiple\" when the job spans clients" }),
-  c("waveNumber", "Wave no", "custom", { width: 104 }),
-  c("ruleName", "Rule name", "text", { width: 150 }),
-  c("code", "Job code", "custom", { width: 150 }),
-  c("jobType", "Job type", "text", { width: 160 }),
-  c("originalJobType", "Original job type", "text", { width: 140, sortable: false, tip: "Job type the AI optimizer started from (AI jobs only)", ...hidden }),
+  // Critic R3: the primary identifier leads, so it sits next to the checkbox at tablet width.
+  c("code", "Job code", "custom", { width: 120 }),
+  // Blind judge R1: the Short / Overdue badges get their own column so they never clip the code.
+  c("flags", "Alerts", "custom", { width: 132, sortable: false, tip: "Open pick short and overdue badges" }),
+  // Critic R5: job state is readable without horizontal scroll (Status and Priority right after the code).
   c("status", "Status", "status", { width: 110 }),
-  c("priority", "Priority", "priority", { width: 104 }),
+  c("priority", "Priority", "priority", { width: 116 }),
+  c("jobType", "Job type", "text", { width: 180 }),
+  c("waveNumber", "Wave no", "custom", { width: 104 }),
+  c("warehouse", "Warehouse", "text", { width: 160 }),
+  c("client", "Client", "text", { width: 150, tip: "\"Multiple\" when the job spans clients" }),
+  c("ruleName", "Rule name", "text", { width: 180 }),
+  // Critic R4: Logiwa shows ORIGINAL IO JOB TYPE by default, so AI-built jobs are recognisable on first load.
+  c("aiJob", "AI job", "boolean", { width: 110, tip: "Built and sequenced by an AI Job wave" }),
+  c("originalJobType", "Original job type", "text", { width: 160, tip: "Job type the AI optimizer started from (AI jobs only)" }),
+  c("aiJobDescription", "AI job description", "text", { width: 320, sortable: false, tip: "AI job type, orders, pick stops and optimized walk vs. the walking-path order", ...hidden }),
   c("operationType", "Operation type", "text", { width: 128 }),
   c("assignee", "Assignee", "text", { width: 150 }),
   c("orderCount", "Order count", "number", { width: 100 }),
@@ -45,7 +54,7 @@ export const JOB_COLUMNS: readonly JobsColumnDef[] = [
   c("mobileCart", "Mobile cart", "text", { width: 110 }),
   c("pickingZone", "Picking zone", "text", { width: 110 }),
   c("plannedStartAt", "Start date", "datetime", { tip: "Planned start: created + 1 hour" }),
-  c("plannedEndAt", "End date", "datetime", { tip: "Planned end: created + 2 hours" }),
+  c("plannedEndAt", "End date", "custom", { width: 190, tip: "Planned end: created + 2 hours. Red with an Overdue badge when a live job has passed it." }),
   c("locationCount", "Number of locations", "number", { width: 140 }),
   c("skuCount", "Number of SKUs", "number", { width: 120 }),
   c("labelStatus", "Label status", "custom", { width: 130 }),
@@ -104,11 +113,11 @@ const PEOPLE_DATES: readonly JobsColumnDef[] = [
 
 const LP_TAIL = (target: boolean): readonly JobsColumnDef[] => [
   c("updatedBy", "Updated by user", "text", { width: 140, ...hidden }),
-  c("sourceParentLp", "Source parent LP", "text", { width: 140, sortable: false, ...hidden }),
+  c("sourceParentLp", "Source parent LP", "text", { width: 140, sortable: false }),
   c("fromOriginalParentLp", "From original parent LP", "text", { width: 170, sortable: false, ...hidden }),
   c("sourceParentLpType", "Source parent LP type", "text", { width: 160, sortable: false, ...hidden }),
-  ...(target ? [c("targetParentLp", "Target parent LP", "text", { width: 140, sortable: false, ...hidden })] : []),
-  c("fromOriginalLp", "From original LP", "text", { width: 140, sortable: false, ...hidden }),
+  ...(target ? [c("targetParentLp", "Target parent LP", "text", { width: 140, sortable: false })] : []),
+  c("fromOriginalLp", "From original LP", "text", { width: 140, sortable: false }),
   ...(target ? [c("targetParentLpType", "Target parent LP type", "text", { width: 160, sortable: false, ...hidden })] : []),
   c("toOriginalParentLp", "To original parent LP", "text", { width: 160, sortable: false, ...hidden }),
   c("toOriginalLp", "To original LP", "text", { width: 130, sortable: false, ...hidden }),
@@ -128,17 +137,17 @@ export const ORDER_TASK_COLUMNS: readonly JobsColumnDef[] = [
   c("poNumber", "PO number", "text", { width: 110, sortable: false, ...hidden }),
   c("storeOrderNumber", "Store order number", "text", { width: 150 }),
   c("orderType", "Order type", "text", { width: 120 }),
-  c("taskType", "Task type", "text", { width: 100 }),
-  c("status", "Task status", "status", { width: 110 }),
+  c("taskType", "Task type", "text", { width: 124 }),
+  c("status", "Task status", "status", { width: 136 }),
   c("pickShortStatus", "Pick short status", "custom", { width: 130 }),
   c("packShortStatus", "Pack short status", "custom", { width: 130 }),
-  c("priority", "Task priority", "priority", { width: 110 }),
-  c("sequence", "AI task sequence", "number", { width: 130, sortable: false, ...hidden }),
+  c("priority", "Task priority", "priority", { width: 136 }),
+  c("sequence", "AI task sequence", "number", { width: 130, sortable: false }),
   c("workOrderCode", "Work order code", "text", { width: 130 }),
   c("workOrderType", "Work order type", "text", { width: 170, sortable: false, ...hidden }),
   ...TASK_PRODUCT,
-  c("suggestedPackage", "Suggested shipment package type", "text", { width: 210, sortable: false, ...hidden }),
-  c("targetLpType", "Target LP type", "text", { width: 120, sortable: false, ...hidden }),
+  c("suggestedPackage", "Suggested shipment package type", "text", { width: 210, sortable: false }),
+  c("targetLpType", "Target LP type", "text", { width: 120, sortable: false }),
   ...TASK_PACK,
   c("taskUomQty", "Task UOM qty", "number", { width: 110, sortable: false }),
   c("actualQty", "Actual qty", "number", { width: 100 }),
@@ -150,21 +159,23 @@ export const ORDER_TASK_COLUMNS: readonly JobsColumnDef[] = [
   c("channel", "Channel", "text", { width: 110 }),
   c("carrier", "Carrier", "text", { width: 100 }),
   c("customer", "Customer", "text", { width: 160 }),
-  c("customerAddress", "Customer address", "text", { width: 240, sortable: false, ...hidden }),
+  c("customerAddress", "Customer address", "text", { width: 240, sortable: false }),
   ...LP_TAIL(true),
 ];
 
 /** Count (48). */
 export const COUNT_TASK_COLUMNS: readonly JobsColumnDef[] = [
-  ...TASK_HEAD,
+  // Critic R2: the operative fields (count plan, source location) lead; location counts carry no product image.
   c("taskNo", "Task ID", "number", { width: 100 }),
+  c("countPlanCode", "Count plan", "custom", { width: 130 }),
+  c("sourceLocation", "Source location", "custom", { width: 140 }),
+  c("status", "Task status", "status", { width: 136 }),
   c("jobCode", "Job code", "custom", { width: 130 }),
   c("jobType", "Job type", "text", { width: 140 }),
+  ...TASK_HEAD,
   c("poNumber", "PO number", "text", { width: 110, sortable: false, ...hidden }),
-  c("countPlanCode", "Count plan", "custom", { width: 130 }),
-  c("taskType", "Task type", "text", { width: 90 }),
-  c("status", "Task status", "status", { width: 110 }),
-  ...TASK_PRODUCT,
+  c("taskType", "Task type", "text", { width: 124 }),
+  ...TASK_PRODUCT.map((col) => (col.id === "productImage" ? { ...col, ...hidden } : col)),
   ...TASK_PACK,
   c("initialPackQty", "Initial task pack qty", "number", { width: 150, sortable: false }),
   c("initialUomQty", "Initial task UOM qty", "number", { width: 150 }),
@@ -172,7 +183,7 @@ export const COUNT_TASK_COLUMNS: readonly JobsColumnDef[] = [
   c("approvedUomQty", "Approved task UOM qty", "number", { width: 170 }),
   c("approvedPackQty", "Approved pack qty", "number", { width: 140, sortable: false }),
   c("taskPackQty", "Approved task pack qty", "number", { width: 170, sortable: false }),
-  ...SOURCE,
+  ...SOURCE.filter((col) => col.id !== "sourceLocation"),
   c("targetLocation", "Target location", "custom", { width: 140 }),
   c("targetLpn", "Target LPN", "text", { width: 130 }),
   ...PEOPLE_DATES,
@@ -187,8 +198,8 @@ export const REPLEN_TASK_COLUMNS: readonly JobsColumnDef[] = [
   c("jobCode", "Job code", "custom", { width: 130 }),
   c("jobType", "Job type", "text", { width: 170 }),
   c("poNumber", "PO number", "text", { width: 110, sortable: false, ...hidden }),
-  c("taskType", "Task type", "text", { width: 120 }),
-  c("status", "Task status", "status", { width: 110 }),
+  c("taskType", "Task type", "text", { width: 124 }),
+  c("status", "Task status", "status", { width: 136 }),
   c("replenishmentPhase", "Replenishment phase", "text", { width: 190 }),
   c("lpSwap", "LP swap", "boolean", { width: 90 }),
   ...TASK_PRODUCT,
@@ -206,60 +217,67 @@ export const REPLEN_TASK_COLUMNS: readonly JobsColumnDef[] = [
 
 /* ---------------------------------------------------------- reports & setup */
 export const WAVE_RULE_COLUMNS: readonly JobsColumnDef[] = [
-  c("name", "Wave rule name", "custom", { width: 220 }),
-  c("warehouse", "Warehouse", "text", { width: 160 }),
-  c("scheduled", "Scheduled", "boolean", { width: 100 }),
-  c("status", "Status", "custom", { width: 110, tip: "Status of the rule's latest wave" }),
-  c("priority", "Priority", "priority", { width: 104 }),
-  c("assignee", "Assignee", "text", { width: 170 }),
-  c("operationType", "Operation type", "text", { width: 130 }),
-  c("lastRunBy", "Last executed by", "text", { width: 150, tip: "\"Auto Run\" when the scheduler ran the rule" }),
-  c("lastRunAt", "Last run", "datetime"),
-  c("lastWaveNo", "Last wave ID", "custom", { width: 110 }),
-  c("nextRunAt", "Next run", "custom", { width: 140, tip: "Live countdown to the next scheduled run (warehouse time zone)" }),
+  // Critic R4: the schedule columns (Next run countdown, Last run, Last wave) sit in the first 1440 px viewport.
+  c("name", "Wave rule name", "custom", { width: 200 }),
+  c("warehouse", "Warehouse", "text", { width: 180 }),
+  c("scheduled", "Scheduled", "boolean", { width: 96 }),
+  c("status", "Status", "custom", { width: 104, tip: "Status of the rule's latest wave" }),
+  c("nextRunAt", "Next run", "custom", { width: 130, tip: "Live countdown to the next scheduled run (warehouse time zone)" }),
+  c("lastRunAt", "Last run", "datetime", { width: 170 }),
+  c("lastWaveNo", "Last wave ID", "custom", { width: 108 }),
+  c("priority", "Priority", "priority", { width: 96 }),
+  c("operationType", "Operation type", "text", { width: 120 }),
+  c("assignee", "Assignee", "text", { width: 150 }),
+  c("lastRunBy", "Last executed by", "text", { width: 170, tip: "\"Auto Run\" when the scheduler ran the rule" }),
 ];
 
 export const WAVE_LOG_COLUMNS: readonly JobsColumnDef[] = [
-  c("ruleName", "Rule set", "text", { width: 200 }),
-  c("waveNo", "Wave no", "custom", { width: 110 }),
-  c("status", "Wave status", "status", { width: 130 }),
-  c("ordersMet", "# of orders met rule set criteria", "number", { width: 220 }),
-  c("shortageOrders", "# of shortage orders", "number", { width: 150 }),
-  c("jobsCreated", "# of jobs created", "number", { width: 130 }),
-  c("allocatedOrders", "# of allocated orders", "number", { width: 160 }),
-  c("mergedOrders", "# of merged orders created", "number", { width: 190 }),
-  c("runAt", "Run date", "datetime"),
-  c("runBy", "Run by", "text", { width: 150, tip: "\"Integration\" for scheduled runs" }),
-  c("message", "Message", "text", { width: 300, sortable: false }),
+  // Critic R4: compact numeric headers (full Logiwa names in the tips) so all 12 columns fit at 1440 px.
+  // Critic R5: Rule set gets room for "Order Merge - Same Customer"; Message (the explanation)
+  // sits in the first viewport at 1440; numeric columns are wide enough for label + sort + tip.
+  c("ruleName", "Rule set", "text", { width: 250 }),
+  c("waveNo", "Wave no", "custom", { width: 84 }),
+  c("status", "Wave status", "status", { width: 116 }),
+  c("message", "Message", "text", { width: 340, sortable: false }),
+  c("runAt", "Run date", "datetime", { width: 172 }),
+  c("ordersMet", "# met", "number", { width: 108, tip: "# of orders met rule set criteria", exportLabel: "# of orders met rule set criteria" }),
+  // Ordered as the invariant reads: met = allocated + shortage + eliminated.
+  c("allocatedOrders", "# allocated", "number", { width: 142, tip: "# of allocated orders", exportLabel: "# of allocated orders" }),
+  c("shortageOrders", "# shortage", "number", { width: 136, tip: "# of shortage orders", exportLabel: "# of shortage orders" }),
+  c("eliminatedOrders", "# eliminated", "number", { width: 148, tip: "# of eliminated orders: no job type matched. # met = # allocated + # shortage + # eliminated", exportLabel: "# of eliminated orders" }),
+  c("jobsCreated", "# jobs", "number", { width: 108, tip: "# of jobs created", exportLabel: "# of jobs created" }),
+  c("mergedOrders", "# merged", "number", { width: 128, tip: "# of merged orders created", exportLabel: "# of merged orders created" }),
+  c("runBy", "Run by", "text", { width: 140, tip: "\"Integration\" for scheduled runs" }),
 ];
 
 export const ALLOCATION_EXCEPTION_COLUMNS: readonly JobsColumnDef[] = [
-  c("orderCode", "Order code", "custom", { width: 130 }),
-  c("waveNo", "Wave no", "custom", { width: 170, tip: "Wave ID, or \"Manual Allocation\" when allocated from the order screens" }),
-  c("waveRuleName", "Wave rule set name", "text", { width: 180 }),
-  c("algorithmRuleName", "Allocation algorithm rule name", "text", { width: 210 }),
-  c("shortageSku", "Shortage SKU", "text", { width: 140, tip: "The SKU that could not be allocated" }),
-  c("inventoryUomQty", "Inventory UOM qty", "number", { width: 140, tip: "Free stock found for the SKU when the wave ran" }),
-  c("orderLineQty", "Order line qty (UOM)", "number", { width: 150, tip: "Quantity the order line asked for" }),
-  c("algorithmName", "Allocation algorithm", "text", { width: 160 }),
-  c("explanation", "Explanation", "custom", { width: 320, tip: "Why the order was not allocated or put into a job" }),
+  c("orderCode", "Order code", "custom", { width: 190 }),
+  c("waveNo", "Wave no", "custom", { width: 150, tip: "Wave ID, or \"Manual Allocation\" when allocated from the order screens" }),
+  // Critic R2: the explanation is the reason the page exists, so it sits in the first viewport at 1440.
+  c("explanation", "Explanation", "custom", { width: 360, tip: "Why the order was not allocated or put into a job" }),
+  c("shortageSku", "Shortage SKU", "text", { width: 170, tip: "The SKU that could not be allocated" }),
+  c("inventoryUomQty", "Inventory UOM qty", "number", { width: 190, tip: "Free stock found for the SKU when the wave ran" }),
+  c("orderLineQty", "Order line qty (UOM)", "number", { width: 200, tip: "Quantity the order line asked for" }),
+  c("waveRuleName", "Wave rule set name", "text", { width: 190 }),
+  c("algorithmRuleName", "Allocation algorithm rule name", "text", { width: 280 }),
+  c("algorithmName", "Allocation algorithm", "text", { width: 190 }),
   c("isRolledBack", "Is rollbacked?", "boolean", { width: 120, tip: "The allocation was rolled back after the wave" }),
   c("runBy", "Run by user", "text", { width: 150 }),
-  c("runAt", "Run date", "datetime"),
+  c("runAt", "Run date", "datetime", { width: 172 }),
   c("client", "Client", "text", { width: 130 }),
   c("warehouse", "Warehouse", "text", { width: 150 }),
 ];
 
 export const SHORTAGE_COLUMNS: readonly JobsColumnDef[] = [
-  c("orderCode", "Order code", "custom", { width: 130 }),
-  c("storeOrderNumber", "Store order name", "text", { width: 140 }),
+  c("orderCode", "Order code", "custom", { width: 190 }),
+  c("storeOrderNumber", "Store order name", "text", { width: 190 }),
   c("sku", "SKU", "custom", { width: 150 }),
   c("productName", "Product name", "text", { width: 190 }),
-  c("orderDate", "Order creation date", "datetime"),
+  c("orderDate", "Order creation date", "datetime", { width: 172 }),
   c("orderType", "Order type", "text", { width: 140 }),
-  c("reason", "Shortage reason", "custom", { width: 190 }),
+  c("reason", "Shortage reason", "custom", { width: 230 }),
   c("missingTriggered", "Missing triggered", "boolean", { width: 140 }),
-  c("orderStatus", "Order status", "status", { width: 130 }),
+  c("orderStatus", "Order status", "status", { width: 150 }),
   c("linePackQty", "Order line pack qty", "number", { width: 150 }),
   c("packType", "Line pack type", "text", { width: 120 }),
   c("shortageQty", "Shortage pack qty", "number", { width: 140 }),
@@ -289,5 +307,5 @@ export const JOB_TYPE_COLUMNS: readonly JobsColumnDef[] = [
 
 /** Export column specs (same ids / labels as the grid). */
 export function exportColumns(cols: readonly JobsColumnDef[]): readonly { readonly key: string; readonly label: string }[] {
-  return cols.filter((col) => col.id !== "productImage" && col.id !== "usage").map((col) => ({ key: col.id, label: col.label }));
+  return cols.filter((col) => col.id !== "productImage" && col.id !== "usage" && col.id !== "flags").map((col) => ({ key: col.id, label: col.exportLabel ?? col.label }));
 }

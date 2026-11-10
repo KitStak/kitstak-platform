@@ -102,8 +102,12 @@ describe("tags, change log, timeline, printouts", () => {
   });
 
   it("builds human change-log messages with line prefixes", () => {
-    const base = { id: "1", type: "Update" as const, message: "Updated", source: "a@b.c", at: "2026-01-01T00:00:00Z" };
+    const base = { id: "1", type: "Update" as const, message: "", source: "a@b.c", at: "2026-01-01T00:00:00Z" };
+    // Rebuilt only when the stored message is empty (shipping R10-4: stored sentences win).
     expect(changeLogMessage({ ...base, fieldLabel: "Received Qty", fromValue: "0", toValue: "24", lineLabel: "MLT-WIDGET-01" })).toBe("MLT-WIDGET-01 -> Received Qty is modified. 0 --> 24");
+    expect(changeLogMessage({ ...base, message: "Added orders SO1, SO2.", fieldLabel: "Orders", lineLabel: null })).toBe("Added orders SO1, SO2.");
+    expect(changeLogMessage({ ...base, field: "status", fieldLabel: "Status", fromValue: "", toValue: "Ready To Count" })).toBe("Status is modified. — --> Ready to Count");
+    expect(changeLogMessage({ ...base, message: "Loading Started At is modified.  --> 2026-11-10T09:26:15.767Z" }, { formatIso: () => "LOCAL" })).toBe("Loading Started At is modified. — --> LOCAL");
     expect(changeLogMessage({ ...base, type: "Create", message: "Order created" })).toBe("Order created");
   });
 

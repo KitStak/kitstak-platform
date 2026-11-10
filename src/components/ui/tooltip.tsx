@@ -97,7 +97,7 @@ export function DisabledReason({ reason, children, side }: { readonly reason?: s
   if (!reason) return children;
   return (
     <Tooltip content={reason} side={side}>
-      <span tabIndex={0} className="inline-flex cursor-not-allowed rounded-md [&>*]:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label={reason}>
+      <span tabIndex={0} className="inline-flex cursor-not-allowed rounded-md [&>*]:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30" aria-label={reason}>
         {children}
       </span>
     </Tooltip>

@@ -143,6 +143,7 @@ export function ImportPage({ importKey, title, description, backHref, backLabel 
         onRetry={() => void history.refetch()}
         onRefresh={() => void history.refetch()}
         getRowId={(b) => b.id}
+        onRowClick={(b) => setDetails(b)}
         selectable={false}
         rowActions={rowActions}
         exportName={`${importKey}-import-history`}

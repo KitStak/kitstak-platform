@@ -8,7 +8,8 @@ export const MAX_BATCH_SIZE = 1000;
 
 export const OPERATION_NOUNS: Readonly<Record<JobOperation, { readonly one: string; readonly many: string }>> = {
   order: { one: "order", many: "orders" },
-  "shipment-plan": { one: "shipment plan", many: "shipment plans" },
+  // The shipment-plan operation counts and receives the plans' orders (shipping R9-2).
+  "shipment-plan": { one: "order", many: "orders" },
   "work-order": { one: "work order", many: "work orders" },
   count: { one: "count plan", many: "count plans" },
 };

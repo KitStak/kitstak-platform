@@ -2,33 +2,79 @@
 
 /** The four steps of the Create/Edit Work Order drawer (Logiwa 02 §8, 07 §Kit Inventory wizard). */
 import * as React from "react";
-import { Boxes, FileText, Paperclip, Pencil, Trash2, Upload } from "lucide-react";
+import { Boxes, FileText, Lock, Wand2, Paperclip, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
 import { ClientSelect, searchPicker, toOption, WarehouseSelect } from "@/components/shared/entity-pickers";
 import { CustomFieldsSection } from "@/components/shared/custom-fields-section";
 import { Callout } from "@/components/ui/callout";
 import { Combobox } from "@/components/ui/combobox";
 import { DateTimePicker } from "@/components/ui/datetime-picker";
-import { NumberInput } from "@/components/ui/number-input";
+import { parseNumberText } from "@/components/ui/number-input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { TextField } from "@/components/ui/text-field";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { apiFetch } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 import { WORK_ORDER_TYPES } from "@/lib/enums";
-import { MAX_KIT_QTY, WO_CODE_MAX, WO_INSTRUCTIONS_MAX, WO_NOTE_MAX, type WorkOrderType } from "@/lib/grid-defs/work-orders/work-order-model";
+import { kitQtyError, MAX_KIT_QTY, WO_CODE_MAX, WO_INSTRUCTIONS_MAX, WO_NOTE_MAX, type WorkOrderType } from "@/lib/grid-defs/work-orders/work-order-model";
 import { MAX_UPLOAD_BYTES } from "@/components/shared/upload-file";
-import type { KitDetail } from "../wo-client";
+import { suggestSource } from "@/lib/grid-defs/work-orders/source-suggest";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
+import type { KitDetail, StockBucket } from "../wo-client";
 import { Field, MetaChip, TrackFlag } from "../wo-ui";
 import { EMPTY_SOURCE, type FormErrors, type WoForm } from "./wo-form";
 
 type Patch = (p: Partial<WoForm>) => void;
 
+/**
+ * Kit quantity input. Unlike the shared NumberInput (which rounds to its decimals), it never
+ * rewrites what was typed: 2.5 stays 2.5 and shows "Whole kits only", -5 shows "At least 1".
+ * Only values above MAX_KIT_QTY are clamped (the field never holds an impossible total).
+ */
+export function KitQtyInput({ id, value, disabled, invalid, onChange, describedBy }: {
+  readonly id: string; readonly value: number | null; readonly disabled?: boolean; readonly invalid?: boolean;
+  readonly onChange: (v: number | null) => void; readonly describedBy?: string;
+}) {
+  const show = (v: number | null) => (v === null || v === undefined || Number.isNaN(v) ? "" : String(v));
+  const [text, setText] = React.useState(() => show(value));
+  const [focused, setFocused] = React.useState(false);
+  React.useEffect(() => { if (!focused) setText(show(value)); }, [value, focused]);
+  const set = (t: string) => {
+    const n = parseNumberText(t);
+    if (n !== null && !Number.isNaN(n) && n > MAX_KIT_QTY) { setText(String(MAX_KIT_QTY)); onChange(MAX_KIT_QTY); return; }
+    setText(t);
+    onChange(n);
+  };
+  return (
+    <TextField id={id} inputMode="numeric" autoComplete="off" value={text} disabled={disabled} invalid={invalid} aria-describedby={describedBy}
+      onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+        e.preventDefault();
+        const base = value !== null && Number.isFinite(value) ? Math.trunc(value) : 0;
+        set(String(Math.max(1, base + (e.key === "ArrowUp" ? 1 : -1))));
+      }}
+      onChange={(e) => set(e.target.value)} />
+  );
+}
+
 /* --------------------------------------------------------------- general */
 
-export function GeneralStep({ form, errors, onChange, lockOrg, lockCore }: { readonly form: WoForm; readonly errors: FormErrors; readonly onChange: Patch; readonly lockOrg: boolean; readonly lockCore: boolean }) {
+export function GeneralStep({ form, errors, onChange, lockOrg, lockCore, codeLoading = false, codeError = null, onRetryCode, suggestedCode = null, codeChecking = false }: {
+  readonly form: WoForm; readonly errors: FormErrors; readonly onChange: Patch; readonly lockOrg: boolean; readonly lockCore: boolean;
+  /** The next-code suggestion is loading (create). */
+  readonly codeLoading?: boolean;
+  readonly codeError?: string | null;
+  readonly onRetryCode?: () => void;
+  /** The sequence's next code (create); offered as "Use …" when the field holds something else. */
+  readonly suggestedCode?: string | null;
+  /** The on-blur uniqueness check is running. */
+  readonly codeChecking?: boolean;
+}) {
   const loadOrders = React.useCallback(
     async (q: string, signal: AbortSignal) => (await searchPicker("orders", q, { warehouseId: form.warehouseId, clientId: form.clientId }, signal)).map(toOption),
     [form.warehouseId, form.clientId],
@@ -45,7 +91,19 @@ export function GeneralStep({ form, errors, onChange, lockOrg, lockCore }: { rea
           onChange={(v) => onChange({ clientId: v, ...(v !== form.clientId ? { kitProductId: null, kitSku: null, sources: {}, shipmentOrderId: null, shipmentOrderCode: null } : {}) })} />
       </Field>
       <Field id="code" label="Work order code" required error={errors.code} info="Suggested from the work order sequence; you can type your own.">
-        <TextField id="code" value={form.code} maxLength={WO_CODE_MAX} placeholder="Enter Work Order Code" invalid={Boolean(errors.code)} onChange={(e) => onChange({ code: e.target.value })} />
+        <div className="flex flex-col gap-1">
+          <TextField id="code" value={form.code} maxLength={WO_CODE_MAX} placeholder={codeLoading && !form.code ? "Loading next code…" : "Enter work order code"} invalid={Boolean(errors.code)}
+            aria-busy={(codeLoading && !form.code) || codeChecking} trailing={codeLoading && !form.code ? <Spinner className="h-3.5 w-3.5" label="Loading next code" /> : codeChecking ? <Spinner className="h-3.5 w-3.5" label="Checking code" /> : undefined}
+            onChange={(e) => onChange({ code: e.target.value })} />
+          {codeError && !form.code ? (
+            <p className="text-[11px] text-secondary">The next code could not be loaded. <button type="button" onClick={onRetryCode} className="font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">Retry</button> or type a code.</p>
+          ) : null}
+          {suggestedCode && form.code.trim() !== suggestedCode && !lockCore ? (
+            <p className="text-[11px] text-secondary">
+              Next in sequence: <button type="button" onClick={() => onChange({ code: suggestedCode })} className="font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">Use {suggestedCode}</button>
+            </p>
+          ) : null}
+        </div>
       </Field>
       <Field id="type" label="Work order type" required error={errors.type}
         info="With picking: components are allocated and picked to the kitting area by a job. Without picking: components are consumed straight from the source you choose for each.">
@@ -58,6 +116,7 @@ export function GeneralStep({ form, errors, onChange, lockOrg, lockCore }: { rea
       </Field>
       <Field id="buildFor" label="Build for" info="Stock builds kits into inventory. SO ties the work order to a shipment order that needs the kits.">
         <SegmentedControl ariaLabel="Build for" value={form.buildFor} onChange={(v) => onChange({ buildFor: v, ...(v === "Stock" ? { shipmentOrderId: null, shipmentOrderCode: null } : {}) })}
+          className="w-fit self-start [&>button]:min-w-[72px] [&>button]:justify-center"
           options={[{ value: "Stock", label: "Stock" }, { value: "SO", label: "SO" }]} />
       </Field>
       {form.buildFor === "SO" ? (
@@ -80,19 +139,69 @@ export interface KitStepProps {
   readonly onChange: Patch;
   readonly kit: KitDetail | null;
   readonly kitLoading: boolean;
+  /** The kit fetch failed (message from the server); shown with Retry instead of a spinner. */
+  readonly kitError?: string | null;
+  readonly kitRetrying?: boolean;
+  readonly onRetryKit?: () => void;
   readonly lockCore: boolean;
   readonly onEditSource: (productId: string) => void;
+  /** Count plan code per component whose saved source is locked (edit). */
+  readonly sourceLocks?: Readonly<Record<string, string>>;
+  /** Auto-assign in flight (lifted so the wizard can hold Next). */
+  readonly assigning: boolean;
+  readonly onAssigning: (busy: boolean) => void;
 }
 
-export function KitStep({ form, errors, onChange, kit, kitLoading, lockCore, onEditSource }: KitStepProps) {
+export function KitStep({ form, errors, onChange, kit, kitLoading, kitError = null, kitRetrying = false, onRetryKit, lockCore, onEditSource, assigning: assigningExternal, onAssigning, sourceLocks }: KitStepProps) {
   const loadKits = React.useCallback(async (q: string, signal: AbortSignal) => {
     if (!form.clientId) return [];
     const rows = await apiFetch<readonly { id: string; label: string; description: string }[]>("/api/kits/search", { query: { clientId: form.clientId, q, limit: 50 }, signal });
     return rows.map((r) => ({ value: r.id, label: r.label, description: r.description }));
   }, [form.clientId]);
-  const qty = form.requestedQty ?? 0;
+  // Keep invalid totals (e.g. 399999996) out of the component chips.
+  const qty = kitQtyError(form.requestedQty) ? 0 : (form.requestedQty ?? 0);
   const totalUnits = (kit?.components ?? []).reduce((s, c) => s + c.bomQty * qty, 0);
+  const assigning = assigningExternal;
+  const [autoAssigned, setAutoAssigned] = React.useState(false);
+  const autoAssign = async () => {
+    if (!kit || !form.warehouseId) return;
+    onAssigning(true);
+    try {
+      // One batched request for every component (lock-aware buckets).
+      const all = await apiFetch<Record<string, StockBucket[]>>("/api/kits/sources", {
+        query: { productIds: kit.components.map((c) => c.productId).join(","), warehouseId: form.warehouseId, clientId: form.clientId ?? "" },
+      });
+      const next = { ...form.sources };
+      const missing: string[] = [];
+      const lockedOnly: string[] = [];
+      for (const c of kit.components) {
+        const buckets = all[c.productId] ?? [];
+        const pick = suggestSource(buckets, c.bomQty * qty);
+        if (!pick) {
+          if (buckets.some((b) => b.freeQty > 0 && b.lockedBy)) lockedOnly.push(c.sku); else missing.push(c.sku);
+          continue;
+        }
+        next[c.productId] = { locationId: pick.locationId, locationCode: pick.locationCode, lpId: pick.lpId, lpNumber: pick.lpNumber, lotNumber: pick.lotNumber, expiryDate: pick.expiryDate, productionDate: pick.productionDate };
+      }
+      onChange({ sources: next });
+      setAutoAssigned(true);
+      const assigned = kit.components.length - missing.length - lockedOnly.length;
+      if (missing.length || lockedOnly.length) {
+        toast.warning(`${assigned} of ${kit.components.length} sources assigned`, [
+          missing.length ? `No free stock for ${missing.join(", ")}.` : null,
+          lockedOnly.length ? `Only count-locked stock for ${lockedOnly.join(", ")}.` : null,
+        ].filter(Boolean).join(" "));
+      } else toast.success("Sources assigned", `FEFO/FIFO sources set for ${kit.components.length} component${kit.components.length === 1 ? "" : "s"}. Count-locked locations were skipped.`);
+    } catch (error) {
+      toast.error("Error", error instanceof Error ? error.message : "Stock could not be loaded");
+    } finally {
+      onAssigning(false);
+    }
+  };
   const withoutPicking = form.type === "Work Order without Picking";
+  const assignedCount = (kit?.components ?? []).filter((c) => form.sources[c.productId]?.locationId).length;
+  const allAssigned = Boolean(kit && kit.components.length > 0 && assignedCount === kit.components.length);
+  const assignedBy = autoAssigned && allAssigned ? "FEFO" : null;
   return (
     <section aria-label="Kit" className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
@@ -107,7 +216,19 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, lockCore, onE
             placeholder={form.clientId ? "Search kit SKU or name" : "Select a client in step 1 first"} disabled={!form.clientId || lockCore}
             invalid={Boolean(errors.kitProductId)} emptyText="No kit-to-stock products for this client" />
         </Field>
-        {kitLoading ? <Skeleton className="h-24 w-full" /> : kit ? (
+        {kitError && !kit ? (
+          <Callout variant="error" title={`Couldn't load kit ${form.kitSku ?? ""}`.trim()}
+            action={onRetryKit ? (
+              <Button type="button" size="sm" variant="secondary" onClick={onRetryKit} disabled={kitRetrying} aria-busy={kitRetrying}>
+                {kitRetrying ? <Spinner className="h-3.5 w-3.5" label="Retrying" /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden />}Retry
+              </Button>
+            ) : undefined}>
+            <span className="block">{kitError}</span>
+            <span className="block text-secondary">The components and quantities can&rsquo;t be shown until the kit loads. Retry, or choose another kit.</span>
+          </Callout>
+        ) : kitLoading ? (
+          <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-lg border border-border bg-surface p-3"><Spinner className="h-4 w-4" label="Loading kit" /><span className="text-[12px] text-secondary">Loading kit and components…</span><Skeleton className="ml-auto h-10 w-40" /></div>
+        ) : kit ? (
           <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-surface p-3 shadow-xs">
             <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-surface-sunken text-faint">
               {kit.imageUrl ? (
@@ -128,12 +249,14 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, lockCore, onE
               </div>
               {form.warehouseId ? (
                 <p className="text-[11px] text-secondary">
-                  On hand <strong className="tabular-nums text-foreground">{kit.onHandQty}</strong> · can build <strong className={cn("tabular-nums", kit.netKittingCapacity >= qty ? "text-success" : "text-warning")}>{kit.netKittingCapacity}</strong> from free component stock
+                  On hand <strong className="tabular-nums text-foreground">{kit.onHandQty}</strong> · can build <strong className={cn("tabular-nums", kit.netKittingCapacity >= qty ? "text-success" : "text-warning")}>{kit.netKittingCapacity}</strong> from usable component stock
+                  {kit.components.some((c) => (c.lockedQty ?? 0) > 0) ? <span className="text-warning"> · count-locked stock excluded ({[...new Set(kit.components.flatMap((c) => c.lockedBy ?? []))].join(", ")})</span> : null}
                 </p>
               ) : null}
             </div>
-            <Field id="requestedQty" label="Kit quantity" required error={errors.requestedQty} className="w-40">
-              <NumberInput id="requestedQty" value={form.requestedQty} min={1} max={MAX_KIT_QTY} disabled={lockCore} invalid={Boolean(errors.requestedQty)} onChange={(v) => onChange({ requestedQty: v })} />
+            {/* Typed values are kept as typed (decimals and negatives show an inline error); only > MAX_KIT_QTY is clamped. */}
+            <Field id="requestedQty" label="Kit quantity" required error={errors.requestedQty ?? (lockCore ? undefined : kitQtyError(form.requestedQty) ?? undefined)} className="w-44" info={`1 to ${MAX_KIT_QTY.toLocaleString("en-US")} kits.`}>
+              <KitQtyInput id="requestedQty" value={form.requestedQty} disabled={lockCore} invalid={Boolean(errors.requestedQty) || (!lockCore && Boolean(kitQtyError(form.requestedQty)))} onChange={(v) => onChange({ requestedQty: v })} />
             </Field>
           </div>
         ) : null}
@@ -151,7 +274,20 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, lockCore, onE
               <span className="rounded-md bg-surface-sunken px-2 py-1"><strong className="tabular-nums text-foreground">{totalUnits}</strong> Total Qty</span>
             </div>
           </div>
-          {withoutPicking ? <Callout variant="info">Without picking, every component needs a source. Use the pencil to choose the location, LP and lot it is consumed from.</Callout> : null}
+          {withoutPicking ? (
+            <Callout variant={allAssigned ? "success" : "attention"} title={allAssigned ? `All ${kit.components.length} source${kit.components.length === 1 ? "" : "s"} assigned${assignedBy ? ` (${assignedBy})` : ""}` : `${assignedCount} of ${kit.components.length} sources assigned`} action={!lockCore && form.warehouseId ? (
+              <Button type="button" size="sm" variant="secondary" onClick={() => void autoAssign()} disabled={assigning} aria-busy={assigning}>
+                {assigning ? <Spinner className="h-3.5 w-3.5" label="Assigning" /> : <Wand2 className="h-3.5 w-3.5" aria-hidden />}Auto-assign all sources
+              </Button>
+            ) : undefined}>{allAssigned
+              ? "Every component has a source. Use the pencil to change a location, LP or lot."
+              : <>Without picking, every component needs a source. Use the pencil to choose the location, LP and lot, or auto-assign FEFO/FIFO sources. Locations locked by a count plan can&rsquo;t be used.</>}</Callout>
+          ) : null}
+          {assigning && kit ? (
+            <p role="status" aria-live="polite" className="flex items-center gap-2 text-[12px] text-secondary">
+              <Spinner className="h-3.5 w-3.5" label="Assigning" />Finding FEFO/FIFO sources for {kit.components.length} component{kit.components.length === 1 ? "" : "s"}…
+            </p>
+          ) : null}
           <ul className="flex flex-col gap-2">
             {kit.components.map((c) => {
               const src = form.sources[c.productId] ?? EMPTY_SOURCE;
@@ -167,11 +303,13 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, lockCore, onE
                     <span className="text-[12px] text-secondary">Pack type <strong className="text-foreground">{c.packType}</strong></span>
                     <span className="text-[12px] text-secondary">BOM <strong className="tabular-nums text-foreground">{c.bomQty}</strong></span>
                     <span className="text-[12px] text-secondary">Qty <strong className="tabular-nums text-foreground">{need}</strong></span>
-                    <Tooltip content={form.warehouseId ? "Free stock in the selected warehouse" : "Select a warehouse to see stock"}>
-                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums", c.freeQty >= need ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>{c.freeQty} free</span>
+                    <Tooltip content={!form.warehouseId ? "Select a warehouse to see stock" : (c.lockedQty ?? 0) > 0 ? `Usable free stock in the selected warehouse. ${c.lockedQty} more sit in locations locked by count plan ${(c.lockedBy ?? []).join(", ")} and can't be used until the count is finished or cancelled.` : "Usable free stock in the selected warehouse (count-locked locations excluded)"}>
+                      <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums", c.freeQty >= need && need > 0 ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
+                        {c.freeQty} free{(c.lockedQty ?? 0) > 0 ? <><span aria-hidden>·</span><Lock className="h-2.5 w-2.5" aria-hidden />{c.lockedQty} locked</> : null}
+                      </span>
                     </Tooltip>
                     <Tooltip content={lockCore ? "Sources are locked after picking started" : "Edit source inventory"}>
-                      <button type="button" aria-label={`Edit source of ${c.sku}`} disabled={lockCore} onClick={() => onEditSource(c.productId)}
+                      <button type="button" aria-label={`Edit source of ${c.sku}`} disabled={lockCore || assigning} onClick={() => onEditSource(c.productId)}
                         className="flex h-7 w-7 items-center justify-center rounded-md border border-border-strong/70 text-secondary transition-colors hover:bg-surface-sunken hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-45">
                         <Pencil className="h-3.5 w-3.5" aria-hidden />
                       </button>
@@ -185,12 +323,15 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, lockCore, onE
                     <MetaChip label="Prod Date" value={src.productionDate?.slice(0, 10)} />
                   </div>
                   {err ? <p role="alert" className="text-[12px] font-medium text-danger">{err}</p> : null}
+                  {!err && sourceLocks?.[c.productId] ? (
+                    <p className="flex items-center gap-1.5 text-[12px] font-medium text-danger"><Lock className="h-3 w-3" aria-hidden />{src.locationCode ?? "The source"} is locked by count plan {sourceLocks[c.productId]}. Kits can&rsquo;t be built from it until the count is finished; choose another source.</p>
+                  ) : null}
                 </li>
               );
             })}
           </ul>
         </div>
-      ) : !kitLoading && form.clientId ? (
+      ) : !kitLoading && !kitError && form.clientId ? (
         <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
           <Boxes className="mx-auto h-6 w-6 text-faint" aria-hidden />
           <p className="mt-2 text-[13px] font-semibold text-foreground">No kit selected</p>
@@ -203,7 +344,9 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, lockCore, onE
 
 /* -------------------------------------------------------------- advanced */
 
-export function AdvancedStep({ form, errors, onChange, files, onFiles }: { readonly form: WoForm; readonly errors: FormErrors; readonly onChange: Patch; readonly files: readonly File[]; readonly onFiles: (files: readonly File[]) => void }) {
+export function AdvancedStep({ form, errors, onChange, files, onFiles, isNew = false }: {
+  readonly form: WoForm; readonly errors: FormErrors; readonly onChange: Patch; readonly files: readonly File[]; readonly onFiles: (files: readonly File[]) => void; readonly isNew?: boolean;
+}) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [fileError, setFileError] = React.useState<string | null>(null);
   const dates = [
@@ -215,11 +358,15 @@ export function AdvancedStep({ form, errors, onChange, files, onFiles }: { reado
         <Textarea id="kittingInstructions" value={form.kittingInstructions} maxLength={WO_INSTRUCTIONS_MAX} showCount rows={4} placeholder="Steps, packaging and quality checks for the kitting station" onChange={(e) => onChange({ kittingInstructions: e.target.value })} />
       </Field>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {dates.map(([key, label]) => (
-          <Field key={key} id={key} label={label} error={errors[key]}>
-            <DateTimePicker id={key} value={form[key]} onChange={(d) => onChange({ [key]: d } as Partial<WoForm>)} invalid={Boolean(errors[key])} aria-describedby={errors[key] ? `${key}-err` : undefined} />
-          </Field>
-        ))}
+        {dates.map(([key, label]) => {
+          // Actual dates are stamped by kitting (Logiwa: disabled on create); they can be corrected later.
+          const locked = isNew && (key === "actualStartAt" || key === "actualFinishAt");
+          return (
+            <Field key={key} id={key} label={label} error={errors[key]} info={locked ? "Stamped when kitting starts and finishes. You can correct it after the work order is created." : undefined}>
+              <DateTimePicker id={key} value={form[key]} disabled={locked} onChange={(d) => onChange({ [key]: d } as Partial<WoForm>)} invalid={Boolean(errors[key])} aria-describedby={errors[key] ? `${key}-err` : undefined} />
+            </Field>
+          );
+        })}
       </div>
       <div className="flex flex-col gap-2">
         <div>

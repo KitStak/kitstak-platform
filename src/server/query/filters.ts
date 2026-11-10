@@ -9,6 +9,7 @@ import { and, sql, type SQL } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { AppError } from "@/server/api/errors";
 import { resolveDateRange } from "./date-presets";
+import { currentTzOffset } from "./request-tz";
 import type { GridFilter, QuickSearchMode } from "./grid-query";
 
 export type FilterFieldType = "enum" | "text" | "number" | "date" | "boolean";
@@ -80,8 +81,15 @@ function coerce(def: FilterFieldDef, raw: string): string | number {
   return def.type === "number" ? toNumber(def, raw) : raw;
 }
 
-function dateBound(def: FilterFieldDef, iso: string): string {
-  return def.dateOnly ? iso.slice(0, 10) : iso;
+/**
+ * Date-only columns compare calendar days: convert the UTC instant of a local-day bound back to
+ * the local calendar day (`..2026-11-10` at UTC-5 resolves to 2026-11-11T04:59Z, which is the
+ * local 2026-11-10, not the 11th).
+ */
+function dateBound(def: FilterFieldDef, iso: string, tzOffsetMinutes = 0): string {
+  if (!def.dateOnly) return iso;
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? iso.slice(0, 10) : new Date(t + tzOffsetMinutes * 60_000).toISOString().slice(0, 10);
 }
 
 function rangeSql(expr: SQL, min: string | number | undefined, max: string | number | undefined): SQL {
@@ -120,8 +128,10 @@ function compileOne(def: FilterFieldDef, filter: GridFilter, options: CompileOpt
       return rangeSql(expr, filter.min === undefined ? undefined : toNumber(def, filter.min), filter.max === undefined ? undefined : toNumber(def, filter.max));
     }
     case "date": {
-      const range = resolveDateRange(filter.date, options.now ?? new Date(), options.tzOffsetMinutes ?? 0);
-      return rangeSql(expr, range.from ? dateBound(def, range.from) : undefined, range.to ? dateBound(def, range.to) : undefined);
+      // Explicit offset (e.g. a warehouse zone) wins; else the viewer's offset from the request.
+      const tz = options.tzOffsetMinutes ?? currentTzOffset() ?? 0;
+      const range = resolveDateRange(filter.date, options.now ?? new Date(), tz);
+      return rangeSql(expr, range.from ? dateBound(def, range.from, tz) : undefined, range.to ? dateBound(def, range.to, tz) : undefined);
     }
   }
 }

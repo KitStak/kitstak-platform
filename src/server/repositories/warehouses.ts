@@ -12,7 +12,9 @@ import { runBulk } from "@/server/domain/bulk";
 import type { BulkResult } from "@/server/domain/types";
 import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
-import { from24h, to24h, WAREHOUSE_FIELDS, WAREHOUSE_SEARCH_FIELDS, WAREHOUSE_SORT_FIELDS, type WarehouseSave } from "@/lib/grid-defs/facility/warehouses";
+import { from24h, STARTER_LOCATION_SUFFIXES, to24h, WAREHOUSE_FIELDS, WAREHOUSE_SEARCH_FIELDS, WAREHOUSE_SORT_FIELDS, type WarehouseSave } from "@/lib/grid-defs/facility/warehouses";
+import { LOCATION_INFO_DEFAULTS, locationSaveSchema } from "@/lib/grid-defs/facility/locations";
+import { createLocation } from "./locations";
 import { assertFound, assertVersion, assertWarehouseInScope, compileGrid, domainCtxOf, duplicateError, logCreate, logUpdate, resolveIds, type Actor, type GridBinding, qc } from "./locations-shared";
 
 const w = s.warehouses;
@@ -211,7 +213,23 @@ function display(db: AppDb, row: typeof w.$inferSelect): Record<string, unknown>
   };
 }
 
-export function createWarehouse(tx: AppDb, auth: AuthContext, actor: Actor, input: WarehouseSave): { id: string; code: string } {
+/**
+ * Operational locations a new warehouse needs before it can receive, pack, ship or take returns
+ * (Logiwa ships with MLT1-RECV / MLT1-PACK / MLT1-SHIP but leaves creating them to the user).
+ */
+export const STARTER_LOCATIONS: readonly { readonly suffix: (typeof STARTER_LOCATION_SUFFIXES)[number]; readonly areaType: string; readonly locationType: string; readonly defaultKey: "defaultReceivingLocationId" | "defaultShipLocationId" | "defaultReturnLocationId" | null }[] = [
+  { suffix: "RECV", areaType: "Receiving", locationType: "BusinessStation", defaultKey: "defaultReceivingLocationId" },
+  { suffix: "PACK", areaType: "Packing", locationType: "BusinessStation", defaultKey: null },
+  { suffix: "SHIP", areaType: "Shipment", locationType: "BusinessStation", defaultKey: "defaultShipLocationId" },
+  { suffix: "RET", areaType: "Returns", locationType: "BusinessStation", defaultKey: "defaultReturnLocationId" },
+];
+
+/** "MLT2" + "RECV" -> "MLT2-RECV". */
+export function starterLocationCode(prefix: string, suffix: string): string {
+  return `${prefix.trim().toUpperCase()}-${suffix}`;
+}
+
+export function createWarehouse(tx: AppDb, auth: AuthContext, actor: Actor, input: WarehouseSave): { id: string; code: string; starterLocations: string[] } {
   if (auth.user.role !== "admin") throw new AppError("FORBIDDEN", "Only administrators can add warehouses");
   assertCodeFree(tx, input.code.trim());
   assertDefaultLocations(tx, null, { ...input, defaultReceivingLocationId: null, defaultShipLocationId: null, defaultReturnLocationId: null });
@@ -219,7 +237,21 @@ export function createWarehouse(tx: AppDb, auth: AuthContext, actor: Actor, inpu
   const row = tx.insert(w).values({ ...columnsFor(input), defaultReceivingLocationId: null, defaultShipLocationId: null, defaultReturnLocationId: null, isDefault: first, createdBy: actor.userId, updatedBy: actor.userId })
     .returning({ id: w.id, code: w.code }).get();
   logCreate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: row.id, entityCode: row.code });
-  return row;
+  const starterLocations: string[] = [];
+  if (input.createStarterLocations) {
+    // The request's scope was resolved before the warehouse existed; widen it for this transaction only.
+    const scoped: AuthContext = { ...auth, scope: { ...auth.scope, warehouseIds: [...auth.scope.warehouseIds, row.id] } };
+    const defaults: Partial<Record<"defaultReceivingLocationId" | "defaultShipLocationId" | "defaultReturnLocationId", string>> = {};
+    for (const s0 of STARTER_LOCATIONS) {
+      const code = starterLocationCode(input.prefix, s0.suffix);
+      const save = locationSaveSchema.parse({ info: { ...LOCATION_INFO_DEFAULTS, code, warehouseId: row.id, areaType: s0.areaType, locationType: s0.locationType, displayMember: code }, productCapacities: [], lpCapacities: [] });
+      const loc = createLocation(tx, scoped, actor, save);
+      starterLocations.push(loc.code);
+      if (s0.defaultKey) defaults[s0.defaultKey] = loc.id;
+    }
+    tx.update(w).set(defaults).where(eq(w.id, row.id)).run();
+  }
+  return { ...row, starterLocations };
 }
 
 export function updateWarehouse(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: WarehouseSave): { id: string; code: string; version: number } {

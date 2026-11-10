@@ -3,16 +3,21 @@
  * changes go through `stateMachines.workOrder`, codes through `sequences`, and every
  * write records field-level change log rows with human-readable values.
  */
-import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import { AppError, notFoundError, validationError } from "@/server/api/errors";
 import { assertInScope, hasClient, hasWarehouse, scopedWhere, type Scope } from "@/server/auth/scope";
 import * as schema from "@/server/db/schema";
 import { changeLog, sequences } from "@/server/domain";
+import { countLockFor } from "@/server/domain/ledger/count-locks";
 import type { DomainCtx, Tx } from "@/server/domain/types";
 import type { GridQuery } from "@/server/query/grid-query";
+import { buildableKits, shortageRecoverable } from "@/lib/grid-defs/work-orders/wo-coverage";
+import { formatInZone } from "@/lib/grid-defs/work-orders/wo-time";
+import { woTxnView } from "@/lib/grid-defs/work-orders/wo-transactions";
 import { ageInDays, type WorkOrderInput } from "@/lib/grid-defs/work-orders/work-order-model";
 import { assertVersion } from "./platform-common";
+import { componentAvailability } from "./work-orders-availability";
 import { compileWorkOrderQuery } from "./work-orders-grid";
 
 const wo = schema.workOrders;
@@ -27,6 +32,8 @@ export interface WorkOrderRow {
   readonly version: number;
   readonly warehouseId: string;
   readonly warehouseCode: string;
+  /** IANA zone of the warehouse; every M08 timestamp is shown in it, with a zone suffix. */
+  readonly warehouseTimeZone: string;
   readonly clientId: string;
   readonly clientName: string;
   readonly status: WorkOrderRecord["status"];
@@ -59,6 +66,13 @@ export interface WorkOrderRow {
   readonly outputLot: string | null;
   readonly outputExpiry: string | null;
   readonly customFields: Readonly<Record<string, string | boolean | null>>;
+  /** With picking: non-cancelled Picking tasks, and how many are completed (Create Kit gate). */
+  readonly pickTaskCount: number;
+  readonly pickDoneCount: number;
+  /** Shortage only: kits usable stock (plus what the WO holds) can build now; null otherwise. */
+  readonly buildableQty: number | null;
+  /** Shortage only: usable stock now covers every remaining kit (list flag "Stock now available"). */
+  readonly stockNowAvailable: boolean;
 }
 
 function tagsFor(db: AppDb, ids: readonly string[]): Map<string, TagChipRow[]> {
@@ -78,16 +92,27 @@ function hydrate(db: AppDb, records: readonly WorkOrderRecord[], now = new Date(
   const kitIds = [...new Set(records.map((r) => r.kitProductId))];
   const jobIds = records.flatMap((r) => (r.jobId ? [r.jobId] : []));
   const soIds = records.flatMap((r) => (r.shipmentOrderId ? [r.shipmentOrderId] : []));
-  const whs = new Map(db.select({ id: schema.warehouses.id, code: schema.warehouses.code }).from(schema.warehouses).where(inArray(schema.warehouses.id, whIds)).all().map((w) => [w.id, w.code]));
+  const whRows = db.select({ id: schema.warehouses.id, code: schema.warehouses.code, tz: schema.warehouses.timezone }).from(schema.warehouses).where(inArray(schema.warehouses.id, whIds)).all();
+  const whs = new Map(whRows.map((w) => [w.id, w.code]));
+  const zones = new Map(whRows.map((w) => [w.id, w.tz ?? "America/Chicago"]));
   const cls = new Map(db.select({ id: schema.clients.id, name: schema.clients.name }).from(schema.clients).where(inArray(schema.clients.id, clIds)).all().map((c) => [c.id, c.name]));
   const kits = new Map(db.select({ id: schema.products.id, sku: schema.products.sku, name: schema.products.name }).from(schema.products).where(inArray(schema.products.id, kitIds)).all().map((p) => [p.id, p]));
   const jobs = new Map(jobIds.length ? db.select({ id: schema.jobs.id, code: schema.jobs.code }).from(schema.jobs).where(inArray(schema.jobs.id, jobIds)).all().map((j) => [j.id, j.code]) : []);
   const sos = new Map(soIds.length ? db.select({ id: schema.shipmentOrders.id, code: schema.shipmentOrders.code }).from(schema.shipmentOrders).where(inArray(schema.shipmentOrders.id, soIds)).all().map((s) => [s.id, s.code]) : []);
   const tags = tagsFor(db, records.map((r) => r.id));
+  const pickIds = records.filter((r) => r.type === "Work Order with Picking").map((r) => r.id);
+  const picks = new Map(pickIds.length ? db.select({ id: schema.tasks.workOrderId, total: count(), done: sql<number>`SUM(CASE WHEN ${schema.tasks.status} = 'Completed' THEN 1 ELSE 0 END)` })
+    .from(schema.tasks).where(and(inArray(schema.tasks.workOrderId, pickIds), eq(schema.tasks.taskType, "Picking"), ne(schema.tasks.status, "Cancelled")))
+    .groupBy(schema.tasks.workOrderId).all().map((p) => [p.id ?? "", { total: Number(p.total), done: Number(p.done ?? 0) }]) : []);
+  // Shortage rows: lock-aware buildable kits (same reading as the detail page), so the list can
+  // flag "Stock now available, retry allocation" without opening each work order.
+  const buildable = new Map(records.filter((r) => r.status === "Shortage")
+    .map((r) => [r.id, buildableKits(listComponents(db, r), r.type === "Work Order with Picking")]));
   return records.map((r) => {
     const t = tags.get(r.id) ?? [];
+    const buildableQty = buildable.get(r.id) ?? null;
     return {
-      id: r.id, code: r.code, version: r.version, warehouseId: r.warehouseId, warehouseCode: whs.get(r.warehouseId) ?? "",
+      id: r.id, code: r.code, version: r.version, warehouseId: r.warehouseId, warehouseCode: whs.get(r.warehouseId) ?? "", warehouseTimeZone: zones.get(r.warehouseId) ?? "America/Chicago",
       clientId: r.clientId, clientName: cls.get(r.clientId) ?? "", status: r.status, age: ageInDays(r.createdAt, now),
       operationType: r.operationType, type: r.type, buildFor: r.buildFor, shipmentOrderId: r.shipmentOrderId,
       shipmentOrderCode: r.shipmentOrderId ? sos.get(r.shipmentOrderId) ?? null : null, tags: t, tagNames: t.map((x) => x.name).join(", "),
@@ -97,6 +122,8 @@ function hydrate(db: AppDb, records: readonly WorkOrderRecord[], now = new Date(
       createdBy: r.createdBy, updatedAt: r.updatedAt, plannedStartAt: r.plannedStartAt, plannedFinishAt: r.plannedFinishAt,
       actualStartAt: r.actualStartAt, actualFinishAt: r.actualFinishAt, cancelledAt: r.cancelledAt, outputLocationId: r.outputLocationId,
       outputLot: r.outputLot, outputExpiry: r.outputExpiry, customFields: r.customFields ?? {},
+      pickTaskCount: picks.get(r.id)?.total ?? 0, pickDoneCount: picks.get(r.id)?.done ?? 0,
+      buildableQty, stockNowAvailable: shortageRecoverable({ status: r.status, buildableQty, remainingQty: r.requestedQty - r.processedQty }),
     };
   });
 }
@@ -144,14 +171,26 @@ export interface ComponentRow {
   readonly componentProductId: string;
   readonly sku: string;
   readonly name: string;
+  /** Product barcode/UPC (labels print it; SKU only when none). */
+  readonly barcode: string | null;
   readonly packType: string;
   readonly componentQty: number;
   readonly totalQty: number;
   readonly allocatedQty: number;
   readonly pickedQty: number;
   readonly consumedQty: number;
-  /** Live free stock of the component in the work order's warehouse. */
+  /** Live usable free stock (lock-aware, same rule as FEFO allocation) in the work order's warehouse. */
   readonly freeQty: number;
+  /** Free stock sitting in count-locked locations (not usable until the count ends). */
+  readonly lockedQty: number;
+  /** Count plans locking that stock. */
+  readonly lockedBy: readonly string[];
+  /** Stock this work order can draw on: the chosen source's free qty (0 when count-locked), else `freeQty`. */
+  readonly availableQty: number;
+  /** Free stock at the chosen source bucket (location + LP + lot); null when no source is chosen (FEFO). */
+  readonly sourceFreeQty: number | null;
+  /** With picking: units picked to the kitting area for this work order and not consumed yet. */
+  readonly inKittingAreaQty: number;
   readonly shortQty: number;
   readonly locationId: string | null;
   readonly locationCode: string | null;
@@ -163,6 +202,8 @@ export interface ComponentRow {
   readonly trackLot: boolean;
   readonly trackExpiry: boolean;
   readonly trackProductionDate: boolean;
+  /** Count plan code that locks the chosen source location (stock can't move out until the count is done). */
+  readonly sourceLockedBy: string | null;
 }
 
 export function listComponents(db: AppDb, record: WorkOrderRecord): ComponentRow[] {
@@ -173,19 +214,31 @@ export function listComponents(db: AppDb, record: WorkOrderRecord): ComponentRow
     .leftJoin(schema.licensePlates, eq(schema.licensePlates.id, c.lpId))
     .where(eq(c.workOrderId, record.id)).orderBy(asc(schema.products.sku)).all();
   const i = schema.inventory;
-  const free = new Map(db.select({ productId: i.productId, free: sql<number>`COALESCE(SUM(${i.onHand} - ${i.allocated}), 0)` }).from(i)
-    .where(and(eq(i.warehouseId, record.warehouseId), eq(i.clientId, record.clientId), eq(i.status, "Stock"), sql`${i.damageReason} IS NULL`))
-    .groupBy(i.productId).all().map((r) => [r.productId, Number(r.free)]));
+  const avail = componentAvailability(db as unknown as Tx, { warehouseId: record.warehouseId, clientId: record.clientId, productIds: rows.map((r) => r.c.componentProductId) });
   const a = schema.inventoryAllocations;
   const picked = new Map(db.select({ id: a.workOrderComponentId, qty: sql<number>`COALESCE(SUM(${a.qty}), 0)` }).from(a)
     .where(and(eq(a.workOrderId, record.id), eq(a.status, "Picked"))).groupBy(a.workOrderComponentId).all().map((r) => [r.id ?? "", Number(r.qty)]));
   return rows.map(({ c: row, p, loc, lp }) => {
     const remaining = Math.max(0, row.totalQty - row.consumedQty - row.allocatedQty);
-    const freeQty = free.get(row.componentProductId) ?? 0;
+    const av = avail.get(row.componentProductId);
+    const freeQty = av?.usableQty ?? 0;
+    let sourceFreeQty: number | null = null;
+    if (row.locationId) {
+      const conds = [eq(i.warehouseId, record.warehouseId), eq(i.clientId, record.clientId), eq(i.productId, row.componentProductId), eq(i.locationId, row.locationId),
+        eq(i.status, "Stock"), sql`${i.damageReason} IS NULL`];
+      if (row.lpId) conds.push(eq(i.lpId, row.lpId));
+      if (row.lotNumber) conds.push(eq(i.lotNumber, row.lotNumber));
+      const got = db.select({ free: sql<number>`COALESCE(SUM(${i.onHand} - ${i.allocated}), 0)` }).from(i).where(and(...conds)).get();
+      sourceFreeQty = Math.max(0, Number(got?.free ?? 0));
+    }
+    const sourceLockedBy = row.locationId ? countLockFor(db, row.locationId) : null;
+    // What this work order can actually draw on: its chosen source (0 while a count locks it), else FEFO's usable stock.
+    const availableQty = row.locationId ? (sourceLockedBy ? 0 : sourceFreeQty ?? 0) : freeQty;
     return {
-      id: row.id, componentProductId: row.componentProductId, sku: p.sku, name: p.name, packType: row.packType, componentQty: row.componentQty,
+      availableQty, sourceLockedBy,
+      id: row.id, componentProductId: row.componentProductId, sku: p.sku, name: p.name, barcode: p.barcode ?? null, packType: row.packType, componentQty: row.componentQty,
       totalQty: row.totalQty, allocatedQty: row.allocatedQty, pickedQty: Math.max(row.pickedQty, picked.get(row.id) ?? 0), consumedQty: row.consumedQty,
-      freeQty, shortQty: Math.max(0, remaining - freeQty), locationId: row.locationId, locationCode: loc ?? null, lpId: row.lpId,
+      freeQty, lockedQty: av?.lockedQty ?? 0, lockedBy: av?.lockedBy ?? [], sourceFreeQty, inKittingAreaQty: picked.get(row.id) ?? 0, shortQty: Math.max(0, remaining - availableQty), locationId: row.locationId, locationCode: loc ?? null, lpId: row.lpId,
       lpNumber: lp ?? null, lotNumber: row.lotNumber, expiryDate: row.expiryDate, productionDate: row.productionDate,
       trackLot: p.trackLot, trackExpiry: p.trackExpiry, trackProductionDate: p.trackProductionDate,
     };
@@ -194,15 +247,18 @@ export function listComponents(db: AppDb, record: WorkOrderRecord): ComponentRow
 
 export interface WorkOrderDetail {
   readonly workOrder: WorkOrderRow;
-  readonly kit: { readonly id: string; readonly sku: string; readonly name: string; readonly packType: string; readonly kitType: string | null; readonly trackLot: boolean; readonly trackExpiry: boolean; readonly trackProductionDate: boolean };
+  readonly kit: { readonly id: string; readonly sku: string; readonly name: string; readonly barcode: string | null; readonly packType: string; readonly kitType: string | null; readonly trackLot: boolean; readonly trackExpiry: boolean; readonly trackProductionDate: boolean };
   readonly outputLocationCode: string | null;
+  readonly warehouseTimeZone: string;
   readonly components: readonly ComponentRow[];
   readonly job: { readonly id: string; readonly code: string; readonly status: string; readonly jobType: string; readonly taskCount: number; readonly completedTaskCount: number; readonly assigneeName: string | null } | null;
   readonly tasks: readonly { readonly id: string; readonly taskNo: number; readonly taskType: string; readonly status: string; readonly sku: string | null; readonly plannedQty: number; readonly actualQty: number; readonly sourceLocationCode: string | null; readonly targetLocationCode: string | null }[];
   readonly receipts: readonly { readonly id: string; readonly masterId: number; readonly type: string; readonly sku: string; readonly quantity: number; readonly locationCode: string; readonly lotNumber: string | null; readonly receivedAt: string; readonly receivedBy: string; readonly cancelledAt: string | null }[];
-  readonly transactions: readonly { readonly id: string; readonly seq: number; readonly type: string; readonly sku: string; readonly qty: number; readonly fromLocationCode: string | null; readonly toLocationCode: string | null; readonly createdAt: string; readonly source: string }[];
+  readonly transactions: readonly { readonly id: string; readonly seq: number; readonly type: string; readonly ledgerType: string; readonly direction: "in" | "out" | "move"; readonly sku: string; readonly qty: number; readonly fromLocationCode: string | null; readonly toLocationCode: string | null; readonly createdAt: string; readonly source: string }[];
   readonly timeline: readonly { readonly id: string; readonly type: string; readonly message: string; readonly source: string; readonly at: string }[];
   readonly exceptions: readonly { readonly id: string; readonly sku: string | null; readonly explanation: string; readonly inventoryQty: number | null; readonly requiredQty: number | null; readonly runAt: string; readonly runBy: string }[];
+  /** Component lots/dates consumed at kitting (largest first): Disassemble prefills them for traceability. */
+  readonly consumedAttributes: readonly { readonly productId: string; readonly lotNumber: string | null; readonly expiryDate: string | null; readonly productionDate: string | null; readonly qty: number }[];
 }
 
 export function getWorkOrderDetail(db: AppDb, scope: Scope, idOrCode: string): WorkOrderDetail {
@@ -216,7 +272,7 @@ export function getWorkOrderDetail(db: AppDb, scope: Scope, idOrCode: string): W
   const src = sql<string | null>`(SELECT l.code FROM locations l WHERE l.id = ${t.sourceLocationId})`;
   const tgt = sql<string | null>`(SELECT l.code FROM locations l WHERE l.id = ${t.targetLocationId})`;
   const tasks = db.select({ t, sku: schema.products.sku, src, tgt }).from(t).leftJoin(schema.products, eq(schema.products.id, t.productId))
-    .where(eq(t.workOrderId, record.id)).orderBy(asc(t.taskNo)).all()
+    .where(eq(t.workOrderId, record.id)).orderBy(sql`COALESCE(${t.sequence}, 1e9)`, asc(t.taskNo)).all()
     .map((r) => ({ id: r.t.id, taskNo: r.t.taskNo, taskType: r.t.taskType, status: r.t.status, sku: r.sku ?? null, plannedQty: r.t.plannedQty, actualQty: r.t.actualQty, sourceLocationCode: r.src, targetLocationCode: r.tgt }));
   const rc = schema.receipts;
   const receipts = db.select({ r: rc, sku: schema.products.sku, loc: schema.locations.code }).from(rc)
@@ -224,7 +280,12 @@ export function getWorkOrderDetail(db: AppDb, scope: Scope, idOrCode: string): W
     .where(eq(rc.workOrderId, record.id)).orderBy(desc(rc.receivedAt)).all()
     .map(({ r, sku, loc: code }) => ({ id: r.id, masterId: r.masterId, type: r.type, sku, quantity: r.quantity, locationCode: code, lotNumber: r.lotNumber, receivedAt: r.receivedAt, receivedBy: r.receivedBy, cancelledAt: r.cancelledAt }));
   const it = schema.inventoryTransactions;
-  const txCols = db.select().from(it).where(eq(it.workOrderId, record.id)).orderBy(desc(it.seq)).limit(200).all();
+  // Picking moves carry job/task refs, not work_order_id: include rows of this WO's tasks.
+  const txCols = db.select().from(it)
+    .where(sql`${it.workOrderId} = ${record.id} OR ${it.taskId} IN (SELECT id FROM tasks WHERE work_order_id = ${record.id})`)
+    .orderBy(desc(it.seq)).limit(200).all();
+  const receiptIds = [...new Set(txCols.flatMap((x) => (x.receiptId ? [x.receiptId] : [])))];
+  const receiptType = new Map(receiptIds.length ? db.select({ id: rc.id, type: rc.type }).from(rc).where(inArray(rc.id, receiptIds)).all().map((r) => [r.id, r.type] as const) : []);
   const locCodes = new Map(db.select({ id: schema.locations.id, code: schema.locations.code }).from(schema.locations).where(eq(schema.locations.warehouseId, record.warehouseId)).all().map((l) => [l.id, l.code]));
   const skuOf = new Map<string, string>();
   const skus = (ids: readonly string[]) => {
@@ -232,25 +293,36 @@ export function getWorkOrderDetail(db: AppDb, scope: Scope, idOrCode: string): W
     if (missing.length) for (const p of db.select({ id: schema.products.id, sku: schema.products.sku }).from(schema.products).where(inArray(schema.products.id, missing)).all()) skuOf.set(p.id, p.sku);
   };
   skus([...new Set(txCols.map((x) => x.productId))]);
-  const transactions = txCols.map((x) => ({
-    id: x.id, seq: x.seq, type: x.type, sku: skuOf.get(x.productId) ?? "", qty: x.uomQty,
+  const transactions = txCols.map((x) => {
+    const v = woTxnView({ type: x.type, qty: x.uomQty, productId: x.productId, fromLocationId: x.fromLocationId, toLocationId: x.toLocationId, receiptType: x.receiptId ? receiptType.get(x.receiptId) ?? null : null }, record.kitProductId);
+    return {
+    id: x.id, seq: x.seq, type: v.label, ledgerType: x.type, direction: v.direction, sku: skuOf.get(x.productId) ?? "", qty: v.qty,
     fromLocationCode: x.fromLocationId ? locCodes.get(x.fromLocationId) ?? null : null, toLocationCode: x.toLocationId ? locCodes.get(x.toLocationId) ?? null : null,
     createdAt: x.at, source: x.source,
-  }));
+    };
+  });
   const cl = schema.changeLog;
   const timeline = db.select().from(cl).where(sql`(${cl.entityType} = ${WO_ENTITY} AND ${cl.entityId} = ${record.id}) OR (${cl.parentEntityType} = ${WO_ENTITY} AND ${cl.parentEntityId} = ${record.id})`)
     .orderBy(desc(cl.at)).limit(100).all().map((c) => ({ id: c.id, type: c.type, message: c.message, source: c.source, at: c.at }));
+  const consumedAttributes = db.select({
+    productId: it.productId, lotNumber: it.fromLot, expiryDate: it.fromExpiry, productionDate: it.fromProductionDate, qty: sql<number>`SUM(ABS(${it.uomQty}))`,
+  }).from(it)
+    .where(and(eq(it.workOrderId, record.id), eq(it.type, "Kitting"), sql`${it.productId} <> ${record.kitProductId}`, sql`${it.fromLocationId} IS NOT NULL`))
+    .groupBy(it.productId, it.fromLot, it.fromExpiry, it.fromProductionDate)
+    .orderBy(desc(sql`SUM(ABS(${it.uomQty}))`)).all()
+    .map((r) => ({ productId: r.productId, lotNumber: r.lotNumber, expiryDate: r.expiryDate, productionDate: r.productionDate, qty: Number(r.qty) }));
   const ae = schema.allocationExceptions;
   const exc = db.select().from(ae).where(eq(ae.orderId, record.id)).orderBy(desc(ae.runAt)).limit(50).all();
   skus(exc.flatMap((e) => (e.shortageProductId ? [e.shortageProductId] : [])));
   const exceptions = exc.map((e) => ({ id: e.id, sku: e.shortageProductId ? skuOf.get(e.shortageProductId) ?? null : null, explanation: e.explanation, inventoryQty: e.inventoryUomQty, requiredQty: e.orderLineQty, runAt: e.runAt, runBy: e.runBy }));
   return {
     workOrder: row,
-    kit: { id: kit.id, sku: kit.sku, name: kit.name, packType: kit.uom, kitType: kit.kitType, trackLot: kit.trackLot, trackExpiry: kit.trackExpiry, trackProductionDate: kit.trackProductionDate },
+    kit: { id: kit.id, sku: kit.sku, name: kit.name, barcode: kit.barcode ?? null, packType: kit.uom, kitType: kit.kitType, trackLot: kit.trackLot, trackExpiry: kit.trackExpiry, trackProductionDate: kit.trackProductionDate },
     outputLocationCode: loc(record.outputLocationId),
+    warehouseTimeZone: warehouseZone(db as unknown as Tx, record.warehouseId),
     components: listComponents(db, record),
     job: job ? { id: job.j.id, code: job.j.code, status: job.j.status, jobType: job.j.jobType, taskCount: job.j.taskCount, completedTaskCount: job.j.completedTaskCount, assigneeName: job.name ?? null } : null,
-    tasks, receipts, transactions, timeline, exceptions,
+    tasks, receipts, transactions, timeline, exceptions, consumedAttributes,
   };
 }
 
@@ -278,7 +350,7 @@ interface Validated {
   readonly bom: readonly (typeof schema.kitComponents.$inferSelect & { readonly sku: string; readonly uom: string })[];
 }
 
-function validateInput(tx: Tx, scope: Scope, input: WorkOrderInput): Validated {
+function validateInput(tx: Tx, scope: Scope, input: WorkOrderInput, previous: readonly (typeof schema.workOrderComponents.$inferSelect)[] = []): Validated {
   const fieldErrors: Record<string, string[]> = {};
   if (!hasWarehouse(scope, input.warehouseId)) fieldErrors.warehouseId = ["Warehouse not found"];
   if (!hasClient(scope, input.clientId)) fieldErrors.clientId = ["Client not found"];
@@ -296,11 +368,19 @@ function validateInput(tx: Tx, scope: Scope, input: WorkOrderInput): Validated {
     .innerJoin(schema.products, eq(schema.products.id, schema.kitComponents.componentProductId))
     .where(eq(schema.kitComponents.kitProductId, kit.id)).all().map((r) => ({ ...r.k, sku: r.sku, uom: r.uom }));
   if (bom.length === 0) throw validationError("This kit has no components; add them on the product first", { kitProductId: ["The kit has no components"] });
-  validateSources(tx, input, bom);
+  validateSources(tx, input, bom, previous);
   return { kit, bom };
 }
 
-function validateSources(tx: Tx, input: WorkOrderInput, bom: Validated["bom"]): void {
+type ComponentRecord = typeof schema.workOrderComponents.$inferSelect;
+
+/**
+ * Component sources: required without picking, in the work order's warehouse, and not in a
+ * location an open count plan locks. The lock check runs for new or changed sources only, so an
+ * unchanged source that a count locked later doesn't block editing notes (Create Kit still
+ * refuses to post from it).
+ */
+function validateSources(tx: Tx, input: WorkOrderInput, bom: Validated["bom"], previous: readonly ComponentRecord[] = []): void {
   const errors: Record<string, string[]> = {};
   bom.forEach((b, index) => {
     const at = input.components.findIndex((c) => c.componentProductId === b.componentProductId);
@@ -313,10 +393,86 @@ function validateSources(tx: Tx, input: WorkOrderInput, bom: Validated["bom"]): 
     }
     if (src?.locationId) {
       const loc = tx.select().from(schema.locations).where(eq(schema.locations.id, src.locationId)).get();
-      if (!loc || loc.warehouseId !== input.warehouseId) errors[path] = [`The source location of ${b.sku} is in another warehouse`];
+      if (!loc || loc.warehouseId !== input.warehouseId) { errors[path] = [`The source location of ${b.sku} is in another warehouse`]; return; }
+      const prev = previous.find((p) => p.componentProductId === b.componentProductId);
+      const changed = !prev || prev.locationId !== src.locationId;
+      const plan = changed ? countLockFor(tx, loc.id) : null;
+      if (plan) errors[path] = [`${loc.code} is locked by count plan ${plan}; choose another source for ${b.sku}`];
     }
   });
   if (Object.keys(errors).length > 0) throw validationError(Object.values(errors)[0]?.[0] ?? "Choose component sources", errors);
+}
+
+/** True when any component's source (location / LP / lot / dates) differs from the stored one. */
+function sourcesChanged(input: WorkOrderInput, previous: readonly ComponentRecord[]): string[] {
+  const out: string[] = [];
+  input.components.forEach((c, index) => {
+    const p = previous.find((x) => x.componentProductId === c.componentProductId);
+    if (!p) return;
+    const same = (p.locationId ?? null) === (c.locationId ?? null) && (p.lpId ?? null) === (c.lpId ?? null) && (p.lotNumber ?? null) === (c.lotNumber ?? null)
+      && (p.expiryDate ?? null) === (c.expiryDate ?? null) && (p.productionDate ?? null) === (c.productionDate ?? null);
+    if (!same) out.push(`components.${index}.locationId`);
+  });
+  return out;
+}
+
+/* ------------------------------------------------- change log formatting */
+
+/** Human field labels for work order change log rows (Logiwa wording). */
+export const WO_FIELD_LABELS: Readonly<Record<string, string>> = {
+  code: "Work order code", type: "Work order type", buildFor: "Build for", requestedQty: "Kit quantity", processedQty: "Processed quantity",
+  extraNote: "Extra note", kittingInstructions: "Kitting instructions", plannedStartAt: "Planned start date", plannedFinishAt: "Planned finish date",
+  actualStartAt: "Actual start date", actualFinishAt: "Actual finish date", cancelledAt: "Cancelled date", status: "Status",
+  warehouseId: "Warehouse", clientId: "Client", kitProductId: "Kit SKU", shipmentOrderId: "Shipment order", jobId: "Job",
+  outputLocationId: "Output location", outputLot: "Output lot", outputExpiry: "Output expiry date", customFields: "Custom fields",
+  disassembledQty: "Disassembled quantity", totalQty: "Total quantity", locationId: "Source location", lotNumber: "Lot number", expiryDate: "Expiry date",
+};
+
+const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/;
+
+/** "11/9/2026 9:09 PM CST" in the warehouse's timezone; non-dates pass through. */
+export function formatLogValue(value: unknown, timeZone: string): unknown {
+  if (typeof value !== "string" || !ISO_DATETIME.test(value)) return value;
+  if (Number.isNaN(new Date(value).getTime())) return value;
+  return formatInZone(value, timeZone);
+}
+
+function warehouseZone(tx: Tx, warehouseId: string): string {
+  return tx.select({ tz: schema.warehouses.timezone }).from(schema.warehouses).where(eq(schema.warehouses.id, warehouseId)).get()?.tz ?? "America/Chicago";
+}
+
+const ID_DISPLAY: Readonly<Partial<Record<string, (tx: Tx, id: string) => string | null>>> = {
+  outputLocationId: (tx, id) => tx.select({ v: schema.locations.code }).from(schema.locations).where(eq(schema.locations.id, id)).get()?.v ?? null,
+};
+
+/**
+ * Field-level change log for a work order: one row per changed field, with human labels and
+ * dates in the warehouse's timezone ("Actual start date is modified. 11/9/2026 9:09 PM CST").
+ */
+export function recordWorkOrderChanges(tx: Tx, ctx: DomainCtx, record: Pick<WorkOrderRecord, "id" | "code" | "warehouseId">, before: Record<string, unknown>, after: Record<string, unknown>): number {
+  const zone = warehouseZone(tx, record.warehouseId);
+  const prep = (snap: Record<string, unknown>) => Object.fromEntries(Object.entries(snap).map(([k, v]) => {
+    const resolver = ID_DISPLAY[k];
+    const shown = resolver && typeof v === "string" && v ? resolver(tx, v) ?? v : v;
+    return [k, formatLogValue(shown, zone)];
+  }));
+  const changes = changeLog.diffRows(WO_ENTITY, prep(before), prep(after));
+  if (changes.length === 0) return 0;
+  tx.insert(schema.changeLog).values(changes.map((c) => {
+    const label = WO_FIELD_LABELS[c.field] ?? c.label;
+    return {
+      entityType: WO_ENTITY, entityId: record.id, entityCode: record.code, type: "Update" as const,
+      field: c.field, fieldLabel: label, fromValue: c.from, toValue: c.to,
+      message: `${label} is modified. ${c.from || "—"} --> ${c.to || "—"}`, userId: ctx.userId, source: ctx.source,
+    };
+  })).run();
+  return changes.length;
+}
+
+/** True when no other work order uses `code` (wizard on-blur check; Save still enforces it). */
+export function isWorkOrderCodeAvailable(db: AppDb, code: string, exceptId?: string): boolean {
+  const hit = db.select({ id: wo.id }).from(wo).where(eq(wo.code, code.trim())).get();
+  return !hit || hit.id === exceptId;
 }
 
 function assertUniqueCode(tx: Tx, code: string, exceptId?: string): void {
@@ -384,24 +540,30 @@ const LOCKED_AFTER_OPEN = ["warehouseId", "clientId", "kitProductId", "requested
 export function updateWorkOrder(tx: Tx, ctx: DomainCtx & { scope: Scope }, idOrCode: string, version: number, input: WorkOrderInput): WorkOrderRecord {
   const before = loadWorkOrder(tx, ctx.scope, idOrCode);
   assertVersion(before.version, version);
-  if (before.status === "Completed" || before.status === "Cancelled") throw new AppError("INVALID_STATE", `${before.status} work orders can't be edited.`);
-  if (before.status !== "Open") {
+  if (before.status === "Cancelled") throw new AppError("INVALID_STATE", "Cancelled work orders can't be edited.");
+  const previous = tx.select().from(schema.workOrderComponents).where(eq(schema.workOrderComponents.workOrderId, before.id)).all();
+  if (before.status !== "Open" || before.processedQty > 0) {
     const changed = LOCKED_AFTER_OPEN.filter((f) => before[f] !== input[f]);
-    if (changed.length) throw new AppError("INVALID_STATE", "Warehouse, client, type, kit and quantity can only change while the work order is Open.", { fieldErrors: Object.fromEntries(changed.map((f) => [f, ["Locked after picking started"]])) });
+    const why = before.status === "Completed" ? "Locked on a completed work order" : before.processedQty > 0 ? "Locked after kits were built" : "Locked after picking started";
+    if (changed.length) throw new AppError("INVALID_STATE", "Warehouse, client, type, kit and quantity can only change while the work order is Open and no kits are built.", { fieldErrors: Object.fromEntries(changed.map((f) => [f, [why]])) });
   }
-  const { bom } = validateInput(tx, ctx.scope, input);
+  if (before.status !== "Open") {
+    const moved = sourcesChanged(input, previous);
+    if (moved.length) throw new AppError("INVALID_STATE", `Component sources can't change once the work order is ${before.status}.`, { fieldErrors: Object.fromEntries(moved.map((p) => [p, [`Locked: the work order is ${before.status}`]])) });
+  }
+  const { bom } = validateInput(tx, ctx.scope, input, previous);
   const code = input.code.trim();
   assertUniqueCode(tx, code, before.id);
-  const previous = tx.select().from(schema.workOrderComponents).where(eq(schema.workOrderComponents.workOrderId, before.id)).all();
   const after = tx.update(wo).set({ code, ...baseValues(input), updatedBy: ctx.userId, version: sql`${wo.version} + 1` }).where(eq(wo.id, before.id)).returning().get();
   writeComponents(tx, ctx, after, input, bom, previous);
-  changeLog.recordUpdate(tx, ctx, { entityType: WO_ENTITY, entityId: after.id, entityCode: after.code, before: snapshot(tx, before), after: snapshot(tx, after) });
+  recordWorkOrderChanges(tx, ctx, after, snapshot(tx, before), snapshot(tx, after));
   return after;
 }
 
 export function deleteWorkOrder(tx: Tx, ctx: DomainCtx & { scope: Scope }, idOrCode: string): WorkOrderRecord {
   const record = loadWorkOrder(tx, ctx.scope, idOrCode);
   if (record.status !== "Open") throw new AppError("INVALID_STATE", `Only Open work orders can be deleted; ${record.code} is ${record.status}.`);
+  if (record.processedQty > 0) throw new AppError("INVALID_STATE", `Kits were already built from ${record.code}; it can't be deleted.`);
   const holds = tx.select({ n: count() }).from(schema.inventoryAllocations)
     .where(and(eq(schema.inventoryAllocations.workOrderId, record.id), inArray(schema.inventoryAllocations.status, ["Allocated", "Picked"]))).get()?.n ?? 0;
   if (Number(holds) > 0) throw new AppError("INVALID_STATE", `${record.code} still holds component allocations; cancel picking first.`);
@@ -417,7 +579,7 @@ export function patchWorkOrder(tx: Tx, ctx: DomainCtx, record: WorkOrderRecord, 
   const after = tx.update(wo).set({ ...patch, updatedBy: ctx.userId, version: sql`${wo.version} + 1` }).where(eq(wo.id, record.id)).returning().get();
   const fields = Object.keys(patch) as (keyof WorkOrderRecord)[];
   const pick = (r: WorkOrderRecord) => Object.fromEntries(fields.map((f) => [f, f === "jobId" ? (r.jobId ? tx.select({ code: schema.jobs.code }).from(schema.jobs).where(eq(schema.jobs.id, r.jobId)).get()?.code ?? r.jobId : null) : r[f]]));
-  changeLog.recordUpdate(tx, ctx, { entityType: WO_ENTITY, entityId: record.id, entityCode: record.code, before: pick(record), after: pick(after) });
+  recordWorkOrderChanges(tx, ctx, record, pick(record), pick(after));
   return after;
 }
 

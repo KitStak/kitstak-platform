@@ -7,11 +7,14 @@
  */
 import * as React from "react";
 import { FileText, Ruler, ShieldCheck } from "lucide-react";
-import type { UseFormReturn } from "react-hook-form";
+import { useController, type UseFormReturn } from "react-hook-form";
+import { ERROR_TOAST_MS } from "@/lib/grid-defs/facility/common";
+import { useAvailabilityCheck, useWizardGuard, type WizardGuard } from "@/components/facility/wizard-guard";
+import { CustomFieldsSection, type CustomFieldValues } from "@/components/shared/custom-fields-section";
 import { apiRequest, isApiError } from "@/lib/api-client";
 import { applyServerFieldErrors, useApiQuery } from "@/lib/query-client";
 import { DIMENSION_UNITS, VOLUME_UNITS, WEIGHT_UNITS } from "@/lib/enums";
-import { LP_TYPE_DEFAULTS, LP_TYPE_PARAMETERS, lpNumberPreview, lpTypeGeneralSchema, lpTypeOtherSchema, type LpTypeInput } from "@/lib/grid-defs/facility/lp-types";
+import { LP_TYPE_DEFAULTS, LP_TYPE_PARAMETERS, lpNumberPreview, maxWeightIssue, lpTypeGeneralSchema, lpTypeOtherSchema, type LpTypeInput } from "@/lib/grid-defs/facility/lp-types";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Drawer } from "@/components/ui/drawer";
@@ -20,21 +23,31 @@ import { FormGrid, FormSection } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { Wizard, type WizardStep } from "@/components/ui/wizard";
-import { CheckboxField, ComboField, enumSelectOptions, NumberField, SelectField, TextInput } from "@/components/facility/form-controls";
-import { useWarehouseOptions, apiErrorMessage } from "@/components/facility/facility-shared";
+import { CheckboxField, ComboField, enumSelectOptions, NumberField, SelectField, TextInput, useCrossFieldError } from "@/components/facility/form-controls";
+import { useWarehouseOptions, usePagePerms, apiErrorMessage } from "@/components/facility/facility-shared";
 import type { LpTypeDetail } from "@/server/repositories/lp-types";
 
 type F = LpTypeInput;
 
-function GeneralStep({ form, isEdit, numberLocked }: { readonly form: UseFormReturn<F>; readonly isEdit: boolean; readonly numberLocked: string | null }) {
+const GENERAL_KEYS: ReadonlySet<string> = new Set(["warehouseId", "code", "numberPrefix", "numberLength", "length", "width", "height", "dimensionUnit", "weightUnit", "emptyWeight", "maxWeight", "volumeUnit", "maxVolume"]);
+
+function GeneralStep({ form, editId, numberLocked, guard }: { readonly form: UseFormReturn<F>; readonly editId: string | null; readonly numberLocked: string | null; readonly guard: WizardGuard }) {
+  const isEdit = Boolean(editId);
   const warehouses = useWarehouseOptions();
+  useAvailabilityCheck<F>(guard, form, {
+    url: "/api/lp-types/availability",
+    paths: ["code", "numberPrefix"],
+    params: (v) => (v.warehouseId && (v.code?.trim() || v.numberPrefix?.trim()) ? { warehouseId: v.warehouseId, code: v.code?.trim() || undefined, prefix: v.numberPrefix?.trim() || undefined, excludeId: editId ?? undefined } : null),
+  });
   const dim = form.watch("dimensionUnit");
   const weight = form.watch("weightUnit");
+  // Live cross-field check (critic: empty 20 / max 10 was accepted with no error until Next).
+  useCrossFieldError(form, "maxWeight", maxWeightIssue(form.watch("emptyWeight"), form.watch("maxWeight")));
   return (
     <div className="flex flex-col gap-5">
-      <FormSection title="General">
+      <FormSection title="Identity and numbering">
         <FormGrid>
-          <ComboField<F> name="warehouseId" label="Warehouse" required options={warehouses.options} disabled={isEdit} info={isEdit ? "An LP type can't move between warehouses" : undefined} />
+          <ComboField<F> name="warehouseId" label="Warehouse" required options={warehouses.selectable(form.watch("warehouseId"))} disabled={isEdit} info={isEdit ? "An LP type can't move between warehouses" : undefined} description={!isEdit && warehouses.defaultHint && form.watch("warehouseId") === warehouses.defaultId ? warehouses.defaultHint : undefined} />
           <TextInput<F> name="code" label="Code" required maxLength={40} transform={(v) => v.toUpperCase()} placeholder="e.g. TOTE" />
           <TextInput<F> name="numberPrefix" label="Number prefix" required maxLength={10} transform={(v) => v.toUpperCase()} placeholder="e.g. KSE-" disabled={Boolean(numberLocked)} info={numberLocked ?? "Every LP number of this type starts with it"} />
           <NumberField<F> name="numberLength" label="Number length" required min={1} max={12} disabled={Boolean(numberLocked)} info={numberLocked ?? "Digits after the prefix, zero padded"} />
@@ -63,7 +76,7 @@ function GeneralStep({ form, isEdit, numberLocked }: { readonly form: UseFormRet
 
 function ParametersStep() {
   return (
-    <FormSection title="Parameters" description="Rules applied whenever stock is put on an LP of this type. A rule breach blocks the scan with a clear message.">
+    <FormSection title="Mixing rules" description="Rules applied whenever stock is put on an LP of this type. A rule breach blocks the scan with a clear message.">
       <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
         {LP_TYPE_PARAMETERS.map((p) => <CheckboxField<F> key={p.key} name={p.key} label={p.label} />)}
       </div>
@@ -71,15 +84,17 @@ function ParametersStep() {
   );
 }
 
-function OtherStep({ form, next }: { readonly form: UseFormReturn<F>; readonly next: number }) {
+function OtherStep({ form, next, canManage }: { readonly form: UseFormReturn<F>; readonly next: number; readonly canManage: boolean }) {
+  const { field } = useController({ control: form.control, name: "customFields" });
   const prefix = form.watch("numberPrefix") || "";
   const length = Number(form.watch("numberLength")) || 1;
   const params = LP_TYPE_PARAMETERS.filter((p) => form.watch(p.key));
   return (
     <div className="flex flex-col gap-5">
-      <FormSection title="Other information">
+      <FormSection title="Description">
         <TextInput<F> name="description" label="Description" maxLength={250} showCount placeholder="e.g. Blue picking tote 24 × 16 × 12" />
       </FormSection>
+      <CustomFieldsSection entityType="lp_type" values={(field.value ?? {}) as CustomFieldValues} onChange={(v) => field.onChange({ ...v })} canManage={canManage} />
       <section className="rounded-lg border border-border bg-surface-sunken/50 p-4">
         <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Numbering preview</h3>
         <p className="mt-1 text-[12px] text-faint">The next three numbers created from this type.</p>
@@ -99,6 +114,7 @@ export function detailToLpTypeForm(d: LpTypeDetail): F {
     emptyWeight: d.emptyWeight, maxWeight: d.maxWeight, volumeUnit: d.volumeUnit as F["volumeUnit"], maxVolume: d.maxVolume,
     onlyOneExpiry: d.onlyOneExpiry, onlyOneProductionDate: d.onlyOneProductionDate, onlyOneLot: d.onlyOneLot, onlyOneSku: d.onlyOneSku, onlyOneClient: d.onlyOneClient,
     onlyOneOrder: d.onlyOneOrder, onlyOneJob: d.onlyOneJob, suitableForParentLp: d.suitableForParentLp, useForAiJob: d.useForAiJob,
+    customFields: { ...((d.customFields ?? {}) as Record<string, string | boolean | null>) },
   };
 }
 
@@ -107,25 +123,33 @@ function Body({ initial, detail, onDone, onCancel, onDirtyChange }: { readonly i
   const [conflict, setConflict] = React.useState(false);
   const editId = detail?.id ?? null;
   const numberLocked = detail && detail.lpCount > 0 ? `Locked: ${detail.lpCount.toLocaleString("en-US")} LP numbers already use it` : null;
+  const guard = useWizardGuard();
+  const perms = usePagePerms("settings.lp_types", ["custom_field_management"] as const);
+  const canManage = perms.custom_field_management;
   const steps = React.useMemo<readonly WizardStep<F>[]>(() => [
-    { key: "general", label: "General", icon: Ruler, schema: lpTypeGeneralSchema, render: ({ form }) => { formRef.current = form; return <GeneralStep form={form} isEdit={Boolean(editId)} numberLocked={numberLocked} />; } },
+    { key: "general", label: "General", icon: Ruler, schema: guard.guard(lpTypeGeneralSchema, (p) => GENERAL_KEYS.has(p)), render: ({ form }) => { formRef.current = form; return <GeneralStep form={form} editId={editId} numberLocked={numberLocked} guard={guard} />; } },
     { key: "parameters", label: "Parameters", icon: ShieldCheck, isOptional: true, render: ({ form }) => { formRef.current = form; return <ParametersStep />; } },
-    { key: "other", label: "Other info", icon: FileText, schema: lpTypeOtherSchema, render: ({ form }) => { formRef.current = form; return <OtherStep form={form} next={detail?.nextSequence ?? 1} />; } },
-  ], [editId, numberLocked, detail?.nextSequence]);
+    { key: "other", label: "Other info", icon: FileText, schema: guard.guard(lpTypeOtherSchema, (p) => p === "description" || p.startsWith("customFields")), render: ({ form }) => { formRef.current = form; return <OtherStep form={form} next={detail?.nextSequence ?? 1} canManage={canManage} />; } },
+    // `guard` is stable for the life of the body.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [editId, numberLocked, detail?.nextSequence, canManage]);
   const submit = async (values: F) => {
+    guard.dismissBanner();
     try {
       const { data } = await apiRequest<{ code: string }>(editId ? `/api/lp-types/${editId}` : "/api/lp-types", { method: editId ? "PATCH" : "POST", body: { ...values, version: detail?.version } });
       toast.success("Success", editId ? `LP type ${data.code} updated.` : `LP type ${data.code} created.`);
       onDone();
     } catch (error) {
       if (isApiError(error) && error.code === "CONFLICT") setConflict(true);
-      if (formRef.current) applyServerFieldErrors(formRef.current, error);
-      toast.error("Couldn't save the LP type", apiErrorMessage(error));
+      const routed = guard.handleServerError(error, values);
+      if (!routed && formRef.current) applyServerFieldErrors(formRef.current, error);
+      toast.error("Couldn't save the LP type", apiErrorMessage(error), { duration: ERROR_TOAST_MS });
       throw error;
     }
   };
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={guard.rootRef} className="flex flex-col gap-3">
+      {guard.banner && !conflict ? <Callout variant="error" title="Couldn't save the LP type" onDismiss={guard.dismissBanner}>{guard.banner}</Callout> : null}
       {conflict ? <Callout variant="attention" title="This record changed since you opened it" action={<Button size="sm" onClick={() => window.location.reload()}>Reload</Button>}>Someone else saved this LP type. Reload to see their changes.</Callout> : null}
       <Wizard<F> steps={steps} variant="drawer" mode={editId ? "free" : "linear"} defaultValues={initial} draftScope={false} guardUnsaved={false} onDirtyChange={onDirtyChange} submitLabel={editId ? "Save" : "Create LP type"} onCancel={onCancel} onComplete={submit} />
     </div>
@@ -138,7 +162,7 @@ export function LpTypeWizardDrawer({ open, onOpenChange, editId, defaultWarehous
   const close = () => { setDirty(false); onOpenChange(false); };
   const initial = editId ? (detail.data ? detailToLpTypeForm(detail.data.data) : null) : { ...LP_TYPE_DEFAULTS, warehouseId: defaultWarehouseId ?? "" };
   return (
-    <Drawer open={open} onOpenChange={(o) => (o ? onOpenChange(o) : close())} dirty={dirty} width={60}
+    <Drawer open={open} onOpenChange={(o) => (o ? onOpenChange(o) : close())} dirty={dirty} width={60} bodyClassName="pb-0"
       title={editId ? `Edit LP type ${detail.data?.data.code ?? ""}`.trim() : "Create LP type"}
       description={editId ? "Every step is editable; Save applies all of them." : "General, then parameters and other info."}>
       {editId && detail.isError ? (

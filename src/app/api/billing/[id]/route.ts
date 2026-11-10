@@ -4,11 +4,16 @@ import { AppError } from "@/server/api/errors";
 import { contractSchema } from "@/lib/grid-defs/organization/billing";
 import { idParamsSchema } from "@/server/repositories/platform-common";
 import { deleteContracts, getContract, updateContract } from "@/server/repositories/billing";
+import { nextAutoRun } from "@/server/repositories/billing-reports";
 
 export const GET = defineRoute({
   permission: "settings.billing.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getContract(db, auth, params.id),
+  handler: ({ db, auth, params }) => {
+    const contract = getContract(db, auth, params.id);
+    // When the period-end scheduler next bills this contract (null while Draft).
+    return { ...contract, nextAutoRun: nextAutoRun(db, contract) };
+  },
 });
 
 export const PATCH = defineRoute({

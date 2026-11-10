@@ -98,9 +98,10 @@ export function Drawer({ open, onOpenChange, title, description, headerExtra, fo
             {...(description ? {} : { "aria-describedby": undefined })}
             onOpenAutoFocus={(event) => {
               const field = firstFormField(bodyRef.current);
-              if (!field) return;
               event.preventDefault();
-              field.focus();
+              // No form field: focus the panel itself, so a mouse-opened drawer shows no focus box on the ×.
+              if (field) field.focus();
+              else (event.currentTarget as HTMLElement | null)?.focus({ preventScroll: true });
             }}
           >
             <div className="flex shrink-0 items-start gap-3 border-b border-border px-5 py-4">
@@ -111,12 +112,13 @@ export function Drawer({ open, onOpenChange, title, description, headerExtra, fo
               </div>
               <DialogPrimitive.Close
                 aria-label="Close"
-                className="-mr-1 rounded-md p-1.5 text-faint transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                className="-mr-1 rounded-md p-1.5 text-faint transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
               >
                 <X className="h-4 w-4" aria-hidden />
               </DialogPrimitive.Close>
             </div>
-            <div ref={bodyRef} className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4 ks-scroll", bodyClassName)}>{children}</div>
+            {/* A sticky footer inside the body (wizard footer, SubmitBar sticky) sits flush: no bottom padding shows under it. */}
+            <div ref={bodyRef} className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4 ks-scroll has-[[data-sticky-footer]]:pb-0", bodyClassName)}>{children}</div>
             {footer ? (
               <div className="sticky bottom-0 flex shrink-0 items-center justify-end gap-2 border-t border-border bg-surface px-5 py-3 shadow-[0_-1px_2px_rgba(16,24,40,0.04)]">
                 {footer}

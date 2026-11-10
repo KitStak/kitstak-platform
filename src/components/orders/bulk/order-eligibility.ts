@@ -10,6 +10,7 @@ export interface EligibilityRow {
   readonly retailerId: string | null;
   readonly isMerged: boolean;
   readonly hasLabel: boolean;
+  readonly hasReturnLabel?: boolean;
   readonly hasActiveTask: boolean;
   readonly hasSerials: boolean;
   readonly pickShortStatus?: unknown;
@@ -18,12 +19,14 @@ export interface EligibilityRow {
 }
 
 export const LOGIWA_GUARDS = {
-  reprint: "The orders which you have selected has no label to reprint.",
+  reprint: "The selected orders have no label to reprint.",
   void: "You can't void the labels for orders without a tracking number.",
   cancelPicking: "The Cancel Picking operation is only available for the orders that have active picking/packing tasks.",
   pickList: "The picking list cannot be printed for the orders that have no active picking task.",
   issueLabel: "Issue label cannot be printed for the selected order(s). To print an issue label, the order must have an active Pick or Pack Short issue and be in Open or Resolved status.",
   removeSerials: "The selected orders have no serial numbers to remove.",
+  voidReturn: "The selected orders have no active return label to void.",
+  returnInfo: "Return info can only be updated for Shipped, Partially Shipped or Delivered orders.",
 } as const;
 
 const SHIPPED = new Set(["Shipped", "Partially Shipped", "Delivered"]);
@@ -50,8 +53,12 @@ export const eligibility = {
   ship: (rows: readonly EligibilityRow[]) => someOk(rows, (r) => r.status === "Ready to Ship", "Only Ready to Ship orders can be shipped."),
   retailerLabel: (rows: readonly EligibilityRow[]) => allOk(rows, (r) => Boolean(r.retailerId), (bad) => `Retailer labels need a retailer on the order (${list(bad)}).`),
   createLabel: (rows: readonly EligibilityRow[]) =>
-    someOk(rows, (r) => ["Packing Started", "Ready to Load", "Loading Started", "Ready to Ship", "Partially Shipped"].includes(r.status) && !r.hasLabel, "Labels can be created once an order is packed and has no active label."),
-  returnLabel: (rows: readonly EligibilityRow[]) => someOk(rows, (r) => SHIPPED.has(r.status), "Return labels can only be created for shipped orders."),
+    someOk(rows, (r) => ["Open", "Ready to Pick", "Packing Started", "Ready to Load", "Loading Started", "Ready to Ship", "Partially Shipped"].includes(r.status) && !r.hasLabel, "Labels can be created for open, ready-to-pick or packed orders with no active label."),
+  returnLabel: (rows: readonly EligibilityRow[]) => someOk(rows, (r) => SHIPPED.has(r.status) && r.hasLabel, "Return labels need a Shipped, Partially Shipped or Delivered order that has a shipping label."),
+  voidReturnLabel: (rows: readonly EligibilityRow[]) => someOk(rows, (r) => SHIPPED.has(r.status) && Boolean(r.hasReturnLabel), "None of the selected orders has an active return label."),
+  reprintShipped: (rows: readonly EligibilityRow[]) => someOk(rows, (r) => SHIPPED.has(r.status) && (r.hasLabel || Boolean(r.hasReturnLabel)), "None of the selected shipped orders has a label to reprint."),
+  /** Shipped tab "Bulk update return info": shipped statuses only (never Cancelled). */
+  returnInfo: (rows: readonly EligibilityRow[]) => (rows.length === 0 ? "Select at least one shipped order" : someOk(rows, (r) => SHIPPED.has(r.status), "Return info can only be updated for Shipped, Partially Shipped or Delivered orders.")),
   jobs: (rows: readonly EligibilityRow[]) => someOk(rows, (r) => JOBABLE.has(r.status) && !r.jobId, "Only Open, Shortage or Ready to Pick orders without a job can get a picking job."),
   backorder: (rows: readonly EligibilityRow[]) => someOk(rows, (r) => r.status === "Shortage", "Only Shortage orders can be back-ordered."),
   cancel: (rows: readonly EligibilityRow[]) =>
@@ -80,8 +87,22 @@ export const guardChecks = {
   pickList: (r: EligibilityRow) => r.hasActiveTask,
   issueLabel: (r: EligibilityRow) => ["Open", "Resolved"].includes(String(r.pickShortStatus)) || ["Open", "Resolved"].includes(String(r.packShortStatus)),
   removeSerials: (r: EligibilityRow) => r.hasSerials,
+  returnInfo: (r: EligibilityRow) => SHIPPED.has(r.status),
+  voidReturn: (r: EligibilityRow) => SHIPPED.has(r.status) && Boolean(r.hasReturnLabel),
+  returnLabel: (r: EligibilityRow) => SHIPPED.has(r.status) && r.hasLabel,
 };
 
-export function shipConfirmText(n: number): string {
-  return `${plural(n, "order")} will be shipped. Orders will move to Shipped & Canceled Orders and their inventory leaves the warehouse.`;
+/** Bulk result window title (Logiwa: "Some orders couldn’t be shipped"). `verbPast` e.g. "shipped". */
+export function bulkResultTitle(verbPast: string, succeeded: number, failed: number): string {
+  if (failed === 0) return `${plural(succeeded, "order")} ${verbPast}`;
+  if (succeeded === 0) return `No orders could be ${verbPast}`;
+  return `Some orders couldn’t be ${verbPast}`;
+}
+
+export function shipConfirmText(n: number, partial = 0): string {
+  const base = `${plural(n, "order")} will be shipped.`;
+  if (partial <= 0) return `${base} Orders will move to Shipped & Canceled Orders and their inventory leaves the warehouse.`;
+  const full = n - partial;
+  const fullText = full > 0 ? ` ${plural(full, "order")} ship${full === 1 ? "s" : ""} in full and move${full === 1 ? "s" : ""} to Shipped & Canceled Orders.` : "";
+  return `${base}${fullText} ${plural(partial, "order")} ${partial === 1 ? "is" : "are"} only partly packed: packed units ship, ${partial === 1 ? "it becomes" : "they become"} Partially Shipped and stay${partial === 1 ? "s" : ""} in the backlog with the remaining units.`;
 }

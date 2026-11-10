@@ -71,8 +71,11 @@ export interface ProductLabelRecord {
   readonly lotNumber?: string;
 }
 
-/** Product labels for the PO lines, one per ordered unit (qty = ordered, capped per line). */
-export function productLabelRecords(db: AppDb, scope: Scope, ids: readonly string[], options: { lineIds?: readonly string[]; maxPerLine?: number } = {}): ProductLabelRecord[] {
+/**
+ * Product labels for the PO lines. "Use as line quantity" (default, Logiwa parity): one label
+ * per ordered unit (capped per line); `perLine`: one label per line.
+ */
+export function productLabelRecords(db: AppDb, scope: Scope, ids: readonly string[], options: { lineIds?: readonly string[]; maxPerLine?: number; perLine?: boolean } = {}): ProductLabelRecord[] {
   const rows = purchaseOrdersByIds(db, scope, ids);
   const cap = options.maxPerLine ?? 500;
   const out: ProductLabelRecord[] = [];
@@ -84,7 +87,30 @@ export function productLabelRecords(db: AppDb, scope: Scope, ids: readonly strin
         sku: l.sku, barcode: l.barcode || l.sku, name: l.productName, clientCode: detail.clientCode || undefined,
         packType: l.packType, ...(l.lotNumber ? { lotNumber: l.lotNumber } : {}),
       };
-      for (let i = 0; i < Math.min(l.orderedQuantity, cap); i++) out.push(record);
+      const copies = options.perLine ? 1 : Math.min(l.orderedQuantity, cap);
+      for (let i = 0; i < copies; i++) out.push(record);
+    }
+  }
+  return out;
+}
+
+export interface ProductLabelLine {
+  readonly poCode: string;
+  readonly record: ProductLabelRecord;
+  readonly ordered: number;
+  readonly received: number;
+}
+
+/** One entry per PO line with its ordered / received quantity (the Print Options modal expands them). */
+export function productLabelLines(db: AppDb, scope: Scope, ids: readonly string[]): ProductLabelLine[] {
+  const out: ProductLabelLine[] = [];
+  for (const row of purchaseOrdersByIds(db, scope, ids)) {
+    const detail = getPurchaseOrder(db, scope, row.id);
+    for (const l of detail.lines) {
+      out.push({
+        poCode: detail.code, ordered: l.orderedQuantity, received: l.receivedQuantity,
+        record: { sku: l.sku, barcode: l.barcode || l.sku, name: l.productName, clientCode: detail.clientCode || undefined, packType: l.packType, ...(l.lotNumber ? { lotNumber: l.lotNumber } : {}) },
+      });
     }
   }
   return out;

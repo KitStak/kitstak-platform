@@ -1,5 +1,5 @@
 /**
- * Channel adapter contract (M12). Every store integration (Shopify, ShipStation, the KitStaks
+ * Channel adapter contract (M12). Every store integration (Shopify, ShipStation, the KitStak
  * Sandbox) normalises its API into these shapes; the runtime (`runtime/*`) applies filters,
  * creates orders through the foundation domain and writes channel runs / missing orders.
  */
@@ -74,6 +74,10 @@ export interface AdapterContext {
   /** Monotonic run counter per method, used by the sandbox for deterministic traffic. */
   readonly runNumber: number;
   readonly now: Date;
+  /** Sandbox only: the run was asked (Simulate error) to include one order with an unknown SKU. */
+  readonly simulateError?: boolean;
+  /** The run was started by a user (Run / Simulate error / Retry), not the scheduler. */
+  readonly manual?: boolean;
 }
 
 export interface ValidateResult {

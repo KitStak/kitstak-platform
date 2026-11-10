@@ -1,4 +1,5 @@
 import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
+import { StaticSlowNotice } from "./static-slow-notice";
 
 /** Streaming fallback for the authenticated shell (header bar + page skeleton). */
 export function ShellSkeleton() {
@@ -16,7 +17,8 @@ export function ShellSkeleton() {
 /** Generic page skeleton: breadcrumb, title, toolbar, grid. */
 export function PageSkeleton() {
   return (
-    <div className="space-y-4 px-6 pt-4">
+    <div className="space-y-4 px-6 pt-4" aria-busy="true" aria-label="Loading">
+      <StaticSlowNotice />
       <Skeleton className="h-3 w-40" />
       <Skeleton className="h-6 w-64" />
       <Skeleton className="h-8 w-full max-w-[720px]" />
@@ -29,6 +31,7 @@ export function PageSkeleton() {
 export function DetailPageSkeleton() {
   return (
     <div className="space-y-4 px-6 pt-4" aria-busy="true" aria-label="Loading record">
+      <StaticSlowNotice />
       <Skeleton className="h-3 w-48" />
       <div className="flex items-center justify-between gap-4">
         <Skeleton className="h-6 w-56" />

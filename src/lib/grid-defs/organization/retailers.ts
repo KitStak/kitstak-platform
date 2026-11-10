@@ -14,6 +14,8 @@ export const RETAILER_FIELDS: readonly OrgField[] = [
   { field: "orderCount", label: "Orders", type: "number" },
   { field: "createdAt", label: "Created date", type: "date" },
 ];
+/** Logiwa Retailers filter: Name (plus Status). */
+export const RETAILER_FILTER_PRESET = ["name", "isActive"] as const;
 export const RETAILER_SORT_FIELDS = ["name", "businessName", "country", "city", "isActive", "orderCount", "createdAt"] as const;
 export const RETAILER_SEARCH_FIELDS = ["name", "businessName"] as const;
 

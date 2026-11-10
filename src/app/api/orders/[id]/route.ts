@@ -4,7 +4,10 @@ import { AppError, isErrorCode, notFoundError } from "@/server/api/errors";
 import { orders } from "@/server/domain";
 import { ORDER_PERMISSIONS } from "@/lib/grid-defs/orders/shipment-orders";
 import { getOrderDetail } from "@/server/repositories/orders";
+import { repairOrderChangeLog } from "@/server/repositories/orders-change-log";
+import { z } from "zod";
 import { updateOrder, updateOrderBodySchema } from "@/server/repositories/orders-commands";
+import { parseOrderBody } from "@/server/repositories/orders-validation";
 import { domainCtx, idParamsSchema } from "@/server/repositories/platform-common";
 
 export const GET = defineRoute({
@@ -13,6 +16,13 @@ export const GET = defineRoute({
   handler: ({ db, auth, params }) => {
     const detail = getOrderDetail(db, auth, params.id);
     if (!detail) throw notFoundError("Shipment order");
+    // Entries other modules wrote raw on this order (jobs, shipping, merge) are made readable
+    // before the change log is opened. Idempotent; a no-op once the history is clean.
+    try {
+      repairOrderChangeLog(db, [detail.order.id]);
+    } catch (error) {
+      console.warn("[orders] change-log repair skipped", error);
+    }
     return detail;
   },
 });
@@ -20,8 +30,8 @@ export const GET = defineRoute({
 export const PATCH = defineRoute({
   permission: ORDER_PERMISSIONS.edit,
   params: idParamsSchema,
-  body: updateOrderBodySchema,
-  handler: ({ db, auth, actor, params, body }) => updateOrder(db, domainCtx(actor, auth), params.id, body),
+  body: z.unknown(),
+  handler: ({ db, auth, actor, params, body }) => updateOrder(db, domainCtx(actor, auth), params.id, parseOrderBody(updateOrderBodySchema, body)),
 });
 
 export const DELETE = defineRoute({

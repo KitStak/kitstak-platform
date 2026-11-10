@@ -255,7 +255,7 @@ describe("tasks", () => {
     expect(() => cancel(w.db, w.ctx, { taskIds: [pick.id] })).toThrow(/Only pending/);
     expect(() => execute(w.db, w.ctx, { taskIds: [], targetLocationId: w.loc.pick })).toThrow(/at least one/);
     const stub = w.db.insert(schema.tasks).values({ taskNo: 9999, jobId, warehouseId: w.warehouseId, taskType: "Count" }).returning().get();
-    expect(() => execute(w.db, w.ctx, { taskIds: [stub.id], targetLocationId: w.loc.pick })).toThrow(/not configured yet/);
+    expect(() => execute(w.db, w.ctx, { taskIds: [stub.id], targetLocationId: w.loc.pick })).toThrow(/not linked to a count line/); // M07 count handler is registered
     expect(w.db.select().from(schema.tasks).where(and(eq(schema.tasks.orderId, orderId), eq(schema.tasks.status, "Pending"))).all()).toHaveLength(0);
     clean();
   });

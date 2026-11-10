@@ -25,7 +25,7 @@ const q = (qs = ""): GridQuery => ({ ...EMPTY_GRID_QUERY, ...parseGridQuery(qs).
 beforeEach(() => {
   w = createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
-  auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
+  auth = { scope, viewScope: scope, permissions: new Set<string>(["settings.users.view"]), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
 afterEach(() => w.close());
 
@@ -41,7 +41,7 @@ describe("report grid compiler", () => {
   it("derives sortable aliases and export columns from the def (Action column is never exported)", () => {
     expect(sortableOf(CHANGE_LOG_DEF)).not.toContain("fromValue");
     expect(exportColumnsOf(EXPORT_HISTORY_DEF).map((c) => c.key)).toContain("rowCount");
-    expect(TRANSACTION_HISTORY_DEF.columns.length).toBe(50);
+    expect(TRANSACTION_HISTORY_DEF.columns.length).toBe(53);
   });
 });
 
@@ -70,7 +70,7 @@ describe("Transaction History (ledger)", () => {
     const provider = reportExportProvider(TRANSACTION_HISTORY_DEF, listTransactions);
     const page = await provider.fetchPage({ db: w.db, auth, gridKey: TRANSACTION_HISTORY_DEF.gridKey, query: q(), rawQuery: "" }, 1, 500);
     expect(page.total).toBe(1);
-    expect(provider.columns?.length).toBe(50);
+    expect(provider.columns?.length).toBe(53);
   });
 });
 
@@ -99,6 +99,14 @@ describe("Change Log", () => {
     expect(listChangeLog(w.db, auth, q("f.type=in:Delete&f.module=in:Shipment%20Order")).total).toBeGreaterThanOrEqual(1);
     const scoped = { ...auth, viewScope: { warehouseIds: ["elsewhere"], clientIds: ["x"] } } as unknown as AuthContext;
     expect(listChangeLog(w.db, scoped, q("f.type=in:Delete")).total).toBe(0);
+  });
+
+  it("roles without user management see only their own changes", () => {
+    const order = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    w.db.insert(schema.changeLog).values({ entityType: "shipment_order", entityId: order.id, entityCode: order.code, type: "Delete", message: "Deleted", source: "someone@test.io" }).run();
+    const own = { ...auth, permissions: new Set<string>(), user: { id: "another-user" } } as unknown as AuthContext;
+    expect(listChangeLog(w.db, auth, q("f.type=in:Delete")).total).toBeGreaterThanOrEqual(1);
+    expect(listChangeLog(w.db, own, q("f.type=in:Delete")).total).toBe(0);
   });
 });
 
@@ -167,7 +175,7 @@ describe("PO Receiving and User Performance", () => {
 
 describe("Report Hub catalog", () => {
   it("is built from the Reports mega-menu: 5 groups, every item described", () => {
-    expect(REPORT_CATALOG.map((g) => g.heading)).toEqual(["Orders", "Inventory", "Logs", "Receiving", "Warehouse Efficiency"]);
+    expect(REPORT_CATALOG.map((g) => g.heading)).toEqual(["Orders", "Inventory", "Inventory Analysis", "Logs", "Receiving", "Warehouse Efficiency", "Labor Analytics", "Operational Analytics"]);
     for (const item of REPORT_CATALOG.flatMap((g) => g.items)) expect(item.description).not.toBe("");
   });
 

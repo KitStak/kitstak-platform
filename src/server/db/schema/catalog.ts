@@ -178,6 +178,8 @@ export const productListings = sqliteTable("product_listings", {
   neverSync: bool("never_sync").notNull().default(false),
   linkedAt: text("linked_at"),
   lastSyncedQty: integer("last_synced_qty"),
+  /** SKU of a suggestion the user dismissed ("Don't match these products"), catalog REQ-2. */
+  dismissedSuggestionSku: text("dismissed_suggestion_sku"),
   ...stamps(),
 }, (t) => [
   uniqueIndex("listing_unique_idx").on(t.channelConnectionId, t.channelProductId),

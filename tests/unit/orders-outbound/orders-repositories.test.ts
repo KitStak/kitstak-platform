@@ -46,6 +46,8 @@ describe("createOrder (wizard save)", () => {
     expect(all.find((l) => l.type === "Create")?.message).toBe("Shipment Order KS-E2E-SO-1 is created.");
     const lineLogs = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.parentEntityId, o.id)).all();
     expect(lineLogs.map((l) => l.message)).toEqual(expect.arrayContaining([expect.stringMatching(/^MLT-WIDGET-01 -> /), expect.stringMatching(/^MLT-GADGET-02 -> /)]));
+    // Exactly one entry per line: the domain writes it; the repository must not duplicate it.
+    expect(lineLogs.filter((l) => l.type === "Create")).toHaveLength(2);
   });
 
   it("checks code uniqueness case-insensitively and rejects a customer of another client", () => {
@@ -63,7 +65,7 @@ describe("updateOrder (detail edit)", () => {
     const o = mk();
     const u = updateOrder(w.db, w.ctx, o.id, updateOrderBodySchema.parse({ version: o.version, patch: { note: "Leave at door", pro: "PRO-77" } }));
     expect(u.version).toBeGreaterThan(o.version);
-    expect(logs(o.id).map((l) => l.message)).toEqual(expect.arrayContaining(["Note is modified.  --> Leave at door", expect.stringMatching(/is modified\.  --> PRO-77$/)]));
+    expect(logs(o.id).map((l) => l.message)).toEqual(expect.arrayContaining(["Note is modified. — --> Leave at door", expect.stringMatching(/is modified\. — --> PRO-77$/)]));
     expect(() => updateOrder(w.db, w.ctx, o.id, updateOrderBodySchema.parse({ version: o.version, patch: { note: "stale" } }))).toThrow(/changed since/);
   });
 

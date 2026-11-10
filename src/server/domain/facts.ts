@@ -4,6 +4,7 @@
  */
 import { and, eq, inArray } from "drizzle-orm";
 import type { OrderByClause } from "@/lib/domain-types";
+import { CUSTOM_FIELD_SLOTS } from "@/lib/enums";
 import * as schema from "@/server/db/schema";
 import type { FactValue, Facts } from "./conditions";
 import type { InventoryRow } from "./ledger/bucket";
@@ -40,7 +41,34 @@ export function orderFacts(tx: Tx, order: OrderRow, lines?: readonly OrderLineRo
     plannedShipmentDate: order.scheduledShipmentDate, customerName: order.customerName, addressType: order.addressType,
     shipAddress: order.shipAddress, shipAddress2: order.shipAddress2, addressLine1: order.shipAddress, addressLine2: order.shipAddress2,
     customerEmail: order.customerEmail, storeOrderNumber: order.storeOrderNumber,
+    ...cartonFacts(tx, order, active, productIds),
   };
+}
+
+/**
+ * Logiwa "Is Partial", "Precartonization Type" and "Number of Boxes" (M12, additive):
+ * - isPartial: some of the order is already allocated or shipped while the rest is still open.
+ * - precartonizationType: a workflow/user pre-selected box (Shipment Package), every SKU ships in
+ *   its own box (Own Box), only some do (Mixed), else None.
+ * - numberOfBoxes: active shipping labels when the order has any; else the estimate
+ *   own-box units + one shared box for the remaining units.
+ */
+function cartonFacts(tx: Tx, order: OrderRow, active: readonly OrderLineRow[], productIds: readonly string[]): Facts {
+  const open = (l: OrderLineRow) => l.quantity - l.cancelledQuantity;
+  const progressed = active.reduce((s, l) => s + Math.max(l.allocatedQuantity, l.shippedQuantity), 0);
+  const units = active.reduce((s, l) => s + open(l), 0);
+  const isPartial = order.status === "Partially Shipped" || (progressed > 0 && progressed < units);
+  const ppt = schema.productPackTypes;
+  const ownBox = new Set(productIds.length === 0 ? [] : tx.select({ productId: ppt.productId, packType: ppt.packType }).from(ppt)
+    .where(and(inArray(ppt.productId, [...productIds]), eq(ppt.useOwnBox, true))).all().map((r) => `${r.productId}|${r.packType}`));
+  const ownUnits = active.filter((l) => ownBox.has(`${l.productId}|${l.packType}`)).reduce((s, l) => s + open(l), 0);
+  const precartonizationType = order.shipmentPackageId ? "Shipment Package"
+    : ownUnits === 0 ? "None" : ownUnits === units ? "Own Box" : "Mixed";
+  const labels = tx.select({ id: schema.shipments.id }).from(schema.shipments).where(and(
+    eq(schema.shipments.orderId, order.id), eq(schema.shipments.labelType, "Shipping Label"), eq(schema.shipments.labelStatus, "Active"),
+  )).all().length;
+  const numberOfBoxes = labels > 0 ? labels : units === 0 ? 0 : ownUnits + (units - ownUnits > 0 ? 1 : 0);
+  return { isPartial, precartonizationType, numberOfBoxes };
 }
 
 /** Facts for allocation inventory conditions / putaway location filters. */
@@ -56,6 +84,8 @@ export function bucketFacts(bucket: InventoryRow, location: LocationRow, lpNumbe
     inventoryProductionDate: bucket.productionDate, inventoryReceivingDate: bucket.receivedAt,
     lotBatchNumber: bucket.lotNumber, expiryDate: bucket.expiryDate, productionDate: bucket.productionDate,
     receivingDate: bucket.receivedAt, freeInventory: bucket.onHand - bucket.allocated, client: bucket.clientId,
+    // Location custom-field slots (allocation inventory conditions, Logiwa "Location Custom Field …").
+    ...Object.fromEntries(CUSTOM_FIELD_SLOTS.map((slot) => [`locationCustomField.${slot}`, location.customFields?.[slot] ?? null])),
   };
 }
 

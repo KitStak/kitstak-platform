@@ -41,7 +41,7 @@ interface SearchGroup {
   readonly seeAllHref?: string;
 }
 
-const RECORD_TYPES = "orders,pos,products,locations,lps,jobs,clients";
+const RECORD_TYPES = "orders,pos,products,locations,lps,jobs,clients,users,roles";
 const DEBOUNCE_MS = 200;
 
 function useDebounced(value: string, ms: number): string {
@@ -69,8 +69,11 @@ const SKELETON_ROWS = 3;
 /** Three 32px placeholder rows while record groups load (no spinner, no empty panel). */
 function RecordsSkeleton() {
   return (
-    <div role="status" aria-label="Searching records" className="px-1.5 py-1">
-      <p className="px-2.5 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.08em] text-faint">Records</p>
+    <div role="status" aria-live="polite" className="px-1.5 py-1">
+      <p className="flex items-center gap-2 px-2.5 pb-1 pt-2 text-[12px] text-secondary">
+        <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-primary/30 border-t-primary" aria-hidden />
+        Searching records…
+      </p>
       {Array.from({ length: SKELETON_ROWS }, (_, i) => (
         <div key={i} className="flex h-8 items-center gap-2.5 px-2.5">
           <span className="ks-skeleton h-3 w-24" />
@@ -80,6 +83,16 @@ function RecordsSkeleton() {
       ))}
     </div>
   );
+}
+
+/** Where Enter goes once results arrive: the first record hit, else the first page. PURE. */
+function enterTarget(sections: readonly ("pages" | SearchGroup)[], pageHits: readonly { readonly href: string }[]): string | null {
+  for (const section of sections) {
+    if (section === "pages") { if (pageHits[0]) return pageHits[0].href; continue; }
+    const hit = section.hits[0];
+    if (hit) return hit.href;
+  }
+  return null;
 }
 
 function TypeLabel({ children }: { readonly children: React.ReactNode }) {
@@ -137,6 +150,22 @@ export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly N
   const nothing = query.trim().length > 0 && pageHits.length === 0 && groups.length === 0 && !searching;
   const sections = orderSearchSections(pageHits.length > 0 ? pageRank(pageHits, query) : null, groups);
 
+  // Enter pressed while records are still loading (nothing to select yet): remember it and open
+  // the best result as soon as it arrives instead of silently ignoring the key.
+  const [pendingEnter, setPendingEnter] = React.useState(false);
+  React.useEffect(() => { setPendingEnter(false); }, [query]);
+  React.useEffect(() => {
+    if (!pendingEnter || searching) return;
+    setPendingEnter(false);
+    const target = enterTarget(sections, pageHits);
+    if (target) go(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the pending search settles
+  }, [pendingEnter, searching]);
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+    if (searching && pageHits.length === 0 && groups.length === 0) { e.preventDefault(); setPendingEnter(true); }
+  };
+
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(next) => (next ? openSearch() : setOpen(false))}>
       <Tooltip content={<span className="flex items-center gap-1.5">Search pages and records <Kbd>/</Kbd></span>} side="bottom">
@@ -156,10 +185,10 @@ export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly N
         <DialogPrimitive.Overlay className={overlayClass} />
         <DialogPrimitive.Content aria-describedby={undefined} onCloseAutoFocus={() => suppressNextTooltipFocus(triggerRef.current)} className="fixed left-1/2 top-[12vh] z-50 w-[calc(100vw-32px)] max-w-[640px] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-surface shadow-lg outline-none">
           <DialogPrimitive.Title className="sr-only">Global search</DialogPrimitive.Title>
-          <Command shouldFilter={false} loop label="Global search">
+          <Command shouldFilter={false} loop label="Global search" onKeyDown={onKeyDown}>
             <div className="flex items-center gap-2 border-b border-border px-3">
               <Search className="h-4 w-4 shrink-0 text-faint" aria-hidden />
-              <Command.Input value={query} onValueChange={setQuery} placeholder="Search in pages, orders, POs, SKUs, LPs, locations…" className="h-12 flex-1 bg-transparent text-[14px] text-foreground outline-none placeholder:text-faint" />
+              <Command.Input value={query} onValueChange={setQuery} placeholder="Search pages, orders, POs, SKUs, LPs, locations, users…" className="h-12 flex-1 bg-transparent text-[14px] text-foreground outline-none placeholder:text-faint" />
               {query ? (
                 <button type="button" aria-label="Clear search" onClick={() => setQuery("")} className="rounded p-1 text-faint hover:bg-neutral-soft hover:text-secondary">
                   <X className="h-4 w-4" aria-hidden />
@@ -167,11 +196,16 @@ export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly N
               ) : null}
             </div>
             <Command.List className="max-h-[min(60vh,480px)] overflow-y-auto py-1">
-              {nothing ? <p className="px-4 py-8 text-center text-[13px] text-secondary">No data found.</p> : null}
+              {nothing ? (
+                <div role="status" className="px-4 py-8 text-center">
+                  <p className="text-[13px] font-medium text-foreground">No results for &ldquo;{query.trim()}&rdquo;</p>
+                  <p className="mt-1 text-[12px] text-faint">Try a full code (SO010916, PO002210), a SKU, an LP, a location, a user&apos;s email or a page name.</p>
+                </div>
+              ) : null}
               {records.isError && recordsEnabled && !records.isFetching ? (
                 <p role="alert" className="flex items-center gap-2 px-4 py-2 text-[12px] text-danger">
                   Record search is unavailable right now.
-                  <button type="button" onClick={() => void records.refetch()} className="rounded font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+                  <button type="button" onClick={() => void records.refetch()} className="rounded font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
                     Retry
                   </button>
                 </p>

@@ -35,11 +35,29 @@ function HeaderCell<T>({ header, sort, onSort, reorderable, stickyRightOffset }:
   const indicator = column.getCanSort() ? sortIndicator(sort, field) : null;
   const label = header.isPlaceholder ? null : flexRender(column.columnDef.header, header.getContext());
   const ariaSort = indicator ? (indicator.dir === "asc" ? "ascending" : "descending") : column.getCanSort() ? "none" : undefined;
+  const right = meta?.align === "right";
+  // String labels truncate with a tooltip, so a column resized narrower than its label never overprints a neighbour.
+  const labelText = typeof column.columnDef.header === "string" && !system ? (
+    <span className="min-w-0 truncate" title={name}>
+      {label}
+    </span>
+  ) : (
+    label
+  );
+  const arrow = indicator ? (
+    <span className="inline-flex shrink-0 items-center text-primary">
+      {indicator.dir === "asc" ? <ArrowUp className="h-3 w-3" aria-hidden /> : <ArrowDown className="h-3 w-3" aria-hidden />}
+      {indicator.position ? <sup className="text-[9px] font-bold">{indicator.position}</sup> : null}
+    </span>
+  ) : (
+    <ArrowUpDown data-sort-affordance="" className="h-3 w-3 shrink-0 text-faint opacity-0 transition-opacity group-hover/th:opacity-100 group-focus-within/th:opacity-100" aria-hidden />
+  );
 
   return (
     <th
       ref={setNodeRef}
       scope="col"
+      role="columnheader"
       aria-sort={ariaSort}
       style={{
         ...placement.style,
@@ -55,9 +73,12 @@ function HeaderCell<T>({ header, sort, onSort, reorderable, stickyRightOffset }:
         isDragging && "z-30 bg-primary-soft opacity-90"
       )}
     >
-      <span className={cn("inline-flex items-center gap-1", meta?.align === "right" && "flex-row-reverse", meta?.headerClassName)}>
+      {/* Block-level flex in DOM order (no row-reverse): right-aligned headers justify to the end, so the
+          label keeps the text baseline, the (i) tip sits right after the label, and the sort arrow stays outside the pair. */}
+      <span className={cn("relative flex min-w-0 max-w-full items-center gap-1", right && "justify-end", meta?.headerClassName)}>
         {canDrag ? (
-          <button type="button" aria-label={`Move ${name} column`} className="-ml-2 flex h-5 w-4 cursor-grab items-center justify-center rounded text-faint opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 group-hover/th:opacity-100" {...attributes} {...listeners}>
+          // Absolutely placed in the cell padding so the label starts at the same x as the cell content.
+          <button type="button" data-audit-skip="" title="Drag to reorder" aria-label={`Move ${name} column`} className={cn("absolute top-1/2 flex h-5 w-3 -translate-y-1/2 cursor-grab items-center justify-center rounded text-faint opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30 group-hover/th:opacity-100", meta?.align === "right" ? "-right-3" : "-left-3")} {...attributes} {...listeners}>
             <GripVertical className="h-3 w-3" aria-hidden />
           </button>
         ) : null}
@@ -66,22 +87,16 @@ function HeaderCell<T>({ header, sort, onSort, reorderable, stickyRightOffset }:
             type="button"
             onClick={(e) => onSort(field, e.shiftKey)}
             title="Click to sort · Shift-click to add a sort"
-            className="inline-flex items-center gap-1 uppercase transition-colors hover:text-foreground focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="inline-flex min-w-0 max-w-full items-center gap-1 uppercase transition-colors hover:text-foreground focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
           >
-            {label}
-            {indicator ? (
-              <span className="inline-flex items-center text-primary">
-                {indicator.dir === "asc" ? <ArrowUp className="h-3 w-3" aria-hidden /> : <ArrowDown className="h-3 w-3" aria-hidden />}
-                {indicator.position ? <sup className="text-[9px] font-bold">{indicator.position}</sup> : null}
-              </span>
-            ) : (
-              <ArrowUpDown data-sort-affordance="" className="h-3 w-3 text-faint opacity-0 transition-opacity group-hover/th:opacity-100 group-focus-within/th:opacity-100" aria-hidden />
-            )}
+            {right ? arrow : null}
+            {labelText}
+            {right ? null : arrow}
           </button>
         ) : (
-          label
+          labelText
         )}
-        {meta?.headerTip ? <InfoTip content={meta.headerTip} label={`About ${name}`} /> : null}
+        {meta?.headerTip ? <InfoTip content={meta.headerTip} label={`About ${name}`} className="shrink-0" /> : null}
       </span>
       {column.getCanResize() ? (
         <span
@@ -141,7 +156,7 @@ export function DataGridHeader<T>({ table, sort, onSort, onReorder, stickyRightO
   return (
     <thead className="sticky top-0 z-20 bg-surface shadow-[inset_0_-1px_0_var(--border)]">
       <SortableContext items={headers.map((h) => h.column.id)} strategy={horizontalListSortingStrategy}>
-        <tr>
+        <tr role="row" aria-rowindex={1}>
           {headers.map((header) => (
             <HeaderCell key={header.id} header={header} sort={sort} onSort={onSort} reorderable={Boolean(onReorder)} stickyRightOffset={stickyRightOffset} />
           ))}

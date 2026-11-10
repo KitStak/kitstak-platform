@@ -14,7 +14,7 @@ import * as schema from "@/server/db/schema";
 import { recordCreate } from "../change-log";
 import { DomainError } from "../errors";
 import { freeQty, type InventoryRow } from "../ledger/bucket";
-import { move } from "../ledger/operations";
+import { move, moveLp } from "../ledger/operations";
 import { getLocation } from "../ledger/rules";
 import { rollupJob } from "../progress";
 import { dynamicReplenishmentTargets } from "../putaway";
@@ -53,6 +53,28 @@ export function pickFaceFor(tx: Tx, warehouseId: string, productId: string): str
   return tx.get<{ id: string }>(sql`SELECT id FROM locations WHERE warehouse_id = ${warehouseId} AND replenishment_type = 'Target' AND is_active = 1 ORDER BY walking_path_priority LIMIT 1`)?.id ?? null;
 }
 
+/** The product's largest pack type above one unit (e.g. Case of 24), if any. */
+export function higherPackOf(tx: Tx, productId: string): { packType: string; uomQty: number } | null {
+  return tx.get<{ packType: string; uomQty: number }>(sql`SELECT pack_type AS packType, uom_qty AS uomQty FROM product_pack_types
+    WHERE product_id = ${productId} AND uom_qty > 1 ORDER BY uom_qty DESC LIMIT 1`) ?? null;
+}
+
+/** Units in one `packType` of the product (1 for the primary or an unknown pack type). */
+export function unitsPerPack(tx: Tx, productId: string, packType: string): number {
+  return tx.get<{ n: number }>(sql`SELECT uom_qty AS n FROM product_pack_types WHERE product_id = ${productId} AND pack_type = ${packType} LIMIT 1`)?.n ?? 1;
+}
+
+interface ReplenPlan {
+  readonly productId: string;
+  readonly source: InventoryRow;
+  /** In `packType` units. */
+  readonly qty: number;
+  readonly target: string;
+  readonly packType: string;
+  readonly toPackType: string | null;
+  readonly lpSwap: boolean;
+}
+
 export interface CreateReplenishmentJobInput {
   readonly warehouseId: string;
   readonly jobTypeId: string;
@@ -76,18 +98,34 @@ export function createReplenishmentJob(tx: Tx, ctx: DomainCtx, input: CreateRepl
   if (!jobType || jobType.operationType !== "Replenishment") throw new DomainError("VALIDATION", "Choose a replenishment job type.");
   const settings = parseSettings(jobTypeSettingsSchema, jobType.settings).replenishment;
   const targets = dynamicReplenishmentTargets(tx, input.warehouseId, { onlyNeeded: true });
-  const plans: { productId: string; source: InventoryRow; qty: number; target: string }[] = [];
+  const plans: ReplenPlan[] = [];
   const skipped: { sku: string; reason: string }[] = [];
   for (const target of targets) {
     const face = pickFaceFor(tx, input.warehouseId, target.productId);
     if (!face) { skipped.push({ sku: target.sku, reason: "No pick face location" }); continue; }
+    const higher = settings.allowHigherPackTypeConversion ? higherPackOf(tx, target.productId) : null;
     let need = target.toReplenish;
     for (const source of replenishmentSources(tx, input.warehouseId, target.productId, settings.algorithmMethod)) {
       if (need <= 0) break;
       if (source.locationId === face) continue;
-      const qty = settings.onlyPickFullLp && source.lpId ? freeQty(source) : Math.min(need, freeQty(source));
-      plans.push({ productId: target.productId, source, qty, target: face });
-      need -= qty;
+      const free = freeQty(source);
+      // LP swap: the whole reserve LP is needed (or only full LPs may be picked), so the LP moves as is.
+      if (source.lpId && (settings.onlyPickFullLp || (settings.enableLpSwap && free <= need && free === source.onHand))) {
+        plans.push({ productId: target.productId, source, qty: free, target: face, packType: source.packType, toPackType: null, lpSwap: settings.enableLpSwap });
+        need -= free;
+        continue;
+      }
+      let take = Math.min(need, free);
+      // Pack-type conversion: pick full higher packs from reserve, break them down at the face.
+      if (higher && higher.packType !== source.packType && take >= higher.uomQty) {
+        const packs = Math.floor(take / higher.uomQty);
+        plans.push({ productId: target.productId, source, qty: packs, target: face, packType: higher.packType, toPackType: source.packType, lpSwap: false });
+        need -= packs * higher.uomQty;
+        take -= packs * higher.uomQty;
+        if (settings.pickFullPack || take <= 0) continue;
+      }
+      plans.push({ productId: target.productId, source, qty: take, target: face, packType: source.packType, toPackType: null, lpSwap: false });
+      need -= take;
     }
     if (need === target.toReplenish) skipped.push({ sku: target.sku, reason: "No reserve stock to replenish from" });
   }
@@ -105,7 +143,8 @@ export function createReplenishmentJob(tx: Tx, ctx: DomainCtx, input: CreateRepl
   plans.forEach((p, i) => {
     tx.insert(schema.tasks).values({
       taskNo: taskNo++, jobId: job.id, warehouseId: input.warehouseId, clientId: p.source.clientId, taskType: "Replenishment", status: "Pending",
-      priority: input.priority ?? "None", sequence: i + 1, productId: p.productId, packType: p.source.packType, plannedQty: p.qty,
+      priority: input.priority ?? "None", sequence: i + 1, productId: p.productId, packType: p.packType, toPackType: p.toPackType, plannedQty: p.qty,
+      lpSwap: p.lpSwap, packTypeConversionApplied: p.toPackType !== null,
       sourceLocationId: p.source.locationId, sourceLpId: p.source.lpId, targetLocationId: p.target, lotNumber: p.source.lotNumber,
       expiryDate: p.source.expiryDate, productionDate: p.source.productionDate, replenishmentPhase: phase, assigneeUserId: input.assigneeUserId ?? null,
       plannedStartAt: new Date(start).toISOString(), plannedFinishAt: new Date(start + (i + 1) * MINUTE_MS).toISOString(), createdBy: ctx.userId, updatedBy: ctx.userId,
@@ -113,6 +152,17 @@ export function createReplenishmentJob(tx: Tx, ctx: DomainCtx, input: CreateRepl
   });
   rollupJob(tx, ctx, job.id);
   return { jobId: job.id, taskCount: plans.length, skipped };
+}
+
+function lpSwapEnabled(tx: Tx, jobId: string | null): boolean {
+  if (!jobId) return false;
+  const row = tx.get<{ settings: string | null }>(sql`SELECT jt.settings AS settings FROM jobs j JOIN job_types jt ON jt.id = j.job_type_id WHERE j.id = ${jobId}`);
+  if (!row?.settings) return false;
+  try {
+    return parseSettings(jobTypeSettingsSchema, typeof row.settings === "string" ? JSON.parse(row.settings) : row.settings).replenishment.enableLpSwap;
+  } catch {
+    return false;
+  }
 }
 
 function sourceBucket(tx: Tx, task: TaskRow): InventoryRow {
@@ -131,25 +181,42 @@ export const executeReplenishment: TaskHandler = (tx, ctx, task, input): TaskExe
   assertExecutable(task);
   const remaining = task.plannedQty - task.actualQty;
   const bucket = sourceBucket(tx, task);
-  const qty = input.qty ?? Math.min(remaining, freeQty(bucket));
-  assertQty(qty, Math.min(remaining, freeQty(bucket)), "Replenished");
+  // A pack-converted task counts in its higher pack (e.g. Case of 24); the ledger moves units.
+  const per = task.productId && task.packType && task.packType !== bucket.packType ? unitsPerPack(tx, task.productId, task.packType) : 1;
+  const freePacks = Math.floor(freeQty(bucket) / per);
+  const qty = input.qty ?? Math.min(remaining, freePacks);
+  assertQty(qty, Math.min(remaining, freePacks), "Replenished");
+  const units = qty * per;
   const target = getLocation(tx, input.targetLocationId);
-  const lpSwap = Boolean(task.sourceLpId && input.targetLpId === undefined && qty === bucket.onHand && task.replenishmentPhase !== "Replenishment Pick Phase");
-  const toPackType = task.toPackType && task.toPackType !== task.packType ? task.toPackType : undefined;
-  if (qty > 0) {
+  // The API sends targetLpId null when none is chosen.
+  const lpSwap = Boolean(task.sourceLpId && !input.targetLpId && units === bucket.onHand
+    && (task.lpSwap || task.replenishmentPhase !== "Replenishment Pick Phase"));
+  const converted = Boolean(task.packTypeConversionApplied || (task.toPackType && task.toPackType !== task.packType));
+  const toPackType = task.toPackType && task.toPackType !== bucket.packType ? task.toPackType : undefined;
+  const toLpId = lpSwap ? bucket.lpId : input.targetLpId ?? null;
+  const lpHoldsOnlyThis = lpSwap && bucket.lpId
+    ? (tx.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM inventory WHERE lp_id = ${bucket.lpId} AND on_hand > 0 AND id <> ${bucket.id}`)?.n ?? 0) === 0
+    : false;
+  if (units > 0 && lpSwap && bucket.lpId && lpHoldsOnlyThis && !toPackType) {
+    // LP swap: the whole LP moves into the target location.
+    moveLp(tx, ctx, { lpId: bucket.lpId, toLocationId: target.id, type: "Replenishment", refs: { jobId: task.jobId, taskId: task.id } });
+  } else if (units > 0) {
     move(tx, ctx, {
-      inventoryId: bucket.id, qty, toLocationId: target.id, toLpId: lpSwap ? bucket.lpId : input.targetLpId ?? null, toPackType,
+      inventoryId: bucket.id, qty: units, toLocationId: target.id, toLpId: lpSwap && !lpHoldsOnlyThis ? null : toLpId, toPackType,
       type: "Replenishment", refs: { jobId: task.jobId, taskId: task.id },
     });
   }
-  completeTask(tx, ctx, task, { doneQty: qty, targetLocationId: target.id, targetLpId: input.targetLpId ?? null });
-  tx.update(schema.tasks).set({ lpSwap, packTypeConversionApplied: Boolean(toPackType) }).where(eq(schema.tasks.id, task.id)).run();
-  if (task.replenishmentPhase === "Replenishment Pick Phase" && qty > 0 && task.targetLocationId && task.targetLocationId !== target.id) {
+  completeTask(tx, ctx, task, { doneQty: qty, targetLocationId: target.id, targetLpId: toLpId });
+  tx.update(schema.tasks).set({ lpSwap, packTypeConversionApplied: converted }).where(eq(schema.tasks.id, task.id)).run();
+  if (task.replenishmentPhase === "Replenishment Pick Phase" && units > 0 && task.targetLocationId && task.targetLocationId !== target.id) {
+    // LP swap (job-type setting): units carried on an LP / tote are put away as the whole LP.
+    const putLpSwap = lpSwap || Boolean(toLpId && lpSwapEnabled(tx, task.jobId));
     tx.insert(schema.tasks).values({
       taskNo: nextTaskNo(tx), jobId: task.jobId, warehouseId: task.warehouseId, clientId: task.clientId, taskType: "Replenishment", status: "Pending",
-      priority: task.priority, sequence: task.sequence, productId: task.productId, packType: toPackType ?? task.packType, plannedQty: qty,
-      sourceLocationId: target.id, sourceLpId: input.targetLpId ?? null, targetLocationId: task.targetLocationId, lotNumber: task.lotNumber,
+      priority: task.priority, sequence: task.sequence, productId: task.productId, packType: task.toPackType ?? bucket.packType, plannedQty: units,
+      sourceLocationId: target.id, sourceLpId: toLpId, targetLocationId: task.targetLocationId, lotNumber: task.lotNumber,
       expiryDate: task.expiryDate, productionDate: task.productionDate, replenishmentPhase: "Replenishment Put Phase", assigneeUserId: task.assigneeUserId,
+      lpSwap: putLpSwap, packTypeConversionApplied: converted,
       plannedStartAt: task.plannedStartAt, plannedFinishAt: task.plannedFinishAt, createdBy: ctx.userId, updatedBy: ctx.userId,
     }).run();
   }

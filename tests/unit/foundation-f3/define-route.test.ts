@@ -37,7 +37,7 @@ async function json(res: Response): Promise<Record<string, unknown>> {
 }
 
 const listRoute = defineRoute({
-  permission: "settings.warehouse.view",
+  permission: "settings.warehouse.edit",
   handler: ({ db, grid }) => {
     const query = grid();
     const rows = db.select({ id: warehouses.id }).from(warehouses).all();

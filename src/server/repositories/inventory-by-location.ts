@@ -62,6 +62,8 @@ export interface BucketRow {
   readonly trackLot: number;
   readonly trackExpiry: number;
   readonly trackProductionDate: number;
+  /** Code of the open Lock Locations count plan covering this row's location, or null. */
+  readonly countLockPlan: string | null;
 }
 
 export interface BucketFilter {
@@ -97,7 +99,16 @@ export function bucketSql(filter: BucketFilter): SQL {
       mc.code AS "mobileCart",
       i.status AS "status", i.damage_reason AS "damageReason",
       i.received_at AS "receivedAt", i.production_date AS "productionDate",
-      p.track_lot AS "trackLot", p.track_expiry AS "trackExpiry", p.track_production_date AS "trackProductionDate"
+      p.track_lot AS "trackLot", p.track_expiry AS "trackExpiry", p.track_production_date AS "trackProductionDate",
+      (SELECT cp.code FROM count_plan_lines cl JOIN count_plans cp ON cp.id = cl.plan_id
+        WHERE cp.lock_locations = 1
+          AND cp.status IN ('Pending', 'Ready To Count', 'Count Started', 'Count Completed')
+          AND cl.status NOT IN ('Cancelled', 'Inventory Updated', 'Recount Created')
+          AND (cl.location_id = i.location_id
+            OR (cl.location_id IS NULL AND cl.product_id IS NOT NULL AND EXISTS (
+              SELECT 1 FROM inventory ci WHERE ci.location_id = i.location_id AND ci.product_id = cl.product_id
+                AND ci.warehouse_id = cp.warehouse_id AND ci.on_hand > 0)))
+        ORDER BY cp.created_at LIMIT 1) AS "countLockPlan"
     FROM inventory i
     JOIN products p ON p.id = i.product_id
     JOIN warehouses w ON w.id = i.warehouse_id
@@ -125,8 +136,18 @@ export function listBuckets(db: AppDb, auth: AuthContext, query: GridQuery): Gri
 
 /** One bucket in the user's full scope (cross-scope → 404). */
 export function getBucketRow(db: AppDb, auth: AuthContext, id: string): BucketRow {
-  const row = db.get<BucketRow>(sql`SELECT * FROM (${bucketSql({ warehouseIds: auth.scope.warehouseIds, clientIds: auth.scope.clientIds, ids: [id] })}) t`);
+  const row = findBucketRow(db, auth, id);
   if (!row) throw notFoundError("Inventory");
+  return row;
+}
+
+/**
+ * The bucket's grid row, or null when it no longer has stock (emptied by Remove all /
+ * Adjust to 0 / a transfer: the row leaves the grid, as in Logiwa) or does not exist.
+ */
+export function findBucketRow(db: AppDb, auth: AuthContext, id: string): BucketRow | null {
+  const row = db.get<BucketRow>(sql`SELECT * FROM (${bucketSql({ warehouseIds: auth.scope.warehouseIds, clientIds: auth.scope.clientIds, ids: [id] })}) t`);
+  if (!row) return null;
   assertInScope(auth.scope, row, "Inventory");
   return row;
 }
@@ -178,10 +199,13 @@ interface RawTxn extends Omit<BucketTransaction, "direction"> {
 
 function directionOf(t: RawTxn, bucketId: string): BucketTransaction["direction"] {
   if (t.fromInventoryId === bucketId && t.toInventoryId === bucketId) return "neutral";
-  if (t.toInventoryId === bucketId && t.fromInventoryId === null) return t.qty < 0 ? "out" : t.type === "Inventory Adjustment" || t.type === "Count" ? "adjust" : "in";
+  // Single-sided entries (adjustments, counts, receipts) carry a signed qty: + is in, − is out.
+  if (t.toInventoryId === bucketId && t.fromInventoryId === null) return t.qty < 0 ? "out" : "in";
   if (t.toInventoryId === bucketId) return "in";
   return "out";
 }
+
+export { directionOf as bucketTxnDirection };
 
 export function getBucketDetail(db: AppDb, auth: AuthContext, id: string): BucketDetail {
   const bucket = getBucketRow(db, auth, id);

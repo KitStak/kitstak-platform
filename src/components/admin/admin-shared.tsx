@@ -12,9 +12,10 @@ import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { apiRequest, isApiError } from "@/lib/api-client";
 import { useApiQuery } from "@/lib/query-client";
 import { useFormat } from "@/lib/format";
-import { usePermissionSet } from "@/lib/permissions-client";
+import { useMe, usePermissionSet } from "@/lib/permissions-client";
+import { useShell } from "@/components/layout/shell-context";
 import { cn } from "@/lib/utils";
-import { bulkSummary, sentenceCase, type AdminField } from "@/lib/grid-defs/admin/common";
+import { bulkSummary, prettyLogMessage, sentenceCase, type AdminField } from "@/lib/grid-defs/admin/common";
 import type { FilterFieldDef } from "@/components/grid";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
@@ -29,11 +30,35 @@ export interface Option {
 
 export const NO_PERMISSION = "You don't have permission for this action";
 
+/**
+ * Pure merge of the two permission sources: `/api/me` once it has loaded, otherwise the set the
+ * (app) layout resolved on the server for this request (`ShellProvider`). `/api/me` is a
+ * refresh, never a gate — CTAs and kebabs render enabled on first paint (SSR included, so no
+ * hydration mismatch). `loading` is true only when neither source is available.
+ */
+export function resolvePagePerms<A extends string>(
+  page: string,
+  actions: readonly A[],
+  live: { readonly permissions: ReadonlySet<string>; readonly isLoading: boolean },
+  seed: ReadonlySet<string> | null,
+): Readonly<Record<A, boolean>> & { readonly loading: boolean } {
+  const source = !live.isLoading ? live.permissions : seed;
+  const out = Object.fromEntries(actions.map((a) => [a, source?.has(`${page}.${a}`) ?? false])) as Record<A, boolean>;
+  return { ...out, loading: source === null };
+}
+
 /** Permission flags for one catalog page, e.g. `settings.users`. */
 export function usePagePerms<A extends string>(page: string, actions: readonly A[]): Readonly<Record<A, boolean>> & { readonly loading: boolean } {
-  const { permissions, isLoading } = usePermissionSet();
-  const out = Object.fromEntries(actions.map((a) => [a, permissions.has(`${page}.${a}`)])) as Record<A, boolean>;
-  return { ...out, loading: isLoading };
+  const live = usePermissionSet();
+  const { permissions: seed } = useShell();
+  return resolvePagePerms(page, actions, live, seed);
+}
+
+/** Signed-in user id: from `/api/me` when loaded, else the server-rendered shell session. */
+export function useMeId(): string | null {
+  const me = useMe();
+  const { user } = useShell();
+  return me.data?.data.user.id ?? user?.id ?? null;
 }
 
 const optionsSchema = z.object({
@@ -82,7 +107,9 @@ export function useAction(invalidate: readonly QueryKey[]) {
       setPending(true);
       try {
         const { data } = await apiRequest<T>(path, { method, body });
-        await Promise.all(invalidate.map((queryKey) => qc.invalidateQueries({ queryKey })));
+        // Reconcile in the background: callers close dialogs and patch rows as soon as the
+        // mutation succeeds instead of waiting on a full list refetch.
+        void Promise.all(invalidate.map((queryKey) => qc.invalidateQueries({ queryKey }))).catch(() => undefined);
         return data;
       } catch (error) {
         if (onError) onError(error);
@@ -95,6 +122,36 @@ export function useAction(invalidate: readonly QueryKey[]) {
     [qc, invalidate],
   );
   return { run, pending };
+}
+
+/**
+ * Optimistically patches every cached page of grid `gridKey` (`["grid", key, path, query]` →
+ * `{ data: T[], meta }`). `fn` maps the rows; removed rows also lower `meta.total`. The background
+ * invalidation in `useAction` reconciles with the server afterwards.
+ */
+export function useGridPatch<T extends { readonly id: string }>(gridKey: string) {
+  const qc = useQueryClient();
+  return React.useCallback((fn: (rows: readonly T[]) => T[]) => {
+    qc.setQueriesData<{ data: T[]; meta?: { total?: number } & Record<string, unknown> }>({ queryKey: ["grid", gridKey] }, (old) => {
+      if (!old || !Array.isArray(old.data)) return old;
+      const next = fn(old.data);
+      const removed = old.data.length - next.length;
+      const meta = old.meta && typeof old.meta.total === "number" && removed > 0 ? { ...old.meta, total: Math.max(0, old.meta.total - removed) } : old.meta;
+      return { ...old, data: next, meta };
+    });
+  }, [qc, gridKey]);
+}
+
+/**
+ * Destructive styling only while the action can actually run: a disabled Delete / Deactivate
+ * renders with the same neutral treatment as every other disabled control instead of a
+ * saturated red button or a red menu icon that looks enabled. Pass `selectedIds` for bulk
+ * actions (no selection or an ineligible one disarms it). PURE.
+ */
+export function armDestructive<A extends { readonly destructive?: boolean; readonly disabledReason?: string | null; readonly eligibility?: (ids: readonly string[]) => string | null }>(action: A, selectedIds?: readonly string[]): A {
+  if (!action.destructive) return action;
+  const blocked = Boolean(action.disabledReason) || (selectedIds !== undefined && (selectedIds.length === 0 || Boolean(action.eligibility?.(selectedIds))));
+  return blocked ? { ...action, destructive: false } : action;
 }
 
 /** "3 of 4 users activated · 1 failed" plus the first failure reasons. */
@@ -120,19 +177,32 @@ const TYPE_META = {
 } as const;
 
 const LOG_PAGE = 20;
+const LOG_SLOW_MS = 8000;
 
-export function EntityChangeLogDrawer({ open, onOpenChange, path, title }: { readonly open: boolean; readonly onOpenChange: (open: boolean) => void; readonly path: string | null; readonly title: string }) {
+
+/** Paged change-log timeline (used by the change-log drawer and in-drawer "Change log" tabs). */
+export function ChangeLogList({ path, enabled = true }: { readonly path: string | null; readonly enabled?: boolean }) {
   const fmt = useFormat();
   const [page, setPage] = React.useState(1);
-  const query = useApiQuery<unknown>(["admin-change-log", path ?? "", page], open && path ? path : null, { query: { page, ps: LOG_PAGE }, placeholderData: (p) => p, staleTime: 0 });
+  const query = useApiQuery<unknown>(["admin-change-log", path ?? "", page], enabled && path ? path : null, { query: { page, ps: LOG_PAGE }, placeholderData: (p) => p, staleTime: 0 });
   const parsed = z.array(logEntry).safeParse(query.data?.data);
   const rows = parsed.success ? parsed.data : [];
   const total = query.data?.meta?.total ?? rows.length;
   const pages = Math.max(1, Math.ceil(total / LOG_PAGE));
+  const [slow, setSlow] = React.useState(false);
+  const loading = query.isPending && enabled && Boolean(path);
+  React.useEffect(() => {
+    if (!loading) { setSlow(false); return undefined; }
+    const t = window.setTimeout(() => setSlow(true), LOG_SLOW_MS);
+    return () => window.clearTimeout(t);
+  }, [loading]);
   return (
-    <Drawer open={open} onOpenChange={(o) => { if (!o) setPage(1); onOpenChange(o); }} title={title} description="Every create, edit and delete with who made it and when." width={45}>
+    <>
       {query.isPending ? (
-        <SkeletonTable rows={6} columns={4} />
+        <div className="flex flex-col gap-3" role="status" aria-live="polite">
+          <p className="text-[12px] text-secondary">{slow ? "The history is taking longer than usual." : "Loading the history…"}{slow ? <> <button type="button" className="font-semibold text-primary hover:underline" onClick={() => void query.refetch()}>Retry</button></> : null}</p>
+          <SkeletonTable rows={6} columns={4} />
+        </div>
       ) : query.isError ? (
         <EmptyState title="Couldn't load the change log" description={query.error.message} action={<Button onClick={() => void query.refetch()}>Retry</Button>} compact />
       ) : rows.length === 0 ? (
@@ -149,15 +219,15 @@ export function EntityChangeLogDrawer({ open, onOpenChange, path, title }: { rea
                   <div className="min-w-0 flex-1">
                     {r.type === "Update" && r.fieldLabel ? (
                       <p className="break-words text-[13px] text-body">
-                        <span className="font-medium">{r.fieldLabel}</span>{" "}
+                        <span className="font-medium">{r.fieldLabel} changed:</span>{" "}
                         {r.fromValue ? <span className="text-faint line-through decoration-faint/60">{r.fromValue}</span> : null}
                         {r.fromValue ? <span className="mx-1 text-faint">→</span> : null}
                         <span className="font-medium text-foreground">{r.toValue || "—"}</span>
                       </p>
                     ) : (
-                      <p className="text-[13px] text-body">{r.message}</p>
+                      <p className="text-[13px] text-body">{prettyLogMessage(r.message)}</p>
                     )}
-                    <p className="mt-0.5 text-[11px] text-faint">{fmt.dateTime(r.at)} · {r.source}</p>
+                    <p className="mt-0.5 text-[11px] text-faint">{fmt.gridDateTime(r.at)} · {r.source}</p>
                   </div>
                 </li>
               );
@@ -173,6 +243,15 @@ export function EntityChangeLogDrawer({ open, onOpenChange, path, title }: { rea
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+export function EntityChangeLogDrawer({ open, onOpenChange, path, title }: { readonly open: boolean; readonly onOpenChange: (open: boolean) => void; readonly path: string | null; readonly title: string }) {
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange} title={title} description="Every create, edit and delete with who made it and when." width={45}>
+      {/* key resets paging when the record changes */}
+      <ChangeLogList key={path ?? ""} path={path} enabled={open} />
     </Drawer>
   );
 }
@@ -218,4 +297,12 @@ export function StatRow({ stats }: { readonly stats: readonly { readonly label: 
       ))}
     </div>
   );
+}
+
+/**
+ * Header action placeholder while `/api/me` (permissions) is pending: a neutral skeleton the
+ * size of a button, so a not-yet-known permission never renders as a filled primary button.
+ */
+export function PermissionPending({ width = 104, label = "Checking permissions" }: { readonly width?: number; readonly label?: string }) {
+  return <span role="status" aria-label={label} className="inline-block h-8 animate-pulse rounded-md bg-neutral-soft" style={{ width }} />;
 }

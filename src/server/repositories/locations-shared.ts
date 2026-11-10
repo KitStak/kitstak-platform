@@ -10,13 +10,14 @@ import type { AppDb } from "@/server/api/db";
 import { AppError, notFoundError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
 import { hasWarehouse, scopedWhere } from "@/server/auth/scope";
-import { recordCreate, recordDelete, recordUpdate } from "@/server/domain/change-log";
+import { diffRows } from "@/server/domain/change-log";
+import { changeChannel, changeSourceUser, FACILITY_ENTITY_LABELS, facilityEntityName, facilityFieldLabel, facilityUpdateMessage, normalizeChangeRow, type CapacityChange } from "@/lib/grid-defs/facility/change-log-copy";
 import type { DomainCtx } from "@/server/domain/types";
 import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/server/query/filters";
 import type { GridQuery, SortSpec } from "@/server/query/grid-query";
 import { compileSort } from "@/server/query/sort";
-import { changeLog } from "@/server/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { changeLog, users } from "@/server/db/schema";
+import { desc, eq, inArray } from "drizzle-orm";
 import type { FacilityField } from "@/lib/grid-defs/facility/common";
 
 export type Actor = { readonly userId: string | null; readonly source: string };
@@ -95,19 +96,53 @@ export interface LogRef {
   readonly entityType: string;
   readonly entityId: string;
   readonly entityCode: string;
+  /**
+   * The record's warehouse. Stored on Delete rows (as the parent warehouse) so the audit trail of
+   * a deleted record stays reachable and is authorized against that warehouse (critic R5, REQ-R4-2).
+   */
+  readonly warehouseId?: string | null;
+}
+
+const refCols = (ref: LogRef) => ({ entityType: ref.entityType, entityId: ref.entityId, entityCode: ref.entityCode });
+
+/*
+ * M10 writes its own change_log rows with the same shape as the Foundation writers
+ * (`@/server/domain/change-log`), but with M10 entity names and field labels ("LP Type X is
+ * created.", "Locked", "Max SKU qty") and "(blank)" for an empty side. REQ-R9-1 asks Foundation
+ * to adopt the same labels so every module reads alike.
+ */
+type ChangeInsert = typeof changeLog.$inferInsert;
+
+function insertChanges(tx: AppDb, ctx: DomainCtx, rows: readonly Omit<ChangeInsert, "userId" | "source">[]): number {
+  if (rows.length === 0) return 0;
+  tx.insert(changeLog).values(rows.map((r) => ({ ...r, userId: ctx.userId, source: ctx.source }))).run();
+  return rows.length;
 }
 
 export function logCreate(tx: AppDb, ctx: DomainCtx, ref: LogRef): void {
-  recordCreate(tx, ctx, ref);
+  insertChanges(tx, ctx, [{ ...refCols(ref), type: "Create", message: `${facilityEntityName(ref.entityType, ref.entityCode)} is created.` }]);
 }
 
 export function logDelete(tx: AppDb, ctx: DomainCtx, ref: LogRef): void {
-  recordDelete(tx, ctx, ref);
+  insertChanges(tx, ctx, [{
+    ...refCols(ref),
+    ...(ref.warehouseId ? { parentEntityType: "warehouse", parentEntityId: ref.warehouseId } : {}),
+    type: "Delete",
+    message: `${facilityEntityName(ref.entityType, ref.entityCode)} is deleted.`,
+  }]);
 }
 
 /** Field-level diff of two *display* snapshots (ids already resolved to codes). */
 export function logUpdate(tx: AppDb, ctx: DomainCtx, ref: LogRef, before: Readonly<Record<string, unknown>>, after: Readonly<Record<string, unknown>>): number {
-  return recordUpdate(tx, ctx, { ...ref, before, after });
+  return insertChanges(tx, ctx, diffRows(ref.entityType, before, after).map((c) => {
+    const label = facilityFieldLabel(c.field);
+    return { ...refCols(ref), type: "Update" as const, field: c.field, fieldLabel: label, fromValue: c.from, toValue: c.to, message: facilityUpdateMessage(label, c.from, c.to) };
+  }));
+}
+
+/** One row per added / edited / removed capacity line on a location (critic R4: capacity was never audited). */
+export function logCapacityChanges(tx: AppDb, ctx: DomainCtx, ref: LogRef, changes: readonly CapacityChange[]): number {
+  return insertChanges(tx, ctx, changes.map((c) => ({ ...refCols(ref), type: c.type, field: c.field, fieldLabel: c.fieldLabel, fromValue: c.from, toValue: c.to, message: c.message })));
 }
 
 /** Resolves FK ids to human codes before diffing, so the change log never shows UUIDs. */
@@ -125,7 +160,7 @@ export function resolveIds(db: AppDb, table: "locations" | "warehouses" | "clien
 export function listEntityChangeLog(db: AppDb, entityType: string, entityId: string, page: number, pageSize: number) {
   const where = and(eq(changeLog.entityType, entityType), eq(changeLog.entityId, entityId));
   const total = db.select({ n: sql<number>`count(*)` }).from(changeLog).where(where).get()?.n ?? 0;
-  const rows = db.select().from(changeLog).where(where).orderBy(desc(changeLog.at), desc(changeLog.id)).limit(pageSize).offset((Math.max(1, page) - 1) * pageSize).all();
+  const rows = db.select().from(changeLog).where(where).orderBy(desc(changeLog.at), sql`(${changeLog.type} = 'Delete') DESC`, sql`${changeLog}.rowid ASC`).limit(pageSize).offset((Math.max(1, page) - 1) * pageSize).all();
   return { rows, total };
 }
 
@@ -138,10 +173,55 @@ export const changeLogPageSchema = z.object({
   ps: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-/** Module change-log endpoint body: paged rows (newest first) with list meta. */
-export function changeLogResult(db: AppDb, entityType: string, entityId: string, query: z.output<typeof changeLogPageSchema>) {
+/**
+ * Module change-log endpoint body: paged rows (newest first) with list meta. Each row is
+ * normalized (one label per field across old and new rows) and carries `userName` and
+ * `channel` (UI / Import / Integration / Workflow / System: Logiwa's SOURCE column).
+ */
+export function changeLogResult(db: AppDb, entityType: string, entityId: string, query: z.output<typeof changeLogPageSchema>, extraMeta: Readonly<Record<string, unknown>> = {}) {
   const { rows, total } = listEntityChangeLog(db, entityType, entityId, query.page, query.ps);
-  return listResult(rows, { total, page: query.page, pageSize: query.ps });
+  const ids = [...new Set(rows.map((r) => r.userId).filter((v): v is string => Boolean(v)))];
+  const names = new Map(ids.length > 0 ? db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(inArray(users.id, ids)).all().map((u) => [u.id, u.name || u.email] as const) : []);
+  const out = rows.map((r) => ({
+    ...(entityType in FACILITY_ENTITY_LABELS ? normalizeChangeRow(r) : r),
+    userName: (r.userId ? names.get(r.userId) : undefined) ?? changeSourceUser(r.source),
+    channel: changeChannel(r.source),
+  }));
+  return listResult(out, { ...extraMeta, total, page: query.page, pageSize: query.ps });
+}
+
+/** `meta.created` for the drawer's provenance line: the record's own created date and creator. */
+function createdMeta(db: AppDb, live: unknown): Record<string, unknown> {
+  if (!live || typeof live !== "object") return {};
+  const rec = live as { createdAt?: unknown; createdBy?: unknown };
+  if (typeof rec.createdAt !== "string") return {};
+  const by = typeof rec.createdBy === "string" && rec.createdBy
+    ? db.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, rec.createdBy)).get()
+    : undefined;
+  return { created: { at: rec.createdAt, by: by ? by.name || by.email : null } };
+}
+
+/**
+ * Change log of a record that may have been deleted. While the record exists, `loadLive` does the
+ * usual scope check. Once it is gone, the stored audit rows are still returned, authorized against
+ * the warehouse recorded on the Delete row; Delete rows written before that warehouse was recorded
+ * are visible to admins only.
+ */
+export function changeLogResultOrDeleted(
+  db: AppDb, auth: AuthContext, entityType: string, entityId: string, query: z.output<typeof changeLogPageSchema>, loadLive: () => unknown,
+) {
+  let extra: Record<string, unknown> = {};
+  try {
+    extra = createdMeta(db, loadLive());
+  } catch (error) {
+    if (!(error instanceof AppError) || error.code !== "NOT_FOUND") throw error;
+    const del = db.select({ parentType: changeLog.parentEntityType, parentId: changeLog.parentEntityId }).from(changeLog)
+      .where(and(eq(changeLog.entityType, entityType), eq(changeLog.entityId, entityId), eq(changeLog.type, "Delete"))).get();
+    if (!del) throw error;
+    const allowed = del.parentType === "warehouse" && del.parentId ? hasWarehouse(auth.scope, del.parentId) : auth.user.role === "admin";
+    if (!allowed) throw error;
+  }
+  return changeLogResult(db, entityType, entityId, query, extra);
 }
 
 /**
@@ -150,4 +230,12 @@ export function changeLogResult(db: AppDb, entityType: string, entityId: string,
  */
 export function qc(column: SQLiteColumn): SQL {
   return sql.raw(`"${getTableName(column.table)}"."${column.name}"`);
+}
+
+/** Re-exported from the dependency-free leaf module (see custom-field-sql.ts for why). */
+export { customFieldSql, CUSTOM_FIELD_SORT_KEYS } from "./custom-field-sql";
+
+/** Flattens `{ textBox1: "x" }` into `{ "customField.textBox1": "x" }` for change-log diffs and exports. */
+export function flattenCustomFields(values: Readonly<Record<string, unknown>> | null | undefined): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(values ?? {}).map(([k, v]) => [`customField.${k}`, v]));
 }

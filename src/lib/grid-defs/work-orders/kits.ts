@@ -16,6 +16,8 @@ export interface KitInventoryRow {
   readonly kitProductId: string;
   readonly warehouseId: string;
   readonly warehouseCode: string;
+  /** IANA zone of the warehouse ("Last updated" is shown in it, with a suffix). */
+  readonly warehouseTimeZone?: string | null;
   readonly clientId: string;
   readonly clientName: string;
   readonly sku: string;

@@ -7,7 +7,7 @@
  */
 import * as React from "react";
 import { useWatch, type UseFormReturn } from "react-hook-form";
-import { Box, Eye, MoreHorizontal, Pencil, Plus, Printer, Search, Trash2 } from "lucide-react";
+import { Box, Download, Eye, MoreHorizontal, Pencil, Plus, Printer, Search, Trash2 } from "lucide-react";
 import { ProductCreateDrawer } from "@/components/products/product-create-drawer";
 import { PrintOptionsModal } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -20,10 +20,11 @@ import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
 import { apiRequest } from "@/lib/api-client";
 import { useFormat } from "@/lib/format";
+import { calendarDay } from "@/lib/grid-defs/receiving/po-schemas";
 import { errorMessage, ProductThumb, type ProductInfo, useCan } from "../receiving-shared";
 import { LineEditorDrawer } from "./line-editor-drawer";
 import { PoProductSearch } from "./po-product-search";
-import { linesQty, newLineKey, skuCount, type LineDraft, type PoFormValues } from "./po-form-model";
+import { linesCsv, linesQty, newLineKey, skuCount, type LineDraft, type PoFormValues } from "./po-form-model";
 
 export async function fetchProductInfo(id: string): Promise<ProductInfo | null> {
   const { data } = await apiRequest<ProductInfo[]>("/api/purchase-orders/products", { query: { ids: id } });
@@ -66,7 +67,9 @@ export function PoLinesTable({ lines, selected, onToggle, onToggleAll, onShow, o
   const all = lines.length > 0 && lines.every((l) => selected.has(l.key));
   const dash = <span className="text-faint">—</span>;
   return (
-    <div className="overflow-x-auto rounded-lg border border-border ks-scroll">
+    // `relative`: the scroller is the containing block of the checkboxes' absolutely positioned
+    // form inputs, so they never widen the document (page-level horizontal scroll).
+    <div className="relative max-w-full overflow-x-auto rounded-lg border border-border ks-scroll">
       <table className="w-full border-collapse">
         <thead>
           <tr>
@@ -95,10 +98,10 @@ export function PoLinesTable({ lines, selected, onToggle, onToggleAll, onShow, o
               <td className={TD}>{l.packType}</td>
               <td className={TD}>{l.uom}</td>
               <td className={`${TD} text-right tabular-nums`}>{(l.orderedQuantity * ratioOf(l)).toLocaleString()}</td>
-              <td className={TD}>{l.expiryDate ? fmt.date(l.expiryDate) : dash}</td>
+              <td className={TD}>{l.expiryDate ? fmt.date(calendarDay(l.expiryDate)) : dash}</td>
               <td className={TD}>{l.lpTypeCode ?? dash}</td>
               <td className={TD}>{l.lpNumber ?? dash}</td>
-              <td className={TD}>{l.productionDate ? fmt.date(l.productionDate) : dash}</td>
+              <td className={TD}>{l.productionDate ? fmt.date(calendarDay(l.productionDate)) : dash}</td>
               <td className={TD}>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -119,7 +122,21 @@ export function PoLinesTable({ lines, selected, onToggle, onToggleAll, onShow, o
   );
 }
 
-export function StepProducts({ form, readOnly }: { readonly form: UseFormReturn<PoFormValues>; readonly readOnly: boolean }) {
+/** Saves the given lines as `<name>-lines.csv`. */
+function downloadLines(lines: readonly LineDraft[], name: string) {
+  const BOM = String.fromCharCode(0xfeff); // Excel opens UTF-8 CSV correctly with a BOM.
+  const blob = new Blob([BOM + linesCsv(lines)], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${name.replace(/[^A-Za-z0-9._-]+/g, "_") || "purchase-order"}-lines.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+export function StepProducts({ form, readOnly, exportName }: { readonly form: UseFormReturn<PoFormValues>; readonly readOnly: boolean; /** Edit mode: shows Export (Logiwa parity), file named after the PO. */ readonly exportName?: string }) {
   const fmt = useFormat();
   const lines = useWatch({ control: form.control, name: "lines" });
   const clientId = useWatch({ control: form.control, name: "clientId" });
@@ -131,6 +148,8 @@ export function StepProducts({ form, readOnly }: { readonly form: UseFormReturn<
   const [createOpen, setCreateOpen] = React.useState(false);
   const [labels, setLabels] = React.useState<readonly unknown[] | null>(null);
   const linesError = form.formState.errors.lines?.message ?? form.formState.errors.lines?.root?.message;
+  // Leaving the step clears the "added" toast so it can't cover Step 3's actions.
+  React.useEffect(() => () => toast.dismiss("po-line-saved"), []);
 
   const shown = find.trim() ? lines.filter((l) => l.sku.toLowerCase().includes(find.trim().toLowerCase())) : lines;
   const setLines = (next: LineDraft[]) => form.setValue("lines", next, { shouldDirty: true, shouldValidate: true });
@@ -147,9 +166,11 @@ export function StepProducts({ form, readOnly }: { readonly form: UseFormReturn<
 
   const apply = (line: LineDraft) => {
     const exists = lines.some((l) => l.key === line.key);
-    setLines(exists ? lines.map((l) => (l.key === line.key ? line : l)) : [...lines, line]);
+    setLines(exists ? lines.map((l) => (l.key === line.key ? line : l)) : [line, ...lines]);
     setEditing(null);
-    toast.success("Success", exists ? `${line.sku} updated.` : `${line.sku} added to the purchase order.`);
+    // One short-lived toast (replaced, not stacked) so it never lingers over the Next button on
+    // the following step; the toaster's bottom-right position is shared (REQ-R2-20).
+    toast.success("Success", exists ? `${line.sku} updated.` : `${line.orderedQuantity.toLocaleString()} product with SKU ${line.sku} added successfully.`, { id: "po-line-saved", duration: 2500 });
   };
 
   const remove = (line: LineDraft) => {
@@ -188,6 +209,23 @@ export function StepProducts({ form, readOnly }: { readonly form: UseFormReturn<
         <div className="w-full max-w-[260px]">
           <TextField size="sm" value={find} onChange={(e) => setFind(e.target.value)} onClear={() => setFind("")} placeholder="Find PO detail by SKU" leading={<Search className="h-3.5 w-3.5 text-faint" aria-hidden />} aria-label="Find PO detail by SKU" />
         </div>
+        {exportName ? (
+          <DisabledReason reason={lines.length === 0 ? "There are no lines to export" : null}>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={lines.length === 0}
+              onClick={() => {
+                const picked = lines.filter((l) => selected.has(l.key));
+                downloadLines(picked.length ? picked : lines, exportName);
+                toast.success("Success", `${(picked.length || lines.length).toLocaleString()} line${(picked.length || lines.length) === 1 ? "" : "s"} exported.`);
+              }}
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              Export
+            </Button>
+          </DisabledReason>
+        ) : null}
         <DisabledReason reason={selected.size === 0 ? "Select at least one line" : null}>
           <Button variant="secondary" size="sm" disabled={selected.size === 0} onClick={printLabels}>
             <Printer className="h-3.5 w-3.5" aria-hidden />

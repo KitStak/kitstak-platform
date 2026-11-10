@@ -2,10 +2,12 @@
 
 /** Receiving History grid: the 34 Logiwa columns (all visible by default) plus a cancelled marker on Master Id. */
 import type { ColumnDef } from "@tanstack/react-table";
-import { ImageIcon } from "lucide-react";
+import { ExternalLink, ImageIcon } from "lucide-react";
 import { DATE_TIME_COLUMN_WIDTH, DateCell, LinkCell } from "@/components/grid/cells";
 import { Badge } from "@/components/ui/badge";
-import { ProductThumb } from "./receiving-shared";
+import { calendarDay } from "@/lib/grid-defs/receiving/po-schemas";
+import { receivingTypeLabel } from "@/lib/grid-defs/receiving/receiving-types";
+import { ProductThumb, ZonedTime } from "./receiving-shared";
 
 export interface ReceiptRow {
   readonly id: string;
@@ -55,15 +57,19 @@ export interface ReceiptRow {
   readonly cancelledAt: string | null;
   readonly cancelledBy: string | null;
   readonly cancelBlockedReason: string | null;
+  /** Warehouse IANA time zone (module date-time rule). */
+  readonly timeZone?: string;
 }
 
 const dash = <span className="text-faint">—</span>;
-const text = (v: unknown) => (v === null || v === undefined || v === "" ? dash : <span className="truncate">{String(v)}</span>);
+const text = (v: unknown) => (v === null || v === undefined || v === "" ? dash : <span className="truncate" title={String(v)}>{String(v)}</span>);
 type Col = ColumnDef<ReceiptRow, unknown>;
 const plain = (id: keyof ReceiptRow & string, header: string, size = 140, sortable = true): Col => ({ id, accessorKey: id, header, size, enableSorting: sortable, cell: ({ getValue }) => text(getValue()) });
 const date = (id: keyof ReceiptRow & string, header: string, dateOnly = false): Col => ({
-  id, accessorKey: id, header, size: dateOnly ? 120 : DATE_TIME_COLUMN_WIDTH, minSize: dateOnly ? 110 : DATE_TIME_COLUMN_WIDTH,
-  cell: ({ getValue }) => <DateCell value={getValue() as string | null} dateOnly={dateOnly} />,
+  id, accessorKey: id, header, size: dateOnly ? 120 : DATE_TIME_COLUMN_WIDTH + 28, minSize: dateOnly ? 110 : DATE_TIME_COLUMN_WIDTH,
+  // Date-only values (expiry / production) render as their calendar day, never shifted by the viewer's time zone;
+  // instants render in the warehouse zone, labelled (the module's one date-time rule).
+  cell: ({ getValue, row }) => (dateOnly ? <DateCell value={calendarDay(getValue() as string | null)} dateOnly /> : <ZonedTime value={getValue() as string | null} timeZone={row.original.timeZone} />),
 });
 const num = (id: keyof ReceiptRow & string, header: string): Col => ({
   id, accessorKey: id, header, size: 104, meta: { align: "right" }, cell: ({ getValue }) => <span className="tabular-nums">{Number(getValue() ?? 0).toLocaleString()}</span>,
@@ -78,13 +84,32 @@ export function buildReceiptColumns(openReceipt: (row: ReceiptRow) => void): Col
           <button type="button" onClick={(e) => { e.stopPropagation(); openReceipt(row.original); }} className="rounded font-medium tabular-nums text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
             {row.original.masterId}
           </button>
-          {row.original.cancelledAt ? <Badge tone="danger" size="sm">Cancelled</Badge> : null}
+          <a
+            href={`/reports/serial-numbers/receiving-history?f.receiptId=eq:${row.original.masterId}`}
+            target="_blank"
+            rel="noopener"
+            onClick={(e) => e.stopPropagation()}
+            title="Serial numbers of this receipt (Serial Number Receiving History, new tab)"
+            aria-label={`Serial numbers of receipt ${row.original.masterId} (opens in a new tab)`}
+            className="rounded text-faint hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
+            <ExternalLink className="h-3 w-3" aria-hidden />
+          </a>
         </span>
       ),
     },
     {
-      id: "poCode", accessorKey: "poCode", header: "PO number", size: 140,
-      cell: ({ row }) => (row.original.purchaseOrderId && row.original.poCode ? <LinkCell href={`/receiving/${row.original.purchaseOrderId}`}>{row.original.poCode}</LinkCell> : dash),
+      id: "status", accessorKey: "cancelledAt", header: "Status", size: 108, minSize: 100, enableSorting: false, meta: { clip: false, headerTip: "Cancelled receipts were reversed; their stock was taken back out." },
+      cell: ({ row }) => (row.original.cancelledAt ? <Badge tone="danger" size="sm">Cancelled</Badge> : <Badge tone="success" size="sm">Received</Badge>),
+    },
+    {
+      // Where the receipt came from (Logiwa Receiving History: Purchase Order / Inventory Add / Return / Work Order …).
+      id: "type", accessorKey: "type", header: "Receiving type", size: 150, minSize: 130, meta: { clip: false, headerTip: "What created this receipt. Only Purchase Order receipts carry a PO number and PO type." },
+      cell: ({ row }) => <Badge tone={row.original.type === "Purchase Order" ? "info" : "neutral"} size="sm">{receivingTypeLabel(row.original.type)}</Badge>,
+    },
+    {
+      id: "poCode", accessorKey: "poCode", header: "PO number", size: 200, minSize: 140,
+      cell: ({ row }) => (row.original.purchaseOrderId && row.original.poCode ? <span className="block min-w-0 truncate" title={row.original.poCode}><LinkCell href={`/receiving/${row.original.purchaseOrderId}`}>{row.original.poCode}</LinkCell></span> : dash),
     },
     plain("poType", "PO type", 140),
     plain("sku", "SKU", 150),
@@ -101,7 +126,6 @@ export function buildReceiptColumns(openReceipt: (row: ReceiptRow) => void): Col
     plain("uomPackType", "UOM pack type", 120),
     num("uomQuantity", "UOM quantity"),
     date("receivedAt", "Receiving date"),
-    plain("type", "Receiving type", 140),
     {
       id: "skuDetailsUpdated", accessorKey: "skuDetailsUpdated", header: "SKU details updated", size: 150, meta: { clip: false },
       cell: ({ getValue }) => (getValue() ? <Badge tone="success" size="sm">Yes</Badge> : <Badge tone="neutral" size="sm">No</Badge>),

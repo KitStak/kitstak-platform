@@ -9,7 +9,7 @@ const row = (over: Partial<PoRow>): PoRow => ({
   id: "1", code: "PO1", vendorId: null, vendorName: "V", referenceNumber: null, purchasePrice: 0, totalQuantity: 10, receivedQuantity: 0, status: "Pending",
   rawStatus: "Pending", poType: "Purchase Order", tags: [], poDate: null, clientId: "c", clientName: "C", warehouseId: "w", warehouseName: "W",
   createdAt: "", plannedReceivingDate: null, receivedAt: null, plannedArrivalDate: null, actualArrivalDate: null, activeReceipts: 0, version: 1,
-  receivingLocationCode: null, ...over,
+  receivingLocationCode: null, receiveAllBlockedReason: null, ...over,
 });
 
 describe("PO wizard model", () => {
@@ -54,7 +54,8 @@ describe("receiving rules", () => {
 
   it("bulk guards explain why an action is unavailable", () => {
     expect(cancelReason([row({ status: "Completed" })])).toMatch(/Only Pending or Started/);
-    expect(cancelReason([row({ activeReceipts: 1 })])).toMatch(/Cancel its receipts first/);
+    // A Started PO with receipts is short-closed by Cancel order (round 7), never blocked.
+    expect(cancelReason([row({ status: "Started", activeReceipts: 1 })])).toBeNull();
     expect(receiveReason([row({ status: "Started" })])).toBeNull();
     expect(deleteReason([row({ receivedQuantity: 2 })])).toMatch(/without receipts/);
     expect(deleteReason([row({})])).toBeNull();

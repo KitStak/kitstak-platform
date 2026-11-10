@@ -53,7 +53,13 @@ import { exportProvider as integrationLogs } from "./providers/integration-logs"
 import { exportProvider as integrationMonitoring } from "./providers/integration-monitoring";
 import { exportProvider as carrierErrors } from "./providers/carrier-errors";
 import { exportProvider as reportChannelSales } from "./providers/report-channel-sales";
+import { exportProvider as reportInventoryAging } from "./providers/report-inventory-aging";
+import { exportProvider as reportLocationUtilization } from "./providers/report-location-utilization";
+import { exportProvider as reportOrderLines } from "./providers/report-order-lines";
+import { exportProvider as putawayWorklist } from "./providers/putaway-worklist";
 import { exportProvider as reportSerialNumbers } from "./providers/report-serial-numbers";
+import { exportProvider as reportSerialShipments } from "./providers/report-serial-shipments";
+import { exportProvider as reportSerialReceipts } from "./providers/report-serial-receipts";
 import { exportProvider as reportOrderInventory } from "./providers/report-order-inventory";
 import { exportProvider as reportReplenishment } from "./providers/report-replenishment";
 import { exportProvider as reportInventorySnapshot } from "./providers/report-inventory-snapshot";
@@ -148,7 +154,13 @@ const PROVIDERS: ReadonlyMap<string, ExportProvider | null> = new Map<string, Ex
   ["carrier-errors-rate-call", carrierErrorsRateCall],
   ["carrier-errors-void-label", carrierErrorsVoidLabel],
   ["report-channel-sales", reportChannelSales],
+  ["report-inventory-aging", reportInventoryAging],
+  ["report-location-utilization", reportLocationUtilization],
+  ["report-order-lines", reportOrderLines],
+  ["putaway-worklist", putawayWorklist],
   ["report-serial-numbers", reportSerialNumbers],
+  ["report-serial-shipments", reportSerialShipments],
+  ["report-serial-receipts", reportSerialReceipts],
   ["report-order-inventory", reportOrderInventory],
   ["report-replenishment", reportReplenishment],
   ["report-inventory-snapshot", reportInventorySnapshot],

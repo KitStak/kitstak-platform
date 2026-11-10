@@ -12,6 +12,7 @@ import {
   GRID_FILTER_OPS,
   LABEL_FORMATS,
   MARKUP_TYPES,
+  MATCH_MODES,
   RULE_COMPARATORS,
   SORT_DIRECTIONS,
 } from "./enums";
@@ -37,6 +38,22 @@ export const ruleConditionSchema = z.object({
   value: conditionValueSchema,
 });
 export type RuleCondition = z.infer<typeof ruleConditionSchema>;
+
+/**
+ * A nested AND/OR group of rule conditions (workflows). A condition list may mix plain
+ * conditions and groups: `[A, {group:"Any", conditions:[B, C]}]` with top-level match All
+ * reads "A AND (B OR C)". Plain `RuleCondition[]` lists stay valid.
+ */
+export const ruleConditionGroupSchema = z.object({
+  group: z.enum(MATCH_MODES),
+  conditions: z.array(ruleConditionSchema).min(1, "Add at least one condition to the group").max(20),
+});
+export type RuleConditionGroup = z.infer<typeof ruleConditionGroupSchema>;
+export const ruleConditionNodeSchema = z.union([ruleConditionGroupSchema, ruleConditionSchema]);
+export type RuleConditionNode = RuleCondition | RuleConditionGroup;
+export function isConditionGroup(node: RuleConditionNode): node is RuleConditionGroup {
+  return typeof node === "object" && node !== null && "group" in node && Array.isArray((node as RuleConditionGroup).conditions);
+}
 
 export const orderByClauseSchema = z.object({
   field: z.string().min(1),
@@ -87,6 +104,8 @@ export const jobTypeSettingsSchema = z.object({
   count: z.object({
     oneByOneCount: off, autoUpdateNoDifferenceLines: off, instantCount: off,
     lockLocationForInstantCount: off, autoFillTrackingAttributes: off,
+    /** Counters don't see the system quantity (count sheet / quick count hide it). */
+    blindCount: off,
   }).prefault({}),
   replenishment: z.object({
     algorithmMethod: z.enum(["FEFO", "FIFO", "LIFO"]).default("FEFO"),
@@ -120,6 +139,8 @@ export const clientSettingsSchema = z.object({
     keepReceivingDateOnInventory: off, allowUniqueSkuBarcodes: off, keepPoNumberOnInventory: off,
     receivingPhysicalAttributeVerification: off,
   }).prefault({}),
+  /** Logiwa Edit Client › Others "SSCC18 Barcode Creation" (M11 writes it; M10 builds SSCC-18 from it). */
+  sscc: z.object({ extensionDigit: z.string(), gs1CompanyPrefix: z.string(), serialNumber: z.string() }).partial().optional(),
 });
 export type ClientSettings = z.infer<typeof clientSettingsSchema>;
 /** Stored form: any subset of the switches (column default `{}`). */

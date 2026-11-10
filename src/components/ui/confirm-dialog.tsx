@@ -178,7 +178,7 @@ export function ConfirmDialog({
                   }}
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-8 rounded-md border border-border-strong/70 bg-surface px-2.5 text-[13px] text-body focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
+                  className="h-8 rounded-md border border-border-strong/70 bg-surface px-2.5 text-[13px] text-body focus:border-info focus:outline-none focus:ring-2 focus:ring-info/25"
                 />
               </div>
             ) : null}

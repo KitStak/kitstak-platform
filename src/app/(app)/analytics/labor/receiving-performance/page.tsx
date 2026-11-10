@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { PageSkeleton } from "@/components/layout/shell-skeleton";
+import { AnalyticsSkeleton } from "@/components/analytics/analytics-skeleton";
 import { AnalyticsPage } from "@/components/analytics/analytics-page";
 
 export const metadata: Metadata = { title: "Receiving Performance Analysis" };
@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Receiving Performance Analysis" };
 /** Filters live in the URL (useSearchParams), so the page renders inside Suspense. */
 export default function Page() {
   return (
-    <Suspense fallback={<PageSkeleton />}>
+    <Suspense fallback={<AnalyticsSkeleton />}>
       <AnalyticsPage group="labor" page="receiving-performance" />
     </Suspense>
   );

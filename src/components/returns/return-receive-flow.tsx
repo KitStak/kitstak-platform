@@ -15,21 +15,23 @@ import { beepDone, beepError, beepOk } from "@/components/packing/scan-feedback"
 import { uploadFile } from "@/components/shared/upload-file";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Card } from "@/components/ui/card";
 import { Kbd } from "@/components/ui/kbd";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Select } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { StatusPill } from "@/components/ui/status-pill";
 import { TextField } from "@/components/ui/text-field";
 import { toast } from "@/components/ui/toast";
-import { apiRequest } from "@/lib/api-client";
+import { ApiError, apiRequest } from "@/lib/api-client";
 import { useShortcut } from "@/lib/keyboard";
 import { useMe } from "@/lib/permissions-client";
 import { cn } from "@/lib/utils";
-import { ReturnItemList } from "./return-items";
-import { addManualProduct, applyScan, itemsFromRma, itemsPayload, totals, updateItem, validateItems, type CaptureItem, type ItemErrors } from "./return-station-model";
+import { ReturnItemList, useReturnRules } from "./return-items";
+import { addManualProduct, applyScan, itemsFromRma, itemsPayload, shortAfterReceive, totals, updateItem, validateItems, type CaptureItem, type ItemErrorField, type ItemErrors } from "./return-station-model";
 import type { ReturnDetail } from "./return-types";
-import { errorText, useInvalidateReturns, useLookupOptions } from "./returns-client";
+import { errorText, useApplyStationKpis, useInvalidateReturns, useLookupOptions, type StationKpis } from "./returns-client";
 import { ShippedOrderPicker } from "./shipped-order-picker";
 
 export interface StationContext {
@@ -48,18 +50,90 @@ interface Candidate {
 
 interface ReceiveResult {
   readonly returnOrderId: string; readonly rmaCode: string; readonly status: string; readonly receivedQty: number; readonly receiptIds: readonly string[]; readonly notified: number;
+  readonly kpis?: StationKpis;
 }
 
-interface ResolvedProduct { readonly id: string; readonly sku: string; readonly name: string; readonly imageUrl: string | null }
+interface ResolvedProduct {
+  readonly id: string; readonly sku: string; readonly name: string; readonly imageUrl: string | null;
+  readonly trackLot?: boolean; readonly trackExpiry?: boolean; readonly trackProductionDate?: boolean; readonly trackSerial?: boolean;
+}
+
+/**
+ * Server field errors (`items.<i>.<field>`, index into the posted items = rows with quantity > 0)
+ * mapped back onto the capture rows, so the failing lot / serial / disposition is highlighted.
+ */
+export function mapServerItemErrors(items: readonly CaptureItem[], fieldErrors: Readonly<Record<string, readonly string[]>>): ItemErrors {
+  const posted = items.filter((i) => i.quantity > 0);
+  const out: Record<string, Partial<Record<ItemErrorField, string>>> = {};
+  for (const [path, msgs] of Object.entries(fieldErrors)) {
+    const m = /^items\.(\d+)\.(\w+)$/.exec(path);
+    const row = m ? posted[Number(m[1])] : undefined;
+    if (!m || !row || !msgs[0]) continue;
+    const field = (["quantity", "damageReasonId", "lotNumber", "expiryDate", "productionDate", "serials", "disposition", "packType", "productId"] as const).find((f) => f === m[2]) ?? "productId";
+    out[row.key] = { ...out[row.key], [field]: msgs[0] };
+  }
+  return out;
+}
 
 function placement(s: StationContext) {
   return { stationLocationId: s.stationId, targetLocationId: s.targetLpId ? null : s.targetLocationId, targetLpId: s.targetLpId };
 }
 
-async function uploadPhotos(returnOrderId: string, photos: Readonly<Record<string, File>>): Promise<number> {
+
+const INFLIGHT_KEY = "kitstaks.returns.inflight";
+export interface InflightReceive { readonly returnOrderId: string; readonly rmaCode: string; readonly at: string }
+
+/** A receive the page was closed during (its outcome is unknown until the RMA is checked). */
+export function readInflightReceive(): InflightReceive | null {
+  try {
+    const raw = window.sessionStorage.getItem(INFLIGHT_KEY);
+    return raw ? (JSON.parse(raw) as InflightReceive) : null;
+  } catch {
+    return null;
+  }
+}
+export function clearInflightReceive(): void {
+  try { window.sessionStorage.removeItem(INFLIGHT_KEY); } catch { /* storage blocked */ }
+}
+function markInflight(v: InflightReceive): void {
+  try { window.sessionStorage.setItem(INFLIGHT_KEY, JSON.stringify(v)); } catch { /* storage blocked */ }
+}
+
+/** Warns before leaving the page while a receive is being committed. */
+function useCommitGuard(active: boolean) {
+  React.useEffect(() => {
+    if (!active) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [active]);
+}
+
+/** Blocking progress state while the receipt posts (prevents double scans). */
+function CommitOverlay({ label }: { readonly label: string }) {
+  return (
+    <div role="alertdialog" aria-modal="true" aria-live="assertive" aria-label={label} className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[1px]">
+      <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-5 py-4 shadow-lg">
+        <Spinner className="h-5 w-5" label={label} />
+        <div>
+          <p className="text-[14px] font-semibold text-foreground">{label}</p>
+          <p className="text-[12px] text-secondary">Posting the receipt. Keep this page open.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+/** Photo file name carries the SKU ("MLT-WIDGET · photo.jpg") so the RMA's Photos tab groups it by line. */
+export function photoFileName(sku: string, name: string): string {
+  return `${sku} · ${name}`.slice(0, 200);
+}
+
+async function uploadPhotos(returnOrderId: string, photos: Readonly<Record<string, File>>, items: readonly CaptureItem[]): Promise<number> {
   let failed = 0;
-  for (const file of Object.values(photos)) {
+  for (const [key, raw] of Object.entries(photos)) {
     try {
+      const sku = items.find((i) => i.key === key)?.sku;
+      const file = sku ? new File([raw], photoFileName(sku, raw.name), { type: raw.type }) : raw;
       const fileId = await uploadFile(file, "attachment", { entityType: "return_order", entityId: returnOrderId });
       await apiRequest("/api/attachments", { method: "POST", body: { entityType: "return_order", entityId: returnOrderId, documentType: "Other", fileId } });
     } catch {
@@ -113,14 +187,26 @@ function Totals({ items }: { readonly items: readonly CaptureItem[] }) {
 
 /* ------------------------------------------------------------- with RMA */
 
-export function ReturnWithRma({ station, initialCode, onExit }: { readonly station: StationContext; readonly initialCode?: string | null; readonly onExit: () => void }) {
+export function ReturnWithRma({ station, initialCode, onExit, onSwitchWarehouse }: {
+  readonly station: StationContext; readonly initialCode?: string | null; readonly onExit: () => void;
+  /** Offered when the code matches an RMA in another warehouse the user can access. */
+  readonly onSwitchWarehouse?: (warehouseId: string, code: string) => void;
+}) {
+  const [elsewhere, setElsewhere] = React.useState<{ readonly warehouseId: string; readonly warehouseCode: string; readonly code: string } | null>(null);
   const invalidate = useInvalidateReturns();
+  const applyKpis = useApplyStationKpis();
   const lookupRef = React.useRef<ScanFieldHandle>(null);
   const itemRef = React.useRef<ScanFieldHandle>(null);
   const [lookupBusy, setLookupBusy] = React.useState(false);
   const [lookupError, setLookupError] = React.useState<string | null>(null);
   const [candidates, setCandidates] = React.useState<readonly Candidate[] | null>(null);
   const [rma, setRma] = React.useState<ReturnDetail | null>(null);
+  // After an RMA loads, the item field mounts in the next commit: focus it then, so the
+  // lookup field's own "keep focus for the next scan" cannot win the race.
+  const loadedRmaId = rma?.id ?? null;
+  React.useEffect(() => {
+    if (loadedRmaId) requestAnimationFrame(() => itemRef.current?.focus());
+  }, [loadedRmaId]);
   const [itemError, setItemError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState<"complete" | "partial" | null>(null);
   const [result, setResult] = React.useState<ReceiveResult | null>(null);
@@ -128,6 +214,9 @@ export function ReturnWithRma({ station, initialCode, onExit }: { readonly stati
   const cap = useCapture();
   const damage = useLookupOptions("damage_reason", rma?.clientId);
   const reasons = useLookupOptions("return_reason", rma?.clientId);
+  const rules = useReturnRules();
+  const [shortConfirm, setShortConfirm] = React.useState<{ readonly total: number; readonly lines: readonly { readonly sku: string; readonly short: number }[] } | null>(null);
+  const [shortReason, setShortReason] = React.useState("");
 
   const load = React.useCallback(async (id: string) => {
     const { data } = await apiRequest<ReturnDetail>(`/api/returns/${id}`);
@@ -141,9 +230,19 @@ export function ReturnWithRma({ station, initialCode, onExit }: { readonly stati
   const lookup = async (code: string) => {
     setLookupBusy(true);
     setLookupError(null);
+    setElsewhere(null);
     try {
       const { data } = await apiRequest<readonly Candidate[]>("/api/returns/lookup", { query: { warehouseId: station.warehouseId, code } });
-      if (data.length === 0) throw new Error(`No return found for "${code}" in this warehouse.`);
+      if (data.length === 0) {
+        // Not here: say where it is, so the operator can switch instead of hitting a dead end.
+        const other = await apiRequest<readonly { warehouseId: string; warehouseCode: string }[]>("/api/returns/lookup/elsewhere", { query: { code } }).then((r) => r.data).catch(() => []);
+        const hit = other.find((o) => o.warehouseId !== station.warehouseId);
+        if (hit) {
+          setElsewhere({ warehouseId: hit.warehouseId, warehouseCode: hit.warehouseCode, code });
+          throw new Error(`"${code}" is a return for warehouse ${hit.warehouseCode}, not this one.`);
+        }
+        throw new Error(`No return found for "${code}" in this warehouse.`);
+      }
       const receivable = data.filter((c) => c.receivable);
       if (receivable.length === 1 && data.length === 1) await load(receivable[0]?.id ?? "");
       else if (receivable.length === 0) throw new Error(data[0]?.reason ?? "This return can't be received.");
@@ -166,6 +265,12 @@ export function ReturnWithRma({ station, initialCode, onExit }: { readonly stati
     if (!rma) return;
     let out = applyScan(cap.items, code);
     if (!out.ok) {
+      // Show the miss at once; an alternate barcode resolved by the server below clears it.
+      const firstError = out.error;
+      beepError();
+      itemRef.current?.flash("error");
+      setItemError(firstError);
+      toast.error("Wrong item", firstError);
       try {
         const { data } = await apiRequest<ResolvedProduct | null>("/api/returns/products", { query: { clientId: rma.clientId, code } });
         if (data) {
@@ -179,10 +284,7 @@ export function ReturnWithRma({ station, initialCode, onExit }: { readonly stati
       }
     }
     if (!out.ok) {
-      beepError();
-      itemRef.current?.flash("error");
       setItemError(out.error);
-      toast.error("Wrong item", out.error);
       return;
     }
     beepOk();
@@ -192,20 +294,33 @@ export function ReturnWithRma({ station, initialCode, onExit }: { readonly stati
     cap.setHighlight(out.key);
   };
 
-  const submit = async (complete: boolean) => {
+  const submit = async (complete: boolean, shortClose = false) => {
     if (!rma) return;
-    const v = validateItems(cap.items);
+    const v = validateItems(cap.items, rules);
     cap.setErrors(v.errors);
     if (v.message) { setSubmitError(v.message); beepError(); return; }
+    // Completing with units still expected closes them as short: never on one stray F9.
+    const short = shortAfterReceive(cap.items);
+    if (complete && !shortClose && short.total > 0) { setShortReason(""); setShortConfirm(short); return; }
+    setShortConfirm(null);
     setSaving(complete ? "complete" : "partial");
     setSubmitError(null);
+    // Marked until the server answers: a reload in between shows "check this RMA" (a retry is safe,
+    // the server rejects receiving more than is left).
+    markInflight({ returnOrderId: rma.id, rmaCode: rma.rmaCode, at: new Date().toISOString() });
     try {
       const { data } = await apiRequest<ReceiveResult>("/api/returns/receive", {
-        method: "POST", body: { returnOrderId: rma.id, ...placement(station), items: itemsPayload(cap.items, true), complete },
+        method: "POST",
+        body: { returnOrderId: rma.id, ...placement(station), items: itemsPayload(cap.items, true), complete, shortClose, shortCloseReason: shortClose ? shortReason.trim() || null : null },
       });
-      const failedPhotos = await uploadPhotos(rma.id, cap.photos);
-      if (failedPhotos) toast.warning("Some photos weren't saved", `${failedPhotos} photo${failedPhotos === 1 ? "" : "s"} failed to upload. Add them from the RMA.`);
-      await invalidate();
+      // The receipt is committed: show success now; photos upload in the background.
+      const photos = cap.photos;
+      const captured = cap.items;
+      void uploadPhotos(rma.id, photos, captured).then((failedPhotos) => {
+        if (failedPhotos) toast.warning("Some photos weren't saved", `${failedPhotos} photo${failedPhotos === 1 ? "" : "s"} failed to upload. Add them from the RMA's Photos & documents tab.`);
+      });
+      applyKpis(station.warehouseId, data.kpis);
+      void invalidate();
       if (!complete && data.status !== "Completed") {
         toast.success("Progress saved", `${data.receivedQty} unit${data.receivedQty === 1 ? "" : "s"} received on ${data.rmaCode}. Status: ${data.status}.`);
         await load(rma.id);
@@ -214,13 +329,18 @@ export function ReturnWithRma({ station, initialCode, onExit }: { readonly stati
       setResult(data);
     } catch (e) {
       beepError();
+      if (e instanceof ApiError && Object.keys(e.fieldErrors).length) cap.setErrors(mapServerItemErrors(cap.items, e.fieldErrors));
+      if (e instanceof ApiError && e.fieldErrors.shortClose) { setShortReason(""); setShortConfirm(shortAfterReceive(cap.items)); }
       setSubmitError(errorText(e, "The return could not be received."));
     } finally {
+      clearInflightReceive();
       setSaving(null);
     }
   };
 
-  useShortcut("F9", (e) => { e.preventDefault(); if (rma && !saving) void submit(true); }, { enabled: Boolean(rma) && !result, allowInInputs: true, description: "Complete the return", group: "Return station" });
+  useShortcut("F9", (e) => { e.preventDefault(); if (rma && !saving && !shortConfirm) void submit(true); }, { enabled: Boolean(rma) && !result, allowInInputs: true, description: "Complete the return", group: "Return station" });
+
+  useCommitGuard(Boolean(saving));
 
   const startOver = () => { setResult(null); setRma(null); setCandidates(null); cap.reset(); setSubmitError(null); setItemError(null); requestAnimationFrame(() => lookupRef.current?.focus()); };
 
@@ -234,7 +354,13 @@ export function ReturnWithRma({ station, initialCode, onExit }: { readonly stati
       </div>
       <Card className="p-4">
         <ScanField ref={lookupRef} id="rma-lookup" label="RMA, order code or tracking number" onScan={lookup} busy={lookupBusy} error={lookupError} autoFocus={!rma}
-          hint="Scan the return label, the packing slip or type the RMA code." size={rma ? "md" : "lg"} />
+          hint="Scan the return label, the packing slip or type the RMA code." size={rma ? "md" : "lg"} onValueChange={() => { if (lookupError) setLookupError(null); if (elsewhere) setElsewhere(null); }} />
+        {elsewhere && onSwitchWarehouse ? (
+          <Callout variant="info" title={`Found in ${elsewhere.warehouseCode}`} className="mt-3"
+            action={<Button size="sm" variant="primary" onClick={() => onSwitchWarehouse(elsewhere.warehouseId, elsewhere.code)}>Switch to {elsewhere.warehouseCode}</Button>}>
+            Switching changes the receiving warehouse and its return station, then loads this return.
+          </Callout>
+        ) : null}
         {candidates ? (
           <div className="mt-3 space-y-1.5" role="listbox" aria-label="Matching returns">
             <p className="text-[12px] font-medium text-body">{candidates.length} returns match. Choose one:</p>
@@ -269,6 +395,18 @@ export function ReturnWithRma({ station, initialCode, onExit }: { readonly stati
             </>
           )}
           {submitError ? <Callout variant="error" title="Not received">{submitError}</Callout> : null}
+          {saving ? <CommitOverlay label={saving === "complete" ? `Completing ${rma.rmaCode}…` : `Saving ${rma.rmaCode}…`} /> : null}
+          <ConfirmDialog open={Boolean(shortConfirm)} onOpenChange={(o) => { if (!o) setShortConfirm(null); }} variant="attention"
+            title={shortConfirm ? `Close ${rma.rmaCode} as short?` : "Close as short?"}
+            description={shortConfirm ? <>{shortConfirm.total} unit{shortConfirm.total === 1 ? "" : "s"} not received will be closed as short. The RMA moves to Completed; a supervisor can reopen it from the RMA to receive the rest. To keep it open, choose <strong>Save progress</strong> instead.</> : null}
+            records={shortConfirm ? { columns: [{ key: "sku", label: "SKU" }, { key: "short", label: "Not received" }], rows: shortConfirm.lines.map((l) => ({ sku: l.sku, short: l.short })) } : undefined}
+            confirmLabel="Close as short" cancelLabel="Keep receiving"
+            onConfirm={() => submit(true, true)}>
+            <label className="mt-1 flex flex-col gap-1 text-[12px] font-medium text-body" htmlFor="short-close-reason">
+              Reason (optional)
+              <TextField id="short-close-reason" className="h-9 w-full" value={shortReason} maxLength={300} placeholder="e.g. Customer kept 2 units" onChange={(ev) => setShortReason(ev.target.value)} />
+            </label>
+          </ConfirmDialog>
           <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 border-t border-border bg-surface py-3">
             <Button variant="ghost" onClick={startOver} disabled={Boolean(saving)}>Scan another RMA</Button>
             <Button variant="secondary" onClick={() => void submit(false)} disabled={Boolean(saving) || cap.items.length === 0}><Save className="h-3.5 w-3.5" aria-hidden />{saving === "partial" ? "Saving…" : "Save progress"}</Button>
@@ -290,6 +428,7 @@ export function ReturnWithRma({ station, initialCode, onExit }: { readonly stati
 export function ReturnManually({ station, onExit }: { readonly station: StationContext; readonly onExit: () => void }) {
   const me = useMe();
   const invalidate = useInvalidateReturns();
+  const applyKpis = useApplyStationKpis();
   const clients = me.data?.data.contextOptions.clients ?? [];
   const [clientId, setClientId] = React.useState<string | null>(me.data?.data.context.clientId ?? null);
   const [order, setOrder] = React.useState<{ id: string; code: string } | null>(null);
@@ -349,17 +488,21 @@ export function ReturnManually({ station, onExit }: { readonly station: StationC
         method: "POST",
         body: { warehouseId: station.warehouseId, clientId, shipmentOrderId: order?.id ?? null, customerName: customerName.trim() || null, note: note.trim() || null, ...placement(station), items: itemsPayload(cap.items, false) },
       });
-      const failed = await uploadPhotos(data.returnOrderId, cap.photos);
-      if (failed) toast.warning("Some photos weren't saved", "Add them from the RMA.");
-      await invalidate();
+      const photos = cap.photos;
+      void uploadPhotos(data.returnOrderId, photos, cap.items).then((failed) => { if (failed) toast.warning("Some photos weren't saved", "Add them from the RMA's Photos & documents tab."); });
+      applyKpis(station.warehouseId, data.kpis);
+      void invalidate();
       setResult(data);
     } catch (e) {
       beepError();
+      if (e instanceof ApiError && Object.keys(e.fieldErrors).length) cap.setErrors(mapServerItemErrors(cap.items, e.fieldErrors));
       setSubmitError(errorText(e, "The manual return could not be saved."));
     } finally {
       setSaving(false);
     }
   };
+
+  useCommitGuard(saving);
 
   useShortcut("F9", (e) => { e.preventDefault(); if (!saving) void submit(); }, { enabled: cap.items.length > 0 && !result, allowInInputs: true, description: "Complete the return", group: "Return station" });
 
@@ -409,6 +552,7 @@ export function ReturnManually({ station, onExit }: { readonly station: StationC
         </>
       ) : null}
       {submitError ? <Callout variant="error" title="Not saved">{submitError}</Callout> : null}
+      {saving ? <CommitOverlay label="Completing manual return…" /> : null}
       <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-surface py-3">
         <Button variant="ghost" onClick={onExit} disabled={saving}>Cancel</Button>
         <Button variant="primary" onClick={() => void submit()} disabled={saving || cap.items.length === 0}><ClipboardCheck className="h-3.5 w-3.5" aria-hidden />{saving ? "Saving…" : "Complete manual return"}<Kbd className="ml-1 border-white/30 bg-white/15 text-white shadow-none">F9</Kbd></Button>

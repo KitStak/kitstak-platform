@@ -4,15 +4,17 @@
  * the caller's scope is NOT_FOUND. Mutations live in `purchase-orders-commands.ts`.
  */
 import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { trackingIssues } from "@/lib/grid-defs/receiving/po-schemas";
 import { displayPoStatus, PO_GRID_FIELDS, PO_SEARCH_FIELDS, PO_SORT_FIELDS } from "@/lib/grid-defs/receiving/purchase-orders";
 import type { AppDb } from "@/server/api/db";
 import { notFoundError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
 import { assertInScope, scopedWhere, type Scope } from "@/server/auth/scope";
 import * as schema from "@/server/db/schema";
-import { stateMachines } from "@/server/domain";
+import { canChangePoStatus, nextPoStatuses } from "./po-status-rules";
 import type { GridQuery } from "@/server/query/grid-query";
 import { compileGrid, tagFilter, type GridSpec } from "./purchase-orders-grid";
+import { preAdvisedByLine, preAdvisedCounts, type PreAdvisedSerial } from "./purchase-orders-serials";
 import { getVendor, type VendorDetail } from "./vendors";
 
 const po = schema.purchaseOrders;
@@ -75,9 +77,30 @@ export interface PurchaseOrderRow {
   readonly actualArrivalDate: string | null;
   readonly activeReceipts: number;
   readonly version: number;
+  /** The warehouse's IANA time zone: every time in the module renders in it, labelled. */
+  readonly warehouseTimeZone: string;
   /** Warehouse default receiving location (bulk Receive PO target). */
   readonly receivingLocationCode: string | null;
+  /**
+   * Why a one-click "Receive PO" (full receive into the default location) can't run: an
+   * open line is lot / expiry / production / serial tracked without a preset value. Null
+   * when Receive PO can run (status permitting).
+   */
+  readonly receiveAllBlockedReason: string | null;
+  /** Serial numbers pre-advised on the PO's lines (Import Serial Numbers; Remove Serial Number). */
+  readonly preAdvisedSerials: number;
 }
+
+/** Status modal reason for Cancelled on a PO with receipts (the menu's Cancel order short-closes it). */
+export const SHORT_CLOSE_HINT = "This order has received stock, so it can't become Cancelled. Choose Completed to close it, or use Other actions › Cancel order to cancel the open balance and keep the received stock.";
+
+export const RECEIVE_ALL_TRACKED_REASON = "Lot, expiry and serial tracked lines must be received with Receive items";
+
+/** Cheap pre-filter: an open line of a tracked product a full receive can't fill. */
+const TRACKED_OPEN_SQL: SQL = sql`EXISTS (SELECT 1 FROM purchase_order_lines tl JOIN products tp ON tp.id = tl.product_id
+  WHERE tl.purchase_order_id = ${po.id} AND tl.received_quantity < tl.ordered_quantity
+    AND (tp.track_serial = 1 OR (tp.track_lot = 1 AND tl.lot_number IS NULL) OR (tp.track_expiry = 1 AND tl.expiry_date IS NULL)
+      OR (tp.track_production_date = 1 AND tl.production_date IS NULL)))`;
 
 const SELECT = {
   id: po.id, code: po.code, vendorId: po.vendorId, vendorName: sql<string>`${VENDOR_SQL}`, referenceNumber: po.referenceNumber,
@@ -86,7 +109,9 @@ const SELECT = {
   warehouseName: sql<string>`${WAREHOUSE_NAME_SQL}`, createdAt: po.createdAt, plannedReceivingDate: po.plannedReceivingDate,
   receivedAt: po.receivedAt, plannedArrivalDate: po.plannedArrivalDate, actualArrivalDate: po.actualArrivalDate,
   activeReceipts: sql<number>`${ACTIVE_RECEIPTS_SQL}`, version: po.version,
+  warehouseTimeZone: sql<string>`COALESCE((SELECT w.timezone FROM warehouses w WHERE w.id = ${po.warehouseId}), 'UTC')`,
   receivingLocationCode: sql<string | null>`(SELECT l.code FROM warehouses w JOIN locations l ON l.id = w.default_receiving_location_id WHERE w.id = ${po.warehouseId})`,
+  trackedOpen: sql<number>`${TRACKED_OPEN_SQL}`,
 };
 
 export function tagsFor(db: AppDb, entityType: string, ids: readonly string[]): Map<string, TagChip[]> {
@@ -99,22 +124,51 @@ export function tagsFor(db: AppDb, entityType: string, ids: readonly string[]): 
   return out;
 }
 
-function shape(rows: readonly Omit<PurchaseOrderRow, "status" | "tags">[], tags: Map<string, TagChip[]>): PurchaseOrderRow[] {
-  return rows.map((r) => ({ ...r, status: displayPoStatus(r.rawStatus), tags: tags.get(r.id) ?? [] }));
+/**
+ * Per PO, why a full receive (Receive PO) can't post: the first open tracked line without
+ * a preset lot / expiry / production date, or any serial-tracked line. Applies the
+ * warehouse receiving screen config exactly as `receiveAll` does.
+ */
+export function receiveAllBlockers(db: AppDb, poIds: readonly string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  if (poIds.length === 0) return out;
+  const p = schema.products;
+  const rows = db.select({
+    poId: line.purchaseOrderId, warehouseId: po.warehouseId, sku: p.sku, ordered: line.orderedQuantity, received: line.receivedQuantity, ratio: line.uomQuantity,
+    lotNumber: line.lotNumber, expiryDate: line.expiryDate, productionDate: line.productionDate,
+    lot: p.trackLot, expiry: p.trackExpiry, production: p.trackProductionDate, serial: p.trackSerial,
+  }).from(line).innerJoin(po, eq(po.id, line.purchaseOrderId)).innerJoin(p, eq(p.id, line.productId))
+    .where(and(inArray(line.purchaseOrderId, [...poIds]), sql`${line.receivedQuantity} < ${line.orderedQuantity}`))
+    .orderBy(asc(line.createdAt), sql`"purchase_order_lines".rowid`).all();
+  for (const r of rows) {
+    if (out.has(r.poId) || !(r.lot || r.expiry || r.production || r.serial)) continue;
+    const req = receivingRequirements(db, r.warehouseId, { lot: Boolean(r.lot), expiry: Boolean(r.expiry), production: Boolean(r.production), serial: Boolean(r.serial) });
+    const issues = trackingIssues({ quantity: r.ordered - r.received, lotNumber: r.lotNumber, expiryDate: r.expiryDate, productionDate: r.productionDate, serials: [], uomRatio: r.ratio }, req, r.sku);
+    if (Object.keys(issues).length > 0) out.set(r.poId, `${RECEIVE_ALL_TRACKED_REASON} (${r.sku}).`);
+  }
+  return out;
+}
+
+type BaseRow = Omit<PurchaseOrderRow, "status" | "tags" | "receiveAllBlockedReason" | "preAdvisedSerials"> & { readonly trackedOpen: number | boolean };
+
+function shape(db: AppDb, rows: readonly BaseRow[], tags: Map<string, TagChip[]>): PurchaseOrderRow[] {
+  const blockers = receiveAllBlockers(db, rows.filter((r) => Boolean(r.trackedOpen)).map((r) => r.id));
+  const serials = preAdvisedCounts(db, rows.map((r) => r.id));
+  return rows.map(({ trackedOpen: _tracked, ...r }) => ({ ...r, status: displayPoStatus(r.rawStatus), tags: tags.get(r.id) ?? [], receiveAllBlockedReason: blockers.get(r.id) ?? null, preAdvisedSerials: serials.get(r.id) ?? 0 }));
 }
 
 export function listPurchaseOrders(db: AppDb, auth: AuthContext, query: GridQuery, extra: readonly (SQL | undefined)[] = []): { rows: PurchaseOrderRow[]; total: number } {
   const { where, orderBy } = compileGrid(SPEC, query, [scopedWhere(po, auth.viewScope), ...extra]);
   const total = db.select({ n: sql<number>`count(*)` }).from(po).where(where).get()?.n ?? 0;
   const base = db.select(SELECT).from(po).where(where).orderBy(...orderBy).limit(query.pageSize).offset((query.page - 1) * query.pageSize).all();
-  return { rows: shape(base, tagsFor(db, "purchase_order", base.map((r) => r.id))), total };
+  return { rows: shape(db, base, tagsFor(db, "purchase_order", base.map((r) => r.id))), total };
 }
 
 /** Rows for a set of ids (bulk confirm tables, labels); scoped. */
 export function purchaseOrdersByIds(db: AppDb, scope: Scope, ids: readonly string[]): PurchaseOrderRow[] {
   if (ids.length === 0) return [];
   const base = db.select(SELECT).from(po).where(and(inArray(po.id, [...ids]), scopedWhere(po, scope))).all();
-  return shape(base, tagsFor(db, "purchase_order", base.map((r) => r.id)));
+  return shape(db, base, tagsFor(db, "purchase_order", base.map((r) => r.id)));
 }
 
 export interface PurchaseOrderLineRow {
@@ -143,10 +197,13 @@ export interface PurchaseOrderLineRow {
   readonly note: string | null;
   readonly tracking: { readonly lot: boolean; readonly expiry: boolean; readonly production: boolean; readonly serial: boolean };
   readonly version: number;
+  /** Pre-advised serials (Import PO Serial Numbers), in import order. */
+  readonly preAdvisedSerials: readonly PreAdvisedSerial[];
 }
 
 export function linesFor(db: AppDb, poId: string): PurchaseOrderLineRow[] {
   const p = schema.products;
+  const serials = preAdvisedByLine(db, poId);
   return db.select({
     id: line.id, productId: line.productId, sku: p.sku, productName: p.name, barcode: p.barcode, imageUrl: p.imageUrl, uom: p.uom,
     packType: line.packType, uomQuantity: line.uomQuantity, orderedQuantity: line.orderedQuantity, receivedQuantity: line.receivedQuantity,
@@ -155,11 +212,12 @@ export function linesFor(db: AppDb, poId: string): PurchaseOrderLineRow[] {
     lotNumber: line.lotNumber, expiryDate: line.expiryDate, productionDate: line.productionDate, lpTypeId: line.lpTypeId,
     lpTypeCode: sql<string | null>`(SELECT t.code FROM lp_types t WHERE t.id = ${line.lpTypeId})`, lpNumber: line.lpNumber, note: line.note,
     trackLot: p.trackLot, trackExpiry: p.trackExpiry, trackProduction: p.trackProductionDate, trackSerial: p.trackSerial, version: line.version,
-  }).from(line).innerJoin(p, eq(p.id, line.productId)).where(eq(line.purchaseOrderId, poId)).orderBy(asc(line.createdAt), asc(p.sku)).all()
+  }).from(line).innerJoin(p, eq(p.id, line.productId)).where(eq(line.purchaseOrderId, poId)).orderBy(asc(line.createdAt), sql`"purchase_order_lines".rowid`).all()
     .map(({ trackLot, trackExpiry, trackProduction, trackSerial, ...r }) => ({
       ...r,
       totalPrice: Math.round(r.orderedQuantity * r.unitCost * 100) / 100,
       tracking: { lot: Boolean(trackLot), expiry: Boolean(trackExpiry), production: Boolean(trackProduction), serial: Boolean(trackSerial) },
+      preAdvisedSerials: serials.get(r.id) ?? [],
     }));
 }
 
@@ -176,6 +234,8 @@ export interface PurchaseOrderDetail extends PurchaseOrderRow {
   readonly attachmentCount: number;
   /** Status machine targets for the manual status pencil. */
   readonly allowedStatuses: readonly string[];
+  /** Why each manual status (Pending / Started / Completed / Cancelled) is unavailable; null when allowed or current. */
+  readonly statusReasons: Readonly<Record<string, string | null>>;
 }
 
 export function getPurchaseOrder(db: AppDb, scope: Scope, id: string): PurchaseOrderDetail {
@@ -183,7 +243,7 @@ export function getPurchaseOrder(db: AppDb, scope: Scope, id: string): PurchaseO
     .from(po).where(eq(po.id, id)).get();
   if (!base) throw notFoundError("Purchase order");
   assertInScope(scope, base, "Purchase order");
-  const [row] = shape([base], tagsFor(db, "purchase_order", [id]));
+  const [row] = shape(db, [base], tagsFor(db, "purchase_order", [id]));
   const wh = db.select({ code: schema.warehouses.code, recv: schema.warehouses.defaultReceivingLocationId }).from(schema.warehouses).where(eq(schema.warehouses.id, base.warehouseId)).get();
   const recv = wh?.recv ? db.select({ id: schema.locations.id, code: schema.locations.code }).from(schema.locations).where(eq(schema.locations.id, wh.recv)).get() ?? null : null;
   const clientCode = db.select({ code: schema.clients.code }).from(schema.clients).where(eq(schema.clients.id, base.clientId)).get()?.code ?? "";
@@ -198,11 +258,21 @@ export function getPurchaseOrder(db: AppDb, scope: Scope, id: string): PurchaseO
   const attachmentCount = db.select({ n: sql<number>`count(*)` }).from(schema.attachments)
     .where(and(eq(schema.attachments.entityType, "purchase_order"), eq(schema.attachments.entityId, id))).get()?.n ?? 0;
   const ctx = { activeReceipts: base.activeReceipts };
-  const allowedStatuses = stateMachines.purchaseOrder.nextStatuses(base.rawStatus)
-    .filter((s) => s !== "Receiving" && stateMachines.purchaseOrder.canTransition(base.rawStatus, s, ctx).ok);
+  const allowedStatuses = nextPoStatuses(base.rawStatus)
+    .filter((s) => s !== "Receiving" && canChangePoStatus(base.rawStatus, s, ctx).ok);
+  // One state machine answers for the status modal and the Other actions menu alike: the
+  // reason each manual status is unavailable (null = allowed, or the current status).
+  const current = base.rawStatus === "Receiving" ? "Started" : base.rawStatus;
+  const statusReasons = Object.fromEntries((["Pending", "Started", "Completed", "Cancelled"] as const).map((s) => {
+    if (s === current) return [s, null];
+    const check = canChangePoStatus(base.rawStatus, s, ctx);
+    // Received stock is never reversed to stop expecting the balance: point to the short-close.
+    if (!check.ok && s === "Cancelled" && base.activeReceipts > 0 && (base.rawStatus === "Started" || base.rawStatus === "Receiving")) return [s, SHORT_CLOSE_HINT];
+    return [s, check.ok ? null : check.reason];
+  })) as Record<string, string | null>;
   return {
     ...(row as PurchaseOrderRow), note: base.note, completedAt: base.completedAt, cancelledAt: base.cancelledAt, customFields: base.customFields ?? {},
-    lines: linesFor(db, id), vendor, warehouseCode: wh?.code ?? "", clientCode, defaultReceivingLocation: recv, attachmentCount, allowedStatuses,
+    lines: linesFor(db, id), vendor, warehouseCode: wh?.code ?? "", clientCode, defaultReceivingLocation: recv, attachmentCount, allowedStatuses, statusReasons,
   };
 }
 

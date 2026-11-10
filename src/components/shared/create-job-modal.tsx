@@ -55,7 +55,8 @@ function EligibilityStep({ data, operation, path, onPath }: { readonly data: Eli
           <ul className="ks-scroll max-h-40 divide-y divide-border overflow-auto rounded-md border border-border text-[12px]">
             {data.ineligible.map((r) => (
               <li key={r.id} className="flex gap-3 px-3 py-1.5">
-                <span className="w-28 shrink-0 font-semibold text-foreground">{r.code ?? r.id}</span>
+                {/* The record code, never the error code (INVALID_STATE / NOT_FOUND). */}
+                <span className="w-28 shrink-0 font-semibold text-foreground">{r.recordCode ?? (r.code && !/^[A-Z_]+$/.test(r.code) ? r.code : "—")}</span>
                 <span className="text-secondary">{r.reason}</span>
               </li>
             ))}

@@ -14,10 +14,13 @@ import * as schema from "@/server/db/schema";
 import { notFoundError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
 import { hasWarehouse } from "@/server/auth/scope";
-import { changeLog, sequences } from "@/server/domain";
+import * as changeLog from "@/server/domain/change-log";
+import * as sequences from "@/server/domain/sequences";
 import { describeError, DomainError } from "@/server/domain/errors";
 import { assertUserInWarehouse } from "@/server/domain/jobs";
 import { rollupJob } from "@/server/domain/progress";
+import { ORPHANED_LINE } from "./counts-grids";
+import { recordCountEvent, recordJobEvent } from "./counts-events";
 import { getCountLine, getCountPlanRow, lineLabel, movePlan, moveLine, rollupCountPlan, type CountLineRow, type CountPlanRow } from "@/server/domain/task-handlers/count";
 import type { BulkResult, DomainCtx, Tx } from "@/server/domain/types";
 
@@ -44,6 +47,26 @@ export function countJobTypes(tx: Tx, warehouseId: string): { id: string; code: 
     });
 }
 
+/**
+ * Create Job never dead-ends: when a warehouse has no active Count job type, a user who may create job
+ * types gets the default "Cycle Count" type (same settings as the seed) in one click. Idempotent: an
+ * existing active Count type is returned instead.
+ */
+export function ensureDefaultCountJobType(tx: Tx, ctx: DomainCtx, auth: AuthContext, warehouseId: string): ReturnType<typeof countJobTypes>[number] {
+  if (!hasWarehouse(auth.scope, warehouseId)) throw notFoundError("Warehouse");
+  const existing = countJobTypes(tx, warehouseId)[0];
+  if (existing) return existing;
+  const taken = new Set(tx.select({ code: schema.jobTypes.code }).from(schema.jobTypes).where(eq(schema.jobTypes.warehouseId, warehouseId)).all().map((r) => r.code.toLowerCase()));
+  let code = "Cycle Count";
+  for (let i = 2; taken.has(code.toLowerCase()); i++) code = `Cycle Count ${i}`;
+  const settings = jobTypeSettingsSchema.parse({ count: { autoUpdateNoDifferenceLines: true } });
+  const row = tx.insert(schema.jobTypes).values({
+    code, description: "Default count job type (created from Create Job)", warehouseId, operationType: "Count", template: settings.template, settings, createdBy: ctx.userId, updatedBy: ctx.userId,
+  }).returning().get();
+  changeLog.recordCreate(tx, ctx, { entityType: "job_type", entityId: row.id, entityCode: row.code });
+  return countJobTypes(tx, warehouseId).find((t) => t.id === row.id) ?? { id: row.id, code, description: row.description, autoUpdateNoDifference: true, instantCount: false };
+}
+
 function loadCountJobType(tx: Tx, jobTypeId: string, warehouseId: string): JobTypeRow {
   const jt = tx.select().from(schema.jobTypes).where(eq(schema.jobTypes.id, jobTypeId)).get();
   if (!jt) throw new DomainError("NOT_FOUND", "Job type not found");
@@ -58,6 +81,12 @@ export function defaultCountJobType(tx: Tx, warehouseId: string, instant = false
   const pick = (instant ? types.find((t) => t.instantCount) : types.find((t) => !t.instantCount)) ?? types[0];
   if (!pick) throw new DomainError("INVALID_STATE", "No count job type is set up for this warehouse. Add one under Settings → Job Types.");
   return loadCountJobType(tx, pick.id, warehouseId);
+}
+
+/** Open lines of a started plan whose count task is gone (job cancelled from the Jobs page). */
+export function orphanedLines(tx: Tx, planId: string): CountLineRow[] {
+  return tx.all<{ id: string }>(sql`
+    SELECT l.id FROM count_plan_lines l WHERE l.plan_id = ${planId} AND ${sql.raw(ORPHANED_LINE)}`).map((r) => getCountLine(tx, r.id));
 }
 
 const nextTaskNo = (tx: Tx): number => (tx.get<{ n: number | null }>(sql`SELECT MAX(task_no) AS n FROM tasks`)?.n ?? 0) + 1;
@@ -133,6 +162,35 @@ export function batchByLocation(tx: Tx, lines: readonly CountLineRow[], batchSiz
   return out;
 }
 
+export interface CountJobPreview { readonly planId: string; readonly code: string; readonly units: number; readonly lines: number; readonly cancelled: number }
+
+/**
+ * Create Job preview without writing: the batch units (distinct locations, after SKU lines expand to
+ * every location that stocks the SKU) of each Pending plan. Jobs = ceil(units / batch size).
+ */
+export function previewCountJobs(tx: Tx, auth: AuthContext, ids: readonly string[]): CountJobPreview[] {
+  return [...new Set(ids)].map((id) => {
+    const plan = ownPlan(tx, auth, id);
+    const pending = plan.status === "Pending"
+      ? tx.select().from(schema.countPlanLines).where(and(eq(schema.countPlanLines.planId, plan.id), eq(schema.countPlanLines.status, "Pending"))).all()
+      : orphanedLines(tx, plan.id);
+    const units = new Set<string>();
+    let lines = 0;
+    for (const l of pending) {
+      if (l.locationId || !l.productId) { units.add(l.locationId ?? `line:${l.id}`); lines += 1; continue; }
+      const locs = tx.select({ locationId: schema.inventory.locationId }).from(schema.inventory)
+        .where(and(eq(schema.inventory.productId, l.productId), eq(schema.inventory.warehouseId, plan.warehouseId), gt(schema.inventory.onHand, 0)))
+        .groupBy(schema.inventory.locationId).all();
+      if (locs.length === 0) { units.add(`sku:${l.productId}`); lines += 1; continue; }
+      for (const r of locs) units.add(r.locationId);
+      lines += locs.length;
+    }
+    // Cancelled lines get no task; reported so the modal matches Location Details, which lists them.
+    const cancelled = tx.select({ n: sql<number>`count(*)` }).from(schema.countPlanLines).where(and(eq(schema.countPlanLines.planId, plan.id), eq(schema.countPlanLines.status, "Cancelled"))).get()?.n ?? 0;
+    return { planId: plan.id, code: plan.code, units: units.size, lines, cancelled: Number(cancelled) };
+  });
+}
+
 function ownPlan(tx: Tx, auth: AuthContext, id: string): CountPlanRow {
   const plan = tx.select().from(schema.countPlans).where(eq(schema.countPlans.id, id)).get();
   if (!plan || !hasWarehouse(auth.scope, plan.warehouseId)) throw notFoundError("Count plan");
@@ -141,10 +199,12 @@ function ownPlan(tx: Tx, auth: AuthContext, id: string): CountPlanRow {
 
 /** Creates the jobs for one Pending plan and moves it (and its lines) to Ready To Count. */
 export function createJobsForPlan(tx: Tx, ctx: DomainCtx, plan: CountPlanRow, input: Pick<CreateCountJobInput, "jobTypeId" | "batchSize" | "assigneeUserId">): string[] {
-  const reason = planCreateJobReason(plan.status);
+  const orphans = plan.status === "Pending" ? [] : orphanedLines(tx, plan.id);
+  const reason = planCreateJobReason(plan.status, orphans.length);
   if (reason) throw new DomainError("INVALID_STATE", `${plan.code}: ${reason.toLowerCase()}.`);
   const jobType = loadCountJobType(tx, input.jobTypeId, plan.warehouseId);
   if (input.assigneeUserId) assertUserInWarehouse(tx, input.assigneeUserId, plan.warehouseId);
+  if (plan.status !== "Pending") return reissueOrphanedLines(tx, ctx, plan, orphans, jobType, input);
   const pending = tx.select().from(schema.countPlanLines).where(and(eq(schema.countPlanLines.planId, plan.id), eq(schema.countPlanLines.status, "Pending"))).all();
   if (pending.length === 0) throw new DomainError("INVALID_STATE", `${plan.code} has no lines to count.`);
   const lines = expandSkuLines(tx, ctx, plan, pending);
@@ -152,9 +212,31 @@ export function createJobsForPlan(tx: Tx, ctx: DomainCtx, plan: CountPlanRow, in
   for (const batch of batchByLocation(tx, lines, input.batchSize)) {
     const jobId = insertCountJob(tx, ctx, jobType, plan, batch, input.assigneeUserId ?? null);
     for (const l of batch) moveLine(tx, ctx, getCountLine(tx, l.id), "Ready To Count", { jobId });
+    recordJobEvent(tx, ctx, plan, jobId, "created", { batchSize: input.batchSize });
     jobIds.push(jobId);
   }
   movePlan(tx, ctx, getCountPlanRow(tx, plan.id), "Ready To Count");
+  return jobIds;
+}
+
+/**
+ * Re-creates count jobs for an open plan whose job was cancelled: each orphaned line keeps its
+ * status (Ready to Count / Count Started) and gets a fresh Pending task in a new job.
+ */
+function reissueOrphanedLines(tx: Tx, ctx: DomainCtx, plan: CountPlanRow, orphans: readonly CountLineRow[], jobType: JobTypeRow, input: Pick<CreateCountJobInput, "batchSize" | "assigneeUserId">): string[] {
+  const jobIds: string[] = [];
+  for (const batch of batchByLocation(tx, orphans, input.batchSize)) {
+    const jobId = insertCountJob(tx, ctx, jobType, plan, batch, input.assigneeUserId ?? null);
+    tx.update(schema.countPlanLines).set({ jobId, updatedBy: ctx.userId, version: sql`${schema.countPlanLines.version} + 1` })
+      .where(inArray(schema.countPlanLines.id, batch.map((l) => l.id))).run();
+    recordJobEvent(tx, ctx, plan, jobId, "reissued", { batchSize: input.batchSize });
+    jobIds.push(jobId);
+  }
+  const codes = tx.select({ code: schema.jobs.code }).from(schema.jobs).where(inArray(schema.jobs.id, jobIds)).all().map((j) => j.code);
+  changeLog.recordUpdate(tx, ctx, {
+    entityType: "count_plan", entityId: plan.id, entityCode: plan.code,
+    before: { reissuedLines: 0, countJobs: "" }, after: { reissuedLines: orphans.length, countJobs: codes.join(", ") },
+  });
   return jobIds;
 }
 
@@ -183,7 +265,7 @@ export function createRecounts(tx: Tx, ctx: DomainCtx, auth: AuthContext, lineId
     try {
       const line = getCountLine(tx, id);
       const plan = ownPlan(tx, auth, line.planId);
-      const reason = lineRecountReason(line.status);
+      const reason = lineRecountReason(line.status, plan.operationType);
       if (reason) throw new DomainError("INVALID_STATE", reason);
       if (plan.status === "Cancelled" || plan.status === "Inventory Updated") throw new DomainError("INVALID_STATE", `Count plan ${plan.code} is ${plan.status.toLowerCase()}.`);
       byPlan.set(plan.id, [...(byPlan.get(plan.id) ?? []), line]);
@@ -215,6 +297,11 @@ export function createRecounts(tx: Tx, ctx: DomainCtx, auth: AuthContext, lineId
         }
         const jobId = insertCountJob(inner, ctx, jobType, plan, created, assigneeUserId ?? sourceJob?.assignedToUserId ?? null);
         inner.update(schema.countPlanLines).set({ jobId }).where(inArray(schema.countPlanLines.id, created.map((c) => c.id))).run();
+        const newJob = inner.select({ code: schema.jobs.code }).from(schema.jobs).where(eq(schema.jobs.id, jobId)).get();
+        for (const line of lines) {
+          recordCountEvent(inner, ctx, { planId, planCode: plan.code, line: { id: line.id, label: lineLabel(inner, line) }, text: `Recount created in job ${newJob?.code ?? "—"}; this count is superseded until the recount is done` });
+        }
+        recordJobEvent(inner, ctx, plan, jobId, "recount", { recountOf: lines.map((l) => lineLabel(inner, l)) });
         rollupCountPlan(inner, ctx, planId);
         jobIds.push(jobId);
       });

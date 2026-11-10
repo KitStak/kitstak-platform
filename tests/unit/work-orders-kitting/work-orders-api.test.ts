@@ -16,6 +16,7 @@ const pickingRoute = await import("@/app/api/work-orders/picking/route");
 const countsRoute = await import("@/app/api/work-orders/status-counts/route");
 const kitsRoute = await import("@/app/api/kits/route");
 const recalcRoute = await import("@/app/api/kits/recalculate/route");
+const sourcesRoute = await import("@/app/api/kits/sources/route");
 
 let kitId = "";
 let kittingLocId = "";
@@ -84,8 +85,14 @@ describe("/api/work-orders", () => {
     await expectGuarded(listRoute.POST, "POST", "/api/work-orders", body());
     await expectGuarded(kitRoute.POST, "POST", "/api/work-orders/create-kit", { workOrderId: "x", qty: 1, locationId: "y" });
     await expectGuarded(pickingRoute.POST, "POST", "/api/work-orders/picking", { ids: ["x"] });
-    // Recalculate Now only refreshes the derived report cache: report viewers may run it, CSRF still applies.
+    // Recalculate Now rewrites a shared derived table: viewers get 403, CSRF still applies.
+    await expectGuarded(recalcRoute.POST, "POST", "/api/kits/recalculate", {});
     await expectCsrf(recalcRoute.POST, "POST", "/api/kits/recalculate", {});
+    const sources = await call(sourcesRoute.GET, req("GET", `/api/kits/sources?productIds=${current().productId}&warehouseId=${current().warehouseId}`, { cookie: await admin() }));
+    expect(sources.status).toBe(200);
+    const buckets = (sources.data as Record<string, { lockedBy: string | null }[]>)[current().productId] ?? [];
+    expect(buckets.length).toBeGreaterThan(0);
+    expect(buckets.every((b) => b.lockedBy === null)).toBe(true);
   });
 
   it("builds kits through create-kit and reports kit capacity", async () => {

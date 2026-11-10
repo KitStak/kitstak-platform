@@ -22,12 +22,16 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { toast } from "@/components/ui/toast";
 import { DisabledReason } from "@/components/ui/tooltip";
 import { apiFetch, apiRequest } from "@/lib/api-client";
+import { PRODUCT_READ_PERMISSIONS } from "@/lib/grid-defs/products/permissions";
 import { PRODUCTS_GRID_KEY } from "@/lib/grid-defs/products/products-grid";
+import { aliasProductListParams } from "@/lib/grid-defs/products/list-query";
 import type { ProductFormValues } from "@/lib/grid-defs/products/product-form";
 import {
-  bulkToast, errorMessage, postBulk, productLabelRecords, useCatalogCan, useInvalidateCatalog, useProductFilterFields, type DeleteCheckRow, type ProductListRow,
+  bulkToast, CATALOG_CRUMBS, CatalogViewGate, SlowGridNotice, errorMessage, postBulk, productLabelRecords, useCatalogCan, useInvalidateCatalog, usePrefetchPrintouts, useProductFilterFields, type DeleteCheckRow, type ProductListRow,
 } from "./catalog-shared";
-import { buildProductColumns } from "./product-columns";
+import { GridFetchFrame, usePrefetchGridFirstPage, useStickySearchMode } from "./grid-state";
+import { usePrefetchWizardOptions } from "./wizard/context";
+import { NewProductContext, buildProductColumns } from "./product-columns";
 import { ProductCreateDrawer, ProductEditDrawer, duplicateValues, type CreatedProduct } from "./product-create-drawer";
 
 const P = "settings.products.";
@@ -36,8 +40,18 @@ const IMPORT_TIP = "Import new records from an Excel template, or update existin
 
 type DeleteDialog = { rows: readonly DeleteCheckRow[] } | null;
 
-function BulkImportMenu({ canImport }: { readonly canImport: boolean }) {
-  const reason = canImport ? null : "You don't have permission to import products";
+/** SKU over name, both single-line with ellipsis + tooltip, so the confirm mini-table never wraps mid-token. */
+function DeleteProductCell({ sku, name }: { readonly sku: string; readonly name: string }) {
+  return (
+    <span className="block max-w-[190px]" title={`${sku} · ${name}`}>
+      <span className="block truncate whitespace-nowrap font-mono text-[12px] text-body">{sku}</span>
+      <span className="block truncate whitespace-nowrap text-[11px] text-secondary">{name}</span>
+    </span>
+  );
+}
+
+function BulkImportMenu() {
+  const reason = null;
   return (
     <span className="inline-flex items-center gap-1">
       <DropdownMenu>
@@ -60,29 +74,51 @@ function BulkImportMenu({ canImport }: { readonly canImport: boolean }) {
           <DropdownMenuItem href="/imports/kit-components" icon={RefreshCcw} disabledReason={reason} description="Replace the components of existing kits">Kit-components</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <InfoTip content={IMPORT_TIP} label="About bulk import" />
+      <InfoTip content={IMPORT_TIP} label="How Excel imports work" />
     </span>
   );
 }
 
 export function ProductsPage() {
+  // Page 1, saved views and the filter field lists start loading with the permission check, not after it.
+  usePrefetchGridFirstPage(PRODUCTS_GRID_KEY, "/api/products");
+  useProductFilterFields();
+  return <CatalogViewGate permission={PRODUCT_READ_PERMISSIONS} title="Products"><ProductsGrid /></CatalogViewGate>;
+}
+
+function ProductsGrid() {
   const router = useRouter();
   const params = useSearchParams();
   const invalidate = useInvalidateCatalog();
   const fields = useProductFilterFields();
+  // Logiwa-style deep links (?sku=&skuqt=eq&ps=100) are rewritten to the grid grammar once.
+  const legacy = params.has("sku") || params.has("search") || params.has("skuqt");
+  // Deferred one macrotask past the first commit: the App Router installs its history patch and
+  // action queue in its own (parent) effects, which run after this child effect.
+  const rewrote = React.useRef(false);
+  React.useEffect(() => {
+    if (!legacy || rewrote.current) return;
+    rewrote.current = true;
+    const target = `/products?${aliasProductListParams(new URLSearchParams(params.toString())).toString()}`;
+    const t = window.setTimeout(() => router.replace(target, { scroll: false }), 0);
+    return () => { window.clearTimeout(t); rewrote.current = false; };
+  }, [legacy, params, router]);
   const g = useGrid<ProductListRow>({ gridKey: PRODUCTS_GRID_KEY, path: "/api/products", fields });
+  // Warm the Create drawer's client list once the grid has its first page (never competes with it).
+  usePrefetchWizardOptions(null, !g.isLoading);
+  const searchGrid = useStickySearchMode(g.toolbarProps.grid);
   const columns = React.useMemo(() => buildProductColumns(), []);
   const can = {
     create: useCatalogCan(`${P}create`).allowed, edit: useCatalogCan(`${P}edit`).allowed, del: useCatalogCan(`${P}delete`).allowed,
     imp: useCatalogCan(`${P}import_file`).allowed, log: useCatalogCan(`${P}change_log`).allowed, label: useCatalogCan(`${P}label`).allowed,
   };
 
+  usePrefetchPrintouts(can.label);
   const seen = React.useRef(new Map<string, ProductListRow>());
   React.useEffect(() => {
     for (const r of g.rows) seen.current.set(r.id, r);
   }, [g.rows]);
-  const rowsFor = React.useCallback((ids: readonly string[]) => ids.map((id) => seen.current.get(id) ?? g.rows.find((r) => r.id === id)).filter((r): r is ProductListRow => Boolean(r)), [g.rows]);
-  const selected = rowsFor(g.selectedIds);
+  const selected = React.useMemo(() => g.rows.filter((r) => g.selectedIds.includes(r.id)), [g.rows, g.selectedIds]);
   const skuOf = (id: string) => seen.current.get(id)?.sku ?? "Product";
 
   const [createOpen, setCreateOpen] = React.useState(params.get("create") === "1");
@@ -98,9 +134,15 @@ export function ProductsPage() {
     await invalidate();
   };
 
+  const [newId, setNewId] = React.useState<string | null>(null);
   const onCreated = async (p: CreatedProduct) => {
+    setNewId(p.id);
+    // Show the new row first (Created desc, page 1), whatever sort/page the user was on.
+    const sorted = g.grid.query.sort.length === 1 && g.grid.query.sort[0]?.field === "createdAt" && g.grid.query.sort[0]?.dir === "desc";
+    if (!sorted && g.grid.query.sort.length) g.grid.setSort([{ field: "createdAt", dir: "desc" }]);
+    if (g.grid.query.page !== 1) g.grid.setPage(1);
     await invalidate();
-    toast.info("Created", `${p.sku} is first in the list.`, { action: { label: "Open", onClick: () => router.push(`/products/${p.id}`) } });
+    g.refetch();
   };
 
   const startDelete = async (ids: readonly string[]) => {
@@ -158,7 +200,7 @@ export function ProductsPage() {
     ...(can.del ? [{ key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: () => void startDelete([row.id]) }] : []),
   ];
 
-  const none = selected.length === 0 ? "Select at least one product" : null;
+  const none = g.selectedIds.length === 0 ? "Select at least one product" : null;
 
   const trailing = (
     <div className="flex items-center gap-2">
@@ -166,7 +208,7 @@ export function ProductsPage() {
         <DropdownMenu>
           <DisabledReason reason={none}>
             <DropdownMenuTrigger asChild disabled={Boolean(none)}>
-              <Button variant="secondary" disabled={Boolean(none)}>
+              <Button variant="secondary" disabled={Boolean(none)} aria-label="Status of selected products">
                 <Power className="h-3.5 w-3.5" aria-hidden />
                 Status
                 <ChevronDown className="h-3.5 w-3.5" aria-hidden />
@@ -189,7 +231,7 @@ export function ProductsPage() {
       ) : null}
       {can.label ? (
         <DisabledReason reason={none}>
-          <Button variant="secondary" disabled={Boolean(none)} onClick={() => setLabels(productLabelRecords(selected))}>
+          <Button variant="secondary" disabled={Boolean(none)} onClick={() => setLabels(productLabelRecords(g.selectedIds.map((id) => seen.current.get(id)).filter((r): r is ProductListRow => Boolean(r))))}>
             <Printer className="h-3.5 w-3.5" aria-hidden />
             Label
           </Button>
@@ -202,10 +244,13 @@ export function ProductsPage() {
   const blocked = (delDialog?.rows ?? []).filter((r) => r.reason);
   const blockedActive = blocked.filter((r) => r.status === "Active");
   const records = delDialog ? {
-    columns: [{ key: "sku", label: "SKU" }, { key: "name", label: "Name" }, { key: "status", label: "Status" }, { key: "result", label: "Delete" }],
+    columns: [{ key: "product", label: "Product" }, { key: "status", label: "Status" }, { key: "result", label: "Delete" }],
     rows: delDialog.rows.map((r) => ({
-      sku: r.sku, name: r.name, status: <StatusPill status={r.status} domain="active" size="sm" />,
-      result: r.reason ? <span className="text-danger">Blocked · {r.reason}</span> : <span className="text-success">Can be deleted</span>,
+      product: <DeleteProductCell sku={r.sku} name={r.name} />,
+      status: <StatusPill status={r.status} domain="active" size="sm" />,
+      result: r.reason
+        ? <span className="block min-w-[7rem] text-danger"><span className="block whitespace-nowrap font-medium">Blocked</span><span className="block text-[11px] leading-snug">{r.reason}</span></span>
+        : <span className="block min-w-[7rem] whitespace-nowrap text-success">Can be deleted</span>,
     })),
   } : undefined;
 
@@ -213,11 +258,12 @@ export function ProductsPage() {
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
         title="Products"
+        breadcrumbs={[CATALOG_CRUMBS[0], { label: "Products" }]}
         tabs="products"
         helper={PRODUCTS_HELPER}
         actions={(
           <>
-            <BulkImportMenu canImport={can.imp} />
+            {can.imp ? <BulkImportMenu /> : null}
             {can.create ? (
               <Button variant="primary" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-3.5 w-3.5" aria-hidden />
@@ -227,8 +273,10 @@ export function ProductsPage() {
           </>
         )}
       />
-      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by SKU, name or barcode" bulkNoun="product" trailing={trailing} />
-      <div className="flex min-h-0 flex-1 flex-col">
+      <GridToolbar {...g.toolbarProps} grid={searchGrid} searchPlaceholder="Search by SKU, name or barcode" bulkNoun="product" trailing={trailing} />
+      <SlowGridNotice pending={g.isLoading || (g.isFetching && g.rows.length === 0)} onRetry={g.refetch} noun="products" />
+      <GridFetchFrame fetching={g.isFetching} pending={g.isLoading}>
+        <NewProductContext.Provider value={newId}>
         <DataGrid<ProductListRow>
           {...g.gridProps}
           columns={columns}
@@ -239,7 +287,8 @@ export function ProductsPage() {
           emptyDescription="Clear the filters, import products from Excel, or create one."
           emptyAction={can.create ? <Button variant="primary" onClick={() => setCreateOpen(true)}><Plus className="h-3.5 w-3.5" aria-hidden />Create new product</Button> : undefined}
         />
-      </div>
+        </NewProductContext.Provider>
+      </GridFetchFrame>
 
       <ProductCreateDrawer open={createOpen} onOpenChange={setCreateOpen} onCreated={(p) => void onCreated(p)} />
       <ProductCreateDrawer open={duplicate !== null} onOpenChange={(o) => !o && setDuplicate(null)} initialValues={duplicate ?? undefined} onCreated={(p) => { setDuplicate(null); void onCreated(p); }} />

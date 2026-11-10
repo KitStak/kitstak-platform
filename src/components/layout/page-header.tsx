@@ -14,7 +14,7 @@ function BetaTag() {
 }
 
 /** Route tabs for a config group, filtered by the viewer's permissions. */
-export function GroupTabs({ group, className }: { readonly group: PageTabGroupKey; readonly className?: string }) {
+export function GroupTabs({ group, className, alwaysShow = false }: { readonly group: PageTabGroupKey; readonly className?: string; /** Render a single allowed tab too, so the page shell does not shift by role. */ readonly alwaysShow?: boolean }) {
   const allows = useShellAllows();
   const tabs = React.useMemo<readonly PageTabItem[]>(
     () =>
@@ -23,7 +23,7 @@ export function GroupTabs({ group, className }: { readonly group: PageTabGroupKe
         .map((t) => ({ href: t.href, exact: t.exact, match: t.match, label: t.badge ? <>{t.label}<BetaTag /></> : t.label })),
     [group, allows],
   );
-  if (tabs.length < 2) return null;
+  if (tabs.length === 0 || (tabs.length < 2 && !alwaysShow)) return null;
   return <PageTabs tabs={tabs} className={className} ariaLabel={`${group} sections`} />;
 }
 
@@ -34,32 +34,56 @@ export interface PageHeaderProps {
   readonly crumbLabel?: string;
   readonly title: string;
   /** Helper sentence, left-aligned under the H1 (13px, secondary). */
-  readonly helper?: string;
+  readonly helper?: React.ReactNode;
+  /** Contextual doc link appended to the helper ("Learn more about LP types"). */
+  readonly helperLink?: { readonly href: string; readonly label: string };
+  /** Keep a single-tab strip visible (see GroupTabs `alwaysShow`). */
+  readonly alwaysShowTabs?: boolean;
   /** Primary + secondary CTAs, top-right. */
   readonly actions?: React.ReactNode;
   /** Route tab strip: a `page-tabs.ts` group or explicit tabs. */
   readonly tabs?: PageTabGroupKey | readonly PageTabItem[];
   readonly className?: string;
+  /** Optional help/doc deep link shown next to the H1 (REQ-R7-5). */
+  readonly helpHref?: string;
 }
 
-/** Page chrome (BUILD_PLAN 0.3): breadcrumb, H1, centred helper text, CTAs top-right, route tabs. */
-export function PageHeader({ breadcrumbs, crumbLabel, title, helper, actions, tabs, className }: PageHeaderProps) {
+/** Page chrome (BUILD_PLAN 0.3): breadcrumb, H1, helper text under it, CTAs top-right, route tabs. */
+export function PageHeader({ breadcrumbs, crumbLabel, title, helper, helperLink, alwaysShowTabs, actions, tabs, className, helpHref }: PageHeaderProps) {
   return (
     <div className={cn("pt-3", className)}>
       <div className="px-6">
         {breadcrumbs ? <Breadcrumbs items={breadcrumbs} /> : <AutoBreadcrumbs currentLabel={crumbLabel} />}
-        {/* 0.3: H1 left, helper centred in the band, CTAs right. Below lg the helper drops under the H1. */}
-        <div className="mt-1.5 flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-1 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)]">
-          <h1 className="min-w-0 text-xl font-semibold tracking-[-0.01em] text-foreground lg:col-start-1">{title}</h1>
-          {helper ? (
-            <p data-slot="page-helper" className="order-last w-full text-[13px] text-secondary lg:order-none lg:col-start-2 lg:w-auto lg:max-w-[560px] lg:text-center">
-              {helper}
-            </p>
-          ) : null}
-          {actions ? <div className="flex flex-wrap items-center gap-2 lg:col-start-3 lg:justify-self-end">{actions}</div> : null}
+        {/* H1 with the helper left-aligned beneath it; CTAs top-right (DESIGN_SPEC page header). */}
+        <div className="mt-1.5 flex min-h-8 flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          {/* Phones: the title takes the full row so the CTAs wrap beneath it instead of squeezing the helper. */}
+          <div className="min-w-0 flex-1 basis-full sm:basis-0">
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold tracking-[-0.01em] text-foreground">{title}</h1>
+              {helpHref ? (
+                <a data-slot="page-help" href={helpHref} target="_blank" rel="noopener" aria-label={`Help: ${title}`} className="rounded text-[12px] font-medium text-[var(--info,#1d6fd6)] hover:underline">
+                  Help
+                </a>
+              ) : null}
+            </div>
+            {helper || helperLink ? (
+              <p data-slot="page-helper" className="mt-0.5 max-w-[720px] text-[13px] text-secondary text-pretty">
+                {helper}
+                {helperLink ? (
+                  <>
+                    {helper ? " " : null}
+                    <a href={helperLink.href} className="font-medium text-info hover:underline">
+                      {helperLink.label}
+                    </a>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
+          </div>
+          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
         </div>
       </div>
-      {tabs === undefined ? null : typeof tabs === "string" ? <GroupTabs group={tabs} className="mt-2" /> : <PageTabs tabs={tabs} className="mt-2" />}
+      {tabs === undefined ? null : typeof tabs === "string" ? <GroupTabs group={tabs} className="mt-2" alwaysShow={alwaysShowTabs} /> : <PageTabs tabs={tabs} className="mt-2" />}
     </div>
   );
 }

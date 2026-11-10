@@ -12,6 +12,7 @@ import { Lock, PackagePlus } from "lucide-react";
 import { LocationPicker } from "@/components/shared/entity-pickers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DisabledReason } from "@/components/ui/tooltip";
 import { Drawer } from "@/components/ui/drawer";
 import { Form, FormField, FormGrid, FormSection, useZodForm } from "@/components/ui/form";
 import { useApiQuery } from "@/lib/query-client";
@@ -19,7 +20,7 @@ import { useFormat } from "@/lib/format";
 import { MAX_LINE_QTY } from "@/lib/grid-defs/receiving/po-schemas";
 import { DateF, NumF, SelectF, TextF } from "../fields";
 import { ProductThumb } from "../receiving-shared";
-import type { LineDraft } from "./po-form-model";
+import { lineTotalOrNull, type LineDraft } from "./po-form-model";
 
 const lineFormSchema = z
   .object({
@@ -52,24 +53,25 @@ function Total({ control }: { readonly control: ReturnType<typeof useZodForm<typ
   const fmt = useFormat();
   const qty = useWatch({ control, name: "orderedQuantity" }) as number | null;
   const price = useWatch({ control, name: "unitCost" }) as number | null;
-  const total = Math.round((qty ?? 0) * (price ?? 0) * 100) / 100;
+  const total = lineTotalOrNull(qty, price);
   return (
     <div className="flex flex-col gap-1">
       <span className="text-[12px] font-medium text-body">Total price</span>
       <span className="flex h-9 items-center justify-end rounded-md border border-border bg-surface-sunken px-3 text-[13px] font-semibold tabular-nums text-foreground" aria-live="polite">
-        {fmt.money(total)}
+        {total === null ? "—" : fmt.money(total)}
       </span>
     </div>
   );
 }
 
-function EditorForm({ line, warehouseId, readOnly, formId, onApply, onDirty }: {
+function EditorForm({ line, warehouseId, readOnly, formId, onApply, onDirty, onInvalid }: {
   readonly line: LineDraft;
   readonly warehouseId: string;
   readonly readOnly: boolean;
   readonly formId: string;
   readonly onApply: (line: LineDraft) => void;
   readonly onDirty: (dirty: boolean) => void;
+  readonly onInvalid: (reason: string | null) => void;
 }) {
   const form = useZodForm(lineFormSchema, {
     packType: line.packType, orderedQuantity: line.orderedQuantity, unitCost: line.unitCost, receivedQuantity: line.receivedQuantity,
@@ -78,6 +80,11 @@ function EditorForm({ line, warehouseId, readOnly, formId, onApply, onDirty }: {
   } satisfies LineForm);
   const dirty = form.formState.isDirty;
   React.useEffect(() => onDirty(dirty), [dirty, onDirty]);
+  // Apply stays disabled until the line is valid (Logiwa parity), with the first issue as the tooltip.
+  const watched = useWatch({ control: form.control });
+  const parsed = lineFormSchema.safeParse(watched);
+  const invalid = parsed.success ? null : (parsed.error.issues[0]?.message ?? "Complete the required fields");
+  React.useEffect(() => onInvalid(invalid), [invalid, onInvalid]);
   const lpTypes = useApiQuery<LpType[]>(["po-lp-types", warehouseId], warehouseId ? "/api/purchase-orders/lp-types" : null, { query: { warehouseId } });
   const lpOptions = (lpTypes.data?.data ?? []).map((t) => ({ value: t.id, label: t.code, description: t.description ?? undefined }));
   const locationCode = useWatch({ control: form.control, name: "receivingLocationCode" });
@@ -159,6 +166,7 @@ export function LineEditorDrawer({ line, warehouseId, readOnly = false, onOpenCh
 }) {
   const formId = React.useId();
   const [dirty, setDirty] = React.useState(false);
+  const [invalid, setInvalid] = React.useState<string | null>(null);
   return (
     <Drawer
       open={line !== null}
@@ -181,7 +189,9 @@ export function LineEditorDrawer({ line, warehouseId, readOnly = false, onOpenCh
         ) : (
           <>
             <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" form={formId} variant="primary">Apply</Button>
+            <DisabledReason reason={invalid}>
+              <Button type="submit" form={formId} variant="primary" disabled={Boolean(invalid)}>Apply</Button>
+            </DisabledReason>
           </>
         )
       }
@@ -194,6 +204,7 @@ export function LineEditorDrawer({ line, warehouseId, readOnly = false, onOpenCh
           readOnly={readOnly}
           formId={formId}
           onDirty={setDirty}
+          onInvalid={setInvalid}
           onApply={(next) => {
             setDirty(false);
             onApply(next);

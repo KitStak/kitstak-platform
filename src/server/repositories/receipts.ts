@@ -11,10 +11,11 @@ import { notFoundError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
 import { assertInScope, scopedWhere, type Scope } from "@/server/auth/scope";
 import * as schema from "@/server/db/schema";
-import { ledger, type DomainCtx } from "@/server/domain";
+import { changeLog, ledger, type DomainCtx } from "@/server/domain";
 import { CANCEL_COMPLETED_PO_MESSAGE } from "@/server/domain/ledger";
 import type { GridQuery } from "@/server/query/grid-query";
 import { compileGrid, type GridSpec } from "./purchase-orders-grid";
+import { logSnapshot, warehouseTimeZone } from "./purchase-orders-log";
 
 const r = schema.receipts;
 
@@ -22,6 +23,9 @@ const sub = (q: SQL): SQL => sql`(${q})`;
 const PRODUCT = (col: string) => sub(sql`SELECT ${sql.raw(col)} FROM products p WHERE p.id = ${r.productId}`);
 const LP = (col: string, idCol: SQL) => sub(sql`SELECT ${sql.raw(col)} FROM license_plates lp WHERE lp.id = ${idCol}`);
 const LP_TYPE = (idCol: SQL) => sub(sql`SELECT t.code FROM license_plates lp JOIN lp_types t ON t.id = lp.lp_type_id WHERE lp.id = ${idCol}`);
+
+/** Receipts store the actor's email (or id); Logiwa shows the user's full name. */
+const USER_NAME = (col: SQL): SQL => sql`COALESCE((SELECT u.name FROM users u WHERE u.email = ${col} OR u.id = ${col} LIMIT 1), ${col})`;
 
 const EXPRS: Readonly<Record<string, SQL>> = {
   masterId: sql`CAST(${r.masterId} AS TEXT)`,
@@ -58,7 +62,7 @@ const EXPRS: Readonly<Record<string, SQL>> = {
   parentLpNumber: LP("lp.number", sql`${r.parentLpId}`),
   parentLpType: LP_TYPE(sql`${r.parentLpId}`),
   damageReason: sql`${r.damageReason}`,
-  receivedBy: sql`${r.receivedBy}`,
+  receivedBy: USER_NAME(sql`${r.receivedBy}`),
 };
 
 const SPEC: GridSpec = {
@@ -118,6 +122,8 @@ export interface ReceiptRow {
   readonly cancelledBy: string | null;
   /** Why Cancel is unavailable (null when it can run). */
   readonly cancelBlockedReason: string | null;
+  /** The warehouse's IANA time zone: every time in the module renders in it, labelled. */
+  readonly timeZone: string;
 }
 
 const text = (e: SQL) => sql<string | null>`${e}`;
@@ -133,15 +139,16 @@ const SELECT = {
   workOrderId: r.workOrderId, workOrderCode: text(EXPRS.workOrderCode as SQL), shipmentOrderId: r.shipmentOrderId,
   shipmentOrderCode: text(EXPRS.shipmentOrderCode as SQL), returnOrderId: r.returnOrderId, rmaNumber: text(EXPRS.rmaNumber as SQL),
   lpNumber: text(EXPRS.lpNumber as SQL), lpType: text(EXPRS.lpType as SQL), parentLpNumber: text(EXPRS.parentLpNumber as SQL),
-  parentLpType: text(EXPRS.parentLpType as SQL), damageReason: r.damageReason, damageImageFileId: r.damageImageFileId, receivedBy: r.receivedBy,
-  productionDate: r.productionDate, cancelledAt: r.cancelledAt, cancelledBy: r.cancelledBy,
+  parentLpType: text(EXPRS.parentLpType as SQL), damageReason: r.damageReason, damageImageFileId: r.damageImageFileId, receivedBy: sql<string>`${EXPRS.receivedBy}`,
+  productionDate: r.productionDate, cancelledAt: r.cancelledAt, cancelledBy: text(USER_NAME(sql`${r.cancelledBy}`)),
+  timeZone: sql<string>`COALESCE((SELECT w.timezone FROM warehouses w WHERE w.id = ${r.warehouseId}), 'UTC')`,
 };
 
 type Base = Omit<ReceiptRow, "cancelBlockedReason" | "skuDetailsUpdated"> & { skuDetailsUpdated: boolean | number };
 
 export function cancelBlockedReason(row: Pick<ReceiptRow, "cancelledAt" | "poStatus" | "type">): string | null {
   if (row.cancelledAt) return "This receipt is already cancelled.";
-  if (row.poStatus === "Completed") return CANCEL_COMPLETED_PO_MESSAGE;
+  if (row.poStatus === "Completed") return `${CANCEL_COMPLETED_PO_MESSAGE} Re-open the purchase order (change its status to Started) first.`;
   if (row.poStatus === "Cancelled") return "The purchase order is cancelled.";
   return null;
 }
@@ -186,7 +193,22 @@ export function cancelReceipt(tx: AppDb, ctx: DomainCtx, scope: Scope, id: strin
   ledger.cancelReceipt(tx, ctx, { receiptId: id });
   if (before.purchaseOrderId) {
     const po = tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, before.purchaseOrderId)).get();
-    if (po) tx.update(schema.purchaseOrders).set({ version: po.version + 1, updatedBy: ctx.userId }).where(eq(schema.purchaseOrders.id, po.id)).run();
+    if (po) {
+      // Actual Receiving Date is a completion stamp (Logiwa parity): a PO that is open again has none.
+      const reopen = po.status !== "Completed" && po.receivedAt ? { receivedAt: null } : {};
+      tx.update(schema.purchaseOrders).set({ ...reopen, version: po.version + 1, updatedBy: ctx.userId }).where(eq(schema.purchaseOrders.id, po.id)).run();
+      const units = before.uomQuantity === before.quantity ? `${before.quantity.toLocaleString("en-US")} ${before.packType}` : `${before.quantity.toLocaleString("en-US")} ${before.packType} (${before.uomQuantity.toLocaleString("en-US")} units)`;
+      tx.insert(schema.changeLog).values({
+        entityType: "purchase_order", entityId: po.id, entityCode: po.code, type: "Update", field: "receipt", fieldLabel: "Receipt",
+        fromValue: `Receipt ${before.masterId}`, toValue: "Cancelled",
+        message: `Receipt ${before.masterId} is cancelled. ${units} of ${before.sku} reversed from ${before.locationCode}${before.lpNumber ? ` (LP ${before.lpNumber})` : ""}.`,
+        userId: ctx.userId, source: ctx.source,
+      }).run();
+      if ("receivedAt" in reopen && po.receivedAt) {
+        changeLog.recordUpdate(tx, ctx, { entityType: "purchase_order", entityId: po.id, entityCode: po.code,
+          before: logSnapshot({ receivedAt: po.receivedAt }, warehouseTimeZone(tx, po.warehouseId)), after: logSnapshot({ receivedAt: null }) });
+      }
+    }
     if (before.damageReason) {
       const lineId = tx.select({ lineId: r.purchaseOrderLineId }).from(r).where(eq(r.id, id)).get()?.lineId;
       if (lineId) {

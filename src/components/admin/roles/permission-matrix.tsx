@@ -8,7 +8,8 @@
 import * as React from "react";
 import { ChevronDown, ChevronsDownUp, ChevronsUpDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { filterMatrix, PERMISSION_MATRIX, togglePermissions, type MatrixGroup, type MatrixPage } from "@/lib/grid-defs/admin/roles";
+import { filterMatrix, PERMISSION_MATRIX, toggleWithViewRule, type MatrixGroup, type MatrixPage } from "@/lib/grid-defs/admin/roles";
+import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -91,7 +92,13 @@ export function PermissionMatrix({ value, onChange, readOnly = false }: MatrixPr
   const granted = React.useMemo(() => new Set(value), [value]);
   const groups = filterMatrix(PERMISSION_MATRIX, search);
   const searching = search.trim().length > 0;
-  const toggle = (keys: readonly string[]) => { if (!readOnly) onChange(togglePermissions(value, keys)); };
+  // Actions imply View: ticking an action ticks View, and unticking View clears the page.
+  const toggle = (keys: readonly string[]) => {
+    if (readOnly) return;
+    const next = toggleWithViewRule(value, keys);
+    onChange(next.keys);
+    if (next.clearedPages.length) toast.info("Page actions cleared", `Without View, ${next.clearedPages.join(", ")} can't be opened, so its actions were removed too.`);
+  };
   const total = PERMISSION_MATRIX.reduce((n, g) => n + g.keys.length, 0);
   return (
     <div className="flex flex-col gap-3">
@@ -106,7 +113,7 @@ export function PermissionMatrix({ value, onChange, readOnly = false }: MatrixPr
         <Button size="sm" variant="ghost" onClick={() => setOpen(new Set())}><ChevronsDownUp className="h-3.5 w-3.5" aria-hidden />Collapse all</Button>
         <span className="ml-auto text-[12px] text-secondary">Granted <span className="font-semibold tabular-nums text-foreground">{value.length}</span> of {total}</span>
       </div>
-      {groups.length === 0 ? <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-[13px] text-faint">No permission matches "{search}".</p> : null}
+      {groups.length === 0 ? <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-[13px] text-faint">No permission matches &ldquo;{search}&rdquo;.</p> : null}
       {groups.map((g) => (
         <GroupPanel key={g.key} group={g} granted={granted} readOnly={readOnly}
           totalKeys={searching ? g.keys : (PERMISSION_MATRIX.find((x) => x.key === g.key)?.keys ?? g.keys)}

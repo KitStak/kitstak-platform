@@ -27,6 +27,8 @@ export interface UseGridOptions {
   readonly extraQuery?: Readonly<Record<string, string>>;
   /** Apply the user's default saved view when the URL carries no grid state. Default true. */
   readonly applyDefaultView?: boolean;
+  /** List request timeout (default 30 s); slow lists can raise it. */
+  readonly timeoutMs?: number;
 }
 
 /** Grid query string without paging — the identity of "the same view". */
@@ -71,6 +73,8 @@ export interface UseGridResult<T> {
     readonly onPageChange: (page: number) => void;
     readonly onPageSizeChange: (size: number) => void;
     readonly loading: boolean;
+    /** True while the rows shown belong to the previous query (placeholder data): DataGrid dims them. */
+    readonly refreshing: boolean;
     readonly error: string | null;
     readonly onRetry: () => void;
     readonly sort: readonly SortSpec[];
@@ -99,6 +103,9 @@ interface SelectionState {
   readonly allMatching: boolean;
 }
 
+/** A list request that hangs longer than this shows the grid error state with Retry, not an endless skeleton. */
+const GRID_TIMEOUT_MS = 30_000;
+
 /** URL-backed grid (list pages). */
 export function useGrid<T>(options: UseGridOptions): UseGridResult<T> {
   return useGridCore<T>(useGridUrlState(options.gridKey), options);
@@ -109,11 +116,11 @@ export function useLocalGrid<T>(options: UseGridOptions & { readonly initial?: P
   return useGridCore<T>(useLocalGridState(options.gridKey, options.initial), { ...options, applyDefaultView: false });
 }
 
-function useGridCore<T>(grid: GridUrlState, { gridKey, path, fields = [], extraQuery, applyDefaultView = true }: UseGridOptions): UseGridResult<T> {
+function useGridCore<T>(grid: GridUrlState, { gridKey, path, fields = [], extraQuery, applyDefaultView = true, timeoutMs = GRID_TIMEOUT_MS }: UseGridOptions): UseGridResult<T> {
   const views = useSavedViews(gridKey);
   const extra = React.useMemo(() => new URLSearchParams(extraQuery ?? {}).toString(), [extraQuery]);
   const requestQuery = extra ? `${grid.queryString}${grid.queryString ? "&" : ""}${extra}` : grid.queryString;
-  const list = useApiQuery<T[]>(["grid", gridKey, path ?? ""], path, { query: requestQuery, placeholderData: (prev) => prev });
+  const list = useApiQuery<T[]>(["grid", gridKey, path ?? ""], path, { query: requestQuery, placeholderData: (prev) => prev, timeoutMs });
 
   // Default view: once, only when the page opened without grid state.
   const defaultApplied = React.useRef(false);
@@ -163,6 +170,7 @@ function useGridCore<T>(grid: GridUrlState, { gridKey, path, fields = [], extraQ
       onPageChange: grid.setPage,
       onPageSizeChange: grid.setPageSize,
       loading: list.isPending,
+      refreshing: list.isPlaceholderData,
       error,
       onRetry: refetch,
       sort: grid.query.sort,

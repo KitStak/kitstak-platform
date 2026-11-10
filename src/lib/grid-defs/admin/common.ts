@@ -70,3 +70,11 @@ export function initialsOf(name: string): string {
   const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
   return `${first}${last}`.toUpperCase() || "?";
 }
+
+/** Change-log wire format ("Roles is modified. a --> b", Logiwa parity) as UI copy: "Roles changed: a → b". */
+export function prettyLogMessage(message: string): string {
+  return message
+    .replace(/^(.*?) is modified\. ([\s\S]*?) --> ([\s\S]*)$/, "$1 changed: $2 → $3")
+    .replace(/ --> /g, " → ")
+    .replace(/ -> /g, " › ");
+}

@@ -5,7 +5,7 @@ import {
   type PackLine, type PackPackageType, type PackState,
 } from "@/components/packing/pack-model";
 import { addManualProduct, applyScan, itemsFromRma, itemsPayload, totals, validateItems } from "@/components/returns/return-station-model";
-import { buildCreatePayload, initialLines, linesStepSchema, orderStepSchema, shippingStepSchema, type RmaFormValues } from "@/components/returns/rma-form";
+import { buildCreatePayload, EMPTY_RETURN_INFO, initialLines, linesStepSchema, orderStepSchema, shippingStepSchema, type RmaFormValues } from "@/components/returns/rma-form";
 import { EMPTY_LABEL, labelPayload, validateLabel } from "@/components/returns/return-label-fields-model";
 import type { ShippableOrder } from "@/components/returns/return-types";
 
@@ -143,7 +143,7 @@ describe("create RMA form", () => {
       { orderLineId: "ol2", productId: "p2", sku: "B", name: "B", imageUrl: null, packType: "Each", shippedQty: 1, alreadyReturned: 1, returnable: 0, isNonReturnable: false },
     ],
   };
-  const base = (): RmaFormValues => ({ orderId: "o1", lines: initialLines(order), expectedReturnDate: null, note: "", createLabel: false, label: EMPTY_LABEL });
+  const base = (): RmaFormValues => ({ orderId: "o1", lines: initialLines(order), expectedReturnDate: null, note: "", createLabel: false, label: EMPTY_LABEL, returnAddressId: null, returnInfo: EMPTY_RETURN_INFO });
 
   it("preselects the single returnable line and validates each step", () => {
     const v = base();

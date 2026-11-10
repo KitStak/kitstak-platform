@@ -1,10 +1,13 @@
 /**
- * Import handler "user-warehouses" — STUB (BUILD_PLAN 0.6), owner M14.
- *
- * Foundation owns the template columns (`../registry`) and the pipeline; M14 replaces
- * this file with a configured handler whose `apply` writes through its repositories
- * and the foundation domain functions. Until then uploads are refused as "not configured".
+ * Import handler "user-warehouses" (owner M14). Assign/Unassign User-Warehouse — gives or removes access to one warehouse (caller scope only). A user always keeps one warehouse.
+ * Goes through `updateUser` (scope, admin rules, session revoke, change log); see
+ * `repositories/users-import.ts`.
  */
-import { createStubHandler, type ImportHandler } from "../types";
+import { importUserLinkRow } from "@/server/repositories/users-import";
+import type { ImportHandler } from "../types";
 
-export const handler: ImportHandler = createStubHandler("M14", "User-warehouse assignment import");
+export const handler: ImportHandler = {
+  configured: true,
+  owner: "M14",
+  apply: ({ db, auth, actor }, row) => importUserLinkRow(db, auth, actor, "warehouse", row),
+};

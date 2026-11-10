@@ -11,7 +11,7 @@ import { MapPin, MoreHorizontal, Pencil, Plus, Star, Trash2 } from "lucide-react
 import { useController, useWatch } from "react-hook-form";
 import { ADDRESS_USAGE_TYPES } from "@/lib/enums";
 import { countryName, countryOptions, subdivisionsFor } from "@/lib/countries";
-import { EMPTY_ORG_ADDRESS, normalizeDefaults, orgAddressSchema, type OrgAddressInput } from "@/lib/grid-defs/organization/common";
+import { EMPTY_ORG_ADDRESS, normalizeDefaults, orgAddressModalSchema, type OrgAddressInput } from "@/lib/grid-defs/organization/common";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,11 +37,12 @@ export function addressLines(a: Pick<A, "line1" | "line2" | "city" | "state" | "
 }
 
 function AddressModal({ open, initial, title, onOpenChange, onSave, lockUsage }: { readonly open: boolean; readonly initial: A; readonly title: string; readonly onOpenChange: (o: boolean) => void; readonly onSave: (a: A) => void; readonly lockUsage?: boolean }) {
-  const form = useZodForm(orgAddressSchema, initial, { mode: "onSubmit" });
+  const form = useZodForm(orgAddressModalSchema, initial, { mode: "onSubmit" });
   React.useEffect(() => { if (open) form.reset(initial); }, [open, initial, form]);
   const country = useWatch({ control: form.control, name: "country" });
   const subs = subdivisionsFor(country);
   const stateLabel = country === "CA" ? "Province" : "State";
+  const shipping = useWatch({ control: form.control, name: "usageType" }) === "Shipping";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="lg">
@@ -53,6 +54,8 @@ function AddressModal({ open, initial, title, onOpenChange, onSave, lockUsage }:
               <FormField<A> name="usageType" label="Usage type" required info={lockUsage ? undefined : "Shipping addresses are used on orders, Billing on invoices, Return on return labels"}>
                 {(c) => <SegmentedControl ariaLabel="Usage type" options={ADDRESS_USAGE_TYPES.map((u) => ({ value: u, label: u }))} value={(c.value as string) ?? "Shipping"} onChange={(v) => c.onChange(v)} disabled={c.disabled} />}
               </FormField>
+              <FormField<A> name="firstName" label="Contact first name" required={shipping}>{(c) => <TextField {...c} value={(c.value as string | null) ?? ""} maxLength={60} autoComplete="given-name" />}</FormField>
+              <FormField<A> name="lastName" label="Contact last name" required={shipping}>{(c) => <TextField {...c} value={(c.value as string | null) ?? ""} maxLength={60} autoComplete="family-name" />}</FormField>
               <FormField<A> name="companyName" label="Company">{(c) => <TextField {...c} value={(c.value as string | null) ?? ""} maxLength={120} autoComplete="organization" />}</FormField>
               <FormField<A> name="line1" label="Address line 1" required>{(c) => <TextField {...c} maxLength={256} autoComplete="address-line1" />}</FormField>
               <FormField<A> name="line2" label="Address line 2">{(c) => <TextField {...c} value={(c.value as string | null) ?? ""} maxLength={256} autoComplete="address-line2" />}</FormField>
@@ -68,7 +71,7 @@ function AddressModal({ open, initial, title, onOpenChange, onSave, lockUsage }:
               </FormField>
               <FormField<A> name="postalCode" label={country === "US" ? "ZIP code" : "Postal code"} required>{(c) => <TextField {...c} maxLength={20} autoComplete="postal-code" />}</FormField>
               <FormField<A> name="phone" label="Phone">{(c) => <TextField {...c} value={(c.value as string | null) ?? ""} type="tel" maxLength={40} />}</FormField>
-              <FormField<A> name="email" label="Email">{(c) => <TextField {...c} value={(c.value as string | null) ?? ""} type="email" maxLength={200} />}</FormField>
+              <FormField<A> name="email" label="Email" required={shipping} info={shipping ? "Printed on carrier labels and used for delivery notifications" : undefined}>{(c) => <TextField {...c} value={(c.value as string | null) ?? ""} type="email" maxLength={200} />}</FormField>
               <div className="grid grid-cols-2 gap-4">
                 <FormField<A> name="isActive" label="Active">{(c) => <YesNoToggle value={Boolean(c.value)} onChange={(v) => c.onChange(v)} ariaLabel="Active" />}</FormField>
                 <FormField<A> name="isDefault" label="Set default address" info="The default address of each usage type is pre-filled on new orders and documents">{(c) => <YesNoToggle value={Boolean(c.value)} onChange={(v) => c.onChange(v)} ariaLabel="Set default address" />}</FormField>
@@ -140,7 +143,7 @@ export function AddressesEditor({ value, onChange, disabled, requireShipping, er
               </div>
               <p className="text-[13px] font-semibold text-foreground">{a.name}{a.companyName ? <span className="font-normal text-secondary"> · {a.companyName}</span> : null}</p>
               <div className="text-[12px] leading-5 text-secondary">{addressLines(a).map((l) => <div key={l}>{l}</div>)}</div>
-              {a.phone || a.email ? <p className="text-[12px] text-faint">{[a.phone, a.email].filter(Boolean).join(" · ")}</p> : null}
+              {a.firstName || a.lastName || a.phone || a.email ? <p className="text-[12px] text-faint">{[[a.firstName, a.lastName].filter(Boolean).join(" "), a.phone, a.email].filter(Boolean).join(" · ")}</p> : null}
             </li>
           ))}
         </ul>

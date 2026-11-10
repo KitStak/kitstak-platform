@@ -84,6 +84,8 @@ export const jobs = sqliteTable("jobs", {
   uniqueIndex("jobs_code_idx").on(t.code),
   index("jobs_status_idx").on(t.warehouseId, t.status),
   index("jobs_wave_idx").on(t.waveId),
+  // Count plan grids look up their jobs by plan (counts REQ-8).
+  index("jobs_count_plan_idx").on(t.countPlanId),
 ]);
 
 export const jobOrders = sqliteTable("job_orders", {
@@ -143,6 +145,9 @@ export const tasks = sqliteTable("tasks", {
   index("tasks_order_idx").on(t.orderId),
   index("tasks_status_idx").on(t.taskType, t.status),
   uniqueIndex("tasks_no_idx").on(t.taskNo),
+  // Open-task counts per location (locations grid, detail, delete guard; facility-config REQ-R2-8).
+  index("tasks_source_location_idx").on(t.sourceLocationId, t.status),
+  index("tasks_target_location_idx").on(t.targetLocationId, t.status),
 ]);
 
 export const waveRules = sqliteTable("wave_rules", {

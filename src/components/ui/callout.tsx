@@ -6,7 +6,7 @@ export type CalloutVariant = "attention" | "info" | "error" | "success";
 
 const STYLES: Readonly<Record<CalloutVariant, { readonly box: string; readonly icon: string; readonly Icon: React.ComponentType<{ className?: string }> }>> = {
   attention: { box: "border-warning/30 bg-warning-soft", icon: "text-warning", Icon: AlertTriangle },
-  info: { box: "border-primary/25 bg-primary-soft", icon: "text-primary", Icon: Info },
+  info: { box: "border-info/25 bg-info-soft", icon: "text-info", Icon: Info },
   error: { box: "border-danger/30 bg-danger-soft", icon: "text-danger", Icon: XCircle },
   success: { box: "border-success/30 bg-success-soft", icon: "text-success", Icon: CheckCircle2 },
 };

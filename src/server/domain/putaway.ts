@@ -10,6 +10,8 @@
  */
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 import type { OrderByClause, RuleCondition } from "@/lib/domain-types";
+import { zoneGroupIds } from "@/lib/grid-defs/admin/lookups";
+import { CUSTOM_FIELD_SLOTS } from "@/lib/enums";
 import * as schema from "@/server/db/schema";
 import type { AlgorithmAction } from "@/server/db/schema";
 import { OPEN_SO_STATUSES } from "./atp";
@@ -17,13 +19,15 @@ import { evaluateConditions, type Facts } from "./conditions";
 import { DomainError } from "./errors";
 import { sortByClauses } from "./facts";
 import { assertLocationAccepts, type LocationRow } from "./ledger/rules";
-import { findPutawayAction, type LocationStats, type PutawayItem } from "./putaway-actions";
+import { findPutawayAction, zoneSpreadAllows, type LocationStats, type PutawayItem } from "./putaway-actions";
 import type { Tx } from "./types";
 
 export interface SuggestInput {
   readonly warehouseId: string;
   readonly productId: string;
   readonly qty: number;
+  /** Part of `qty` already allocated to orders (Allocated Transfer Quantity condition). */
+  readonly allocatedQty?: number;
   readonly packType?: string;
   readonly lpId?: string | null;
   readonly lot?: string | null;
@@ -93,7 +97,15 @@ function locationStats(tx: Tx, warehouseId: string, productId: string): Map<stri
     .from(schema.inventory).innerJoin(schema.products, eq(schema.products.id, schema.inventory.productId))
     .where(and(eq(schema.inventory.warehouseId, warehouseId), gt(schema.inventory.onHand, 0))).all();
   const caps = tx.select().from(schema.locationProductCapacity).all();
-  const zoneNames = new Map(tx.select({ id: schema.lookupValues.id, name: schema.lookupValues.name }).from(schema.lookupValues).where(eq(schema.lookupValues.type, "location_zone")).all().map((z) => [z.id, z.name]));
+  const zones = tx.select({ id: schema.lookupValues.id, name: schema.lookupValues.name, meta: schema.lookupValues.meta }).from(schema.lookupValues).where(eq(schema.lookupValues.type, "location_zone")).all();
+  const zoneNames = new Map(zones.map((z) => [z.id, z.name]));
+  const zoneGroups = new Map(zones.map((z) => [z.id, new Set(zoneGroupIds(z.meta))]));
+  const zoneNum = (meta: unknown, key: string): number | null => {
+    const v = (meta as Record<string, unknown> | null)?.[key];
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
+  const zonePriority = new Map(zones.map((z) => [z.id, zoneNum(z.meta, "priority")]));
+  const zoneMax = new Map(zones.map((z) => [z.id, zoneNum(z.meta, "maxLocationsPerSku")]));
   const out = new Map<string, LocationStats>();
   for (const location of locs) {
     const rows = stock.filter((s) => s.inv.locationId === location.id);
@@ -102,6 +114,9 @@ function locationStats(tx: Tx, warehouseId: string, productId: string): Map<stri
     const own = locCaps.find((c) => c.productId === productId);
     out.set(location.id, {
       location, zoneName: (location.locationZoneId ? zoneNames.get(location.locationZoneId) : null) ?? location.zone ?? null,
+      zoneProductGroupIds: (location.locationZoneId ? zoneGroups.get(location.locationZoneId) : undefined) ?? new Set<string>(),
+      zonePriority: location.locationZoneId ? zonePriority.get(location.locationZoneId) ?? null : null,
+      zoneMaxLocationsPerSku: location.locationZoneId ? zoneMax.get(location.locationZoneId) ?? null : null,
       totalQty: rows.reduce((s, r) => s + r.inv.onHand, 0), allocatedQty: rows.reduce((s, r) => s + r.inv.allocated, 0),
       usedVolume: rows.reduce((s, r) => s + r.inv.onHand * r.l * r.w * r.h, 0), lpCount: new Set(rows.flatMap((r) => (r.inv.lpId ? [r.inv.lpId] : []))).size,
       skus: new Set(rows.map((r) => r.inv.productId)), skuPackTypes: new Set(rows.map((r) => `${r.inv.productId}|${r.inv.packType}`)),
@@ -114,10 +129,31 @@ function locationStats(tx: Tx, warehouseId: string, productId: string): Map<stri
   return out;
 }
 
+/** Custom-field slots as prefixed facts: `productCustomField.toggle1` etc. Every slot is present (null when unset). */
+function prefixedCustomFields(prefix: string, values: Readonly<Record<string, string | boolean | null | undefined>> | null | undefined): Facts {
+  return Object.fromEntries(CUSTOM_FIELD_SLOTS.map((slot) => [`${prefix}.${slot}`, values?.[slot] ?? null]));
+}
+
 function ruleFacts(tx: Tx, input: SuggestInput, product: typeof schema.products.$inferSelect, source: LocationRow | null): Facts {
-  const lp = input.lpId ? tx.select({ typeId: schema.licensePlates.lpTypeId }).from(schema.licensePlates).where(eq(schema.licensePlates.id, input.lpId)).get() : undefined;
-  const lpType = lp ? tx.select({ code: schema.lpTypes.code }).from(schema.lpTypes).where(eq(schema.lpTypes.id, lp.typeId)).get()?.code ?? null : null;
+  const lp = input.lpId ? tx.select({ typeId: schema.licensePlates.lpTypeId, parentLpId: schema.licensePlates.parentLpId }).from(schema.licensePlates).where(eq(schema.licensePlates.id, input.lpId)).get() : undefined;
+  const lpTypeRow = lp ? tx.select({ code: schema.lpTypes.code, customFields: schema.lpTypes.customFields }).from(schema.lpTypes).where(eq(schema.lpTypes.id, lp.typeId)).get() : undefined;
+  const lpType = lpTypeRow?.code ?? null;
+  // A parent LP (it holds child LPs) or an LP nested in a parent is a parent-LP-based transfer.
+  const hasChildren = input.lpId ? Boolean(tx.select({ id: schema.licensePlates.id }).from(schema.licensePlates).where(eq(schema.licensePlates.parentLpId, input.lpId)).limit(1).get()) : false;
+  // LP Carrier: carrier of the open shipment order whose line is pinned to this LP.
+  const lpCarrier = input.lpId
+    ? tx.select({ carrier: schema.shipmentOrders.carrier }).from(schema.orderLines).innerJoin(schema.shipmentOrders, eq(schema.shipmentOrders.id, schema.orderLines.orderId))
+      .where(and(eq(schema.orderLines.pinnedLpId, input.lpId), inArray(schema.shipmentOrders.status, [...OPEN_SO_STATUSES]))).limit(1).get()?.carrier ?? null
+    : null;
+  const sourceCustom = source ? tx.select({ cf: schema.locations.customFields, preventAllocation: schema.locations.preventAllocation }).from(schema.locations).where(eq(schema.locations.id, source.id)).get() : undefined;
   return {
+    allocatedTransferQuantity: input.allocatedQty ?? 0,
+    isPreventAllocation: sourceCustom ? sourceCustom.preventAllocation : null,
+    lpCarrier,
+    isParentLpTransfer: lp ? Boolean(lp.parentLpId) || hasChildren : false,
+    ...prefixedCustomFields("locationCustomField", sourceCustom?.cf),
+    ...prefixedCustomFields("lpTypeCustomField", lpTypeRow?.customFields),
+    ...prefixedCustomFields("productCustomField", product.customFields),
     client: product.clientId, sku: product.sku, productGroup: product.productGroupId, productType: product.productTypeId,
     productPackType: input.packType ?? product.uom, damageReason: input.damageReason ?? null, expiryDate: input.expiry ?? null,
     lotBatchNumber: input.lot ?? null, productionDate: input.productionDate ?? null, receivingDate: input.receivedAt ?? null,
@@ -134,7 +170,8 @@ function orderFactsOf(s: LocationStats): Facts {
   return {
     aisle: s.location.aisle, allocatedQuantity: s.allocatedQty, column: s.location.column, level: s.location.level,
     locationEmptyVolume: Math.max(0, s.location.volume - s.usedVolume), lpCountInLocation: s.lpCount, skuCountInLocation: s.skus.size,
-    totalInventoryQuantity: s.totalQty, walkingPathPriority: s.location.walkingPathPriority, zonePriority: s.zoneName ?? s.location.zone,
+    totalInventoryQuantity: s.totalQty, walkingPathPriority: s.location.walkingPathPriority, // Data Setup zone priority when set (lower first); zones without one fall back to their name.
+    zonePriority: s.zonePriority ?? s.zoneName ?? s.location.zone,
   };
 }
 
@@ -154,7 +191,13 @@ export function suggestLocations(tx: Tx, input: SuggestInput): SuggestResult {
   const productLocationIds = new Set([...stats.values()].filter((s) => s.skus.has(product.id)).map((s) => s.location.id));
   const productGroupName = lookupName(tx, product.productGroupId);
   const facts = ruleFacts(tx, input, product, source);
-  const base = [...stats.values()].filter((s) => s.location.id !== input.fromLocationId && !s.location.isLocked);
+  // Zone "Max locations per SKU": count the zones' locations already holding the product.
+  const productLocationsByZone = new Map<string, number>();
+  for (const s of stats.values()) {
+    const zoneId = s.location.locationZoneId;
+    if (zoneId && productLocationIds.has(s.location.id)) productLocationsByZone.set(zoneId, (productLocationsByZone.get(zoneId) ?? 0) + 1);
+  }
+  const base = [...stats.values()].filter((s) => s.location.id !== input.fromLocationId && !s.location.isLocked && zoneSpreadAllows(s, productLocationIds, productLocationsByZone));
   const trace: TraceEntry[] = [];
   for (const rule of rules) {
     if (!evaluateConditions(rule.conditions, facts)) {

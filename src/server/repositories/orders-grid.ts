@@ -10,6 +10,7 @@ import { AppError } from "@/server/api/errors";
 import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/server/query/filters";
 import { parseGridQuery, type GridQuery } from "@/server/query/grid-query";
 import { ORDER_FILTER_FIELDS, ORDER_SEARCH_FIELDS, ORDER_SORT_FIELDS } from "@/lib/grid-defs/orders/shipment-orders";
+import { effectiveRankSql } from "@/lib/grid-defs/orders/priority";
 
 const so = schema.shipmentOrders;
 
@@ -23,23 +24,28 @@ export const q = Object.fromEntries(
 ) as { readonly [K in keyof typeof so.$inferSelect]: SQL };
 
 const days = (from: SQL): SQL => sql`CAST(julianday(COALESCE(${q.shippedAt}, ${q.cancelledAt}, 'now')) - julianday(${from}) AS INTEGER)`;
+/** The single integer priority (column, sort, numeric filter, export); see grid-defs/orders/priority. */
+const priorityRank = sql.raw(effectiveRankSql(`"shipment_orders"."priority"`, `"shipment_orders"."priority_rank"`));
 const cf = (key: string): SQL => sql`json_extract(${q.customFields}, ${`$.${key}`})`;
 
 /** SQL per column id / filter field. */
 export const ORDER_SQL: Readonly<Record<string, SQL>> = {
   code: sql`${q.code}`,
   storeOrderNumber: sql`${q.storeOrderNumber}`,
-  companyName: sql`${q.companyName}`,
+  // Company: the order's own company, else the customer's default address company, else the retailer (B2B).
+  companyName: sql`COALESCE(NULLIF(${q.companyName}, ''), (SELECT a.company_name FROM addresses a WHERE a.owner_type = 'customer' AND a.owner_id = ${q.customerId} AND a.company_name IS NOT NULL AND a.company_name <> '' ORDER BY a.is_default DESC LIMIT 1), (SELECT r.name FROM retailers r WHERE r.id = ${q.retailerId}))`,
   channelPaymentStatus: sql`${q.channelPaymentStatus}`,
   storeName: sql`COALESCE(${q.storeName}, CASE WHEN ${q.channel} = 'Manual' THEN 'Created Manually' END)`,
   channel: sql`${q.channel}`,
   age: days(sql`${q.orderDate}`),
   processingAge: days(sql`${q.createdAt}`),
+  daysSinceShipped: sql`CASE WHEN COALESCE(${q.shippedAt}, ${q.cancelledAt}) IS NULL THEN NULL ELSE CAST(julianday('now') - julianday(COALESCE(${q.shippedAt}, ${q.cancelledAt})) AS INTEGER) END`,
   totalWeightOz: sql`${q.totalWeightOz}`,
   clientId: sql`${q.clientId}`,
   clientName: sql`(SELECT c.name FROM clients c WHERE c.id = ${q.clientId})`,
   warehouseId: sql`${q.warehouseId}`,
-  warehouseCode: sql`(SELECT w.code FROM warehouses w WHERE w.id = ${q.warehouseId})`,
+  // Same label as the detail page (`codeNameLabel`): "MLT1 - Main Fulfillment"; the code is not repeated when the name starts with it.
+  warehouseCode: sql`(SELECT CASE WHEN w.code IS NULL OR w.code = '' THEN w.name WHEN upper(w.name) = upper(w.code) OR upper(w.name) LIKE upper(w.code) || ' %' THEN w.name ELSE w.code || ' - ' || w.name END FROM warehouses w WHERE w.id = ${q.warehouseId})`,
   status: sql`${q.status}`,
   pickShortStatus: sql`${q.pickShortStatus}`,
   packShortStatus: sql`${q.packShortStatus}`,
@@ -67,12 +73,15 @@ export const ORDER_SQL: Readonly<Record<string, SQL>> = {
   createdAt: sql`${q.createdAt}`,
   deliveredAt: sql`${q.deliveredAt}`,
   actualPickupDate: sql`${q.actualPickupDate}`,
-  shippedAt: sql`COALESCE(${q.shippedAt}, ${q.cancelledAt})`,
+  // The cell is the real ship date only: a cancelled order was never shipped (Cancel Date has its own column).
+  shippedAt: sql`${q.shippedAt}`,
   shippingAccountNumber: sql`${q.shippingAccountNumber}`,
   taxDutiesAccountNumber: sql`${q.taxDutiesAccountNumber}`,
   isPrime: sql`${q.isPrime}`,
   isGift: sql`${q.isGift}`,
-  priority: sql`${q.priority}`,
+  priority: priorityRank,
+  priorityRank,
+  priorityLevel: sql`${q.priority}`,
   scheduledPickupDate: sql`${q.scheduledPickupDate}`,
   expectedDeliveryDate: sql`${q.expectedDeliveryDate}`,
   extraNote1: sql`${q.extraNote1}`,
@@ -112,6 +121,23 @@ export const ORDER_SQL: Readonly<Record<string, SQL>> = {
   cfToggle1: cf("toggle1"), cfToggle2: cf("toggle2"),
 };
 
+const warned = new Set<string>();
+
+/** Logs an unmapped field once per process instead of failing the whole grid (a def/SQL-map mismatch must never 500 the list). */
+function warnUnmapped(field: string, where: string): void {
+  const key = `${where}:${field}`;
+  if (warned.has(key)) return;
+  warned.add(key);
+  console.warn(`orders-grid: no SQL for ${where} field "${field}"; it is skipped.`);
+}
+
+/** SQL for a column / filter field, or undefined (logged) when the field is not mapped. */
+export function tryOrderExpr(field: string, where = "column"): SQL | undefined {
+  const expr = ORDER_SQL[field];
+  if (!expr) warnUnmapped(field, where);
+  return expr;
+}
+
 export function orderExpr(field: string): SQL {
   const expr = ORDER_SQL[field];
   if (!expr) throw new Error(`orders-grid: no SQL for field "${field}"`);
@@ -123,10 +149,26 @@ function tagFilterDef(): FilterFieldDef {
   return { key: "tag", label: "Tag", type: "enum", sql: sql`${q.id}`, nullable: true };
 }
 
-/** Server filter defs derived from the shared field list. */
-export const ORDER_FILTER_DEFS: readonly FilterFieldDef[] = ORDER_FILTER_FIELDS.map((f) =>
-  f.field === "tag" ? tagFilterDef() : { key: f.field, label: f.label, type: f.type, sql: orderExpr(f.field), nullable: true },
-);
+/**
+ * Filter SQL that differs from the column SQL:
+ * - `priority` (saved views: "High or Urgent") speaks in levels;
+ * - `shippedAt`: the Shipped & Canceled default chip ("Actual Shipment Date: Last 7 days")
+ *   also matches orders cancelled in the window, while the cell shows only a real ship date.
+ */
+const FILTER_SQL: Readonly<Record<string, SQL>> = {
+  priority: sql`${q.priority}`,
+  shippedAt: sql`COALESCE(${q.shippedAt}, ${q.cancelledAt})`,
+};
+
+/** Sort SQL that differs from the column SQL: shipped / cancelled orders sort together by their close date. */
+const SORT_SQL: Readonly<Record<string, SQL>> = { shippedAt: sql`COALESCE(${q.shippedAt}, ${q.cancelledAt})` };
+
+/** Server filter defs derived from the shared field list; an unmapped field is skipped (logged), never fatal. */
+export const ORDER_FILTER_DEFS: readonly FilterFieldDef[] = ORDER_FILTER_FIELDS.flatMap((f): FilterFieldDef[] => {
+  if (f.field === "tag") return [tagFilterDef()];
+  const expr = FILTER_SQL[f.field] ?? tryOrderExpr(f.field, "filter");
+  return expr ? [{ key: f.field, label: f.label, type: f.type, sql: expr, nullable: true }] : [];
+});
 
 /** `f.tag=in:a,b` is rewritten to an EXISTS over entity_tags (multi-valued field). */
 function compileTagFilters(query: GridQuery): { readonly rest: GridQuery["filters"]; readonly sql: SQL[] } {
@@ -190,11 +232,21 @@ export function compileOrderGrid(query: GridQuery): OrderGridParams {
   }
   const tags = compileTagFilters(query);
   const skus = compileSkuFilters(tags.rest);
-  const search = compileQuickSearch(query.q, query.qm, ORDER_SEARCH_FIELDS.map(orderExpr));
-  const filters = compileFilters(ORDER_FILTER_DEFS, skus.rest);
+  const searchExprs = ORDER_SEARCH_FIELDS.map((f) => tryOrderExpr(f, "search")).filter((e): e is SQL => e !== undefined);
+  const search = compileQuickSearch(query.q, query.qm, searchExprs);
+  const known = new Set(ORDER_FILTER_DEFS.map((d) => d.key));
+  const mapped = skus.rest.filter((f) => {
+    if (known.has(f.field)) return true;
+    warnUnmapped(f.field, "filter");
+    return false;
+  });
+  const filters = compileFilters(ORDER_FILTER_DEFS, mapped);
   const parts = [search, filters, ...tags.sql, ...skus.sql].filter((p): p is SQL => p !== undefined);
   const where = parts.length === 0 ? undefined : parts.length === 1 ? parts[0] : sql`(${sql.join(parts, sql` AND `)})`;
-  const orderBy = query.sort.map((s) => (s.dir === "asc" ? asc(orderExpr(s.field)) : desc(orderExpr(s.field))));
+  const orderBy = query.sort.flatMap((s) => {
+    const expr = SORT_SQL[s.field] ?? tryOrderExpr(s.field, "sort");
+    return expr ? [s.dir === "asc" ? asc(expr) : desc(expr)] : [];
+  });
   return { query, where, orderBy };
 }
 
