@@ -1,125 +1,98 @@
-import { createHash } from "node:crypto";
+/**
+ * Session API for Next.js (server components, route handlers, proxy).
+ *
+ * - `getSessionUser()`  — server components / layouts (reads `cookies()`), DB-verified.
+ * - `getRequestSession(db, request)` — route handlers (reads the request cookie).
+ * - `setSessionCookie` / `clearSessionCookie` — attach to a `NextResponse`.
+ *
+ * Verification rules live in `session-store.ts` (jti + sv + user_sessions revocation).
+ */
+import { cache } from "react";
 import { cookies } from "next/headers";
-import { SignJWT, jwtVerify } from "jose";
+import { connection, type NextRequest, type NextResponse } from "next/server";
+import { getAppDb, type AppDb } from "@/server/api/db";
+import { log } from "@/server/log";
+import { resolveSession, type SessionResolution, type SessionUser } from "./session-store";
+
+export {
+  bumpSessionVersion,
+  issueSession,
+  listActiveSessions,
+  revokeSession,
+  revokeUserSessions,
+  SESSION_TTL_SECONDS,
+  type IssuedSession,
+  type SessionUser,
+} from "./session-store";
 
 export const SESSION_COOKIE = "kitstak_session";
 
-const SESSION_TTL_SECONDS = 12 * 60 * 60; // 12 hours
-const JWT_ALG = "HS256";
-
-export type SessionRole = "admin" | "manager" | "operator" | "viewer";
-
-export interface SessionUser {
-  id: string;
-  email: string;
-  name: string;
-  role: SessionRole;
-}
-
-const ROLES: readonly SessionRole[] = ["admin", "manager", "operator", "viewer"];
-
-function isSessionRole(value: unknown): value is SessionRole {
-  return typeof value === "string" && (ROLES as readonly string[]).includes(value);
-}
-
-let warnedMissingSecret = false;
-
-/**
- * Resolve the signing secret. In production a missing SESSION_SECRET is fatal;
- * in development we derive a stable (but insecure) fallback and warn once.
- */
-function getSecretKey(): Uint8Array {
-  const secret = process.env.SESSION_SECRET;
-  if (secret && secret.length >= 32) {
-    return new TextEncoder().encode(secret);
-  }
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "SESSION_SECRET is not configured. Set a strong random value (64 hex chars) in the environment."
-    );
-  }
-  if (!warnedMissingSecret) {
-    warnedMissingSecret = true;
-    console.error(
-      "[kitstak:auth] SESSION_SECRET is missing — using an insecure, derived dev-only fallback. " +
-        "Create .env.local with SESSION_SECRET (see .env.example)."
-    );
-  }
-  const derived = createHash("sha256")
-    .update("kitstak-dev-fallback-session-secret")
-    .digest("hex");
-  return new TextEncoder().encode(derived);
-}
+/** Legacy alias kept for existing imports. */
+export type SessionRole = SessionUser["role"];
 
 function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
-/** Sign a session JWT for the user and set it as an httpOnly cookie. */
-export async function createSession(user: SessionUser): Promise<void> {
-  const token = await new SignJWT({
-    email: user.email,
-    name: user.name,
-    role: user.role,
-  })
-    .setProtectedHeader({ alg: JWT_ALG })
-    .setSubject(user.id)
-    .setIssuedAt()
-    .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
-    .sign(getSecretKey());
-
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: isProduction(),
-    path: "/",
-    maxAge: SESSION_TTL_SECONDS,
-  });
+export interface CookieSpec {
+  readonly httpOnly: boolean;
+  readonly sameSite: "lax" | "strict";
+  readonly secure: boolean;
+  readonly path: string;
+  readonly maxAge: number;
 }
 
-/** Clear the session cookie. */
-export async function destroySession(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: isProduction(),
-    path: "/",
-    maxAge: 0,
-  });
+export function sessionCookieOptions(maxAgeSeconds: number): CookieSpec {
+  return { httpOnly: true, sameSite: "lax", secure: isProduction(), path: "/", maxAge: maxAgeSeconds };
+}
+
+export function setSessionCookie(response: NextResponse, token: string, maxAgeSeconds: number): void {
+  response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(maxAgeSeconds));
+}
+
+export function clearSessionCookie(response: NextResponse): void {
+  response.cookies.set(SESSION_COOKIE, "", sessionCookieOptions(0));
+}
+
+/** Verifies the session cookie of a route-handler request. */
+export async function getRequestSession(db: AppDb, request: NextRequest | Request): Promise<SessionResolution> {
+  const token = readCookie(request, SESSION_COOKIE);
+  if (!token) return { ok: false, reason: "malformed" };
+  return resolveSession(db, token);
+}
+
+/** Reads a cookie from a `NextRequest` or a plain `Request`. */
+export function readCookie(request: NextRequest | Request, name: string): string | undefined {
+  const maybeNext = request as { cookies?: { get(n: string): { value: string } | undefined } };
+  if (maybeNext.cookies && typeof maybeNext.cookies.get === "function") {
+    return maybeNext.cookies.get(name)?.value || undefined;
+  }
+  const header = request.headers.get("cookie") ?? "";
+  for (const part of header.split(";")) {
+    const [rawKey, ...rest] = part.trim().split("=");
+    if (rawKey === name) return decodeURIComponent(rest.join("=")) || undefined;
+  }
+  return undefined;
 }
 
 /**
- * Verify the session JWT from the request cookie.
- * Returns the session user, or null on any failure (missing, expired, tampered).
+ * Session user for server components (memoised per request via React `cache`).
+ * Returns null when the cookie is missing, invalid, revoked or the user was deactivated.
  */
-export async function getSessionUser(): Promise<SessionUser | null> {
+export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
+  // `cookies()` stays outside the try: during prerendering Next signals dynamic usage
+  // through it, and that signal must propagate.
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  // Session checks read the clock (expiry, lastSeenAt): mark the render as request-time.
+  await connection();
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get(SESSION_COOKIE)?.value;
-    if (!token) return null;
-
-    const { payload } = await jwtVerify(token, getSecretKey(), {
-      algorithms: [JWT_ALG],
-    });
-
-    const id: unknown = payload.sub;
-    const email: unknown = payload.email;
-    const name: unknown = payload.name;
-    const role: unknown = payload.role;
-
-    if (
-      typeof id !== "string" ||
-      typeof email !== "string" ||
-      typeof name !== "string" ||
-      !isSessionRole(role)
-    ) {
-      return null;
-    }
-
-    return { id, email, name, role };
-  } catch {
+    const db = await getAppDb();
+    const resolution = await resolveSession(db, token);
+    return resolution.ok ? resolution.user : null;
+  } catch (error: unknown) {
+    log.error("getSessionUser failed", { component: "auth", err: error });
     return null;
   }
-}
+});

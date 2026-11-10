@@ -1,0 +1,94 @@
+"use client";
+
+/**
+ * Import batch details (`GET /api/imports/batches/[id]` → `{ batch, rows }`): summary
+ * counts and the row results, with "Show Errors" narrowing to failed rows.
+ */
+import * as React from "react";
+import { z } from "zod";
+import { cn } from "@/lib/utils";
+import { useFormat } from "@/lib/format";
+import { useApiQuery } from "@/lib/query-client";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Drawer } from "@/components/ui/drawer";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SkeletonTable } from "@/components/ui/skeleton";
+import { StatusPill } from "@/components/ui/status-pill";
+import { Switch } from "@/components/ui/switch";
+import { fileUrl, importBatchSchema, importRowSchema, type ImportBatch } from "./contracts";
+
+const detailsSchema = z.object({ batch: importBatchSchema, rows: z.array(importRowSchema).default([]) });
+
+export function ImportDetailsDrawer({ batch, onOpenChange }: { readonly batch: ImportBatch | null; readonly onOpenChange: (open: boolean) => void }) {
+  const fmt = useFormat();
+  const [errorsOnly, setErrorsOnly] = React.useState(false);
+  const query = useApiQuery<unknown>(["import-batch", batch?.id ?? ""], batch ? `/api/imports/batches/${encodeURIComponent(batch.id)}` : null);
+  const parsed = detailsSchema.safeParse(query.data?.data);
+  const rows = parsed.success ? parsed.data.rows : [];
+  const shown = errorsOnly ? rows.filter((r) => !r.success) : rows;
+  const current = parsed.success ? parsed.data.batch : batch;
+
+  return (
+    <Drawer
+      open={batch !== null}
+      onOpenChange={onOpenChange}
+      width={60}
+      title="Import details"
+      description={current ? `Uploaded ${fmt.dateTime(current.createdAt)} by ${current.uploadedByName ?? current.uploadedBy ?? "Unknown"}` : undefined}
+      footer={
+        current?.errorFileId ? (
+          <a href={fileUrl(current.errorFileId, true)} download className={cn(buttonVariants({ variant: "secondary" }), "ml-auto")}>
+            Download Error File
+          </a>
+        ) : undefined
+      }
+    >
+      {current ? (
+        <div className="mb-4 grid grid-cols-4 gap-3">
+          {[
+            ["Status", <StatusPill key="s" status={current.status} domain="integration" />],
+            ["Master rows", fmt.number(current.masterRowCount)],
+            ["Success", <span key="ok" className="text-success">{fmt.number(current.successCount)}</span>],
+            ["Error", <span key="err" className={cn(current.errorCount > 0 && "text-danger")}>{fmt.number(current.errorCount)}</span>],
+          ].map(([label, value]) => (
+            <div key={String(label)} className="rounded-lg border border-border p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{label}</p>
+              <p className="mt-1 text-[15px] font-semibold tabular-nums text-foreground">{value}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div className="mb-3 flex justify-end">
+        <Switch label="Show errors" checked={errorsOnly} onCheckedChange={setErrorsOnly} />
+      </div>
+      {query.isPending ? (
+        <SkeletonTable rows={6} columns={3} />
+      ) : query.error ? (
+        <EmptyState compact title="Could not load the import details" description={query.error.message} action={<Button size="sm" onClick={() => void query.refetch()}>Retry</Button>} />
+      ) : shown.length === 0 ? (
+        <EmptyState compact title={errorsOnly ? "No errors in this import" : "No rows recorded"} />
+      ) : (
+        <table className="w-full border-collapse overflow-hidden rounded-lg border border-border text-[13px]">
+          <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+            <tr>
+              <th scope="col" className="w-20 px-3 py-2">Row</th>
+              <th scope="col" className="w-28 px-3 py-2">Result</th>
+              <th scope="col" className="px-3 py-2">Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((r) => (
+              <tr key={r.rowNumber} className="border-t border-border">
+                <td className="px-3 py-2 tabular-nums text-secondary">{r.rowNumber}</td>
+                <td className="px-3 py-2">
+                  <StatusPill status={r.success ? "Successful" : "Error"} domain="integration" size="sm" />
+                </td>
+                <td className="px-3 py-2 text-body">{r.message ?? (r.success ? "Imported" : "Failed")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Drawer>
+  );
+}

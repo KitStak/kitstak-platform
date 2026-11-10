@@ -1,0 +1,18 @@
+/** `GET|PATCH /api/warehouses/[id]` — detail and edit (optimistic `version`). */
+import { defineRoute } from "@/server/api/define-route";
+import { warehouseSchema } from "@/lib/grid-defs/facility/warehouses";
+import { idParamsSchema } from "@/server/repositories/platform-common";
+import { getWarehouse, updateWarehouse } from "@/server/repositories/warehouses";
+
+export const GET = defineRoute({
+  permission: "settings.warehouse.view",
+  params: idParamsSchema,
+  handler: ({ db, auth, params }) => getWarehouse(db, auth, params.id),
+});
+
+export const PATCH = defineRoute({
+  permission: "settings.warehouse.edit",
+  params: idParamsSchema,
+  body: warehouseSchema,
+  handler: ({ db, auth, actor, params, body }) => updateWarehouse(db, auth, actor, params.id, body),
+});

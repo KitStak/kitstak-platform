@@ -1,3 +1,8 @@
+/**
+ * LEGACY read models kept for the pre-foundation inventory-snapshot / verify-data callers
+ * (`reports.ts`, `scripts/verify-data.ts`). The inventory pages use the scoped grid
+ * repositories (`inventory-total.ts`, `inventory-by-location.ts`, `inventory-atp.ts`).
+ */
 import { and, asc, count, countDistinct, desc, eq, inArray, like, or, sql, type SQL } from "drizzle-orm";
 import { db, schema } from "@/server/db";
 import { likePattern, offsetOf, type ListResult } from "./shared";

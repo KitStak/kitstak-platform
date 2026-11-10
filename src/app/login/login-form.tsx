@@ -3,8 +3,14 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Field, Input } from "@/components/ui/input";
+import { Tooltip } from "@/components/ui/tooltip";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { validateLogin, type LoginField, type LoginFieldErrors } from "./login-schema";
+
+const INVALID_INPUT = "border-danger focus:border-danger focus:ring-danger/20";
 
 interface LoginSuccessResponse {
   success: true;
@@ -27,6 +33,8 @@ function isLoginResponse(value: unknown): value is LoginResponse {
   );
 }
 
+const SSO_DISABLED_REASON = "SSO isn't configured for this workspace";
+
 /** Only allow same-origin relative paths as a post-login destination. */
 function safeNextPath(raw: string | null): string {
   if (raw && raw.startsWith("/") && !raw.startsWith("//")) {
@@ -35,26 +43,68 @@ function safeNextPath(raw: string | null): string {
   return "/dashboard";
 }
 
-export function LoginForm(): React.ReactElement {
+const noopSubscribe = (): (() => void) => () => undefined;
+
+/** False during SSR and before hydration; true once React owns the form. */
+function useHydrated(): boolean {
+  return React.useSyncExternalStore(noopSubscribe, () => true, () => false);
+}
+
+/** Explicit `<label htmlFor>` so "Email*" / "Password*" are the accessible names (not the placeholder). */
+function LabeledField({ id, label, error, children }: { readonly id: string; readonly label: string; readonly error?: string; readonly children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-[12px] font-semibold text-body">
+        {label}
+        <span className="text-danger" aria-hidden>*</span>
+      </label>
+      {children}
+      {error ? <span id={`${id}-error`} className="text-[11px] text-danger">{error}</span> : null}
+    </div>
+  );
+}
+
+export interface LoginFormProps {
+  /** Show the seeded demo credentials (non-production builds only). */
+  readonly showDemoCredentials?: boolean;
+}
+
+export function LoginForm({ showDemoCredentials = false }: LoginFormProps): React.ReactElement {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const hydrated = useHydrated();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = React.useState<LoginFieldErrors>({});
+  const emailRef = React.useRef<HTMLInputElement>(null);
+  const passwordRef = React.useRef<HTMLInputElement>(null);
+
+  const clearFieldError = (field: LoginField): void => {
+    if (fieldErrors[field]) setFieldErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (isSubmitting) return;
     setError(null);
+    // Validate locally first: an empty submit never reaches the server or the rate limiter.
+    const invalid = validateLogin({ email, password });
+    setFieldErrors(invalid);
+    if (invalid.email || invalid.password) {
+      (invalid.email ? emailRef : passwordRef).current?.focus();
+      return;
+    }
     setIsSubmitting(true);
 
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // Wrong credentials come back as 200 + success:false (no console 401 for an expected outcome).
+        headers: { "Content-Type": "application/json", "x-ks-soft-auth-failure": "1" },
         body: JSON.stringify({ email, password }),
       });
 
@@ -95,9 +145,16 @@ export function LoginForm(): React.ReactElement {
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4" noValidate>
-          <Field label="Email" required>
+        {/* method/action: a submit before hydration is a POST (never a GET that puts the password in the URL). */}
+        <form method="post" action="/api/auth/login" onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4" noValidate>
+          <LabeledField id="login-email" label="Email" error={fieldErrors.email}>
             <Input
+              id="login-email"
+              aria-label="Email"
+              ref={emailRef}
+              aria-required
+              aria-describedby={fieldErrors.email ? "login-email-error" : undefined}
+              aria-invalid={fieldErrors.email ? true : undefined}
               type="email"
               name="email"
               autoComplete="email"
@@ -105,22 +162,34 @@ export function LoginForm(): React.ReactElement {
               required
               autoFocus
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-9"
+              onChange={(e) => {
+                setEmail(e.target.value);
+                clearFieldError("email");
+              }}
+              className={cn("h-9", fieldErrors.email && INVALID_INPUT)}
             />
-          </Field>
+          </LabeledField>
 
-          <Field label="Password" required>
+          <LabeledField id="login-password" label="Password" error={fieldErrors.password}>
             <div className="relative">
               <Input
+                id="login-password"
+                aria-label="Password"
+                ref={passwordRef}
+                aria-required
+                aria-describedby={fieldErrors.password ? "login-password-error" : undefined}
+                aria-invalid={fieldErrors.password ? true : undefined}
                 type={showPassword ? "text" : "password"}
                 name="password"
                 autoComplete="current-password"
-                placeholder="••••••••••"
+                placeholder="Password"
                 required
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-9 pr-9"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  clearFieldError("password");
+                }}
+                className={cn("h-9 pr-9", fieldErrors.password && INVALID_INPUT)}
               />
               <button
                 type="button"
@@ -135,15 +204,15 @@ export function LoginForm(): React.ReactElement {
                 )}
               </button>
             </div>
-          </Field>
+          </LabeledField>
 
           <div className="flex items-center justify-end">
-            <a
-              href="#"
+            <Link
+              href="/forgot-password"
               className="text-[12.5px] font-medium text-primary transition-colors hover:text-primary-hover hover:underline"
             >
               Forgot password?
-            </a>
+            </Link>
           </div>
 
           <Button
@@ -151,7 +220,7 @@ export function LoginForm(): React.ReactElement {
             variant="primary"
             size="lg"
             className="w-full"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !hydrated}
           >
             {isSubmitting ? (
               <>
@@ -170,12 +239,18 @@ export function LoginForm(): React.ReactElement {
           <span className="h-px flex-1 bg-border" />
         </div>
 
-        <Button type="button" size="lg" className="mt-5 w-full">
-          <KeyRound className="h-4 w-4 text-secondary" aria-hidden />
-          Log in with SSO
-        </Button>
+        <Tooltip content={SSO_DISABLED_REASON}>
+          <span tabIndex={0} aria-label={SSO_DISABLED_REASON} className="mt-5 flex w-full cursor-not-allowed rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+            {/* pointer-events-none: a disabled button swallows hover, so the span drives the tooltip. */}
+            <Button type="button" size="lg" className="pointer-events-none w-full" disabled>
+              <KeyRound className="h-4 w-4 text-secondary" aria-hidden />
+              Log in with SSO
+            </Button>
+          </span>
+        </Tooltip>
       </div>
 
+      {showDemoCredentials ? (
       <div className="mt-4 rounded-lg border border-border bg-surface-sunken px-4 py-3 text-[12px] text-secondary shadow-xs">
         <span className="font-semibold text-body">Demo workspace</span> — sign in with{" "}
         <code className="rounded bg-neutral-soft px-1 py-px font-mono text-[11.5px] text-body">
@@ -186,6 +261,7 @@ export function LoginForm(): React.ReactElement {
           KitStak!demo2026
         </code>
       </div>
+      ) : null}
     </div>
   );
 }

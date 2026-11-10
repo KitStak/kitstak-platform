@@ -3,25 +3,27 @@
 /* ================= KitStak WMS design tokens ================= */
 :root {
   /* canvas + surfaces */
-  --background: #f6f7f9;
+  /* KitStak identity: crimson #C8102E, maroon #8F122C, navy #0A1628, cream #F3F0E7 */
+  --background: #f5f3ee;
   --surface: #ffffff;
-  --surface-sunken: #f9fafb;
-  --border: #e4e7ec;
-  --border-strong: #d0d5dd;
+  --surface-sunken: #faf9f6;
+  --border: #e6e2d9;
+  --border-strong: #d2ccc0;
 
   /* text */
-  --foreground: #101828;
-  --text-body: #344054;
-  --text-secondary: #667085;
-  --text-faint: #98a2b3;
+  --foreground: #0a1628;
+  --text-body: #2b3648;
+  --text-secondary: #5b6474;
+  /* AA: #5b6474 reaches 4.5:1+ on white and on #f5f3ee (stations-returns REQ-4). */
+  --text-faint: #5b6474;
 
   /* brand */
-  --nav: #353e6b;
-  --nav-hover: #414b80;
-  --nav-active: #4a549008;
-  --primary: #2e5ce6;
-  --primary-hover: #2449b8;
-  --primary-soft: #eff4ff;
+  --nav: #0a1628;
+  --nav-hover: #16253d;
+  --nav-active: #c8102e14;
+  --primary: #c8102e;
+  --primary-hover: #a50d26;
+  --primary-soft: #fcecee;
 
   /* semantic */
   --success: #027a48;
@@ -35,7 +37,7 @@
   --neutral: #475467;
   --neutral-soft: #f2f4f7;
 
-  --ring: rgba(46, 92, 230, 0.35);
+  --ring: rgba(200, 16, 46, 0.35);
 
   --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
   --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.1), 0 1px 2px rgba(16, 24, 40, 0.06);
@@ -44,20 +46,21 @@
 }
 
 :root[data-theme="dark"] {
-  --background: #0d1117;
-  --surface: #161b26;
-  --surface-sunken: #11161f;
-  --border: #272e3b;
-  --border-strong: #333c4d;
-  --foreground: #f2f4f7;
-  --text-body: #cdd5e0;
-  --text-secondary: #94a3b8;
-  --text-faint: #64748b;
-  --nav: #11162a;
-  --nav-hover: #1c2340;
-  --primary: #5c82f2;
-  --primary-hover: #7695f5;
-  --primary-soft: #1b2440;
+  --background: #070f1d;
+  --surface: #0f1b2e;
+  --surface-sunken: #0b1525;
+  --border: #1e2b42;
+  --border-strong: #2a3a55;
+  --foreground: #f3f0e7;
+  --text-body: #d5d2c8;
+  --text-secondary: #9aa3b2;
+  --text-faint: #7a8496;
+  --nav: #050c18;
+  --nav-hover: #13213a;
+  --primary: #e8344f;
+  --primary-hover: #f05a70;
+  --primary-soft: #2a1220;
+  --ring: rgba(232, 52, 79, 0.45);
   --success: #3ccb7f;
   --success-soft: #0f2a1d;
   --warning: #f5a623;
@@ -97,18 +100,35 @@
   --color-neutral-soft: var(--neutral-soft);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, sans-serif;
+  --font-display: var(--font-bebas), "Oswald", "Arial Narrow", sans-serif;
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
 }
 
-* {
-  border-color: var(--border);
+/* Default border colour. MUST stay inside @layer base: an unlayered rule here
+   would beat every Tailwind v4 `border-*` utility (they live in
+   @layer utilities), killing invalid/focus/hover border states app-wide. */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
 }
 
 html {
   font-size: 16px;
+  /* Reserve the scrollbar lane so Radix scroll-lock never shifts the shell. */
+  scrollbar-gutter: stable;
+}
+
+/* react-remove-scroll-bar compensates for the scrollbar with a body margin;
+   with a stable gutter that compensation would itself shift the page. */
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
+  padding-right: 0 !important;
 }
 
 body {
@@ -121,11 +141,13 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* keyboard focus */
-:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 1px;
-  border-radius: 4px;
+/* keyboard focus: layered + zero-specificity so Tailwind `outline-none`,
+   `rounded-*` and `ring-*` utilities on a component always win. */
+@layer base {
+  :where(:focus-visible) {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
 }
 
 ::selection {
@@ -133,21 +155,42 @@ body {
   color: var(--primary);
 }
 
-/* thin scrollbars for grid regions */
-.ks-scroll::-webkit-scrollbar {
-  height: 10px;
-  width: 10px;
+/* Thin product scrollbars everywhere (page, popovers, search results, menus, grids), with
+   no native arrow buttons. Chromium/WebKit use the ::-webkit rules. The standard
+   `scrollbar-width`/`scrollbar-color` properties are applied ONLY where ::-webkit-scrollbar
+   is unsupported (Firefox): in Chrome 121+ setting them switches to standard scrollbars,
+   which ignore ::-webkit-scrollbar and bring back the Windows arrow buttons. */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-.ks-scroll::-webkit-scrollbar-track {
-  background: var(--surface-sunken);
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
-.ks-scroll::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 6px;
-  border: 2px solid var(--surface-sunken);
+  border-radius: 3px;
 }
-.ks-scroll::-webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover,
+.ks-scroll:hover::-webkit-scrollbar-thumb {
   background: var(--text-faint);
+}
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+@supports not selector(::-webkit-scrollbar) {
+  html,
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  /* Grid regions: the thumb darkens on hover so long tables read as scrollable. */
+  .ks-scroll:hover {
+    scrollbar-color: var(--text-faint) transparent;
+  }
 }
 
 .tabular-nums {
@@ -172,6 +215,14 @@ body {
   background-size: 800px 100%;
   animation: ks-shimmer 1.4s ease infinite;
   border-radius: 4px;
+}
+
+/* Route transition: after 400ms of a pending navigation the old page dims (route-progress.tsx). */
+#main-content {
+  transition: opacity 160ms ease-out;
+}
+html[data-route-pending] #main-content {
+  opacity: 0.6;
 }
 
 @media (prefers-reduced-motion: reduce) {

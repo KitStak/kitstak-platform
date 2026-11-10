@@ -1,34 +1,37 @@
-import { connection } from "next/server";
+/**
+ * `GET /api/orders?view=backlog|shipped` (grid grammar; legacy `tab=` and `status=` kept)
+ * and `POST /api/orders` (create wizard → `orders.createOrder`, workflows run).
+ */
 import { z } from "zod";
-import {
-  badRequest,
-  listQuerySchema,
-  ok,
-  queryOf,
-  requireSession,
-  serverError,
-  zodMessage,
-} from "@/server/api-utils";
-import { listOrders, ORDER_CHANNELS, ORDER_STATUSES } from "@/server/repositories/orders";
+import { defineRoute } from "@/server/api/define-route";
+import { created, listResult } from "@/server/api/envelope";
+import { SO_STATUSES } from "@/lib/enums";
+import { ORDER_PERMISSIONS, ORDER_VIEWS } from "@/lib/grid-defs/orders/shipment-orders";
+import { listOrders } from "@/server/repositories/orders";
+import { createOrder, createOrderBodySchema } from "@/server/repositories/orders-commands";
+import { domainCtx } from "@/server/repositories/platform-common";
 
-const querySchema = listQuerySchema.extend({
-  status: z.enum(ORDER_STATUSES).optional(),
-  channel: z.enum(ORDER_CHANNELS).optional(),
-  clientId: z.string().trim().max(60).optional(),
+const querySchema = z.object({
+  view: z.enum(ORDER_VIEWS).optional(),
   tab: z.enum(["backlog", "shipped", "returns"]).optional(),
+  status: z.enum(SO_STATUSES).optional(),
+  pageSize: z.coerce.number().int().min(1).max(1000).optional(),
+}).loose();
+
+export const GET = defineRoute({
+  permission: ORDER_PERMISSIONS.view,
+  query: querySchema,
+  handler: ({ db, auth, query, grid, searchParams }) => {
+    const parsed = grid();
+    const legacySize = !searchParams.has("ps") && query.pageSize ? { pageSize: query.pageSize } : {};
+    const view = query.view ?? (query.tab === "shipped" ? "shipped" : "backlog");
+    const { rows, total } = listOrders(db, auth.viewScope, { view, query: { ...parsed, ...legacySize }, status: query.status });
+    return listResult(rows, { total, page: parsed.page, pageSize: legacySize.pageSize ?? parsed.pageSize });
+  },
 });
 
-export async function GET(request: Request): Promise<Response> {
-  await connection();
-  try {
-    const denied = await requireSession();
-    if (denied) return denied;
-    const parsed = querySchema.safeParse(queryOf(request));
-    if (!parsed.success) return badRequest(zodMessage(parsed.error));
-    const { page, pageSize, search, status, channel, clientId, tab } = parsed.data;
-    const { rows, total } = listOrders({ page, pageSize, search, status, channel, clientId, tab });
-    return ok(rows, { total, page, pageSize });
-  } catch (error: unknown) {
-    return serverError("GET /api/orders", error);
-  }
-}
+export const POST = defineRoute({
+  permission: ORDER_PERMISSIONS.create,
+  body: createOrderBodySchema,
+  handler: ({ db, auth, actor, body }) => created(createOrder(db, domainCtx(actor, auth), body)),
+});

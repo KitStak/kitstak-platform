@@ -1,0 +1,27 @@
+# Requests from M04 stations-returns
+
+## REQ-1 — Dedicated "Receive" permission for the Return Station
+- **File:** `src/server/auth/permission-catalog-data.ts` (line ~98, `viewOnly("return_station", "Return Station")`)
+- **Change:** turn it into `page("return_station", "Return Station", ["View", "Receive Return"])` so the key `inventory.return_station.receive_return` exists; grant it to admin/manager/operator (not viewer).
+- **Reason:** Return Station receiving posts inventory (ledger Return Receiving). The catalog only has `inventory.return_station.view`, which the viewer role holds, so a viewer could receive returns. Until this lands, `/api/returns/receive` and `/api/returns/manual` additionally require `fulfillment.task_details.execute_task` (see `RETURN_PERMISSIONS.receive` in `src/server/repositories/returns.ts`); swap the constant once the key exists.
+- **Status:** applied (F-patch 2026-11-06): `page("return_station", "Return Station", ["View", "Receive Return"])` -> `inventory.return_station.receive_return` (admin, manager and operator by default; viewer not). Granted to the live system roles via `npm run db:fixtures` (`syncSystemRoleGrants`). Swap `RETURN_PERMISSIONS.receive`.
+
+## REQ-2 — OrderPickerDrawer and `/api/pickers/orders` disagree on the response shape
+- **Files:** `src/components/shared/order-picker-drawer.tsx` and `src/app/api/pickers/orders/route.ts` (`runNamedPicker(db, "orders", …)` in `src/server/repositories/platform-pickers.ts`).
+- **Problem:** the drawer runs `useLocalGrid` against `/api/pickers/orders` and expects grid rows (`code`, `status`, `customerName`, …) plus the grid grammar (`p`, `ps`, `sort`, filters). The route only accepts the picker query (`q`, `mode`, `limit`, `ids`, …) and returns `{ id, label, sublabel, meta }`. Opening the drawer gets a 400, then a row without `status` reaches `StatusPill`, and `statusToneName` throws "Cannot read properties of undefined (reading 'trim')". The whole page falls into the error boundary (reproduced on `/orders/returns/new` → "Choose a shipped order").
+- **Change:** either give the drawer its own grid endpoint (e.g. `GET /api/pickers/orders/grid`, which returns `OrderPick` rows and accepts the grid grammar plus `status`, `clientId`, `warehouseId`), or map the picker options into `OrderPick` rows inside the drawer. Make `StatusPill` / `statusToneName` tolerate an undefined status too.
+- **Workaround in M04:** Create RMA and Return Manually → "Link a shipped order" now use a local `ShippedOrderPicker` (`src/components/returns/shipped-order-picker.tsx`) over the picker API. Once the drawer works, M04 can switch back or keep the local dialog.
+- **Status:** applied (F-patch 2026-11-06): same fix as shipping REQ-3: `GET /api/pickers/orders/grid` + drawer switched to it; `StatusPill` / `statusToneName` tolerate undefined status.
+
+## REQ-3 — Persist station choices in user preferences (remembered per user on any device)
+- **File:** `src/lib/domain-types.ts` (`userPreferencesSchema`, line ~178).
+- **Change:** add `stations: z.object({ packing: z.object({ warehouseId: z.string().nullable(), stationId: z.string().nullable() }).partial(), returns: z.object({ warehouseId: z.string().nullable(), stationId: z.string().nullable(), targetKind: z.enum(["location", "lp"]), targetId: z.string().nullable(), targetCode: z.string().nullable() }).partial() }).partial().optional()`. `PATCH /api/me` then merges it like the other preferences.
+- **Reason:** M04 §1 says the Packing Station warehouse and station are "remembered per user". `userPreferencesSchema` strips unknown keys, so M04 can only use per-browser localStorage today (`src/components/packing/station-memory.ts`). A packer who switches devices starts empty.
+- **Adapter:** `useStationMemory()` keeps its signature. When this lands it reads from `useMe().data.preferences.stations[kind]` and writes through `PATCH /api/me { preferences: { stations } }`, with localStorage as the offline fallback.
+- **Status:** applied (F-patch 2026-11-06): `userPreferencesSchema.stations` added as requested; `PATCH /api/me` merges `stations` per kind (packing / returns) so saving one keeps the other.
+
+## REQ-4 — Shared tokens fail WCAG AA contrast on M04 pages (axe "color-contrast", serious)
+- **Files:** `src/app/globals.css` (`--color-faint` / `text-faint` = #98a2b3), `src/components/ui/select.tsx` (placeholder span), `src/components/ui/stat-tile.tsx` (uppercase label `text-faint`), `src/components/ui/wizard/*` (rail title and `RailRow` label `text-faint`), and the status color map behind `StatusPill` (Completed / success = #17874d on #d3f0e3, 3.76:1).
+- **Change:** darken `--color-faint` to about #667085 (4.5:1 on white and #f6f7f9), or move those labels to `text-secondary`. Darken the success pill foreground to about #0e6b3b (≥4.5:1 on #d3f0e3).
+- **Reason:** `tests/e2e/stations-returns` runs axe on /packing-station, /return-station, /orders/returns and /orders/returns/new. M04's own components no longer use `text-faint` for text (they use `text-secondary`). The remaining violations all come from these shared primitives, so the spec excludes them by selector until this lands.
+- **Status:** applied (F-patch 2026-11-06): `--text-faint` darkened to #667085 (light theme; 4.6:1 on #f6f7f9), which fixes select placeholders, stat-tile labels and wizard rail labels; success / green pill fg darkened to #0E6B3B. Grid headers, tabs and breadcrumbs also moved to `text-secondary` (inventory REQ-3). Dark-theme `--text-faint` is unchanged.

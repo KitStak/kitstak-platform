@@ -1,17 +1,22 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { getProductDetail } from "@/server/repositories/products";
-import { ProductDetailView } from "@/components/products/product-detail";
+import { Suspense } from "react";
+import { ProductDetailPage, ProductDetailSkeleton } from "@/components/products/product-detail";
 
 export const metadata: Metadata = { title: "Product Detail" };
 
 interface PageProps {
-  params: Promise<{ id: string }>;
+  readonly params: Promise<{ id: string }>;
 }
 
-export default async function Page({ params }: PageProps) {
+async function Detail({ params }: PageProps) {
   const { id } = await params;
-  const detail = getProductDetail(id);
-  if (!detail) notFound();
-  return <ProductDetailView detail={detail} />;
+  return <ProductDetailPage id={id} />;
+}
+
+export default function Page({ params }: PageProps) {
+  return (
+    <Suspense fallback={<ProductDetailSkeleton />}>
+      <Detail params={params} />
+    </Suspense>
+  );
 }

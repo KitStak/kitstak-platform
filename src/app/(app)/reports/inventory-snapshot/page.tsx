@@ -1,8 +1,15 @@
 import type { Metadata } from "next";
-import { InventorySnapshotPage } from "@/components/reports/inventory-snapshot-page";
+import { Suspense } from "react";
+import { PageSkeleton } from "@/components/layout/shell-skeleton";
+import { InventorySnapshotReport } from "@/components/reports/report-pages";
 
 export const metadata: Metadata = { title: "Inventory Snapshot Report" };
 
-export default function InventorySnapshotReportPage() {
-  return <InventorySnapshotPage />;
+/** The grid reads its state from the URL (useSearchParams), so it renders inside Suspense. */
+export default function Page() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <InventorySnapshotReport />
+    </Suspense>
+  );
 }

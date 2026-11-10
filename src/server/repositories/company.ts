@@ -1,0 +1,134 @@
+/**
+ * Company Settings repository (M14): display / full name, logo (png/jpeg < 2 MB, stored in
+ * the file store), account defaults and the password / lockout policy. One row ("company");
+ * every change writes field-level `change_log` (entity "company") and bumps `version`.
+ */
+import { eq, sql } from "drizzle-orm";
+import type { z } from "zod";
+import type { AppDb } from "@/server/api/db";
+import { AppError } from "@/server/api/errors";
+import type { AuthContext } from "@/server/auth/context";
+import { DEFAULT_PASSWORD_POLICY, passwordPolicySchema } from "@/server/auth/password-policy";
+import * as s from "@/server/db/schema";
+import type { CompanyDefaults } from "@/server/db/schema";
+import type { FileStore } from "@/server/files/files";
+import { LOGO_MAX_BYTES, LOGO_MIMES, type companyDefaultsSchema, type companyInfoSchema, type companySecuritySchema } from "@/lib/grid-defs/admin/company";
+import { assertVersion, domainCtxOf, logUpdate, type Actor } from "./users-shared";
+
+const c = s.companySettings;
+export const COMPANY_ENTITY = "company";
+const ID = "company";
+
+const DEFAULTS: CompanyDefaults = { currency: "USD", dateFormat: "M/D/YYYY h:mm:ss A", weightUnit: "Pound", dimensionUnit: "Inch" };
+
+export interface CompanySettings {
+  readonly displayName: string;
+  readonly fullName: string;
+  readonly logoFileId: string | null;
+  readonly logoUrl: string | null;
+  readonly defaults: CompanyDefaults;
+  readonly passwordPolicy: z.output<typeof passwordPolicySchema>;
+  readonly updatedAt: string;
+  readonly version: number;
+}
+
+function ensureRow(db: AppDb): typeof c.$inferSelect {
+  const row = db.select().from(c).where(eq(c.id, ID)).get();
+  if (row) return row;
+  return db.insert(c).values({ id: ID, displayName: "KitStaks", fullName: "KitStaks", defaults: DEFAULTS, passwordPolicy: DEFAULT_PASSWORD_POLICY }).returning().get();
+}
+
+export function getCompany(db: AppDb): CompanySettings {
+  const row = ensureRow(db);
+  const policy = passwordPolicySchema.safeParse(row.passwordPolicy ?? {});
+  return {
+    displayName: row.displayName, fullName: row.fullName, logoFileId: row.logoFileId,
+    logoUrl: row.logoFileId ? `/api/company/logo?v=${row.version}` : null,
+    defaults: { ...DEFAULTS, ...(row.defaults ?? {}) }, passwordPolicy: policy.success ? policy.data : DEFAULT_PASSWORD_POLICY,
+    updatedAt: row.updatedAt, version: row.version,
+  };
+}
+
+function bump(tx: AppDb, actor: Actor, set: Partial<typeof c.$inferInsert>): number {
+  return tx.update(c).set({ ...set, updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${c.version} + 1` }).where(eq(c.id, ID)).returning({ v: c.version }).get()?.v ?? 1;
+}
+
+const ref = { entityType: COMPANY_ENTITY, entityId: ID, entityCode: "Company settings" };
+
+export function updateCompanyInfo(tx: AppDb, auth: AuthContext, actor: Actor, input: z.output<typeof companyInfoSchema>): CompanySettings {
+  const before = ensureRow(tx);
+  assertVersion(before.version, input.version);
+  bump(tx, actor, { displayName: input.displayName, fullName: input.fullName });
+  logUpdate(tx, domainCtxOf(actor, auth), ref, { displayName: before.displayName, fullName: before.fullName }, { displayName: input.displayName, fullName: input.fullName });
+  return getCompany(tx);
+}
+
+export function updateCompanyDefaults(tx: AppDb, auth: AuthContext, actor: Actor, input: z.output<typeof companyDefaultsSchema>): CompanySettings {
+  const before = ensureRow(tx);
+  assertVersion(before.version, input.version);
+  const next: CompanyDefaults = { currency: input.currency, weightUnit: input.weightUnit, dimensionUnit: input.dimensionUnit, dateFormat: input.dateFormat };
+  bump(tx, actor, { defaults: next });
+  const prev = { ...DEFAULTS, ...(before.defaults ?? {}) };
+  logUpdate(tx, domainCtxOf(actor, auth), ref, prev as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>);
+  return getCompany(tx);
+}
+
+export function updateCompanySecurity(tx: AppDb, auth: AuthContext, actor: Actor, input: z.output<typeof companySecuritySchema>): CompanySettings {
+  const before = ensureRow(tx);
+  assertVersion(before.version, input.version);
+  const next = passwordPolicySchema.parse({
+    minLength: input.minLength, requireUpper: input.requireUpper, requireNumber: input.requireNumber, requireSymbol: input.requireSymbol,
+    ...(input.expires ? { maxAgeDays: input.maxAgeDays } : {}), lockoutThreshold: input.lockoutThreshold, lockoutMinutes: input.lockoutMinutes,
+  });
+  const prev = passwordPolicySchema.safeParse(before.passwordPolicy ?? {});
+  bump(tx, actor, { passwordPolicy: next });
+  const view = (p: z.output<typeof passwordPolicySchema>) => ({
+    minimumLength: p.minLength, requireUppercase: p.requireUpper, requireNumber: p.requireNumber, requireSymbol: p.requireSymbol,
+    passwordExpiry: p.maxAgeDays ? `${p.maxAgeDays} days` : "Never", lockoutAfter: `${p.lockoutThreshold} failed attempts`, lockoutDuration: `${p.lockoutMinutes} minutes`,
+  });
+  logUpdate(tx, domainCtxOf(actor, auth), ref, view(prev.success ? prev.data : DEFAULT_PASSWORD_POLICY), view(next));
+  return getCompany(tx);
+}
+
+/** PNG / JPEG magic bytes — the extension and the declared type are not trusted. */
+export function sniffImage(bytes: Uint8Array): (typeof LOGO_MIMES)[number] | null {
+  if (bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
+  if (bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  return null;
+}
+
+export function setCompanyLogo(tx: AppDb, store: FileStore, auth: AuthContext, actor: Actor, upload: { fileName: string; bytes: Uint8Array }): CompanySettings {
+  if (upload.bytes.length > LOGO_MAX_BYTES) throw new AppError("VALIDATION", "The logo must be smaller than 2 MB", { fieldErrors: { file: ["Use an image smaller than 2 MB"] } });
+  const mime = sniffImage(upload.bytes);
+  if (!mime) throw new AppError("VALIDATION", "Upload a JPG or PNG image", { fieldErrors: { file: ["Only JPG and PNG images are accepted"] } });
+  const ext = mime === "image/png" ? "png" : "jpg";
+  const before = ensureRow(tx);
+  const file = store.store(tx, { name: `company-logo.${ext}`, bytes: upload.bytes, purpose: "attachment", uploadedBy: actor.userId ?? undefined, ownerEntityType: COMPANY_ENTITY, ownerEntityId: ID, expiresAt: null });
+  bump(tx, actor, { logoFileId: file.id });
+  logUpdate(tx, domainCtxOf(actor, auth), ref, { logo: before.logoFileId ? "Previous logo" : "" }, { logo: upload.fileName.slice(0, 120) });
+  if (before.logoFileId) {
+    try { store.remove(tx, before.logoFileId); } catch { /* the old blob may already be gone */ }
+  }
+  return getCompany(tx);
+}
+
+export function removeCompanyLogo(tx: AppDb, store: FileStore, auth: AuthContext, actor: Actor): CompanySettings {
+  const before = ensureRow(tx);
+  if (!before.logoFileId) throw new AppError("INVALID_STATE", "There is no logo to remove");
+  bump(tx, actor, { logoFileId: null });
+  logUpdate(tx, domainCtxOf(actor, auth), ref, { logo: "Logo" }, { logo: "" });
+  try { store.remove(tx, before.logoFileId); } catch { /* already removed */ }
+  return getCompany(tx);
+}
+
+/** Logo bytes for the shell and printouts, or null. */
+export function readCompanyLogo(db: AppDb, store: FileStore): { bytes: Buffer; mime: string } | null {
+  const row = ensureRow(db);
+  if (!row.logoFileId) return null;
+  try {
+    const { record, bytes } = store.read(db, row.logoFileId);
+    return { bytes, mime: record.mime };
+  } catch {
+    return null;
+  }
+}

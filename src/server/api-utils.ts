@@ -1,76 +1,64 @@
+/**
+ * LEGACY SHIM — pre-foundation API helpers, kept so existing route handlers keep working.
+ * New handlers must use `defineRoute()` from `@/server/api/define-route`.
+ *
+ * `requireSession` / `requireRole` now verify against `user_sessions` (revocation + sv),
+ * and error bodies carry the foundation `code` alongside the legacy `error` string.
+ */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/server/auth/session";
+import { AppError, type ErrorCode } from "@/server/api/errors";
+import { failureBody, type ApiFailure } from "@/server/api/envelope";
+import { log } from "@/server/log";
 
-/** Standard API envelope: { success, data?, error?, meta? } */
-export interface ApiMeta {
+export { defineRoute } from "@/server/api/define-route";
+export { AppError } from "@/server/api/errors";
+export type { ApiEnvelope, ApiMeta } from "@/server/api/envelope";
+
+interface LegacyMeta {
   total: number;
   page: number;
   pageSize: number;
 }
 
-export interface ApiEnvelope<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  meta?: ApiMeta;
+export function ok<T>(data: T, meta?: LegacyMeta): NextResponse<{ success: true; data: T; meta?: LegacyMeta }> {
+  return NextResponse.json(meta ? { success: true as const, data, meta } : { success: true as const, data });
 }
 
-export function ok<T>(data: T, meta?: ApiMeta): NextResponse<ApiEnvelope<T>> {
-  const body: ApiEnvelope<T> = meta ? { success: true, data, meta } : { success: true, data };
-  return NextResponse.json(body);
+function fail(code: ErrorCode, message: string): NextResponse<ApiFailure> {
+  const error = new AppError(code, message);
+  return NextResponse.json(failureBody(error), { status: error.status });
 }
 
-export function badRequest(error: string): NextResponse<ApiEnvelope<never>> {
-  return NextResponse.json({ success: false, error }, { status: 400 });
-}
+export const badRequest = (error: string): NextResponse<ApiFailure> => fail("VALIDATION", error);
+export const notFound = (error = "Not found"): NextResponse<ApiFailure> => fail("NOT_FOUND", error);
+export const unauthorized = (error = "Authentication required"): NextResponse<ApiFailure> => fail("UNAUTHENTICATED", error);
+export const forbidden = (error = "Insufficient permissions"): NextResponse<ApiFailure> => fail("FORBIDDEN", error);
 
-export function notFound(error = "Not found"): NextResponse<ApiEnvelope<never>> {
-  return NextResponse.json({ success: false, error }, { status: 404 });
-}
-
-export function unauthorized(error = "Authentication required"): NextResponse<ApiEnvelope<never>> {
-  return NextResponse.json({ success: false, error }, { status: 401 });
-}
-
-/**
- * Cryptographically verify the session JWT for an API route.
- * Middleware only checks cookie presence, so every data route must call this.
- * Returns a 401 response to send when the session is missing/invalid, or null when authenticated.
- */
-export async function requireSession(): Promise<NextResponse<ApiEnvelope<never>> | null> {
+/** Verifies the session (DB-backed). Returns a 401 response, or null when authenticated. */
+export async function requireSession(): Promise<NextResponse<ApiFailure> | null> {
   const user = await getSessionUser();
   return user ? null : unauthorized();
 }
 
-export function forbidden(error = "Insufficient permissions"): NextResponse<ApiEnvelope<never>> {
-  return NextResponse.json({ success: false, error }, { status: 403 });
-}
-
-/**
- * Like requireSession, but additionally requires one of the given roles.
- * Returns the 401/403 response to send, or null when authorized.
- */
-export async function requireRole(
-  roles: readonly string[]
-): Promise<NextResponse<ApiEnvelope<never>> | null> {
+/** Like requireSession, but also requires one of the legacy coarse roles. */
+export async function requireRole(roles: readonly string[]): Promise<NextResponse<ApiFailure> | null> {
   const user = await getSessionUser();
   if (!user) return unauthorized();
   return roles.includes(user.role) ? null : forbidden();
 }
 
-export function serverError(context: string, error: unknown): NextResponse<ApiEnvelope<never>> {
-  console.error(`[api] ${context}:`, error);
-  return NextResponse.json(
-    { success: false, error: "Internal server error" },
-    { status: 500 }
-  );
+export function serverError(context: string, error: unknown): NextResponse<ApiFailure> {
+  log.error("legacy route failed", { route: context, err: error });
+  return fail("INTERNAL", "Internal server error");
 }
 
-/** Base pagination/search query schema shared across list endpoints. */
+/** Base pagination/search query schema shared across legacy list endpoints. */
 export const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+  // Grid page sizes go up to 1000 (BUILD_PLAN 0.3: 100/300/500/700/1000).
+  pageSize: z.coerce.number().int().min(1).max(1000).default(50),
   search: z
     .string()
     .trim()
@@ -79,13 +67,10 @@ export const listQuerySchema = z.object({
     .transform((v) => (v === "" ? undefined : v)),
 });
 
-/** Read a Request's search params into a plain record for zod parsing. */
 export function queryOf(request: Request): Record<string, string> {
-  const url = new URL(request.url);
-  return Object.fromEntries(url.searchParams.entries());
+  return Object.fromEntries(new URL(request.url).searchParams.entries());
 }
 
-/** Format a ZodError into a short, user-readable message. */
 export function zodMessage(error: z.ZodError): string {
   const first = error.issues[0];
   if (!first) return "Invalid query";

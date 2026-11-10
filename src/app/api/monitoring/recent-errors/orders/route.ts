@@ -1,0 +1,10 @@
+/** `GET /api/monitoring/recent-errors/orders?connectionId&reason&day` — drilldown to the affected orders. */
+import { z } from "zod";
+import { defineRoute } from "@/server/api/define-route";
+import { recentErrorOrders } from "@/server/repositories/monitoring";
+
+export const GET = defineRoute({
+  permission: "integrations.integration_monitoring.view",
+  query: z.object({ connectionId: z.string().min(1).max(64), reason: z.string().min(1).max(200), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
+  handler: ({ db, auth, query }) => recentErrorOrders(db, auth, query.connectionId, query.reason, query.day),
+});

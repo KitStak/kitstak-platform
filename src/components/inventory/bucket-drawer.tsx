@@ -1,0 +1,170 @@
+"use client";
+
+/**
+ * Bucket drawer (row click; KitStaks addition — Logiwa has no drill-down): attributes,
+ * the allocations holding this stock (linked to orders, jobs and work orders) and the
+ * last 50 ledger transactions, with the row actions in the footer.
+ */
+import * as React from "react";
+import Link from "next/link";
+import { ArrowDownRight, ArrowUpRight, Minus, PencilLine, Plus, Shuffle, SlidersHorizontal } from "lucide-react";
+import { useApiQuery } from "@/lib/query-client";
+import { useFormat } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { Drawer } from "@/components/ui/drawer";
+import { Button } from "@/components/ui/button";
+import { UnderlineTabs } from "@/components/ui/tabs";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SkeletonText } from "@/components/ui/skeleton";
+import { DisabledReason } from "@/components/ui/tooltip";
+import { BucketCard, Fact } from "./bucket-card";
+import { formatQty } from "./inventory-shared";
+import { lockedReason, type BucketDetail, type BucketRow, type QuantityMode } from "./by-location-types";
+
+type Tab = "attributes" | "allocations" | "transactions";
+
+export interface BucketDrawerProps {
+  readonly bucketId: string | null;
+  readonly onClose: () => void;
+  readonly onQuantity: (row: BucketRow, mode: QuantityMode) => void;
+  readonly onTransfer: (row: BucketRow) => void;
+  readonly can: { readonly add: boolean; readonly adjust: boolean; readonly remove: boolean; readonly transfer: boolean };
+}
+
+export function BucketDrawer({ bucketId, onClose, onQuantity, onTransfer, can }: BucketDrawerProps) {
+  const [tab, setTab] = React.useState<Tab>("attributes");
+  const q = useApiQuery<BucketDetail>(["inventory", "bucket", bucketId ?? ""], bucketId ? `/api/inventory/buckets/${bucketId}` : null);
+  const detail = q.data?.data;
+  const row = detail?.bucket;
+  const locked = row ? lockedReason(row) : null;
+  const noFree = row && row.freeQty <= 0 ? "Every unit in this row is allocated" : null;
+  const perm = "You don't have permission for this action";
+  const footer = row ? (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {([
+        ["add", "Add", Plus, can.add ? locked : perm],
+        ["adjust", "Adjust", PencilLine, can.adjust ? locked : perm],
+        ["remove", "Remove", Minus, can.remove ? locked ?? noFree : perm],
+      ] as const).map(([mode, label, Icon, reason]) => (
+        <DisabledReason key={mode} reason={reason}>
+          <Button variant="secondary" disabled={reason !== null} onClick={() => onQuantity(row, mode)}><Icon className="h-3.5 w-3.5" aria-hidden />{label}</Button>
+        </DisabledReason>
+      ))}
+      <DisabledReason reason={can.transfer ? locked ?? noFree : perm}>
+        <Button variant="primary" disabled={!can.transfer || Boolean(locked ?? noFree)} onClick={() => onTransfer(row)}><Shuffle className="h-3.5 w-3.5" aria-hidden />Transfer product</Button>
+      </DisabledReason>
+    </div>
+  ) : undefined;
+
+  return (
+    <Drawer open={bucketId !== null} onOpenChange={(o) => (o ? undefined : onClose())} title={row ? `${row.sku} · ${row.location}${row.lpNumber ? ` / ${row.lpNumber}` : ""}` : "Inventory"} width={45} footer={footer}>
+      {q.isPending ? <SkeletonText lines={8} /> : q.error ? (
+        <EmptyState compact title="Couldn't load this inventory row" description={q.error.message} action={<Button onClick={() => void q.refetch()}>Retry</Button>} />
+      ) : detail && row ? (
+        <div className="flex flex-col gap-4">
+          <BucketCard row={row} />
+          <UnderlineTabs
+            tabs={[
+              { key: "attributes", label: "Attributes" },
+              { key: "allocations", label: "Allocations", count: detail.allocations.length },
+              { key: "transactions", label: "Transactions", count: detail.transactions.length },
+            ]}
+            active={tab}
+            onChange={(k) => setTab(k as Tab)}
+          />
+          {tab === "attributes" ? <Attributes row={row} /> : null}
+          {tab === "allocations" ? <Allocations detail={detail} /> : null}
+          {tab === "transactions" ? <Transactions detail={detail} /> : null}
+        </div>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function Attributes({ row }: { readonly row: BucketRow }) {
+  const fmt = useFormat();
+  const v = (x: string | number | null) => (x === null || x === "" ? "-" : String(x));
+  return (
+    <dl className="grid grid-cols-3 gap-x-4 gap-y-3">
+      <Fact label="Warehouse">{row.warehouse}</Fact>
+      <Fact label="Client">{row.client}</Fact>
+      <Fact label="Barcode">{row.barcode}</Fact>
+      <Fact label="Location">{row.location}</Fact>
+      <Fact label="Location type">{v(row.locationType)}</Fact>
+      <Fact label="Area type">{v(row.areaType)}</Fact>
+      <Fact label="Location group">{v(row.locationGroup)}</Fact>
+      <Fact label="Location zone">{v(row.locationZone)}</Fact>
+      <Fact label="Walking path">{row.walkingPathPriority}</Fact>
+      <Fact label="LPN">{v(row.lpNumber)}</Fact>
+      <Fact label="LP type">{v(row.lpType)}</Fact>
+      <Fact label="Parent LP">{v(row.parentLpNumber)}</Fact>
+      <Fact label="Pack type">{row.packType}{row.unitsPerPack > 1 ? ` (${row.unitsPerPack} ${row.uomPackType})` : ""}</Fact>
+      <Fact label="UOM quantity">{formatQty(row.totalQty)}</Fact>
+      <Fact label="Free UOM qty">{formatQty(row.freeQty)}</Fact>
+      <Fact label="PO number">{v(row.poNumber)}</Fact>
+      <Fact label="Received">{fmt.dateTime(row.receivedAt)}</Fact>
+      <Fact label="Mobile cart">{v(row.mobileCart)}</Fact>
+    </dl>
+  );
+}
+
+function Allocations({ detail }: { readonly detail: BucketDetail }) {
+  const fmt = useFormat();
+  if (detail.allocations.length === 0) {
+    return <EmptyState compact icon={SlidersHorizontal} title="Nothing allocated" description="Every unit in this row is free to move, remove or change." />;
+  }
+  return (
+    <table className="w-full text-[13px]">
+      <thead className="text-left text-[11px] uppercase tracking-wide text-faint"><tr><th className="py-1">Document</th><th>Job</th><th>Status</th><th className="text-right">Qty</th><th className="text-right">Since</th></tr></thead>
+      <tbody>
+        {detail.allocations.map((a) => (
+          <tr key={a.id} className="border-t border-border">
+            <td className="py-1.5">
+              {a.orderCode ? <Link className="font-medium text-primary hover:underline" href={`/orders/${encodeURIComponent(a.orderCode)}`}>{a.orderCode}</Link>
+                : a.workOrderId ? <Link className="font-medium text-primary hover:underline" href={`/work-orders/${a.workOrderId}`}>{a.workOrderCode ?? "Work order"}</Link> : "-"}
+            </td>
+            <td>{a.jobId ? <Link className="text-primary hover:underline" href={`/jobs/${a.jobId}`}>{a.jobCode ?? "Job"}</Link> : "-"}</td>
+            <td>{a.status}</td>
+            <td className="text-right tabular-nums">{formatQty(a.qty)}</td>
+            <td className="text-right text-secondary">{fmt.gridDateTime(a.createdAt)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function Transactions({ detail }: { readonly detail: BucketDetail }) {
+  const fmt = useFormat();
+  if (detail.transactions.length === 0) return <EmptyState compact title="No transactions yet" description="Ledger history appears here after the first movement." />;
+  return (
+    <ol className="flex flex-col divide-y divide-border">
+      {detail.transactions.map((t) => {
+        const signed = t.direction === "out" ? -Math.abs(t.qty) : t.direction === "adjust" ? t.qty : t.direction === "neutral" ? 0 : Math.abs(t.qty);
+        const Icon = signed < 0 ? ArrowDownRight : ArrowUpRight;
+        return (
+          <li key={t.id} className="flex items-start gap-3 py-2 text-[13px]">
+            <span className={cn("mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full", signed < 0 ? "bg-danger-soft text-danger" : signed > 0 ? "bg-success-soft text-success" : "bg-neutral-soft text-neutral")}>
+              <Icon className="h-3.5 w-3.5" aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium text-foreground">{t.type}</span>
+                <span className={cn("tabular-nums font-semibold", signed < 0 ? "text-danger" : signed > 0 ? "text-success" : "text-secondary")}>{signed > 0 ? "+" : ""}{formatQty(signed)}</span>
+                {t.fromLocation || t.toLocation ? <span className="text-secondary">{t.fromLocation ?? "—"} → {t.toLocation ?? "—"}</span> : null}
+                {t.fromStatus && t.toStatus && t.fromStatus !== t.toStatus ? <span className="text-secondary">{t.fromStatus} → {t.toStatus}</span> : null}
+              </div>
+              <div className="text-[12px] text-secondary">
+                {[t.reason, t.note, t.orderCode, t.jobCode].filter(Boolean).join(" · ") || " "}
+              </div>
+            </div>
+            <div className="shrink-0 text-right text-[12px] text-secondary">
+              <div>{fmt.gridDateTime(t.at)}</div>
+              <div className="text-faint">{t.user ?? t.source}</div>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}

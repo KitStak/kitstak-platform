@@ -1,150 +1,82 @@
 "use client";
 
-import * as React from "react";
-import type { ZoneSummaryRow } from "@/server/repositories/locations";
-import { cn, formatNumber } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/card";
-import { utilizationPct, utilizationTone } from "./location-cells";
-
-export interface ZoneSummaryStripProps {
-  zones: ZoneSummaryRow[];
-  loading: boolean;
-  activeZone: string;
-  onZoneSelect: (zone: string) => void;
-}
-
-const SKELETON_CARD_COUNT = 6;
-
 /**
- * Human-readable card labels. The chip already carries the raw zone code,
- * so special zones get real names instead of repeating it ("Zone RECV"),
- * and storage zones get a short role descriptor.
+ * Zone summary strip above the Locations grid. Each card shows bins, occupancy and stored
+ * units for a zone; clicking toggles the `f.locationZoneId` filter (so it shows as a chip and
+ * round-trips through the URL).
  */
-const ZONE_LABELS: Record<string, string> = {
-  A: "Zone A — Fast pick",
-  B: "Zone B — Case pick",
-  C: "Zone C — Slow pick",
-  D: "Zone D — Overflow",
-  RECV: "Receiving",
-  RET: "Returns",
-  SHIP: "Shipping",
-};
+import * as React from "react";
+import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
-function zoneLabel(zone: string): string {
-  return ZONE_LABELS[zone] ?? `Zone ${zone}`;
+export interface ZoneCardData {
+  readonly zoneId: string | null;
+  readonly zone: string;
+  readonly warehouseCode?: string | null;
+  readonly binCount: number;
+  readonly occupiedCount: number;
+  readonly storedUnits: number;
 }
 
-function ZoneCard({
-  zone,
-  active,
-  onSelect,
-}: {
-  zone: ZoneSummaryRow;
-  active: boolean;
-  onSelect: (zone: string) => void;
-}) {
-  const pct = utilizationPct(zone.storedUnits, zone.capacityUnits);
-  const tone = utilizationTone(pct);
-  // Multi-letter tokens (RECV, RET, SHIP) get a smaller, slightly tightened
-  // face so they keep >=3px of horizontal padding per side inside the badge
-  // and match the optical weight of the single-letter A–D badges.
-  const isSpecialZoneCode = zone.zone.length > 1;
+export function occupancyPct(zone: Pick<ZoneCardData, "binCount" | "occupiedCount">): number {
+  return zone.binCount === 0 ? 0 : Math.round((zone.occupiedCount / zone.binCount) * 100);
+}
+
+function tone(pct: number): { bar: string; text: string } {
+  if (pct >= 90) return { bar: "bg-danger", text: "text-danger" };
+  if (pct >= 70) return { bar: "bg-warning", text: "text-warning" };
+  return { bar: "bg-success", text: "text-success" };
+}
+
+function ZoneCard({ zone, active, showWarehouse, onSelect }: { readonly zone: ZoneCardData; readonly active: boolean; readonly showWarehouse: boolean; readonly onSelect: () => void }) {
+  const pct = occupancyPct(zone);
+  const t = tone(pct);
+  const badge = zone.zoneId === null ? "—" : zone.zone.slice(0, 4).toUpperCase();
   return (
     <button
       type="button"
-      onClick={() => onSelect(zone.zone)}
+      onClick={onSelect}
       aria-pressed={active}
-      title={`${formatNumber(zone.storedUnits)} of ${formatNumber(zone.capacityUnits)} units stored`}
+      title={`${showWarehouse && zone.warehouseCode ? `${zone.warehouseCode} · ` : ""}${zone.occupiedCount.toLocaleString("en-US")} of ${zone.binCount.toLocaleString("en-US")} bins occupied · ${zone.storedUnits.toLocaleString("en-US")} units`}
       className={cn(
-        // flex-1 basis-0 with a 168px floor lets all 7 cards share a 1440px
-        // viewport without clipping; narrower viewports fall back to the
-        // container's horizontal scroll.
-        "flex min-w-[168px] flex-1 basis-0 flex-col gap-2.5 rounded-lg border bg-surface px-3.5 py-3 text-left shadow-xs transition-colors",
-        "outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-        active
-          ? "border-primary bg-primary-soft/40"
-          : "border-border hover:border-border-strong hover:bg-surface-sunken"
+        "flex min-w-[176px] flex-1 basis-0 flex-col gap-2 rounded-lg border bg-surface px-3 py-2.5 text-left shadow-xs transition-[border-color,background-color,transform] duration-150",
+        "outline-none focus-visible:ring-2 focus-visible:ring-primary/40 active:scale-[0.99]",
+        active ? "border-primary bg-primary-soft/50 ring-1 ring-primary/30" : "border-border hover:border-border-strong hover:bg-surface-sunken",
       )}
     >
       <span className="flex items-center gap-2.5">
-        <span
-          aria-hidden
-          className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500 to-blue-600 text-white",
-            isSpecialZoneCode
-              ? "text-[8px] font-semibold tracking-[-0.01em]"
-              : "text-[13px] font-bold"
-          )}
-        >
-          {zone.zone}
+        <span aria-hidden className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-white", zone.zoneId === null ? "bg-neutral" : "bg-primary", badge.length > 2 ? "text-[9px] font-semibold" : "text-[13px] font-bold")}>
+          {badge}
         </span>
         <span className="flex min-w-0 flex-col leading-tight">
-          <span
-            className="truncate text-[12px] font-semibold text-foreground"
-            title={zoneLabel(zone.zone)}
-          >
-            {zoneLabel(zone.zone)}
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-[12px] font-semibold text-foreground">{zone.zoneId === null ? "No zone" : `Zone ${zone.zone}`}</span>
+            {showWarehouse && zone.warehouseCode ? <span className="shrink-0 rounded border border-border bg-surface-sunken px-1 text-[10px] font-medium leading-4 text-secondary">{zone.warehouseCode}</span> : null}
           </span>
-          <span className="text-[11px] text-faint">
-            {formatNumber(zone.binCount)} bins
-          </span>
+          <span className="text-[11px] text-faint">{zone.binCount.toLocaleString("en-US")} bins · {zone.storedUnits.toLocaleString("en-US")} units</span>
         </span>
       </span>
       <span className="flex items-center gap-2">
         <span className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-soft">
-          <span
-            className={cn("block h-full rounded-full", tone.bar)}
-            style={{ width: `${pct}%` }}
-          />
+          <span className={cn("block h-full rounded-full", t.bar)} style={{ width: `${pct}%` }} />
         </span>
-        <span
-          className={cn(
-            "w-8 shrink-0 text-right text-[11px] font-medium tabular-nums",
-            tone.text
-          )}
-        >
-          {pct}%
-        </span>
+        <span className={cn("w-9 shrink-0 text-right text-[11px] font-medium tabular-nums", t.text)}>{pct}%</span>
       </span>
     </button>
   );
 }
 
-/** Horizontal strip of per-zone capacity cards above the locations grid. */
-export function ZoneSummaryStrip({
-  zones,
-  loading,
-  activeZone,
-  onZoneSelect,
-}: ZoneSummaryStripProps) {
+export function ZoneSummaryStrip({ zones, loading, activeZoneId, onToggle }: { readonly zones: readonly ZoneCardData[]; readonly loading: boolean; readonly activeZoneId: string | null | undefined; readonly onToggle: (zoneId: string | null) => void }) {
   if (!loading && zones.length === 0) return null;
+  // Without a single-warehouse filter the strip mixes warehouses: qualify each card with its warehouse.
+  const warehouseCount = new Set(zones.map((z) => z.warehouseCode).filter(Boolean)).size;
+  const showWarehouse = warehouseCount > 1;
   return (
-    <div className="px-6 pt-4">
-      <div className="ks-scroll flex gap-3 overflow-x-auto pb-1">
+    <div className="px-6 pt-3" aria-label="Zones">
+      <div className="ks-scroll flex gap-2.5 overflow-x-auto pb-1">
         {loading
-          ? Array.from({ length: SKELETON_CARD_COUNT }).map((_, i) => (
-              <div
-                key={i}
-                className="flex min-w-[168px] flex-1 basis-0 flex-col gap-2.5 rounded-lg border border-border bg-surface px-3.5 py-3 shadow-xs"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Skeleton className="h-8 w-8 rounded-md" />
-                  <div className="flex flex-col gap-1.5">
-                    <Skeleton className="h-3 w-14" />
-                    <Skeleton className="h-2.5 w-10" />
-                  </div>
-                </div>
-                <Skeleton className="h-1 w-full rounded-full" />
-              </div>
-            ))
-          : zones.map((zone) => (
-              <ZoneCard
-                key={zone.zone}
-                zone={zone}
-                active={activeZone === zone.zone}
-                onSelect={(z) => onZoneSelect(activeZone === z ? "" : z)}
-              />
-            ))}
+          ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-[66px] min-w-[176px] flex-1 rounded-lg" />)
+          : zones.map((z) => <ZoneCard key={z.zoneId ?? "none"} zone={z} showWarehouse={showWarehouse} active={activeZoneId !== undefined && activeZoneId === z.zoneId} onSelect={() => onToggle(z.zoneId)} />)}
       </div>
     </div>
   );

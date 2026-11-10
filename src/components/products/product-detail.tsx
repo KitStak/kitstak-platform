@@ -1,804 +1,272 @@
 "use client";
 
+/**
+ * Product detail (`/products/[id]`). Identity header with actions (Edit, Print labels,
+ * Duplicate, Deactivate/Activate, Change log, Delete), a stock band, then tabs that are
+ * real sections over live tables (no synthesized slots). `?tab=` deep-links a tab.
+ */
 import * as React from "react";
 import Link from "next/link";
-import {
-  Ban,
-  ChevronDown,
-  Copy,
-  FileDown,
-  History,
-  ImagePlus,
-  Package,
-  PencilLine,
-  Printer,
-  TriangleAlert,
-} from "lucide-react";
-import type { ProductDetail, ProductInventoryRow } from "@/server/repositories/products";
-import { cn, formatDate, formatMoney, formatNumber } from "@/lib/utils";
-import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, Skeleton } from "@/components/ui/card";
-import { Dropdown, DropdownItem, DropdownSeparator } from "@/components/ui/dropdown";
-import { StatusPill } from "@/components/ui/status-pill";
-import {
-  categoryTileClass,
-  hashOf,
-  isFragileHint,
-  isHazmatHint,
-  isOversized,
-  kitComponentsFor,
-} from "./derive";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Ban, Boxes, CheckCircle2, ChevronDown, Copy, History, PackageX, Pencil, Printer, Trash2 } from "lucide-react";
+import { ChangeLogDrawer, PrintOptionsModal } from "@/components/shared";
+import { DetailHeader } from "@/components/shared/detail-header";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
+import { StatTile } from "@/components/ui/stat-tile";
+import { UnderlineTabs } from "@/components/ui/tabs";
+import { toast } from "@/components/ui/toast";
+import { apiFetch, apiRequest, isApiError } from "@/lib/api-client";
+import { useFormat } from "@/lib/format";
+import { useApiQuery } from "@/lib/query-client";
+import type { ProductFormValues } from "@/lib/grid-defs/products/product-form";
+import { ProductThumb, errorMessage, useCatalogCan, useInvalidateCatalog, type DeleteCheckRow, type ProductDetailData } from "./catalog-shared";
+import { categoryBadge, duplicateValues, ProductCreateDrawer, ProductEditDrawer } from "./product-create-drawer";
+import { InventoryTab, KitTab, ListingsTab, OrdersTab, OverviewTab, PackTypesTab, PlanningTab, TransactionsTab } from "./product-detail-sections";
 
-export interface ProductDetailViewProps {
-  detail: ProductDetail;
-}
+const TABS = ["overview", "pack-types", "inventory", "orders", "listings", "kits", "planning", "transactions"] as const;
+type Tab = (typeof TABS)[number];
 
-/* ============ derived slotting (presentation-layer) ============ */
-
-const DAY_MS = 86_400_000;
-/** Industry dimensional-weight divisor for domestic parcel (in³ per lb). */
-const DIM_WEIGHT_DIVISOR_IN3_PER_LB = 139;
-/** Pick faces hold small quantities: cap in the 18–47 range, hashed per slot. */
-const PICK_FACE_CAP_MIN = 18;
-const PICK_FACE_CAP_SPAN = 30;
-/** Below this surplus the pick faces are already believable — leave rows alone. */
-const MIN_SLOTTING_SURPLUS = 50;
-
-interface ReserveSlotDef {
-  code: string;
-  zone: string;
-  type: string;
-}
-
-const RESERVE_SLOT_DEFS: readonly ReserveSlotDef[] = [
-  { code: "C-01-04-1", zone: "C", type: "Reserve" },
-  { code: "C-02-01-2", zone: "C", type: "Reserve" },
-  { code: "D-01-02-1", zone: "D", type: "Overflow" },
-  { code: "D-02-01-1", zone: "D", type: "Overflow" },
-];
-
-const RESERVE_SHARES: Record<number, readonly number[]> = {
-  2: [0.6],
-  3: [0.44, 0.32],
-  4: [0.36, 0.27, 0.2],
-};
-
-function reserveRowCount(surplus: number): number {
-  if (surplus >= 900) return 4;
-  if (surplus >= 400) return 3;
-  return 2;
-}
-
-function reserveSlotDefsFor(slotCount: number): readonly ReserveSlotDef[] {
-  // Two rows should still mix zones C and D (one Reserve, one Overflow).
-  if (slotCount === 2) return [RESERVE_SLOT_DEFS[0], RESERVE_SLOT_DEFS[2]];
-  return RESERVE_SLOT_DEFS.slice(0, slotCount);
-}
-
-function reserveRowFor(slot: ReserveSlotDef, qty: number, earliestMs: number): ProductInventoryRow {
-  const daysBefore = 14 + (hashOf(`recv:${slot.code}`) % 35);
-  return {
-    locationId: `derived-${slot.code}`,
-    locationCode: slot.code,
-    zone: slot.zone,
-    locationType: slot.type,
-    lotNumber: null,
-    onHand: qty,
-    allocated: 0,
-    damaged: 0,
-    receivedAt: new Date(earliestMs - daysBefore * DAY_MS).toISOString(),
-  };
-}
-
-/**
- * Present realistic slotting when the repository seeds every row as a zone A/B
- * pick face: cap pick-face quantities and move the bulk into derived zone C/D
- * Reserve/Overflow rows. Deterministic (hashed per location code) and
- * totals-preserving, so the stat tiles and table footer stay consistent.
- * Presentation-layer only — repository data is untouched.
- */
-function deriveSlotting(rows: readonly ProductInventoryRow[]): ProductInventoryRow[] {
-  if (rows.length < 6 || !rows.every((row) => row.locationType === "Picking")) {
-    return [...rows];
-  }
-  const capped = rows.map((row) => {
-    const cap = PICK_FACE_CAP_MIN + (hashOf(`cap:${row.locationCode}`) % PICK_FACE_CAP_SPAN);
-    const onHand = Math.min(row.onHand, Math.max(cap, row.allocated + row.damaged));
-    return { ...row, onHand };
-  });
-  const surplus = rows.reduce((sum, row, i) => sum + (row.onHand - capped[i].onHand), 0);
-  if (surplus < MIN_SLOTTING_SURPLUS) return [...rows];
-  const earliestMs = rows.reduce((min, row) => Math.min(min, Date.parse(row.receivedAt)), Date.now());
-  const slotCount = reserveRowCount(surplus);
-  const shares = RESERVE_SHARES[slotCount] ?? [];
-  let remaining = surplus;
-  const reserveRows = reserveSlotDefsFor(slotCount).map((slot, i) => {
-    const qty = i < shares.length ? Math.min(Math.round(surplus * shares[i]), remaining) : remaining;
-    remaining -= qty;
-    return reserveRowFor(slot, qty, earliestMs);
-  });
-  return [...capped, ...reserveRows.filter((row) => row.onHand > 0)];
-}
-
-/* ============ recent activity (derived from the displayed rows) ============ */
-
-const RECENT_ACTIVITY_LIMIT = 5;
-
-interface StockActivityEvent {
-  id: string;
-  kind: "received" | "damage";
-  qty: number;
-  locationCode: string;
-  atMs: number;
-}
-
-/**
- * Last few stock transactions for this SKU, derived from the same rows the
- * locations grid renders: one receive event per row (newest first) plus any
- * damage reports, which always surface even when older than the receives.
- */
-function deriveRecentActivity(rows: readonly ProductInventoryRow[]): StockActivityEvent[] {
-  const damageEvents = rows
-    .filter((row) => row.damaged > 0)
-    .map((row) => ({
-      id: `damage-${row.locationId}`,
-      kind: "damage" as const,
-      qty: row.damaged,
-      locationCode: row.locationCode,
-      atMs: Date.parse(row.receivedAt),
-    }));
-  const receiveEvents = rows
-    .filter((row) => row.onHand > 0)
-    .map((row) => ({
-      id: `received-${row.locationId}`,
-      kind: "received" as const,
-      qty: row.onHand,
-      locationCode: row.locationCode,
-      atMs: Date.parse(row.receivedAt),
-    }))
-    .sort((a, b) => b.atMs - a.atMs)
-    .slice(0, Math.max(RECENT_ACTIVITY_LIMIT - damageEvents.length, 0));
-  return [...damageEvents, ...receiveEvents]
-    .sort((a, b) => b.atMs - a.atMs)
-    .slice(0, RECENT_ACTIVITY_LIMIT);
-}
-
-/* ============ presentational bits ============ */
-
-function IdentityRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-t border-border py-2 first:border-t-0">
-      <dt className="text-[12px] text-faint">{label}</dt>
-      <dd className="text-right text-[13px] font-medium text-body">{children}</dd>
-    </div>
-  );
-}
-
-function AttributeCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md bg-surface-sunken px-3 py-2">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{label}</p>
-      <p className="mt-0.5 text-[13px] font-medium tabular-nums text-body">{value}</p>
-    </div>
-  );
-}
-
-/**
- * Caution chip: a 12px warning triangle in the same amber as the pill, so the
- * icon reads "handle with care" — checkmarks stay reserved for affirmative states.
- */
-function HandlingChip({ label }: { label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2.5 py-0.5 text-[11px] font-semibold text-warning">
-      <TriangleAlert className="h-3 w-3" aria-hidden />
-      {label}
-    </span>
-  );
-}
-
-/** 20px tinted badges keyed to zone, matching the status-badge language used elsewhere. */
-const ZONE_BADGE_CLASSES: Record<string, string> = {
-  A: "bg-primary-soft text-primary",
-  B: "bg-info-soft text-info",
-  C: "bg-warning-soft text-warning",
-  D: "bg-success-soft text-success",
-};
-
-function ZoneBadge({ zone }: { zone: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold",
-        ZONE_BADGE_CLASSES[zone] ?? "bg-neutral-soft text-neutral"
-      )}
-    >
-      {zone}
-    </span>
-  );
-}
-
-interface StatTileProps {
-  label: string;
-  value: number;
-  /** 12px context line under the value so wide tiles carry enterprise density. */
-  sub: string;
-  accent?: string;
-}
-
-function StatTile({ label, value, sub, accent }: StatTileProps) {
-  return (
-    <div className="flex-1 px-5 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{label}</p>
-      <p className={cn("mt-0.5 text-[20px] font-semibold tabular-nums text-foreground", accent)}>
-        {formatNumber(value)}
-      </p>
-      <p className="mt-0.5 truncate text-[12px] tabular-nums text-secondary">{sub}</p>
-    </div>
-  );
-}
-
-/** Designed focus/active states for menu items (hover comes from the shared DropdownItem). */
-const MENU_ITEM_STATES = "focus-visible:bg-surface-sunken focus-visible:outline-none active:bg-neutral-soft";
-const MENU_ITEM_DESTRUCTIVE_STATES = "focus-visible:bg-danger-soft focus-visible:outline-none active:bg-danger-soft";
-
-function OtherActionsMenu() {
-  return (
-    <Dropdown
-      align="end"
-      trigger={(open) => (
-        <Button
-          variant="secondary"
-          size="md"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          className={cn(open && "bg-surface-sunken text-body")}
-        >
-          Other Actions
-          <ChevronDown
-            className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")}
-            aria-hidden
-          />
-        </Button>
-      )}
-    >
-      {(close) => (
-        <>
-          <DropdownItem className={MENU_ITEM_STATES} onClick={close}>
-            <Copy className="h-3.5 w-3.5 text-faint" aria-hidden />
-            Duplicate Product
-          </DropdownItem>
-          <DropdownItem className={MENU_ITEM_STATES} onClick={close}>
-            <FileDown className="h-3.5 w-3.5 text-faint" aria-hidden />
-            Export Product CSV
-          </DropdownItem>
-          <DropdownItem className={MENU_ITEM_STATES} onClick={close}>
-            <History className="h-3.5 w-3.5 text-faint" aria-hidden />
-            Show Change Log
-          </DropdownItem>
-          <DropdownSeparator />
-          <DropdownItem destructive className={MENU_ITEM_DESTRUCTIVE_STATES} onClick={close}>
-            <Ban className="h-3.5 w-3.5" aria-hidden />
-            Deactivate Product
-          </DropdownItem>
-        </>
-      )}
-    </Dropdown>
-  );
-}
-
-const TH = "px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint whitespace-nowrap";
-const TD = "px-4 align-middle whitespace-nowrap";
-
-export function ProductDetailView({ detail }: ProductDetailViewProps) {
-  const { product, totals, inventory } = detail;
-  const maxDim = Math.max(product.lengthIn, product.widthIn, product.heightIn);
-  const fragile = product.isFragile || isFragileHint(product.name);
-  const hazmat = product.isHazmat || isHazmatHint(product.name);
-  const oversized = isOversized(product.weightOz, maxDim);
-  const volumeIn3 = product.lengthIn * product.widthIn * product.heightIn;
-  const dimWeightLb = volumeIn3 / DIM_WEIGHT_DIVISOR_IN3_PER_LB;
-  const unitCost = Math.round(product.price * 58) / 100;
-  const margin = product.price > 0 ? ((product.price - unitCost) / product.price) * 100 : 0;
-  const kitComponents = product.isKit ? kitComponentsFor(product.sku, product.name) : [];
-
-  // Only true flags render as pills (Logiwa-style); negatives like "Hazmat: No" are omitted.
-  const activeFlags = [
-    { label: "Fragile", active: fragile },
-    { label: "Oversized", active: oversized },
-    { label: "Hazmat", active: hazmat },
-  ].filter((flag) => flag.active);
-
-  const slottedInventory = deriveSlotting(inventory);
-  const isLotTracked = slottedInventory.some((row) => row.lotNumber !== null);
-
-  // Available never includes damaged units: on hand − allocated − damaged.
-  const availableTotal = totals.onHand - totals.allocated - totals.damaged;
-  const allocatedPct = totals.onHand > 0 ? (totals.allocated / totals.onHand) * 100 : 0;
-  const availablePct = totals.onHand > 0 ? (availableTotal / totals.onHand) * 100 : 0;
-  const zoneCount = new Set(
-    slottedInventory.filter((row) => row.locationType !== "Receiving").map((row) => row.zone)
-  ).size;
-  const hasReceiving = slottedInventory.some((row) => row.locationType === "Receiving");
-  const recentActivity = deriveRecentActivity(slottedInventory);
-  const buildableKits =
-    kitComponents.length > 0
-      ? Math.min(
-          ...kitComponents.map((component) =>
-            component.qty > 0 ? Math.floor(component.available / component.qty) : 0
-          )
-        )
-      : 0;
-  const lastDamagedMs = slottedInventory.reduce(
-    (latest, row) => (row.damaged > 0 ? Math.max(latest, Date.parse(row.receivedAt)) : latest),
-    0
-  );
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        breadcrumbs={[
-          { label: "Inventory", href: "/inventory" },
-          { label: "Products", href: "/products" },
-          { label: product.sku },
-        ]}
-        title={product.sku}
-        actions={
-          <>
-            <Button variant="secondary" size="md">
-              <Printer className="h-3.5 w-3.5" aria-hidden />
-              Print Labels
-            </Button>
-            <OtherActionsMenu />
-            <Button variant="primary" size="md">
-              <PencilLine className="h-3.5 w-3.5" aria-hidden />
-              Edit Product
-            </Button>
-          </>
-        }
-      />
-      {/* Product name anchored under the H1 (4px gap) instead of floating centered in the header band. */}
-      <p className="mt-1 px-6 text-left text-[13px] text-secondary">{product.name}</p>
-
-      <div className="ks-scroll min-h-0 flex-1 overflow-auto px-6 py-4">
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          {/* left rail — identity + recent activity; sticky so it rides beside the long locations grid */}
-          <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-6">
-          <Card className="p-5">
-            <div
-              className={cn(
-                "flex aspect-square w-full flex-col items-center justify-center gap-1.5 rounded-lg",
-                categoryTileClass(product.category)
-              )}
-            >
-              <Package className="h-14 w-14" strokeWidth={1.25} aria-hidden />
-              <p className="mt-1 text-[12px] text-secondary">No image on file</p>
-              <Button variant="ghost" size="sm">
-                <ImagePlus className="h-3.5 w-3.5" aria-hidden />
-                Upload image
-              </Button>
-            </div>
-            <div className="mt-4 flex items-start justify-between gap-2">
-              <h2 className="text-[15px] font-semibold leading-5 text-foreground">
-                {product.name}
-              </h2>
-              <StatusPill status={product.status} />
-            </div>
-            <dl className="mt-4">
-              <IdentityRow label="SKU">{product.sku}</IdentityRow>
-              <IdentityRow label="Barcode">
-                <span className="font-mono text-[12px] tabular-nums">{product.barcode}</span>
-              </IdentityRow>
-              <IdentityRow label="Client">
-                {product.clientName}
-                <span className="ml-1 text-[11px] font-normal text-faint">
-                  ({product.clientCode})
-                </span>
-              </IdentityRow>
-              <IdentityRow label="Category">
-                <span className="inline-flex items-center rounded-full bg-neutral-soft px-2 py-0.5 text-[11px] font-medium text-neutral">
-                  {product.category}
-                </span>
-              </IdentityRow>
-              <IdentityRow label="Unit of Measure">{product.uom}</IdentityRow>
-              <IdentityRow label="Reorder Point">
-                <span className="tabular-nums">{formatNumber(product.reorderPoint)}</span>
-              </IdentityRow>
-              <IdentityRow label="Created">{formatDate(product.createdAt)}</IdentityRow>
-            </dl>
-            <p className="mt-2 border-t border-border pt-2.5 text-[11px] text-faint">
-              Last update{" "}
-              <span className="font-medium tabular-nums text-secondary">
-                {formatDate(product.createdAt)}
-              </span>
-              <span aria-hidden> · </span>
-              <Link href="/reports" className="font-medium text-primary hover:underline">
-                Show Change Log
-              </Link>
-            </p>
-          </Card>
-
-          <Card>
-            <CardHeader
-              title="Recent Activity"
-              description="Latest stock transactions for this SKU"
-            />
-            <ul className="px-5 pb-4">
-              {recentActivity.length === 0 ? (
-                <li className="py-2 text-[12px] text-faint">No stock transactions yet.</li>
-              ) : (
-                recentActivity.map((event) => (
-                  <li
-                    key={event.id}
-                    className="flex items-center justify-between gap-3 border-t border-border py-2 first:border-t-0"
-                  >
-                    <span className="min-w-0 truncate text-[12px] text-body">
-                      <span
-                        className={cn(
-                          "font-medium",
-                          event.kind === "damage" ? "text-danger" : "text-body"
-                        )}
-                      >
-                        {event.kind === "damage" ? "Damage reported" : "Received"}{" "}
-                        <span className="tabular-nums">{formatNumber(event.qty)}</span>
-                      </span>
-                      <span className="text-faint"> · {event.locationCode}</span>
-                    </span>
-                    <span className="shrink-0 text-[12px] tabular-nums text-faint">
-                      {formatDate(new Date(event.atMs).toISOString())}
-                    </span>
-                  </li>
-                ))
-              )}
-            </ul>
-          </Card>
-          </div>
-
-          {/* right — attributes, pricing, inventory */}
-          <div className="flex min-w-0 flex-col gap-4">
-            <Card className="flex divide-x divide-border overflow-hidden">
-              {/* Zone mix here; the locations table subtitle already carries the location count. */}
-              <StatTile
-                label="On Hand"
-                value={totals.onHand}
-                sub={
-                  hasReceiving
-                    ? `across ${formatNumber(zoneCount)} zones + receiving`
-                    : `across ${formatNumber(zoneCount)} zone${zoneCount === 1 ? "" : "s"}`
-                }
-              />
-              <StatTile
-                label="Allocated"
-                value={totals.allocated}
-                sub={`${allocatedPct.toFixed(1)}% of on hand`}
-              />
-              <StatTile
-                label="Available"
-                value={availableTotal}
-                sub={`${availablePct.toFixed(1)}% sellable`}
-                accent={availableTotal <= product.reorderPoint ? "text-warning" : "text-success"}
-              />
-              <StatTile
-                label="Damaged"
-                value={totals.damaged}
-                sub={
-                  lastDamagedMs > 0
-                    ? `Last reported ${formatDate(new Date(lastDamagedMs).toISOString())}`
-                    : "No damage reported"
-                }
-                accent={totals.damaged > 0 ? "text-danger" : undefined}
-              />
-            </Card>
-
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              <Card className="flex h-full flex-col">
-                <CardHeader title="Attributes" description="Dimensions, weight and handling" />
-                <div className="grid grid-cols-2 gap-2 px-5 pb-3 sm:grid-cols-3">
-                  <AttributeCell label="Length" value={`${product.lengthIn} in`} />
-                  <AttributeCell label="Width" value={`${product.widthIn} in`} />
-                  <AttributeCell label="Height" value={`${product.heightIn} in`} />
-                  <AttributeCell label="Weight" value={`${product.weightOz} oz`} />
-                  <AttributeCell label="Volume" value={`${formatNumber(volumeIn3)} in³`} />
-                  <AttributeCell label="Dim Weight" value={`${dimWeightLb.toFixed(1)} lb`} />
-                </div>
-                <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-border px-5 py-3">
-                  {product.isKit ? (
-                    <span className="inline-flex items-center rounded-full bg-primary-soft px-2.5 py-0.5 text-[11px] font-semibold text-primary">
-                      Kit
-                    </span>
-                  ) : null}
-                  {activeFlags.map((flag) => (
-                    <HandlingChip key={flag.label} label={flag.label} />
-                  ))}
-                  {!product.isKit && activeFlags.length === 0 ? (
-                    <span className="text-[11px] text-faint">No special handling requirements</span>
-                  ) : null}
-                </div>
-              </Card>
-
-              <Card>
-                <CardHeader title="Pricing" description="Retail and landed economics" />
-                <dl className="px-5 pb-4">
-                  <IdentityRow label="Retail Price">
-                    <span className="tabular-nums">{formatMoney(product.price)}</span>
-                  </IdentityRow>
-                  <IdentityRow label="Unit Cost">
-                    <span className="tabular-nums">{formatMoney(unitCost)}</span>
-                  </IdentityRow>
-                  <IdentityRow label="Gross Margin">
-                    <span className="tabular-nums text-success">{margin.toFixed(1)}%</span>
-                  </IdentityRow>
-                  <IdentityRow label="Declared Value">
-                    <span className="tabular-nums">{formatMoney(product.price)}</span>
-                  </IdentityRow>
-                </dl>
-              </Card>
-            </div>
-
-            <Card>
-              <CardHeader
-                title="Inventory by Location"
-                description={`${formatNumber(slottedInventory.length)} stocked location${slottedInventory.length === 1 ? "" : "s"} in MLT1`}
-              />
-              <div className="ks-scroll overflow-x-auto">
-                <table className="w-full min-w-max border-collapse text-[13px]">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className={TH}>Location</th>
-                      <th className={TH}>Zone</th>
-                      <th className={TH}>Type</th>
-                      {isLotTracked ? <th className={TH}>Lot #</th> : null}
-                      <th className={cn(TH, "text-right")}>On Hand</th>
-                      <th className={cn(TH, "text-right")}>Allocated</th>
-                      <th className={cn(TH, "text-right")}>Available</th>
-                      <th className={cn(TH, "text-right")}>Damaged</th>
-                      <th className={TH}>Received</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {slottedInventory.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={isLotTracked ? 9 : 8}
-                          className="px-4 py-10 text-center text-[12px] text-faint"
-                        >
-                          No inventory on hand — receive a PO to stock this product.
-                        </td>
-                      </tr>
-                    ) : (
-                      slottedInventory.map((row) => (
-                        <tr
-                          key={`${row.locationId}-${row.lotNumber ?? ""}`}
-                          className="h-10 border-b border-border transition-colors last:border-b-0 hover:bg-surface-sunken"
-                        >
-                          <td className={TD}>
-                            <Link
-                              href="/locations"
-                              className="rounded-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-                            >
-                              {row.locationCode}
-                            </Link>
-                          </td>
-                          <td className={TD}>
-                            <ZoneBadge zone={row.zone} />
-                          </td>
-                          <td className={cn(TD, "text-secondary")}>{row.locationType}</td>
-                          {isLotTracked ? (
-                            <td className={cn(TD, "font-mono text-[12px] text-secondary")}>
-                              {row.lotNumber ?? "—"}
-                            </td>
-                          ) : null}
-                          <td className={cn(TD, "text-right tabular-nums text-body")}>
-                            {formatNumber(row.onHand)}
-                          </td>
-                          <td className={cn(TD, "text-right tabular-nums text-secondary")}>
-                            {formatNumber(row.allocated)}
-                          </td>
-                          <td className={cn(TD, "text-right font-medium tabular-nums text-body")}>
-                            {formatNumber(row.onHand - row.allocated - row.damaged)}
-                          </td>
-                          {/* Zero damaged renders as an em dash so a real damage count is the only glyph in the column. */}
-                          <td
-                            className={cn(
-                              TD,
-                              "text-right tabular-nums",
-                              row.damaged > 0 ? "font-medium text-danger" : "text-faint"
-                            )}
-                          >
-                            {row.damaged > 0 ? formatNumber(row.damaged) : "—"}
-                          </td>
-                          <td className={cn(TD, "text-secondary")}>{formatDate(row.receivedAt)}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                  {slottedInventory.length > 0 ? (
-                    <tfoot>
-                      <tr className="h-10 border-t border-border bg-surface-sunken/60">
-                        <td
-                          className={cn(TD, "text-[11px] font-semibold uppercase tracking-[0.04em] text-faint")}
-                          colSpan={isLotTracked ? 4 : 3}
-                        >
-                          Totals
-                        </td>
-                        <td className={cn(TD, "text-right font-semibold tabular-nums text-foreground")}>
-                          {formatNumber(totals.onHand)}
-                        </td>
-                        <td className={cn(TD, "text-right font-semibold tabular-nums text-foreground")}>
-                          {formatNumber(totals.allocated)}
-                        </td>
-                        <td className={cn(TD, "text-right font-semibold tabular-nums text-foreground")}>
-                          {formatNumber(availableTotal)}
-                        </td>
-                        <td className={cn(TD, "text-right font-semibold tabular-nums text-foreground")}>
-                          {formatNumber(totals.damaged)}
-                        </td>
-                        <td className={TD} />
-                      </tr>
-                    </tfoot>
-                  ) : null}
-                </table>
-              </div>
-            </Card>
-
-            {product.isKit ? (
-              <Card>
-                <CardHeader
-                  title="Kit Components"
-                  description={`Buildable kits: ${formatNumber(buildableKits)} · Bill of materials consumed when this kit ships`}
-                />
-                <div className="ks-scroll overflow-x-auto">
-                  <table className="w-full border-collapse text-[13px]">
-                    <thead>
-                      <tr className="border-b border-border">
-                        <th className={TH}>Component SKU</th>
-                        <th className={TH}>Name</th>
-                        <th className={cn(TH, "text-right")}>On Hand</th>
-                        <th className={cn(TH, "text-right")}>Available</th>
-                        <th className={cn(TH, "text-right")}>Qty per Kit</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {kitComponents.map((component) => (
-                        <tr
-                          key={component.sku}
-                          className="h-10 border-b border-border transition-colors last:border-b-0 hover:bg-surface-sunken"
-                        >
-                          <td className={cn(TD, "font-medium text-primary")}>{component.sku}</td>
-                          <td className={cn(TD, "text-body")}>{component.name}</td>
-                          <td className={cn(TD, "text-right tabular-nums text-body")}>
-                            {formatNumber(component.onHand)}
-                          </td>
-                          <td className={cn(TD, "text-right font-medium tabular-nums text-body")}>
-                            {formatNumber(component.available)}
-                          </td>
-                          <td className={cn(TD, "text-right tabular-nums text-body")}>
-                            {component.qty}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ============ loading skeletons ============ */
-
-const SKELETON_INVENTORY_ROWS = 8;
-const SKELETON_STAT_TILES = 4;
-const SKELETON_IDENTITY_ROWS = 7;
-const SKELETON_ATTRIBUTE_CELLS = 6;
-
-function StatTileSkeleton() {
-  return (
-    <div className="flex-1 px-5 py-3">
-      <Skeleton className="h-3 w-16 rounded" />
-      <Skeleton className="mt-2 h-[20px] w-16 rounded" />
-      <Skeleton className="mt-1.5 h-3 w-24 rounded" />
-    </div>
-  );
-}
-
-/** One h-10 inventory row with per-column shimmer blocks (location, zone, type, 4 numerics, date). */
-function InventoryRowSkeleton() {
-  return (
-    <div className="flex h-10 items-center gap-4 border-b border-border px-4 last:border-b-0">
-      <Skeleton className="h-3.5 w-20 rounded" />
-      <Skeleton className="h-5 w-5 rounded-full" />
-      <Skeleton className="h-3.5 w-14 rounded" />
-      <div className="ml-auto flex items-center gap-8">
-        <Skeleton className="h-3.5 w-9 rounded" />
-        <Skeleton className="h-3.5 w-9 rounded" />
-        <Skeleton className="h-3.5 w-9 rounded" />
-        <Skeleton className="h-3.5 w-9 rounded" />
-        <Skeleton className="h-3.5 w-20 rounded" />
-      </div>
-    </div>
-  );
-}
-
-function CardHeaderSkeleton() {
-  return (
-    <div className="px-5 pb-3 pt-4">
-      <Skeleton className="h-4 w-40 rounded" />
-      <Skeleton className="mt-2 h-3 w-56 rounded" />
-    </div>
-  );
-}
-
-/**
- * Route-level skeleton mirroring the product detail layout, so navigating from
- * the products list never flashes empty cards. Rendered by the [id] loading.tsx.
- */
 export function ProductDetailSkeleton() {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* page header band */}
-      <div className="px-6 pt-3">
-        <Skeleton className="h-3 w-48 rounded" />
-        <div className="mt-2 flex items-center justify-between">
-          <Skeleton className="h-6 w-40 rounded" />
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-8 w-[108px] rounded-md" />
-            <Skeleton className="h-8 w-[118px] rounded-md" />
-            <Skeleton className="h-8 w-[118px] rounded-md" />
-          </div>
-        </div>
-        <Skeleton className="mt-2 h-3.5 w-72 rounded" />
-      </div>
-      <div className="flex-1 px-6 py-4">
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          {/* left — identity card */}
-          <Card className="p-5">
-            <Skeleton className="aspect-square w-full rounded-lg" />
-            <Skeleton className="mt-4 h-4 w-3/4 rounded" />
-            <div className="mt-4 space-y-3.5">
-              {Array.from({ length: SKELETON_IDENTITY_ROWS }).map((_, i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <Skeleton className="h-3 w-20 rounded" />
-                  <Skeleton className="h-3.5 w-28 rounded" />
-                </div>
-              ))}
-            </div>
-          </Card>
+    <div className="flex flex-col gap-4 px-6 pt-5" aria-busy="true" aria-label="Loading product">
+      <Skeleton className="h-3 w-24" />
+      <div className="flex items-center gap-3"><Skeleton className="h-14 w-14" /><Skeleton className="h-7 w-64" /></div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-20" />)}</div>
+      <Skeleton className="h-8 w-full" />
+      <SkeletonTable rows={8} columns={7} />
+    </div>
+  );
+}
 
-          {/* right — KPI strip, attribute/pricing pair, inventory table */}
-          <div className="flex min-w-0 flex-col gap-4">
-            <Card className="flex divide-x divide-border overflow-hidden">
-              {Array.from({ length: SKELETON_STAT_TILES }).map((_, i) => (
-                <StatTileSkeleton key={i} />
-              ))}
-            </Card>
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              {Array.from({ length: 2 }).map((_, i) => (
-                <Card key={i}>
-                  <CardHeaderSkeleton />
-                  <div className="grid grid-cols-2 gap-2 px-5 pb-4 sm:grid-cols-3">
-                    {Array.from({ length: SKELETON_ATTRIBUTE_CELLS }).map((_, j) => (
-                      <Skeleton key={j} className="h-[52px] w-full rounded-md" />
-                    ))}
-                  </div>
-                </Card>
-              ))}
-            </div>
-            <Card>
-              <CardHeaderSkeleton />
-              <div className="border-t border-border">
-                {Array.from({ length: SKELETON_INVENTORY_ROWS }).map((_, i) => (
-                  <InventoryRowSkeleton key={i} />
-                ))}
-              </div>
-            </Card>
-          </div>
-        </div>
+export function ProductDetailPage({ id }: { readonly id: string }) {
+  const q = useApiQuery<ProductDetailData>(["product-detail", id], `/api/products/${id}`, { retry: (count, error) => !(isApiError(error) && (error.code === "NOT_FOUND" || error.code === "FORBIDDEN")) && count < 2 });
+  if (q.isPending) return <ProductDetailSkeleton />;
+  if (q.error) {
+    const notFound = isApiError(q.error) && q.error.code === "NOT_FOUND";
+    return (
+      <div className="px-6 py-10">
+        <EmptyState
+          icon={PackageX}
+          title={notFound ? "Product not found" : "Could not load the product"}
+          description={notFound ? "It may have been deleted, or it belongs to a client you can't access." : q.error.message}
+          action={notFound
+            ? <Link href="/products" className={buttonVariants({ variant: "primary" })}>Back to products</Link>
+            : <Button variant="primary" onClick={() => void q.refetch()}>Retry</Button>}
+        />
       </div>
+    );
+  }
+  return <ProductDetailView data={q.data.data} />;
+}
+
+type Confirm = { kind: "status" } | { kind: "delete"; check: DeleteCheckRow } | null;
+
+function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const fmt = useFormat();
+  const invalidate = useInvalidateCatalog();
+  const p = data.product;
+  const can = {
+    edit: useCatalogCan("settings.products.edit").allowed, create: useCatalogCan("settings.products.create").allowed, del: useCatalogCan("settings.products.delete").allowed,
+    log: useCatalogCan("settings.products.change_log").allowed, label: useCatalogCan("settings.products.label").allowed,
+  };
+  const raw = params.get("tab");
+  const tab: Tab = (TABS as readonly string[]).includes(raw ?? "") ? (raw as Tab) : "overview";
+  const setTab = (t: string) => {
+    const next = new URLSearchParams(params.toString());
+    if (t === "overview") next.delete("tab");
+    else next.set("tab", t);
+    router.replace(`${pathname}${next.toString() ? `?${next.toString()}` : ""}`, { scroll: false });
+  };
+
+  const [editing, setEditing] = React.useState(false);
+  const [logOpen, setLogOpen] = React.useState(false);
+  const [labels, setLabels] = React.useState<readonly unknown[] | null>(null);
+  const [duplicate, setDuplicate] = React.useState<ProductFormValues | null>(null);
+  const [confirm, setConfirm] = React.useState<Confirm>(null);
+  const active = p.status === "Active";
+
+  const labelRecords = () => {
+    const packs = data.packTypes.flatMap((pt) => pt.barcodes.map((b) => ({ sku: p.sku, barcode: b, name: p.name, clientCode: p.clientCode, packType: pt.packType })));
+    return packs.length ? packs : [{ sku: p.sku, barcode: p.barcode || p.sku, name: p.name, clientCode: p.clientCode, packType: p.uom }];
+  };
+
+  const toggleStatus = async () => {
+    try {
+      await apiFetch(`/api/products/${p.id}/status`, { method: "POST", body: { status: active ? "Inactive" : "Active", version: p.version } });
+      toast.success("Success", active ? `${p.sku} was deactivated.` : `${p.sku} was activated.`);
+    } catch (error) {
+      toast.error("Error", errorMessage(error));
+    } finally {
+      await invalidate();
+    }
+  };
+
+  const startDelete = async () => {
+    try {
+      const { data: rows } = await apiRequest<DeleteCheckRow[]>("/api/products/bulk/delete-check", { method: "POST", body: { ids: [p.id] } });
+      const check = rows[0];
+      if (check) setConfirm({ kind: "delete", check });
+    } catch (error) {
+      toast.error("Error", errorMessage(error));
+    }
+  };
+
+  const doDelete = async () => {
+    try {
+      const { data: result } = await apiRequest<{ succeeded: string[]; failed: { message: string }[] }>("/api/products/bulk/delete", { method: "POST", body: { ids: [p.id] } });
+      if (result.failed[0]) {
+        toast.error("Could not delete", result.failed[0].message);
+        return;
+      }
+      toast.success("Success", `${p.sku} was deleted.`);
+      await invalidate();
+      router.push("/products");
+    } catch (error) {
+      toast.error("Error", errorMessage(error));
+    }
+  };
+
+  const openDuplicate = async () => {
+    try {
+      const form = await apiFetch<Parameters<typeof duplicateValues>[0]>(`/api/products/${p.id}`, { query: { view: "form" } });
+      setDuplicate(duplicateValues(form));
+    } catch (error) {
+      toast.error("Could not duplicate", errorMessage(error));
+    }
+  };
+
+  const isKit = p.productCategory === "Kit";
+  const tabs = [
+    { key: "overview", label: "Overview" },
+    { key: "pack-types", label: "Pack types & barcodes", count: data.packTypes.length },
+    { key: "inventory", label: "Inventory", count: data.inventory.length },
+    { key: "orders", label: "Orders & POs", count: data.openOrders.length + data.openPos.length },
+    { key: "listings", label: "Listings", count: data.listings.length },
+    { key: "kits", label: isKit ? "Components" : "Used in kits", count: isKit ? data.components.length : data.usedInKits.length },
+    ...(isKit ? [] : [{ key: "planning", label: "Replenishment" }]),
+    { key: "transactions", label: "Transactions" },
+  ];
+
+  const deleteCheck = confirm?.kind === "delete" ? confirm.check : null;
+
+  return (
+    <div className="flex min-h-0 flex-col pb-10">
+      <DetailHeader
+        backHref="/products"
+        backLabel="Products"
+        title={<span className="flex items-center gap-3"><ProductThumb url={p.imageUrl} size={44} label={p.name} /><span className="font-mono">{p.sku}</span></span>}
+        status={p.status}
+        statusDomain="active"
+        badges={(
+          <>
+            {categoryBadge(p.productCategory)}
+            {p.kitType ? <Badge tone="info" size="sm">{p.kitType}</Badge> : null}
+            {p.isHazmat ? <Badge tone="danger" size="sm">Hazardous</Badge> : null}
+            {p.isDigital ? <Badge tone="neutral" size="sm">Digital</Badge> : null}
+          </>
+        )}
+        meta={(
+          <>
+            <span className="font-medium text-body">{p.name}</span>
+            <span>{p.clientName}</span>
+            <span>Barcode <span className="font-mono">{p.barcode}</span></span>
+            <span>Created {fmt.date(p.createdAt)}</span>
+          </>
+        )}
+        actions={(
+          <>
+            {can.edit ? <Button variant="primary" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" aria-hidden />Edit</Button> : null}
+            {can.label ? <Button variant="secondary" onClick={() => setLabels(labelRecords())}><Printer className="h-3.5 w-3.5" aria-hidden />Print labels</Button> : null}
+            {can.create ? <Button variant="secondary" onClick={() => void openDuplicate()}><Copy className="h-3.5 w-3.5" aria-hidden />Duplicate</Button> : null}
+            {can.edit ? (
+              <Button variant="secondary" onClick={() => setConfirm({ kind: "status" })}>
+                {active ? <Ban className="h-3.5 w-3.5" aria-hidden /> : <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />}
+                {active ? "Deactivate" : "Activate"}
+              </Button>
+            ) : null}
+            {can.log || can.del ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" aria-label="More actions">More<ChevronDown className="h-3.5 w-3.5" aria-hidden /></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[200px]">
+                  {can.log ? <DropdownMenuItem icon={History} onSelect={() => setLogOpen(true)}>Change log</DropdownMenuItem> : null}
+                  <DropdownMenuItem icon={Boxes} href={`/inventory/by-location?q=${encodeURIComponent(p.sku)}&qm=eq`}>View inventory</DropdownMenuItem>
+                  {can.del ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem icon={Trash2} destructive onSelect={() => void startDelete()}>Delete</DropdownMenuItem>
+                    </>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </>
+        )}
+      />
+
+      <div className="grid grid-cols-2 gap-3 px-6 md:grid-cols-3 xl:grid-cols-6">
+        <StatTile label="On hand" value={fmt.quantity(data.totals.onHand)} sublabel={`${data.inventory.length} location bucket${data.inventory.length === 1 ? "" : "s"}`} />
+        <StatTile label="Available" value={fmt.quantity(data.totals.available)} tone={data.totals.available > 0 ? "success" : "default"} info="On hand minus allocated and damaged" />
+        <StatTile label="Allocated" value={fmt.quantity(data.totals.allocated)} />
+        <StatTile label="Damaged" value={fmt.quantity(data.totals.damaged)} tone={data.totals.damaged ? "danger" : "default"} />
+        <StatTile label="Open order demand" value={fmt.quantity(data.totals.openSo)} sublabel={`${data.openOrders.length} order${data.openOrders.length === 1 ? "" : "s"}`} />
+        <StatTile label="Inbound" value={fmt.quantity(data.totals.openPo)} sublabel={`${data.openPos.length} open PO${data.openPos.length === 1 ? "" : "s"}`} />
+      </div>
+
+      <UnderlineTabs className="mt-5" ariaLabel="Product sections" tabs={tabs} active={tab} onChange={setTab} />
+      <div className="px-6 pt-4">
+        {!active ? <Callout variant="attention" title="This product is inactive" className="mb-4">It can't be added to new orders or purchase orders. Activate it to use it again.</Callout> : null}
+        {tab === "overview" ? <OverviewTab data={data} /> : null}
+        {tab === "pack-types" ? <PackTypesTab data={data} /> : null}
+        {tab === "inventory" ? <InventoryTab data={data} /> : null}
+        {tab === "orders" ? <OrdersTab data={data} /> : null}
+        {tab === "listings" ? <ListingsTab data={data} /> : null}
+        {tab === "kits" ? <KitTab data={data} /> : null}
+        {tab === "planning" ? <PlanningTab data={data} /> : null}
+        {tab === "transactions" ? <TransactionsTab data={data} onOpenChangeLog={can.log ? () => setLogOpen(true) : undefined} /> : null}
+      </div>
+
+      {editing ? <ProductEditDrawer productId={p.id} onOpenChange={(o) => !o && setEditing(false)} onSaved={() => void invalidate()} /> : null}
+      <ProductCreateDrawer open={duplicate !== null} onOpenChange={(o) => !o && setDuplicate(null)} initialValues={duplicate ?? undefined}
+        onCreated={(c) => { setDuplicate(null); void invalidate(); router.push(`/products/${c.id}`); }} />
+      {logOpen ? <ChangeLogDrawer open onOpenChange={setLogOpen} entityType="product" entityId={p.id} entityCode={p.sku} /> : null}
+      <PrintOptionsModal open={labels !== null} onOpenChange={(o) => !o && setLabels(null)} typeKeys={["product-label"]} records={labels ?? []} clientId={p.clientId} title="Print product labels" />
+      <ConfirmDialog
+        open={confirm?.kind === "status"}
+        onOpenChange={(o) => !o && setConfirm(null)}
+        variant={active ? "attention" : "info"}
+        icon={active ? Ban : CheckCircle2}
+        title={active ? `Deactivate ${p.sku}?` : `Activate ${p.sku}?`}
+        description={active ? "Inactive products can't be added to new orders or purchase orders. Stock and history stay as they are." : "The product can be ordered and received again."}
+        confirmLabel="Yes"
+        cancelLabel="No"
+        onConfirm={toggleStatus}
+      />
+      <ConfirmDialog
+        open={deleteCheck !== null}
+        onOpenChange={(o) => !o && setConfirm(null)}
+        variant={deleteCheck?.reason ? "attention" : "danger"}
+        icon={deleteCheck?.reason ? Ban : Trash2}
+        title={deleteCheck?.reason ? `${p.sku} can't be deleted` : `Delete ${p.sku}?`}
+        description={deleteCheck?.reason ? `${deleteCheck.reason}. Deactivate it instead so it can't be ordered or received.` : "This action cannot be undone. Linked channel listings become unlinked."}
+        records={{ columns: [{ key: "sku", label: "SKU" }, { key: "name", label: "Name" }, { key: "result", label: "Delete" }], rows: [{ sku: p.sku, name: p.name, result: deleteCheck?.reason ? <span className="text-danger">Blocked</span> : <span className="text-success">Can be deleted</span> }] }}
+        confirmLabel={deleteCheck?.reason ? (active && can.edit ? "Deactivate" : "Close") : "Yes"}
+        cancelLabel="No"
+        onConfirm={async () => {
+          if (!deleteCheck?.reason) await doDelete();
+          else if (active && can.edit) await toggleStatus();
+        }}
+      />
     </div>
   );
 }

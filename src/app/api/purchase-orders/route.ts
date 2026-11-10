@@ -1,32 +1,25 @@
-import { connection } from "next/server";
-import { z } from "zod";
-import {
-  badRequest,
-  listQuerySchema,
-  ok,
-  queryOf,
-  requireSession,
-  serverError,
-  zodMessage,
-} from "@/server/api-utils";
-import { listPurchaseOrders, PO_STATUSES } from "@/server/repositories/purchase-orders";
+/**
+ * `/api/purchase-orders` — PO list (grid grammar: q/qm, f.*, sort, page, ps) and create
+ * (5-step wizard payload). Scoped to the caller's warehouses/clients.
+ */
+import { created, listResult } from "@/server/api/envelope";
+import { defineRoute } from "@/server/api/define-route";
+import { poCreateSchema } from "@/lib/grid-defs/receiving/po-schemas";
+import { domainCtx } from "@/server/repositories/platform-common";
+import { listPurchaseOrders } from "@/server/repositories/purchase-orders";
+import { createPurchaseOrder } from "@/server/repositories/purchase-orders-commands";
 
-const querySchema = listQuerySchema.extend({
-  status: z.enum(PO_STATUSES).optional(),
-  clientId: z.string().trim().max(60).optional(),
+export const GET = defineRoute({
+  permission: "inventory.purchase_orders.view",
+  handler: ({ db, auth, grid }) => {
+    const query = grid();
+    const { rows, total } = listPurchaseOrders(db, auth, query);
+    return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
+  },
 });
 
-export async function GET(request: Request): Promise<Response> {
-  await connection();
-  try {
-    const denied = await requireSession();
-    if (denied) return denied;
-    const parsed = querySchema.safeParse(queryOf(request));
-    if (!parsed.success) return badRequest(zodMessage(parsed.error));
-    const { page, pageSize, search, status, clientId } = parsed.data;
-    const { rows, total } = listPurchaseOrders({ page, pageSize, search, status, clientId });
-    return ok(rows, { total, page, pageSize });
-  } catch (error: unknown) {
-    return serverError("GET /api/purchase-orders", error);
-  }
-}
+export const POST = defineRoute({
+  permission: "inventory.purchase_orders.create",
+  body: poCreateSchema,
+  handler: ({ db, auth, actor, body }) => created(createPurchaseOrder(db, domainCtx(actor, auth), auth.scope, body)),
+});

@@ -1,19 +1,29 @@
-import { notFound, ok, requireSession, serverError } from "@/server/api-utils";
-import { getProductDetail } from "@/server/repositories/products";
+/** `GET /api/products/[id]` (detail, or `?view=form` for the edit wizard) · `PATCH` (wizard edit). M09. */
+import { z } from "zod";
+import { defineRoute } from "@/server/api/define-route";
+import { notFoundError } from "@/server/api/errors";
+import { domainCtx, idParamsSchema } from "@/server/repositories/platform-common";
+import { updateProductFromWizard } from "@/server/repositories/products-commands";
+import { getProductDetail, getProductForm } from "@/server/repositories/products-detail";
+import type { ProductInput } from "@/lib/grid-defs/products/product-form";
 
-interface RouteContext {
-  params: Promise<{ id: string }>;
-}
+export const GET = defineRoute({
+  permission: "settings.products.view",
+  params: idParamsSchema,
+  query: z.object({ view: z.enum(["detail", "form"]).default("detail") }),
+  handler: ({ db, auth, params, query }) => {
+    const data = query.view === "form" ? getProductForm(db, auth.scope, params.id) : getProductDetail(db, auth.scope, auth.viewScope, params.id);
+    if (!data) throw notFoundError("Product");
+    return data;
+  },
+});
 
-export async function GET(_request: Request, context: RouteContext): Promise<Response> {
-  try {
-    const denied = await requireSession();
-    if (denied) return denied;
-    const { id } = await context.params;
-    const detail = getProductDetail(id);
-    if (!detail) return notFound("Product not found");
-    return ok(detail);
-  } catch (error: unknown) {
-    return serverError("GET /api/products/[id]", error);
-  }
-}
+export const PATCH = defineRoute({
+  permission: "settings.products.edit",
+  params: idParamsSchema,
+  body: z.record(z.string(), z.unknown()),
+  handler: ({ db, auth, actor, params, body }) => {
+    const row = updateProductFromWizard(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.id, body as ProductInput);
+    return { id: row.id, sku: row.sku, version: row.version };
+  },
+});

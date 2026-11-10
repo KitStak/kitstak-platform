@@ -1,19 +1,30 @@
-import { notFound, ok, requireSession, serverError } from "@/server/api-utils";
-import { getPurchaseOrderDetail } from "@/server/repositories/purchase-orders";
+/** `/api/purchase-orders/[id]` — detail, edit (optimistic `version`) and delete (Pending, no receipts). */
+import { z } from "zod";
+import { defineRoute } from "@/server/api/define-route";
+import { poUpdateSchema } from "@/lib/grid-defs/receiving/po-schemas";
+import { domainCtx, idParamsSchema } from "@/server/repositories/platform-common";
+import { getPurchaseOrder } from "@/server/repositories/purchase-orders";
+import { deletePurchaseOrder, updatePurchaseOrder } from "@/server/repositories/purchase-orders-commands";
 
-interface RouteContext {
-  params: Promise<{ id: string }>;
-}
+export const GET = defineRoute({
+  permission: "inventory.purchase_orders.view",
+  params: idParamsSchema,
+  handler: ({ db, auth, params }) => getPurchaseOrder(db, auth.scope, params.id),
+});
 
-export async function GET(_request: Request, context: RouteContext): Promise<Response> {
-  try {
-    const denied = await requireSession();
-    if (denied) return denied;
-    const { id } = await context.params;
-    const detail = getPurchaseOrderDetail(id);
-    if (!detail) return notFound("Purchase order not found");
-    return ok(detail);
-  } catch (error: unknown) {
-    return serverError("GET /api/purchase-orders/[id]", error);
-  }
-}
+export const PATCH = defineRoute({
+  permission: "inventory.purchase_orders.edit",
+  params: idParamsSchema,
+  body: poUpdateSchema,
+  handler: ({ db, auth, actor, params, body }) => updatePurchaseOrder(db, domainCtx(actor, auth), auth.scope, params.id, body),
+});
+
+export const DELETE = defineRoute({
+  permission: "inventory.purchase_orders.delete",
+  params: idParamsSchema,
+  query: z.object({ version: z.coerce.number().int().min(1).optional() }),
+  handler: ({ db, auth, actor, params, query }) => {
+    deletePurchaseOrder(db, domainCtx(actor, auth), auth.scope, params.id, query.version);
+    return { id: params.id, deleted: true };
+  },
+});

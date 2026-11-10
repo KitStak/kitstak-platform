@@ -1,84 +1,90 @@
 import * as React from "react";
-import { ArrowUp, FileText, ShoppingBag, Store, Truck, Zap } from "lucide-react";
+import { ArrowUp, ChevronsUp, FileText, ShoppingBag, Store, Truck, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { differenceTone, isPartialStatus, statusLabel, statusTone, type StatusDomain } from "@/lib/status-colors";
 
-/** Shipment / PO / job status → semantic pill style */
-const STATUS_STYLES: Record<string, string> = {
-  // amber — awaiting action
-  open: "bg-warning-soft text-warning",
-  "on hold": "bg-warning-soft text-warning",
-  backorder: "bg-warning-soft text-warning",
-  // blue — queued / ready
-  "ready to pick": "bg-primary-soft text-primary",
-  "ready to pack": "bg-primary-soft text-primary",
-  "ready to ship": "bg-primary-soft text-primary",
-  "ready to load": "bg-primary-soft text-primary",
-  allocated: "bg-primary-soft text-primary",
-  started: "bg-primary-soft text-primary",
-  // cyan — in motion
-  "picking started": "bg-info-soft text-info",
-  "packing started": "bg-info-soft text-info",
-  "in progress": "bg-info-soft text-info",
-  receiving: "bg-info-soft text-info",
-  // green — done
-  shipped: "bg-success-soft text-success",
-  delivered: "bg-success-soft text-success",
-  completed: "bg-success-soft text-success",
-  received: "bg-success-soft text-success",
-  active: "bg-success-soft text-success",
-  // gray — inert
-  pending: "bg-neutral-soft text-neutral",
-  draft: "bg-neutral-soft text-neutral",
-  closed: "bg-neutral-soft text-neutral",
-  inactive: "bg-neutral-soft text-neutral",
-  // red — problems
-  cancelled: "bg-danger-soft text-danger",
-  shortage: "bg-danger-soft text-danger",
-  error: "bg-danger-soft text-danger",
-};
-
+/**
+ * Status pill (BUILD_PLAN 0.5). Colours come from `@/lib/status-colors`; pass `domain`
+ * for entity-specific semantics (e.g. "Open" is green for orders, teal for shipment
+ * plans). Without a domain the generic map is used, so existing call sites keep working.
+ */
 export function StatusPill({
   status,
+  domain = "generic",
+  partial,
+  size = "md",
   className,
 }: {
   status: string;
+  domain?: StatusDomain;
+  /** Force/disable the half-filled "partial" dot; defaults to statuses starting with "Partially". */
+  partial?: boolean;
+  size?: "sm" | "md";
   className?: string;
 }) {
-  const style = STATUS_STYLES[status.toLowerCase()] ?? "bg-neutral-soft text-neutral";
+  const tone = statusTone(status, domain);
+  const showPartial = partial ?? isPartialStatus(status);
   return (
     <span
+      data-status={status}
+      style={{ backgroundColor: tone.bg, color: tone.fg }}
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 whitespace-nowrap",
-        style,
+        "inline-flex items-center gap-1 rounded-full font-semibold whitespace-nowrap",
+        size === "sm" ? "px-1.5 py-px text-[10px] leading-4" : "px-2 py-0.5 text-[11px] leading-4",
         className
       )}
     >
-      {status}
+      {statusLabel(status)}
+      {showPartial ? (
+        // 6px half-filled dot: reads as "partial" without a stray letter glyph.
+        <span
+          role="img"
+          aria-label="Partial"
+          title="Partial"
+          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full border"
+          style={{ borderColor: tone.fg, background: `linear-gradient(90deg, ${tone.fg} 50%, transparent 50%)` }}
+        />
+      ) : null}
     </span>
   );
 }
 
+/** One soft treatment for every priority; High gets an up arrow, Urgent a double arrow. */
 export function PriorityFlag({ priority }: { priority: string | null }) {
   if (!priority || priority.toLowerCase() === "none") {
     return <span className="text-faint text-[12px]">—</span>;
   }
-  const isHigh = priority.toLowerCase() === "high";
-  const isUrgent = priority.toLowerCase() === "urgent";
+  const key = priority.toLowerCase();
+  const tone = statusTone(priority, "priority");
+  const Icon = key === "urgent" ? ChevronsUp : key === "high" ? ArrowUp : null;
   return (
     <span
-      className={cn(
-        "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-        isUrgent
-          ? "bg-danger text-white"
-          : isHigh
-            ? "bg-danger-soft text-danger"
-            : "bg-neutral-soft text-neutral"
-      )}
+      data-priority={key}
+      style={{ backgroundColor: tone.bg, color: tone.fg }}
+      className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold"
     >
-      {(isHigh || isUrgent) && <ArrowUp className="h-3 w-3" aria-hidden />}
-      {priority}
+      {Icon ? <Icon className="h-3 w-3" aria-hidden /> : null}
+      {statusLabel(priority)}
     </span>
   );
+}
+
+/** Canonical name for the shared priority pill; every grid uses this one map. */
+export const PriorityPill = PriorityFlag;
+
+/** Receiving difference pill: "-3" red-orange, "+2" green, "0" grey. */
+export function DifferencePill({ value, className }: { value: number; className?: string }) {
+  const tone = differenceTone(value);
+  return (
+    <span style={{ backgroundColor: tone.bg, color: tone.fg }} className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums", className)}>
+      {value > 0 ? `+${value}` : value}
+    </span>
+  );
+}
+
+/** Green Yes / grey No pill. */
+export function YesNoPill({ value }: { value: boolean }) {
+  return <StatusPill status={value ? "Yes" : "No"} domain="yesNo" />;
 }
 
 /** Sales-channel badge with brand-flavored icon tiles */

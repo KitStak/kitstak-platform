@@ -1,267 +1,129 @@
 "use client";
 
+/**
+ * Clients (`/clients`, Organization tabs): grid (Client, Official name, Full name, Tax ID,
+ * Status, # Products, # Open orders …), header Bulk Import/Update ▾ + Create Client
+ * (4-step wizard), bulk Activate / Deactivate / Delete (guarded), row ⋯ Show details ·
+ * Edit · Change log · Activate/Deactivate · Delete.
+ */
 import * as React from "react";
-import { ChevronDown, Plus, Upload } from "lucide-react";
-import type { RowSelectionState } from "@tanstack/react-table";
-import type { ClientListRow } from "@/server/repositories/clients";
+import { useRouter } from "next/navigation";
+import { ChevronDown, CircleCheck, CircleOff, Eye, FileUp, History, Pencil, Plus, Trash2 } from "lucide-react";
+import { DataGrid, GridToolbar, LinkCell, useGrid, type BulkAction, type GridColumnDef, type RowAction } from "@/components/grid";
+import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { DataGrid } from "@/components/grid/data-grid";
-import { FilterButton, GridSearch } from "@/components/grid/grid-toolbar";
-import { PageHeader, UnderlineTabs } from "@/components/layout/page-header";
-import { CLIENT_COLUMNS } from "./clients-columns";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { StatusPill } from "@/components/ui/status-pill";
+import { DisabledReason } from "@/components/ui/tooltip";
+import { CLIENT_FIELDS, CLIENTS_GRID_KEY } from "@/lib/grid-defs/organization/clients";
+import type { ClientListRow } from "@/server/repositories/clients";
+import { EntityChangeLogDrawer, Muted, NO_PERMISSION, toastBulk, toFilterFields, useAction, usePagePerms, type BulkResponse } from "@/components/facility/facility-shared";
+import { ClientWizardDrawer } from "./client-wizard";
 
-interface ListEnvelope<T> {
-  success: boolean;
-  data?: T[];
-  error?: string;
-  meta?: { total: number };
-}
+const PERMS = ["view", "create", "edit", "delete", "change_log", "import_file"] as const;
+const hidden = { defaultVisible: false } as const;
+const num = (v: number, href?: string) => <div className="text-right tabular-nums">{href && v > 0 ? <LinkCell href={href}>{v.toLocaleString("en-US")}</LinkCell> : v > 0 ? v.toLocaleString("en-US") : <span className="text-faint">0</span>}</div>;
 
-type StatusTab = "all" | "Active" | "Inactive";
+const COLUMNS: GridColumnDef<ClientListRow>[] = [
+  { id: "name", header: "Client", size: 200, meta: { alwaysVisible: true }, cell: ({ row }) => <LinkCell href={`/clients/${row.original.id}`}>{row.original.name}</LinkCell> },
+  { id: "code", header: "Code", size: 110, cell: ({ row }) => <code className="font-mono text-[12px] text-secondary">{row.original.code}</code> },
+  { id: "officialName", header: "Official name", size: 240, cell: ({ row }) => row.original.officialName ?? <Muted /> },
+  { id: "fullName", header: "Full name", size: 280, enableSorting: false, cell: ({ row }) => <span className="text-secondary">{row.original.fullName}</span> },
+  { id: "taxId", header: "Tax ID", size: 130, cell: ({ row }) => (row.original.taxId ? <span className="tabular-nums">{row.original.taxId}</span> : <Muted />) },
+  { id: "status", header: "Status", size: 110, cell: ({ row }) => <StatusPill status={row.original.status} domain="active" /> },
+  { id: "productCount", header: "# Products", size: 110, meta: { align: "right" }, cell: ({ row }) => num(row.original.productCount, `/products?f.clientId=in:${row.original.id}`) },
+  { id: "openOrders", header: "# Open orders", size: 120, meta: { align: "right" }, cell: ({ row }) => num(row.original.openOrders, `/orders?f.clientId=in:${row.original.id}`) },
+  { id: "currency", header: "Currency", size: 100, cell: ({ row }) => row.original.currency },
+  { id: "contactName", header: "Contact", size: 170, meta: hidden, enableSorting: false, cell: ({ row }) => row.original.contactName || <Muted /> },
+  { id: "contactEmail", header: "Contact email", size: 210, meta: hidden, enableSorting: false, cell: ({ row }) => row.original.contactEmail || <Muted /> },
+  { id: "createdAt", header: "Created date", size: 130, meta: hidden, cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString("en-US") },
+];
 
-interface TabCounts {
-  all?: number;
-  active?: number;
-  inactive?: number;
-}
-
-const SEARCH_DEBOUNCE_MS = 300;
-const DEFAULT_PAGE_SIZE = 50;
-
-const STATUS_FILTERS = [{ key: "status", label: "Status", options: ["Active", "Inactive"] }];
+type Pending = { readonly kind: "delete" | "Active" | "Inactive"; readonly rows: readonly ClientListRow[] } | null;
 
 export function ClientsPage() {
-  const [tab, setTab] = React.useState<StatusTab>("all");
-  const [page, setPage] = React.useState(1);
-  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
-  const [search, setSearch] = React.useState("");
-  const [debouncedSearch, setDebouncedSearch] = React.useState("");
-  const [rows, setRows] = React.useState<ClientListRow[]>([]);
-  const [total, setTotal] = React.useState(0);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [selection, setSelection] = React.useState<RowSelectionState>({});
-  const [counts, setCounts] = React.useState<TabCounts>({});
-  const [refreshKey, setRefreshKey] = React.useState(0);
+  const router = useRouter();
+  const perms = usePagePerms("settings.clients", PERMS);
+  const fields = React.useMemo(() => toFilterFields(CLIENT_FIELDS), []);
+  const g = useGrid<ClientListRow>({ gridKey: CLIENTS_GRID_KEY, path: "/api/clients", fields });
+  const [wizard, setWizard] = React.useState<{ open: boolean; editId: string | null }>({ open: false, editId: null });
+  const [log, setLog] = React.useState<ClientListRow | null>(null);
+  const [pending, setPending] = React.useState<Pending>(null);
+  const action = useAction([["grid", CLIENTS_GRID_KEY], ["me"]]);
+  const selected = (ids: readonly string[]) => g.rows.filter((r) => ids.includes(r.id));
+  const deleteReason = (row: ClientListRow) => (!perms.delete ? NO_PERMISSION : row.productCount > 0 || row.totalOrders > 0 ? "Clients with products or orders can't be deleted; deactivate instead" : null);
 
-  React.useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [search]);
-
-  React.useEffect(() => {
-    const controller = new AbortController();
-    const params = new URLSearchParams({
-      page: String(page),
-      pageSize: String(pageSize),
-    });
-    if (debouncedSearch) params.set("search", debouncedSearch);
-    if (tab !== "all") params.set("status", tab);
-    setLoading(true);
-    setError(null);
-    fetch(`/api/clients?${params.toString()}`, { signal: controller.signal })
-      .then((res) => res.json() as Promise<ListEnvelope<ClientListRow>>)
-      .then((body) => {
-        if (!body.success || !body.data) {
-          throw new Error(body.error ?? "Failed to load clients.");
-        }
-        setRows(body.data);
-        setTotal(body.meta?.total ?? body.data.length);
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Failed to load clients.");
-        setLoading(false);
-      });
-    return () => controller.abort();
-  }, [page, pageSize, debouncedSearch, tab, refreshKey]);
-
-  // Cheap tab counts: two pageSize=1 queries read only meta.total.
-  React.useEffect(() => {
-    const controller = new AbortController();
-    async function loadCounts(): Promise<void> {
-      try {
-        const [allRes, activeRes] = await Promise.all([
-          fetch("/api/clients?page=1&pageSize=1", { signal: controller.signal }),
-          fetch("/api/clients?page=1&pageSize=1&status=Active", {
-            signal: controller.signal,
-          }),
-        ]);
-        const all = (await allRes.json()) as ListEnvelope<ClientListRow>;
-        const active = (await activeRes.json()) as ListEnvelope<ClientListRow>;
-        const allTotal = all.meta?.total;
-        const activeTotal = active.meta?.total;
-        if (typeof allTotal === "number" && typeof activeTotal === "number") {
-          setCounts({
-            all: allTotal,
-            active: activeTotal,
-            inactive: allTotal - activeTotal,
-          });
-        }
-      } catch {
-        // Counts are decorative; the grid surfaces real fetch errors.
-      }
-    }
-    void loadCounts();
-    return () => controller.abort();
-  }, [refreshKey]);
-
-  const changeTab = (next: StatusTab) => {
-    setTab(next);
-    setPage(1);
-    setSelection({});
-  };
-
-  const changeSearch = (value: string) => {
-    setSearch(value);
-    setPage(1);
-  };
-
-  const appliedFilters: Record<string, string> =
-    tab === "all" ? {} : { status: tab };
+  const bulkActions: readonly BulkAction[] = [
+    { key: "activate", label: "Activate", icon: CircleCheck, onSelect: (ids) => setPending({ kind: "Active", rows: selected(ids) }), disabledReason: perms.edit ? null : NO_PERMISSION,
+      eligibility: (ids) => (selected(ids).every((r) => r.status === "Active") ? "Every selected client is already active" : null) },
+    { key: "deactivate", label: "Deactivate", icon: CircleOff, onSelect: (ids) => setPending({ kind: "Inactive", rows: selected(ids) }), disabledReason: perms.edit ? null : NO_PERMISSION,
+      eligibility: (ids) => (selected(ids).every((r) => r.status === "Inactive") ? "Every selected client is already inactive" : null) },
+    { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: (ids) => setPending({ kind: "delete", rows: selected(ids) }), disabledReason: perms.delete ? null : NO_PERMISSION,
+      eligibility: (ids) => (selected(ids).every((r) => r.productCount > 0 || r.totalOrders > 0) ? "Clients with products or orders can't be deleted; deactivate instead" : null) },
+  ];
+  const rowActions = (row: ClientListRow): readonly RowAction[] => [
+    { key: "details", label: "Show details", icon: Eye, href: `/clients/${row.id}` },
+    { key: "edit", label: "Edit", icon: Pencil, onSelect: () => setWizard({ open: true, editId: row.id }), disabledReason: perms.edit ? null : NO_PERMISSION },
+    { key: "log", label: "Change log", icon: History, onSelect: () => setLog(row), disabledReason: perms.change_log || perms.view ? null : NO_PERMISSION },
+    row.status === "Active"
+      ? { key: "deactivate", label: "Deactivate", icon: CircleOff, onSelect: () => setPending({ kind: "Inactive", rows: [row] }), disabledReason: !perms.edit ? NO_PERMISSION : row.openOrders > 0 ? `${row.openOrders} open orders` : null }
+      : { key: "activate", label: "Activate", icon: CircleCheck, onSelect: () => setPending({ kind: "Active", rows: [row] }), disabledReason: perms.edit ? null : NO_PERMISSION },
+    { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: () => setPending({ kind: "delete", rows: [row] }), disabledReason: deleteReason(row) },
+  ];
+  const filtered = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
+  const count = pending?.rows.length ?? 0;
+  const one = pending?.rows[0];
+  const verb = pending?.kind === "delete" ? "Delete" : pending?.kind === "Active" ? "Activate" : "Deactivate";
 
   return (
-    // No flex-1/min-h-0 stretch here on purpose: the DataGrid card hugs its
-    // rows, so the density/pagination/export footer sits directly under the
-    // last row instead of pinning to the viewport bottom with a dead white
-    // zone inside the card. At 8 demo rows that gap was ~230px of blank card.
-    <div className="ks-clients flex flex-col pb-4">
-      {/*
-        Scoped override for DataGrid's footer page-size <select> (shared
-        component, read-only): design-system sizing plus a custom lucide
-        chevron-down so it stops reading as a default browser control.
-      */}
-      <style>{`
-        .ks-clients select[aria-label="Rows per page"] {
-          height: 32px;
-          appearance: none;
-          border: 1px solid var(--border);
-          border-radius: 6px;
-          padding: 0 28px 0 10px;
-          font-size: 13px;
-          background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
-          background-repeat: no-repeat;
-          background-position: right 8px center;
-          background-size: 14px 14px;
-        }
-        /*
-          Local shim for the global header search pill (app-shell.tsx is a
-          read-only shared component): widen it to 280px and forbid wrapping
-          so "Search orders, SKUs, locations…" can never break onto two
-          lines. The pill is the only header button with an embedded <kbd>
-          shortcut hint. The real fix belongs in TopNav — see the shared
-          component request accompanying this change.
-        */
-        header button:has(> kbd) {
-          width: 280px !important;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        /*
-          UnderlineTabs (read-only shared component) paints a faint grey 2px
-          bar under unselected tabs; only the selected tab should draw the
-          indigo indicator. Scoped kill-switch pinning inactive tabs to a
-          transparent border-bottom until the shared component drops the
-          visible inactive bar — see the shared component request.
-        */
-        .ks-clients [role="tablist"] [role="tab"][aria-selected="false"] {
-          border-bottom-color: transparent !important;
-        }
-      `}</style>
-      {/*
-        Breadcrumb parent must match the top-nav section that owns /clients.
-        NAV_MENUS (read-only) files Clients under Inventory > Facility, so the
-        active white pill lands on "Inventory" — the stale "Settings" crumb
-        here was the mismatch. If Clients should instead live under Settings,
-        nav-config.ts has to move, which is a shared-component change.
-      */}
-      <PageHeader
-        breadcrumbs={[{ label: "Inventory" }, { label: "Clients" }]}
-        title="Clients"
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHeader title="Organization" tabs="organization" helper="Define your clients (the brands you fulfill for) and set up their preferences."
         actions={
-          <>
-            <Button variant="secondary">
-              <Upload className="h-3.5 w-3.5" aria-hidden />
-              Import
-              <ChevronDown className="h-3.5 w-3.5 text-faint" aria-hidden />
-            </Button>
-            <Button variant="primary">
-              <Plus className="h-3.5 w-3.5" aria-hidden />
-              Create Client
-            </Button>
-          </>
-        }
-      />
-      <p className="mt-1 px-6 text-[13px] text-secondary">
-        3PL depositors fulfilled from this facility
-      </p>
-      <UnderlineTabs
-        className="mt-2"
-        active={tab}
-        onChange={(key) => changeTab(key as StatusTab)}
-        tabs={[
-          { key: "all", label: "All Clients", count: counts.all },
-          { key: "Active", label: "Active", count: counts.active },
-          { key: "Inactive", label: "Inactive", count: counts.inactive },
-        ]}
-      />
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DisabledReason reason={perms.import_file ? null : NO_PERMISSION}>
+                <DropdownMenuTrigger asChild><Button disabled={!perms.import_file}><FileUp className="h-4 w-4" aria-hidden />Bulk import/update<ChevronDown className="h-3.5 w-3.5" aria-hidden /></Button></DropdownMenuTrigger>
+              </DisabledReason>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem icon={FileUp} href="/imports/clients" description="Create or update clients from an Excel file">Import clients</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DisabledReason reason={perms.create ? null : NO_PERMISSION}><Button variant="primary" disabled={!perms.create} onClick={() => setWizard({ open: true, editId: null })}><Plus className="h-4 w-4" aria-hidden />Create client</Button></DisabledReason>
+          </div>
+        } />
+      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search client, code, official name or tax ID" bulkActions={bulkActions} bulkNoun="client" />
       <DataGrid<ClientListRow>
-        columns={CLIENT_COLUMNS}
-        data={rows}
-        total={total}
-        page={page}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={(size) => {
-          setPageSize(size);
-          setPage(1);
+        {...g.gridProps}
+        columns={COLUMNS}
+        getRowId={(r) => r.id}
+        rowActions={rowActions}
+        onRowClick={(r) => router.push(`/clients/${r.id}`)}
+        emptyTitle={filtered ? "No clients match these filters" : "No clients yet"}
+        emptyDescription={filtered ? "Clear a filter or search for another name." : "Create the first brand you fulfill for, then add its products."}
+        emptyAction={perms.create && !filtered ? <Button variant="primary" onClick={() => setWizard({ open: true, editId: null })}><Plus className="h-4 w-4" />Create client</Button> : undefined}
+      />
+      <ClientWizardDrawer open={wizard.open} editId={wizard.editId} onOpenChange={(o) => setWizard((w) => ({ ...w, open: o }))}
+        onSaved={(id) => { g.refetch(); if (!wizard.editId && id) router.push(`/clients/${id}`); }} />
+      <EntityChangeLogDrawer open={log !== null} onOpenChange={(o) => !o && setLog(null)} path={log ? `/api/clients/${log.id}/change-log` : null} title={`Change log · ${log?.name ?? ""}`} />
+      <ConfirmDialog
+        open={pending !== null}
+        onOpenChange={(o) => !o && setPending(null)}
+        variant={pending?.kind === "delete" ? "danger" : pending?.kind === "Inactive" ? "attention" : "info"}
+        title={`${verb} ${count === 1 ? one?.name : `${count} clients`}?`}
+        description={pending?.kind === "delete" ? "Clients with products, orders, POs, stock or billing forms are skipped." : pending?.kind === "Inactive" ? "Inactive clients disappear from order, PO and billing client selects. Clients with open orders are skipped." : "The clients become selectable on new orders, POs and billing forms again."}
+        confirmLabel={`Yes, ${verb.toLowerCase()}`}
+        cancelLabel="No"
+        records={{ columns: [{ key: "name", label: "Client" }, { key: "status", label: "Status" }, { key: "orders", label: "Open orders" }], rows: (pending?.rows ?? []).map((r) => ({ name: r.name, status: r.status, orders: r.openOrders })) }}
+        onConfirm={async () => {
+          if (!pending) return;
+          const ids = pending.rows.map((r) => r.id);
+          const result = pending.kind === "delete"
+            ? await action.run<BulkResponse>("/api/clients/bulk-delete", "POST", { ids })
+            : await action.run<BulkResponse>("/api/clients/bulk-status", "POST", { ids, status: pending.kind });
+          if (result) { toastBulk(result, "client", pending.kind === "delete" ? "deleted" : pending.kind === "Active" ? "activated" : "deactivated"); g.clearSelection(); }
+          setPending(null);
         }}
-        loading={loading}
-        error={error}
-        onRetry={() => setRefreshKey((k) => k + 1)}
-        onRefresh={() => setRefreshKey((k) => k + 1)}
-        getRowId={(row) => row.id}
-        selection={selection}
-        onSelectionChange={setSelection}
-        exportName="clients"
-        emptyTitle="No clients found"
-        emptyDescription="Adjust your search or filters, or create a new client to get started."
-        toolbarLeft={
-          <>
-            <GridSearch
-              value={search}
-              onChange={changeSearch}
-              placeholder="Search by name or code"
-            />
-            <FilterButton
-              filters={STATUS_FILTERS}
-              applied={appliedFilters}
-              onApply={(next) =>
-                changeTab(
-                  next.status === "Active" || next.status === "Inactive"
-                    ? next.status
-                    : "all"
-                )
-              }
-            />
-          </>
-        }
-        toolbarRight={(selectedCount) => (
-          <>
-            <Button variant="secondary" disabled={selectedCount === 0}>
-              Tag
-            </Button>
-            <Button variant="secondary" disabled={selectedCount === 0}>
-              Assign Plan
-              <ChevronDown className="h-3.5 w-3.5 text-faint" aria-hidden />
-            </Button>
-            <Button variant="secondary" disabled={selectedCount === 0}>
-              Deactivate
-            </Button>
-          </>
-        )}
       />
     </div>
   );

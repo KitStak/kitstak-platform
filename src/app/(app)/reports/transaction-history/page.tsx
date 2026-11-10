@@ -1,8 +1,15 @@
 import type { Metadata } from "next";
-import { TransactionHistoryPage } from "@/components/reports/transaction-history-page";
+import { Suspense } from "react";
+import { PageSkeleton } from "@/components/layout/shell-skeleton";
+import { TransactionHistoryReport } from "@/components/reports/report-pages";
 
-export const metadata: Metadata = { title: "Transaction History Report" };
+export const metadata: Metadata = { title: "Transaction History" };
 
-export default function TransactionHistoryReportPage() {
-  return <TransactionHistoryPage />;
+/** The grid reads its state from the URL (useSearchParams), so it renders inside Suspense. */
+export default function Page() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <TransactionHistoryReport />
+    </Suspense>
+  );
 }

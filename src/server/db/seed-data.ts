@@ -74,7 +74,7 @@ export interface ClientSeed {
 
 export const CLIENT_SEEDS: readonly ClientSeed[] = [
   { code: "APX", name: "Apex Threads Co.", contactName: "Dana Whitfield", contactEmail: "dana@apexthreads.com", phone: "(312) 555-0142", billingPlan: "per-order", status: "Active", category: "apparel" },
-  { code: "NOVA", name: "NovaForge Electronics", contactName: "Marcus Oyelaran", contactEmail: "marcus@novaforge.io", phone: "(415) 555-0177", billingPlan: "per-unit", status: "Active", category: "electronics" },
+  { code: "NVF", name: "NovaForge Electronics", contactName: "Marcus Oyelaran", contactEmail: "marcus@novaforge.io", phone: "(415) 555-0177", billingPlan: "per-unit", status: "Active", category: "electronics" },
   { code: "CPL", name: "Copperline Coffee Co.", contactName: "Elena Vásquez", contactEmail: "elena@copperlinecoffee.com", phone: "(503) 555-0121", billingPlan: "monthly", status: "Active", category: "coffee" },
   { code: "BLB", name: "Bluebird & Main", contactName: "Priya Raghavan", contactEmail: "priya@bluebirdandmain.com", phone: "(617) 555-0168", billingPlan: "per-order", status: "Active", category: "apparel" },
   { code: "VLT", name: "Voltbyte Labs", contactName: "Tom Keller", contactEmail: "tkeller@voltbyte.com", phone: "(206) 555-0193", billingPlan: "per-unit", status: "Active", category: "electronics" },
@@ -187,7 +187,7 @@ export function buildProductSeeds(): ProductSeed[] {
   out.push(product("SMT", "Apparel", { sku: "SMT-SOCK-WOOL-3PK", name: "Summit Merino Crew Socks (3-Pack)", price: 36, weightOz: 7, dims: [9, 5, 2] }));
   out.push(product("SMT", "Apparel", { sku: "SMT-BND-OS", name: "Summit Trail Headband — One Size", price: 16, weightOz: 1.6, dims: [6, 4, 1] }));
 
-  // NOVA — electronics: cables, chargers, hubs, power banks (10)
+  // NVF — electronics: cables, chargers, hubs, power banks (10)
   const novaItems: readonly ProductTemplate[] = [
     { sku: "NOVA-CBL-USBC-1M", name: "NovaForge USB-C Cable 1m — Braided", price: 14, weightOz: 2.1, dims: [4, 4, 1] },
     { sku: "NOVA-CBL-USBC-2M", name: "NovaForge USB-C Cable 2m — Braided", price: 18, weightOz: 3.2, dims: [4, 4, 1.2] },
@@ -200,7 +200,7 @@ export function buildProductSeeds(): ProductSeed[] {
     { sku: "NOVA-PWB-10K", name: "NovaForge PowerCell 10,000mAh", price: 39, weightOz: 8.1, dims: [5.5, 2.8, 0.9], isFragile: true },
     { sku: "NOVA-PWB-20K", name: "NovaForge PowerCell 20,000mAh", price: 59, weightOz: 14.6, dims: [6, 3, 1.1], isFragile: true },
   ];
-  for (const t of novaItems) out.push(product("NOVA", "Electronics", t));
+  for (const t of novaItems) out.push(product("NVF", "Electronics", t));
 
   // VLT — electronics: audio + desk gear incl. a kit (9)
   const vltItems: readonly ProductTemplate[] = [
@@ -237,7 +237,7 @@ export function buildProductSeeds(): ProductSeed[] {
     { sku: "CPL-BAG-DEC-12", name: "Copperline Water-Process Decaf — 12oz", price: 18, weightOz: 13, dims: [4, 2.5, 7] },
     { sku: "CPL-BAG-ESP-32", name: "Copperline Espresso Blend — 2lb Bulk", price: 42, weightOz: 34, dims: [6, 3.5, 10] },
     { sku: "CPL-PODS-24", name: "Copperline Single-Serve Pods (24ct)", price: 26, weightOz: 12, dims: [9, 6, 4] },
-    { sku: "CPL-KIT-SAMPLER", name: "Copperline Roaster's Sampler Kit (4 × 4oz)", price: 32, weightOz: 20, dims: [9, 9, 4], isKit: true },
+    { sku: "CPL-KIT-SAMPLER", name: "Copperline Roaster's Sampler Kit (4 × 12oz)", price: 64, weightOz: 54, dims: [9, 9, 4], isKit: true },
     { sku: "CPL-MUG-12OZ", name: "Copperline Diner Mug — 12oz", price: 16, weightOz: 14, dims: [5, 4, 4.5], isFragile: true },
   ];
   for (const t of cplItems) out.push(product("CPL", "Coffee", t));
@@ -254,59 +254,6 @@ export function buildProductSeeds(): ProductSeed[] {
   ];
   for (const t of hrbItems) out.push(product("HRB", "Coffee", t));
 
-  return out;
-}
-
-/* ============ locations ============ */
-
-export interface LocationSeed {
-  code: string;
-  zone: string;
-  aisle: string;
-  bay: string;
-  level: string;
-  type: "Picking" | "Reserve" | "Receiving" | "Shipping" | "Returns" | "Damaged";
-  capacityUnits: number;
-}
-
-export function buildLocationSeeds(): LocationSeed[] {
-  const out: LocationSeed[] = [];
-  const zones = ["A", "B", "C", "D"] as const;
-  for (const zone of zones) {
-    const type: LocationSeed["type"] =
-      zone === "A" || zone === "B" ? "Picking" : "Reserve";
-    for (let aisle = 1; aisle <= 4; aisle += 1) {
-      for (let bay = 1; bay <= 5; bay += 1) {
-        for (let level = 1; level <= 3; level += 1) {
-          const aa = String(aisle).padStart(2, "0");
-          const bb = String(bay).padStart(2, "0");
-          out.push({
-            code: `${zone}-${aa}-${bb}-${level}`,
-            zone,
-            aisle: aa,
-            bay: bb,
-            level: String(level),
-            type,
-            capacityUnits: type === "Picking" ? 80 : 240,
-          });
-        }
-      }
-    }
-  }
-  const docks: ReadonlyArray<readonly [string, string, LocationSeed["type"], number]> = [
-    ["RECV-01", "RECV", "Receiving", 600],
-    ["RECV-02", "RECV", "Receiving", 600],
-    ["RECV-03", "RECV", "Receiving", 600],
-    ["SHIP-01", "SHIP", "Shipping", 600],
-    ["SHIP-02", "SHIP", "Shipping", 600],
-    ["SHIP-03", "SHIP", "Shipping", 600],
-    ["RET-01", "RET", "Returns", 300],
-    ["RET-02", "RET", "Returns", 300],
-    ["DMG-01", "RET", "Damaged", 200],
-  ];
-  for (const [code, zone, type, capacity] of docks) {
-    out.push({ code, zone, aisle: "00", bay: "00", level: "1", type, capacityUnits: capacity });
-  }
   return out;
 }
 
@@ -386,19 +333,6 @@ export const INTL_CITIES: readonly CitySeed[] = [
 
 /* ============ carriers & channels ============ */
 
-export interface CarrierSeed {
-  carrier: string;
-  services: readonly string[];
-  trackingPrefix: string;
-  trackingDigits: number;
-}
-
-export const CARRIER_SEEDS: readonly CarrierSeed[] = [
-  { carrier: "FedEx", services: ["FedEx Home Delivery", "FedEx Ground", "FedEx 2Day"], trackingPrefix: "39", trackingDigits: 10 },
-  { carrier: "UPS", services: ["UPS Ground", "UPS 2nd Day Air", "UPS Next Day Air Saver"], trackingPrefix: "1Z8F4W", trackingDigits: 10 },
-  { carrier: "USPS", services: ["USPS Ground Advantage", "USPS Priority Mail"], trackingPrefix: "94001109", trackingDigits: 14 },
-];
-
 export type Channel =
   | "Shopify"
   | "Amazon"
@@ -406,15 +340,6 @@ export type Channel =
   | "Walmart"
   | "Wholesale"
   | "Manual";
-
-export const CHANNEL_WEIGHTS: ReadonlyArray<readonly [Channel, number]> = [
-  ["Shopify", 34],
-  ["Amazon", 26],
-  ["TikTok Shop", 12],
-  ["Walmart", 10],
-  ["Wholesale", 8],
-  ["Manual", 10],
-];
 
 export function storeNameFor(channel: Channel, clientName: string): string | null {
   switch (channel) {
@@ -454,23 +379,4 @@ export const VENDORS_BY_CATEGORY: Record<"apparel" | "electronics" | "coffee", r
   coffee: ["Finca La Aurora Importers", "Cascadia Green Bean Co.", "Port of Call Trading"],
 };
 
-/* ============ users ============ */
-
-export interface UserSeed {
-  email: string;
-  name: string;
-  role: "admin" | "manager" | "operator" | "viewer";
-}
-
-export const USER_SEEDS: readonly UserSeed[] = [
-  { email: "admin@kitstak.io", name: "Mike Lunsford", role: "admin" },
-  { email: "ops.manager@kitstak.io", name: "Renata Alvarez", role: "manager" },
-  { email: "j.okafor@kitstak.io", name: "Jonah Okafor", role: "operator" },
-  { email: "t.nguyen@kitstak.io", name: "Thao Nguyen", role: "operator" },
-  { email: "d.castillo@kitstak.io", name: "Diego Castillo", role: "operator" },
-  { email: "s.bennett@kitstak.io", name: "Sarah Bennett", role: "operator" },
-  { email: "m.okada@kitstak.io", name: "Mina Okada", role: "operator" },
-  { email: "l.fitzgerald@kitstak.io", name: "Liam Fitzgerald", role: "operator" },
-  { email: "finance@kitstak.io", name: "Grace Whitmore", role: "viewer" },
-  { email: "cs.team@kitstak.io", name: "Evan Brooks", role: "viewer" },
-];
+/* Users, roles and passwords live in ./seed/access.ts (USER_SPECS). */

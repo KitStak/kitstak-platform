@@ -43,3 +43,18 @@ export function formatDateTime(iso: string | Date | null | undefined): string {
     minute: "2-digit",
   });
 }
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * "MLT1 - Main Fulfillment": code + name joined with a plain hyphen, without repeating
+ * the code when the name already starts with it as a whole token ("MLT1 - Main
+ * Fulfillment" stays as is, but "NovaForge" does not repeat the code "NOVA").
+ */
+export function codeNameLabel(code: string | null | undefined, name: string): string {
+  if (!code) return name;
+  const pattern = new RegExp(`^${escapeRegExp(code.trim())}(?![\\p{L}\\p{N}])`, "iu");
+  return pattern.test(name.trim()) ? name : `${code} - ${name}`;
+}

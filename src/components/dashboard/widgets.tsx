@@ -1,379 +1,281 @@
 "use client";
 
-import * as React from "react";
-import {
-  Globe2,
-  type LucideIcon,
-  Moon,
-  Store,
-  Sunrise,
-  Truck,
-  Users2,
-} from "lucide-react";
-import { cn, formatNumber } from "@/lib/utils";
-import { Card, CardHeader } from "@/components/ui/card";
-
-/* ---------- Progress for Today ---------- */
-
-export interface ProgressMetric {
-  label: string;
-  sub: string;
-  percent: number;
-  current: number;
-  target: number;
-}
-
-export function ProgressTodayCard({
-  shiftDate,
-  nowLabel,
-  shiftStart,
-  shiftEnd,
-  shiftPercent,
-  metrics,
-}: {
-  shiftDate: string;
-  nowLabel: string;
-  shiftStart: string;
-  shiftEnd: string;
-  shiftPercent: number;
-  metrics: ProgressMetric[];
-}) {
-  return (
-    <Card className="flex flex-col">
-      <CardHeader title="Progress for Today" info />
-      <div className="mx-5 rounded-lg bg-surface-sunken p-4">
-        <div className="flex items-baseline justify-between">
-          <div>
-            <p className="text-[13px] font-semibold text-foreground">Day Shift</p>
-            <p className="text-[11px] text-faint">{shiftDate}</p>
-          </div>
-          <p className="text-[13px] tabular-nums">
-            <span className="font-semibold text-success">{nowLabel}</span>
-            <span className="font-normal text-faint"> – {shiftEnd}</span>
-          </p>
-        </div>
-        <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-border">
-          <div
-            className="h-full rounded-full bg-primary transition-[width] duration-700"
-            style={{ width: `${Math.min(100, Math.max(0, shiftPercent))}%` }}
-          />
-        </div>
-        <div className="mt-1.5 flex items-center justify-between text-[11px]">
-          <span className="flex items-center gap-1 font-medium text-warning">
-            <Sunrise className="h-3.5 w-3.5" aria-hidden /> {shiftStart}
-          </span>
-          <span className="flex items-center gap-1 text-secondary">
-            {shiftEnd} <Moon className="h-3 w-3" aria-hidden />
-          </span>
-        </div>
-      </div>
-      <div className="flex flex-col divide-y divide-border px-5 pb-4">
-        {metrics.map((m) => (
-          <div key={m.label} className="py-3">
-            <div className="flex items-baseline justify-between">
-              <p className="text-[13px] font-semibold text-foreground">{m.label}</p>
-              <p className="text-[13px] font-semibold tabular-nums">
-                <span className="text-success">{formatNumber(m.current)}</span>
-                <span className="text-secondary"> – {formatNumber(m.target)}</span>
-              </p>
-            </div>
-            <p className="text-[11px] text-faint">
-              <span className={cn("font-semibold", m.percent > 0 ? "text-success" : "text-faint")}>
-                {m.percent}%
-              </span>{" "}
-              {m.sub}
-            </p>
-            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-border">
-              <div
-                className="h-full rounded-full bg-success transition-[width] duration-700"
-                style={{ width: `${Math.min(100, m.percent)}%` }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-/* ---------- Unfulfilled donut ---------- */
-
-export interface DonutRow {
-  label: string;
-  tone: "foreground" | "warning" | "primary";
-  orders: number;
-  packQty: number;
-}
-
-/** Donut geometry: 180px square per the enterprise-dense card spec. */
-const DONUT_SIZE = 180;
-const DONUT_STROKE = 13;
-const DONUT_RADIUS = (DONUT_SIZE - DONUT_STROKE) / 2;
-const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
-const DONUT_COLOR_IN_PROGRESS = "#2563eb";
-const DONUT_COLOR_OPEN = "#f59e0b";
-
-/** Arc length for a value, normalized against the series sum (never a fixed max). */
-function donutArcLength(value: number, seriesSum: number): number {
-  if (seriesSum <= 0 || value <= 0) return 0;
-  return (value / seriesSum) * DONUT_CIRCUMFERENCE;
-}
-
-export function UnfulfilledCard({
-  total,
-  rows,
-  open,
-  inProgress,
-}: {
-  total: number;
-  rows: DonutRow[];
-  open: number;
-  inProgress: number;
-}) {
-  // Value-to-angle mapping normalizes against the series sum so the two
-  // segments always close the ring (e.g. 52 + 11 -> ~297deg + ~63deg).
-  const seriesSum = open + inProgress;
-  const inProgressArc = donutArcLength(inProgress, seriesSum);
-  const openArc = donutArcLength(open, seriesSum);
-  const toneClass = {
-    foreground: "text-foreground",
-    warning: "text-warning",
-    primary: "text-primary",
-  } as const;
-
-  return (
-    <Card className="flex flex-col">
-      <CardHeader title="Unfulfilled Orders" info />
-      {/* CardHeader contributes 12px below the title; pt-1 brings the title-to-content gap to 16px.
-          flex-1 + items-center vertically center both the donut+legend and the fixed-leading
-          table against the card's inner height, so leftover space splits evenly instead of
-          pooling below "In Progress". */}
-      <div className="flex flex-1 items-center gap-8 px-6 pb-5 pt-1">
-        <div className="flex shrink-0 flex-col items-center justify-center gap-3">
-          <div className="relative h-[180px] w-[180px]">
-            <svg
-              viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`}
-              className="h-full w-full -rotate-90"
-              role="img"
-              aria-label={`${formatNumber(inProgress)} in progress and ${formatNumber(open)} open of ${formatNumber(total)} unfulfilled orders`}
-            >
-              {/* Neutral track only shows when the series is empty. */}
-              <circle
-                cx={DONUT_SIZE / 2}
-                cy={DONUT_SIZE / 2}
-                r={DONUT_RADIUS}
-                fill="none"
-                stroke="var(--border)"
-                strokeWidth={DONUT_STROKE}
-              />
-              {inProgressArc > 0 ? (
-                <circle
-                  cx={DONUT_SIZE / 2}
-                  cy={DONUT_SIZE / 2}
-                  r={DONUT_RADIUS}
-                  fill="none"
-                  stroke={DONUT_COLOR_IN_PROGRESS}
-                  strokeWidth={DONUT_STROKE}
-                  strokeDasharray={`${inProgressArc} ${DONUT_CIRCUMFERENCE}`}
-                />
-              ) : null}
-              {openArc > 0 ? (
-                <circle
-                  cx={DONUT_SIZE / 2}
-                  cy={DONUT_SIZE / 2}
-                  r={DONUT_RADIUS}
-                  fill="none"
-                  stroke={DONUT_COLOR_OPEN}
-                  strokeWidth={DONUT_STROKE}
-                  strokeDasharray={`${openArc} ${DONUT_CIRCUMFERENCE}`}
-                  strokeDashoffset={-inProgressArc}
-                />
-              ) : null}
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <p className="text-[11px] text-faint">Total Orders</p>
-              <p className="text-[26px] font-bold tabular-nums text-foreground">
-                {formatNumber(total)}
-              </p>
-            </div>
-          </div>
-          {/* Legend carries the data, not just color keys: "In Progress 34 · Open 11". */}
-          <div className="flex items-center justify-center gap-2 text-[12px] text-secondary">
-            <span className="flex items-center gap-1.5">
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: DONUT_COLOR_IN_PROGRESS }}
-              />{" "}
-              In Progress{" "}
-              <span className="font-semibold tabular-nums text-foreground">
-                {formatNumber(inProgress)}
-              </span>
-            </span>
-            <span aria-hidden className="text-faint">
-              ·
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: DONUT_COLOR_OPEN }}
-              />{" "}
-              Open{" "}
-              <span className="font-semibold tabular-nums text-foreground">
-                {formatNumber(open)}
-              </span>
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-1 flex-col">
-          <div className="grid grid-cols-[1fr_auto_auto] gap-x-10 border-b border-border pb-2 text-[11px] font-semibold uppercase tracking-wide text-faint">
-            <span />
-            <span className="text-right">Total Orders</span>
-            <span className="text-right">Pack Quantity</span>
-          </div>
-          {/* Rows sit on a fixed 72px leading (9 x 8px grid) so the panel's density
-              matches Order Breakdown directly below; divide-y hairlines span the
-              table's full width. */}
-          <div className="flex flex-col divide-y divide-border">
-            {rows.map((row) => (
-              <div
-                key={row.label}
-                className="grid h-[72px] grid-cols-[1fr_auto_auto] items-center gap-x-10"
-              >
-                <span className={cn("text-[13px] font-semibold", toneClass[row.tone])}>
-                  {row.label}
-                </span>
-                <span className="text-right text-[15px] font-bold tabular-nums text-foreground">
-                  {formatNumber(row.orders)}
-                </span>
-                <span className="text-right text-[15px] font-bold tabular-nums text-foreground">
-                  {formatNumber(row.packQty)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-/* ---------- Status breakdown ---------- */
-
-export function StatusBreakdownCard({
-  entries,
-}: {
-  entries: { label: string; count: number; emphasis?: boolean }[];
-}) {
-  return (
-    <Card>
-      <CardHeader title="Order Breakdown by Status" info />
-      <div className="grid grid-cols-2 gap-x-10 gap-y-2.5 px-6 pb-5 md:grid-cols-4">
-        {entries.map((e) => (
-          <div key={e.label} className="flex items-baseline justify-between gap-2 text-[13px]">
-            <span className="text-secondary">{e.label}</span>
-            <span
-              className={cn(
-                "font-bold tabular-nums",
-                e.emphasis && e.count > 0 ? "text-danger" : "text-foreground"
-              )}
-            >
-              {formatNumber(e.count)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-/* ---------- Rank card ---------- */
-
 /**
- * Icons are referenced by name (not passed as component functions) so server
- * pages can render RankCard without sending functions across the RSC boundary.
+ * Dashboard widgets (spec 08 §Dashboard). Unlike Logiwa every number drills down: the
+ * href comes from the server, built from the same grid grammar the count used.
  */
-const RANK_ICONS: Record<RankIconName, LucideIcon> = {
-  store: Store,
-  users: Users2,
-  truck: Truck,
-  globe: Globe2,
-};
+import * as React from "react";
+import Link from "next/link";
+import { ChevronRight, Globe2, Moon, Store, Sun, Truck, Users } from "lucide-react";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip as ChartTooltip } from "recharts";
+import { InfoTip } from "@/components/ui/info-tip";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { shiftWindow } from "@/lib/shift";
+import { cn } from "@/lib/utils";
+import type { JobRow, LiveDashboard, Metric, Progress, RankRow, ShiftInfo } from "@/server/repositories/dashboard-live";
 
-export type RankIconName = "store" | "users" | "truck" | "globe";
+const nf = new Intl.NumberFormat("en-US");
+const fmt = (n: number) => nf.format(n);
+const pctOf = (done: number, total: number) => (total > 0 ? Math.round((done / total) * 100) : 0);
 
-export function RankCard({
-  icon = "globe",
-  title,
-  description,
-  periodLabel,
-  percentLabel = "of all orders",
-  rows,
-  totalEntries,
-}: {
-  icon?: RankIconName;
-  title: string;
-  description: string;
-  /** Explicit reporting window shown under the card title (e.g. "Last 30 days"). */
-  periodLabel?: string;
-  /**
-   * Names the base the percentages are computed against. Defaults to
-   * "of all orders"; cards ranked against a subset (e.g. carrier-shipped
-   * orders only) must say so instead of contradicting sibling cards.
-   */
-  percentLabel?: string;
-  rows: { name: string; percent: number; count: number }[];
-  /** Total number of ranked entries available (rows may be a truncated top-N slice). */
-  totalEntries?: number;
+export function Panel({ title, info, description, action, children, className }: {
+  readonly title: string; readonly info?: string; readonly description?: string; readonly action?: React.ReactNode; readonly children: React.ReactNode; readonly className?: string;
 }) {
-  const Icon = RANK_ICONS[icon];
-  const moreCount = Math.max(0, (totalEntries ?? rows.length) - rows.length);
   return (
-    <Card className="flex flex-col">
-      <div className="flex items-start gap-3 px-5 pt-4 pb-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-sunken">
-          <Icon className="h-4.5 w-4.5 text-secondary" aria-hidden />
+    <section aria-label={title} className={cn("flex min-w-0 flex-col rounded-xl border border-border bg-surface shadow-xs", className)}>
+      <header className="flex items-start justify-between gap-3 px-5 pt-4 pb-2">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-1.5 text-[15px] font-semibold text-foreground">{title}{info ? <InfoTip content={info} label={`About ${title}`} /> : null}</h2>
+          {description ? <p className="mt-0.5 text-[12px] text-faint">{description}</p> : null}
+        </div>
+        {action}
+      </header>
+      <div className="flex-1 px-5 pb-4">{children}</div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------ progress today */
+
+function ShiftClock({ shift }: { readonly shift: ShiftInfo }) {
+  const [now, setNow] = React.useState(() => new Date());
+  React.useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const w = shiftWindow({ now, timeZone: shift.timeZone, start: shift.start, end: shift.end });
+  return (
+    <div className="rounded-lg bg-surface-sunken/60 px-3.5 py-3" data-testid="shift-clock">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[12px] font-semibold text-secondary">Day shift · {w.dateLabel}</span>
+        <span className="text-[13px] font-semibold tabular-nums">
+          {w.phase === "during" ? <><span className="text-[#17874D]">{w.nowLabel}</span><span className="text-faint"> – {shift.end}</span></> : <span className="text-secondary">{w.statusLabel}</span>}
         </span>
-        <div>
-          <h3 className="text-[14px] font-semibold text-foreground">{title}</h3>
-          {periodLabel ? (
-            <p className="text-[12px] leading-4 text-secondary">{periodLabel}</p>
-          ) : null}
-          <p className="text-[11px] leading-4 text-faint">{description}</p>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border" role="progressbar" aria-label="Shift elapsed" aria-valuenow={w.percent} aria-valuemin={0} aria-valuemax={100}>
+        <div className="h-full rounded-full bg-primary transition-[width] duration-700" style={{ width: `${w.percent}%` }} />
+      </div>
+      <div className="mt-1.5 flex justify-between text-[11px] text-faint">
+        <span className="inline-flex items-center gap-1"><Sun className="h-3 w-3 text-[#EBAC00]" aria-hidden />{shift.start}</span>
+        <span className="truncate px-2">{shift.warehouseLabel} · {shift.timeZone.replace("_", " ")}</span>
+        <span className="inline-flex items-center gap-1">{shift.end}<Moon className="h-3 w-3 text-primary" aria-hidden /></span>
+      </div>
+    </div>
+  );
+}
+
+/** Tasks: no single grid filter can express "open OR completed today", so each half links to exactly its count. */
+function SplitProgressRow({ label, verb, p }: { readonly label: string; readonly verb: string; readonly p: Progress & { doneHref: string; openHref: string } }) {
+  const pct = pctOf(p.done, p.total);
+  const open = Math.max(p.total - p.done, 0);
+  const link = "rounded px-1 -mx-1 hover:bg-primary/5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
+  return (
+    <div className="rounded-lg px-1 py-1.5 -mx-1" data-testid="progress-tasks">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[13px] font-medium text-foreground">{label}</span>
+        <span className="text-[12px] text-secondary"><span className="text-[15px] font-semibold text-foreground tabular-nums">{pct}%</span> {verb}</span>
+      </div>
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-[#17874D]" style={{ width: `${pct}%` }} /></div>
+      <div className="mt-1 flex items-center justify-between gap-2 text-[11.5px] tabular-nums text-faint">
+        <span>
+          <Link href={p.doneHref} className={link} title="Open the tasks completed today" data-testid="progress-tasks-done"><span className="font-semibold text-[#17874D]">{fmt(p.done)}</span> completed today</Link>
+          <span aria-hidden> · </span>
+          <Link href={p.openHref} className={link} title="Open the pending and started tasks" data-testid="progress-tasks-open"><span className="font-semibold text-foreground">{fmt(open)}</span> open</Link>
+        </span>
+        <span>of {fmt(p.total)}</span>
+      </div>
+    </div>
+  );
+}
+
+function ProgressRow({ label, verb, p }: { readonly label: string; readonly verb: string; readonly p: Progress }) {
+  if (p.doneHref && p.openHref) return <SplitProgressRow label={label} verb={verb} p={{ ...p, doneHref: p.doneHref, openHref: p.openHref }} />;
+  const pct = pctOf(p.done, p.total);
+  return (
+    <Link href={p.href} className="group block rounded-lg px-1 py-1.5 -mx-1 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[13px] font-medium text-foreground">{label}</span>
+        <span className="text-[12px] text-secondary"><span className="text-[15px] font-semibold text-foreground tabular-nums">{pct}%</span> {verb}</span>
+      </div>
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-[#17874D]" style={{ width: `${pct}%` }} /></div>
+      <div className="mt-1 flex items-center justify-between text-[11.5px] tabular-nums text-faint">
+        <span><span className="font-semibold text-[#17874D]">{fmt(p.done)}</span> – {fmt(p.total)}</span>
+        <ChevronRight className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+      </div>
+    </Link>
+  );
+}
+
+export function ProgressTodayCard({ data }: { readonly data: LiveDashboard }) {
+  return (
+    <Panel title="Progress for Today" info="Shows the progress of the tasks, order lines, and orders that have been created today and prior to this day.">
+      {data.shift ? <ShiftClock shift={data.shift} /> : (
+        <p className="rounded-lg border border-dashed border-border px-3.5 py-3 text-[12.5px] text-secondary">Select just one warehouse to see Day Shift data.</p>
+      )}
+      <div className="mt-3 space-y-1">
+        <ProgressRow label="Tasks" verb="Completed" p={data.progress.tasks} />
+        <ProgressRow label="Order Lines" verb="Packed" p={data.progress.lines} />
+        <ProgressRow label="Orders to be Shipped Today" verb="Packed" p={data.progress.ordersToday} />
+      </div>
+    </Panel>
+  );
+}
+
+/* --------------------------------------------------------------- unfulfilled */
+
+const SERIES = [
+  { key: "open", label: "Open", color: "#E0A500" },
+  { key: "inProgress", label: "In Progress", color: "#2E5CE6" },
+] as const;
+
+export function UnfulfilledCard({ data }: { readonly data: LiveDashboard }) {
+  const [hidden, setHidden] = React.useState<readonly string[]>([]);
+  const u = data.unfulfilled;
+  const slices = SERIES.filter((s) => !hidden.includes(s.key)).map((s) => ({ ...s, value: u[s.key].count }));
+  const centerTotal = slices.reduce((a, s) => a + s.value, 0);
+  const rows: { m: Metric; color?: string }[] = [{ m: u.total }, { m: u.open, color: SERIES[0].color }, { m: u.inProgress, color: SERIES[1].color }];
+  return (
+    <Panel title="Unfulfilled Orders" info="Total number of orders with no action taken, regardless of a specific time interval.">
+      <div className="flex flex-col items-center gap-5 sm:flex-row">
+        <div className="relative h-[180px] w-[180px] shrink-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={slices.length && centerTotal ? slices : [{ key: "empty", label: "None", value: 1, color: "#E3E6E8" }]} dataKey="value" nameKey="label" innerRadius={60} outerRadius={84} paddingAngle={slices.length > 1 ? 2 : 0} stroke="none" isAnimationActive={false}>
+                {(slices.length && centerTotal ? slices : [{ color: "#E3E6E8" }]).map((s, i) => <Cell key={i} fill={s.color} />)}
+              </Pie>
+              {centerTotal ? <ChartTooltip formatter={(v) => fmt(Number(v))} /> : null}
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+            <div><div className="text-[11px] text-faint">Total Order</div><div className="text-[22px] font-semibold tabular-nums">{fmt(centerTotal)}</div></div>
+          </div>
+        </div>
+        <div className="w-full min-w-0">
+          <div className="mb-2 flex gap-2" role="group" aria-label="Toggle series">
+            {SERIES.map((s) => {
+              const off = hidden.includes(s.key);
+              return (
+                <button key={s.key} type="button" aria-pressed={!off} onClick={() => setHidden((h) => (off ? h.filter((x) => x !== s.key) : [...h, s.key]))}
+                  className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", off ? "border-border text-faint line-through" : "border-border-strong/50 text-foreground")}>
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: off ? "#C9CDD2" : s.color }} />{s.label}
+                </button>
+              );
+            })}
+          </div>
+          <table className="w-full text-[13px]">
+            <thead><tr className="text-left text-[11px] uppercase tracking-[0.05em] text-faint"><th className="py-1 font-semibold" /><th className="py-1 text-right font-semibold">Total Order</th><th className="py-1 text-right font-semibold">Total Pack Qty</th></tr></thead>
+            <tbody>
+              {rows.map(({ m, color }) => (
+                <tr key={m.label} className="border-t border-border">
+                  <td className="py-1.5"><span className="inline-flex items-center gap-1.5 font-medium">{color ? <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} /> : null}{m.label}</span></td>
+                  <td className="py-1.5 text-right tabular-nums"><Link className="font-semibold text-primary hover:underline" href={m.href}>{fmt(m.count)}</Link></td>
+                  <td className="py-1.5 text-right tabular-nums text-secondary">{fmt(m.packQty ?? 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
-      {/* flex-1 list + flex-1 rows: inside the grid's equal-height cards a 3-entry
-          list fills the same vertical space as a 4-entry sibling (hairlines spread
-          evenly) instead of leaving a dead band above the footer hairline. */}
-      <div className="mx-5 flex flex-1 flex-col divide-y divide-border border-t border-border">
-        {rows.length === 0 ? (
-          <p className="py-4 text-center text-[12px] text-faint">No orders in range</p>
-        ) : (
-          rows.map((row, i) => (
-            <div
-              key={row.name}
-              className="flex min-h-[52px] flex-1 items-center justify-between py-2.5"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-[13px] font-semibold text-foreground">
-                  {i + 1}. {row.name}
-                </p>
-                <p className="text-[11px] text-faint">
-                  <span className="font-semibold text-secondary">{row.percent}%</span>{" "}
-                  {percentLabel}
-                </p>
-              </div>
-              <span className="text-[15px] font-bold tabular-nums text-foreground">
-                {formatNumber(row.count)}
-              </span>
-            </div>
-          ))
-        )}
+    </Panel>
+  );
+}
+
+/* ---------------------------------------------------------------- breakdown */
+
+export function StatusBreakdownCard({ data }: { readonly data: LiveDashboard }) {
+  return (
+    <Panel title="Order Breakdown by Status" info="Shows the number of orders according to their current status. Every value opens the matching orders.">
+      <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 xl:grid-cols-4">
+        {data.breakdown.map((col, i) => (
+          <ul key={i} className={cn("space-y-0.5", i > 0 && "xl:border-l xl:border-border xl:pl-6")}>
+            {col.map((m) => (
+              <li key={m.label}>
+                <Link href={m.href} className="group flex items-center justify-between rounded-md px-2 py-1.5 -mx-2 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label={`${m.label}: ${m.count} orders`}>
+                  <span className="text-[13px] text-secondary group-hover:text-foreground">{m.label}</span>
+                  <span className={cn("text-[16px] font-semibold tabular-nums", m.count === 0 ? "text-faint" : "text-foreground group-hover:text-primary")}>{fmt(m.count)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ))}
       </div>
-      <div className="mx-5 mt-auto border-t border-border pb-4 pt-2.5 text-[11px] text-faint">
-        {moreCount > 0
-          ? `+ ${formatNumber(moreCount)} more`
-          : `All ${formatNumber(rows.length)} shown`}
-      </div>
-    </Card>
+    </Panel>
+  );
+}
+
+/* --------------------------------------------------------------------- ranks */
+
+const RANK_ICONS = { store: Store, users: Users, truck: Truck, globe: Globe2 } as const;
+
+export function RankCard({ title, description, icon, rows }: { readonly title: string; readonly description: string; readonly icon: keyof typeof RANK_ICONS; readonly rows: readonly RankRow[] }) {
+  const Icon = RANK_ICONS[icon];
+  return (
+    <Panel title={title} description={description} action={<span className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary"><Icon className="h-4 w-4" aria-hidden /></span>}>
+      {rows.length === 0 ? <p className="py-6 text-center text-[12.5px] text-faint">No unfulfilled orders in this selection.</p> : (
+        <ol className="space-y-1">
+          {rows.map((r, i) => {
+            const body = (
+              <>
+                <span className="w-4 shrink-0 text-[12px] font-semibold text-faint tabular-nums">{r.name === "Others" ? "" : i + 1}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-[13px] font-medium">{r.name}</span>
+                    <span className="text-[13px] font-semibold tabular-nums">{fmt(r.count)}</span>
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-2">
+                    <span className="h-1 flex-1 overflow-hidden rounded-full bg-border"><span className="block h-full rounded-full bg-primary/70" style={{ width: `${r.pct}%` }} /></span>
+                    <span className="w-12 text-right text-[11px] text-faint tabular-nums" title={`${r.pct}% of all unfulfilled orders`}>{r.pct}%</span>
+                  </span>
+                </span>
+              </>
+            );
+            return (
+              <li key={r.name}>
+                {r.href ? (
+                  <Link href={r.href} className="flex items-center gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">{body}</Link>
+                ) : <div className="flex items-center gap-2 px-0 py-1.5" title="Remaining entries combined">{body}</div>}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </Panel>
+  );
+}
+
+/* ---------------------------------------------------------------------- jobs */
+
+type JobTab = "priority" | "status" | "type";
+
+export function JobsCard({ data }: { readonly data: LiveDashboard }) {
+  const [tab, setTab] = React.useState<JobTab>("priority");
+  const rows: readonly JobRow[] = data.jobs[tab];
+  return (
+    <Panel
+      title="Jobs"
+      description="You can manage and review the details of the jobs with the tabs on the right."
+      action={<SegmentedControl<JobTab> size="sm" ariaLabel="Group jobs by" value={tab} onChange={setTab} options={[{ value: "priority", label: "Priority" }, { value: "status", label: "Status" }, { value: "type", label: "Type" }]} />}
+    >
+      {rows.length === 0 ? <p className="py-6 text-center text-[12.5px] text-faint">No open jobs in this selection.</p> : (
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-[0.05em] text-faint">
+              <th className="py-1.5 font-semibold">Name</th><th className="py-1.5 text-right font-semibold">Product Qty</th><th className="py-1.5 text-right font-semibold">Order Qty</th><th className="py-1.5 pl-4 font-semibold">Percentage</th><th className="py-1.5 text-right font-semibold">Job Qty</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.name} className="border-t border-border hover:bg-primary/5">
+                <td className="py-2"><Link href={r.href} className="font-medium text-primary hover:underline">{r.name}</Link></td>
+                <td className="py-2 text-right tabular-nums">{fmt(r.productQty)}</td>
+                <td className="py-2 text-right tabular-nums">{fmt(r.orderQty)}</td>
+                <td className="py-2 pl-4"><span className="flex items-center gap-2"><span className="h-1.5 w-24 overflow-hidden rounded-full bg-border"><span className="block h-full rounded-full bg-primary" style={{ width: `${r.pct}%` }} /></span><span className="tabular-nums text-secondary">{r.pct}%</span></span></td>
+                <td className="py-2 text-right font-semibold tabular-nums">{fmt(r.jobQty)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Panel>
   );
 }

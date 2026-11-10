@@ -1,31 +1,19 @@
-import { connection } from "next/server";
-import { z } from "zod";
-import {
-  badRequest,
-  listQuerySchema,
-  ok,
-  queryOf,
-  requireSession,
-  serverError,
-  zodMessage,
-} from "@/server/api-utils";
-import { listClients } from "@/server/repositories/clients";
+/** `GET /api/clients` — Clients grid (grid grammar; `f.warehouseId` = Active clients for wizard selects). `POST` — 4-step Create Client. */
+import { defineRoute } from "@/server/api/define-route";
+import { created, listResult } from "@/server/api/envelope";
+import { clientSchema } from "@/lib/grid-defs/organization/clients";
+import { createClient, listClients } from "@/server/repositories/clients";
 
-const querySchema = listQuerySchema.extend({
-  status: z.enum(["Active", "Inactive"]).optional(),
+export const GET = defineRoute({
+  handler: ({ db, auth, grid }) => {
+    const query = grid();
+    const { rows, total } = listClients(db, auth, query);
+    return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
+  },
 });
 
-export async function GET(request: Request): Promise<Response> {
-  await connection();
-  try {
-    const denied = await requireSession();
-    if (denied) return denied;
-    const parsed = querySchema.safeParse(queryOf(request));
-    if (!parsed.success) return badRequest(zodMessage(parsed.error));
-    const { page, pageSize, search, status } = parsed.data;
-    const { rows, total } = listClients({ page, pageSize, search, status });
-    return ok(rows, { total, page, pageSize });
-  } catch (error: unknown) {
-    return serverError("GET /api/clients", error);
-  }
-}
+export const POST = defineRoute({
+  permission: "settings.clients.create",
+  body: clientSchema,
+  handler: ({ db, auth, actor, body }) => created(createClient(db, auth, actor, body)),
+});

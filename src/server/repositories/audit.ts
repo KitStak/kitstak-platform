@@ -1,51 +1,115 @@
-import { and, count, desc, eq, like, or, type SQL } from "drizzle-orm";
-import { db, schema } from "@/server/db";
-import { likePattern, offsetOf, type ListResult } from "./shared";
+/**
+ * Audit Log repository (M14): security events from `audit_log` (sign-ins, CSRF rejects,
+ * permission denials, user / role changes, session revocations) with the grid grammar.
+ * Targets are resolved to emails / role names so the grid never shows raw ids.
+ */
+import { sql, type SQL } from "drizzle-orm";
+import type { AppDb } from "@/server/api/db";
+import * as s from "@/server/db/schema";
+import { paginate } from "@/server/query/paginate";
+import type { GridQuery } from "@/server/query/grid-query";
+import { AUDIT_FIELDS, AUDIT_SEARCH_FIELDS, AUDIT_SORT_FIELDS, auditActionLabel, auditCategory, type AuditCategory } from "@/lib/grid-defs/admin/audit";
+import { compileGrid, qc, type GridBinding } from "./users-shared";
 
-const { auditLog, users } = schema;
+const a = s.auditLog;
 
-export interface AuditListParams {
-  page: number;
-  pageSize: number;
-  search?: string;
-  entity?: string;
+const categorySql = sql<string>`CASE
+  WHEN ${qc(a.action)} LIKE 'auth.login%' THEN 'Sign-in'
+  WHEN ${qc(a.action)} LIKE 'auth.logout%' OR ${qc(a.action)} LIKE 'session.%' THEN 'Session'
+  WHEN ${qc(a.action)} LIKE 'auth.password%' OR ${qc(a.action)} = 'user.password_reset' THEN 'Password'
+  WHEN ${qc(a.action)} LIKE 'security.csrf%' THEN 'CSRF rejected'
+  WHEN ${qc(a.action)} LIKE 'security.permission%' THEN 'Permission denied'
+  WHEN ${qc(a.action)} LIKE 'user.%' THEN 'User change'
+  WHEN ${qc(a.action)} LIKE 'role.%' THEN 'Role change'
+  WHEN ${qc(a.action)} LIKE 'company.%' OR ${qc(a.action)} LIKE 'app.%' OR ${qc(a.action)} LIKE 'printout.%' OR ${qc(a.action)} LIKE 'screen_config.%' OR ${qc(a.action)} LIKE 'lookup.%' OR ${qc(a.action)} LIKE 'sequence.%' THEN 'Settings change'
+  ELSE 'Other' END`;
+
+const userNameSql = sql<string | null>`(SELECT x.name FROM users x WHERE x.id = ${qc(a.userId)})`;
+const userEmailSql = sql<string | null>`COALESCE((SELECT x.email FROM users x WHERE x.id = ${qc(a.userId)}), json_extract(${qc(a.detail)}, '$.email'))`;
+const entityLabelSql = sql<string | null>`CASE
+  WHEN ${qc(a.entity)} = 'user' THEN COALESCE((SELECT x.email FROM users x WHERE x.id = ${qc(a.entityId)}), ${qc(a.entityId)})
+  WHEN ${qc(a.entity)} = 'role' THEN COALESCE((SELECT x.name FROM roles x WHERE x.id = ${qc(a.entityId)}), json_extract(${qc(a.detail)}, '$.name'), 'Deleted role')
+  WHEN ${qc(a.entity)} = 'app' THEN COALESCE((SELECT x.name FROM apps x WHERE x.key = ${qc(a.entityId)}), ${qc(a.entityId)})
+  WHEN ${qc(a.entity)} = 'company' THEN 'Company settings'
+  ELSE ${qc(a.entityId)} END`;
+
+const AUDIT_SQL: Readonly<Record<string, SQL>> = {
+  at: sql`${qc(a.at)}`,
+  category: categorySql,
+  action: sql`${qc(a.action)}`,
+  outcome: sql`${qc(a.outcome)}`,
+  userId: sql`${qc(a.userId)}`,
+  userName: userNameSql,
+  userEmail: userEmailSql,
+  ip: sql`${qc(a.ip)}`,
+  entityLabel: entityLabelSql,
+};
+
+const BINDING: GridBinding = {
+  exprs: AUDIT_SQL, fields: AUDIT_FIELDS, sortable: AUDIT_SORT_FIELDS, search: AUDIT_SEARCH_FIELDS,
+  defaultSort: [{ field: "at", dir: "desc" }], tiebreaker: a.id,
+};
+
+export interface AuditRow {
+  readonly id: string;
+  readonly at: string;
+  readonly action: string;
+  readonly actionLabel: string;
+  readonly category: AuditCategory;
+  readonly outcome: "success" | "failure";
+  readonly userName: string | null;
+  readonly userEmail: string | null;
+  readonly entity: string;
+  readonly entityLabel: string | null;
+  readonly ip: string | null;
+  readonly userAgent: string | null;
+  readonly detail: string | null;
+  /** Human summary of the detail JSON ("reason: bad password · method: POST"). */
+  readonly summary: string;
 }
 
-export interface AuditListRow {
-  id: string;
-  userName: string | null;
-  action: string;
-  entity: string;
-  entityId: string;
-  detail: string | null;
-  at: string;
-}
+const SKIP_DETAIL = new Set(["email", "name"]);
 
-export function listAuditLog(params: AuditListParams): ListResult<AuditListRow> {
-  const conds: Array<SQL | undefined> = [];
-  if (params.entity) conds.push(eq(auditLog.entity, params.entity));
-  if (params.search) {
-    const p = likePattern(params.search);
-    conds.push(or(like(auditLog.action, p), like(auditLog.detail, p), like(auditLog.entityId, p)));
+export function summarizeDetail(detail: string | null): string {
+  if (!detail) return "";
+  try {
+    const parsed = JSON.parse(detail) as Record<string, unknown>;
+    return Object.entries(parsed)
+      .filter(([k, v]) => !SKIP_DETAIL.has(k) && v !== null && v !== undefined && v !== "" && !/Id$/.test(k))
+      .map(([k, v]) => `${k.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}: ${Array.isArray(v) ? v.join(", ") || "none" : typeof v === "object" ? JSON.stringify(v) : String(v).replace(/_/g, " ")}`)
+      .join(" · ");
+  } catch {
+    return detail.slice(0, 200);
   }
-  const where = and(...conds);
-  const rows = db
-    .select({
-      id: auditLog.id,
-      userName: users.name,
-      action: auditLog.action,
-      entity: auditLog.entity,
-      entityId: auditLog.entityId,
-      detail: auditLog.detail,
-      at: auditLog.at,
-    })
-    .from(auditLog)
-    .leftJoin(users, eq(auditLog.userId, users.id))
-    .where(where)
-    .orderBy(desc(auditLog.at))
-    .limit(params.pageSize)
-    .offset(offsetOf(params.page, params.pageSize))
-    .all();
-  const total = db.select({ n: count() }).from(auditLog).where(where).get()?.n ?? 0;
-  return { rows, total };
+}
+
+export function listAuditLog(db: AppDb, query: GridQuery): { rows: AuditRow[]; total: number } {
+  const grid = compileGrid(BINDING, query);
+  const result = paginate(
+    db.select({
+      id: a.id, at: a.at, action: a.action, outcome: a.outcome, entity: a.entity, ip: a.ip, userAgent: a.userAgent, detail: a.detail,
+      category: categorySql, userName: userNameSql, userEmail: userEmailSql, entityLabel: entityLabelSql,
+    }).from(a).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    () => db.select({ n: sql<number>`count(*)` }).from(a).where(grid.where).get()?.n ?? 0,
+    { page: query.page, pageSize: query.pageSize },
+  );
+  const rows = result.rows.map((r) => ({
+    ...r,
+    category: (r.category as AuditCategory) ?? auditCategory(r.action),
+    actionLabel: auditActionLabel(r.action),
+    summary: summarizeDetail(r.detail),
+  })) as AuditRow[];
+  return { rows, total: result.total };
+}
+
+/** Counters for the page header strip (last 24 hours). */
+export function auditStats(db: AppDb, now: Date = new Date()): { signIns: number; failedSignIns: number; denied: number; csrf: number } {
+  const since = new Date(now.getTime() - 86_400_000).toISOString();
+  const row = db.get<{ signIns: number; failedSignIns: number; denied: number; csrf: number }>(sql`SELECT
+    SUM(CASE WHEN action = 'auth.login' AND outcome = 'success' THEN 1 ELSE 0 END) AS signIns,
+    SUM(CASE WHEN action LIKE 'auth.login%' AND outcome = 'failure' THEN 1 ELSE 0 END) AS failedSignIns,
+    SUM(CASE WHEN action LIKE 'security.permission%' THEN 1 ELSE 0 END) AS denied,
+    SUM(CASE WHEN action LIKE 'security.csrf%' THEN 1 ELSE 0 END) AS csrf
+    FROM audit_log WHERE at >= ${since}`);
+  return { signIns: row?.signIns ?? 0, failedSignIns: row?.failedSignIns ?? 0, denied: row?.denied ?? 0, csrf: row?.csrf ?? 0 };
 }

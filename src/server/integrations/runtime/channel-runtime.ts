@@ -1,0 +1,414 @@
+/**
+ * Channel methods runtime (M12, spec 06 §8): Download Orders · Download Products · Sync Inventory ·
+ * Send Shipment Info. Each run writes `channel_runs` + `channel_run_items`; order failures upsert
+ * `channel_missing_orders` with the error-catalog code. Orders go through `orders.createOrder`
+ * (which runs workflows); products through `products.ensureProductForListing`.
+ * Every order/listing is written in its own transaction so one failure never rolls back the run.
+ */
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { channelSettingsSchema, type ChannelSettings } from "@/lib/domain-types";
+import { CHANNEL_METHODS, ORDER_CHANNELS } from "@/lib/enums";
+import type { AppDb } from "@/server/api/db";
+import * as s from "@/server/db/schema";
+import { recordUpdate } from "@/server/domain/change-log";
+import { describeError } from "@/server/domain/errors";
+import { createOrder } from "@/server/domain/orders/create-update";
+import { ensureProductForListing } from "@/server/domain/products";
+import { systemCtx, type DomainCtx } from "@/server/domain/types";
+import { ChannelApiError, type AdapterContext, type ChannelAdapter, type ChannelConnectionRow, type ChannelOrder } from "../channel-adapter";
+import { decryptCredentials } from "../crypto";
+import { sandboxAdapter } from "../sandbox";
+import { shipstationAdapter } from "../shipstation";
+import { shopifyAdapter } from "../shopify";
+
+export type ChannelMethod = (typeof CHANNEL_METHODS)[number];
+export type MethodRow = typeof s.channelMethods.$inferSelect;
+type RunStatus = (typeof s.channelRuns.$inferSelect)["status"];
+
+export const DEFAULT_INTERVALS: Readonly<Record<ChannelMethod, number>> = {
+  "Download Orders": 15, "Download Products": 1440, "Sync Inventory": 60, "Send Shipment Info": 30,
+};
+
+const LIVE_ADAPTERS: Readonly<Record<string, ChannelAdapter>> = { shopify: shopifyAdapter, shipstation: shipstationAdapter };
+export const LIVE_PROVIDERS: ReadonlySet<string> = new Set(Object.keys(LIVE_ADAPTERS));
+export const isSandbox = (c: Pick<ChannelConnectionRow, "distribution">) => c.distribution === "API";
+
+/** Why the scheduler can't run a connection (null = runnable). */
+export function pauseReason(c: Pick<ChannelConnectionRow, "distribution" | "credentialsEnc" | "provider" | "isActive">): string | null {
+  if (!c.isActive) return "The store connection is inactive";
+  if (isSandbox(c)) return null;
+  if (!LIVE_PROVIDERS.has(c.provider)) return "This channel has no live API adapter yet";
+  if (!c.credentialsEnc) return "No credentials stored — reconnect the store";
+  return null;
+}
+
+function sandboxSkus(db: AppDb, clientId: string) {
+  return db.select({ sku: s.products.sku, title: s.products.name, price: s.products.price }).from(s.products)
+    .where(and(eq(s.products.clientId, clientId), eq(s.products.status, "Active"))).orderBy(asc(s.products.sku)).limit(24).all()
+    .map((p) => ({ sku: p.sku, title: p.title, price: p.price ?? 0 }));
+}
+
+export function adapterFor(db: AppDb, c: ChannelConnectionRow): ChannelAdapter | null {
+  if (isSandbox(c)) return sandboxAdapter(sandboxSkus(db, c.clientId));
+  return LIVE_ADAPTERS[c.provider] ?? null;
+}
+
+const CHANNEL_OF: Readonly<Record<string, (typeof ORDER_CHANNELS)[number]>> = { shopify: "Shopify", amazon: "Amazon", tiktok: "TikTok Shop", walmart: "Walmart" };
+const PREFIX: Readonly<Record<string, string>> = { shopify: "SPY", shipstation: "SS", amazon: "AMZ", woocommerce: "WOO", walmart: "WMT", tiktok: "TTS", ebay: "EBY", etsy: "ETS" };
+const refOf = (c: ChannelConnectionRow, o: ChannelOrder) => `${isSandbox(c) ? "SBX" : PREFIX[c.provider] ?? "CH"}-${o.id.replace(/\D/g, "").slice(-13) || o.id}`;
+const channelOrderIdOf = (raw: unknown): string | null => {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const v = r.kitstaks_ref ?? r.id ?? r.orderId;
+  return typeof v === "string" || typeof v === "number" ? String(v) : null;
+};
+
+class OrderSkip extends Error {
+  readonly code: string;
+  constructor(code: string, message?: string) { super(message ?? code); this.code = code; }
+}
+
+interface RunCounters { success: number; error: number; total: number }
+
+function addItem(db: AppDb, runId: string, item: { success: boolean; properties: Record<string, unknown>; error?: string | null; storeOrderNumber?: string | null; sellerSku?: string | null; qty?: number | null }) {
+  db.insert(s.channelRunItems).values({
+    runId, success: item.success, properties: JSON.stringify(item.properties), errorMessage: item.error ?? null,
+    storeOrderNumber: item.storeOrderNumber ?? null, sellerSku: item.sellerSku ?? null, qty: item.qty ?? null,
+  }).run();
+}
+
+function upsertMissing(db: AppDb, c: ChannelConnectionRow, o: ChannelOrder, code: string) {
+  const m = s.channelMissingOrders;
+  const raw = o.raw && typeof o.raw === "object" ? o.raw : { order: o.raw };
+  const existing = db.select().from(m).where(and(eq(m.connectionId, c.id), eq(m.channelOrderNumber, o.number))).get();
+  const values = { lastErrorCode: code, payload: JSON.stringify(raw), lastUpdated: new Date().toISOString(), status: "Error" as const };
+  if (existing) db.update(m).set(values).where(eq(m.id, existing.id)).run();
+  else db.insert(m).values({ connectionId: c.id, orderCode: refOf(c, o), channelOrderNumber: o.number, orderDate: o.createdAt, ...values }).run();
+}
+
+function resolveMissing(db: AppDb, c: ChannelConnectionRow, number: string) {
+  const m = s.channelMissingOrders;
+  db.update(m).set({ status: "Resolved", lastUpdated: new Date().toISOString() }).where(and(eq(m.connectionId, c.id), eq(m.channelOrderNumber, number), sql`${m.status} <> 'Resolved'`)).run();
+}
+
+function tagBlocked(settings: ChannelSettings, tags: readonly string[]): boolean {
+  const wanted = settings.tagFilter.tags.map((t) => t.toLowerCase());
+  if (wanted.length === 0) return false;
+  const have = new Set(tags.map((t) => t.toLowerCase()));
+  const all = wanted.every((t) => have.has(t));
+  const any = wanted.some((t) => have.has(t));
+  const hit = settings.tagFilter.condition === "All Following Tags" ? all : any;
+  return settings.tagFilter.method === "Included" ? !hit : hit;
+}
+
+function importOrder(db: AppDb, ctx: DomainCtx, c: ChannelConnectionRow, settings: ChannelSettings, o: ChannelOrder): { code: string; lines: number } {
+  const so = s.shipmentOrders;
+  const dup = db.select({ code: so.code }).from(so).where(and(eq(so.storeOrderNumber, o.number), sql`(${so.channelConnectionId} = ${c.id} OR (${so.channelConnectionId} IS NULL AND ${so.storeName} = ${c.storeName}))`)).get();
+  if (dup) throw new OrderSkip("__duplicate", `Already downloaded as ${dup.code}`);
+  if (tagBlocked(settings, o.tags)) throw new OrderSkip("Order is Blocked by Tag Filter");
+  if (o.lines.length === 0) throw new OrderSkip("Line details not found in the Order");
+  if (!o.hasFulfillmentOrders) throw new OrderSkip("Fulfillment Orders not found in the Order");
+  const shippable = o.lines.filter((l) => l.requiresShipping);
+  if (shippable.length === 0) throw new OrderSkip("All products are Digital");
+  const open = shippable.filter((l) => l.quantity - l.fulfilledQuantity > 0);
+  if (open.length === 0) throw new OrderSkip("Order lines are already fulfilled on the Store");
+  if (open.some((l) => l.isCustom)) throw new OrderSkip("The Order includes custom products");
+  if (open.some((l) => !l.sku)) throw new OrderSkip("The Order includes products without an SKU");
+  if (!o.shipTo || !o.shipTo.line1 || !o.shipTo.city || !o.shipTo.zip) throw new OrderSkip("Unexpected Error", "The order has no complete shipping address");
+  const maps = db.select().from(s.channelLocationMappings).where(eq(s.channelLocationMappings.connectionId, c.id)).all();
+  const mapping = o.locationId ? maps.find((m) => m.channelLocationId === o.locationId) : maps[0];
+  if (!mapping) throw new OrderSkip("Fulfillment Orders not found in the specified location");
+  const products = new Map<string, string>();
+  const missing: string[] = [];
+  for (const l of open) {
+    const sku = l.sku as string;
+    const p = db.select({ id: s.products.id }).from(s.products).where(and(eq(s.products.clientId, c.clientId), eq(s.products.sku, sku))).get();
+    if (p) { products.set(sku, p.id); continue; }
+    if (settings.orders.createNonexistentProducts) {
+      try {
+        products.set(sku, ensureProductForListing(db, ctx, { clientId: c.clientId, sellerSku: sku, name: l.title, price: l.price }).product.id);
+      } catch {
+        throw new OrderSkip("One or more SKUs could not be created in KitStaks", `'${sku}' could not be created`);
+      }
+    } else missing.push(sku);
+  }
+  if (missing.length > 0 && (!settings.orders.partialOrders || missing.length === open.length)) {
+    throw new OrderSkip("One or more SKUs in the order were not found in KitStaks", `SKU not found: ${missing.join(", ")}`);
+  }
+  const lines = open.filter((l) => products.has(l.sku as string)).map((l) => ({ productId: products.get(l.sku as string) as string, quantity: l.quantity - l.fulfilledQuantity, unitPrice: l.price }));
+  const type = settings.orders.shipmentOrderType.toUpperCase().includes("B2B") ? "B2B" : "D2C";
+  const created = createOrder(db, ctx, {
+    channel: CHANNEL_OF[c.provider] ?? (isSandbox(c) ? "Shopify" : "Wholesale"), storeName: c.storeName, storeOrderNumber: o.number,
+    customerName: o.shipTo.name, customerEmail: o.email ?? "", customerPhone: o.shipTo.phone ?? null, customerFirstName: o.shipTo.firstName ?? null, customerLastName: o.shipTo.lastName ?? null,
+    companyName: o.shipTo.company ?? null, shipAddress: o.shipTo.line1, shipAddress2: o.shipTo.line2 ?? null, shipCity: o.shipTo.city, shipState: o.shipTo.state ?? "", shipZip: o.shipTo.zip,
+    shipCountry: o.shipTo.country || "United States", orderType: type, priority: "None", orderDate: o.createdAt, note: [o.note, missing.length > 0 ? `Partial order: ${missing.join(", ")} not found` : null].filter(Boolean).join("\n") || null,
+    skipAddressVerification: settings.orders.skipAddressVerification, isGift: o.isGift, warehouseId: mapping.warehouseId, clientId: c.clientId, lines,
+    channelConnectionId: c.id, channelPaymentStatus: o.financialStatus ? o.financialStatus.slice(0, 50) : null,
+  }, { trigger: "Shipment Order Created" });
+  return { code: created.code, lines: lines.length };
+}
+
+async function downloadOrders(db: AppDb, c: ChannelConnectionRow, adapter: ChannelAdapter, actx: AdapterContext, runId: string, method: MethodRow, onlyOrders?: readonly ChannelOrder[]): Promise<RunCounters> {
+  const counters: RunCounters = { success: 0, error: 0, total: 0 };
+  const settings = actx.settings;
+  const since = settings.orders.downloadFrom ?? method.lastSuccessAt ?? null;
+  const orders = onlyOrders ?? (await adapter.fetchOrders(actx, since));
+  const ctx = systemCtx("Integration");
+  for (const o of orders) {
+    if (settings.paymentStatuses.length > 0 && !settings.paymentStatuses.map((p) => p.toLowerCase()).includes(o.financialStatus.toLowerCase())) continue;
+    try {
+      const res = db.transaction((tx) => importOrder(tx, ctx, c, settings, o));
+      counters.success++; counters.total++;
+      db.transaction((tx) => { resolveMissing(tx, c, o.number); addItem(tx, runId, { success: true, properties: { orderCode: res.code, storeOrderNumber: o.number, lines: res.lines }, storeOrderNumber: o.number }); });
+    } catch (error) {
+      if (error instanceof OrderSkip && error.code === "__duplicate") continue;
+      const code = error instanceof OrderSkip ? error.code : "Unexpected Error";
+      const message = error instanceof OrderSkip ? error.message : describeError(error).message;
+      counters.error++; counters.total++;
+      db.transaction((tx) => {
+        upsertMissing(tx, c, o, code);
+        addItem(tx, runId, { success: false, properties: { storeOrderNumber: o.number, channelOrderId: o.id }, error: message === code ? code : `${code}: ${message}`, storeOrderNumber: o.number });
+      });
+    }
+  }
+  return counters;
+}
+
+async function downloadProducts(db: AppDb, c: ChannelConnectionRow, adapter: ChannelAdapter, actx: AdapterContext, runId: string): Promise<RunCounters> {
+  const counters: RunCounters = { success: 0, error: 0, total: 0 };
+  const products = await adapter.fetchProducts(actx);
+  const ctx = systemCtx("Integration");
+  const l = s.productListings;
+  for (const p of products) {
+    counters.total++;
+    if (!p.sku) {
+      counters.error++;
+      addItem(db, runId, { success: false, properties: { channelProductId: p.id, title: p.title }, error: "The listing has no SKU", sellerSku: null });
+      continue;
+    }
+    try {
+      db.transaction((tx) => {
+        const product = actx.settings.products.download
+          ? ensureProductForListing(tx, ctx, { clientId: c.clientId, sellerSku: p.sku as string, name: p.title, price: p.price, barcode: p.barcode ?? undefined, weightOz: p.weightOz }).product
+          : tx.select().from(s.products).where(and(eq(s.products.clientId, c.clientId), eq(s.products.sku, p.sku as string))).get() ?? null;
+        const existing = tx.select().from(l).where(and(eq(l.channelConnectionId, c.id), eq(l.channelProductId, p.id))).get();
+        const values = { sellerSku: p.sku as string, name: p.title, storePrice: p.price, imageUrl: p.imageUrl, productId: product?.id ?? null, linkedAt: product ? new Date().toISOString() : null };
+        if (existing) tx.update(l).set({ ...values, productId: existing.productId ?? values.productId, linkedAt: existing.linkedAt ?? values.linkedAt }).where(eq(l.id, existing.id)).run();
+        else tx.insert(l).values({ channelConnectionId: c.id, clientId: c.clientId, channelProductId: p.id, ...values }).run();
+        addItem(tx, runId, { success: true, properties: { sku: p.sku, channelProductId: p.id, linked: Boolean(product) }, sellerSku: p.sku });
+      });
+      counters.success++;
+    } catch (error) {
+      counters.error++;
+      addItem(db, runId, { success: false, properties: { sku: p.sku, channelProductId: p.id }, error: `'${p.sku}' could not be created: ${describeError(error).message}`, sellerSku: p.sku });
+    }
+  }
+  return counters;
+}
+
+/** Quantity to publish for one listing (on hand or available, sync-prevented locations excluded, channel allocation rules). */
+export function listingQty(db: AppDb, c: ChannelConnectionRow, settings: ChannelSettings, productId: string): number {
+  const whIds = db.select({ id: s.channelLocationMappings.warehouseId }).from(s.channelLocationMappings).where(eq(s.channelLocationMappings.connectionId, c.id)).all().map((x) => x.id);
+  if (whIds.length === 0) return 0;
+  const i = s.inventory;
+  const row = db.select({ onHand: sql<number>`COALESCE(SUM(${i.onHand} - ${i.damaged}), 0)`, allocated: sql<number>`COALESCE(SUM(${i.allocated}), 0)` })
+    .from(i).innerJoin(s.locations, eq(s.locations.id, i.locationId))
+    .where(and(eq(i.productId, productId), eq(i.clientId, c.clientId), inArray(i.warehouseId, whIds), eq(i.status, "Stock"), eq(s.locations.preventInventorySync, false))).get();
+  const base = Math.max(0, settings.inventory.method === "On Hand" ? Number(row?.onHand ?? 0) : Number(row?.onHand ?? 0) - Number(row?.allocated ?? 0));
+  const alloc = db.select().from(s.productChannelAllocations).where(and(eq(s.productChannelAllocations.productId, productId), eq(s.productChannelAllocations.channelConnectionId, c.id))).get();
+  if (!alloc) return base;
+  if (alloc.staticQty !== null && alloc.staticQty !== undefined) return Math.max(0, alloc.staticQty);
+  const afterReserve = Math.max(0, base - (alloc.reserveQty ?? 0));
+  return alloc.allocationPct !== null && alloc.allocationPct !== undefined ? Math.floor((afterReserve * alloc.allocationPct) / 100) : afterReserve;
+}
+
+async function syncInventory(db: AppDb, c: ChannelConnectionRow, adapter: ChannelAdapter, actx: AdapterContext, runId: string): Promise<RunCounters> {
+  const counters: RunCounters = { success: 0, error: 0, total: 0 };
+  const l = s.productListings;
+  const listings = db.select().from(l).where(and(eq(l.channelConnectionId, c.id), eq(l.neverSync, false), sql`${l.productId} IS NOT NULL`)).all();
+  const pushes = listings.map((x) => ({ listing: x, qty: listingQty(db, c, actx.settings, x.productId as string) }));
+  const results = await adapter.pushInventory(actx, pushes.map((p) => ({ sellerSku: p.listing.sellerSku, channelProductId: p.listing.channelProductId, qty: p.qty })));
+  pushes.forEach((p, idx) => {
+    const r = results[idx];
+    counters.total++;
+    if (r?.ok) {
+      counters.success++;
+      db.update(l).set({ lastSyncedQty: p.qty }).where(eq(l.id, p.listing.id)).run();
+      addItem(db, runId, { success: true, properties: { sku: p.listing.sellerSku, qty: p.qty }, sellerSku: p.listing.sellerSku, qty: p.qty });
+    } else {
+      counters.error++;
+      addItem(db, runId, { success: false, properties: { sku: p.listing.sellerSku, qty: p.qty }, error: r?.error ?? "Inventory update failed", sellerSku: p.listing.sellerSku, qty: p.qty });
+    }
+  });
+  return counters;
+}
+
+async function sendShipments(db: AppDb, c: ChannelConnectionRow, adapter: ChannelAdapter, actx: AdapterContext, runId: string): Promise<RunCounters> {
+  const counters: RunCounters = { success: 0, error: 0, total: 0 };
+  const so = s.shipmentOrders;
+  const ol = s.orderLines;
+  const orders = db.select().from(so).where(and(eq(so.channelConnectionId, c.id), inArray(so.status, ["Shipped", "Partially Shipped", "Delivered"]))).all();
+  for (const o of orders) {
+    const lines = db.select({ l: ol, sku: s.products.sku }).from(ol).innerJoin(s.products, eq(s.products.id, ol.productId)).where(and(eq(ol.orderId, o.id), gt(ol.shippedQuantity, 0), eq(ol.isStoreUpdated, false))).all();
+    if (lines.length === 0) continue;
+    const ship = db.select().from(s.shipments).where(and(eq(s.shipments.orderId, o.id), eq(s.shipments.labelStatus, "Active"))).orderBy(sql`${s.shipments.labelCreatedAt} DESC`).get();
+    counters.total++;
+    const tracking = ship?.trackingNumber ?? null;
+    if (!tracking) {
+      counters.error++;
+      addItem(db, runId, { success: false, properties: { orderCode: o.code }, error: "No active label with a tracking number", storeOrderNumber: o.storeOrderNumber });
+      continue;
+    }
+    const missing = db.select({ payload: s.channelMissingOrders.payload }).from(s.channelMissingOrders).where(and(eq(s.channelMissingOrders.connectionId, c.id), eq(s.channelMissingOrders.channelOrderNumber, o.storeOrderNumber ?? ""))).get();
+    const channelOrderId = (missing ? channelOrderIdOf(JSON.parse(missing.payload)) : null) ?? o.storeOrderNumber ?? o.code;
+    try {
+      const r = await adapter.pushShipment(actx, { channelOrderId, storeOrderNumber: o.storeOrderNumber ?? o.code, trackingNumber: tracking, carrier: ship?.carrierCode ?? o.carrier ?? "Other", lines: lines.map((x) => ({ sku: x.sku, quantity: x.l.shippedQuantity })) });
+      if (!r.ok) throw new Error(r.error ?? "The store rejected the fulfillment");
+      db.transaction((tx) => {
+        tx.update(ol).set({ isStoreUpdated: true, storeUpdateNotes: `Tracking ${tracking} sent ${new Date().toISOString().slice(0, 16).replace("T", " ")}` }).where(inArray(ol.id, lines.map((x) => x.l.id))).run();
+        recordUpdate(tx, systemCtx("Integration"), { entityType: "shipment_order", entityId: o.id, entityCode: o.code, before: { storeUpdated: "No" }, after: { storeUpdated: `Yes · ${tracking}` } });
+        addItem(tx, runId, { success: true, properties: { orderCode: o.code, trackingNumber: tracking }, storeOrderNumber: o.storeOrderNumber });
+      });
+      counters.success++;
+    } catch (error) {
+      counters.error++;
+      db.update(ol).set({ storeUpdateNotes: describeError(error).message.slice(0, 300) }).where(inArray(ol.id, lines.map((x) => x.l.id))).run();
+      addItem(db, runId, { success: false, properties: { orderCode: o.code, trackingNumber: tracking }, error: describeError(error).message, storeOrderNumber: o.storeOrderNumber });
+    }
+  }
+  return counters;
+}
+
+export interface RunSummary {
+  readonly runId: string | null;
+  readonly method: ChannelMethod;
+  readonly storeName: string;
+  readonly status: RunStatus;
+  readonly success: number;
+  readonly error: number;
+  readonly total: number;
+  readonly message: string | null;
+}
+
+const statusOf = (c: RunCounters): RunStatus => (c.total === 0 ? "No Data" : c.error === 0 ? "Successful" : c.success === 0 ? "Failed" : "Partially Successful");
+
+function nextRunAt(intervalMinutes: number, from: Date): string {
+  return new Date(from.getTime() + intervalMinutes * 60_000).toISOString();
+}
+
+/** Runs one channel method now (scheduler or manual Run). Never throws; failures become a run row. */
+export async function runChannelMethod(db: AppDb, methodId: string, opts: { readonly manual: boolean; readonly now?: Date; readonly onlyOrders?: readonly ChannelOrder[] } = { manual: true }): Promise<RunSummary> {
+  const now = opts.now ?? new Date();
+  const m = s.channelMethods;
+  const method = db.select().from(m).where(eq(m.id, methodId)).get();
+  if (!method) throw new ChannelApiError("Channel method not found", 404);
+  const c = db.select().from(s.channelConnections).where(eq(s.channelConnections.id, method.connectionId)).get();
+  if (!c) throw new ChannelApiError("Store connection not found", 404);
+  const base = { method: method.method, storeName: c.storeName };
+  const startRun = (status: RunStatus) => db.insert(s.channelRuns).values({ methodId: method.id, connectionId: c.id, method: method.method, status, startedAt: now.toISOString(), endedAt: status === "Processing" ? null : new Date().toISOString() }).returning().get();
+  if (method.jobStatus === "Processing") {
+    const run = startRun("Already Processing");
+    return { ...base, runId: run.id, status: "Already Processing", success: 0, error: 0, total: 0, message: "This method is already running; try again in a moment." };
+  }
+  const reason = pauseReason(c);
+  const adapter = adapterFor(db, c);
+  if (reason || !adapter) {
+    const run = startRun(reason?.includes("credentials") ? "Unauthorized" : "Failed");
+    addItem(db, run.id, { success: false, properties: { method: method.method }, error: reason ?? "No adapter" });
+    db.update(s.channelRuns).set({ errorCount: 1, totalCount: 1 }).where(eq(s.channelRuns.id, run.id)).run();
+    db.update(m).set({ lastRunAt: now.toISOString(), nextRunAt: nextRunAt(method.intervalMinutes, now), jobStatus: opts.manual ? method.jobStatus : "Paused" }).where(eq(m.id, method.id)).run();
+    return { ...base, runId: run.id, status: run.status, success: 0, error: 1, total: 1, message: reason ?? "No adapter" };
+  }
+  db.update(m).set({ jobStatus: "Processing" }).where(eq(m.id, method.id)).run();
+  const run = startRun("Processing");
+  const settings = channelSettingsSchema.parse(c.settings ?? {});
+  const runNumber = db.select({ n: sql<number>`COUNT(*)` }).from(s.channelRuns).where(eq(s.channelRuns.methodId, method.id)).get()?.n ?? 1;
+  const actx: AdapterContext = { connection: c, credentials: decryptCredentials(c.credentialsEnc), settings, runNumber: Number(runNumber), now };
+  let counters: RunCounters = { success: 0, error: 0, total: 0 };
+  let status: RunStatus;
+  let message: string | null = null;
+  try {
+    counters = method.method === "Download Orders" ? await downloadOrders(db, c, adapter, actx, run.id, method, opts.onlyOrders)
+      : method.method === "Download Products" ? await downloadProducts(db, c, adapter, actx, run.id)
+      : method.method === "Sync Inventory" ? await syncInventory(db, c, adapter, actx, run.id)
+      : await sendShipments(db, c, adapter, actx, run.id);
+    status = statusOf(counters);
+  } catch (error) {
+    const unauthorized = error instanceof ChannelApiError && (error.status === 401 || error.status === 403);
+    status = unauthorized ? "Unauthorized" : "Failed";
+    message = describeError(error).message;
+    counters = { success: counters.success, error: counters.error + 1, total: counters.total + 1 };
+    addItem(db, run.id, { success: false, properties: { method: method.method }, error: message });
+  }
+  const ended = new Date().toISOString();
+  db.update(s.channelRuns).set({ status, successCount: counters.success, errorCount: counters.error, totalCount: counters.total, endedAt: ended }).where(eq(s.channelRuns.id, run.id)).run();
+  db.update(m).set({
+    jobStatus: "Waiting For Next", lastRunAt: now.toISOString(), nextRunAt: nextRunAt(method.intervalMinutes, now),
+    ...(status === "Successful" || status === "No Data" || status === "Partially Successful" ? { lastSuccessAt: now.toISOString() } : {}),
+  }).where(eq(m.id, method.id)).run();
+  if (status === "Unauthorized") db.update(s.channelConnections).set({ status: "Error" }).where(eq(s.channelConnections.id, c.id)).run();
+  return { ...base, runId: run.id, status, ...counters, message };
+}
+
+/** Retry Download for missing orders: re-fetch from the channel and import again. */
+export async function retryMissingOrders(db: AppDb, ids: readonly string[]): Promise<{ succeeded: string[]; failed: { id: string; code: string; message: string }[] }> {
+  const mo = s.channelMissingOrders;
+  const rows = db.select().from(mo).where(inArray(mo.id, [...ids])).all();
+  const succeeded: string[] = [];
+  const failed: { id: string; code: string; message: string }[] = [];
+  const byConn = new Map<string, typeof rows>();
+  for (const r of rows) byConn.set(r.connectionId, [...(byConn.get(r.connectionId) ?? []), r]);
+  for (const missingId of ids) if (!rows.some((r) => r.id === missingId)) failed.push({ id: missingId, code: "NOT_FOUND", message: "Missing order not found" });
+  for (const [connectionId, list] of byConn) {
+    const method = db.select().from(s.channelMethods).where(and(eq(s.channelMethods.connectionId, connectionId), eq(s.channelMethods.method, "Download Orders"))).get();
+    const c = db.select().from(s.channelConnections).where(eq(s.channelConnections.id, connectionId)).get();
+    const adapter = c ? adapterFor(db, c) : null;
+    const reason = c ? pauseReason(c) : "Store connection not found";
+    if (!method || !c || !adapter || reason) {
+      for (const r of list) failed.push({ id: r.id, code: "INVALID_STATE", message: reason ?? "The store has no Download Orders method" });
+      continue;
+    }
+    for (const r of list) db.update(mo).set({ status: "Retrying", lastUpdated: new Date().toISOString() }).where(eq(mo.id, r.id)).run();
+    const settings = channelSettingsSchema.parse(c.settings ?? {});
+    const actx: AdapterContext = { connection: c, credentials: decryptCredentials(c.credentialsEnc), settings, runNumber: 0, now: new Date() };
+    let orders: readonly ChannelOrder[] = [];
+    try {
+      orders = await adapter.fetchOrdersById(actx, list.map((r) => channelOrderIdOf(JSON.parse(r.payload)) ?? r.channelOrderNumber));
+    } catch (error) {
+      for (const r of list) {
+        db.update(mo).set({ status: "Error" }).where(eq(mo.id, r.id)).run();
+        failed.push({ id: r.id, code: "INVALID_STATE", message: describeError(error).message });
+      }
+      continue;
+    }
+    await runChannelMethod(db, method.id, { manual: true, onlyOrders: orders });
+    for (const r of list) {
+      const after = db.select().from(mo).where(eq(mo.id, r.id)).get();
+      if (after?.status === "Resolved") succeeded.push(r.id);
+      else {
+        if (after?.status === "Retrying") db.update(mo).set({ status: "Error" }).where(eq(mo.id, r.id)).run();
+        failed.push({ id: r.id, code: "INVALID_STATE", message: `${r.channelOrderNumber}: ${after?.lastErrorCode ?? "still failing"}` });
+      }
+    }
+  }
+  return { succeeded, failed };
+}
+
+/** Scheduler entry: runs every due, active, runnable method. */
+export async function runDueChannelMethods(db: AppDb, now: Date): Promise<{ ran: number; skipped: number }> {
+  const m = s.channelMethods;
+  const due = db.select({ m, c: s.channelConnections }).from(m).innerJoin(s.channelConnections, eq(s.channelConnections.id, m.connectionId))
+    .where(and(eq(m.status, "Active"), sql`(${m.nextRunAt} IS NULL OR ${m.nextRunAt} <= ${now.toISOString()})`, sql`${m.jobStatus} <> 'Processing'`)).all();
+  let ran = 0;
+  let skipped = 0;
+  for (const { m: row, c } of due) {
+    const reason = pauseReason(c);
+    if (reason) {
+      if (row.jobStatus !== "Paused") db.update(m).set({ jobStatus: "Paused" }).where(eq(m.id, row.id)).run();
+      skipped++;
+      continue;
+    }
+    await runChannelMethod(db, row.id, { manual: false, now });
+    ran++;
+  }
+  return { ran, skipped };
+}

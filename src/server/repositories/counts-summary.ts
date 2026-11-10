@@ -1,0 +1,41 @@
+/**
+ * Status summary for the count grids (M07): how many plans / lines sit in each status,
+ * within the viewer's scope. Drives the status chips above each grid.
+ */
+import { sql } from "drizzle-orm";
+import type { AppDb } from "@/server/api/db";
+import type { Scope } from "@/server/auth/scope";
+import { inList, raw } from "./counts-grid";
+
+export type SummaryKind = "plans" | "locations" | "skus";
+
+export interface StatusSummary {
+  readonly total: number;
+  readonly byStatus: Readonly<Record<string, number>>;
+  /** Plans / lines currently holding locked locations. */
+  readonly locked: number;
+}
+
+export function countStatusSummary(db: AppDb, scope: Scope, kind: SummaryKind): StatusSummary {
+  const scoped = inList(raw("p.warehouse_id"), scope.warehouseIds);
+  const rows = kind === "plans"
+    ? db.all<{ status: string; n: number; locked: number }>(sql`
+        SELECT p.status AS status, COUNT(*) AS n,
+          SUM(CASE WHEN p.lock_locations = 1 AND p.status IN ('Pending','Ready To Count','Count Started','Count Completed') THEN 1 ELSE 0 END) AS locked
+        FROM count_plans p WHERE ${scoped} GROUP BY p.status`)
+    : db.all<{ status: string; n: number; locked: number }>(sql`
+        SELECT l.status AS status, COUNT(*) AS n,
+          SUM(CASE WHEN p.lock_locations = 1 AND p.status IN ('Pending','Ready To Count','Count Started','Count Completed')
+            AND l.status NOT IN ('Cancelled','Inventory Updated','Recount Created') THEN 1 ELSE 0 END) AS locked
+        FROM count_plan_lines l JOIN count_plans p ON p.id = l.plan_id
+        WHERE ${scoped} ${kind === "skus" ? sql`AND l.product_id IS NOT NULL` : sql``} GROUP BY l.status`);
+  const byStatus: Record<string, number> = {};
+  let total = 0;
+  let locked = 0;
+  for (const r of rows) {
+    byStatus[r.status] = Number(r.n);
+    total += Number(r.n);
+    locked += Number(r.locked ?? 0);
+  }
+  return { total, byStatus, locked };
+}

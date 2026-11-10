@@ -1,101 +1,15 @@
-export interface NavLink {
-  label: string;
-  href: string;
-  description?: string;
-}
+/**
+ * Compatibility entry point. The nav map lives in `src/config/nav-config.ts` (F4.7).
+ * `NAV_MENUS` here is the full searchable tree (dashboard, the 7 mega-menus, account and
+ * header pages) consumed structurally by `src/server/search/pages.ts`.
+ */
+import { DASHBOARD_ITEM, HEADER_ITEMS, NAV_MENUS as MEGA_MENUS, USER_MENU_ITEMS } from "@/config/nav-config";
 
-export interface NavSection {
-  heading: string;
-  links: NavLink[];
-}
+export * from "@/config/nav-config";
 
-export interface NavMenu {
-  label: string;
-  sections: NavSection[];
-}
-
-export const NAV_MENUS: NavMenu[] = [
-  {
-    label: "Fulfillment",
-    sections: [
-      {
-        heading: "Orders",
-        links: [
-          { label: "Shipment Orders", href: "/orders" },
-          { label: "Shipped Orders", href: "/orders?tab=shipped" },
-          { label: "Return Orders", href: "/orders?tab=returns" },
-        ],
-      },
-      {
-        heading: "Operations",
-        links: [
-          { label: "Job Management", href: "/jobs" },
-          { label: "Packing Station", href: "/jobs?tab=exceptions" },
-          { label: "Shipment Plan", href: "/reports/transaction-history" },
-        ],
-      },
-      {
-        heading: "PO & Receiving",
-        links: [
-          { label: "Purchase Orders", href: "/receiving" },
-          { label: "Receiving History", href: "/receiving?tab=history" },
-          { label: "Vendors", href: "/receiving?tab=vendors" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Inventory",
-    sections: [
-      {
-        heading: "Inventory",
-        links: [
-          { label: "Total Inventory", href: "/inventory" },
-          { label: "Inventory by Location", href: "/inventory?tab=by-location" },
-          { label: "Available to Promise", href: "/inventory?tab=atp" },
-        ],
-      },
-      {
-        heading: "Catalog",
-        links: [
-          { label: "Products", href: "/products" },
-          { label: "Product Listings", href: "/products?tab=listings" },
-        ],
-      },
-      {
-        heading: "Facility",
-        links: [
-          { label: "Locations", href: "/locations" },
-          { label: "Clients", href: "/clients" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Reports",
-    sections: [
-      {
-        heading: "Reports",
-        links: [
-          { label: "Report Hub", href: "/reports" },
-          { label: "Inventory Snapshot", href: "/reports/inventory-snapshot" },
-          { label: "Transaction History", href: "/reports/transaction-history" },
-        ],
-      },
-    ],
-  },
-  {
-    label: "Settings",
-    sections: [
-      {
-        heading: "Administration",
-        links: [
-          { label: "Users & Roles", href: "/settings" },
-          { label: "Warehouses", href: "/settings?tab=warehouses" },
-          { label: "Carriers", href: "/settings?tab=carriers" },
-          { label: "Audit Log", href: "/settings?tab=audit" },
-        ],
-      },
-    ],
-  },
-];
+export const NAV_MENUS = Object.freeze([
+  DASHBOARD_ITEM,
+  ...MEGA_MENUS,
+  { label: "Account", items: USER_MENU_ITEMS },
+  ...HEADER_ITEMS,
+]);

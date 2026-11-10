@@ -1,319 +1,280 @@
 "use client";
 
+/**
+ * Products (`/products`, spec 05 §1). Shared grid (search mode, 27+ filters, chips, saved
+ * views, column chooser, density, page sizes, async xlsx export) with the Logiwa header
+ * (Bulk Import/Update ▾, Create new product) and bulk actions (Delete, Label) plus
+ * Status ▾ (beyond Logiwa). Delete runs a guard check first: products with stock, open
+ * orders/POs, kit usage or history are blocked and the dialog offers Deactivate instead.
+ */
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import type { RowSelectionState } from "@tanstack/react-table";
-import { ChevronDown, FileSpreadsheet, FileUp, Plus, Tags, Trash2 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { DataGrid } from "@/components/grid/data-grid";
-import { FilterButton, GridSearch, type FilterOption } from "@/components/grid/grid-toolbar";
-import { PageHeader, UnderlineTabs } from "@/components/layout/page-header";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Ban, CheckCircle2, ChevronDown, Copy, Eye, FileUp, History, Pencil, Plus, Power, Printer, RefreshCcw, Trash2, Upload } from "lucide-react";
+import { DataGrid, GridToolbar, useGrid, type RowAction } from "@/components/grid";
+import { PageHeader } from "@/components/layout/page-header";
+import { ChangeLogDrawer, PrintOptionsModal } from "@/components/shared";
 import { Button } from "@/components/ui/button";
-import { Dropdown, DropdownItem, DropdownSeparator } from "@/components/ui/dropdown";
-import { orderForBrowsing, synthesizeListings } from "./derive";
-import { listingColumns } from "./listing-columns";
-import { productColumns } from "./product-columns";
-import type { ApiEnvelope, ClientOption, ListingRow, ProductRow } from "./types";
+import { Callout } from "@/components/ui/callout";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { InfoTip } from "@/components/ui/info-tip";
+import { StatusPill } from "@/components/ui/status-pill";
+import { toast } from "@/components/ui/toast";
+import { DisabledReason } from "@/components/ui/tooltip";
+import { apiFetch, apiRequest } from "@/lib/api-client";
+import { PRODUCTS_GRID_KEY } from "@/lib/grid-defs/products/products-grid";
+import type { ProductFormValues } from "@/lib/grid-defs/products/product-form";
+import {
+  bulkToast, errorMessage, postBulk, productLabelRecords, useCatalogCan, useInvalidateCatalog, useProductFilterFields, type DeleteCheckRow, type ProductListRow,
+} from "./catalog-shared";
+import { buildProductColumns } from "./product-columns";
+import { ProductCreateDrawer, ProductEditDrawer, duplicateValues, type CreatedProduct } from "./product-create-drawer";
 
-const SEARCH_DEBOUNCE_MS = 300;
-const LISTINGS_FETCH_SIZE = 200;
-const CATEGORY_OPTIONS = ["Apparel", "Coffee", "Electronics"];
-const STATUS_OPTIONS = ["Active", "Inactive"];
+const P = "settings.products.";
+export const PRODUCTS_HELPER = "You can create, edit, or delete your products here.";
+const IMPORT_TIP = "Import new records from an Excel template, or update existing products and kit components in bulk. Every upload is validated row by row and kept in import history.";
 
-type ProductsTab = "products" | "listings";
+type DeleteDialog = { rows: readonly DeleteCheckRow[] } | null;
 
-function useDebounced<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = React.useState<T>(value);
-  React.useEffect(() => {
-    const handle = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(handle);
-  }, [value, delay]);
-  return debounced;
-}
-
-function BulkImportMenu() {
+function BulkImportMenu({ canImport }: { readonly canImport: boolean }) {
+  const reason = canImport ? null : "You don't have permission to import products";
   return (
-    <Dropdown
-      align="end"
-      trigger={(open) => (
-        <Button variant="secondary" size="md" aria-expanded={open}>
-          <FileUp className="h-3.5 w-3.5" aria-hidden />
-          Bulk Import/Update
-          <ChevronDown className="h-3.5 w-3.5 text-faint" aria-hidden />
-        </Button>
-      )}
-    >
-      {(close) => (
-        <>
-          <DropdownItem onClick={close}>
-            <FileUp className="h-3.5 w-3.5" aria-hidden /> Import products (CSV)
-          </DropdownItem>
-          <DropdownItem onClick={close}>
-            <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden /> Update prices &amp; barcodes
-          </DropdownItem>
-          <DropdownItem onClick={close}>
-            <Tags className="h-3.5 w-3.5" aria-hidden /> Update channel listings
-          </DropdownItem>
-          <DropdownSeparator />
-          <DropdownItem onClick={close}>
-            <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden /> Download template
-          </DropdownItem>
-        </>
-      )}
-    </Dropdown>
+    <span className="inline-flex items-center gap-1">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="secondary">
+            <Upload className="h-3.5 w-3.5" aria-hidden />
+            Bulk import/update
+            <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-[280px]">
+          <DropdownMenuLabel>Import</DropdownMenuLabel>
+          <DropdownMenuItem href="/imports/products" icon={FileUp} disabledReason={reason} description="New products with their primary pack type">Products</DropdownMenuItem>
+          <DropdownMenuItem href="/imports/pack-types" icon={FileUp} disabledReason={reason} description="Add or update pack types and their barcodes">Pack types &amp; barcodes</DropdownMenuItem>
+          <DropdownMenuItem href="/imports/replenishment-levels" icon={FileUp} disabledReason={reason} description="Min/max per warehouse">Warehouse replenishment levels</DropdownMenuItem>
+          <DropdownMenuItem href="/imports/sku-allocation" icon={FileUp} disabledReason={reason} description="Channel allocation per SKU">SKU based inventory allocation</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Update</DropdownMenuLabel>
+          <DropdownMenuItem href="/imports/products-update" icon={RefreshCcw} disabledReason={reason} description="Change fields on existing SKUs">Products</DropdownMenuItem>
+          <DropdownMenuItem href="/imports/kit-components" icon={RefreshCcw} disabledReason={reason} description="Replace the components of existing kits">Kit-components</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <InfoTip content={IMPORT_TIP} label="About bulk import" />
+    </span>
   );
 }
 
 export function ProductsPage() {
   const router = useRouter();
-  const [tab, setTab] = React.useState<ProductsTab>("products");
-  const [page, setPage] = React.useState(1);
-  const [pageSize, setPageSize] = React.useState(50);
-  const [search, setSearch] = React.useState("");
-  const [filters, setFilters] = React.useState<Record<string, string>>({});
-  const [selection, setSelection] = React.useState<RowSelectionState>({});
-  const [rows, setRows] = React.useState<ProductRow[]>([]);
-  const [total, setTotal] = React.useState(0);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [clients, setClients] = React.useState<ClientOption[]>([]);
-  const [refreshTick, setRefreshTick] = React.useState(0);
+  const params = useSearchParams();
+  const invalidate = useInvalidateCatalog();
+  const fields = useProductFilterFields();
+  const g = useGrid<ProductListRow>({ gridKey: PRODUCTS_GRID_KEY, path: "/api/products", fields });
+  const columns = React.useMemo(() => buildProductColumns(), []);
+  const can = {
+    create: useCatalogCan(`${P}create`).allowed, edit: useCatalogCan(`${P}edit`).allowed, del: useCatalogCan(`${P}delete`).allowed,
+    imp: useCatalogCan(`${P}import_file`).allowed, log: useCatalogCan(`${P}change_log`).allowed, label: useCatalogCan(`${P}label`).allowed,
+  };
 
-  const debouncedSearch = useDebounced(search, SEARCH_DEBOUNCE_MS);
-  const clientId = clients.find((c) => c.name === filters.client)?.id;
-
-  /* clients for the filter dropdown (names → ids) */
+  const seen = React.useRef(new Map<string, ProductListRow>());
   React.useEffect(() => {
-    const controller = new AbortController();
-    async function loadClients() {
-      try {
-        const res = await fetch("/api/clients?page=1&pageSize=200", {
-          signal: controller.signal,
-        });
-        const json = (await res.json()) as ApiEnvelope<ClientOption[]>;
-        if (res.ok && json.success && json.data) {
-          setClients(json.data.map((c) => ({ id: c.id, name: c.name })));
-        }
-      } catch {
-        /* filter options are a nicety — the grid still works without them */
-      }
+    for (const r of g.rows) seen.current.set(r.id, r);
+  }, [g.rows]);
+  const rowsFor = React.useCallback((ids: readonly string[]) => ids.map((id) => seen.current.get(id) ?? g.rows.find((r) => r.id === id)).filter((r): r is ProductListRow => Boolean(r)), [g.rows]);
+  const selected = rowsFor(g.selectedIds);
+  const skuOf = (id: string) => seen.current.get(id)?.sku ?? "Product";
+
+  const [createOpen, setCreateOpen] = React.useState(params.get("create") === "1");
+  const [duplicate, setDuplicate] = React.useState<ProductFormValues | null>(null);
+  const [editId, setEditId] = React.useState<string | null>(null);
+  const [logFor, setLogFor] = React.useState<ProductListRow | null>(null);
+  const [labels, setLabels] = React.useState<readonly unknown[] | null>(null);
+  const [delDialog, setDelDialog] = React.useState<DeleteDialog>(null);
+  const [checking, setChecking] = React.useState(false);
+
+  const finish = async () => {
+    g.clearSelection();
+    await invalidate();
+  };
+
+  const onCreated = async (p: CreatedProduct) => {
+    await invalidate();
+    toast.info("Created", `${p.sku} is first in the list.`, { action: { label: "Open", onClick: () => router.push(`/products/${p.id}`) } });
+  };
+
+  const startDelete = async (ids: readonly string[]) => {
+    setChecking(true);
+    try {
+      const { data } = await apiRequest<DeleteCheckRow[]>("/api/products/bulk/delete-check", { method: "POST", body: { ids } });
+      setDelDialog({ rows: data });
+    } catch (error) {
+      toast.error("Error", errorMessage(error));
+    } finally {
+      setChecking(false);
     }
-    void loadClients();
-    return () => controller.abort();
-  }, []);
+  };
 
-  /* product rows (listings are synthesized from the full product set) */
-  React.useEffect(() => {
-    const controller = new AbortController();
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const params = new URLSearchParams({
-          page: String(tab === "products" ? page : 1),
-          pageSize: String(tab === "products" ? pageSize : LISTINGS_FETCH_SIZE),
-        });
-        if (debouncedSearch) params.set("search", debouncedSearch);
-        if (clientId) params.set("clientId", clientId);
-        if (filters.category) params.set("category", filters.category);
-        if (filters.status) params.set("status", filters.status);
-        const res = await fetch(`/api/products?${params.toString()}`, {
-          signal: controller.signal,
-        });
-        const json = (await res.json()) as ApiEnvelope<ProductRow[]>;
-        if (!res.ok || !json.success || !json.data) {
-          throw new Error(json.error ?? "Failed to load products");
-        }
-        setRows(json.data);
-        setTotal(json.meta?.total ?? json.data.length);
-      } catch (err: unknown) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Failed to load products");
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
+  const setStatus = async (ids: readonly string[], status: "Active" | "Inactive") => {
+    try {
+      const result = await postBulk("/api/products/bulk/status", { ids, status });
+      bulkToast(result, skuOf, { done: status === "Active" ? "activated" : "deactivated", noun: "product" });
+    } catch (error) {
+      toast.error("Error", errorMessage(error));
+    } finally {
+      await finish();
     }
-    void load();
-    return () => controller.abort();
-  }, [tab, page, pageSize, debouncedSearch, clientId, filters.category, filters.status, refreshTick]);
+  };
 
-  /* reset paging + selection when the data scope changes */
-  React.useEffect(() => {
-    setPage(1);
-    setSelection({});
-  }, [tab, debouncedSearch, clientId, filters.category, filters.status]);
+  const deleteRows = async (ids: readonly string[]) => {
+    try {
+      const result = await postBulk("/api/products/bulk/delete", { ids });
+      bulkToast(result, skuOf, { done: "deleted", noun: "product" });
+    } catch (error) {
+      toast.error("Error", errorMessage(error));
+    } finally {
+      await finish();
+    }
+  };
 
-  /*
-   * Default browse order: the API returns SKU-ascending, which fills the
-   * first viewport with near-identical rows (12 tee variants in a row).
-   * Re-order newest-first by the derived created date so page 1 interleaves
-   * clients, categories, prices, kits, and statuses. Deterministic.
-   */
-  const orderedRows = React.useMemo(() => orderForBrowsing(rows), [rows]);
+  const openDuplicate = async (row: ProductListRow) => {
+    try {
+      const form = await apiFetch<Parameters<typeof duplicateValues>[0]>(`/api/products/${row.id}`, { query: { view: "form" } });
+      setDuplicate(duplicateValues(form));
+    } catch (error) {
+      toast.error("Could not duplicate", errorMessage(error));
+    }
+  };
 
-  const listings: ListingRow[] = React.useMemo(
-    () => (tab === "listings" ? synthesizeListings(orderedRows) : []),
-    [tab, orderedRows]
+  const rowActions = (row: ProductListRow): readonly RowAction[] => [
+    { key: "details", label: "Show details", icon: Eye, href: `/products/${row.id}` },
+    ...(can.edit ? [{ key: "edit", label: "Edit", icon: Pencil, onSelect: () => setEditId(row.id) }] : []),
+    ...(can.log ? [{ key: "log", label: "Change log", icon: History, onSelect: () => setLogFor(row) }] : []),
+    ...(can.create ? [{ key: "duplicate", label: "Duplicate", icon: Copy, onSelect: () => void openDuplicate(row) }] : []),
+    ...(can.edit ? [row.status === "Active"
+      ? { key: "deactivate", label: "Deactivate", icon: Ban, onSelect: () => void setStatus([row.id], "Inactive") }
+      : { key: "activate", label: "Activate", icon: CheckCircle2, onSelect: () => void setStatus([row.id], "Active") }] : []),
+    ...(can.label ? [{ key: "label", label: "Print label", icon: Printer, onSelect: () => setLabels(productLabelRecords([row])) }] : []),
+    ...(can.del ? [{ key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: () => void startDelete([row.id]) }] : []),
+  ];
+
+  const none = selected.length === 0 ? "Select at least one product" : null;
+
+  const trailing = (
+    <div className="flex items-center gap-2">
+      {can.edit ? (
+        <DropdownMenu>
+          <DisabledReason reason={none}>
+            <DropdownMenuTrigger asChild disabled={Boolean(none)}>
+              <Button variant="secondary" disabled={Boolean(none)}>
+                <Power className="h-3.5 w-3.5" aria-hidden />
+                Status
+                <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+          </DisabledReason>
+          <DropdownMenuContent align="end" className="min-w-[200px]">
+            <DropdownMenuItem icon={CheckCircle2} disabledReason={selected.every((r) => r.status === "Active") ? "Every selected product is already active" : null} onSelect={() => void setStatus(g.selectedIds, "Active")}>Activate</DropdownMenuItem>
+            <DropdownMenuItem icon={Ban} disabledReason={selected.every((r) => r.status === "Inactive") ? "Every selected product is already inactive" : null} onSelect={() => void setStatus(g.selectedIds, "Inactive")}>Deactivate</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+      {can.del ? (
+        <DisabledReason reason={none}>
+          <Button variant="secondary" disabled={Boolean(none) || checking} onClick={() => void startDelete(g.selectedIds)}>
+            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+            Delete
+          </Button>
+        </DisabledReason>
+      ) : null}
+      {can.label ? (
+        <DisabledReason reason={none}>
+          <Button variant="secondary" disabled={Boolean(none)} onClick={() => setLabels(productLabelRecords(selected))}>
+            <Printer className="h-3.5 w-3.5" aria-hidden />
+            Label
+          </Button>
+        </DisabledReason>
+      ) : null}
+    </div>
   );
-  const pagedListings = React.useMemo(
-    () => listings.slice((page - 1) * pageSize, page * pageSize),
-    [listings, page, pageSize]
-  );
 
-  const filterOptions: FilterOption[] = React.useMemo(
-    () => [
-      { key: "client", label: "Client", options: clients.map((c) => c.name) },
-      { key: "category", label: "Category", options: CATEGORY_OPTIONS },
-      { key: "status", label: "Status", options: STATUS_OPTIONS },
-    ],
-    [clients]
-  );
-
-  const isProducts = tab === "products";
+  const deletable = (delDialog?.rows ?? []).filter((r) => !r.reason);
+  const blocked = (delDialog?.rows ?? []).filter((r) => r.reason);
+  const blockedActive = blocked.filter((r) => r.status === "Active");
+  const records = delDialog ? {
+    columns: [{ key: "sku", label: "SKU" }, { key: "name", label: "Name" }, { key: "status", label: "Status" }, { key: "result", label: "Delete" }],
+    rows: delDialog.rows.map((r) => ({
+      sku: r.sku, name: r.name, status: <StatusPill status={r.status} domain="active" size="sm" />,
+      result: r.reason ? <span className="text-danger">Blocked · {r.reason}</span> : <span className="text-success">Can be deleted</span>,
+    })),
+  } : undefined;
 
   return (
-    /*
-     * h-[calc(100dvh-3.5rem)] (viewport minus the h-14 top nav) caps the page
-     * at the fold so the DataGrid's internal scroll region takes over and its
-     * pagination footer stays pinned on screen. The app layout wraps pages in
-     * min-h-screen (grows past the fold), so the cap must live here.
-     */
-    <div
-      className={cn(
-        "flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col",
-        isProducts && "ks-products-actions-rail"
-      )}
-    >
-      {/*
-        Local shim for the global header search pill (app-shell.tsx is a
-        read-only shared component): widen it to 280px and forbid wrapping so
-        "Search orders, SKUs, locations…" can never break onto two lines
-        inside the pill at 800px or 1440px. Same scoped workaround the
-        Orders, Clients, Jobs, Receiving, Settings and Inventory Snapshot
-        pages ship; the real fix (plus shortening the copy to
-        "Search orders, SKUs…") belongs in the shared TopNav — see the shared
-        component request accompanying this change.
-
-        The .ks-products-actions-rail rules style the kebab actions column of
-        the Products grid as a pinned actions rail (the shared DataGrid has
-        no per-column cell/header class hooks): a hairline slate-200 left
-        border separating it from PRICE, plus 8px right padding so the "…"
-        trigger no longer sits flush against the grid's right edge. The
-        :not([colspan]) guard keeps the border off full-width loading/empty/
-        error cells, and the class is only applied on the Products tab so the
-        Listings grid (whose last column is LAST SYNCED, not actions) is
-        untouched.
-      */}
-      <style>{`
-        header button:has(> kbd) {
-          width: 280px !important;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .ks-products-actions-rail thead th:last-child,
-        .ks-products-actions-rail tbody td:last-child:not([colspan]) {
-          border-left: 1px solid var(--color-slate-200, #e2e8f0);
-          padding-right: 8px;
-        }
-      `}</style>
+    <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
-        breadcrumbs={[{ label: "Inventory", href: "/inventory" }, { label: "Products" }]}
         title="Products"
-        /*
-         * No helper subtitle: PageHeader centers it in the gap between the H1
-         * and the action buttons, where it floats unanchored. The shared
-         * component has no "left of title, baseline-aligned" slot, and the
-         * Logiwa-equivalent copy is noise anyway — dropped per design review.
-         */
-        actions={
+        tabs="products"
+        helper={PRODUCTS_HELPER}
+        actions={(
           <>
-            <BulkImportMenu />
-            <Button variant="primary" size="md">
-              <Plus className="h-3.5 w-3.5" aria-hidden />
-              Create New Product
-            </Button>
+            <BulkImportMenu canImport={can.imp} />
+            {can.create ? (
+              <Button variant="primary" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-3.5 w-3.5" aria-hidden />
+                Create new product
+              </Button>
+            ) : null}
           </>
-        }
+        )}
       />
-      <UnderlineTabs
-        className="mt-2"
-        tabs={[
-          { key: "products", label: "Products", count: isProducts && !loading ? total : undefined },
-          {
-            key: "listings",
-            label: "Product Listings",
-            count: !isProducts && !loading ? listings.length : undefined,
-          },
-        ]}
-        active={tab}
-        onChange={(key) => setTab(key as ProductsTab)}
-      />
-      {(() => {
-        const toolbarLeft = (
-          <>
-            <GridSearch
-              value={search}
-              onChange={setSearch}
-              placeholder={isProducts ? "Search by SKU" : "Search by listing SKU"}
-            />
-            <FilterButton filters={filterOptions} applied={filters} onApply={setFilters} />
-          </>
-        );
-        const toolbarRight = (selectedCount: number) => (
-          <>
-            <Button variant="secondary" size="md" disabled={selectedCount === 0}>
-              <Trash2 className="h-3.5 w-3.5" aria-hidden />
-              Delete
-            </Button>
-            <Button variant="secondary" size="md" disabled={selectedCount === 0}>
-              <Tags className="h-3.5 w-3.5" aria-hidden />
-              Label
-            </Button>
-          </>
-        );
-        const shared = {
-          page,
-          pageSize,
-          onPageChange: setPage,
-          onPageSizeChange: (size: number) => {
-            setPageSize(size);
-            setPage(1);
-          },
-          loading,
-          error,
-          onRetry: () => setRefreshTick((t) => t + 1),
-          onRefresh: () => setRefreshTick((t) => t + 1),
-          selection,
-          onSelectionChange: setSelection,
-          toolbarLeft,
-          toolbarRight,
-        };
-        return isProducts ? (
-          <DataGrid<ProductRow>
-            {...shared}
-            columns={productColumns}
-            data={orderedRows}
-            total={total}
-            emptyTitle="No products found"
-            emptyDescription="Adjust your search or filters, or create a new product to get started."
-            getRowId={(row) => row.id}
-            onRowClick={(row) => router.push(`/products/${row.id}`)}
-            exportName="products"
-          />
-        ) : (
-          <DataGrid<ListingRow>
-            {...shared}
-            columns={listingColumns}
-            data={pagedListings}
-            total={listings.length}
-            emptyTitle="No listings found"
-            emptyDescription="Listings appear once products are connected to a sales channel."
-            getRowId={(row) => row.id}
-            exportName="product-listings"
-          />
-        );
-      })()}
+      <GridToolbar {...g.toolbarProps} searchPlaceholder="Search by SKU, name or barcode" bulkNoun="product" trailing={trailing} />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <DataGrid<ProductListRow>
+          {...g.gridProps}
+          columns={columns}
+          getRowId={(row) => row.id}
+          rowActions={rowActions}
+          onRowClick={(row) => router.push(`/products/${row.id}`)}
+          emptyTitle="No products match this view"
+          emptyDescription="Clear the filters, import products from Excel, or create one."
+          emptyAction={can.create ? <Button variant="primary" onClick={() => setCreateOpen(true)}><Plus className="h-3.5 w-3.5" aria-hidden />Create new product</Button> : undefined}
+        />
+      </div>
+
+      <ProductCreateDrawer open={createOpen} onOpenChange={setCreateOpen} onCreated={(p) => void onCreated(p)} />
+      <ProductCreateDrawer open={duplicate !== null} onOpenChange={(o) => !o && setDuplicate(null)} initialValues={duplicate ?? undefined} onCreated={(p) => { setDuplicate(null); void onCreated(p); }} />
+      <ProductEditDrawer productId={editId} onOpenChange={(o) => !o && setEditId(null)} onSaved={() => void invalidate()} />
+      {logFor ? <ChangeLogDrawer open onOpenChange={(o) => !o && setLogFor(null)} entityType="product" entityId={logFor.id} entityCode={logFor.sku} /> : null}
+      <PrintOptionsModal open={labels !== null} onOpenChange={(o) => !o && setLabels(null)} typeKeys={["product-label"]} records={labels ?? []} title="Print product labels" />
+
+      <ConfirmDialog
+        open={delDialog !== null}
+        onOpenChange={(o) => !o && setDelDialog(null)}
+        variant={deletable.length ? "danger" : "attention"}
+        icon={deletable.length ? Trash2 : Ban}
+        title={deletable.length
+          ? `Delete ${deletable.length} product${deletable.length === 1 ? "" : "s"}?`
+          : `${blocked.length === 1 ? "This product" : "These products"} can't be deleted`}
+        description={deletable.length ? "This action cannot be undone. Linked channel listings become unlinked." : "Products with stock, open orders, kit usage or history are kept for traceability. Deactivate them instead so they can't be ordered or received."}
+        records={records}
+        confirmLabel={deletable.length ? "Yes" : blockedActive.length ? `Deactivate ${blockedActive.length}` : "Close"}
+        cancelLabel="No"
+        onConfirm={async () => {
+          if (deletable.length) await deleteRows(deletable.map((r) => r.id));
+          else if (blockedActive.length) await setStatus(blockedActive.map((r) => r.id), "Inactive");
+        }}
+      >
+        {deletable.length && blocked.length ? (
+          <Callout variant="attention" title={`${blocked.length} product${blocked.length === 1 ? " is" : "s are"} blocked and will be skipped`}
+            action={blockedActive.length && can.edit ? (
+              <Button size="sm" variant="secondary" onClick={() => { const ids = blockedActive.map((r) => r.id); setDelDialog(null); void setStatus(ids, "Inactive"); }}>
+                Deactivate {blockedActive.length} instead
+              </Button>
+            ) : undefined}>
+            Yes deletes only the products marked &ldquo;Can be deleted&rdquo;.
+          </Callout>
+        ) : null}
+      </ConfirmDialog>
     </div>
   );
 }

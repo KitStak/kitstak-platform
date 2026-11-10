@@ -1,258 +1,196 @@
 "use client";
 
-import * as React from "react";
-import { ChevronDown, Plus, Upload } from "lucide-react";
-import type { RowSelectionState } from "@tanstack/react-table";
-import type {
-  LocationListRow,
-  ZoneSummaryRow,
-} from "@/server/repositories/locations";
-import { Button } from "@/components/ui/button";
-import { FilterButton, GridSearch } from "@/components/grid/grid-toolbar";
-import { LocationsDataGrid } from "./locations-data-grid";
-import { PageHeader } from "@/components/layout/page-header";
-import { LOCATION_COLUMNS } from "./locations-columns";
-import {
-  normalizeLocationRows,
-  summarizeZonesFromRows,
-  type LocationDisplayRow,
-} from "./location-data";
-import { ZoneSummaryStrip } from "./zone-summary-strip";
-import styles from "./locations-grid.module.css";
-
-interface ListEnvelope<T> {
-  success: boolean;
-  data?: T[];
-  error?: string;
-  meta?: { total: number };
-}
-
-const SEARCH_DEBOUNCE_MS = 300;
-const DEFAULT_PAGE_SIZE = 50;
-/** API caps pageSize at 200; the summary fetch pages through the rest. */
-const SUMMARY_FETCH_PAGE_SIZE = 200;
-
 /**
- * The repo's turbopack rule pipes every .css file through the Tailwind
- * loader, which can skip CSS-module name hashing and leave the export map
- * empty while still injecting the literal selectors. Fall back to the
- * literal class name so the zebra/fade rules apply either way.
+ * Locations (`/locations`) on the shared grid: zone strip (drives the zone filter),
+ * Import ▾, Generate, Create Location; bulk Label · Assign Capacity ▾ · Lock · Unlock ·
+ * Delete; row ⋯ Show Details · Edit · Change Log · Delete.
  */
-const GRID_STYLE_CLASS = styles.locationsGrid ?? "locationsGrid";
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, Eye, History, Lock, LockOpen, Pencil, Plus, Printer, Trash2, Upload, Wand2 } from "lucide-react";
+import { DataGrid, GridToolbar, useGrid, type BulkAction, type RowAction } from "@/components/grid";
+import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DisabledReason } from "@/components/ui/tooltip";
+import { ChangeLogDrawer } from "@/components/shared/change-log-drawer";
+import { PrintOptionsModal } from "@/components/shared/print-options-modal";
+import { useApiQuery } from "@/lib/query-client";
+import { LOCATION_FIELDS, LOCATIONS_GRID_KEY } from "@/lib/grid-defs/facility/locations";
+import type { LocationRow } from "@/server/repositories/locations";
+import { AvailabilityPill, NO_PERMISSION, toastBulk, toFilterFields, useAction, useClientOptions, useLookups, usePagePerms, useWarehouseOptions, type BulkResponse } from "@/components/facility/facility-shared";
+import { LOCATION_COLUMNS } from "./location-columns";
+import { LocationGeneratorDrawer } from "./location-generator-drawer";
+import { LocationWizardDrawer } from "./location-wizard";
+import { ZoneSummaryStrip, type ZoneCardData } from "./zone-summary-strip";
 
-/** Mirrors LOCATION_TYPES from the repository (runtime import would pull in the DB). */
-const LOCATION_TYPE_OPTIONS = [
-  "Picking",
-  "Reserve",
-  "Receiving",
-  "Shipping",
-  "Returns",
-  "Damaged",
-];
+const PERMS = ["view", "create", "edit", "delete", "import_file", "change_log", "assign_capacity", "label"] as const;
+
+export const CAPACITY_IMPORTS = [
+  { href: "/imports/product-capacity", label: "Bulk import product capacity" },
+  { href: "/imports/product-capacity-update", label: "Bulk update product capacity" },
+  { href: "/imports/lp-capacity", label: "Bulk import LP capacity" },
+  { href: "/imports/lp-capacity-update", label: "Bulk update LP capacity" },
+] as const;
 
 export function LocationsPage() {
-  const [page, setPage] = React.useState(1);
-  const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
-  const [search, setSearch] = React.useState("");
-  const [debouncedSearch, setDebouncedSearch] = React.useState("");
-  const [zone, setZone] = React.useState("");
-  const [type, setType] = React.useState("");
-  const [rows, setRows] = React.useState<LocationDisplayRow[]>([]);
-  const [total, setTotal] = React.useState(0);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [selection, setSelection] = React.useState<RowSelectionState>({});
-  const [zones, setZones] = React.useState<ZoneSummaryRow[]>([]);
-  const [zonesLoading, setZonesLoading] = React.useState(true);
-  const [refreshKey, setRefreshKey] = React.useState(0);
+  const router = useRouter();
+  const perms = usePagePerms("settings.locations", PERMS);
+  const warehouses = useWarehouseOptions();
+  const clients = useClientOptions();
+  const groups = useLookups("location_group");
+  const zonesLookup = useLookups("location_zone");
+  const fields = React.useMemo(() => toFilterFields(LOCATION_FIELDS, { warehouseId: warehouses.options, locationGroupId: groups.options, locationZoneId: zonesLookup.options, dedicatedClientId: clients }), [warehouses.options, groups.options, zonesLookup.options, clients]);
+  const g = useGrid<LocationRow>({ gridKey: LOCATIONS_GRID_KEY, path: "/api/locations", fields });
 
-  React.useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [search]);
+  const whFilter = g.grid.query.filters.find((f) => f.field === "warehouseId");
+  const zoneWarehouse = whFilter && whFilter.op === "in" && whFilter.values.length === 1 ? whFilter.values[0] : undefined;
+  const zones = useApiQuery<ZoneCardData[]>(["location-zones", zoneWarehouse ?? "all"], "/api/locations/zones", { query: { warehouseId: zoneWarehouse } });
+  const zoneFilter = g.grid.query.filters.find((f) => f.field === "locationZoneId");
+  const activeZoneId = zoneFilter ? (zoneFilter.op === "in" && zoneFilter.values.length === 1 ? zoneFilter.values[0] : zoneFilter.op === "empty" ? null : undefined) : undefined;
 
-  React.useEffect(() => {
-    const controller = new AbortController();
-    const params = new URLSearchParams({
-      page: String(page),
-      pageSize: String(pageSize),
-    });
-    if (debouncedSearch) params.set("search", debouncedSearch);
-    if (zone) params.set("zone", zone);
-    if (type) params.set("type", type);
-    setLoading(true);
-    setError(null);
-    fetch(`/api/locations?${params.toString()}`, { signal: controller.signal })
-      .then((res) => res.json() as Promise<ListEnvelope<LocationListRow>>)
-      .then((body) => {
-        if (!body.success || !body.data) {
-          throw new Error(body.error ?? "Failed to load locations.");
-        }
-        setRows(normalizeLocationRows(body.data));
-        setTotal(body.meta?.total ?? body.data.length);
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Failed to load locations.");
-        setLoading(false);
-      });
-    return () => controller.abort();
-  }, [page, pageSize, debouncedSearch, zone, type, refreshKey]);
+  const [wizard, setWizard] = React.useState<{ open: boolean; editId: string | null }>({ open: false, editId: null });
+  const [generator, setGenerator] = React.useState(false);
+  const [log, setLog] = React.useState<LocationRow | null>(null);
+  const [toDelete, setToDelete] = React.useState<readonly LocationRow[] | null>(null);
+  const [labels, setLabels] = React.useState<readonly unknown[] | null>(null);
+  const action = useAction([["grid", LOCATIONS_GRID_KEY], ["location-zones"]]);
 
-  // Zone summary cards aggregate the same normalized rows the grid renders
-  // (sum stored / sum capacity per zone), so cards and rows always agree.
-  // That requires every location, so this fetch pages through the full set
-  // instead of using the server's view=zones aggregate (whose stored units
-  // the client-side normalization replaces per row).
-  React.useEffect(() => {
-    const controller = new AbortController();
-    setZonesLoading(true);
-    const fetchRowsPage = (pageNumber: number) =>
-      fetch(
-        `/api/locations?page=${pageNumber}&pageSize=${SUMMARY_FETCH_PAGE_SIZE}`,
-        { signal: controller.signal }
-      ).then((res) => res.json() as Promise<ListEnvelope<LocationListRow>>);
-    fetchRowsPage(1)
-      .then(async (first) => {
-        if (!first.success || !first.data) {
-          throw new Error(first.error ?? "Failed to load zone summary.");
-        }
-        const totalRows = first.meta?.total ?? first.data.length;
-        const pageCount = Math.max(
-          1,
-          Math.ceil(totalRows / SUMMARY_FETCH_PAGE_SIZE)
-        );
-        const rest = await Promise.all(
-          Array.from({ length: pageCount - 1 }, (_, i) => fetchRowsPage(i + 2))
-        );
-        const allRows = rest.reduce<LocationListRow[]>(
-          (acc, body) =>
-            body.success && body.data ? [...acc, ...body.data] : acc,
-          first.data
-        );
-        setZones(summarizeZonesFromRows(normalizeLocationRows(allRows)));
-        setZonesLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        // The strip simply hides itself when the summary is unavailable.
-        setZonesLoading(false);
-      });
-    return () => controller.abort();
-  }, [refreshKey]);
+  const refresh = () => { g.refetch(); void zones.refetch(); };
+  const selectedRows = (ids: readonly string[]) => g.rows.filter((r) => ids.includes(r.id));
 
-  const applyFilters = (next: Record<string, string>) => {
-    setZone(next.zone ?? "");
-    setType(next.type ?? "");
-    setPage(1);
-    setSelection({});
+  const printLabels = async (ids: readonly string[]) => {
+    const records = await action.run<unknown[]>("/api/locations/labels", "POST", { ids });
+    if (records) setLabels(records);
+  };
+  const setLock = async (ids: readonly string[], locked: boolean) => {
+    const result = await action.run<BulkResponse>("/api/locations/bulk-lock", "POST", { ids, locked });
+    if (result) { toastBulk(result, "location", locked ? "locked" : "unlocked"); g.clearSelection(); }
   };
 
-  const changeSearch = (value: string) => {
-    setSearch(value);
-    setPage(1);
+  const lockReason = (ids: readonly string[], locked: boolean) => {
+    const rows = selectedRows(ids);
+    if (rows.length > 0 && rows.every((r) => r.isLocked === locked)) return locked ? "The selected locations are already locked" : "The selected locations are not locked";
+    return null;
+  };
+  const deleteReason = (ids: readonly string[]) => {
+    const rows = selectedRows(ids);
+    const busy = rows.filter((r) => r.storedUnits > 0 || r.openTaskCount > 0);
+    if (rows.length > 0 && busy.length === rows.length) return `Locations with inventory or open tasks can't be deleted (${busy.slice(0, 3).map((r) => r.code).join(", ")}${busy.length > 3 ? "…" : ""})`;
+    return null;
   };
 
-  const filterOptions = [
-    {
-      key: "zone",
-      label: "Zone",
-      options: zones.map((z) => z.zone),
-    },
-    { key: "type", label: "Type", options: LOCATION_TYPE_OPTIONS },
+  const bulkActions: readonly BulkAction[] = [
+    { key: "label", label: "Label", icon: Printer, onSelect: (ids) => void printLabels(ids), disabledReason: perms.label ? null : NO_PERMISSION },
+    { key: "lock", label: "Lock", icon: Lock, onSelect: (ids) => void setLock(ids, true), eligibility: (ids) => lockReason(ids, true), disabledReason: perms.edit ? null : NO_PERMISSION },
+    { key: "unlock", label: "Unlock", icon: LockOpen, onSelect: (ids) => void setLock(ids, false), eligibility: (ids) => lockReason(ids, false), disabledReason: perms.edit ? null : NO_PERMISSION },
+    { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: (ids) => setToDelete(selectedRows(ids)), eligibility: deleteReason, disabledReason: perms.delete ? null : NO_PERMISSION },
   ];
 
+  const rowActions = (row: LocationRow): readonly RowAction[] => [
+    { key: "details", label: "Show details", icon: Eye, href: `/locations/${row.id}` },
+    { key: "edit", label: "Edit", icon: Pencil, onSelect: () => setWizard({ open: true, editId: row.id }), disabledReason: perms.edit ? null : NO_PERMISSION },
+    { key: "log", label: "Change log", icon: History, onSelect: () => setLog(row), disabledReason: perms.change_log ? null : NO_PERMISSION },
+    { key: "delete", label: "Delete", icon: Trash2, destructive: true, onSelect: () => setToDelete([row]),
+      disabledReason: !perms.delete ? NO_PERMISSION : row.storedUnits > 0 ? `Holds ${row.storedUnits} units; move the stock first` : row.openTaskCount > 0 ? `Has ${row.openTaskCount} open tasks` : null },
+  ];
+
+  const assignCapacity = (
+    <DropdownMenu>
+      <DisabledReason reason={perms.assign_capacity ? null : NO_PERMISSION}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="secondary" disabled={!perms.assign_capacity}>Assign capacity<ChevronDown className="h-3.5 w-3.5" aria-hidden /></Button>
+        </DropdownMenuTrigger>
+      </DisabledReason>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Excel imports</DropdownMenuLabel>
+        {CAPACITY_IMPORTS.map((i) => <DropdownMenuItem key={i.href} href={i.href} icon={Upload}>{i.label}</DropdownMenuItem>)}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
-    // Fixed viewport height (minus the 56px top nav) keeps the grid's
-    // pagination footer pinned on screen instead of below the fold. The
-    // CSS module adds zebra striping and a bottom fade to the shared grid.
-    <div
-      className={`flex h-[calc(100vh-3.5rem)] min-h-0 flex-col pb-4 ${GRID_STYLE_CLASS}`}
-    >
+    <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
-        // The shared top nav (read-only) derives its active pill from
-        // nav-config, which files /locations under Inventory › Facility —
-        // so the breadcrumb names Inventory to agree with the highlighted
-        // pill. Moving both to Settings needs a nav-config change (see
-        // sharedComponentRequests).
-        breadcrumbs={[{ label: "Inventory" }, { label: "Locations" }]}
         title="Locations"
+        helper="Create, edit, label and lock the bins, shelves and docks in each warehouse."
         actions={
           <>
-            <Button variant="secondary">
-              <Upload className="h-3.5 w-3.5" aria-hidden />
-              Import
-              <ChevronDown className="h-3.5 w-3.5 text-faint" aria-hidden />
-            </Button>
-            <Button variant="primary">
-              <Plus className="h-3.5 w-3.5" aria-hidden />
-              Create Location
-            </Button>
+            <DropdownMenu>
+              <DisabledReason reason={perms.import_file ? null : NO_PERMISSION}>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="secondary" disabled={!perms.import_file}><Upload className="h-4 w-4" aria-hidden />Import<ChevronDown className="h-3.5 w-3.5" aria-hidden /></Button>
+                </DropdownMenuTrigger>
+              </DisabledReason>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem href="/imports/locations" icon={Upload} description="Add new locations from Excel">Bulk import locations</DropdownMenuItem>
+                <DropdownMenuItem href="/imports/locations-update" icon={Upload} description="Change existing locations by code">Bulk update locations</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Capacity</DropdownMenuLabel>
+                {CAPACITY_IMPORTS.map((i) => <DropdownMenuItem key={i.href} href={i.href} icon={Upload}>{i.label}</DropdownMenuItem>)}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DisabledReason reason={perms.create ? null : NO_PERMISSION}>
+              <Button variant="secondary" disabled={!perms.create} onClick={() => setGenerator(true)}><Wand2 className="h-4 w-4" aria-hidden />Generate locations</Button>
+            </DisabledReason>
+            <DisabledReason reason={perms.create ? null : NO_PERMISSION}>
+              <Button variant="primary" disabled={!perms.create} onClick={() => setWizard({ open: true, editId: null })}><Plus className="h-4 w-4" aria-hidden />Create location</Button>
+            </DisabledReason>
           </>
         }
       />
-      <p className="mt-1 px-6 text-left text-[13px] leading-5 text-secondary">
-        Zones, aisles, bays and bins across MLT1 — Main Fulfillment
-      </p>
       <ZoneSummaryStrip
-        zones={zones}
-        loading={zonesLoading}
-        activeZone={zone}
-        onZoneSelect={(next) => {
-          setZone(next);
-          setPage(1);
-          setSelection({});
+        zones={zones.data?.data ?? []}
+        loading={zones.isPending}
+        activeZoneId={activeZoneId}
+        onToggle={(zoneId) => {
+          if (activeZoneId !== undefined && activeZoneId === zoneId) g.grid.removeFilter("locationZoneId");
+          else g.grid.upsertFilter(zoneId === null ? { field: "locationZoneId", op: "empty" } : { field: "locationZoneId", op: "in", values: [zoneId] });
         }}
       />
-      {/* Page-local DataGrid fork: styled page-size dropdown + loading
-          footer fixes pending in the shared grid (see locations-data-grid). */}
-      <LocationsDataGrid<LocationDisplayRow>
+      <GridToolbar {...g.toolbarProps} onRefresh={refresh} searchPlaceholder="Search location code or barcode" bulkActions={bulkActions} bulkNoun="location" trailing={assignCapacity} />
+      <DataGrid<LocationRow>
+        {...g.gridProps}
         columns={LOCATION_COLUMNS}
-        data={rows}
-        total={total}
-        page={page}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={(size) => {
-          setPageSize(size);
-          setPage(1);
+        getRowId={(r) => r.id}
+        rowActions={rowActions}
+        emptyTitle={g.grid.query.filters.length || g.grid.query.q ? "No locations match these filters" : "No locations yet"}
+        emptyDescription={g.grid.query.filters.length || g.grid.query.q ? "Clear a filter or search for another code." : "Create one, generate a whole aisle, or import from Excel."}
+        emptyAction={perms.create ? <div className="flex gap-2"><Button onClick={() => setGenerator(true)}><Wand2 className="h-4 w-4" />Generate locations</Button><Button variant="primary" onClick={() => setWizard({ open: true, editId: null })}><Plus className="h-4 w-4" />Create location</Button></div> : undefined}
+      />
+
+      <LocationWizardDrawer open={wizard.open} editId={wizard.editId} defaultWarehouseId={zoneWarehouse ?? warehouses.defaultId}
+        onOpenChange={(o) => setWizard((w) => ({ ...w, open: o }))}
+        onSaved={(id) => { refresh(); if (!wizard.editId) router.prefetch(`/locations/${id}`); }} />
+      <LocationGeneratorDrawer open={generator} onOpenChange={setGenerator} defaultWarehouseId={zoneWarehouse ?? warehouses.defaultId} onCreated={refresh} />
+      {log ? <ChangeLogDrawer open onOpenChange={(o) => !o && setLog(null)} entityType="location" entityId={log.id} entityCode={log.code} /> : null}
+      <PrintOptionsModal open={labels !== null} onOpenChange={(o) => !o && setLabels(null)} typeKeys={["location-label"]} records={labels ?? []} title="Print location labels" />
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(o) => !o && setToDelete(null)}
+        variant="danger"
+        title={`Delete ${toDelete?.length === 1 ? `location ${toDelete[0]?.code}` : `${toDelete?.length ?? 0} locations`}?`}
+        description="Capacities are removed with the location. Locations holding stock or with open tasks are skipped."
+        confirmLabel="Yes, delete"
+        cancelLabel="No"
+        records={{
+          columns: [{ key: "code", label: "Location" }, { key: "warehouse", label: "Warehouse" }, { key: "area", label: "Area" }, { key: "status", label: "Inventory" }],
+          rows: (toDelete ?? []).map((r) => ({ code: r.code, warehouse: r.warehouseCode, area: r.areaType ?? "—", status: <AvailabilityPill status={r.inventoryStatus} /> })),
         }}
-        loading={loading}
-        error={error}
-        onRetry={() => setRefreshKey((k) => k + 1)}
-        onRefresh={() => setRefreshKey((k) => k + 1)}
-        getRowId={(row) => row.id}
-        selection={selection}
-        onSelectionChange={setSelection}
-        exportName="locations"
-        emptyTitle="No locations found"
-        emptyDescription="Adjust your search or filters, or create a new location to get started."
-        toolbarLeft={
-          <>
-            <GridSearch value={search} onChange={changeSearch} placeholder="Search by code" />
-            <FilterButton
-              filters={filterOptions}
-              applied={{ zone, type }}
-              onApply={applyFilters}
-            />
-          </>
-        }
-        toolbarRight={(selectedCount) => (
-          <>
-            <Button variant="secondary" disabled={selectedCount === 0}>
-              Assign Capacity
-              <ChevronDown className="h-3.5 w-3.5 text-faint" aria-hidden />
-            </Button>
-            <Button variant="secondary" disabled={selectedCount === 0}>
-              Print Labels
-            </Button>
-            <Button variant="secondary" disabled={selectedCount === 0}>
-              Deactivate
-            </Button>
-          </>
-        )}
+        onConfirm={async () => {
+          const ids = (toDelete ?? []).map((r) => r.id);
+          const result = await action.run<BulkResponse>("/api/locations/bulk-delete", "POST", { ids });
+          if (result) { toastBulk(result, "location", "deleted"); g.clearSelection(); }
+          setToDelete(null);
+        }}
       />
     </div>
   );
 }
+
+/** Used by tests: whether a bulk delete selection is fully blocked. */
+export function allBlocked(rows: readonly Pick<LocationRow, "storedUnits" | "openTaskCount">[]): boolean {
+  return rows.length > 0 && rows.every((r) => r.storedUnits > 0 || r.openTaskCount > 0);
+}
+

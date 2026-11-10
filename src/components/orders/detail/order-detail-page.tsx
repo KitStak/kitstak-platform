@@ -1,146 +1,194 @@
 "use client";
 
+/**
+ * Edit shipment order (`/orders/[id]`): the same six-step wizard in free mode with field
+ * locks (warehouse / client always; lines once picking starts; everything but notes and
+ * return info once shipped or cancelled), the right rail, workflow-blocked banner,
+ * activity timeline, notes and documents. Saves send only changed fields + `version`
+ * (409 → Reload prompt).
+ */
 import * as React from "react";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  CheckCircle2,
-  Info,
-  ListChecks,
-  Package,
-  Truck,
-  Users,
-} from "lucide-react";
-import type { OrderDetail } from "@/server/repositories/orders";
-import { Breadcrumbs } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
-import { ConfirmSection } from "./confirm-section";
-import { deriveSectionStates, type SectionKey } from "./order-derive";
-import {
-  CustomerAddressSection,
-  OrderDetailsSection,
-  OtherInfoSection,
-} from "./order-sections";
-import { ProductsSection } from "./products-section";
-import { OrderRightRail } from "./right-rail";
-import { ShippingSection } from "./shipping-section";
-import { WizardStepper, type WizardStep } from "./wizard-stepper";
+import { useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, ShieldAlert } from "lucide-react";
+import { apiFetch } from "@/lib/api-client";
+import { useApiQuery } from "@/lib/query-client";
+import { useCan, usePermissionSet } from "@/lib/permissions-client";
+import { ORDER_PERMISSIONS } from "@/lib/grid-defs/orders/shipment-orders";
+import { buttonVariants, Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import { StatusPill } from "@/components/ui/status-pill";
+import { toast } from "@/components/ui/toast";
+import { DisabledReason } from "@/components/ui/tooltip";
+import { ActivityTimeline, DocumentsViewer, NotesPanel } from "@/components/shared";
+import { PageHeader } from "@/components/layout/page-header";
+import { errorMessage, orderDetailKey, useInvalidateOrders, useOrderOptions, type OrderDetail } from "../orders-client";
+import { addressNeedsAttention, updateBody, valuesFromDetail, type OrderFormValues } from "../wizard/order-form-model";
+import { carrierLookup, reportSaveError } from "../wizard/order-save";
+import { buildOrderSteps } from "../wizard/order-steps";
+import { RailCard, StatusCard } from "../wizard/order-summary";
+import { OrderWizardProvider, type OrderLocks } from "../wizard/order-wizard-context";
+import { OrderWizardShell } from "../wizard/order-wizard-shell";
+import type { WizardController } from "@/components/ui/wizard";
+import { DocumentsCards, JobsCard, OrderActionsMenu, SummaryCard } from "./order-detail-rail";
 
-const STEP_ORDER: ReadonlyArray<{
-  key: SectionKey;
-  name: string;
-  icon: React.ComponentType<{ className?: string }>;
-}> = [
-  { key: "details", name: "Order Details", icon: ListChecks },
-  // Short stepper label ("Customer") keeps every tile one line; the section
-  // card itself still shows the full "Customer & Address" title.
-  { key: "customer", name: "Customer", icon: Users },
-  { key: "products", name: "Products", icon: Package },
-  { key: "shipping", name: "Shipping", icon: Truck },
-  { key: "other", name: "Other Info", icon: Info },
-  { key: "confirm", name: "Confirm", icon: CheckCircle2 },
-];
+const TERMINAL = new Set(["Shipped", "Partially Shipped", "Delivered", "Cancelled"]);
 
-export interface OrderDetailPageProps {
-  detail: OrderDetail;
+export function orderLocks(detail: OrderDetail, canEdit: boolean): OrderLocks {
+  if (!canEdit) return { header: "You don't have permission to edit shipment orders.", lines: "You don't have permission to edit shipment orders." };
+  const status = detail.order.status;
+  if (TERMINAL.has(status)) return { header: `This order is ${status}. Only notes and return info can still change.`, lines: `Lines can't change on a ${status} order.` };
+  const allocated = detail.lines.some((l) => l.allocatedQuantity > 0 || l.pickedQuantity > 0);
+  if (detail.actions.editLines) return { header: null, lines: detail.actions.editLines };
+  if (allocated) return { header: null, lines: "Lines are locked while stock is allocated. Remove the order from its job to change them." };
+  return { header: null, lines: null };
 }
 
-export function OrderDetailPage({ detail }: OrderDetailPageProps) {
-  const [activeKey, setActiveKey] = React.useState<SectionKey>("details");
-  const states = React.useMemo(() => deriveSectionStates(detail), [detail]);
-  const { order } = detail;
-
-  const steps: WizardStep[] = STEP_ORDER.map((step, idx) => ({
-    key: step.key,
-    stepLabel: `Step ${idx + 1}`,
-    name: step.name,
-    icon: step.icon,
-    state: states[step.key],
-  }));
-
-  const activeIdx = STEP_ORDER.findIndex((s) => s.key === activeKey);
-  const prevKey = activeIdx > 0 ? STEP_ORDER[activeIdx - 1].key : null;
-  const nextKey = activeIdx < STEP_ORDER.length - 1 ? STEP_ORDER[activeIdx + 1].key : null;
-  // Rendered inside SectionCard's sticky action bar: "Back" on the left
-  // (disabled on step 1), the primary CTA right-aligned.
-  const footer = (
-    <>
-      <Button
-        variant="secondary"
-        disabled={!prevKey}
-        onClick={() => {
-          if (prevKey) setActiveKey(prevKey);
-        }}
-      >
-        Back
-      </Button>
-      {nextKey ? (
-        <Button variant="primary" onClick={() => setActiveKey(nextKey)}>
-          Next Step
-        </Button>
-      ) : (
-        <Button variant="primary">Save Shipment Order</Button>
-      )}
-    </>
+function WorkflowBanner({ detail, onChanged }: { readonly detail: OrderDetail; readonly onChanged: () => void }) {
+  const canRelease = useCan(ORDER_PERMISSIONS.edit).allowed;
+  const [busy, setBusy] = React.useState(false);
+  const block = detail.workflowBlock;
+  if (!block) return null;
+  const release = async () => {
+    setBusy(true);
+    try {
+      await apiFetch(`/api/orders/${detail.order.id}/release-block`, { method: "POST", body: { version: detail.order.version } });
+      toast.success("Block released", `${detail.order.code} can be allocated and picked again.`);
+      onChanged();
+    } catch (error) {
+      toast.error("Couldn't release the block", errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Callout
+      variant="error"
+      title={`${block.blockType === "Fully" ? "Fully" : "Partially"} blocked by workflow “${block.workflowName}”`}
+      action={
+        <DisabledReason reason={canRelease ? null : "You don't have permission to release workflow blocks"}>
+          <Button size="sm" variant="secondary" onClick={() => void release()} disabled={busy || !canRelease}>
+            <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
+            Release
+          </Button>
+        </DisabledReason>
+      }
+    >
+      {block.blockType === "Fully" ? "The order can't be allocated or picked until the block is released." : "Some actions are held until the block is released."}
+      {block.actions.length ? ` Actions: ${block.actions.join(", ")}.` : ""}
+    </Callout>
   );
+}
+
+export function OrderDetailPage({ initial }: { readonly initial: OrderDetail }) {
+  const qc = useQueryClient();
+  const invalidate = useInvalidateOrders();
+  const key = orderDetailKey(initial.order.id);
+  const query = useApiQuery<OrderDetail>(key, `/api/orders/${initial.order.id}`, { initialData: { data: initial }, staleTime: 5_000 });
+  const detail = query.data?.data ?? initial;
+  const { permissions } = usePermissionSet();
+  const canEdit = permissions.has(ORDER_PERMISSIONS.edit);
+  const options = useOrderOptions(detail.order.warehouseId, detail.order.clientId);
+  const steps = React.useMemo(() => buildOrderSteps("edit"), []);
+  const initialValues = React.useMemo(() => valuesFromDetail(detail), [detail]);
+  const wizardRef = React.useRef<WizardController<OrderFormValues> | null>(null);
+  const locks = orderLocks(detail, canEdit);
+
+  const refresh = React.useCallback(async () => {
+    await qc.invalidateQueries({ queryKey: key });
+    await invalidate();
+  }, [qc, key, invalidate]);
+
+  const save = async (values: OrderFormValues) => {
+    const body = updateBody(initialValues, values, detail.order.version, carrierLookup(options.data?.data));
+    if (Object.keys(body.patch).length === 0 && !body.lines) {
+      toast.info("No changes to save", `${detail.order.code} is already up to date.`);
+      throw new Error("no-op");
+    }
+    try {
+      await apiFetch(`/api/orders/${detail.order.id}`, { method: "PATCH", body });
+      toast.success("Success", `${detail.order.code} was saved.`);
+      await refresh();
+    } catch (error) {
+      reportSaveError(error, wizardRef.current, "save");
+      throw error;
+    }
+  };
+
+  const ctx = {
+    mode: "edit" as const,
+    options: options.data?.data,
+    optionsLoading: options.isLoading,
+    locks,
+    detail,
+    canCreateProduct: permissions.has(ORDER_PERMISSIONS.createProduct),
+    canManageCustomFields: permissions.has(ORDER_PERMISSIONS.customFields),
+  };
+  const onChanged = () => void refresh();
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      {/*
-        Local shim for the global header search pill (app-shell.tsx is a
-        read-only shared component): widen it to 280px and forbid wrapping so
-        "Search orders, SKUs, locations…" can never break onto two lines.
-        Same scoped workaround the Jobs, Receiving, Clients and Inventory
-        Snapshot pages ship; the real fix (plus shortening the copy to
-        "Search orders, SKUs…") belongs in the shared TopNav — see the shared
-        component request accompanying this change.
-      */}
-      <style>{`
-        header button:has(> kbd) {
-          width: 280px !important;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+    <div className="flex flex-col gap-4 pb-8">
+      <PageHeader
+        title="Edit shipment order"
+        crumbLabel={detail.order.code}
+        helper={`${detail.clientName} · ${detail.warehouseLabel}`}
+        actions={
+          <>
+            <StatusPill status={detail.order.status} domain="shipmentOrder" />
+            <Link href={["Shipped", "Partially Shipped", "Delivered", "Cancelled"].includes(detail.order.status) ? "/orders/shipped" : "/orders"} className={buttonVariants({ variant: "secondary" })}>
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+              Back to list
+            </Link>
+          </>
         }
-      `}</style>
-      <div className="px-6 pb-6 pt-3">
-        <Breadcrumbs
-          items={[{ label: "Orders", href: "/orders" }, { label: order.code }]}
-        />
-        <div className="mt-1.5 flex items-center gap-2">
-          <Link
-            href="/orders"
-            aria-label="Back to Shipment Orders"
-            className="flex h-7 w-7 items-center justify-center rounded-md text-secondary outline-none transition-colors hover:bg-neutral-soft hover:text-body focus-visible:ring-2 focus-visible:ring-primary/40"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-          </Link>
-          <h1 className="text-xl font-semibold tracking-[-0.01em] text-foreground">
-            Shipment Order {order.code}
-          </h1>
-        </div>
-
-        <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-start">
-          <div className="min-w-0 flex-1">
-            <WizardStepper steps={steps} activeKey={activeKey} onSelect={(key) => setActiveKey(key as SectionKey)} />
-            <div className="mt-4">
-              {activeKey === "details" ? (
-                <OrderDetailsSection order={order} footer={footer} />
-              ) : activeKey === "customer" ? (
-                <CustomerAddressSection order={order} footer={footer} />
-              ) : activeKey === "products" ? (
-                <ProductsSection lines={detail.lines} footer={footer} />
-              ) : activeKey === "shipping" ? (
-                <ShippingSection order={order} footer={footer} />
-              ) : activeKey === "other" ? (
-                <OtherInfoSection order={order} footer={footer} />
-              ) : (
-                <ConfirmSection timeline={detail.timeline} footer={footer} />
-              )}
-            </div>
-          </div>
-          <OrderRightRail detail={detail} />
-        </div>
+      />
+      <div className="flex flex-col gap-4 px-6">
+        <WorkflowBanner detail={detail} onChanged={onChanged} />
+        {query.isError ? <Callout variant="error" title="Couldn't refresh this order" action={<Button size="sm" variant="secondary" onClick={() => void query.refetch()}>Retry</Button>}>{query.error.message}</Callout> : null}
+        <OrderWizardProvider value={ctx}>
+          <OrderWizardShell<OrderFormValues>
+            key={`${detail.order.id}:${detail.order.version}`}
+            steps={steps}
+            mode="free"
+            defaultValues={initialValues}
+            draftScope={false}
+            stickyRail={false}
+            onComplete={save}
+            onController={(w) => {
+              wizardRef.current = w;
+            }}
+            attention={(v) => (addressNeedsAttention(v) ? ["customer"] : [])}
+            rail={(_values, wizard) => (
+              <>
+                <StatusCard
+                  percent={wizard.percent}
+                  subtitle={locks.header ?? (wizard.percent >= 100 ? "All required fields are complete" : "Some required fields are missing")}
+                  saveLabel="Save shipment order"
+                  onSave={() => void wizard.submit()}
+                  saving={wizard.submitting}
+                  disabledReason={!canEdit ? "You don't have permission to edit shipment orders" : wizard.saveDisabledReason}
+                />
+                <OrderActionsMenu detail={detail} onChanged={onChanged} />
+                <SummaryCard detail={detail} />
+                <JobsCard detail={detail} onChanged={onChanged} />
+                <DocumentsCards detail={detail} onChanged={onChanged} />
+              </>
+            )}
+            below={
+              <div className="grid gap-5 xl:grid-cols-2">
+                <RailCard title="Activity" className="xl:col-span-2">
+                  <ActivityTimeline entityType="shipment_order" entityId={detail.order.id} ledgerPath={`/api/orders/${encodeURIComponent(detail.order.id)}/ledger`} />
+                </RailCard>
+                <RailCard title="Notes">
+                  <NotesPanel entityType="shipment_order" entityId={detail.order.id} canEdit={canEdit} />
+                </RailCard>
+                <div id="order-documents" className="scroll-mt-4 rounded-lg border border-border bg-surface p-4 shadow-xs">
+                  <DocumentsViewer entityType="shipment_order" entityId={detail.order.id} canEdit={permissions.has(ORDER_PERMISSIONS.documentsUpload)} />
+                </div>
+              </div>
+            }
+          />
+        </OrderWizardProvider>
       </div>
     </div>
   );

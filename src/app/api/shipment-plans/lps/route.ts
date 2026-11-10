@@ -1,0 +1,13 @@
+/** `GET /api/shipment-plans/lps` — Shipment Plan LPs tab (grid grammar). */
+import { defineRoute } from "@/server/api/define-route";
+import { listResult } from "@/server/api/envelope";
+import { listPlanLps } from "@/server/repositories/shipment-plans-lists";
+
+export const GET = defineRoute({
+  permission: "fulfillment.shipment_plan.view_plan_lps",
+  handler: ({ db, auth, grid }) => {
+    const query = grid();
+    const { rows, total } = listPlanLps(db, auth, query);
+    return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
+  },
+});

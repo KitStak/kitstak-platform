@@ -1,108 +1,69 @@
-import { randomUUID } from "node:crypto";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
+import { defineRoute } from "@/server/api/define-route";
+import { failureBody, successBody } from "@/server/api/envelope";
+import { AppError } from "@/server/api/errors";
+import { generateCsrfToken, isSameOriginRequest, setCsrfCookie } from "@/server/auth/csrf";
+import { authenticate, INVALID_CREDENTIALS_MESSAGE, LOCKED_MESSAGE } from "@/server/auth/login";
+import { issueSession, setSessionCookie } from "@/server/auth/session";
+import { users } from "@/server/db/schema";
 import { eq } from "drizzle-orm";
-import { db, schema } from "@/server/db";
-import { hashPassword, verifyPassword } from "@/server/auth/password";
-import { createSession, type SessionUser } from "@/server/auth/session";
-import { checkRateLimit } from "@/server/auth/rate-limit";
+
+/**
+ * The browser login form sends this header: a wrong password is an *expected* outcome there,
+ * so it is answered with 200 + `{ success: false }` instead of 401 (which Chrome would log
+ * as a console error). API clients without the header still get the standard 401.
+ */
+const SOFT_AUTH_FAILURE_HEADER = "x-ks-soft-auth-failure";
 
 const loginSchema = z.object({
   email: z.string().trim().min(1).max(254),
   password: z.string().min(1).max(200),
 });
 
-const INVALID_CREDENTIALS = "Invalid email or password";
-
 /**
- * Dummy bcrypt hash compared against when the user does not exist, so the
- * response time does not reveal whether an email is registered.
+ * POST /api/auth/login — CSRF-token exempt (no session yet) but must be same-origin.
+ * Sets the session cookie and a fresh `ks_csrf` cookie; returns `{ user, csrfToken }`.
  */
-const TIMING_PAD_HASH = hashPassword("kitstak-timing-pad");
-
-interface LoginResponseData {
-  user: SessionUser;
-}
-
-function clientIp(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  const first = forwarded?.split(",")[0]?.trim();
-  return first && first.length > 0 ? first : "local";
-}
-
-export async function POST(request: NextRequest): Promise<NextResponse> {
-  try {
-    const limit = checkRateLimit(`login:${clientIp(request)}`);
-    if (!limit.allowed) {
-      return NextResponse.json(
-        { success: false, error: "Too many login attempts. Please try again shortly." },
-        { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
-      );
-    }
-
+export const POST = defineRoute({
+  name: "POST /api/auth/login",
+  auth: "public",
+  csrf: false,
+  rateLimit: false,
+  transaction: false,
+  handler: async ({ db, request, ip, userAgent }) => {
+    if (!isSameOriginRequest(request)) throw new AppError("CSRF", "Cross-site login is not allowed");
     let raw: unknown;
     try {
       raw = await request.json();
     } catch {
-      return NextResponse.json(
-        { success: false, error: "Invalid request body" },
-        { status: 400 }
-      );
+      throw new AppError("VALIDATION", "Invalid request body");
     }
-
     const parsed = loginSchema.safeParse(raw);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { success: false, error: INVALID_CREDENTIALS },
-        { status: 401 }
-      );
+    if (!parsed.success) throw new AppError("UNAUTHENTICATED", INVALID_CREDENTIALS_MESSAGE);
+
+    const outcome = authenticate(db, { email: parsed.data.email, password: parsed.data.password, ip, userAgent });
+    if (!outcome.ok) {
+      if (outcome.reason === "rate_limited") {
+        throw new AppError("RATE_LIMITED", "Too many login attempts. Please try again shortly.", {
+          headers: { "Retry-After": String(outcome.retryAfterSeconds) },
+        });
+      }
+      const failure = new AppError("UNAUTHENTICATED", outcome.reason === "locked" ? LOCKED_MESSAGE : INVALID_CREDENTIALS_MESSAGE);
+      if (request.headers.get(SOFT_AUTH_FAILURE_HEADER) === "1") return NextResponse.json(failureBody(failure), { status: 200 });
+      throw failure;
     }
 
-    const email = parsed.data.email.toLowerCase();
+    const issued = await issueSession(db, outcome.userId, { ip, userAgent });
     const user = db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.email, email))
+      .select({ id: users.id, email: users.email, name: users.name, role: users.role })
+      .from(users)
+      .where(eq(users.id, outcome.userId))
       .get();
-
-    const passwordOk = verifyPassword(
-      parsed.data.password,
-      user?.passwordHash ?? TIMING_PAD_HASH
-    );
-    if (!user || !user.isActive || !passwordOk) {
-      return NextResponse.json(
-        { success: false, error: INVALID_CREDENTIALS },
-        { status: 401 }
-      );
-    }
-
-    const sessionUser: SessionUser = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-    };
-    await createSession(sessionUser);
-
-    db.insert(schema.auditLog)
-      .values({
-        id: randomUUID(),
-        userId: user.id,
-        action: "auth.login",
-        entity: "user",
-        entityId: user.id,
-        detail: JSON.stringify({ email: user.email }),
-        at: new Date().toISOString(),
-      })
-      .run();
-
-    const data: LoginResponseData = { user: sessionUser };
-    return NextResponse.json({ success: true, data }, { status: 200 });
-  } catch (error: unknown) {
-    console.error("[kitstak:auth] login failed", error);
-    return NextResponse.json(
-      { success: false, error: "Something went wrong. Please try again." },
-      { status: 500 }
-    );
-  }
-}
+    const csrfToken = generateCsrfToken();
+    const response = NextResponse.json(successBody({ user, csrfToken }));
+    setCsrfCookie(response, csrfToken);
+    setSessionCookie(response, issued.token, issued.maxAgeSeconds);
+    return response;
+  },
+});

@@ -1,465 +1,310 @@
 "use client";
 
+/**
+ * DataGrid (BUILD_PLAN F4.3) — rewritten; legacy props stay backward-compatible.
+ *
+ *   - server multi-sort when `sort` + `onSortChange` are passed (client sort otherwise)
+ *   - columns: resize, drag-reorder, pin-left, legacy `meta.sticky: "right"`
+ *   - per-user prefs (visible/order/widths/pins/density) via `gridKey` → /api/grid-prefs
+ *   - tri-state page checkbox; selection survives paging (ids); "Select all N matching"
+ *   - density Large/Small, page sizes 100–1000, Total/Selected, `|< < [n] / N > >|`
+ *   - windowed rows above 200, header `?` tips, row kebab (`rowActions`), expandable rows
+ *   - Export As Excel (async, Transactions tray) when `gridKey` + `queryString` are set;
+ *     legacy callers without a gridKey keep the client-side CSV export
+ */
 import * as React from "react";
 import {
-  type ColumnDef,
-  type RowSelectionState,
-  type SortingState,
-  type VisibilityState,
-  flexRender,
   getCoreRowModel,
+  getExpandedRowModel,
   getSortedRowModel,
   useReactTable,
+  type ColumnDef,
+  type ColumnSizingInfoState,
+  type ColumnSizingState,
+  type ExpandedState,
+  type RowSelectionState,
+  type SortingState,
 } from "@tanstack/react-table";
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  Download,
-  Inbox,
-  RefreshCw,
-  Settings2,
-} from "lucide-react";
-import { cn, formatNumber } from "@/lib/utils";
+import { Download, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { SortSpec } from "@/server/query/grid-query";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/input";
-import { Dropdown } from "@/components/ui/dropdown";
-import { Skeleton } from "@/components/ui/card";
+import { Tooltip } from "@/components/ui/tooltip";
+import { ColumnChooser, type ChooserColumn } from "./column-chooser";
+import { DataGridBody } from "./data-grid-body";
+import { DataGridHeader, HeaderDndContext } from "./data-grid-header";
+import { actionsColumn, columnLabel, expandColumn, EXPAND_COLUMN_ID, isSystemColumn, SELECT_COLUMN_ID, selectColumn, stickyRightOffsetFor } from "./data-grid-columns";
+import { ExportButton, type ExportColumnSpec } from "./export-button";
+import { GridFooter } from "./grid-footer";
+import { clampWidth, moveColumn, visibilityMap, type PrefColumn } from "./grid-prefs";
+import { nextSort } from "./grid-sort";
+import { exportCsv } from "./legacy-csv";
+import { SelectionBanner } from "./selection-banner";
+import type { GridColumnMeta, GridDensity, RowAction } from "./grid-types";
+import { useGridPrefs } from "./use-grid-prefs";
 
+/** Legacy density names (pre-F4). `"comfortable"` = Large, `"compact"` = Small. */
 export type Density = "comfortable" | "compact";
-
-/** Column meta: set `{ sticky: "right" }` to freeze a column at the grid's right edge. */
-export interface GridColumnMeta {
-  sticky?: "right";
-}
-
-declare module "@tanstack/react-table" {
-  // Module augmentation must use declaration merging, so an interface (with
-  // TanStack's required type params) is the only shape that works here.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-object-type
-  interface ColumnMeta<TData, TValue> extends GridColumnMeta {}
-}
-
-function isStickyRight(meta: unknown): boolean {
-  return (
-    typeof meta === "object" &&
-    meta !== null &&
-    (meta as GridColumnMeta).sticky === "right"
-  );
-}
+export type { GridColumnMeta };
 
 export interface DataGridProps<T> {
-  columns: ColumnDef<T, unknown>[];
-  data: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  onPageChange: (page: number) => void;
-  onPageSizeChange?: (size: number) => void;
-  loading?: boolean;
-  error?: string | null;
-  onRetry?: () => void;
-  emptyTitle?: string;
-  emptyDescription?: string;
-  getRowId: (row: T) => string;
-  selection?: RowSelectionState;
-  onSelectionChange?: (next: RowSelectionState) => void;
-  onRowClick?: (row: T) => void;
-  exportName?: string;
-  onRefresh?: () => void;
-  toolbarLeft?: React.ReactNode;
-  toolbarRight?: (selectedCount: number) => React.ReactNode;
+  readonly columns: ColumnDef<T, unknown>[];
+  readonly data: T[];
+  readonly total: number;
+  readonly page: number;
+  readonly pageSize: number;
+  readonly onPageChange: (page: number) => void;
+  readonly onPageSizeChange?: (size: number) => void;
+  readonly loading?: boolean;
+  readonly error?: string | null;
+  readonly onRetry?: () => void;
+  readonly emptyTitle?: string;
+  readonly emptyDescription?: string;
+  readonly emptyAction?: React.ReactNode;
+  readonly getRowId: (row: T) => string;
+  readonly selection?: RowSelectionState;
+  readonly onSelectionChange?: (next: RowSelectionState) => void;
+  readonly onRowClick?: (row: T) => void;
+  /** Legacy CSV file name (used when no gridKey is set). */
+  readonly exportName?: string;
+  readonly onRefresh?: () => void;
+  readonly toolbarLeft?: React.ReactNode;
+  readonly toolbarRight?: (selectedCount: number) => React.ReactNode;
+
+  /* ---- F4 additions (all optional) ---- */
+  /** Persists column prefs per user and enables Export As Excel. */
+  readonly gridKey?: string;
+  /** Canonical grid query (for export). */
+  readonly queryString?: string;
+  readonly exportColumns?: readonly ExportColumnSpec[];
+  /** Server sort (grid grammar). Passing `onSortChange` switches to manual sorting. */
+  readonly sort?: readonly SortSpec[];
+  readonly onSortChange?: (sort: readonly SortSpec[]) => void;
+  readonly rowActions?: (row: T) => readonly RowAction[];
+  readonly renderExpanded?: (row: T) => React.ReactNode;
+  readonly canSelectRow?: (row: T) => boolean;
+  /** Hide the selection checkboxes entirely. */
+  readonly selectable?: boolean;
+  /** "Select all N matching" support (bulk ops on the whole query). */
+  readonly allMatchingSelected?: boolean;
+  readonly onAllMatchingSelectedChange?: (value: boolean) => void;
+  readonly density?: GridDensity;
+  readonly onDensityChange?: (density: GridDensity) => void;
+  /** Hide the built-in toolbar row (when a page renders `GridToolbar` itself). */
+  readonly hideToolbar?: boolean;
+  readonly className?: string;
 }
 
-function exportCsv<T>(rows: T[], columns: ColumnDef<T, unknown>[], name: string) {
-  const headers = columns
-    .filter((c) => c.header && typeof c.header === "string")
-    .map((c) => c.header as string);
-  const keys = columns
-    .filter((c) => c.header && typeof c.header === "string")
-    .map((c) => ("accessorKey" in c ? (c.accessorKey as string) : ""));
-  const lines = [
-    headers.join(","),
-    ...rows.map((row) =>
-      keys
-        .map((k) => {
-          if (!k) return "";
-          const value = (row as Record<string, unknown>)[k];
-          const s = value == null ? "" : String(value);
-          return s.includes(",") || s.includes('"')
-            ? `"${s.replaceAll('"', '""')}"`
-            : s;
-        })
-        .join(",")
-    ),
-  ];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${name}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+function prefColumnsOf<T>(columns: readonly ColumnDef<T, unknown>[]): readonly PrefColumn[] {
+  return columns.map((c, i) => ({
+    id: columnIdOf(c, i),
+    defaultVisible: c.meta?.defaultVisible !== false,
+    alwaysVisible: c.meta?.alwaysVisible === true || c.enableHiding === false,
+  }));
 }
 
-export function DataGrid<T>({
-  columns,
-  data,
-  total,
-  page,
-  pageSize,
-  onPageChange,
-  onPageSizeChange,
-  loading,
-  error,
-  onRetry,
-  emptyTitle = "Nothing here yet",
-  emptyDescription = "Adjust your filters or create a new record to get started.",
-  getRowId,
-  selection,
-  onSelectionChange,
-  onRowClick,
-  exportName = "export",
-  onRefresh,
-  toolbarLeft,
-  toolbarRight,
-}: DataGridProps<T>) {
-  const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
-  const [density, setDensity] = React.useState<Density>("compact");
+function columnIdOf<T>(c: ColumnDef<T, unknown>, index: number): string {
+  if (c.id) return c.id;
+  if ("accessorKey" in c && typeof c.accessorKey === "string") return c.accessorKey.replaceAll(".", "_");
+  return typeof c.header === "string" ? c.header : `col_${index}`;
+}
+
+function hasAccessor<T>(c: ColumnDef<T, unknown>): boolean {
+  return ("accessorKey" in c && c.accessorKey !== undefined) || ("accessorFn" in c && typeof c.accessorFn === "function");
+}
+
+/**
+ * Every data column is sortable by default: a display column (id only, no accessor) gets an
+ * accessor reading `row[meta.sortKey ?? id]`, so the header shows the sort affordance and
+ * client-side sorting works. Opt out per column with `enableSorting: false`.
+ */
+export function withDefaultSort<T>(c: ColumnDef<T, unknown>, id: string): ColumnDef<T, unknown> {
+  if (c.enableSorting === false || hasAccessor(c)) return { ...c, id } as ColumnDef<T, unknown>;
+  const key = c.meta?.sortKey ?? id;
+  return { ...c, id, accessorFn: (row: T) => (row as Record<string, unknown> | null)?.[key] } as ColumnDef<T, unknown>;
+}
+
+export function DataGrid<T>(props: DataGridProps<T>) {
+  const { columns, data, total, page, pageSize, onPageChange, onPageSizeChange, loading = false, error = null, onRetry, getRowId, onRowClick, onRefresh, toolbarLeft, toolbarRight, gridKey, sort: sortProp, onSortChange, rowActions, renderExpanded, selectable = true } = props;
+
+  const idColumns = React.useMemo(() => columns.map((c, i) => withDefaultSort(c, columnIdOf(c, i))), [columns]);
+  const prefColumns = React.useMemo(() => prefColumnsOf(idColumns), [idColumns]);
+  const prefs = useGridPrefs(gridKey, prefColumns);
+
+  const [localSort, setLocalSort] = React.useState<readonly SortSpec[]>([]);
+  const sort = sortProp ?? localSort;
+  const manualSorting = Boolean(onSortChange);
+  const setSort = (next: readonly SortSpec[]) => (onSortChange ? onSortChange(next) : setLocalSort(next));
+
   const [internalSelection, setInternalSelection] = React.useState<RowSelectionState>({});
+  const rowSelection = props.selection ?? internalSelection;
+  const setRowSelection = props.onSelectionChange ?? setInternalSelection;
+  const [expanded, setExpanded] = React.useState<ExpandedState>({});
+  const [sizing, setSizing] = React.useState<ColumnSizingState | null>(null);
+  const [sizingInfo, setSizingInfo] = React.useState<ColumnSizingInfoState>({ startOffset: null, startSize: null, deltaOffset: null, deltaPercentage: null, isResizingColumn: false, columnSizingStart: [] });
+  const sizingRef = React.useRef<ColumnSizingState>({});
 
-  const rowSelection = selection ?? internalSelection;
-  const setRowSelection = onSelectionChange ?? setInternalSelection;
+  const density: GridDensity = props.density ?? prefs.prefs.density;
+  const setDensity = (d: GridDensity) => (props.onDensityChange ? props.onDensityChange(d) : prefs.update({ density: d }));
 
-  const selectColumn = React.useMemo<ColumnDef<T, unknown>>(
-    () => ({
-      id: "_select",
-      size: 36,
-      enableSorting: false,
-      header: ({ table }) => (
-        <Checkbox
-          aria-label="Select all rows"
-          checked={table.getIsAllRowsSelected()}
-          ref={(el) => {
-            if (el) el.indeterminate = table.getIsSomeRowsSelected();
-          }}
-          onChange={table.getToggleAllRowsSelectedHandler()}
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          aria-label="Select row"
-          checked={row.getIsSelected()}
-          onChange={row.getToggleSelectedHandler()}
-          onClick={(e) => e.stopPropagation()}
-        />
-      ),
-    }),
-    []
-  );
+  const allColumns = React.useMemo(() => {
+    const list: ColumnDef<T, unknown>[] = [];
+    if (selectable) list.push(selectColumn<T>());
+    if (renderExpanded) list.push(expandColumn<T>());
+    list.push(...idColumns);
+    if (rowActions) list.push(actionsColumn<T>(rowActions));
+    return list;
+  }, [idColumns, selectable, renderExpanded, rowActions]);
 
-  const allColumns = React.useMemo(
-    () => [selectColumn, ...columns],
-    [selectColumn, columns]
-  );
+  const sortingState: SortingState = React.useMemo(() => {
+    const byField = new Map(idColumns.map((c) => [c.meta?.sortKey ?? c.id ?? "", c.id ?? ""]));
+    return sort.map((s) => ({ id: byField.get(s.field) ?? s.field, desc: s.dir === "desc" })).filter((s) => idColumns.some((c) => c.id === s.id));
+  }, [sort, idColumns]);
 
+  const columnSizing = sizing ?? prefs.prefs.widths;
+  const systemLeft = [selectable ? SELECT_COLUMN_ID : null, renderExpanded ? EXPAND_COLUMN_ID : null].filter((x): x is string => x !== null);
+
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table returns non-memoisable functions by design
   const table = useReactTable({
     data,
     columns: allColumns,
-    state: { sorting, columnVisibility, rowSelection },
-    onSortingChange: setSorting,
-    onColumnVisibilityChange: setColumnVisibility,
-    onRowSelectionChange: (updater) => {
-      const next = typeof updater === "function" ? updater(rowSelection) : updater;
-      setRowSelection(next);
+    state: {
+      sorting: sortingState,
+      columnVisibility: visibilityMap(prefs.prefs),
+      columnOrder: [...systemLeft, ...prefs.prefs.order],
+      columnPinning: { left: [...systemLeft, ...(prefs.prefs.pinned ?? [])] },
+      columnSizing,
+      columnSizingInfo: sizingInfo,
+      rowSelection,
+      expanded,
     },
+    manualSorting,
+    manualPagination: true,
+    enableColumnResizing: true,
+    columnResizeMode: "onChange",
+    enableMultiSort: true,
     getRowId,
+    enableRowSelection: props.canSelectRow ? (row) => props.canSelectRow?.(row.original) ?? true : true,
+    getRowCanExpand: () => Boolean(renderExpanded),
+    onRowSelectionChange: (updater) => setRowSelection(typeof updater === "function" ? updater(rowSelection) : updater),
+    onExpandedChange: setExpanded,
+    onColumnSizingChange: (updater) => {
+      const next = typeof updater === "function" ? updater(columnSizing) : updater;
+      sizingRef.current = next;
+      setSizing(next);
+    },
+    onColumnSizingInfoChange: (updater) => {
+      const next = typeof updater === "function" ? updater(sizingInfo) : updater;
+      if (sizingInfo.isResizingColumn && !next.isResizingColumn) {
+        const widths = Object.fromEntries(Object.entries(sizingRef.current).filter(([id]) => !isSystemColumn(id)).map(([id, w]) => [id, clampWidth(w)]));
+        prefs.update({ widths });
+        setSizing(null);
+      }
+      setSizingInfo(next);
+    },
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    enableRowSelection: true,
+    getSortedRowModel: manualSorting ? undefined : getSortedRowModel(),
+    getExpandedRowModel: renderExpanded ? getExpandedRowModel() : undefined,
   });
 
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
-  const selectedCount = Object.keys(rowSelection).length;
-  const rowH = density === "compact" ? "h-10" : "h-12";
-  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, total);
+  const selectedIds = Object.keys(rowSelection).filter((id) => rowSelection[id]);
+  const selectedCount = props.allMatchingSelected ? total : selectedIds.length;
+  const pageIds = table.getRowModel().rows.map((r) => r.id);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const stickyRightOffset = stickyRightOffsetFor(table);
+  const chooserColumns: readonly ChooserColumn[] = idColumns.map((c) => ({ id: c.id ?? "", label: columnLabel(c, c.id ?? ""), alwaysVisible: c.meta?.alwaysVisible === true || c.enableHiding === false }));
+
+  const reorder = (id: string, before: string | null) => prefs.update({ order: moveColumn(prefs.prefs.order, id, before) });
+
+  const changePageSize = onPageSizeChange
+    ? (size: number) => {
+        onPageSizeChange(size);
+        prefs.update({ pageSize: size });
+      }
+    : undefined;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {/* toolbar */}
-      <div className="flex items-center justify-between gap-3 px-6 py-3">
-        <div className="flex items-center gap-2">{toolbarLeft}</div>
-        <div className="flex items-center gap-2">
-          {toolbarRight?.(selectedCount)}
-          <Dropdown
-            align="end"
-            trigger={() => (
-              <Button variant="ghost" size="icon" aria-label="Configure columns">
-                <Settings2 className="h-4 w-4" aria-hidden />
-              </Button>
-            )}
-            panelClassName="max-h-72 overflow-auto ks-scroll"
-          >
-            <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-faint">
-              Columns
-            </p>
-            {table
-              .getAllLeafColumns()
-              .filter((c) => c.id !== "_select")
-              .map((column) => (
-                <label
-                  key={column.id}
-                  className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[13px] text-body hover:bg-surface-sunken"
-                >
-                  <Checkbox
-                    checked={column.getIsVisible()}
-                    onChange={column.getToggleVisibilityHandler()}
-                  />
-                  {typeof column.columnDef.header === "string"
-                    ? column.columnDef.header
-                    : column.id}
-                </label>
-              ))}
-          </Dropdown>
-          {onRefresh ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Refresh"
-              onClick={onRefresh}
-            >
-              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} aria-hidden />
-            </Button>
-          ) : null}
+    <div className={cn("flex min-h-0 flex-1 flex-col", props.className)}>
+      {props.hideToolbar ? null : (
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3">
+          <div className="flex flex-wrap items-center gap-2">{toolbarLeft}</div>
+          <div className="flex items-center gap-2">
+            {toolbarRight?.(selectedCount)}
+            <ColumnChooser columns={chooserColumns} prefs={prefs.prefs} onApply={(patch) => prefs.update(patch)} onReset={prefs.reset} />
+            {onRefresh ? (
+              <Tooltip content="Refresh">
+                <Button variant="ghost" size="icon" aria-label="Refresh" onClick={onRefresh}>
+                  <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} aria-hidden />
+                </Button>
+              </Tooltip>
+            ) : null}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* table */}
       <div className="mx-6 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-xs">
-        <div className="ks-scroll min-h-0 flex-1 overflow-auto">
-          <table className="w-full min-w-max border-collapse text-[13px]">
-            <thead className="sticky top-0 z-10 bg-surface shadow-[inset_0_-1px_0_var(--border)]">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
-                      className={cn(
-                        "whitespace-nowrap px-3 py-2.5 text-left align-middle text-[11px] font-semibold uppercase tracking-[0.04em] text-faint",
-                        isStickyRight(header.column.columnDef.meta) &&
-                          "sticky right-0 z-20 bg-surface shadow-[inset_1px_0_0_var(--border)]"
-                      )}
-                    >
-                      {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                        <button
-                          type="button"
-                          onClick={header.column.getToggleSortingHandler()}
-                          className="inline-flex items-center gap-1 transition-colors hover:text-secondary"
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          {header.column.getIsSorted() === "asc" ? (
-                            <ArrowUp className="h-3 w-3 text-primary" aria-hidden />
-                          ) : header.column.getIsSorted() === "desc" ? (
-                            <ArrowDown className="h-3 w-3 text-primary" aria-hidden />
-                          ) : null}
-                        </button>
-                      ) : (
-                        flexRender(header.column.columnDef.header, header.getContext())
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length: 12 }).map((_, i) => (
-                  <tr key={i} className={cn(rowH, "border-t border-border")}>
-                    {table.getVisibleLeafColumns().map((col) => (
-                      <td key={col.id} className="px-3">
-                        <Skeleton className="h-3.5 w-[70%]" />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : error ? (
-                <tr>
-                  <td colSpan={table.getVisibleLeafColumns().length}>
-                    <div className="flex flex-col items-center gap-2 py-16 text-center">
-                      <p className="text-[14px] font-semibold text-foreground">
-                        Something went wrong
-                      </p>
-                      <p className="max-w-sm text-[12px] text-faint">{error}</p>
-                      {onRetry ? (
-                        <Button variant="secondary" size="sm" onClick={onRetry}>
-                          Try again
-                        </Button>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ) : table.getRowModel().rows.length === 0 ? (
-                <tr>
-                  <td colSpan={table.getVisibleLeafColumns().length}>
-                    <div className="flex flex-col items-center gap-2 py-16 text-center">
-                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-neutral-soft">
-                        <Inbox className="h-5 w-5 text-faint" aria-hidden />
-                      </span>
-                      <p className="text-[14px] font-semibold text-foreground">
-                        {emptyTitle}
-                      </p>
-                      <p className="max-w-sm text-[12px] text-faint">{emptyDescription}</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                table.getRowModel().rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                    className={cn(
-                      rowH,
-                      "group border-t border-border transition-colors",
-                      onRowClick && "cursor-pointer",
-                      row.getIsSelected() ? "bg-primary-soft/60" : "hover:bg-surface-sunken"
-                    )}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <td
-                        key={cell.id}
-                        className={cn(
-                          "whitespace-nowrap px-3 align-middle",
-                          isStickyRight(cell.column.columnDef.meta) &&
-                            cn(
-                              "sticky right-0 z-[1] shadow-[inset_1px_0_0_var(--border)]",
-                              "before:pointer-events-none before:absolute before:inset-y-0 before:-left-3 before:w-3 before:bg-gradient-to-r before:from-transparent before:to-[var(--surface)]",
-                              row.getIsSelected()
-                                ? "bg-primary-soft"
-                                : "bg-surface group-hover:bg-surface-sunken"
-                            )
-                        )}
-                      >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
+        <SelectionBanner
+          pageCount={pageIds.length}
+          pageAllSelected={pageIds.length > 0 && pageIds.every((id) => rowSelection[id])}
+          total={total}
+          selectedCount={selectedCount}
+          allMatching={props.allMatchingSelected ?? false}
+          onSelectAllMatching={props.onAllMatchingSelectedChange ? () => props.onAllMatchingSelectedChange?.(true) : undefined}
+          onClear={() => {
+            setRowSelection({});
+            props.onAllMatchingSelectedChange?.(false);
+          }}
+        />
+        <HeaderDndContext table={table} onReorder={reorder}>
+        <div className="relative flex min-h-0 flex-1 flex-col">
+        {props.hideToolbar ? (
+          // External toolbar (useGrid + GridToolbar): pin the chooser to the header row's right end (Logiwa parity).
+          <div className="absolute right-1 top-1 z-30 rounded-md bg-surface shadow-[-8px_0_8px_-4px_var(--surface)]">
+            <ColumnChooser columns={chooserColumns} prefs={prefs.prefs} onApply={(patch) => prefs.update(patch)} onReset={prefs.reset} size="sm" />
+          </div>
+        ) : null}
+        {/* Capped at the viewport so long grids scroll inside the frame and the sticky header stays visible. */}
+        <div ref={scrollRef} className="ks-scroll max-h-[calc(100dvh-8rem)] min-h-0 flex-1 overflow-auto">
+          <table className={cn("w-full min-w-max border-collapse text-[13px]", sizingInfo.isResizingColumn && "select-none")}>
+            <DataGridHeader table={table} sort={sort} onSort={(field, additive) => setSort(nextSort(sort, field, additive))} onReorder={reorder} stickyRightOffset={stickyRightOffset} />
+            <DataGridBody
+              table={table}
+              density={density}
+              loading={loading}
+              error={error}
+              onRetry={onRetry}
+              emptyTitle={props.emptyTitle ?? "Nothing here yet"}
+              emptyDescription={props.emptyDescription ?? "Adjust your filters or create a new record to get started."}
+              emptyAction={props.emptyAction}
+              onRowClick={onRowClick}
+              renderExpanded={renderExpanded}
+              stickyRightOffset={stickyRightOffset}
+              scrollRef={scrollRef}
+            />
           </table>
         </div>
-
-        {/* footer */}
-        <div className="flex items-center justify-between gap-3 border-t border-border bg-surface px-4 py-2">
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-md border border-border p-0.5">
-              {(
-                [
-                  ["comfortable", "Large"],
-                  ["compact", "Small"],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setDensity(key)}
-                  className={cn(
-                    "rounded px-2 py-0.5 text-[11px] font-semibold transition-colors",
-                    density === key
-                      ? "bg-primary text-white"
-                      : "text-secondary hover:bg-surface-sunken"
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {onPageSizeChange ? (
-              <select
-                aria-label="Rows per page"
-                value={pageSize}
-                onChange={(e) => onPageSizeChange(Number(e.target.value))}
-                className="h-7 rounded-md border border-border bg-surface px-1.5 text-[11px] font-medium text-secondary focus:outline-none focus:ring-2 focus:ring-primary/25"
-              >
-                {[25, 50, 100].map((n) => (
-                  <option key={n} value={n}>
-                    Show {n} items
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            {selectedCount > 0 ? (
-              <span className="text-[11px] font-medium text-primary">
-                {selectedCount} selected
-              </span>
-            ) : null}
-          </div>
-
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="First page"
-              disabled={page <= 1}
-              onClick={() => onPageChange(1)}
-            >
-              <ChevronsLeft className="h-3.5 w-3.5" aria-hidden />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Previous page"
-              disabled={page <= 1}
-              onClick={() => onPageChange(page - 1)}
-            >
-              <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
-            </Button>
-            <span className="px-1 text-[12px] tabular-nums text-secondary">
-              <span className="font-semibold text-foreground">{page}</span> / {pageCount}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Next page"
-              disabled={page >= pageCount}
-              onClick={() => onPageChange(page + 1)}
-            >
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Last page"
-              disabled={page >= pageCount}
-              onClick={() => onPageChange(pageCount)}
-            >
-              <ChevronsRight className="h-3.5 w-3.5" aria-hidden />
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              variant="success-outline"
-              size="sm"
-              onClick={() => exportCsv(data, columns, exportName)}
-            >
-              <Download className="h-3.5 w-3.5" aria-hidden />
-              Export CSV
-            </Button>
-            <span className="text-[12px] text-secondary">
-              {from.toLocaleString()}–{to.toLocaleString()} of{" "}
-              <span className="font-semibold text-foreground tabular-nums">
-                {formatNumber(total)}
-              </span>
-            </span>
-          </div>
         </div>
+        </HeaderDndContext>
+        <GridFooter
+          total={total}
+          page={page}
+          pageSize={pageSize}
+          selectedCount={selectedCount}
+          density={density}
+          onDensityChange={setDensity}
+          onPageChange={onPageChange}
+          onPageSizeChange={changePageSize}
+          trailing={
+            gridKey && props.queryString !== undefined ? (
+              <ExportButton gridKey={gridKey} queryString={props.queryString} columns={props.exportColumns} total={total} />
+            ) : (
+              <Button variant="success-outline" size="sm" disabled={data.length === 0} onClick={() => exportCsv(data, columns, props.exportName ?? "export")}>
+                <Download className="h-3.5 w-3.5" aria-hidden />
+                Export CSV
+              </Button>
+            )
+          }
+        />
       </div>
     </div>
   );

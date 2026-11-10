@@ -1,43 +1,14 @@
-import { connection } from "next/server";
-import { z } from "zod";
-import {
-  badRequest,
-  listQuerySchema,
-  ok,
-  queryOf,
-  requireSession,
-  serverError,
-  zodMessage,
-} from "@/server/api-utils";
-import {
-  listAtp,
-  listInventoryByLocation,
-  listTotalInventory,
-} from "@/server/repositories/inventory";
+/** `GET /api/inventory` — Total Inventory grid (grid grammar; spec 04 §1). */
+import { defineRoute } from "@/server/api/define-route";
+import { listResult } from "@/server/api/envelope";
+import { listTotalInventory } from "@/server/repositories/inventory-total";
+import { INVENTORY_PERMISSIONS as P } from "@/lib/grid-defs/inventory/permissions";
 
-const querySchema = listQuerySchema.extend({
-  view: z.enum(["total", "by-location", "atp"]).default("total"),
-  clientId: z.string().trim().max(60).optional(),
-  zone: z.string().trim().max(20).optional(),
+export const GET = defineRoute({
+  permission: P.totalView,
+  handler: ({ db, auth, grid }) => {
+    const query = grid();
+    const { rows, total } = listTotalInventory(db, auth, query);
+    return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
+  },
 });
-
-export async function GET(request: Request): Promise<Response> {
-  await connection();
-  try {
-    const denied = await requireSession();
-    if (denied) return denied;
-    const parsed = querySchema.safeParse(queryOf(request));
-    if (!parsed.success) return badRequest(zodMessage(parsed.error));
-    const { page, pageSize, search, view, clientId, zone } = parsed.data;
-    const params = { page, pageSize, search, clientId, zone };
-    const { rows, total } =
-      view === "by-location"
-        ? listInventoryByLocation(params)
-        : view === "atp"
-          ? listAtp(params)
-          : listTotalInventory(params);
-    return ok(rows, { total, page, pageSize });
-  } catch (error: unknown) {
-    return serverError("GET /api/inventory", error);
-  }
-}

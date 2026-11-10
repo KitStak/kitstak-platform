@@ -1,23 +1,18 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { OrderDetailPage } from "@/components/orders/detail/order-detail-page";
-import { presentOrderDetail } from "@/components/orders/detail/order-presenter";
+import { getAuthContext } from "@/server/auth/context";
+import { getAppDb } from "@/server/api/db";
 import { getOrderDetail } from "@/server/repositories/orders";
+import { OrderDetailPage } from "@/components/orders/detail/order-detail-page";
 
-export const metadata: Metadata = { title: "Shipment Order" };
+export const metadata: Metadata = { title: "Shipment order" };
+export const instant = false;
 
-export default async function Page({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+/** Edit Shipment Order: the order wizard in free mode + right rail. Accepts the order id or code. */
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const slug = decodeURIComponent(id).toLowerCase();
-  const detail = getOrderDetail(slug);
-  if (!detail) {
-    notFound();
-  }
-  // Bind the rendered record to the route slug (so /orders/so-0083 reads as
-  // SO-0083 everywhere) and normalize seeded timestamps to business hours.
-  return <OrderDetailPage detail={presentOrderDetail(detail, slug)} />;
+  const auth = await getAuthContext();
+  const detail = auth ? getOrderDetail(await getAppDb(), auth, decodeURIComponent(id)) : null;
+  if (!detail) notFound();
+  return <OrderDetailPage initial={detail} />;
 }
