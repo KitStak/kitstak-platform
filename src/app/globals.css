@@ -1,110 +1,144 @@
 @import "tailwindcss";
+@import "../styles/tokens.css";
 
-/* ================= KitStak WMS design tokens ================= */
+/* Dark variant follows the resolved theme attribute (set before paint by the theme script). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ================= Legacy WMS token names =================
+   Design tokens live in src/styles/tokens.css, shared byte-for-byte with KitStak CRM.
+   The names below predate that file. They are aliases only (no literal colours), so
+   existing components keep working and pick up both themes from the shared tokens.
+   New code should use the shared token names directly.
+
+   Not aliased because the shared file already defines the same name:
+   --surface-sunken, --border-strong, --primary, --primary-hover, --success, --warning,
+   --danger, --info, --text-secondary. */
 :root {
   /* canvas + surfaces */
-  /* KitStak identity: crimson #C8102E, maroon #8F122C, navy #0A1628, cream #F3F0E7 */
-  --background: #f5f3ee;
-  --surface: #ffffff;
-  --surface-sunken: #faf9f6;
-  --border: #e6e2d9;
-  --border-strong: #d2ccc0;
+  --background: var(--surface-app);
+  --surface: var(--surface-panel);
+  --border: var(--border-subtle);
 
   /* text */
-  --foreground: #0a1628;
-  --text-body: #2b3648;
-  --text-secondary: #5b6474;
-  /* AA: #5b6474 reaches 4.5:1+ on white and on #f5f3ee (stations-returns REQ-4). */
-  --text-faint: #5b6474;
+  --foreground: var(--text-primary);
+  --text-body: var(--text-secondary);
+  --text-faint: var(--text-muted);
 
-  /* brand */
-  --nav: #0a1628;
-  --nav-hover: #16253d;
-  --nav-active: #c8102e14;
-  --primary: #c8102e;
-  --primary-hover: #a50d26;
-  --primary-soft: #fcecee;
+  /* top bar */
+  --nav: var(--brand-navy);
+  --nav-hover: color-mix(in srgb, var(--brand-navy) 88%, white);
+  --nav-active: color-mix(in srgb, var(--primary) 8%, transparent);
 
-  /* semantic */
-  --success: #027a48;
-  --success-soft: #ecfdf3;
-  --warning: #b54708;
-  --warning-soft: #fff6e6;
-  --danger: #b42318;
-  --danger-soft: #fef3f2;
-  --info: #026aa2;
-  --info-soft: #e0f2fe;
-  --neutral: #475467;
-  --neutral-soft: #f2f4f7;
+  /* brand + semantic tints */
+  --primary-soft: var(--primary-subtle);
+  --success-soft: var(--success-subtle);
+  --warning-soft: var(--warning-subtle);
+  --danger-soft: var(--danger-subtle);
+  --info-soft: var(--info-subtle);
+  --neutral: var(--text-muted);
+  --neutral-soft: var(--surface-sunken);
 
-  --ring: rgba(200, 16, 46, 0.35);
-
-  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.1), 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.1), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
-  --shadow-lg: 0 12px 16px -4px rgba(16, 24, 40, 0.08), 0 4px 6px -2px rgba(16, 24, 40, 0.03);
-}
-
-:root[data-theme="dark"] {
-  --background: #070f1d;
-  --surface: #0f1b2e;
-  --surface-sunken: #0b1525;
-  --border: #1e2b42;
-  --border-strong: #2a3a55;
-  --foreground: #f3f0e7;
-  --text-body: #d5d2c8;
-  --text-secondary: #9aa3b2;
-  --text-faint: #7a8496;
-  --nav: #050c18;
-  --nav-hover: #13213a;
-  --primary: #e8344f;
-  --primary-hover: #f05a70;
-  --primary-soft: #2a1220;
-  --ring: rgba(232, 52, 79, 0.45);
-  --success: #3ccb7f;
-  --success-soft: #0f2a1d;
-  --warning: #f5a623;
-  --warning-soft: #2d2008;
-  --danger: #f97066;
-  --danger-soft: #331210;
-  --info: #38bdf8;
-  --info-soft: #0b2434;
-  --neutral: #94a3b8;
-  --neutral-soft: #1e2532;
+  --ring: color-mix(in srgb, var(--focus-ring) 40%, transparent);
 }
 
 @theme inline {
+  /* ---- legacy WMS utility names (bg-surface, text-secondary, border-border, ...) ---- */
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-sunken: var(--surface-sunken);
   --color-border: var(--border);
-  --color-border-strong: var(--border-strong);
   --color-foreground: var(--foreground);
   --color-body: var(--text-body);
-  --color-secondary: var(--text-secondary);
+  /* WMS `text-secondary` has always meant the muted tone. */
+  --color-secondary: var(--text-muted);
   --color-faint: var(--text-faint);
   --color-nav: var(--nav);
   --color-nav-hover: var(--nav-hover);
-  --color-primary: var(--primary);
-  --color-primary-hover: var(--primary-hover);
   --color-primary-soft: var(--primary-soft);
-  --color-success: var(--success);
   --color-success-soft: var(--success-soft);
-  --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
-  --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
-  --color-info: var(--info);
   --color-info-soft: var(--info-soft);
   --color-neutral: var(--neutral);
   --color-neutral-soft: var(--neutral-soft);
+  /* As text, the semantic and brand colours use their AA `-text` step in both themes;
+     as fills (`bg-success`, `border-danger`) they stay the solid colour. */
+  --text-color-primary: var(--primary-text);
+  --text-color-success: var(--success-text);
+  --text-color-warning: var(--warning-text);
+  --text-color-danger: var(--danger-text);
+  --text-color-info: var(--info-text);
+
+  /* ---- shared utility names (identical to KitStak CRM) ---- */
+  --color-app: var(--surface-app);
+  --color-panel: var(--surface-panel);
+  --color-raised: var(--surface-raised);
+  --color-sunken: var(--surface-sunken);
+  --color-muted: var(--surface-muted);
+  --color-hover: var(--surface-hover);
+  --color-pressed: var(--surface-pressed);
+  --color-selected: var(--surface-selected);
+  --color-selected-hover: var(--surface-selected-hover);
+  --color-highlight: var(--surface-highlight);
+  --color-inverse: var(--surface-inverse);
+  --color-overlay: var(--surface-overlay);
+  --color-skeleton: var(--surface-skeleton);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-border-input: var(--border-input);
+  --color-border-input-hover: var(--border-input-hover);
+
+  --color-fg: var(--text-primary);
+  --color-fg-secondary: var(--text-secondary);
+  --color-fg-muted: var(--text-muted);
+  --color-fg-disabled: var(--text-disabled);
+  --color-fg-placeholder: var(--text-placeholder);
+  --color-fg-inverse: var(--text-inverse);
+  --color-fg-link: var(--text-link);
+  --color-icon: var(--icon-default);
+  --color-icon-strong: var(--icon-strong);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-selected: var(--primary-selected);
+  --color-primary-selected-hover: var(--primary-selected-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-text: var(--primary-text);
+  --color-focus: var(--focus-ring);
+
+  --color-success: var(--success);
+  --color-success-hover: var(--success-hover);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-hover: var(--warning-hover);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-text: var(--warning-text);
+  --color-warning-accent: var(--warning-accent);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-active: var(--danger-active);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-danger-text: var(--danger-text);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-text: var(--info-text);
+
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, sans-serif;
   --font-display: var(--font-bebas), "Oswald", "Arial Narrow", sans-serif;
-  --shadow-xs: var(--shadow-xs);
-  --shadow-sm: var(--shadow-sm);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
+
+  --shadow-xs: var(--elevation-xs);
+  --shadow-sm: var(--elevation-sm);
+  --shadow-md: var(--elevation-md);
+  --shadow-lg: var(--elevation-lg);
+  --shadow-popover: var(--elevation-popover);
+  --shadow-modal: var(--elevation-modal);
+  --shadow-sticky: var(--elevation-sticky);
 }
 
 /* Default border colour. MUST stay inside @layer base: an unlayered rule here

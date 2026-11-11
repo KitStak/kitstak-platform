@@ -1,0 +1,810 @@
+/*
+ * KitStak design tokens: the single source of truth for color, type, space, depth and motion.
+ *
+ * SHARED FILE. This file is byte-identical in KitStakCRM and KitStakWMS
+ * (src/styles/tokens.css in both). A unit test in each repo pins its SHA-256, so an edit made
+ * in one repo fails that repo's tests until the pinned hash is updated, and the same file and
+ * hash must then be copied to the other repo. App-specific tokens and legacy aliases belong in
+ * each app's globals.css, never here.
+ *
+ * Themes
+ *   - Light is primary and is the default.
+ *   - Dark applies when <html data-theme="dark">, or when the OS prefers dark and the user has
+ *     not forced light (<html data-theme="light">). Each app's theme script writes the resolved
+ *     theme to data-theme before first paint.
+ *
+ * Label palette
+ *   Every label color has:
+ *     --label-<name>          pill background (user-picked label fills, kanban column headers)
+ *     --label-<name>-hover    pill hover
+ *     --label-<name>-subtle   tinted surface (status pills, chips)
+ *     --label-<name>-fg       text on the solid fill, chosen per color for >= 4.5:1 (WCAG AA):
+ *                             white on deep hues (red, blue, purple, berry), ink on bright ones
+ *                             (green, orange, yellow, sky).
+ *     --label-<name>-text     the color as text/icons on panels and on its own -subtle tint
+ *                             (AA on --surface-panel per theme).
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ---------------------------------------------------------------- KitStak brand */
+  --brand-red: #c8102e;
+  --brand-oxblood: #8f122c;
+  --brand-navy: #0a1628;
+  --brand-cream: #f4f1e9;
+  /* Wordtype ink: navy on light surfaces, cream on dark. */
+  --logo-ink: var(--brand-navy);
+  --logo-divider: rgb(10 22 40 / 0.18);
+  --logo-product: #596274;
+
+  /* ---------------------------------------------------------------- Neutral scale */
+  --neutral-0: #ffffff;
+  --neutral-25: #fbfaf6;
+  --neutral-50: #f7f5ef;
+  --neutral-100: #f0ede4;
+  --neutral-150: #e8e4d9;
+  --neutral-200: #dfdace;
+  --neutral-300: #c9c3b5;
+  --neutral-400: #a19c91;
+  --neutral-500: #747a86;
+  --neutral-600: #566072;
+  --neutral-700: #3c4659;
+  --neutral-800: #263247;
+  --neutral-900: #142036;
+  --neutral-950: #0a1628;
+
+  /* ---------------------------------------------------------------- Primary scale */
+  --primary-50: #fdf0f2;
+  --primary-100: #fadbe0;
+  --primary-200: #f4b8c2;
+  --primary-300: #ec8b9a;
+  --primary-400: #e05268;
+  --primary-500: #d42a45;
+  --primary-600: #c8102e;
+  --primary-700: #a50d26;
+  --primary-800: #8f122c;
+  --primary-900: #6e0e22;
+
+  /* ---------------------------------------------------------------- Surfaces */
+  --surface-app: #f4f1e9;
+  --surface-panel: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f8f6f0;
+  /* Selected segment in segmented controls (sunken track): an edge only where surfaces are close. */
+  --segment-ring: transparent;
+  --surface-muted: #faf8f3;
+  --surface-hover: rgb(10 22 40 / 0.06);
+  --surface-pressed: rgb(10 22 40 / 0.11);
+  --surface-selected: #fbe6ea;
+  --surface-selected-hover: #f7d5dc;
+  --surface-highlight: #fdf3f4;
+  --surface-inverse: #0a1628;
+  --surface-overlay: rgb(10 22 40 / 0.55);
+  --surface-skeleton: #ece8de;
+  --surface-skeleton-shine: #f7f5ef;
+
+  /* ---------------------------------------------------------------- Borders */
+  --border-subtle: #e9e4d8;
+  --border-default: #dcd6c8;
+  --border-strong: #c3bcaa;
+  --border-input: #cec7b6;
+  --border-input-hover: #9c9587;
+
+  /* ---------------------------------------------------------------- Text & icons */
+  --text-primary: #0a1628;
+  --text-secondary: #3a4558;
+  --text-muted: #596274;
+  --text-disabled: rgb(10 22 40 / 0.38);
+  --text-placeholder: #5f6878;
+  /* Search-match highlight (<mark>) */
+  --mark-bg: var(--label-yellow-light-subtle);
+  --mark-fg: var(--text-primary);
+  --text-inverse: #ffffff;
+  --text-link: #a50d26;
+  --icon-default: #4f596b;
+  --icon-strong: #0a1628;
+
+  /* ---------------------------------------------------------------- Primary roles */
+  --primary: var(--primary-600);
+  --primary-hover: var(--primary-700);
+  --primary-active: var(--primary-800);
+  --primary-subtle: var(--primary-50);
+  --primary-selected: var(--primary-100);
+  --primary-selected-hover: var(--primary-200);
+  --primary-fg: #ffffff;
+  --primary-text: var(--primary-700);
+  --focus-ring: #c8102e;
+  --focus-ring-soft: rgb(200 16 46 / 0.24);
+
+  /* ---------------------------------------------------------------- Semantic */
+  --success: #0e8a52;
+  --success-hover: #0b7344;
+  --success-subtle: #e3f5ec;
+  --success-text: #0b6e41;
+  --warning: #b45f06;
+  --warning-hover: #96500a;
+  --warning-subtle: #fff3df;
+  --warning-text: #8f4b04;
+  --warning-accent: #f5b13d;
+  --danger: #b3112c;
+  --danger-hover: #960e25;
+  --danger-active: #7c0c1f;
+  --danger-subtle: #fbe6e9;
+  --danger-text: #a30e27;
+  --info: #2d5c94;
+  --info-hover: #234c7d;
+  --info-subtle: #e7edf5;
+  --info-text: #244d7f;
+
+  /* ---------------------------------------------------------------- Label palette */
+  --label-green: #00c875;
+  --label-green-hover: #00b46a;
+  --label-green-subtle: #d6f4e7;
+  --label-green-fg: #1f2533;
+  --label-green-text: #00814b;
+  --label-orange: #fdab3d;
+  --label-orange-hover: #f09c2a;
+  --label-orange-subtle: #ffefdb;
+  --label-orange-fg: #1f2533;
+  --label-orange-text: #a26115;
+  --label-red: #e0283f;
+  --label-red-hover: #ca2439;
+  --label-red-subtle: #fadde0;
+  --label-red-fg: #ffffff;
+  --label-red-text: #e0283f;
+  --label-gray: #c2c7d1;
+  --label-gray-hover: #afb3bc;
+  --label-gray-subtle: #f5f6f8;
+  --label-gray-fg: #1f2533;
+  --label-gray-text: #6f7177;
+  --label-blue: #1764e3;
+  --label-blue-hover: #155acc;
+  --label-blue-subtle: #dae6fb;
+  --label-blue-fg: #ffffff;
+  --label-blue-text: #1764e3;
+  --label-dark-blue: #1f4fb0;
+  --label-dark-blue-hover: #1c479e;
+  --label-dark-blue-subtle: #dbe3f2;
+  --label-dark-blue-fg: #ffffff;
+  --label-dark-blue-text: #1f4fb0;
+  --label-purple: #8746f0;
+  --label-purple-hover: #7a3fd8;
+  --label-purple-subtle: #ece1fd;
+  --label-purple-fg: #ffffff;
+  --label-purple-text: #8746f0;
+  --label-pink: #ff5cb6;
+  --label-pink-hover: #f257ad;
+  --label-pink-subtle: #ffe5f3;
+  --label-pink-fg: #1f2533;
+  --label-pink-text: #bc4386;
+  --label-teal: #00b5ad;
+  --label-teal-hover: #00a39c;
+  --label-teal-subtle: #d6f3f2;
+  --label-teal-fg: #1f2533;
+  --label-teal-text: #007e79;
+  --label-yellow: #ffcb1f;
+  --label-yellow-hover: #e6b71c;
+  --label-yellow-subtle: #fff7db;
+  --label-yellow-fg: #1f2533;
+  --label-yellow-text: #8b6e12;
+  --label-lime: #9bd431;
+  --label-lime-hover: #8cbf2c;
+  --label-lime-subtle: #eff8de;
+  --label-lime-fg: #1f2533;
+  --label-lime-text: #5d7e1d;
+  --label-brown: #9a5c30;
+  --label-brown-hover: #8b532b;
+  --label-brown-subtle: #efe5de;
+  --label-brown-fg: #ffffff;
+  --label-brown-text: #9a5c30;
+  --label-sky: #3ab4f2;
+  --label-sky-hover: #34a2da;
+  --label-sky-subtle: #dff3fd;
+  --label-sky-fg: #1f2533;
+  --label-sky-text: #2777a2;
+  --label-berry: #b8245f;
+  --label-berry-hover: #a62056;
+  --label-berry-subtle: #f4dce5;
+  --label-berry-fg: #ffffff;
+  --label-berry-text: #b8245f;
+  --label-indigo: #5357e6;
+  --label-indigo-hover: #4b4ecf;
+  --label-indigo-subtle: #e3e4fb;
+  --label-indigo-fg: #ffffff;
+  --label-indigo-text: #5357e6;
+  --label-peach: #ff7d5c;
+  --label-peach-hover: #e67153;
+  --label-peach-subtle: #ffeae5;
+  --label-peach-fg: #1f2533;
+  --label-peach-text: #b35740;
+  --label-green-light: #9fe3bf;
+  --label-green-light-hover: #87dcaf;
+  --label-green-light-subtle: #d9f4e5;
+  --label-green-light-fg: #1f2533;
+  --label-green-light-text: var(--label-green-text);
+  --label-orange-light: #fcd3a1;
+  --label-orange-light-hover: #fbc583;
+  --label-orange-light-subtle: #feedd9;
+  --label-orange-light-fg: #1f2533;
+  --label-orange-light-text: var(--label-orange-text);
+  --label-red-light: #f6b0bb;
+  --label-red-light-hover: #f395a3;
+  --label-red-light-subtle: #fbdfe4;
+  --label-red-light-fg: #1f2533;
+  --label-red-light-text: var(--label-red-text);
+  --label-blue-light: #b3d1f9;
+  --label-blue-light-hover: #97c0f7;
+  --label-blue-light-subtle: #e1edfd;
+  --label-blue-light-fg: #1f2533;
+  --label-blue-light-text: var(--label-blue-text);
+  --label-purple-light: #d4c3f8;
+  --label-purple-light-hover: #c0a8f5;
+  --label-purple-light-subtle: #eee7fc;
+  --label-purple-light-fg: #1f2533;
+  --label-purple-light-text: var(--label-purple-text);
+  --label-pink-light: #f8c2e0;
+  --label-pink-light-hover: #f5a7d2;
+  --label-pink-light-subtle: #fce7f3;
+  --label-pink-light-fg: #1f2533;
+  --label-pink-light-text: var(--label-pink-text);
+  --label-teal-light: #a3e0e1;
+  --label-teal-light-hover: #8cd8d9;
+  --label-teal-light-subtle: #daf3f3;
+  --label-teal-light-fg: #1f2533;
+  --label-teal-light-text: var(--label-teal-text);
+  --label-yellow-light: #fbe593;
+  --label-yellow-light-hover: #fade75;
+  --label-yellow-light-subtle: #fdf5d4;
+  --label-yellow-light-fg: #1f2533;
+  --label-yellow-light-text: var(--label-yellow-text);
+
+  /* ---------------------------------------------------------------- Elevation */
+  --elevation-xs: 0 1px 2px rgb(10 22 40 / 0.06);
+  --elevation-sm: 0 1px 3px rgb(10 22 40 / 0.08), 0 1px 2px rgb(10 22 40 / 0.05);
+  --elevation-md: 0 4px 10px -2px rgb(10 22 40 / 0.1), 0 2px 4px -2px rgb(10 22 40 / 0.06);
+  --elevation-lg: 0 12px 28px -6px rgb(10 22 40 / 0.16), 0 4px 8px -4px rgb(10 22 40 / 0.08);
+  --elevation-popover: 0 10px 30px -4px rgb(10 22 40 / 0.18), 0 2px 8px rgb(10 22 40 / 0.08),
+    0 0 0 1px rgb(10 22 40 / 0.04);
+  --elevation-modal: 0 24px 64px -12px rgb(10 22 40 / 0.32), 0 8px 20px -8px rgb(10 22 40 / 0.16);
+  --elevation-sticky: 0 4px 6px -4px rgb(10 22 40 / 0.12);
+  /* Legacy alias kept for early consumers. */
+  --shadow-popover: var(--elevation-popover);
+
+  /* ---------------------------------------------------------------- Radii */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-pill: 9999px;
+
+  /* ---------------------------------------------------------------- Spacing (4px grid) */
+  --space-0: 0px;
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---------------------------------------------------------------- Typography */
+  --font-ui: var(--font-barlow), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-barlow-condensed), var(--font-barlow), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Code', Menlo, Consolas, monospace;
+  --type-2xs: 11px;
+  --type-2xs-lh: 14px;
+  --type-xs: 12px;
+  --type-xs-lh: 16px;
+  --type-sm: 13px;
+  --type-sm-lh: 18px;
+  --type-base: 14px;
+  --type-base-lh: 20px;
+  --type-md: 16px;
+  --type-md-lh: 22px;
+  --type-lg: 18px;
+  --type-lg-lh: 24px;
+  --type-xl: 24px;
+  --type-xl-lh: 30px;
+  --type-2xl: 32px;
+  --type-2xl-lh: 40px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ---------------------------------------------------------------- Motion */
+  --duration-instant: 70ms;
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --duration-slow: 250ms;
+  --duration-slower: 400ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-enter: cubic-bezier(0, 0, 0.35, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1.25);
+
+  /* ---------------------------------------------------------------- Z-index layers */
+  --z-base: 0;
+  --z-raised: 1;
+  --z-sticky: 10;
+  --z-header: 20;
+  --z-sidebar: 30;
+  --z-sidebar-peek: 40;
+  --z-dropdown: 1000;
+  --z-overlay: 1100;
+  --z-modal: 1200;
+  --z-popover: 1300;
+  --z-toast: 1400;
+  --z-tooltip: 1500;
+
+  /* ---------------------------------------------------------------- Layout */
+  --row-height: 36px;
+  --row-height-compact: 32px;
+  --row-height-comfortable: 40px;
+  --topbar-height: 52px;
+  --sidebar-width: 264px;
+  --sidebar-width-min: 216px;
+  --sidebar-width-max: 440px;
+  --sidebar-rail-width: 56px;
+  --control-height-xs: 24px;
+  --control-height-sm: 28px;
+  --control-height-md: 32px;
+  --control-height-lg: 40px;
+}
+
+/* Dark theme: forced */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --logo-ink: var(--brand-cream);
+  --logo-divider: rgb(244 241 233 / 0.22);
+  --logo-product: #a3acbb;
+
+  --neutral-0: #060d19;
+  --neutral-25: #08111f;
+  --neutral-50: #0a1628;
+  --neutral-100: #0f1d33;
+  --neutral-150: #14243d;
+  --neutral-200: #1a2c48;
+  --neutral-300: #263a5a;
+  --neutral-400: #3b4e6e;
+  --neutral-500: #5b6b87;
+  --neutral-600: #8592a8;
+  --neutral-700: #aab3c3;
+  --neutral-800: #cfd3da;
+  --neutral-900: #e9e6dd;
+  --neutral-950: #f4f1e9;
+
+  --primary-50: #2a0c15;
+  --primary-100: #3a0f1c;
+  --primary-200: #521324;
+  --primary-300: #7a1530;
+  --primary-400: #a8173a;
+  --primary-500: #d42a45;
+  --primary-600: #c8102e;
+  --primary-700: #e04a60;
+  --primary-800: #ec7a8b;
+  --primary-900: #f4a9b4;
+
+  --surface-app: #060d19;
+  --surface-panel: #0a1628;
+  --surface-raised: #12213a;
+  --surface-sunken: #071020;
+  --segment-ring: var(--border-strong);
+  --surface-muted: #0f1d33;
+  --surface-hover: rgb(244 241 233 / 0.07);
+  --surface-pressed: rgb(244 241 233 / 0.12);
+  --surface-selected: #1c2f4d;
+  --surface-selected-hover: #233a5d;
+  --surface-highlight: #1f1222;
+  --surface-inverse: #f4f1e9;
+  --surface-overlay: rgb(3 7 14 / 0.7);
+  --surface-skeleton: #15253e;
+  --surface-skeleton-shine: #1d304d;
+
+  --border-subtle: #16263f;
+  --border-default: #20324f;
+  --border-strong: #314767;
+  --border-input: #2a3e5d;
+  --border-input-hover: #455b7d;
+
+  --text-primary: #f4f1e9;
+  --text-secondary: #c9cdd4;
+  --text-muted: #a3acbb;
+  --text-disabled: rgb(244 241 233 / 0.38);
+  --text-placeholder: #8b95a6;
+  --mark-bg: #521324;
+  --mark-fg: #fbe3e7;
+  --text-inverse: #0a1628;
+  --text-link: #f07a8b;
+  --icon-default: #a8b1c0;
+  --icon-strong: #f4f1e9;
+
+  --primary: #c8102e;
+  --primary-hover: #d42a45;
+  --primary-active: #a50d26;
+  --primary-subtle: #2a0c15;
+  --primary-selected: #1c2f4d;
+  --primary-selected-hover: #233a5d;
+  --primary-fg: #ffffff;
+  --primary-text: #f07a8b;
+  --focus-ring: #e04a60;
+  --focus-ring-soft: rgb(224 74 96 / 0.35);
+
+  --success: #178a55;
+  --success-hover: #14794b;
+  --success-subtle: #12302a;
+  --success-text: #5fd39b;
+  --warning: #a85c0c;
+  --warning-hover: #96520a;
+  --warning-subtle: #3a2b17;
+  --warning-text: #f5b968;
+  --warning-accent: #f5b13d;
+  --danger: #c8233d;
+  --danger-hover: #d63a52;
+  --danger-active: #a81b32;
+  --danger-subtle: #3a0f1c;
+  --danger-text: #ff8b9c;
+  --info: #3c78c2;
+  --info-hover: #5a90d4;
+  --info-subtle: #12264a;
+  --info-text: #8db7ec;
+
+  --elevation-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --elevation-sm: 0 1px 3px rgb(0 0 0 / 0.45), 0 1px 2px rgb(0 0 0 / 0.3);
+  --elevation-md: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.35);
+  --elevation-lg: 0 14px 32px -6px rgb(0 0 0 / 0.6), 0 4px 10px -4px rgb(0 0 0 / 0.4);
+  --elevation-popover: 0 12px 32px -4px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.4),
+    0 0 0 1px rgb(255 255 255 / 0.06);
+  --elevation-modal: 0 28px 72px -12px rgb(0 0 0 / 0.75), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --elevation-sticky: 0 4px 6px -4px rgb(0 0 0 / 0.5);
+
+  --label-green-subtle: #133c34;
+  --label-orange-subtle: #463122;
+  --label-red-subtle: #522232;
+  --label-gray-subtle: #323744;
+  --label-blue-subtle: #1b365f;
+  --label-dark-blue-subtle: #1c2c4d;
+  --label-purple-subtle: #3a2c5d;
+  --label-pink-subtle: #502045;
+  --label-teal-subtle: #163b44;
+  --label-yellow-subtle: #3e351e;
+  --label-lime-subtle: #2b3b24;
+  --label-brown-subtle: #3f3230;
+  --label-sky-subtle: #1a3952;
+  --label-berry-subtle: #45233a;
+  --label-indigo-subtle: #2a2e5a;
+  --label-peach-subtle: #4f2925;
+  --label-green-light-subtle: #3c504f;
+  --label-orange-light-subtle: #534c48;
+  --label-red-light-subtle: #52434e;
+  --label-blue-light-subtle: #414c5e;
+  --label-purple-light-subtle: #49485e;
+  --label-pink-light-subtle: #524858;
+  --label-teal-light-subtle: #3d4f58;
+  --label-yellow-light-subtle: #535144;
+
+  /* Label text on dark panels (AA). */
+  --label-green-text: #00b86b;
+  --label-orange-text: #ff9a1f;
+  --label-red-text: #e8576a;
+  --label-gray-text: #c2c7d1;
+  --label-blue-text: #4a86e9;
+  --label-dark-blue-text: #6e8dcb;
+  --label-purple-text: #a16ef4;
+  --label-pink-text: #ff5cb6;
+  --label-teal-text: #00b5ad;
+  --label-yellow-text: #ffcb1f;
+  --label-lime-text: #9bd431;
+  --label-brown-text: #b0805d;
+  --label-sky-text: #3ab4f2;
+  --label-berry-text: #ce6891;
+  --label-indigo-text: #8183ec;
+  --label-peach-text: #ff7d5c;
+  /* Label pills dimmed for dark canvases (R-9): lower L/C, AA text re-verified. */
+  --label-berry: #98194d;
+  --label-berry-hover: #8b0342;
+  --label-berry-fg: #ffffff;
+  --label-blue: #0f51be;
+  --label-blue-hover: #0045b0;
+  --label-blue-fg: #ffffff;
+  --label-blue-light: #8aabd7;
+  --label-blue-light-hover: #7a9bc7;
+  --label-blue-light-fg: #1f2533;
+  --label-brown: #7f4b25;
+  --label-brown-hover: #734019;
+  --label-brown-fg: #ffffff;
+  --label-dark-blue: #143d8f;
+  --label-dark-blue-hover: #093182;
+  --label-dark-blue-fg: #ffffff;
+  --label-gray: #3a4050;
+  --label-gray-hover: #444b5d;
+  --label-gray-fg: #e6e9ef;
+  --label-green: #00b06a;
+  --label-green-hover: #00a060;
+  --label-green-fg: #1f2533;
+  --label-green-light: #6fbe97;
+  --label-green-light-hover: #5fae87;
+  --label-green-light-fg: #1f2533;
+  --label-indigo: #4346c0;
+  --label-indigo-hover: #3a39b3;
+  --label-indigo-fg: #ffffff;
+  --label-lime: #8abb33;
+  --label-lime-hover: #7eae21;
+  --label-lime-fg: #1f2533;
+  --label-orange: #e89a3a;
+  --label-orange-hover: #d98c2f;
+  --label-orange-fg: #1f2533;
+  --label-orange-light: #d7aa71;
+  --label-orange-light-hover: #c69960;
+  --label-orange-light-fg: #1f2533;
+  --label-peach: #e8775b;
+  --label-peach-hover: #da6b4f;
+  --label-peach-fg: #1f2533;
+  --label-pink: #f265b1;
+  --label-pink-hover: #e458a4;
+  --label-pink-fg: #1f2533;
+  --label-pink-light: #d499ba;
+  --label-pink-light-hover: #c389aa;
+  --label-pink-light-fg: #1f2533;
+  --label-purple: #7039ca;
+  --label-purple-hover: #662abc;
+  --label-purple-fg: #ffffff;
+  --label-purple-light: #af9cd7;
+  --label-purple-light-hover: #9f8cc6;
+  --label-purple-light-fg: #1f2533;
+  --label-red: #bd2034;
+  --label-red-hover: #af0728;
+  --label-red-fg: #ffffff;
+  --label-red-light: #d58895;
+  --label-red-light-hover: #c57986;
+  --label-red-light-fg: #1f2533;
+  --label-sky: #3ca2d7;
+  --label-sky-hover: #2c95ca;
+  --label-sky-fg: #1f2533;
+  --label-teal: #2caba3;
+  --label-teal-hover: #149e97;
+  --label-teal-fg: #1f2533;
+  --label-teal-light: #74bbbc;
+  --label-teal-light-hover: #64aaac;
+  --label-teal-light-fg: #1f2533;
+  --label-yellow: #e2b62d;
+  --label-yellow-hover: #d5a913;
+  --label-yellow-fg: #1f2533;
+  --label-yellow-light: #d4ba5a;
+  --label-yellow-light-hover: #c2a947;
+  --label-yellow-light-fg: #1f2533;
+}
+
+/* Dark theme: follows the OS unless the user forced light */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --logo-ink: var(--brand-cream);
+    --logo-divider: rgb(244 241 233 / 0.22);
+    --logo-product: #a3acbb;
+
+    --neutral-0: #060d19;
+    --neutral-25: #08111f;
+    --neutral-50: #0a1628;
+    --neutral-100: #0f1d33;
+    --neutral-150: #14243d;
+    --neutral-200: #1a2c48;
+    --neutral-300: #263a5a;
+    --neutral-400: #3b4e6e;
+    --neutral-500: #5b6b87;
+    --neutral-600: #8592a8;
+    --neutral-700: #aab3c3;
+    --neutral-800: #cfd3da;
+    --neutral-900: #e9e6dd;
+    --neutral-950: #f4f1e9;
+
+    --primary-50: #2a0c15;
+    --primary-100: #3a0f1c;
+    --primary-200: #521324;
+    --primary-300: #7a1530;
+    --primary-400: #a8173a;
+    --primary-500: #d42a45;
+    --primary-600: #c8102e;
+    --primary-700: #e04a60;
+    --primary-800: #ec7a8b;
+    --primary-900: #f4a9b4;
+
+    --surface-app: #060d19;
+    --surface-panel: #0a1628;
+    --surface-raised: #12213a;
+    --surface-sunken: #071020;
+    --segment-ring: var(--border-strong);
+    --surface-muted: #0f1d33;
+    --surface-hover: rgb(244 241 233 / 0.07);
+    --surface-pressed: rgb(244 241 233 / 0.12);
+    --surface-selected: #1c2f4d;
+    --surface-selected-hover: #233a5d;
+    --surface-highlight: #1f1222;
+    --surface-inverse: #f4f1e9;
+    --surface-overlay: rgb(3 7 14 / 0.7);
+    --surface-skeleton: #15253e;
+    --surface-skeleton-shine: #1d304d;
+
+    --border-subtle: #16263f;
+    --border-default: #20324f;
+    --border-strong: #314767;
+    --border-input: #2a3e5d;
+    --border-input-hover: #455b7d;
+
+    --text-primary: #f4f1e9;
+    --text-secondary: #c9cdd4;
+    --text-muted: #a3acbb;
+    --text-disabled: rgb(244 241 233 / 0.38);
+    --text-placeholder: #8b95a6;
+    --mark-bg: #521324;
+    --mark-fg: #fbe3e7;
+    --text-inverse: #0a1628;
+    --text-link: #f07a8b;
+    --icon-default: #a8b1c0;
+    --icon-strong: #f4f1e9;
+
+    --primary: #c8102e;
+    --primary-hover: #d42a45;
+    --primary-active: #a50d26;
+    --primary-subtle: #2a0c15;
+    --primary-selected: #1c2f4d;
+    --primary-selected-hover: #233a5d;
+    --primary-fg: #ffffff;
+    --primary-text: #f07a8b;
+    --focus-ring: #e04a60;
+    --focus-ring-soft: rgb(224 74 96 / 0.35);
+
+    --success: #178a55;
+    --success-hover: #14794b;
+    --success-subtle: #12302a;
+    --success-text: #5fd39b;
+    --warning: #a85c0c;
+    --warning-hover: #96520a;
+    --warning-subtle: #3a2b17;
+    --warning-text: #f5b968;
+    --warning-accent: #f5b13d;
+    --danger: #c8233d;
+    --danger-hover: #d63a52;
+    --danger-active: #a81b32;
+    --danger-subtle: #3a0f1c;
+    --danger-text: #ff8b9c;
+    --info: #3c78c2;
+    --info-hover: #5a90d4;
+    --info-subtle: #12264a;
+    --info-text: #8db7ec;
+
+    --elevation-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+    --elevation-sm: 0 1px 3px rgb(0 0 0 / 0.45), 0 1px 2px rgb(0 0 0 / 0.3);
+    --elevation-md: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.35);
+    --elevation-lg: 0 14px 32px -6px rgb(0 0 0 / 0.6), 0 4px 10px -4px rgb(0 0 0 / 0.4);
+    --elevation-popover: 0 12px 32px -4px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.4),
+      0 0 0 1px rgb(255 255 255 / 0.06);
+    --elevation-modal: 0 28px 72px -12px rgb(0 0 0 / 0.75), 0 0 0 1px rgb(255 255 255 / 0.06);
+    --elevation-sticky: 0 4px 6px -4px rgb(0 0 0 / 0.5);
+
+    --label-green-subtle: #133c34;
+    --label-orange-subtle: #463122;
+    --label-red-subtle: #522232;
+    --label-gray-subtle: #323744;
+    --label-blue-subtle: #1b365f;
+    --label-dark-blue-subtle: #1c2c4d;
+    --label-purple-subtle: #3a2c5d;
+    --label-pink-subtle: #502045;
+    --label-teal-subtle: #163b44;
+    --label-yellow-subtle: #3e351e;
+    --label-lime-subtle: #2b3b24;
+    --label-brown-subtle: #3f3230;
+    --label-sky-subtle: #1a3952;
+    --label-berry-subtle: #45233a;
+    --label-indigo-subtle: #2a2e5a;
+    --label-peach-subtle: #4f2925;
+    --label-green-light-subtle: #3c504f;
+    --label-orange-light-subtle: #534c48;
+    --label-red-light-subtle: #52434e;
+    --label-blue-light-subtle: #414c5e;
+    --label-purple-light-subtle: #49485e;
+    --label-pink-light-subtle: #524858;
+    --label-teal-light-subtle: #3d4f58;
+    --label-yellow-light-subtle: #535144;
+
+    /* Label text on dark panels (AA). */
+    --label-green-text: #00b86b;
+    --label-orange-text: #ff9a1f;
+    --label-red-text: #e8576a;
+    --label-gray-text: #c2c7d1;
+    --label-blue-text: #4a86e9;
+    --label-dark-blue-text: #6e8dcb;
+    --label-purple-text: #a16ef4;
+    --label-pink-text: #ff5cb6;
+    --label-teal-text: #00b5ad;
+    --label-yellow-text: #ffcb1f;
+    --label-lime-text: #9bd431;
+    --label-brown-text: #b0805d;
+    --label-sky-text: #3ab4f2;
+    --label-berry-text: #ce6891;
+    --label-indigo-text: #8183ec;
+    --label-peach-text: #ff7d5c;
+    /* Label pills dimmed for dark canvases (R-9): lower L/C, AA text re-verified. */
+    --label-berry: #98194d;
+    --label-berry-hover: #8b0342;
+    --label-berry-fg: #ffffff;
+    --label-blue: #0f51be;
+    --label-blue-hover: #0045b0;
+    --label-blue-fg: #ffffff;
+    --label-blue-light: #8aabd7;
+    --label-blue-light-hover: #7a9bc7;
+    --label-blue-light-fg: #1f2533;
+    --label-brown: #7f4b25;
+    --label-brown-hover: #734019;
+    --label-brown-fg: #ffffff;
+    --label-dark-blue: #143d8f;
+    --label-dark-blue-hover: #093182;
+    --label-dark-blue-fg: #ffffff;
+    --label-gray: #3a4050;
+    --label-gray-hover: #444b5d;
+    --label-gray-fg: #e6e9ef;
+    --label-green: #00b06a;
+    --label-green-hover: #00a060;
+    --label-green-fg: #1f2533;
+    --label-green-light: #6fbe97;
+    --label-green-light-hover: #5fae87;
+    --label-green-light-fg: #1f2533;
+    --label-indigo: #4346c0;
+    --label-indigo-hover: #3a39b3;
+    --label-indigo-fg: #ffffff;
+    --label-lime: #8abb33;
+    --label-lime-hover: #7eae21;
+    --label-lime-fg: #1f2533;
+    --label-orange: #e89a3a;
+    --label-orange-hover: #d98c2f;
+    --label-orange-fg: #1f2533;
+    --label-orange-light: #d7aa71;
+    --label-orange-light-hover: #c69960;
+    --label-orange-light-fg: #1f2533;
+    --label-peach: #e8775b;
+    --label-peach-hover: #da6b4f;
+    --label-peach-fg: #1f2533;
+    --label-pink: #f265b1;
+    --label-pink-hover: #e458a4;
+    --label-pink-fg: #1f2533;
+    --label-pink-light: #d499ba;
+    --label-pink-light-hover: #c389aa;
+    --label-pink-light-fg: #1f2533;
+    --label-purple: #7039ca;
+    --label-purple-hover: #662abc;
+    --label-purple-fg: #ffffff;
+    --label-purple-light: #af9cd7;
+    --label-purple-light-hover: #9f8cc6;
+    --label-purple-light-fg: #1f2533;
+    --label-red: #bd2034;
+    --label-red-hover: #af0728;
+    --label-red-fg: #ffffff;
+    --label-red-light: #d58895;
+    --label-red-light-hover: #c57986;
+    --label-red-light-fg: #1f2533;
+    --label-sky: #3ca2d7;
+    --label-sky-hover: #2c95ca;
+    --label-sky-fg: #1f2533;
+    --label-teal: #2caba3;
+    --label-teal-hover: #149e97;
+    --label-teal-fg: #1f2533;
+    --label-teal-light: #74bbbc;
+    --label-teal-light-hover: #64aaac;
+    --label-teal-light-fg: #1f2533;
+    --label-yellow: #e2b62d;
+    --label-yellow-hover: #d5a913;
+    --label-yellow-fg: #1f2533;
+    --label-yellow-light: #d4ba5a;
+    --label-yellow-light-hover: #c2a947;
+    --label-yellow-light-fg: #1f2533;
+  }
+}
