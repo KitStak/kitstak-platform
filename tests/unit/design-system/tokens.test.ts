@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { cn } from "@/lib/utils";
 
 /**
  * src/styles/tokens.css is shared byte-for-byte with KitStak CRM (same path there).
@@ -135,5 +136,19 @@ describe("legacy WMS token aliases", () => {
     for (const name of LEGACY_UTILITIES) {
       expect(globals, `--color-${name}`).toMatch(new RegExp(`\\n\\s*--color-${name}:`));
     }
+  });
+});
+
+describe("cn", () => {
+  it("keeps a shared-scale font size next to a text colour", () => {
+    expect(cn("text-2xs", "text-fg")).toBe("text-2xs text-fg");
+    expect(cn("text-md", "text-fg-muted")).toBe("text-md text-fg-muted");
+    expect(cn("text-sm", "text-secondary")).toBe("text-sm text-secondary");
+  });
+
+  it("still lets a later size or colour win over an earlier one", () => {
+    expect(cn("text-sm", "text-md")).toBe("text-md");
+    expect(cn("text-2xs", "text-xs")).toBe("text-xs");
+    expect(cn("px-2", false, "px-3")).toBe("px-3");
   });
 });
