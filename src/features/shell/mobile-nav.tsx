@@ -1,7 +1,7 @@
 'use client';
 /**
- * Off-canvas navigation for narrow viewports: the full sidebar slides in from the left over a
- * dimmed backdrop. Closes on route change, Escape, backdrop click or the close button.
+ * Off-canvas navigation below the md breakpoint: everything the top bar navigation holds (Home,
+ * My work, Inbox, CRM, Favorites, Workspaces) slides in from the left over a dimmed backdrop. Closes on route change, Escape, backdrop click or the close button.
  */
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
@@ -18,8 +18,7 @@ import { useShellStore } from './store';
 const DRAWER_WIDTH = 300;
 
 /**
- * Warm the drawer's queries while it is closed (the docked sidebar is not mounted on narrow
- * viewports), so the first open shows real rows instead of skeletons.
+ * Warm the drawer's queries while it is closed (its content is not mounted until it opens), so the first open shows real rows instead of skeletons.
  */
 function useSidebarPrefetch(): void {
   const { org } = useOrg();
@@ -59,7 +58,7 @@ export function MobileNav() {
           className="fixed top-0 bottom-0 left-0 z-[var(--z-modal)] flex flex-col border-r border-border-subtle bg-app shadow-modal outline-none data-[state=closed]:animate-slide-out-left data-[state=open]:animate-slide-in-left"
         >
           <div className="flex h-[var(--topbar-height)] shrink-0 items-center justify-between px-3">
-            <Logo size={26} />
+            <Logo size={22} />
             <DialogPrimitive.Close asChild>
               <IconButton label="Close navigation" icon={<X aria-hidden />} />
             </DialogPrimitive.Close>

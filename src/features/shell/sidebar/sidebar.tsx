@@ -19,7 +19,7 @@ import { CrmSidebarSection } from '@/features/crm/nav/crm-sidebar-section';
 
 const RAIL_WIDTH = 56;
 
-function useActiveWorkspaceId(): { readonly id: string | null; readonly select: (id: string) => void } {
+export function useActiveWorkspaceId(): { readonly id: string | null; readonly select: (id: string) => void } {
   const { org } = useOrg();
   const workspaces = useWorkspaces(org.id);
   const stored = useShellStore((state) => state.activeWorkspaceByOrg[org.id]);
@@ -108,7 +108,8 @@ function PrimaryNav({ collapsed }: { readonly collapsed: boolean }) {
   );
 }
 
-function WorkspacesSection() {
+/** Workspace switcher, add / manage menus, filter and the folder + board tree. */
+export function WorkspacesSection() {
   const { org } = useOrg();
   const pathname = usePathname() ?? '';
   const workspaces = useWorkspaces(org.id);
@@ -256,6 +257,10 @@ function RailShortcuts({ onPeek, peeking }: { readonly onPeek: () => void; reado
 }
 
 /**
+ * Navigation body. On desktop the app uses the top bar (see top-nav/top-nav.tsx); this
+ * component now renders inside the off-canvas drawer below the md breakpoint (variant="drawer").
+ * The docked and rail variants are kept so nothing that imports them breaks.
+ *
  * Left sidebar. Expanded: primary nav, favorites and the workspace tree; resizable and persisted.
  * Collapsed: a 56px icon rail; hovering it (300ms) or clicking a rail shortcut peeks the full
  * sidebar as an overlay without reflowing content. Toggle with the edge button or Ctrl/⌘ + \.

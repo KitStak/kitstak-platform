@@ -313,7 +313,7 @@ export function CommandPalette({ extraGroups }: CommandPaletteProps) {
           close();
         },
       },
-      { id: 'sidebar', label: 'Toggle sidebar', keywords: 'sidebar collapse expand navigation', icon: <PanelLeft aria-hidden className="size-4" />, run: () => { toggleSidebar(); close(); } },
+      { id: 'sidebar', label: 'Open the Workspaces menu', keywords: 'sidebar workspaces boards folders navigation', icon: <PanelLeft aria-hidden className="size-4" />, run: () => { toggleSidebar(); close(); } },
       { id: 'shortcuts', label: 'Keyboard shortcuts', keywords: 'keyboard shortcuts help hotkeys', icon: <Keyboard aria-hidden className="size-4" />, hint: '?', run: () => openPanel('shortcuts') },
     );
     return { nav: list, actions };

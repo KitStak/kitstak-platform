@@ -1,9 +1,9 @@
 /**
- * Shell module: home page, ⌘K palette record search, collapsed-sidebar peek, sidebar "…" menu
+ * Shell module: home page, ⌘K palette record search, top bar Workspaces menu, tree "…" menu
  * with inline rename (restored afterwards), workspace overview, 404 without console errors.
  */
 import type { Page } from '@playwright/test';
-import { appShell, authedTest, expect, sidebar, waitForSettled } from './support/fixtures';
+import { appShell, authedTest, expect, openWorkspacesMenu, waitForSettled } from './support/fixtures';
 
 async function orgBase(page: Page): Promise<string> {
   await page.goto('/');
@@ -53,23 +53,28 @@ authedTest.describe('shell', () => {
     expect(diagnostics.errors).toEqual([]);
   });
 
-  authedTest('collapsed sidebar still reaches boards through the peek', async ({ page }) => {
+  authedTest('the Workspaces menu reaches boards and Ctrl+\\ toggles it', async ({ page }) => {
     await orgBase(page);
     await waitForSettled(page, 120_000);
-    await page.getByTestId('sidebar-toggle').click();
-    await expect(sidebar(page)).toHaveAttribute('data-collapsed', 'true');
-    await page.getByTestId('rail-workspaces').click();
-    const peek = page.getByTestId('sidebar-peek');
-    await expect(peek).toBeVisible();
-    await expect(peek.getByTestId('sidebar-board-link').first()).toBeVisible();
+    const menu = await openWorkspacesMenu(page);
+    const tree = menu.getByTestId('workspace-tree');
+    await expect(tree).toBeVisible({ timeout: 30_000 });
+    if ((await tree.getByTestId('sidebar-board-link').count()) === 0) {
+      await tree.getByTestId('sidebar-folder').first().click(); // boards may all live in folders
+    }
+    await expect(tree.getByTestId('sidebar-board-link').first()).toBeVisible();
     await page.keyboard.press('Escape');
-    await page.getByTestId('sidebar-toggle').click(); // restore for other specs
-    await expect(sidebar(page)).not.toHaveAttribute('data-collapsed', 'true');
+    await expect(menu).toBeHidden();
+    await page.keyboard.press('Control+\\');
+    await expect(menu).toBeVisible();
+    await page.keyboard.press('Control+\\');
+    await expect(menu).toBeHidden();
   });
 
   authedTest('board menu has full actions and rename works inline', async ({ page, diagnostics }) => {
     await orgBase(page);
     await waitForSettled(page, 120_000);
+    await openWorkspacesMenu(page);
     const tree = page.getByTestId('workspace-tree');
     await expect(tree).toBeVisible({ timeout: 30_000 });
     if ((await tree.getByTestId('sidebar-board-link').count()) === 0) {
@@ -102,6 +107,7 @@ authedTest.describe('shell', () => {
   authedTest('drag a board into a folder, then move it back with the menu', async ({ page, diagnostics }) => {
     await orgBase(page);
     await waitForSettled(page, 120_000);
+    await openWorkspacesMenu(page);
     const tree = page.getByTestId('workspace-tree');
     const rootBoards = tree.locator('[data-testid="sidebar-board-link"]:not([data-nested] *)');
     const folder = tree.getByTestId('sidebar-folder').first();
@@ -153,6 +159,7 @@ authedTest.describe('shell', () => {
   authedTest('workspace overview lists content with filters', async ({ page, diagnostics }) => {
     await orgBase(page);
     await waitForSettled(page, 120_000);
+    await openWorkspacesMenu(page);
     await page.getByTestId('workspace-menu').first().click();
     await page.getByRole('menuitem', { name: 'Workspace overview' }).click();
     await expect(page.getByTestId('workspace-page')).toBeVisible({ timeout: 120_000 });
@@ -196,6 +203,7 @@ authedTest.describe('shell', () => {
   authedTest('route progress bar shows during a slow sidebar navigation', async ({ page, diagnostics }) => {
     await orgBase(page);
     await waitForSettled(page, 120_000);
+    await openWorkspacesMenu(page);
     const link = page.getByTestId('workspace-tree').getByTestId('sidebar-board-link').first();
     await expect(link).toBeVisible({ timeout: 60_000 });
     await page.route(/_rsc=/, async (route) => {

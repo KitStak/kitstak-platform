@@ -15,7 +15,7 @@ import { NavRow } from '@/features/shell/sidebar/nav-row';
 import type { CrmObjectKind } from '@/server/services/crm-contracts';
 import { useCrmBoards } from '../api';
 
-interface CrmNavItem {
+export interface CrmNavItem {
   readonly key: string;
   readonly label: string;
   readonly href: string;
@@ -31,7 +31,8 @@ const OBJECTS: readonly { kind: CrmObjectKind; label: string; icon: ReactNode }[
   { kind: 'activities', label: 'Activities', icon: <PhoneCall aria-hidden className="size-[18px]" /> },
 ];
 
-function useCrmNavItems(): CrmNavItem[] | null {
+/** CRM destinations for the viewer: null while loading, [] when CRM is not provisioned. */
+export function useCrmNavItems(): CrmNavItem[] | null {
   const { org } = useOrg();
   const pathname = usePathname() ?? '';
   const boards = useCrmBoards();

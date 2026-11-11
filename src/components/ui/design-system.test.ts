@@ -14,7 +14,7 @@ const lightBlock = tokens.slice(0, tokens.indexOf("[data-theme='dark']"));
  * This hash is pinned in BOTH repos. To change a token: edit the file, update the hash,
  * then copy the file and the hash to the other repo. A one-sided edit fails here.
  */
-const SHARED_TOKENS_SHA256 = 'bf7dd9425fefec6cbad4356feebcfaf8a356940cb4ad4b0465fb9e1f2915bdd0';
+const SHARED_TOKENS_SHA256 = '8c7c20388dca3dc9496937683d1bb018f77624eb459337314f1a8c7150dc45e5';
 
 describe('shared design tokens', () => {
   it('matches the hash pinned in both KitStak repos (no drift)', () => {

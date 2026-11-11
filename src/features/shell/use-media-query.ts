@@ -24,7 +24,10 @@ export function useMediaQuery(query: string, serverValue = false): boolean {
 
 export type ShellLayout = 'drawer' | 'rail' | 'full';
 
-/** drawer: < 768px (off-canvas nav) · rail: < 1024px (icon rail) · full: docked sidebar. */
+/**
+ * drawer: < 768px (off-canvas nav). At md and up the top bar carries the navigation; `rail` and
+ * `full` only differ for components that still size themselves by width.
+ */
 export function useShellLayout(): ShellLayout {
   const isDrawer = useMediaQuery(`(max-width: ${SHELL_BREAKPOINTS.drawer - 0.02}px)`);
   const isRail = useMediaQuery(`(max-width: ${SHELL_BREAKPOINTS.rail - 0.02}px)`);

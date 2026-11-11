@@ -98,8 +98,8 @@ test.describe('crm', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('crm-pipeline-settings')).toBeHidden();
 
-    // Sidebar CRM nav is present and marks Pipeline active.
-    await expect(page.getByTestId('crm-nav-pipeline').first()).toHaveAttribute('aria-current', 'page');
+    // The top bar CRM menu is present and marks the CRM section active on the pipeline.
+    await expect(page.getByTestId('topnav-crm')).toHaveAttribute('aria-current', 'page');
     expect(diagnostics.errors, 'console errors on the pipeline').toEqual([]);
   });
 
