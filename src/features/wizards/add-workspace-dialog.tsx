@@ -160,7 +160,7 @@ export function AddWorkspaceDialog({ open, onClose }: AddWorkspaceDialogProps) {
                           onClick={() => setIcon(value)}
                           className={cn(
                             // Emoji at 20px on a neutral tile: crisp in both themes, consistent across OSes.
-                            'inline-flex size-10 items-center justify-center rounded-lg border text-[20px] leading-none transition-[border-color,background-color,box-shadow,transform] duration-[var(--duration-fast)] ease-out',
+                            'inline-flex size-10 items-center justify-center rounded-lg border text-lg leading-none transition-[border-color,background-color,box-shadow,transform] duration-[var(--duration-fast)] ease-out',
                             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus active:scale-95',
                             selected
                               ? 'border-primary bg-primary-subtle shadow-[0_0_0_1px_var(--primary)]'
@@ -169,7 +169,7 @@ export function AddWorkspaceDialog({ open, onClose }: AddWorkspaceDialogProps) {
                         >
                           {value || (
                             <span
-                              className="inline-flex size-7 items-center justify-center rounded-md bg-[var(--lc-bg)] font-heading text-sm font-semibold text-[var(--lc-fg)]"
+                              className="inline-flex size-7 items-center justify-center rounded-md bg-[var(--lc-bg)] text-sm font-semibold text-[var(--lc-fg)]"
                               style={labelColorStyle(color)}
                               data-testid="workspace-icon-letter"
                             >

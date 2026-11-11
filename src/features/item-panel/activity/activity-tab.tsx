@@ -282,7 +282,7 @@ export function ActivityTab({ item, columns, board, users, term }: ActivityTabPr
         <div className="flex flex-col gap-4" data-testid="activity-log">
           {days.map((day) => (
             <section key={day.key} aria-labelledby={`activity-day-${day.key}`}>
-              <h3 id={`activity-day-${day.key}`} className="sticky top-0 z-[1] bg-raised/95 px-2 py-1.5 text-xs font-semibold tracking-wide text-fg-muted uppercase backdrop-blur-sm">
+              <h3 id={`activity-day-${day.key}`} className="sticky top-0 z-[1] bg-raised/95 px-2 py-1.5 text-xs font-semibold text-fg-muted backdrop-blur-sm">
                 {dayLabel(day.key, now)}
               </h3>
               <ol className="flex flex-col">

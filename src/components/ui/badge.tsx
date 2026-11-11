@@ -58,7 +58,7 @@ export function CountBadge({ count, max = 99, tone = 'danger', ringClassName, cl
   return (
     <span
       className={cn(
-        'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] leading-none font-bold tabular-nums ring-2',
+        'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-2xs leading-none font-bold tabular-nums ring-2',
         tone === 'danger' && 'bg-danger text-white',
         tone === 'primary' && 'bg-primary text-primary-fg',
         tone === 'neutral' && 'bg-muted text-fg-secondary',

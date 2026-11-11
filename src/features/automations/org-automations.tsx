@@ -50,12 +50,12 @@ function DailyBars({ usage }: { readonly usage: AutomationUsageDto }) {
   return (
     <figure className="flex h-full min-h-[220px] flex-col gap-3" data-testid="daily-runs-chart">
       <figcaption className="flex items-baseline justify-between gap-2">
-        <span className="text-xs font-semibold tracking-wide text-fg-muted uppercase">Runs per day · {month}</span>
+        <span className="text-xs font-semibold text-fg-muted ">Runs per day · {month}</span>
         <span className="text-xs text-fg-secondary tabular-nums">{total.toLocaleString()} total</span>
       </figcaption>
       <div className="relative flex min-h-[140px] flex-1 flex-col">
         <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-border-default">
-          <span className="absolute -top-2.5 right-0 bg-panel pl-1.5 text-[11px] leading-5 text-fg-muted tabular-nums">
+          <span className="absolute -top-2.5 right-0 bg-panel pl-1.5 text-2xs leading-5 text-fg-muted tabular-nums">
             {max.toLocaleString()}
           </span>
         </div>
@@ -92,7 +92,7 @@ function DailyBars({ usage }: { readonly usage: AutomationUsageDto }) {
             );
           })}
         </div>
-        <div aria-hidden className="relative mt-1.5 h-8 text-[11px] text-fg-muted tabular-nums">
+        <div aria-hidden className="relative mt-1.5 h-8 text-2xs text-fg-muted tabular-nums">
           {TICK_DAYS.filter((day) => day <= days).map((day) => (
             <span
               key={day}
@@ -147,7 +147,7 @@ function Stat({
       <span className="text-xs leading-4 text-fg-secondary">{label}</span>
       <span
         className={cn(
-          'font-heading text-xl leading-7 font-semibold tabular-nums',
+          'text-xl leading-7 font-semibold tabular-nums',
           tone === 'danger' ? 'text-danger-text' : 'text-fg',
         )}
       >
@@ -210,7 +210,7 @@ export function OrgAutomationsPage() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
         <PageSection className="flex flex-col gap-5 p-5">
           <div>
-            <h2 className="mb-3 font-heading text-md font-semibold text-fg">Runs this month</h2>
+            <h2 className="mb-3 text-md font-semibold text-fg">Runs this month</h2>
             <UsageMeter usage={data} />
           </div>
           {data ? (

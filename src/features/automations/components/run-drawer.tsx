@@ -306,7 +306,7 @@ export function RunDrawer({
                 )}
               </div>
               <section className="flex flex-col gap-1">
-                <h3 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">{context.term}</h3>
+                <h3 className="text-xs font-semibold text-fg-muted ">{context.term}</h3>
                 {run.itemId && run.itemName ? (
                   <Link
                     href={`${routes.board(orgSlug, context.boardId)}?item=${run.itemId}`}
@@ -320,7 +320,7 @@ export function RunDrawer({
                 )}
               </section>
               <section className="flex flex-col gap-2">
-                <h3 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">What triggered it</h3>
+                <h3 className="text-xs font-semibold text-fg-muted ">What triggered it</h3>
                 <p className="text-sm text-fg">{triggerText(event?.type, column?.title, term)}</p>
                 {'before' in (event ?? {}) || 'after' in (event ?? {}) ? (
                   <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start">
@@ -331,14 +331,14 @@ export function RunDrawer({
                 ) : null}
               </section>
               <section className="flex flex-col gap-2">
-                <h3 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">What it did</h3>
+                <h3 className="text-xs font-semibold text-fg-muted ">What it did</h3>
                 {outcomes.length > 0 ? (
                   <ol className="flex flex-col gap-1.5" data-testid="run-outcomes">
                     {outcomes.map((outcome, index) => (
                       <li key={index} className="flex items-start gap-2.5 text-sm leading-6 text-fg">
                         <span
                           aria-hidden
-                          className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-success-subtle text-[11px] font-semibold text-success-text tabular-nums"
+                          className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-success-subtle text-2xs font-semibold text-success-text tabular-nums"
                         >
                           {index + 1}
                         </span>

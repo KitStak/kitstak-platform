@@ -35,7 +35,7 @@ export function WidgetFullscreen({ widget, onClose, dashboardId, filters, filter
         {widget && shown && definition ? (
           <>
             <div className="flex items-center gap-3 border-b border-border-subtle px-6 py-4 pr-14">
-              <RDialog.Title className="truncate font-heading text-xl font-semibold text-fg">{widget.title}</RDialog.Title>
+              <RDialog.Title className="truncate text-xl font-semibold text-fg">{widget.title}</RDialog.Title>
               <RDialog.Description className="sr-only">{definition.label} widget in full screen</RDialog.Description>
             </div>
             <div className="min-h-0 flex-1 p-6">

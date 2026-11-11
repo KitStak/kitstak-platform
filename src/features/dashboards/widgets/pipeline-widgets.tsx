@@ -17,7 +17,7 @@ export function BatteryWidget({ insight, settings, filtered, onConfigure }: Widg
   return (
     <div ref={ref} className="flex h-full min-h-0 flex-col justify-center gap-3" data-testid="battery-widget">
       <div className="flex items-baseline gap-2">
-        <span className="font-heading text-xl font-medium tabular-nums text-fg">
+        <span className="text-xl font-medium tabular-nums text-fg">
           {insight.doneRatio === null ? '—' : formatPercent(insight.doneRatio)}
         </span>
         <span className="text-sm text-fg-secondary">done</span>
@@ -43,7 +43,7 @@ export function BatteryWidget({ insight, settings, filtered, onConfigure }: Widg
                 <span className="truncate">{point.label}</span>
               </span>
               <span className="flex items-baseline gap-1.5">
-                <span className="font-heading text-lg font-medium tabular-nums text-fg">{point.count.toLocaleString('en-US')}</span>
+                <span className="text-lg font-medium tabular-nums text-fg">{point.count.toLocaleString('en-US')}</span>
                 <span className="text-xs text-fg-muted tabular-nums">{formatPercent(point.count / total)}</span>
               </span>
             </li>
@@ -96,7 +96,7 @@ export function FunnelWidget({ insight, settings, filtered, onConfigure }: Widge
                   <span aria-hidden className="h-full w-px bg-border-default" />
                   {stage.conversion !== null && stage.conversion !== undefined ? (
                     <span
-                      className="rounded-full border border-border-subtle bg-panel px-1.5 text-[11px] leading-4 font-semibold text-fg-secondary tabular-nums"
+                      className="rounded-full border border-border-subtle bg-panel px-1.5 text-2xs leading-4 font-semibold text-fg-secondary tabular-nums"
                       aria-label={`${formatPercent(stage.conversion)} converted from ${previous?.label ?? 'the previous stage'}`}
                     >
                       {formatPercent(stage.conversion)}
@@ -181,7 +181,7 @@ export function LeaderboardWidget({ insight, settings, filtered, onConfigure }: 
               <div className={cn('mt-1 overflow-hidden rounded-full bg-muted', roomy ? 'h-2' : 'h-1.5')}>
                 <div className="h-full rounded-full transition-[width] duration-[var(--duration-slower)] ease-out" style={{ width: `${(row.value / max) * 100}%`, background: accent }} />
               </div>
-              <span className="text-[11px] text-fg-muted tabular-nums">{row.count} {row.count === 1 ? 'item' : 'items'}</span>
+              <span className="text-2xs text-fg-muted tabular-nums">{row.count} {row.count === 1 ? 'item' : 'items'}</span>
             </div>
           </li>
         );

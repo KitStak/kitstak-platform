@@ -29,7 +29,7 @@ export function SectionCard({
   return (
     <section aria-labelledby={id} className={cn('flex min-w-0 flex-col rounded-xl border border-border-subtle bg-panel shadow-xs', className)}>
       <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border-subtle px-4">
-        <h2 id={id} className="flex items-center gap-2 font-heading text-md font-semibold text-fg">
+        <h2 id={id} className="flex items-center gap-2 text-md font-semibold text-fg">
           <span className="text-icon [&_svg]:size-4">{icon}</span>
           {title}
         </h2>
@@ -196,7 +196,7 @@ export function RecentSection({
   return (
     <section ref={ref} aria-labelledby="home-recents" className="flex flex-col gap-3" style={gridStyle}>
       <div className="flex items-center justify-between gap-3">
-        <h2 id="home-recents" className="flex items-center gap-2 font-heading text-lg font-semibold text-fg">
+        <h2 id="home-recents" className="flex items-center gap-2 text-lg font-semibold text-fg">
           <Clock aria-hidden className="size-4 text-icon" />
           Recently visited
         </h2>

@@ -241,7 +241,7 @@ function TeamDetail({
           <button
             type="button"
             onClick={() => setRenaming(true)}
-            className="group inline-flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 font-heading text-lg font-semibold text-fg hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus"
+            className="group inline-flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-lg font-semibold text-fg hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus"
           >
             <span className="truncate">{team.name}</span>
             <Pencil aria-hidden className="size-3.5 text-icon opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />

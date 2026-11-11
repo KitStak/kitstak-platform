@@ -10,7 +10,7 @@ export const PASSWORD_MAX_LENGTH = 128;
 export function AuthHeading({ title, subtitle }: { readonly title: string; readonly subtitle?: ReactNode }) {
   return (
     <div className="mb-8 flex flex-col gap-2">
-      <h1 className="font-heading text-2xl font-semibold tracking-[-0.02em] text-fg">{title}</h1>
+      <h1 className="text-2xl font-semibold tracking-[-0.02em] text-fg">{title}</h1>
       {subtitle ? <p className="text-md text-fg-secondary">{subtitle}</p> : null}
     </div>
   );

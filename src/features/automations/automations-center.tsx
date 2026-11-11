@@ -253,7 +253,7 @@ export function AutomationsCenter({ boardId }: { readonly boardId: string }) {
                 <Zap className="size-5" />
               </span>
               <div className="min-w-0">
-                <h1 className="font-heading text-2xl font-semibold tracking-[-0.01em] text-fg">
+                <h1 className="text-2xl font-semibold tracking-[-0.01em] text-fg">
                   Automations
                 </h1>
                 <p className="truncate text-base text-fg-secondary">
@@ -341,7 +341,7 @@ export function AutomationsCenter({ boardId }: { readonly boardId: string }) {
               href={`/${org.slug}/automations`}
               className="hidden flex-col gap-2 rounded-lg border border-border-subtle bg-panel p-3 shadow-xs transition-[border-color,box-shadow] duration-[var(--duration-fast)] hover:border-primary hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus lg:flex"
             >
-              <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-fg-muted uppercase">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-fg-muted ">
                 <LayoutGrid aria-hidden className="size-3.5" />
                 Usage this month
               </span>

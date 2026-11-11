@@ -78,7 +78,7 @@ function Harness({ boardId, userId, perfRows }: DevBoardTableProps) {
       <main className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-panel shadow-xs max-sm:rounded-none">
         <header className="flex flex-wrap items-center gap-3 border-b border-border-subtle px-6 py-3 max-sm:px-4">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <h1 className="truncate font-heading text-xl font-medium text-fg">
+            <h1 className="truncate text-xl font-medium text-fg">
               {board.data?.board.name ?? 'Board'}
             </h1>
             <Badge tone="neutral" size="sm">

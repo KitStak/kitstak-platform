@@ -78,7 +78,7 @@ export function DashboardsList() {
             <LayoutDashboard />
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="font-heading text-2xl font-semibold tracking-[-0.01em] text-fg">Dashboards</h1>
+            <h1 className="text-2xl font-semibold tracking-[-0.01em] text-fg">Dashboards</h1>
             <p className="text-base text-fg-secondary">Live KPIs, forecasts and team views across your boards.</p>
           </div>
           {canEdit ? (

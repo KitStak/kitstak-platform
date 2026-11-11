@@ -47,7 +47,7 @@ function QuickColumn({ facet, filters, onToggle }: { readonly facet: Facet; read
   const values = expanded ? facet.values : facet.values.slice(0, MAX_CHIPS);
   return (
     <section className="flex min-w-0 flex-col gap-1.5" aria-label={facet.column.title}>
-      <h3 className="truncate text-xs font-semibold tracking-wide text-fg-muted uppercase">{facet.column.title}</h3>
+      <h3 className="truncate text-xs font-semibold text-fg-muted ">{facet.column.title}</h3>
       {facet.values.length === 0 ? <p className="text-sm text-fg-muted">No values yet</p> : null}
       <ul className="flex flex-col gap-1">
         {values.map((value) => {
@@ -133,7 +133,7 @@ function GroupEditor({ group, depth, columns, users, total, onChange, onRemove }
     >
       {nested ? (
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold tracking-wide text-fg-muted uppercase">Condition group</span>
+          <span className="text-xs font-semibold text-fg-muted ">Condition group</span>
           {onRemove ? (
             <IconButton label="Remove condition group" size="sm" icon={<Trash2 aria-hidden />} onClick={onRemove} />
           ) : null}

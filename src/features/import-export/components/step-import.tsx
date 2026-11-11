@@ -55,7 +55,7 @@ function Count({
     >
       <p
         className={cn(
-          'font-heading text-2xl font-semibold tabular-nums',
+          'text-2xl font-semibold tabular-nums',
           muted ? 'text-fg-muted line-through decoration-1' : tone,
         )}
       >
@@ -90,7 +90,7 @@ function WhatWasAdded({ added, undone }: { readonly added: AddedSchema; readonly
       </h3>
       {added.columns.length ? (
         <div className="mt-3">
-          <p className="text-xs font-semibold tracking-wide text-fg-muted uppercase">
+          <p className="text-xs font-semibold text-fg-muted ">
             {added.columns.length} new {added.columns.length === 1 ? 'column' : 'columns'}
           </p>
           <ul className="mt-2 flex flex-wrap gap-2">
@@ -108,7 +108,7 @@ function WhatWasAdded({ added, undone }: { readonly added: AddedSchema; readonly
       ) : null}
       {added.labels.length ? (
         <div className="mt-4">
-          <p className="text-xs font-semibold tracking-wide text-fg-muted uppercase">
+          <p className="text-xs font-semibold text-fg-muted ">
             {added.labels.length} new {added.labels.length === 1 ? 'label' : 'labels'}
           </p>
           <ul className="mt-2 flex flex-wrap gap-1.5">
@@ -223,7 +223,7 @@ export function StepImport({ run, onAnother, onBackground }: StepImportProps) {
         </span>
         <div className="min-w-0" aria-live="polite">
           <h2
-            className="font-heading text-xl font-semibold text-balance text-fg outline-none"
+            className="text-xl font-semibold text-balance text-fg outline-none"
             data-testid="import-run-title"
           >
             {title(run, term)}

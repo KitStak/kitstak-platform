@@ -381,7 +381,7 @@ export function FilesTab({ itemId, boardId, term, canWrite, columns, usersById }
       {dragging ? (
         <div aria-hidden className="pointer-events-none absolute inset-0 z-10 flex animate-fade-in flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-primary-subtle/90">
           <Upload className="size-8 text-primary-text" />
-          <p className="font-heading text-md font-semibold text-primary-text">Drop to upload</p>
+          <p className="text-md font-semibold text-primary-text">Drop to upload</p>
         </div>
       ) : null}
 

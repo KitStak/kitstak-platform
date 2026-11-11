@@ -266,7 +266,7 @@ export function PublicForm({ form, token, preview, decorate, header }: PublicFor
       <div className="rounded-b-xl border border-t-0 border-border-subtle bg-panel px-8 py-8 shadow-sm max-[480px]:px-5 max-[480px]:py-6">{children}</div>
       {form.hideBranding ? null : (
         <p className="mt-4 text-center text-xs text-fg-muted">
-          Powered by <span className="font-heading font-semibold text-fg-secondary">KitStak</span>
+          Powered by <span className="font-semibold text-fg-secondary">KitStak</span>
         </p>
       )}
     </div>
@@ -276,7 +276,7 @@ export function PublicForm({ form, token, preview, decorate, header }: PublicFor
     return shell(
       <div className="flex flex-col items-center gap-3 py-8 text-center" data-testid="form-closed">
         <Lock aria-hidden className="size-8 text-icon" />
-        <h1 className="font-heading text-xl font-semibold text-fg">This form is no longer accepting responses</h1>
+        <h1 className="text-xl font-semibold text-fg">This form is no longer accepting responses</h1>
         <p className="text-fg-secondary">Reach out to the team that shared it if you still need to get in touch.</p>
       </div>,
     );
@@ -286,7 +286,7 @@ export function PublicForm({ form, token, preview, decorate, header }: PublicFor
     return shell(
       <div className="flex flex-col items-center gap-3 py-8 text-center" data-testid="form-success" role="status">
         <CircleCheck aria-hidden className="size-14 text-[var(--lc-bg)] animate-[ks-pop-in_400ms_var(--ease-emphasized)] motion-reduce:animate-none" strokeWidth={1.75} />
-        <h1 className="font-heading text-xl font-semibold text-fg">{form.thankYouTitle}</h1>
+        <h1 className="text-xl font-semibold text-fg">{form.thankYouTitle}</h1>
         <p className="max-w-md whitespace-pre-line text-fg-secondary">{form.thankYouMessage}</p>
         {preview ? <p className="text-xs text-fg-muted">Preview: no response was recorded.</p> : null}
         {form.allowAnother ? (
@@ -310,7 +310,7 @@ export function PublicForm({ form, token, preview, decorate, header }: PublicFor
     <form ref={root} noValidate onSubmit={onSubmit} aria-label={form.title} data-testid="public-form" className={cn('flex flex-col gap-6', form.align === 'center' && 'text-center')}>
       {header ?? (
         <header className="flex flex-col gap-2">
-          <h1 className="font-heading text-2xl font-semibold text-balance text-fg">{form.title}</h1>
+          <h1 className="text-2xl font-semibold text-balance text-fg">{form.title}</h1>
           {form.description ? <p className="whitespace-pre-line text-md text-fg-secondary">{form.description}</p> : null}
         </header>
       )}

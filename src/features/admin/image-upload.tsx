@@ -92,7 +92,7 @@ export function ImageUpload({ name, src, shape, size, label, onChange, disabled,
         ) : (
           <span
             aria-hidden
-            className="flex size-full items-center justify-center font-heading font-semibold"
+            className="flex size-full items-center justify-center font-semibold"
             style={{ fontSize: Math.round(size * 0.34) }}
           >
             {initialsFor(name)}

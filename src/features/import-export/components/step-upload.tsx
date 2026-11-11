@@ -48,7 +48,7 @@ export function StepUpload(props: StepUploadProps) {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h2 className="font-heading text-xl font-semibold text-balance text-fg outline-none">
+        <h2 className="text-xl font-semibold text-balance text-fg outline-none">
           {file ? 'Check your data' : 'Import your data'}
         </h2>
         <p className="mt-1 text-base text-fg-secondary">

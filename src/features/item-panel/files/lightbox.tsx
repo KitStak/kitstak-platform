@@ -78,7 +78,7 @@ export function Lightbox({ files, index, onIndexChange, fileUrl, uploaderName }:
               <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-xl bg-raised p-8 text-center shadow-lg">
                 <FileKindIcon mime={file.mime} name={file.name} size={64} className="rounded-xl" />
                 <div className="flex flex-col gap-1">
-                  <p className="font-heading text-md font-semibold break-all text-fg">{file.name}</p>
+                  <p className="text-md font-semibold break-all text-fg">{file.name}</p>
                   <p className="text-sm text-fg-secondary">
                     {kind === 'pdf'
                         ? 'PDFs open in your browser’s viewer, so you can search, zoom and print.'

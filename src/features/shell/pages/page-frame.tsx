@@ -62,7 +62,7 @@ export function PageFrame({
               </span>
             ) : null}
             <div className="min-w-0">
-              <h1 className="truncate font-heading text-2xl font-semibold tracking-[-0.01em] text-fg">{title}</h1>
+              <h1 className="truncate text-2xl font-semibold tracking-[-0.01em] text-fg">{title}</h1>
               {description ? <p className="mt-0.5 text-base text-fg-secondary">{description}</p> : null}
             </div>
           </div>
@@ -90,7 +90,7 @@ export function PageSection({
     <section className={cn('rounded-lg border border-border-subtle bg-panel shadow-xs', className)}>
       {title ? (
         <div className="flex items-center justify-between gap-3 border-b border-border-subtle px-5 py-3">
-          <h2 className="font-heading text-md font-semibold text-fg">{title}</h2>
+          <h2 className="text-md font-semibold text-fg">{title}</h2>
           {aside}
         </div>
       ) : null}

@@ -99,7 +99,7 @@ function Gallery({ onPick, onClose }: { readonly onPick: (kind: WidgetKind) => v
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-center gap-3 border-b border-border-subtle px-6 py-4">
         <div className="min-w-0 flex-1">
-          <RDialog.Title className="font-heading text-xl font-semibold text-fg">Add a widget</RDialog.Title>
+          <RDialog.Title className="text-xl font-semibold text-fg">Add a widget</RDialog.Title>
           <RDialog.Description className="text-sm text-fg-secondary">Pick a widget, then shape it with live data before placing it.</RDialog.Description>
         </div>
         <SearchInput value={query} onValueChange={setQuery} placeholder="Search widgets" aria-label="Search widgets" containerClassName="hidden w-64 sm:flex" autoFocus />
@@ -233,7 +233,7 @@ function Configure({ dashboardId, draft, onDraft, sources, dashboardBoardIds, fi
           <Icon />
         </span>
         <div className="min-w-0 flex-1">
-          <RDialog.Title className="truncate font-heading text-lg font-semibold text-fg">Configure {definition.label.toLowerCase()}</RDialog.Title>
+          <RDialog.Title className="truncate text-lg font-semibold text-fg">Configure {definition.label.toLowerCase()}</RDialog.Title>
           <RDialog.Description className="truncate text-sm text-fg-secondary">{definition.description}</RDialog.Description>
         </div>
       </header>
@@ -259,7 +259,7 @@ function Configure({ dashboardId, draft, onDraft, sources, dashboardBoardIds, fi
           )}
         </div>
         <section aria-label="Live preview" className="flex min-h-[260px] flex-1 flex-col bg-sunken p-4 sm:p-6">
-          <p className="mb-2 flex items-center gap-2 text-xs font-semibold tracking-wide text-fg-muted uppercase">
+          <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-fg-muted ">
             Live preview
             {preview.isFetching ? <span className="size-1.5 animate-pulse rounded-full bg-primary" aria-label="Updating preview" /> : null}
           </p>

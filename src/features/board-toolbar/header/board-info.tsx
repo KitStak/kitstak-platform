@@ -100,14 +100,14 @@ export function BoardInfoButton({ board, users, location, totalItems, onEditDesc
               <EntityIcon type="board" boardKind={board.kind} className="size-5" />
             </span>
             <div className="min-w-0">
-              <p className="truncate font-heading text-md font-semibold text-fg">{board.name}</p>
+              <p className="truncate text-md font-semibold text-fg">{board.name}</p>
               <p className="text-sm text-fg-muted">
                 {kind.label} board · {totalItems.toLocaleString('en-US')} {totalItems === 1 ? noun.toLowerCase() : `${noun.toLowerCase()}s`}
               </p>
             </div>
           </div>
           <div>
-            <p className="mb-1 text-xs font-semibold tracking-wide text-fg-muted uppercase">Description</p>
+            <p className="mb-1 text-xs font-semibold text-fg-muted ">Description</p>
             {board.description ? (
               <p className="text-base whitespace-pre-wrap text-fg-secondary">{board.description}</p>
             ) : (

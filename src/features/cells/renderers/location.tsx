@@ -215,7 +215,7 @@ function LocationEditor({ ctx }: { readonly ctx: CellRenderContext }) {
           return (
             <li key={suggestion.key} role="presentation">
               {first ? (
-                <div className="px-2.5 pt-1.5 pb-1 text-xs font-semibold tracking-wide text-fg-muted uppercase">
+                <div className="px-2.5 pt-1.5 pb-1 text-xs font-semibold text-fg-muted ">
                   {suggestion.kind === 'place' ? 'Places' : 'Used on this board'}
                 </div>
               ) : null}

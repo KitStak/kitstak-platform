@@ -63,7 +63,7 @@ export function EmptyGhost({ icon, label }: { readonly icon: ReactNode; readonly
 export function PickerHeader({ title, aside }: { readonly title: ReactNode; readonly aside?: ReactNode }) {
   return (
     <div className="flex h-8 items-center justify-between gap-2 px-1">
-      <span className="text-xs font-semibold tracking-wide text-fg-muted uppercase">{title}</span>
+      <span className="text-xs font-semibold text-fg-muted ">{title}</span>
       {aside}
     </div>
   );

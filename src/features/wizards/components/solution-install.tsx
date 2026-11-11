@@ -97,7 +97,7 @@ export function SolutionInstall({
       <div className="flex items-start gap-3 px-6 pt-6 pr-14 pb-4">
         <IconButton label="Back to templates" icon={<ArrowLeft aria-hidden />} onClick={onBack} disabled={running} className="-ml-2 shrink-0" />
         <div className="min-w-0">
-          <DialogPrimitive.Title className="font-heading text-xl font-semibold text-fg">Install {entry.name}</DialogPrimitive.Title>
+          <DialogPrimitive.Title className="text-xl font-semibold text-fg">Install {entry.name}</DialogPrimitive.Title>
           <DialogPrimitive.Description className="mt-1 text-base text-fg-secondary [text-wrap:balance]">
             We’ll create a workspace with every board connected, so deals link to accounts and contacts from day one.
           </DialogPrimitive.Description>

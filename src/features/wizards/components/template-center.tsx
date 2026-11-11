@@ -145,7 +145,7 @@ function TemplateGallery({
     <div className="flex min-h-0 flex-1 flex-col" data-testid="template-center">
       <header className="flex flex-col gap-3 border-b border-border-subtle pt-5 pr-14 pb-4 pl-4 sm:flex-row sm:items-center sm:pr-16 sm:pl-6">
         <div className="min-w-0 flex-1">
-          <DialogPrimitive.Title className="font-heading text-xl font-semibold text-fg">Template center</DialogPrimitive.Title>
+          <DialogPrimitive.Title className="text-xl font-semibold text-fg">Template center</DialogPrimitive.Title>
           <DialogPrimitive.Description className="text-sm text-fg-secondary [text-wrap:balance]">
             Start from a proven board, or a whole connected CRM.
           </DialogPrimitive.Description>
@@ -198,7 +198,7 @@ function TemplateGallery({
         </nav>
         <section aria-label={heading || 'Templates'} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="mb-4 flex items-baseline justify-between gap-3">
-            <h3 className="font-heading text-lg font-semibold text-fg [text-wrap:balance]" aria-live="polite" data-testid="template-heading">
+            <h3 className="text-lg font-semibold text-fg [text-wrap:balance]" aria-live="polite" data-testid="template-heading">
               <span className="sr-only">{searching ? '' : `${navLabel}: `}</span>
               {heading}
             </h3>
@@ -454,7 +454,7 @@ function TemplateDetail({
             >
               <TemplateGlyph entry={entry} className="size-5" />
             </span>
-            <h3 className="font-heading text-xl font-semibold text-fg">{entry.name}</h3>
+            <h3 className="text-xl font-semibold text-fg">{entry.name}</h3>
             <p className="text-base text-fg-secondary [text-wrap:pretty]">{entry.description}</p>
             {blockedReason ? (
               <div className="flex flex-col gap-1.5">

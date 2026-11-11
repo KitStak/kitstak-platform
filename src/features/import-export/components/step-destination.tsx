@@ -58,7 +58,7 @@ export function StepDestination({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="font-heading text-xl font-semibold text-balance text-fg outline-none">Where should the rows go?</h2>
+        <h2 className="text-xl font-semibold text-balance text-fg outline-none">Where should the rows go?</h2>
         <p className="mt-1 text-base text-fg-secondary">Create a board shaped by your file, or add to a board you already use.</p>
       </div>
 

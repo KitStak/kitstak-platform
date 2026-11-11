@@ -99,7 +99,7 @@ export function RecordHeader({
             </span>
             <div className="min-w-0 pb-0.5">
               <h1
-                className="line-clamp-2 break-words font-heading text-xl font-semibold tracking-[-0.01em] text-fg sm:text-2xl"
+                className="line-clamp-2 break-words text-xl font-semibold tracking-[-0.01em] text-fg sm:text-2xl"
                 title={record.name}
               >
                 {record.name}

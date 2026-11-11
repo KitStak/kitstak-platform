@@ -32,15 +32,15 @@ export function NotificationsTab({ profile }: { readonly profile: ProfileDto | u
             <caption className="sr-only">Notification channels per event</caption>
             <thead className="border-b border-border-subtle bg-sunken/60">
               <tr>
-                <th scope="col" className="h-10 px-5 text-left text-xs font-semibold tracking-wide text-fg-muted uppercase">
+                <th scope="col" className="h-10 px-5 text-left text-xs font-semibold text-fg-muted ">
                   Event
                 </th>
-                <th scope="col" className="h-10 w-28 px-3 text-center text-xs font-semibold tracking-wide text-fg-muted uppercase">
+                <th scope="col" className="h-10 w-28 px-3 text-center text-xs font-semibold text-fg-muted ">
                   <span className="inline-flex items-center gap-1">
                     <Bell aria-hidden className="size-3.5" /> In-app
                   </span>
                 </th>
-                <th scope="col" className="h-10 w-28 px-3 text-center text-xs font-semibold tracking-wide text-fg-muted uppercase">
+                <th scope="col" className="h-10 w-28 px-3 text-center text-xs font-semibold text-fg-muted ">
                   <span className="inline-flex items-center gap-1">
                     <Mail aria-hidden className="size-3.5" /> Email
                   </span>

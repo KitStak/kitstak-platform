@@ -96,7 +96,7 @@ export function HomePage() {
           <p className="text-sm text-fg-muted" suppressHydrationWarning>
             {dateLine} · {org.name}
           </p>
-          <h1 className="mt-1 font-heading text-xl font-semibold tracking-[-0.01em] text-fg sm:text-2xl" suppressHydrationWarning>
+          <h1 className="mt-1 text-xl font-semibold tracking-[-0.01em] text-fg sm:text-2xl" suppressHydrationWarning>
             {greetingFor(new Date())}, {firstName}
           </h1>
         </div>

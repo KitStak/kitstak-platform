@@ -75,7 +75,7 @@ function Total({
       <dt className="text-xs text-fg-secondary">{label}</dt>
       <dd
         className={cn(
-          'font-heading text-md font-semibold tabular-nums',
+          'text-md font-semibold tabular-nums',
           tone === 'primary' ? 'text-primary-text' : tone === 'success' ? 'text-success-text' : 'text-fg',
         )}
       >

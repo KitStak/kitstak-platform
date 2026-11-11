@@ -56,7 +56,7 @@ export const CellSheet = forwardRef<HTMLDivElement, CellSheetProps>(function Cel
           className="ks-cell-sheet ks-popover-surface fixed inset-x-0 bottom-0 z-[var(--z-popover)] flex max-h-[85dvh] flex-col rounded-t-xl rounded-b-none pb-[env(safe-area-inset-bottom)] outline-none"
         >
           <div className="flex flex-none items-center gap-2 border-b border-border-subtle py-1.5 pr-1.5 pl-4">
-            <DialogPrimitive.Title className="min-w-0 flex-1 truncate font-heading text-base font-semibold text-fg">
+            <DialogPrimitive.Title className="min-w-0 flex-1 truncate text-base font-semibold text-fg">
               {title}
             </DialogPrimitive.Title>
             <DialogPrimitive.Close asChild>

@@ -158,8 +158,8 @@ function Workbench({ boardId }: { readonly boardId: string }) {
     <div className="flex h-dvh flex-col bg-app" data-testid="views-workbench">
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border-subtle bg-panel px-4 py-2.5">
         <div className="min-w-0">
-          <p className="text-xs font-semibold tracking-wide text-fg-muted uppercase">Board views · dev</p>
-          <h1 className="flex h-7 items-center truncate font-heading text-xl leading-7 font-semibold text-fg">
+          <p className="text-xs font-semibold text-fg-muted ">Board views · dev</p>
+          <h1 className="flex h-7 items-center truncate text-xl leading-7 font-semibold text-fg">
             {board.data ? board.data.board.name : <Skeleton width={140} height={20} rounded="sm" />}
           </h1>
         </div>

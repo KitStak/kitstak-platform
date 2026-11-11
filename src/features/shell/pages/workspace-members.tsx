@@ -97,7 +97,7 @@ export function WorkspaceMembersTab({ workspace }: { readonly workspace: Workspa
     <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section aria-labelledby="ws-members" className="overflow-hidden rounded-lg border border-border-subtle bg-panel">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
-          <h2 id="ws-members" className="font-heading text-md font-semibold text-fg">
+          <h2 id="ws-members" className="text-md font-semibold text-fg">
             Members <span className="font-sans text-sm font-normal text-fg-muted">{current.length || ''}</span>
           </h2>
           {canWrite ? (

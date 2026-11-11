@@ -48,7 +48,7 @@ function StatTile({ icon, label, value, tone, testId, note }: StatTileProps) {
         {icon}
       </span>
       <div className="min-w-0">
-        <p className="font-heading text-xl font-semibold leading-tight text-fg tabular-nums">{value.toLocaleString('en-US')}</p>
+        <p className="text-xl font-semibold leading-tight text-fg tabular-nums">{value.toLocaleString('en-US')}</p>
         <p className="truncate text-sm text-fg-secondary">{label}</p>
         {note}
       </div>
@@ -198,7 +198,7 @@ export function StepReview({ model, onDraft }: StepReviewProps) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="font-heading text-xl font-semibold text-balance text-fg outline-none">Review before importing</h2>
+        <h2 className="text-xl font-semibold text-balance text-fg outline-none">Review before importing</h2>
         <p className="mt-1 text-base text-fg-secondary">
           {existing
             ? 'Fix problems inline, choose how to handle duplicates, then import.'
@@ -393,7 +393,7 @@ export function StepReview({ model, onDraft }: StepReviewProps) {
             ) : null}
             <div className="hidden max-h-[420px] overflow-auto sm:block">
               <table className="w-full min-w-[640px] border-collapse text-sm" data-testid="import-issues">
-                <thead className="sticky top-0 z-[1] bg-sunken text-left text-xs font-semibold uppercase tracking-wide text-fg-muted">
+                <thead className="sticky top-0 z-[1] bg-sunken text-left text-xs font-semibold text-fg-muted">
                   <tr>
                     <th scope="col" className="w-16 px-3 py-2">Row</th>
                     <th scope="col" className="px-3 py-2">Column</th>

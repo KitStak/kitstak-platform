@@ -140,7 +140,7 @@ export function DashboardHeader(props: DashboardHeaderProps) {
               placeholder="Untitled dashboard"
               editable={canEdit}
               label="Dashboard name"
-              className="font-heading text-xl font-semibold tracking-[-0.01em] text-fg sm:text-2xl"
+              className="text-xl font-semibold tracking-[-0.01em] text-fg sm:text-2xl"
               onCommit={(name) => name && props.onRename(name)}
             />
           </h1>

@@ -138,7 +138,7 @@ export function ToolbarPopover({
 export function PanelHeader({ title, aside }: { readonly title: string; readonly aside?: ReactNode }) {
   return (
     <div className="flex items-center gap-2 border-b border-border-subtle px-4 py-3">
-      <h2 className="min-w-0 flex-1 truncate font-heading text-md font-semibold text-fg">{title}</h2>
+      <h2 className="min-w-0 flex-1 truncate text-md font-semibold text-fg">{title}</h2>
       {aside}
     </div>
   );

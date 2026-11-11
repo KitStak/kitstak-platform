@@ -145,7 +145,7 @@ export function CalendarMonth({
     <div role="grid" aria-label="Month" className="flex min-h-0 flex-1 flex-col overflow-auto" data-testid="calendar-month">
       <div role="row" className="sticky top-0 z-[var(--z-sticky)] grid shrink-0 border-b border-border-subtle bg-panel" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
         {weekdayLabels.map((label) => (
-          <div role="columnheader" key={label} className="h-8 px-2 text-xs leading-8 font-semibold text-fg-muted uppercase">
+          <div role="columnheader" key={label} className="h-8 px-2 text-xs leading-8 font-semibold text-fg-muted ">
             {label}
           </div>
         ))}

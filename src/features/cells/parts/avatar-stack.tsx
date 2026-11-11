@@ -48,7 +48,7 @@ export function AvatarStack({
         <span
           className={cn(
             'relative inline-flex items-center justify-center rounded-full bg-muted px-1 font-semibold text-fg-secondary tabular-nums ring-2 ring-[var(--ks-cell-surface,var(--surface-panel))]',
-            px <= 20 ? 'h-5 min-w-6 px-1.5 text-[10px]' : px >= 32 ? 'h-8 min-w-8 text-xs' : 'h-6 min-w-7 px-1.5 text-[11px]',
+            px <= 20 ? 'h-5 min-w-6 px-1.5 text-2xs' : px >= 32 ? 'h-8 min-w-8 text-xs' : 'h-6 min-w-7 px-1.5 text-2xs',
           )}
           style={{ zIndex: entries.length + 1, marginLeft: entries.length ? 2 : 0 }}
         >
@@ -80,7 +80,7 @@ export function StackAvatar({
       colorKey={colorKey}
       size={size}
       maxInitials={px < 22 ? 1 : 2}
-      className={px <= 24 ? '[&>span:first-child]:text-[10px] [&>span:first-child]:tracking-[-0.01em]' : undefined}
+      className={px <= 24 ? '[&>span:first-child]:text-2xs [&>span:first-child]:tracking-[-0.01em]' : undefined}
     />
   );
 }

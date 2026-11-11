@@ -494,7 +494,7 @@ function TableViewInner({
             >
               <FilterX aria-hidden className="size-10 text-icon" />
               <div>
-                <p className="font-heading text-lg font-semibold text-fg">
+                <p className="text-lg font-semibold text-fg">
                   No {terminology.toLowerCase()}s match this view
                 </p>
                 <p className="text-base text-fg-secondary">

@@ -152,7 +152,7 @@ function SharePopover({ view, settings, boardId }: { readonly view: ViewDto; rea
                 </Button>
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-xs font-semibold text-fg-muted uppercase">Embed</span>
+                <span className="text-xs font-semibold text-fg-muted ">Embed</span>
                 <Textarea readOnly rows={3} value={embed} aria-label="Embed code" className="font-mono text-xs" />
                 <Button size="xs" variant="ghost" className="self-end" onClick={() => copy('embed', embed)}>
                   {copied === 'embed' ? 'Copied' : 'Copy embed code'}
@@ -340,7 +340,7 @@ export function FormView({ boardId, view, className }: BoardViewProps) {
       <div className="flex min-h-0 flex-1 overflow-hidden max-[900px]:flex-col max-[900px]:overflow-y-auto">
         <aside aria-label="Questions" className="flex w-[260px] shrink-0 flex-col border-r border-border-subtle bg-panel max-[900px]:w-full max-[900px]:border-r-0 max-[900px]:border-b">
           <div className="flex h-10 items-center justify-between px-4">
-            <h3 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">Questions</h3>
+            <h3 className="text-xs font-semibold text-fg-muted ">Questions</h3>
             <span className="text-xs text-fg-muted tabular-nums">{settings.questions.length}</span>
           </div>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
@@ -381,7 +381,7 @@ export function FormView({ boardId, view, className }: BoardViewProps) {
                     onChange={(event) => update({ title: event.target.value })}
                     placeholder="Form title"
                     containerClassName="h-auto border-transparent bg-transparent px-0 shadow-none hover:border-border-subtle focus-within:px-2"
-                    className="font-heading text-2xl font-semibold"
+                    className="text-2xl font-semibold"
                     data-testid="form-title"
                   />
                   <Textarea

@@ -272,7 +272,7 @@ function MiniPreview({
       <div className="flex flex-col gap-3 rounded-xl border border-border-subtle bg-sunken p-4">
         <div className="flex items-center gap-1.5">
           <PrivacyIcon aria-hidden className="size-3.5 shrink-0 text-icon" />
-          <span className="truncate font-heading text-md font-semibold text-fg">{name.trim() || 'New board'}</span>
+          <span className="truncate text-md font-semibold text-fg">{name.trim() || 'New board'}</span>
         </div>
         {!board ? (
           <div aria-busy="true" className="flex flex-col gap-2">

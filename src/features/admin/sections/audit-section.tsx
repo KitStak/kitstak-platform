@@ -245,7 +245,7 @@ export function AuditSection() {
                       type="button"
                       onClick={() => setOrder(order === 'desc' ? 'asc' : 'desc')}
                       data-testid="audit-sort-time"
-                      className="-mx-1.5 inline-flex h-7 items-center gap-1 rounded-sm px-1.5 uppercase text-fg transition-colors duration-[var(--duration-instant)] hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus active:bg-pressed"
+                      className="-mx-1.5 inline-flex h-7 items-center gap-1 rounded-sm px-1.5 text-fg transition-colors duration-[var(--duration-instant)] hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus active:bg-pressed"
                     >
                       When
                       {order === 'desc' ? <ArrowDown aria-hidden className="size-3.5" /> : <ArrowUp aria-hidden className="size-3.5" />}

@@ -25,7 +25,7 @@ export function FormSection({ title, children, aside }: { readonly title: string
   return (
     <section className="flex flex-col gap-3 border-b border-border-subtle px-5 py-4 last:border-b-0">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">{title}</h3>
+        <h3 className="text-xs font-semibold text-fg-muted ">{title}</h3>
         {aside}
       </div>
       {children}
@@ -274,7 +274,7 @@ export function BoardChecklist({
         {groups.length === 0 ? <p className="px-2 py-3 text-sm text-fg-muted">No boards match “{query}”.</p> : null}
         {groups.map((group) => (
           <div key={group.key} role="group" aria-label={group.label}>
-            <p className="sticky top-0 z-[1] bg-panel px-2 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-fg-muted uppercase">{group.label}</p>
+            <p className="sticky top-0 z-[1] bg-panel px-2 pt-2 pb-1 text-2xs font-semibold text-fg-muted ">{group.label}</p>
             <ul className="flex flex-col gap-0.5">
               {group.boards.map((board) => {
                 const checked = selected.includes(board.id);

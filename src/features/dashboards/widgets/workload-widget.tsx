@@ -60,7 +60,7 @@ export function WorkloadWidget({ insight, filtered, onConfigure }: WidgetRenderP
                 Person
               </th>
               {periods.map((period) => (
-                <th key={period.key} scope="col" className="truncate border-b border-border-subtle px-0.5 text-center text-[11px] font-medium whitespace-nowrap text-fg-muted" title={`Week of ${period.label}`}>
+                <th key={period.key} scope="col" className="truncate border-b border-border-subtle px-0.5 text-center text-2xs font-medium whitespace-nowrap text-fg-muted" title={`Week of ${period.label}`}>
                   {period.label}
                 </th>
               ))}

@@ -40,7 +40,7 @@ export const DrawerContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
         >
           <header className="flex items-start gap-3 border-b border-border-subtle px-6 py-4">
             <div className="min-w-0 flex-1">
-              <DialogPrimitive.Title className="truncate font-heading text-xl font-semibold">{title}</DialogPrimitive.Title>
+              <DialogPrimitive.Title className="truncate text-xl font-semibold">{title}</DialogPrimitive.Title>
               {description ? (
                 <DialogPrimitive.Description className="mt-0.5 text-sm text-fg-secondary">{description}</DialogPrimitive.Description>
               ) : (

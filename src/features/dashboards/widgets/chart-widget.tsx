@@ -216,7 +216,7 @@ export function ChartWidget({ insight, settings, filtered, onConfigure }: Widget
         {chart}
         {ready && type === 'donut' ? (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span className="font-heading text-xl font-medium tabular-nums text-fg">{formatCompact(total, format)}</span>
+            <span className="text-xl font-medium tabular-nums text-fg">{formatCompact(total, format)}</span>
             <span className="text-xs text-fg-muted">Total</span>
           </div>
         ) : null}

@@ -97,7 +97,7 @@ export function NumbersWidget({ insight, settings, filtered }: WidgetRenderProps
           <p
             tabIndex={0}
             className={cn(
-              'max-w-full truncate rounded-sm font-heading font-medium leading-none tracking-[-0.02em] tabular-nums outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+              'max-w-full truncate rounded-sm font-medium leading-none tracking-[-0.02em] tabular-nums outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
               noMatch ? 'text-fg-muted' : 'text-fg',
             )}
             style={{ fontSize: 'clamp(28px, min(16cqw, 34cqh), 60px)' }}

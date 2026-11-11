@@ -111,7 +111,7 @@ function LogDisplay({ ctx }: { readonly ctx: CellRenderContext }) {
         {user ? (
           <Avatar name={user.name} src={user.image} colorKey={user.id} size="xs" />
         ) : (
-          <span aria-hidden className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-fg-muted">
+          <span aria-hidden className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-2xs font-bold text-fg-muted">
             KS
           </span>
         )}

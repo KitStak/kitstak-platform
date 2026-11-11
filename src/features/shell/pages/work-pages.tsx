@@ -139,7 +139,7 @@ export function DashboardPage({ dashboardId }: { readonly dashboardId: string })
               )}
             >
               <header className="flex items-center justify-between gap-2">
-                <h2 className="truncate font-heading text-md font-semibold text-fg">{widget.title}</h2>
+                <h2 className="truncate text-md font-semibold text-fg">{widget.title}</h2>
                 <Badge tone="outline" icon={<BarChart3 />}>
                   {WIDGET_LABEL[widget.type]}
                 </Badge>

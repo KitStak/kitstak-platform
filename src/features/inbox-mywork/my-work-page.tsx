@@ -232,7 +232,7 @@ function Section({
               collapsed && '-rotate-90',
             )}
           />
-          <span className={cn('font-heading text-md font-semibold', TONE[section.tone])}>
+          <span className={cn('text-md font-semibold', TONE[section.tone])}>
             {section.title}
           </span>
           <span className="rounded-full bg-muted px-1.5 text-xs font-semibold text-fg-secondary tabular-nums">

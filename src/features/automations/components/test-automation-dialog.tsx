@@ -167,7 +167,7 @@ function TestBody({
               </ul>
             ) : null}
             <div>
-              <h3 className="mb-1.5 text-xs font-semibold tracking-wide text-fg-muted uppercase">
+              <h3 className="mb-1.5 text-xs font-semibold text-fg-muted ">
                 {preview.conditionsMet ? 'It would' : 'It would have'}
               </h3>
               <ol className="flex list-decimal flex-col gap-1 pl-5 text-sm">

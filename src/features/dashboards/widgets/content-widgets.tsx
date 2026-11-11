@@ -33,7 +33,7 @@ export function RichText({ source }: { readonly source: string }) {
     <div className="flex flex-col gap-2 text-base leading-6 text-fg-secondary">
       {blocks.map((block, index) =>
         block.kind === 'heading' ? (
-          <h4 key={index} className="font-heading text-md font-semibold text-fg">{renderInline(block.inline)}</h4>
+          <h4 key={index} className="text-md font-semibold text-fg">{renderInline(block.inline)}</h4>
         ) : block.kind === 'list' ? (
           <ul key={index} className="flex list-disc flex-col gap-1 pl-5 marker:text-fg-muted">
             {block.items.map((item, itemIndex) => (
@@ -151,7 +151,7 @@ export function CountdownWidget({ settings }: WidgetRenderProps) {
                 {String(unit.value).padStart(2, '0')}
               </span>
             </span>
-            <span className="text-[11px] font-medium tracking-wide text-fg-muted uppercase">{unit.label}</span>
+            <span className="text-2xs font-medium text-fg-muted ">{unit.label}</span>
           </div>
         ))}
       </div>
@@ -168,7 +168,7 @@ export function CountdownWidget({ settings }: WidgetRenderProps) {
 export function SectionWidget({ title, settings }: WidgetRenderProps) {
   return (
     <div className="flex h-full flex-col justify-end gap-0.5 border-b-2 border-border-default pb-2">
-      <h2 className="truncate font-heading text-xl font-semibold tracking-[-0.01em] text-fg">{title}</h2>
+      <h2 className="truncate text-xl font-semibold tracking-[-0.01em] text-fg">{title}</h2>
       {settings.description ? <p className="truncate text-sm text-fg-secondary">{settings.description}</p> : null}
     </div>
   );

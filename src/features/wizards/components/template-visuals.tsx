@@ -254,7 +254,7 @@ export function BoardPreview({ board, terminology }: { readonly board: GalleryBo
           return (
             <section key={group.key} aria-label={group.title}>
               <h4
-                className="sticky left-0 mb-1.5 inline-flex items-center gap-2 font-heading text-md font-semibold"
+                className="sticky left-0 mb-1.5 inline-flex items-center gap-2 text-md font-semibold"
                 style={{ color: `var(--label-${color}-text)` }}
                 data-testid="preview-group-title"
               >

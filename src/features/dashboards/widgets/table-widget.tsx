@@ -157,7 +157,7 @@ export function TableWidget({ insight, orgSlug, filtered, onConfigure, expanded 
                       <Cell display={cellDisplay(pillColumn, item, users)} />
                     </div>
                   ) : group ? (
-                    <span className="block truncate text-[11px] text-fg-muted">{group.title}</span>
+                    <span className="block truncate text-2xs text-fg-muted">{group.title}</span>
                   ) : null}
                 </div>
                 {valueColumn ? (
@@ -204,7 +204,7 @@ export function TableWidget({ insight, orgSlug, filtered, onConfigure, expanded 
                       {item.name}
                     </Link>
                     {multiBoard || group ? (
-                      <span className="block truncate text-[11px] text-fg-muted">
+                      <span className="block truncate text-2xs text-fg-muted">
                         {multiBoard ? `${board?.name ?? 'Board'} · ` : ''}
                         {group?.title}
                       </span>

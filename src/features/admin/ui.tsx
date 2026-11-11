@@ -19,7 +19,7 @@ export function SectionHeader({
   return (
     <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-6">
       <div className="min-w-0 md:flex-1">
-        <h2 className="font-heading text-xl font-semibold tracking-[-0.01em] text-fg">{title}</h2>
+        <h2 className="text-xl font-semibold tracking-[-0.01em] text-fg">{title}</h2>
         {description ? <p className="mt-1 max-w-2xl text-base text-fg-secondary">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2 md:shrink-0 md:flex-nowrap">{actions}</div> : null}
@@ -55,7 +55,7 @@ export function SettingsCard({
       {title ? (
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border-subtle px-5 py-4">
           <div className="min-w-0">
-            <h2 className="font-heading text-md font-semibold text-fg">{title}</h2>
+            <h2 className="text-md font-semibold text-fg">{title}</h2>
             {description ? <p className="mt-0.5 text-sm text-fg-muted">{description}</p> : null}
           </div>
           {aside}
@@ -128,7 +128,7 @@ export function ErrorPanel({
         <CircleAlert aria-hidden className="size-5" />
       </span>
       <div>
-        <p className="font-heading text-md font-semibold text-fg">{title}</p>
+        <p className="text-md font-semibold text-fg">{title}</p>
         <p className="mt-1 max-w-sm text-sm text-fg-muted">{message ?? 'Check your connection and try again.'}</p>
       </div>
       {onRetry ? (
@@ -193,7 +193,7 @@ export function StatTile({
         <span className="text-sm font-medium text-fg-secondary">{label}</span>
         {icon ? <span className="text-icon [&_svg]:size-4">{icon}</span> : null}
       </div>
-      <span className="font-heading text-2xl font-semibold text-fg tabular-nums">{value}</span>
+      <span className="text-2xl font-semibold text-fg tabular-nums">{value}</span>
       {hint ? <span className="text-sm text-fg-muted">{hint}</span> : null}
     </div>
   );
@@ -205,7 +205,7 @@ export function DemoBadge({ children = 'Demo' }: { readonly children?: ReactNode
 }
 
 export const TABLE_HEAD =
-  'h-9 px-4 text-left text-xs font-semibold tracking-wide whitespace-nowrap text-fg-muted uppercase first:pl-5 last:pr-5';
+  'h-9 px-4 text-left text-xs font-semibold whitespace-nowrap text-fg-muted first:pl-5 last:pr-5';
 export const TABLE_CELL = 'px-4 py-2.5 align-middle first:pl-5 last:pr-5';
 export const TABLE_ROW = 'border-b border-border-subtle transition-colors duration-[var(--duration-instant)] last:border-b-0 hover:bg-hover';
 
@@ -232,7 +232,7 @@ export function PageTitle({
           </span>
         ) : null}
         <div className="min-w-0">
-          <h1 className="font-heading text-xl font-semibold tracking-[-0.01em] text-fg">{title}</h1>
+          <h1 className="text-xl font-semibold tracking-[-0.01em] text-fg">{title}</h1>
           {description ? <p className="mt-0.5 text-base text-fg-secondary">{description}</p> : null}
         </div>
       </div>
@@ -287,7 +287,7 @@ export function SortableHeader<K extends string>({
         onClick={() => onSort(sortKey)}
         data-testid={`sort-${sortKey}`}
         className={cn(
-          'group -mx-1.5 inline-flex h-7 items-center gap-1 rounded-sm px-1.5 uppercase transition-colors duration-[var(--duration-instant)]',
+          'group -mx-1.5 inline-flex h-7 items-center gap-1 rounded-sm px-1.5 transition-colors duration-[var(--duration-instant)]',
           'hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus active:bg-pressed',
           active ? 'text-fg' : 'text-fg-muted',
           align === 'right' && 'flex-row-reverse',

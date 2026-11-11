@@ -66,7 +66,7 @@ function TableBody({ board, groups }: { readonly board: GalleryBoard; readonly g
       </div>
       {shown.map(({ group, rows }) => (
         <div key={group!.key} className="flex flex-col gap-[3px]">
-          <span className="truncate text-[10px] leading-[13px] font-semibold" style={groupText(group!.color)}>
+          <span className="truncate text-2xs leading-[13px] font-semibold" style={groupText(group!.color)}>
             {group!.title}
           </span>
           {rows.map((row) => (
@@ -75,7 +75,7 @@ function TableBody({ board, groups }: { readonly board: GalleryBoard; readonly g
               className="grid h-[17px] gap-[3px] overflow-hidden rounded-[3px] bg-sunken"
               style={{ ...grid, boxShadow: `inset 3px 0 0 var(--label-${toLabelColor(group!.color)})` }}
             >
-              <span className="truncate self-center pl-[7px] text-[10px] leading-none text-fg">{row.name}</span>
+              <span className="truncate self-center pl-[7px] text-2xs leading-none text-fg">{row.name}</span>
               {pills.map((column) => (
                 <span key={column.key} className="py-[2px] pr-[2px]">
                   <Pill label={labelOf(column, row)} />
@@ -145,7 +145,7 @@ function TimelineBody({ groups }: { readonly groups: readonly PreviewGroup[] }) 
       </div>
       {rows.map(({ row, color }, index) => (
         <div key={row.key} className="flex h-[16px] items-center gap-1.5">
-          <span className="w-[36%] shrink-0 truncate text-[10px] leading-none text-fg">{row.name}</span>
+          <span className="w-[36%] shrink-0 truncate text-2xs leading-none text-fg">{row.name}</span>
           <span className="relative h-full flex-1 rounded-[2px] bg-sunken">
             <span
               className="absolute top-[3px] bottom-[3px] rounded-full"
@@ -200,7 +200,7 @@ function FormBody({ board, groups }: { readonly board: GalleryBoard; readonly gr
   return (
     <div className="grid grid-cols-[1.05fr_1fr] gap-2 px-2 pt-1.5 pb-2">
       <div className="flex flex-col gap-[4px] rounded-[4px] border border-border-subtle bg-sunken p-1.5">
-        <span className="text-[10px] leading-none font-semibold text-fg">New {board.itemTerminology.toLowerCase()}</span>
+        <span className="text-2xs leading-none font-semibold text-fg">New {board.itemTerminology.toLowerCase()}</span>
         {fields.map((field) => (
           <span key={field.key} className="flex flex-col gap-[2px]">
             <span className="truncate text-[8.5px] leading-none text-fg-secondary">{field.title}</span>
@@ -235,7 +235,7 @@ function BlankBody() {
           <span className="rounded-[3px] border border-dashed border-border-strong" />
         </span>
       ))}
-      <span className="mt-0.5 flex items-center gap-1 text-[10px] leading-none font-medium text-fg-secondary">
+      <span className="mt-0.5 flex items-center gap-1 text-2xs leading-none font-medium text-fg-secondary">
         <Plus aria-hidden className="size-3 text-icon-strong" strokeWidth={2.5} />
         Add your own columns
       </span>
@@ -268,7 +268,7 @@ export function TemplateThumbnail({ board, accent, icon, suite, title }: Templat
           >
             {icon}
           </span>
-          <span className="min-w-0 shrink-0 truncate text-[10.5px] leading-none font-semibold text-fg">{title ?? board.name}</span>
+          <span className="min-w-0 shrink-0 truncate text-2xs leading-none font-semibold text-fg">{title ?? board.name}</span>
           <span className="ml-auto flex min-w-0 gap-1 overflow-hidden">
             {chips.map((chip, index) => (
               <span
@@ -345,7 +345,7 @@ function SuiteThumbnail({ boards, accent }: { readonly boards: readonly GalleryB
       </div>
       <div className="flex w-[32%] max-w-[110px] flex-col gap-1 rounded-[5px] border border-border-subtle bg-raised p-1.5 shadow-xs">
         <span className="truncate text-[9px] leading-none font-semibold text-fg">Sales dashboard</span>
-        <span className="text-[11px] leading-none font-semibold text-fg tabular-nums">$1.2M</span>
+        <span className="text-2xs leading-none font-semibold text-fg tabular-nums">$1.2M</span>
         <span className="flex h-[34px] items-end gap-[3px]">
           {SUITE_BARS.map((height, index) => (
             <span

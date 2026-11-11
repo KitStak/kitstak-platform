@@ -44,7 +44,7 @@ export function CrmCard({
     >
       <header className="flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border-subtle px-4 py-2.5 sm:px-5">
         <div className="min-w-0">
-          <h2 id={headingId} className="font-heading text-md font-semibold text-fg">
+          <h2 id={headingId} className="text-md font-semibold text-fg">
             {title}
           </h2>
           {description ? <p className="text-sm text-fg-muted">{description}</p> : null}
@@ -75,7 +75,7 @@ export function MetricTile({
     <span
       tabIndex={exact ? 0 : undefined}
       className={cn(
-        'rounded-sm font-heading text-xl font-semibold tabular-nums tracking-[-0.01em] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+        'rounded-sm text-xl font-semibold tabular-nums tracking-[-0.01em] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
         tone === 'primary' && 'text-primary-text',
         tone === 'success' && 'text-success-text',
         tone === 'danger' && 'text-danger-text',

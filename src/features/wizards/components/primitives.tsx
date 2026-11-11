@@ -169,7 +169,7 @@ function DiscardConfirm({
               <TriangleAlert aria-hidden className="size-[18px]" />
             </span>
             <div className="min-w-0">
-              <DialogPrimitive.Title className="font-heading text-lg font-semibold text-fg">Discard changes?</DialogPrimitive.Title>
+              <DialogPrimitive.Title className="text-lg font-semibold text-fg">Discard changes?</DialogPrimitive.Title>
               <DialogPrimitive.Description className="mt-1 text-base text-fg-secondary">
                 What you entered here will be lost.
               </DialogPrimitive.Description>

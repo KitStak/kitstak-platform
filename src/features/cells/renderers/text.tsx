@@ -138,7 +138,7 @@ function LongTextEditor({ ctx }: { readonly ctx: CellRenderContext }) {
   return (
     <div className="flex w-[320px] flex-col gap-2" data-testid="long-text-editor">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold tracking-wide text-fg-muted uppercase">{ctx.column.title}</span>
+        <span className="text-xs font-semibold text-fg-muted ">{ctx.column.title}</span>
         <IconButton size="xs" label="Expand editor" icon={<Maximize2 aria-hidden />} onClick={() => setExpanded(true)} />
       </div>
       {expanded ? <div className="h-[132px] rounded-sm bg-muted" aria-hidden /> : textarea(6, 'min-h-[132px]')}

@@ -89,7 +89,7 @@ export function BulkBar({ items }: { readonly items: readonly ItemDto[] }) {
     >
       <div className="flex h-16 shrink-0 items-center gap-3 border-r border-border-subtle pr-4 max-sm:h-12 max-sm:gap-2 max-sm:pr-2">
         <span
-          className="flex h-16 w-14 max-sm:h-12 max-sm:w-11 items-center justify-center rounded-l-lg bg-primary font-heading text-xl font-medium text-primary-fg tabular-nums"
+          className="flex h-16 w-14 max-sm:h-12 max-sm:w-11 items-center justify-center rounded-l-lg bg-primary text-xl font-medium text-primary-fg tabular-nums"
           data-testid="bulk-count"
         >
           {ids.length}
