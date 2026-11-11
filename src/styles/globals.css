@@ -68,7 +68,9 @@
   --color-info-text: var(--info-text);
 
   --font-sans: var(--font-ui);
-  --font-heading: var(--font-display);
+  /* Headings share the UI face. `font-heading` is kept so existing classes still resolve. */
+  --font-heading: var(--font-ui);
+  --font-display: var(--font-display);
 
   --shadow-xs: var(--elevation-xs);
   --shadow-sm: var(--elevation-sm);
@@ -201,15 +203,24 @@
     font-family: var(--font-ui);
     font-size: var(--type-base);
     line-height: var(--type-base-lh);
+    font-feature-settings: 'cv05', 'cv11';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Data reads in columns: tables and numeric inputs get tabular numerals by default. */
+  table,
+  [role='grid'],
+  [role='table'],
+  input[type='number'] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Headings use the UI face (Inter); only weight, size and tracking set them apart. */
   h1,
   h2,
   h3,
   h4 {
-    font-family: var(--font-display);
     letter-spacing: -0.01em;
   }
 
@@ -378,29 +389,28 @@
 }
 
 /* ---------------------------------------------------------------------------------------------
- * Brand panel (auth showcase + onboarding rail). KitStak navy in both themes with a low red glow
- * and a faint stacked-bar texture; light theme keeps white cards, dark theme raises navy cards.
+ * Brand panel (auth showcase + onboarding rail). Flat --surface-brand: KitStak navy on light,
+ * charcoal on dark. No glow and no gradient; the dark panel is set apart by a 1px border.
  * ------------------------------------------------------------------------------------------- */
 .auth-hero {
   --logo-ink: var(--brand-cream);
-  background:
-    radial-gradient(900px 520px at 112% -8%, rgb(200 16 46 / 0.34) 0%, transparent 58%),
-    radial-gradient(760px 520px at -18% 118%, rgb(143 18 44 / 0.3) 0%, transparent 55%),
-    linear-gradient(165deg, #0a1628 0%, #0d1b31 60%, #11223c 100%);
+  background: var(--surface-brand);
 }
 
-:root[data-theme='dark'] .auth-hero .auth-card-a { stop-color: #16273f; }
-:root[data-theme='dark'] .auth-hero .auth-card-b { stop-color: #12213a; }
-:root[data-theme='dark'] .auth-hero .auth-surface { fill: #16273f; }
-:root[data-theme='dark'] .auth-hero .auth-surface-stroke { stroke: #16273f; }
-:root[data-theme='dark'] .auth-hero .auth-line { fill: #2a3e5d; }
-:root[data-theme='dark'] .auth-hero .auth-ink { fill: #f4f1e9; }
+:root[data-theme='dark'] .auth-hero { box-shadow: inset -1px 0 0 var(--border-subtle); }
+:root[data-theme='dark'] .auth-hero .auth-card-a { stop-color: #1b1d21; }
+:root[data-theme='dark'] .auth-hero .auth-card-b { stop-color: #1b1d21; }
+:root[data-theme='dark'] .auth-hero .auth-surface { fill: #1b1d21; }
+:root[data-theme='dark'] .auth-hero .auth-surface-stroke { stroke: #2c3036; }
+:root[data-theme='dark'] .auth-hero .auth-line { fill: #3a3f46; }
+:root[data-theme='dark'] .auth-hero .auth-ink { fill: #ecedef; }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .auth-hero .auth-card-a { stop-color: #16273f; }
-  :root:not([data-theme='light']) .auth-hero .auth-card-b { stop-color: #12213a; }
-  :root:not([data-theme='light']) .auth-hero .auth-surface { fill: #16273f; }
-  :root:not([data-theme='light']) .auth-hero .auth-surface-stroke { stroke: #16273f; }
-  :root:not([data-theme='light']) .auth-hero .auth-line { fill: #2a3e5d; }
-  :root:not([data-theme='light']) .auth-hero .auth-ink { fill: #f4f1e9; }
+  :root:not([data-theme='light']) .auth-hero { box-shadow: inset -1px 0 0 var(--border-subtle); }
+  :root:not([data-theme='light']) .auth-hero .auth-card-a { stop-color: #1b1d21; }
+  :root:not([data-theme='light']) .auth-hero .auth-card-b { stop-color: #1b1d21; }
+  :root:not([data-theme='light']) .auth-hero .auth-surface { fill: #1b1d21; }
+  :root:not([data-theme='light']) .auth-hero .auth-surface-stroke { stroke: #2c3036; }
+  :root:not([data-theme='light']) .auth-hero .auth-line { fill: #3a3f46; }
+  :root:not([data-theme='light']) .auth-hero .auth-ink { fill: #ecedef; }
 }

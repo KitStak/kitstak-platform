@@ -1,22 +1,15 @@
 import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
-import { Barlow, Barlow_Condensed } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import { THEME_COOKIE, parseThemeCookie } from '@/features/shell/theme-script';
 import { RouteProgress } from '@/features/shell/route-progress';
 import { Providers } from './providers';
 import '@/styles/globals.css';
 
-/* KitStak type: Barlow for UI text, Barlow Condensed for headings (pairs with the condensed wordtype). */
-const barlow = Barlow({
-  variable: '--font-barlow',
+/* KitStak type: Inter for all UI text and headings (same face as KitStak WMS). */
+const inter = Inter({
+  variable: '--font-inter',
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  display: 'swap',
-});
-const barlowCondensed = Barlow_Condensed({
-  variable: '--font-barlow-condensed',
-  subsets: ['latin'],
-  weight: ['500', '600', '700'],
   display: 'swap',
 });
 
@@ -29,7 +22,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#f4f1e9' },
-    { media: '(prefers-color-scheme: dark)', color: '#0a1628' },
+    { media: '(prefers-color-scheme: dark)', color: '#0d0e10' },
   ],
 };
 
@@ -46,7 +39,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     <html
       lang="en"
       data-theme={theme ?? undefined}
-      className={`${barlow.variable} ${barlowCondensed.variable} h-full`}
+      className={`${inter.variable} h-full`}
       suppressHydrationWarning
     >
       <body className="min-h-full">
