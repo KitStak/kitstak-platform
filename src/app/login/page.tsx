@@ -47,7 +47,7 @@ export default function LoginPage() {
       {/* Brand panel */}
       <aside
         className="relative hidden flex-col justify-between overflow-hidden p-12 lg:flex lg:w-[55%]"
-        style={{ background: BRAND_COLORS.navy }}
+        style={{ background: "var(--surface-brand)" }}
         aria-hidden
       >
         {/* dot grid */}
@@ -69,7 +69,7 @@ export default function LoginPage() {
         </div>
 
         <div className="relative max-w-[520px]">
-          <h2 className="font-display text-[64px] uppercase leading-[0.95] tracking-[0.02em]" style={{ color: BRAND_COLORS.cream }}>
+          <h2 className="text-[40px] font-semibold leading-[1.1] tracking-[-0.02em]" style={{ color: BRAND_COLORS.cream }}>
             Fulfillment,
             <br />
             <span style={{ color: BRAND_COLORS.crimson }}>running on rails.</span>

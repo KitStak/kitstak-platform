@@ -104,8 +104,8 @@ function TypeLabel({ children }: { readonly children: React.ReactNode }) {
  * from `GET /api/search`. Keyboard navigable; recent searches persist per browser.
  */
 const searchTriggerClass =
-  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-[12px] text-white/80 outline-none transition-colors " +
-  "hover:bg-white/15 hover:text-white focus-visible:ring-2 focus-visible:ring-white/80 min-[1440px]:w-44 min-[1440px]:px-3";
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-subtle bg-sunken text-[12px] text-fg-secondary outline-none transition-colors " +
+  "hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-focus min-[1440px]:w-44 min-[1440px]:px-3";
 
 export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly NavMenu[]; readonly extraPages: readonly NavItem[] }) {
   const router = useRouter();
@@ -176,7 +176,7 @@ export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly N
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <Search className="h-3.5 w-3.5 shrink-0" aria-hidden />
               <span className="hidden min-w-0 flex-1 whitespace-nowrap text-left min-[1440px]:inline">Search…</span>
-              <kbd className="hidden shrink-0 rounded bg-white/10 px-1.5 py-px text-[10px] font-semibold text-white/75 min-[1440px]:inline">/</kbd>
+              <kbd className="hidden shrink-0 rounded border border-border-subtle bg-panel px-1.5 py-px text-[10px] font-semibold text-fg-secondary min-[1440px]:inline">/</kbd>
             </span>
           </button>
         </DialogPrimitive.Trigger>

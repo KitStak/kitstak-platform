@@ -36,7 +36,7 @@ export interface AvatarProps {
 
 export function Avatar({ name, src, size = "md", tone = "auto", className }: AvatarProps) {
   const rootClass = cn("inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full align-middle", SIZES[size], className);
-  const fallbackClass = cn("flex h-full w-full items-center justify-center font-semibold", tone === "brand" ? "bg-[#C7D2FE] text-[#3730A3]" : "text-white");
+  const fallbackClass = cn("flex h-full w-full items-center justify-center font-semibold", tone === "brand" ? "bg-pressed text-fg" : "text-white");
   const fallbackStyle = tone === "brand" ? undefined : { backgroundColor: avatarColor(name) };
   // Initials-only avatars render as plain markup so they are present in the server HTML
   // (Radix's Fallback only mounts after hydration, leaving an empty slot at first paint).

@@ -80,6 +80,8 @@
   --surface-selected-hover: #f7d5dc;
   --surface-highlight: #fdf3f4;
   --surface-inverse: #0a1628;
+  /* Brand panel (auth showcase): navy on light, charcoal on dark. Flat, no gradient. */
+  --surface-brand: #0a1628;
   --surface-overlay: rgb(10 22 40 / 0.55);
   --surface-skeleton: #ece8de;
   --surface-skeleton-shine: #f7f5ef;
@@ -296,8 +298,10 @@
   --space-16: 64px;
 
   /* ---------------------------------------------------------------- Typography */
-  --font-ui: var(--font-barlow), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-display: var(--font-barlow-condensed), var(--font-barlow), ui-sans-serif, system-ui, sans-serif;
+  /* Inter for all UI text and headings. The display face (Bebas Neue) is reserved for the wordmark
+     and large KPI numerals; apps that do not load it fall back to Inter. */
+  --font-ui: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: var(--font-bebas, var(--font-inter)), 'Arial Narrow', ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Code', Menlo, Consolas, monospace;
   --type-2xs: 11px;
   --type-2xs-lh: 14px;
@@ -361,27 +365,31 @@
   --control-height-lg: 40px;
 }
 
-/* Dark theme: forced */
+/*
+ * Dark theme (forced): neutral charcoal with a slight warmth. Depth comes from lightness steps
+ * (sunken < app < panel < raised) and 1px borders, never from glows or gradients. Crimson stays
+ * the single accent and the logo ink is cream.
+ */
 :root[data-theme='dark'] {
   color-scheme: dark;
   --logo-ink: var(--brand-cream);
-  --logo-divider: rgb(244 241 233 / 0.22);
-  --logo-product: #a3acbb;
+  --logo-divider: rgb(236 237 239 / 0.2);
+  --logo-product: #b4b8bf;
 
-  --neutral-0: #060d19;
-  --neutral-25: #08111f;
-  --neutral-50: #0a1628;
-  --neutral-100: #0f1d33;
-  --neutral-150: #14243d;
-  --neutral-200: #1a2c48;
-  --neutral-300: #263a5a;
-  --neutral-400: #3b4e6e;
-  --neutral-500: #5b6b87;
-  --neutral-600: #8592a8;
-  --neutral-700: #aab3c3;
-  --neutral-800: #cfd3da;
-  --neutral-900: #e9e6dd;
-  --neutral-950: #f4f1e9;
+  --neutral-0: #0d0e10;
+  --neutral-25: #101113;
+  --neutral-50: #141518;
+  --neutral-100: #1b1d21;
+  --neutral-150: #202328;
+  --neutral-200: #23262b;
+  --neutral-300: #2c3036;
+  --neutral-400: #3a3f46;
+  --neutral-500: #5c626b;
+  --neutral-600: #8a9099;
+  --neutral-700: #b4b8bf;
+  --neutral-800: #d4d7db;
+  --neutral-900: #ecedef;
+  --neutral-950: #f5f5f6;
 
   --primary-50: #2a0c15;
   --primary-100: #3a0f1c;
@@ -394,46 +402,47 @@
   --primary-800: #ec7a8b;
   --primary-900: #f4a9b4;
 
-  --surface-app: #060d19;
-  --surface-panel: #0a1628;
-  --surface-raised: #12213a;
-  --surface-sunken: #071020;
+  --surface-app: #0d0e10;
+  --surface-panel: #141518;
+  --surface-raised: #1b1d21;
+  --surface-sunken: #0a0b0d;
   --segment-ring: var(--border-strong);
-  --surface-muted: #0f1d33;
-  --surface-hover: rgb(244 241 233 / 0.07);
-  --surface-pressed: rgb(244 241 233 / 0.12);
-  --surface-selected: #1c2f4d;
-  --surface-selected-hover: #233a5d;
-  --surface-highlight: #1f1222;
-  --surface-inverse: #f4f1e9;
-  --surface-overlay: rgb(3 7 14 / 0.7);
-  --surface-skeleton: #15253e;
-  --surface-skeleton-shine: #1d304d;
+  --surface-muted: #17181c;
+  --surface-hover: rgb(236 237 239 / 0.06);
+  --surface-pressed: rgb(236 237 239 / 0.11);
+  --surface-selected: #24272c;
+  --surface-selected-hover: #2c3036;
+  --surface-highlight: #1e1a1b;
+  --surface-inverse: #ecedef;
+  --surface-brand: #141518;
+  --surface-overlay: rgb(0 0 0 / 0.65);
+  --surface-skeleton: #1b1d21;
+  --surface-skeleton-shine: #25282d;
 
-  --border-subtle: #16263f;
-  --border-default: #20324f;
-  --border-strong: #314767;
-  --border-input: #2a3e5d;
-  --border-input-hover: #455b7d;
+  --border-subtle: #23262b;
+  --border-default: #2c3036;
+  --border-strong: #3a3f46;
+  --border-input: #33383f;
+  --border-input-hover: #4a5059;
 
-  --text-primary: #f4f1e9;
-  --text-secondary: #c9cdd4;
-  --text-muted: #a3acbb;
-  --text-disabled: rgb(244 241 233 / 0.38);
-  --text-placeholder: #8b95a6;
+  --text-primary: #ecedef;
+  --text-secondary: #b4b8bf;
+  --text-muted: #8a9099;
+  --text-disabled: rgb(236 237 239 / 0.38);
+  --text-placeholder: #7d838c;
   --mark-bg: #521324;
   --mark-fg: #fbe3e7;
-  --text-inverse: #0a1628;
+  --text-inverse: #0d0e10;
   --text-link: #f07a8b;
-  --icon-default: #a8b1c0;
-  --icon-strong: #f4f1e9;
+  --icon-default: #9aa0a9;
+  --icon-strong: #ecedef;
 
   --primary: #c8102e;
   --primary-hover: #d42a45;
   --primary-active: #a50d26;
   --primary-subtle: #2a0c15;
-  --primary-selected: #1c2f4d;
-  --primary-selected-hover: #233a5d;
+  --primary-selected: #24272c;
+  --primary-selected-hover: #2c3036;
   --primary-fg: #ffffff;
   --primary-text: #f07a8b;
   --focus-ring: #e04a60;
@@ -470,7 +479,7 @@
   --label-green-subtle: #133c34;
   --label-orange-subtle: #463122;
   --label-red-subtle: #522232;
-  --label-gray-subtle: #323744;
+  --label-gray-subtle: #2a2d32;
   --label-blue-subtle: #1b365f;
   --label-dark-blue-subtle: #1c2c4d;
   --label-purple-subtle: #3a2c5d;
@@ -496,7 +505,7 @@
   --label-green-text: #00b86b;
   --label-orange-text: #ff9a1f;
   --label-red-text: #e8576a;
-  --label-gray-text: #c2c7d1;
+  --label-gray-text: #b4b8bf;
   --label-blue-text: #4a86e9;
   --label-dark-blue-text: #6e8dcb;
   --label-purple-text: #a16ef4;
@@ -525,9 +534,9 @@
   --label-dark-blue: #143d8f;
   --label-dark-blue-hover: #093182;
   --label-dark-blue-fg: #ffffff;
-  --label-gray: #3a4050;
-  --label-gray-hover: #444b5d;
-  --label-gray-fg: #e6e9ef;
+  --label-gray: #3a3f46;
+  --label-gray-hover: #454a52;
+  --label-gray-fg: #ecedef;
   --label-green: #00b06a;
   --label-green-hover: #00a060;
   --label-green-fg: #1f2533;
@@ -589,23 +598,23 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
     --logo-ink: var(--brand-cream);
-    --logo-divider: rgb(244 241 233 / 0.22);
-    --logo-product: #a3acbb;
+    --logo-divider: rgb(236 237 239 / 0.2);
+    --logo-product: #b4b8bf;
 
-    --neutral-0: #060d19;
-    --neutral-25: #08111f;
-    --neutral-50: #0a1628;
-    --neutral-100: #0f1d33;
-    --neutral-150: #14243d;
-    --neutral-200: #1a2c48;
-    --neutral-300: #263a5a;
-    --neutral-400: #3b4e6e;
-    --neutral-500: #5b6b87;
-    --neutral-600: #8592a8;
-    --neutral-700: #aab3c3;
-    --neutral-800: #cfd3da;
-    --neutral-900: #e9e6dd;
-    --neutral-950: #f4f1e9;
+    --neutral-0: #0d0e10;
+    --neutral-25: #101113;
+    --neutral-50: #141518;
+    --neutral-100: #1b1d21;
+    --neutral-150: #202328;
+    --neutral-200: #23262b;
+    --neutral-300: #2c3036;
+    --neutral-400: #3a3f46;
+    --neutral-500: #5c626b;
+    --neutral-600: #8a9099;
+    --neutral-700: #b4b8bf;
+    --neutral-800: #d4d7db;
+    --neutral-900: #ecedef;
+    --neutral-950: #f5f5f6;
 
     --primary-50: #2a0c15;
     --primary-100: #3a0f1c;
@@ -618,46 +627,47 @@
     --primary-800: #ec7a8b;
     --primary-900: #f4a9b4;
 
-    --surface-app: #060d19;
-    --surface-panel: #0a1628;
-    --surface-raised: #12213a;
-    --surface-sunken: #071020;
+    --surface-app: #0d0e10;
+    --surface-panel: #141518;
+    --surface-raised: #1b1d21;
+    --surface-sunken: #0a0b0d;
     --segment-ring: var(--border-strong);
-    --surface-muted: #0f1d33;
-    --surface-hover: rgb(244 241 233 / 0.07);
-    --surface-pressed: rgb(244 241 233 / 0.12);
-    --surface-selected: #1c2f4d;
-    --surface-selected-hover: #233a5d;
-    --surface-highlight: #1f1222;
-    --surface-inverse: #f4f1e9;
-    --surface-overlay: rgb(3 7 14 / 0.7);
-    --surface-skeleton: #15253e;
-    --surface-skeleton-shine: #1d304d;
+    --surface-muted: #17181c;
+    --surface-hover: rgb(236 237 239 / 0.06);
+    --surface-pressed: rgb(236 237 239 / 0.11);
+    --surface-selected: #24272c;
+    --surface-selected-hover: #2c3036;
+    --surface-highlight: #1e1a1b;
+    --surface-inverse: #ecedef;
+    --surface-brand: #141518;
+    --surface-overlay: rgb(0 0 0 / 0.65);
+    --surface-skeleton: #1b1d21;
+    --surface-skeleton-shine: #25282d;
 
-    --border-subtle: #16263f;
-    --border-default: #20324f;
-    --border-strong: #314767;
-    --border-input: #2a3e5d;
-    --border-input-hover: #455b7d;
+    --border-subtle: #23262b;
+    --border-default: #2c3036;
+    --border-strong: #3a3f46;
+    --border-input: #33383f;
+    --border-input-hover: #4a5059;
 
-    --text-primary: #f4f1e9;
-    --text-secondary: #c9cdd4;
-    --text-muted: #a3acbb;
-    --text-disabled: rgb(244 241 233 / 0.38);
-    --text-placeholder: #8b95a6;
+    --text-primary: #ecedef;
+    --text-secondary: #b4b8bf;
+    --text-muted: #8a9099;
+    --text-disabled: rgb(236 237 239 / 0.38);
+    --text-placeholder: #7d838c;
     --mark-bg: #521324;
     --mark-fg: #fbe3e7;
-    --text-inverse: #0a1628;
+    --text-inverse: #0d0e10;
     --text-link: #f07a8b;
-    --icon-default: #a8b1c0;
-    --icon-strong: #f4f1e9;
+    --icon-default: #9aa0a9;
+    --icon-strong: #ecedef;
 
     --primary: #c8102e;
     --primary-hover: #d42a45;
     --primary-active: #a50d26;
     --primary-subtle: #2a0c15;
-    --primary-selected: #1c2f4d;
-    --primary-selected-hover: #233a5d;
+    --primary-selected: #24272c;
+    --primary-selected-hover: #2c3036;
     --primary-fg: #ffffff;
     --primary-text: #f07a8b;
     --focus-ring: #e04a60;
@@ -694,7 +704,7 @@
     --label-green-subtle: #133c34;
     --label-orange-subtle: #463122;
     --label-red-subtle: #522232;
-    --label-gray-subtle: #323744;
+    --label-gray-subtle: #2a2d32;
     --label-blue-subtle: #1b365f;
     --label-dark-blue-subtle: #1c2c4d;
     --label-purple-subtle: #3a2c5d;
@@ -720,7 +730,7 @@
     --label-green-text: #00b86b;
     --label-orange-text: #ff9a1f;
     --label-red-text: #e8576a;
-    --label-gray-text: #c2c7d1;
+    --label-gray-text: #b4b8bf;
     --label-blue-text: #4a86e9;
     --label-dark-blue-text: #6e8dcb;
     --label-purple-text: #a16ef4;
@@ -749,9 +759,9 @@
     --label-dark-blue: #143d8f;
     --label-dark-blue-hover: #093182;
     --label-dark-blue-fg: #ffffff;
-    --label-gray: #3a4050;
-    --label-gray-hover: #444b5d;
-    --label-gray-fg: #e6e9ef;
+    --label-gray: #3a3f46;
+    --label-gray-hover: #454a52;
+    --label-gray-fg: #ecedef;
     --label-green: #00b06a;
     --label-green-hover: #00a060;
     --label-green-fg: #1f2533;

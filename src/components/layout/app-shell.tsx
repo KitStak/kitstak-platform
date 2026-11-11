@@ -38,14 +38,14 @@ function Logo() {
   const custom = logoUrl && failed !== logoUrl ? logoUrl : null;
   const name = branding.data?.data.displayName ?? PRODUCT_NAME;
   return (
-    <Link href={DASHBOARD_ITEM.href} aria-label={`${custom ? name : PRODUCT_NAME} home`} className="flex shrink-0 items-center rounded-md px-1 pr-2 xl:pr-3 outline-none focus-visible:ring-2 focus-visible:ring-white/50">
+    <Link href={DASHBOARD_ITEM.href} aria-label={`${custom ? name : PRODUCT_NAME} home`} className="flex shrink-0 items-center rounded-md px-1 pr-2 xl:pr-3 outline-none focus-visible:ring-2 focus-visible:ring-focus">
       {custom ? (
         <span className="flex h-8 items-center rounded-md bg-white px-2 shadow-sm">
           {/* eslint-disable-next-line @next/next/no-img-element -- private, session-authenticated blob */}
           <img src={custom} alt="" className="max-h-6 max-w-[120px] object-contain" onError={() => setFailed(custom)} />
         </span>
       ) : (
-        <BrandLogo tone="dark" height={16} showProduct />
+        <BrandLogo tone="light" height={16} showProduct />
       )}
     </Link>
   );
@@ -60,7 +60,7 @@ function TopBar() {
   const menus = React.useMemo(() => (permissions ? visibleMenus(NAV_MENUS, permissions, activeApps) : NAV_MENUS), [permissions, activeApps]);
   const extraPages = React.useMemo(() => [DASHBOARD_ITEM, ...USER_MENU_ITEMS, ...HEADER_ITEMS].filter((navItem) => allows(navItem.permission)), [allows]);
   return (
-    <header className="sticky top-0 z-40 bg-nav shadow-md">
+    <header className="sticky top-0 z-40 border-b border-border-subtle bg-panel">
       <div className="flex h-14 items-center gap-1 px-3 lg:px-4">
         <MobileNav menus={menus} dashboardHref={DASHBOARD_ITEM.href} />
         <Logo />
@@ -97,7 +97,7 @@ function PreferencesBoundary({ children }: { readonly children: React.ReactNode 
 }
 
 /**
- * Authenticated application shell: indigo top bar (7 permission-filtered mega-menus, global
+ * Authenticated application shell: light top bar (7 permission-filtered mega-menus, global
  * search, context switcher, Transactions, Printers, Help, Notifications, user menu).
  * `permissions` are resolved on the server so menus render without a loading flash.
  */

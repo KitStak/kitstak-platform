@@ -21,8 +21,8 @@ export const HeaderIconButton = React.forwardRef<HTMLButtonElement, HeaderIconBu
         ref={ref}
         type="button"
         className={cn(
-          "relative flex h-8 w-8 items-center justify-center rounded-full text-white/75 outline-none transition-colors",
-          "hover:bg-white/15 hover:text-white focus-visible:ring-2 focus-visible:ring-white/50 data-[state=open]:bg-white/15 data-[state=open]:text-white",
+          "relative flex h-8 w-8 items-center justify-center rounded-full text-fg-secondary outline-none transition-colors",
+          "hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-focus data-[state=open]:bg-pressed data-[state=open]:text-fg",
           className,
         )}
         {...props}
@@ -31,11 +31,11 @@ export const HeaderIconButton = React.forwardRef<HTMLButtonElement, HeaderIconBu
         <span className="sr-only">{label}</span>
         {children}
         {badge ? (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#f04438] px-1 text-[9px] font-bold leading-none text-white ring-2 ring-nav">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold leading-none text-white ring-2 ring-panel">
             {badge > MAX_BADGE ? `${MAX_BADGE}+` : badge}
           </span>
         ) : null}
-        {pulse && !badge ? <span className="absolute right-1 top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-[#5fe3c0]" aria-hidden /> : null}
+        {pulse && !badge ? <span className="absolute right-1 top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-success" aria-hidden /> : null}
       </button>
     </Tooltip>
   ),

@@ -15,7 +15,7 @@ const buttonVariants = cva(
         danger: "bg-danger text-white hover:opacity-90 shadow-xs disabled:bg-neutral-soft disabled:text-faint disabled:border disabled:border-border disabled:shadow-none disabled:opacity-100",
         "success-outline":
           "bg-surface text-success border border-success/40 hover:bg-success-soft shadow-xs",
-        nav: "text-white/85 hover:bg-nav-hover hover:text-white",
+        nav: "text-fg-secondary hover:bg-hover hover:text-fg",
       },
       size: {
         sm: "h-7 px-2.5 text-xs",

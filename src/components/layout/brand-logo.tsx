@@ -40,8 +40,8 @@ interface BrandLogoProps {
 
 /** Mark + condensed uppercase wordmark, matching the KitStak logo lockup. */
 export function BrandLogo({ tone = "dark", height = 20, showProduct = false, className, wordmarkClassName }: BrandLogoProps) {
-  // "light" tone sits on theme surfaces, so it follows the theme (navy in light mode, cream in dark).
-  const textColor = tone === "dark" ? BRAND_COLORS.cream : "var(--foreground)";
+  // "light" tone sits on theme surfaces, so it follows the shared --logo-ink token (navy in light mode, cream in dark).
+  const textColor = tone === "dark" ? BRAND_COLORS.cream : "var(--logo-ink)";
   return (
     <span className={`inline-flex items-center ${className ?? ""}`} style={{ gap: Math.round(height * 0.5) }}>
       <BrandMark tone={tone} size={Math.round(height * 1.0)} />
@@ -56,8 +56,8 @@ export function BrandLogo({ tone = "dark", height = 20, showProduct = false, cla
           className="rounded-[3px] px-1 py-px font-semibold uppercase leading-none tracking-widest"
           style={{
             fontSize: Math.max(9, Math.round(height * 0.45)),
-            color: tone === "dark" ? "rgba(243,240,231,0.72)" : "var(--text-muted)",
-            background: tone === "dark" ? "rgba(243,240,231,0.1)" : "var(--neutral-soft)",
+            color: tone === "dark" ? "rgba(243,240,231,0.72)" : "var(--logo-product)",
+            background: tone === "dark" ? "rgba(243,240,231,0.1)" : "var(--surface-hover)",
           }}
         >
           WMS

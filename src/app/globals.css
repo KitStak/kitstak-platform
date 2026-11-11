@@ -24,10 +24,10 @@
   --text-body: var(--text-secondary);
   --text-faint: var(--text-muted);
 
-  /* top bar */
-  --nav: var(--brand-navy);
-  --nav-hover: color-mix(in srgb, var(--brand-navy) 88%, white);
-  --nav-active: color-mix(in srgb, var(--primary) 8%, transparent);
+  /* top bar: a panel surface in both themes (light bar in light mode) */
+  --nav: var(--surface-panel);
+  --nav-hover: var(--surface-hover);
+  --nav-active: var(--primary-subtle);
 
   /* brand + semantic tints */
   --primary-soft: var(--primary-subtle);
@@ -141,6 +141,34 @@
   --shadow-sticky: var(--elevation-sticky);
 }
 
+/* Static scales, identical to KitStak CRM. Type scale: 11/12/13/14/16/18/24/32.
+   1 spacing unit = 4px regardless of root font size. */
+@theme {
+  --spacing: 4px;
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --text-2xs: 11px;
+  --text-2xs--line-height: 14px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 18px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+  --text-md: 16px;
+  --text-md--line-height: 22px;
+  --text-lg: 18px;
+  --text-lg--line-height: 24px;
+  --text-xl: 24px;
+  --text-xl--line-height: 30px;
+  --text-2xl: 32px;
+  --text-2xl--line-height: 40px;
+}
+
 /* Default border colour. MUST stay inside @layer base: an unlayered rule here
    would beat every Tailwind v4 `border-*` utility (they live in
    @layer utilities), killing invalid/focus/hover border states app-wide. */
@@ -227,7 +255,12 @@ body {
   }
 }
 
-.tabular-nums {
+.tabular-nums,
+table,
+[role="grid"],
+[role="table"],
+input[type="number"] {
+  /* Data reads in columns: tabular numerals by default. */
   font-variant-numeric: tabular-nums;
 }
 
@@ -304,5 +337,5 @@ tr[data-highlight] > td {
    tint of the pill hue with a lifted foreground. */
 :root[data-theme="dark"] [style*="--pill-fg"] {
   background-color: color-mix(in srgb, var(--pill-fg) 24%, transparent) !important;
-  color: color-mix(in srgb, var(--pill-fg) 45%, #ffffff) !important;
+  color: color-mix(in srgb, var(--pill-fg) 45%, white) !important;
 }

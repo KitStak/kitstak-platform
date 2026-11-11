@@ -5,9 +5,9 @@ import { StaticSlowNotice } from "./static-slow-notice";
 export function ShellSkeleton() {
   return (
     <div className="flex min-h-screen flex-col" aria-busy="true" aria-label="Loading">
-      <div className="flex h-14 items-center justify-end gap-2 bg-nav px-4 shadow-md">
-        <span className="hidden h-8 w-44 animate-pulse rounded-full bg-white/10 xl:block" />
-        <span className="h-6 w-6 animate-pulse rounded-full bg-[#C7D2FE]/40" />
+      <div className="flex h-14 items-center justify-end gap-2 border-b border-border-subtle bg-panel px-4">
+        <span className="hidden h-8 w-44 animate-pulse rounded-full bg-skeleton xl:block" />
+        <span className="h-6 w-6 animate-pulse rounded-full bg-skeleton" />
       </div>
       <PageSkeleton />
     </div>
