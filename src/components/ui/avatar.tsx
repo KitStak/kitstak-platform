@@ -2,7 +2,6 @@
 import type { ReactNode } from 'react';
 import * as AvatarPrimitive from '@radix-ui/react-avatar';
 import { cn } from './cn';
-import { colorForString, labelColorVars } from './label-color';
 import { Tooltip } from './tooltip';
 
 export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
@@ -41,7 +40,7 @@ export interface AvatarProps {
   /** Square tile (teams, workspaces) instead of a circle. */
   readonly shape?: 'circle' | 'square';
   readonly presence?: PresenceStatus;
-  /** Stable key for the color (defaults to the name). */
+  /** @deprecated Avatars are neutral now; kept so existing call sites compile. */
   readonly colorKey?: string;
   readonly showTooltip?: boolean;
   readonly className?: string;
@@ -55,21 +54,19 @@ export function Avatar({
   size = 'md',
   shape = 'circle',
   presence,
-  colorKey,
   showTooltip = false,
   className,
   maxInitials = 2,
 }: AvatarProps) {
-  const color = labelColorVars(colorForString(colorKey ?? name));
   const avatar = (
     <span className={cn('relative inline-flex shrink-0', className)}>
       <AvatarPrimitive.Root
         className={cn(
-          'inline-flex items-center justify-center overflow-hidden font-semibold select-none',
+          // Neutral initials: people are told apart by their initials, not by a colour.
+          'inline-flex items-center justify-center overflow-hidden bg-pressed font-medium text-fg-secondary select-none',
           shape === 'circle' ? 'rounded-full' : 'rounded-md',
           SIZE[size],
         )}
-        style={{ background: color.bg, color: color.fg }}
       >
         {src ? <AvatarPrimitive.Image src={src} alt="" className="size-full object-cover" /> : null}
         <AvatarPrimitive.Fallback delayMs={src ? 300 : 0} aria-hidden>

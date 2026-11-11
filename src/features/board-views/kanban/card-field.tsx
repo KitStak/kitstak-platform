@@ -35,12 +35,12 @@ function FieldValue({ column, item, userMap, closed }: Pick<CardFieldProps, 'col
   const display = cellDisplay(column, item, userMap);
   switch (display.kind) {
     case 'label':
-      return <StatusPill label={display.label} color={toLabelColor(display.color)} className="h-6 max-w-full min-w-0 rounded-sm px-2 text-xs" />;
+      return <StatusPill label={display.label} color={toLabelColor(display.color)} className="max-w-full min-w-0" />;
     case 'labels':
       return (
         <span className="flex min-w-0 justify-end gap-1 overflow-hidden">
           {display.labels.slice(0, 2).map((label) => (
-            <StatusPill key={label.label} label={label.label} color={toLabelColor(label.color)} className="h-6 min-w-0 rounded-sm px-2 text-xs" />
+            <StatusPill key={label.label} label={label.label} color={toLabelColor(label.color)} className="min-w-0" />
           ))}
           {display.labels.length > 2 ? <span className="text-xs text-fg-muted">+{display.labels.length - 2}</span> : null}
         </span>

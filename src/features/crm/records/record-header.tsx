@@ -1,5 +1,5 @@
 'use client';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import '../crm.css';
 import Link from 'next/link';
 import { Building2, Copy, ExternalLink, Globe, Mail, NotebookPen, Phone } from 'lucide-react';
@@ -10,8 +10,6 @@ import {
   Tooltip,
   buttonVariants,
   cn,
-  colorForString,
-  labelColorVars,
   toast,
 } from '@/components/ui';
 import { routes } from '@/features/shell/routes';
@@ -77,7 +75,6 @@ export function RecordHeader({
   readonly composerOpen?: boolean;
 }) {
   const isAccount = record.kind === 'accounts';
-  const tint = labelColorVars(colorForString(record.id));
   const subtitle =
     record.kind === 'contacts'
       ? [record.title, record.account?.name].filter(Boolean)
@@ -86,16 +83,7 @@ export function RecordHeader({
     <section
       aria-label={`${record.name} profile`}
       data-testid="crm-record-header"
-      className="crm-record-header relative overflow-hidden rounded-xl border border-border-subtle bg-panel shadow-xs"
-      // Light: a soft wash of the record colour. Dark: the same hue at ~35% so it reads as a
-      // tint, not a muddy gradient (`--crm-wash-strength` is lowered by the dark theme rule).
-      style={
-        {
-          '--crm-wash': tint.subtle,
-          backgroundImage:
-            'linear-gradient(100deg, color-mix(in oklab, var(--crm-wash) var(--crm-wash-strength, 100%), transparent) 0%, transparent 45%)',
-        } as CSSProperties
-      }
+      className="crm-record-header relative overflow-hidden rounded-lg border border-border-subtle bg-panel"
     >
       <div className="flex flex-col gap-4 px-4 py-5 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -103,10 +91,9 @@ export function RecordHeader({
             <span
               aria-hidden
               className={cn(
-                'flex size-12 shrink-0 items-center justify-center font-heading text-lg font-semibold shadow-sm sm:size-16 sm:text-xl',
+                'flex size-12 shrink-0 items-center justify-center bg-pressed text-lg font-medium text-fg-secondary sm:size-16 sm:text-xl',
                 isAccount ? 'rounded-xl' : 'rounded-full',
               )}
-              style={{ background: tint.bg, color: tint.fg }}
             >
               {initials(record.name)}
             </span>

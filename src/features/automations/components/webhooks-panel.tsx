@@ -649,7 +649,6 @@ function DeliveryRow({
         <StatusPill
           label={delivery.status ? String(delivery.status) : 'Error'}
           color={delivery.ok ? 'green' : 'red'}
-          className="h-6 min-w-14 text-xs"
         />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-mono text-xs text-fg">{delivery.event}</span>

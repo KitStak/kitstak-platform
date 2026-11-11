@@ -15,16 +15,16 @@ import {
 import { cn } from '@/components/ui/cn';
 import type { BoardKind } from './api';
 
-/** Icon + accent per board kind: fast visual scanning in the tree, favorites and search. */
+/** Icon per board kind. Icons are neutral: the shape tells the kinds apart, not a colour. */
 export const BOARD_KIND_META: Readonly<
   Record<BoardKind, { readonly icon: LucideIcon; readonly label: string; readonly accent: string }>
 > = {
-  leads: { icon: Target, label: 'Leads', accent: 'var(--label-orange-text)' },
-  contacts: { icon: Contact, label: 'Contacts', accent: 'var(--label-sky-text)' },
-  accounts: { icon: Building2, label: 'Accounts', accent: 'var(--label-indigo-text)' },
-  deals: { icon: Handshake, label: 'Deals', accent: 'var(--label-green-text)' },
-  activities: { icon: Activity, label: 'Activities', accent: 'var(--label-pink-text)' },
-  projects: { icon: FolderKanban, label: 'Projects', accent: 'var(--label-purple-text)' },
+  leads: { icon: Target, label: 'Leads', accent: 'var(--icon-default)' },
+  contacts: { icon: Contact, label: 'Contacts', accent: 'var(--icon-default)' },
+  accounts: { icon: Building2, label: 'Accounts', accent: 'var(--icon-default)' },
+  deals: { icon: Handshake, label: 'Deals', accent: 'var(--icon-default)' },
+  activities: { icon: Activity, label: 'Activities', accent: 'var(--icon-default)' },
+  projects: { icon: FolderKanban, label: 'Projects', accent: 'var(--icon-default)' },
   custom: { icon: Table2, label: 'Board', accent: 'var(--icon-default)' },
 };
 
@@ -51,7 +51,7 @@ export function EntityIcon({ type, boardKind, colored = true, color, className }
       <LayoutDashboard
         aria-hidden
         className={base}
-        style={colored ? { color: 'var(--label-teal-text)' } : undefined}
+        style={colored ? { color: 'var(--icon-default)' } : undefined}
       />
     );
   }

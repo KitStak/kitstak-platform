@@ -263,7 +263,7 @@ export function RunHistory({
                     )}
                   </span>
                   <span role="cell" className="mt-1 flex items-center justify-between gap-3 md:mt-0 md:block">
-                    <StatusPill label={meta.label} color={meta.color} className="h-6 min-w-[84px] text-xs" />
+                    <StatusPill label={meta.label} color={meta.color} />
                     <span
                       aria-hidden
                       className="text-xs text-fg-secondary tabular-nums md:hidden"

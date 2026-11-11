@@ -19,6 +19,7 @@ import {
   cn,
   labelColorVars,
   toLabelColor,
+  pillTextColor,
 } from '@/components/ui';
 import type { MyWorkLabelDto } from '@/server/services/contracts/inbox-mywork';
 import { formatDueDate, parseIsoDay, toIsoDay, type BucketId } from './my-work-model';
@@ -40,25 +41,24 @@ export function StatusPillCell({ label, labels, columnTitle, disabled, onChange 
       disabled={disabled}
       aria-label={`${columnTitle}: ${label?.name || 'Empty'}${disabled ? '' : '. Change'}`}
       data-testid="my-work-status"
-      style={vars ? { background: vars.bg, color: vars.fg } : undefined}
       className={cn(
-        'group/pill relative flex h-8 w-full items-center justify-center overflow-hidden rounded-sm px-2 text-sm font-medium',
-        'transition-[filter,box-shadow] duration-[var(--duration-instant)] ease-out',
+        'group/pill relative flex h-8 w-full items-center justify-center overflow-hidden rounded-md px-2',
+        'transition-colors duration-[var(--duration-instant)] ease-out',
         'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus',
-        'disabled:cursor-default',
-        vars
-          ? 'enabled:hover:brightness-95 enabled:active:brightness-90'
-          : 'bg-muted text-fg-muted enabled:hover:bg-hover',
-        'data-[state=open]:shadow-[0_0_0_2px_var(--primary)]',
+        'disabled:cursor-default enabled:hover:bg-hover data-[state=open]:bg-pressed',
       )}
     >
-      <span className="truncate">{label?.name || (disabled ? '' : 'Set')}</span>
-      {disabled ? null : (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute top-0 right-0 size-2.5 bg-[linear-gradient(225deg,var(--surface-raised)_50%,transparent_50%)] opacity-0 transition-opacity duration-[var(--duration-fast)] group-hover/pill:opacity-100"
-        />
-      )}
+      {/* Shared status pill: tinted background, label colour as text, solid dot. */}
+      <span
+        style={vars && label ? { background: vars.subtle, color: pillTextColor(toLabelColor(label.color)) } : undefined}
+        className={cn(
+          'inline-flex h-[22px] max-w-full items-center gap-1.5 rounded-full px-2 text-xs font-medium',
+          vars ? '' : 'text-fg-muted ring-1 ring-border-default ring-inset',
+        )}
+      >
+        {vars ? <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: vars.bg }} /> : null}
+        <span className="truncate">{label?.name || (disabled ? '' : 'Set')}</span>
+      </span>
     </button>
   );
   if (disabled) return pill;
