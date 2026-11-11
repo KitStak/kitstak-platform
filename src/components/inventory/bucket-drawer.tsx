@@ -151,8 +151,8 @@ function Allocations({ detail }: { readonly detail: BucketDetail }) {
     return <EmptyState compact icon={SlidersHorizontal} title="Nothing allocated" description="Every unit in this row is free to move, remove or change." />;
   }
   return (
-    <table className="w-full text-[13px]">
-      <thead className="text-left text-[11px] uppercase tracking-wide text-faint"><tr><th className="py-1">Document</th><th>Job</th><th>Status</th><th className="text-right">Qty</th><th className="text-right">Since</th></tr></thead>
+    <table className="w-full text-sm">
+      <thead className="text-left text-2xs text-faint"><tr><th className="py-1">Document</th><th>Job</th><th>Status</th><th className="text-right">Qty</th><th className="text-right">Since</th></tr></thead>
       <tbody>
         {detail.allocations.map((a) => (
           <tr key={a.id} className="border-t border-border">
@@ -192,7 +192,7 @@ function Transactions({ detail }: { readonly detail: BucketDetail }) {
   if (detail.transactions.length === 0) return <EmptyState compact title="No transactions yet" description="Ledger history appears here after the first movement." />;
   return (
     <div className="flex flex-col gap-2">
-    <nav aria-label="Open in Transaction History" className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-[12px]">
+    <nav aria-label="Open in Transaction History" className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs">
       <span className="text-secondary">Transaction History:</span>
       <Link href={bucketHistoryHref(detail.bucket, "in")} className="font-medium text-primary underline-offset-2 hover:underline">Into {detail.bucket.location}</Link>
       <Link href={bucketHistoryHref(detail.bucket, "out")} className="font-medium text-primary underline-offset-2 hover:underline">Out of {detail.bucket.location}</Link>
@@ -203,7 +203,7 @@ function Transactions({ detail }: { readonly detail: BucketDetail }) {
         const d = txnQtyDisplay(t, formatQty);
         const Icon = TXN_ICON[d.kind];
         return (
-          <li key={t.id} className="flex items-start gap-3 py-2 text-[13px]">
+          <li key={t.id} className="flex items-start gap-3 py-2 text-sm">
             <span className={cn("mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full", d.tone === "out" ? "bg-danger-soft text-danger" : d.tone === "in" ? "bg-success-soft text-success" : "bg-neutral-soft text-neutral")}>
               <Icon className="h-3.5 w-3.5" aria-hidden />
             </span>
@@ -214,11 +214,11 @@ function Transactions({ detail }: { readonly detail: BucketDetail }) {
                 {txnLocationText(t.fromLocation, t.toLocation) ? <span className="text-secondary">{txnLocationText(t.fromLocation, t.toLocation)}</span> : null}
                 {t.fromStatus && t.toStatus && t.fromStatus !== t.toStatus ? <span className="text-secondary">{t.fromStatus} → {t.toStatus}</span> : null}
               </div>
-              <div className="text-[12px] text-secondary">
+              <div className="text-xs text-secondary">
                 {[t.reason, t.note, t.orderCode, t.jobCode].filter(Boolean).join(" · ") || " "}
               </div>
             </div>
-            <div className="shrink-0 text-right text-[12px] text-secondary">
+            <div className="shrink-0 text-right text-xs text-secondary">
               <div>{fmt.gridDateTime(t.at)}</div>
               <div className="text-faint">{t.user ?? t.source}</div>
             </div>

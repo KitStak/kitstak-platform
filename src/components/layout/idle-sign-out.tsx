@@ -93,7 +93,7 @@ export function IdleSignOut({ minutes }: { readonly minutes: number | null }) {
         <DialogHeader title="Are you still there?" />
         <DialogBody className="flex items-start gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning"><Clock className="h-4 w-4" aria-hidden /></span>
-          <p className="text-[13px] text-body" aria-live="polite">
+          <p className="text-sm text-body" aria-live="polite">
             For security, you&apos;ll be signed out in <strong className="tabular-nums">{warning ?? 0} seconds</strong> after {minutes} minutes without activity. Unsaved changes will be lost.
           </p>
         </DialogBody>

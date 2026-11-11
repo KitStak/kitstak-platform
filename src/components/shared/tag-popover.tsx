@@ -101,18 +101,18 @@ export function TagPopover({ entityType, ids, scope = "any", appliedTagIds = [],
         </DisabledReason>
         <PopoverContent align="start" className="flex w-[300px] flex-col gap-2 p-3">
           <div className="flex items-center justify-between">
-            <p className="text-[13px] font-semibold text-foreground">Tags</p>
-            <Link href={TAG_MANAGE_HREF} className="text-[12px] font-semibold text-primary hover:underline">
+            <p className="text-sm font-semibold text-foreground">Tags</p>
+            <Link href={TAG_MANAGE_HREF} className="text-xs font-semibold text-primary hover:underline">
               Manage
             </Link>
           </div>
           {list.isPending ? (
-            <p className="py-6 text-center text-[12px] text-faint">Loading tags…</p>
+            <p className="py-6 text-center text-xs text-faint">Loading tags…</p>
           ) : tags.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-5 text-center">
               <TagIcon className="h-5 w-5 text-faint" aria-hidden />
-              <p className="text-[13px] font-semibold text-foreground">No tags yet</p>
-              <p className="text-[12px] text-faint">Create a tag to group and filter records.</p>
+              <p className="text-sm font-semibold text-foreground">No tags yet</p>
+              <p className="text-xs text-faint">Create a tag to group and filter records.</p>
               <Button size="sm" variant="primary" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-3.5 w-3.5" aria-hidden />
                 Create Tag
@@ -132,7 +132,7 @@ export function TagPopover({ entityType, ids, scope = "any", appliedTagIds = [],
                 leading={<Search className="h-3.5 w-3.5" aria-hidden />}
               />
               <ul className="flex min-h-[120px] flex-col gap-1.5" aria-label="Tags">
-                {view.items.length === 0 ? <li className="py-4 text-center text-[12px] text-faint">No tags match</li> : null}
+                {view.items.length === 0 ? <li className="py-4 text-center text-xs text-faint">No tags match</li> : null}
                 {view.items.map((t) => (
                   <li key={t.id} className="flex items-center gap-2">
                     <Checkbox
@@ -148,7 +148,7 @@ export function TagPopover({ entityType, ids, scope = "any", appliedTagIds = [],
                   </li>
                 ))}
               </ul>
-              <div className="flex items-center justify-between text-[11px] text-faint">
+              <div className="flex items-center justify-between text-2xs text-faint">
                 <span>
                   {view.from}-{view.to} of {view.total} · Selected: {selected.size}
                 </span>

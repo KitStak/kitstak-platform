@@ -76,7 +76,7 @@ function InfoStep({ form, isEdit, isOwner, checkEmail, taken, checking }: {
           <TextInput<F> name="lastName" label="Last name" required maxLength={60} placeholder="e.g. Reyes" />
           <div className="flex flex-col gap-1">
             <TextInput<F> name="email" label="Email" required maxLength={254} placeholder="name@company.com" type="email" inputMode="email" autoComplete="off" transform={(v) => v.trim()} />
-            <p aria-live="polite" className="min-h-4 text-[11.5px] text-faint">{isChecking ? "Checking that this email isn't already used…" : ""}</p>
+            <p aria-live="polite" className="min-h-4 text-2xs text-faint">{isChecking ? "Checking that this email isn't already used…" : ""}</p>
           </div>
           <SelectField<F> name="userType" label="User type" required options={typeOptions} disabled={isOwner} info={isOwner ? "The account owner's type can't change" : "Client users only see their own clients' data"} />
         </FormGrid>
@@ -105,7 +105,7 @@ function ArrayStep({ name, items, noun, columnLabel, title, description, loading
   if (!nested) {
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-[13px] text-secondary">{description}</p>
+        <p className="text-sm text-secondary">{description}</p>
         <FormField<F> name={name}>
           {(c) => <AccessGrid items={items} value={(c.value as string[] | null) ?? []} onChange={(ids) => c.onChange(ids)} noun={noun} columnLabel={columnLabel} invalid={c.invalid} describedBy={c["aria-describedby"]} loading={loading} />}
         </FormField>

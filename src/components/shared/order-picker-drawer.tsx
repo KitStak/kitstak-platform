@@ -85,7 +85,7 @@ function Body({ onOpenChange, onConfirm, clientId, warehouseId, statuses, exclud
       <GridToolbar {...g.toolbarProps} views={undefined} searchPlaceholder="Search order code" />
       <DataGrid<OrderPick> {...g.gridProps} gridKey={undefined} queryString={undefined} columns={COLUMNS} getRowId={(o) => o.id} canSelectRow={(o) => !excluded.has(o.id)} onAllMatchingSelectedChange={undefined} emptyTitle="No orders match" emptyDescription="Adjust the search or filters." />
       <div className="mt-3 flex items-center justify-end gap-2 border-t border-border px-6 py-3">
-        <span className="mr-auto text-[12px] text-secondary">
+        <span className="mr-auto text-xs text-secondary">
           Selected: <strong className="text-foreground">{count}</strong>
         </span>
         <Button variant="secondary" onClick={() => onOpenChange(false)}>

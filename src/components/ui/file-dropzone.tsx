@@ -119,8 +119,8 @@ export function FileDropzone({ onFiles, accept, maxSizeBytes, maxFiles, multiple
         )}
       >
         <UploadCloud className={cn("h-7 w-7", dragging ? "text-primary" : "text-faint")} aria-hidden />
-        <p className="text-[13px] font-medium text-body">{title}</p>
-        {autoHint ? <p id={id ? `${id}-hint` : undefined} className="text-[11px] text-faint">{autoHint}</p> : null}
+        <p className="text-sm font-medium text-body">{title}</p>
+        {autoHint ? <p id={id ? `${id}-hint` : undefined} className="text-2xs text-faint">{autoHint}</p> : null}
         <input
           ref={inputRef}
           id={id}
@@ -147,7 +147,7 @@ export function FileDropzone({ onFiles, accept, maxSizeBytes, maxFiles, multiple
             <li key={item.id} className="flex items-center gap-2.5 rounded-md border border-border bg-surface px-3 py-2">
               <FileText className="h-4 w-4 shrink-0 text-secondary" aria-hidden />
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2 text-[12px]">
+                <div className="flex items-center justify-between gap-2 text-xs">
                   <span className="truncate font-medium text-body">{item.name}</span>
                   <span className="shrink-0 tabular-nums text-faint">{item.error ? "Failed" : item.progress !== undefined ? `${Math.round(item.progress)}%` : formatBytes(item.size)}</span>
                 </div>

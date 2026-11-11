@@ -89,7 +89,7 @@ export function GeneralStep({ form, statuses, isEdit, lastEstimate, onApplyEstim
               <DateTimeField<F> name="truckDepartedAt" label="Truck departed date" disabled={!editableTimes.has("truckDepartedAt")}
                 info={editableTimes.has("truckDepartedAt") ? "Enter when the truck left the gate. Ship stamps it if it is still empty." : "Can be entered once loading is completed. Ship stamps it automatically."} />
             </>
-          ) : <p className="col-span-full text-[12px] text-secondary">Loading, departure and actual shipment times are recorded automatically as the plan moves through its lifecycle.</p>}
+          ) : <p className="col-span-full text-xs text-secondary">Loading, departure and actual shipment times are recorded automatically as the plan moves through its lifecycle.</p>}
         </FormGrid>
       </FormSection>
       <FormSection title="Load">
@@ -97,7 +97,7 @@ export function GeneralStep({ form, statuses, isEdit, lastEstimate, onApplyEstim
           <NumberField<F> name="expectedTotalWeight" label="Expected total weight" decimals={2} suffix="lb" />
           <NumberField<F> name="expectedTotalVolume" label="Expected total volume" decimals={2} suffix="ft³" />
           <FormGridFull>
-            <div className="flex items-center justify-between gap-3 rounded-md bg-surface-sunken px-3 py-2 text-[12px] text-secondary">
+            <div className="flex items-center justify-between gap-3 rounded-md bg-surface-sunken px-3 py-2 text-xs text-secondary">
               <span className="flex items-center gap-1.5">
                 <Calculator className="h-3.5 w-3.5" aria-hidden />
                 {lastEstimate && hasOrders ? `From ${lastEstimate.orders} ${lastEstimate.orders === 1 ? "order" : "orders"} (${lastEstimate.units} units): ${lastEstimate.weightLb} lb · ${lastEstimate.volumeFt3} ft³` : "Totals are computed from the orders you add on the Orders step."}
@@ -142,8 +142,8 @@ function OrdersTable({ orders, selected, onToggle, onToggleAll }: { readonly ord
   const all = orders.length > 0 && orders.every((o) => selected.has(o.id));
   return (
     <div className="overflow-hidden rounded-lg border border-border">
-      <table className="w-full text-[12px]">
-        <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+      <table className="w-full text-xs">
+        <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
           <tr>
             <th className="w-9 px-3 py-2"><Checkbox aria-label="Select all orders" checked={all} onCheckedChange={onToggleAll} /></th>
             <th className="px-2 py-2">Order code</th>
@@ -219,7 +219,7 @@ export function OrdersStep({ form, planId, lastEstimate, onEstimate }: { readonl
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[12px] text-secondary">{orders.length} {orders.length === 1 ? "order" : "orders"} · {orders.reduce((s, o) => s + o.totalQuantity, 0)} units</p>
+        <p className="text-xs text-secondary">{orders.length} {orders.length === 1 ? "order" : "orders"} · {orders.reduce((s, o) => s + o.totalQuantity, 0)} units</p>
         <div className="flex items-center gap-2">
           <DisabledReason reason={selected.size === 0 ? "Select orders to remove" : null}>
             <Button variant="secondary" disabled={selected.size === 0} onClick={() => void remove()}><Trash2 className="h-3.5 w-3.5" aria-hidden />Remove</Button>
@@ -232,8 +232,8 @@ export function OrdersStep({ form, planId, lastEstimate, onEstimate }: { readonl
       {orders.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border px-6 py-10 text-center">
           <PackagePlus className="h-6 w-6 text-faint" aria-hidden />
-          <p className="text-[13px] font-semibold">No order added yet.</p>
-          <p className="max-w-sm text-[12px] text-secondary">Add the orders that ride on this truck. Only orders of the plan&apos;s warehouse that are not shipped, cancelled, on hold or in another active plan can be added.</p>
+          <p className="text-sm font-semibold">No order added yet.</p>
+          <p className="max-w-sm text-xs text-secondary">Add the orders that ride on this truck. Only orders of the plan&apos;s warehouse that are not shipped, cancelled, on hold or in another active plan can be added.</p>
           <DisabledReason reason={addReason}>
             <Button size="sm" disabled={Boolean(addReason)} onClick={() => setPicking(true)}>Add order</Button>
           </DisabledReason>
@@ -242,13 +242,13 @@ export function OrdersStep({ form, planId, lastEstimate, onEstimate }: { readonl
         <OrdersTable orders={orders} selected={selected} onToggle={toggle} onToggleAll={() => setSelected(orders.every((o) => selected.has(o.id)) ? new Set() : new Set(orders.map((o) => o.id)))} />
       )}
       {orders.some((o) => !isShipReady(o.status)) ? (
-        <p role="status" className="rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-[12px] text-foreground">
+        <p role="status" className="rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-xs text-foreground">
           <strong>{orders.filter((o) => !isShipReady(o.status)).length} of {orders.length}</strong> orders are not Ready to Ship yet
           ({[...new Set(orders.filter((o) => !isShipReady(o.status)).map((o) => o.status))].join(', ')}). They can ride on the plan, but Ship only ships
           orders that are picked and packed.
         </p>
       ) : null}
-      {error ? <p role="alert" className="text-[12px] text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
       {picking ? (
         <PlanOrderPicker open onOpenChange={(o) => (o ? undefined : setPicking(false))} title="Add order(s)" warehouseId={warehouseId} clientId={clientId} planId={planId}
           excludeIds={orders.map((o) => o.id)} onConfirm={async (ids) => { await add(ids); setPicking(false); }} />

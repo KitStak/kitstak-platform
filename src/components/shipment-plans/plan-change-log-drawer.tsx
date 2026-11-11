@@ -47,8 +47,8 @@ export function PlanChangeLogDrawer({ open, onOpenChange, entityId, entityCode }
       ) : (
         <div className="flex flex-col gap-3">
           <div className="overflow-hidden rounded-lg border border-border">
-            <table className="w-full border-collapse text-[13px]">
-              <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+            <table className="w-full border-collapse text-sm">
+              <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
                 <tr>
                   <th scope="col" className="w-14 px-3 py-2">Type</th>
                   <th scope="col" className="px-3 py-2">Message</th>
@@ -77,7 +77,7 @@ export function PlanChangeLogDrawer({ open, onOpenChange, entityId, entityCode }
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-between text-[12px] text-secondary">
+          <div className="flex items-center justify-between text-xs text-secondary">
             <span className="tabular-nums">{(page - 1) * CHANGE_LOG_PAGE_SIZE + 1}–{Math.min(page * CHANGE_LOG_PAGE_SIZE, total)} of {total}</span>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon-sm" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft className="h-3.5 w-3.5" aria-hidden /></Button>

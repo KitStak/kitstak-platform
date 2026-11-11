@@ -50,7 +50,7 @@ const fileUrl = (id: string) => `/api/files/${id}?inline=1`;
 function Logo({ fileId, name, size = 28 }: { readonly fileId: string | null; readonly name: string; readonly size?: number }) {
   const [broken, setBroken] = React.useState(false);
   if (!fileId || broken) {
-    return <span className="inline-flex items-center justify-center rounded-md bg-primary-soft text-[11px] font-bold uppercase text-primary" style={{ width: size, height: size }} aria-hidden>{name.slice(0, 2)}</span>;
+    return <span className="inline-flex items-center justify-center rounded-md bg-primary-soft text-2xs font-bold text-primary" style={{ width: size, height: size }} aria-hidden>{name.slice(0, 2)}</span>;
   }
   // eslint-disable-next-line @next/next/no-img-element -- authenticated file route, not a static asset
   return <img src={fileUrl(fileId)} alt={`${name} logo`} width={size} height={size} onError={() => setBroken(true)} className="rounded-md border border-border bg-surface object-contain" style={{ width: size, height: size }} />;
@@ -122,7 +122,7 @@ function GeneralStep() {
           <FormField<F> name="state" label={country === "CA" ? "Province" : "State"} disabled={!country}>
             {(c) => subs.length > 0
               ? <Combobox id={c.id} aria-label="State" options={subs.map((s) => ({ value: s.code, label: s.name }))} value={(c.value as string | null) || null} invalid={c.invalid} onBlur={c.onBlur} onChange={(v) => c.onChange(v ?? "")} disabled={c.disabled} clearable />
-              : <input disabled className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-[13px] text-faint" placeholder="Not applicable" aria-label="State" />}
+              : <input disabled className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-faint" placeholder="Not applicable" aria-label="State" />}
           </FormField>
           <TextInput<F> name="email" label="Email" maxLength={200} />
           <TextInput<F> name="phone" label="Phone number" maxLength={40} />
@@ -158,10 +158,10 @@ function DocumentsField({ initial }: { readonly initial: readonly RetailerDocume
       {docs.length ? (
         <ul className="divide-y divide-border rounded-lg border border-border">
           {docs.map((d) => (
-            <li key={d.fileId} className="flex items-center gap-2 px-3 py-2 text-[13px]">
+            <li key={d.fileId} className="flex items-center gap-2 px-3 py-2 text-sm">
               <FileText className="h-4 w-4 text-secondary" aria-hidden />
               <a href={fileUrl(d.fileId)} target="_blank" rel="noreferrer" className="flex-1 truncate text-primary hover:underline">{d.name}</a>
-              {d.size ? <span className="text-[12px] text-faint">{Math.max(1, Math.round(d.size / 1024))} KB</span> : null}
+              {d.size ? <span className="text-xs text-faint">{Math.max(1, Math.round(d.size / 1024))} KB</span> : null}
               <Button size="icon-sm" variant="ghost" aria-label={`Remove ${d.name}`} onClick={() => field.onChange(ids.filter((x) => x !== d.fileId))}><X className="h-4 w-4" /></Button>
             </li>
           ))}
@@ -278,10 +278,10 @@ function RetailerDetailsDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly
               { key: "desc", label: "Description", value: d.description ?? "—" },
             ]} />
             <section className="flex flex-col gap-2" aria-label="Documents">
-              <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Documents ({d.documents.length})</h3>
-              {d.documents.length === 0 ? <p className="text-[13px] text-faint">No documents.</p> : (
+              <h3 className="text-xs font-semibold text-secondary">Documents ({d.documents.length})</h3>
+              {d.documents.length === 0 ? <p className="text-sm text-faint">No documents.</p> : (
                 <ul className="divide-y divide-border rounded-lg border border-border">
-                  {d.documents.map((doc) => <li key={doc.fileId} className="flex items-center justify-between px-3 py-2 text-[13px]"><a className="text-primary hover:underline" href={fileUrl(doc.fileId)} target="_blank" rel="noreferrer">{doc.name}</a><span className="text-secondary">{Math.max(1, Math.round(doc.size / 1024))} KB</span></li>)}
+                  {d.documents.map((doc) => <li key={doc.fileId} className="flex items-center justify-between px-3 py-2 text-sm"><a className="text-primary hover:underline" href={fileUrl(doc.fileId)} target="_blank" rel="noreferrer">{doc.name}</a><span className="text-secondary">{Math.max(1, Math.round(doc.size / 1024))} KB</span></li>)}
                 </ul>
               )}
             </section>

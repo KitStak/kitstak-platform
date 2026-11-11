@@ -76,9 +76,11 @@
   --surface-muted: #faf8f3;
   --surface-hover: rgb(10 22 40 / 0.06);
   --surface-pressed: rgb(10 22 40 / 0.11);
-  --surface-selected: #fbe6ea;
-  --surface-selected-hover: #f7d5dc;
-  --surface-highlight: #fdf3f4;
+  /* Selection is neutral: crimson is reserved for primary buttons, the active nav underline,
+     checked controls and focus rings. */
+  --surface-selected: #f0ede4;
+  --surface-selected-hover: #e8e4d9;
+  --surface-highlight: #f7f5ef;
   --surface-inverse: #0a1628;
   /* Brand panel (auth showcase): navy on light, charcoal on dark. Flat, no gradient. */
   --surface-brand: #0a1628;
@@ -113,11 +115,13 @@
   --primary: var(--primary-600);
   --primary-hover: var(--primary-700);
   --primary-active: var(--primary-800);
-  --primary-subtle: var(--primary-50);
-  --primary-selected: var(--primary-100);
-  --primary-selected-hover: var(--primary-200);
+  /* Tinted and text roles of the accent are neutral too (see Selection above). The crimson
+     scale itself (--primary-50 … --primary-900) is unchanged. */
+  --primary-subtle: var(--neutral-100);
+  --primary-selected: var(--neutral-150);
+  --primary-selected-hover: var(--neutral-200);
   --primary-fg: #ffffff;
-  --primary-text: var(--primary-700);
+  --primary-text: var(--text-primary);
   --focus-ring: #c8102e;
   --focus-ring-soft: rgb(200 16 46 / 0.24);
 
@@ -450,8 +454,8 @@
   --text-muted: #8a9099;
   --text-disabled: rgb(236 237 239 / 0.38);
   --text-placeholder: #7d838c;
-  --mark-bg: #521324;
-  --mark-fg: #fbe3e7;
+  --mark-bg: #4a4130;
+  --mark-fg: #f3ead2;
   --text-inverse: #0d0e10;
   --text-link: var(--text-primary);
   --pill-text-mix: 60%;
@@ -467,11 +471,11 @@
   --primary: #c8102e;
   --primary-hover: #d42a45;
   --primary-active: #a50d26;
-  --primary-subtle: #2a0c15;
+  --primary-subtle: var(--surface-raised);
   --primary-selected: #24272c;
   --primary-selected-hover: #2c3036;
   --primary-fg: #ffffff;
-  --primary-text: #f07a8b;
+  --primary-text: var(--text-primary);
   --focus-ring: #e04a60;
   --focus-ring-soft: rgb(224 74 96 / 0.35);
 
@@ -682,8 +686,8 @@
     --text-muted: #8a9099;
     --text-disabled: rgb(236 237 239 / 0.38);
     --text-placeholder: #7d838c;
-    --mark-bg: #521324;
-    --mark-fg: #fbe3e7;
+    --mark-bg: #4a4130;
+    --mark-fg: #f3ead2;
     --text-inverse: #0d0e10;
     --text-link: var(--text-primary);
     --pill-text-mix: 60%;
@@ -699,11 +703,11 @@
     --primary: #c8102e;
     --primary-hover: #d42a45;
     --primary-active: #a50d26;
-    --primary-subtle: #2a0c15;
+    --primary-subtle: var(--surface-raised);
     --primary-selected: #24272c;
     --primary-selected-hover: #2c3036;
     --primary-fg: #ffffff;
-    --primary-text: #f07a8b;
+    --primary-text: var(--text-primary);
     --focus-ring: #e04a60;
     --focus-ring-soft: rgb(224 74 96 / 0.35);
 

@@ -80,7 +80,7 @@ export const QtyInput = React.forwardRef<HTMLInputElement, QtyInputProps>(({ val
         className="h-full min-w-0 flex-1 bg-transparent text-right tabular-nums outline-none placeholder:text-faint disabled:cursor-not-allowed"
         {...props}
       />
-      {suffix ? <span className="shrink-0 text-[12px] text-faint">{suffix}</span> : null}
+      {suffix ? <span className="shrink-0 text-xs text-faint">{suffix}</span> : null}
     </div>
   );
 });
@@ -184,10 +184,10 @@ export function usePlacementCheck(target: { readonly kind: "location" | "lp"; re
 /** Inline result under a destination picker: lock / rule (blocking, red), a neutral note, or a retry when the check failed. */
 export function PlacementNotice({ state }: { readonly state: PlacementCheckState }) {
   const { check, checking, failed, retry } = state;
-  if (checking && !check) return <p className="flex items-center gap-1.5 text-[12px] text-secondary"><Spinner className="h-3 w-3" label="Checking" /> Checking the destination…</p>;
+  if (checking && !check) return <p className="flex items-center gap-1.5 text-xs text-secondary"><Spinner className="h-3 w-3" label="Checking" /> Checking the destination…</p>;
   if (failed) {
     return (
-      <p role="status" className="flex flex-wrap items-center gap-1.5 text-[12px] text-warning">
+      <p role="status" className="flex flex-wrap items-center gap-1.5 text-xs text-warning">
         <span>Couldn&apos;t check the destination in time. It is re-checked when you submit.</span>
         <button type="button" onClick={retry} className="font-semibold text-link underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded">Retry</button>
       </p>
@@ -196,12 +196,12 @@ export function PlacementNotice({ state }: { readonly state: PlacementCheckState
   if (!check) return null;
   if (check.blocking) {
     return (
-      <p role="alert" className="flex items-start gap-1.5 rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-[12px] text-danger">
+      <p role="alert" className="flex items-start gap-1.5 rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-xs text-danger">
         <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
         <span>{check.blocking}</span>
       </p>
     );
   }
   if (check.notes.length === 0) return null;
-  return <p className="text-[12px] text-secondary">{check.notes.join(" ")}</p>;
+  return <p className="text-xs text-secondary">{check.notes.join(" ")}</p>;
 }

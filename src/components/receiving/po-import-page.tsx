@@ -92,20 +92,20 @@ function ImportManual({ def, open, onOpenChange }: { readonly def: PoImportDefin
   const required = def.columns.filter((c) => c.required).length;
   return (
     <Drawer open={open} onOpenChange={onOpenChange} width={45} title={<span className="flex items-center gap-2"><BookOpen className="h-4 w-4 text-primary" aria-hidden />Import manual · {def.label}</span>} description={`${def.columns.length} columns, ${required} required (marked *)`}
-      footer={<><a href={`/api/imports/${def.key}/template`} download className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-[13px] font-medium text-foreground hover:bg-surface-sunken"><Download className="h-3.5 w-3.5" aria-hidden />Download template</a><Button variant="primary" onClick={() => onOpenChange(false)}>Close</Button></>}>
+      footer={<><a href={`/api/imports/${def.key}/template`} download className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-surface-sunken"><Download className="h-3.5 w-3.5" aria-hidden />Download template</a><Button variant="primary" onClick={() => onOpenChange(false)}>Close</Button></>}>
       <div className="flex flex-col gap-5" data-testid="import-manual">
         <section>
-          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-[0.04em] text-faint">How the import works</h3>
-          <ol className="list-decimal space-y-1.5 pl-5 text-[13px] text-body">
+          <h3 className="mb-2 text-xs font-semibold text-faint">How the import works</h3>
+          <ol className="list-decimal space-y-1.5 pl-5 text-sm text-body">
             {IMPORT_RULES[def.key].map((r) => <li key={r}>{r}</li>)}
           </ol>
         </section>
         <section>
-          <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-[0.04em] text-faint">Columns</h3>
+          <h3 className="mb-2 text-xs font-semibold text-faint">Columns</h3>
           <div className="overflow-x-auto ks-scroll">
-            <table className="w-full border-collapse text-[12px]">
+            <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+                <tr className="text-left text-2xs font-semibold text-faint">
                   {["Column", "Rules", "Example", "Notes"].map((h) => <th key={h} className="border-b border-border px-2 py-2">{h}</th>)}
                 </tr>
               </thead>
@@ -114,7 +114,7 @@ function ImportManual({ def, open, onOpenChange }: { readonly def: PoImportDefin
                   <tr key={c.key} className="align-top">
                     <td className="border-b border-border px-2 py-2 font-semibold text-foreground">{c.header.replace(/\s*\*$/, "")}{c.required ? <span className="text-danger"> *</span> : null}</td>
                     <td className="border-b border-border px-2 py-2 text-secondary">{columnRule(c)}</td>
-                    <td className="border-b border-border px-2 py-2 font-mono text-[11px] text-body">{c.example || "—"}</td>
+                    <td className="border-b border-border px-2 py-2 font-mono text-2xs text-body">{c.example || "—"}</td>
                     <td className="border-b border-border px-2 py-2 text-secondary">{c.description ?? (c.required ? "Required." : "Optional.")}</td>
                   </tr>
                 ))}
@@ -173,15 +173,15 @@ function ImportPanel({ def }: { readonly def: PoImportDefinition }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-col gap-4 px-6 pt-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <p className="max-w-3xl text-[13px] text-secondary">{def.description}</p>
+          <p className="max-w-3xl text-sm text-secondary">{def.description}</p>
           <Button variant="secondary" onClick={() => setManual(true)} data-testid="open-import-manual"><BookOpen className="h-3.5 w-3.5" aria-hidden />Import manual</Button>
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
           <a href={`/api/imports/${def.key}/template`} download className="group flex items-center gap-3 rounded-lg border border-success/40 bg-success-soft p-4 transition-colors hover:border-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success/40">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-success text-white"><FileSpreadsheet className="h-5 w-5" aria-hidden /></span>
             <span className="flex flex-col">
-              <span className="text-[13px] font-semibold text-success">Download our excel template</span>
-              <span className="text-[12px] text-secondary">{def.columns.length} columns, an example row and field notes</span>
+              <span className="text-sm font-semibold text-success">Download our excel template</span>
+              <span className="text-xs text-secondary">{def.columns.length} columns, an example row and field notes</span>
             </span>
             <Download className="ml-auto h-4 w-4 text-success transition-transform group-hover:translate-y-0.5" aria-hidden />
           </a>
@@ -218,7 +218,7 @@ function ImportPanel({ def }: { readonly def: PoImportDefinition }) {
         exportName={`${def.key}-import-history`}
         emptyTitle="No imports yet"
         emptyDescription="Download the template, fill it in and drop the file above. Each upload is listed here with its success and error counts."
-        toolbarLeft={<h2 className="text-[14px] font-semibold text-foreground">Import history</h2>}
+        toolbarLeft={<h2 className="text-base font-semibold text-foreground">Import history</h2>}
       />
       <ImportDetailsDrawer batch={details} onOpenChange={(o) => !o && setDetails(null)} />
       <ImportManual def={def} open={manual} onOpenChange={setManual} />
@@ -238,15 +238,15 @@ export function PoImportPage({ defs, initialKey }: { readonly defs: readonly PoI
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <div className="flex flex-col gap-3 px-6 pt-5">
-        <Link href="/receiving" className="inline-flex w-fit items-center gap-1 text-[12px] font-semibold text-secondary hover:text-primary"><ArrowLeft className="h-3.5 w-3.5" aria-hidden />Back to purchase orders</Link>
+        <Link href="/receiving" className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-secondary hover:text-primary"><ArrowLeft className="h-3.5 w-3.5" aria-hidden />Back to purchase orders</Link>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-[20px] font-semibold text-foreground">Import purchase orders</h1>
+          <h1 className="text-lg font-semibold text-foreground">Import purchase orders</h1>
           {!def.configured ? <Badge tone="warning" size="sm">Not configured</Badge> : null}
         </div>
         <div role="tablist" aria-label="Import type" className="flex gap-1 border-b border-border">
           {defs.map((d) => (
             <button key={d.key} type="button" role="tab" aria-selected={d.key === def.key} onClick={() => select(d.key)}
-              className={`-mb-px border-b-2 px-3 py-2 text-[13px] font-medium ${d.key === def.key ? "border-primary text-primary" : "border-transparent text-secondary hover:text-foreground"}`}>
+              className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${d.key === def.key ? "border-primary text-primary" : "border-transparent text-secondary hover:text-foreground"}`}>
               {d.label}
             </button>
           ))}

@@ -116,8 +116,8 @@ function CommitOverlay({ label }: { readonly label: string }) {
       <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-5 py-4 shadow-lg">
         <Spinner className="h-5 w-5" label={label} />
         <div>
-          <p className="text-[14px] font-semibold text-foreground">{label}</p>
-          <p className="text-[12px] text-secondary">Posting the receipt. Keep this page open.</p>
+          <p className="text-base font-semibold text-foreground">{label}</p>
+          <p className="text-xs text-secondary">Posting the receipt. Keep this page open.</p>
         </div>
       </div>
     </div>
@@ -148,11 +148,11 @@ function Done({ result, onNext, onExit, nextLabel }: { readonly result: ReceiveR
   return (
     <Card className="flex flex-col items-center gap-3 p-8 text-center"><div role="status" className="contents">
       <CheckCircle2 className="h-12 w-12 text-success" aria-hidden />
-      <h2 className="text-[18px] font-semibold">Return {result.rmaCode} received</h2>
-      <p className="text-[13px] text-secondary">{result.receivedQty} unit{result.receivedQty === 1 ? "" : "s"} received on {result.receiptIds.length} receipt{result.receiptIds.length === 1 ? "" : "s"}. Status: <StatusPill status={result.status} domain="return" size="sm" />{result.notified ? ` · ${result.notified} client user${result.notified === 1 ? "" : "s"} notified` : ""}</p>
+      <h2 className="text-lg font-semibold">Return {result.rmaCode} received</h2>
+      <p className="text-sm text-secondary">{result.receivedQty} unit{result.receivedQty === 1 ? "" : "s"} received on {result.receiptIds.length} receipt{result.receiptIds.length === 1 ? "" : "s"}. Status: <StatusPill status={result.status} domain="return" size="sm" />{result.notified ? ` · ${result.notified} client user${result.notified === 1 ? "" : "s"} notified` : ""}</p>
       <div className="mt-2 flex flex-wrap justify-center gap-2">
         <Button variant="primary" autoFocus onClick={onNext}><RotateCcw className="h-3.5 w-3.5" aria-hidden />{nextLabel}</Button>
-        <Link href={`/orders/returns/${result.returnOrderId}`} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-[13px] font-medium hover:bg-surface-sunken">View RMA<ExternalLink className="h-3.5 w-3.5" aria-hidden /></Link>
+        <Link href={`/orders/returns/${result.returnOrderId}`} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-surface-sunken">View RMA<ExternalLink className="h-3.5 w-3.5" aria-hidden /></Link>
         <Button variant="ghost" onClick={onExit}>Back to station</Button>
       </div>
     </div></Card>
@@ -178,8 +178,8 @@ function useCapture() {
 function Totals({ items }: { readonly items: readonly CaptureItem[] }) {
   const t = totals(items);
   return (
-    <div className="flex items-center gap-3 text-[12px] text-secondary">
-      <span className="tabular-nums"><strong className="text-[15px] text-foreground">{t.scanned}</strong>{t.expected !== null ? ` / ${t.expected}` : ""} units</span>
+    <div className="flex items-center gap-3 text-xs text-secondary">
+      <span className="tabular-nums"><strong className="text-base text-foreground">{t.scanned}</strong>{t.expected !== null ? ` / ${t.expected}` : ""} units</span>
       {t.expected ? <ProgressBar value={t.scanned} max={t.expected} tone={t.scanned >= t.expected ? "success" : "primary"} className="w-32" /> : null}
     </div>
   );
@@ -350,7 +350,7 @@ export function ReturnWithRma({ station, initialCode, onExit, onSwitchWarehouse 
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <Button variant="ghost" onClick={onExit}><ArrowLeft className="h-3.5 w-3.5" aria-hidden />Station</Button>
-        <p className="text-[12px] text-secondary">Return with RMA · {station.stationCode}{station.targetCode ? ` → ${station.targetCode}` : ""}</p>
+        <p className="text-xs text-secondary">Return with RMA · {station.stationCode}{station.targetCode ? ` → ${station.targetCode}` : ""}</p>
       </div>
       <Card className="p-4">
         <ScanField ref={lookupRef} id="rma-lookup" label="RMA, order code or tracking number" onScan={lookup} busy={lookupBusy} error={lookupError} autoFocus={!rma}
@@ -363,12 +363,12 @@ export function ReturnWithRma({ station, initialCode, onExit, onSwitchWarehouse 
         ) : null}
         {candidates ? (
           <div className="mt-3 space-y-1.5" role="listbox" aria-label="Matching returns">
-            <p className="text-[12px] font-medium text-body">{candidates.length} returns match. Choose one:</p>
+            <p className="text-xs font-medium text-body">{candidates.length} returns match. Choose one:</p>
             {candidates.map((c) => (
               <button key={c.id} type="button" role="option" aria-selected={false} disabled={!c.receivable} onClick={() => void load(c.id)}
-                className="flex w-full items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-left text-[13px] hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" title={c.reason ?? undefined}>
+                className="flex w-full items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-left text-sm hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" title={c.reason ?? undefined}>
                 <span><strong>{c.rmaCode}</strong> · {c.orderCode ?? "Manual"} · {c.customerName ?? "—"}</span>
-                <span className="flex items-center gap-2 text-[12px] text-secondary">{c.returnedQty}/{c.requestedQty}<StatusPill status={c.status} domain="return" size="sm" /></span>
+                <span className="flex items-center gap-2 text-xs text-secondary">{c.returnedQty}/{c.requestedQty}<StatusPill status={c.status} domain="return" size="sm" /></span>
               </button>
             ))}
           </div>
@@ -378,8 +378,8 @@ export function ReturnWithRma({ station, initialCode, onExit, onSwitchWarehouse 
         <>
           <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
             <div>
-              <p className="flex items-center gap-2 text-[15px] font-semibold">RMA {rma.rmaCode}<StatusPill status={rma.status} domain="return" size="sm" /></p>
-              <p className="text-[12px] text-secondary">{rma.order?.code ?? "Manual"} · {rma.customerName ?? "—"} · {rma.clientName}{rma.trackingNumber ? ` · ${rma.trackingNumber}` : ""}</p>
+              <p className="flex items-center gap-2 text-base font-semibold">RMA {rma.rmaCode}<StatusPill status={rma.status} domain="return" size="sm" /></p>
+              <p className="text-xs text-secondary">{rma.order?.code ?? "Manual"} · {rma.customerName ?? "—"} · {rma.clientName}{rma.trackingNumber ? ` · ${rma.trackingNumber}` : ""}</p>
             </div>
             <Totals items={cap.items} />
           </Card>
@@ -402,7 +402,7 @@ export function ReturnWithRma({ station, initialCode, onExit, onSwitchWarehouse 
             records={shortConfirm ? { columns: [{ key: "sku", label: "SKU" }, { key: "short", label: "Not received" }], rows: shortConfirm.lines.map((l) => ({ sku: l.sku, short: l.short })) } : undefined}
             confirmLabel="Close as short" cancelLabel="Keep receiving"
             onConfirm={() => submit(true, true)}>
-            <label className="mt-1 flex flex-col gap-1 text-[12px] font-medium text-body" htmlFor="short-close-reason">
+            <label className="mt-1 flex flex-col gap-1 text-xs font-medium text-body" htmlFor="short-close-reason">
               Reason (optional)
               <TextField id="short-close-reason" className="h-9 w-full" value={shortReason} maxLength={300} placeholder="e.g. Customer kept 2 units" onChange={(ev) => setShortReason(ev.target.value)} />
             </label>
@@ -416,7 +416,7 @@ export function ReturnWithRma({ station, initialCode, onExit, onSwitchWarehouse 
       ) : !candidates ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-12 text-center text-secondary">
           <Search className="h-8 w-8 text-faint" aria-hidden />
-          <p className="text-[13px]">Scan a return to load its lines.</p>
+          <p className="text-sm">Scan a return to load its lines.</p>
         </div>
       ) : null}
     </div>
@@ -514,16 +514,16 @@ export function ReturnManually({ station, onExit }: { readonly station: StationC
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <Button variant="ghost" onClick={onExit}><ArrowLeft className="h-3.5 w-3.5" aria-hidden />Station</Button>
-        <p className="text-[12px] text-secondary">Return manually · {station.stationCode}{station.targetCode ? ` → ${station.targetCode}` : ""}</p>
+        <p className="text-xs text-secondary">Return manually · {station.stationCode}{station.targetCode ? ` → ${station.targetCode}` : ""}</p>
       </div>
       <Card className="grid gap-3 p-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
-          <label htmlFor="manual-client" className="text-[12px] font-semibold text-body">Client <span className="text-danger">*</span></label>
+          <label htmlFor="manual-client" className="text-xs font-semibold text-body">Client <span className="text-danger">*</span></label>
           <Select id="manual-client" value={clientId} invalid={Boolean(clientError)} onChange={changeClient} options={clients.map((c) => ({ value: c.id, label: c.code ? `${c.code} · ${c.name}` : c.name }))} placeholder="Choose the client" />
-          {clientError ? <p className="text-[11px] text-danger">{clientError}</p> : null}
+          {clientError ? <p className="text-2xs text-danger">{clientError}</p> : null}
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-[12px] font-semibold text-body">Shipment order <span className="font-normal text-secondary">(optional)</span></span>
+          <span className="text-xs font-semibold text-body">Shipment order <span className="font-normal text-secondary">(optional)</span></span>
           <div className="flex items-center gap-2">
             <Button variant="secondary" className="flex-1 justify-start" disabled={!clientId} onClick={() => setPicking(true)} title={clientId ? undefined : "Choose the client first"}>
               <PackageOpen className="h-3.5 w-3.5" aria-hidden />{order ? order.code : "Link a shipped order"}
@@ -532,11 +532,11 @@ export function ReturnManually({ station, onExit }: { readonly station: StationC
           </div>
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="manual-customer" className="text-[12px] font-semibold text-body">Customer name</label>
+          <label htmlFor="manual-customer" className="text-xs font-semibold text-body">Customer name</label>
           <TextField id="manual-customer" value={customerName} maxLength={200} onChange={(e) => setCustomerName(e.target.value)} placeholder={order ? "From the order" : "Who sent it back"} />
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="manual-note" className="text-[12px] font-semibold text-body">Note</label>
+          <label htmlFor="manual-note" className="text-xs font-semibold text-body">Note</label>
           <TextField id="manual-note" value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} placeholder="e.g. No RMA in the box" />
         </div>
       </Card>

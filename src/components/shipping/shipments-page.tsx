@@ -216,7 +216,7 @@ export function ShipmentsPage() {
       <GridToolbar {...g.toolbarProps} searchPlaceholder="Order code, tracking or master tracking, customer" onRefresh={refresh} bulkActions={bulkActions} selectedIds={g.selectedIds} bulkNoun="label" trailing={(
         <span className="flex items-center gap-2">
           <button type="button" aria-pressed={errorsOn} onClick={toggleErrors} data-testid="carrier-errors-filter"
-            className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+            className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
               errorsOn ? "border-primary bg-primary text-white" : typeof errorCount === "number" && errorCount > 0 ? "border-danger/40 bg-danger-soft text-danger hover:brightness-95" : "border-border bg-surface text-body hover:bg-surface-sunken")}>
             <AlertTriangle className="h-3.5 w-3.5" aria-hidden />Carrier errors{typeof errorCount === "number" ? <span className="tabular-nums">{errorCount}</span> : null}
           </button>

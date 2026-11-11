@@ -16,7 +16,7 @@ function Card({ title, onEdit, children, className }: { readonly title: string; 
   return (
     <section className={`flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 ${className ?? ""}`}>
       <header className="flex items-center justify-between">
-        <h3 className="text-[13px] font-semibold uppercase tracking-[0.04em] text-faint">{title}</h3>
+        <h3 className="text-sm font-semibold text-faint">{title}</h3>
         <Button variant="ghost" size="sm" onClick={onEdit} aria-label={`Edit ${title.toLowerCase()}`}>
           <Pencil className="h-3.5 w-3.5" aria-hidden />
           Edit
@@ -57,15 +57,15 @@ export function StepConfirm({ goTo }: { readonly goTo: (key: string) => void }) 
                 {l.imageUrl ? <img src={l.imageUrl} alt="" width={36} height={36} className="h-full w-full object-cover" /> : <ImageIcon className="h-4 w-4 text-faint" aria-hidden />}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-semibold text-foreground">{l.sku}</span>
-                <span className="block truncate text-[12px] text-secondary">{l.name}</span>
+                <span className="block truncate text-sm font-semibold text-foreground">{l.sku}</span>
+                <span className="block truncate text-xs text-secondary">{l.name}</span>
               </span>
-              <span className="w-24 text-right text-[12px] tabular-nums">{fmt.quantity(l.quantity)} {l.packType}</span>
-              <span className="w-28 text-right text-[13px] font-semibold tabular-nums">{fmt.money(l.quantity * l.unitPrice)}</span>
+              <span className="w-24 text-right text-xs tabular-nums">{fmt.quantity(l.quantity)} {l.packType}</span>
+              <span className="w-28 text-right text-sm font-semibold tabular-nums">{fmt.money(l.quantity * l.unitPrice)}</span>
             </li>
           ))}
         </ul>
-        <div className="flex justify-end gap-6 border-t border-border pt-2 text-[12px]">
+        <div className="flex justify-end gap-6 border-t border-border pt-2 text-xs">
           <span className="text-secondary">{fmt.quantity(totals.totalQuantity)} units · {fmt.measure(totals.weightOz / 16, "lb", 2)}</span>
           <span className="font-semibold text-foreground">Total {fmt.money(totals.total, "USD", "summary")}</span>
         </div>
@@ -76,16 +76,16 @@ export function StepConfirm({ goTo }: { readonly goTo: (key: string) => void }) 
           <ReadValue label="Name">{name}</ReadValue>
           <ReadValue label="Email">{v.customerEmail}</ReadValue>
           <div className="flex flex-col gap-1">
-            <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+            <span className="flex items-center gap-2 text-2xs font-semibold text-faint">
               Shipment address
               <StatusPill size="sm" status={v.skipAddressVerification ? "Skipped" : v.addressStatus} domain="generic" />
             </span>
-            {ship.map((l) => <span key={l} className="text-[13px] text-foreground">{l}</span>)}
-            {addressNeedsAttention(v) ? <span className="text-[12px] text-warning">Not verified — it is verified when you save.</span> : null}
+            {ship.map((l) => <span key={l} className="text-sm text-foreground">{l}</span>)}
+            {addressNeedsAttention(v) ? <span className="text-xs text-warning">Not verified — it is verified when you save.</span> : null}
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">Billing address</span>
-            {bill ? bill.map((l) => <span key={l} className="text-[13px] text-foreground">{l}</span>) : <span className="text-[13px] text-secondary">Same as shipment address</span>}
+            <span className="text-2xs font-semibold text-faint">Billing address</span>
+            {bill ? bill.map((l) => <span key={l} className="text-sm text-foreground">{l}</span>) : <span className="text-sm text-secondary">Same as shipment address</span>}
           </div>
         </div>
       </Card>
@@ -102,7 +102,7 @@ export function StepConfirm({ goTo }: { readonly goTo: (key: string) => void }) 
           </div>
           <div className="hidden w-32 shrink-0 flex-col items-center justify-center gap-2 rounded-lg bg-gradient-to-b from-primary-soft to-surface p-3 text-center sm:flex">
             <Warehouse className="h-10 w-10 text-primary" strokeWidth={1.5} aria-hidden />
-            <span className="text-[12px] font-semibold text-foreground">{warehouse}</span>
+            <span className="text-xs font-semibold text-foreground">{warehouse}</span>
           </div>
         </div>
       </Card>

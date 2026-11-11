@@ -68,7 +68,7 @@ export function ActivityTimeline({ entityType, entityId, ledgerPath, limit = PAG
   if (loading) return <SkeletonText lines={5} />;
   if (changes.error) {
     return (
-      <p className="text-[12px] text-danger">
+      <p className="text-xs text-danger">
         Activity could not be loaded.{" "}
         <button type="button" className="font-semibold underline" onClick={() => void changes.refetch()}>
           Retry
@@ -76,7 +76,7 @@ export function ActivityTimeline({ entityType, entityId, ledgerPath, limit = PAG
       </p>
     );
   }
-  if (items.length === 0) return <p className="text-[12px] text-faint">No activity recorded for this record yet.</p>;
+  if (items.length === 0) return <p className="text-xs text-faint">No activity recorded for this record yet.</p>;
 
   return (
     <div className="flex flex-col gap-2">
@@ -91,8 +91,8 @@ export function ActivityTimeline({ entityType, entityId, ledgerPath, limit = PAG
                 <Icon className="h-3 w-3" aria-hidden />
               </span>
               <div className="min-w-0 pt-0.5">
-                <p className="break-words text-[13px] text-body">{item.title}</p>
-                <p className="text-[11px] text-faint">
+                <p className="break-words text-sm text-body">{item.title}</p>
+                <p className="text-2xs text-faint">
                   {timeOf(item.at)} · {item.source}
                 </p>
               </div>

@@ -58,7 +58,7 @@ function CartTypeDimensions({ meta }: { readonly meta: Record<string, unknown> |
   const cart = cartDimensionText(meta, "");
   const cell = cartDimensionText(meta, "cell");
   return (
-    <dl className="mt-3 grid grid-cols-2 gap-3 rounded-md border border-border bg-surface-sunken px-3 py-2 text-[12px]" aria-label="Cart type dimensions">
+    <dl className="mt-3 grid grid-cols-2 gap-3 rounded-md border border-border bg-surface-sunken px-3 py-2 text-xs" aria-label="Cart type dimensions">
       <div><dt className="text-faint">Cart H × L × W</dt><dd className="tabular-nums text-foreground">{cart ?? "Not set in Data Setup"}</dd></div>
       <div><dt className="text-faint">Cell H × L × W</dt><dd className="tabular-nums text-foreground">{cell ?? "Not set in Data Setup"}</dd></div>
     </dl>
@@ -87,14 +87,14 @@ function AddCartTypePanel({ warehouseId, onCreated, onCancel }: { readonly wareh
   };
   return (
     <div role="group" aria-label="Add mobile cart type" className="rounded-md border border-border bg-surface-2 p-3 md:col-span-2">
-      <p className="mb-2 text-[13px] font-semibold text-foreground">New mobile cart type</p>
+      <p className="mb-2 text-sm font-semibold text-foreground">New mobile cart type</p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_96px_96px]">
-        <label className="flex flex-col gap-1 text-[12px] text-muted">Name<TextField autoFocus value={name} maxLength={120} invalid={Boolean(error) && !name.trim()} onChange={(e) => setName(e.target.value)} placeholder="e.g. 24-bin cart"
+        <label className="flex flex-col gap-1 text-xs text-muted">Name<TextField autoFocus value={name} maxLength={120} invalid={Boolean(error) && !name.trim()} onChange={(e) => setName(e.target.value)} placeholder="e.g. 24-bin cart"
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} /></label>
-        <label className="flex flex-col gap-1 text-[12px] text-muted">Levels<TextField type="number" min={1} max={MAX_CART_LEVELS} value={levels} onChange={(e) => setLevels(Number(e.target.value))} /></label>
-        <label className="flex flex-col gap-1 text-[12px] text-muted">Columns<TextField type="number" min={1} max={MAX_CART_COLUMNS} value={columns} onChange={(e) => setColumns(Number(e.target.value))} /></label>
+        <label className="flex flex-col gap-1 text-xs text-muted">Levels<TextField type="number" min={1} max={MAX_CART_LEVELS} value={levels} onChange={(e) => setLevels(Number(e.target.value))} /></label>
+        <label className="flex flex-col gap-1 text-xs text-muted">Columns<TextField type="number" min={1} max={MAX_CART_COLUMNS} value={columns} onChange={(e) => setColumns(Number(e.target.value))} /></label>
       </div>
-      {error ? <p role="alert" className="mt-2 text-[12px] text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="mt-2 text-xs text-danger">{error}</p> : null}
       <div className="mt-3 flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>Cancel</Button>
         <Button size="sm" variant="primary" onClick={() => void submit()} disabled={busy}>{busy ? "Creating…" : "Create cart type"}</Button>
@@ -149,7 +149,7 @@ function CartStep({ form, isEdit, locked, guard, editId }: { readonly form: UseF
           <ComboField<F> name="cartTypeId" label="Mobile cart type" required options={types.options} onValueChange={applyType} disabled={!warehouseId}
             placeholder={warehouseId ? "Select a cart type" : "Select a warehouse first"} emptyText="No cart types for this warehouse yet. Use Add cart type below." info="The type sets the default levels × columns" />
           {warehouseId && !adding && canAddType ? (
-            <div className="-mt-3 flex items-center gap-2 text-[12px] text-muted md:col-span-2">
+            <div className="-mt-3 flex items-center gap-2 text-xs text-muted md:col-span-2">
               {!types.loading && types.options.length === 0 ? <span>No cart types for this warehouse yet.</span> : null}
               <Button size="sm" variant="ghost" className="text-primary" onClick={() => setAdding(true)}><Plus className="h-3.5 w-3.5" aria-hidden />Add cart type</Button>
             </div>
@@ -171,8 +171,8 @@ function CartStep({ form, isEdit, locked, guard, editId }: { readonly form: UseF
           <NumberField<F> name="levels" label="Levels" required min={1} max={MAX_CART_LEVELS} disabled={Boolean(layoutReason)} info={layoutReason} />
           <NumberField<F> name="columns" label="Columns" required min={1} max={MAX_CART_COLUMNS} disabled={Boolean(layoutReason)} info={layoutReason} />
           <div className="flex flex-col justify-end pb-1">
-            <p className="text-[11px] text-faint">Cells</p>
-            <p className="text-[20px] font-semibold tabular-nums text-foreground">{levels * columns || 0}</p>
+            <p className="text-2xs text-faint">Cells</p>
+            <p className="text-lg font-semibold tabular-nums text-foreground">{levels * columns || 0}</p>
           </div>
         </FormGrid>
         <CartTypeDimensions meta={types.rows.find((r) => r.id === form.watch("cartTypeId"))?.meta} />
@@ -203,22 +203,22 @@ function CellStep({ form, locked }: { readonly form: UseFormReturn<F>; readonly 
       {locked ? <Callout variant="attention" title="Cells are locked">{locked}</Callout> : null}
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Cart layout · {levels} × {columns}</h3>
+          <h3 className="text-xs font-semibold text-secondary">Cart layout · {levels} × {columns}</h3>
           <Button size="sm" variant="secondary" onClick={regenerate} disabled={Boolean(locked)}><RefreshCw className="h-3.5 w-3.5" aria-hidden />Regenerate barcodes</Button>
         </div>
         <div className="overflow-x-auto rounded-lg border border-border bg-surface-sunken/50 p-3">
           <div className="inline-grid gap-1.5" style={{ gridTemplateColumns: `2rem repeat(${Math.max(1, columns)}, minmax(4.5rem, 1fr))` }}>
             <span />
-            {Array.from({ length: columns }, (_, c) => <span key={c} className="text-center text-[11px] font-medium text-faint">{c + 1}</span>)}
+            {Array.from({ length: columns }, (_, c) => <span key={c} className="text-center text-2xs font-medium text-faint">{c + 1}</span>)}
             {Array.from({ length: levels }, (_, l) => (
               <React.Fragment key={l}>
-                <span className="flex items-center text-[11px] font-semibold text-faint">{levelLetter(l + 1)}</span>
+                <span className="flex items-center text-2xs font-semibold text-faint">{levelLetter(l + 1)}</span>
                 {Array.from({ length: columns }, (_, c) => {
                   const cell = cells.find((x) => x.level === l + 1 && x.column === c + 1);
                   const color = cellColor(cellSequence(l + 1, c + 1, columns));
                   return (
                     <span key={c} title={`${cellDisplayName(l + 1, c + 1)} · ${color.name} · ${cell?.barcode ?? ""}`}
-                      className="truncate rounded-md border border-border border-t-[3px] bg-surface px-1.5 py-1 text-center font-mono text-[10px] text-body shadow-xs" style={{ borderTopColor: color.hex }}>
+                      className="truncate rounded-md border border-border border-t-[3px] bg-surface px-1.5 py-1 text-center font-mono text-2xs text-body shadow-xs" style={{ borderTopColor: color.hex }}>
                       {cell?.barcode.slice(code.length + 1) || "—"}
                     </span>
                   );
@@ -229,11 +229,11 @@ function CellStep({ form, locked }: { readonly form: UseFormReturn<F>; readonly 
         </div>
       </section>
       <section className="flex flex-col gap-2">
-        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Cell list</h3>
-        {listError ? <p role="alert" className="text-[12px] text-danger">{listError}</p> : null}
+        <h3 className="text-xs font-semibold text-secondary">Cell list</h3>
+        {listError ? <p role="alert" className="text-xs text-danger">{listError}</p> : null}
         <div className="max-h-[40vh] overflow-auto rounded-lg border border-border">
-          <table className="w-full text-[13px]">
-            <thead className="sticky top-0 z-[1] bg-surface-sunken text-[11px] uppercase text-secondary">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-[1] bg-surface-sunken text-2xs text-secondary">
               <tr><th className="w-14 px-3 py-2 text-right">Seq.</th><th className="w-20 px-3 py-2 text-left" title="Level letter + column; the end of the cell barcode">Cell</th><th className="w-14 px-3 py-2 text-left">Level</th><th className="w-16 px-3 py-2 text-left">Column</th><th className="w-28 px-3 py-2 text-left">Color</th><th className="px-3 py-2 text-left">Cell barcode *</th></tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -251,7 +251,7 @@ function CellStep({ form, locked }: { readonly form: UseFormReturn<F>; readonly 
                     <td className="px-3 py-1.5">
                       <TextField aria-label={`Barcode for cell ${cellDisplayName(cell.level, cell.column)}`} value={cell.barcode} maxLength={60} disabled={Boolean(locked)} invalid={Boolean(err)} size="sm"
                         onChange={(e) => form.setValue(`cells.${i}.barcode`, e.target.value.toUpperCase(), { shouldDirty: true, shouldValidate: true })} />
-                      {err ? <p className="mt-0.5 text-[11px] text-danger">{err}</p> : null}
+                      {err ? <p className="mt-0.5 text-2xs text-danger">{err}</p> : null}
                     </td>
                   </tr>
                 );

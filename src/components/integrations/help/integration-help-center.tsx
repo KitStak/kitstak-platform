@@ -67,8 +67,8 @@ function status(e: HelpEntry): { label: string; tone: "success" | "neutral" | "w
 function Section({ id, title, children, aside }: { readonly id: string; readonly title: string; readonly children: React.ReactNode; readonly aside?: React.ReactNode }) {
   return (
     <section id={id} className="scroll-mt-20 rounded-xl border border-border bg-surface p-5">
-      <div className="mb-2 flex flex-wrap items-center gap-2"><h2 className="text-[15px] font-semibold text-foreground">{title}</h2>{aside}</div>
-      <div className="flex flex-col gap-2 text-[13px] leading-relaxed text-body">{children}</div>
+      <div className="mb-2 flex flex-wrap items-center gap-2"><h2 className="text-base font-semibold text-foreground">{title}</h2>{aside}</div>
+      <div className="flex flex-col gap-2 text-sm leading-relaxed text-body">{children}</div>
     </section>
   );
 }
@@ -81,7 +81,7 @@ export function IntegrationHelpCenter({ entries, shopifyPublicApp }: { readonly 
       <PageHeader title="Integration Help Center" breadcrumbs={[{ label: "Integrations" }, { label: "Integration Management", href: "/integrations/channels" }, { label: "Help Center" }]}
         helper="How to connect each sales channel and carrier, what every channel method does, and how to read the logs and monitoring screens." />
       <div className="mt-4 grid gap-6 px-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <nav aria-label="Help topics" className="flex flex-col gap-1 self-start text-[13px] lg:sticky lg:top-4">
+        <nav aria-label="Help topics" className="flex flex-col gap-1 self-start text-sm lg:sticky lg:top-4">
           {[["overview", "Overview"], ["channels", "Sales channels"], ["carriers", "Carriers"], ["methods", "Channel methods"], ["logs", "Channel logs"], ["monitoring", "Channel monitoring"], ["carrier-errors", "Carrier errors"], ["workflows", "Workflow triggers"]].map(([id, label]) => (
             <a key={id} href={`#${id}`} className="rounded px-2 py-1 text-secondary hover:bg-surface-sunken hover:text-foreground">{label}</a>
           ))}
@@ -91,7 +91,7 @@ export function IntegrationHelpCenter({ entries, shopifyPublicApp }: { readonly 
             <p>Every integration is set up from <Link className="text-primary hover:underline" href="/integrations/channels">Integration Management</Link>. A store connection belongs to one client; link each store location to a warehouse, then turn on the methods you want. Credentials are encrypted at rest and only the last four characters are ever shown.</p>
             <p><strong>Live adapter · Beta</strong> integrations call the provider&apos;s real API with your credentials, but are marked Beta until a connected account in this workspace completes a successful call; the Integration Management card then reads <strong>Live API</strong>. Connecting checks the credentials against the provider&apos;s API; a <strong>Run</strong> on Channel Methods (or a rate or label call for a carrier) then verifies it end to end. <strong>Sandbox only</strong> integrations don&apos;t have a live adapter yet: connecting creates a KitStak Sandbox store that simulates orders, inventory and shipment confirmation so you can configure and test. <strong>Coming soon</strong> integrations can&apos;t be connected yet.</p>
             <div className="overflow-x-auto">
-              <table className="mt-1 w-full text-left text-[12px]">
+              <table className="mt-1 w-full text-left text-xs">
                 <thead className="text-secondary"><tr><th className="py-1 pr-3 font-medium">Integration</th><th className="py-1 pr-3 font-medium">Type</th><th className="py-1 font-medium">Status</th></tr></thead>
                 <tbody>{[...channels, ...carriers].map((e) => { const st = status(e); return (
                   <tr key={`${e.kind}-${e.key}`} className="border-t border-border"><td className="py-1.5 pr-3"><a href={e.kind === "carrier" ? `#carrier-${e.key}` : `#${e.key}`} className="text-primary hover:underline">{e.name}</a></td><td className="py-1.5 pr-3 capitalize text-secondary">{e.kind}</td><td className="py-1.5"><Badge size="sm" tone={st.tone}>{st.label}</Badge></td></tr>
@@ -99,7 +99,7 @@ export function IntegrationHelpCenter({ entries, shopifyPublicApp }: { readonly 
               </table>
             </div>
           </Section>
-          <h2 id="channels" className="scroll-mt-20 pt-2 text-[12px] font-semibold uppercase tracking-wide text-secondary">Sales channels</h2>
+          <h2 id="channels" className="scroll-mt-20 pt-2 text-xs font-semibold text-secondary">Sales channels</h2>
           {channels.map((e) => {
             const st = status(e);
             const profile = CHANNEL_CREDENTIAL_PROFILES[e.key] ? channelCredentialProfile(e.key) : null;
@@ -118,7 +118,7 @@ export function IntegrationHelpCenter({ entries, shopifyPublicApp }: { readonly 
               </Section>
             );
           })}
-          <h2 id="carriers" className="scroll-mt-20 pt-2 text-[12px] font-semibold uppercase tracking-wide text-secondary">Carriers</h2>
+          <h2 id="carriers" className="scroll-mt-20 pt-2 text-xs font-semibold text-secondary">Carriers</h2>
           {carriers.map((e) => {
             const st = status(e);
             return (

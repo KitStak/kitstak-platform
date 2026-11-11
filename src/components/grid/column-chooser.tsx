@@ -103,8 +103,8 @@ export function ColumnChooser({ columns, prefs, onApply, onReset, size = "md" }:
       </Tooltip>
       <PopoverContent align="end" className="flex w-[300px] flex-col gap-2 p-3">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] font-semibold text-foreground">Columns</p>
-          <span className="text-[11px] text-faint">
+          <p className="text-sm font-semibold text-foreground">Columns</p>
+          <span className="text-2xs text-faint">
             {visibleCount} of {ordered.length} shown
           </span>
         </div>

@@ -36,7 +36,7 @@ export function SupportContact() {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[13px] text-body">Email our support team. Include the order, PO or screen you were on so we can help faster.</p>
+      <p className="text-sm text-body">Email our support team. Include the order, PO or screen you were on so we can help faster.</p>
       <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-sunken px-3 py-2">
         <Mail className="h-4 w-4 shrink-0 text-primary" aria-hidden />
         <span className="min-w-0 flex-1 select-all truncate font-medium text-foreground" data-testid="support-email">{SUPPORT_EMAIL}</span>
@@ -47,7 +47,7 @@ export function SupportContact() {
       </div>
       <a
         href={supportMailto()}
-        className="self-start rounded text-[13px] font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
+        className="self-start rounded text-sm font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
       >
         Open email app
       </a>

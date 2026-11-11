@@ -104,7 +104,7 @@ const EXC_COLS = buildColumns<GridRow>(ALLOCATION_EXCEPTION_COLUMNS, {
     },
     explanation: ({ row }) => {
       const text = str(row.original.explanation);
-      const tone = text === "Shortage" || text.startsWith("Order bypassed") ? "text-[#A13406]" : "text-body";
+      const tone = text === "Shortage" || text.startsWith("Order bypassed") ? "text-[var(--label-brown-text)]" : "text-body";
       return <span className={`truncate ${tone}`} title={text}>{text || "—"}</span>;
     },
   },
@@ -152,7 +152,7 @@ const SHORT_COLS = buildColumns<GridRow>(SHORTAGE_COLUMNS, {
     reason: ({ getValue }) => <ReasonCell value={getValue()} />,
     orderAge: ({ getValue }) => {
       const days = Number(getValue() ?? 0);
-      return <span className={`tabular-nums ${days >= 3 ? "font-semibold text-[#A13406]" : ""}`}>{plural(days, "day")}</span>;
+      return <span className={`tabular-nums ${days >= 3 ? "font-semibold text-[var(--label-brown-text)]" : ""}`}>{plural(days, "day")}</span>;
     },
     masterOrderCode: ({ getValue }) => (getValue() ? orderLink(getValue()) : <Dash />),
   },

@@ -198,18 +198,18 @@ function SuggestionHint({ po, line, index, form }: { readonly po: PoDetail; read
 
   if (q.isPending) {
     return (
-      <p className="flex items-center gap-1.5 text-[11px] text-faint" aria-live="polite">
+      <p className="flex items-center gap-1.5 text-2xs text-faint" aria-live="polite">
         <Spinner className="h-3 w-3" label="Finding a putaway location" />
         Checking putaway rules…
       </p>
     );
   }
-  if (q.isError && !data) return <p className="text-[11px] text-faint">No putaway suggestion available. Choose a location.</p>;
+  if (q.isError && !data) return <p className="text-2xs text-faint">No putaway suggestion available. Choose a location.</p>;
   if (!data) return null;
   const others = data.suggestions.filter((s) => s.locationId !== locationId).slice(0, 3);
   const reasons = top ? humanReasons(top.reasons, { damaged: Boolean(damage) }) : [];
   return (
-    <div className="flex flex-col gap-1 text-[11px]">
+    <div className="flex flex-col gap-1 text-2xs">
       {top ? (
         <p className="flex min-w-0 items-start gap-1 text-secondary">
           <Lightbulb className="mt-px h-3 w-3 shrink-0 text-warning" aria-hidden />
@@ -257,10 +257,10 @@ function PhotoField({ form, index, poId }: { readonly form: UseFormReturn<Receiv
   };
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[12px] font-medium text-body">Damage photo</span>
+      <span className="text-xs font-medium text-body">Damage photo</span>
       <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => void pick(e.target.files?.[0])} />
       {name ? (
-        <span className="flex h-9 items-center gap-2 rounded-md border border-border px-2.5 text-[12px]">
+        <span className="flex h-9 items-center gap-2 rounded-md border border-border px-2.5 text-xs">
           <Camera className="h-3.5 w-3.5 text-faint" aria-hidden />
           <span className="min-w-0 flex-1 truncate">{name}</span>
           <Button variant="ghost" size="icon-sm" aria-label="Remove photo" onClick={() => { form.setValue(`lines.${index}.damageImageFileId`, null); form.setValue(`lines.${index}.damageImageName`, null); }}><X className="h-3.5 w-3.5" aria-hidden /></Button>
@@ -283,7 +283,7 @@ function ExpiryField({ form, index, name }: { readonly form: UseFormReturn<Recei
     <div className="flex flex-col gap-1">
       <DateF name={name} label="Expiry date" required liveValidate />
       {isExpired(expiry, todayIn()) && !hasError ? (
-        <p className="flex items-center gap-1 text-[11px] font-medium text-warning" role="status"><AlertTriangle className="h-3 w-3" aria-hidden />{EXPIRED_LOT_MESSAGE}</p>
+        <p className="flex items-center gap-1 text-2xs font-medium text-warning" role="status"><AlertTriangle className="h-3 w-3" aria-hidden />{EXPIRED_LOT_MESSAGE}</p>
       ) : null}
     </div>
   );
@@ -317,8 +317,8 @@ function LineCard({ po, line, index, form, lpTypes }: { readonly po: PoDetail; r
         <Checkbox checked={include} onCheckedChange={(v) => form.setValue(`lines.${index}.include`, Boolean(v), { shouldDirty: true, shouldValidate: form.formState.isSubmitted })} aria-label={`Receive ${line.sku}`} />
         <ProductThumb url={line.imageUrl} label={line.sku} size={36} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-foreground">{line.sku} <span className="font-normal text-secondary">· {line.productName}</span></p>
-          <p className="text-[11px] text-faint">
+          <p className="truncate text-sm font-semibold text-foreground">{line.sku} <span className="font-normal text-secondary">· {line.productName}</span></p>
+          <p className="text-2xs text-faint">
             Ordered {line.orderedQuantity.toLocaleString()} · Received {line.receivedQuantity.toLocaleString()} · <span className={remaining > 0 ? "font-semibold text-foreground" : "text-success"}>{remaining.toLocaleString()} remaining</span> · {line.packType}
           </p>
         </div>
@@ -357,7 +357,7 @@ function LineCard({ po, line, index, form, lpTypes }: { readonly po: PoDetail; r
               )}
             </FormField>
             <div className="flex flex-col gap-1 md:col-span-3">
-              <span className="text-[12px] font-medium text-body">License plate</span>
+              <span className="text-xs font-medium text-body">License plate</span>
               <SegmentedControl options={LP_MODES} value={lpMode} onChange={(v) => form.setValue(`lines.${index}.lpMode`, v, { shouldDirty: true })} size="sm" ariaLabel={`LP for ${line.sku}`} />
             </div>
             {lpMode === "existing" ? (
@@ -506,7 +506,7 @@ function ReceiveItemsForm({ po, formId, onDone, onDirty, onBusy, onBlocked, onSu
     <SuggestPendingCtx.Provider value={reportPending}>
     <Form form={form} id={formId} onSubmit={submit} className="gap-3">
       <div className="contents" onKeyDown={advanceOnEnter}>
-      <div className="flex flex-wrap items-center gap-2 text-[12px]">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="text-secondary">Receiving into <span className="font-semibold text-foreground">{po.warehouseName}</span></span>
         <span className="flex-1" />
         <Button variant="ghost" size="sm" onClick={() => fields.forEach((f, i) => { const l = byId.get(f.lineId); if (l && l.orderedQuantity > l.receivedQuantity) form.setValue(`lines.${i}.include`, true, { shouldDirty: true }); })}>Select all open</Button>
@@ -516,7 +516,7 @@ function ReceiveItemsForm({ po, formId, onDone, onDirty, onBusy, onBlocked, onSu
         const line = byId.get(f.lineId);
         return line ? <LineCard key={f.id} po={po} line={line} index={i} form={form} lpTypes={lpTypes.data?.data ?? []} /> : null;
       })}
-      {rootError ? <p role="alert" className="text-[12px] font-medium text-danger">{rootError}</p> : null}
+      {rootError ? <p role="alert" className="text-xs font-medium text-danger">{rootError}</p> : null}
       {overLines.length > 0 ? (
         <Callout variant="attention" title="Over-receipt">
           <div className="flex flex-col gap-2">
@@ -564,7 +564,7 @@ export function ReceiveItemsDrawer({ po, open, onOpenChange, onlyLineId }: { rea
         <>
           {/* Selection summary lives in the footer (never over the last line card's fields). */}
           {summary ? (
-            <span className="mr-auto flex min-w-0 flex-1 flex-col gap-0.5 text-[12px] text-secondary" aria-live="polite">
+            <span className="mr-auto flex min-w-0 flex-1 flex-col gap-0.5 text-xs text-secondary" aria-live="polite">
               <span className="flex items-center gap-2 whitespace-nowrap">
                 <PackageCheck className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
                 {summary.lines} line{summary.lines === 1 ? "" : "s"} · {summary.units.toLocaleString()} units selected

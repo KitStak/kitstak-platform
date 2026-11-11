@@ -79,7 +79,7 @@ function Footer<T extends FieldValues>({ wizard, mode, submitLabel, onCancel, st
         ) : null}
         {!wizard.isLast && blocked ? (
           // Visible reason next to a blocked Next (also wired to the button for assistive tech).
-          <span id={reasonId} className="hidden max-w-[280px] truncate text-[11px] text-secondary sm:inline" title={blocked}>
+          <span id={reasonId} className="hidden max-w-[280px] truncate text-2xs text-secondary sm:inline" title={blocked}>
             {blocked}
           </span>
         ) : null}
@@ -199,11 +199,11 @@ export function Wizard<T extends FieldValues>({
       ) : null}
       <section ref={sectionRef} aria-labelledby={`wizard-step-${step.key}`} className="flex flex-col gap-4">
         <header>
-          <h2 id={`wizard-step-${step.key}`} tabIndex={-1} data-step-heading className={cn("text-[15px] font-semibold text-foreground outline-none", step.hideHeading && "sr-only")}>
+          <h2 id={`wizard-step-${step.key}`} tabIndex={-1} data-step-heading className={cn("text-base font-semibold text-foreground outline-none", step.hideHeading && "sr-only")}>
             {step.label}
-            {step.isOptional ? <span className="ml-2 text-[12px] font-normal text-faint">Optional</span> : null}
+            {step.isOptional ? <span className="ml-2 text-xs font-normal text-faint">Optional</span> : null}
           </h2>
-          {step.description ? <p className="mt-0.5 text-[12px] text-secondary">{step.description}</p> : null}
+          {step.description ? <p className="mt-0.5 text-xs text-secondary">{step.description}</p> : null}
         </header>
         {step.render({ form: wizard.form, values, goTo: wizard.goTo, applyServerErrors: wizard.applyServerErrors })}
       </section>

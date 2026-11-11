@@ -58,7 +58,7 @@ export function buildWoColumns(): ColumnDef<WorkOrderRow, unknown>[] {
           <WoStatusPill status={row.original.status} />
           {row.original.stockNowAvailable ? (
             <Tooltip content={<span className="block max-w-[260px]">{SHORTAGE_RECOVERABLE_COPY} Can build {(row.original.buildableQty ?? 0).toLocaleString()} of {(row.original.requestedQty - row.original.processedQty).toLocaleString()} left.</span>}>
-              <span role="img" aria-label="Stock now available, retry allocation" className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-success-soft px-1.5 py-0.5 text-[11px] font-medium text-success">
+              <span role="img" aria-label="Stock now available, retry allocation" className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-success-soft px-1.5 py-0.5 text-2xs font-medium text-success">
                 <RefreshCw className="size-3" aria-hidden />Stock in
               </span>
             </Tooltip>

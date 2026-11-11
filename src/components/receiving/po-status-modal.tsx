@@ -87,7 +87,7 @@ function StatusRadios({ po, value, onChange }: { readonly po: PoDetail; readonly
             )}
           >
             <StatusPill status={s} domain="purchaseOrder" size="sm" />
-            <span className="text-[11px] text-faint">{current ? "Current" : reason ? "Not available" : "Available"}</span>
+            <span className="text-2xs text-faint">{current ? "Current" : reason ? "Not available" : "Available"}</span>
           </button>
         );
       })}
@@ -127,11 +127,11 @@ export function PoStatusModal({ po, open, onOpenChange, onChanged }: { readonly 
             ) : (
               <>
                 <StatusRadios po={po} value={status} onChange={(v) => form.setValue("status", v, { shouldValidate: true, shouldDirty: true })} />
-                {status && hintFor(po.status, status) ? <p className="-mt-1 text-[12px] text-secondary" aria-live="polite">{hintFor(po.status, status)}</p> : null}
+                {status && hintFor(po.status, status) ? <p className="-mt-1 text-xs text-secondary" aria-live="polite">{hintFor(po.status, status)}</p> : null}
                 {MANUAL.filter((s) => s !== po.status && !(po.status === "Receiving" && s === "Started") && po.statusReasons?.[s]).map((s) => (
-                  <p key={s} className="-mt-2 text-[11px] text-faint"><span className="font-medium text-secondary">{s}:</span> {po.statusReasons?.[s]}</p>
+                  <p key={s} className="-mt-2 text-2xs text-faint"><span className="font-medium text-secondary">{s}:</span> {po.statusReasons?.[s]}</p>
                 ))}
-                {form.formState.errors.status?.message ? <p role="alert" className="-mt-2 text-[12px] font-medium text-danger">{form.formState.errors.status.message}</p> : null}
+                {form.formState.errors.status?.message ? <p role="alert" className="-mt-2 text-xs font-medium text-danger">{form.formState.errors.status.message}</p> : null}
                 <AreaF name="reason" label="Reason" required maxLength={250} rows={3} placeholder="Why is the status changing?" />
               </>
             )}

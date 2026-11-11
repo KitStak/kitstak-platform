@@ -79,7 +79,7 @@ function SettingsStep({ form }: { readonly form: UseFormReturn<F> }) {
             { value: "Fastest", title: "Fastest", description: METHOD_COPY.Fastest, icon: Gauge },
             { value: "Cheapest In Time", title: "Cheapest In Time", description: METHOD_COPY["Cheapest In Time"], icon: Clock },
           ]} />
-        {fieldState.error?.message ? <p role="alert" className="text-[12px] text-danger">{fieldState.error.message}</p> : null}
+        {fieldState.error?.message ? <p role="alert" className="text-xs text-danger">{fieldState.error.message}</p> : null}
         {method === "Cheapest In Time" ? <div className="max-w-xs"><NumberField<F> name="transitDays" label="Transit time (days)" required min={1} max={30} nullable suffix="days" /></div> : null}
       </FormSection>
       <FormSection title="Error messages" description="Enable to receive error notifications for failed shipments.">
@@ -114,10 +114,10 @@ function ServicesStep({ form }: { readonly form: UseFormReturn<F> }) {
       <div className="flex items-center gap-2">
         <CheckboxField<F> name="useAllServices" label="Use all available services." hint="New services added to the client's carrier setups are included automatically." />
       </div>
-      {fieldState.error?.message && !useAll ? <p role="alert" className="text-[12px] text-danger">{fieldState.error.message}</p> : null}
+      {fieldState.error?.message && !useAll ? <p role="alert" className="text-xs text-danger">{fieldState.error.message}</p> : null}
       <div className="flex flex-wrap items-center gap-2">
         <TextField aria-label="Search by shipping option" placeholder="Search by shipping option" size="sm" value={search} onChange={(e) => setSearch(e.target.value)} wrapperClassName="w-64" />
-        <span className="text-[12px] text-secondary" aria-live="polite">{useAll ? (q.isPending && warehouseId && clientId ? "All available services" : `All ${rows.length} service${rows.length === 1 ? "" : "s"}`) : q.isPending && warehouseId && clientId ? "Loading services…" : `${on.size} of ${rows.length} selected`}</span>
+        <span className="text-xs text-secondary" aria-live="polite">{useAll ? (q.isPending && warehouseId && clientId ? "All available services" : `All ${rows.length} service${rows.length === 1 ? "" : "s"}`) : q.isPending && warehouseId && clientId ? "Loading services…" : `${on.size} of ${rows.length} selected`}</span>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="secondary" className="ml-auto" disabled={useAll || checked.size === 0} title={useAll ? "Turn off Use all available services to pick options" : checked.size === 0 ? "Tick at least one row" : undefined}>Bulk Actions<ChevronDown className="h-3.5 w-3.5" /></Button>
@@ -133,13 +133,13 @@ function ServicesStep({ form }: { readonly form: UseFormReturn<F> }) {
           {useAll ? "You can still save: with Use all available services on, the preset compares every service the client has." : "Retry, or turn on Use all available services to save without a list."}
         </Callout>
       ) : q.isPending && warehouseId && clientId ? (useAll
-        ? <p className="rounded-lg border border-dashed border-border px-3 py-4 text-[12px] text-secondary">Every active service from the client&apos;s carrier setups at this warehouse is compared. You can save now; the list below is only needed to pick services one by one.</p>
+        ? <p className="rounded-lg border border-dashed border-border px-3 py-4 text-xs text-secondary">Every active service from the client&apos;s carrier setups at this warehouse is compared. You can save now; the list below is only needed to pick services one by one.</p>
         : <SkeletonTable rows={6} columns={4} />) : rows.length === 0 ? (
         <EmptyState compact icon={Truck} title="No shipping options for this client" description="Give the client access to a carrier setup in Carrier Integrations, then come back." />
       ) : (
         <div className="max-h-[48vh] overflow-auto rounded-lg border border-border">
-          <table className="w-full text-[13px]">
-            <thead className="sticky top-0 z-[1] bg-surface-sunken text-[11px] uppercase text-secondary">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-[1] bg-surface-sunken text-2xs text-secondary">
               <tr>
                 <th className="w-10 px-3 py-2"><Checkbox aria-label="Select all shown" disabled={useAll} checked={shown.length > 0 && shown.every((r) => checked.has(r.id))} onCheckedChange={(v) => setChecked(v === true ? new Set(shown.map((r) => r.id)) : new Set())} /></th>
                 <th className="px-3 py-2 text-left">Setup name</th><th className="px-3 py-2 text-left">Carrier</th><th className="px-3 py-2 text-left">Shipping option</th><th className="px-3 py-2 text-right">Transit</th><th className="w-20 px-3 py-2 text-left">Select</th>
@@ -150,7 +150,7 @@ function ServicesStep({ form }: { readonly form: UseFormReturn<F> }) {
                 <tr key={r.id} className={checked.has(r.id) ? "bg-primary-soft/30" : undefined}>
                   <td className="px-3 py-1.5"><Checkbox aria-label={`Select ${r.name}`} disabled={useAll} checked={checked.has(r.id)} onCheckedChange={(v) => setChecked((c) => { const n = new Set(c); if (v === true) n.add(r.id); else n.delete(r.id); return n; })} /></td>
                   <td className="px-3 py-1.5 font-medium text-primary">{r.setupName}</td>
-                  <td className="px-3 py-1.5 uppercase">{r.carrierCode}</td>
+                  <td className="px-3 py-1.5 ">{r.carrierCode}</td>
                   <td className="px-3 py-1.5">{r.name}{r.isInternational ? <Badge size="sm" tone="info" className="ml-1.5">Intl</Badge> : null}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums text-secondary">{r.transitDays}d</td>
                   <td className="px-3 py-1.5"><Switch size="sm" aria-label={`Use ${r.name}`} disabled={useAll} checked={useAll || on.has(r.id)} onCheckedChange={(v) => set([r.id], v === true)} /></td>

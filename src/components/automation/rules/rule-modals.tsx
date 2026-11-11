@@ -31,9 +31,9 @@ import type { AlgorithmAction } from "@/server/db/schema";
 function Field({ id, label, required, error, children }: { readonly id: string; readonly label: string; readonly required?: boolean; readonly error?: string | null; readonly children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-[12px] font-medium text-body">{label}{required ? <span className="text-danger"> *</span> : null}</label>
+      <label htmlFor={id} className="text-xs font-medium text-body">{label}{required ? <span className="text-danger"> *</span> : null}</label>
       {children}
-      {error ? <p id={`${id}-error`} role="alert" className="text-[12px] text-danger">{error}</p> : null}
+      {error ? <p id={`${id}-error`} role="alert" className="text-xs text-danger">{error}</p> : null}
     </div>
   );
 }
@@ -63,7 +63,7 @@ export function ConditionValueEditor({ id, def, comparator, value, onChange, inv
   readonly presetInComparator?: boolean;
 }) {
   const options = useKindOptions(def);
-  if (VALUELESS.has(comparator)) return <p className="rounded-md bg-surface-sunken px-3 py-2 text-[12px] text-secondary">No value needed.</p>;
+  if (VALUELESS.has(comparator)) return <p className="rounded-md bg-surface-sunken px-3 py-2 text-xs text-secondary">No value needed.</p>;
   if (def.kind === "enum" || def.kind === "lookup" || def.kind === "client" || def.kind === "warehouse" || def.kind === "retailer" || def.kind === "package") {
     const list = Array.isArray(value) ? value.map(String) : value === null || value === "" ? [] : [String(value)];
     return <Combobox id={id} multiple aria-label={def.label} options={[...options, EMPTY_OPTION]} value={list} onChange={(v) => onChange([...v])} placeholder={`Select ${def.label.toLowerCase()}`} invalid={invalid} />;
@@ -79,7 +79,7 @@ export function ConditionValueEditor({ id, def, comparator, value, onChange, inv
       return (
         <div className="flex items-center gap-2">
           <NumberInput id={id} aria-label="From" value={num(pair[0])} onChange={(n) => onChange([n ?? "", pair[1] ?? ""] as ConditionValue)} decimals={2} invalid={invalid} />
-          <span className="text-[12px] text-faint">and</span>
+          <span className="text-xs text-faint">and</span>
           <NumberInput aria-label="To" value={num(pair[1])} onChange={(n) => onChange([pair[0] ?? "", n ?? ""] as ConditionValue)} decimals={2} invalid={invalid} />
         </div>
       );
@@ -92,11 +92,11 @@ export function ConditionValueEditor({ id, def, comparator, value, onChange, inv
     const days = parsed?.days ?? null;
     // The condition modal lists the presets as comparators, so only the day count is left here.
     if (presetInComparator) {
-      if (!parsed?.preset.needsDays) return <p className="rounded-md bg-surface-sunken px-3 py-2 text-[12px] text-secondary">No value needed. Resolved each time the rule runs, so it never goes stale.</p>;
+      if (!parsed?.preset.needsDays) return <p className="rounded-md bg-surface-sunken px-3 py-2 text-xs text-secondary">No value needed. Resolved each time the rule runs, so it never goes stale.</p>;
       return (
         <div className="flex items-center gap-2">
           <div className="w-28 shrink-0"><NumberInput id={id} aria-label="Number of days" value={days} min={0} max={3650} onChange={(n) => onChange(datePresetValue(parsed.preset.key, n ?? 0))} invalid={invalid} /></div>
-          <span className="text-[12px] text-secondary">{(days ?? 0) === 1 ? "day" : "days"}</span>
+          <span className="text-xs text-secondary">{(days ?? 0) === 1 ? "day" : "days"}</span>
         </div>
       );
     }
@@ -121,7 +121,7 @@ export function ConditionValueEditor({ id, def, comparator, value, onChange, inv
       return (
         <div className="flex items-center gap-2">
           <TextField id={id} type="date" aria-label="From" value={d(pair[0])} onChange={(e) => onChange([e.target.value, String(pair[1] ?? "")])} invalid={invalid} />
-          <span className="text-[12px] text-faint">and</span>
+          <span className="text-xs text-faint">and</span>
           <TextField type="date" aria-label="To" value={d(pair[1])} onChange={(e) => onChange([String(pair[0] ?? ""), e.target.value])} invalid={invalid} />
         </div>
       );
@@ -224,7 +224,7 @@ export function ConditionModal({ state, onClose, onSubmit }: { readonly state: C
             <SegmentedControl ariaLabel="Condition mode" value={mode} onChange={setMode} options={[{ value: "all", label: "Apply To All" }, { value: "specify", label: "Specify Condition" }]} />
           ) : null}
           {mode === "all" ? (
-            <p className="rounded-lg border border-border bg-surface-sunken/60 px-3 py-3 text-[13px] text-body">The rule applies to everything. Any specific conditions on this rule are replaced by <span className="font-semibold">Applied to all</span>.</p>
+            <p className="rounded-lg border border-border bg-surface-sunken/60 px-3 py-3 text-sm text-body">The rule applies to everything. Any specific conditions on this rule are replaced by <span className="font-semibold">Applied to all</span>.</p>
           ) : (
             <>
               <Field id="cond-field" label="If" required error={touched && !def ? "Choose a field" : null}>
@@ -307,7 +307,7 @@ export function ActionModal({ open, initial, warehouseId, onClose, onSubmit }: {
                 : <Combobox id="act-value" multiple aria-label={def.paramLabel ?? "Value"} value={Array.isArray(value) ? value.map(String) : typeof value === "string" && value ? [value] : []}
                     options={def.param === "lookup" ? lookup.options : (def.options ?? []).map((o) => ({ value: o, label: splitCamel(o) }))} onChange={(v) => setValue([...v])} invalid={touched && Boolean(missing)} />}
             </Field>
-          ) : def ? <p className="text-[12px] text-secondary">This action has no settings.</p> : null}
+          ) : def ? <p className="text-xs text-secondary">This action has no settings.</p> : null}
         </DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>

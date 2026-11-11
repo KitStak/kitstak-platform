@@ -69,15 +69,15 @@ function Body({ onOpenChange, warehouseId, countType, exclude, onAdd }: Omit<Cou
               <FieldLabel htmlFor="ai-limit">How many {noun[1]}</FieldLabel>
               <NumberInput id="ai-limit" aria-label={`How many ${noun[1]}`} min={1} max={200} value={limit} onChange={setLimit} className="w-[120px]" />
             </div>
-            <p className="pb-1.5 text-[12px] text-secondary">{q.isPending ? "Ranking…" : `${rows.length} suggested · ${picked.length} selected`}</p>
+            <p className="pb-1.5 text-xs text-secondary">{q.isPending ? "Ranking…" : `${rows.length} suggested · ${picked.length} selected`}</p>
           </div>
           {q.error ? <Callout variant="error" title="Suggestions unavailable" action={<Button size="sm" variant="secondary" onClick={() => void q.refetch()}>Retry</Button>}>{q.error.message}</Callout> : null}
           {q.isPending ? <SkeletonText lines={6} /> : rows.length === 0 && !q.error ? (
-            <p className="rounded-lg border border-dashed border-border-strong px-4 py-8 text-center text-[13px] text-secondary">No stocked {noun[1]} are left to suggest. Everything with stock is already in an open count or in this plan.</p>
+            <p className="rounded-lg border border-dashed border-border-strong px-4 py-8 text-center text-sm text-secondary">No stocked {noun[1]} are left to suggest. Everything with stock is already in an open count or in this plan.</p>
           ) : (
             <div className="ks-scroll max-h-[46vh] overflow-auto rounded-lg border border-border">
-              <table className="w-full border-collapse text-[13px]">
-                <thead className="sticky top-0 bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+              <table className="w-full border-collapse text-sm">
+                <thead className="sticky top-0 bg-surface-sunken text-left text-2xs font-semibold text-faint">
                   <tr>
                     <th scope="col" className="w-10 px-3 py-2"><input type="checkbox" aria-label="Select all suggestions" checked={unchecked.size === 0 && rows.length > 0} onChange={() => setUnchecked(unchecked.size === 0 ? new Set(rows.map((r) => r.id)) : new Set())} className="accent-[var(--color-primary)]" /></th>
                     <th scope="col" className="px-3 py-2">{countType === "Location" ? "Location" : "Product Code"}</th>
@@ -90,8 +90,8 @@ function Body({ onOpenChange, warehouseId, countType, exclude, onAdd }: Omit<Cou
                   {rows.map((r) => (
                     <tr key={r.id} className={cn("cursor-pointer border-t border-border", !unchecked.has(r.id) && "bg-primary-soft/40")} onClick={() => toggle(r.id)}>
                       <td className="px-3 py-1.5"><input type="checkbox" aria-label={`Select ${r.label}`} checked={!unchecked.has(r.id)} onChange={() => toggle(r.id)} onClick={(e) => e.stopPropagation()} className="accent-[var(--color-primary)]" /></td>
-                      <td className="px-3 py-1.5"><span className="flex flex-col leading-tight"><span className="font-semibold text-foreground">{r.label}</span><span className="text-[11px] text-secondary">{[r.sub1, r.sub2].filter(Boolean).join(" · ") || "—"}</span></span></td>
-                      <td className="px-3 py-1.5 text-[12px] text-secondary">{r.reasons.join(" · ") || "Routine coverage"}</td>
+                      <td className="px-3 py-1.5"><span className="flex flex-col leading-tight"><span className="font-semibold text-foreground">{r.label}</span><span className="text-2xs text-secondary">{[r.sub1, r.sub2].filter(Boolean).join(" · ") || "—"}</span></span></td>
+                      <td className="px-3 py-1.5 text-xs text-secondary">{r.reasons.join(" · ") || "Routine coverage"}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums">{r.onHand.toLocaleString()}</td>
                       <td className="px-3 py-1.5 text-right"><RiskBadge score={r.score} /></td>
                     </tr>
@@ -103,7 +103,7 @@ function Body({ onOpenChange, warehouseId, countType, exclude, onAdd }: Omit<Cou
         </div>
       </DialogBody>
       <DialogFooter>
-        <span className="mr-auto text-[12px] text-secondary">The plan is saved as an AI Count Plan.</span>
+        <span className="mr-auto text-xs text-secondary">The plan is saved as an AI Count Plan.</span>
         <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
         <DisabledReason reason={reason}>
           <Button variant="primary" disabled={Boolean(reason)} onClick={() => { onAdd(picked); onOpenChange(false); }}><Sparkles className="h-3.5 w-3.5" aria-hidden />Add {picked.length || ""} {picked.length === 1 ? noun[0] : noun[1]}</Button>
@@ -115,5 +115,5 @@ function Body({ onOpenChange, warehouseId, countType, exclude, onAdd }: Omit<Cou
 
 function RiskBadge({ score }: { readonly score: number }) {
   const tone = score >= 70 ? "bg-danger-soft text-danger" : score >= 40 ? "bg-warning-soft text-warning" : "bg-surface-sunken text-secondary";
-  return <span className={cn("inline-flex min-w-[36px] justify-center rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums", tone)} title="Count risk score (0–100)">{score}</span>;
+  return <span className={cn("inline-flex min-w-[36px] justify-center rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums", tone)} title="Count risk score (0–100)">{score}</span>;
 }

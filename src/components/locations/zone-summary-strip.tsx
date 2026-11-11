@@ -69,22 +69,22 @@ function ZoneCard({ zone, active, showWarehouse, badgeClass, onSelect }: { reado
       )}
     >
       <span className="flex items-center gap-2.5">
-        <span aria-hidden className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-white", zone.zoneId === null ? "bg-neutral" : badgeClass, badge.length > 2 ? "text-[9px] font-semibold" : "text-[13px] font-bold")}>
+        <span aria-hidden className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-white", zone.zoneId === null ? "bg-neutral" : badgeClass, badge.length > 2 ? "text-2xs font-semibold" : "text-sm font-bold")}>
           {badge}
         </span>
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate text-[12px] font-semibold text-foreground">{zone.zoneId === null ? "No zone" : `Zone ${zone.zone}`}</span>
-            {showWarehouse && zone.warehouseCode ? <span className="shrink-0 rounded border border-border bg-surface-sunken px-1 text-[10px] font-medium leading-4 text-secondary">{zone.warehouseCode}</span> : null}
+            <span className="truncate text-xs font-semibold text-foreground">{zone.zoneId === null ? "No zone" : `Zone ${zone.zone}`}</span>
+            {showWarehouse && zone.warehouseCode ? <span className="shrink-0 rounded border border-border bg-surface-sunken px-1 text-2xs font-medium leading-4 text-secondary">{zone.warehouseCode}</span> : null}
           </span>
-          <span className="truncate whitespace-nowrap text-[11px] tabular-nums text-faint">{compactCount(zone.binCount)} bins · {compactCount(zone.storedUnits)} units</span>
+          <span className="truncate whitespace-nowrap text-2xs tabular-nums text-faint">{compactCount(zone.binCount)} bins · {compactCount(zone.storedUnits)} units</span>
         </span>
       </span>
       <span className="flex items-center gap-2">
         <span className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-soft">
           <span className={cn("block h-full rounded-full", t.bar)} style={{ width: `${pct}%` }} />
         </span>
-        <span className={cn("w-9 shrink-0 text-right text-[11px] font-medium tabular-nums", t.text)}>{pct}%</span>
+        <span className={cn("w-9 shrink-0 text-right text-2xs font-medium tabular-nums", t.text)}>{pct}%</span>
       </span>
     </button>
   );
@@ -124,8 +124,8 @@ export function ZoneSummaryStrip({ zones, loading, activeZoneId, onToggle }: { r
               <React.Fragment key={grp.warehouseCode || "none"}>
                 {showWarehouse ? (
                   <div role="presentation" className={cn("flex shrink-0 snap-start flex-col items-center justify-center px-1", gi > 0 && "ml-1.5 border-l border-border pl-3")}>
-                    <span className="text-[10px] font-medium uppercase tracking-wide text-faint">Warehouse</span>
-                    <span className="text-[13px] font-semibold text-foreground">{grp.warehouseCode || "—"}</span>
+                    <span className="text-2xs font-medium text-faint">Warehouse</span>
+                    <span className="text-sm font-semibold text-foreground">{grp.warehouseCode || "—"}</span>
                   </div>
                 ) : null}
                 {grp.zones.map((z) => <ZoneCard key={`${z.warehouseCode ?? ""}-${z.zoneId ?? "none"}`} zone={z} showWarehouse={false} badgeClass={badgeFor(z)} active={activeZoneId !== undefined && activeZoneId === z.zoneId} onSelect={() => onToggle(z.zoneId)} />)}

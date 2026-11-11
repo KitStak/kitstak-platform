@@ -67,7 +67,7 @@ export const ScanField = React.forwardRef<ScanFieldHandle, ScanFieldProps>(funct
   return (
     <div className={cn("flex flex-col gap-1", className)}>
       <style>{SHAKE_CSS}</style>
-      <label htmlFor={id} className="text-[12px] font-semibold text-body">{label}</label>
+      <label htmlFor={id} className="text-xs font-semibold text-body">{label}</label>
       <div
         className={cn(
           "relative flex items-center rounded-lg border bg-surface transition-[box-shadow,border-color,background-color] duration-150",
@@ -95,7 +95,7 @@ export const ScanField = React.forwardRef<ScanFieldHandle, ScanFieldProps>(funct
               void submit();
             }
           }}
-          className={cn("min-w-0 flex-1 bg-transparent px-3 font-mono outline-none placeholder:font-sans placeholder:text-faint", size === "lg" ? "text-[16px]" : "text-[13px]")}
+          className={cn("min-w-0 flex-1 bg-transparent px-3 font-mono outline-none placeholder:font-sans placeholder:text-faint", size === "lg" ? "text-md" : "text-sm")}
         />
         {busy ? <Spinner className="mr-3 h-4 w-4" label="Looking up" /> : null}
         {clearable && value && !busy ? (
@@ -104,7 +104,7 @@ export const ScanField = React.forwardRef<ScanFieldHandle, ScanFieldProps>(funct
           </button>
         ) : null}
       </div>
-      {error ? <p id={`${id}-err`} role="alert" className="text-[12px] font-medium text-danger">{error}</p> : hint ? <p id={`${id}-hint`} className="text-[11px] text-secondary">{hint}</p> : null}
+      {error ? <p id={`${id}-err`} role="alert" className="text-xs font-medium text-danger">{error}</p> : hint ? <p id={`${id}-hint`} className="text-2xs text-secondary">{hint}</p> : null}
     </div>
   );
 });

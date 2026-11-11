@@ -32,7 +32,7 @@ export function ShipResultDialog({ rows, notes = [], onClose }: { readonly rows:
             <Badge tone={errors > 0 ? "danger" : "neutral"} icon={XCircle}>Error {errors}</Badge>
           </div>
           {notes.length > 0 ? (
-            <ul className="mt-2 flex flex-col gap-1 rounded-md bg-info-soft px-3 py-2 text-[12px] text-body" aria-label="Plan status changes">
+            <ul className="mt-2 flex flex-col gap-1 rounded-md bg-info-soft px-3 py-2 text-xs text-body" aria-label="Plan status changes">
               {notes.map((n) => (
                 <li key={n} className="flex items-start gap-1.5"><ArrowRightLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-info" aria-hidden />{n}</li>
               ))}
@@ -43,11 +43,11 @@ export function ShipResultDialog({ rows, notes = [], onClose }: { readonly rows:
           {list.length === 0 ? (
             <p className="px-5 py-6 text-center text-secondary">No orders were processed.</p>
           ) : (
-            <table className="w-full border-collapse text-left text-[12px]">
+            <table className="w-full border-collapse text-left text-xs">
               <thead className="sticky top-0 bg-surface-sunken">
                 <tr>
                   {["Plan", "SO code", "Result", "Description"].map((h) => (
-                    <th key={h} scope="col" className="border-b border-border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{h}</th>
+                    <th key={h} scope="col" className="border-b border-border px-4 py-2 text-2xs font-semibold text-faint">{h}</th>
                   ))}
                 </tr>
               </thead>

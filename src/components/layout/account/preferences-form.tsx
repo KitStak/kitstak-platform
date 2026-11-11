@@ -16,8 +16,8 @@ function Preview({ values }: { readonly values: PreferencesFormValues }) {
   const sample = preferencesPreview(values, SAMPLE_AT);
   return (
     <div aria-live="polite" className="rounded-lg border border-border bg-surface-sunken px-4 py-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-faint">Preview</p>
-      <dl className="mt-1.5 grid grid-cols-[110px_1fr] gap-y-1 text-[13px]">
+      <p className="text-2xs font-bold text-faint">Preview</p>
+      <dl className="mt-1.5 grid grid-cols-[110px_1fr] gap-y-1 text-sm">
         <dt className="text-secondary">Date and time</dt>
         <dd className="tabular-nums text-foreground">{sample.dateTime}</dd>
         <dt className="text-secondary">Number</dt>

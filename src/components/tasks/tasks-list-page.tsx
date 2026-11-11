@@ -49,7 +49,7 @@ const CELLS: Readonly<Record<string, CellRenderer<TaskRow>>> = {
     const ai = String(v).startsWith("AI-");
     return (
       <span className="flex min-w-0 items-center gap-1" title={ai && row.original.aiJobDescription ? String(row.original.aiJobDescription) : String(v)}>
-        {ai ? <Sparkles className="h-3 w-3 shrink-0 text-[#5B3DB5] dark:text-[#C7B5FF]" aria-label="AI job" /> : null}
+        {ai ? <Sparkles className="h-3 w-3 shrink-0 text-[var(--label-purple-text)] dark:text-[var(--label-purple-light)]" aria-label="AI job" /> : null}
         <span className="truncate">{String(v)}</span>
       </span>
     );
@@ -66,7 +66,7 @@ const CELLS: Readonly<Record<string, CellRenderer<TaskRow>>> = {
       // eslint-disable-next-line @next/next/no-img-element
       <img src={String(row.original.productImage)} alt="" width={28} height={28} className="h-7 w-7 rounded border border-border object-cover" />
     ) : (
-      <span className="flex h-7 w-7 items-center justify-center rounded border border-dashed border-border text-[9px] text-faint">No img</span>
+      <span className="flex h-7 w-7 items-center justify-center rounded border border-dashed border-border text-2xs text-faint">No img</span>
     ),
 };
 
@@ -84,7 +84,7 @@ const COLUMNS: Readonly<Record<TaskKind, ReturnType<typeof buildColumns<TaskRow>
 
 function Banner() {
   return (
-    <div className="mx-6 mb-2 flex items-start gap-2 rounded-md border border-info/25 bg-info-soft px-3 py-2 text-[12px] leading-5 text-info">
+    <div className="mx-6 mb-2 flex items-start gap-2 rounded-md border border-info/25 bg-info-soft px-3 py-2 text-xs leading-5 text-info">
       <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
       <span>Task Details shows every task of your orders and jobs in real time: who has it, where it picks from and where it goes. Select tasks to execute, re-route or reassign them.</span>
     </div>

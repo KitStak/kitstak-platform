@@ -163,7 +163,7 @@ export function PrintoutListPage({ typeKey }: { readonly typeKey: string }) {
         onRowClick={(r) => setDetailId(r.id)}
         emptyTitle={filtered ? "No printouts match these filters" : `No ${title.toLowerCase()} templates yet`}
         emptyDescription={filtered ? "Clear a filter or search for another name." : "Create a template to control what this printout looks like."}
-        emptyAction={perms.create && !filtered ? <Button variant="primary" onClick={create}><Plus className="h-4 w-4" />Create {title}</Button> : <Link href="/settings/printouts" className="text-[13px] text-primary hover:underline">Back to printout types</Link>}
+        emptyAction={perms.create && !filtered ? <Button variant="primary" onClick={create}><Plus className="h-4 w-4" />Create {title}</Button> : <Link href="/settings/printouts" className="text-sm text-primary hover:underline">Back to printout types</Link>}
       />
       <DetailDrawer id={detailId} canEdit={perms.edit} onOpenChange={(o) => !o && setDetailId(null)} onEdit={edit} onPreview={(id) => void preview(id)} />
       <EntityChangeLogDrawer open={log !== null} onOpenChange={(o) => !o && setLog(null)} path={log ? `/api/printouts/${log.id}/change-log` : null} title={`Printout change log · ${log?.name ?? ""}`} />

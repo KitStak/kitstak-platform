@@ -79,14 +79,14 @@ function Body({ onOpenChange, component, warehouseId, clientId, value, onChange,
       <DialogHeader title={`Source inventory · ${component.sku}`} description={`${component.name}. ${component.totalQty} ${component.totalQty === 1 ? "unit is" : "units are"} needed for this work order. Choose where they come from.`} />
       <DialogBody>
         {!warehouseId ? <Callout variant="attention" title="Choose a warehouse first">Select the warehouse in step 1 to see its stock.</Callout> : stock.isPending ? (
-          <div role="status" aria-live="polite" className="flex flex-col gap-2"><span className="flex items-center gap-2 text-[12px] text-secondary"><Spinner className="h-3.5 w-3.5" label="Loading stock" />Loading stock…</span><Skeleton className="h-9 w-full" /><Skeleton className="h-9 w-full" /><Skeleton className="h-9 w-full" /></div>
+          <div role="status" aria-live="polite" className="flex flex-col gap-2"><span className="flex items-center gap-2 text-xs text-secondary"><Spinner className="h-3.5 w-3.5" label="Loading stock" />Loading stock…</span><Skeleton className="h-9 w-full" /><Skeleton className="h-9 w-full" /><Skeleton className="h-9 w-full" /></div>
         ) : stock.error ? <Callout variant="error" title="Stock not available">{stock.error.message}</Callout> : buckets.length === 0 ? (
           <Callout variant="attention" title="No stock">{component.sku} has no free stock in this warehouse. Receive or move stock first, or use a work order with picking.</Callout>
         ) : (
           <div className="ks-scroll max-h-[52vh] overflow-auto rounded-lg border border-border">
-            <table className="w-full border-collapse text-[12px]">
+            <table className="w-full border-collapse text-xs">
               <caption className="sr-only">Stock of {component.sku}</caption>
-              <thead className="sticky top-0 bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+              <thead className="sticky top-0 bg-surface-sunken text-left text-2xs font-semibold text-faint">
                 <tr><th scope="col" className="w-8 px-3 py-2"><span className="sr-only">Selected</span></th><th scope="col" className="px-3 py-2">Location</th><th scope="col" className="px-3 py-2">LP</th><th scope="col" className="px-3 py-2">Lot no</th><th scope="col" className="px-3 py-2">Exp date</th><th scope="col" className="px-3 py-2">Prod date</th><th scope="col" className="px-3 py-2 text-right">Free</th></tr>
               </thead>
               <tbody>
@@ -104,8 +104,8 @@ function Body({ onOpenChange, component, warehouseId, clientId, value, onChange,
                       <td className={cn("px-3 py-1.5 font-semibold", locked ? "text-faint" : "text-foreground")}>
                         <span className="inline-flex flex-wrap items-center gap-1.5">
                           {b.locationCode}
-                          {locked ? <span className="inline-flex items-center gap-1 rounded-full bg-danger-soft px-1.5 py-0.5 text-[10px] font-semibold text-danger"><Lock className="h-2.5 w-2.5" aria-hidden />Locked · {b.lockedBy}</span> : null}
-                          {suggested?.id === b.id ? <span className="rounded-full bg-success-soft px-1.5 py-0.5 text-[10px] font-semibold text-success" title="First expiring / first received bucket that covers the quantity">FEFO pick</span> : null}
+                          {locked ? <span className="inline-flex items-center gap-1 rounded-full bg-danger-soft px-1.5 py-0.5 text-2xs font-semibold text-danger"><Lock className="h-2.5 w-2.5" aria-hidden />Locked · {b.lockedBy}</span> : null}
+                          {suggested?.id === b.id ? <span className="rounded-full bg-success-soft px-1.5 py-0.5 text-2xs font-semibold text-success" title="First expiring / first received bucket that covers the quantity">FEFO pick</span> : null}
                         </span>
                       </td>
                       <td className="px-3 py-1.5 text-secondary">{b.lpNumber ?? "–"}</td>
@@ -121,18 +121,18 @@ function Body({ onOpenChange, component, warehouseId, clientId, value, onChange,
           </div>
         )}
         {lockedCount > 0 ? (
-          <p className="mt-2 flex items-center gap-1.5 text-[11px] text-secondary"><Lock className="h-3 w-3 text-danger" aria-hidden />{lockedCount} bucket{lockedCount === 1 ? " is" : "s are"} in a location locked by a count plan and can&rsquo;t be used until the count is finished or cancelled.</p>
+          <p className="mt-2 flex items-center gap-1.5 text-2xs text-secondary"><Lock className="h-3 w-3 text-danger" aria-hidden />{lockedCount} bucket{lockedCount === 1 ? " is" : "s are"} in a location locked by a count plan and can&rsquo;t be used until the count is finished or cancelled.</p>
         ) : null}
         {warehouseId && !stock.isPending && !stock.error ? (
           <fieldset className="mt-4 flex flex-col gap-2 rounded-lg border border-border p-3">
-            <legend className="px-1 text-[12px] font-semibold text-foreground">Attributes</legend>
+            <legend className="px-1 text-xs font-semibold text-foreground">Attributes</legend>
             {picked.locationId ? (
-              <p className="text-[12px] text-secondary">Taken from the selected stock: lot <strong className="text-foreground">{picked.lotNumber ?? "–"}</strong> · expiry <strong className="text-foreground">{picked.expiryDate?.slice(0, 10) ?? "–"}</strong> · production <strong className="text-foreground">{picked.productionDate?.slice(0, 10) ?? "–"}</strong>. Clear the source to enter attributes instead.</p>
+              <p className="text-xs text-secondary">Taken from the selected stock: lot <strong className="text-foreground">{picked.lotNumber ?? "–"}</strong> · expiry <strong className="text-foreground">{picked.expiryDate?.slice(0, 10) ?? "–"}</strong> · production <strong className="text-foreground">{picked.productionDate?.slice(0, 10) ?? "–"}</strong>. Clear the source to enter attributes instead.</p>
             ) : requireLocation ? (
-              <p className="text-[12px] text-secondary">Without picking, choose a stock row above; its lot, expiry and production date are used.</p>
+              <p className="text-xs text-secondary">Without picking, choose a stock row above; its lot, expiry and production date are used.</p>
             ) : (
               <>
-                <p className="text-[12px] text-secondary">No fixed location: allocation picks FEFO stock that matches these attributes.</p>
+                <p className="text-xs text-secondary">No fixed location: allocation picks FEFO stock that matches these attributes.</p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <Field id="srcLot" label="Lot / batch number">
                     <TextField id="srcLot" value={picked.lotNumber ?? ""} maxLength={120} placeholder="Any lot" onChange={(e) => patchAttr({ lotNumber: e.target.value.trim() ? e.target.value : null })} />

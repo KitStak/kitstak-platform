@@ -44,7 +44,7 @@ function DrawerDemo() {
         dirty={name.length > 0}
         footer={<div className="flex justify-end gap-2"><Button onClick={() => setOpen(false)}>Cancel</Button><Button variant="primary" disabled={!name} onClick={() => { toast.success("Saved", `${name} created.`); setName(""); setOpen(false); }}>Save</Button></div>}
       >
-        <label htmlFor="drawer-vendor" className="mb-1 block text-[12px] font-semibold text-body">Vendor name <span className="text-danger">*</span></label>
+        <label htmlFor="drawer-vendor" className="mb-1 block text-xs font-semibold text-body">Vendor name <span className="text-danger">*</span></label>
         <TextField id="drawer-vendor" value={name} onChange={(e) => setName(e.target.value)} placeholder="Type, then press Esc to see the guard" />
       </Drawer>
     </>
@@ -109,7 +109,7 @@ export function OverlaysShowcase() {
           <Dialog open={dialogSize !== null} onOpenChange={(open) => (open ? undefined : setDialogSize(null))}>
             <DialogContent size={dialogSize ?? "md"}>
               <DialogHeader title={`Dialog (${dialogSize ?? "md"})`} description="Esc, the X and the overlay all close it." />
-              <DialogBody><p className="text-[13px] text-secondary">Dialog body content.</p></DialogBody>
+              <DialogBody><p className="text-sm text-secondary">Dialog body content.</p></DialogBody>
               <DialogFooter><Button onClick={() => setDialogSize(null)}>Close</Button></DialogFooter>
             </DialogContent>
           </Dialog>
@@ -124,13 +124,13 @@ export function OverlaysShowcase() {
         </Specimen>
         <Specimen label="Tooltips, info tips, disabled reasons">
           <Tooltip content="Tooltips explain icons and disabled actions"><Button>Hover me</Button></Tooltip>
-          <span className="flex items-center gap-1 text-[13px] text-body">Batch size <InfoTip content="Orders per job when creating jobs in bulk." /></span>
+          <span className="flex items-center gap-1 text-sm text-body">Batch size <InfoTip content="Orders per job when creating jobs in bulk." /></span>
           <DisabledReason reason="Select at least one order"><Button variant="primary" disabled>Create job</Button></DisabledReason>
         </Specimen>
         <Specimen label="Popover & dropdown menu">
           <Popover>
             <PopoverTrigger asChild><Button>Popover</Button></PopoverTrigger>
-            <PopoverContent className="w-64"><p className="text-[13px] text-body">Popover content with any controls.</p></PopoverContent>
+            <PopoverContent className="w-64"><p className="text-sm text-body">Popover content with any controls.</p></PopoverContent>
           </Popover>
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button>Other actions <MoreHorizontal className="h-4 w-4" aria-hidden /></Button></DropdownMenuTrigger>

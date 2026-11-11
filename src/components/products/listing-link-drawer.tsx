@@ -88,7 +88,7 @@ function Field({ label, required, error, children, htmlFor, hint }: { readonly l
     <div className="flex min-w-0 flex-col gap-1">
       <FieldLabel htmlFor={htmlFor} required={required}>{label}</FieldLabel>
       {children}
-      {error ? <p id={`${htmlFor}-error`} className="text-[12px] text-danger" role="alert">{error}</p> : hint ? <p className="text-[11px] text-faint">{hint}</p> : null}
+      {error ? <p id={`${htmlFor}-error`} className="text-xs text-danger" role="alert">{error}</p> : hint ? <p className="text-2xs text-faint">{hint}</p> : null}
     </div>
   );
 }
@@ -136,14 +136,14 @@ function SearchTab({ listing, picked, setPicked, onSubmit }: { readonly listing:
         aria-label="Search product name, SKU or barcode"
         aria-controls="listing-link-results"
       />
-      <p className="text-[11px] text-faint">Matches {listing.clientName} product names, SKUs and barcodes; best matches first. ↑ ↓ to move, Enter to select, Enter again to link.</p>
+      <p className="text-2xs text-faint">Matches {listing.clientName} product names, SKUs and barcodes; best matches first. ↑ ↓ to move, Enter to select, Enter again to link.</p>
       <div className="min-h-[200px] rounded-md border border-border">
         {res.isPending ? (
-          <div className="flex items-center gap-2 px-3 py-3 text-[12px] text-secondary"><Spinner className="h-3.5 w-3.5" label="Searching" />Searching…</div>
+          <div className="flex items-center gap-2 px-3 py-3 text-xs text-secondary"><Spinner className="h-3.5 w-3.5" label="Searching" />Searching…</div>
         ) : res.isError ? (
-          <p className="px-3 py-4 text-center text-[12px] text-danger">Search failed. {errorMessage(res.error)}</p>
+          <p className="px-3 py-4 text-center text-xs text-danger">Search failed. {errorMessage(res.error)}</p>
         ) : rows.length === 0 ? (
-          <p className="px-3 py-6 text-center text-[12px] text-faint">No {listing.clientName} product name, SKU or barcode contains &ldquo;{term}&rdquo;. Change the search or use Create new.</p>
+          <p className="px-3 py-6 text-center text-xs text-faint">No {listing.clientName} product name, SKU or barcode contains &ldquo;{term}&rdquo;. Change the search or use Create new.</p>
         ) : (
           <ul ref={listRef} id="listing-link-results" role="listbox" aria-label="Products" className="divide-y divide-border">
             {rows.map((r, i) => (
@@ -154,10 +154,10 @@ function SearchTab({ listing, picked, setPicked, onSubmit }: { readonly listing:
                     picked === r.id && "bg-primary-soft/60", i === active && "outline outline-1 -outline-offset-1 outline-primary/40")}>
                   <ProductThumb url={r.imageUrl} size={30} label={r.name} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-mono text-[13px] font-semibold text-foreground">{r.sku}</span>
-                    <span className="block truncate text-[12px] text-secondary">{r.name}</span>
+                    <span className="block truncate font-mono text-sm font-semibold text-foreground">{r.sku}</span>
+                    <span className="block truncate text-xs text-secondary">{r.name}</span>
                   </span>
-                  <span className={cn("text-[11px]", r.status === "Active" ? "text-success" : "text-faint")}>{r.status}</span>
+                  <span className={cn("text-2xs", r.status === "Active" ? "text-success" : "text-faint")}>{r.status}</span>
                   {picked === r.id ? <Check className="h-4 w-4 text-primary" aria-hidden /> : null}
                 </button>
               </li>
@@ -165,7 +165,7 @@ function SearchTab({ listing, picked, setPicked, onSubmit }: { readonly listing:
           </ul>
         )}
       </div>
-      {res.data && rows.length >= 50 ? <p className="text-[11px] text-faint">Showing the first 50 matches. Type more of the name or SKU to narrow the list.</p> : null}
+      {res.data && rows.length >= 50 ? <p className="text-2xs text-faint">Showing the first 50 matches. Type more of the name or SKU to narrow the list.</p> : null}
     </div>
   );
 }
@@ -239,59 +239,59 @@ function CreateTab({ listing, values, setValues, errors, initial, setInitial }: 
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-border bg-surface-sunken/40 p-3 sm:grid-cols-4">
         {([["isActive", "Active?"], ["neverSync", "Never sync"], ["isFragile", "Fragile"], ["isOversized", "Oversized"]] as const).map(([key, label]) => (
           <div key={key} className="flex flex-col gap-1">
-            <span className="text-[12px] font-medium text-secondary" id={`qp-${key}-label`}>{label}</span>
+            <span className="text-xs font-medium text-secondary" id={`qp-${key}-label`}>{label}</span>
             <YesNoToggle value={Boolean(values[key])} onChange={(v) => set(key, v)} ariaLabel={label} />
           </div>
         ))}
       </div>
       <div className="flex flex-col gap-3 rounded-lg border border-border p-3" data-testid="initial-quantity">
         <div>
-          <p className="text-[13px] font-semibold text-body">Initial quantity <span className="font-normal text-faint">(optional)</span></p>
-          <p className="text-[11px] text-faint">Booked as an inventory adjustment at the location you pick, so it shows in the product&apos;s Transactions. Leave empty to add stock later.</p>
+          <p className="text-sm font-semibold text-body">Initial quantity <span className="font-normal text-faint">(optional)</span></p>
+          <p className="text-2xs text-faint">Booked as an inventory adjustment at the location you pick, so it shows in the product&apos;s Transactions. Leave empty to add stock later.</p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
             <FieldLabel htmlFor="qp-init-qty">Quantity ({str(values.uom) || "Unit"})</FieldLabel>
             <NumberInput id="qp-init-qty" value={initial.qty} decimals={0} invalid={Boolean(errors.initialQty)} onChange={(v) => setInitial((d) => ({ ...d, qty: v }))} />
-            {errors.initialQty ? <p className="text-[11px] text-danger">{errors.initialQty}</p> : null}
+            {errors.initialQty ? <p className="text-2xs text-danger">{errors.initialQty}</p> : null}
           </div>
           <div className="flex flex-col gap-1">
             <FieldLabel htmlFor="qp-init-wh">Warehouse</FieldLabel>
             <InventoryWarehouseSelect id="qp-init-wh" value={initial.warehouseId} invalid={Boolean(errors.initialWarehouse)} onChange={(v) => setInitial((d) => ({ ...d, warehouseId: v, locationId: null }))} />
-            {errors.initialWarehouse ? <p className="text-[11px] text-danger">{errors.initialWarehouse}</p> : null}
+            {errors.initialWarehouse ? <p className="text-2xs text-danger">{errors.initialWarehouse}</p> : null}
           </div>
           <div className="flex flex-col gap-1">
             <FieldLabel htmlFor="qp-init-loc">Location</FieldLabel>
             <DestinationSinglePicker kind="location" id="qp-init-loc" warehouseId={initial.warehouseId} disabled={!initial.warehouseId} placeholder={initial.warehouseId ? "Search location" : "Select a warehouse first"} invalid={Boolean(errors.initialLocation)} value={initial.locationId} onChange={(v) => setInitial((d) => ({ ...d, locationId: v }))} />
-            {errors.initialLocation ? <p className="text-[11px] text-danger">{errors.initialLocation}</p> : null}
+            {errors.initialLocation ? <p className="text-2xs text-danger">{errors.initialLocation}</p> : null}
           </div>
           <div className="flex flex-col gap-1">
             <FieldLabel htmlFor="qp-init-reason">Adjustment reason{reasonRequired ? <span className="text-danger"> *</span> : null}</FieldLabel>
             <Select id="qp-init-reason" clearable={!reasonRequired} disabled={!initial.warehouseId} invalid={Boolean(errors.initialReason)} placeholder={reasonOptions.length ? "Select reason" : "No adjustment reasons"} value={initial.reasonId ?? null}
               onChange={(v) => setInitial((d) => ({ ...d, reasonId: v ?? null }))} options={reasonOptions} />
-            {errors.initialReason ? <p className="text-[11px] text-danger">{errors.initialReason}</p> : null}
+            {errors.initialReason ? <p className="text-2xs text-danger">{errors.initialReason}</p> : null}
           </div>
         </div>
       </div>
-      <p className="text-[11px] text-faint">Never sync applies to this listing: KitStaks won&apos;t push inventory to {listing.storeName} for it. Add dimensions, pack types and tracking later from the product&apos;s Edit.</p>
+      <p className="text-2xs text-faint">Never sync applies to this listing: KitStaks won&apos;t push inventory to {listing.storeName} for it. Add dimensions, pack types and tracking later from the product&apos;s Edit.</p>
     </div>
   );
 }
 
 function SuggestedTab({ listing }: { readonly listing: ListingRow }) {
-  if (!listing.suggestedProductId) return <p className="text-[12px] text-faint">There is no suggestion for this listing.</p>;
+  if (!listing.suggestedProductId) return <p className="text-xs text-faint">There is no suggestion for this listing.</p>;
   return (
     <div className="flex flex-col gap-3">
       <Callout variant="info" title="Suggested by SKU">The seller SKU {listing.sellerSku} matches a {listing.clientName} product SKU. Match to link them, or Don&apos;t match to hide this suggestion.</Callout>
       <div className="flex gap-3 rounded-lg border border-border p-3">
         <ProductThumb url={listing.suggestedProductImageUrl} size={56} label={listing.suggestedProductName ?? ""} />
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-[14px] font-semibold text-foreground">{listing.suggestedProductSku}</p>
-          <p className="truncate text-[13px] text-body">{listing.suggestedProductName}</p>
-          <p className="mt-1 line-clamp-3 text-[12px] text-secondary">{listing.suggestedProductDescription || "No description"}</p>
+          <p className="font-mono text-base font-semibold text-foreground">{listing.suggestedProductSku}</p>
+          <p className="truncate text-sm text-body">{listing.suggestedProductName}</p>
+          <p className="mt-1 line-clamp-3 text-xs text-secondary">{listing.suggestedProductDescription || "No description"}</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3 text-[12px]">
+      <div className="grid grid-cols-2 gap-3 text-xs">
         <div className="rounded-md bg-surface-sunken/60 p-2.5"><p className="text-faint">Listing</p><p className="truncate font-medium text-body">{listing.name}</p><p className="font-mono text-secondary">{listing.sellerSku}</p></div>
         <div className="rounded-md bg-surface-sunken/60 p-2.5"><p className="text-faint">Store</p><p className="truncate font-medium text-body">{listing.storeName}</p><p className="text-secondary">{listing.provider}</p></div>
       </div>

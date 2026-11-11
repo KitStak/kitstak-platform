@@ -45,7 +45,7 @@ const DATE_OPTIONS: readonly { value: NotificationDateFilter; label: string }[] 
 function Chip({ active, onClick, children }: { readonly active: boolean; readonly onClick: () => void; readonly children: React.ReactNode }) {
   return (
     <button type="button" aria-pressed={active} onClick={onClick}
-      className={cn("h-7 rounded-full border px-3 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40",
+      className={cn("h-7 rounded-full border px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40",
         active ? "border-primary bg-primary-soft text-primary" : "border-border bg-surface text-secondary hover:border-border-strong hover:text-body")}>
       {children}
     </button>
@@ -149,7 +149,7 @@ export function NotificationsPage() {
             ))}
           </ul>
         )}
-        <nav aria-label="Notification pages" className="mt-3 flex flex-wrap items-center justify-end gap-3 text-[12px] text-secondary">
+        <nav aria-label="Notification pages" className="mt-3 flex flex-wrap items-center justify-end gap-3 text-xs text-secondary">
           <span className="flex items-center gap-1.5">Rows per page
             <span className="w-20"><Select aria-label="Rows per page" value={String(pageSize)} onChange={(v) => { if (v) { setPageSize(Number(v)); setPage(1); } }} options={PAGE_SIZES.map((s) => ({ value: String(s), label: String(s) }))} /></span>
           </span>

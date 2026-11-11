@@ -22,9 +22,9 @@ const catalogSchema = z.object({ credentialFields: z.array(z.object({ key: z.str
 function F({ id, label, required, error, children }: { readonly id: string; readonly label: string; readonly required?: boolean; readonly error?: string; readonly children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={`ac-${id.replace(".", "-")}`} className="text-[12px] font-medium text-body">{label}{required ? <span className="text-danger"> *</span> : null}</label>
+      <label htmlFor={`ac-${id.replace(".", "-")}`} className="text-xs font-medium text-body">{label}{required ? <span className="text-danger"> *</span> : null}</label>
       {children}
-      {error ? <p role="alert" className="text-[12px] text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
     </div>
   );
 }
@@ -87,9 +87,9 @@ export function AddCarrierDrawer({ open, onOpenChange, provider, providerName, o
         <F id="warehouseId" error={errors["warehouseId"]} label="Warehouse" required><Select id="ac-warehouseId" value={warehouseId} options={warehouses.options} placeholder="Select warehouse" invalid={Boolean(errors.warehouseId)} onChange={setWarehouseId} /></F>
         {provider !== "kitstaks-sandbox" ? (
           <div className="flex flex-col gap-1">
-            <span className="text-[12px] font-medium text-body">Test account</span>
+            <span className="text-xs font-medium text-body">Test account</span>
             <YesNoToggle value={isTest} onChange={setIsTest} ariaLabel="Test account" />
-            <p className="text-[11px] text-faint">{isTest ? "Test setups validate requests like the carrier and return sandbox rates and labels." : "Production calls the live carrier API; Continue checks the credentials first."}</p>
+            <p className="text-2xs text-faint">{isTest ? "Test setups validate requests like the carrier and return sandbox rates and labels." : "Production calls the live carrier API; Continue checks the credentials first."}</p>
           </div>
         ) : null}
       </div>

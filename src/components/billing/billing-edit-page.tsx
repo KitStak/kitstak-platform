@@ -101,7 +101,7 @@ function FeeCard({ fee, currency, locked, onEdit, onDelete }: { readonly fee: Fe
     <article className="group flex flex-col gap-3 rounded-xl border border-border bg-surface p-4 shadow-xs transition hover:-translate-y-px hover:shadow-sm">
       <header className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[14px] font-semibold text-foreground">{fee.name}</h3>
+          <h3 className="truncate text-base font-semibold text-foreground">{fee.name}</h3>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <FeeBadges fee={fee} />
           </div>
@@ -114,15 +114,15 @@ function FeeCard({ fee, currency, locked, onEdit, onDelete }: { readonly fee: Fe
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
         <dt className="text-faint">Fee by</dt><dd className="text-body">{fee.feeBy}</dd>
         <dt className="text-faint">Charge by</dt><dd className="text-body">{fee.chargeBy}</dd>
       </dl>
       <div className="rounded-lg bg-surface-sunken/70 px-3 py-2">
-        {priceLines(fee, currency).map((l) => <div key={l} className="text-[13px] font-semibold tabular-nums text-foreground">{l}</div>)}
-        {fee.useMinPrice || fee.useMaxPrice ? <div className="mt-1 text-[11px] text-secondary">{[fee.useMinPrice ? `Min ${moneyRail(fee.minPrice, currency)}` : "", fee.useMaxPrice ? `Max ${moneyRail(fee.maxPrice, currency)}` : ""].filter(Boolean).join(" · ")}</div> : null}
+        {priceLines(fee, currency).map((l) => <div key={l} className="text-sm font-semibold tabular-nums text-foreground">{l}</div>)}
+        {fee.useMinPrice || fee.useMaxPrice ? <div className="mt-1 text-2xs text-secondary">{[fee.useMinPrice ? `Min ${moneyRail(fee.minPrice, currency)}` : "", fee.useMaxPrice ? `Max ${moneyRail(fee.maxPrice, currency)}` : ""].filter(Boolean).join(" · ")}</div> : null}
       </div>
-      {fee.conditions.length ? <ul className="flex flex-col gap-1">{fee.conditions.map((c) => <li key={c.text} className="text-[12px] text-secondary">If {c.text}</li>)}</ul> : null}
+      {fee.conditions.length ? <ul className="flex flex-col gap-1">{fee.conditions.map((c) => <li key={c.text} className="text-xs text-secondary">If {c.text}</li>)}</ul> : null}
     </article>
   );
 }
@@ -195,11 +195,11 @@ export function BillingEditPage({ id }: { readonly id: string }) {
           <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <h1 className="min-w-0 break-words text-[20px] font-semibold leading-tight text-foreground">{c.name}</h1>
+                <h1 className="min-w-0 break-words text-lg font-semibold leading-tight text-foreground">{c.name}</h1>
                 <DisabledReason reason={perms.edit ? null : NO_PERMISSION}><Button size="icon-sm" variant="ghost" aria-label="Edit billing form info" disabled={!perms.edit} onClick={() => setEditInfo(true)}><Pencil className="h-4 w-4" /></Button></DisabledReason>
                 <BillingPill status={c.approvalStatus} />
               </div>
-              <p className="mt-0.5 text-[13px] text-secondary"><Link href={`/clients/${c.clientId}`} className="text-primary hover:underline">{c.clientName}</Link> · {c.warehouseCode} · {c.currency}</p>
+              <p className="mt-0.5 text-sm text-secondary"><Link href={`/clients/${c.clientId}`} className="text-primary hover:underline">{c.clientName}</Link> · {c.warehouseCode} · {c.currency}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="ghost" onClick={() => setLog(true)}><History className="h-4 w-4" />Show change log</Button>
@@ -217,17 +217,17 @@ export function BillingEditPage({ id }: { readonly id: string }) {
               </DropdownMenu>
             </div>
           </div>
-          <dl className="grid grid-cols-2 gap-4 border-t border-border pt-4 text-[13px] md:grid-cols-3 lg:grid-cols-6">
+          <dl className="grid grid-cols-2 gap-4 border-t border-border pt-4 text-sm md:grid-cols-3 lg:grid-cols-6">
             {[
               ["Calc. start date", dates.day(c.calcStartDate)], ["Billing period", FREQUENCY_LABELS[c.frequency] ?? c.frequency], ["Next auto-run", c.nextAutoRun ? `${dates.day(c.nextAutoRun.runDay)} · bills ${dates.period(c.nextAutoRun.periodStart, c.nextAutoRun.periodEnd)}` : "Off until approved"],
               ["Last calculation", c.lastCalculatedAt ? dates.at(c.lastCalculatedAt) : "Never"], ["Fees", String(c.fees.length)],
               ["Last bill", c.lastReport ? `${c.lastReport.billNumber} · ${moneyRail(c.lastReport.totalPrice, c.currency)}` : "None yet"],
-            ].map(([k, v]) => <div key={k}><dt className="text-[11px] font-semibold uppercase tracking-wide text-faint">{k}</dt><dd className="mt-0.5 tabular-nums text-foreground">{c.lastReport && k === "Last bill" ? <Link className="text-primary hover:underline" href={`/billing/reports/${c.lastReport.id}`}>{v}</Link> : v}</dd></div>)}
+            ].map(([k, v]) => <div key={k}><dt className="text-2xs font-semibold text-faint">{k}</dt><dd className="mt-0.5 tabular-nums text-foreground">{c.lastReport && k === "Last bill" ? <Link className="text-primary hover:underline" href={`/billing/reports/${c.lastReport.id}`}>{v}</Link> : v}</dd></div>)}
           </dl>
         </section>
 
         {c.approvalStatus === "Approved" ? (
-          <div role="status" className="flex items-start gap-2.5 rounded-lg border border-border bg-surface-sunken/60 px-3.5 py-2.5 text-[13px]">
+          <div role="status" className="flex items-start gap-2.5 rounded-lg border border-border bg-surface-sunken/60 px-3.5 py-2.5 text-sm">
             <Lock className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
             <div><p className="font-semibold text-foreground">Approved: fees are locked</p><p className="text-secondary">The scheduler checks every hour and bills this contract at each period end{c.nextAutoRun ? <>; next automatic calculation <strong className="text-foreground">{dates.day(c.nextAutoRun.runDay)}</strong> for {dates.period(c.nextAutoRun.periodStart, c.nextAutoRun.periodEnd)}</> : null}. Cancel the approval to change fees.</p></div>
           </div>
@@ -235,7 +235,7 @@ export function BillingEditPage({ id }: { readonly id: string }) {
 
         <section className="flex flex-col gap-3" aria-label="Fees">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="mr-auto text-[15px] font-semibold text-foreground">Fees <span className="font-normal text-faint">({c.fees.length})</span></h2>
+            <h2 className="mr-auto text-base font-semibold text-foreground">Fees <span className="font-normal text-faint">({c.fees.length})</span></h2>
             <div className="w-60"><TextField value={search} onChange={(e) => setSearch(e.target.value)} onClear={() => setSearch("")} placeholder="Search fees" leading={<Search className="h-4 w-4" />} aria-label="Search fees" /></div>
             <div className="w-48"><Select aria-label="Filter by operation" placeholder="All operations" clearable value={opFilter} onChange={setOpFilter} options={BILLING_OPERATION_TYPES.map((o) => ({ value: o, label: o }))} /></div>
             <DisabledReason reason={locked}><Button variant="primary" disabled={Boolean(locked) || feeEditor !== null} onClick={() => setFeeEditor({ fee: null })}><Plus className="h-4 w-4" />Create fee</Button></DisabledReason>
@@ -245,7 +245,7 @@ export function BillingEditPage({ id }: { readonly id: string }) {
             <EmptyState title="No fees yet" description="Add receiving, storage, pick and pack, shipment, VAS or recurring fees. Each fee can have tiers, conditions and a minimum or maximum."
               action={locked ? undefined : <Button variant="primary" onClick={() => setFeeEditor({ fee: null })}><Plus className="h-4 w-4" />Create fee</Button>} />
           ) : fees.length === 0 && c.fees.length > 0 ? (
-            <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-[13px] text-secondary">No fees match. <button type="button" className="font-semibold text-primary hover:underline" onClick={() => { setSearch(""); setOpFilter(null); }}>Clear search</button></p>
+            <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-secondary">No fees match. <button type="button" className="font-semibold text-primary hover:underline" onClick={() => { setSearch(""); setOpFilter(null); }}>Clear search</button></p>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {fees.map((f) => <FeeCard key={f.id} fee={f} currency={c.currency} locked={locked} onEdit={() => setFeeEditor({ fee: f })} onDelete={() => setConfirm({ fee: f })} />)}
@@ -255,10 +255,10 @@ export function BillingEditPage({ id }: { readonly id: string }) {
 
         {c.fees.length > 0 ? (
           <section className="flex flex-col gap-2" aria-label="Summary">
-            <h2 className="text-[15px] font-semibold text-foreground">Summary</h2>
+            <h2 className="text-base font-semibold text-foreground">Summary</h2>
             <div className="relative overflow-x-auto rounded-lg border border-border bg-surface" tabIndex={0} aria-label="Fee summary table, scrolls horizontally">
-              <table className="w-full min-w-[980px] text-left text-[13px]">
-                <thead className="bg-surface-sunken text-[11px] font-semibold uppercase tracking-wide text-secondary"><tr>{["Fee", "Operation", "Calculation", "Fee by", "Charge by", "Price", "Min", "Max", "Conditions"].map((h, i) => <th key={h} className={i === 0 ? "sticky left-0 z-10 bg-surface-sunken px-3 py-2 shadow-[1px_0_0_var(--border)]" : "px-3 py-2"}>{h}</th>)}</tr></thead>
+              <table className="w-full min-w-[980px] text-left text-sm">
+                <thead className="bg-surface-sunken text-2xs font-semibold text-secondary"><tr>{["Fee", "Operation", "Calculation", "Fee by", "Charge by", "Price", "Min", "Max", "Conditions"].map((h, i) => <th key={h} className={i === 0 ? "sticky left-0 z-10 bg-surface-sunken px-3 py-2 shadow-[1px_0_0_var(--border)]" : "px-3 py-2"}>{h}</th>)}</tr></thead>
                 <tbody className="divide-y divide-border">
                   {c.fees.map((f) => (
                     <tr key={f.id} className="group/row align-top hover:bg-surface-sunken/40">
@@ -277,11 +277,11 @@ export function BillingEditPage({ id }: { readonly id: string }) {
         ) : null}
 
         <section className="flex flex-col gap-2" aria-label="Bills">
-          <div className="flex items-center justify-between"><h2 className="text-[15px] font-semibold text-foreground">Bills <span className="font-normal text-faint">({billRows.length})</span></h2>{billRows.length ? <Link className="text-[13px] font-semibold text-primary hover:underline" href={`/billing/reports?f.contractName=eq:${encodeURIComponent(c.name)}`}>Open in Billing Report</Link> : null}</div>
-          {billRows.length === 0 ? <p className="rounded-lg border border-dashed border-border px-4 py-5 text-[13px] text-secondary">No bills yet. Calculate to create the first one.</p> : (
+          <div className="flex items-center justify-between"><h2 className="text-base font-semibold text-foreground">Bills <span className="font-normal text-faint">({billRows.length})</span></h2>{billRows.length ? <Link className="text-sm font-semibold text-primary hover:underline" href={`/billing/reports?f.contractName=eq:${encodeURIComponent(c.name)}`}>Open in Billing Report</Link> : null}</div>
+          {billRows.length === 0 ? <p className="rounded-lg border border-dashed border-border px-4 py-5 text-sm text-secondary">No bills yet. Calculate to create the first one.</p> : (
             <div className="overflow-x-auto rounded-lg border border-border bg-surface">
-              <table className="w-full text-left text-[13px]">
-                <thead className="bg-surface-sunken text-[11px] font-semibold uppercase tracking-wide text-secondary"><tr>{["Bill number", "Period", "Calculation", "Status", "Total", "Calculated"].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}</tr></thead>
+              <table className="w-full text-left text-sm">
+                <thead className="bg-surface-sunken text-2xs font-semibold text-secondary"><tr>{["Bill number", "Period", "Calculation", "Status", "Total", "Calculated"].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}</tr></thead>
                 <tbody className="divide-y divide-border">
                   {billRows.slice(0, 12).map((b) => (
                     <tr key={b.id} className="hover:bg-surface-sunken/40">

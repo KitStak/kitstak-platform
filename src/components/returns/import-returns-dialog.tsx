@@ -76,7 +76,7 @@ export function ImportReturnsDialog({ open, onOpenChange, onDone }: { readonly o
   };
 
   const field = "flex flex-col gap-1";
-  const lbl = "text-[12px] font-semibold text-body";
+  const lbl = "text-xs font-semibold text-body";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="md">
@@ -86,18 +86,18 @@ export function ImportReturnsDialog({ open, onOpenChange, onDone }: { readonly o
             <div className={field}>
               <label htmlFor="imp-ext" className={lbl}>Loop return # <span className="text-danger">*</span></label>
               <Input id="imp-ext" value={externalId} onChange={(e) => { setExternalId(e.target.value); setErrors((x) => ({ ...x, externalId: "" })); }} placeholder="e.g. LR-10482" aria-invalid={Boolean(errors.externalId) || undefined} />
-              {errors.externalId ? <p className="text-[11px] text-danger">{errors.externalId}</p> : null}
+              {errors.externalId ? <p className="text-2xs text-danger">{errors.externalId}</p> : null}
             </div>
             <div className={field}>
               <label htmlFor="imp-order" className={lbl}>Order <span className="text-danger">*</span></label>
               <Input id="imp-order" value={order} onChange={(e) => { setOrder(e.target.value); setErrors((x) => ({ ...x, order: "" })); }} placeholder="Order code or store order #" aria-invalid={Boolean(errors.order) || undefined} />
-              {errors.order ? <p className="text-[11px] text-danger">{errors.order}</p> : null}
+              {errors.order ? <p className="text-2xs text-danger">{errors.order}</p> : null}
             </div>
           </div>
           <div className={field}>
             <label htmlFor="imp-lines" className={lbl}>Lines <span className="text-danger">*</span></label>
             <Textarea id="imp-lines" rows={4} value={linesText} onChange={(e) => { setLinesText(e.target.value); setErrors((x) => ({ ...x, lines: "" })); }} placeholder={"One per row: SKU, quantity, reason\nAPX-TEE-WHT-M, 1, Wrong size"} aria-invalid={Boolean(errors.lines) || undefined} />
-            {errors.lines ? <p className="text-[11px] text-danger">{errors.lines}</p> : <p className="text-[11px] text-secondary">The reason is matched to your Return Reasons by name; unknown reasons are left empty.</p>}
+            {errors.lines ? <p className="text-2xs text-danger">{errors.lines}</p> : <p className="text-2xs text-secondary">The reason is matched to your Return Reasons by name; unknown reasons are left empty.</p>}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className={field}><label htmlFor="imp-trk" className={lbl}>Return tracking #</label><Input id="imp-trk" value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="Optional" /></div>

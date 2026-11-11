@@ -28,7 +28,7 @@ export function GridSearch({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={placeholder}
-        className="h-8 w-60 rounded-md border border-border-strong/70 bg-surface pl-8 pr-7 text-[13px] text-body placeholder:text-faint transition-colors hover:border-border-strong focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25"
+        className="h-8 w-60 rounded-md border border-border-strong/70 bg-surface pl-8 pr-7 text-sm text-body placeholder:text-faint transition-colors hover:border-border-strong focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25"
       />
       {value ? (
         <button
@@ -72,7 +72,7 @@ export function FilterButton({
             <ListFilter className="h-3.5 w-3.5" aria-hidden />
             Filter
             {appliedCount > 0 ? (
-              <span className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">
+              <span className="rounded-full bg-primary px-1.5 text-2xs font-bold text-white">
                 {appliedCount}
               </span>
             ) : null}
@@ -84,7 +84,7 @@ export function FilterButton({
           <div className="flex flex-col gap-2.5">
             {filters.map((filter) => (
               <label key={filter.key} className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold text-secondary">
+                <span className="text-2xs font-semibold text-secondary">
                   {filter.label}
                 </span>
                 <select
@@ -92,7 +92,7 @@ export function FilterButton({
                   onChange={(e) =>
                     onApply({ ...applied, [filter.key]: e.target.value })
                   }
-                  className="h-8 rounded-md border border-border-strong/70 bg-surface px-2 text-[13px] text-body focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25"
+                  className="h-8 rounded-md border border-border-strong/70 bg-surface px-2 text-sm text-body focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25"
                 >
                   <option value="">All</option>
                   {filter.options.map((o) => (
@@ -128,7 +128,7 @@ export function FilterButton({
           return (
             <span
               key={key}
-              className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary-soft px-2.5 py-1 text-[11px] font-medium text-primary"
+              className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary-soft px-2.5 py-1 text-2xs font-medium text-primary"
             >
               {label}: {value}
               <button

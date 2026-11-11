@@ -127,7 +127,7 @@ export function StepProducts() {
       {!lineLock ? (
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface-sunken/50 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[12px] font-medium text-body">Enter SKU and add product (at least 3 characters)</p>
+            <p className="text-xs font-medium text-body">Enter SKU and add product (at least 3 characters)</p>
             <DisabledReason reason={noClient ?? (canCreateProduct ? null : "You don't have permission to create products")}>
               <Button variant="secondary" size="sm" onClick={() => setCreateOpen(true)} disabled={Boolean(noClient) || !canCreateProduct}>
                 <PackagePlus className="h-3.5 w-3.5" aria-hidden />
@@ -135,7 +135,7 @@ export function StepProducts() {
               </Button>
             </DisabledReason>
           </div>
-          {noClient ? <p className="text-[12px] text-secondary">{noClient}.</p> : (
+          {noClient ? <p className="text-xs text-secondary">{noClient}.</p> : (
             <OrderProductSearch clientId={clientId} warehouseId={warehouseId || null} addedIds={lines.map((l) => l.productId)} onAdd={add} />
           )}
         </div>
@@ -162,14 +162,14 @@ export function StepProducts() {
         </div>
       </div>
 
-      {errorText ? <p role="alert" className="text-[12px] font-medium text-danger" data-field="lines">{errorText}</p> : null}
+      {errorText ? <p role="alert" className="text-xs font-medium text-danger" data-field="lines">{errorText}</p> : null}
 
       {lines.length === 0 ? (
         <EmptyState icon={PackagePlus} title="No product has been added yet" description="Search by SKU above and press + to add products to this order." />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[860px] text-[12px]">
-            <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+          <table className="w-full min-w-[860px] text-xs">
+            <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
               <tr>
                 <th className="whitespace-nowrap px-3 py-2">Image</th>
                 <th className="whitespace-nowrap px-3 py-2">SKU</th>
@@ -199,7 +199,7 @@ export function StepProducts() {
                       <button type="button" className="rounded text-left font-semibold text-foreground underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" onClick={() => setDrawer({ line: l, readOnly: Boolean(lineLock) })} aria-label={`${lineLock ? "Show details for" : "Edit"} ${l.sku}`}>
                         {l.sku}
                       </button>
-                      {l.isKit ? <span className="ml-1.5 rounded bg-primary-soft px-1 py-0.5 text-[10px] font-semibold text-primary">Kit</span> : null}
+                      {l.isKit ? <span className="ml-1.5 rounded bg-primary-soft px-1 py-0.5 text-2xs font-semibold text-primary">Kit</span> : null}
                     </td>
                     <td className="max-w-[220px] truncate px-3 py-1.5 text-body" title={l.name}>{l.name}</td>
                     <td className="whitespace-nowrap px-3 py-1.5">{l.packType}</td>

@@ -55,25 +55,25 @@ async function Hub() {
             {groups.map((g) => (
               <div key={g.area} className="rounded-lg border border-border bg-surface p-4">
                 <div className="mb-2 flex items-baseline justify-between gap-2">
-                  <h3 className="text-[13px] font-semibold capitalize text-foreground">{g.area}</h3>
+                  <h3 className="text-sm font-semibold capitalize text-foreground">{g.area}</h3>
                   <Link href={g.href} className="text-xs text-primary hover:underline">Open {g.area}</Link>
                 </div>
                 <ul className="divide-y divide-border">
                   {g.items.map((it) => (
                     <li key={it.key} className="flex items-center justify-between gap-3 py-2">
                       {it.configured ? (
-                        <Link href={`/imports/${it.key}`} className="min-w-0 text-[13px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">
+                        <Link href={`/imports/${it.key}`} className="min-w-0 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-sm">
                           {importTitle(it.title)}
                         </Link>
                       ) : (
-                        <span className="min-w-0 text-[13px] font-medium text-faint" aria-disabled="true">{importTitle(it.title)}</span>
+                        <span className="min-w-0 text-sm font-medium text-faint" aria-disabled="true">{importTitle(it.title)}</span>
                       )}
                       <span className="flex shrink-0 items-center gap-2">
                         {it.configured ? (
                           <a href={`/api/imports/${it.key}/template`} className="text-xs text-secondary hover:text-foreground hover:underline" aria-label={`Download template for ${importTitle(it.title)}`}>Template ({it.columns} cols)</a>
                         ) : (
                           <Tooltip content={unavailableReason(it)}>
-                            <span tabIndex={0} className="rounded-full bg-neutral-soft px-2 py-0.5 text-[11px] text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Coming soon</span>
+                            <span tabIndex={0} className="rounded-full bg-neutral-soft px-2 py-0.5 text-2xs text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">Coming soon</span>
                           </Tooltip>
                         )}
                       </span>

@@ -32,7 +32,7 @@ export function InfoNote({ title, children }: { readonly title: string; readonly
   return (
     <div role="note" className="flex items-start gap-2.5 rounded-lg border border-info/25 bg-info-soft/60 px-3.5 py-2.5" data-tone="info">
       <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
-      <div className="min-w-0 flex-1 text-[13px] leading-5">
+      <div className="min-w-0 flex-1 text-sm leading-5">
         <p className="font-semibold text-foreground">{title}</p>
         <div className="mt-0.5 text-secondary">{children}</div>
       </div>
@@ -230,7 +230,7 @@ function DownloadLink({ row }: { readonly row: ReportRow }) {
   const href = typeof row.downloadHref === "string" ? row.downloadHref : null;
   if (!href) {
     const status = String(row.status ?? "");
-    return <span className="inline-flex h-5 items-center gap-1 align-middle text-[12px] leading-5 text-faint" title={status === "error" ? "The export failed, so there is no file" : "The file is still being generated"}><Info className="h-3.5 w-3.5" aria-hidden />{status === "error" ? "No file" : status === "queued" ? "Queued" : `Preparing${typeof row.progress === "number" && row.progress > 0 ? ` ${row.progress}%` : ""}`}</span>;
+    return <span className="inline-flex h-5 items-center gap-1 align-middle text-xs leading-5 text-faint" title={status === "error" ? "The export failed, so there is no file" : "The file is still being generated"}><Info className="h-3.5 w-3.5" aria-hidden />{status === "error" ? "No file" : status === "queued" ? "Queued" : `Preparing${typeof row.progress === "number" && row.progress > 0 ? ` ${row.progress}%` : ""}`}</span>;
   }
   return (
     <a href={href} onClick={(e) => e.stopPropagation()} className="inline-flex h-5 items-center gap-1 align-middle font-medium leading-5 text-primary underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" download>

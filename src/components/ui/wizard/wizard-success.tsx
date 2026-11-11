@@ -26,13 +26,13 @@ export function WizardSuccess({ entity, verb, description, options, className }:
   return (
     <div className={cn("flex flex-col items-center", className)} role="status">
       <CheckCircle2 className="h-12 w-12 text-success" aria-hidden />
-      <h2 className="mt-3 text-center text-[18px] font-semibold text-foreground">
+      <h2 className="mt-3 text-center text-lg font-semibold text-foreground">
         You have successfully {action} {entity}
       </h2>
-      {description ? <p className="mt-1 max-w-[480px] text-center text-[13px] text-secondary">{description}</p> : null}
+      {description ? <p className="mt-1 max-w-[480px] text-center text-sm text-secondary">{description}</p> : null}
       {options.length ? (
         <>
-          <p className="mt-6 text-[12px] font-semibold uppercase tracking-[0.04em] text-faint">What can you do next?</p>
+          <p className="mt-6 text-xs font-semibold text-faint">What can you do next?</p>
           <ActionCards cards={options} className="mt-3" />
         </>
       ) : null}

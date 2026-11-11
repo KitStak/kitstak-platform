@@ -31,7 +31,7 @@ export const HeaderIconButton = React.forwardRef<HTMLButtonElement, HeaderIconBu
         <span className="sr-only">{label}</span>
         {children}
         {badge ? (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold leading-none text-white ring-2 ring-panel">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-2xs font-bold leading-none text-white ring-2 ring-panel">
             {badge > MAX_BADGE ? `${MAX_BADGE}+` : badge}
           </span>
         ) : null}

@@ -20,7 +20,7 @@ const orderLink = (code: string | null) => (code ? <LinkCell href={`/orders/${en
 function typePill(type: string) {
   const isRemove = type === "Remove Inventory";
   return (
-    <span className={isRemove ? "inline-flex whitespace-nowrap rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning" : "inline-flex whitespace-nowrap rounded-full bg-info-soft px-2 py-0.5 text-[11px] font-semibold text-info"}>
+    <span className={isRemove ? "inline-flex whitespace-nowrap rounded-full bg-warning-soft px-2 py-0.5 text-2xs font-semibold text-warning" : "inline-flex whitespace-nowrap rounded-full bg-info-soft px-2 py-0.5 text-2xs font-semibold text-info"}>
       {type}
     </span>
   );
@@ -30,7 +30,7 @@ const SPECS: readonly ColumnSpec<Row>[] = [
   {
     id: "orderCode", label: "Order code", width: 130, always: true,
     // Remove-inventory rows carry no order: show the adjustment reference instead of a bare dash.
-    cell: (r) => (r.orderId && r.orderCode ? orderLink(r.orderCode) : r.reference ? <span className="truncate font-mono text-[12px] text-secondary" title="Remove inventory adjustment">{r.reference}</span> : dash),
+    cell: (r) => (r.orderId && r.orderCode ? orderLink(r.orderCode) : r.reference ? <span className="truncate font-mono text-xs text-secondary" title="Remove inventory adjustment">{r.reference}</span> : dash),
     exportKey: "reference",
   },
   { id: "shipmentType", label: "Shipment type", width: 140, cell: (r) => typePill(r.shipmentType) },
@@ -42,7 +42,7 @@ const SPECS: readonly ColumnSpec<Row>[] = [
   { id: "barcode", label: "Barcode", width: 140 },
   { id: "poNumber", label: "PO number", width: 120 },
   { id: "lotNumber", label: "Lot/batch number", width: 140 },
-  { id: "trackingNumber", label: "Tracking number", width: 190, cell: (r) => (r.trackingNumber ? <span className="truncate font-mono text-[12px]">{String(r.trackingNumber)}</span> : dash) },
+  { id: "trackingNumber", label: "Tracking number", width: 190, cell: (r) => (r.trackingNumber ? <span className="truncate font-mono text-xs">{String(r.trackingNumber)}</span> : dash) },
   { id: "expiryDate", label: "Expiry date", kind: "date", width: 120 },
   { id: "quantity", label: "Quantity", kind: "integer", width: 96 },
   { id: "packType", label: "Pack type", width: 100 },

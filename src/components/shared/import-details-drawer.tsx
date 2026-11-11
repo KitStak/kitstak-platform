@@ -77,8 +77,8 @@ export function ImportDetailsDrawer({ batch, onOpenChange }: { readonly batch: I
             ["Error", <span key="err" className={cn(current.errorCount > 0 && "text-danger")}>{fmt.number(current.errorCount)}</span>],
           ].map(([label, value]) => (
             <div key={String(label)} className="rounded-lg border border-border p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{label}</p>
-              <p className="mt-1 text-[15px] font-semibold tabular-nums text-foreground">{value}</p>
+              <p className="text-2xs font-semibold text-faint">{label}</p>
+              <p className="mt-1 text-base font-semibold tabular-nums text-foreground">{value}</p>
             </div>
           ))}
         </div>
@@ -93,8 +93,8 @@ export function ImportDetailsDrawer({ batch, onOpenChange }: { readonly batch: I
       ) : shown.length === 0 ? (
         <EmptyState compact title={errorsOnly ? "No errors in this import" : "No rows recorded"} />
       ) : (
-        <table className="w-full border-collapse overflow-hidden rounded-lg border border-border text-[13px]">
-          <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+        <table className="w-full border-collapse overflow-hidden rounded-lg border border-border text-sm">
+          <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
             <tr>
               <th scope="col" className="w-20 px-3 py-2">Row</th>
               <th scope="col" className="w-28 px-3 py-2">Result</th>

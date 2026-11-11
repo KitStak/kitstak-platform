@@ -25,8 +25,8 @@ export type JobRow = GridRow & JobFacts & { readonly waveId: string | null; read
 function LabelPill({ value }: { readonly value: unknown }) {
   const v = String(value ?? "");
   if (!v) return <Dash />;
-  const tone = v === "Labeled" || v === "Printed" ? "bg-[#D3F0E3] text-success" : v.startsWith("Partially") ? "bg-[#FFF3D6] text-[#9A6700]" : "bg-[#E3E6E8] text-[#50575C]";
-  return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 ${tone}`}>{v}</span>;
+  const tone = v === "Labeled" || v === "Printed" ? "bg-[var(--label-green-subtle)] text-success" : v.startsWith("Partially") ? "bg-[#FFF3D6] text-[#9A6700]" : "bg-[var(--border-default)] text-[var(--text-muted)]";
+  return <span className={`inline-flex rounded-full px-2 py-0.5 text-2xs font-semibold leading-4 ${tone}`}>{v}</span>;
 }
 
 function TaskCountLink({ row, value }: { readonly row: JobRow; readonly value: unknown }) {
@@ -48,7 +48,7 @@ const COLUMNS = buildColumns<JobRow>(JOB_COLUMNS, {
       if (!short && !overdue) return <Dash />;
       return (
         <span className="flex flex-wrap items-center gap-1">
-          {short ? <span className="inline-flex shrink-0 whitespace-nowrap rounded-full bg-[#F7E9E4] px-1.5 py-px text-[10px] font-semibold leading-4 text-[#A13406] dark:bg-[#3A2116] dark:text-[#F5B38F]" title="Open pick short">Short</span> : null}
+          {short ? <span className="inline-flex shrink-0 whitespace-nowrap rounded-full bg-[var(--label-brown-subtle)] px-1.5 py-px text-2xs font-semibold leading-4 text-[var(--label-brown-text)] dark:bg-[#3A2116] dark:text-[#F5B38F]" title="Open pick short">Short</span> : null}
           {overdue ? <OverduePill /> : null}
         </span>
       );
@@ -57,7 +57,7 @@ const COLUMNS = buildColumns<JobRow>(JOB_COLUMNS, {
       const v = getValue() as string | null;
       if (!v) return <Dash />;
       return Number(row.original.overdue) ? (
-        <span className="flex min-w-0 items-center gap-1.5 font-semibold text-[#B42318] dark:text-[#F7A99C]"><DateCell value={v} /><OverduePill /></span>
+        <span className="flex min-w-0 items-center gap-1.5 font-semibold text-[var(--danger-text)] dark:text-[var(--label-red-light)]"><DateCell value={v} /><OverduePill /></span>
       ) : <DateCell value={v} />;
     },
     waveNumber: ({ row }) => (row.original.waveNumber ? <LinkCell href={`/jobs/wave-log?q=${encodeURIComponent(String(row.original.waveNumber))}&qm=eq`}>{String(row.original.waveNumber)}</LinkCell> : <Dash />),
@@ -66,7 +66,7 @@ const COLUMNS = buildColumns<JobRow>(JOB_COLUMNS, {
       if (!v) return <Dash />;
       return row.original.aiJob ? (
         <span className="flex min-w-0 items-center gap-1" title={String(row.original.aiJobDescription ?? v)}>
-          <Sparkles className="h-3 w-3 shrink-0 text-[#5B3DB5] dark:text-[#C7B5FF]" aria-label="AI job" />
+          <Sparkles className="h-3 w-3 shrink-0 text-[var(--label-purple-text)] dark:text-[var(--label-purple-light)]" aria-label="AI job" />
           <span className="truncate">{String(v)}</span>
         </span>
       ) : textCell(v);

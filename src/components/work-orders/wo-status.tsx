@@ -58,7 +58,7 @@ export function WoStatusFilterPill({ item }: { readonly item: WoStatusFilterItem
     <button type="button" onClick={item.onClick} aria-pressed={item.active}
       style={item.active ? { "--wo-bg": tone?.bg ?? "var(--color-primary-soft)", "--wo-fg": tone?.fg ?? "var(--color-primary)", "--wo-acc": accent, borderColor: accent, boxShadow: `inset 0 0 0 1px ${accent}` } as React.CSSProperties : undefined}
       className={cn(item.active && WO_PILL_TONE,
-        "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+        "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
         item.active ? "font-semibold" : "border-border bg-surface text-body hover:border-border-strong hover:bg-surface-sunken",
       )}>
       <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} aria-hidden />

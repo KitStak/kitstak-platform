@@ -201,11 +201,11 @@ export function OrderWizardShell<T extends FieldValues>({ steps, mode, defaultVa
                 ) : null}
                 <section ref={sectionRef} aria-labelledby={`order-step-${step.key}`} className="flex flex-col gap-4">
                   <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                    <h2 id={`order-step-${step.key}`} tabIndex={-1} data-step-heading className="text-[15px] font-semibold text-foreground outline-none">
+                    <h2 id={`order-step-${step.key}`} tabIndex={-1} data-step-heading className="text-base font-semibold text-foreground outline-none">
                       <span className="mr-1.5 text-faint">Step {wizard.nav.current + 1} /</span>
                       {step.label}
                     </h2>
-                    {step.description ? <p className="text-[12px] text-secondary">{step.description}</p> : null}
+                    {step.description ? <p className="text-xs text-secondary">{step.description}</p> : null}
                   </header>
                   {issues.length > 0 ? (
                     <Callout variant="error" title={`Fix ${issues.length} ${issues.length === 1 ? "field" : "fields"} to continue`}>

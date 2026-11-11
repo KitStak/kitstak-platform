@@ -66,10 +66,10 @@ function MoveBackDialog({ row, from, warehouseId, onClose, onDone }: { readonly 
       <DialogContent size="md">
         <DialogHeader title={`Move ${row.sku} back`} description={`From hospital ${from}. ${row.free} of ${row.onHand} units are free to move.`} />
         <DialogBody className="grid gap-3">
-          <label className="grid gap-1 text-[12px] font-medium text-body">Quantity
+          <label className="grid gap-1 text-xs font-medium text-body">Quantity
             <NumberInput value={qty} min={1} max={row.free} decimals={0} onChange={setQty} aria-label="Quantity to move" />
           </label>
-          <label className="grid gap-1 text-[12px] font-medium text-body" htmlFor="hosp-target">Move to
+          <label className="grid gap-1 text-xs font-medium text-body" htmlFor="hosp-target">Move to
             <Select id="hosp-target" value={to} onChange={setTo} placeholder={targets.isPending ? "Loading locations…" : "Choose a storage or picking location"}
               options={(targets.data?.data ?? []).map((t) => {
                 const pickBlocked = damaged && t.areaType === "Picking";
@@ -78,10 +78,10 @@ function MoveBackDialog({ row, from, warehouseId, onClose, onDone }: { readonly 
           </label>
           {damaged ? <Callout variant="attention" title="Damaged stock">Marked damaged ({row.damageReason}). It can go to a Storage location for review, not straight to a Picking location.</Callout> : null}
           {targets.isError ? <Callout variant="error" title="Could not load locations" action={<Button size="sm" onClick={() => void targets.refetch()}>Retry</Button>}>{targets.error.message}</Callout> : null}
-          <label className="grid gap-1 text-[12px] font-medium text-body">Note <span className="font-normal text-secondary">(optional, saved on the movement)</span>
+          <label className="grid gap-1 text-xs font-medium text-body">Note <span className="font-normal text-secondary">(optional, saved on the movement)</span>
             <Input value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Pack short resolved, item OK" />
           </label>
-          {error ? <p role="alert" className="text-[12px] text-danger">{error}</p> : null}
+          {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
@@ -132,26 +132,26 @@ export function HospitalLocationsPage() {
             action={<div className="flex flex-wrap justify-center gap-2">{elsewhere.slice(0, 3).map((s) => <Button key={s.warehouseId} size="sm" variant="secondary" onClick={() => setPicked(s.warehouseId)}>Show {whLabel(s.warehouseId)}</Button>)}</div>} />
         ) : null}
         {!q.isPending && list.length === 0 && !q.isError && elsewhere.length === 0 ? (
-          <EmptyState icon={Hospital} title="No hospital location configured" description={'Report Issue needs a dedicated hospital location. In Facility › Locations, put a location in the "Hospital" location group, or code it HOSP… (e.g. HOSP-01). Return Station bins are never used as hospitals.'} action={<Link href="/locations" className="text-[13px] font-medium text-primary hover:underline">Go to Locations</Link>} />
+          <EmptyState icon={Hospital} title="No hospital location configured" description={'Report Issue needs a dedicated hospital location. In Facility › Locations, put a location in the "Hospital" location group, or code it HOSP… (e.g. HOSP-01). Return Station bins are never used as hospitals.'} action={<Link href="/locations" className="text-sm font-medium text-primary hover:underline">Go to Locations</Link>} />
         ) : null}
         {list.map((h) => (
           <Card key={h.id} className="overflow-hidden p-0" data-testid={`hospital-${h.code}`}>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-              <h2 className="flex items-center gap-2 text-[14px] font-semibold text-strong"><Hospital className="h-4 w-4 text-secondary" aria-hidden />{h.code}
-                {h.isDefault ? <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">Default for Report Issue</span> : null}
+              <h2 className="flex items-center gap-2 text-base font-semibold text-strong"><Hospital className="h-4 w-4 text-secondary" aria-hidden />{h.code}
+                {h.isDefault ? <span className="rounded-full bg-primary-soft px-2 py-0.5 text-2xs font-semibold text-primary">Default for Report Issue</span> : null}
               </h2>
-              <span className="text-[12px] text-secondary">{h.designation === "group" ? "Hospital group" : "HOSP code"} · {[h.areaType, h.locationType].filter(Boolean).join(" · ")} · {h.units} units · {h.skus} SKUs{h.heldForOrders ? ` · ${h.heldForOrders} pack-short order${h.heldForOrders === 1 ? "" : "s"}` : ""}</span>
+              <span className="text-xs text-secondary">{h.designation === "group" ? "Hospital group" : "HOSP code"} · {[h.areaType, h.locationType].filter(Boolean).join(" · ")} · {h.units} units · {h.skus} SKUs{h.heldForOrders ? ` · ${h.heldForOrders} pack-short order${h.heldForOrders === 1 ? "" : "s"}` : ""}</span>
             </div>
-            {h.stock.length === 0 ? <p className="flex items-center gap-2 px-4 py-3 text-[13px] text-secondary"><PackageOpen className="h-4 w-4" aria-hidden />Empty</p> : (
+            {h.stock.length === 0 ? <p className="flex items-center gap-2 px-4 py-3 text-sm text-secondary"><PackageOpen className="h-4 w-4" aria-hidden />Empty</p> : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] text-[13px]">
-                  <thead className="border-b border-border bg-surface-sunken/60 text-left text-[12px] text-secondary"><tr>
+                <table className="w-full min-w-[720px] text-sm">
+                  <thead className="border-b border-border bg-surface-sunken/60 text-left text-xs text-secondary"><tr>
                     <th className="px-4 py-2 font-medium">SKU</th><th className="px-2 py-2 font-medium">Client</th><th className="px-2 py-2 text-right font-medium">On hand</th><th className="px-2 py-2 text-right font-medium">Held</th><th className="px-2 py-2 text-right font-medium">Free</th><th className="px-2 py-2 font-medium">Status</th><th className="px-2 py-2 font-medium">Held for</th><th className="px-4 py-2 text-right font-medium">Action</th>
                   </tr></thead>
                   <tbody>
                     {h.stock.map((s) => (
                       <tr key={s.inventoryId} className="border-b border-border last:border-0">
-                        <td className="px-4 py-2"><span className="font-medium text-strong">{s.sku}</span><span className="block truncate text-[12px] text-secondary" title={s.productName}>{s.productName}</span></td>
+                        <td className="px-4 py-2"><span className="font-medium text-strong">{s.sku}</span><span className="block truncate text-xs text-secondary" title={s.productName}>{s.productName}</span></td>
                         <td className="px-2 py-2 text-secondary">{s.clientName ?? "—"}</td>
                         <td className="px-2 py-2 text-right tabular-nums">{s.onHand}</td>
                         <td className="px-2 py-2 text-right tabular-nums">{s.allocated}</td>
@@ -170,7 +170,7 @@ export function HospitalLocationsPage() {
                                   <Button size="sm" variant="secondary" disabled={Boolean(why)} aria-label={why ? `Move back ${s.sku} (unavailable: ${why})` : `Move back ${s.sku}`} onClick={() => setMoving({ row: s, from: h.code })}><ArrowLeftRight className="h-3.5 w-3.5" aria-hidden />Move back</Button>
                                 </DisabledReason>
                                 {why && canMove ? (
-                                  <span className="max-w-[220px] text-right text-[11px] text-secondary" data-testid="move-back-reason">
+                                  <span className="max-w-[220px] text-right text-2xs text-secondary" data-testid="move-back-reason">
                                     {held ? <>Held for <Link href={`/orders/${held.id}`} className="font-medium text-primary hover:underline">{held.code}</Link>{held.packShortStatus === "Open" ? " (pack short)" : ""}. Resolve it first.</> : why}
                                   </span>
                                 ) : null}

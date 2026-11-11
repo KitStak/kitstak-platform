@@ -92,7 +92,7 @@ interface PrinterSlotProps {
 function PrinterSlot({ id, label, icon: Icon, value, savedValue, registered, onChange }: PrinterSlotProps) {
   return (
     <div className="rounded-lg border border-border p-2.5">
-      <label htmlFor={id} className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-body">
+      <label htmlFor={id} className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-body">
         <Icon className="h-3.5 w-3.5 text-primary" aria-hidden />
         {label}: <span className="font-normal text-secondary">{savedValue?.trim() || "Not selected"}</span>
       </label>
@@ -170,8 +170,8 @@ export function testLabelZpl(printer: string, warehouse: string): string {
 
 function StepPill({ n, label, active, done }: { readonly n: number; readonly label: string; readonly active: boolean; readonly done: boolean }) {
   return (
-    <span className={`flex items-center gap-1.5 text-[11.5px] ${active ? "font-semibold text-foreground" : "text-secondary"}`}>
-      <span aria-hidden className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${active ? "bg-primary text-white" : done ? "bg-success-soft text-success" : "bg-neutral-soft text-secondary"}`}>{done ? "✓" : n}</span>
+    <span className={`flex items-center gap-1.5 text-2xs ${active ? "font-semibold text-foreground" : "text-secondary"}`}>
+      <span aria-hidden className={`flex h-4 w-4 items-center justify-center rounded-full text-2xs font-semibold ${active ? "bg-primary text-white" : done ? "bg-success-soft text-success" : "bg-neutral-soft text-secondary"}`}>{done ? "✓" : n}</span>
       {label}
     </span>
   );
@@ -291,11 +291,11 @@ export function PrintersPopover() {
       <PopoverContent align="end" className="w-[360px] p-0">
         <div className="flex items-center gap-1.5 border-b border-border px-3 py-2.5">
           <Printer className="h-4 w-4 text-primary" aria-hidden />
-          <h2 className="text-[14px] font-semibold text-foreground">Printers</h2>
+          <h2 className="text-base font-semibold text-foreground">Printers</h2>
         </div>
         <div className="space-y-3 p-3">
           {agent.status ? (
-            <p className="flex items-center gap-1.5 rounded-md bg-success-soft px-2.5 py-1.5 text-[12px] text-success" role="status">
+            <p className="flex items-center gap-1.5 rounded-md bg-success-soft px-2.5 py-1.5 text-xs text-success" role="status">
               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />Direct Print agent {agent.status.version ? `v${agent.status.version} ` : ""}connected
               {agent.status.printers?.length ? <span className="text-secondary">· {agent.status.printers.length} printers</span> : null}
             </p>
@@ -323,10 +323,10 @@ export function PrintersPopover() {
             </Callout>
           ) : null}
           {printers.isError ? <Callout variant="error" action={<Button size="sm" onClick={() => void printers.refetch()}>Retry</Button>}>Could not load printers.</Callout> : null}
-          {printers.isSuccess && rows.length === 0 ? <p className="text-[12px] text-secondary">You have no warehouses assigned.</p> : null}
+          {printers.isSuccess && rows.length === 0 ? <p className="text-xs text-secondary">You have no warehouses assigned.</p> : null}
           {printers.isSuccess && rows.length > 0 && currentStep === "warehouse" ? (
             <div className="space-y-2">
-              <p className="text-[12px] font-semibold text-body">Warehouse selection</p>
+              <p className="text-xs font-semibold text-body">Warehouse selection</p>
               <RadioCards
                 ariaLabel="Warehouse"
                 value={warehouseId}
@@ -348,7 +348,7 @@ export function PrintersPopover() {
           ) : null}
           {printers.isSuccess && selected && currentStep === "printers" ? (
             <div className="space-y-2.5">
-              <p className="text-[12px] text-secondary">
+              <p className="text-xs text-secondary">
                 Warehouse: <span className="font-semibold text-body">{codeNameLabel(selected.warehouseCode, selected.warehouseName)}</span>{" "}
                 <button type="button" onClick={() => setStep("warehouse")} className="font-semibold text-primary hover:underline">Change</button>
               </p>
@@ -360,10 +360,10 @@ export function PrintersPopover() {
                   value={scan}
                   onChange={(e) => setScan(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyScan(); } }}
-                  className="h-8 text-[12px]"
+                  className="h-8 text-xs"
                 />
               </div>
-              {scanNote ? <p className="text-[11.5px] text-secondary" role="status">{scanNote}</p> : null}
+              {scanNote ? <p className="text-2xs text-secondary" role="status">{scanNote}</p> : null}
               <PrinterSlot id="barcode-printer" label="Selected barcode printer" icon={Tag} value={draft.barcodePrinter} savedValue={selected.barcodePrinter} registered={selected.barcodePrinters} onChange={(v) => setDraft((d) => ({ ...d, barcodePrinter: v }))} />
               <PrinterSlot id="laser-printer" label="Selected laser printer" icon={Printer} value={draft.laserPrinter} savedValue={selected.laserPrinter} registered={selected.laserPrinters} onChange={(v) => setDraft((d) => ({ ...d, laserPrinter: v }))} />
               <div className="flex items-center justify-end gap-2 pt-1">

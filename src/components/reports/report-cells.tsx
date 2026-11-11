@@ -41,7 +41,7 @@ export function ReportPill({ status, domain }: { readonly status: string; readon
   const tone = LOCAL_TONES[status.toLowerCase()];
   if (!tone) return <StatusPill status={status} />;
   return (
-    <span data-status={status} style={pillStyle(tone)} className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 whitespace-nowrap">
+    <span data-status={status} style={pillStyle(tone)} className="inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold leading-4 whitespace-nowrap">
       {status}
     </span>
   );
@@ -53,7 +53,7 @@ export function DiffPill({ value }: { readonly value: number | null | undefined 
   if (value === null || value === undefined || value === 0) return <span className="text-faint">—</span>;
   const tone = differenceTone(value);
   return (
-    <span data-diff={value < 0 ? "negative" : "positive"} style={pillStyle(tone)} className="inline-flex rounded-[5px] px-1.5 py-0.5 text-[11px] font-bold tabular-nums">
+    <span data-diff={value < 0 ? "negative" : "positive"} style={pillStyle(tone)} className="inline-flex rounded-[5px] px-1.5 py-0.5 text-2xs font-bold tabular-nums">
       {value > 0 ? "+" : ""}{fmt.quantity(value)}
     </span>
   );
@@ -62,7 +62,7 @@ export function DiffPill({ value }: { readonly value: number | null | undefined 
 function Initials({ name }: { readonly name: string }) {
   const parts = name.replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean);
   const ini = ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
-  return <span aria-hidden className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary/10 text-[9px] font-bold text-primary">{ini}</span>;
+  return <span aria-hidden className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary/10 text-2xs font-bold text-primary">{ini}</span>;
 }
 
 function renderValue(c: ReportColumn, row: ReportRow): React.ReactNode {
@@ -100,8 +100,8 @@ function renderValue(c: ReportColumn, row: ReportRow): React.ReactNode {
       // Free-text values that are ISO timestamps (Change Log "Cancelled At" from/to) read as dates, never raw ISO.
       if (typeof v === "string" && ISO_DATETIME_RE.test(v)) return <DateCell value={v} />;
       // Dates written as text by other modules ("11/10/2026 01:37 PM EST") wrap, never ellipsize.
-      if (typeof v === "string" && DATE_TEXT_RE.test(v)) return <span className="block whitespace-normal break-words text-[12px] leading-[1.25] tabular-nums" title={v}>{v}</span>;
-      return <span className={c.kind === "mono" ? "block truncate font-mono text-[12px]" : "block truncate"} title={String(v)}>{String(v)}</span>;
+      if (typeof v === "string" && DATE_TEXT_RE.test(v)) return <span className="block whitespace-normal break-words text-xs leading-[1.25] tabular-nums" title={v}>{v}</span>;
+      return <span className={c.kind === "mono" ? "block truncate font-mono text-xs" : "block truncate"} title={String(v)}>{String(v)}</span>;
   }
 }
 

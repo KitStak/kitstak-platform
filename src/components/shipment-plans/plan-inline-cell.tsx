@@ -112,7 +112,7 @@ export function PlanInlineCell({ row, field, canEdit, onSaved }: {
         <Popover open={open} onOpenChange={begin}>
           <PopoverTrigger asChild>{trigger}</PopoverTrigger>
           <PopoverContent align="start" className="w-72 p-3" onKeyDown={(e) => { if (e.key === "Enter" && field !== "loadingGateLocationId") { e.preventDefault(); void save(); } }}>
-            <label className="mb-1.5 block text-[12px] font-semibold text-primary" htmlFor={`inline-${row.id}-${field}`}>{LABEL[field]}</label>
+            <label className="mb-1.5 block text-xs font-semibold text-primary" htmlFor={`inline-${row.id}-${field}`}>{LABEL[field]}</label>
             {field === "loadingGateLocationId" ? (
               <GatePicker id={`inline-${row.id}-${field}`} value={gate.id} selectedLabel={gate.label || undefined} warehouseId={row.warehouseId}
                 placeholder="Search a dock or staging location" onChange={(v, item) => setGate({ id: v, label: item ? String(item.label) : "" })} />
@@ -125,10 +125,10 @@ export function PlanInlineCell({ row, field, canEdit, onSaved }: {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 aria-invalid={Boolean(error)}
-                className="h-9 w-full rounded-md border border-border bg-surface px-2.5 text-[13px] text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 aria-[invalid=true]:border-danger"
+                className="h-9 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 aria-[invalid=true]:border-danger"
               />
             )}
-            {error ? <p role="alert" className="mt-1.5 text-[12px] text-danger">{error}</p> : null}
+            {error ? <p role="alert" className="mt-1.5 text-xs text-danger">{error}</p> : null}
             <div className="mt-3 flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
               <Button size="sm" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>

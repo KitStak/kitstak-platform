@@ -62,7 +62,7 @@ export function AccountPasswordForm({ mustChange, reason = null, maxAgeDays }: {
           <PasswordMeter id="account-password-meter" password={newPassword} policy={policy} />
         </div>
         <Field name="confirmPassword" label="Re-enter new password" autoComplete="new-password" />
-        {maxAgeDays ? <p className="text-[12px] text-faint">Passwords expire every {maxAgeDays} days under your company&apos;s policy.</p> : null}
+        {maxAgeDays ? <p className="text-xs text-faint">Passwords expire every {maxAgeDays} days under your company&apos;s policy.</p> : null}
         <SubmitBar submitLabel="Change password" cancelLabel="Clear" onCancel={() => form.reset(EMPTY)} pending={mutation.isPending} />
       </Form>
     </div>

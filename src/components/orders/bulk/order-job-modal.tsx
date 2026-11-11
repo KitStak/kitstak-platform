@@ -238,7 +238,7 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
     return (
       <>
         <DialogHeader title={title} description={description} />
-        <DialogBody className="flex items-center gap-3 py-8 text-[13px] text-body">
+        <DialogBody className="flex items-center gap-3 py-8 text-sm text-body">
           <Spinner className="size-4" label="Checking" />
           Checking the selected orders…
         </DialogBody>
@@ -271,7 +271,7 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
         ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_260px]">
             <div className="flex flex-col gap-3">
-              <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-secondary">
                 <span>Job type <span className="text-danger">*</span></span>
                 <Select
                   aria-label="Job type"
@@ -286,12 +286,12 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
                   }}
                 />
               </label>
-              <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-secondary">
                 <span>Batch size <span className="text-danger">*</span></span>
                 <NumberInput aria-label="Batch size" min={1} max={1000} value={batchSize} onChange={setBatchSize} />
                 {jobType ? <span className="font-normal text-faint">{jobType.batchMethod === "Nof Item" ? "Units" : "Orders"} per job · job type allows {jobType.batchMin}–{jobType.batchMax}</span> : null}
               </label>
-              <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-secondary">
                 Assign to
                 <UserPicker
                   aria-label="Assign to"
@@ -308,14 +308,14 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
               <DryRunNote query={dryRun} codes={codes} />
             </div>
             <aside aria-label="Jobs preview" className="flex flex-col gap-2 rounded-lg border border-border bg-surface-sunken p-3">
-              <p className="text-[12px] font-semibold text-secondary">Below jobs will be created</p>
+              <p className="text-xs font-semibold text-secondary">Below jobs will be created</p>
               {batches.length === 0 ? (
-                <p className="text-[12px] text-faint">Choose a job type and batch size to preview.</p>
+                <p className="text-xs text-faint">Choose a job type and batch size to preview.</p>
               ) : (
                 <>
                   <ul className="ks-scroll flex max-h-48 flex-col gap-1 overflow-auto">
                     {batches.map((size, i) => (
-                      <li key={i} className="flex flex-col gap-0.5 rounded-md bg-surface px-2.5 py-1.5 text-[12px]">
+                      <li key={i} className="flex flex-col gap-0.5 rounded-md bg-surface px-2.5 py-1.5 text-xs">
                         <span className="flex items-center justify-between gap-2">
                           <span className="font-semibold text-foreground">{jobType?.code ?? "Job"} #{i + 1}</span>
                           <span className="text-secondary">{size} order{size === 1 ? "" : "s"}</span>
@@ -324,7 +324,7 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
                       </li>
                     ))}
                   </ul>
-                  <p className="border-t border-border pt-2 text-[12px] text-secondary">
+                  <p className="border-t border-border pt-2 text-xs text-secondary">
                     {batches.reduce((a, b) => a + b, 0)} order{batches.reduce((a, b) => a + b, 0) === 1 ? "" : "s"} in {batches.length} job{batches.length === 1 ? "" : "s"}
                     {jobType ? ` · ${jobType.batchMethod === "Nof Item" ? "units" : "orders"} per job ${batchSize ?? 1}` : ""}
                   </p>
@@ -336,7 +336,7 @@ function Body({ orders, onOpenChange, onDone }: Omit<OrderJobModalProps, "open">
       </DialogBody>
       <DialogFooter>
         {step === "create" ? (
-          <span className="mr-auto text-[12px] text-secondary">
+          <span className="mr-auto text-xs text-secondary">
             <strong className="text-foreground">{assigneeUserId ? 1 : 0}</strong> person assigned <span className="mx-1 text-border-strong">|</span> <strong className="text-foreground">{batches.length}</strong> total job{batches.length === 1 ? "" : "s"}
           </span>
         ) : null}
@@ -373,7 +373,7 @@ function ChooseStep({ blocked, ready, total, failed, codes, path, onPath }: {
     return (
       <div className="flex items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft p-3">
         <XCircle className="size-5 text-danger" aria-hidden />
-        <p className="text-[13px] font-semibold text-foreground">{blocked}</p>
+        <p className="text-sm font-semibold text-foreground">{blocked}</p>
       </div>
     );
   }
@@ -381,7 +381,7 @@ function ChooseStep({ blocked, ready, total, failed, codes, path, onPath }: {
     <div className="flex flex-col gap-4">
       <div className={cn("flex items-center gap-3 rounded-lg border p-3", ready ? "border-success/30 bg-success-soft" : "border-danger/30 bg-danger-soft")}>
         {ready ? <CheckCircle2 className="size-5 text-success" aria-hidden /> : <XCircle className="size-5 text-danger" aria-hidden />}
-        <p className="text-[14px] font-semibold text-foreground">
+        <p className="text-base font-semibold text-foreground">
           {ready} of {total} order{total === 1 ? "" : "s"} can get a picking job. Open and Shortage orders are allocated when the job is saved.
         </p>
       </div>
@@ -407,8 +407,8 @@ function FailureList({ failed, codes, title }: { readonly failed: readonly BulkF
   if (failed.length === 0) return null;
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-[12px] font-semibold text-secondary">{title}</p>
-      <ul className="ks-scroll max-h-40 divide-y divide-border overflow-auto rounded-md border border-border text-[12px]">
+      <p className="text-xs font-semibold text-secondary">{title}</p>
+      <ul className="ks-scroll max-h-40 divide-y divide-border overflow-auto rounded-md border border-border text-xs">
         {failed.map((r) => (
           <li key={r.id} className="flex gap-3 px-3 py-1.5">
             <span className="w-28 shrink-0 font-semibold text-foreground">{codes.get(r.id) ?? "Order"}</span>
@@ -422,12 +422,12 @@ function FailureList({ failed, codes, title }: { readonly failed: readonly BulkF
 
 function DryRunNote({ query, codes }: { readonly query: ReturnType<typeof useQuery<DryRun, ApiError>>; readonly codes: ReadonlyMap<string, string> }) {
   if (!query.isEnabled) return null;
-  if (query.isPending) return <p className="flex items-center gap-2 text-[12px] text-secondary"><Spinner className="size-3" /> Checking the job type rules…</p>;
-  if (query.error) return <p className="text-[12px] text-danger">{query.error.message}</p>;
+  if (query.isPending) return <p className="flex items-center gap-2 text-xs text-secondary"><Spinner className="size-3" /> Checking the job type rules…</p>;
+  if (query.error) return <p className="text-xs text-danger">{query.error.message}</p>;
   const d = query.data;
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[12px] text-secondary">
+      <p className="text-xs text-secondary">
         <strong className="text-foreground">{d.eligible.length} of {d.total}</strong> order{d.total === 1 ? "" : "s"} match this job&apos;s rules.
       </p>
       <FailureList failed={d.ineligible.filter((f) => !isShortage(f.message))} codes={codes} title="Excluded by the job rules" />
@@ -460,10 +460,10 @@ function ShortageList({ failed, codes }: { readonly failed: readonly BulkFailure
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[12px] font-semibold text-secondary">Not enough allocatable stock</p>
-        <Link href="/jobs/allocation-exceptions" className="text-[12px] font-semibold text-primary hover:underline">Allocation Exceptions</Link>
+        <p className="text-xs font-semibold text-secondary">Not enough allocatable stock</p>
+        <Link href="/jobs/allocation-exceptions" className="text-xs font-semibold text-primary hover:underline">Allocation Exceptions</Link>
       </div>
-      <ul className="ks-scroll max-h-48 divide-y divide-border overflow-auto rounded-md border border-warning/40 bg-warning-soft/40 text-[12px]">
+      <ul className="ks-scroll max-h-48 divide-y divide-border overflow-auto rounded-md border border-warning/40 bg-warning-soft/40 text-xs">
         {failed.map((r) => (
           <li key={r.id} className="flex gap-3 px-3 py-1.5">
             <span className="w-28 shrink-0 font-semibold text-foreground">{codes.get(r.id) ?? "Order"}</span>
@@ -481,11 +481,11 @@ function MergeTable({ jobs, loading, selected, onSelect }: {
   readonly jobs: OrderJobOptions["mergeableJobs"]; readonly loading: boolean; readonly selected: string | null; readonly onSelect: (id: string) => void;
 }) {
   if (loading) return <div className="flex justify-center py-10"><Spinner /></div>;
-  if (jobs.length === 0) return <p className="py-10 text-center text-[13px] text-faint">No pending picking job in this warehouse. Go back and create a new job instead.</p>;
+  if (jobs.length === 0) return <p className="py-10 text-center text-sm text-faint">No pending picking job in this warehouse. Go back and create a new job instead.</p>;
   return (
     <div role="radiogroup" aria-label="Job to merge into" className="ks-scroll max-h-72 overflow-auto rounded-lg border border-border">
-      <table className="w-full border-collapse text-[13px]">
-        <thead className="sticky top-0 bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+      <table className="w-full border-collapse text-sm">
+        <thead className="sticky top-0 bg-surface-sunken text-left text-2xs font-semibold text-faint">
           <tr>
             <th scope="col" className="w-10 px-3 py-2"><span className="sr-only">Select</span></th>
             <th scope="col" className="px-3 py-2">Job code</th>

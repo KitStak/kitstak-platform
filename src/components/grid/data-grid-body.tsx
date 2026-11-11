@@ -155,7 +155,7 @@ function SlowLoadNotice({ colSpan, onRetry }: { readonly colSpan: number; readon
   return (
     <tr>
       <td colSpan={Math.max(1, colSpan)} className="px-3 py-2">
-        <div role="status" className="flex items-center gap-3 text-[12px] text-secondary">
+        <div role="status" className="flex items-center gap-3 text-xs text-secondary">
           <span>This is taking longer than usual. The server may be busy.</span>
           {onRetry ? <Button variant="secondary" size="sm" onClick={onRetry}>Retry</Button> : null}
         </div>
@@ -192,8 +192,8 @@ export function DataGridBody<T>({ table, density, loading, error, onRetry, empty
           <span className="flex h-11 w-11 items-center justify-center rounded-full bg-danger-soft">
             <AlertTriangle className="h-5 w-5 text-danger" aria-hidden />
           </span>
-          <p className="text-[14px] font-semibold text-foreground">Something went wrong</p>
-          <p className="max-w-sm text-[12px] text-faint">{error}</p>
+          <p className="text-base font-semibold text-foreground">Something went wrong</p>
+          <p className="max-w-sm text-xs text-faint">{error}</p>
           {onRetry ? (
             <Button variant="secondary" size="sm" onClick={onRetry}>
               Retry
@@ -210,8 +210,8 @@ export function DataGridBody<T>({ table, density, loading, error, onRetry, empty
           <span className="flex h-11 w-11 items-center justify-center rounded-full bg-neutral-soft">
             <Inbox className="h-5 w-5 text-faint" aria-hidden />
           </span>
-          <p className="text-[14px] font-semibold text-foreground">{emptyTitle}</p>
-          <p className="max-w-sm text-[12px] text-faint">{emptyDescription}</p>
+          <p className="text-base font-semibold text-foreground">{emptyTitle}</p>
+          <p className="max-w-sm text-xs text-faint">{emptyDescription}</p>
           {emptyAction}
         </FullRow>
       </tbody>

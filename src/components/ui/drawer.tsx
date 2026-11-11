@@ -106,8 +106,8 @@ export function Drawer({ open, onOpenChange, title, description, headerExtra, fo
           >
             <div className="flex shrink-0 items-start gap-3 border-b border-border px-5 py-4">
               <div className="min-w-0 flex-1">
-                <DialogPrimitive.Title className="text-[16px] font-semibold leading-6 text-foreground">{title}</DialogPrimitive.Title>
-                {description ? <DialogPrimitive.Description className="mt-0.5 text-[12px] leading-4 text-secondary">{description}</DialogPrimitive.Description> : null}
+                <DialogPrimitive.Title className="text-md font-semibold leading-6 text-foreground">{title}</DialogPrimitive.Title>
+                {description ? <DialogPrimitive.Description className="mt-0.5 text-xs leading-4 text-secondary">{description}</DialogPrimitive.Description> : null}
                 {headerExtra ? <div className="mt-3">{headerExtra}</div> : null}
               </div>
               <DialogPrimitive.Close

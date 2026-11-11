@@ -42,7 +42,7 @@ function FieldList({ fields, pinned, onPin, onPick }: { readonly fields: readonl
     <div className="flex flex-col gap-2">
       <TextField size="sm" autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search fields" aria-label="Search filter fields" leading={<Search className="h-3.5 w-3.5" aria-hidden />} />
       <ul className="ks-scroll flex max-h-72 flex-col overflow-auto" aria-label="Filter fields">
-        {shown.length === 0 ? <li className="py-4 text-center text-[12px] text-faint">No fields match &ldquo;{query}&rdquo;</li> : null}
+        {shown.length === 0 ? <li className="py-4 text-center text-xs text-faint">No fields match &ldquo;{query}&rdquo;</li> : null}
         {shown.map((def) => {
           const isPinned = pinned.includes(def.field);
           return (
@@ -58,10 +58,10 @@ function FieldList({ fields, pinned, onPin, onPick }: { readonly fields: readonl
               >
                 <Star className={cn("h-3.5 w-3.5", isPinned && "fill-current")} aria-hidden />
               </button>
-              <button type="button" aria-label={def.label} aria-describedby={def.description ? `ff-desc-${def.field}` : undefined} data-filter-pick={def.field} onClick={() => onPick(def)} className="flex min-w-0 flex-1 items-center justify-between gap-2 py-1.5 pr-2 text-left text-[13px] text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
+              <button type="button" aria-label={def.label} aria-describedby={def.description ? `ff-desc-${def.field}` : undefined} data-filter-pick={def.field} onClick={() => onPick(def)} className="flex min-w-0 flex-1 items-center justify-between gap-2 py-1.5 pr-2 text-left text-sm text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
                 <span className="min-w-0">
                   <span className="block truncate">{def.label}</span>
-                  {def.description ? <span id={`ff-desc-${def.field}`} className="block truncate text-[11px] text-faint">{def.description}</span> : null}
+                  {def.description ? <span id={`ff-desc-${def.field}`} className="block truncate text-2xs text-faint">{def.description}</span> : null}
                 </span>
                 <ChevronRight className="h-3.5 w-3.5 shrink-0 text-faint" aria-hidden />
               </button>
@@ -90,7 +90,7 @@ function EditorPanel({ def, existing, onBack, onApply }: { readonly def: FilterF
         <Button variant="ghost" size="icon-sm" aria-label="Back to fields" onClick={onBack}>
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
         </Button>
-        <p className="text-[13px] font-semibold text-foreground">{def.label}</p>
+        <p className="text-sm font-semibold text-foreground">{def.label}</p>
       </div>
       <FieldEditor def={def} draft={draft} onChange={setDraft} />
       <div className="flex justify-end gap-2 border-t border-border pt-3">
@@ -112,8 +112,8 @@ function SavedList({ views, onApply }: { readonly views: readonly SavedView[]; r
     return (
       <div className="flex flex-col items-center gap-1 py-6 text-center">
         <Bookmark className="h-5 w-5 text-faint" aria-hidden />
-        <p className="text-[13px] font-semibold text-foreground">No saved views yet</p>
-        <p className="text-[12px] text-faint">Apply filters, then use Save view to keep them.</p>
+        <p className="text-sm font-semibold text-foreground">No saved views yet</p>
+        <p className="text-xs text-faint">Apply filters, then use Save view to keep them.</p>
       </div>
     );
   }
@@ -121,9 +121,9 @@ function SavedList({ views, onApply }: { readonly views: readonly SavedView[]; r
     <ul className="ks-scroll flex max-h-72 flex-col overflow-auto" aria-label="Saved views">
       {views.map((v) => (
         <li key={v.id}>
-          <button type="button" onClick={() => onApply(v)} className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
+          <button type="button" onClick={() => onApply(v)} className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
             <span className="truncate">{v.name}</span>
-            <span className="flex shrink-0 gap-1 text-[10px] font-semibold uppercase text-faint">
+            <span className="flex shrink-0 gap-1 text-2xs font-semibold text-faint">
               {v.isDefault ? <span className="text-primary">Default</span> : null}
               {v.isShared ? <span>Shared</span> : null}
             </span>
@@ -161,7 +161,7 @@ export function FilterPopover({ gridKey, fields, filters, onApply, savedViews = 
           <Button variant="secondary" className={cn("shrink-0", open && "border-primary text-primary")} disabled={fields.length === 0} aria-label={count ? `Filter, ${count} applied` : "Filter"}>
             <ListFilter className="h-3.5 w-3.5" aria-hidden />
             Filter
-            {count > 0 ? <span className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">{count}</span> : null}
+            {count > 0 ? <span className="rounded-full bg-primary px-1.5 text-2xs font-bold text-white">{count}</span> : null}
           </Button>
         )}
       </PopoverTrigger>

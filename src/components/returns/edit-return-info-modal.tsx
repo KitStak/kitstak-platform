@@ -49,7 +49,7 @@ export function EditReturnInfoModal({ open, onOpenChange, detail, onDone }: { re
         <DialogBody className="space-y-3">
           {detail.label && detail.label.labelStatus !== "Voided" ? <Callout variant="info" title="A return label is active">Tracking {detail.label.trackingNumber} comes from the purchased label. Void it to change the carrier.</Callout> : null}
           <ManualReturnInfoFields warehouseId={detail.warehouseId} clientId={detail.clientId} value={value} onChange={(v) => { setValue(v); if (errors.shippingCost && v.shippingCost !== value.shippingCost) { setErrors((e) => ({ ...e, shippingCost: undefined })); setError(null); } }} errors={errors} />
-          {error ? <p role="alert" className="text-[12px] text-danger">{error}</p> : null}
+          {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>

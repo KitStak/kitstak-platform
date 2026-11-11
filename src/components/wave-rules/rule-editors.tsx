@@ -46,7 +46,7 @@ export function ConditionsEditor({ fields, value, onChange, scope, emptyText = "
     <div className="flex flex-col gap-2" onSubmit={stopSubmit}>
       <div className="flex flex-wrap items-center gap-1.5">
         {value.map((c) => (
-          <span key={c.field} className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary-soft py-0.5 pl-1 pr-1 text-[12px] text-primary">
+          <span key={c.field} className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/30 bg-primary-soft py-0.5 pl-1 pr-1 text-xs text-primary">
             <FilterPopover
               gridKey={scope}
               fields={fields}
@@ -77,7 +77,7 @@ export function ConditionsEditor({ fields, value, onChange, scope, emptyText = "
           }
         />
       </div>
-      {value.length === 0 ? <p className="text-[12px] text-faint">{emptyText}</p> : null}
+      {value.length === 0 ? <p className="text-xs text-faint">{emptyText}</p> : null}
     </div>
   );
 }
@@ -95,7 +95,7 @@ function SortableRow({ id, index, count, onMove, children }: { readonly id: stri
       <button type="button" {...attributes} {...listeners} aria-label="Drag to reorder" className="flex h-7 w-6 cursor-grab items-center justify-center rounded text-faint hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 active:cursor-grabbing">
         <GripVertical className="h-4 w-4" aria-hidden />
       </button>
-      <span className="w-6 shrink-0 text-right text-[12px] font-semibold tabular-nums text-secondary">{index + 1}.</span>
+      <span className="w-6 shrink-0 text-right text-xs font-semibold tabular-nums text-secondary">{index + 1}.</span>
       <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>
       <span className="flex shrink-0">
         <button type="button" aria-label="Move up" disabled={index === 0} onClick={() => onMove(index, index - 1)} className="flex h-6 w-6 items-center justify-center rounded text-faint hover:bg-surface-sunken hover:text-secondary disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" aria-hidden /></button>
@@ -147,7 +147,7 @@ export function OrderByEditor({ options, value, onChange, placeholder, emptyText
         </Button>
       </div>
       {value.length === 0 ? (
-        <p className="text-[12px] text-faint">{emptyText}</p>
+        <p className="text-xs text-faint">{emptyText}</p>
       ) : (
         <SortableList
           ariaLabel="Order by"
@@ -156,7 +156,7 @@ export function OrderByEditor({ options, value, onChange, placeholder, emptyText
           onReorder={onChange}
           renderItem={(c, i) => (
             <>
-              <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{labelOf(c.field)}</span>
+              <span className="min-w-0 flex-1 truncate text-sm text-foreground">{labelOf(c.field)}</span>
               <SegmentedControl
                 size="sm"
                 ariaLabel={`${labelOf(c.field)} direction`}

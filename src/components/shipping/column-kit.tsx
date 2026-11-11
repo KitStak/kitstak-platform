@@ -50,7 +50,7 @@ export function CarrierMark({ code, title }: { readonly code: string; readonly t
   const mark = CARRIER_MARKS[key] ?? { bg: "var(--color-neutral-soft, #EEF0F3)", fg: "var(--color-body, #344054)", text: key.slice(0, 2) || "?" };
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5" title={title ?? code}>
-      <span aria-hidden style={{ backgroundColor: mark.bg, color: mark.fg }} className="inline-flex h-[18px] min-w-[26px] shrink-0 items-center justify-center rounded px-1 text-[9px] font-extrabold leading-none tracking-tight">
+      <span aria-hidden style={{ backgroundColor: mark.bg, color: mark.fg }} className="inline-flex h-[18px] min-w-[26px] shrink-0 items-center justify-center rounded px-1 text-2xs font-extrabold leading-none tracking-tight">
         {mark.text}
       </span>
       {mark.text.toUpperCase() === key ? <span className="sr-only">{code}</span> : <span className="shrink-0 whitespace-nowrap">{code}</span>}
@@ -141,7 +141,7 @@ export function LabelTypePill({ type }: { readonly type: string }) {
   const isReturn = type.toLowerCase().startsWith("return");
   const tone = statusTone(isReturn ? "return" : "shipping", "labelType");
   return (
-    <span style={pillStyle(tone)} className="inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4">
+    <span style={pillStyle(tone)} className="inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold leading-4">
       {isReturn ? "Return label" : "Shipping label"}
     </span>
   );
@@ -151,7 +151,7 @@ export function LabelTypePill({ type }: { readonly type: string }) {
 export function LabelStatusPill({ status }: { readonly status: string }) {
   const tone = status === "Voided" ? statusTone("cancelled", "shipmentOrder") : statusTone("active", "active");
   return (
-    <span data-status={status} style={pillStyle(tone)} className="inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4">
+    <span data-status={status} style={pillStyle(tone)} className="inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold leading-4">
       {status}
     </span>
   );

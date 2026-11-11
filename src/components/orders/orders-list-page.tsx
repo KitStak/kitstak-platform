@@ -122,7 +122,7 @@ function HeaderActions({ view, ready, canCreate, canImport, canEdit, selected, o
           </Button>
         </DisabledReason>
         <InfoTip content="Set the return carrier, shipping option, cost and tracking numbers for the selected orders in one step." />
-        {reason ? <span className="text-[12px] text-faint">{selected.length === 0 ? "Select shipped orders to enable" : "Cancelled orders have no return info"}</span> : null}
+        {reason ? <span className="text-xs text-faint">{selected.length === 0 ? "Select shipped orders to enable" : "Cancelled orders have no return info"}</span> : null}
       </span>
     );
   }

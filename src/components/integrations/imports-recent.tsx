@@ -32,7 +32,7 @@ const linkClass = "inline-flex items-center gap-1 rounded-sm text-xs text-primar
 export function ImportsRecentList({ rows }: { readonly rows: readonly RecentImportRow[] }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-border p-6 text-center text-[13px] text-secondary">
+      <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-secondary">
         No imports yet. Uploads you run from any entity page appear here.
       </div>
     );
@@ -42,7 +42,7 @@ export function ImportsRecentList({ rows }: { readonly rows: readonly RecentImpo
       {rows.map((b) => (
         <li key={b.id} className="flex items-start justify-between gap-3 px-4 py-2.5">
           <div className="min-w-0 flex-1">
-            <Link href={`/imports/${b.importKey}`} className="block truncate text-[13px] font-medium text-primary hover:underline" title={importTitle(b.title)}>
+            <Link href={`/imports/${b.importKey}`} className="block truncate text-sm font-medium text-primary hover:underline" title={importTitle(b.title)}>
               {importTitle(b.title)}
             </Link>
             {b.fileName ? <p className="truncate text-xs text-body" title={b.fileName}>{b.fileName}</p> : null}

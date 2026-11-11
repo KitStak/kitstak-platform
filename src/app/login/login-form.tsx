@@ -53,12 +53,12 @@ function useHydrated(): boolean {
 function LabeledField({ id, label, error, children }: { readonly id: string; readonly label: string; readonly error?: string; readonly children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-[12px] font-semibold text-body">
+      <label htmlFor={id} className="text-xs font-semibold text-body">
         {label}
         <span className="text-danger" aria-hidden>*</span>
       </label>
       {children}
-      {error ? <span id={`${id}-error`} className="text-[11px] text-danger">{error}</span> : null}
+      {error ? <span id={`${id}-error`} className="text-2xs text-danger">{error}</span> : null}
     </div>
   );
 }
@@ -129,15 +129,15 @@ export function LoginForm({ showDemoCredentials = false }: LoginFormProps): Reac
   return (
     <div className="w-full max-w-[400px]">
       <div className="rounded-xl border border-border bg-surface p-8 shadow-lg">
-        <h1 className="text-[22px] font-bold tracking-tight text-foreground">Log in</h1>
-        <p className="mt-1 text-[13px] text-secondary">
+        <h1 className="text-xl font-bold tracking-tight text-foreground">Log in</h1>
+        <p className="mt-1 text-sm text-secondary">
           Welcome back. Enter your credentials to access your warehouse.
         </p>
 
         {error ? (
           <div
             role="alert"
-            className="mt-5 flex items-start gap-2 rounded-md border border-danger/25 bg-danger-soft px-3 py-2.5 text-[12.5px] text-danger"
+            className="mt-5 flex items-start gap-2 rounded-md border border-danger/25 bg-danger-soft px-3 py-2.5 text-xs text-danger"
           >
             <AlertCircle className="mt-px h-4 w-4 shrink-0" aria-hidden />
             <span>{error}</span>
@@ -208,7 +208,7 @@ export function LoginForm({ showDemoCredentials = false }: LoginFormProps): Reac
           <div className="flex items-center justify-end">
             <Link
               href="/forgot-password"
-              className="text-[12.5px] font-medium text-primary transition-colors hover:text-primary-hover hover:underline"
+              className="text-xs font-medium text-primary transition-colors hover:text-primary-hover hover:underline"
             >
               Forgot password?
             </Link>
@@ -234,7 +234,7 @@ export function LoginForm({ showDemoCredentials = false }: LoginFormProps): Reac
 
         <div className="mt-5 flex items-center gap-3" role="separator" aria-label="or">
           <span className="h-px flex-1 bg-border" />
-          <span className="text-[11px] font-medium uppercase tracking-wider text-faint">or</span>
+          <span className="text-2xs font-mediumr text-faint">or</span>
           <span className="h-px flex-1 bg-border" />
         </div>
 
@@ -242,13 +242,13 @@ export function LoginForm({ showDemoCredentials = false }: LoginFormProps): Reac
       </div>
 
       {showDemoCredentials ? (
-      <div className="mt-4 rounded-lg border border-border bg-surface-sunken px-4 py-3 text-[12px] text-secondary shadow-xs">
+      <div className="mt-4 rounded-lg border border-border bg-surface-sunken px-4 py-3 text-xs text-secondary shadow-xs">
         <span className="font-semibold text-body">Demo workspace</span> — sign in with{" "}
-        <code className="rounded bg-neutral-soft px-1 py-px font-mono text-[11.5px] text-body">
+        <code className="rounded bg-neutral-soft px-1 py-px font-mono text-2xs text-body">
           admin@kitstak.io
         </code>{" "}
         /{" "}
-        <code className="rounded bg-neutral-soft px-1 py-px font-mono text-[11.5px] text-body">
+        <code className="rounded bg-neutral-soft px-1 py-px font-mono text-2xs text-body">
           KitStak!demo2026
         </code>
       </div>

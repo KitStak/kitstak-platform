@@ -71,7 +71,7 @@ function PickerBody<T>({ onOpenChange, title, description, gridKey, path, column
         <DataGrid<T> {...g.gridProps} gridKey={undefined} queryString={undefined} columns={columns} getRowId={getRowId} onSelectionChange={onSelectionChange} canSelectRow={(row) => !excluded.has(getRowId(row))} onAllMatchingSelectedChange={undefined} className="pb-3" />
       </div>
       <DialogFooter>
-        <span className="mr-auto text-[12px] text-secondary">
+        <span className="mr-auto text-xs text-secondary">
           Selected: <strong className="text-foreground">{count}</strong>
         </span>
         <Button variant="secondary" onClick={() => onOpenChange(false)}>

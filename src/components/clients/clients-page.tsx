@@ -29,7 +29,7 @@ const num = (v: number, href?: string) => <div className="text-right tabular-num
 
 const COLUMNS: GridColumnDef<ClientListRow>[] = [
   { id: "name", header: "Client", size: 200, meta: { alwaysVisible: true }, cell: ({ row }) => <LinkCell href={`/clients/${row.original.id}`}>{row.original.name}</LinkCell> },
-  { id: "code", header: "Code", size: 100, cell: ({ row }) => <code className="font-mono text-[12px] text-secondary">{row.original.code}</code> },
+  { id: "code", header: "Code", size: 100, cell: ({ row }) => <code className="font-mono text-xs text-secondary">{row.original.code}</code> },
   { id: "officialName", header: "Official name", size: 210, cell: ({ row }) => row.original.officialName ?? <Muted /> },
   { id: "fullName", header: "Full name", size: 220, enableSorting: false, meta: hidden, cell: ({ row }) => <span className="block truncate text-secondary" title={row.original.fullName}>{row.original.fullName}</span> },
   { id: "taxId", header: "Tax ID", size: 120, cell: ({ row }) => (row.original.taxId ? <span className="tabular-nums">{row.original.taxId}</span> : <Muted />) },

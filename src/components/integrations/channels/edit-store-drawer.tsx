@@ -47,7 +47,7 @@ const locList = z.array(z.object({ id: z.string(), name: z.string() }));
 function Row({ label, children, hint }: { readonly label: React.ReactNode; readonly children: React.ReactNode; readonly hint?: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-border py-2.5 last:border-b-0">
-      <div className="min-w-0"><p className="text-[13px] font-medium text-foreground">{label}</p>{hint ? <p className="text-[11px] text-secondary">{hint}</p> : null}</div>
+      <div className="min-w-0"><p className="text-sm font-medium text-foreground">{label}</p>{hint ? <p className="text-2xs text-secondary">{hint}</p> : null}</div>
       <div className="shrink-0">{children}</div>
     </div>
   );
@@ -56,7 +56,7 @@ function Row({ label, children, hint }: { readonly label: React.ReactNode; reado
 function Section({ title, children, required }: { readonly title: string; readonly children: React.ReactNode; readonly required?: boolean }) {
   return (
     <section className="rounded-lg border border-border bg-surface px-4 py-2">
-      <h3 className="pb-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-secondary">{title}{required ? <span className="text-danger"> *</span> : null}</h3>
+      <h3 className="pb-1 pt-2 text-xs font-semibold text-secondary">{title}{required ? <span className="text-danger"> *</span> : null}</h3>
       {children}
     </section>
   );
@@ -140,7 +140,7 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
     }
   };
 
-  const err = (k: string) => (errors[k] ? <p role="alert" className="mt-1 text-[12px] text-danger">{errors[k]}</p> : null);
+  const err = (k: string) => (errors[k] ? <p role="alert" className="mt-1 text-xs text-danger">{errors[k]}</p> : null);
   const tabErrors = (t: Tab) => Object.keys(errors).filter((k) => errors[k] && TAB_OF(k) === t).length;
   return (
     <div className="flex flex-col gap-4">
@@ -150,22 +150,22 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
         <div className="flex flex-col gap-4">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="flex flex-col gap-1">
-              <label htmlFor="es-storeName" className="text-[12px] font-medium text-body">Connection store name <span className="text-danger">*</span></label>
+              <label htmlFor="es-storeName" className="text-xs font-medium text-body">Connection store name <span className="text-danger">*</span></label>
               <TextField id="es-storeName" value={form.storeName} maxLength={STORE_NAME_MAX} showCount invalid={Boolean(errors.storeName)} onChange={(e) => setForm((f) => ({ ...f, storeName: e.target.value }))} />
               {err("storeName")}
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-[12px] font-medium text-body">Client</span>
-              <p className="rounded-md border border-border bg-surface-sunken px-3 py-2 text-[13px] text-secondary">{detail.clientName} <span className="text-[11px]">· locked</span></p>
+              <span className="text-xs font-medium text-body">Client</span>
+              <p className="rounded-md border border-border bg-surface-sunken px-3 py-2 text-sm text-secondary">{detail.clientName} <span className="text-2xs">· locked</span></p>
             </div>
             <div className="flex flex-col gap-1">
-              <span className="text-[12px] font-medium text-body">Active</span>
+              <span className="text-xs font-medium text-body">Active</span>
               <YesNoToggle value={form.isActive} onChange={(v) => setForm((f) => ({ ...f, isActive: v }))} ariaLabel="Connection active" />
-              <p className="text-[11px] text-faint">Inactive connections pause every channel method.</p>
+              <p className="text-2xs text-faint">Inactive connections pause every channel method.</p>
             </div>
             {!detail.isSandbox ? (
               <div className="flex flex-col gap-1">
-                <span className="text-[12px] font-medium text-body">API version</span>
+                <span className="text-xs font-medium text-body">API version</span>
                 <SegmentedControl className="w-full [&>button]:flex-1" ariaLabel="API version" value={form.apiVersion} onChange={(v) => setForm((f) => ({ ...f, apiVersion: v }))} options={[{ value: "Rest API", label: "Rest API" }, { value: "GraphQL", label: "GraphQL" }]} />
               </div>
             ) : null}
@@ -174,7 +174,7 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
             <section className="rounded-lg border border-border p-4">
               <div className="flex items-center gap-2">
                 <KeyRound className="h-4 w-4 text-secondary" />
-                <p className="flex-1 text-[13px] font-medium">Authorization · {detail.authMethod}</p>
+                <p className="flex-1 text-sm font-medium">Authorization · {detail.authMethod}</p>
                 {Object.entries(detail.credentialHints).map(([k, v]) => <Badge key={k} size="sm" tone="neutral">{k} {maskSecret(v)}</Badge>)}
                 {Object.keys(detail.credentialHints).length === 0 ? <Badge size="sm" tone="danger">No credentials stored</Badge> : null}
               </div>
@@ -188,7 +188,7 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
                     </div>
                   ) : <TextField aria-label="Access token" type="password" placeholder="New access token" autoComplete="off" value={form.accessToken} invalid={Boolean(errors.accessToken)} onChange={(e) => setForm((f) => ({ ...f, accessToken: e.target.value }))} />}
                   {err("accessToken")}{err("apiClientId")}
-                  <p className="text-[11px] text-faint">New credentials are validated with the store when you save. Leave blank to keep the current ones.</p>
+                  <p className="text-2xs text-faint">New credentials are validated with the store when you save. Leave blank to keep the current ones.</p>
                 </div>
               )}
             </section>
@@ -199,18 +199,18 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
       {tab === "warehouse" ? (
         <div className="flex flex-col gap-3">
           <div>
-            <h3 className="text-[13px] font-semibold text-foreground">Link store fulfillment locations with KitStak</h3>
-            <p className="text-[12px] text-secondary">KitStak downloads orders, syncs inventory and sends fulfillments by location. Match each store location to a warehouse.</p>
+            <h3 className="text-sm font-semibold text-foreground">Link store fulfillment locations with KitStak</h3>
+            <p className="text-xs text-secondary">KitStak downloads orders, syncs inventory and sends fulfillments by location. Match each store location to a warehouse.</p>
           </div>
           {locationsBlocked ? <Callout variant="attention" title={detail.isActive ? "Connect credentials to load the store's locations" : "Store locations unavailable"}>{detail.pauseReason}. {detail.isActive ? "Rotate the credentials on the General tab and save; existing mappings stay as they are." : "Turn the connection on and save to load locations."}</Callout> : null}
           {locations.isError ? <Callout variant="error" title="Couldn't load the store's locations">{locations.error.message}</Callout> : null}
           <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-surface-sunken/60 p-3">
             <div className="flex min-w-56 flex-1 flex-col gap-1">
-              <label htmlFor="es-loc" className="text-[11px] font-medium text-secondary">Store location</label>
+              <label htmlFor="es-loc" className="text-2xs font-medium text-secondary">Store location</label>
               <Select id="es-loc" value={newLoc} onChange={setNewLoc} placeholder={locationsBlocked ? "Connect credentials first" : locations.isPending ? "Loading locations…" : "Select store location"} options={locOptions.map((o) => ({ ...o, disabled: form.mappings.some((m) => m.channelLocationId === o.value) }))} />
             </div>
             <div className="flex min-w-48 flex-1 flex-col gap-1">
-              <label htmlFor="es-wh" className="text-[11px] font-medium text-secondary">Warehouse</label>
+              <label htmlFor="es-wh" className="text-2xs font-medium text-secondary">Warehouse</label>
               <Select id="es-wh" value={newWh} onChange={setNewWh} placeholder="Select warehouse" options={warehouses.options} />
             </div>
             <Button variant="primary" disabled={!newLoc || !newWh} title={!newLoc || !newWh ? "Choose a location and a warehouse" : undefined} onClick={() => {
@@ -222,8 +222,8 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
           </div>
           {err("mappings")}
           <div className="overflow-hidden rounded-lg border border-border">
-            <table className="w-full text-[13px]">
-              <thead className="bg-surface-sunken text-[11px] uppercase text-secondary"><tr><th className="px-3 py-2 text-left">Store location</th><th className="px-3 py-2 text-left">Warehouse</th><th className="w-12" /></tr></thead>
+            <table className="w-full text-sm">
+              <thead className="bg-surface-sunken text-2xs text-secondary"><tr><th className="px-3 py-2 text-left">Store location</th><th className="px-3 py-2 text-left">Warehouse</th><th className="w-12" /></tr></thead>
               <tbody className="divide-y divide-border">
                 {form.mappings.length === 0 ? <tr><td colSpan={3} className="px-3 py-6 text-center text-faint">No locations linked yet.</td></tr> : form.mappings.map((m) => (
                   <tr key={m.channelLocationId}>
@@ -241,28 +241,28 @@ function Body({ detail, initialTab, onDirtyChange, onCancel, onSaved }: { readon
         <div className="flex flex-col gap-4">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="flex flex-col gap-1">
-              <label htmlFor="es-pay" className="text-[12px] font-medium text-body">Payment status ({st.paymentStatuses.length}) <span className="text-danger">*</span></label>
+              <label htmlFor="es-pay" className="text-xs font-medium text-body">Payment status ({st.paymentStatuses.length}) <span className="text-danger">*</span></label>
               <Combobox id="es-pay" multiple aria-label="Payment statuses" options={PAYMENT_STATUSES.map((p) => ({ value: p, label: p.replace(/_/g, " ") }))} value={st.paymentStatuses} onChange={(v) => setSettings((s) => ({ ...s, paymentStatuses: [...v] }))} invalid={Boolean(errors["settings.paymentStatuses"])} />
-              <p className="text-[11px] text-faint">Only orders with these payment statuses are downloaded.</p>
+              <p className="text-2xs text-faint">Only orders with these payment statuses are downloaded.</p>
               {err("settings.paymentStatuses")}
             </div>
             <div className="flex flex-col gap-1">
-              <label htmlFor="es-tax" className="text-[12px] font-medium text-body">Tax ID mapping</label>
+              <label htmlFor="es-tax" className="text-xs font-medium text-body">Tax ID mapping</label>
               <Select id="es-tax" value={st.taxIdMapping} clearable onChange={(v) => setSettings((s) => ({ ...s, taxIdMapping: v }))} placeholder="Don't map"
                 options={[{ value: "note_attribute:tax_id", label: "Order note attribute · tax_id" }, { value: "customer_tax_exemption", label: "Customer tax exemption" }, { value: "billing_company", label: "Billing company" }]} />
             </div>
           </div>
           <section className="rounded-lg border border-border p-4">
-            <h3 className="text-[13px] font-semibold">Filter orders by order tag</h3>
-            <p className="text-[12px] text-secondary">KitStak can download only orders with (or without) these tags. Filtered orders appear in Missing Orders as “Order is Blocked by Tag Filter”.</p>
+            <h3 className="text-sm font-semibold">Filter orders by order tag</h3>
+            <p className="text-xs text-secondary">KitStak can download only orders with (or without) these tags. Filtered orders appear in Missing Orders as “Order is Blocked by Tag Filter”.</p>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <div className="flex flex-col gap-1"><span className="text-[11px] font-medium text-secondary">Filter method</span>
+              <div className="flex flex-col gap-1"><span className="text-2xs font-medium text-secondary">Filter method</span>
                 <SegmentedControl className="w-full [&>button]:flex-1" ariaLabel="Filter method" value={st.tagFilter.method} onChange={(v) => setSettings((s) => ({ ...s, tagFilter: { ...s.tagFilter, method: v } }))} options={[{ value: "Included", label: "Included order tags" }, { value: "Excluded", label: "Excluded order tags" }]} /></div>
-              <div className="flex flex-col gap-1"><label htmlFor="es-cond" className="text-[11px] font-medium text-secondary">Filter condition</label>
+              <div className="flex flex-col gap-1"><label htmlFor="es-cond" className="text-2xs font-medium text-secondary">Filter condition</label>
                 <Select id="es-cond" value={st.tagFilter.condition} onChange={(v) => v && setSettings((s) => ({ ...s, tagFilter: { ...s.tagFilter, condition: v } }))} options={[{ value: "All Following Tags", label: "All following tags" }, { value: "Any Following Tags", label: "Any following tags" }]} /></div>
-              <div className="flex flex-col gap-1 md:col-span-2"><label htmlFor="es-tags" className="text-[11px] font-medium text-secondary">Order tags</label>
+              <div className="flex flex-col gap-1 md:col-span-2"><label htmlFor="es-tags" className="text-2xs font-medium text-secondary">Order tags</label>
                 <ChipInput id="es-tags" value={st.tagFilter.tags} maxItems={50} maxLength={60} caseInsensitive placeholder="Type a tag and press Enter" onChange={(v) => setSettings((s) => ({ ...s, tagFilter: { ...s.tagFilter, tags: [...v] } }))} />
-                {st.tagFilter.tags.length === 0 ? <p className="text-[11px] text-faint">No order tag has been added yet — every tag passes.</p> : null}</div>
+                {st.tagFilter.tags.length === 0 ? <p className="text-2xs text-faint">No order tag has been added yet — every tag passes.</p> : null}</div>
             </div>
           </section>
         </div>

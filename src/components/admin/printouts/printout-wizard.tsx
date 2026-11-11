@@ -42,7 +42,7 @@ const opts = (values: readonly string[]) => values.map((v) => ({ value: v, label
 function InfoStep({ typeKey, isDefault }: { readonly typeKey: string; readonly isDefault: boolean }) {
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center gap-2 text-[13px] text-secondary">Type <Badge tone="primary" shape="pill">{typeTitle(typeKey)}</Badge>{isDefault ? <Badge tone="warning">Default template</Badge> : null}</div>
+      <div className="flex items-center gap-2 text-sm text-secondary">Type <Badge tone="primary" shape="pill">{typeTitle(typeKey)}</Badge>{isDefault ? <Badge tone="warning">Default template</Badge> : null}</div>
       <FormSection title="Printout information">
         <FormGrid>
           <TextInput<F> name="name" label="Name" required maxLength={80} placeholder={`e.g. ${typeTitle(typeKey)} - Retail`} />
@@ -76,18 +76,18 @@ function TemplateStep({ form, typeKey }: { readonly form: UseFormReturn<F>; read
               const selected = current === t.key;
               return (
                 <React.Fragment key={t.key}>
-                {i === 0 && templates.some((x) => x.key.startsWith("retailer-")) ? <p className="col-span-full text-[11px] font-bold uppercase tracking-[0.06em] text-faint">Base layouts</p> : null}
-                {firstRetailer ? <p className="col-span-full mt-2 text-[11px] font-bold uppercase tracking-[0.06em] text-faint">Retailer compliant · drop-ship packing lists without prices, with the retailer&apos;s PO barcode and return copy</p> : null}
+                {i === 0 && templates.some((x) => x.key.startsWith("retailer-")) ? <p className="col-span-full text-2xs font-bold text-faint">Base layouts</p> : null}
+                {firstRetailer ? <p className="col-span-full mt-2 text-2xs font-bold text-faint">Retailer compliant · drop-ship packing lists without prices, with the retailer&apos;s PO barcode and return copy</p> : null}
                 <button type="button" role="radio" aria-checked={selected} onClick={() => choose(t.key)}
                   className={cn("flex flex-col gap-3 rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                     selected ? "border-primary bg-primary-soft/40 ring-1 ring-primary" : "border-border bg-surface hover:border-border-strong")}>
                   <span className="flex justify-center rounded-md bg-surface-sunken py-3"><LayoutThumbnail layout={t.layout(typeKey)} /></span>
                   <span>
-                    <span className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
+                    <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
                       <span className={cn("flex h-4 w-4 items-center justify-center rounded-full border", selected ? "border-primary" : "border-border-strong")}>{selected ? <span className="h-2 w-2 rounded-full bg-primary" /> : null}</span>
                       {t.name}
                     </span>
-                    <span className="mt-0.5 block text-[12px] text-secondary">{t.description}</span>
+                    <span className="mt-0.5 block text-xs text-secondary">{t.description}</span>
                   </span>
                 </button>
                 </React.Fragment>

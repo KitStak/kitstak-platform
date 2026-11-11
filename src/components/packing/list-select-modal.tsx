@@ -80,8 +80,8 @@ export function ListSelectModal({ open, onOpenChange, warehouseId, stationId, on
             : rows.length === 0 ? <EmptyState compact icon={PackageOpen} title="No orders ready to pack" description="Orders show here once picking is complete. Clear the filters to see all of them." />
             : (
               <div className="max-h-[420px] overflow-auto rounded-lg border border-border" role="radiogroup" aria-label="Orders ready to pack">
-                <table className="w-full text-[13px]">
-                  <thead className="sticky top-0 bg-surface-sunken text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-surface-sunken text-2xs font-semibold text-secondary">
                     <tr><th className="w-10 px-3 py-2" /><th className="px-3 py-2 text-left">Order</th><th className="px-3 py-2 text-left">Client</th><th className="px-3 py-2 text-left">Customer</th><th className="px-3 py-2 text-left">Job</th><th className="px-3 py-2 text-left">Expected ship</th><th className="px-3 py-2 text-right">Units</th><th className="px-3 py-2 text-left">Status</th></tr>
                   </thead>
                   <tbody>
@@ -90,8 +90,8 @@ export function ListSelectModal({ open, onOpenChange, warehouseId, stationId, on
                         onKeyDown={(e) => { if (e.key === " ") { e.preventDefault(); setSelected(r.id); } if (e.key === "Enter") start(r); }}
                         className={cn("cursor-pointer border-b border-border last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40", selected === r.id ? "bg-primary-soft" : "hover:bg-surface-sunken")}>
                         <td className="px-3 py-2"><span className={cn("block h-4 w-4 rounded-full border-2", selected === r.id ? "border-primary bg-primary shadow-[inset_0_0_0_2px_white]" : "border-border-strong")} aria-hidden /></td>
-                        <td className="px-3 py-2 font-semibold">{r.code}{r.priority === "High" ? <span className="ml-1.5 rounded bg-danger-soft px-1 text-[10px] font-semibold text-danger">High</span> : null}
-                          {r.countLock ? <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-danger-soft px-1.5 py-0.5 text-[10px] font-semibold text-danger" title={r.countLock.reason} data-testid="list-lock-pill"><Lock className="h-3 w-3" aria-hidden />Locked by {r.countLock.planCode}</span> : null}</td>
+                        <td className="px-3 py-2 font-semibold">{r.code}{r.priority === "High" ? <span className="ml-1.5 rounded bg-danger-soft px-1 text-2xs font-semibold text-danger">High</span> : null}
+                          {r.countLock ? <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-danger-soft px-1.5 py-0.5 text-2xs font-semibold text-danger" title={r.countLock.reason} data-testid="list-lock-pill"><Lock className="h-3 w-3" aria-hidden />Locked by {r.countLock.planCode}</span> : null}</td>
                         <td className="px-3 py-2">{r.clientName}</td>
                         <td className="px-3 py-2">{r.customerName}</td>
                         <td className="px-3 py-2">{r.jobCode ?? "—"}</td>
@@ -107,7 +107,7 @@ export function ListSelectModal({ open, onOpenChange, warehouseId, stationId, on
           {chosen?.countLock ? <Callout variant="error" title={`Locked by count plan ${chosen.countLock.planCode}`}>{chosen.countLock.reason}</Callout> : null}
         </DialogBody>
         <DialogFooter>
-          <span className="mr-auto text-[12px] text-secondary" aria-live="polite">{list.isPending ? "Loading orders…" : list.error ? "Not loaded" : `${rows.length} order${rows.length === 1 ? "" : "s"}${lockedCount ? ` · ${lockedCount} count-locked` : ""}${list.isFetching ? " · updating…" : ""}`}</span>
+          <span className="mr-auto text-xs text-secondary" aria-live="polite">{list.isPending ? "Loading orders…" : list.error ? "Not loaded" : `${rows.length} order${rows.length === 1 ? "" : "s"}${lockedCount ? ` · ${lockedCount} count-locked` : ""}${list.isFetching ? " · updating…" : ""}`}</span>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
           <DisabledReason reason={startReason}>
             <Button variant="primary" disabled={Boolean(startReason)} data-testid="list-start" onClick={() => chosen && start(chosen)}>Start packing</Button>

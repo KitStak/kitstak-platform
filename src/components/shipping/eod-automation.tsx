@@ -34,11 +34,11 @@ export function OverdueBanner({ onShow, onCloseAll, canClose }: { readonly onSho
   const text = s ? overdueText(s) : null;
   if (!s || !text) return null;
   return (
-    <div role="alert" data-testid="eod-overdue-banner" className="mx-6 mb-2 flex flex-wrap items-center gap-3 rounded-lg border border-warning/40 bg-warning-soft px-4 py-2.5 text-[13px] text-foreground">
+    <div role="alert" data-testid="eod-overdue-banner" className="mx-6 mb-2 flex flex-wrap items-center gap-3 rounded-lg border border-warning/40 bg-warning-soft px-4 py-2.5 text-sm text-foreground">
       <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-hidden />
       <span className="min-w-0 flex-1">
         <span className="font-semibold">Manifests not closed.</span> {text}
-        <span className="mt-0.5 block text-[12px] text-secondary">{s.rows.slice(0, 4).map((r) => `${r.carrierPrefix} ${r.carrierCode} · ${shipDay(r.shipDate)} (${r.totalPackages})`).join(" · ")}{s.rows.length > 4 ? ` · +${s.count - 4} more` : ""}</span>
+        <span className="mt-0.5 block text-xs text-secondary">{s.rows.slice(0, 4).map((r) => `${r.carrierPrefix} ${r.carrierCode} · ${shipDay(r.shipDate)} (${r.totalPackages})`).join(" · ")}{s.rows.length > 4 ? ` · +${s.count - 4} more` : ""}</span>
       </span>
       <Button size="sm" variant="secondary" onClick={onShow}>Show them</Button>
       {canClose ? <Button size="sm" onClick={() => onCloseAll(s.rows)}>Close and print</Button> : null}
@@ -94,7 +94,7 @@ export function SchedulePickupDialog({ rows, onClose, onDone }: { readonly rows:
         <DialogHeader title="Schedule carrier pickup" description={`Books a pickup with the carrier for ${packages} ${packages === 1 ? "package" : "packages"} and stamps Scheduled pickup on each of them.`} />
         <DialogBody className="flex flex-col gap-3">
           {result ? (
-            <ul className="flex flex-col gap-1.5 text-[12px]">
+            <ul className="flex flex-col gap-1.5 text-xs">
               {result.pickups.map((p) => {
                 const r = rows?.find((x) => x.id === p.id);
                 return <li key={p.id}><span className="font-semibold">{r ? `${r.carrierPrefix} ${r.carrierCode} · ${shipDay(r.shipDate)}` : p.id}</span>: confirmation <span className="font-mono">{p.confirmation}</span>, {p.packages} packages, {shipDateTime(p.pickupAt)}</li>;
@@ -103,16 +103,16 @@ export function SchedulePickupDialog({ rows, onClose, onDone }: { readonly rows:
             </ul>
           ) : (
             <>
-              <ul className="rounded-md bg-surface-sunken px-3 py-2 text-[12px] text-secondary">
+              <ul className="rounded-md bg-surface-sunken px-3 py-2 text-xs text-secondary">
                 {(rows ?? []).map((r) => <li key={r.id}>{r.carrierPrefix} {r.carrierCode} · {r.shipFrom || r.warehouseCode} · {shipDay(r.shipDate)} · {r.totalPackages} packages{r.scheduledPickupAt ? ` · pickup already set for ${shipDateTime(r.scheduledPickupAt)}` : ""}</li>)}
               </ul>
-              <label className="flex flex-col gap-1 text-[12px] font-medium">Ready for pickup at
+              <label className="flex flex-col gap-1 text-xs font-medium">Ready for pickup at
                 <DateTimePicker value={ready} onChange={setReady} invalid={!ready} aria-label="Ready for pickup at" />
               </label>
-              <label className="flex flex-col gap-1 text-[12px] font-medium">Latest pickup time (dock closes)
+              <label className="flex flex-col gap-1 text-xs font-medium">Latest pickup time (dock closes)
                 <DateTimePicker value={latest} onChange={setLatest} invalid={Boolean(invalid && ready)} aria-label="Latest pickup time" />
               </label>
-              {invalid ? <p className="text-[12px] text-danger">{invalid}</p> : null}
+              {invalid ? <p className="text-xs text-danger">{invalid}</p> : null}
             </>
           )}
         </DialogBody>
@@ -166,11 +166,11 @@ export function AutoCloseDialog({ open, onOpenChange, canEdit }: { readonly open
       <DialogContent size="lg" data-testid="auto-close-dialog">
         <DialogHeader title="Close of day automation" description="Close a carrier setup's Open manifests automatically every day at a cutoff time, in the warehouse's time zone. The End Of The Day report is printed and stored as if you closed it by hand." />
         <DialogBody className="flex flex-col gap-4">
-          {!setup ? <p className="text-[12px] text-secondary">{q.isError ? `Couldn't load the rules. ${q.error.message}` : "Loading…"}</p> : (
+          {!setup ? <p className="text-xs text-secondary">{q.isError ? `Couldn't load the rules. ${q.error.message}` : "Loading…"}</p> : (
             <>
-              {setup.rules.length === 0 ? <p className="text-[12px] text-secondary">No carrier setup closes automatically yet.</p> : (
-                <table className="w-full text-[12px]">
-                  <thead className="text-left text-[11px] uppercase text-faint"><tr><th className="py-1">Carrier setup</th><th>Warehouse</th><th>Cutoff</th><th>On</th><th>Last run</th><th className="w-10"><span className="sr-only">Remove</span></th></tr></thead>
+              {setup.rules.length === 0 ? <p className="text-xs text-secondary">No carrier setup closes automatically yet.</p> : (
+                <table className="w-full text-xs">
+                  <thead className="text-left text-2xs text-faint"><tr><th className="py-1">Carrier setup</th><th>Warehouse</th><th>Cutoff</th><th>On</th><th>Last run</th><th className="w-10"><span className="sr-only">Remove</span></th></tr></thead>
                   <tbody>
                     {setup.rules.map((r) => (
                       <tr key={r.id} className="border-t border-border">
@@ -187,15 +187,15 @@ export function AutoCloseDialog({ open, onOpenChange, canEdit }: { readonly open
               )}
               {canEdit ? (
                 <div className="flex flex-wrap items-end gap-2 rounded-md border border-border p-3">
-                  <label className="flex min-w-[260px] flex-1 flex-col gap-1 text-[12px] font-medium">Carrier setup
+                  <label className="flex min-w-[260px] flex-1 flex-col gap-1 text-xs font-medium">Carrier setup
                     <Select options={options} value={connectionId} onChange={setConnectionId} placeholder={options.length ? "Choose a carrier setup" : "Every setup has a rule"} disabled={options.length === 0} />
                   </label>
-                  <label className="flex w-32 flex-col gap-1 text-[12px] font-medium">Cutoff time
+                  <label className="flex w-32 flex-col gap-1 text-xs font-medium">Cutoff time
                     <TimePicker value={time} onChange={setTime} aria-label="Cutoff time" />
                   </label>
                   <Button disabled={!connectionId || !time || busy} onClick={() => connectionId && time ? void save({ carrierConnectionId: connectionId, cutoffTime: time, isActive: true }) : undefined}><AlarmClock className="h-3.5 w-3.5" aria-hidden />Add rule</Button>
                 </div>
-              ) : <p className="text-[12px] text-secondary">You need permission to print the End Of The Day report to change these rules.</p>}
+              ) : <p className="text-xs text-secondary">You need permission to print the End Of The Day report to change these rules.</p>}
             </>
           )}
         </DialogBody>

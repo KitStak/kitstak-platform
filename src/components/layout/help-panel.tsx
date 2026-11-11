@@ -54,8 +54,8 @@ function ArticleRow({ article, onOpen }: { readonly article: HelpArticle; readon
     <button type="button" className={rowClass} onClick={() => onOpen(article.id)}>
       <FileText className="h-4 w-4 shrink-0 text-primary" aria-hidden />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-semibold text-foreground">{article.title}</span>
-        <span className="block truncate text-[12px] text-secondary">{article.summary}</span>
+        <span className="block truncate text-sm font-semibold text-foreground">{article.title}</span>
+        <span className="block truncate text-xs text-secondary">{article.summary}</span>
       </span>
       <ChevronRight className="h-4 w-4 shrink-0 text-faint" aria-hidden />
     </button>
@@ -63,7 +63,7 @@ function ArticleRow({ article, onOpen }: { readonly article: HelpArticle; readon
 }
 
 function SectionTitle({ children }: { readonly children: React.ReactNode }) {
-  return <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.06em] text-faint">{children}</h3>;
+  return <h3 className="mb-2 text-2xs font-bold text-faint">{children}</h3>;
 }
 
 function Home({ go, onShortcuts }: { readonly go: (v: HelpView) => void; readonly onShortcuts: () => void }) {
@@ -75,20 +75,20 @@ function Home({ go, onShortcuts }: { readonly go: (v: HelpView) => void; readonl
   return (
     <div className="flex flex-col gap-5">
       <section className="rounded-lg border border-border-subtle bg-sunken px-4 py-5 text-fg">
-        <p className="text-[18px] font-semibold">Help Center</p>
-        <p className="mt-0.5 text-[12.5px] text-fg-muted">Guides, release notes and support for every KitStak screen.</p>
+        <p className="text-lg font-semibold">Help Center</p>
+        <p className="mt-0.5 text-xs text-fg-muted">Guides, release notes and support for every KitStak screen.</p>
         <label className="relative mt-3 flex items-center">
           <span className="sr-only">Search help articles</span>
           <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-faint" aria-hidden />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search help, e.g. receive, wave, label" data-autofocus
-            className="h-9 w-full rounded-md border border-border-input bg-surface pl-8 pr-2 text-[13px] text-foreground placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" />
+            className="h-9 w-full rounded-md border border-border-input bg-surface pl-8 pr-2 text-sm text-foreground placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" />
         </label>
       </section>
       {query.trim() ? (
         <section aria-live="polite">
           <SectionTitle>{results.length} {results.length === 1 ? "article" : "articles"} for &ldquo;{query.trim()}&rdquo;</SectionTitle>
           {results.length ? <div className="flex flex-col gap-2">{results.map((a) => <ArticleRow key={a.id} article={a} onOpen={openArticle} />)}</div>
-            : <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-[13px] text-secondary">No article matches. Try another word, or <button type="button" className="font-semibold text-primary hover:underline" onClick={() => go({ kind: "support" })}>contact support</button>.</p>}
+            : <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-secondary">No article matches. Try another word, or <button type="button" className="font-semibold text-primary hover:underline" onClick={() => go({ kind: "support" })}>contact support</button>.</p>}
         </section>
       ) : (
         <>
@@ -108,8 +108,8 @@ function Home({ go, onShortcuts }: { readonly go: (v: HelpView) => void; readonl
                   <button key={c.key} type="button" className={cn(rowClass, "items-start")} onClick={() => go(c.key === "release-notes" ? { kind: "whats-new" } : { kind: "category", key: c.key })}>
                     <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">{c.title}<span className="text-[11px] font-normal text-faint">{count}</span></span>
-                      <span className="mt-0.5 block text-[11.5px] leading-4 text-secondary">{c.description}</span>
+                      <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">{c.title}<span className="text-2xs font-normal text-faint">{count}</span></span>
+                      <span className="mt-0.5 block text-2xs leading-4 text-secondary">{c.description}</span>
                     </span>
                   </button>
                 );
@@ -127,7 +127,7 @@ function Home({ go, onShortcuts }: { readonly go: (v: HelpView) => void; readonl
           <Button variant="secondary" className="justify-start" onClick={() => go({ kind: "support" })}><LifeBuoy className="h-4 w-4" aria-hidden />Contact support</Button>
         </div>
       </section>
-      <footer className="flex items-center gap-3 border-t border-border pt-3 text-[12px] text-faint">
+      <footer className="flex items-center gap-3 border-t border-border pt-3 text-xs text-faint">
         <button type="button" className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40" onClick={() => go({ kind: "article", id: "privacy" })}>Privacy Policy</button>
         <span aria-hidden>·</span>
         <span>{WHATS_NEW[0] ? `KitStak ${WHATS_NEW[0].version}` : "KitStak"}</span>
@@ -138,10 +138,10 @@ function Home({ go, onShortcuts }: { readonly go: (v: HelpView) => void; readonl
 
 function CategoryView({ categoryKey, go }: { readonly categoryKey: string; readonly go: (v: HelpView) => void }) {
   const category = HELP_CATEGORIES.find((c) => c.key === categoryKey);
-  if (!category) return <p className="text-[13px] text-secondary">This collection no longer exists.</p>;
+  if (!category) return <p className="text-sm text-secondary">This collection no longer exists.</p>;
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[13px] text-secondary">{category.description}</p>
+      <p className="text-sm text-secondary">{category.description}</p>
       {category.articles.map((a) => <ArticleRow key={a.id} article={a} onOpen={(id) => go({ kind: "article", id })} />)}
     </div>
   );
@@ -149,16 +149,16 @@ function CategoryView({ categoryKey, go }: { readonly categoryKey: string; reado
 
 function ArticleView({ id, onNavigate }: { readonly id: string; readonly onNavigate: () => void }) {
   const found = findArticle(id);
-  if (!found) return <p className="text-[13px] text-secondary">This article no longer exists.</p>;
+  if (!found) return <p className="text-sm text-secondary">This article no longer exists.</p>;
   const { article, category } = found;
   return (
     <article className="flex flex-col gap-3">
       <Badge tone="neutral" size="sm" className="self-start">{category.title}</Badge>
-      <p className="text-[13px] text-secondary">{article.summary}</p>
+      <p className="text-sm text-secondary">{article.summary}</p>
       <ol className="flex flex-col gap-2">
         {article.steps.map((step, i) => (
-          <li key={i} className="flex gap-2.5 text-[13px] leading-5 text-body">
-            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-soft text-[11px] font-semibold text-primary">{i + 1}</span>
+          <li key={i} className="flex gap-2.5 text-sm leading-5 text-body">
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-soft text-2xs font-semibold text-primary">{i + 1}</span>
             <span>{step}</span>
           </li>
         ))}
@@ -166,7 +166,7 @@ function ArticleView({ id, onNavigate }: { readonly id: string; readonly onNavig
       {article.links?.length ? (
         <div className="flex flex-wrap gap-2 border-t border-border pt-3">
           {article.links.map((l) => (
-            <Link key={l.href} href={l.href} onClick={onNavigate} className="inline-flex h-7 items-center gap-1 rounded-md border border-border-strong/70 bg-surface px-2.5 text-[12px] font-medium text-primary hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40">
+            <Link key={l.href} href={l.href} onClick={onNavigate} className="inline-flex h-7 items-center gap-1 rounded-md border border-border-strong/70 bg-surface px-2.5 text-xs font-medium text-primary hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40">
               {l.label}<ChevronRight className="h-3.5 w-3.5" aria-hidden />
             </Link>
           ))}
@@ -181,14 +181,14 @@ export function WhatsNewList({ limit }: { readonly limit?: number }) {
     <ol className="space-y-3">
       {WHATS_NEW.slice(0, limit).map((entry) => (
         <li key={entry.title} className="border-l-2 border-primary pl-3">
-          <p className="flex items-center gap-1.5 text-[11px] text-faint">
+          <p className="flex items-center gap-1.5 text-2xs text-faint">
             <time>{entry.date}</time>
             <span aria-hidden>·</span>
             <span>{entry.version}</span>
             <span className="rounded bg-primary-soft px-1.5 py-px font-semibold text-primary">{entry.tag}</span>
           </p>
-          <p className="text-[13px] font-semibold text-foreground">{entry.title}</p>
-          <p className="text-[12px] text-secondary">{entry.body}</p>
+          <p className="text-sm font-semibold text-foreground">{entry.title}</p>
+          <p className="text-xs text-secondary">{entry.body}</p>
         </li>
       ))}
     </ol>
@@ -224,17 +224,17 @@ function FeedbackView({ onDone }: { readonly onDone: () => void }) {
     <div className="flex flex-col gap-5">
       <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3" noValidate>
         <div className="flex flex-col gap-1.5">
-          <span className="text-[12.5px] font-medium text-body" id="fb-type">What is it about?</span>
+          <span className="text-xs font-medium text-body" id="fb-type">What is it about?</span>
           <SegmentedControl ariaLabel="Feedback type" value={type} onChange={setType} options={FEEDBACK_TYPES.map((t) => ({ value: t, label: FEEDBACK_TYPE_LABELS[t] }))} size="sm" />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="fb-message" className="text-[12.5px] font-medium text-body">Your feedback <span className="text-danger" aria-hidden>*</span></label>
+          <label htmlFor="fb-message" className="text-xs font-medium text-body">Your feedback <span className="text-danger" aria-hidden>*</span></label>
           <Textarea id="fb-message" rows={5} maxLength={2000} value={message} onChange={(e) => { setMessage(e.target.value); if (error) setError(null); }} invalid={Boolean(error)}
             aria-describedby={error ? "fb-error" : undefined} placeholder={type === "problem" ? "What did you do, what happened and what did you expect?" : "Tell us what would make KitStak better for you."} />
-          {error ? <p id="fb-error" role="alert" className="text-[12px] text-danger">{error}</p> : null}
+          {error ? <p id="fb-error" role="alert" className="text-xs text-danger">{error}</p> : null}
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-[12.5px] font-medium text-body">How is KitStak working for you? <span className="font-normal text-faint">(optional)</span></span>
+          <span className="text-xs font-medium text-body">How is KitStak working for you? <span className="font-normal text-faint">(optional)</span></span>
           <div className="flex items-center gap-1" role="radiogroup" aria-label="Rating">
             {[1, 2, 3, 4, 5].map((n) => (
               <button key={n} type="button" role="radio" aria-checked={rating === n} aria-label={`${n} of 5`} onClick={() => setRating(rating === n ? null : n)}
@@ -244,7 +244,7 @@ function FeedbackView({ onDone }: { readonly onDone: () => void }) {
             ))}
           </div>
         </div>
-        <p className="text-[11.5px] text-faint">Sent with the page you are on ({page}), your name and the time. No record data is attached.</p>
+        <p className="text-2xs text-faint">Sent with the page you are on ({page}), your name and the time. No record data is attached.</p>
         <Button type="submit" variant="primary" className="self-start" disabled={sending} aria-busy={sending}>{sending ? "Sending…" : "Send feedback"}</Button>
       </form>
       <section>
@@ -316,14 +316,14 @@ function RecorderView({ onSupport }: { readonly onSupport: () => void }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-[13px] text-secondary">Record what you see to show support exactly what happened. The video stays on this device; nothing is uploaded. Recordings stop after {MAX_RECORDING_SECONDS / 60} minutes.</p>
+      <p className="text-sm text-secondary">Record what you see to show support exactly what happened. The video stays on this device; nothing is uploaded. Recordings stop after {MAX_RECORDING_SECONDS / 60} minutes.</p>
       {!supported ? <Callout variant="info" title="Screen recording isn't available">Use a current version of Chrome, Edge or Firefox on a computer to record your screen.</Callout> : null}
       {error ? <Callout variant="attention" title="Recording didn't start">{error}</Callout> : null}
       {state === "recording" ? (
         <div className="flex items-center gap-3 rounded-lg border border-danger/40 bg-danger-soft/40 px-3 py-2.5" role="status" aria-live="polite">
           <Circle className="h-3 w-3 animate-pulse fill-danger text-danger" aria-hidden />
-          <span className="text-[13px] font-semibold text-foreground">Recording</span>
-          <span className="tabular-nums text-[13px] text-secondary">{recordingClock(seconds)}</span>
+          <span className="text-sm font-semibold text-foreground">Recording</span>
+          <span className="tabular-nums text-sm text-secondary">{recordingClock(seconds)}</span>
           <Button size="sm" variant="primary" className="ml-auto" onClick={stop}><CircleStop className="h-3.5 w-3.5" aria-hidden />Stop</Button>
         </div>
       ) : (
@@ -333,10 +333,10 @@ function RecorderView({ onSupport }: { readonly onSupport: () => void }) {
         <div className="flex flex-col gap-2">
           <video src={url} controls className="w-full rounded-lg border border-border bg-black" aria-label="Recording preview" />
           <div className="flex flex-wrap gap-2">
-            <a href={url} download={fileName} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40"><Download className="h-4 w-4" aria-hidden />Download video</a>
+            <a href={url} download={fileName} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40"><Download className="h-4 w-4" aria-hidden />Download video</a>
             <Button variant="secondary" onClick={onSupport}><LifeBuoy className="h-4 w-4" aria-hidden />Send to support</Button>
           </div>
-          <p className="text-[11.5px] text-faint">{recordingClock(seconds)} recorded. Attach the downloaded file to your email to support.</p>
+          <p className="text-2xs text-faint">{recordingClock(seconds)} recorded. Attach the downloaded file to your email to support.</p>
         </div>
       ) : null}
     </div>
@@ -362,7 +362,7 @@ export function HelpPanel({ view, onViewChange, onClose, onShortcuts }: { readon
   return (
     <Drawer open={view !== null} onOpenChange={(o) => { if (!o) onClose(); }} width={35} title={viewTitle(current)}
       headerExtra={current.kind !== "home" ? (
-        <button type="button" onClick={back} className="inline-flex items-center gap-1 rounded text-[12px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40">
+        <button type="button" onClick={back} className="inline-flex items-center gap-1 rounded text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40">
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />Back
         </button>
       ) : undefined}>

@@ -45,7 +45,7 @@ const COLUMNS: ColumnDef<EligibleOrder, unknown>[] = [
   { id: "status", header: "Status", cell: ({ row }) => <StatusPill status={row.original.status} domain="shipmentOrder" /> },
   { id: "readiness", header: "Readiness", enableSorting: false, cell: ({ row }) => {
     const r = orderReadiness(row.original.status);
-    return <span className={cn("text-[12px]", READINESS_TONE[r.tone])} title={r.tone === "success" ? undefined : "Ship only ships Ready to Ship orders."}>{r.label}</span>;
+    return <span className={cn("text-xs", READINESS_TONE[r.tone])} title={r.tone === "success" ? undefined : "Ship only ships Ready to Ship orders."}>{r.label}</span>;
   } },
   { id: "warehouseCode", header: "Warehouse", cell: ({ row }) => row.original.warehouseCode ?? "—" },
   { id: "clientName", header: "Client", cell: ({ row }) => row.original.clientName ?? "—" },
@@ -56,7 +56,7 @@ const COLUMNS: ColumnDef<EligibleOrder, unknown>[] = [
   { id: "totalQuantity", header: "Qty", meta: { align: "right" }, cell: ({ row }) => <QtyCell value={row.original.totalQuantity} /> },
   { id: "createdAt", header: "Created date", cell: ({ row }) => <DateCell value={row.original.createdAt} /> },
   { id: "ageDays", header: "Age", meta: { align: "right" }, cell: ({ row }) => <span className="block text-right tabular-nums" title="Days since the order was created">{row.original.ageDays === null ? "—" : `${row.original.ageDays} d`}</span> },
-  { id: "tags", header: "Tags", enableSorting: false, cell: ({ row }) => row.original.tags ? <span className="flex flex-wrap gap-1">{row.original.tags.split(", ").map((t) => <span key={t} className="rounded-full bg-neutral-soft px-2 py-0.5 text-[11px] text-body">{t}</span>)}</span> : <span className="text-faint">—</span> },
+  { id: "tags", header: "Tags", enableSorting: false, cell: ({ row }) => row.original.tags ? <span className="flex flex-wrap gap-1">{row.original.tags.split(", ").map((t) => <span key={t} className="rounded-full bg-neutral-soft px-2 py-0.5 text-2xs text-body">{t}</span>)}</span> : <span className="text-faint">—</span> },
 ];
 
 export interface PlanOrderPickerProps {
@@ -114,13 +114,13 @@ function Body({ onOpenChange, onConfirm, warehouseId, clientId, planId, excludeI
           emptyTitle="No eligible orders" emptyDescription="Only orders of this warehouse that are not shipped, cancelled, on hold or on another active plan can be added." />
       )}
       {g.rows.filter((o) => ids.includes(o.id) && o.status !== "Ready to Ship").length > 0 ? (
-        <p role="status" className="mx-6 mt-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-[12px]">
+        <p role="status" className="mx-6 mt-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-xs">
           {g.rows.filter((o) => ids.includes(o.id) && o.status !== "Ready to Ship").length} selected {g.rows.filter((o) => ids.includes(o.id) && o.status !== "Ready to Ship").length === 1 ? "order is" : "orders are"} not Ready to Ship. The plan can&apos;t ship them until they are picked and packed.
         </p>
       ) : null}
-      {error ? <p role="alert" className="px-6 pt-2 text-[12px] text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="px-6 pt-2 text-xs text-danger">{error}</p> : null}
       <div className="mt-3 flex items-center justify-end gap-2 border-t border-border px-6 py-3">
-        <span className="mr-auto text-[12px] text-secondary">Selected: <strong className="text-foreground">{ids.length}</strong></span>
+        <span className="mr-auto text-xs text-secondary">Selected: <strong className="text-foreground">{ids.length}</strong></span>
         <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
         <DisabledReason reason={reason}>
           <Button variant="primary" disabled={Boolean(reason)} onClick={() => void confirm()}>

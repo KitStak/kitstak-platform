@@ -116,7 +116,7 @@ function TransferProductForm({ row, skipped, onClose, onDone }: { readonly row: 
       <div className="flex flex-col gap-4">
         <SkippedRowsCallout eligible={[row]} skipped={skipped} />
         <BucketCard row={row} compact locationLabel="Transfer from LP/Loc" />
-        {sourceLock ? <p role="alert" className="rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-[12px] text-danger">{sourceLock}</p> : null}
+        {sourceLock ? <p role="alert" className="rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-xs text-danger">{sourceLock}</p> : null}
         <FormField name="qty" label="Transfer Product Quantity" required description={isLargeQty(qty) ? `Large quantity: ${formatQty(qty as number)}. Double-check it.` : `${formatQty(row.freePackQty)} ${row.packType} available`}>
           {(c) => (
             <div className="flex items-center gap-2">
@@ -195,9 +195,9 @@ function BulkTransferForm({ rows, skipped, onClose, onDone }: { readonly rows: r
     <Form form={form} onSubmit={() => submit()} className="flex h-full flex-col" guardUnsaved>
       <div className="flex flex-col gap-4">
         <SkippedRowsCallout eligible={rows} skipped={skipped} />
-        <div className="rounded-lg border border-border bg-surface-sunken/60 p-3 text-[13px]">
+        <div className="rounded-lg border border-border bg-surface-sunken/60 p-3 text-sm">
           <div className="font-semibold text-foreground">{rows.length} rows · {formatQty(totalPacks)} free units move</div>
-          <p className="text-[12px] text-secondary">Every free unit of each row moves. Allocated units stay where they are. To move part of a row, transfer it on its own.</p>
+          <p className="text-xs text-secondary">Every free unit of each row moves. Allocated units stay where they are. To move part of a row, transfer it on its own.</p>
           <ul className="mt-2 max-h-48 overflow-auto">
             {rows.map((r) => {
               const o = outcomeFor(r.id);
@@ -205,7 +205,7 @@ function BulkTransferForm({ rows, skipped, onClose, onDone }: { readonly rows: r
                 <li key={r.id} className="flex items-center gap-2 py-0.5">
                   <span className="min-w-0 flex-1 truncate text-body">{r.sku} · {r.location}{r.lpNumber ? ` / ${r.lpNumber}` : ""}</span>
                   <span className="shrink-0 tabular-nums text-secondary">{formatQty(r.freePackQty)} {r.packType}</span>
-                  {o ? <span className={o.ok ? "shrink-0 text-[12px] text-success" : "shrink-0 max-w-[45%] truncate text-[12px] text-danger"} title={o.message}>{o.ok ? "Moved" : o.message}</span> : null}
+                  {o ? <span className={o.ok ? "shrink-0 text-xs text-success" : "shrink-0 max-w-[45%] truncate text-xs text-danger"} title={o.message}>{o.ok ? "Moved" : o.message}</span> : null}
                 </li>
               );
             })}

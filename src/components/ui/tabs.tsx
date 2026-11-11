@@ -23,7 +23,7 @@ export interface TabItem {
 
 function CountBadge({ count, active }: { readonly count: number; readonly active: boolean }) {
   return (
-    <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums", active ? "bg-pressed text-fg" : "bg-muted text-fg-secondary")}>
+    <span className={cn("rounded-full px-1.5 py-px text-2xs font-semibold tabular-nums", active ? "bg-pressed text-fg" : "bg-muted text-fg-secondary")}>
       {count}
     </span>
   );
@@ -165,7 +165,7 @@ export function SegmentedTabs({
             >
               {Icon ? <Icon className="h-3.5 w-3.5" aria-hidden /> : null}
               {tab.label}
-              {typeof tab.count === "number" ? <span className="text-[11px] tabular-nums text-secondary">{tab.count}</span> : null}
+              {typeof tab.count === "number" ? <span className="text-2xs tabular-nums text-secondary">{tab.count}</span> : null}
             </TabsPrimitive.Trigger>
           );
         })}
@@ -183,7 +183,7 @@ export interface VerticalNavItem {
 }
 
 const verticalItem =
-  "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-focus/30";
+  "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-focus/30";
 
 export function VerticalNav({
   items,

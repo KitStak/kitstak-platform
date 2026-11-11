@@ -58,9 +58,9 @@ DialogContent.displayName = "DialogContent";
 export function DialogHeader({ title, description, className, children }: { readonly title: React.ReactNode; readonly description?: React.ReactNode; readonly className?: string; readonly children?: React.ReactNode }) {
   return (
     <div className={cn("shrink-0 border-b border-border px-5 py-4 pr-12", className)}>
-      <DialogPrimitive.Title className="text-[15px] font-semibold leading-5 text-foreground">{title}</DialogPrimitive.Title>
+      <DialogPrimitive.Title className="text-base font-semibold leading-5 text-foreground">{title}</DialogPrimitive.Title>
       {description ? (
-        <DialogPrimitive.Description className="mt-1 text-[12px] leading-4 text-secondary">{description}</DialogPrimitive.Description>
+        <DialogPrimitive.Description className="mt-1 text-xs leading-4 text-secondary">{description}</DialogPrimitive.Description>
       ) : (
         <DialogPrimitive.Description className="sr-only">{typeof title === "string" ? title : "Dialog"}</DialogPrimitive.Description>
       )}
@@ -70,7 +70,7 @@ export function DialogHeader({ title, description, className, children }: { read
 }
 
 export function DialogBody({ className, children }: { readonly className?: string; readonly children: React.ReactNode }) {
-  return <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4 text-[13px] ks-scroll", className)}>{children}</div>;
+  return <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4 text-sm ks-scroll", className)}>{children}</div>;
 }
 
 export function DialogFooter({ className, children }: { readonly className?: string; readonly children: React.ReactNode }) {

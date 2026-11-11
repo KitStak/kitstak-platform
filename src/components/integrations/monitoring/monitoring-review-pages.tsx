@@ -94,19 +94,19 @@ export function MissingOrderDrawer({ id, onOpenChange, onRetry, canRetry }: { re
             { label: "Last updated", value: dates.dateTime(d.lastUpdated) }, { label: "Status", value: <StatusPill status={d.status === "Resolved" ? "Successful" : d.status} domain={integrationDomain(d.status === "Resolved" ? "Successful" : d.status)} /> },
           ]} />
           <section className="rounded-lg border border-danger/30 bg-danger-soft/30 p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">Error details · {brandText(d.lastErrorCode)}</p>
-            <h3 className="mt-1 text-[15px] font-semibold text-foreground">{brandText(d.error.title)}</h3>
-            <p className="mt-1 text-[13px] text-body">{brandText(d.error.explanation)}</p>
+            <p className="text-2xs font-semibold text-danger">Error details · {brandText(d.lastErrorCode)}</p>
+            <h3 className="mt-1 text-base font-semibold text-foreground">{brandText(d.error.title)}</h3>
+            <p className="mt-1 text-sm text-body">{brandText(d.error.explanation)}</p>
             <div className="mt-3 flex gap-2 rounded-md bg-surface px-3 py-2">
               <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
-              <div><p className="text-[12px] font-semibold text-foreground">Recommended action</p><p className="text-[13px] text-body">{brandText(d.error.recommendedAction)}</p></div>
+              <div><p className="text-xs font-semibold text-foreground">Recommended action</p><p className="text-sm text-body">{brandText(d.error.recommendedAction)}</p></div>
             </div>
-            <a href={d.error.guideHref} className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-primary hover:underline">View troubleshooting guide<ExternalLink className="h-3 w-3" /></a>
+            <a href={d.error.guideHref} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">View troubleshooting guide<ExternalLink className="h-3 w-3" /></a>
           </section>
           {d.history.length > 0 ? (
             <section>
-              <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wide text-secondary">Download attempts</h3>
-              <ul className="divide-y divide-border rounded-lg border border-border text-[12px]">{d.history.map((h, i) => (
+              <h3 className="mb-1 text-xs font-semibold text-secondary">Download attempts</h3>
+              <ul className="divide-y divide-border rounded-lg border border-border text-xs">{d.history.map((h, i) => (
                 <li key={i} className="flex gap-3 px-3 py-1.5"><span className="w-40 shrink-0 tabular-nums text-secondary">{dates.dateTime(h.at)}</span><span className={h.success ? "text-success" : "text-danger"}>{h.success ? "Downloaded" : brandText(h.message) ?? "Failed"}</span></li>
               ))}</ul>
             </section>
@@ -185,8 +185,8 @@ function DrilldownDialog({ row, onClose, onOpenOrder }: { readonly row: RecentEr
         <DialogHeader title="Affected orders" description={row ? `${brandText(row.errorReason)} · ${row.storeName} · ${dates.day(row.day)}` : undefined} />
         <DialogBody>
           {q.isPending ? <SkeletonTable rows={4} columns={4} /> : !p.success || p.data.length === 0 ? <EmptyState compact title="No affected orders found" /> : (
-            <table className="w-full text-[12px]">
-              <thead className="bg-surface-sunken text-[11px] uppercase text-secondary"><tr><th className="px-3 py-2 text-left">Store order</th><th className="px-3 py-2 text-left">Order code</th><th className="px-3 py-2 text-left">Last attempt</th><th className="px-3 py-2 text-left">Status</th><th /></tr></thead>
+            <table className="w-full text-xs">
+              <thead className="bg-surface-sunken text-2xs text-secondary"><tr><th className="px-3 py-2 text-left">Store order</th><th className="px-3 py-2 text-left">Order code</th><th className="px-3 py-2 text-left">Last attempt</th><th className="px-3 py-2 text-left">Status</th><th /></tr></thead>
               <tbody className="divide-y divide-border">{p.data.map((o) => (
                 <tr key={o.storeOrderNumber}>
                   <td className="px-3 py-2 font-medium">{o.storeOrderNumber}</td><td className="px-3 py-2">{o.orderCode ?? <Muted />}</td>
@@ -293,7 +293,7 @@ export function ListingExceptionsPage() {
     { id: "clientName", header: "Client", size: 170, cell: ({ row }) => row.original.clientName },
     { id: "issueType", header: "Issue type", size: 150, cell: ({ row }) => <Badge size="sm" shape="pill" tone={row.original.issueType === "Multi Listing" ? "warning" : "info"}>{row.original.issueType}</Badge> },
     { id: "listingDate", header: "Listing date", size: 180, cell: ({ row }) => <DateTimeText value={row.original.listingDate} /> },
-    { id: "open", header: "", size: 120, enableSorting: false, cell: ({ row }) => <Link className="inline-flex items-center gap-1 text-[12px] text-primary hover:underline" href={`/products/listings?q=${encodeURIComponent(row.original.sku)}`}>Open listings<ExternalLink className="h-3 w-3" /></Link> },
+    { id: "open", header: "", size: 120, enableSorting: false, cell: ({ row }) => <Link className="inline-flex items-center gap-1 text-xs text-primary hover:underline" href={`/products/listings?q=${encodeURIComponent(row.original.sku)}`}>Open listings<ExternalLink className="h-3 w-3" /></Link> },
   ];
   return (
     <ReviewShell>

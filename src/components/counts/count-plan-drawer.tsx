@@ -80,7 +80,7 @@ function PickCodeCell({ value, openCount }: { readonly value: string; readonly o
       <span className={cn("truncate font-semibold", openCount ? "text-faint" : "text-foreground")}>{value}</span>
       {openCount ? (
         <Tooltip content={`Already in open count plan ${openCount}. Finish or cancel it before counting this again.`}>
-          <span tabIndex={0} className="inline-flex shrink-0 items-center gap-0.5 rounded bg-warning-soft px-1.5 py-px text-[10px] font-semibold text-warning">In {openCount}</span>
+          <span tabIndex={0} className="inline-flex shrink-0 items-center gap-0.5 rounded bg-warning-soft px-1.5 py-px text-2xs font-semibold text-warning">In {openCount}</span>
         </Tooltip>
       ) : null}
     </span>
@@ -309,7 +309,7 @@ function Body({ onOpenChange, mode, planId, onSaved, onDirty }: CountPlanDrawerP
         {plan ? (
           <span className="flex items-center gap-2">
             <CountStatusPill status={status} domain="count" />
-            {readOnly ? <Link href={`/counts/${encodeURIComponent(plan.code)}`} className="text-[12px] font-semibold text-primary hover:underline">Open count details</Link> : null}
+            {readOnly ? <Link href={`/counts/${encodeURIComponent(plan.code)}`} className="text-xs font-semibold text-primary hover:underline">Open count details</Link> : null}
           </span>
         ) : null}
       </div>
@@ -450,15 +450,15 @@ function TasksStep({ countType, items, checked, readOnly, onType, onCheck, onRem
             >
               <span className={cn("flex h-8 w-8 items-center justify-center rounded-md", active ? "bg-primary text-white" : "bg-surface-sunken text-secondary")}><Icon className="h-4 w-4" aria-hidden /></span>
               <span className="flex flex-col">
-                <span className="text-[13px] font-semibold text-foreground">{t} Count</span>
-                <span className="text-[11px] text-secondary">{t === "Location" ? "Count everything in chosen locations" : t === "LP" ? "Count the contents of chosen license plates" : "Count chosen SKUs wherever they are stocked"}</span>
+                <span className="text-sm font-semibold text-foreground">{t} Count</span>
+                <span className="text-2xs text-secondary">{t === "Location" ? "Count everything in chosen locations" : t === "LP" ? "Count the contents of chosen license plates" : "Count chosen SKUs wherever they are stocked"}</span>
               </span>
             </button>
           );
         })}
       </div>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[12px] text-secondary">
+        <p className="text-xs text-secondary">
           <strong className="text-foreground">{items.length}</strong> {loc ? (items.length === 1 ? "location" : "locations") : lp ? NOUN.LP[items.length === 1 ? 0 : 1] : (items.length === 1 ? "SKU" : "SKUs")}
           <span className="mx-1.5 text-border-strong">|</span><strong className="text-foreground tabular-nums">{totalOnHand}</strong> units on hand
         </p>
@@ -479,8 +479,8 @@ function TasksStep({ countType, items, checked, readOnly, onType, onCheck, onRem
         )}
       </div>
       <div className="ks-scroll max-h-[52vh] overflow-auto rounded-lg border border-border">
-        <table className="w-full border-collapse text-[13px]">
-          <thead className="sticky top-0 bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+        <table className="w-full border-collapse text-sm">
+          <thead className="sticky top-0 bg-surface-sunken text-left text-2xs font-semibold text-faint">
             <tr>
               {readOnly ? null : <th scope="col" className="w-10 px-3 py-2"><input type="checkbox" aria-label="Select all" checked={allChecked} onChange={() => onCheck(allChecked ? new Set() : new Set(items.map((i) => i.id)))} className="accent-[var(--color-primary)]" /></th>}
               <th scope="col" className="px-3 py-2">{loc ? "Location" : lp ? "LP Number" : "Product Code"}</th>
@@ -492,14 +492,14 @@ function TasksStep({ countType, items, checked, readOnly, onType, onCheck, onRem
           <tbody>
             {items.length === 0 ? (
               <tr><td colSpan={5} className="px-3 py-10 text-center">
-                <p className="text-[13px] font-semibold text-foreground">No {NOUN[countType][1]} yet</p>
-                <p className="mt-0.5 text-[12px] text-secondary">{readOnly ? "This plan has no lines." : `Use Add to pick the ${loc ? "locations" : lp ? "license plates" : "SKUs"} to count. Save unlocks once the plan has at least one.`}</p>
+                <p className="text-sm font-semibold text-foreground">No {NOUN[countType][1]} yet</p>
+                <p className="mt-0.5 text-xs text-secondary">{readOnly ? "This plan has no lines." : `Use Add to pick the ${loc ? "locations" : lp ? "license plates" : "SKUs"} to count. Save unlocks once the plan has at least one.`}</p>
               </td></tr>
             ) : items.map((i) => (
               <tr key={i.id} className={cn("border-t border-border", checked.has(i.id) && "bg-primary-soft/60")} onClick={readOnly ? undefined : () => toggle(i.id)}>
                 {readOnly ? null : <td className="px-3 py-1.5"><input type="checkbox" aria-label={`Select ${i.label}`} checked={checked.has(i.id)} onChange={() => toggle(i.id)} onClick={(e) => e.stopPropagation()} className="accent-[var(--color-primary)]" /></td>}
                 <td className="px-3 py-1.5 font-semibold text-foreground">
-                  <span className="flex items-center gap-1.5">{i.label}{taken?.get(i.label) ? <span className="inline-flex items-center rounded bg-danger-soft px-1.5 py-px text-[10px] font-semibold text-danger" title={`Already in open count plan ${taken.get(i.label)}`}>In {taken.get(i.label)}</span> : null}{i.reasons ? <span title={i.reasons.join(" · ") || "Suggested by AI Count Plan"} className="inline-flex items-center gap-0.5 rounded bg-primary-soft px-1.5 py-px text-[10px] font-semibold uppercase text-primary"><Sparkles className="h-2.5 w-2.5" aria-hidden />AI</span> : null}</span>
+                  <span className="flex items-center gap-1.5">{i.label}{taken?.get(i.label) ? <span className="inline-flex items-center rounded bg-danger-soft px-1.5 py-px text-2xs font-semibold text-danger" title={`Already in open count plan ${taken.get(i.label)}`}>In {taken.get(i.label)}</span> : null}{i.reasons ? <span title={i.reasons.join(" · ") || "Suggested by AI Count Plan"} className="inline-flex items-center gap-0.5 rounded bg-primary-soft px-1.5 py-px text-2xs font-semibold text-primary"><Sparkles className="h-2.5 w-2.5" aria-hidden />AI</span> : null}</span>
                 </td>
                 <td className="px-3 py-1.5 text-secondary">{i.sub1 ?? "—"}</td>
                 <td className="px-3 py-1.5 text-secondary">{i.sub2 ?? "—"}</td>
@@ -519,7 +519,7 @@ function AllocatedChip({ allocated, onHand }: { readonly allocated: number; read
   const full = allocated >= onHand;
   return (
     <span title={full ? `All ${onHand} units are allocated to orders. A shortage here posts only after unpicked orders are shorted; picked stock can't post.` : `${allocated} of ${onHand} units are allocated to orders`}
-      className={full ? "rounded bg-warning-soft px-1.5 py-px text-[10px] font-semibold uppercase text-warning" : "rounded bg-neutral-soft px-1.5 py-px text-[10px] font-semibold uppercase text-neutral"}>
+      className={full ? "rounded bg-warning-soft px-1.5 py-px text-2xs font-semibold text-warning" : "rounded bg-neutral-soft px-1.5 py-px text-2xs font-semibold text-neutral"}>
       {allocated} alloc.
     </span>
   );
@@ -561,7 +561,7 @@ function LocationPicker({ open, onOpenChange, warehouseId, exclude, onAdd, planI
   const extra = React.useMemo(() => ({ warehouseId, types: allTypes ? "all" : "storage", ...(planId ? { exceptPlanId: planId } : {}) }), [warehouseId, allTypes, planId]);
   return (
     <CountPickerModal<PickLocation>
-      headerExtra={<label className="flex items-center gap-2 px-2 pb-1 text-[12px] text-secondary"><input type="checkbox" checked={allTypes} onChange={(e) => setAllTypes(e.target.checked)} className="accent-[var(--color-primary)]" />Include station and virtual locations (not counted by default)</label>}
+      headerExtra={<label className="flex items-center gap-2 px-2 pb-1 text-xs text-secondary"><input type="checkbox" checked={allTypes} onChange={(e) => setAllTypes(e.target.checked)} className="accent-[var(--color-primary)]" />Include station and virtual locations (not counted by default)</label>}
       open={open} onOpenChange={onOpenChange} title="Add Location" description="Pick the locations to count. Locations already in this plan or in another open count are greyed out."
       gridKey="count-pick-locations" path="/api/counts/pickers/locations" extraQuery={extra} columns={locationColumns} fields={fields}
       getRowId={(r) => r.id} excludeIds={exclude} isBlocked={inOpenCount} blockedNote={blockedNote} confirmLabel="Add" searchPlaceholder="Search location code or barcode" onConfirm={onAdd}

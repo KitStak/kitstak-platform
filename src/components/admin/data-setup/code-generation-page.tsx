@@ -49,8 +49,8 @@ function SequenceCard({ row, canEdit, onLog }: { readonly row: SequenceRow; read
     <section className="rounded-xl border border-border bg-surface p-4 shadow-xs">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
-          <h2 className="text-[14px] font-semibold text-foreground">{row.label}</h2>
-          <p className="text-[12px] text-secondary">Next code today: <code className="font-mono text-foreground">{row.autoGenerate ? row.nextCode : "entered manually"}</code></p>
+          <h2 className="text-base font-semibold text-foreground">{row.label}</h2>
+          <p className="text-xs text-secondary">Next code today: <code className="font-mono text-foreground">{row.autoGenerate ? row.nextCode : "entered manually"}</code></p>
         </div>
         <Button size="sm" variant="ghost" onClick={onLog}><History className="h-3.5 w-3.5" aria-hidden />Change log</Button>
       </div>
@@ -79,9 +79,9 @@ function SequenceCard({ row, canEdit, onLog }: { readonly row: SequenceRow; read
           </FormGrid>
         ) : null}
         <div className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-sunken px-3 py-2" aria-live="polite">
-          <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-faint">Preview</span>
-          {auto ? [0, 1, 2].map((i) => <code key={i} className="rounded-md border border-border bg-surface px-2 py-0.5 font-mono text-[13px] text-foreground">{sequencePreview(prefix, next + i, pad)}</code>)
-            : <span className="text-[12.5px] text-secondary">The {row.entity} form asks for a code, and duplicates are rejected.</span>}
+          <span className="text-2xs font-bold text-faint">Preview</span>
+          {auto ? [0, 1, 2].map((i) => <code key={i} className="rounded-md border border-border bg-surface px-2 py-0.5 font-mono text-sm text-foreground">{sequencePreview(prefix, next + i, pad)}</code>)
+            : <span className="text-xs text-secondary">The {row.entity} form asks for a code, and duplicates are rejected.</span>}
         </div>
         {canEdit ? <SubmitBar submitLabel="Save" cancelLabel="Reset" requireDirty onCancel={() => form.reset(initial)} /> : null}
       </Form>

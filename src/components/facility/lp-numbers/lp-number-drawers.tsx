@@ -136,8 +136,8 @@ export function CreateLpNumberDrawer({ open, onOpenChange, defaultWarehouseId, o
           )}
           {preview.length ? (
             <div className="rounded-lg border border-border bg-surface-sunken/50 px-3 py-2.5">
-              <p className="text-[11px] text-faint">{sscc ? "SSCC18 numbers start with" : count > 3 ? `First 3 of ${count}` : "Will create"}</p>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">{preview.map((n) => <code key={n} className="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[12px]">{n}</code>)}</div>
+              <p className="text-2xs text-faint">{sscc ? "SSCC18 numbers start with" : count > 3 ? `First 3 of ${count}` : "Will create"}</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">{preview.map((n) => <code key={n} className="rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs">{n}</code>)}</div>
             </div>
           ) : null}
         </div>
@@ -171,10 +171,10 @@ function EditForm({ detail, onDone, onCancel, onDirty }: { readonly detail: LpDe
     <Form form={form} onSubmit={submit} id="lp-edit-form" className="flex flex-col gap-5">
       {conflict ? <Callout variant="attention" title="This record changed since you opened it" action={<Button size="sm" onClick={() => window.location.reload()}>Reload</Button>}>Someone else saved this LP. Reload to see their changes.</Callout> : null}
       <FormSection title="Locked" description="Set when the LP was created.">
-        <dl className="grid grid-cols-3 gap-3 text-[13px]">
-          <div><dt className="text-[11px] text-faint">Warehouse</dt><dd>{detail.warehouseCode}</dd></div>
-          <div><dt className="text-[11px] text-faint">LP type</dt><dd>{detail.lpTypeCode}</dd></div>
-          <div><dt className="text-[11px] text-faint">Location</dt><dd>{detail.locationCode ?? "—"}</dd></div>
+        <dl className="grid grid-cols-3 gap-3 text-sm">
+          <div><dt className="text-2xs text-faint">Warehouse</dt><dd>{detail.warehouseCode}</dd></div>
+          <div><dt className="text-2xs text-faint">LP type</dt><dd>{detail.lpTypeCode}</dd></div>
+          <div><dt className="text-2xs text-faint">Location</dt><dd>{detail.locationCode ?? "—"}</dd></div>
         </dl>
       </FormSection>
       <FormSection title="Number">

@@ -90,14 +90,14 @@ function jobLinks(codes: string | null, refs: string | null | undefined) {
         <Popover>
           <PopoverTrigger asChild>
             <button type="button" onClick={(e) => e.stopPropagation()} aria-label={`Show all ${parsed.length} jobs`}
-              className="shrink-0 rounded-full border border-border bg-surface-sunken px-1.5 text-[11px] font-semibold leading-[18px] text-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+              className="shrink-0 rounded-full border border-border bg-surface-sunken px-1.5 text-2xs font-semibold leading-[18px] text-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
               +{rest.length}
             </button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-56 p-2" onClick={(e) => e.stopPropagation()}>
-            <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{parsed.length} jobs</p>
+            <p className="px-1 pb-1 text-2xs font-semibold text-faint">{parsed.length} jobs</p>
             <ul className="ks-scroll flex max-h-60 flex-col gap-1 overflow-auto">
-              {parsed.map((j) => <li key={j.id} className="px-1 text-[13px]"><JobLink id={j.id} code={j.code} /></li>)}
+              {parsed.map((j) => <li key={j.id} className="px-1 text-sm"><JobLink id={j.id} code={j.code} /></li>)}
             </ul>
           </PopoverContent>
         </Popover>
@@ -141,7 +141,7 @@ export function buildPlanColumns(): ColumnDef<CountPlanRow, unknown>[] {
           <span className="flex w-full items-center justify-end gap-1.5 tabular-nums">
             {cancelled > 0 ? (
               <Tooltip content={`${cancelled} cancelled ${cancelled === 1 ? "line is" : "lines are"} not counted and not included. Location Details lists them with status Cancelled.`}>
-                <span tabIndex={0} className="rounded bg-surface-sunken px-1 text-[11px] text-faint" data-testid="cancelled-lines">+{cancelled} cancelled</span>
+                <span tabIndex={0} className="rounded bg-surface-sunken px-1 text-2xs text-faint" data-testid="cancelled-lines">+{cancelled} cancelled</span>
               </Tooltip>
             ) : null}
             <span>{row.original.locationCount}</span>
@@ -185,7 +185,7 @@ const lineCommon = (kind: "locations" | "skus" | "plan"): ColSpec<CountLineRow>[
     id: "jobCode", label: "Job Code", width: 184,
     cell: ({ row }) => (!row.original.jobId || !row.original.jobCode ? dash
       : row.original.orphaned
-        ? <Tooltip content="This count job was cancelled, so the line has no count task. Re-create the job from the count plan, or cancel the line."><span tabIndex={0} className="flex min-w-0 items-center gap-1.5"><span className="truncate text-faint line-through">{row.original.jobCode}</span><span className="shrink-0 rounded bg-danger-soft px-1 text-[10px] font-semibold uppercase text-danger">Cancelled</span></span></Tooltip>
+        ? <Tooltip content="This count job was cancelled, so the line has no count task. Re-create the job from the count plan, or cancel the line."><span tabIndex={0} className="flex min-w-0 items-center gap-1.5"><span className="truncate text-faint line-through">{row.original.jobCode}</span><span className="shrink-0 rounded bg-danger-soft px-1 text-2xs font-semibold text-danger">Cancelled</span></span></Tooltip>
         : <JobLink id={row.original.jobId} code={row.original.jobCode} />),
   },
   { id: "planCode", label: "Count Code", width: 170, hidden: kind === "plan", cell: ({ row }) => <LinkCell href={`/counts/${encodeURIComponent(row.original.planCode)}`}>{row.original.planCode}</LinkCell> },
@@ -213,7 +213,7 @@ function SkuListCell({ list, name }: { readonly list: string | null; readonly na
     <Tooltip content={<span className="block max-w-[280px] whitespace-normal">{skus.join(", ")}</span>}>
       <span className="flex min-w-0 items-center gap-1.5" tabIndex={0} aria-label={`${skus.length} SKUs: ${skus.join(", ")}`}>
         <span className="truncate font-medium text-foreground">{shown}</span>
-        {rest > 0 ? <span className="shrink-0 rounded-full border border-border bg-surface-sunken px-1.5 text-[11px] font-semibold leading-[18px] text-secondary">+{rest}</span> : null}
+        {rest > 0 ? <span className="shrink-0 rounded-full border border-border bg-surface-sunken px-1.5 text-2xs font-semibold leading-[18px] text-secondary">+{rest}</span> : null}
       </span>
     </Tooltip>
   );
@@ -226,7 +226,7 @@ function ApprovedQtyCell({ status, value }: { readonly status: string; readonly 
   return (
     <Tooltip content={value != null ? `${superseded.reason} The superseded value was ${value}.` : superseded.reason}>
       <span tabIndex={0} className="flex w-full items-center justify-end gap-1.5" data-testid="approved-superseded" aria-label={`${superseded.tag}: not approved`}>
-        <span className="shrink-0 rounded bg-surface-sunken px-1 text-[10px] font-semibold uppercase tracking-[0.04em] text-faint">{superseded.tag}</span>
+        <span className="shrink-0 rounded bg-surface-sunken px-1 text-2xs font-semibold text-faint">{superseded.tag}</span>
         <span className="text-faint">—</span>
       </span>
     </Tooltip>
@@ -246,7 +246,7 @@ const tailCols = (kind: "locations" | "skus" | "plan"): ColSpec<CountLineRow>[] 
   {
     id: "isRecountLine", label: "Recount Line", width: 150,
     cell: ({ row }) => (row.original.isRecountLine
-      ? <Tooltip content={row.original.recountOfJobCode ? `Recount of the line counted in ${row.original.recountOfJobCode}` : "Recount line"}><span tabIndex={0} className="inline-flex items-center gap-1.5"><span className="font-semibold text-foreground">Yes</span>{row.original.recountOfJobCode ? <span className="truncate text-[11px] text-secondary">of {row.original.recountOfJobCode}</span> : null}</span></Tooltip>
+      ? <Tooltip content={row.original.recountOfJobCode ? `Recount of the line counted in ${row.original.recountOfJobCode}` : "Recount line"}><span tabIndex={0} className="inline-flex items-center gap-1.5"><span className="font-semibold text-foreground">Yes</span>{row.original.recountOfJobCode ? <span className="truncate text-2xs text-secondary">of {row.original.recountOfJobCode}</span> : null}</span></Tooltip>
       : <span className="text-faint">No</span>),
   },
   {

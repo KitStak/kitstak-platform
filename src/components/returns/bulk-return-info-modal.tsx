@@ -86,7 +86,7 @@ export function BulkReturnInfoModal({ open, onOpenChange, ids, onDone }: {
               <div key={f.key} className="grid grid-cols-[20px_minmax(0,1fr)] items-start gap-2">
                 <Checkbox className="mt-6" aria-label={`Update ${f.label.toLowerCase()}`} checked={Boolean(on[f.key])} onCheckedChange={(c) => setOn((p) => ({ ...p, [f.key]: c === true }))} />
                 <label htmlFor={id} className="block min-w-0">
-                  <span className="mb-1 block text-[12px] font-medium text-body">{f.label}</span>
+                  <span className="mb-1 block text-xs font-medium text-body">{f.label}</span>
                   {f.key === "expectedReturnDate" ? (
                     <DatePicker id={id} value={values.expectedReturnDate ? new Date(`${values.expectedReturnDate}T00:00:00`) : null} onChange={(d) => set("expectedReturnDate", toIsoDate(d))} clearable aria-label={f.label} />
                   ) : f.key === "note" ? (
@@ -98,7 +98,7 @@ export function BulkReturnInfoModal({ open, onOpenChange, ids, onDone }: {
               </div>
             );
           })}
-          {error ? <p role="alert" className="text-[12px] text-danger">{error}</p> : null}
+          {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>

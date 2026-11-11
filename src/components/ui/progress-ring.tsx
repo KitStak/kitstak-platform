@@ -30,7 +30,7 @@ export function ProgressRing({ value, max = 100, size = 64, thickness = 6, tone 
   const offset = circumference * (1 - pct / 100);
   const content =
     center === "percent" ? (
-      <span className="text-[13px] font-semibold tabular-nums text-foreground" style={{ fontSize: Math.max(11, size * 0.22) }}>
+      <span className="text-sm font-semibold tabular-nums text-foreground" style={{ fontSize: Math.max(11, size * 0.22) }}>
         {Math.round(pct)}%
       </span>
     ) : center === "truck" ? (

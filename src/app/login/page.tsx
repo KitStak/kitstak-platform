@@ -74,7 +74,7 @@ export default function LoginPage() {
             <br />
             <span style={{ color: BRAND_COLORS.crimson }}>running on rails.</span>
           </h2>
-          <p className="mt-5 text-[15px] leading-relaxed text-white/70">
+          <p className="mt-5 text-base leading-relaxed text-white/70">
             Orders, inventory, receiving and labor — one operations platform built for
             high-volume 3PL warehouses. Synchronized across every channel, from order
             creation to the loading dock.
@@ -84,7 +84,7 @@ export default function LoginPage() {
             {CAPABILITIES.map((stat) => (
               <li
                 key={stat.label}
-                className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[12px] font-medium text-white/90 backdrop-blur-sm"
+                className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/90 backdrop-blur-sm"
               >
                 {stat.icon}
                 {stat.label}
@@ -93,7 +93,7 @@ export default function LoginPage() {
           </ul>
         </div>
 
-        <p className="relative text-[12px] text-white/40">
+        <p className="relative text-xs text-white/40">
           © {COPYRIGHT_YEAR} {BRAND_NAME}
         </p>
       </aside>

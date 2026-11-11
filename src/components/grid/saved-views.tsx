@@ -85,19 +85,19 @@ function SaveViewDialog({ open, onOpenChange, api, query, activeViewId }: { read
               ]}
             />
             {mode === "new" ? (
-              <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-secondary">
                 <span>
                   View name <span className="text-danger">*</span>
                 </span>
                 <TextField autoFocus value={name} maxLength={SAVED_VIEW_NAME_MAX} showCount onChange={(e) => setName(e.target.value)} onBlur={() => setTouched(true)} invalid={touched && Boolean(nameError)} aria-describedby="save-view-name-error" />
                 {touched && nameError ? (
-                  <span id="save-view-name-error" className="text-[11px] font-medium text-danger">
+                  <span id="save-view-name-error" className="text-2xs font-medium text-danger">
                     {nameError}
                   </span>
                 ) : null}
               </label>
             ) : (
-              <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+              <label className="flex flex-col gap-1 text-xs font-semibold text-secondary">
                 View to overwrite
                 <Select options={ownViews.map((v) => ({ value: v.id, label: v.name }))} value={targetId} onChange={setTargetId} placeholder="Choose a view" aria-label="View to overwrite" />
               </label>
@@ -158,7 +158,7 @@ export function SavedViews({ api, query, activeViewId, onApply }: SavedViewsProp
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>Saved views</DropdownMenuLabel>
-          {api.views.length === 0 ? <p className="px-3 py-2 text-[12px] text-faint">No saved views yet</p> : null}
+          {api.views.length === 0 ? <p className="px-3 py-2 text-xs text-faint">No saved views yet</p> : null}
           {api.views.map((v) => (
             <DropdownMenuItem key={v.id} icon={v.id === activeViewId ? Check : undefined} onSelect={() => onApply(v)} description={[v.isDefault ? "Default" : null, v.isShared ? "Shared" : null].filter(Boolean).join(" · ") || undefined}>
               {v.name}

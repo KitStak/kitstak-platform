@@ -77,27 +77,27 @@ export function ExportHistoryButton({ gridKey }: { readonly gridKey: string }) {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[340px] p-0">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <p className="text-[13px] font-semibold text-foreground">Excel export history</p>
+          <p className="text-sm font-semibold text-foreground">Excel export history</p>
           <Button variant="ghost" size="sm" disabled={finished.length === 0} title={finished.length === 0 ? "No finished exports to clear" : undefined} onClick={clearCompleted} data-testid="export-history-clear">
             Clear completed
           </Button>
         </div>
-        {q.isLoading ? <p className="px-3 py-4 text-[12px] text-secondary">Loading exports…</p> : tasks.length === 0 ? (
-          <p className="px-3 py-4 text-[12px] text-secondary">No exports of this grid yet. Use Export As Excel to create one; files stay here for download.</p>
+        {q.isLoading ? <p className="px-3 py-4 text-xs text-secondary">Loading exports…</p> : tasks.length === 0 ? (
+          <p className="px-3 py-4 text-xs text-secondary">No exports of this grid yet. Use Export As Excel to create one; files stay here for download.</p>
         ) : (
           <ul className="max-h-[320px] divide-y divide-border overflow-y-auto" data-testid="export-history-list">
             {tasks.map((t) => (
               <li key={t.id} className="flex flex-col gap-1 px-3 py-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-[13px] font-medium text-foreground">{t.title}</p>
-                    <p className="text-[11px] text-faint">{format.dateTime(t.createdAt)}{t.rowCount !== null ? ` · ${t.rowCount} rows` : ""}{!isFinishedExport(t) ? ` · ${t.progress}%` : ""}</p>
+                    <p className="truncate text-sm font-medium text-foreground">{t.title}</p>
+                    <p className="text-2xs text-faint">{format.dateTime(t.createdAt)}{t.rowCount !== null ? ` · ${t.rowCount} rows` : ""}{!isFinishedExport(t) ? ` · ${t.progress}%` : ""}</p>
                   </div>
                   <StatusPill status={STATUS_LABEL[t.status]} domain="export" size="sm" />
                 </div>
-                {t.status === "error" && t.errorMessage ? <p className="text-[11px] text-danger">{t.errorMessage}</p> : null}
+                {t.status === "error" && t.errorMessage ? <p className="text-2xs text-danger">{t.errorMessage}</p> : null}
                 {t.status === "completed" && t.fileId ? (
-                  <a href={`/api/files/${t.fileId}?download=1`} className="inline-flex w-fit items-center gap-1 text-[12px] font-semibold text-primary hover:underline">
+                  <a href={`/api/files/${t.fileId}?download=1`} className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-primary hover:underline">
                     <Download className="h-3 w-3" aria-hidden />{t.fileName ?? "Download"}
                   </a>
                 ) : null}
@@ -105,7 +105,7 @@ export function ExportHistoryButton({ gridKey }: { readonly gridKey: string }) {
             ))}
           </ul>
         )}
-        <div className="border-t border-border px-3 py-2 text-[11px] text-secondary">
+        <div className="border-t border-border px-3 py-2 text-2xs text-secondary">
           Cleared exports stay in <Link href="/reports/export-history" className="font-semibold text-primary hover:underline">Reports → Excel export history</Link>.
         </div>
       </PopoverContent>

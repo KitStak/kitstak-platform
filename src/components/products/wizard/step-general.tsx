@@ -196,10 +196,10 @@ function ClientField({ onValue }: { readonly onValue: () => void }) {
         )}
       </FormField>
       {optionsError ? (
-        <p role="alert" className="flex items-center gap-2 text-[12px] text-danger">
+        <p role="alert" className="flex items-center gap-2 text-xs text-danger">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
           Could not load clients and lookups.
-          <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[12px]" onClick={refetchOptions}><RotateCw className="h-3 w-3" aria-hidden />Retry</Button>
+          <Button size="sm" variant="ghost" className="h-6 px-1.5 text-xs" onClick={refetchOptions}><RotateCw className="h-3 w-3" aria-hidden />Retry</Button>
         </p>
       ) : null}
     </div>
@@ -227,7 +227,7 @@ export function StepGeneral() {
               onChange={(v) => form.setValue("kitType", v, { shouldDirty: true })}
               options={KIT_TYPES.map((k) => ({ value: k, label: k }))}
             />
-            <p className="text-[12px] text-secondary">
+            <p className="text-xs text-secondary">
               {kitType === "Kit to Stock" ? "Assembled ahead of demand through work orders and stocked as its own SKU." : "Assembled per order from its components at pick time."}
             </p>
           </div>
@@ -236,7 +236,7 @@ export function StepGeneral() {
       {mode === "edit" ? (
         <div className="flex flex-col gap-1.5">
           <FieldLabel>Client</FieldLabel>
-          <div className="flex h-8 items-center gap-2 rounded-md border border-border bg-surface-sunken px-2.5 text-[13px] text-body" title="The client cannot be changed after creation">
+          <div className="flex h-8 items-center gap-2 rounded-md border border-border bg-surface-sunken px-2.5 text-sm text-body" title="The client cannot be changed after creation">
             <Lock className="h-3.5 w-3.5 text-faint" aria-hidden />
             {clientName}
           </div>

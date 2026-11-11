@@ -161,7 +161,7 @@ export function GeneralStep({ form, options, loading, optionsLoading = loading }
               {(c) => <SegmentedControl ariaLabel="Priority" value={((c.value as string | undefined) ?? "None") as (typeof WAVE_PRIORITIES)[number]} onChange={(v) => c.onChange(v)} options={WAVE_PRIORITIES.map((p) => ({ value: p, label: p }))} />}
             </FormField>
             <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface-sunken/40 p-3">
-              <p className="text-[12px] text-secondary">Automate deletion of pending jobs based on a set frequency.</p>
+              <p className="text-xs text-secondary">Automate deletion of pending jobs based on a set frequency.</p>
               <div className="grid gap-4 md:grid-cols-3">
                 <FormField<F> name="deleteIfNotStarted" label="Delete the jobs if not started">
                   {(c) => <YesNoToggle id={c.id} value={Boolean(c.value)} onChange={(v) => { c.onChange(v); if (!v) { form.setValue("deleteMethod", "None", { shouldDirty: true }); form.setValue("deleteTime", null, { shouldDirty: true }); } }} ariaLabel="Delete the jobs if not started" />}
@@ -187,11 +187,11 @@ export function GeneralStep({ form, options, loading, optionsLoading = loading }
       {op === "Order Merge" ? (
         <FormSection title="Order merge rules" description="Select at least one rule. Drag and reorder the execution sequence.">
           {!warehouseId ? (
-            <p className="text-[12px] text-faint">Fill in the information above to list order merge rules.</p>
+            <p className="text-xs text-faint">Fill in the information above to list order merge rules.</p>
           ) : optionsLoading ? (
             <div className="h-10 animate-pulse rounded-md bg-surface-sunken" aria-busy="true" aria-label="Loading order merge rules" />
           ) : (options?.mergeRules ?? []).length === 0 ? (
-            <p className="text-[12px] text-faint">No order merge rules found for the selected warehouse. Add them in Settings → Data setup → Order merge rule.</p>
+            <p className="text-xs text-faint">No order merge rules found for the selected warehouse. Add them in Settings → Data setup → Order merge rule.</p>
           ) : (
             <CheckableOrderList ariaLabel="Order merge rules" invalid={Boolean(mergeError)} items={(options?.mergeRules ?? []).map((m) => ({ id: m.value, label: m.label }))} selected={form.watch("mergeRuleIds") ?? []} onChange={(ids) => form.setValue("mergeRuleIds", ids, { shouldDirty: true, shouldValidate: form.formState.isSubmitted })} />
           )}
@@ -208,13 +208,13 @@ export function GeneralStep({ form, options, loading, optionsLoading = loading }
             className={cn("rounded-lg transition-colors", showTypeError ? "border border-danger bg-danger-soft/40 p-2" : "")}
           >
           {!warehouseId ? (
-            <p className={cn("text-[12px]", showTypeError ? "text-danger" : "text-faint")}>Fill in the information above to list job types.</p>
+            <p className={cn("text-xs", showTypeError ? "text-danger" : "text-faint")}>Fill in the information above to list job types.</p>
           ) : optionsLoading ? (
             <div className="flex flex-col gap-2" aria-busy="true" aria-label="Loading job types">
               {[0, 1, 2].map((i) => <div key={i} className="h-10 animate-pulse rounded-md bg-surface-sunken" />)}
             </div>
           ) : jobTypes.length === 0 ? (
-            <p className="text-[12px] text-faint">
+            <p className="text-xs text-faint">
               You don&apos;t have any {wantOp?.toLowerCase()} job type in this warehouse. <Link className="text-primary hover:underline" href="/settings/job-types">Create a job type</Link>.
             </p>
           ) : (
@@ -223,7 +223,7 @@ export function GeneralStep({ form, options, loading, optionsLoading = loading }
           </div>
           {showTypeError ? <p id="wr-job-types-error" className={errorTextClass} role="alert">{typeError ?? "Select at least one job type"}</p> : null}
           {jobTypes.length > 0 ? (
-            <p className="text-[12px] text-faint">
+            <p className="text-xs text-faint">
               Need another one? <Link className="text-primary hover:underline" href="/settings/job-types" target="_blank" rel="noopener">Create job type</Link> opens in a new tab; reopen this step to see it.
             </p>
           ) : null}
@@ -294,7 +294,7 @@ function SetTimePopover({ disabled, onAdd }: { readonly disabled: boolean; reado
         <div className="mt-3 flex flex-col gap-2">
           {tab === "specific" ? (
             <>
-              <p className="text-[12px] text-secondary">Enter the specific time at which the job will repeat.</p>
+              <p className="text-xs text-secondary">Enter the specific time at which the job will repeat.</p>
               <TimePicker value={time} onChange={setTime} aria-label="Specific time" invalid={Boolean(specificError)} />
               {specificError ? <p className={errorTextClass}>{specificError}</p> : null}
             </>
@@ -302,16 +302,16 @@ function SetTimePopover({ disabled, onAdd }: { readonly disabled: boolean; reado
             <>
               <label className={labelClass} htmlFor="wr-every">Repeat every (minutes)</label>
               <NumberInput id="wr-every" value={every} onChange={setEvery} invalid={Boolean(everyError)} aria-invalid={Boolean(everyError)} aria-describedby="wr-every-hint" />
-              <p id="wr-every-hint" className={everyError ? errorTextClass : "text-[11px] text-faint"} role={everyError ? "alert" : undefined}>
+              <p id="wr-every-hint" className={everyError ? errorTextClass : "text-2xs text-faint"} role={everyError ? "alert" : undefined}>
                 {everyError ?? `Between ${MIN_REPEAT_MINUTES} and ${MAX_REPEAT_MINUTES} minutes.`}
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <div className="flex flex-col gap-1"><span className={labelClass}>From</span><TimePicker value={from} onChange={setFrom} aria-label="From" /></div>
                 <div className="flex flex-col gap-1"><span className={labelClass}>To</span><TimePicker value={to} onChange={setTo} aria-label="To" /></div>
               </div>
-              {everyError ? null : periodError ? <p className={errorTextClass}>{periodError}</p> : <p className="text-[11px] text-faint">{generated.length} start times: {generated.slice(0, 4).join(", ")}{generated.length > 4 ? "…" : ""}</p>}
+              {everyError ? null : periodError ? <p className={errorTextClass}>{periodError}</p> : <p className="text-2xs text-faint">{generated.length} start times: {generated.slice(0, 4).join(", ")}{generated.length > 4 ? "…" : ""}</p>}
               {highFrequency ? (
-                <p className="rounded-md bg-warning-soft px-2 py-1.5 text-[11px] leading-4 text-[#8A5300]" role="status">
+                <p className="rounded-md bg-warning-soft px-2 py-1.5 text-2xs leading-4 text-[#8A5300]" role="status">
                   {generated.length} runs a day. Every run selects orders, allocates stock and creates jobs; check this is intended.
                 </p>
               ) : null}
@@ -361,7 +361,7 @@ export function ScheduleStep({ form, timezone }: { readonly form: Form; readonly
           {WEEKDAYS.map((d) => {
             const on = days.includes(d);
             return (
-              <button key={d} type="button" aria-pressed={on} onClick={() => toggleDay(d)} className={cn("inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", on ? "border-[#17874D] bg-[#D3F0E3] text-success" : "border-border bg-surface-sunken text-secondary hover:border-border-strong")}>
+              <button key={d} type="button" aria-pressed={on} onClick={() => toggleDay(d)} className={cn("inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", on ? "border-[var(--success-text)] bg-[var(--label-green-subtle)] text-success" : "border-border bg-surface-sunken text-secondary hover:border-border-strong")}>
                 {DAY_LABELS[d]}
                 {on ? <X className="h-3 w-3" aria-hidden /> : <Plus className="h-3 w-3" aria-hidden />}
               </button>
@@ -374,7 +374,7 @@ export function ScheduleStep({ form, timezone }: { readonly form: Form; readonly
         description={`Select the times you would like this rule set to run on scheduled days (${timezone}).`}
         action={
           <span className="flex items-center gap-2">
-            <span className={cn("whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-semibold", times.length > HIGH_FREQUENCY_RUNS ? "bg-warning-soft text-[#8A5300]" : "bg-primary-soft text-primary")} title={times.length > HIGH_FREQUENCY_RUNS ? "High frequency: every run allocates stock and creates jobs" : undefined}>{times.length} daily frequency</span>
+            <span className={cn("whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold", times.length > HIGH_FREQUENCY_RUNS ? "bg-warning-soft text-[#8A5300]" : "bg-primary-soft text-primary")} title={times.length > HIGH_FREQUENCY_RUNS ? "High frequency: every run allocates stock and creates jobs" : undefined}>{times.length} daily frequency</span>
             <Button variant="secondary" size="sm" disabled={picked.size === 0} onClick={() => { setTimes(times.filter((t) => !picked.has(t))); setPicked(new Set()); }}>
               <Trash2 className="h-3.5 w-3.5" aria-hidden />
               Remove
@@ -384,17 +384,17 @@ export function ScheduleStep({ form, timezone }: { readonly form: Form; readonly
         }
       >
         <div className={cn("overflow-hidden rounded-lg border", timeError ? "border-danger" : "border-border")}>
-          <table className="w-full border-collapse text-left text-[13px]">
+          <table className="w-full border-collapse text-left text-sm">
             <thead className="bg-surface-sunken">
               <tr>
                 <th className="w-10 px-3 py-2"><Checkbox aria-label="Select all times" checked={times.length > 0 && picked.size === times.length ? true : picked.size > 0 ? "indeterminate" : false} onCheckedChange={(c) => setPicked(c === true ? new Set(times) : new Set())} /></th>
-                <th className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">No</th>
-                <th className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">Start time</th>
+                <th className="px-3 py-2 text-2xs font-semibold text-faint">No</th>
+                <th className="px-3 py-2 text-2xs font-semibold text-faint">Start time</th>
               </tr>
             </thead>
             <tbody>
               {times.length === 0 ? (
-                <tr><td colSpan={3} className="px-3 py-6 text-center text-[12px] text-faint">{days.length === 0 ? "Pick at least one day, then set times." : "No repeat time has been selected yet."}</td></tr>
+                <tr><td colSpan={3} className="px-3 py-6 text-center text-xs text-faint">{days.length === 0 ? "Pick at least one day, then set times." : "No repeat time has been selected yet."}</td></tr>
               ) : times.map((t, i) => (
                 <tr key={t} className="border-t border-border">
                   <td className="px-3 py-1.5"><Checkbox aria-label={`Select ${t}`} checked={picked.has(t)} onCheckedChange={(c) => setPicked((p) => { const n = new Set(p); if (c === true) n.add(t); else n.delete(t); return n; })} /></td>
@@ -406,7 +406,7 @@ export function ScheduleStep({ form, timezone }: { readonly form: Form; readonly
           </table>
         </div>
         {timeError ? <p className={errorTextClass} role="alert">{timeError}</p> : null}
-        <p className="text-[12px] text-secondary">
+        <p className="text-xs text-secondary">
           {next ? <>Next run <span className="font-semibold text-foreground">{next.toLocaleString("en-US", { timeZone: timezone, weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}</span> · in <span className="font-mono tabular-nums">{formatWaveCountdown(next.getTime() - (now ?? 0))}</span></> : days.length > 0 ? "Set at least one start time for the selected days." : "Not scheduled: the rule runs only when you press Run."}
         </p>
       </FormSection>
@@ -423,22 +423,22 @@ function ToggleGrid<T extends { readonly id: string }>({ rows, columns, selected
     <div className="flex flex-col gap-2">
       <TextField size="sm" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter" aria-label="Filter" leading={<Search className="h-3.5 w-3.5" aria-hidden />} />
       <div className="ks-scroll max-h-[320px] overflow-auto rounded-lg border border-border">
-        <table className="w-full border-collapse text-left text-[13px]">
+        <table className="w-full border-collapse text-left text-sm">
           <thead className="sticky top-0 bg-surface-sunken">
             <tr>
-              {columns.map((c) => <th key={c.label} className="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{c.label}</th>)}
-              <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">Assigned</th>
+              {columns.map((c) => <th key={c.label} className="px-3 py-2 text-2xs font-semibold text-faint">{c.label}</th>)}
+              <th className="px-3 py-2 text-right text-2xs font-semibold text-faint">Assigned</th>
             </tr>
           </thead>
           <tbody>
-            {shown.length === 0 ? <tr><td colSpan={columns.length + 1} className="px-3 py-6 text-center text-[12px] text-faint">{empty}</td></tr> : null}
+            {shown.length === 0 ? <tr><td colSpan={columns.length + 1} className="px-3 py-6 text-center text-xs text-faint">{empty}</td></tr> : null}
             {shown.map((r) => {
               const on = selected.includes(r.id);
               return (
                 <tr key={r.id} className="border-t border-border">
                   {columns.map((c) => <td key={c.label} className="px-3 py-1.5">{c.value(r)}</td>)}
                   <td className="px-3 py-1.5 text-right">
-                    <span className="inline-flex items-center gap-2 text-[12px] text-secondary">
+                    <span className="inline-flex items-center gap-2 text-xs text-secondary">
                       {on ? "Assigned" : "Unassigned"}
                       <Switch checked={on} onCheckedChange={(v) => onChange(v ? [...selected, r.id] : selected.filter((x) => x !== r.id))} aria-label={`Assign ${search(r)}`} />
                     </span>
@@ -477,7 +477,7 @@ export function AssignStep({ form, options }: { readonly form: Form; readonly op
   return (
     <div className="flex flex-col gap-4">
       {dropped > 0 ? (
-        <p className="rounded-md border border-[#F0D9A8] bg-[#FFF7E6] px-3 py-2 text-[12px] text-[#7A4B00] dark:border-[#5C4520] dark:bg-[#2A2112] dark:text-[#F3CF8C]" role="status">
+        <p className="rounded-md border border-[#F0D9A8] bg-[#FFF7E6] px-3 py-2 text-xs text-[#7A4B00] dark:border-[#5C4520] dark:bg-[#2A2112] dark:text-[#F3CF8C]" role="status">
           {dropped === 1 ? "1 previous assignee can't execute tasks in this warehouse and was removed." : `${dropped} previous assignees can't execute tasks in this warehouse and were removed.`} Save to apply.
         </p>
       ) : null}
@@ -513,9 +513,9 @@ export function AiJobGate() {
   return (
     <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border px-6 py-10 text-center">
       <span className="flex h-11 w-11 items-center justify-center rounded-full bg-primary-soft text-primary"><Sparkles className="h-5 w-5" aria-hidden /></span>
-      <p className="text-[14px] font-semibold text-foreground">AI Jobs is not active</p>
-      <p className="max-w-sm text-[13px] text-secondary">You don&apos;t have any job type selected for the AI feature. Activate the AI Jobs app to let AI waves optimize your picking jobs.</p>
-      <Link href="/settings/apps" className="text-[13px] font-semibold text-primary hover:underline">Go to Settings → Apps</Link>
+      <p className="text-base font-semibold text-foreground">AI Jobs is not active</p>
+      <p className="max-w-sm text-sm text-secondary">You don&apos;t have any job type selected for the AI feature. Activate the AI Jobs app to let AI waves optimize your picking jobs.</p>
+      <Link href="/settings/apps" className="text-sm font-semibold text-primary hover:underline">Go to Settings → Apps</Link>
     </div>
   );
 }

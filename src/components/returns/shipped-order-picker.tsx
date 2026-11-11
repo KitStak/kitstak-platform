@@ -135,7 +135,7 @@ function PickerBody({ onOpenChange, onPick, clientId, warehouseId, title = "Choo
         <DialogBody className="space-y-3">
           <TextField autoFocus aria-label="Search orders" placeholder="Order code, store order # or customer" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKeyDown}
             leading={<Search className="h-3.5 w-3.5 text-faint" aria-hidden />} onClear={text ? () => setText("") : undefined} />
-          {list.isPending && !list.error ? <div className="space-y-1.5" role="status" aria-live="polite" aria-label="Loading shipped orders">{slow ? <p className="text-[12px] text-secondary">Still loading. The server is slow; this stops after {PICKER_TIMEOUT_MS / 1000} seconds with a Retry.</p> : null}{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-12" />)}</div>
+          {list.isPending && !list.error ? <div className="space-y-1.5" role="status" aria-live="polite" aria-label="Loading shipped orders">{slow ? <p className="text-xs text-secondary">Still loading. The server is slow; this stops after {PICKER_TIMEOUT_MS / 1000} seconds with a Retry.</p> : null}{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-12" />)}</div>
             : list.error ? <Callout variant="error" title="Could not load orders" action={<Button size="sm" onClick={() => void list.refetch()}>Retry</Button>}>{list.error.message}</Callout>
             : rows.length === 0 ? <EmptyState compact icon={PackageSearch} title="No shipped orders match" description={q ? `Nothing shipped matches "${q}".` : "Orders show here once they ship."} />
             : (
@@ -145,17 +145,17 @@ function PickerBody({ onOpenChange, onPick, clientId, warehouseId, title = "Choo
                   return (
                     <li key={r.id} data-index={i} role="option" aria-selected={!done && i === active} aria-disabled={done || undefined} onMouseEnter={done ? undefined : () => setCursor({ q, index: i })} onClick={() => void choose(r)} onDoubleClick={() => void choose(r)}
                       title={done ? "Every shipped unit is already on a return" : undefined}
-                      className={cn("flex items-center gap-3 border-b border-border px-3 py-2 text-[13px] last:border-0", done ? "cursor-not-allowed opacity-55" : "cursor-pointer", !done && i === active ? "bg-primary-soft" : done ? "" : "hover:bg-surface-sunken")}>
+                      className={cn("flex items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-0", done ? "cursor-not-allowed opacity-55" : "cursor-pointer", !done && i === active ? "bg-primary-soft" : done ? "" : "hover:bg-surface-sunken")}>
                       <span className="w-[92px] shrink-0">
                         <span className="block font-semibold text-foreground">{r.code}</span>
-                        <span className="block text-[11px] text-secondary">{r.shippedAt ? fmt.date(r.shippedAt) : "—"}</span>
+                        <span className="block text-2xs text-secondary">{r.shippedAt ? fmt.date(r.shippedAt) : "—"}</span>
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{r.customerName}</span>
-                        <span className="block truncate text-[11px] text-secondary">{r.clientName}{r.storeOrderNumber ? ` · ${r.storeOrderNumber}` : ""}</span>
-                        {r.outboundLabelVoided ? <span className="mt-0.5 block text-[11px] font-medium text-warning" data-testid="picker-label-voided" title="Every outbound shipping label on this order was voided before it shipped. Check that the parcel really left the warehouse before authorising a return.">Outbound label voided: check the shipment</span> : null}
+                        <span className="block truncate text-2xs text-secondary">{r.clientName}{r.storeOrderNumber ? ` · ${r.storeOrderNumber}` : ""}</span>
+                        {r.outboundLabelVoided ? <span className="mt-0.5 block text-2xs font-medium text-warning" data-testid="picker-label-voided" title="Every outbound shipping label on this order was voided before it shipped. Check that the parcel really left the warehouse before authorising a return.">Outbound label voided: check the shipment</span> : null}
                       </span>
-                      <span className="w-28 shrink-0 text-right text-[12px] tabular-nums text-secondary">{done ? "All returned" : `${r.returnableUnits} of ${r.shippedUnits} returnable`}</span>
+                      <span className="w-28 shrink-0 text-right text-xs tabular-nums text-secondary">{done ? "All returned" : `${r.returnableUnits} of ${r.shippedUnits} returnable`}</span>
                       <StatusPill status={r.status} domain="shipmentOrder" size="sm" />
                     </li>
                   );
@@ -164,7 +164,7 @@ function PickerBody({ onOpenChange, onPick, clientId, warehouseId, title = "Choo
             )}
         </DialogBody>
         <DialogFooter>
-          <span className="mr-auto text-[12px] text-secondary">{list.isPending && !list.error ? "Loading…" : list.error ? "Not loaded" : rows.length === RESULT_LIMIT ? `Newest ${RESULT_LIMIT} shown. Search to narrow down.` : `${rows.length} order${rows.length === 1 ? "" : "s"}`}</span>
+          <span className="mr-auto text-xs text-secondary">{list.isPending && !list.error ? "Loading…" : list.error ? "Not loaded" : rows.length === RESULT_LIMIT ? `Newest ${RESULT_LIMIT} shown. Search to narrow down.` : `${rows.length} order${rows.length === 1 ? "" : "s"}`}</span>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
           {(() => {
             const reason = list.isPending && !list.error ? "Wait for the orders to load" : list.error ? "The orders could not be loaded. Retry first." : !chosen ? "Choose an order from the list" : null;

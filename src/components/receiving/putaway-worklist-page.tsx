@@ -95,28 +95,28 @@ function PutawayDialog({ row, onClose, onDone }: { readonly row: PutawayTaskRow 
         <DialogHeader title={row ? `Put away ${row.sku}` : "Put away"} description={row ? `${row.productName} · ${row.qty.toLocaleString()} ${row.packType} in ${row.fromLocationCode}${row.lotNumber ? ` · lot ${row.lotNumber}` : ""}${row.warehouseName ? ` · ${row.warehouseName}` : ""}` : undefined} />
         <DialogBody className="flex flex-col gap-4">
           {row?.blockedReason ? (
-            <p role="alert" className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-[12px] text-warning">
+            <p role="alert" className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-xs text-warning">
               <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /><span>{row.blockedReason}</span>
             </p>
           ) : null}
           <section aria-label="Suggested locations">
-            <p className="mb-1.5 text-[12px] font-semibold text-secondary">Suggested locations{header ? <span className="font-normal text-faint"> · {header}</span> : null}</p>
-            {row?.blockedReason ? <p className="text-[12px] text-secondary">Suggestions appear once the source location is unlocked.</p>
+            <p className="mb-1.5 text-xs font-semibold text-secondary">Suggested locations{header ? <span className="font-normal text-faint"> · {header}</span> : null}</p>
+            {row?.blockedReason ? <p className="text-xs text-secondary">Suggestions appear once the source location is unlocked.</p>
               : suggest.isPending ? <Skeleton className="h-8 w-full" /> : top.length === 0 ? (
-                <p className="text-[12px] text-secondary">No location matched the putaway rules. Scan any storage location.</p>
+                <p className="text-xs text-secondary">No location matched the putaway rules. Scan any storage location.</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {top.map((s, i) => (
                     <button key={s.locationId} type="button" title={s.reasons.join(" · ")} aria-pressed={code.trim().toLowerCase() === s.code.toLowerCase()}
                       onClick={() => { edit(setCode)(s.code); scanRef.current?.focus(); }}
-                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 font-mono text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${i === 0 ? "border-primary/50 bg-primary-soft text-primary" : "border-border text-body hover:bg-surface-sunken"}`}>
-                      <MapPin className="h-3 w-3" aria-hidden />{s.code}{i === 0 ? <span className="font-sans text-[10px] font-semibold uppercase">Best</span> : null}
+                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${i === 0 ? "border-primary/50 bg-primary-soft text-primary" : "border-border text-body hover:bg-surface-sunken"}`}>
+                      <MapPin className="h-3 w-3" aria-hidden />{s.code}{i === 0 ? <span className="font-sans text-2xs font-semibold ">Best</span> : null}
                     </button>
                   ))}
                 </div>
               )}
           </section>
-          <label className="flex flex-col gap-1 text-[12px] font-medium text-body">
+          <label className="flex flex-col gap-1 text-xs font-medium text-body">
             <span className="flex items-center gap-1.5"><ScanLine className="h-3.5 w-3.5 text-faint" aria-hidden />Scan destination location</span>
             <Input ref={scanRef} value={code} placeholder={top[0] ? `e.g. ${top[0].code}` : "Location code or barcode"} autoComplete="off" spellCheck={false} aria-label="Destination location"
               disabled={Boolean(row?.blockedReason)} aria-invalid={error ? true : undefined}
@@ -127,18 +127,18 @@ function PutawayDialog({ row, onClose, onDone }: { readonly row: PutawayTaskRow 
               label={`Move the whole LP ${row.lpNumber} (every SKU on it) in one scan`} />
           ) : null}
           {!wholeLp ? (
-            <label className="flex flex-col gap-1 text-[12px] font-medium text-body">
+            <label className="flex flex-col gap-1 text-xs font-medium text-body">
               <span>Quantity ({row?.packType ?? "Each"})</span>
               <Input type="number" inputMode="numeric" min={1} max={row?.qty} value={qtyText} aria-label="Quantity" disabled={Boolean(row?.blockedReason)}
                 aria-invalid={qtyIssue && qtyText !== "" ? true : undefined}
                 onChange={(e) => edit(setQtyText)(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void submit(); } }} className="w-32" />
-              {qtyIssue ? <span className="text-[11px] font-normal text-danger">{qtyIssue}</span> : null}
+              {qtyIssue ? <span className="text-2xs font-normal text-danger">{qtyIssue}</span> : null}
             </label>
           ) : null}
-          {error ? <p role="alert" className="rounded-md border border-danger/40 bg-danger-soft px-3 py-2 text-[12px] text-danger">{error}</p> : null}
+          {error ? <p role="alert" className="rounded-md border border-danger/40 bg-danger-soft px-3 py-2 text-xs text-danger">{error}</p> : null}
         </DialogBody>
         <DialogFooter>
-          {blocked && !row?.blockedReason ? <span className="mr-auto text-[12px] text-secondary">{blocked}</span> : null}
+          {blocked && !row?.blockedReason ? <span className="mr-auto text-xs text-secondary">{blocked}</span> : null}
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <DisabledReason reason={blocked}>
             <Button variant="primary" disabled={Boolean(blocked) || busy} onClick={() => void submit()}><PackageCheck className="h-3.5 w-3.5" aria-hidden />{busy ? "Moving…" : "Confirm putaway"}</Button>
@@ -185,16 +185,16 @@ function BulkPutawayDialog({ rows, onClose, onDone }: { readonly rows: readonly 
     <Dialog open={rows !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent size="md">
         <DialogHeader title={`Put away ${eligible.length.toLocaleString()} task${eligible.length === 1 ? "" : "s"}`} description={`${units.toLocaleString()} units move in full. Each task is posted to the inventory ledger as its own transfer.`} />
-        <DialogBody className="flex flex-col gap-3 text-[13px]">
+        <DialogBody className="flex flex-col gap-3 text-sm">
           <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-[12px] font-semibold text-secondary">Destination</legend>
+            <legend className="mb-1 text-xs font-semibold text-secondary">Destination</legend>
             <label className="flex items-start gap-2">
               <input type="radio" name="bulk-putaway-mode" className="mt-0.5 accent-[var(--color-primary)]" checked={mode === "suggested"} onChange={() => setMode("suggested")} />
-              <span><span className="font-medium text-foreground">Each task to its best suggested location</span><span className="block text-[12px] text-secondary">The putaway algorithm picks the location per SKU, lot and quantity.</span></span>
+              <span><span className="font-medium text-foreground">Each task to its best suggested location</span><span className="block text-xs text-secondary">The putaway algorithm picks the location per SKU, lot and quantity.</span></span>
             </label>
             <label className="flex items-start gap-2">
               <input type="radio" name="bulk-putaway-mode" className="mt-0.5 accent-[var(--color-primary)]" checked={mode === "scan"} onChange={() => setMode("scan")} />
-              <span><span className="font-medium text-foreground">All tasks to one location</span><span className="block text-[12px] text-secondary">Scan the location, cart or staging lane they all go to.</span></span>
+              <span><span className="font-medium text-foreground">All tasks to one location</span><span className="block text-xs text-secondary">Scan the location, cart or staging lane they all go to.</span></span>
             </label>
           </fieldset>
           {mode === "scan" ? (
@@ -202,7 +202,7 @@ function BulkPutawayDialog({ rows, onClose, onDone }: { readonly rows: readonly 
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void run(); } }} />
           ) : null}
           {skipped.length > 0 ? (
-            <div role="status" className="rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-[12px] text-warning">
+            <div role="status" className="rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-xs text-warning">
               <p className="font-semibold">{skipped.length} selected task{skipped.length === 1 ? " is" : "s are"} skipped</p>
               <ul className="mt-1 list-disc pl-4">
                 {skipped.slice(0, 4).map((r) => <li key={r.id}>{r.sku} in {r.fromLocationCode}: {r.blockedReason}</li>)}
@@ -212,7 +212,7 @@ function BulkPutawayDialog({ rows, onClose, onDone }: { readonly rows: readonly 
           ) : null}
         </DialogBody>
         <DialogFooter>
-          {reason ? <span className="mr-auto text-[12px] text-secondary">{reason}</span> : null}
+          {reason ? <span className="mr-auto text-xs text-secondary">{reason}</span> : null}
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <DisabledReason reason={reason}>
             <Button variant="primary" disabled={Boolean(reason) || busy} onClick={() => void run()}><PackageCheck className="h-3.5 w-3.5" aria-hidden />{busy ? "Moving…" : "Put away"}</Button>
@@ -233,7 +233,7 @@ const plain = (id: keyof PutawayTaskRow & string, header: string, size = 130, mo
 function buildColumns(canMove: boolean, open: (row: PutawayTaskRow) => void): Col[] {
   return [
     { id: "sku", accessorKey: "sku", header: "SKU", size: 210, enableSorting: true,
-      cell: ({ row }) => <div className="min-w-0"><div className="truncate font-mono font-medium text-foreground">{row.original.sku}</div><div className="truncate text-[12px] text-secondary" title={row.original.productName}>{row.original.productName}</div></div> },
+      cell: ({ row }) => <div className="min-w-0"><div className="truncate font-mono font-medium text-foreground">{row.original.sku}</div><div className="truncate text-xs text-secondary" title={row.original.productName}>{row.original.productName}</div></div> },
     plain("warehouseName", "Warehouse", 150),
     plain("clientName", "Client", 150),
     { id: "fromLocationCode", accessorKey: "fromLocationCode", header: "Location", size: 150, enableSorting: true,
@@ -244,7 +244,7 @@ function buildColumns(canMove: boolean, open: (row: PutawayTaskRow) => void): Co
         </span>
       ) },
     { id: "qty", accessorKey: "qty", header: "Quantity", size: 110, enableSorting: true, meta: { align: "right" },
-      cell: ({ row }) => <span className="tabular-nums">{row.original.qty.toLocaleString()} <span className="text-[11px] text-faint">{row.original.packType}</span></span> },
+      cell: ({ row }) => <span className="tabular-nums">{row.original.qty.toLocaleString()} <span className="text-2xs text-faint">{row.original.packType}</span></span> },
     plain("barcode", "Barcode", 140),
     plain("lotNumber", "Lot batch number", 140),
     { id: "expiryDate", accessorKey: "expiryDate", header: "Expiry date", size: 120, enableSorting: true, cell: ({ row }) => <DateCell value={calendarDay(row.original.expiryDate)} dateOnly /> },
@@ -309,7 +309,7 @@ export function PutawayWorklistPage() {
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader title="Putaway" tabs="receiving" helper={HELPER} actions={<ReceivingReportLinks />} />
       <GridToolbar {...g.toolbarProps} searchPlaceholder="Search SKU, barcode, location or PO" bulkNoun="task" bulkActions={bulkActions}
-        trailing={<span className="whitespace-nowrap text-[12px] text-secondary" data-testid="putaway-count">{g.isLoading ? "Loading…" : `${g.total.toLocaleString()} task${g.total === 1 ? "" : "s"} · ${units.toLocaleString()} units waiting`}</span>} />
+        trailing={<span className="whitespace-nowrap text-xs text-secondary" data-testid="putaway-count">{g.isLoading ? "Loading…" : `${g.total.toLocaleString()} task${g.total === 1 ? "" : "s"} · ${units.toLocaleString()} units waiting`}</span>} />
       <div className="flex min-h-0 flex-1 flex-col">
         <DataGrid<PutawayTaskRow>
           {...g.gridProps}

@@ -21,7 +21,7 @@ export function AddressCard({ title = "Address", address, onEdit, className }: A
   return (
     <section aria-label={title} className={cn("flex flex-col gap-2 rounded-lg border border-border bg-surface p-4", className)}>
       <div className="flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-faint">
+        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-faint">
           <MapPin className="h-3.5 w-3.5" aria-hidden />
           {title}
         </h3>
@@ -32,17 +32,17 @@ export function AddressCard({ title = "Address", address, onEdit, className }: A
         ) : null}
       </div>
       {!address || !address.line1 ? (
-        <p className="text-[13px] text-faint">No address on file</p>
+        <p className="text-sm text-faint">No address on file</p>
       ) : (
         <>
-          <p className="text-[14px] font-semibold text-foreground">{address.name}</p>
-          <address className="flex flex-col text-[13px] not-italic leading-5 text-body">
+          <p className="text-base font-semibold text-foreground">{address.name}</p>
+          <address className="flex flex-col text-sm not-italic leading-5 text-body">
             {formatAddressLines({ ...address, country: address.country ? countryName(address.country) : undefined }).map((line) => (
               <span key={line}>{line}</span>
             ))}
           </address>
           {address.phone || address.email ? (
-            <div className="flex flex-col gap-0.5 text-[12px] text-secondary">
+            <div className="flex flex-col gap-0.5 text-xs text-secondary">
               {address.phone ? (
                 <span className="inline-flex items-center gap-1.5">
                   <Phone className="h-3 w-3" aria-hidden />

@@ -55,15 +55,15 @@ export function LocationCardList({ rows, total, page, pageSize, onPageChange, lo
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Link href={`/locations/${r.id}`} className="font-mono text-[14px] font-semibold text-primary hover:underline">{r.code}</Link>
+                    <Link href={`/locations/${r.id}`} className="font-mono text-base font-semibold text-primary hover:underline">{r.code}</Link>
                     <AvailabilityPill status={r.inventoryStatus} />
                     {r.isLocked ? <LockedPill value /> : null}
                   </div>
-                  <p className="mt-0.5 truncate text-[12px] text-secondary">{locationWhere(r)}</p>
-                  <p className="mt-0.5 truncate text-[12px] text-faint">
+                  <p className="mt-0.5 truncate text-xs text-secondary">{locationWhere(r)}</p>
+                  <p className="mt-0.5 truncate text-xs text-faint">
                     {[r.areaType ?? "No area", r.locationType ? splitCamel(r.locationType) : null, r.locationGroup].filter(Boolean).join(" · ")}
                   </p>
-                  <p className="mt-1 text-[12px] tabular-nums text-body">
+                  <p className="mt-1 text-xs tabular-nums text-body">
                     {r.storedUnits.toLocaleString()} units · {r.skuCount} SKU{r.skuCount === 1 ? "" : "s"}{r.openTaskCount > 0 ? ` · ${r.openTaskCount} open task${r.openTaskCount === 1 ? "" : "s"}` : ""}
                   </p>
                 </div>
@@ -73,7 +73,7 @@ export function LocationCardList({ rows, total, page, pageSize, onPageChange, lo
           ))}
         </ul>
       )}
-      <div className="sticky bottom-0 -mx-4 mt-auto flex items-center justify-between gap-2 border-t border-border bg-surface px-4 py-2 text-[12px] text-secondary">
+      <div className="sticky bottom-0 -mx-4 mt-auto flex items-center justify-between gap-2 border-t border-border bg-surface px-4 py-2 text-xs text-secondary">
         <span className="tabular-nums" aria-live="polite">{from.toLocaleString()}–{to.toLocaleString()} of {total.toLocaleString()}</span>
         <div className="flex items-center gap-1">
           <ExportButton gridKey={gridKey} queryString={queryString} total={total} />

@@ -50,7 +50,7 @@ function GeneralTab({ options }: { readonly options: ScreenConfigOptions }) {
 }
 
 function Token({ children }: { readonly children: React.ReactNode }) {
-  return <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-[12px] font-semibold text-primary">{children}</span>;
+  return <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-semibold text-primary">{children}</span>;
 }
 
 function ConditionsTab({ form, options }: { readonly form: UseFormReturn<F>; readonly options: ScreenConfigOptions }) {
@@ -64,7 +64,7 @@ function ConditionsTab({ form, options }: { readonly form: UseFormReturn<F>; rea
   const sentence = conditionSentence({ join }, { clients: clientIds.map(clientName), poTypes: cond?.poTypes ?? [], vendors: (cond?.vendorIds ?? []).map(vendorName) });
   const row = (label: React.ReactNode, body: React.ReactNode) => (
     <div className="grid grid-cols-[88px_1fr] items-start gap-3 py-2.5">
-      <span className="pt-1.5 text-[12px] font-bold uppercase tracking-wide text-secondary">{label}</span>
+      <span className="pt-1.5 text-xs font-bold text-secondary">{label}</span>
       <div className="min-w-0">{body}</div>
     </div>
   );
@@ -89,7 +89,7 @@ function ConditionsTab({ form, options }: { readonly form: UseFormReturn<F>; rea
         )}
         {row("Use", <Token>{name?.trim() || "This configuration"}</Token>)}
       </div>
-      <p className="mt-2 rounded-md bg-surface-sunken px-3 py-2 text-[12px] text-body"><span className="font-semibold">Applies to:</span> {sentence}</p>
+      <p className="mt-2 rounded-md bg-surface-sunken px-3 py-2 text-xs text-body"><span className="font-semibold">Applies to:</span> {sentence}</p>
     </FormSection>
   );
 }
@@ -113,15 +113,15 @@ function ConfigurationTab({ form }: { readonly form: UseFormReturn<F> }) {
           return (
             <li key={def.key} className={cn("flex items-center gap-3 px-3 py-2.5", !s.enabled && "bg-surface-sunken/50")}>
               <span className="min-w-0 flex-1">
-                <span className={cn("block text-[13px] font-medium", s.enabled ? "text-foreground" : "text-faint")}>{def.label}</span>
-                <span className="block text-[12px] text-secondary">{def.description}</span>
+                <span className={cn("block text-sm font-medium", s.enabled ? "text-foreground" : "text-faint")}>{def.label}</span>
+                <span className="block text-xs text-secondary">{def.description}</span>
               </span>
               {def.canBeOptional ? (
-                <label className={cn("flex items-center gap-1.5 text-[12px]", s.enabled ? "text-body" : "text-faint")}>
+                <label className={cn("flex items-center gap-1.5 text-xs", s.enabled ? "text-body" : "text-faint")}>
                   <Switch aria-label={`${def.label} required`} checked={s.required} disabled={!s.enabled} onCheckedChange={(v) => update(def.key, { required: v === true })} />Required
                 </label>
               ) : null}
-              <label className="flex items-center gap-1.5 text-[12px] text-body">
+              <label className="flex items-center gap-1.5 text-xs text-body">
                 <Switch aria-label={`Show ${def.label}`} checked={s.enabled} onCheckedChange={(v) => update(def.key, { enabled: v === true })} />Show
               </label>
             </li>

@@ -58,8 +58,8 @@ export function UserDetailDrawer({ id, seed, onOpenChange, onEdit, onSessions, c
           <div className="flex items-center gap-3">
             <Avatar name={d.name} size="lg" tone="brand" />
             <div className="min-w-0">
-              <p className="flex items-center gap-2 text-[15px] font-semibold text-foreground">{d.name}<StatusPill status={d.status} size="sm" /></p>
-              <p className="truncate text-[12px] text-faint">{d.email}</p>
+              <p className="flex items-center gap-2 text-base font-semibold text-foreground">{d.name}<StatusPill status={d.status} size="sm" /></p>
+              <p className="truncate text-xs text-faint">{d.email}</p>
             </div>
           </div>
           <StatRow stats={[
@@ -79,8 +79,8 @@ export function UserDetailDrawer({ id, seed, onOpenChange, onEdit, onSessions, c
             { label: "Member since", value: fmt.date(d.createdAt) },
           ]} /> : null}
           {tab === "access" ? <section className="flex flex-col gap-2">
-            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Access</h3>
-            <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-3 text-[13px]">
+            <h3 className="text-xs font-semibold text-secondary">Access</h3>
+            <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
               <AccessRow label="Roles" values={d.roles.map((r) => r.name)} />
               <AccessRow label="Warehouses" values={d.warehouses.map((w) => w.name)} />
               <AccessRow label="Clients" values={d.allClients ? ["All existing and future clients"] : provisional ? ["Loading…"] : d.clients.map((c) => c.name)} />
@@ -95,8 +95,8 @@ export function UserDetailDrawer({ id, seed, onOpenChange, onEdit, onSessions, c
               <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
                 {(sessionsQ.data?.data ?? []).map((sess) => (
                   <li key={sess.id} className="px-3 py-2.5">
-                    <p className="flex items-center gap-2 text-[13px] font-medium text-foreground">{deviceOf(sess.userAgent).label}{sess.isCurrent ? <Badge tone="success" size="sm">This device</Badge> : null}</p>
-                    <p className="text-[11.5px] text-faint">{sess.ip ?? "Unknown IP"} · signed in {fmt.gridDateTime(sess.createdAt)}</p>
+                    <p className="flex items-center gap-2 text-sm font-medium text-foreground">{deviceOf(sess.userAgent).label}{sess.isCurrent ? <Badge tone="success" size="sm">This device</Badge> : null}</p>
+                    <p className="text-2xs text-faint">{sess.ip ?? "Unknown IP"} · signed in {fmt.gridDateTime(sess.createdAt)}</p>
                   </li>
                 ))}
               </ul>
@@ -112,7 +112,7 @@ export function UserDetailDrawer({ id, seed, onOpenChange, onEdit, onSessions, c
 function AccessRow({ label, values }: { readonly label: string; readonly values: readonly string[] }) {
   return (
     <div className="grid grid-cols-[100px_minmax(0,1fr)] items-start gap-2">
-      <span className="pt-0.5 text-[11px] text-faint">{label}</span>
+      <span className="pt-0.5 text-2xs text-faint">{label}</span>
       <div className="flex flex-wrap gap-1">
         {values.length ? values.map((v) => <Badge key={v} tone="primary" size="md" shape="pill">{v}</Badge>) : <span className="text-faint">None</span>}
       </div>
@@ -159,8 +159,8 @@ export function UserSessionsDrawer({ user, onOpenChange, canEdit, onChanged }: {
               <li key={sess.id} className="flex items-center gap-3 px-3 py-3">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><Icon className="h-4 w-4" aria-hidden /></span>
                 <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-2 text-[13px] font-medium text-foreground">{device.label}{sess.isCurrent ? <Badge tone="success" size="sm">This device</Badge> : null}</p>
-                  <p className="text-[11.5px] text-faint">{sess.ip ?? "Unknown IP"} · signed in {fmt.gridDateTime(sess.createdAt)} · last active {sess.lastSeenAt ? (fmt.age(sess.lastSeenAt) === "now" ? "just now" : `${fmt.age(sess.lastSeenAt)} ago`) : "—"}</p>
+                  <p className="flex items-center gap-2 text-sm font-medium text-foreground">{device.label}{sess.isCurrent ? <Badge tone="success" size="sm">This device</Badge> : null}</p>
+                  <p className="text-2xs text-faint">{sess.ip ?? "Unknown IP"} · signed in {fmt.gridDateTime(sess.createdAt)} · last active {sess.lastSeenAt ? (fmt.age(sess.lastSeenAt) === "now" ? "just now" : `${fmt.age(sess.lastSeenAt)} ago`) : "—"}</p>
                 </div>
                 <DisabledReason reason={!canEdit ? NO_PERMISSION : sess.isCurrent ? "Use Log out to end your current session" : null}>
                   <Button size="sm" variant="secondary" disabled={!canEdit || sess.isCurrent || action.pending} onClick={() => void revoke(sess.id)}>Revoke</Button>
@@ -200,10 +200,10 @@ export function TemporaryPasswordDialog({ value, onClose }: { readonly value: { 
         <DialogBody className="flex flex-col gap-3">
           <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-sunken px-3 py-2.5">
             <KeyRound className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-            <code className="flex-1 select-all font-mono text-[15px] tracking-wide text-foreground">{value?.temporaryPassword}</code>
+            <code className="flex-1 select-all font-mono text-base tracking-wide text-foreground">{value?.temporaryPassword}</code>
             <Button size="sm" variant="secondary" onClick={() => void copy()}><Copy className="h-3.5 w-3.5" aria-hidden />Copy</Button>
           </div>
-          <p className="text-[12px] text-secondary">Every session of this user was signed out. Their password is marked as expired, so they must choose a new one after signing in.</p>
+          <p className="text-xs text-secondary">Every session of this user was signed out. Their password is marked as expired, so they must choose a new one after signing in.</p>
         </DialogBody>
         <DialogFooter><Button variant="primary" onClick={onClose}>Done</Button></DialogFooter>
       </DialogContent>

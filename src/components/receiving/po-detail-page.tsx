@@ -42,7 +42,7 @@ const P = "inventory.purchase_orders.";
 function RailCard({ title, children }: { readonly title: string; readonly children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{title}</p>
+      <p className="text-2xs font-semibold text-faint">{title}</p>
       {children}
     </div>
   );
@@ -55,7 +55,7 @@ function ReceiptsPanel({ po, canCancel, onOpen, onCancel }: { readonly po: PoDet
   if (q.isPending) {
     return (
       <section className="min-w-0 rounded-lg border border-border bg-surface p-5 shadow-xs" aria-busy="true" aria-label="Receipts">
-        <h2 className="mb-3 text-[15px] font-semibold text-foreground">Receipts</h2>
+        <h2 className="mb-3 text-base font-semibold text-foreground">Receipts</h2>
         <div className="flex flex-col gap-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
       </section>
     );
@@ -63,8 +63,8 @@ function ReceiptsPanel({ po, canCancel, onOpen, onCancel }: { readonly po: PoDet
   if (q.isError) {
     return (
       <section className="min-w-0 rounded-lg border border-border bg-surface p-5 shadow-xs" aria-label="Receipts">
-        <h2 className="mb-2 text-[15px] font-semibold text-foreground">Receipts</h2>
-        <p role="alert" className="mb-2 text-[13px] text-secondary">{"Couldn't load receipts for this purchase order."}</p>
+        <h2 className="mb-2 text-base font-semibold text-foreground">Receipts</h2>
+        <p role="alert" className="mb-2 text-sm text-secondary">{"Couldn't load receipts for this purchase order."}</p>
         <Button variant="secondary" size="sm" onClick={() => void q.refetch()}>Retry</Button>
       </section>
     );
@@ -72,21 +72,21 @@ function ReceiptsPanel({ po, canCancel, onOpen, onCancel }: { readonly po: PoDet
   return (
     <section className="min-w-0 rounded-lg border border-border bg-surface p-5 shadow-xs" aria-labelledby="po-receipts">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 id="po-receipts" className="text-[15px] font-semibold text-foreground">Receipts <span className="text-[12px] font-normal text-faint">({rows.length})</span></h2>
+        <h2 id="po-receipts" className="text-base font-semibold text-foreground">Receipts <span className="text-xs font-normal text-faint">({rows.length})</span></h2>
         <span className="flex flex-wrap items-center gap-3">
-          <Link href={`/reports/po-receiving?q=${encodeURIComponent(po.code)}&qm=eq`} className="text-[12px] font-medium text-primary hover:underline">PO receiving report</Link>
-          <Link href={`/receiving/history?q=${encodeURIComponent(po.code)}&qm=eq`} className="text-[12px] font-medium text-primary hover:underline">Open in receiving history</Link>
-          <Link href={receivingLedgerHref({ poCode: po.code })} className="text-[12px] font-medium text-primary hover:underline">Ledger transactions</Link>
-          <Link href={receivingLedgerHref({ poCode: po.code, types: ["Cancel Receiving"] })} className="text-[12px] font-medium text-primary hover:underline">Cancelled receipts</Link>
+          <Link href={`/reports/po-receiving?q=${encodeURIComponent(po.code)}&qm=eq`} className="text-xs font-medium text-primary hover:underline">PO receiving report</Link>
+          <Link href={`/receiving/history?q=${encodeURIComponent(po.code)}&qm=eq`} className="text-xs font-medium text-primary hover:underline">Open in receiving history</Link>
+          <Link href={receivingLedgerHref({ poCode: po.code })} className="text-xs font-medium text-primary hover:underline">Ledger transactions</Link>
+          <Link href={receivingLedgerHref({ poCode: po.code, types: ["Cancel Receiving"] })} className="text-xs font-medium text-primary hover:underline">Cancelled receipts</Link>
         </span>
       </div>
       {rows.length === 0 ? (
-        <p className="flex items-center gap-2 rounded-md border border-dashed border-border px-4 py-5 text-[12px] text-secondary"><PackageOpen className="h-4 w-4 text-faint" aria-hidden />Nothing received yet. Use Other actions › Receive items to receive part or all of this order.</p>
+        <p className="flex items-center gap-2 rounded-md border border-dashed border-border px-4 py-5 text-xs text-secondary"><PackageOpen className="h-4 w-4 text-faint" aria-hidden />Nothing received yet. Use Other actions › Receive items to receive part or all of this order.</p>
       ) : (
         <div className="relative max-w-full overflow-x-auto ks-scroll">
-          <table className="w-full border-collapse whitespace-nowrap text-[12px]">
+          <table className="w-full border-collapse whitespace-nowrap text-xs">
             <thead>
-              <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+              <tr className="text-left text-2xs font-semibold text-faint">
                 {["Master ID", "SKU", "Quantity", "Location", "LPN", "Lot", "Expiry", "Damage", "Received", "By", ""].map((h) => <th key={h} className="border-b border-border px-2.5 py-2">{h}</th>)}
               </tr>
             </thead>
@@ -128,8 +128,8 @@ function PreAdvicePanel({ po }: { readonly po: PoDetail }) {
   return (
     <section className="min-w-0 rounded-lg border border-border bg-surface p-5 shadow-xs" aria-labelledby="po-preadvice">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 id="po-preadvice" className="text-[15px] font-semibold text-foreground">Serial pre-advice <span className="text-[12px] font-normal text-faint">({total.toLocaleString()})</span></h2>
-        <Link href="/receiving/import?type=po-serials" className="text-[12px] font-medium text-primary hover:underline">Import serial numbers</Link>
+        <h2 id="po-preadvice" className="text-base font-semibold text-foreground">Serial pre-advice <span className="text-xs font-normal text-faint">({total.toLocaleString()})</span></h2>
+        <Link href="/receiving/import?type=po-serials" className="text-xs font-medium text-primary hover:underline">Import serial numbers</Link>
       </div>
       <div className="flex flex-col gap-3">
         {lines.map((l) => {
@@ -138,12 +138,12 @@ function PreAdvicePanel({ po }: { readonly po: PoDetail }) {
           const shown = list.slice(0, 24);
           return (
             <div key={l.id} className="flex flex-col gap-1.5">
-              <p className="text-[12px] text-secondary"><span className="font-semibold text-foreground">{l.sku}</span> · {list.length.toLocaleString()} of {(l.orderedQuantity * l.uomQuantity).toLocaleString()} expected · {received.toLocaleString()} received</p>
+              <p className="text-xs text-secondary"><span className="font-semibold text-foreground">{l.sku}</span> · {list.length.toLocaleString()} of {(l.orderedQuantity * l.uomQuantity).toLocaleString()} expected · {received.toLocaleString()} received</p>
               <div className="flex flex-wrap gap-1">
                 {shown.map((x) => (
-                  <span key={x.serial} className={`rounded-full border px-2 py-px font-mono text-[11px] ${x.received ? "border-success/40 bg-success-soft text-success" : "border-border bg-surface-sunken text-body"}`} title={x.received ? "Received" : "Expected"}>{x.serial}</span>
+                  <span key={x.serial} className={`rounded-full border px-2 py-px font-mono text-2xs ${x.received ? "border-success/40 bg-success-soft text-success" : "border-border bg-surface-sunken text-body"}`} title={x.received ? "Received" : "Expected"}>{x.serial}</span>
                 ))}
-                {list.length > shown.length ? <span className="px-1 text-[11px] text-faint">+{(list.length - shown.length).toLocaleString()} more</span> : null}
+                {list.length > shown.length ? <span className="px-1 text-2xs text-faint">+{(list.length - shown.length).toLocaleString()} more</span> : null}
               </div>
             </div>
           );
@@ -171,12 +171,12 @@ function ReceivedSummary({ po }: { readonly po: PoDetail }) {
   const tone = receivedSummaryTone(po);
   const open = Math.max(0, po.totalQuantity - po.receivedQuantity);
   return (
-    <div className="flex items-center justify-between gap-2 text-[12px]">
+    <div className="flex items-center justify-between gap-2 text-xs">
       <span className="text-faint">Received</span>
       <span className="flex items-center gap-1.5 tabular-nums">
         {po.receivedQuantity.toLocaleString()} / {po.totalQuantity.toLocaleString()}
-        {tone === "open" ? (open > 0 ? <span className="rounded-full bg-surface-sunken px-1.5 py-px text-[11px] font-medium text-secondary">{open.toLocaleString()} open</span> : null) : null}
-        {tone === "cancelled" ? <span className="rounded-full bg-surface-sunken px-1.5 py-px text-[11px] font-medium text-secondary" title="The order was cancelled; the remaining quantity won't be received.">cancelled</span> : null}
+        {tone === "open" ? (open > 0 ? <span className="rounded-full bg-surface-sunken px-1.5 py-px text-2xs font-medium text-secondary">{open.toLocaleString()} open</span> : null) : null}
+        {tone === "cancelled" ? <span className="rounded-full bg-surface-sunken px-1.5 py-px text-2xs font-medium text-secondary" title="The order was cancelled; the remaining quantity won't be received.">cancelled</span> : null}
         {tone === "variance" ? <DiffPill value={po.receivedQuantity - po.totalQuantity} /> : null}
       </span>
     </div>
@@ -263,11 +263,11 @@ function DetailView({ po, initialStep, refresh }: { readonly po: PoDetail; reado
     <>
       <div className="pt-1">{otherActions}</div>
       <RailCard title="Summary">
-        <p className="text-[18px] font-bold leading-6 text-foreground">{po.code}</p>
-        <div className="flex items-center justify-between gap-2 text-[12px]"><span className="text-faint">Type</span><span className="truncate font-medium text-body">{po.poType}</span></div>
-        <div className="flex items-center justify-between gap-2 text-[12px]"><span className="text-faint">Vendor</span><span className="truncate font-medium text-body" title={po.vendorName}>{po.vendorName || "—"}</span></div>
-        <div className="flex items-center justify-between gap-2 text-[12px]"><span className="text-faint">Client</span><span className="truncate font-medium text-body">{po.clientName}</span></div>
-        <div className="flex items-center justify-between gap-2 text-[12px]"><span className="text-faint">PO date</span><span>{po.poDate ? fmt.date(po.poDate) : "—"}</span></div>
+        <p className="text-lg font-bold leading-6 text-foreground">{po.code}</p>
+        <div className="flex items-center justify-between gap-2 text-xs"><span className="text-faint">Type</span><span className="truncate font-medium text-body">{po.poType}</span></div>
+        <div className="flex items-center justify-between gap-2 text-xs"><span className="text-faint">Vendor</span><span className="truncate font-medium text-body" title={po.vendorName}>{po.vendorName || "—"}</span></div>
+        <div className="flex items-center justify-between gap-2 text-xs"><span className="text-faint">Client</span><span className="truncate font-medium text-body">{po.clientName}</span></div>
+        <div className="flex items-center justify-between gap-2 text-xs"><span className="text-faint">PO date</span><span>{po.poDate ? fmt.date(po.poDate) : "—"}</span></div>
         <div className="flex items-center gap-1.5">
           <StatusPill status={po.status} domain="purchaseOrder" />
           {can.status && po.status !== "Pending" ? (
@@ -276,21 +276,21 @@ function DetailView({ po, initialStep, refresh }: { readonly po: PoDetail; reado
             </DisabledReason>
           ) : null}
           <span className="flex-1" />
-          {can.log ? <button type="button" className="text-[12px] font-medium text-primary hover:underline" onClick={() => setLogOpen(true)}>Show change log</button> : null}
+          {can.log ? <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => setLogOpen(true)}>Show change log</button> : null}
         </div>
         <ReceivedSummary po={po} />
-        {po.receivedAt ? <div className="flex items-center justify-between gap-2 text-[12px]"><span className="text-faint">Actual receiving</span><ZonedTime value={po.receivedAt} timeZone={po.warehouseTimeZone} /></div> : null}
+        {po.receivedAt ? <div className="flex items-center justify-between gap-2 text-xs"><span className="text-faint">Actual receiving</span><ZonedTime value={po.receivedAt} timeZone={po.warehouseTimeZone} /></div> : null}
       </RailCard>
       <RailCard title="Billing charges">
         <DisabledReason reason={can.billing ? null : "You don't have permission to download billing charges"}>
           <Button variant="secondary" size="sm" disabled={!can.billing} onClick={() => openFile(`/api/purchase-orders/${po.id}/billing-charges`)}><Download className="h-3.5 w-3.5" aria-hidden />Download billing charges</Button>
         </DisabledReason>
-        <p className="text-[11px] text-faint">Click to download the latest billing charges.</p>
+        <p className="text-2xs text-faint">Click to download the latest billing charges.</p>
       </RailCard>
       <RailCard title="Printouts">
         <div className="flex items-center gap-2">
           <FileText className="h-3.5 w-3.5 text-faint" aria-hidden />
-          <span className={`flex-1 text-[12px] ${po.attachmentCount ? "text-body" : "text-faint"}`}>{po.attachmentCount ? `Documents · ${po.attachmentCount}` : "No documents yet"}</span>
+          <span className={`flex-1 text-xs ${po.attachmentCount ? "text-body" : "text-faint"}`}>{po.attachmentCount ? `Documents · ${po.attachmentCount}` : "No documents yet"}</span>
           <DisabledReason reason={can.upload ? null : "You don't have permission to upload documents"}>
             <Button variant="ghost" size="icon-sm" aria-label="Upload document" disabled={!can.upload} onClick={() => setUploadOpen(true)}><Plus className="h-3.5 w-3.5" aria-hidden /></Button>
           </DisabledReason>

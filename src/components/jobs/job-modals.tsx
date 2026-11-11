@@ -37,8 +37,8 @@ export function DifferentWarehousesDialog({ open, onClose, noun = "jobs" }: { re
       <DialogContent size="sm">
         <AttentionBand title="Attention" />
         <DialogBody className="flex flex-col gap-2">
-          <p className="text-[14px] font-semibold text-foreground">Different warehouses selected</p>
-          <p className="text-[13px] leading-5 text-body">
+          <p className="text-base font-semibold text-foreground">Different warehouses selected</p>
+          <p className="text-sm leading-5 text-body">
             Assign and unassign can only be performed for {noun} in the same warehouse. Please update your selection and try again.
           </p>
         </DialogBody>
@@ -54,8 +54,8 @@ const PRIORITY_COPY: Readonly<Record<(typeof JOB_PRIORITY_CHOICES)[number], { re
   None: { hint: "Default order, no tag", tone: "text-secondary" },
   Low: { hint: "Picked after everything else", tone: "text-[#2E7D32]" },
   Medium: { hint: "Ahead of low and untagged jobs", tone: "text-[#B26A00]" },
-  High: { hint: "Pickers see these first", tone: "text-[#E55B56]" },
-  Urgent: { hint: "Ahead of every other job", tone: "text-[#A13406]" },
+  High: { hint: "Pickers see these first", tone: "text-[var(--danger-text)]" },
+  Urgent: { hint: "Ahead of every other job", tone: "text-[var(--label-brown-text)]" },
 };
 
 export function UpdatePriorityModal({ open, count, onClose, onSave }: { readonly open: boolean; readonly count: number; readonly onClose: () => void; readonly onSave: (priority: string) => Promise<void> }) {
@@ -79,8 +79,8 @@ export function UpdatePriorityModal({ open, count, onClose, onSave }: { readonly
       <DialogContent size="lg">
         <AttentionBand title="Attention" />
         <DialogBody className="flex flex-col gap-3">
-          <p className="text-[13px] leading-5 text-body">Previously assigned/selected priorities will change after your new priority selection.</p>
-          <p className="text-[13px] font-semibold text-foreground">Set priority for {count === 1 ? "the selected job" : `${count} selected jobs`}.</p>
+          <p className="text-sm leading-5 text-body">Previously assigned/selected priorities will change after your new priority selection.</p>
+          <p className="text-sm font-semibold text-foreground">Set priority for {count === 1 ? "the selected job" : `${count} selected jobs`}.</p>
           <div role="radiogroup" aria-label="Priority" className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {JOB_PRIORITY_CHOICES.map((p) => {
               const active = choice === p;
@@ -97,11 +97,11 @@ export function UpdatePriorityModal({ open, count, onClose, onSave }: { readonly
                     active ? "border-primary bg-primary-soft shadow-sm" : "border-border hover:border-border-strong hover:bg-surface-sunken",
                   )}
                 >
-                  <span className={cn("flex items-center gap-1 text-[13px] font-semibold", PRIORITY_COPY[p].tone)}>
+                  <span className={cn("flex items-center gap-1 text-sm font-semibold", PRIORITY_COPY[p].tone)}>
                     {Icon ? <Icon className="h-3.5 w-3.5" aria-hidden /> : null}
                     {p}
                   </span>
-                  <span className="text-[11px] leading-4 text-faint">{PRIORITY_COPY[p].hint}</span>
+                  <span className="text-2xs leading-4 text-faint">{PRIORITY_COPY[p].hint}</span>
                   {active ? <Check className="absolute right-2 top-2 h-3.5 w-3.5 text-primary" aria-hidden /> : null}
                 </button>
               );
@@ -164,7 +164,7 @@ export function AssignUserModal({ open, warehouseId, noun, onClose, onAssign }: 
             disabled={!warehouseId}
             clearable
           />
-          <p className="text-[11px] text-faint">Only active users of this warehouse who can execute tasks are listed.</p>
+          <p className="text-2xs text-faint">Only active users of this warehouse who can execute tasks are listed.</p>
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>

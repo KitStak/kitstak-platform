@@ -46,7 +46,7 @@ export function focusFirst(root: HTMLElement | null, keys: readonly string[]): v
 
 export function TrackFlag({ label, on }: { readonly label: string; readonly on: boolean }) {
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold", on ? "bg-primary-soft text-primary" : "bg-surface-sunken text-faint")}>
+    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold", on ? "bg-primary-soft text-primary" : "bg-surface-sunken text-faint")}>
       {label}: {on ? "Yes" : "No"}
     </span>
   );
@@ -55,7 +55,7 @@ export function TrackFlag({ label, on }: { readonly label: string; readonly on: 
 export function MetaChip({ label, value }: { readonly label: string; readonly value: React.ReactNode }) {
   const empty = value === null || value === undefined || value === "";
   return (
-    <span className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-1.5 py-0.5 text-[11px]">
+    <span className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-1.5 py-0.5 text-2xs">
       <span className="text-faint">{label}:</span>
       <span className={cn("font-medium", empty ? "text-faint" : "text-foreground")}>{empty ? "–" : value}</span>
     </span>
@@ -64,5 +64,5 @@ export function MetaChip({ label, value }: { readonly label: string; readonly va
 
 /** Unit adornment for kit quantity inputs: "kit" / "kits", set apart from the number. */
 export function KitUnit({ qty }: { readonly qty: number | null | undefined }) {
-  return <span className="ml-1.5 rounded border-l border-border px-1.5 text-[11px] font-medium text-faint">{qty === 1 ? "kit" : "kits"}</span>;
+  return <span className="ml-1.5 rounded border-l border-border px-1.5 text-2xs font-medium text-faint">{qty === 1 ? "kit" : "kits"}</span>;
 }

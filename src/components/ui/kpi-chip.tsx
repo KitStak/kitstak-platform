@@ -12,7 +12,7 @@ const DOT: Readonly<Record<KpiTone, string>> = {
   danger: "bg-danger",
   info: "bg-info",
   // Same hue as the teal status pill (work order Open, shipment plan Open).
-  teal: "bg-[#16C2AA]",
+  teal: "bg-[var(--label-teal)]",
 };
 
 export interface KpiChipProps {
@@ -28,7 +28,7 @@ export interface KpiChipProps {
 /** Compact "• Late 12" counter used in toolbars and summary rows; optional drilldown. */
 export function KpiChip({ label, value, tone = "neutral", href, active, onClick, className }: KpiChipProps) {
   const classes = cn(
-    "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition-colors",
+    "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors",
     active ? "border-primary bg-primary-soft text-primary" : "border-border bg-surface text-body",
     (href || onClick) && "hover:border-border-strong hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30",
     className

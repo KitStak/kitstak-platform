@@ -48,8 +48,8 @@ type TabKey = (typeof TABS)[number];
 function Fact({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <dt className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{label}</dt>
-      <dd className="truncate text-[13px] text-foreground">{children}</dd>
+      <dt className="text-2xs font-semibold text-faint">{label}</dt>
+      <dd className="truncate text-sm text-foreground">{children}</dd>
     </div>
   );
 }
@@ -69,11 +69,11 @@ function OrdersTab({ detail, onChanged }: { readonly detail: Detail; readonly on
   }
   return (
     <div className="overflow-auto rounded-lg border border-border bg-surface">
-      <table className="w-full border-collapse text-left text-[13px]">
+      <table className="w-full border-collapse text-left text-sm">
         <thead className="bg-surface-sunken">
           <tr>
             {["Order code", "Status", "Customer", "Client", "Units", "Picked", "Packed", "Tasks", "Pick short", "Label", ""].map((h) => (
-              <th key={h} scope="col" className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{h}</th>
+              <th key={h} scope="col" className="border-b border-border px-3 py-2 text-2xs font-semibold text-faint">{h}</th>
             ))}
           </tr>
         </thead>
@@ -84,7 +84,7 @@ function OrdersTab({ detail, onChanged }: { readonly detail: Detail; readonly on
             return (
               <tr key={o.id} className="border-b border-border last:border-b-0 hover:bg-surface-sunken/60">
                 <td className="px-3 py-2"><Link className="font-medium text-primary hover:underline" href={`/orders/${encodeURIComponent(o.code)}`}>{o.code}</Link></td>
-                <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><StatusPill status={o.status} domain="shipmentOrder" size="sm" />{o.released ? <span className="rounded-full bg-surface-sunken px-1.5 py-px text-[10px] font-semibold uppercase text-secondary" title="Released from this job; its tasks here were cancelled">Released</span> : null}</span></td>
+                <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5"><StatusPill status={o.status} domain="shipmentOrder" size="sm" />{o.released ? <span className="rounded-full bg-surface-sunken px-1.5 py-px text-2xs font-semibold text-secondary" title="Released from this job; its tasks here were cancelled">Released</span> : null}</span></td>
                 <td className="px-3 py-2">{o.customerName || dash}</td>
                 <td className="px-3 py-2">{o.clientName || dash}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{o.units}</td>
@@ -92,7 +92,7 @@ function OrdersTab({ detail, onChanged }: { readonly detail: Detail; readonly on
                 <td className="px-3 py-2 text-right tabular-nums">{o.packed}</td>
                 <td className="px-3 py-2 tabular-nums text-secondary">{o.completedTasks}/{o.pendingTasks + o.startedTasks + o.completedTasks}{o.cancelledTasks > 0 ? <span className="ml-1 text-faint">· {o.cancelledTasks} cancelled</span> : null}</td>
                 <td className="px-3 py-2"><ShortPill value={o.pickShortStatus} /></td>
-                <td className="px-3 py-2">{o.hasLabel ? <StatusPill status="Labeled" size="sm" /> : <span className="text-[12px] text-faint">No label</span>}</td>
+                <td className="px-3 py-2">{o.hasLabel ? <StatusPill status="Labeled" size="sm" /> : <span className="text-xs text-faint">No label</span>}</td>
                 <td className="px-3 py-2 text-right">
                   <DisabledReason reason={reason}>
                     <Button variant="ghost" size="sm" disabled={Boolean(reason)} onClick={() => setRemoving(o)} aria-label={`Remove ${o.code} from the job`}>
@@ -147,7 +147,7 @@ function TasksTab({ detail, onChanged }: { readonly detail: Detail; readonly onC
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-3 text-[12px] text-secondary">
+        <span className="flex items-center gap-3 text-xs text-secondary">
           {selected.size > 0 ? `${selected.size} selected` : `${detail.tasks.length} tasks`}
           <Link className="inline-flex items-center gap-1 font-medium text-primary hover:underline" href={jobTasksHref(String(detail.job.code), String(detail.job.operationType))}>
             Open in Task Details
@@ -157,12 +157,12 @@ function TasksTab({ detail, onChanged }: { readonly detail: Detail; readonly onC
         <TaskActions tasks={chosen} onChanged={() => { setSelected(new Set()); onChanged(); }} />
       </div>
       <div className="overflow-auto rounded-lg border border-border bg-surface">
-        <table className="w-full border-collapse text-left text-[13px]">
+        <table className="w-full border-collapse text-left text-sm">
           <thead className="bg-surface-sunken">
             <tr>
               <th className="w-10 border-b border-border px-3 py-2"><Checkbox aria-label="Select all tasks" checked={all ? true : selected.size > 0 ? "indeterminate" : false} onCheckedChange={(c) => setSelected(c === true ? new Set(detail.tasks.map((t) => t.id)) : new Set())} /></th>
               {["Task ID", "Type", "Status", "Order", "SKU", "Source", "Target", "Planned", "Actual", "Pick short", "Assignee", "Executed by", "Finished"].map((h) => (
-                <th key={h} scope="col" className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{h}</th>
+                <th key={h} scope="col" className="border-b border-border px-3 py-2 text-2xs font-semibold text-faint">{h}</th>
               ))}
             </tr>
           </thead>
@@ -186,9 +186,9 @@ function TaskRowView({ task: t, checked, onToggle }: { readonly task: DetailTask
       <td className="px-3 py-2">{t.taskType}</td>
       <td className="px-3 py-2"><JobsStatusPill status={t.status} domain="task" size="sm" /></td>
       <td className="px-3 py-2">{t.orderCode ? <Link className="text-primary hover:underline" href={`/orders/${encodeURIComponent(t.orderCode)}`}>{t.orderCode}</Link> : dash}</td>
-      <td className="px-3 py-2"><span className="font-medium">{t.sku ?? "—"}</span><span className="block max-w-[200px] truncate text-[11px] text-faint">{t.productName}</span></td>
-      <td className="px-3 py-2">{t.sourceLocation ?? "—"}{t.sourceLpn ? <span className="block text-[11px] text-faint">{t.sourceLpn}</span> : null}</td>
-      <td className="px-3 py-2">{t.targetLocation ?? "—"}{t.targetLpn ? <span className="block text-[11px] text-faint">{t.targetLpn}</span> : null}</td>
+      <td className="px-3 py-2"><span className="font-medium">{t.sku ?? "—"}</span><span className="block max-w-[200px] truncate text-2xs text-faint">{t.productName}</span></td>
+      <td className="px-3 py-2">{t.sourceLocation ?? "—"}{t.sourceLpn ? <span className="block text-2xs text-faint">{t.sourceLpn}</span> : null}</td>
+      <td className="px-3 py-2">{t.targetLocation ?? "—"}{t.targetLpn ? <span className="block text-2xs text-faint">{t.targetLpn}</span> : null}</td>
       <td className="px-3 py-2 text-right tabular-nums">{t.plannedQty}</td>
       <td className="px-3 py-2 text-right tabular-nums">{t.actualQty}</td>
       <td className="px-3 py-2"><ShortPill value={t.pickShortStatus} /></td>
@@ -222,8 +222,8 @@ function PickPathTab({ detail }: { readonly detail: Detail }) {
   return (
     <div className="flex flex-col gap-4">
     {detail.ai ? (
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-[#D9CCF5] bg-[#F5F0FF] px-4 py-3 text-[13px] dark:border-[#4B3B78] dark:bg-[#211A33]">
-        <span className="inline-flex items-center gap-1.5 font-semibold text-[#5B3DB5] dark:text-[#C7B5FF]"><Sparkles className="h-4 w-4" aria-hidden />AI-optimized route</span>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-[#D9CCF5] bg-[#F5F0FF] px-4 py-3 text-sm dark:border-[#4B3B78] dark:bg-[#211A33]">
+        <span className="inline-flex items-center gap-1.5 font-semibold text-[var(--label-purple-text)] dark:text-[var(--label-purple-light)]"><Sparkles className="h-4 w-4" aria-hidden />AI-optimized route</span>
         <span className="text-body"><span className="font-semibold tabular-nums">{detail.ai.stops}</span> {detail.ai.stops === 1 ? "stop" : "stops"}</span>
         <span className="text-body"><span className="font-semibold tabular-nums">{Math.round(detail.ai.optimizedM)} m</span> walk</span>
         <span className="text-secondary">Walking-path order: <span className="tabular-nums">{Math.round(detail.ai.baselineM)} m</span></span>
@@ -236,21 +236,21 @@ function PickPathTab({ detail }: { readonly detail: Detail }) {
         const units = s.lines.reduce((n, l) => n + l.plannedQty, 0);
         return (
           <li key={s.location} className="relative">
-            <span className={cn("absolute -left-[37px] top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-bold", done ? "border-[#17874D] bg-[#D3F0E3] text-success" : "border-primary bg-surface text-primary")}>{i + 1}</span>
+            <span className={cn("absolute -left-[37px] top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 text-2xs font-bold", done ? "border-[var(--success-text)] bg-[var(--label-green-subtle)] text-success" : "border-primary bg-surface text-primary")}>{i + 1}</span>
             <div className={cn("rounded-lg border bg-surface px-4 py-3", done ? "border-border opacity-70" : "border-border shadow-sm")}>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="flex items-center gap-2 text-[14px] font-semibold text-foreground"><MapPin className="h-4 w-4 text-primary" aria-hidden />{s.location}</span>
-                <span className="text-[12px] text-secondary">{[s.zone && `Zone ${s.zone}`, s.aisle && `Aisle ${s.aisle}`, s.walk !== null && s.walk > 0 && `Walk #${s.walk}`].filter(Boolean).join(" · ") || "No walking path set"}</span>
+                <span className="flex items-center gap-2 text-base font-semibold text-foreground"><MapPin className="h-4 w-4 text-primary" aria-hidden />{s.location}</span>
+                <span className="text-xs text-secondary">{[s.zone && `Zone ${s.zone}`, s.aisle && `Aisle ${s.aisle}`, s.walk !== null && s.walk > 0 && `Walk #${s.walk}`].filter(Boolean).join(" · ") || "No walking path set"}</span>
               </div>
               <ul className="mt-2 flex flex-col gap-1">
                 {s.lines.map((l) => (
-                  <li key={l.id} className="flex items-center justify-between gap-3 text-[12px]">
+                  <li key={l.id} className="flex items-center justify-between gap-3 text-xs">
                     <span className="min-w-0 truncate"><span className="font-semibold text-foreground">{l.sku ?? "—"}</span> <span className="text-secondary">{l.productName}</span>{l.orderCode ? <span className="text-faint"> · {l.orderCode}</span> : null}</span>
                     <span className="flex shrink-0 items-center gap-2"><span className="tabular-nums">{l.actualQty}/{l.plannedQty}</span><JobsStatusPill status={l.status} domain="task" size="sm" /></span>
                   </li>
                 ))}
               </ul>
-              <p className="mt-1 text-[11px] text-faint">{units} {units === 1 ? "unit" : "units"} at this stop</p>
+              <p className="mt-1 text-2xs text-faint">{units} {units === 1 ? "unit" : "units"} at this stop</p>
             </div>
           </li>
         );
@@ -279,12 +279,12 @@ function Header({ detail, onChanged }: { readonly detail: Detail; readonly onCha
             <Link href="/jobs" className="rounded p-1 text-secondary hover:bg-surface-sunken" aria-label="Back to jobs"><ArrowLeft className="h-4 w-4" aria-hidden /></Link>
             <h1 className="text-xl font-semibold tracking-[-0.01em] text-foreground">{String(j.code)}</h1>
             <JobsStatusPill status={String(j.status)} domain="job" />
-            <span className="inline-flex items-center gap-1 text-[12px] text-secondary">Priority <JobPriorityPill priority={j.priority} /></span>
-            {detail.ai ? <span className="inline-flex items-center gap-1 rounded-full bg-[#EFE8FF] px-2 py-0.5 text-[11px] font-semibold text-[#5B3DB5] dark:bg-[#2C2245] dark:text-[#C7B5FF]" title={detail.ai.description}><Sparkles className="h-3 w-3" aria-hidden />AI job</span> : null}
-            {Number(j.hasPickShort) ? <span className="inline-flex items-center gap-1 rounded-full bg-[#F7E9E4] px-2 py-0.5 text-[11px] font-semibold text-[#A13406]"><AlertTriangle className="h-3 w-3" aria-hidden />Pick short</span> : null}
+            <span className="inline-flex items-center gap-1 text-xs text-secondary">Priority <JobPriorityPill priority={j.priority} /></span>
+            {detail.ai ? <span className="inline-flex items-center gap-1 rounded-full bg-[#EFE8FF] px-2 py-0.5 text-2xs font-semibold text-[var(--label-purple-text)] dark:bg-[#2C2245] dark:text-[var(--label-purple-light)]" title={detail.ai.description}><Sparkles className="h-3 w-3" aria-hidden />AI job</span> : null}
+            {Number(j.hasPickShort) ? <span className="inline-flex items-center gap-1 rounded-full bg-[var(--label-brown-subtle)] px-2 py-0.5 text-2xs font-semibold text-[var(--label-brown-text)]"><AlertTriangle className="h-3 w-3" aria-hidden />Pick short</span> : null}
             {overdue ? <OverduePill title={`Planned to finish by ${dt(j.plannedEndAt)}`} /> : null}
           </div>
-          <p className="text-[13px] text-secondary">{String(j.jobType)}{j.originalJobType ? ` (from ${String(j.originalJobType)})` : ""} · {String(j.operationType)} · {String(j.warehouse ?? "")}{j.client ? ` · ${String(j.client)}` : ""}</p>
+          <p className="text-sm text-secondary">{String(j.jobType)}{j.originalJobType ? ` (from ${String(j.originalJobType)})` : ""} · {String(j.operationType)} · {String(j.warehouse ?? "")}{j.client ? ` · ${String(j.client)}` : ""}</p>
         </div>
         <JobActions jobs={[facts]} onChanged={onChanged} compact />
       </div>
@@ -295,29 +295,29 @@ function Header({ detail, onChanged }: { readonly detail: Detail; readonly onCha
           <Fact label="Wave rule">{detail.rule ? <Link className="text-primary hover:underline" href={`/jobs/wave-rules?q=${encodeURIComponent(detail.rule.name)}&qm=eq`}>{detail.rule.name}</Link> : "—"}</Fact>
           <Fact label="Mobile cart">{j.mobileCart ? String(j.mobileCart) : "—"}</Fact>
           <Fact label="Planned start">{dt(j.plannedStartAt)}</Fact>
-          <Fact label="Planned end">{overdue ? <span className="font-semibold text-[#B42318] dark:text-[#F7A99C]">{dt(j.plannedEndAt)} · overdue</span> : dt(j.plannedEndAt)}</Fact>
+          <Fact label="Planned end">{overdue ? <span className="font-semibold text-[var(--danger-text)] dark:text-[var(--label-red-light)]">{dt(j.plannedEndAt)} · overdue</span> : dt(j.plannedEndAt)}</Fact>
           <Fact label="Actual start">{dt(j.startedAt)}</Fact>
           <Fact label="Actual finish">{dt(j.completedAt)}</Fact>
           <Fact label="Created">{dt(j.createdAt)} · {String(j.createdBy ?? "Integration")}</Fact>
           {isOrderlessJob(String(j.operationType)) ? null : <Fact label="Label status">{String(j.labelStatus ?? "—")}</Fact>}
           {isOrderlessJob(String(j.operationType)) ? null : <Fact label="Pick list">{String(j.pickListStatus ?? "—")}</Fact>}
-          <Fact label="Orders · SKUs">{Number(j.orderCount)} · {Number(j.productCount)}{detail.history.releasedOrderCount > 0 && j.status !== "Cancelled" ? <span className="ml-1 text-[12px] font-normal text-faint">({detail.history.releasedOrderCount} released)</span> : null}</Fact>
+          <Fact label="Orders · SKUs">{Number(j.orderCount)} · {Number(j.productCount)}{detail.history.releasedOrderCount > 0 && j.status !== "Cancelled" ? <span className="ml-1 text-xs font-normal text-faint">({detail.history.releasedOrderCount} released)</span> : null}</Fact>
         </dl>
         <div className="flex flex-col justify-center gap-2 border-t border-border pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
           <div className="flex items-baseline justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">Progress</span>
-            <span className="text-[20px] font-semibold tabular-nums text-foreground">{pct}%</span>
+            <span className="text-2xs font-semibold text-faint">Progress</span>
+            <span className="text-lg font-semibold tabular-nums text-foreground">{pct}%</span>
           </div>
           <ProgressBar value={pct} tone={progressTone({ percent: pct, status: String(j.status), hasPickShort: Boolean(Number(j.hasPickShort)), overdue })} label="Job progress" />
-          <span className="text-[12px] text-secondary">{detail.progress.completedTaskCount} of {detail.history.liveTaskCount} tasks complete{detail.history.cancelledTaskCount > 0 ? ` · ${detail.history.cancelledTaskCount} cancelled` : ""}</span>
+          <span className="text-xs text-secondary">{detail.progress.completedTaskCount} of {detail.history.liveTaskCount} tasks complete{detail.history.cancelledTaskCount > 0 ? ` · ${detail.history.cancelledTaskCount} cancelled` : ""}</span>
           {detail.phases.length > 0 ? (
             <ul className="flex flex-col gap-1" aria-label="Progress by task type">
               {detail.phases.map((p) => (
-                <li key={p.phase} className="flex items-center justify-between gap-2 text-[12px]">
+                <li key={p.phase} className="flex items-center justify-between gap-2 text-xs">
                   <span className="text-secondary">{p.phase}</span>
                   <span className="tabular-nums text-foreground">
                     {p.completedTasks}/{p.taskCount} tasks · {p.actualUnits}/{p.plannedUnits} units
-                    {p.pendingTasks + p.startedTasks > 0 ? <span className="ml-1.5 rounded-full bg-surface-sunken px-1.5 py-px text-[10px] font-semibold uppercase text-secondary">{p.pendingTasks + p.startedTasks} pending</span> : null}
+                    {p.pendingTasks + p.startedTasks > 0 ? <span className="ml-1.5 rounded-full bg-surface-sunken px-1.5 py-px text-2xs font-semibold text-secondary">{p.pendingTasks + p.startedTasks} pending</span> : null}
                   </span>
                 </li>
               ))}

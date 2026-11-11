@@ -171,11 +171,11 @@ function ExecuteDrawer({ tasks, open, onClose, onDone }: { readonly tasks: reado
     >
       <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); void execute(); }} noValidate>
         <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full border-collapse text-left text-[12px]">
+          <table className="w-full border-collapse text-left text-xs">
             <thead className="bg-surface-sunken">
               <tr>
                 {["Task ID", "Type", "SKU", "Source", "Remaining"].map((h) => (
-                  <th key={h} scope="col" className="border-b border-border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{h}</th>
+                  <th key={h} scope="col" className="border-b border-border px-3 py-1.5 text-2xs font-semibold text-faint">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -191,12 +191,12 @@ function ExecuteDrawer({ tasks, open, onClose, onDone }: { readonly tasks: reado
               ))}
             </tbody>
           </table>
-          {tasks.length > 8 ? <p className="border-t border-border bg-surface-sunken px-3 py-1.5 text-[11px] text-faint">+{tasks.length - 8} more</p> : null}
+          {tasks.length > 8 ? <p className="border-t border-border bg-surface-sunken px-3 py-1.5 text-2xs text-faint">+{tasks.length - 8} more</p> : null}
         </div>
         <div className="flex flex-col gap-1.5">
           <label className={labelClass} htmlFor="exec-location">Target location <span className="text-danger">*</span></label>
           <LocationPicker id="exec-location" warehouseId={tasks[0]?.warehouseId ?? null} value={locationId} onChange={(v) => setLocationId(v)} placeholder="Select target location" invalid={Boolean(locError)} />
-          {locError ? <p className={errorTextClass}>{locError}</p> : <p className="text-[11px] text-faint">{targetHint(tasks.map((t) => t.taskType))}</p>}
+          {locError ? <p className={errorTextClass}>{locError}</p> : <p className="text-2xs text-faint">{targetHint(tasks.map((t) => t.taskType))}</p>}
         </div>
         <div className="flex flex-col gap-1.5">
           <label className={labelClass} htmlFor="exec-lp">Target LPN</label>
@@ -206,29 +206,29 @@ function ExecuteDrawer({ tasks, open, onClose, onDone }: { readonly tasks: reado
           <div className="flex flex-col gap-1.5">
             <label className={labelClass} htmlFor="exec-qty">Quantity</label>
             <NumberInput id="exec-qty" value={qty} min={0} max={remaining} onChange={(v) => setQty(v)} invalid={Boolean(qtyError)} />
-            <p className="text-[11px] text-faint">{single.sku ? `${single.sku} · ` : ""}{remaining} remaining{single.sourceLocation ? ` at ${single.sourceLocation}` : ""}</p>
+            <p className="text-2xs text-faint">{single.sku ? `${single.sku} · ` : ""}{remaining} remaining{single.sourceLocation ? ` at ${single.sourceLocation}` : ""}</p>
             {qtyError ? <p className={errorTextClass}>{qtyError}</p> : null}
           </div>
         ) : (
-          <p className="text-[12px] text-secondary">Every selected task is executed for its full remaining quantity.</p>
+          <p className="text-xs text-secondary">Every selected task is executed for its full remaining quantity.</p>
         )}
         {partial ? (
           <Callout variant="attention" title={`Partial execute: ${plural(remaining - (qty ?? 0), "unit")} short`}>
             <div className="flex flex-col gap-2">
               <span>A missing-log row is written, Pick Short Status becomes Open and the order is flagged Pick short.</span>
-              <label className="flex items-center gap-2 text-[12px] font-medium text-body">
+              <label className="flex items-center gap-2 text-xs font-medium text-body">
                 <Switch checked={resolutionOn && canResolve} disabled={!canResolve} onCheckedChange={(v) => { setResolutionTouched(true); setResolution(v); }} aria-label="Create a resolution job" data-testid="exec-resolution-toggle" />
                 Create a resolution job to re-pick from another location
               </label>
-              {preview.isPending && single?.taskType === "Picking" ? <span className="text-[11px] text-faint">Checking stock in other locations…</span> : null}
+              {preview.isPending && single?.taskType === "Picking" ? <span className="text-2xs text-faint">Checking stock in other locations…</span> : null}
               {pv && canResolve && pv.freeElsewhere > 0 ? (
-                <span className="text-[11px] text-secondary" data-testid="exec-free-elsewhere">
+                <span className="text-2xs text-secondary" data-testid="exec-free-elsewhere">
                   {plural(pv.freeElsewhere, "unit")} free in {pv.locations.map((l) => `${l.code} (${l.free})`).join(", ")}{pv.sourceLocation ? ` · excluding ${pv.sourceLocation}` : ""}.
                   {!resolutionOn ? " Without a resolution job the order ships short." : ""}
                 </span>
               ) : null}
-              {resolutionHint(pv) ? <span className="text-[11px] text-secondary">{resolutionHint(pv)}</span> : null}
-              {preview.error ? <span className="text-[11px] text-faint">Couldn&apos;t check other locations; you can still create a resolution job.</span> : null}
+              {resolutionHint(pv) ? <span className="text-2xs text-secondary">{resolutionHint(pv)}</span> : null}
+              {preview.error ? <span className="text-2xs text-faint">Couldn&apos;t check other locations; you can still create a resolution job.</span> : null}
             </div>
           </Callout>
         ) : null}
@@ -285,7 +285,7 @@ function UpdateModal({ task, open, onClose, onDone }: { readonly task: TaskFacts
           <div className="flex flex-col gap-1.5">
             <label className={labelClass} htmlFor="upd-job">Job code</label>
             <JobPicker id="upd-job" status={["Pending", "Started"]} value={jobId} onChange={(v) => setJobId(v)} placeholder="Search job code" />
-            <p className="text-[11px] text-faint">Moves the task (and its allocation) to another open job of the same warehouse.</p>
+            <p className="text-2xs text-faint">Moves the task (and its allocation) to another open job of the same warehouse.</p>
           </div>
           {serverError ? <Callout variant="error" title="Couldn't update">{serverError}</Callout> : null}
         </DialogBody>

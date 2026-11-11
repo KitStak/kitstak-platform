@@ -76,7 +76,7 @@ export function StepVendor({ form }: { readonly form: UseFormReturn<PoFormValues
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[12px] text-secondary">
+        <p className="text-xs text-secondary">
           {vendorId ? <>Selected: <span className="font-semibold text-foreground">{form.getValues("vendorLabel")}</span></> : null}
         </p>
         <DisabledReason reason={canCreate ? null : "You don't have permission to create vendors"}>
@@ -101,7 +101,7 @@ export function StepVendor({ form }: { readonly form: UseFormReturn<PoFormValues
           emptyAction={canCreate ? <Button variant="primary" onClick={() => setDrawer({ id: null })}><Plus className="h-3.5 w-3.5" aria-hidden />Add new vendor</Button> : undefined}
         />
       </div>
-      {error ? <p role="alert" className="text-[12px] font-medium text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="text-xs font-medium text-danger">{error}</p> : null}
       <VendorDrawer
         open={drawer !== null}
         onOpenChange={(open) => !open && setDrawer(null)}

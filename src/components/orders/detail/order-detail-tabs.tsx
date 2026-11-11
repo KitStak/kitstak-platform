@@ -120,7 +120,7 @@ function StackNum({ label, v, tone }: { readonly label: string; readonly v: numb
   const cls = v === 0 ? "text-faint" : tone === "success" ? "text-success" : tone === "danger" ? "text-danger" : "text-foreground";
   return (
     <div className="flex flex-col">
-      <dt className="text-[10.5px] font-semibold uppercase tracking-[0.04em] text-faint">{label}</dt>
+      <dt className="text-2xs font-semibold text-faint">{label}</dt>
       <dd className={`tabular-nums font-semibold ${cls}`}>{v}</dd>
     </div>
   );
@@ -135,16 +135,16 @@ export function OrderLinesTab({ detail }: { readonly detail: OrderDetail }) {
   if (detail.lines.length === 0) return <EmptyState title="No lines on this order" description="Open the Edit tab to add products." compact />;
   return (
     <div className="@container flex w-full min-w-0 max-w-full flex-col gap-3">
-      {hint ? <p className="rounded-md border border-border bg-surface-sunken px-3 py-2 text-[13px] text-secondary" data-testid="order-next-step">{hint}</p> : null}
+      {hint ? <p className="rounded-md border border-border bg-surface-sunken px-3 py-2 text-sm text-secondary" data-testid="order-next-step">{hint}</p> : null}
       {/* Narrow cards (tablet): one stacked card per line, so no quantity column hides behind a scroll. */}
       <ul className="flex flex-col divide-y divide-border rounded-md border border-border @[760px]:hidden" aria-label="Order lines" data-testid="order-lines-stacked">
         {detail.lines.map((l) => (
           <li key={l.id} className="flex flex-col gap-2 px-3 py-2.5">
             <div className="flex min-w-0 items-baseline justify-between gap-3">
-              <Link href={`/products/${encodeURIComponent(l.productId)}`} className="shrink-0 font-mono text-[12px] text-primary hover:underline">{l.sku}</Link>
-              <span className="truncate text-[12.5px] text-secondary" title={l.productName}>{l.productName}</span>
+              <Link href={`/products/${encodeURIComponent(l.productId)}`} className="shrink-0 font-mono text-xs text-primary hover:underline">{l.sku}</Link>
+              <span className="truncate text-xs text-secondary" title={l.productName}>{l.productName}</span>
             </div>
-            <dl className="grid grid-cols-3 gap-x-3 gap-y-1.5 text-[12px] @[480px]:grid-cols-6">
+            <dl className="grid grid-cols-3 gap-x-3 gap-y-1.5 text-xs @[480px]:grid-cols-6">
               <StackNum label="Ordered" v={l.quantity} />
               <StackNum label="Allocated" v={l.allocatedQuantity} />
               <StackNum label="Picked" v={l.pickedQuantity} />
@@ -152,16 +152,16 @@ export function OrderLinesTab({ detail }: { readonly detail: OrderDetail }) {
               <StackNum label="Shipped" v={l.shippedQuantity} tone="success" />
               <StackNum label="Cancelled" v={l.cancelledQuantity} tone="danger" />
             </dl>
-            <p className="text-[12px] text-secondary">
+            <p className="text-xs text-secondary">
               {l.uom} · {fmt.money(l.unitPrice)}{l.lotNumber || l.pinnedLocationCode ? ` · ${[l.lotNumber, l.pinnedLocationCode].filter(Boolean).join(" · ")}` : ""}
             </p>
           </li>
         ))}
       </ul>
       <ScrollRegion label="Order lines" className="hidden @[760px]:block">
-        <table className="w-full border-collapse text-[12.5px]">
+        <table className="w-full border-collapse text-xs">
           <caption className="sr-only">Order lines and fulfilment progress</caption>
-          <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+          <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
             <tr>
               <th scope="col" className="whitespace-nowrap px-2 py-2">SKU</th>
               <th scope="col" className="whitespace-nowrap px-2 py-2">Product</th>
@@ -179,7 +179,7 @@ export function OrderLinesTab({ detail }: { readonly detail: OrderDetail }) {
           <tbody>
             {detail.lines.map((l) => (
               <tr key={l.id} className="border-t border-border">
-                <td className="whitespace-nowrap px-2 py-2 font-mono text-[12px]" title={l.sku}>
+                <td className="whitespace-nowrap px-2 py-2 font-mono text-xs" title={l.sku}>
                   <Link href={`/products/${encodeURIComponent(l.productId)}`} className="text-primary hover:underline">{l.sku}</Link>
                 </td>
                 <td className="max-w-[220px] truncate px-2 py-2" title={l.productName}>{l.productName}</td>
@@ -191,7 +191,7 @@ export function OrderLinesTab({ detail }: { readonly detail: OrderDetail }) {
                 <Num v={l.shippedQuantity} tone="success" />
                 <Num v={l.cancelledQuantity} tone="danger" />
                 <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{fmt.money(l.unitPrice)}</td>
-                {hasLot ? <td className="whitespace-nowrap px-2 py-2 text-[12px] text-secondary">{[l.lotNumber, l.pinnedLocationCode].filter(Boolean).join(" · ") || "—"}</td> : null}
+                {hasLot ? <td className="whitespace-nowrap px-2 py-2 text-xs text-secondary">{[l.lotNumber, l.pinnedLocationCode].filter(Boolean).join(" · ") || "—"}</td> : null}
               </tr>
             ))}
           </tbody>
@@ -209,7 +209,7 @@ export function OrderLinesTab({ detail }: { readonly detail: OrderDetail }) {
           </tfoot>
         </table>
       </ScrollRegion>
-      <p className="text-right text-[12px] text-secondary" data-testid="order-lines-footnote">{linesFootnote(detail.order.status, totals)}</p>
+      <p className="text-right text-xs text-secondary" data-testid="order-lines-footnote">{linesFootnote(detail.order.status, totals)}</p>
     </div>
   );
 }
@@ -219,15 +219,15 @@ export function OrderShipmentsTab({ detail }: { readonly detail: OrderDetail }) 
   return (
     <div className="flex flex-col gap-4">
       <section aria-labelledby="order-jobs-h" className="flex flex-col gap-2">
-        <h3 id="order-jobs-h" className="text-[13px] font-semibold text-foreground">Jobs</h3>
+        <h3 id="order-jobs-h" className="text-sm font-semibold text-foreground">Jobs</h3>
         {detail.jobs.length === 0 ? (
-          <p className="text-[13px] text-secondary">No picking job yet.</p>
+          <p className="text-sm text-secondary">No picking job yet.</p>
         ) : (
           <ul className="flex flex-wrap gap-2">
             {detail.jobs.map((j) => (
               <li key={j.id} className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5">
-                <Link href={`/jobs/${encodeURIComponent(j.id)}`} className="text-[13px] font-semibold text-primary hover:underline">{j.code}</Link>
-                <span className="text-[12px] text-secondary">{j.jobType}</span>
+                <Link href={`/jobs/${encodeURIComponent(j.id)}`} className="text-sm font-semibold text-primary hover:underline">{j.code}</Link>
+                <span className="text-xs text-secondary">{j.jobType}</span>
                 <StatusPill status={j.status} domain="job" size="sm" />
               </li>
             ))}
@@ -236,16 +236,16 @@ export function OrderShipmentsTab({ detail }: { readonly detail: OrderDetail }) 
       </section>
       <section aria-labelledby="order-ship-h" className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <h3 id="order-ship-h" className="text-[13px] font-semibold text-foreground">Packages & labels</h3>
-          <Link href="/shipments/history" className="text-[12px] font-medium text-primary hover:underline">Shipment history</Link>
+          <h3 id="order-ship-h" className="text-sm font-semibold text-foreground">Packages & labels</h3>
+          <Link href="/shipments/history" className="text-xs font-medium text-primary hover:underline">Shipment history</Link>
         </div>
         {detail.shipments.length === 0 ? (
           <EmptyState title="No packages yet" description="Packages and tracking numbers appear once the order is packed and labeled." compact />
         ) : (
           <ScrollRegion label="Packages and labels">
-            <table className="w-full min-w-[640px] border-collapse text-[13px]">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
               <caption className="sr-only">Packages and labels</caption>
-              <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+              <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
                 <tr>
                   <th scope="col" className="whitespace-nowrap px-2 py-2">Pkg</th>
                   <th scope="col" className="whitespace-nowrap px-2 py-2">Tracking</th>
@@ -261,13 +261,13 @@ export function OrderShipmentsTab({ detail }: { readonly detail: OrderDetail }) 
                 {detail.shipments.map((s) => (
                   <tr key={s.id} className="border-t border-border">
                     <td className="px-3 py-2 tabular-nums">{s.packageSeq}</td>
-                    <td className="px-3 py-2 font-mono text-[12px]">{s.trackingNumber}</td>
+                    <td className="px-3 py-2 font-mono text-xs">{s.trackingNumber}</td>
                     <td className="px-3 py-2">{s.carrierCode} · {s.serviceName}</td>
                     <td className="px-3 py-2"><StatusPill status={s.labelStatus} size="sm" /></td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmt.measure(s.weight, "lb", 2)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmt.money(s.shippingCost)}</td>
-                    <td className="px-3 py-2 text-[12px] text-secondary">{fmt.dateTime(s.labelCreatedAt)}</td>
-                    <td className="px-3 py-2 text-[12px] text-secondary">{s.actualShipmentAt ? fmt.dateTime(s.actualShipmentAt) : "—"}</td>
+                    <td className="px-3 py-2 text-xs text-secondary">{fmt.dateTime(s.labelCreatedAt)}</td>
+                    <td className="px-3 py-2 text-xs text-secondary">{s.actualShipmentAt ? fmt.dateTime(s.actualShipmentAt) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -285,9 +285,9 @@ function Field({ label, children, mono, className }: { readonly label: string; r
   const empty = children === null || children === undefined || children === "";
   return (
     <div className={`flex min-w-0 flex-col gap-0.5 ${className ?? ""}`}>
-      <dt className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{label}</dt>
+      <dt className="text-2xs font-semibold text-faint">{label}</dt>
       {/* The empty glyph never uses the mono face (its em dash renders like an en dash there). */}
-      <dd className={`min-w-0 break-words text-[13px] ${empty ? "text-faint" : "text-foreground"} ${mono && !empty ? "font-mono text-[12px]" : ""}`}>{empty ? EMPTY_VALUE : children}</dd>
+      <dd className={`min-w-0 break-words text-sm ${empty ? "text-faint" : "text-foreground"} ${mono && !empty ? "font-mono text-xs" : ""}`}>{empty ? EMPTY_VALUE : children}</dd>
     </div>
   );
 }
@@ -295,7 +295,7 @@ function Field({ label, children, mono, className }: { readonly label: string; r
 function OverviewCard({ title, children, testId, className }: { readonly title: string; readonly children: React.ReactNode; readonly testId?: string; readonly className?: string }) {
   return (
     <section aria-label={title} data-testid={testId} className={`flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-surface p-4 shadow-xs ${className ?? ""}`}>
-      <h3 className="text-[13px] font-semibold text-foreground">{title}</h3>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       {children}
     </section>
   );
@@ -308,7 +308,7 @@ const VERIFICATION_CLASS: Readonly<Record<string, string>> = {
 };
 
 function VerificationPill({ status }: { readonly status: string }) {
-  return <span className={`inline-flex rounded-full px-1.5 py-px text-[10px] font-semibold leading-4 ${VERIFICATION_CLASS[status] ?? VERIFICATION_CLASS.Unverified}`}>{status === "Corrected" ? "Verified (corrected)" : status}</span>;
+  return <span className={`inline-flex rounded-full px-1.5 py-px text-2xs font-semibold leading-4 ${VERIFICATION_CLASS[status] ?? VERIFICATION_CLASS.Unverified}`}>{status === "Corrected" ? "Verified (corrected)" : status}</span>;
 }
 
 /** Postal address as display lines; empty parts are skipped. */
@@ -344,17 +344,17 @@ export function OrderOverviewCards({ detail }: { readonly detail: OrderDetail })
           <Field label="Phone">{o.customerPhone}</Field>
           <Field label="Address type">{o.addressType}</Field>
           <div className="flex min-w-0 flex-col gap-0.5 sm:col-span-2">
-            <dt className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+            <dt className="flex flex-wrap items-center gap-2 text-2xs font-semibold text-faint">
               <span>Ship-to address</span>
               <span className="normal-case tracking-normal" data-testid="order-address-verification">
                 <VerificationPill status={verification} />
               </span>
             </dt>
-            <dd className="text-[13px] text-foreground">{ship.length ? lines(ship) : <span className="text-faint">—</span>}</dd>
+            <dd className="text-sm text-foreground">{ship.length ? lines(ship) : <span className="text-faint">—</span>}</dd>
           </div>
           <div className="flex min-w-0 flex-col gap-0.5 sm:col-span-2">
-            <dt className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">Billing address</dt>
-            <dd className="text-[13px] text-foreground">
+            <dt className="text-2xs font-semibold text-faint">Billing address</dt>
+            <dd className="text-sm text-foreground">
               {billing === null ? <span className="text-secondary">Same as ship-to</span> : billing.length ? lines(billing) : <span className="text-faint">—</span>}
             </dd>
           </div>

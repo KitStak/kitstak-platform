@@ -35,8 +35,8 @@ function ActionCard({ card }: { readonly card: EmptyStateAction }) {
         </span>
       ) : null}
       <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-semibold text-foreground">{card.title}</span>
-        {card.description ? <span className="mt-0.5 block text-[12px] leading-4 text-secondary">{card.description}</span> : null}
+        <span className="block text-sm font-semibold text-foreground">{card.title}</span>
+        {card.description ? <span className="mt-0.5 block text-xs leading-4 text-secondary">{card.description}</span> : null}
       </span>
       <ChevronRight className="h-4 w-4 shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg" aria-hidden />
     </>

@@ -50,7 +50,7 @@ export function buildProductColumns(): Col[] {
     },
     { id: "barcode", accessorKey: "barcode", header: "Barcode", size: 170, meta: { clip: false }, cell: ({ row }) => (
       <span className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate font-mono text-[12px]">{row.original.barcode}</span>
+        <span className="truncate font-mono text-xs">{row.original.barcode}</span>
         {row.original.barcodeConflictCount > 0 ? (
           <span title={`Barcode shared with ${row.original.barcodeConflictCount} other product${row.original.barcodeConflictCount === 1 ? "" : "s"} of this client — scans are ambiguous`}><Badge tone="warning" size="sm">Conflict</Badge></span>
         ) : null}
@@ -73,7 +73,7 @@ export function buildProductColumns(): Col[] {
     { id: "purchasePrice", accessorKey: "purchasePrice", header: "Purchase price", size: 124, meta: { align: "right" }, cell: ({ row }) => <MoneyCell value={row.original.purchasePrice} currency={row.original.currency} /> },
     {
       id: "uom", accessorKey: "uom", header: "UOM pack type", size: 124,
-      cell: ({ row }) => <span className="truncate">{row.original.uom}{row.original.packTypeCount > 1 ? <span className="ml-1 text-[11px] text-faint">+{row.original.packTypeCount - 1}</span> : null}</span>,
+      cell: ({ row }) => <span className="truncate">{row.original.uom}{row.original.packTypeCount > 1 ? <span className="ml-1 text-2xs text-faint">+{row.original.packTypeCount - 1}</span> : null}</span>,
     },
     flag("trackLot", "Lot/batch number tracking"),
     flag("trackExpiry", "Expiry date tracking"),

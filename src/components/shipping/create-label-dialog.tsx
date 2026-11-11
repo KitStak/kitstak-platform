@@ -124,14 +124,14 @@ export function CreateLabelDialog({ open, onOpenChange, planId, preselect, title
         <DialogHeader title={title ?? "Create label for order(s)"} description="Buys a carrier label per order with the order's carrier service, or the best rate when it names none. Labels join today's End Of The Day manifest." />
         <DialogBody className="flex flex-col gap-3">
           {result ? (
-            <table className="w-full text-[12px]" aria-label="Label results">
-              <thead className="text-left text-[11px] uppercase text-faint"><tr><th className="py-1">Order</th><th>Result</th><th>Tracking / carrier response</th><th className="w-24"><span className="sr-only">Label</span></th></tr></thead>
+            <table className="w-full text-xs" aria-label="Label results">
+              <thead className="text-left text-2xs text-faint"><tr><th className="py-1">Order</th><th>Result</th><th>Tracking / carrier response</th><th className="w-24"><span className="sr-only">Label</span></th></tr></thead>
               <tbody>
                 {outcomeRows.map((o) => (
                   <tr key={o.id} className="border-t border-border align-top">
                     <td className="py-1.5 font-semibold"><Link className="text-primary hover:underline" href={`/orders/${encodeURIComponent(o.code)}`}>{o.code}</Link></td>
                     <td className={o.ok ? "py-1.5 text-success" : "py-1.5 text-danger"}>{o.ok ? "Created" : "Error"}</td>
-                    <td className="break-words py-1.5 font-mono text-[11px]">{o.text}</td>
+                    <td className="break-words py-1.5 font-mono text-2xs">{o.text}</td>
                     <td className="py-1.5 text-right">{o.fileId ? <a className="inline-flex items-center gap-1 text-primary hover:underline" href={fileUrl(o.fileId)} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3 w-3" aria-hidden />Open label</a> : null}</td>
                   </tr>
                 ))}
@@ -144,13 +144,13 @@ export function CreateLabelDialog({ open, onOpenChange, planId, preselect, title
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" aria-hidden />
                 <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Order code, customer or store order number" className="pl-8" autoFocus />
               </label>
-              {list.isError ? <p className="text-[12px] text-danger">Couldn&apos;t load orders. {list.error.message}</p> : !list.data ? (
+              {list.isError ? <p className="text-xs text-danger">Couldn&apos;t load orders. {list.error.message}</p> : !list.data ? (
                 <div className="flex flex-col gap-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
               ) : rows.length === 0 ? (
-                <p className="py-6 text-center text-[12px] text-secondary">{query ? "No order matches this search." : planId ? "This plan has no orders." : "No order is waiting for a label."}</p>
+                <p className="py-6 text-center text-xs text-secondary">{query ? "No order matches this search." : planId ? "This plan has no orders." : "No order is waiting for a label."}</p>
               ) : (
-                <table className="w-full text-[12px]">
-                  <thead className="text-left text-[11px] uppercase text-faint">
+                <table className="w-full text-xs">
+                  <thead className="text-left text-2xs text-faint">
                     <tr>
                       <th className="w-8 py-1"><Checkbox aria-label="Select all orders that can get a label" checked={eligible.length > 0 && eligible.every((r) => picked.has(r.id)) ? true : eligible.some((r) => picked.has(r.id)) ? "indeterminate" : false} onCheckedChange={(c) => setPicked(c === true ? new Set(eligible.map((r) => r.id)) : new Set())} disabled={eligible.length === 0} /></th>
                       <th>Order</th><th>Status</th><th>Customer</th><th>Carrier service</th><th className="text-right">Weight</th>
@@ -161,7 +161,7 @@ export function CreateLabelDialog({ open, onOpenChange, planId, preselect, title
                       <tr key={r.id} className="border-t border-border align-top" title={r.blockedReason ?? undefined}>
                         <td className="py-1.5"><Checkbox aria-label={`Select ${r.code}`} checked={picked.has(r.id) && !r.blockedReason} disabled={Boolean(r.blockedReason)} onCheckedChange={(c) => toggle(r.id, c === true)} /></td>
                         <td className="py-1.5 font-semibold">{r.code}<div className="font-normal text-faint">{r.warehouseCode}{r.clientName ? ` · ${r.clientName}` : ""}</div></td>
-                        <td className="py-1.5"><StatusPill status={r.status} domain="shipmentOrder" size="sm" />{r.blockedReason ? <div className="mt-0.5 max-w-[180px] text-[11px] text-warning">{r.blockedReason}</div> : null}</td>
+                        <td className="py-1.5"><StatusPill status={r.status} domain="shipmentOrder" size="sm" />{r.blockedReason ? <div className="mt-0.5 max-w-[180px] text-2xs text-warning">{r.blockedReason}</div> : null}</td>
                         <td className="max-w-[160px] truncate py-1.5" title={r.customerName}>{r.customerName}</td>
                         <td className="py-1.5">{r.carrierService ?? <span className="text-secondary" title="The order names no carrier service, so the label uses the best rate">Rate shop</span>}</td>
                         <td className="py-1.5 text-right tabular-nums">{(r.weightOz / 16).toFixed(2)} lb</td>

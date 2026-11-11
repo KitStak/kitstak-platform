@@ -42,7 +42,7 @@ function Pill({ band, sign, children, title, className, dataAttrs }: { readonly 
       data-band={band}
       title={title}
       style={pillStyle(tone)}
-      className={cn("inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums", DARK_BY_TONE[toneName], className)}
+      className={cn("inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums", DARK_BY_TONE[toneName], className)}
     >
       {sign > 0 ? <ArrowUp className="h-3 w-3 shrink-0" aria-hidden /> : sign < 0 ? <ArrowDown className="h-3 w-3 shrink-0" aria-hidden /> : null}
       {children}

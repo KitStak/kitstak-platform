@@ -54,7 +54,7 @@ export function JobTypesPage() {
       ),
       usage: ({ row }) => {
         const t = usageText(row.original);
-        return t ? <span className="inline-flex rounded-full bg-[#D5E5F2] px-2 py-0.5 text-[11px] font-semibold text-[#0D36A3]">{t}</span> : <span className="text-[12px] text-faint">Not used</span>;
+        return t ? <span className="inline-flex rounded-full bg-[var(--label-blue-subtle)] px-2 py-0.5 text-2xs font-semibold text-[var(--label-blue-text)]">{t}</span> : <span className="text-xs text-faint">Not used</span>;
       },
     },
   }), []);

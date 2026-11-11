@@ -66,7 +66,7 @@ export function buildTotalColumns(): Col[] {
     {
       id: "warehouse", accessorKey: "warehouse", header: "Warehouse", size: 170, meta: { label: "Warehouse" },
       cell: ({ row }) => (row.original.warehouseId ? row.original.warehouse : (
-        <span className="inline-flex rounded-full bg-surface-sunken px-2 py-0.5 text-[12px] text-secondary" title={row.original.warehouseCount > 1 ? `${ALL_WAREHOUSES_LABEL} (${row.original.warehouseCount} warehouses)` : ALL_WAREHOUSES_LABEL}>
+        <span className="inline-flex rounded-full bg-surface-sunken px-2 py-0.5 text-xs text-secondary" title={row.original.warehouseCount > 1 ? `${ALL_WAREHOUSES_LABEL} (${row.original.warehouseCount} warehouses)` : ALL_WAREHOUSES_LABEL}>
           {row.original.warehouseCount > 1 ? `All (${row.original.warehouseCount})` : "All"}
         </span>
       )),

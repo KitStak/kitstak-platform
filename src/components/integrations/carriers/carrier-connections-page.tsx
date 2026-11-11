@@ -47,7 +47,7 @@ export function CarrierConnectionsPage({ provider: slug }: { readonly provider: 
       <PageHeader title={`${entry.name} Integration`} crumbLabel={entry.name} helpHref={`/integrations/help#carrier-${slug}`} helper={`Connect ${entry.name} to KitStak to get its carriers, services and packages for rating and labels.`}
         actions={
           <div className="flex items-center gap-3">
-            <Link href="/integrations/carriers" className="inline-flex items-center gap-1 text-[13px] text-secondary hover:text-primary"><ChevronLeft className="h-4 w-4" />Carrier integrations</Link>
+            <Link href="/integrations/carriers" className="inline-flex items-center gap-1 text-sm text-secondary hover:text-primary"><ChevronLeft className="h-4 w-4" />Carrier integrations</Link>
             {perms.create_setup ? <DisabledReason reason={soon ? "This carrier isn't available yet" : null}><Button variant="success-outline" disabled={soon} onClick={() => setAdd(true)}><Plus className="h-4 w-4" />Add New Connection</Button></DisabledReason> : null}
           </div>
         } />
@@ -55,14 +55,14 @@ export function CarrierConnectionsPage({ provider: slug }: { readonly provider: 
         <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={svgDataUri(sandbox ? entry.logoSvg : brandMarkSvg("carrier", slug, entry.logoSvg))} alt="" width={40} height={40} className="rounded-lg" />
-          <div className="min-w-0 flex-1"><p className="text-[14px] font-semibold">{entry.name}</p><p className="truncate text-[12px] text-secondary">{entry.description}</p></div>
+          <div className="min-w-0 flex-1"><p className="text-base font-semibold">{entry.name}</p><p className="truncate text-xs text-secondary">{entry.description}</p></div>
           <Badge tone={rows.length > 0 ? "success" : "neutral"}>{rows.length} setup{rows.length === 1 ? "" : "s"}</Badge>
         </div>
         {list.isPending ? <SkeletonTable rows={3} columns={6} /> : list.isError ? <EmptyState title="Couldn't load carrier setups" description={list.error.message} action={<Button onClick={() => void list.refetch()}>Retry</Button>} />
           : rows.length === 0 ? <EmptyState icon={Truck} title={`No ${entry.name} setups yet`} description="Add a connection to rate shop and print labels with this carrier." action={perms.create_setup && !soon ? <Button variant="primary" onClick={() => setAdd(true)}><Plus className="h-4 w-4" />Add New Connection</Button> : undefined} /> : (
           <div className="overflow-x-auto rounded-xl border border-border bg-surface">
-            <table className="w-full text-[13px]">
-              <thead className="border-b border-border bg-surface-sunken text-[11px] font-semibold uppercase tracking-wide text-secondary"><tr><th className="px-4 py-2.5 text-left">Setup name</th><th className="px-3 py-2.5 text-left">Warehouse</th><th className="px-3 py-2.5 text-left">Status</th><th className="px-3 py-2.5 text-left">Environment</th><th className="px-3 py-2.5 text-left">Connection</th><th className="px-3 py-2.5 text-left">Services</th><th className="px-3 py-2.5 text-left">Clients</th><th className="px-3 py-2.5 text-left">Errors (24h)</th><th className="w-12" /></tr></thead>
+            <table className="w-full text-sm">
+              <thead className="border-b border-border bg-surface-sunken text-2xs font-semibold text-secondary"><tr><th className="px-4 py-2.5 text-left">Setup name</th><th className="px-3 py-2.5 text-left">Warehouse</th><th className="px-3 py-2.5 text-left">Status</th><th className="px-3 py-2.5 text-left">Environment</th><th className="px-3 py-2.5 text-left">Connection</th><th className="px-3 py-2.5 text-left">Services</th><th className="px-3 py-2.5 text-left">Clients</th><th className="px-3 py-2.5 text-left">Errors (24h)</th><th className="w-12" /></tr></thead>
               <tbody className="divide-y divide-border">
                 {rows.map((r) => (
                   <tr key={r.id} className="hover:bg-surface-sunken/50">

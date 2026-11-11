@@ -62,18 +62,18 @@ function AutoRunsDrawer({ open, onOpenChange }: { readonly open: boolean; readon
   return (
     <Drawer open={open} onOpenChange={onOpenChange} width={35} title="Automatic calculation" description="Approved billing forms are calculated by the scheduler once each period closes.">
       {q.isPending ? <Skeleton className="h-40 w-full" /> : !d ? <EmptyState title="Couldn't load the job history" action={<Button onClick={() => void q.refetch()}>Retry</Button>} /> : (
-        <div className="flex flex-col gap-5 text-[13px]">
+        <div className="flex flex-col gap-5 text-sm">
           <dl className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-surface-sunken/50 p-3">
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-faint">Schedule</dt><dd className="mt-0.5 text-foreground">Every hour</dd></div>
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-faint">Next check</dt><dd className="mt-0.5 tabular-nums text-foreground">{d.task ? dates.at(d.task.nextCheckAt) : "Within the hour"}</dd></div>
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-faint">Last run</dt><dd className="mt-0.5 tabular-nums text-foreground">{d.task?.lastStartedAt ? dates.at(d.task.lastStartedAt) : "Not run on this server yet"}</dd></div>
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-faint">Last result</dt><dd className="mt-0.5 text-foreground">{d.task?.lastMessage ?? "—"}</dd></div>
+            <div><dt className="text-2xs font-semibold text-faint">Schedule</dt><dd className="mt-0.5 text-foreground">Every hour</dd></div>
+            <div><dt className="text-2xs font-semibold text-faint">Next check</dt><dd className="mt-0.5 tabular-nums text-foreground">{d.task ? dates.at(d.task.nextCheckAt) : "Within the hour"}</dd></div>
+            <div><dt className="text-2xs font-semibold text-faint">Last run</dt><dd className="mt-0.5 tabular-nums text-foreground">{d.task?.lastStartedAt ? dates.at(d.task.lastStartedAt) : "Not run on this server yet"}</dd></div>
+            <div><dt className="text-2xs font-semibold text-faint">Last result</dt><dd className="mt-0.5 text-foreground">{d.task?.lastMessage ?? "—"}</dd></div>
           </dl>
           <section aria-label="Job history">
-            <h3 className="mb-2 text-[13px] font-semibold text-foreground">Job history</h3>
+            <h3 className="mb-2 text-sm font-semibold text-foreground">Job history</h3>
             {d.runs.length === 0 ? <p className="text-secondary">No automatic bills yet. Bills appear here after the first period closes.</p> : (
               <table className="w-full text-left">
-                <thead className="text-[11px] font-semibold uppercase tracking-wide text-secondary"><tr><th className="py-1.5">Run day</th><th className="py-1.5 text-right">Contracts</th><th className="py-1.5 text-right">Bills</th><th className="py-1.5 text-right">Failed</th><th className="py-1.5 text-right">Total</th></tr></thead>
+                <thead className="text-2xs font-semibold text-secondary"><tr><th className="py-1.5">Run day</th><th className="py-1.5 text-right">Contracts</th><th className="py-1.5 text-right">Bills</th><th className="py-1.5 text-right">Failed</th><th className="py-1.5 text-right">Total</th></tr></thead>
                 <tbody className="divide-y divide-border">
                   {d.runs.map((r) => <tr key={r.day}><td className="py-1.5 tabular-nums">{dates.day(r.day)}</td><td className="py-1.5 text-right tabular-nums">{r.contracts}</td><td className="py-1.5 text-right tabular-nums">{r.bills}</td><td className={`py-1.5 text-right tabular-nums ${r.failed ? "text-error" : "text-faint"}`}>{r.failed || "—"}</td><td className="py-1.5 text-right font-semibold tabular-nums">{moneyGrid(r.total, "USD")}</td></tr>)}
                 </tbody>

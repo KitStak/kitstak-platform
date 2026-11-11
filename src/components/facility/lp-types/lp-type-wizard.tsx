@@ -96,12 +96,12 @@ function OtherStep({ form, next, canManage }: { readonly form: UseFormReturn<F>;
       </FormSection>
       <CustomFieldsSection entityType="lp_type" values={(field.value ?? {}) as CustomFieldValues} onChange={(v) => field.onChange({ ...v })} canManage={canManage} />
       <section className="rounded-lg border border-border bg-surface-sunken/50 p-4">
-        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Numbering preview</h3>
-        <p className="mt-1 text-[12px] text-faint">The next three numbers created from this type.</p>
+        <h3 className="text-xs font-semibold text-secondary">Numbering preview</h3>
+        <p className="mt-1 text-xs text-faint">The next three numbers created from this type.</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {[0, 1, 2].map((i) => <code key={i} className="rounded-md border border-border bg-surface px-2 py-1 font-mono text-[13px] text-foreground">{lpNumberPreview(prefix, length, next + i)}</code>)}
+          {[0, 1, 2].map((i) => <code key={i} className="rounded-md border border-border bg-surface px-2 py-1 font-mono text-sm text-foreground">{lpNumberPreview(prefix, length, next + i)}</code>)}
         </div>
-        <p className="mt-3 text-[12px] text-secondary">{params.length ? `Rules: ${params.map((p) => p.label).join(" · ")}` : "No mixing rules: any stock can share an LP of this type."}</p>
+        <p className="mt-3 text-xs text-secondary">{params.length ? `Rules: ${params.map((p) => p.label).join(" · ")}` : "No mixing rules: any stock can share an LP of this type."}</p>
       </section>
     </div>
   );

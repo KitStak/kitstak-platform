@@ -168,12 +168,12 @@ function RunDetailDialog({ run, onClose }: { readonly run: RunRow | null; readon
         <DialogHeader title={title} description={run ? `${run.storeName} · ${run.method}` : undefined} />
         <DialogBody className="flex flex-col gap-4">
           {run ? <StatRow stats={[{ label: "Success qty", value: run.successCount, tone: "success" }, { label: "Error qty", value: run.errorCount, tone: run.errorCount > 0 ? "danger" : undefined }, { label: "Total qty", value: run.totalCount }, { label: "Status", value: <StatusPill status={run.status} domain={integrationDomain(run.status)} /> }]} /> : null}
-          {run ? <p className="text-[12px] text-secondary">Started {dates.dateTime(run.startedAt)} · {run.endedAt ? `ended ${dates.dateTime(run.endedAt)} (${Math.max(0, Math.round((Date.parse(run.endedAt) - Date.parse(run.startedAt)) / 1000))} s)` : "still running"}</p> : null}
+          {run ? <p className="text-xs text-secondary">Started {dates.dateTime(run.startedAt)} · {run.endedAt ? `ended ${dates.dateTime(run.endedAt)} (${Math.max(0, Math.round((Date.parse(run.endedAt) - Date.parse(run.startedAt)) / 1000))} s)` : "still running"}</p> : null}
           <SegmentedControl size="sm" ariaLabel="Show" value={filter} onChange={(v) => { setFilter(v); setPage(1); }} options={[{ value: "all", label: "All rows" }, { value: "errors", label: "Errors only" }]} />
           {q.isPending ? <SkeletonTable rows={5} columns={3} /> : (
             <div className="overflow-hidden rounded-lg border border-border">
-              <table className="w-full text-[12px]">
-                <thead className="bg-surface-sunken text-[11px] uppercase text-secondary"><tr><th className="w-20 px-3 py-2 text-left">Success</th><th className="px-3 py-2 text-left">Properties</th><th className="px-3 py-2 text-left">Error message</th></tr></thead>
+              <table className="w-full text-xs">
+                <thead className="bg-surface-sunken text-2xs text-secondary"><tr><th className="w-20 px-3 py-2 text-left">Success</th><th className="px-3 py-2 text-left">Properties</th><th className="px-3 py-2 text-left">Error message</th></tr></thead>
                 <tbody className="divide-y divide-border">
                   {(d?.items ?? []).length === 0 ? <tr><td colSpan={3} className="px-3 py-6 text-center text-faint">No rows to display.</td></tr> : (d?.items ?? []).map((i) => (
                     <tr key={i.id} className="align-top">
@@ -188,9 +188,9 @@ function RunDetailDialog({ run, onClose }: { readonly run: RunRow | null; readon
           )}
         </DialogBody>
         <DialogFooter>
-          <span className="mr-auto text-[12px] text-secondary">Total: {d?.total ?? 0}</span>
+          <span className="mr-auto text-xs text-secondary">Total: {d?.total ?? 0}</span>
           <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-          <span className="text-[12px] tabular-nums">{page} / {pages}</span>
+          <span className="text-xs tabular-nums">{page} / {pages}</span>
           <Button size="sm" variant="secondary" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Next</Button>
           <Button variant="primary" onClick={onClose}>Close</Button>
         </DialogFooter>

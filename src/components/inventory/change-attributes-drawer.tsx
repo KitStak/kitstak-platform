@@ -115,7 +115,7 @@ function AttributeForm({ attribute, rows, skipped, onClose, onDone }: { readonly
       <div className="flex flex-col gap-4">
         <SkippedRowsCallout eligible={rows} skipped={skipped} />
         {single ? <BucketCard row={single} compact /> : (
-          <div className="rounded-lg border border-border bg-surface-sunken/60 p-3 text-[13px]">
+          <div className="rounded-lg border border-border bg-surface-sunken/60 p-3 text-sm">
             <div className="font-semibold text-foreground">{rows.length} rows selected</div>
             <ul className="mt-1 max-h-32 overflow-auto text-secondary">
               {rows.slice(0, 20).map((r) => <li key={r.id} className="truncate">{r.sku} · {r.location}{r.lpNumber ? ` / ${r.lpNumber}` : ""} · {formatQty(r.freePackQty)} {r.packType}</li>)}

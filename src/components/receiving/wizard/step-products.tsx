@@ -43,15 +43,15 @@ const ratioOf = (l: LineDraft): number => l.packTypes.find((p) => p.packType ===
 
 export function Chip({ label, value }: { readonly label: string; readonly value: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-[12px]">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-xs">
       <span className="text-faint">{label}</span>
       <span className="font-semibold tabular-nums text-foreground">{value}</span>
     </span>
   );
 }
 
-const TH = "whitespace-nowrap border-b border-border bg-surface-sunken px-2.5 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint";
-const TD = "whitespace-nowrap border-b border-border px-2.5 py-2 text-[12px] text-body";
+const TH = "whitespace-nowrap border-b border-border bg-surface-sunken px-2.5 py-2 text-left text-2xs font-semibold text-faint";
+const TD = "whitespace-nowrap border-b border-border px-2.5 py-2 text-xs text-body";
 
 export function PoLinesTable({ lines, selected, onToggle, onToggleAll, onShow, onEdit, onRemove, readOnly }: {
   readonly lines: readonly LineDraft[];
@@ -193,7 +193,7 @@ export function StepProducts({ form, readOnly, exportName }: { readonly form: Us
       {readOnly ? null : (
         <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface-sunken/50 p-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[12px] font-medium text-body">Enter SKU and add product (at least 3 characters)</p>
+            <p className="text-xs font-medium text-body">Enter SKU and add product (at least 3 characters)</p>
             <DisabledReason reason={canCreateProduct ? null : "You don't have permission to create products"}>
               <Button variant="secondary" size="sm" disabled={!canCreateProduct} onClick={() => setCreateOpen(true)}>
                 <Plus className="h-3.5 w-3.5" aria-hidden />
@@ -247,7 +247,7 @@ export function StepProducts({ form, readOnly, exportName }: { readonly form: Us
           action={canCreateProduct && !readOnly ? <Button variant="primary" onClick={() => setCreateOpen(true)}><Plus className="h-3.5 w-3.5" aria-hidden />Create product</Button> : undefined}
         />
       ) : shown.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-[12px] text-secondary">No line matches “{find}”.</p>
+        <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-xs text-secondary">No line matches “{find}”.</p>
       ) : (
         <PoLinesTable
           lines={shown}
@@ -260,7 +260,7 @@ export function StepProducts({ form, readOnly, exportName }: { readonly form: Us
           onRemove={remove}
         />
       )}
-      {linesError ? <p role="alert" className="text-[12px] font-medium text-danger">{linesError}</p> : null}
+      {linesError ? <p role="alert" className="text-xs font-medium text-danger">{linesError}</p> : null}
 
       <LineEditorDrawer line={editing?.line ?? null} isNew={editing?.isNew} readOnly={editing?.readOnly} warehouseId={warehouseId} onOpenChange={(open) => !open && setEditing(null)} onApply={apply} />
       <ProductCreateDrawer open={createOpen} onOpenChange={setCreateOpen} defaultClientId={clientId} onCreated={(p) => { setCreateOpen(false); void openNew(p.id, 1); }} />

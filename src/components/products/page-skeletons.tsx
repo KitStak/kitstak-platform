@@ -41,7 +41,7 @@ export function StagedNotices({ title }: { readonly title: string }) {
             <div className="flex items-start gap-3">
               <Clock className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
               <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-semibold text-body">This is taking longer than usual</p>
+                <p className="text-sm font-semibold text-body">This is taking longer than usual</p>
                 <p className="mt-0.5 text-xs text-secondary">Still loading {title}. You can keep waiting or retry.</p>
               </div>
               <a href="" className={link(true)}>Retry</a>
@@ -55,7 +55,7 @@ export function StagedNotices({ title }: { readonly title: string }) {
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden />
               <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-semibold text-body">{title} isn&apos;t responding</p>
+                <p className="text-sm font-semibold text-body">{title} isn&apos;t responding</p>
                 <p className="mt-0.5 text-xs text-secondary">
                   The server hasn&apos;t answered in {STALLED_NOTICE_S} seconds. Your data is safe; nothing was saved or changed.
                   Reload to try again. If it keeps happening, contact your administrator.

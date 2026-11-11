@@ -59,7 +59,7 @@ function OwnDimsNotice() {
   const gaps = ownDimsGaps(category, { length, width, height, weight, weightUnit: weightUnit || "Pound" });
   if (gaps.length === 0) return null;
   return (
-    <ul data-testid="own-dims-gaps" className="flex flex-col gap-0.5 rounded-md border border-warning/30 bg-warning-soft px-2.5 py-1.5 text-[12px] text-body" aria-live="polite">
+    <ul data-testid="own-dims-gaps" className="flex flex-col gap-0.5 rounded-md border border-warning/30 bg-warning-soft px-2.5 py-1.5 text-xs text-body" aria-live="polite">
       {gaps.map((m) => (
         <li key={m} className="flex items-start gap-1.5">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />

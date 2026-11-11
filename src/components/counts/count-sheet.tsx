@@ -166,8 +166,8 @@ export function CountSheet({ planId, planCode, planStatus, warehouseId, canExecu
         <span className={cn("flex h-11 w-11 items-center justify-center rounded-xl", pending ? "bg-primary-soft text-primary" : "bg-success-soft text-success")}>
           {pending ? <ClipboardList className="h-5 w-5" aria-hidden /> : <CheckCircle2 className="h-5 w-5" aria-hidden />}
         </span>
-        <p className="text-[14px] font-semibold text-foreground">{pending ? "Create a job to start counting" : "Nothing left to count"}</p>
-        <p className="max-w-[460px] text-[12px] text-secondary">
+        <p className="text-base font-semibold text-foreground">{pending ? "Create a job to start counting" : "Nothing left to count"}</p>
+        <p className="max-w-[460px] text-xs text-secondary">
           {pending ? "Count lines become countable once a Count job exists. Create Job splits the plan into jobs by location batch."
             : doneCount > 0 ? `You counted ${doneCount} ${doneCount === 1 ? "line" : "lines"} in this session. Review differences on the Lines tab, then update inventory or create recounts.`
             : "Every line of this plan is counted, posted or cancelled. Review the Lines tab for differences."}
@@ -185,7 +185,7 @@ export function CountSheet({ planId, planCode, planStatus, warehouseId, canExecu
           <TextField id="cs-scan" ref={scanRef} value={scan} maxLength={120} placeholder="Scan a location barcode" onChange={(e) => { setScan(e.target.value); setScanError(null); }} invalid={Boolean(scanError)} leading={<ScanLine className="h-4 w-4 text-faint" aria-hidden />} aria-describedby={scanError ? "cs-scan-err" : undefined} />
           <FieldError id="cs-scan-err" message={scanError ?? undefined} />
         </form>
-        <p className="order-3 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint lg:order-none">{lines.length} {lines.length === 1 ? "line" : "lines"} to count</p>
+        <p className="order-3 text-2xs font-semibold text-faint lg:order-none">{lines.length} {lines.length === 1 ? "line" : "lines"} to count</p>
         <ul className="ks-scroll order-4 -mt-2 flex max-h-[40vh] flex-col gap-1 overflow-auto pr-1 lg:order-none lg:mt-0 lg:max-h-[56vh]">
           {lines.map((l) => {
             const isActive = l.lineId === activeId;
@@ -196,11 +196,11 @@ export function CountSheet({ planId, planCode, planStatus, warehouseId, canExecu
                     isActive ? "border-primary bg-primary-soft" : "border-border bg-surface hover:border-border-strong")}>
                   <MapPin className={cn("h-4 w-4 shrink-0", isActive ? "text-primary" : "text-faint")} aria-hidden />
                   <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                    <span className="truncate text-[13px] font-semibold text-foreground">{lineTitle(l)}</span>
-                    <span className={cn("truncate text-[11px]", l.taskId ? "text-secondary" : "font-semibold text-danger")}>{l.taskId ? l.jobCode : "Job cancelled"} · {l.buckets.length} {l.buckets.length === 1 ? "bucket" : "buckets"}</span>
+                    <span className="truncate text-sm font-semibold text-foreground">{lineTitle(l)}</span>
+                    <span className={cn("truncate text-2xs", l.taskId ? "text-secondary" : "font-semibold text-danger")}>{l.taskId ? l.jobCode : "Job cancelled"} · {l.buckets.length} {l.buckets.length === 1 ? "bucket" : "buckets"}</span>
                   </span>
-                  {skipped.includes(l.lineId) ? <span className="inline-flex items-center gap-0.5 rounded bg-surface-sunken px-1.5 py-px text-[10px] font-semibold uppercase text-secondary"><SkipForward className="h-2.5 w-2.5" aria-hidden />Skipped</span> : null}
-                  {l.isRecountLine ? <span className="inline-flex items-center gap-0.5 rounded bg-warning-soft px-1.5 py-px text-[10px] font-semibold uppercase text-warning"><RotateCcw className="h-2.5 w-2.5" aria-hidden />Recount</span> : null}
+                  {skipped.includes(l.lineId) ? <span className="inline-flex items-center gap-0.5 rounded bg-surface-sunken px-1.5 py-px text-2xs font-semibold text-secondary"><SkipForward className="h-2.5 w-2.5" aria-hidden />Skipped</span> : null}
+                  {l.isRecountLine ? <span className="inline-flex items-center gap-0.5 rounded bg-warning-soft px-1.5 py-px text-2xs font-semibold text-warning"><RotateCcw className="h-2.5 w-2.5" aria-hidden />Recount</span> : null}
                 </button>
               </li>
             );
@@ -212,11 +212,11 @@ export function CountSheet({ planId, planCode, planStatus, warehouseId, canExecu
         <section aria-label={`Count ${lineTitle(active)}`} className="order-2 flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-surface p-3 sm:p-4 lg:order-none">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-[16px] font-semibold text-foreground">{lineTitle(active)}</h3>
+              <h3 className="text-md font-semibold text-foreground">{lineTitle(active)}</h3>
               <CountStatusPill status={active.status} domain="count" size="sm" />
-              {active.isRecountLine ? <span className="text-[12px] font-semibold text-warning">Recount line</span> : null}
+              {active.isRecountLine ? <span className="text-xs font-semibold text-warning">Recount line</span> : null}
             </div>
-            <span className="text-[12px] text-secondary">{active.jobCode ? <>Job <strong className="text-foreground">{active.jobCode}</strong>{active.taskNo ? ` · task ${active.taskNo}` : ""}</> : "No live count task"}</span>
+            <span className="text-xs text-secondary">{active.jobCode ? <>Job <strong className="text-foreground">{active.jobCode}</strong>{active.taskNo ? ` · task ${active.taskNo}` : ""}</> : "No live count task"}</span>
           </div>
           {!active.taskId ? (
             <Callout variant="error" title="This line's count job was cancelled"
@@ -232,13 +232,13 @@ export function CountSheet({ planId, planCode, planStatus, warehouseId, canExecu
             </div>
           ) : null}
           <CountEntryTable drafts={drafts} onChange={setDrafts} warehouseId={warehouseId} productId={active.productId} disabled={saving || !canExecute} showErrors={tried} idPrefix={`cs-${active.lineId}`} blind={Boolean(active.blind)} />
-          {tried && entryError ? <p role="alert" className="text-[12px] font-medium text-danger">{entryError}</p> : null}
+          {tried && entryError ? <p role="alert" className="text-xs font-medium text-danger">{entryError}</p> : null}
           <div className="flex flex-col gap-1">
             <FieldLabel htmlFor="cs-note">Note</FieldLabel>
             <Textarea id="cs-note" rows={2} maxLength={400} showCount value={note} onChange={(e) => setNote(e.target.value)} placeholder="Damaged boxes, mislabeled bins…" disabled={!canExecute} />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
-            <span className="text-[12px] text-secondary">Blank expected stock is not allowed. Enter 0 when it is missing.</span>
+            <span className="text-xs text-secondary">Blank expected stock is not allowed. Enter 0 when it is missing.</span>
             <span className="ml-auto flex flex-wrap items-center gap-2">
               <DisabledReason reason={saving ? "Submitting…" : !touched ? "Nothing entered for this location yet" : null}>
                 <Button variant="ghost" disabled={saving || !touched} onClick={reset}><Eraser className="h-3.5 w-3.5" aria-hidden />Reset count</Button>
@@ -253,9 +253,9 @@ export function CountSheet({ planId, planCode, planStatus, warehouseId, canExecu
           </div>
         </section>
       ) : (
-        <div className="order-2 flex items-center justify-center rounded-lg border border-dashed border-border-strong p-10 text-[13px] text-secondary lg:order-none">Pick a line on the left or scan its location.</div>
+        <div className="order-2 flex items-center justify-center rounded-lg border border-dashed border-border-strong p-10 text-sm text-secondary lg:order-none">Pick a line on the left or scan its location.</div>
       )}
-      <p className="order-5 text-[11px] text-faint lg:order-none lg:col-span-2">Counts also arrive from scanners through the job <Link href="/tasks/count" className="font-semibold text-primary hover:underline">Count Task Details</Link>.</p>
+      <p className="order-5 text-2xs text-faint lg:order-none lg:col-span-2">Counts also arrive from scanners through the job <Link href="/tasks/count" className="font-semibold text-primary hover:underline">Count Task Details</Link>.</p>
     </div>
   );
 }

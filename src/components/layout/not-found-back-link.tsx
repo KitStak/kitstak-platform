@@ -25,7 +25,7 @@ export function NotFoundBackLink() {
   const target = backTargetFor(usePathname() ?? "/");
   if (!target) return null;
   return (
-    <Link href={target.href} className="inline-flex h-9 items-center rounded-md border border-border-strong/70 bg-surface px-4 text-[13px] font-medium text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
+    <Link href={target.href} className="inline-flex h-9 items-center rounded-md border border-border-strong/70 bg-surface px-4 text-sm font-medium text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
       {target.label}
     </Link>
   );

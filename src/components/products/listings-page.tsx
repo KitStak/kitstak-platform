@@ -53,7 +53,7 @@ const EXCEPTION_HINT: Readonly<Record<ListingException, string>> = {
 function ExceptionCell({ row }: { readonly row: ListingRow }) {
   if (!row.exception) return <span className="text-faint" title="No exception">—</span>;
   return (
-    <span title={EXCEPTION_HINT[row.exception]} className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${EXCEPTION_TONE[row.exception]}`}>
+    <span title={EXCEPTION_HINT[row.exception]} className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold ${EXCEPTION_TONE[row.exception]}`}>
       {row.exceptionLabel}
     </span>
   );
@@ -79,12 +79,12 @@ function buildColumns(): Col[] {
   return [
     { id: "image", header: "Image", size: 64, enableSorting: false, meta: { label: "Image", clip: false, justify: "center" }, cell: ({ row }) => <ListingImage row={row.original} /> },
     { id: "name", accessorKey: "name", header: "Product name", size: 240, meta: { alwaysVisible: true }, cell: ({ getValue }) => text(getValue()) },
-    { id: "sellerSku", accessorKey: "sellerSku", header: "Seller SKU", size: 160, cell: ({ getValue }) => <span className="truncate font-mono text-[12px]">{String(getValue())}</span> },
+    { id: "sellerSku", accessorKey: "sellerSku", header: "Seller SKU", size: 160, cell: ({ getValue }) => <span className="truncate font-mono text-xs">{String(getValue())}</span> },
     {
       id: "productSku", accessorKey: "productSku", header: "KitStaks product", size: 380,
       meta: { clip: false, alwaysVisible: true }, cell: ({ row }) => <ListingProductCell row={row.original} />,
     },
-    { id: "storeName", accessorKey: "storeName", header: "Store name", size: 180, cell: ({ row }) => <span className="truncate">{row.original.storeName}<span className="ml-1 text-[11px] text-faint">{row.original.provider}</span></span> },
+    { id: "storeName", accessorKey: "storeName", header: "Store name", size: 180, cell: ({ row }) => <span className="truncate">{row.original.storeName}<span className="ml-1 text-2xs text-faint">{row.original.provider}</span></span> },
     { id: "channelProductId", accessorKey: "channelProductId", header: "Channel ID", size: 150, cell: ({ getValue }) => text(getValue()) },
     { id: "description", accessorKey: "description", header: "Description", size: 220, cell: ({ getValue }) => text(getValue()) },
     { id: "storePrice", accessorKey: "storePrice", header: "Store price", size: 110, meta: { align: "right" }, cell: ({ row }) => (row.original.storePrice === null ? dash : <MoneyCell value={row.original.storePrice} />) },
@@ -135,13 +135,13 @@ export function LinkStateToggle({ value, onChange, counts }: { readonly value: L
             }}
             data-state={checked ? "on" : "off"}
             className={cn(
-              "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-[13px] font-medium text-secondary outline-none transition-[color,background-color,box-shadow]",
+              "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-medium text-secondary outline-none transition-[color,background-color,box-shadow]",
               "hover:text-body focus-visible:ring-2 focus-visible:ring-focus/40",
               checked && "bg-surface text-foreground shadow-xs",
             )}
           >
             <span>{o.label}</span>
-            {typeof count === "number" ? <span id={`${id}-${o.key}`} className="text-[11px] tabular-nums text-secondary"><span className="sr-only">Count: </span>{count}</span> : null}
+            {typeof count === "number" ? <span id={`${id}-${o.key}`} className="text-2xs tabular-nums text-secondary"><span className="sr-only">Count: </span>{count}</span> : null}
           </button>
         );
       })}
@@ -381,7 +381,7 @@ function ListingsGrid() {
           rowActions={rowActions}
           emptyTitle={link === "unlinked" ? "Every listing is linked" : "No linked listings"}
           emptyDescription={link === "unlinked" ? "Listings downloaded from your stores that don't match a SKU show up here." : "Link an unlinked listing to a product, or import listings with their SKU."}
-          emptyAction={link === "unlinked" ? <Button variant="secondary" onClick={() => setLink("linked")}>View linked listings</Button> : <Link href="/imports/listings" className="text-[13px] font-semibold text-primary hover:underline">Import listings</Link>}
+          emptyAction={link === "unlinked" ? <Button variant="secondary" onClick={() => setLink("linked")}>View linked listings</Button> : <Link href="/imports/listings" className="text-sm font-semibold text-primary hover:underline">Import listings</Link>}
         />
       </GridFetchFrame>
       </ListingCellActionsProvider>

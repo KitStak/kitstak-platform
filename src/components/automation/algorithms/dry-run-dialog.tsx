@@ -67,15 +67,15 @@ export function DryRunDialog({ target, onOpenChange }: { readonly target: DryRun
         <DialogHeader title="Dry run for order" description={target ? `${target.name} · nothing is reserved; results are rolled back` : undefined} />
         <DialogBody className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <label htmlFor="dr-order" className="text-[12px] font-medium text-body">Shipment order <span className="text-danger">*</span></label>
+            <label htmlFor="dr-order" className="text-xs font-medium text-body">Shipment order <span className="text-danger">*</span></label>
             <Combobox id="dr-order" aria-label="Shipment order" loadOptions={load} minChars={0} value={orderId} onChange={(v) => { setOrderId(v); setError(null); }}
               placeholder="Search open orders by code or customer" invalid={Boolean(error)} clearable />
-            {error ? <p role="alert" className="text-[12px] text-danger">{error}</p> : null}
+            {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
           </div>
           {failure ? <Callout variant="error" title="Dry run failed">{failure}</Callout> : null}
-          {pending ? <div className="flex items-center gap-2 py-6 text-[13px] text-secondary"><Spinner className="h-4 w-4" />Allocating in a sandbox…</div> : result ? (
+          {pending ? <div className="flex items-center gap-2 py-6 text-sm text-secondary"><Spinner className="h-4 w-4" />Allocating in a sandbox…</div> : result ? (
             <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-2 text-[13px]">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-semibold text-foreground">{result.orderCode}</span>
                 <StatusPill status={result.outcome === "Allocated" ? "Ready to Pick" : result.outcome === "Shortage" ? "Shortage" : "Cancelled"} domain="shipmentOrder" />
                 <span className="text-secondary">{result.outcome === "Allocated" ? "would be fully allocated" : result.outcome === "Shortage" ? "would be short" : "would fail"}</span>
@@ -83,8 +83,8 @@ export function DryRunDialog({ target, onOpenChange }: { readonly target: DryRun
               </div>
               {result.message ? <Callout variant="attention">{result.message}</Callout> : null}
               <div className="overflow-hidden rounded-lg border border-border">
-                <table className="w-full text-[12px]">
-                  <thead className="bg-surface-sunken text-[11px] uppercase text-secondary"><tr><th className="px-3 py-2 text-left">SKU</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-left">Buckets chosen</th></tr></thead>
+                <table className="w-full text-xs">
+                  <thead className="bg-surface-sunken text-2xs text-secondary"><tr><th className="px-3 py-2 text-left">SKU</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-left">Buckets chosen</th></tr></thead>
                   <tbody className="divide-y divide-border">
                     {result.lines.map((l) => (
                       <tr key={l.sku} className="align-top">
@@ -102,7 +102,7 @@ export function DryRunDialog({ target, onOpenChange }: { readonly target: DryRun
                 </table>
               </div>
               {result.exceptions.length > 0 ? <Callout variant="attention" title="Allocation exceptions">{result.exceptions.join(" · ")}</Callout> : null}
-              <p className="text-[11px] text-faint">Want to commit it? Allocate the order from <Link className="text-primary hover:underline" href="/jobs">Jobs</Link> or the order backlog.</p>
+              <p className="text-2xs text-faint">Want to commit it? Allocate the order from <Link className="text-primary hover:underline" href="/jobs">Jobs</Link> or the order backlog.</p>
             </div>
           ) : <EmptyState compact icon={Boxes} title="Pick an order" description="The dry run shows which locations, LPs and lots would be reserved and the rule that matched." />}
         </DialogBody>

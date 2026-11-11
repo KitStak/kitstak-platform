@@ -41,10 +41,10 @@ export const Switch = React.forwardRef<React.ElementRef<typeof SwitchPrimitive.R
       <div className="flex items-start gap-2.5">
         <div className="pt-px">{control}</div>
         <div className="flex flex-col">
-          <label htmlFor={switchId} className="cursor-pointer text-[13px] font-medium text-body peer-disabled:cursor-not-allowed">
+          <label htmlFor={switchId} className="cursor-pointer text-sm font-medium text-body peer-disabled:cursor-not-allowed">
             {label}
           </label>
-          {description ? <span className="text-[11px] leading-4 text-faint">{description}</span> : null}
+          {description ? <span className="text-2xs leading-4 text-faint">{description}</span> : null}
         </div>
       </div>
     );

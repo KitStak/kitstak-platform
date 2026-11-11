@@ -106,7 +106,7 @@ export function AppShell({ user, permissions, initialContext, activeApps, passwo
     <ShellProvider user={user} permissions={permissions} initialContext={initialContext} activeApps={activeApps}>
       <PreferencesBoundary>
         <div className="flex min-h-screen flex-col">
-          <a href="#main-content" className="sr-only z-50 rounded bg-surface px-3 py-2 text-[13px] font-semibold text-primary focus:not-sr-only focus:fixed focus:left-3 focus:top-3">
+          <a href="#main-content" className="sr-only z-50 rounded bg-surface px-3 py-2 text-sm font-semibold text-primary focus:not-sr-only focus:fixed focus:left-3 focus:top-3">
             Skip to content
           </a>
           <TopBar />

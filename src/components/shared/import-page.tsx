@@ -95,13 +95,13 @@ export function ImportPage({ importKey, title, description, backHref, backLabel 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-col gap-4 px-6 pt-5">
-        <Link href={backHref} className="inline-flex w-fit items-center gap-1 text-[12px] font-semibold text-secondary hover:text-primary">
+        <Link href={backHref} className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-secondary hover:text-primary">
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
           {backLabel}
         </Link>
         <div>
-          <h1 className="text-[20px] font-semibold text-foreground">{title}</h1>
-          {description ? <p className="mt-1 max-w-3xl text-[13px] text-secondary">{description}</p> : null}
+          <h1 className="text-lg font-semibold text-foreground">{title}</h1>
+          {description ? <p className="mt-1 max-w-3xl text-sm text-secondary">{description}</p> : null}
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
           <a href={`/api/imports/${encodeURIComponent(importKey)}/template`} download className="group flex items-center gap-3 rounded-lg border border-success/40 bg-success-soft p-4 transition-colors hover:border-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success/40">
@@ -109,8 +109,8 @@ export function ImportPage({ importKey, title, description, backHref, backLabel 
               <FileSpreadsheet className="h-5 w-5" aria-hidden />
             </span>
             <span className="flex flex-col">
-              <span className="text-[13px] font-semibold text-success">Download our excel template</span>
-              <span className="text-[12px] text-secondary">Columns, an example row and field notes</span>
+              <span className="text-sm font-semibold text-success">Download our excel template</span>
+              <span className="text-xs text-secondary">Columns, an example row and field notes</span>
             </span>
             <Download className="ml-auto h-4 w-4 text-success transition-transform group-hover:translate-y-0.5" aria-hidden />
           </a>
@@ -149,7 +149,7 @@ export function ImportPage({ importKey, title, description, backHref, backLabel 
         exportName={`${importKey}-import-history`}
         emptyTitle="No imports yet"
         emptyDescription="Download the template, fill it in and drop the file above."
-        toolbarLeft={<h2 className="text-[14px] font-semibold text-foreground">Import history</h2>}
+        toolbarLeft={<h2 className="text-base font-semibold text-foreground">Import history</h2>}
       />
       <ImportDetailsDrawer batch={details} onOpenChange={(o) => !o && setDetails(null)} />
     </div>

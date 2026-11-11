@@ -81,14 +81,14 @@ export function RmaPhotos({ returnOrderId, rmaCode, skus, canEdit }: {
       {canEdit ? (
         <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-surface-sunken/40 p-3">
           <div className="flex min-w-[200px] flex-col gap-1">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">Attach to line</span>
+            <span className="text-2xs font-semibold text-secondary">Attach to line</span>
             <Select aria-label="Attach to line" value={lineSku} clearable placeholder="General (whole RMA)" options={skus.map((s) => ({ value: s, label: s }))} onChange={(v) => setLineSku(v)} />
           </div>
           <input ref={inputRef} type="file" accept={ACCEPT} multiple className="sr-only" id="rma-photo-input" onChange={(e) => void upload(e.target.files)} />
           <Button variant="secondary" disabled={uploading} onClick={() => inputRef.current?.click()}>
             <Upload className="h-3.5 w-3.5" aria-hidden />{uploading ? "Uploading…" : "Add photos or files"}
           </Button>
-          <p className="text-[11px] text-secondary">PNG, JPEG, WebP or PDF. Photos taken at the Return Station appear here automatically.</p>
+          <p className="text-2xs text-secondary">PNG, JPEG, WebP or PDF. Photos taken at the Return Station appear here automatically.</p>
         </div>
       ) : null}
       {q.isPending ? (
@@ -109,7 +109,7 @@ export function RmaPhotos({ returnOrderId, rmaCode, skus, canEdit }: {
               // eslint-disable-next-line @next/next/no-img-element -- served by /api/files with auth
               ? <img src={fileUrl(viewing.fileId)} alt={viewing.fileName ?? "Return photo"} className="mx-auto max-h-[70vh] rounded-md object-contain" />
               : <iframe title={viewing.fileName ?? "Document"} src={fileUrl(viewing.fileId)} className="h-[70vh] w-full rounded-md border border-border" />) : null}
-            {viewing ? <div className="mt-3 flex justify-end"><a href={fileUrl(viewing.fileId, true)} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-[13px] font-medium hover:bg-surface-sunken"><Download className="h-3.5 w-3.5" aria-hidden />Download</a></div> : null}
+            {viewing ? <div className="mt-3 flex justify-end"><a href={fileUrl(viewing.fileId, true)} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-surface-sunken"><Download className="h-3.5 w-3.5" aria-hidden />Download</a></div> : null}
           </DialogBody>
         </DialogContent>
       </Dialog>
@@ -125,7 +125,7 @@ function Group({ group, onView, onDelete, fmtDate }: {
 }) {
   return (
     <div className="flex flex-col gap-2" data-testid={`rma-photo-group-${group.key}`}>
-      <h3 className="text-[12px] font-semibold text-foreground">{group.label} <span className="font-normal text-faint">({group.items.length})</span></h3>
+      <h3 className="text-xs font-semibold text-foreground">{group.label} <span className="font-normal text-faint">({group.items.length})</span></h3>
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
         {group.items.map(({ attachment: a, displayName, isImage }) => (
           <li key={a.id} className="group overflow-hidden rounded-lg border border-border bg-surface">
@@ -135,8 +135,8 @@ function Group({ group, onView, onDelete, fmtDate }: {
             </button>
             <div className="flex items-center gap-1 px-2 py-1.5">
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12px] font-medium text-foreground" title={displayName}>{displayName}</span>
-                <span className="block truncate text-[11px] text-faint">{a.uploadedByName ?? a.uploadedBy ?? "Unknown"} · {fmtDate(a.createdAt)}</span>
+                <span className="block truncate text-xs font-medium text-foreground" title={displayName}>{displayName}</span>
+                <span className="block truncate text-2xs text-faint">{a.uploadedByName ?? a.uploadedBy ?? "Unknown"} · {fmtDate(a.createdAt)}</span>
               </span>
               <Tooltip content="View"><Button variant="ghost" size="icon-sm" aria-label={`View ${displayName}`} onClick={() => onView(a)}><Eye className="h-3.5 w-3.5" aria-hidden /></Button></Tooltip>
               <Tooltip content="Download"><a href={fileUrl(a.fileId, true)} aria-label={`Download ${displayName}`} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-secondary hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Download className="h-3.5 w-3.5" aria-hidden /></a></Tooltip>

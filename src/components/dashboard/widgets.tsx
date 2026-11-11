@@ -47,7 +47,7 @@ function PanelStamp() {
   const label = freshnessLabel(f);
   if (!label && !f.refreshing) return null;
   return (
-    <p data-testid="panel-updated" data-stale={label?.stale ? "true" : undefined} className={cn("mt-0.5 flex items-center gap-1 text-[11px] tabular-nums", label?.stale ? "text-warning" : "text-faint")}>
+    <p data-testid="panel-updated" data-stale={label?.stale ? "true" : undefined} className={cn("mt-0.5 flex items-center gap-1 text-2xs tabular-nums", label?.stale ? "text-warning" : "text-faint")}>
       {f.refreshing ? <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" /> : null}
       {f.refreshing ? "Refreshing…" : label?.text}
     </p>
@@ -61,8 +61,8 @@ export function Panel({ title, info, description, action, children, className }:
     <section aria-label={title} className={cn("flex min-w-0 flex-col rounded-xl border border-border bg-surface shadow-xs", className)}>
       <header className="flex items-start justify-between gap-3 px-5 pt-4 pb-2">
         <div className="min-w-0">
-          <h2 className="flex items-center gap-1.5 text-[15px] font-semibold text-foreground">{title}{info ? <InfoTip content={info} label={`About ${title}`} /> : null}</h2>
-          {description ? <p className="mt-0.5 text-[12px] text-faint">{description}</p> : null}
+          <h2 className="flex items-center gap-1.5 text-base font-semibold text-foreground">{title}{info ? <InfoTip content={info} label={`About ${title}`} /> : null}</h2>
+          {description ? <p className="mt-0.5 text-xs text-faint">{description}</p> : null}
           <PanelStamp />
         </div>
         {action}
@@ -89,12 +89,12 @@ function ShiftSummary({ shifts }: { readonly shifts: readonly ShiftInfo[] }) {
   return (
     <div className="rounded-lg bg-surface-sunken/60 px-3.5 py-3" data-testid="shift-summary">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[12px] font-semibold text-secondary">Day shift · {shifts.length} warehouses</span>
-        <span className="text-[12px] font-semibold tabular-nums text-secondary">{during} on shift</span>
+        <span className="text-xs font-semibold text-secondary">Day shift · {shifts.length} warehouses</span>
+        <span className="text-xs font-semibold tabular-nums text-secondary">{during} on shift</span>
       </div>
       <ul className="mt-2 space-y-1.5">
         {shown.map(({ s, w }) => (
-          <li key={s.warehouseId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 text-[11.5px]">
+          <li key={s.warehouseId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 text-2xs">
             <span className="truncate text-foreground" title={`${s.warehouseLabel} · ${s.timeZone.replace("_", " ")}`}>{s.warehouseLabel}</span>
             <span className={cn("tabular-nums", w.phase === "during" ? "font-semibold text-success" : "text-faint")}>{w.phase === "during" ? `${w.nowLabel} – ${s.end}` : w.statusLabel}</span>
             <div className="col-span-2 h-1 overflow-hidden rounded-full bg-border" role="progressbar" aria-label={`${s.warehouseLabel} shift elapsed`} aria-valuenow={w.percent} aria-valuemin={0} aria-valuemax={100}>
@@ -103,7 +103,7 @@ function ShiftSummary({ shifts }: { readonly shifts: readonly ShiftInfo[] }) {
           </li>
         ))}
       </ul>
-      {windows.length > shown.length ? <p className="mt-1.5 text-[11px] text-faint">+{windows.length - shown.length} more · select one warehouse for its full shift clock</p> : null}
+      {windows.length > shown.length ? <p className="mt-1.5 text-2xs text-faint">+{windows.length - shown.length} more · select one warehouse for its full shift clock</p> : null}
     </div>
   );
 }
@@ -118,15 +118,15 @@ function ShiftClock({ shift }: { readonly shift: ShiftInfo }) {
   return (
     <div className="rounded-lg bg-surface-sunken/60 px-3.5 py-3" data-testid="shift-clock">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[12px] font-semibold text-secondary">Day shift · {w.dateLabel}</span>
-        <span className="text-[13px] font-semibold tabular-nums">
+        <span className="text-xs font-semibold text-secondary">Day shift · {w.dateLabel}</span>
+        <span className="text-sm font-semibold tabular-nums">
           {w.phase === "during" ? <><span className="text-success">{w.nowLabel}</span><span className="text-faint"> – {shift.end}</span></> : <span className="text-secondary">{w.statusLabel}</span>}
         </span>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border" role="progressbar" aria-label="Shift elapsed" aria-valuenow={w.percent} aria-valuemin={0} aria-valuemax={100}>
         <div className="h-full rounded-full bg-primary transition-[width] duration-700" style={{ width: `${w.percent}%` }} />
       </div>
-      <div className="mt-1.5 flex justify-between text-[11px] text-faint">
+      <div className="mt-1.5 flex justify-between text-2xs text-faint">
         <span className="inline-flex items-center gap-1"><Sun className="h-3 w-3 text-warning" aria-hidden />{shift.start}</span>
         <span className="truncate px-2">{shift.warehouseLabel} · {shift.timeZone.replace("_", " ")}</span>
         <span className="inline-flex items-center gap-1">{shift.end}<Moon className="h-3 w-3 text-primary" aria-hidden /></span>
@@ -143,11 +143,11 @@ function SplitProgressRow({ label, verb, p }: { readonly label: string; readonly
   return (
     <div className="rounded-lg px-1 py-1.5 -mx-1" data-testid="progress-tasks">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[13px] font-medium text-foreground">{label}</span>
-        <span className="text-[12px] text-secondary"><span className="text-[15px] font-semibold text-foreground tabular-nums">{pct}%</span> {verb}</span>
+        <span className="text-sm font-medium text-foreground">{label}</span>
+        <span className="text-xs text-secondary"><span className="text-base font-semibold text-foreground tabular-nums">{pct}%</span> {verb}</span>
       </div>
-      <div className="mt-1 h-1 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-[#17874D]" style={{ width: `${pct}%` }} /></div>
-      <div className="mt-1 flex items-center justify-between gap-2 text-[11.5px] tabular-nums text-faint">
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-[var(--success-text)]" style={{ width: `${pct}%` }} /></div>
+      <div className="mt-1 flex items-center justify-between gap-2 text-2xs tabular-nums text-faint">
         <span>
           <Link href={p.doneHref} className={link} title="Open the tasks completed today" data-testid="progress-tasks-done"><span className="font-semibold text-success">{fmt(p.done)}</span> completed today</Link>
           <span aria-hidden> · </span>
@@ -166,11 +166,11 @@ function PartsProgressRow({ label, verb, p, hint, testId }: { readonly label: st
   return (
     <div className="rounded-lg px-1 py-1.5 -mx-1" data-testid={testId} title={hint}>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[13px] font-medium text-foreground">{label}</span>
-        <span className="text-[12px] text-secondary"><span className="text-[15px] font-semibold text-foreground tabular-nums">{pct}%</span> {verb}</span>
+        <span className="text-sm font-medium text-foreground">{label}</span>
+        <span className="text-xs text-secondary"><span className="text-base font-semibold text-foreground tabular-nums">{pct}%</span> {verb}</span>
       </div>
-      <div className="mt-1 h-1 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-[#17874D]" style={{ width: `${pct}%` }} /></div>
-      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-[11.5px] tabular-nums text-faint">
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-[var(--success-text)]" style={{ width: `${pct}%` }} /></div>
+      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-2xs tabular-nums text-faint">
         <span className="flex flex-wrap items-baseline gap-x-1">
           {p.parts.map((part, i) => (
             <React.Fragment key={part.label}>
@@ -200,11 +200,11 @@ function ProgressRow({ label, verb, p, hint, testId }: { readonly label: string;
   return (
     <Link href={p.href} title={hint} className="group block rounded-lg px-1 py-1.5 -mx-1 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[13px] font-medium text-foreground">{label}</span>
-        <span className="text-[12px] text-secondary"><span className="text-[15px] font-semibold text-foreground tabular-nums">{pct}%</span> {verb}</span>
+        <span className="text-sm font-medium text-foreground">{label}</span>
+        <span className="text-xs text-secondary"><span className="text-base font-semibold text-foreground tabular-nums">{pct}%</span> {verb}</span>
       </div>
-      <div className="mt-1 h-1 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-[#17874D]" style={{ width: `${pct}%` }} /></div>
-      <div className="mt-1 flex items-center justify-between text-[11.5px] tabular-nums text-faint">
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-[var(--success-text)]" style={{ width: `${pct}%` }} /></div>
+      <div className="mt-1 flex items-center justify-between text-2xs tabular-nums text-faint">
         <span><span className="font-semibold text-success">{fmt(p.done)}</span> – {fmt(p.total)}</span>
         <ChevronRight className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
       </div>
@@ -216,7 +216,7 @@ export function ProgressTodayCard({ data }: { readonly data: LiveDashboard }) {
   return (
     <Panel title="Progress for Today" info="Shows the progress of the tasks, order lines, and orders that have been created today and prior to this day.">
       {data.shift ? <ShiftClock shift={data.shift} /> : (data.shifts?.length ?? 0) > 0 ? <ShiftSummary shifts={data.shifts} /> : (
-        <p className="rounded-lg border border-dashed border-border px-3.5 py-3 text-[12.5px] text-secondary">No warehouse in your selection has a day shift set.</p>
+        <p className="rounded-lg border border-dashed border-border px-3.5 py-3 text-xs text-secondary">No warehouse in your selection has a day shift set.</p>
       )}
       <div className="mt-3 space-y-1">
         <ProgressRow label="Tasks" verb="Completed" p={data.progress.tasks} testId="progress-tasks" />
@@ -243,7 +243,7 @@ function UnfulfilledAge({ buckets }: { readonly buckets: readonly Metric[] }) {
   const oldest = buckets[buckets.length - 1];
   return (
     <section aria-label="Unfulfilled orders by order age" className="mt-4 border-t border-border pt-3" data-testid="unfulfilled-age">
-      <h3 className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
+      <h3 className="mb-2 flex items-center justify-between text-2xs font-semibold text-faint">
         By order age
         {oldest && oldest.count > 0 ? <span className="normal-case tracking-normal text-danger">{fmt(oldest.count)} waiting 7+ days</span> : null}
       </h3>
@@ -251,11 +251,11 @@ function UnfulfilledAge({ buckets }: { readonly buckets: readonly Metric[] }) {
         {buckets.map((b, i) => (
           <li key={b.label}>
             <Link href={b.href} className="group grid grid-cols-[96px_1fr_44px] items-center gap-2 rounded-md px-1 py-0.5 -mx-1 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label={`${b.label}: ${b.count} orders`}>
-              <span className="text-[12.5px] text-secondary group-hover:text-foreground">{b.label}</span>
+              <span className="text-xs text-secondary group-hover:text-foreground">{b.label}</span>
               <span className="h-2 overflow-hidden rounded-full bg-surface-sunken">
                 <span className="block h-full rounded-full" style={{ width: `${b.count > 0 ? Math.max((b.count / max) * 100, 3) : 0}%`, backgroundColor: AGE_COLORS[i] ?? AGE_COLORS[AGE_COLORS.length - 1] }} />
               </span>
-              <span className={cn("text-right text-[13px] font-semibold tabular-nums", b.count === 0 ? "text-faint" : "text-foreground group-hover:text-primary")}>{fmt(b.count)}</span>
+              <span className={cn("text-right text-sm font-semibold tabular-nums", b.count === 0 ? "text-faint" : "text-foreground group-hover:text-primary")}>{fmt(b.count)}</span>
             </Link>
           </li>
         ))}
@@ -328,9 +328,9 @@ function UnfulfilledDonut({ slices, total, onToggle }: { readonly slices: readon
       </svg>
       <div className="pointer-events-none absolute inset-0 grid place-items-center text-center" aria-live="polite">
         {active ? (
-          <div><div className="text-[11px] text-faint">{active.label}</div><div className="text-[22px] font-semibold tabular-nums">{fmt(active.value)}</div><div className="text-[11px] tabular-nums text-faint">{pctOf(active.value, total)}%</div></div>
+          <div><div className="text-2xs text-faint">{active.label}</div><div className="text-xl font-semibold tabular-nums">{fmt(active.value)}</div><div className="text-2xs tabular-nums text-faint">{pctOf(active.value, total)}%</div></div>
         ) : (
-          <div><div className="text-[11px] text-faint">Total Order</div><div className="text-[22px] font-semibold tabular-nums">{fmt(total)}</div></div>
+          <div><div className="text-2xs text-faint">Total Order</div><div className="text-xl font-semibold tabular-nums">{fmt(total)}</div></div>
         )}
       </div>
     </div>
@@ -354,14 +354,14 @@ export function UnfulfilledCard({ data }: { readonly data: LiveDashboard }) {
               const off = hidden.includes(s.key);
               return (
                 <button key={s.key} type="button" aria-pressed={!off} onClick={() => toggle(s.key)}
-                  className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", off ? "border-border text-faint line-through" : "border-border-strong/50 text-foreground")}>
+                  className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", off ? "border-border text-faint line-through" : "border-border-strong/50 text-foreground")}>
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: off ? "var(--border-strong)" : s.color }} />{s.label}
                 </button>
               );
             })}
           </div>
-          <table className="w-full text-[13px]">
-            <thead><tr className="text-left text-[11px] uppercase tracking-[0.05em] text-faint"><th className="py-1 font-semibold" /><th className="py-1 text-right font-semibold">Total Order</th><th className="py-1 text-right font-semibold">Total Pack Qty</th></tr></thead>
+          <table className="w-full text-sm">
+            <thead><tr className="text-left text-2xs text-faint"><th className="py-1 font-semibold" /><th className="py-1 text-right font-semibold">Total Order</th><th className="py-1 text-right font-semibold">Total Pack Qty</th></tr></thead>
             <tbody>
               {rows.map(({ m, color }) => (
                 <tr key={m.label} className="border-t border-border">
@@ -385,8 +385,8 @@ function BreakdownItem({ m }: { readonly m: Metric }) {
   return (
     <li>
       <Link href={m.href} className="group flex items-center justify-between rounded-md px-2 py-1.5 -mx-2 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" aria-label={`${m.label}: ${m.count} orders`}>
-        <span className="text-[13px] text-secondary group-hover:text-foreground">{m.label}</span>
-        <span className={cn("text-[16px] font-semibold tabular-nums", m.count === 0 ? "text-faint" : "text-foreground group-hover:text-primary")}>{fmt(m.count)}</span>
+        <span className="text-sm text-secondary group-hover:text-foreground">{m.label}</span>
+        <span className={cn("text-md font-semibold tabular-nums", m.count === 0 ? "text-faint" : "text-foreground group-hover:text-primary")}>{fmt(m.count)}</span>
       </Link>
     </li>
   );
@@ -407,7 +407,7 @@ export function StatusBreakdownCard({ data }: { readonly data: LiveDashboard }) 
         {data.breakdown.flat().map((m) => <BreakdownItem key={m.label} m={m} />)}
       </ul>
       {data.backlogTotal ? (
-        <p className="mt-3 flex flex-wrap items-baseline justify-between gap-2 border-t border-border pt-2.5 text-[12px] text-faint" data-testid="breakdown-total">
+        <p className="mt-3 flex flex-wrap items-baseline justify-between gap-2 border-t border-border pt-2.5 text-xs text-faint" data-testid="breakdown-total">
           <span>The backlog status lines add up to the backlog total, the same orders the Channels, Clients and Order By Country cards rank.</span>
           <Link href={data.backlogTotal.href} className="shrink-0 rounded px-1 -mx-1 font-medium text-secondary hover:bg-primary/5 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
             Backlog orders <span className="font-semibold tabular-nums text-foreground">{fmt(data.backlogTotal.count)}</span>
@@ -455,16 +455,16 @@ export function RankCard({ title, description, icon, rows, modes }: { readonly t
           <SegmentedControl<string> size="sm" ariaLabel={`${title}: rank by`} value={modeKey} onChange={setModeKey} options={modes.map((m) => ({ value: m.key, label: m.label }))} />
         </div>
       ) : null}
-      {shown.length === 0 ? <p className="py-6 text-center text-[12.5px] text-faint">{mode?.empty ?? "No backlog orders in this selection."}</p> : (
+      {shown.length === 0 ? <p className="py-6 text-center text-xs text-faint">{mode?.empty ?? "No backlog orders in this selection."}</p> : (
         <>
-          {ranked.length === 0 ? <p className="py-3 text-center text-[12.5px] text-faint">No ranked values yet.</p> : null}
+          {ranked.length === 0 ? <p className="py-3 text-center text-xs text-faint">No ranked values yet.</p> : null}
           <ol className="space-y-1">
             {ranked.map((r) => <RankItem key={r.name} r={r} n={numbers[shown.indexOf(r)] ?? null} />)}
           </ol>
           {muted.map((r) => (
             <div key={r.name} className="mt-2 border-t border-border pt-2" data-testid="rank-unassigned">
               {r.href ? (
-                <Link href={r.href} className="flex items-baseline justify-between gap-2 rounded-md px-2 py-1 -mx-2 text-[12px] text-faint hover:bg-primary/5 hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+                <Link href={r.href} className="flex items-baseline justify-between gap-2 rounded-md px-2 py-1 -mx-2 text-xs text-faint hover:bg-primary/5 hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
                   <span className="truncate italic">{r.name}</span>
                   <span className="shrink-0 tabular-nums"><span className="font-semibold text-secondary">{fmt(r.count)}</span> · {r.pct}%</span>
                 </Link>
@@ -480,15 +480,15 @@ export function RankCard({ title, description, icon, rows, modes }: { readonly t
 function RankItem({ r, n }: { readonly r: RankRow; readonly n: number | null }) {
   const body = (
     <>
-      <span className="w-4 shrink-0 text-[12px] font-semibold text-faint tabular-nums">{n ?? ""}</span>
+      <span className="w-4 shrink-0 text-xs font-semibold text-faint tabular-nums">{n ?? ""}</span>
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-[13px] font-medium">{r.name}</span>
-          <span className="text-[13px] font-semibold tabular-nums">{fmt(r.count)}</span>
+          <span className="truncate text-sm font-medium">{r.name}</span>
+          <span className="text-sm font-semibold tabular-nums">{fmt(r.count)}</span>
         </span>
         <span className="mt-0.5 flex items-center gap-2">
           <span className="h-1 flex-1 overflow-hidden rounded-full bg-border"><span className="block h-full rounded-full bg-primary/70" style={{ width: `${r.pct}%` }} /></span>
-          <span className="w-12 text-right text-[11px] text-faint tabular-nums" title={`${r.pct}% of all orders counted on this card`}>{r.pct}%</span>
+          <span className="w-12 text-right text-2xs text-faint tabular-nums" title={`${r.pct}% of all orders counted on this card`}>{r.pct}%</span>
         </span>
       </span>
     </>
@@ -522,14 +522,14 @@ export function JobsCard({ data }: { readonly data: LiveDashboard }) {
       description="You can manage and review the details of the jobs with the tabs on the right."
       action={<SegmentedControl<JobTab> size="sm" ariaLabel="Group jobs by" value={tab} onChange={setTab} options={[{ value: "priority", label: "Priority" }, { value: "status", label: "Status" }, { value: "type", label: "Type" }]} />}
     >
-      <p className="mb-1.5 flex items-baseline justify-between gap-2 text-[11.5px] text-faint" data-testid="jobs-scope">
+      <p className="mb-1.5 flex items-baseline justify-between gap-2 text-2xs text-faint" data-testid="jobs-scope">
         <span>{JOB_TAB_SCOPE[tab]}</span>
         <span className="tabular-nums">{fmt(rows.reduce((a, r) => a + r.jobQty, 0))} jobs</span>
       </p>
-      {rows.length === 0 ? <p className="py-6 text-center text-[12.5px] text-faint">{tab === "status" ? "No open jobs and none completed today in this selection." : "No open jobs in this selection."}</p> : (
-        <table className="w-full text-[13px]">
+      {rows.length === 0 ? <p className="py-6 text-center text-xs text-faint">{tab === "status" ? "No open jobs and none completed today in this selection." : "No open jobs in this selection."}</p> : (
+        <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-[0.05em] text-faint">
+            <tr className="text-left text-2xs text-faint">
               <th className="py-1.5 font-semibold">Name</th><th className="py-1.5 text-right font-semibold">Product Qty</th><th className="py-1.5 text-right font-semibold">Order Qty</th><th className="py-1.5 pl-4 font-semibold">Percentage</th><th className="py-1.5 text-right font-semibold">Job Qty</th>
             </tr>
           </thead>
@@ -568,7 +568,7 @@ export function describeNights(days: readonly string[]): string {
 export function SnapshotGapAlert({ gaps }: { readonly gaps: readonly SnapshotGap[] }) {
   if (gaps.length === 0) return null;
   return (
-    <div role="alert" data-testid="snapshot-gap-alert" className="flex items-start gap-2.5 rounded-lg border border-warning/35 bg-warning-soft/60 px-3.5 py-2.5 text-[13px] leading-5">
+    <div role="alert" data-testid="snapshot-gap-alert" className="flex items-start gap-2.5 rounded-lg border border-warning/35 bg-warning-soft/60 px-3.5 py-2.5 text-sm leading-5">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
       <div className="min-w-0 flex-1">
         <p className="font-semibold text-foreground">Nightly inventory snapshot missed</p>

@@ -101,7 +101,7 @@ function SelectInner<V extends string>(
               {groups.map((group, gi) => (
                 <SelectPrimitive.Group key={group.label ?? `g${gi}`}>
                   {group.label ? (
-                    <SelectPrimitive.Label className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{group.label}</SelectPrimitive.Label>
+                    <SelectPrimitive.Label className="px-2 pb-1 pt-2 text-2xs font-semibold text-faint">{group.label}</SelectPrimitive.Label>
                   ) : null}
                   {group.items.map((option) => (
                     <SelectPrimitive.Item
@@ -113,7 +113,7 @@ function SelectInner<V extends string>(
                     >
                       <span className="flex min-w-0 flex-col">
                         <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
-                        {option.description ? <span className="text-[11px] leading-4 text-faint">{option.description}</span> : null}
+                        {option.description ? <span className="text-2xs leading-4 text-faint">{option.description}</span> : null}
                       </span>
                       <SelectPrimitive.ItemIndicator className="absolute right-2 inline-flex">
                         <Check className="h-3.5 w-3.5 text-primary" aria-hidden />
@@ -122,7 +122,7 @@ function SelectInner<V extends string>(
                   ))}
                 </SelectPrimitive.Group>
               ))}
-              {options.length === 0 ? <p className="px-2 py-1.5 text-[12px] text-faint">No options</p> : null}
+              {options.length === 0 ? <p className="px-2 py-1.5 text-xs text-faint">No options</p> : null}
             </SelectPrimitive.Viewport>
           </SelectPrimitive.Content>
         </SelectPrimitive.Portal>

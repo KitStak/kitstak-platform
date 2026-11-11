@@ -57,11 +57,11 @@ export function JsonViewer({ title, value, filename, maxHeight = "45vh" }: { rea
   return (
     <section className="flex flex-col overflow-hidden rounded-lg border border-border">
       <header className="flex items-center gap-2 border-b border-border bg-surface-sunken/70 px-3 py-2">
-        <h4 className="flex-1 text-[12px] font-semibold uppercase tracking-wide text-secondary">{title}</h4>
+        <h4 className="flex-1 text-xs font-semibold text-secondary">{title}</h4>
         <Button size="sm" variant="ghost" onClick={() => void copy()} aria-label={`Copy ${title}`}>{copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}{copied ? "Copied" : "Copy"}</Button>
         <Button size="sm" variant="secondary" onClick={() => downloadText(filename, text)}><Download className="h-3.5 w-3.5" />Download</Button>
       </header>
-      <pre tabIndex={0} aria-label={title} className="overflow-auto bg-surface px-3 py-2 font-mono text-[12px] leading-5 text-body" style={{ maxHeight }}>
+      <pre tabIndex={0} aria-label={title} className="overflow-auto bg-surface px-3 py-2 font-mono text-xs leading-5 text-body" style={{ maxHeight }}>
         <Highlighted text={text} />
       </pre>
     </section>

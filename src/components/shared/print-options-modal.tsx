@@ -185,10 +185,10 @@ export function PrintOptionsModal({ open, onOpenChange, typeKeys, records, clien
       <DialogContent size={previewId ? "xl" : "lg"}>
         <DialogHeader title={title} description={`${records.length} record${records.length === 1 ? "" : "s"} selected`} />
         <DialogBody className="flex flex-col gap-4">
-          {summary ? <div className="text-[12px] text-secondary">{summary}</div> : null}
+          {summary ? <div className="text-xs text-secondary">{summary}</div> : null}
           {/* The built-in templates show at once; saved templates replace them when /api/printouts answers. */}
           {remote.isPending ? (
-            <p role="status" className="-mb-2 flex items-center gap-2 text-[12px] text-faint">
+            <p role="status" className="-mb-2 flex items-center gap-2 text-xs text-faint">
               <Spinner className="h-3.5 w-3.5" label="Loading" />
               Loading templates…
             </p>
@@ -214,11 +214,11 @@ export function PrintOptionsModal({ open, onOpenChange, typeKeys, records, clien
                       <FileText className="h-4 w-4" aria-hidden />
                     </span>
                     <span className="flex min-w-0 flex-col gap-0.5">
-                      <span className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+                      <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                         <span className="truncate">{t.name}</span>
                         {t.isDefault ? <Badge tone="info" size="sm">Default</Badge> : null}
                       </span>
-                      <span className="text-[12px] text-faint">{ready ? t.description || t.printerType : "Not configured yet"}</span>
+                      <span className="text-xs text-faint">{ready ? t.description || t.printerType : "Not configured yet"}</span>
                     </span>
                   </button>
                 );
@@ -226,12 +226,12 @@ export function PrintOptionsModal({ open, onOpenChange, typeKeys, records, clien
             </div>
           )}
           <div className="flex flex-wrap items-end gap-4">
-            <label className="flex w-48 flex-col gap-1 text-[12px] font-semibold text-secondary">
+            <label className="flex w-48 flex-col gap-1 text-xs font-semibold text-secondary">
               Print Quantity
               <NumberInput min={1} max={MAX_COPIES} value={copies} onChange={setCopies} aria-label="Print quantity" />
             </label>
             {lineQuantityOption ? (
-              <label className="flex items-center gap-2 pb-1.5 text-[12px] font-semibold text-secondary">
+              <label className="flex items-center gap-2 pb-1.5 text-xs font-semibold text-secondary">
                 <input type="checkbox" checked={useLineQuantity} onChange={(e) => setUseLineQuantity(e.target.checked)} className="h-4 w-4 accent-[var(--primary)]" />
                 Use as Line Quantity
               </label>

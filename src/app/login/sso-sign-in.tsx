@@ -42,7 +42,7 @@ export function SsoButton() {
   if (status?.enabled) {
     const href = `/api/auth/sso/start${next && next.startsWith("/") && !next.startsWith("//") ? `?returnTo=${encodeURIComponent(next)}` : ""}`;
     return (
-      <a href={href} className="mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border bg-surface text-[14px] font-semibold text-foreground shadow-xs hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+      <a href={href} className="mt-5 flex h-10 w-full items-center justify-center gap-2 rounded-md border border-border bg-surface text-base font-semibold text-foreground shadow-xs hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
         <KeyRound className="h-4 w-4 text-primary" aria-hidden />{status.label}
       </a>
     );
@@ -66,9 +66,9 @@ export function SsoNotices() {
   if (!error && !status?.enforced && !status?.loginMessage) return null;
   return (
     <div className="mt-4 flex w-full max-w-[400px] flex-col gap-2">
-      {error ? <p role="alert" className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-[12.5px] text-danger">Single sign-on: {error}</p> : null}
-      {status?.enforced ? <p className="text-center text-[11.5px] text-secondary">Your company signs in with single sign-on. Password sign-in is for administrators only.</p> : null}
-      {status?.loginMessage ? <p className="text-center text-[12px] text-secondary">{status.loginMessage}</p> : null}
+      {error ? <p role="alert" className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger">Single sign-on: {error}</p> : null}
+      {status?.enforced ? <p className="text-center text-2xs text-secondary">Your company signs in with single sign-on. Password sign-in is for administrators only.</p> : null}
+      {status?.loginMessage ? <p className="text-center text-xs text-secondary">{status.loginMessage}</p> : null}
     </div>
   );
 }

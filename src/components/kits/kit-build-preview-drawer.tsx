@@ -72,20 +72,20 @@ function Body({ row, onClose, onCreateWorkOrder, canCreate }: { readonly row: Ki
   const steps: readonly { key: Step; label: string }[] = [{ key: "qty", label: "Quantity" }, { key: "preview", label: "Inventory preview" }];
   return (
     <>
-      <ol className="flex items-center gap-2 border-b border-border px-5 py-3 text-[12px]" aria-label="Steps">
+      <ol className="flex items-center gap-2 border-b border-border px-5 py-3 text-xs" aria-label="Steps">
         {steps.map((s, i) => (
           <li key={s.key} aria-current={step === s.key ? "step" : undefined} className={cn("inline-flex items-center gap-1.5", step === s.key ? "font-semibold text-foreground" : "text-secondary")}>
-            <span className={cn("inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px]", step === s.key ? "bg-primary text-white" : "bg-surface-sunken")}>{i + 1}</span>
+            <span className={cn("inline-flex h-5 w-5 items-center justify-center rounded-full text-2xs", step === s.key ? "bg-primary text-white" : "bg-surface-sunken")}>{i + 1}</span>
             {s.label}
             {i < steps.length - 1 ? <span className="mx-1 text-faint" aria-hidden>›</span> : null}
           </li>
         ))}
-        <li className="inline-flex items-center gap-1.5 text-secondary"><span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-surface-sunken text-[11px]">3</span>Work order</li>
+        <li className="inline-flex items-center gap-1.5 text-secondary"><span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-surface-sunken text-2xs">3</span>Work order</li>
       </ol>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[14px] font-semibold text-foreground">{row.sku}</span>
-          <span className="text-[13px] text-secondary">{row.name}</span>
+          <span className="text-base font-semibold text-foreground">{row.sku}</span>
+          <span className="text-sm text-secondary">{row.name}</span>
           <QtyChip label="Warehouse" value={row.warehouseCode} />
           <QtyChip label="Kit type" value={row.kitType ?? "—"} />
           <QtyChip label="Can build now" value={capacity} />
@@ -97,10 +97,10 @@ function Body({ row, onClose, onCreateWorkOrder, canCreate }: { readonly row: Ki
         ) : null}
         {step === "qty" ? (
           <div className="flex max-w-sm flex-col gap-1.5">
-            <label htmlFor="kit-build-qty" className="text-[13px] font-medium text-foreground">Kits to build <span className="text-danger">*</span></label>
+            <label htmlFor="kit-build-qty" className="text-sm font-medium text-foreground">Kits to build <span className="text-danger">*</span></label>
             <QtyInput id="kit-build-qty" autoFocus value={qty} onChange={(v) => setQty(v)} onBlur={() => setTouched(true)} invalid={touched && Boolean(issue)} suffix={row.packType} />
-            {touched && issue ? <p className="text-[12px] text-danger">{issue}</p> : (
-              <p className="text-[12px] text-secondary">
+            {touched && issue ? <p className="text-xs text-danger">{issue}</p> : (
+              <p className="text-xs text-secondary">
                 You can build up to <strong className="tabular-nums text-foreground">{capacity}</strong> with usable component stock.{" "}
                 {capacity > 0 ? <button type="button" className="font-medium text-info underline-offset-2 hover:underline" onClick={() => setQty(capacity)}>Use {capacity}</button> : null}
               </p>
@@ -108,13 +108,13 @@ function Body({ row, onClose, onCreateWorkOrder, canCreate }: { readonly row: Ki
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            <p className="text-[13px] text-secondary">Building <strong className="text-foreground">{n}</strong> {row.packType} of {row.sku} changes inventory like this:</p>
+            <p className="text-sm text-secondary">Building <strong className="text-foreground">{n}</strong> {row.packType} of {row.sku} changes inventory like this:</p>
             {!k ? <div role="status" className="flex flex-col gap-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-24 w-full" /></div> : (
               <KitDeltaTable caption={`Inventory change for building ${n} ${row.sku}`} currentLabel="Current qty" lines={kitBuildDeltas(k, n, row.warehouseCode)}
-                flags={Object.fromEntries(Object.entries(shortages).map(([id, s]) => [id, <span key={id} className="rounded bg-danger/10 px-1 text-[10px] font-semibold text-danger">Short {s}</span>]))} />
+                flags={Object.fromEntries(Object.entries(shortages).map(([id, s]) => [id, <span key={id} className="rounded bg-danger/10 px-1 text-2xs font-semibold text-danger">Short {s}</span>]))} />
             )}
             {shortCount > 0 ? <Callout variant="error" title={`${shortCount} component${shortCount === 1 ? " is" : "s are"} short`}>Lower the quantity to {capacity} or receive more stock first.</Callout> : null}
-            <p className="text-[12px] text-secondary">Nothing changes yet. Kitting runs through a work order: the next step opens Create Work Order with this kit and quantity, and the work order&apos;s Create Kit step posts these movements.</p>
+            <p className="text-xs text-secondary">Nothing changes yet. Kitting runs through a work order: the next step opens Create Work Order with this kit and quantity, and the work order&apos;s Create Kit step posts these movements.</p>
           </div>
         )}
       </div>

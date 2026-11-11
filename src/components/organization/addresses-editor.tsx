@@ -109,8 +109,8 @@ export function AddressesEditor({ value, onChange, disabled, requireShipping, er
     <section className="flex flex-col gap-3" aria-label="Addresses">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-[13px] font-semibold text-foreground">Addresses{requireShipping ? <span className="text-danger"> *</span> : null}</h3>
-          <p className="text-[12px] text-secondary">{description}</p>
+          <h3 className="text-sm font-semibold text-foreground">Addresses{requireShipping ? <span className="text-danger"> *</span> : null}</h3>
+          <p className="text-xs text-secondary">{description}</p>
         </div>
         <Button size="sm" variant="secondary" disabled={disabled} onClick={() => setEditing({ index: null, initial: { ...EMPTY_ORG_ADDRESS, usageType: missingShipping || list.length === 0 ? "Shipping" : "Billing", isDefault: !list.some((a) => a.usageType === "Shipping") } })}>
           <Plus className="h-4 w-4" aria-hidden />Add address
@@ -119,7 +119,7 @@ export function AddressesEditor({ value, onChange, disabled, requireShipping, er
       {list.length === 0 ? (
         <div className={cn("flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center", error ? "border-danger bg-danger-soft/30" : "border-border-strong bg-surface-sunken/40")}>
           <MapPin className="h-5 w-5 text-faint" aria-hidden />
-          <p className="text-[13px] text-secondary">No addresses have been added yet. Click Add address to add one.</p>
+          <p className="text-sm text-secondary">No addresses have been added yet. Click Add address to add one.</p>
         </div>
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">
@@ -141,14 +141,14 @@ export function AddressesEditor({ value, onChange, disabled, requireShipping, er
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-              <p className="text-[13px] font-semibold text-foreground">{a.name}{a.companyName ? <span className="font-normal text-secondary"> · {a.companyName}</span> : null}</p>
-              <div className="text-[12px] leading-5 text-secondary">{addressLines(a).map((l) => <div key={l}>{l}</div>)}</div>
-              {a.firstName || a.lastName || a.phone || a.email ? <p className="text-[12px] text-faint">{[[a.firstName, a.lastName].filter(Boolean).join(" "), a.phone, a.email].filter(Boolean).join(" · ")}</p> : null}
+              <p className="text-sm font-semibold text-foreground">{a.name}{a.companyName ? <span className="font-normal text-secondary"> · {a.companyName}</span> : null}</p>
+              <div className="text-xs leading-5 text-secondary">{addressLines(a).map((l) => <div key={l}>{l}</div>)}</div>
+              {a.firstName || a.lastName || a.phone || a.email ? <p className="text-xs text-faint">{[[a.firstName, a.lastName].filter(Boolean).join(" "), a.phone, a.email].filter(Boolean).join(" · ")}</p> : null}
             </li>
           ))}
         </ul>
       )}
-      {error ? <p role="alert" className="text-[12px] font-medium text-danger">{error}</p> : missingShipping && list.length > 0 ? <p className="text-[12px] text-warning">Add at least one active Shipping address.</p> : null}
+      {error ? <p role="alert" className="text-xs font-medium text-danger">{error}</p> : missingShipping && list.length > 0 ? <p className="text-xs text-warning">Add at least one active Shipping address.</p> : null}
       {editing ? (
         <AddressModal open title={editing.index === null ? "Add address" : `Edit address ${editing.initial.name}`} initial={editing.initial}
           onOpenChange={(o) => !o && setEditing(null)} onSave={(a) => save(a, editing.index)} />

@@ -22,7 +22,7 @@ const dash = <span className="text-faint">—</span>;
 
 function Row({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[140px_1fr] gap-3 py-1.5 text-[13px]">
+    <div className="grid grid-cols-[140px_1fr] gap-3 py-1.5 text-sm">
       <dt className="text-faint">{label}</dt>
       <dd className="min-w-0 text-body">{children}</dd>
     </div>
@@ -33,9 +33,9 @@ function AddressCard({ title, address }: { readonly title: string; readonly addr
   const has = address && (address.line1 || address.city || address.state || address.name);
   return (
     <section className="rounded-lg border border-border p-3" aria-label={title}>
-      <h4 className="mb-1 text-[12px] font-semibold text-foreground">{title}</h4>
+      <h4 className="mb-1 text-xs font-semibold text-foreground">{title}</h4>
       {has && address ? (
-        <div className="text-[13px] leading-5 text-body">
+        <div className="text-sm leading-5 text-body">
           {address.name ? <div className="font-medium text-foreground">{address.name}</div> : null}
           {address.contactName ? <div>{address.contactName}</div> : null}
           {address.line1 ? <div>{address.line1}</div> : null}
@@ -45,7 +45,7 @@ function AddressCard({ title, address }: { readonly title: string; readonly addr
           {address.phone ? <div className="text-faint">{address.phone}</div> : null}
         </div>
       ) : (
-        <p className="text-[13px] text-faint">Not set</p>
+        <p className="text-sm text-faint">Not set</p>
       )}
     </section>
   );
@@ -89,12 +89,12 @@ export function VendorDetailsDrawer({ vendorId, onOpenChange, onEdit }: {
           <AddressCard title="Billing address" address={v.useShipAsBilling ? v.shipping : v.billing} />
         </div>
         <section aria-label="Recent purchase orders">
-          <h4 className="mb-2 text-[12px] font-semibold text-foreground">Recent purchase orders</h4>
+          <h4 className="mb-2 text-xs font-semibold text-foreground">Recent purchase orders</h4>
           {pos.isPending ? <Skeleton className="h-20 w-full" /> : recent.length === 0 ? (
-            <p className="text-[13px] text-faint">No purchase orders for this vendor yet.</p>
+            <p className="text-sm text-faint">No purchase orders for this vendor yet.</p>
           ) : (
-            <table className="w-full text-[13px]">
-              <thead><tr className="text-left text-[11px] uppercase tracking-wide text-faint"><th className="py-1 font-semibold">PO</th><th className="py-1 font-semibold">Status</th><th className="py-1 font-semibold">PO date</th><th className="py-1 text-right font-semibold">Quantity</th></tr></thead>
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-2xs text-faint"><th className="py-1 font-semibold">PO</th><th className="py-1 font-semibold">Status</th><th className="py-1 font-semibold">PO date</th><th className="py-1 text-right font-semibold">Quantity</th></tr></thead>
               <tbody className="divide-y divide-border">
                 {recent.map((po) => (
                   <tr key={po.id}>

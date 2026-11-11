@@ -29,7 +29,7 @@ export function SearchMode({ value, onChange }: { readonly value: QuickSearchMod
         <button
           type="button"
           aria-label={`Search mode: ${SEARCH_MODE_LABELS[value]}`}
-          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-l-md border border-r-0 border-border-strong/70 bg-surface-sunken px-2.5 text-[12px] font-medium text-secondary transition-colors hover:text-body focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
+          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-l-md border border-r-0 border-border-strong/70 bg-surface-sunken px-2.5 text-xs font-medium text-secondary transition-colors hover:text-body focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
         >
           {SEARCH_MODE_LABELS[value]}
           <ChevronDown className="h-3 w-3" aria-hidden />
@@ -38,7 +38,7 @@ export function SearchMode({ value, onChange }: { readonly value: QuickSearchMod
       <PopoverContent align="start" className="w-52 p-2">
         <div role="radiogroup" aria-label="Search mode" className="flex flex-col gap-0.5">
           {MODES.map((mode) => (
-            <label key={mode} className={cn("flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] hover:bg-surface-sunken", draft === mode ? "text-primary" : "text-body")}>
+            <label key={mode} className={cn("flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface-sunken", draft === mode ? "text-primary" : "text-body")}>
               <input type="radio" name="grid-search-mode" className="accent-[var(--color-primary)]" checked={draft === mode} onChange={() => setDraft(mode)} />
               {SEARCH_MODE_LABELS[mode]}
             </label>

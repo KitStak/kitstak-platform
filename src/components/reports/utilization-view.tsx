@@ -19,7 +19,7 @@ const toneOf = (band: string) => TONES[BAND_TONE[band as UtilizationBand] ?? "gr
 export function BandPill({ band, estimated }: { readonly band: string; readonly estimated?: boolean }) {
   const tone = toneOf(band);
   return (
-    <span data-band={band} style={pillStyle(tone)} className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4">
+    <span data-band={band} style={pillStyle(tone)} className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold leading-4">
       {band}
       {estimated && band !== "Empty" && band !== "No Capacity Set" ? <span className="font-medium opacity-75">· est.</span> : null}
     </span>
@@ -52,7 +52,7 @@ export function UtilizationBar({ pct, band, estimated }: { readonly pct: number 
           }}
         />
       </span>
-      <span className="w-[68px] shrink-0 text-right text-[12px] font-semibold tabular-nums text-foreground">{label}</span>
+      <span className="w-[68px] shrink-0 text-right text-xs font-semibold tabular-nums text-foreground">{label}</span>
     </span>
   );
 }
@@ -85,7 +85,7 @@ export function UtilizationSummaryBar() {
   if (!summary) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Locations by utilization band" data-testid="utilization-summary">
-      <span className="mr-1 text-[12px] font-semibold text-secondary">{summary.total.toLocaleString("en-US")} locations</span>
+      <span className="mr-1 text-xs font-semibold text-secondary">{summary.total.toLocaleString("en-US")} locations</span>
       {UTILIZATION_BANDS.map((band) => {
         const count = summary.bands.find((b) => b.band === band)?.count ?? 0;
         const tone = toneOf(band);
@@ -97,7 +97,7 @@ export function UtilizationSummaryBar() {
             scroll={false}
             aria-pressed={isActive}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
               isActive ? "border-transparent" : "border-border bg-surface text-body hover:bg-surface-sunken",
               count === 0 && !isActive && "opacity-60",
             )}
@@ -110,7 +110,7 @@ export function UtilizationSummaryBar() {
         );
       })}
       {summary.estimated > 0 ? (
-        <span className="ml-1 text-[12px] text-secondary">
+        <span className="ml-1 text-xs text-secondary">
           · {summary.estimated.toLocaleString("en-US")} on estimated capacity (hidden by the Estimated chip)
         </span>
       ) : null}

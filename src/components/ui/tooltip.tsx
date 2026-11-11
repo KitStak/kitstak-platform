@@ -76,7 +76,7 @@ export function Tooltip({ content, children, side = "top", align = "center", dis
             sideOffset={6}
             collisionPadding={8}
             className={cn(
-              "z-[60] max-w-[280px] rounded-md bg-foreground px-2.5 py-1.5 text-[12px] leading-4 font-medium text-surface shadow-md",
+              "z-[60] max-w-[280px] rounded-md bg-foreground px-2.5 py-1.5 text-xs leading-4 font-medium text-surface shadow-md",
               className
             )}
           >

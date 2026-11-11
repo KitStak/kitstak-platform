@@ -16,8 +16,8 @@ export type ShowcaseKey = (typeof SHOWCASE_SECTIONS)[number]["key"];
 export function ShowcaseSection({ id, title, description, children }: { readonly id: ShowcaseKey; readonly title: string; readonly description?: string; readonly children: React.ReactNode }) {
   return (
     <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-[72px] rounded-xl border border-border bg-surface p-5 shadow-xs">
-      <h2 id={`${id}-title`} className="text-[16px] font-semibold text-foreground">{title}</h2>
-      {description ? <p className="mt-0.5 text-[12px] text-secondary">{description}</p> : null}
+      <h2 id={`${id}-title`} className="text-md font-semibold text-foreground">{title}</h2>
+      {description ? <p className="mt-0.5 text-xs text-secondary">{description}</p> : null}
       <div className="mt-4 space-y-5">{children}</div>
     </section>
   );
@@ -26,7 +26,7 @@ export function ShowcaseSection({ id, title, description, children }: { readonly
 export function Specimen({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-faint">{label}</p>
+      <p className="mb-2 text-2xs font-bold text-faint">{label}</p>
       <div className="flex flex-wrap items-center gap-3">{children}</div>
     </div>
   );

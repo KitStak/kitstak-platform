@@ -74,27 +74,27 @@ export function PackingDashboard() {
 
   return (
     <div className="pb-8">
-      <PageHeader title="Packing Station" breadcrumbs={[{ label: "Fulfillment" }, { label: "Outbound" }, { label: "Packing Station" }]} helper="Choose your station, then scan what you are packing from." actions={<span className="flex items-center gap-4"><Link href="/packing-station/hospitals" className="text-[13px] font-medium text-primary hover:underline">Hospital locations</Link><Link href="/orders?f.status=in%3AReady%20to%20Pack%2CPacking%20Started" className="text-[13px] font-medium text-primary hover:underline">Orders to pack</Link></span>} />
+      <PageHeader title="Packing Station" breadcrumbs={[{ label: "Fulfillment" }, { label: "Outbound" }, { label: "Packing Station" }]} helper="Choose your station, then scan what you are packing from." actions={<span className="flex items-center gap-4"><Link href="/packing-station/hospitals" className="text-sm font-medium text-primary hover:underline">Hospital locations</Link><Link href="/orders?f.status=in%3AReady%20to%20Pack%2CPacking%20Started" className="text-sm font-medium text-primary hover:underline">Orders to pack</Link></span>} />
       <div className="grid gap-4 px-6 pt-4 xl:grid-cols-[300px_minmax(0,1fr)_280px]">
         <Card className="flex flex-col gap-4 self-start p-4">
-          <h2 className="flex items-center gap-2 text-[13px] font-semibold"><Warehouse className="h-4 w-4 text-secondary" aria-hidden />Station setup</h2>
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><Warehouse className="h-4 w-4 text-secondary" aria-hidden />Station setup</h2>
           <div className="flex flex-col gap-1">
-            <label htmlFor="ps-warehouse" className="text-[12px] font-semibold text-body">Warehouse <span className="text-danger">*</span></label>
+            <label htmlFor="ps-warehouse" className="text-xs font-semibold text-body">Warehouse <span className="text-danger">*</span></label>
             <Select id="ps-warehouse" value={warehouseId} options={warehouses.map((w) => ({ value: w.id, label: w.code && !w.name.startsWith(w.code) ? `${w.code} · ${w.name}` : w.name }))} onChange={(id) => setMem({ warehouseId: id, stationId: null })} placeholder={meLoading ? "Loading…" : "Choose a warehouse"} />
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="ps-station" className="text-[12px] font-semibold text-body">Packing station <span className="text-danger">*</span></label>
+            <label htmlFor="ps-station" className="text-xs font-semibold text-body">Packing station <span className="text-danger">*</span></label>
             <Select id="ps-station" value={station?.id ?? null} disabled={!warehouseId} options={list.map((s) => ({ value: s.id, label: s.code, description: s.countLockPlan ? `Locked by ${s.countLockPlan}` : s.description && s.description !== s.code ? s.description : undefined, disabled: Boolean(s.countLockPlan) }))}
               onChange={(id) => setMem({ stationId: id })} placeholder={stations.isPending && warehouseId ? "Loading…" : "Choose a station"} />
-            {warehouseId && !stations.isPending && list.length === 0 ? <p className="text-[11px] text-warning">No Packing-area location in this warehouse. Add one in Locations.</p>
-              : lockReason ? <p className="text-[11px] font-medium text-danger" data-testid="ps-station-locked">{lockReason}</p>
-              : skippedLocked ? <p className="text-[11px] text-warning" data-testid="ps-station-lock-note">{skippedLocked.code} is locked by count plan {skippedLocked.countLockPlan}, so {station?.code} is used.</p>
-              : <p className="text-[11px] text-secondary">Remembered for your next visit.</p>}
+            {warehouseId && !stations.isPending && list.length === 0 ? <p className="text-2xs text-warning">No Packing-area location in this warehouse. Add one in Locations.</p>
+              : lockReason ? <p className="text-2xs font-medium text-danger" data-testid="ps-station-locked">{lockReason}</p>
+              : skippedLocked ? <p className="text-2xs text-warning" data-testid="ps-station-lock-note">{skippedLocked.code} is locked by count plan {skippedLocked.countLockPlan}, so {station?.code} is used.</p>
+              : <p className="text-2xs text-secondary">Remembered for your next visit.</p>}
           </div>
         </Card>
 
         <div className="flex min-w-0 flex-col gap-3">
-          <h2 className="text-[15px] font-semibold">Start packing</h2>
+          <h2 className="text-base font-semibold">Start packing</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             {START_MODES.map((m) => (
               <DisabledReason key={m.mode} reason={reason}>
@@ -103,15 +103,15 @@ export function PackingDashboard() {
                     reason ? "cursor-not-allowed opacity-55" : "hover:-translate-y-0.5 hover:border-primary hover:shadow-md")}>
                   <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary-soft text-primary transition-colors group-hover:bg-primary group-hover:text-white"><m.icon className="h-5 w-5" /></span>
                   <span>
-                    <span className="block text-[15px] font-semibold text-foreground">{m.title}</span>
-                    <span className="block text-[12px] text-secondary">{m.description}</span>
+                    <span className="block text-base font-semibold text-foreground">{m.title}</span>
+                    <span className="block text-xs text-secondary">{m.description}</span>
                   </span>
                   <Kbd className="absolute right-4 top-4">{m.key}</Kbd>
                 </button>
               </DisabledReason>
             ))}
           </div>
-          <p className="text-[12px] text-secondary">Shortcuts on the pack screen: <Kbd>Enter</Kbd> submits a scan · <Kbd>F2</Kbd> closes the package · <Kbd>F9</Kbd> completes packing.</p>
+          <p className="text-xs text-secondary">Shortcuts on the pack screen: <Kbd>Enter</Kbd> submits a scan · <Kbd>F2</Kbd> closes the package · <Kbd>F9</Kbd> completes packing.</p>
           <PackingHistoryCard warehouseId={warehouseId} warehouseCode={warehouses.find((w) => w.id === warehouseId)?.code ?? ""} />
         </div>
 
@@ -120,8 +120,8 @@ export function PackingDashboard() {
             <Avatar name={user?.name ?? user?.email ?? "?"} size="lg" />
             <div className="min-w-0">
               <p className="truncate font-semibold">{user?.name ?? "—"}</p>
-              <p className="truncate text-[12px] text-secondary">{roleLabel(user?.role) ? <span className="font-medium text-body">{roleLabel(user?.role)} · </span> : null}{user?.email}</p>
-              <p className="text-[11px] text-secondary">{station ? `At ${station.code}` : "No station chosen"}</p>
+              <p className="truncate text-xs text-secondary">{roleLabel(user?.role) ? <span className="font-medium text-body">{roleLabel(user?.role)} · </span> : null}{user?.email}</p>
+              <p className="text-2xs text-secondary">{station ? `At ${station.code}` : "No station chosen"}</p>
             </div>
           </Card>
           <StatTile label="Orders packed today" value={k?.ordersPackedToday ?? "—"} icon={PackageCheck} tone="success" loading={kpis.isPending && Boolean(warehouseId)} info="Orders you completed packing today." />
@@ -133,17 +133,17 @@ export function PackingDashboard() {
           <StatTile label="Orders with packing warnings" value={k?.ordersWithWarnings ?? "—"} icon={MessageSquareWarning} tone={k?.ordersWithWarnings ? "warning" : "default"} loading={kpis.isPending && Boolean(warehouseId)}
             info="Orders to pack that carry a Packing Warning Type. The warning opens on the pack screen at its trigger and must be acknowledged." />
           <div data-testid="ps-station-kpis"><Card className="space-y-2 p-4">
-            <p className="flex items-center gap-1.5 text-[12px] font-semibold text-body"><MapPin className="h-3.5 w-3.5 text-secondary" aria-hidden />{station ? `Station ${station.code} today` : "Station today"}</p>
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-body"><MapPin className="h-3.5 w-3.5 text-secondary" aria-hidden />{station ? `Station ${station.code} today` : "Station today"}</p>
             {station && k?.station ? (
               <dl className="grid grid-cols-3 gap-2 text-center">
-                <div><dt className="text-[11px] text-secondary">Orders</dt><dd className="text-[18px] font-semibold tabular-nums">{k.station.ordersPackedToday}</dd></div>
-                <div><dt className="text-[11px] text-secondary">Units</dt><dd className="text-[18px] font-semibold tabular-nums">{k.station.productsPackedToday}</dd></div>
-                <div><dt className="text-[11px] text-secondary">Packers</dt><dd className="text-[18px] font-semibold tabular-nums">{k.station.packers}</dd></div>
+                <div><dt className="text-2xs text-secondary">Orders</dt><dd className="text-lg font-semibold tabular-nums">{k.station.ordersPackedToday}</dd></div>
+                <div><dt className="text-2xs text-secondary">Units</dt><dd className="text-lg font-semibold tabular-nums">{k.station.productsPackedToday}</dd></div>
+                <div><dt className="text-2xs text-secondary">Packers</dt><dd className="text-lg font-semibold tabular-nums">{k.station.packers}</dd></div>
               </dl>
-            ) : <p className="text-[12px] text-secondary">{station ? (kpis.isPending ? "Loading…" : "No packing at this station yet today.") : meLoading || (stations.isPending && warehouseId) ? "Loading…" : "Choose a station to see its totals."}</p>}
-            <p className="text-[11px] text-secondary">Every packer at this station, since midnight.</p>
+            ) : <p className="text-xs text-secondary">{station ? (kpis.isPending ? "Loading…" : "No packing at this station yet today.") : meLoading || (stations.isPending && warehouseId) ? "Loading…" : "Choose a station to see its totals."}</p>}
+            <p className="text-2xs text-secondary">Every packer at this station, since midnight.</p>
           </Card></div>
-          <Link href="/shipments" className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:underline"><ClipboardList className="h-3.5 w-3.5" aria-hidden />Today&apos;s shipments</Link>
+          <Link href="/shipments" className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"><ClipboardList className="h-3.5 w-3.5" aria-hidden />Today&apos;s shipments</Link>
         </div>
       </div>
     </div>

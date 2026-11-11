@@ -163,7 +163,7 @@ export function HydrationStallNotice() {
   return (
     <>
       <style>{STALL_CSS}</style>
-      <div data-ks-stall="" role="status" aria-live="polite" className="flex max-w-[calc(100vw-32px)] items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-[13px] text-foreground shadow-lg">
+      <div data-ks-stall="" role="status" aria-live="polite" className="flex max-w-[calc(100vw-32px)] items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-foreground shadow-lg">
         <Loader2 className="h-4 w-4 shrink-0 animate-spin text-info" aria-hidden />
         <span>This page is taking longer than usual to load.</span>
         {/* An empty href reloads the current URL, filters and tab included. */}
@@ -191,12 +191,12 @@ export function apiErrorMessage(error: unknown, fallback = "Something went wrong
 /* ---------------- cells ---------------- */
 
 export function YesNo({ value }: { readonly value: boolean | null | undefined }) {
-  return value ? <Badge tone="success" size="sm" shape="pill">Yes</Badge> : <span className="text-[12px] text-faint">No</span>;
+  return value ? <Badge tone="success" size="sm" shape="pill">Yes</Badge> : <span className="text-xs text-faint">No</span>;
 }
 
 /** Locked is a blocking state (no picks / putaway), so Yes reads as a warning, never as green "good". */
 export function LockedPill({ value }: { readonly value: boolean | null | undefined }) {
-  return value ? <Badge tone="warning" size="sm" shape="pill">Locked</Badge> : <span className="text-[12px] text-faint">No</span>;
+  return value ? <Badge tone="warning" size="sm" shape="pill">Locked</Badge> : <span className="text-xs text-faint">No</span>;
 }
 
 /**
@@ -248,7 +248,7 @@ export function StallNotice({ pending, onRetry, label = "results", delayMs = STA
   const stalled = useDelayedFlag(pending, delayMs);
   if (!stalled) return null;
   return (
-    <div role="alert" data-slot="stall-notice" className="mx-6 my-2 flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-[13px] text-body">
+    <div role="alert" data-slot="stall-notice" className="mx-6 my-2 flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-body">
       <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin text-warning" aria-hidden />Loading {label} is taking longer than usual. The server may be busy.</span>
       <Button size="sm" onClick={onRetry}>Retry</Button>
     </div>
@@ -266,7 +266,7 @@ export function GridFetchShell({ fetching, status, children, pending, onRetry }:
         </div>
       ) : null}
       {status ? (
-        <div role="status" className="pointer-events-none absolute right-4 top-2 z-30 flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-[12px] text-body shadow-sm">
+        <div role="status" className="pointer-events-none absolute right-4 top-2 z-30 flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-xs text-body shadow-sm">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-info" aria-hidden />{status}
         </div>
       ) : null}
@@ -282,7 +282,7 @@ export function GridFetchShell({ fetching, status, children, pending, onRetry }:
 export function CodeCell({ children, mono, label }: { readonly children: React.ReactNode; readonly mono?: boolean; readonly label?: string }) {
   return (
     <button type="button" aria-label={label ? `Open ${label}` : undefined}
-      className={cn("max-w-full truncate text-left font-medium text-primary underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", mono && "font-mono text-[12px]")}>
+      className={cn("max-w-full truncate text-left font-medium text-primary underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", mono && "font-mono text-xs")}>
       {children}
     </button>
   );
@@ -297,7 +297,7 @@ export function Num({ value, decimals = 0, unit }: { readonly value: number | nu
   return (
     <span className={cn("tabular-nums", value === 0 && "text-faint")}>
       {value.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}
-      {unit ? <span className="ml-0.5 text-[11px] text-faint">{unit}</span> : null}
+      {unit ? <span className="ml-0.5 text-2xs text-faint">{unit}</span> : null}
     </span>
   );
 }
@@ -430,7 +430,7 @@ export function EntityChangeLogDrawer({ open, onOpenChange, path, title, created
   return (
     <Drawer open={open} onOpenChange={(o) => { if (!o) setPage(1); onOpenChange(o); }} title={title} description="Every create, edit and delete with who made it and when." width={45}>
       {query.isFetching && !query.isPending && !query.isPlaceholderData && !invalidated ? (
-        <p role="status" className="-mt-1 mb-2 flex items-center gap-1.5 text-[11px] text-faint"><Loader2 className="h-3 w-3 animate-spin" aria-hidden />Checking for newer changes…</p>
+        <p role="status" className="-mt-1 mb-2 flex items-center gap-1.5 text-2xs text-faint"><Loader2 className="h-3 w-3 animate-spin" aria-hidden />Checking for newer changes…</p>
       ) : null}
       {!query.isError && (query.isPending || query.isPlaceholderData || invalidated || query.data === undefined) ? (
         <div role="status" aria-label="Loading change log"><SkeletonTable rows={6} columns={4} /></div>
@@ -452,17 +452,17 @@ export function EntityChangeLogDrawer({ open, onOpenChange, path, title, created
                       <Badge tone={meta.tone} size="sm" className="mt-px shrink-0">{r.type}</Badge>
                       <span className="sr-only">: </span>
                       {r.type === "Update" && r.fieldLabel ? (
-                        <p className="min-w-0 text-[13px] text-body">
+                        <p className="min-w-0 text-sm text-body">
                           <span className="font-medium">{tidyLegacyNames(r.fieldLabel)}</span>{" "}
                           <span className={cn("text-faint", r.fromValue ? "line-through decoration-faint/60" : "italic")}>{changeLogValue(r.fromValue)}</span>
                           <span className="mx-1 text-faint" aria-label="changed to">→</span>
                           <span className={cn(r.toValue ? "font-medium text-foreground" : "italic text-faint")}>{changeLogValue(r.toValue)}</span>
                         </p>
                       ) : (
-                        <p className="min-w-0 text-[13px] text-body">{cleanChangeMessage(r.message)}</p>
+                        <p className="min-w-0 text-sm text-body">{cleanChangeMessage(r.message)}</p>
                       )}
                     </div>
-                    <p className="mt-1 text-[11px] text-faint">{fmt.dateTime(r.at)} · {changeByline(r)}</p>
+                    <p className="mt-1 text-2xs text-faint">{fmt.dateTime(r.at)} · {changeByline(r)}</p>
                   </div>
                 </li>
               );
@@ -474,14 +474,14 @@ export function EntityChangeLogDrawer({ open, onOpenChange, path, title, created
                   <div className="flex items-start gap-2">
                     <Badge tone="neutral" size="sm" className="mt-px shrink-0">Created</Badge>
                     <span className="sr-only">: </span>
-                    <p className="min-w-0 text-[13px] text-body">{rows.length > 0 ? "Record created before change tracking began; later edits are listed above." : "Record created before change tracking began; no edits since."}</p>
+                    <p className="min-w-0 text-sm text-body">{rows.length > 0 ? "Record created before change tracking began; later edits are listed above." : "Record created before change tracking began; no edits since."}</p>
                   </div>
-                  <p className="mt-1 text-[11px] text-faint">{fmt.dateTime(created.at)}{created.by ? ` · ${created.by}` : ""} · From the record</p>
+                  <p className="mt-1 text-2xs text-faint">{fmt.dateTime(created.at)}{created.by ? ` · ${created.by}` : ""} · From the record</p>
                 </div>
               </li>
             ) : null}
           </ol>
-          <div className="flex items-center justify-between text-[12px] text-secondary">
+          <div className="flex items-center justify-between text-xs text-secondary">
             <span>Total: {total}</span>
             <div className="flex items-center gap-1">
               <Button size="icon-sm" variant="ghost" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
@@ -507,12 +507,12 @@ export interface DetailItem {
 export function DetailList({ title, items }: { readonly title?: string; readonly items: readonly DetailItem[] }) {
   return (
     <section className="flex flex-col gap-2">
-      {title ? <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">{title}</h3> : null}
+      {title ? <h3 className="text-xs font-semibold text-secondary">{title}</h3> : null}
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg border border-border bg-surface px-4 py-3">
         {items.map((i) => (
           <div key={i.label} className={cn("min-w-0", i.wide && "col-span-2")}>
-            <dt className="text-[11px] text-faint">{i.label}</dt>
-            <dd className="mt-0.5 break-words text-[13px] text-foreground">{i.value === null || i.value === undefined || i.value === "" ? <Muted /> : i.value}</dd>
+            <dt className="text-2xs text-faint">{i.label}</dt>
+            <dd className="mt-0.5 break-words text-sm text-foreground">{i.value === null || i.value === undefined || i.value === "" ? <Muted /> : i.value}</dd>
           </div>
         ))}
       </dl>
@@ -526,8 +526,8 @@ export function StatRow({ stats }: { readonly stats: readonly { readonly label: 
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {stats.map((s) => (
         <div key={s.label} className="rounded-lg border border-border bg-surface-sunken/60 px-3 py-2">
-          <p className="text-[11px] text-faint">{s.label}</p>
-          <p className={cn("text-[18px] font-semibold tabular-nums text-foreground", s.tone === "danger" && "text-danger", s.tone === "warning" && "text-warning", s.tone === "success" && "text-success")}>{s.value}</p>
+          <p className="text-2xs text-faint">{s.label}</p>
+          <p className={cn("text-lg font-semibold tabular-nums text-foreground", s.tone === "danger" && "text-danger", s.tone === "warning" && "text-warning", s.tone === "success" && "text-success")}>{s.value}</p>
         </div>
       ))}
     </div>

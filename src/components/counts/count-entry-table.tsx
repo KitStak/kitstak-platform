@@ -175,9 +175,9 @@ function CountQtyInput({ id, label, value, onChange, disabled, invalid, errorId,
           if (n === null || countedValueError(n)) { e.preventDefault(); setPasteError(`"${pasted.trim().slice(0, 12)}" is not a whole number of 0 or more`); }
         }}
         onChange={(e) => { setText(e.target.value); setPasteError(null); onChange(parseCountedText(e.target.value)); }}
-        className={cn("w-full rounded-md border bg-surface px-2.5 text-right tabular-nums", large ? "h-11 text-[16px] font-semibold" : "h-8 text-[13px]", " text-foreground outline-none transition-colors placeholder:text-faint focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60",
+        className={cn("w-full rounded-md border bg-surface px-2.5 text-right tabular-nums", large ? "h-11 text-md font-semibold" : "h-8 text-sm", " text-foreground outline-none transition-colors placeholder:text-faint focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60",
           invalid || pasteError ? "border-danger focus-visible:ring-danger/25" : "border-border-strong focus-visible:border-primary focus-visible:ring-primary/25")} />
-      {pasteError ? <p id={`${id}-paste`} role="alert" className="mt-0.5 text-[11px] font-medium text-danger">{pasteError}</p> : null}
+      {pasteError ? <p id={`${id}-paste`} role="alert" className="mt-0.5 text-2xs font-medium text-danger">{pasteError}</p> : null}
     </>
   );
 }
@@ -244,8 +244,8 @@ export function CountEntryTable({ drafts, onChange, warehouseId, productId, disa
     return { valueError, invalid, delta };
   };
   const kindBadge = (d: EntryDraft) => (d.damageReason
-    ? <span className="ml-1.5 rounded bg-danger-soft px-1.5 py-px text-[10px] font-semibold uppercase text-danger">Damaged</span>
-    : d.inventoryId ? null : <span className="ml-1.5 rounded bg-primary-soft px-1.5 py-px text-[10px] font-semibold uppercase text-primary">Found</span>);
+    ? <span className="ml-1.5 rounded bg-danger-soft px-1.5 py-px text-2xs font-semibold text-danger">Damaged</span>
+    : d.inventoryId ? null : <span className="ml-1.5 rounded bg-primary-soft px-1.5 py-px text-2xs font-semibold text-primary">Found</span>);
   // Allocated stock (critic r5): counting below it shorts unpicked orders, and picked / in-job stock
   // can't be posted at all, so the counter sees the commitment up front.
   const allocBadge = (d: EntryDraft) => {
@@ -254,7 +254,7 @@ export function CountEntryTable({ drafts, onChange, warehouseId, productId, disa
     const below = d.counted !== null && Number.isFinite(d.counted) && d.counted < n;
     return (
       <span data-allocated={n} title={below ? `Counted below the ${n} allocated units: Update Inv. shorts unpicked orders first; picked or in-job units can't be posted` : `${n} of ${d.systemQty} units are allocated to orders`}
-        className={cn("ml-1.5 rounded px-1.5 py-px text-[10px] font-semibold uppercase", below ? "bg-warning-soft text-warning" : "bg-neutral-soft text-neutral")}>
+        className={cn("ml-1.5 rounded px-1.5 py-px text-2xs font-semibold ", below ? "bg-warning-soft text-warning" : "bg-neutral-soft text-neutral")}>
         {n} alloc.
       </span>
     );
@@ -264,13 +264,13 @@ export function CountEntryTable({ drafts, onChange, warehouseId, productId, disa
     <span className={cn("mt-1 block", wide ? "w-full" : "w-[180px]")}>
       <Combobox id={`${idPrefix}-${d.key}-reason`} aria-label={`Damage reason for ${d.sku}`} options={damageOptions} value={d.damageReason ?? null} onChange={(v) => setReason(d.key, v)} disabled={disabled} placeholder="Damage reason" />
     </span>
-  ) : d.damageReason ? <span className="mt-0.5 block text-[11px] text-danger">{d.damageReason}</span> : null);
+  ) : d.damageReason ? <span className="mt-0.5 block text-2xs text-danger">{d.damageReason}</span> : null);
   const qtyInput = (d: EntryDraft, large = false) => {
     const { valueError, invalid } = rowState(d);
     return (
       <>
         <CountQtyInput id={`${idPrefix}-${d.key}`} label={`Counted qty for ${d.sku}`} value={d.counted} onChange={(v) => setCount(d.key, v)} disabled={disabled} invalid={invalid} errorId={valueError ? `${idPrefix}-${d.key}-err` : undefined} large={large} />
-        {valueError ? <p id={`${idPrefix}-${d.key}-err`} role="alert" className="mt-0.5 text-[11px] font-medium text-danger">{valueError}</p> : null}
+        {valueError ? <p id={`${idPrefix}-${d.key}-err`} role="alert" className="mt-0.5 text-2xs font-medium text-danger">{valueError}</p> : null}
       </>
     );
   };
@@ -292,8 +292,8 @@ export function CountEntryTable({ drafts, onChange, warehouseId, productId, disa
   };
   const empty = (
     <>
-      <p className="text-[13px] font-semibold text-foreground">{blind ? "Nothing listed to count here" : "No stock expected here"}</p>
-      <p className="mt-0.5 text-[12px] text-secondary">If you find product, add it below. Submitting an empty count confirms the location is empty.</p>
+      <p className="text-sm font-semibold text-foreground">{blind ? "Nothing listed to count here" : "No stock expected here"}</p>
+      <p className="mt-0.5 text-xs text-secondary">If you find product, add it below. Submitting an empty count confirms the location is empty.</p>
     </>
   );
   const totalCounted = totals.counted === null ? <span className="font-normal text-danger" title="Fix the invalid counted quantities">—</span> : totals.counted.toLocaleString();
@@ -311,9 +311,9 @@ export function CountEntryTable({ drafts, onChange, warehouseId, productId, disa
                 <li key={d.key} className={cn("rounded-lg border border-border bg-surface p-3", delta !== null && delta !== 0 && "border-warning/50 bg-warning-soft/30", d.damagedFrom && "ml-4")}>
                   <div className="flex items-start gap-2">
                     <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                      <span className="flex min-w-0 items-center"><span className="truncate text-[15px] font-semibold text-foreground">{d.sku}</span>{badge(d)}</span>
-                      <span className="truncate text-[12px] text-secondary">{d.productName}</span>
-                      {d.lotNumber || d.lpNumber ? <span className="truncate text-[12px] text-secondary">{[d.lotNumber ? `Lot ${d.lotNumber}` : null, d.lpNumber ? `LP ${d.lpNumber}` : null].filter(Boolean).join(" · ")}</span> : null}
+                      <span className="flex min-w-0 items-center"><span className="truncate text-base font-semibold text-foreground">{d.sku}</span>{badge(d)}</span>
+                      <span className="truncate text-xs text-secondary">{d.productName}</span>
+                      {d.lotNumber || d.lpNumber ? <span className="truncate text-xs text-secondary">{[d.lotNumber ? `Lot ${d.lotNumber}` : null, d.lpNumber ? `LP ${d.lpNumber}` : null].filter(Boolean).join(" · ")}</span> : null}
                       {reasonEditor(d, true)}
                     </span>
                     <span className="-mr-2 -mt-2 shrink-0">{actions(d, true)}</span>
@@ -321,12 +321,12 @@ export function CountEntryTable({ drafts, onChange, warehouseId, productId, disa
                   <div className={cn("mt-2 grid items-end gap-2", blind ? "grid-cols-1" : "grid-cols-[auto_minmax(0,1fr)_auto]")}>
                     {blind ? null : (
                       <span className="flex flex-col pb-2.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.04em] text-faint">System</span>
-                        <span className="text-[15px] font-semibold tabular-nums text-foreground">{d.systemQty.toLocaleString()}</span>
+                        <span className="text-2xs font-semibold text-faint">System</span>
+                        <span className="text-base font-semibold tabular-nums text-foreground">{d.systemQty.toLocaleString()}</span>
                       </span>
                     )}
                     <span className="flex min-w-0 flex-col">
-                      <label htmlFor={`${idPrefix}-${d.key}`} className="text-[10px] font-semibold uppercase tracking-[0.04em] text-faint">Counted</label>
+                      <label htmlFor={`${idPrefix}-${d.key}`} className="text-2xs font-semibold text-faint">Counted</label>
                       {qtyInput(d, true)}
                     </span>
                     {blind ? null : <span className="pb-3">{delta === null ? <span className="text-faint">—</span> : <DeltaBadge value={delta} system={d.systemQty} />}</span>}
@@ -336,7 +336,7 @@ export function CountEntryTable({ drafts, onChange, warehouseId, productId, disa
             })}
           </ul>
           {drafts.length > 0 ? (
-            <div className="flex items-center justify-between gap-2 rounded-lg bg-surface-sunken px-3 py-2 text-[12px] font-semibold">
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-surface-sunken px-3 py-2 text-xs font-semibold">
               <span className="text-secondary">Total</span>
               <span className="flex items-center gap-2 tabular-nums">
                 {blind ? <span>Counted {totalCounted}</span> : <><span>{totalCounted} <span className="font-normal text-secondary">/ {totals.system.toLocaleString()}</span></span>{totalPct}</>}
@@ -346,8 +346,8 @@ export function CountEntryTable({ drafts, onChange, warehouseId, productId, disa
         </div>
       ) : (
         <div className="ks-scroll overflow-auto rounded-lg border border-border">
-          <table className="w-full min-w-[600px] border-collapse text-[13px]">
-            <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+          <table className="w-full min-w-[600px] border-collapse text-sm">
+            <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
               <tr>
                 <th scope="col" className="px-3 py-2">SKU</th>
                 <th scope="col" className="px-3 py-2">Lot / LP</th>
@@ -367,7 +367,7 @@ export function CountEntryTable({ drafts, onChange, warehouseId, productId, disa
                     <td className="px-3 py-1.5">
                       <span className="flex flex-col leading-tight">
                         <span className="font-semibold text-foreground">{d.sku}{badge(d)}</span>
-                        <span className="truncate text-[11px] text-secondary">{d.productName}</span>
+                        <span className="truncate text-2xs text-secondary">{d.productName}</span>
                       </span>
                     </td>
                     <td className="px-3 py-1.5 text-secondary">
@@ -383,7 +383,7 @@ export function CountEntryTable({ drafts, onChange, warehouseId, productId, disa
               })}
             </tbody>
             {drafts.length > 0 ? (
-              <tfoot className="border-t border-border-strong bg-surface-sunken text-[12px] font-semibold">
+              <tfoot className="border-t border-border-strong bg-surface-sunken text-xs font-semibold">
                 <tr>
                   <td className="px-3 py-2 text-secondary" colSpan={2}>Total</td>
                   {blind ? null : <td className="px-3 py-2 text-right tabular-nums">{totals.system.toLocaleString()}</td>}
@@ -397,7 +397,7 @@ export function CountEntryTable({ drafts, onChange, warehouseId, productId, disa
         </div>
       )}
       <div className={cn("flex flex-wrap items-end gap-2", narrow && "flex-col items-stretch")}>
-        {blind ? <span className="text-[12px] text-secondary">Blind count: enter what you find. System quantities are hidden for this job.</span> : <Button type="button" size="sm" variant="secondary" className={narrow ? "h-11" : undefined} disabled={disabled || drafts.every((d) => !d.inventoryId)} onClick={() => onChange(drafts.map((d) => (d.inventoryId && d.counted === null ? { ...d, counted: d.systemQty } : d)))}>
+        {blind ? <span className="text-xs text-secondary">Blind count: enter what you find. System quantities are hidden for this job.</span> : <Button type="button" size="sm" variant="secondary" className={narrow ? "h-11" : undefined} disabled={disabled || drafts.every((d) => !d.inventoryId)} onClick={() => onChange(drafts.map((d) => (d.inventoryId && d.counted === null ? { ...d, counted: d.systemQty } : d)))}>
           <Copy className="h-3.5 w-3.5" aria-hidden />Fill blanks with system qty
         </Button>}
         {narrow ? null : <span className="mx-1 hidden h-6 w-px bg-border sm:block" aria-hidden />}
@@ -413,7 +413,7 @@ export function CountEntryTable({ drafts, onChange, warehouseId, productId, disa
           <Button type="button" size="sm" variant="secondary" className={narrow ? "h-auto shrink-0" : undefined} disabled={disabled || !foundProduct} onClick={addFound}><PackagePlus className="h-3.5 w-3.5" aria-hidden />{narrow ? "Add found" : "Add found stock"}</Button>
         </div>
       </div>
-      {foundNotice ? <p role="status" className="text-[12px] font-medium text-primary">{foundNotice}</p> : null}
+      {foundNotice ? <p role="status" className="text-xs font-medium text-primary">{foundNotice}</p> : null}
     </div>
   );
 }

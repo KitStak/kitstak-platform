@@ -48,7 +48,7 @@ export function LocationLedgerTab({ id, code, warehouseId }: { readonly id: stri
       <div className="flex flex-wrap items-center justify-between gap-2">
         <SegmentedControl<LedgerKind> size="sm" ariaLabel="Ledger filter" value={kind} onChange={(v) => { setKind(v); setPage(1); }}
           options={[{ value: "movements", label: "Stock movements" }, { value: "reservations", label: "Reservations" }, { value: "all", label: "All" }]} />
-        <nav aria-label="Open in Transaction History" className="flex items-center gap-3 text-[12px]">
+        <nav aria-label="Open in Transaction History" className="flex items-center gap-3 text-xs">
           <span className="text-faint">Transaction History:</span>
           <Link href={history("in")} className="text-primary hover:underline">Into {code}</Link>
           <Link href={history("out")} className="text-primary hover:underline">Out of {code}</Link>
@@ -61,8 +61,8 @@ export function LocationLedgerTab({ id, code, warehouseId }: { readonly id: stri
       ) : (
         <div className={q.isPlaceholderData ? "opacity-60 transition-opacity" : undefined} aria-busy={q.isFetching}>
           <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-[13px]">
-              <thead className="bg-surface-sunken text-[11px] uppercase tracking-wide text-secondary">
+            <table className="w-full text-sm">
+              <thead className="bg-surface-sunken text-2xs text-secondary">
                 <tr>
                   {["Date", "Type", "SKU", "Lot", "Direction"].map((h) => <th key={h} className="whitespace-nowrap px-3 py-2 text-left font-semibold">{h}</th>)}
                   <th className="whitespace-nowrap px-3 py-2 text-right font-semibold">Qty</th>
@@ -84,7 +84,7 @@ export function LocationLedgerTab({ id, code, warehouseId }: { readonly id: stri
               </tbody>
             </table>
           </div>
-          <div className="mt-2 flex items-center justify-between text-[12px] text-secondary">
+          <div className="mt-2 flex items-center justify-between text-xs text-secondary">
             <span>{total.toLocaleString("en-US")} {kind === "reservations" ? (total === 1 ? "reservation" : "reservations") : total === 1 ? "entry" : "entries"} · newest first</span>
             <div className="flex items-center gap-1">
               <Button size="icon-sm" variant="ghost" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>

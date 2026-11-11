@@ -52,7 +52,7 @@ function OtherInfo() {
   const canManage = useCan("settings.products.custom_field_management").allowed;
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[12px] text-secondary">You can optionally add or edit custom fields under &ldquo;Other info&rdquo;. Values are filterable in the products grid.</p>
+      <p className="text-xs text-secondary">You can optionally add or edit custom fields under &ldquo;Other info&rdquo;. Values are filterable in the products grid.</p>
       <CustomFieldsSection entityType="product" values={values} canManage={canManage} onChange={(next) => form.setValue("customFields", { ...next }, { shouldDirty: true })} />
     </div>
   );

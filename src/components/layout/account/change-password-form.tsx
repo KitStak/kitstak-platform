@@ -17,7 +17,7 @@ function PolicyChecklist({ password, policy }: { readonly password: string; read
   return (
     <ul id={RULES_ID} aria-label="Password requirements" className="mt-1.5 grid grid-cols-1 gap-0.5 sm:grid-cols-2">
       {passwordChecks(password, policy).map((check) => (
-        <li key={check.key} className={cn("flex items-center gap-1 text-[11.5px]", check.ok ? "text-success" : "text-faint")}>
+        <li key={check.key} className={cn("flex items-center gap-1 text-2xs", check.ok ? "text-success" : "text-faint")}>
           {check.ok ? <Check className="h-3 w-3" aria-hidden /> : <Circle className="h-2.5 w-2.5" aria-hidden />}
           {check.label}
           <span className="sr-only">{check.ok ? "(met)" : "(not met)"}</span>

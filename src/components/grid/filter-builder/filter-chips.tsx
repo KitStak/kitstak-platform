@@ -26,8 +26,8 @@ interface ChipProps {
 const ChipBody = React.forwardRef<HTMLButtonElement, { readonly chip: FilterChipModel } & React.ButtonHTMLAttributes<HTMLButtonElement>>(function ChipBody({ chip, className, ...props }, ref) {
   return (
     <button ref={ref} type="button" title={`${chip.label}: ${chip.value}`} className={cn("flex min-w-0 max-w-[220px] flex-col items-start py-0.5 pl-2.5 pr-1 text-left leading-tight focus-visible:outline-none", className)} {...props}>
-      <span className="block w-full truncate whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.04em] text-info/80">{chip.label}</span>
-      <span className="w-full truncate text-[12px] font-medium text-foreground">{chip.value}</span>
+      <span className="block w-full truncate whitespace-nowrap text-2xs font-semibold text-info/80">{chip.label}</span>
+      <span className="w-full truncate text-xs font-medium text-foreground">{chip.value}</span>
     </button>
   );
 });
@@ -72,7 +72,7 @@ export function FilterChips({ gridKey, fields, filters, onRemove, onApply, onCle
       {overflow.length > 0 ? (
         <Popover>
           <PopoverTrigger asChild>
-            <button type="button" aria-label={`Show ${overflow.length} more filters`} className="inline-flex h-9 shrink-0 items-center rounded-lg border border-info/30 bg-surface px-2.5 text-[12px] font-semibold text-info hover:bg-info-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
+            <button type="button" aria-label={`Show ${overflow.length} more filters`} className="inline-flex h-9 shrink-0 items-center rounded-lg border border-info/30 bg-surface px-2.5 text-xs font-semibold text-info hover:bg-info-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
               +{overflow.length}
             </button>
           </PopoverTrigger>
@@ -84,7 +84,7 @@ export function FilterChips({ gridKey, fields, filters, onRemove, onApply, onCle
         </Popover>
       ) : null}
       {onClearAll ? (
-        <button type="button" onClick={onClearAll} className="px-1.5 text-[12px] font-semibold text-secondary hover:text-danger focus-visible:outline-none focus-visible:underline">
+        <button type="button" onClick={onClearAll} className="px-1.5 text-xs font-semibold text-secondary hover:text-danger focus-visible:outline-none focus-visible:underline">
           Clear
         </button>
       ) : null}

@@ -27,7 +27,7 @@ export function DataSetupShell({ children }: { readonly children: React.ReactNod
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-0 lg:flex-row">
       <div className="border-b border-border px-6 py-2.5 lg:hidden">
-        <div className="flex items-center gap-3 text-[12px] font-medium text-secondary">
+        <div className="flex items-center gap-3 text-xs font-medium text-secondary">
           <span className="shrink-0">Data setup</span>
           <span className="min-w-0 flex-1 sm:max-w-sm">
             <Select aria-label="Data setup lookup" value={current} onChange={(v) => { if (v && v !== current) router.push(v); }}
@@ -37,7 +37,7 @@ export function DataSetupShell({ children }: { readonly children: React.ReactNod
       </div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
       <aside className="hidden shrink-0 border-l border-border px-4 py-3 lg:block lg:w-[300px]">
-        <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-faint">Data setup</p>
+        <p className="px-3 pb-2 text-2xs font-bold text-faint">Data setup</p>
         <VerticalNav ariaLabel="Data setup lookups" items={items} />
       </aside>
     </div>

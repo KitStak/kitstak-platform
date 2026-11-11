@@ -35,7 +35,7 @@ export function PackingWarningDialog({ warning, orderCode, onAcknowledge, busy, 
         <DialogBody>
           {warning ? (
             <div className="flex flex-col gap-3">
-              <p role="alert" className="whitespace-pre-line rounded-md border border-warning/40 bg-warning-soft px-3 py-2.5 text-[14px] font-medium text-foreground">{warning.text}</p>
+              <p role="alert" className="whitespace-pre-line rounded-md border border-warning/40 bg-warning-soft px-3 py-2.5 text-base font-medium text-foreground">{warning.text}</p>
               {warning.mediaLinks.length ? (
                 <div className="flex flex-col gap-2">
                   {warning.mediaLinks.map((url) => {
@@ -46,7 +46,7 @@ export function PackingWarningDialog({ warning, orderCode, onAcknowledge, busy, 
                     }
                     if (kind === "video") return <video key={url} src={url} controls className="max-h-64 w-full rounded-md border border-border" />;
                     return (
-                      <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-primary hover:underline">
+                      <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
                         <ExternalLink className="h-3.5 w-3.5" aria-hidden />{url}
                       </a>
                     );
@@ -56,7 +56,7 @@ export function PackingWarningDialog({ warning, orderCode, onAcknowledge, busy, 
               {mustConfirm ? (
                 <Checkbox checked={read} onCheckedChange={(v) => setRead(v === true)} label="I have read this warning" autoFocus data-testid="packing-warning-read" />
               ) : null}
-              {error ? <p role="alert" className="text-[12px] font-medium text-danger">{error}</p> : null}
+              {error ? <p role="alert" className="text-xs font-medium text-danger">{error}</p> : null}
             </div>
           ) : null}
         </DialogBody>

@@ -41,7 +41,7 @@ export function ProgressBar({ value, max = 100, tone = "primary", size = "md", l
       >
         <div className={cn("h-full rounded-full transition-[width] duration-300 ease-out", TONE[tone])} style={{ width: `${pct}%` }} />
       </div>
-      {showValue ? <span className="shrink-0 text-[11px] font-semibold tabular-nums text-secondary">{typeof showValue === "string" ? showValue : `${Math.round(pct)}%`}</span> : null}
+      {showValue ? <span className="shrink-0 text-2xs font-semibold tabular-nums text-secondary">{typeof showValue === "string" ? showValue : `${Math.round(pct)}%`}</span> : null}
     </div>
   );
 }

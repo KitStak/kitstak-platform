@@ -120,8 +120,8 @@ export function CustomizeDashboard({ layout, onSave, warehouses, clients }: {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[340px] p-3" aria-label="Customize dashboard">
-        <p className="text-[13px] font-semibold text-foreground">Cards</p>
-        <p className="text-[11.5px] text-faint">Show, hide and reorder. Saved to your account.</p>
+        <p className="text-sm font-semibold text-foreground">Cards</p>
+        <p className="text-2xs text-faint">Show, hide and reorder. Saved to your account.</p>
         <ul className="mt-2 flex flex-col gap-0.5" aria-label="Dashboard cards">
           {layout.order.map((id, i) => {
             const visible = !layout.hidden.includes(id);
@@ -133,7 +133,7 @@ export function CustomizeDashboard({ layout, onSave, warehouses, clients }: {
                   onCheckedChange={(c) => setHidden(id, c !== true)}
                   aria-label={`Show ${label(id)}`}
                 />
-                <span className="min-w-0 flex-1 truncate text-[13px] text-body">{label(id)}</span>
+                <span className="min-w-0 flex-1 truncate text-sm text-body">{label(id)}</span>
                 <Button variant="ghost" size="icon-sm" aria-label={`Move ${label(id)} up`} disabled={i === 0} onClick={() => onSave({ ...layout, order: moveCard(layout.order, id, -1) })}>
                   <ArrowUp className="h-3.5 w-3.5" aria-hidden />
                 </Button>
@@ -145,8 +145,8 @@ export function CustomizeDashboard({ layout, onSave, warehouses, clients }: {
           })}
         </ul>
         <div className="mt-3 border-t border-border pt-3">
-          <p className="text-[13px] font-semibold text-foreground">Open on</p>
-          <p className="text-[11.5px] text-faint">Used when the link names no warehouse or client.</p>
+          <p className="text-sm font-semibold text-foreground">Open on</p>
+          <p className="text-2xs text-faint">Used when the link names no warehouse or client.</p>
           <div className="mt-2 grid gap-2">
             <Select
               size="sm" clearable aria-label="Default warehouse" placeholder="Header warehouse (default)"

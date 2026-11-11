@@ -118,21 +118,21 @@ export function OrderTagPopover({ ids, appliedTagIds = [], invalidate = [], onAp
         </DisabledReason>
         <PopoverContent align="start" className="flex w-[300px] flex-col gap-2 p-3">
           <div className="flex items-center justify-between">
-            <p className="text-[13px] font-semibold text-foreground">Tags</p>
-            <Link href={ORDER_TAG_MANAGE_HREF} className="text-[12px] font-semibold text-primary hover:underline">Manage</Link>
+            <p className="text-sm font-semibold text-foreground">Tags</p>
+            <Link href={ORDER_TAG_MANAGE_HREF} className="text-xs font-semibold text-primary hover:underline">Manage</Link>
           </div>
           {list.isPending ? (
-            <p className="py-6 text-center text-[12px] text-faint">Loading tags…</p>
+            <p className="py-6 text-center text-xs text-faint">Loading tags…</p>
           ) : list.isError ? (
             <div className="flex flex-col items-center gap-2 py-5 text-center">
-              <p className="text-[12px] text-danger">Tags could not be loaded.</p>
+              <p className="text-xs text-danger">Tags could not be loaded.</p>
               <Button size="sm" variant="secondary" onClick={() => void list.refetch()}>Retry</Button>
             </div>
           ) : tags.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-5 text-center">
               <TagIcon className="h-5 w-5 text-faint" aria-hidden />
-              <p className="text-[13px] font-semibold text-foreground">No tags yet</p>
-              <p className="text-[12px] text-faint">Create a tag to group and filter orders.</p>
+              <p className="text-sm font-semibold text-foreground">No tags yet</p>
+              <p className="text-xs text-faint">Create a tag to group and filter orders.</p>
               <Button size="sm" variant="primary" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-3.5 w-3.5" aria-hidden />
                 Create Tag
@@ -152,7 +152,7 @@ export function OrderTagPopover({ ids, appliedTagIds = [], invalidate = [], onAp
                 leading={<Search className="h-3.5 w-3.5" aria-hidden />}
               />
               <ul className="flex min-h-[120px] flex-col gap-1.5" aria-label="Tags">
-                {view.items.length === 0 ? <li className="py-4 text-center text-[12px] text-faint">No tags match</li> : null}
+                {view.items.length === 0 ? <li className="py-4 text-center text-xs text-faint">No tags match</li> : null}
                 {view.items.map((t) => (
                   <li key={t.id} className="flex items-center gap-2">
                     <Checkbox
@@ -168,7 +168,7 @@ export function OrderTagPopover({ ids, appliedTagIds = [], invalidate = [], onAp
                   </li>
                 ))}
               </ul>
-              <div className="flex items-center justify-between text-[11px] text-faint">
+              <div className="flex items-center justify-between text-2xs text-faint">
                 <span>{view.from}-{view.to} of {view.total} · Selected: {selected.size}</span>
                 <span className="flex items-center">
                   <Button variant="ghost" size="icon-sm" aria-label="Previous tags" disabled={page <= 1} onClick={() => setPage(page - 1)}>
@@ -179,7 +179,7 @@ export function OrderTagPopover({ ids, appliedTagIds = [], invalidate = [], onAp
                   </Button>
                 </span>
               </div>
-              {ids.length > 1 ? <p className="text-[11px] text-faint">Ticked tags are added to {ids.length} orders; their other tags are kept.</p> : null}
+              {ids.length > 1 ? <p className="text-2xs text-faint">Ticked tags are added to {ids.length} orders; their other tags are kept.</p> : null}
               <div className="flex items-center justify-between border-t border-border pt-2">
                 <Button variant="ghost" size="sm" onClick={() => setCreateOpen(true)}>
                   <Plus className="h-3.5 w-3.5" aria-hidden />

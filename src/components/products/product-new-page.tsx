@@ -35,7 +35,7 @@ export function ProductNewPage() {
       title="Create product"
       deniedTitle="You don't have permission to create products"
       deniedDescription="Your role does not include Products › Create. Ask an administrator to update your role in Settings › Roles."
-      deniedActions={<Link href="/products" className="inline-flex h-8 items-center rounded-md border border-border-strong/70 bg-surface px-3 text-[13px] font-semibold text-body hover:bg-surface-sunken">Back to products</Link>}
+      deniedActions={<Link href="/products" className="inline-flex h-8 items-center rounded-md border border-border-strong/70 bg-surface px-3 text-sm font-semibold text-body hover:bg-surface-sunken">Back to products</Link>}
     >
       <ProductNewInner />
     </CatalogViewGate>

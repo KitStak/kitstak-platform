@@ -45,10 +45,10 @@ const shortDay = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/
 function DataTable({ chart, plain = false }: { readonly chart: AnalyticsChart; readonly plain?: boolean }) {
   return (
     <div className="max-h-[320px] overflow-auto rounded-lg border border-border">
-      <table className="w-full text-[12.5px]">
+      <table className="w-full text-xs">
         <caption className="sr-only">{chart.title} data</caption>
         <thead className="sticky top-0 bg-surface-sunken">
-          <tr>{chart.columns.map((c) => <th key={c.key} scope="col" className={cn("px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary", c.kind && c.kind !== "text" && "text-right")}>{c.label}</th>)}</tr>
+          <tr>{chart.columns.map((c) => <th key={c.key} scope="col" className={cn("px-3 py-2 text-left text-2xs font-semibold text-secondary", c.kind && c.kind !== "text" && "text-right")}>{c.label}</th>)}</tr>
         </thead>
         <tbody>
           {chart.rows.map((r, i) => (
@@ -77,10 +77,10 @@ function Heatmap({ chart }: { readonly chart: AnalyticsChart }) {
     <div className="overflow-x-auto" role="img" aria-label={`${chart.title} heatmap`}>
       <div className="grid min-w-[640px] gap-[3px]" style={{ gridTemplateColumns: `40px repeat(${xs.length}, minmax(0, 1fr))` }}>
         <span />
-        {xs.map((x) => <span key={x} className="text-center text-[10px] text-faint">{Number(x) % 3 === 0 ? x : ""}</span>)}
+        {xs.map((x) => <span key={x} className="text-center text-2xs text-faint">{Number(x) % 3 === 0 ? x : ""}</span>)}
         {chart.rows.map((r) => (
           <React.Fragment key={String(r[chart.xKey])}>
-            <span className="self-center text-[11px] text-secondary">{String(r[chart.xKey])}</span>
+            <span className="self-center text-2xs text-secondary">{String(r[chart.xKey])}</span>
             {xs.map((x) => {
               const v = Number(r[x] ?? 0);
               const href = r[`${HEAT_HREF_PREFIX}${x}`];
@@ -94,7 +94,7 @@ function Heatmap({ chart }: { readonly chart: AnalyticsChart }) {
           </React.Fragment>
         ))}
       </div>
-      <div className="mt-2 flex items-center justify-end gap-2 text-[11px] text-faint">Fewer<span className="h-2.5 w-24 rounded-full" style={{ background: "linear-gradient(90deg, rgba(46,92,230,.12), rgba(46,92,230,1))" }} />More</div>
+      <div className="mt-2 flex items-center justify-end gap-2 text-2xs text-faint">Fewer<span className="h-2.5 w-24 rounded-full" style={{ background: "linear-gradient(90deg, rgba(46,92,230,.12), rgba(46,92,230,1))" }} />More</div>
     </div>
   );
 }
@@ -116,15 +116,15 @@ function ScorecardBody({ r }: { readonly r: AnalyticsRow }) {
   return (
     <>
       <div className="flex items-center justify-between">
-        <span className="truncate text-[14px] font-semibold text-foreground">{String(r.user)}</span>
-        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold", Number(r.rank) === 1 ? "bg-[#EBAC00]/15 text-[#8A6400]" : "bg-primary/10 text-primary")}>#{String(r.rank)}</span>
+        <span className="truncate text-base font-semibold text-foreground">{String(r.user)}</span>
+        <span className={cn("rounded-full px-2 py-0.5 text-2xs font-bold", Number(r.rank) === 1 ? "bg-[var(--label-orange-text)]/15 text-[#8A6400]" : "bg-primary/10 text-primary")}>#{String(r.rank)}</span>
       </div>
-      <dl className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-faint">
-        <div><dt>Tasks</dt><dd className="text-[15px] font-semibold text-foreground tabular-nums">{formatCell(r.tasks, { key: "tasks", label: "", kind: "number" })}</dd></div>
-        <div><dt>Tasks/h</dt><dd className="text-[15px] font-semibold text-foreground tabular-nums">{String(r.speed)}</dd></div>
-        <div><dt>Avg min</dt><dd className="text-[15px] font-semibold text-foreground tabular-nums">{String(r.avgMinutes)}</dd></div>
+      <dl className="mt-2 grid grid-cols-3 gap-2 text-2xs text-faint">
+        <div><dt>Tasks</dt><dd className="text-base font-semibold text-foreground tabular-nums">{formatCell(r.tasks, { key: "tasks", label: "", kind: "number" })}</dd></div>
+        <div><dt>Tasks/h</dt><dd className="text-base font-semibold text-foreground tabular-nums">{String(r.speed)}</dd></div>
+        <div><dt>Avg min</dt><dd className="text-base font-semibold text-foreground tabular-nums">{String(r.avgMinutes)}</dd></div>
       </dl>
-      <div className="mt-2 flex items-end justify-between gap-2"><Sparkline values={spark} /><span className="text-[11px] text-faint">{String(r.activeDays)} active days</span></div>
+      <div className="mt-2 flex items-end justify-between gap-2"><Sparkline values={spark} /><span className="text-2xs text-faint">{String(r.activeDays)} active days</span></div>
     </>
   );
 }
@@ -147,17 +147,17 @@ function AssociateDetail({ r, count }: { readonly r: AnalyticsRow; readonly coun
   return (
     <div className="rounded-lg border border-border p-4" data-testid="associate-detail">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-[15px] font-semibold text-foreground">{String(r.user)} <span className="ml-1 text-[12px] font-normal text-faint">Rank #{String(r.rank)} of {count}</span></h3>
-        {href ? <Link href={href} className="inline-flex items-center gap-1 text-[12.5px] font-medium text-primary hover:underline">Open their tasks <ArrowUpRight className="h-3.5 w-3.5" aria-hidden /></Link> : null}
+        <h3 className="text-base font-semibold text-foreground">{String(r.user)} <span className="ml-1 text-xs font-normal text-faint">Rank #{String(r.rank)} of {count}</span></h3>
+        {href ? <Link href={href} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">Open their tasks <ArrowUpRight className="h-3.5 w-3.5" aria-hidden /></Link> : null}
       </div>
-      <dl className="mt-3 grid grid-cols-2 gap-3 text-[11px] text-faint sm:grid-cols-5">
+      <dl className="mt-3 grid grid-cols-2 gap-3 text-2xs text-faint sm:grid-cols-5">
         {stats.map(([k, v]) => (
-          <div key={k}><dt>{k}</dt><dd className="text-[16px] font-semibold text-foreground tabular-nums">{v}</dd></div>
+          <div key={k}><dt>{k}</dt><dd className="text-md font-semibold text-foreground tabular-nums">{v}</dd></div>
         ))}
       </dl>
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <p className="mb-1 text-[12px] font-medium text-secondary">Tasks per day</p>
+          <p className="mb-1 text-xs font-medium text-secondary">Tasks per day</p>
           <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={daily} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
@@ -171,11 +171,11 @@ function AssociateDetail({ r, count }: { readonly r: AnalyticsRow; readonly coun
           </div>
         </div>
         <div>
-          <p className="mb-1 text-[12px] font-medium text-secondary">Task mix</p>
-          {mix.length === 0 ? <p className="text-[12px] text-faint">No tasks in this period.</p> : (
+          <p className="mb-1 text-xs font-medium text-secondary">Task mix</p>
+          {mix.length === 0 ? <p className="text-xs text-faint">No tasks in this period.</p> : (
             <ul className="space-y-1.5">
               {mix.map((m, i) => (
-                <li key={m.type} className="text-[12px]">
+                <li key={m.type} className="text-xs">
                   <div className="flex justify-between"><span className="text-foreground">{m.type}</span><span className="tabular-nums text-secondary">{m.n} · {mixTotal ? Math.round((m.n / mixTotal) * 100) : 0}%</span></div>
                   <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full" style={{ width: `${mixTotal ? (m.n / mixTotal) * 100 : 0}%`, backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }} /></div>
                 </li>
@@ -197,9 +197,9 @@ function Scorecards({ chart }: { readonly chart: AnalyticsChart }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor={pickerId} className="text-[12.5px] font-medium text-secondary">Associate</label>
+        <label htmlFor={pickerId} className="text-xs font-medium text-secondary">Associate</label>
         <select id={pickerId} value={picked} onChange={(e) => setPicked(e.target.value)} data-testid="associate-picker"
-          className="h-8 min-w-[200px] rounded-md border border-border bg-surface px-2 text-[13px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+          className="h-8 min-w-[200px] rounded-md border border-border bg-surface px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
           <option value="">All associates ({rows.length})</option>
           {rows.map((r) => <option key={String(r.user)} value={String(r.user)}>#{String(r.rank)} {String(r.user)}</option>)}
         </select>
@@ -435,7 +435,7 @@ function QuadrantLegend({ labels }: { readonly labels: readonly [string, string,
   const arrows = ["↗", "↖", "↘", "↙"];
   const items = labels.map((l, i) => ({ label: `${arrows[i]} ${l}`, color: QUADRANT_COLORS[i] as string }));
   return (
-    <ul className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-secondary" aria-label="Quadrant key">
+    <ul className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-secondary" aria-label="Quadrant key">
       {[...items, { label: "Low sample (not ranked)", color: LOW_SAMPLE_COLOR }].map((it) => (
         <li key={it.label} className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: it.color }} aria-hidden />{it.label}</li>
       ))}
@@ -457,8 +457,8 @@ export function AnalyticsChartCard({ chart, fileStem }: { readonly chart: Analyt
     <section aria-labelledby={`chart-${chart.id}`} className={cn("flex min-w-0 flex-col rounded-xl border border-border bg-surface shadow-xs", chart.wide && "lg:col-span-2")}>
       <header className="flex items-start justify-between gap-3 px-5 pt-4 pb-2">
         <div className="min-w-0">
-          <h2 id={`chart-${chart.id}`} className="text-[15px] font-semibold text-foreground">{chart.title}</h2>
-          <p className="mt-0.5 text-[12px] text-faint">{chart.description}</p>
+          <h2 id={`chart-${chart.id}`} className="text-base font-semibold text-foreground">{chart.title}</h2>
+          <p className="mt-0.5 text-xs text-faint">{chart.description}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {chart.rows.length > 0 ? (
@@ -475,7 +475,7 @@ export function AnalyticsChartCard({ chart, fileStem }: { readonly chart: Analyt
             )}
           </Dropdown>
           {chart.gridHref ? (
-            <Link href={chart.gridHref} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" title={chart.gridLabel}>
+            <Link href={chart.gridHref} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" title={chart.gridLabel}>
               {chart.gridLabel ?? "Open grid"}<ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
             </Link>
           ) : null}
@@ -483,8 +483,8 @@ export function AnalyticsChartCard({ chart, fileStem }: { readonly chart: Analyt
       </header>
       <div className="flex-1 px-5 pb-5">
         {empty && chart.kind !== "scorecards" ? (
-          <div className="grid h-[240px] place-items-center rounded-lg border border-dashed border-border text-center text-[12.5px] text-faint">No activity in this period. Widen the date range or pick another warehouse.</div>
-        ) : chart.kind === "scorecards" && !showTable ? (chart.rows.length ? <Scorecards chart={chart} /> : <p className="py-10 text-center text-[12.5px] text-faint">No associate completed a task in this period.</p>)
+          <div className="grid h-[240px] place-items-center rounded-lg border border-dashed border-border text-center text-xs text-faint">No activity in this period. Widen the date range or pick another warehouse.</div>
+        ) : chart.kind === "scorecards" && !showTable ? (chart.rows.length ? <Scorecards chart={chart} /> : <p className="py-10 text-center text-xs text-faint">No associate completed a task in this period.</p>)
           : showTable ? <DataTable chart={chart} />
           : chart.kind === "heatmap" ? <Heatmap chart={chart} />
           : (

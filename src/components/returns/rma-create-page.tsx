@@ -84,10 +84,10 @@ function OrderCard({ order }: { readonly order: ShippableOrder }) {
   const fmt = useFormat();
   return (
     <div className="grid gap-3 rounded-lg border border-border bg-surface-sunken/50 p-4 sm:grid-cols-4">
-      <div><p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">Order</p><p className="mt-0.5 flex items-center gap-2 font-semibold">{order.code}<StatusPill status={order.status} domain="shipmentOrder" size="sm" /></p></div>
-      <div><p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">Customer</p><p className="mt-0.5">{order.customerName}</p><p className="text-[11px] text-secondary">{order.shipTo}</p></div>
-      <div><p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">Client</p><p className="mt-0.5">{order.clientName}</p><p className="text-[11px] text-secondary">{order.storeOrderNumber ? `Store order ${order.storeOrderNumber}` : "No store order #"}</p></div>
-      <div><p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">Shipped</p><p className="mt-0.5">{order.shippedAt ? fmt.gridDateTime(order.shippedAt) : "—"}</p><p className="text-[11px] text-secondary">{order.deliveredAt ? `Delivered ${fmt.date(order.deliveredAt)}` : "Not delivered yet"}</p></div>
+      <div><p className="text-2xs font-semibold text-secondary">Order</p><p className="mt-0.5 flex items-center gap-2 font-semibold">{order.code}<StatusPill status={order.status} domain="shipmentOrder" size="sm" /></p></div>
+      <div><p className="text-2xs font-semibold text-secondary">Customer</p><p className="mt-0.5">{order.customerName}</p><p className="text-2xs text-secondary">{order.shipTo}</p></div>
+      <div><p className="text-2xs font-semibold text-secondary">Client</p><p className="mt-0.5">{order.clientName}</p><p className="text-2xs text-secondary">{order.storeOrderNumber ? `Store order ${order.storeOrderNumber}` : "No store order #"}</p></div>
+      <div><p className="text-2xs font-semibold text-secondary">Shipped</p><p className="mt-0.5">{order.shippedAt ? fmt.gridDateTime(order.shippedAt) : "—"}</p><p className="text-2xs text-secondary">{order.deliveredAt ? `Delivered ${fmt.date(order.deliveredAt)}` : "Not delivered yet"}</p></div>
     </div>
   );
 }
@@ -99,17 +99,17 @@ function OrderStep({ form, order, loading, missing, onPick, loadError, onRetry }
   return (
     <div className="space-y-4" data-invalid={error ? "true" : undefined}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[13px] text-secondary">Returns start from a shipped or delivered order. Each RMA covers one order.</p>
+        <p className="text-sm text-secondary">Returns start from a shipped or delivered order. Each RMA covers one order.</p>
         <Button variant={order ? "secondary" : "primary"} onClick={onPick} disabled={!hydrated} title={hydrated ? undefined : "Loading…"} aria-invalid={error ? true : undefined}>{hydrated ? <PackageSearch className="h-3.5 w-3.5" aria-hidden /> : <Spinner className="h-3.5 w-3.5" label="Loading" />}{order ? "Choose another order" : "Choose a shipped order"}</Button>
       </div>
       {loadError && !order ? <Callout variant="error" title="Could not load the order" action={<Button size="sm" onClick={onRetry}>Retry</Button>}>{loadError}</Callout> : loading ? (
-        <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-lg border border-border bg-surface-sunken/50 p-4 text-[13px] text-secondary"><Spinner className="h-4 w-4" label="Loading" />Loading the order and its returnable lines…</div>
+        <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-lg border border-border bg-surface-sunken/50 p-4 text-sm text-secondary"><Spinner className="h-4 w-4" label="Loading" />Loading the order and its returnable lines…</div>
       ) : order ? <OrderCard order={order} /> : missing ? <Callout variant="error" title="Order not found">The order doesn&apos;t exist or is outside your warehouses and clients.</Callout> : (
-        <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-[13px] text-secondary">No order chosen yet.</div>
+        <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-secondary">No order chosen yet.</div>
       )}
       {order && !order.eligible ? <Callout variant="attention" title="This order can't be returned">{order.reason}</Callout> : null}
-      {error && !loading && !(order && !order.eligible) ? <p role="alert" className="text-[12px] text-danger">{error}</p> : null}
-      {!order && !error ? <p id="rma-next-reason" className="text-[12px] text-secondary">{loading ? "Next unlocks when the order has loaded." : loadError ? "Retry loading the order, or choose another one, to continue." : "Choose a shipped order to continue. Next stays unavailable until then."}</p> : null}
+      {error && !loading && !(order && !order.eligible) ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
+      {!order && !error ? <p id="rma-next-reason" className="text-xs text-secondary">{loading ? "Next unlocks when the order has loaded." : loadError ? "Retry loading the order, or choose another one, to continue." : "Choose a shipped order to continue. Next stays unavailable until then."}</p> : null}
     </div>
   );
 }
@@ -129,8 +129,8 @@ function ItemsStep({ form, order, reasons, reasonsLoading }: { readonly form: Us
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-[760px] text-[13px]">
-          <thead className="border-b border-border bg-surface-sunken/60 text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead className="border-b border-border bg-surface-sunken/60 text-2xs font-semibold text-secondary">
             <tr>
               <th className="w-10 px-3 py-2"><Checkbox aria-label="Select all returnable items" checked={allOn} onCheckedChange={(c) => form.setValue("lines", lines.map((l) => {
                 const src = order.lines.find((x) => x.orderLineId === l.orderLineId);
@@ -154,18 +154,18 @@ function ItemsStep({ form, order, reasons, reasonsLoading }: { readonly form: Us
               return (
                 <tr key={src.orderLineId} className={`border-b border-border last:border-0 ${blocked ? "bg-surface-sunken/40 text-secondary" : v.selected ? "bg-primary-soft/40" : ""}`}>
                   <td className="px-3 py-2 align-top"><Checkbox aria-label={`Return ${src.sku}`} disabled={Boolean(blocked)} checked={v.selected} onCheckedChange={(c) => setLine(i, lineEdit(v, src.returnable, { selected: c === true }))} /></td>
-                  <td className="px-3 py-2 align-top"><p className="font-medium text-foreground">{src.sku}</p><p className="max-w-[260px] truncate text-[11px] text-secondary">{src.name} · {src.packType}</p>{blocked ? <p className="text-[11px] text-warning">{blocked}</p> : null}</td>
+                  <td className="px-3 py-2 align-top"><p className="font-medium text-foreground">{src.sku}</p><p className="max-w-[260px] truncate text-2xs text-secondary">{src.name} · {src.packType}</p>{blocked ? <p className="text-2xs text-warning">{blocked}</p> : null}</td>
                   <td className="px-3 py-2 text-right align-top tabular-nums">{src.shippedQty}</td>
                   <td className="px-3 py-2 text-right align-top tabular-nums">{src.alreadyReturned}</td>
                   <td className="px-3 py-2 align-top">
                     <NumberInput aria-label={`Return quantity for ${src.sku}`} value={v.quantity} min={0} max={src.returnable} placeholder="0" disabled={Boolean(blocked)} invalid={Boolean(qErr)}
-                      onChange={(n) => setLine(i, lineEdit(v, src.returnable, { quantity: n === null ? null : Math.min(n, src.returnable) }))} suffix={<span className="text-[11px] text-secondary">/ {src.returnable}</span>}
+                      onChange={(n) => setLine(i, lineEdit(v, src.returnable, { quantity: n === null ? null : Math.min(n, src.returnable) }))} suffix={<span className="text-2xs text-secondary">/ {src.returnable}</span>}
                       onInput={(e) => { const typed = Number((e.target as HTMLInputElement).value.replace(/,/g, "")); setOver((o) => ({ ...o, [src.orderLineId]: Number.isFinite(typed) && typed > src.returnable })); }} />
-                    {qErr ? <p className="mt-1 text-[11px] text-danger">{qErr}</p> : over[src.orderLineId] ? <p role="status" className="mt-1 text-[11px] font-medium text-warning">Max {src.returnable} returnable. Set to {src.returnable}.</p> : null}
+                    {qErr ? <p className="mt-1 text-2xs text-danger">{qErr}</p> : over[src.orderLineId] ? <p role="status" className="mt-1 text-2xs font-medium text-warning">Max {src.returnable} returnable. Set to {src.returnable}.</p> : null}
                   </td>
                   <td className="px-3 py-2 align-top">
                     <Select aria-label={`Return reason for ${src.sku}`} value={v.reasonId} disabled={!v.selected} invalid={Boolean(rErr)} clearable options={reasons} onChange={(id) => setLine(i, { reasonId: id })} placeholder={reasonsLoading ? "Loading reasons…" : reasons.length ? "Choose a reason" : "No reasons set up"} />
-                    {rErr ? <p className="mt-1 text-[11px] text-danger">{rErr}</p> : null}
+                    {rErr ? <p className="mt-1 text-2xs text-danger">{rErr}</p> : null}
                   </td>
                 </tr>
               );
@@ -173,8 +173,8 @@ function ItemsStep({ form, order, reasons, reasonsLoading }: { readonly form: Us
           </tbody>
         </table>
       </div>
-      {allError ? <p role="alert" className="text-[12px] text-danger">{allError}</p> : null}
-      <p className="text-[12px] text-secondary">{selectedUnits({ lines })} unit{selectedUnits({ lines }) === 1 ? "" : "s"} selected. Quantities are capped at shipped minus what is already on other returns.</p>
+      {allError ? <p role="alert" className="text-xs text-danger">{allError}</p> : null}
+      <p className="text-xs text-secondary">{selectedUnits({ lines })} unit{selectedUnits({ lines }) === 1 ? "" : "s"} selected. Quantities are capped at shipped minus what is already on other returns.</p>
     </div>
   );
 }
@@ -193,11 +193,11 @@ function ShippingStep({ form, order }: { readonly form: UseFormReturn<RmaFormVal
     <div className="space-y-5" onKeyDown={noImplicitSubmit}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
-          <label htmlFor="rma-expected" className="text-[12px] font-medium text-body">Expected return date</label>
+          <label htmlFor="rma-expected" className="text-xs font-medium text-body">Expected return date</label>
           {/* Date-only: read and written as a LOCAL calendar date, so 2026/11/20 stays the 20th in every timezone. */}
           <DatePicker id="rma-expected" value={localDateFromIso(values.expectedReturnDate)} minDate={today} invalid={Boolean(dateErr)} clearable
             onChange={(d) => form.setValue("expectedReturnDate", isoFromLocalDate(d), { shouldDirty: true })} />
-          {dateErr ? <p className="text-[11px] text-danger">{dateErr}</p> : <p className="text-[11px] text-secondary">Optional. Shown on the return order and used for overdue follow-up.</p>}
+          {dateErr ? <p className="text-2xs text-danger">{dateErr}</p> : <p className="text-2xs text-secondary">Optional. Shown on the return order and used for overdue follow-up.</p>}
         </div>
         {order ? <ReturnAddressField options={order.returnAddresses ?? []} value={values.returnAddressId ?? null} onChange={(id) => form.setValue("returnAddressId", id, { shouldDirty: true })} /> : null}
       </div>
@@ -209,7 +209,7 @@ function ShippingStep({ form, order }: { readonly form: UseFormReturn<RmaFormVal
             onChange={(v) => form.setValue("label", v, { shouldDirty: true, shouldValidate: form.formState.submitCount > 0 })} />
         ) : order ? (
           <div className="space-y-2 border-t border-border pt-3">
-            <p className="text-[12px] text-secondary">No label is bought. Record the return shipping the customer or marketplace provides (all optional).</p>
+            <p className="text-xs text-secondary">No label is bought. Record the return shipping the customer or marketplace provides (all optional).</p>
             <ManualReturnInfoFields warehouseId={order.warehouseId} clientId={order.clientId} value={values.returnInfo ?? EMPTY_RETURN_INFO}
               errors={{ shippingCost: err(form, "returnInfo.shippingCost"), trackingNumbers: err(form, "returnInfo.trackingNumbers") }}
               onChange={(v) => form.setValue("returnInfo", v, { shouldDirty: true })} />
@@ -217,7 +217,7 @@ function ShippingStep({ form, order }: { readonly form: UseFormReturn<RmaFormVal
         ) : null}
       </Card>
       <div className="flex flex-col gap-1">
-        <label htmlFor="rma-note" className="text-[12px] font-medium text-body">Note</label>
+        <label htmlFor="rma-note" className="text-xs font-medium text-body">Note</label>
         <Textarea id="rma-note" rows={3} maxLength={1000} value={values.note} onChange={(e) => form.setValue("note", e.target.value, { shouldDirty: true })} placeholder="Anything the return station should know" />
       </div>
     </div>

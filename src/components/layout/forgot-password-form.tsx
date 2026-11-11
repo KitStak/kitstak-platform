@@ -47,9 +47,9 @@ export function ForgotPasswordForm() {
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
       {error ? <Callout variant="error">{error}</Callout> : null}
       <div className="flex flex-col gap-1">
-        <label htmlFor="forgot-email" className="text-[12px] font-semibold text-body">Email <span className="text-danger">*</span></label>
+        <label htmlFor="forgot-email" className="text-xs font-semibold text-body">Email <span className="text-danger">*</span></label>
         <TextField id="forgot-email" type="email" autoComplete="email" autoFocus placeholder="you@company.com" value={email} invalid={Boolean(fieldError)} aria-describedby={fieldError ? "forgot-email-error" : undefined} onChange={(e) => setEmail(e.target.value)} onBlur={() => setTouched(true)} />
-        {fieldError ? <p id="forgot-email-error" className="text-[11.5px] text-danger">{fieldError}</p> : null}
+        {fieldError ? <p id="forgot-email-error" className="text-2xs text-danger">{fieldError}</p> : null}
       </div>
       <Button type="submit" variant="primary" size="lg" className="w-full" disabled={status === "sending"}>
         {status === "sending" ? <Spinner className="h-4 w-4" label="Sending" /> : <MailCheck className="h-4 w-4" aria-hidden />}

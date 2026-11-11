@@ -40,8 +40,8 @@ export function CategoryChooser({ onPick }: { readonly onPick: (c: ProductCatego
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-lg bg-primary-soft/50 px-4 py-3">
-        <p className="text-[13px] font-semibold text-foreground">Please select the type of product category to proceed.</p>
-        <p className="text-[12px] text-secondary">Each category opens its own wizard. You can&apos;t change the category later.</p>
+        <p className="text-sm font-semibold text-foreground">Please select the type of product category to proceed.</p>
+        <p className="text-xs text-secondary">Each category opens its own wizard. You can&apos;t change the category later.</p>
       </div>
       <RadioCards<ProductCategory> ariaLabel="Product category" chevron value={null} onChange={onPick} options={CATEGORY_CARDS} />
     </div>
@@ -84,7 +84,7 @@ export function ProductCreateDrawer({ open, onOpenChange, defaultClientId = null
         <span className="flex items-center gap-1">
           {initialValues ? "Duplicate product" : "Create product"}{categoryBadge(category)}
           {initialValues || initialCategory ? null : (
-            <Button variant="ghost" size="sm" className="ml-1 h-6 px-1.5 text-[12px] font-medium" onClick={() => setCategory(null)} disabled={dirty} title={dirty ? "Discard your changes to change the category" : "Pick a different category"}>
+            <Button variant="ghost" size="sm" className="ml-1 h-6 px-1.5 text-xs font-medium" onClick={() => setCategory(null)} disabled={dirty} title={dirty ? "Discard your changes to change the category" : "Pick a different category"}>
               Change
             </Button>
           )}
@@ -95,7 +95,7 @@ export function ProductCreateDrawer({ open, onOpenChange, defaultClientId = null
     >
       {category && defaults ? (
         <div className="flex flex-1 flex-col gap-3">
-          {initialValues ? <div role="status" className="flex items-start gap-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-2.5 text-[13px] leading-5"><Info className="mt-0.5 h-4 w-4 shrink-0 text-secondary" aria-hidden /><div><p className="font-semibold text-foreground">Duplicating</p><p className="mt-0.5 text-secondary">Every setting was copied. Enter a new SKU and barcodes, then save.</p></div></div> : null}
+          {initialValues ? <div role="status" className="flex items-start gap-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-2.5 text-sm leading-5"><Info className="mt-0.5 h-4 w-4 shrink-0 text-secondary" aria-hidden /><div><p className="font-semibold text-foreground">Duplicating</p><p className="mt-0.5 text-secondary">Every setting was copied. Enter a new SKU and barcodes, then save.</p></div></div> : null}
           <ProductWizard
             key={category}
             category={category}
@@ -135,7 +135,7 @@ export function ProductEditDrawer({ productId, onOpenChange, onSaved }: { readon
       width={60}
       dirty={dirty}
       bodyClassName={data && !q.isPending && !q.error ? DRAWER_WIZARD_BODY : undefined}
-      title={data ? <span>Edit product <span className="font-mono text-[14px] text-secondary">{data.sku}</span>{categoryBadge(data.productCategory)}</span> : "Edit product"}
+      title={data ? <span>Edit product <span className="font-mono text-base text-secondary">{data.sku}</span>{categoryBadge(data.productCategory)}</span> : "Edit product"}
     >
       {q.isPending ? (
         <div className="flex flex-col gap-3">

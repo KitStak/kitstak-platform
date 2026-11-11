@@ -85,8 +85,8 @@ type Key = "scan" | "qty" | "locationId" | "lotNumber" | "expiryDate" | "product
 function ScanChip({ code, expected }: { readonly code: string | null; readonly expected: string | null }) {
   if (!expected) return null;
   return code
-    ? <span className="inline-flex w-fit items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success"><CheckCircle2 className="h-3 w-3" aria-hidden />Scanned {code}</span>
-    : <span className="inline-flex w-fit items-center gap-1 rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] text-secondary"><ScanLine className="h-3 w-3" aria-hidden />Scan {expected}</span>;
+    ? <span className="inline-flex w-fit items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-2xs font-semibold text-success"><CheckCircle2 className="h-3 w-3" aria-hidden />Scanned {code}</span>
+    : <span className="inline-flex w-fit items-center gap-1 rounded-full bg-surface-sunken px-2 py-0.5 text-2xs text-secondary"><ScanLine className="h-3 w-3" aria-hidden />Scan {expected}</span>;
 }
 
 function Footer({ children }: { readonly children: React.ReactNode }) {
@@ -173,7 +173,7 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
       <div className="px-5 py-4">
         {detail.error ? <Callout variant="error" title="Work order not available" action={<Button type="button" size="sm" variant="secondary" disabled={detail.isFetching} onClick={() => void detail.refetch()}><RefreshCw className="h-3.5 w-3.5" aria-hidden />Retry</Button>}>{detail.error.message}</Callout> : (
           <div role="status" aria-live="polite" className="flex flex-col gap-3">
-            <span className="flex items-center gap-2 text-[12px] text-secondary"><Spinner className="h-3.5 w-3.5" label="Loading" />Loading work order and component stock…</span>
+            <span className="flex items-center gap-2 text-xs text-secondary"><Spinner className="h-3.5 w-3.5" label="Loading" />Loading work order and component stock…</span>
             <Skeleton className="h-7 w-72" /><Skeleton className="h-10 w-full" /><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" />
           </div>
         )}
@@ -349,13 +349,13 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
       <>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 ks-scroll">
           <div className="flex flex-col gap-3" role="status" aria-live="polite">
-            <h3 className="text-[14px] font-semibold text-foreground">Kit summary</h3>
+            <h3 className="text-base font-semibold text-foreground">Kit summary</h3>
             <div className="flex items-start gap-3 rounded-lg border border-success/40 bg-success-soft/50 p-3">
               <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden />
               <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="text-[14px] font-semibold text-foreground">{summary.qty} {d.kit.sku} {summary.qty === 1 ? "kit" : "kits"} built</span>
-                <span className="text-[12px] text-secondary">{d.kit.name} · {wo.code} is {summary.status}</span>
-                <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] sm:grid-cols-4">
+                <span className="text-base font-semibold text-foreground">{summary.qty} {d.kit.sku} {summary.qty === 1 ? "kit" : "kits"} built</span>
+                <span className="text-xs text-secondary">{d.kit.name} · {wo.code} is {summary.status}</span>
+                <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
                   <div><dt className="text-faint">Location</dt><dd className="font-semibold text-foreground">{summary.location ?? "—"}</dd></div>
                   <div><dt className="text-faint">Lot</dt><dd className="font-semibold text-foreground">{summary.lot ?? "—"}</dd></div>
                   <div><dt className="text-faint">Processed / requested</dt><dd className="font-semibold tabular-nums text-foreground">{summary.processedQty} / {wo.requestedQty}</dd></div>
@@ -367,7 +367,7 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
           </div>
         </div>
         <Footer>
-          <Link href={`/work-orders/${wo.id}`} onClick={onClose} className="mr-auto text-[13px] font-semibold text-primary hover:underline">Open work order</Link>
+          <Link href={`/work-orders/${wo.id}`} onClick={onClose} className="mr-auto text-sm font-semibold text-primary hover:underline">Open work order</Link>
           <Button type="button" variant="primary" onClick={onClose}>Done</Button>
         </Footer>
         <PrintOptionsModal open={printing} onOpenChange={setPrinting} typeKeys={["product-label"]} title="Print kit barcode" clientId={wo.clientId}
@@ -388,7 +388,7 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
       <div ref={rootRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4 ks-scroll">
         <div className="flex flex-col gap-4">
           <WizardPills steps={pills} onSelect={(k) => goTo(k as Step)} />
-          <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-surface-sunken/60 px-3 py-2.5 text-[12px]">
+          <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-surface-sunken/60 px-3 py-2.5 text-xs">
             <span className="flex items-center gap-2"><Boxes className="h-4 w-4 text-primary" aria-hidden /><span className="font-semibold text-foreground">{d.kit.sku}</span><span className="text-secondary">{d.kit.name}</span></span>
             <span className="ml-auto flex items-center gap-4 tabular-nums text-secondary">
               <span>{wo.code}</span>
@@ -419,14 +419,14 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
                 <Callout variant={forcePicks ? "info" : "attention"} title={pickReason}>
                   <div className="flex flex-col gap-2">
                     <span>Pick the components to {d.outputLocationCode ?? "the kitting area"} first, then kit. Open picking tasks:</span>
-                    <ul className="list-disc pl-5 text-[12px]">
+                    <ul className="list-disc pl-5 text-xs">
                       {pendingPicks.map((t) => <li key={t.id}>Task #{t.taskNo} · {t.sku ?? "—"} · {t.plannedQty} from {t.sourceLocationCode ?? "—"} to {t.targetLocationCode ?? d.outputLocationCode ?? "kitting area"} · {t.status}</li>)}
                     </ul>
                     {canForcePicks ? (
                       <Checkbox id="forcePicks" checked={forcePicks} onCheckedChange={(v) => { setForcePicks(v === true); resetScans(); setErr("scan"); setSnap(null); }}
                         label={<strong>Complete pending picks and build</strong>}
                         description={`Posts Picking moves for ${pendingPicks.map((t) => `Task #${t.taskNo}`).join(", ")} to ${d.outputLocationCode ?? "the kitting area"} under your name, then builds. Use only when the components are physically there.`} />
-                    ) : <span className="text-[12px] text-secondary">Only a supervisor with Picking/Job Operations permission can complete pending picks from here.</span>}
+                    ) : <span className="text-xs text-secondary">Only a supervisor with Picking/Job Operations permission can complete pending picks from here.</span>}
                   </div>
                 </Callout>
               ) : null}
@@ -436,7 +436,7 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
                 </Callout>
               ) : null}
               {groups.length > 1 ? (
-                <div role="status" aria-live="polite" className="flex flex-wrap items-center gap-2 text-[12px]">
+                <div role="status" aria-live="polite" className="flex flex-wrap items-center gap-2 text-xs">
                   <span className={allScanned ? "font-semibold text-success" : "font-semibold text-foreground"}>{scannedCount} of {groups.length} sources scanned</span>
                   {groups.map((g) => (
                     <span key={g.label} className={scanned[g.label] ? "inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 font-semibold text-success" : "inline-flex items-center gap-1 rounded-full bg-surface-sunken px-2 py-0.5 text-secondary"}>
@@ -446,14 +446,14 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
                   {fefoComponents ? <span className="text-secondary">· {fefoComponents} FEFO component{fefoComponents === 1 ? "" : "s"} (no scan)</span> : null}
                   {scanNote && !allScanned ? <span className="basis-full text-secondary">{scanNote}</span> : null}
                 </div>
-              ) : confirmed ? <span className="flex items-center gap-1.5 text-[12px] font-semibold text-success" role="status"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden />Source confirmed{codes.length ? `: ${confirmed}` : ""}</span> : null}
+              ) : confirmed ? <span className="flex items-center gap-1.5 text-xs font-semibold text-success" role="status"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden />Source confirmed{codes.length ? `: ${confirmed}` : ""}</span> : null}
               <ul className="grid grid-cols-1 gap-2 md:grid-cols-2" aria-label="Components">
                 {lines.map((l) => (
                   <li key={l.id} className="flex flex-col gap-1.5 rounded-lg border border-border bg-surface p-3">
-                    <span className="flex min-w-0 items-center gap-2"><span className="shrink-0 whitespace-nowrap font-semibold text-foreground">{l.sku}</span><span className="min-w-0 truncate text-[12px] text-secondary" title={l.name}>{l.name}</span></span>
-                    <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-faint">{l.locationCode ?? (withPicking ? d.outputLocationCode ?? "Kitting area" : "FEFO")}{l.lpNumber ? ` · ${l.lpNumber}` : ""}{l.lotNumber ? ` · lot ${l.lotNumber}` : ""}
-                      {!withPicking && l.sourceLockedBy ? <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning"><Lock className="h-2.5 w-2.5" aria-hidden />Locked · {l.sourceLockedBy}</span> : null}
-                      {!withPicking && !l.locationId && (l.lockedQty ?? 0) > 0 ? <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning" title={`Free stock in locations locked by ${(l.lockedBy ?? []).join(", ")}`}><Lock className="h-2.5 w-2.5" aria-hidden />{l.lockedQty} locked · {(l.lockedBy ?? []).join(", ")}</span> : null}
+                    <span className="flex min-w-0 items-center gap-2"><span className="shrink-0 whitespace-nowrap font-semibold text-foreground">{l.sku}</span><span className="min-w-0 truncate text-xs text-secondary" title={l.name}>{l.name}</span></span>
+                    <span className="flex flex-wrap items-center gap-1.5 text-2xs text-faint">{l.locationCode ?? (withPicking ? d.outputLocationCode ?? "Kitting area" : "FEFO")}{l.lpNumber ? ` · ${l.lpNumber}` : ""}{l.lotNumber ? ` · lot ${l.lotNumber}` : ""}
+                      {!withPicking && l.sourceLockedBy ? <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-1.5 py-0.5 text-2xs font-semibold text-warning"><Lock className="h-2.5 w-2.5" aria-hidden />Locked · {l.sourceLockedBy}</span> : null}
+                      {!withPicking && !l.locationId && (l.lockedQty ?? 0) > 0 ? <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-1.5 py-0.5 text-2xs font-semibold text-warning" title={`Free stock in locations locked by ${(l.lockedBy ?? []).join(", ")}`}><Lock className="h-2.5 w-2.5" aria-hidden />{l.lockedQty} locked · {(l.lockedBy ?? []).join(", ")}</span> : null}
                     </span>
                     <ScanChip code={groupOf(l.id) ? scanned[groupOf(l.id)?.label ?? ""] ?? null : null} expected={groupOf(l.id)?.label ?? null} />
                     <span className="flex flex-wrap gap-1.5"><QtyChip label="Component qty" value={l.componentQty} /><QtyChip label="Total qty" value={l.need} /><QtyChip label={withPicking ? (forcePicks ? "Reserved for this WO" : "In kitting area") : l.locationId ? (l.sourceLockedBy ? "Usable at source (locked)" : "Available at source") : "Usable (unlocked bins)"} value={l.available} /></span>
@@ -475,7 +475,7 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
               <Field id="lpId" label="Target LP">
                 <LpPicker id="lpId" warehouseId={wo.warehouseId} value={lpId} onChange={(v, o) => { setLpId(v); setLpLabel(o?.label); }} />
               </Field>
-              <div className="md:col-span-2"><h3 className="text-[12px] font-semibold uppercase tracking-[0.04em] text-faint">Attribute selection</h3></div>
+              <div className="md:col-span-2"><h3 className="text-xs font-semibold text-faint">Attribute selection</h3></div>
               <Field id="lotNumber" label="Lot number" required={d.kit.trackLot} error={errors.lotNumber}>
                 <TextField id="lotNumber" value={lot} maxLength={120} placeholder={d.kit.trackLot ? "Enter lot number" : "Optional"} invalid={Boolean(errors.lotNumber)} onChange={(e) => { setLot(e.target.value); setErr("lotNumber"); }} />
               </Field>
@@ -485,7 +485,7 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
               <Field id="productionDate" label="Production date" required={d.kit.trackProductionDate} error={errors.productionDate}>
                 <DatePicker id="productionDate" value={production} onChange={(v) => { setProduction(v); setErr("productionDate"); }} invalid={Boolean(errors.productionDate)} />
               </Field>
-              <div className="md:col-span-2"><h3 className="text-[12px] font-semibold uppercase tracking-[0.04em] text-faint">Kitting task time range</h3></div>
+              <div className="md:col-span-2"><h3 className="text-xs font-semibold text-faint">Kitting task time range</h3></div>
               <Field id="actualStartAt" label="Actual start" info="Kept from the first build once the work order has started.">
                 <DateTimePicker id="actualStartAt" value={startAt} disabled={Boolean(wo.actualStartAt)} onChange={(v) => { setStartAt(v); setErr("actualFinishAt"); }} />
               </Field>
@@ -501,16 +501,16 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
               <section aria-label="Kit summary" className="flex items-start gap-3 rounded-lg border border-border bg-surface p-3">
                 <Boxes className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">Kit summary</span>
-                  <span className="text-[14px] font-semibold text-foreground">{build} × {d.kit.sku}</span>
-                  <span className="text-[12px] text-secondary">{d.kit.name}{lot.trim() ? ` · lot ${lot.trim()}` : ""}{expiry ? ` · exp ${toDateOnly(expiry)}` : ""}</span>
+                  <span className="text-2xs font-semibold text-faint">Kit summary</span>
+                  <span className="text-base font-semibold text-foreground">{build} × {d.kit.sku}</span>
+                  <span className="text-xs text-secondary">{d.kit.name}{lot.trim() ? ` · lot ${lot.trim()}` : ""}{expiry ? ` · exp ${toDateOnly(expiry)}` : ""}</span>
                 </div>
                 <Button type="button" size="sm" variant="ghost" aria-label="Print kit barcode" title="Print kit barcode" onClick={() => setPrinting(true)}><Printer className="h-3.5 w-3.5" aria-hidden /></Button>
                 <Button type="button" size="sm" variant="ghost" aria-label="Edit kit quantity and attributes" title="Edit" onClick={() => goTo("info")}><Pencil className="h-3.5 w-3.5" aria-hidden /></Button>
               </section>
               <section aria-label="Kitting process summary" className="rounded-lg border border-border bg-surface-sunken/50 p-3">
-                <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">Kitting process summary</h3>
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px] md:grid-cols-4">
+                <h3 className="mb-2 text-2xs font-semibold text-faint">Kitting process summary</h3>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs md:grid-cols-4">
                   {groups.length > 1 ? (
                     <div className="col-span-2"><dt className="text-faint">Source locations ({groups.length}, each scanned)</dt>
                       <dd className="flex flex-col gap-0.5 pt-0.5">{groups.map((g) => (
@@ -518,7 +518,7 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
                           <CheckCircle2 className="h-3 w-3 shrink-0 text-success" aria-label="Scanned" />{scanned[g.label] ?? g.label}
                           <span className="font-normal text-secondary">· {lines.filter((l) => g.componentIds.includes(l.id)).map((l) => l.sku).join(", ")}</span>
                         </span>
-                      ))}{fefoComponents ? <span className="text-[11px] text-secondary">+ {fefoComponents} FEFO component{fefoComponents === 1 ? "" : "s"}</span> : null}</dd>
+                      ))}{fefoComponents ? <span className="text-2xs text-secondary">+ {fefoComponents} FEFO component{fefoComponents === 1 ? "" : "s"}</span> : null}</dd>
                     </div>
                   ) : <div><dt className="text-faint">Source location</dt><dd className="font-semibold text-foreground">{sourceText}</dd></div>}
                   <div><dt className="text-faint">Target location</dt><dd className="font-semibold text-foreground">{targetText}</dd></div>
@@ -527,17 +527,17 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
                 </dl>
               </section>
               <div className="flex flex-wrap items-end justify-between gap-2">
-                <h3 className="text-[13px] font-semibold text-foreground">Inventory transaction summary</h3>
+                <h3 className="text-sm font-semibold text-foreground">Inventory transaction summary</h3>
                 <span className="flex items-center gap-2"><QtyChip label="Component SKU qty" value={lines.length} /><QtyChip label="Component total qty" value={totalNeed} /></span>
               </div>
               {stockChanged ? (
                 <Callout variant="attention" title="Stock changed since this summary opened" action={<Button type="button" size="sm" variant="secondary" onClick={() => setSnap(null)}><RefreshCw className="h-3.5 w-3.5" aria-hidden />Use latest</Button>}>
                   Another transaction moved component or kit stock. Review the latest quantities before you save.
                 </Callout>
-              ) : snap ? <p className="text-[11px] text-faint">Quantities as of {formatInZone(snap.at, d.warehouseTimeZone)}.</p> : <p className="flex items-center gap-1.5 text-[11px] text-secondary" role="status"><Spinner className="h-3 w-3" label="Loading" />Loading current quantities…</p>}
+              ) : snap ? <p className="text-2xs text-faint">Quantities as of {formatInZone(snap.at, d.warehouseTimeZone)}.</p> : <p className="flex items-center gap-1.5 text-2xs text-secondary" role="status"><Spinner className="h-3 w-3" label="Loading" />Loading current quantities…</p>}
               <KitDeltaTable lines={deltas} flags={flags} caption="Inventory transaction summary: current stock and the change this build posts" currentLabel={withPicking ? (pickReason && forcePicks ? "Reserved (picked on save)" : "Current qty in kitting area") : "Current qty"} unavailable={kitUnavailable} />
               {pickReason && forcePicks ? <Callout variant="attention" title="Save completes the pending picks first">{pendingPicks.map((t) => `Task #${t.taskNo}`).join(", ")} will post Picking moves to {d.outputLocationCode ?? "the kitting area"} under your name, recorded on this work order, then the kits are built.</Callout> : null}
-              {build < remaining ? <p className="text-[12px] text-secondary">Partial build: {wo.code} stays {wo.status} with {wo.processedQty + build} of {wo.requestedQty} processed.</p> : <p className="text-[12px] text-secondary">This build completes {wo.code}.</p>}
+              {build < remaining ? <p className="text-xs text-secondary">Partial build: {wo.code} stays {wo.status} with {wo.processedQty + build} of {wo.requestedQty} processed.</p> : <p className="text-xs text-secondary">This build completes {wo.code}.</p>}
               {locked.length ? (
                 <Callout variant="attention" title="Source location locked by a count">
                   {locked.map((l) => `${l.sku} at ${l.locationCode ?? "its source"} is locked by count plan ${l.sourceLockedBy}`).join(" · ")}. Finish, update or cancel the count first{wo.status === "Open" ? ", or edit the work order to choose another source" : ""}.

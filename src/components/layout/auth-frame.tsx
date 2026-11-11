@@ -12,11 +12,11 @@ export function AuthFrame({ title, description, children }: { readonly title: st
       </Link>
       <main className="w-full max-w-[400px]">
         <div className="rounded-xl border border-border bg-surface p-8 shadow-lg">
-          <h1 className="text-[22px] font-bold tracking-tight text-foreground">{title}</h1>
-          <div className="mt-1 text-[13px] text-secondary">{description}</div>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">{title}</h1>
+          <div className="mt-1 text-sm text-secondary">{description}</div>
           <div className="mt-5">{children}</div>
         </div>
-        <Link href="/login" className="mt-4 inline-flex items-center gap-1 text-[12.5px] font-medium text-primary hover:underline">
+        <Link href="/login" className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
           Back to log in
         </Link>

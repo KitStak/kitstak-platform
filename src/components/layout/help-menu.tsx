@@ -17,7 +17,7 @@ function Alternatives({ items }: { readonly items: readonly React.ReactNode[] })
     <span className="inline-flex items-center gap-1.5">
       {items.map((item, i) => (
         <React.Fragment key={i}>
-          {i > 0 ? <span className="text-[11px] text-faint">or</span> : null}
+          {i > 0 ? <span className="text-2xs text-faint">or</span> : null}
           {item}
         </React.Fragment>
       ))}
@@ -32,22 +32,22 @@ function ShortcutsSheet() {
     <div className="space-y-4">
       {groups.map((group) => (
         <section key={group}>
-          <h3 className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-faint">{group}</h3>
+          <h3 className="mb-1.5 text-2xs font-bold text-faint">{group}</h3>
           <ul className="divide-y divide-border rounded-lg border border-border">
             {rows.filter((r) => r.group === group).map((r) => (
-              <li key={r.description} className="flex items-center justify-between px-3 py-2 text-[13px] text-body">
+              <li key={r.description} className="flex items-center justify-between px-3 py-2 text-sm text-body">
                 {r.description}
                 <Alternatives items={r.combos.map((combo) => <KeyCombo key={combo} combo={combo} />)} />
               </li>
             ))}
             {STATIC_SHORTCUTS.filter((s) => s.group === group).map((s) => (
-              <li key={s.description} className="flex items-center justify-between px-3 py-2 text-[13px] text-body">
+              <li key={s.description} className="flex items-center justify-between px-3 py-2 text-sm text-body">
                 {s.description}
                 <Alternatives items={s.keys.map((seq) => (
                   <span key={seq.join(" ")} className="inline-flex items-center gap-1">
                     {seq.map((k, i) => (
                       <React.Fragment key={`${k}-${i}`}>
-                        {i > 0 ? <span className="text-[11px] text-faint">then</span> : null}
+                        {i > 0 ? <span className="text-2xs text-faint">then</span> : null}
                         <Kbd>{k}</Kbd>
                       </React.Fragment>
                     ))}
@@ -85,7 +85,7 @@ export function HelpMenu() {
       </HeaderIconButton>
       {/* Logiwa-style "Feedback & Updates" side tab; hidden on small screens and in print. */}
       <button type="button" onClick={() => setView({ kind: "feedback" })} aria-label="Feedback and updates"
-        className="fixed right-0 top-1/2 z-30 hidden w-7 -translate-y-1/2 items-center justify-center gap-1.5 rounded-l-md bg-inverse px-0 py-3 text-[11px] font-semibold leading-none text-fg-inverse shadow-md transition-colors [writing-mode:vertical-rl] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60 print:hidden lg:flex">
+        className="fixed right-0 top-1/2 z-30 hidden w-7 -translate-y-1/2 items-center justify-center gap-1.5 rounded-l-md bg-inverse px-0 py-3 text-2xs font-semibold leading-none text-fg-inverse shadow-md transition-colors [writing-mode:vertical-rl] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60 print:hidden lg:flex">
         <MessageSquarePlus className="h-3.5 w-3.5 rotate-90" aria-hidden />
         Feedback &amp; Updates
       </button>

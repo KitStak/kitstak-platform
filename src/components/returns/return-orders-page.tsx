@@ -47,7 +47,7 @@ function StatusPills({ counts, active, onPick }: { readonly counts: Readonly<Rec
   return (
     <div role="toolbar" aria-label="Filter by status" className="flex flex-wrap items-center gap-1.5 px-6 pb-2">
       <button type="button" aria-pressed={active === null} title="Counts are return lines: one grid row per RMA line" onClick={() => onPick(null)}
-        className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
           active === null ? "border-foreground bg-foreground text-surface [[data-theme=dark]_&]:border-white/35 [[data-theme=dark]_&]:bg-white/10 [[data-theme=dark]_&]:text-foreground" : "border-border bg-surface text-body hover:bg-surface-sunken")}>
         <span className="sr-only">Counts are lines. </span>All lines <span className="tabular-nums opacity-70">{counts ? total.toLocaleString() : "…"}</span>
       </button>
@@ -58,7 +58,7 @@ function StatusPills({ counts, active, onPick }: { readonly counts: Readonly<Rec
         const on = active === s;
         return (
           <button key={s} type="button" aria-pressed={on} title={RETURN_STATUS_HELP[s]} onClick={() => onPick(on ? null : s)}
-            className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+            className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
               "bg-[var(--pill-bg)] text-[var(--pill-fg)]",
               on ? "border-[var(--pill-fg)] shadow-sm ring-1 ring-current" : "border-transparent hover:brightness-95")}
             style={vars}>

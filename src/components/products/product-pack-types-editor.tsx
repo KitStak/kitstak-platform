@@ -78,8 +78,8 @@ export function PackHierarchy({ nodes, className }: { readonly nodes: readonly H
   const unit = primary.packType;
   return (
     <section aria-label="Pack hierarchy" className={cn("rounded-lg border border-border bg-surface-sunken/50 px-4 py-3", className)}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">Pack hierarchy</p>
-      <ol className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-2 text-[13px]" data-testid="pack-hierarchy">
+      <p className="text-2xs font-semibold text-faint">Pack hierarchy</p>
+      <ol className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-2 text-sm" data-testid="pack-hierarchy">
         {tree.map((line, i) => (
           <li key={line.node.key} className="flex items-center gap-2">
             {i > 0 ? <ArrowRight className="h-3.5 w-3.5 text-faint" aria-hidden /> : null}
@@ -93,7 +93,7 @@ export function PackHierarchy({ nodes, className }: { readonly nodes: readonly H
         ))}
       </ol>
       {irregular.length ? (
-        <p className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px] text-secondary">
+        <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-secondary">
           <Boxes className="h-3.5 w-3.5 text-faint" aria-hidden />Irregular:
           {irregular.map((n) => <Badge key={n.key} tone="neutral" size="sm">{n.packType} · {n.uomQty} {unit}</Badge>)}
         </p>
@@ -189,8 +189,8 @@ function Board({ payload, onSaved }: { readonly payload: FormPayload; readonly o
   return (
     <div className="flex flex-col gap-4" data-testid="pack-types-editor">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[12px] text-secondary">Add, edit or delete pack types and their barcodes. Changes save immediately; scanning any barcode identifies its pack.</p>
-        {saving ? <span role="status" className="flex items-center gap-1.5 text-[12px] text-secondary"><Spinner className="h-3 w-3" />Saving…</span> : null}
+        <p className="text-xs text-secondary">Add, edit or delete pack types and their barcodes. Changes save immediately; scanning any barcode identifies its pack.</p>
+        {saving ? <span role="status" className="flex items-center gap-1.5 text-xs text-secondary"><Spinner className="h-3 w-3" />Saving…</span> : null}
       </div>
       <PackHierarchy nodes={hierarchyFromForm(packs)} />
       <PackGroup title="Primary (UOM)" description="The base unit every quantity is counted in.">
@@ -226,8 +226,8 @@ function PackGroup({ title, description, children }: { readonly title: string; r
   return (
     <section className="flex flex-col gap-2" aria-label={title.replace(/ \(\d+\)$/, "")}>
       <div>
-        <h3 className="text-[13px] font-semibold text-foreground">{title}</h3>
-        <p className="text-[12px] text-secondary">{description}</p>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <p className="text-xs text-secondary">{description}</p>
       </div>
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">{children}</div>
     </section>

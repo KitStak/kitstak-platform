@@ -41,7 +41,7 @@ export interface RecordSummaryRailProps {
 function RailCard({ title, children }: { readonly title: string; readonly children: React.ReactNode }) {
   return (
     <section aria-label={title} className="rounded-lg border border-border bg-surface p-4 shadow-xs">
-      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{title}</h3>
+      <h3 className="mb-3 text-2xs font-semibold text-faint">{title}</h3>
       {children}
     </section>
   );
@@ -83,7 +83,7 @@ export function RecordSummaryRail({ entityType, entityId, code, status, statusDo
       ) : null}
       <RailCard title="Summary">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <span className="truncate text-[16px] font-semibold text-foreground">{code}</span>
+          <span className="truncate text-md font-semibold text-foreground">{code}</span>
           {status ? <StatusPill status={status} domain={statusDomain} /> : null}
         </div>
         <KvList

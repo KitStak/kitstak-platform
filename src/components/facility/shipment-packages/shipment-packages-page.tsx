@@ -69,8 +69,8 @@ function PackageDetailDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly i
             { label: "Reduced from", value: d.reductionRule === "Specific Location" ? `${d.reductionRule} · ${d.reductionLocationCode ?? ""}` : d.reductionRule, wide: true },
           ] : [{ label: "Tracking", value: "Not tracked", wide: true }]} />
           <section className="flex flex-col gap-2">
-            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Client access</h3>
-            {d.allClients ? <p className="rounded-lg border border-border px-4 py-3 text-[13px] text-body">All existing and future clients</p> : (
+            <h3 className="text-xs font-semibold text-secondary">Client access</h3>
+            {d.allClients ? <p className="rounded-lg border border-border px-4 py-3 text-sm text-body">All existing and future clients</p> : (
               <div className="flex flex-wrap gap-1.5 rounded-lg border border-border px-4 py-3">
                 {d.access.filter((a) => a.hasAccess).map((a) => <Badge key={a.clientId} tone="success" size="sm" shape="pill">{a.code}</Badge>)}
                 {d.access.every((a) => !a.hasAccess) ? <Muted>No clients enabled</Muted> : null}

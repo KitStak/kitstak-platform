@@ -33,7 +33,7 @@ function ThemeSubmenu() {
       <DropdownMenuSubTrigger icon={resolved === "dark" ? Moon : Sun}>
         <span className="flex items-center justify-between gap-2">
           Appearance
-          <span className="text-[12px] text-faint">{current?.label}</span>
+          <span className="text-xs text-faint">{current?.label}</span>
         </span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
@@ -89,8 +89,8 @@ export function UserMenu() {
         <div className="flex items-center gap-2.5 px-2 py-2">
           <Avatar name={name} tone="brand" />
           <div className="min-w-0">
-            <p className="truncate text-[13px] font-semibold text-foreground">{name}</p>
-            <p className="truncate text-[11px] text-faint">{user ? `${roleLabel(user.role)} · ${user.email}` : ""}</p>
+            <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+            <p className="truncate text-2xs text-faint">{user ? `${roleLabel(user.role)} · ${user.email}` : ""}</p>
           </div>
         </div>
         <DropdownMenuSeparator />

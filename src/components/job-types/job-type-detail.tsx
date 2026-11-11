@@ -21,15 +21,15 @@ type Detail = Awaited<ReturnType<typeof getJobTypeDetail>>;
 function Row({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[180px_minmax(0,1fr)] gap-3 border-b border-border py-2 last:border-b-0">
-      <dt className="text-[12px] font-semibold text-secondary">{label}</dt>
-      <dd className="min-w-0 text-[13px] text-foreground">{children}</dd>
+      <dt className="text-xs font-semibold text-secondary">{label}</dt>
+      <dd className="min-w-0 text-sm text-foreground">{children}</dd>
     </div>
   );
 }
 
 function Chips({ list }: { readonly list: readonly FilterCondition[] | null | undefined }) {
   if (!list || list.length === 0) return <span className="text-secondary">Applies to all</span>;
-  return <span className="flex flex-wrap gap-1">{list.map((c) => <span key={c.field} className="rounded-full bg-primary-soft px-2 py-0.5 text-[12px] text-primary">{c.label}</span>)}</span>;
+  return <span className="flex flex-wrap gap-1">{list.map((c) => <span key={c.field} className="rounded-full bg-primary-soft px-2 py-0.5 text-xs text-primary">{c.label}</span>)}</span>;
 }
 
 const label = (opts: readonly { value: string; label: string }[], v: string) => opts.find((o) => o.value === v)?.label ?? v;
@@ -67,7 +67,7 @@ export function JobTypeDetailDrawer({ row, onClose, onEdit }: { readonly row: Gr
                   return <Row label="Retailer flow">{r.flowType === "None" ? "None" : `${r.flowType} · scan ${r.uccLabelScanningType} · print ${r.defaultLabelPrintOption}`}</Row>;
                 })()}
                 <Row label="Flags">
-                  <span className="grid grid-cols-1 gap-1 sm:grid-cols-2">{PICKING_FLAG_DEFS.map((f) => <span key={f.key} className="flex items-center justify-between gap-2 text-[12px]"><span className="text-secondary">{f.label}</span><YesNoPill value={s.picking[f.key]} /></span>)}</span>
+                  <span className="grid grid-cols-1 gap-1 sm:grid-cols-2">{PICKING_FLAG_DEFS.map((f) => <span key={f.key} className="flex items-center justify-between gap-2 text-xs"><span className="text-secondary">{f.label}</span><YesNoPill value={s.picking[f.key]} /></span>)}</span>
                 </Row>
                 <Row label="Batch size">{s.batch.method === "Nof Order" ? "Orders" : "Items"} {s.batch.min} – {s.batch.max}</Row>
                 <Row label="Mobile screens">{[s.mobileScreens.pickAndSort && "Pick and sort", s.mobileScreens.pickToLocation && "Pick to location"].filter(Boolean).join(", ") || "Default"}</Row>

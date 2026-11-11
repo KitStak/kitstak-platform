@@ -59,10 +59,10 @@ export function ActionParamField({ id, action, def, value, onChange, error, ware
   }
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <label htmlFor={id} className="text-[11px] font-medium text-secondary">{def.label}{def.required ? <span className="text-danger"> *</span> : null}</label>
+      <label htmlFor={id} className="text-2xs font-medium text-secondary">{def.label}{def.required ? <span className="text-danger"> *</span> : null}</label>
       {control}
       <FieldError id={`${id}-error`} message={error ?? undefined} />
-      {action === "Set Rate Shopping Preset" && !clientId ? <p className="text-[11px] text-faint">Tip: scope the workflow to a client to list only its presets.</p> : null}
+      {action === "Set Rate Shopping Preset" && !clientId ? <p className="text-2xs text-faint">Tip: scope the workflow to a client to list only its presets.</p> : null}
     </div>
   );
 }
@@ -77,7 +77,7 @@ function UserChips({ ids, onRemove }: { readonly ids: readonly string[]; readonl
   return (
     <ul className="flex flex-wrap gap-1.5">
       {ids.map((uid) => (
-        <li key={uid} className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary">
+        <li key={uid} className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2 py-0.5 text-2xs font-medium text-primary">
           {label.get(uid) ?? "User"}
           <button type="button" aria-label={`Remove ${label.get(uid) ?? "user"}`} onClick={() => onRemove(uid)} className="rounded-full px-0.5 hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">×</button>
         </li>

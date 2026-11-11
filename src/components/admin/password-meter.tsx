@@ -59,7 +59,7 @@ export function PasswordMeter({ password, policy, id }: { readonly password: str
     return (
       <div id={id} className="mt-1.5 flex items-center gap-2" role="status" aria-live="polite">
         <span className="h-1 flex-1 animate-pulse rounded-full bg-neutral-soft" aria-hidden />
-        <span className="text-[11.5px] text-faint">Loading your company&apos;s password policy…</span>
+        <span className="text-2xs text-faint">Loading your company&apos;s password policy…</span>
       </div>
     );
   }
@@ -72,11 +72,11 @@ export function PasswordMeter({ password, policy, id }: { readonly password: str
         <div className="grid flex-1 grid-cols-4 gap-1" aria-hidden>
           {[1, 2, 3, 4].map((i) => <span key={i} className={cn("h-1 rounded-full transition-colors", i <= strength ? level.bar : "bg-neutral-soft")} />)}
         </div>
-        <span className={cn("w-16 text-right text-[11px] font-semibold", password ? level.text : "text-faint")} aria-live="polite">{password ? level.label : ""}</span>
+        <span className={cn("w-16 text-right text-2xs font-semibold", password ? level.text : "text-faint")} aria-live="polite">{password ? level.label : ""}</span>
       </div>
       <ul aria-label="Password requirements" className="grid grid-cols-1 gap-0.5 sm:grid-cols-2">
         {checks.map((c) => (
-          <li key={c.key} className={cn("flex items-center gap-1 text-[11.5px]", c.ok ? "text-success" : "text-faint")}>
+          <li key={c.key} className={cn("flex items-center gap-1 text-2xs", c.ok ? "text-success" : "text-faint")}>
             {c.ok ? <Check className="h-3 w-3" aria-hidden /> : <Circle className="h-2.5 w-2.5" aria-hidden />}
             {c.label}
             <span className="sr-only">{c.ok ? "(met)" : "(not met)"}</span>

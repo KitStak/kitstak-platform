@@ -27,9 +27,9 @@ type Mode = "Custom App" | "Public App" | "API";
 function Field({ id, label, required, error, children, hint }: { readonly id: string; readonly label: string; readonly required?: boolean; readonly error?: string; readonly children: React.ReactNode; readonly hint?: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-[12px] font-medium text-body">{label}{required ? <span className="text-danger"> *</span> : null}</label>
+      <label htmlFor={id} className="text-xs font-medium text-body">{label}{required ? <span className="text-danger"> *</span> : null}</label>
       {children}
-      {error ? <p id={`${id}-error`} role="alert" className="text-[12px] text-danger">{error}</p> : hint ? <p className="text-[11px] text-faint">{hint}</p> : null}
+      {error ? <p id={`${id}-error`} role="alert" className="text-xs text-danger">{error}</p> : hint ? <p className="text-2xs text-faint">{hint}</p> : null}
     </div>
   );
 }
@@ -120,7 +120,7 @@ export function ConnectStoreDrawer({ open, onOpenChange, provider, providerName,
           { value: "API", title: "KitStak Sandbox", description: "A realistic test store that generates orders on every run.", icon: FlaskConical, badge: "NEW" },
         ]} />
         {provider === "shopify" && !publicAppEnabled ? (
-          <p className="-mt-2 rounded-lg border border-border bg-surface-sunken/60 px-3 py-2 text-[12px] leading-relaxed text-secondary">
+          <p className="-mt-2 rounded-lg border border-border bg-surface-sunken/60 px-3 py-2 text-xs leading-relaxed text-secondary">
             One-click install is built (OAuth with signed state and HMAC check) but needs this workspace&apos;s own Shopify app: an administrator creates an app in a Shopify Partner account, adds the redirect URL <code className="rounded bg-surface px-1 text-foreground">{typeof window === "undefined" ? "" : window.location.origin}/api/channels/shopify/callback</code>, and sets <code className="rounded bg-surface px-1 text-foreground">SHOPIFY_CLIENT_ID</code> and <code className="rounded bg-surface px-1 text-foreground">SHOPIFY_CLIENT_SECRET</code> on the server. Until then, connect with a Custom App access token.
           </p>
         ) : null}
@@ -131,7 +131,7 @@ export function ConnectStoreDrawer({ open, onOpenChange, provider, providerName,
           <>
             <Callout variant="info" title="You'll approve the app on the store">You’ll go to {providerName} to approve the KitStak app. Click Install there and you’re brought straight back here with the store connected; then link its locations and turn on the methods you want.</Callout>
             <Field id="cs-storeName" label="Your Shopify store name" required error={errors.storeName} hint="e.g. bluebird-main (we connect to bluebird-main.myshopify.com)">
-              <TextField id="cs-storeName" value={storeName} maxLength={STORE_NAME_MAX} invalid={Boolean(errors.storeName)} leading={<Store className="h-4 w-4" />} trailing={<span className="text-[12px] text-secondary">.myshopify.com</span>}
+              <TextField id="cs-storeName" value={storeName} maxLength={STORE_NAME_MAX} invalid={Boolean(errors.storeName)} leading={<Store className="h-4 w-4" />} trailing={<span className="text-xs text-secondary">.myshopify.com</span>}
                 placeholder="bluebird-main" onChange={(e) => { setStoreName(e.target.value); setErrors((x) => ({ ...x, storeName: "" })); }} />
             </Field>
           </>

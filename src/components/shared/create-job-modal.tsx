@@ -45,14 +45,14 @@ function EligibilityStep({ data, operation, path, onPath }: { readonly data: Eli
     <div className="flex flex-col gap-4">
       <div className={cn("flex items-center gap-3 rounded-lg border p-3", n ? "border-success/30 bg-success-soft" : "border-danger/30 bg-danger-soft")}>
         {n ? <CheckCircle2 className="h-5 w-5 text-success" aria-hidden /> : <XCircle className="h-5 w-5 text-danger" aria-hidden />}
-        <p className="text-[14px] font-semibold text-foreground">
+        <p className="text-base font-semibold text-foreground">
           {n} of {data.total} {nounFor(operation, data.total)} {n === 1 ? "is" : "are"} eligible
         </p>
       </div>
       {data.ineligible.length > 0 ? (
         <div className="flex flex-col gap-1.5">
-          <p className="text-[12px] font-semibold text-secondary">Not eligible</p>
-          <ul className="ks-scroll max-h-40 divide-y divide-border overflow-auto rounded-md border border-border text-[12px]">
+          <p className="text-xs font-semibold text-secondary">Not eligible</p>
+          <ul className="ks-scroll max-h-40 divide-y divide-border overflow-auto rounded-md border border-border text-xs">
             {data.ineligible.map((r) => (
               <li key={r.id} className="flex gap-3 px-3 py-1.5">
                 {/* The record code, never the error code (INVALID_STATE / NOT_FOUND). */}
@@ -82,11 +82,11 @@ function EligibilityStep({ data, operation, path, onPath }: { readonly data: Eli
 
 function MergeStep({ operation, jobs, loading, selected, onSelect }: { readonly operation: JobOperation; readonly jobs: readonly MergeableJob[]; readonly loading: boolean; readonly selected: string | null; readonly onSelect: (id: string) => void }) {
   if (loading) return <div className="flex justify-center py-10"><Spinner /></div>;
-  if (jobs.length === 0) return <p className="py-10 text-center text-[13px] text-faint">No open jobs can take these {nounFor(operation, 2)}. Create a new job instead.</p>;
+  if (jobs.length === 0) return <p className="py-10 text-center text-sm text-faint">No open jobs can take these {nounFor(operation, 2)}. Create a new job instead.</p>;
   return (
     <div role="radiogroup" aria-label="Job to merge into" className="overflow-hidden rounded-lg border border-border">
-      <table className="w-full border-collapse text-[13px]">
-        <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+      <table className="w-full border-collapse text-sm">
+        <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
           <tr>
             <th scope="col" className="w-10 px-3 py-2"><span className="sr-only">Select</span></th>
             <th scope="col" className="px-3 py-2">Job code</th>
@@ -127,7 +127,7 @@ function CreateStep({ data, state, onChange }: { readonly data: Eligibility; rea
   return (
     <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_260px]">
       <div className="flex flex-col gap-3">
-        <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-secondary">
           <span>Job type <span className="text-danger">*</span></span>
           <Select
             aria-label="Job type"
@@ -138,23 +138,23 @@ function CreateStep({ data, state, onChange }: { readonly data: Eligibility; rea
             onChange={(jobTypeId) => onChange({ ...state, jobTypeId, batchSize: data.jobTypes.find((t) => t.id === jobTypeId)?.defaultBatchSize ?? state.batchSize })}
           />
         </label>
-        <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-secondary">
           <span>Batch size <span className="text-danger">*</span></span>
           <NumberInput aria-label="Batch size" min={1} max={1000} value={state.batchSize} onChange={(batchSize) => onChange({ ...state, batchSize })} />
         </label>
-        <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+        <label className="flex flex-col gap-1 text-xs font-semibold text-secondary">
           Assign to
           <UserPicker value={state.assigneeUserId} onChange={(assigneeUserId) => onChange({ ...state, assigneeUserId })} placeholder="Leave unassigned" />
         </label>
       </div>
       <aside aria-label="Jobs preview" className="flex flex-col gap-2 rounded-lg border border-border bg-surface-sunken p-3">
-        <p className="text-[12px] font-semibold text-secondary">Below jobs will be created</p>
+        <p className="text-xs font-semibold text-secondary">Below jobs will be created</p>
         {batches.length === 0 ? (
-          <p className="text-[12px] text-faint">Choose a job type and batch size to preview.</p>
+          <p className="text-xs text-faint">Choose a job type and batch size to preview.</p>
         ) : (
           <ul className="ks-scroll flex max-h-48 flex-col gap-1 overflow-auto">
             {batches.map((size, i) => (
-              <li key={i} className="flex items-center justify-between rounded-md bg-surface px-2.5 py-1.5 text-[12px]">
+              <li key={i} className="flex items-center justify-between rounded-md bg-surface px-2.5 py-1.5 text-xs">
                 <span className="font-semibold text-foreground">{jobType?.code ?? "Job"} #{i + 1}</span>
                 <span className="text-secondary">{size} records</span>
               </li>
@@ -216,7 +216,7 @@ function Body({ onOpenChange, operation, ids, invalidate = [], onDone }: Omit<Cr
         {eligibility.isPending ? (
           <div className="flex justify-center py-10"><Spinner /></div>
         ) : eligibility.error || !data ? (
-          <p className="py-8 text-center text-[13px] text-danger">{eligibility.error?.message ?? "The eligibility check returned an unexpected response."}</p>
+          <p className="py-8 text-center text-sm text-danger">{eligibility.error?.message ?? "The eligibility check returned an unexpected response."}</p>
         ) : step === "eligibility" ? (
           <EligibilityStep data={data} operation={operation} path={path} onPath={setPath} />
         ) : step === "merge" ? (
@@ -227,7 +227,7 @@ function Body({ onOpenChange, operation, ids, invalidate = [], onDone }: Omit<Cr
       </DialogBody>
       <DialogFooter>
         {step === "create" ? (
-          <span className="mr-auto text-[12px] text-secondary">
+          <span className="mr-auto text-xs text-secondary">
             <strong className="text-foreground">{assigned}</strong> Person Assigned <span className="mx-1 text-border-strong">|</span> <strong className="text-foreground">{totalJobs}</strong> Total Job
           </span>
         ) : null}

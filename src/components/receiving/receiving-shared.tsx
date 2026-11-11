@@ -270,7 +270,7 @@ export async function postBulk(path: string, ids: readonly string[]): Promise<Bu
 export function ProductThumb({ url, size = 32, label }: { readonly url: string | null; readonly size?: number; readonly label: string }) {
   const initials = label.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "—";
   return (
-    <span className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-surface-sunken text-[10px] font-semibold text-faint" style={{ width: size, height: size }}>
+    <span className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-surface-sunken text-2xs font-semibold text-faint" style={{ width: size, height: size }}>
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element -- product images come from arbitrary CDNs
         <img src={url} alt="" width={size} height={size} loading="lazy" className="h-full w-full object-cover" />

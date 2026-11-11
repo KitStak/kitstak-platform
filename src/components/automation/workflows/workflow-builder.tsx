@@ -71,8 +71,8 @@ function SortableAction({ id, index, children, readOnly, onDelete, label }: { re
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("rounded-lg border border-border bg-surface p-3", isDragging && "z-10 shadow-lg")}>
       <div className="flex items-center gap-2">
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-success-soft text-[11px] font-bold text-success">{index + 1}</span>
-        <p className="flex-1 text-[13px] font-semibold text-foreground">{label}</p>
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-success-soft text-2xs font-bold text-success">{index + 1}</span>
+        <p className="flex-1 text-sm font-semibold text-foreground">{label}</p>
         {!readOnly ? <button type="button" aria-label={`Remove ${label}`} onClick={onDelete} className="rounded p-1 text-secondary hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"><Trash2 className="h-3.5 w-3.5" /></button> : null}
         <button type="button" aria-label={`Reorder ${label}`} disabled={readOnly} {...attributes} {...listeners} className="cursor-grab rounded p-1 text-faint hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed"><GripVertical className="h-3.5 w-3.5" /></button>
       </div>
@@ -203,7 +203,7 @@ function Body({ detail }: { readonly detail: WorkflowDetail | null }) {
   const conditionRow = (c: RuleCondition, connector: React.ReactNode, onEdit: () => void, onDelete: () => void, k: string) => (
     <li key={k} className="flex items-center gap-2 rounded-lg border border-info/30 bg-info-soft/30 px-3 py-2">
       {connector}
-      <span className="flex-1 text-[13px] text-foreground">{describeCondition(catalog, c, names)}</span>
+      <span className="flex-1 text-sm text-foreground">{describeCondition(catalog, c, names)}</span>
       {!readOnly ? <>
         <button type="button" aria-label="Edit condition" onClick={onEdit} className="rounded p-1 text-secondary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Pencil className="h-3.5 w-3.5" /></button>
         <button type="button" aria-label="Delete condition" onClick={onDelete} className="rounded p-1 text-secondary hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"><Trash2 className="h-3.5 w-3.5" /></button>
@@ -211,8 +211,8 @@ function Body({ detail }: { readonly detail: WorkflowDetail | null }) {
     </li>
   );
   const connectorChip = (first: boolean, match: "All" | "Any", firstLabel: string) => (first
-    ? <span className="w-9 shrink-0 text-[11px] font-semibold text-info">{firstLabel}</span>
-    : <span className="w-9 shrink-0 rounded-full bg-surface px-1 text-center text-[10px] font-bold text-secondary">{MATCH_WORD[match]}</span>);
+    ? <span className="w-9 shrink-0 text-2xs font-semibold text-info">{firstLabel}</span>
+    : <span className="w-9 shrink-0 rounded-full bg-surface px-1 text-center text-2xs font-bold text-secondary">{MATCH_WORD[match]}</span>);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -220,12 +220,12 @@ function Body({ detail }: { readonly detail: WorkflowDetail | null }) {
       <PageHeader title={isEdit ? detail.name : "Create Workflow"} crumbLabel={isEdit ? "Workflow Details" : "Create Workflow"}
         actions={
           <div className="flex items-center gap-2">
-            <Link href="/automation/workflows" className="inline-flex items-center gap-1 text-[13px] text-secondary hover:text-primary"><ChevronLeft className="h-4 w-4" />Workflows</Link>
+            <Link href="/automation/workflows" className="inline-flex items-center gap-1 text-sm text-secondary hover:text-primary"><ChevronLeft className="h-4 w-4" />Workflows</Link>
             <Button variant="secondary" onClick={() => router.push("/automation/workflows")}>Cancel</Button>
             <DisabledReason reason={saveBlocker}><Button variant="primary" disabled={saveBlocker !== null || saving || opening} onClick={() => void save()}>{opening ? "Opening workflow…" : saving ? "Saving…" : "Save"}</Button></DisabledReason>
           </div>
         } />
-      <p data-slot="page-subtitle" className="-mt-1 px-6 pb-2 text-[13px] text-secondary">When the trigger fires and the conditions match, the actions run in order.</p>
+      <p data-slot="page-subtitle" className="-mt-1 px-6 pb-2 text-sm text-secondary">When the trigger fires and the conditions match, the actions run in order.</p>
       {isEdit ? <UnderlineTabs className="px-6" ariaLabel="Workflow sections" tabs={[{ key: "builder", label: "Builder" }, { key: "runs", label: "Run history", count: detail.runCount }]} active={tab} onChange={setTab} /> : null}
       {conflict ? <div className="px-6 pt-3"><Callout variant="attention" title="This record changed since you opened it" action={<Button size="sm" onClick={() => window.location.reload()}>Reload</Button>}>Someone else saved this workflow. Reload to see their changes.</Callout></div> : null}
       <ConfirmDialog open={confirmBroad} onOpenChange={setConfirmBroad} variant="attention"
@@ -237,28 +237,28 @@ function Body({ detail }: { readonly detail: WorkflowDetail | null }) {
         <div className="grid flex-1 gap-5 overflow-auto p-6 xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="flex min-w-0 flex-col gap-5">
             <section className="rounded-xl border border-border bg-surface p-4">
-              <h2 className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-foreground"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] text-white">1</span>When</h2>
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-2xs text-white">1</span>When</h2>
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="wf-name" className="text-[12px] font-medium text-body">Workflow name <span className="text-danger">*</span></label>
+                  <label htmlFor="wf-name" className="text-xs font-medium text-body">Workflow name <span className="text-danger">*</span></label>
                   <TextField id="wf-name" value={form.name} maxLength={80} disabled={readOnly} invalid={Boolean(errors.name)} placeholder="e.g. Block PO box addresses" onChange={(e) => set("name", e.target.value)} />
                   <FieldError id="wf-name-error" message={errors.name || undefined} />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="wf-trigger" className="text-[12px] font-medium text-body">Trigger <span className="text-danger">*</span></label>
+                  <label htmlFor="wf-trigger" className="text-xs font-medium text-body">Trigger <span className="text-danger">*</span></label>
                   <Select id="wf-trigger" value={form.trigger} disabled={readOnly} options={WORKFLOW_TRIGGERS.map((t) => ({ value: t, label: t }))} onChange={(v) => v && v !== form.trigger && changeTrigger(v)} invalid={Boolean(errors.trigger)} aria-describedby="wf-trigger-help" />
-                  <p id="wf-trigger-help" className="text-[11px] text-secondary">Runs when: {TRIGGER_COPY[form.trigger]}</p>
+                  <p id="wf-trigger-help" className="text-2xs text-secondary">Runs when: {TRIGGER_COPY[form.trigger]}</p>
                 </div>
                 <div className="flex flex-col gap-1 md:col-span-2">
-                  <label htmlFor="wf-description" className="text-[12px] font-medium text-body">Description</label>
+                  <label htmlFor="wf-description" className="text-xs font-medium text-body">Description</label>
                   <Textarea id="wf-description" rows={2} maxLength={500} value={form.description} disabled={readOnly} onChange={(e) => set("description", e.target.value)} placeholder="Why this workflow exists, so the team knows when to release its orders" />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="wf-warehouseId" className="text-[12px] font-medium text-body">Warehouse</label>
+                  <label htmlFor="wf-warehouseId" className="text-xs font-medium text-body">Warehouse</label>
                   <Select id="wf-warehouseId" value={form.warehouseId} clearable disabled={readOnly} options={warehouses.options} placeholder="All warehouses" onChange={(v) => set("warehouseId", v)} />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="wf-clientId" className="text-[12px] font-medium text-body">Client</label>
+                  <label htmlFor="wf-clientId" className="text-xs font-medium text-body">Client</label>
                   <Combobox id="wf-clientId" value={form.clientId} clearable disabled={readOnly} options={clients} placeholder="All clients" onChange={(v) => set("clientId", v)} />
                 </div>
                 <div className="flex flex-wrap items-center gap-6 md:col-span-2">
@@ -270,7 +270,7 @@ function Body({ detail }: { readonly detail: WorkflowDetail | null }) {
 
             <section className="rounded-xl border border-border bg-surface p-4">
               <div className="mb-3 flex flex-wrap items-center gap-3">
-                <h2 className="flex items-center gap-2 text-[13px] font-semibold text-foreground"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-info text-[11px] text-white">2</span>If</h2>
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-info text-2xs text-white">2</span>If</h2>
                 <SegmentedControl size="sm" ariaLabel="Match" value={form.match} disabled={readOnly} onChange={(v) => set("match", v)}
                   options={MATCH_MODES.map((m) => ({ value: m, label: m === "All" ? "Match all" : "Match any" }))} />
                 <span className="ml-auto flex items-center gap-2">
@@ -279,7 +279,7 @@ function Body({ detail }: { readonly detail: WorkflowDetail | null }) {
                   <Button size="sm" variant="secondary" disabled={readOnly} onClick={() => setCond({ group: null, index: form.conditions.length, insert: true })}><Plus className="h-3.5 w-3.5" />Add condition</Button>
                 </span>
               </div>
-              {form.conditions.length === 0 ? <p className={cn("rounded-lg border border-dashed px-3 py-3 text-[12px]", broad ? "border-warning/50 bg-warning-soft/40 text-body" : "border-border text-secondary")}>No conditions: the workflow applies to every {catalog === "purchaseOrder" ? "purchase order" : "order"} in its scope{broad ? " — and its scope is all warehouses and all clients. Add a condition or pick a warehouse or client." : "."}</p> : (
+              {form.conditions.length === 0 ? <p className={cn("rounded-lg border border-dashed px-3 py-3 text-xs", broad ? "border-warning/50 bg-warning-soft/40 text-body" : "border-border text-secondary")}>No conditions: the workflow applies to every {catalog === "purchaseOrder" ? "purchase order" : "order"} in its scope{broad ? " — and its scope is all warehouses and all clients. Add a condition or pick a warehouse or client." : "."}</p> : (
                 <ul className="flex flex-col gap-1.5" aria-label="Conditions">
                   {form.conditions.map((c, i) => {
                     const connector = connectorChip(i === 0, form.match, "If");
@@ -290,7 +290,7 @@ function Body({ detail }: { readonly detail: WorkflowDetail | null }) {
                         <span className="pt-1.5">{connector}</span>
                         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[12px] font-semibold text-foreground">Group</span>
+                            <span className="text-xs font-semibold text-foreground">Group</span>
                             <SegmentedControl size="sm" ariaLabel={`Group ${i + 1} match`} value={c.group} disabled={readOnly} onChange={(v) => updateGroup(i, (g) => ({ ...g, group: v }))}
                               options={MATCH_MODES.map((m) => ({ value: m, label: m === "All" ? "Match all" : "Match any" }))} />
                             {!readOnly ? (
@@ -314,7 +314,7 @@ function Body({ detail }: { readonly detail: WorkflowDetail | null }) {
 
             <section className="rounded-xl border border-border bg-surface p-4">
               <div className="mb-3 flex items-center gap-3">
-                <h2 className="flex items-center gap-2 text-[13px] font-semibold text-foreground"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-success text-[11px] text-white">3</span>Then</h2>
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-success text-2xs text-white">3</span>Then</h2>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild><Button id="wf-actions" size="sm" variant="secondary" className="ml-auto" disabled={readOnly}><Plus className="h-3.5 w-3.5" />Add action</Button></DropdownMenuTrigger>
                   <DropdownMenuContent align="end" side="bottom" sideOffset={4} collisionPadding={{ top: 72, right: 16, bottom: 16, left: 16 }} className="max-h-[min(420px,var(--radix-dropdown-menu-content-available-height))] w-80 overflow-y-auto">
@@ -323,13 +323,13 @@ function Body({ detail }: { readonly detail: WorkflowDetail | null }) {
                 </DropdownMenu>
               </div>
               {errors.actions ? <div className="mb-2"><FieldError id="wf-actions-error" message={errors.actions} /></div> : null}
-              {form.actions.length === 0 ? <p className="rounded-lg border border-dashed border-border px-3 py-3 text-[12px] text-secondary">Add at least one action. Actions run in the order shown; drag to reorder.</p> : (
+              {form.actions.length === 0 ? <p className="rounded-lg border border-dashed border-border px-3 py-3 text-xs text-secondary">Add at least one action. Actions run in the order shown; drag to reorder.</p> : (
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                   <SortableContext items={form.actions.map((a) => a.key)} strategy={verticalListSortingStrategy}>
                     <ol className="flex flex-col gap-2">
                       {form.actions.map((a, i) => (
                         <SortableAction key={a.key} id={a.key} index={i} label={a.action} readOnly={readOnly} onDelete={() => set("actions", form.actions.filter((x) => x.key !== a.key))}>
-                          <p className="mt-1 pl-8 text-[11px] text-secondary">{ACTION_COPY[a.action]}</p>
+                          <p className="mt-1 pl-8 text-2xs text-secondary">{ACTION_COPY[a.action]}</p>
                           {errors[`actions.${i}.action`] ? <div className="pl-8"><FieldError id={`wf-actions-${i}-action-error`} message={errors[`actions.${i}.action`]} /></div> : null}
                           {ACTION_PARAMS[a.action].length > 0 ? (
                             <div className="mt-2 grid gap-2 pl-8 md:grid-cols-2">
@@ -402,14 +402,14 @@ function TestPanel({ form }: { readonly form: Form }) {
   };
   return (
     <aside className="flex flex-col gap-3 self-start rounded-xl border border-border bg-surface p-4 xl:sticky xl:top-0">
-      <h2 className="flex items-center gap-2 text-[13px] font-semibold text-foreground"><FlaskConical className="h-4 w-4 text-primary" />Test against {noun}</h2>
-      <p className="text-[12px] text-secondary">Runs the unsaved workflow on a real {kind === "shipped" ? "shipped order" : noun} and rolls everything back.</p>
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground"><FlaskConical className="h-4 w-4 text-primary" />Test against {noun}</h2>
+      <p className="text-xs text-secondary">Runs the unsaved workflow on a real {kind === "shipped" ? "shipped order" : noun} and rolls everything back.</p>
       <Combobox id="wf-test-order" aria-label={`${noun} to test`} loadOptions={load} minChars={0} value={orderId} onChange={(v) => { setOrderId(v); setError(null); }} placeholder={kind === "po" ? "Search PO code, vendor or reference" : "Search order code, customer or address"} invalid={Boolean(error)} clearable />
-      {error ? <p role="alert" className="text-[12px] text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
       <DisabledReason reason={orderId ? null : `Choose ${kind === "po" ? "a purchase order" : "an order"} to test against first`}><Button variant="primary" className="w-full" onClick={() => void run()} disabled={pending || !orderId}>{pending ? <Spinner className="h-3.5 w-3.5" /> : <FlaskConical className="h-4 w-4" />}Run test</Button></DisabledReason>
       {result ? (
         <div className="flex flex-col gap-3 border-t border-border pt-3">
-          <p className="flex items-center gap-2 text-[13px]">
+          <p className="flex items-center gap-2 text-sm">
             {result.matched ? <CheckCircle2 className="h-4 w-4 text-success" /> : <XCircle className="h-4 w-4 text-danger" />}
             <span className="font-semibold">{result.orderCode}</span>{result.matched ? "matches" : "doesn't match"}
             {result.blockType ? <Badge tone="danger" size="sm">Blocked · {result.blockType}</Badge> : null}
@@ -417,21 +417,21 @@ function TestPanel({ form }: { readonly form: Form }) {
           {result.scopeNote ? <Callout variant="attention">{result.scopeNote}</Callout> : null}
           {result.conditions.length > 0 ? (
             <ul className="flex flex-col gap-1">{result.conditions.map((c, i) => (
-              <li key={i} className="flex items-start gap-1.5 text-[12px]">{c.passed ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" /> : <CircleSlash className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />}<span className={c.passed ? "text-foreground" : "text-secondary"}>{c.text}</span></li>
+              <li key={i} className="flex items-start gap-1.5 text-xs">{c.passed ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" /> : <CircleSlash className="mt-0.5 h-3.5 w-3.5 shrink-0 text-faint" />}<span className={c.passed ? "text-foreground" : "text-secondary"}>{c.text}</span></li>
             ))}</ul>
-          ) : <p className="text-[12px] text-secondary">No conditions — every order matches.</p>}
+          ) : <p className="text-xs text-secondary">No conditions — every order matches.</p>}
           {result.actions.length > 0 ? (
-            <div><h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-secondary">Actions</h3>
+            <div><h3 className="mb-1 text-2xs font-semibold text-secondary">Actions</h3>
               <ul className="flex flex-col gap-1">{result.actions.map((a, i) => (
-                <li key={i} className="text-[12px]"><span className={a.applied ? "font-medium text-success" : "font-medium text-secondary"}>{a.applied ? "Applied" : "Skipped"}</span> · {a.action}{a.message ? <span className="text-faint"> — {a.message}</span> : null}</li>
+                <li key={i} className="text-xs"><span className={a.applied ? "font-medium text-success" : "font-medium text-secondary"}>{a.applied ? "Applied" : "Skipped"}</span> · {a.action}{a.message ? <span className="text-faint"> — {a.message}</span> : null}</li>
               ))}</ul></div>
           ) : null}
           {result.changes.length > 0 ? (
-            <div><h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-secondary">Order would change</h3>
+            <div><h3 className="mb-1 text-2xs font-semibold text-secondary">Order would change</h3>
               <ul className="flex flex-col gap-1">{result.changes.map((c) => (
-                <li key={c.field} className="text-[12px]"><span className="font-medium">{c.field}</span> {!c.from || c.from === "—" ? <span className="italic text-faint">(none)</span> : <span className="text-faint line-through">{c.from}</span>} → <span className="font-medium text-foreground">{c.to}</span></li>
+                <li key={c.field} className="text-xs"><span className="font-medium">{c.field}</span> {!c.from || c.from === "—" ? <span className="italic text-faint">(none)</span> : <span className="text-faint line-through">{c.from}</span>} → <span className="font-medium text-foreground">{c.to}</span></li>
               ))}</ul></div>
-          ) : result.matched ? <p className="text-[12px] text-secondary">No order fields would change.</p> : null}
+          ) : result.matched ? <p className="text-xs text-secondary">No order fields would change.</p> : null}
         </div>
       ) : null}
     </aside>

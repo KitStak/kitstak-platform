@@ -35,7 +35,7 @@ export function StatTile({ label, value, sublabel, icon: Icon, delta, info, info
   const body = (
     <>
       <div className="flex items-start justify-between gap-2">
-        <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+        <span className="flex items-center gap-1 text-2xs font-semibold text-faint">
           {label}
           {info ? <InfoTip content={info} label={infoLabel} /> : null}
         </span>
@@ -45,8 +45,8 @@ export function StatTile({ label, value, sublabel, icon: Icon, delta, info, info
           </span>
         ) : null}
       </div>
-      {loading ? <Skeleton className="mt-2 h-7 w-24" /> : <div className="mt-1 text-[24px] font-semibold leading-8 tracking-tight tabular-nums text-foreground">{value}</div>}
-      <div className="mt-1 flex items-center gap-2 text-[12px]">
+      {loading ? <Skeleton className="mt-2 h-7 w-24" /> : <div className="mt-1 text-xl font-semibold leading-8 tracking-tight tabular-nums text-foreground">{value}</div>}
+      <div className="mt-1 flex items-center gap-2 text-xs">
         {delta && !loading ? (
           <span className={cn("inline-flex items-center gap-0.5 font-semibold tabular-nums", delta.value === 0 ? "text-secondary" : good ? "text-success" : "text-danger")}>
             {delta.value > 0 ? <ArrowUpRight className="h-3.5 w-3.5" aria-hidden /> : delta.value < 0 ? <ArrowDownRight className="h-3.5 w-3.5" aria-hidden /> : null}

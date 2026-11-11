@@ -40,8 +40,8 @@ function AppCard({ app, canManage, onDetails, onSettings, onActivate, onDeactiva
       <div className="flex items-start gap-3">
         <AppIcon def={app.def} />
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[14px] font-semibold text-foreground">{app.name}</h3>
-          <p className="text-[11px] uppercase tracking-wide text-faint">{app.category}</p>
+          <h3 className="truncate text-base font-semibold text-foreground">{app.name}</h3>
+          <p className="text-2xs text-faint">{app.category}</p>
         </div>
         {hasSettings ? (
           <DisabledReason reason={canManage ? null : NO_PERMISSION}>
@@ -49,20 +49,20 @@ function AppCard({ app, canManage, onDetails, onSettings, onActivate, onDeactiva
           </DisabledReason>
         ) : null}
       </div>
-      <p className="mt-3 line-clamp-2 min-h-[36px] text-[12.5px] leading-[18px] text-secondary">{app.description}</p>
+      <p className="mt-3 line-clamp-2 min-h-[36px] text-xs leading-[18px] text-secondary">{app.description}</p>
       <div className="mt-4 flex items-center justify-between gap-2 border-t border-border pt-3">
         <Button size="sm" variant="ghost" onClick={onDetails}>Details</Button>
         {app.isActive ? (
           canManage ? (
             <Tooltip content="Click to deactivate">
               <button type="button" disabled={busy} onClick={onDeactivate} aria-label={`${app.name} is activated. Click to deactivate`}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-semibold text-success transition-colors hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-wait disabled:opacity-60">
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-success transition-colors hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-wait disabled:opacity-60">
                 <Check className="h-3.5 w-3.5" aria-hidden />Activated
               </button>
             </Tooltip>
           ) : (
             <DisabledReason reason={NO_PERMISSION}>
-              <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] font-semibold text-success">
+              <span className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-success">
                 <Check className="h-3.5 w-3.5" aria-hidden />Activated
               </span>
             </DisabledReason>
@@ -91,15 +91,15 @@ function DetailsDialog({ app, onClose, onLog, onSettings, onActivate, onDeactiva
             <DialogBody className="flex flex-col gap-4">
               <div className="flex items-start gap-3">
                 <AppIcon def={app.def} size="lg" />
-                <p className="text-[13px] text-body">{app.description}</p>
+                <p className="text-sm text-body">{app.description}</p>
               </div>
               <section>
-                <h4 className="text-[11px] font-bold uppercase tracking-[0.06em] text-secondary">What it unlocks</h4>
+                <h4 className="text-2xs font-bold text-secondary">What it unlocks</h4>
                 <ul className="mt-1.5 flex flex-col gap-1">
-                  {(app.def?.unlocks ?? []).map((u) => <li key={u} className="flex items-start gap-2 text-[13px] text-body"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden />{u}</li>)}
+                  {(app.def?.unlocks ?? []).map((u) => <li key={u} className="flex items-start gap-2 text-sm text-body"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden />{u}</li>)}
                 </ul>
               </section>
-              <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[12.5px] text-secondary">
+              <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-secondary">
                 {app.isActive ? <>Activated {app.activatedAt ? fmt.gridDateTime(app.activatedAt) : ""}{app.activatedByName ? ` by ${app.activatedByName}` : ""}.</> : "Not activated yet."}
               </p>
             </DialogBody>
@@ -171,14 +171,14 @@ export function AppsPage() {
       <div className="mx-6 mt-2 overflow-hidden rounded-2xl border border-border bg-[radial-gradient(120%_140%_at_0%_0%,#EFE7FB_0%,#E2E5FB_45%,#F5F7FA_100%)] px-6 py-6">
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div className="max-w-xl">
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#621DB8]">App directory</p>
-            <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.01em] text-foreground">Discover apps for KitStaks</h2>
-            <p className="mt-1 text-[13px] text-secondary">{q.isLoading ? "Loading the app catalog…" : q.isError ? "The app catalog could not be loaded." : counts.all === 0 ? "No apps are installed on this account yet." : <>{counts.active} of {counts.all} apps active. Activate one to unlock it for every user with access.</>}</p>
+            <p className="text-2xs font-bold text-[var(--label-purple-text)]">App directory</p>
+            <h2 className="mt-1 text-xl font-semibold tracking-[-0.01em] text-foreground">Discover apps for KitStaks</h2>
+            <p className="mt-1 text-sm text-secondary">{q.isLoading ? "Loading the app catalog…" : q.isError ? "The app catalog could not be loaded." : counts.all === 0 ? "No apps are installed on this account yet." : <>{counts.active} of {counts.all} apps active. Activate one to unlock it for every user with access.</>}</p>
             <label className="relative mt-4 flex max-w-md items-center">
               <Search className="pointer-events-none absolute left-3 h-4 w-4 text-faint" aria-hidden />
               <span className="sr-only">Search apps</span>
               <input value={search} onChange={(e) => setSearch(e.target.value)} onBlur={() => setParam("q", search.trim() || null)} onKeyDown={(e) => { if (e.key === "Enter") setParam("q", search.trim() || null); }}
-                placeholder="Search by app" className="h-10 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-[13px] shadow-xs placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />
+                placeholder="Search by app" className="h-10 w-full rounded-lg border border-border bg-surface pl-9 pr-3 text-sm shadow-xs placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />
             </label>
           </div>
           <div className="hidden grid-cols-3 gap-2 md:grid" aria-hidden>
@@ -189,8 +189,8 @@ export function AppsPage() {
       <div role="tablist" aria-label="App lists" className="mx-6 mt-4 flex gap-5 border-b border-border">
         {APP_TABS.map((t) => (
           <button key={t} role="tab" type="button" aria-selected={tab === t} onClick={() => setParam("tab", t === "popular" ? null : t)}
-            className={cn("-mb-px border-b-2 px-0.5 pb-2 text-[12px] font-semibold uppercase tracking-[0.06em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40", tab === t ? "border-primary text-primary" : "border-transparent text-secondary hover:text-body")}>
-            {TAB_LABELS[t]} <span className="ml-1 rounded-full bg-neutral-soft px-1.5 text-[10px] text-neutral">{counts[t]}</span>
+            className={cn("-mb-px border-b-2 px-0.5 pb-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40", tab === t ? "border-primary text-primary" : "border-transparent text-secondary hover:text-body")}>
+            {TAB_LABELS[t]} <span className="ml-1 rounded-full bg-neutral-soft px-1.5 text-2xs text-neutral">{counts[t]}</span>
           </button>
         ))}
       </div>
@@ -212,7 +212,7 @@ export function AppsPage() {
             ))}
           </div>
         )}
-        {!perms.update && !perms.loading ? <p className="mt-4 text-[12px] text-faint">Ask an administrator with Company Settings access to activate apps.</p> : null}
+        {!perms.update && !perms.loading ? <p className="mt-4 text-xs text-faint">Ask an administrator with Company Settings access to activate apps.</p> : null}
       </div>
       <DetailsDialog app={byKey(details)} canManage={perms.update} busy={action.pending}
         onActivate={() => { const a = byKey(details); setDetails(null); if (a) void activate(a); }}

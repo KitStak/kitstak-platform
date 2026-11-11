@@ -76,7 +76,7 @@ function OptionRow({ row, id, active, selected, onPick, style }: { readonly row:
         if (!disabled) onPick();
       }}
       className={cn(
-        "flex min-h-8 cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-body",
+        "flex min-h-8 cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm text-body",
         active && "bg-surface-sunken text-foreground",
         disabled && "cursor-not-allowed text-faint"
       )}
@@ -92,7 +92,7 @@ function OptionRow({ row, id, active, selected, onPick, style }: { readonly row:
         <>
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate">{row.option.label}</span>
-            {row.option.description ? <span className="truncate text-[11px] text-faint">{row.option.description}</span> : null}
+            {row.option.description ? <span className="truncate text-2xs text-faint">{row.option.description}</span> : null}
           </span>
           {selected ? <Check className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden /> : null}
         </>
@@ -214,7 +214,7 @@ export function Combobox(props: ComboboxProps) {
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             {props.multiple
               ? values.map((v) => (
-                  <span key={v} className="inline-flex max-w-full items-center gap-1 rounded bg-primary-soft py-0.5 pl-1.5 pr-0.5 text-[12px] font-medium text-primary">
+                  <span key={v} className="inline-flex max-w-full items-center gap-1 rounded bg-primary-soft py-0.5 pl-1.5 pr-0.5 text-xs font-medium text-primary">
                     <span className="truncate">{lookup(v).label}</span>
                     <button type="button" aria-label={`Remove ${lookup(v).label}`} disabled={disabled} onClick={(e) => { e.stopPropagation(); remove(v); }} className="rounded p-px hover:bg-primary/15">
                       <X className="h-3 w-3" aria-hidden />
@@ -269,17 +269,17 @@ export function Combobox(props: ComboboxProps) {
         >
           <div id={listId} role="listbox" aria-multiselectable={props.multiple || undefined}>
             {source.hint ? (
-              <p className="px-2 py-2 text-[12px] text-secondary">{source.hint}</p>
+              <p className="px-2 py-2 text-xs text-secondary">{source.hint}</p>
             ) : source.error ? (
-              <p role="alert" className="px-2 py-2 text-[12px] text-danger">{source.error}</p>
+              <p role="alert" className="px-2 py-2 text-xs text-danger">{source.error}</p>
             ) : rows.length === 0 ? (
               source.loading || props.loading ? (
-                <p role="status" className="flex items-center gap-2 px-2 py-2 text-[12px] text-faint">
+                <p role="status" className="flex items-center gap-2 px-2 py-2 text-xs text-faint">
                   <Spinner className="h-3.5 w-3.5" label="Loading" />
                   {props.loading || trimmed === "" ? "Loading options…" : "Searching…"}
                 </p>
               ) : (
-                <p className="px-2 py-2 text-[12px] text-faint">{emptyText}</p>
+                <p className="px-2 py-2 text-xs text-faint">{emptyText}</p>
               )
             ) : rows.length > VIRTUALIZE_ABOVE ? (
               <VirtualList rows={rows} render={renderRow} />

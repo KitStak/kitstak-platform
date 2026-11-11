@@ -85,12 +85,12 @@ function InfoPopover({ row, state }: { readonly row: ListingRow; readonly state:
         <div className="flex gap-3 p-3">
           <ProductThumb url={image} size={48} label={name ?? sku ?? ""} />
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-faint">{linked ? "Linked product" : "Suggested product"}</p>
-            <p className="truncate font-mono text-[13px] font-semibold text-foreground">{sku}</p>
-            <p className="truncate text-[12px] text-secondary" title={name ?? undefined}>{name}</p>
+            <p className="text-2xs font-semibold text-faint">{linked ? "Linked product" : "Suggested product"}</p>
+            <p className="truncate font-mono text-sm font-semibold text-foreground">{sku}</p>
+            <p className="truncate text-xs text-secondary" title={name ?? undefined}>{name}</p>
           </div>
         </div>
-        <dl className="grid grid-cols-[96px_1fr] gap-x-2 gap-y-1 border-t border-border px-3 py-2.5 text-[12px]">
+        <dl className="grid grid-cols-[96px_1fr] gap-x-2 gap-y-1 border-t border-border px-3 py-2.5 text-xs">
           <dt className="text-faint">Client</dt><dd className="truncate text-body">{row.clientName}</dd>
           <dt className="text-faint">Seller SKU</dt><dd className="truncate font-mono text-body">{row.sellerSku}</dd>
           {linked ? (<><dt className="text-faint">Status</dt><dd className="text-body">{row.productStatus ?? "—"}</dd></>) : null}
@@ -98,10 +98,10 @@ function InfoPopover({ row, state }: { readonly row: ListingRow; readonly state:
           <dt className="text-faint">Description</dt><dd className="line-clamp-3 text-body">{description || "—"}</dd>
         </dl>
         {!linked ? (
-          <p className="border-t border-border px-3 py-2 text-[12px] text-secondary">Suggested because the seller SKU matches this product&apos;s SKU.</p>
+          <p className="border-t border-border px-3 py-2 text-xs text-secondary">Suggested because the seller SKU matches this product&apos;s SKU.</p>
         ) : null}
         <div className="border-t border-border px-3 py-2">
-          <Link href={`/products/${id}`} className="inline-flex items-center gap-1 text-[12px] font-semibold text-primary hover:underline">
+          <Link href={`/products/${id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
             Open product<ExternalLink className="h-3 w-3" aria-hidden />
           </Link>
         </div>
@@ -132,8 +132,8 @@ export function ListingProductCell({ row, actions: explicit }: { readonly row: L
           <Link2 className="h-3 w-3" />
         </span>
       ) : <ProductThumb url={image} size={24} label={name ?? sku ?? ""} />}
-      <span className={cn("shrink-0 rounded-full px-2 py-px text-[10px] font-semibold leading-4", pill.className)}>{pill.label}</span>
-      <span className="min-w-0 flex-1 truncate text-[12px]">
+      <span className={cn("shrink-0 rounded-full px-2 py-px text-2xs font-semibold leading-4", pill.className)}>{pill.label}</span>
+      <span className="min-w-0 flex-1 truncate text-xs">
         {state === "none" ? (
           <span className="text-secondary" title="No match. Search or create a product to link">Search or create a product to link</span>
         ) : state === "linked" && row.productId ? (

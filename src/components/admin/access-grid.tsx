@@ -66,7 +66,7 @@ export function AccessGrid({ items, value, onChange, noun, columnLabel, disabled
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={`Search by ${noun}`}
-            className="h-8 w-full rounded-md border border-border bg-surface pl-7 pr-2 text-[13px] text-foreground placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="h-8 w-full rounded-md border border-border bg-surface pl-7 pr-2 text-sm text-foreground placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           />
         </label>
         {!toggles && visible.length > 0 ? (
@@ -77,8 +77,8 @@ export function AccessGrid({ items, value, onChange, noun, columnLabel, disabled
         ) : null}
       </div>
       <div className={cn("overflow-auto", items.length > 10 && "max-h-[420px] [scrollbar-gutter:stable]")}>
-        <table className="w-full text-[13px]">
-          <thead className="sticky top-0 z-[1] bg-surface-sunken text-left text-[10px] font-semibold uppercase tracking-wide text-faint">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 z-[1] bg-surface-sunken text-left text-2xs font-semibold text-faint">
             <tr>
               {!toggles ? (
                 <th className="w-10 px-3 py-2">
@@ -119,7 +119,7 @@ export function AccessGrid({ items, value, onChange, noun, columnLabel, disabled
                         <span className="font-medium text-foreground">{item.label}</span>
                         {item.badge}
                       </span>
-                      {item.description ? <span className="block text-[11px] text-faint">{item.description}</span> : null}
+                      {item.description ? <span className="block text-2xs text-faint">{item.description}</span> : null}
                     </td>
                     <td className="px-3 py-1.5">
                       {toggles ? (
@@ -130,7 +130,7 @@ export function AccessGrid({ items, value, onChange, noun, columnLabel, disabled
                           disabled={disabled}
                           onClick={() => toggleOne(item.id)}
                           className={cn(
-                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed",
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed",
                             on ? "bg-success-soft text-success hover:bg-success-soft/70" : "bg-neutral-soft text-neutral hover:bg-neutral-soft/70",
                           )}
                           aria-pressed={on}
@@ -148,7 +148,7 @@ export function AccessGrid({ items, value, onChange, noun, columnLabel, disabled
           </tbody>
         </table>
       </div>
-      <div className="flex items-center justify-between border-t border-border px-3 py-1.5 text-[11.5px] text-secondary">
+      <div className="flex items-center justify-between border-t border-border px-3 py-1.5 text-2xs text-secondary">
         <span>Total: {items.length}{q ? ` · Showing: ${visible.length}` : ""}</span>
         <span className="font-medium text-foreground">Assigned: {value.length}</span>
       </div>

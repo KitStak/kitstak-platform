@@ -43,13 +43,13 @@ export function JobTimeline({ jobId }: { readonly jobId: string }) {
   if (query.isPending) return <SkeletonText lines={5} />;
   if (query.error) {
     return (
-      <p className="text-[12px] text-danger" role="alert">
+      <p className="text-xs text-danger" role="alert">
         The timeline could not be loaded.{" "}
         <button type="button" className="font-semibold underline" onClick={() => void query.refetch()}>Retry</button>
       </p>
     );
   }
-  if (items.length === 0) return <p className="text-[12px] text-faint">No activity recorded for this job yet.</p>;
+  if (items.length === 0) return <p className="text-xs text-faint">No activity recorded for this job yet.</p>;
 
   return (
     <div className="flex flex-col gap-2">
@@ -66,8 +66,8 @@ export function JobTimeline({ jobId }: { readonly jobId: string }) {
                 <span className="sr-only">{meta.label}</span>
               </span>
               <div className="min-w-0 pt-0.5">
-                <p className="break-words text-[13px] text-body">{changeLogMessage(item)}</p>
-                <p className="text-[11px] text-faint">
+                <p className="break-words text-sm text-body">{changeLogMessage(item)}</p>
+                <p className="text-2xs text-faint">
                   <time dateTime={item.at}>{fmt.gridDateTime(item.at)}</time> · <span title={detail}>{item.source}</span>
                 </p>
               </div>

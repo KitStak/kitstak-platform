@@ -35,7 +35,7 @@ function Field({ f, secretHint }: { readonly f: AppSettingField; readonly secret
   if (f.type === "textarea") {
     return (
       <FormField<FieldValues> {...common}>
-        {(c) => <Textarea id={c.id} name={c.name} ref={c.ref as React.Ref<HTMLTextAreaElement>} rows={6} value={(c.value as string | null) ?? ""} onChange={(e) => c.onChange(e.target.value)} onBlur={c.onBlur} invalid={c.invalid} aria-invalid={c["aria-invalid"]} aria-describedby={c["aria-describedby"]} className="font-mono text-[12px]" placeholder="-----BEGIN CERTIFICATE-----" />}
+        {(c) => <Textarea id={c.id} name={c.name} ref={c.ref as React.Ref<HTMLTextAreaElement>} rows={6} value={(c.value as string | null) ?? ""} onChange={(e) => c.onChange(e.target.value)} onBlur={c.onBlur} invalid={c.invalid} aria-invalid={c["aria-invalid"]} aria-describedby={c["aria-describedby"]} className="font-mono text-xs" placeholder="-----BEGIN CERTIFICATE-----" />}
       </FormField>
     );
   }
@@ -62,9 +62,9 @@ function VisibleFields({ fields, control, hints }: { readonly fields: readonly A
 
 function CopyRow({ label, value }: { readonly label: string; readonly value: string }) {
   return (
-    <div className="flex items-center gap-2 text-[12px]">
+    <div className="flex items-center gap-2 text-xs">
       <span className="w-40 shrink-0 text-secondary">{label}</span>
-      <code className="min-w-0 flex-1 truncate rounded bg-surface px-1.5 py-0.5 font-mono text-[11.5px] text-body" title={value}>{value}</code>
+      <code className="min-w-0 flex-1 truncate rounded bg-surface px-1.5 py-0.5 font-mono text-2xs text-body" title={value}>{value}</code>
       <button type="button" aria-label={`Copy ${label}`} className="text-secondary hover:text-primary" onClick={() => { void navigator.clipboard?.writeText(value); toast.success("Copied", label); }}><Copy className="h-3.5 w-3.5" aria-hidden /></button>
     </div>
   );
@@ -92,28 +92,28 @@ function SsoServicePanel({ control }: { readonly control: ReturnType<typeof useZ
   };
   return (
     <section className="flex flex-col gap-2 rounded-lg border border-border bg-surface-sunken px-3 py-3" aria-label="Service provider details">
-      <p className="text-[12px] font-semibold uppercase tracking-wide text-secondary">In your identity provider</p>
+      <p className="text-xs font-semibold text-secondary">In your identity provider</p>
       {protocol === "SAML 2.0" ? (
         <>
           <CopyRow label="SP entity ID / metadata" value={`${origin}/api/auth/sso/metadata`} />
           <CopyRow label="ACS URL" value={`${origin}/api/auth/sso/acs`} />
-          <p className="text-[11.5px] text-secondary">KitStak validates the IdP certificate and publishes SP metadata. The sign-in button uses OpenID Connect: switch Protocol to OpenID Connect to turn on &quot;Sign in with SSO&quot;.</p>
+          <p className="text-2xs text-secondary">KitStak validates the IdP certificate and publishes SP metadata. The sign-in button uses OpenID Connect: switch Protocol to OpenID Connect to turn on &quot;Sign in with SSO&quot;.</p>
         </>
       ) : (
         <>
           <CopyRow label="Sign-in redirect URI" value={`${origin}/api/auth/sso/callback`} />
           <CopyRow label="Initiate login URI" value={`${origin}/api/auth/sso/start`} />
-          <p className="text-[11.5px] text-secondary">Create a Web app (authorization code, PKCE) with scopes openid, email, profile. Users sign in only when their email matches an active KitStak user.</p>
+          <p className="text-2xs text-secondary">Create a Web app (authorization code, PKCE) with scopes openid, email, profile. Users sign in only when their email matches an active KitStak user.</p>
         </>
       )}
       <div className="flex items-center gap-2 pt-1">
         <Button size="sm" onClick={() => void run()} disabled={busy}>{busy ? "Testing…" : "Test saved settings"}</Button>
-        {test ? <span className={`text-[12px] font-semibold ${test.ok ? "text-success" : "text-danger"}`}>{test.ok ? "Connection OK" : "Needs attention"}</span> : null}
+        {test ? <span className={`text-xs font-semibold ${test.ok ? "text-success" : "text-danger"}`}>{test.ok ? "Connection OK" : "Needs attention"}</span> : null}
       </div>
       {test ? (
         <ul className="flex flex-col gap-1" aria-label="Connection test results">
           {test.checks.map((c) => (
-            <li key={c.label} className="flex items-start gap-1.5 text-[12px]">
+            <li key={c.label} className="flex items-start gap-1.5 text-xs">
               {c.ok ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" aria-hidden /> : <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" aria-hidden />}
               <span className="text-body">{c.label}</span><span className="min-w-0 truncate text-secondary" title={c.detail}>· {c.detail}</span>
             </li>
@@ -152,7 +152,7 @@ function SettingsForm({ app, onDone, onCancel, onDirty }: { readonly app: AppRow
       <DirtyReport control={form.control} onDirty={onDirty} />
       <div className="flex items-center gap-3 rounded-lg bg-surface-sunken px-3 py-3">
         <AppIcon def={def} />
-        <p className="text-[12.5px] text-secondary">{def?.unlocks.join(" · ")}</p>
+        <p className="text-xs text-secondary">{def?.unlocks.join(" · ")}</p>
       </div>
       <VisibleFields fields={def?.settings ?? []} control={form.control} hints={app.secretHints ?? {}} />
       {app.key === "sso" ? <SsoServicePanel control={form.control} /> : null}
@@ -166,7 +166,7 @@ export function AppSettingsDrawer({ app, onClose }: { readonly app: AppRow | nul
   const close = () => { setDirty(false); onClose(); };
   return (
     <Drawer open={app !== null} onOpenChange={(o) => !o && close()} dirty={dirty} width={35} bodyClassName="pb-0" title={`${app?.name ?? "App"} settings`} description={app?.isActive ? "Active for every user with access." : "Settings apply once the app is activated."}>
-      {app && app.def && app.def.settings.length > 0 ? <SettingsForm key={app.key} app={app} onDone={close} onCancel={close} onDirty={setDirty} /> : <p className="text-[13px] text-faint">This app has no settings.</p>}
+      {app && app.def && app.def.settings.length > 0 ? <SettingsForm key={app.key} app={app} onDone={close} onCancel={close} onDirty={setDirty} /> : <p className="text-sm text-faint">This app has no settings.</p>}
     </Drawer>
   );
 }

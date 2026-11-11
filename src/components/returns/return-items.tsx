@@ -50,7 +50,7 @@ export function ReturnItemList({ items, errors, highlightKey, damageReasons, ret
               <ItemThumb url={i.imageUrl} size={44} />
               <div className="min-w-[160px] flex-1">
                 <p className="flex items-center gap-1.5 font-semibold text-foreground">{i.sku}{done ? <CheckCircle2 className="h-4 w-4 text-success" aria-label="All expected units scanned" /> : null}</p>
-                <p className="truncate text-[12px] text-secondary">{i.name}</p>
+                <p className="truncate text-xs text-secondary">{i.name}</p>
               </div>
               <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-1">
@@ -59,32 +59,32 @@ export function ReturnItemList({ items, errors, highlightKey, damageReasons, ret
                   <Button size="sm" variant="secondary" aria-label={`One more ${i.sku}`} disabled={i.remaining !== null && i.quantity >= i.remaining} onClick={() => onChange(i.key, { quantity: i.quantity + 1 })}><Plus className="h-3.5 w-3.5" aria-hidden /></Button>
                   {onRemove ? <Button size="sm" variant="ghost" aria-label={`Remove ${i.sku}`} onClick={() => onRemove(i.key)}><Trash2 className="h-3.5 w-3.5" aria-hidden /></Button> : null}
                 </div>
-                <p className={cn("text-[11px] tabular-nums", e?.quantity ? "font-medium text-danger" : "text-secondary")}>{e?.quantity ?? (i.remaining !== null ? `${i.quantity} of ${i.remaining} expected` : `${i.quantity} scanned`)}</p>
+                <p className={cn("text-2xs tabular-nums", e?.quantity ? "font-medium text-danger" : "text-secondary")}>{e?.quantity ?? (i.remaining !== null ? `${i.quantity} of ${i.remaining} expected` : `${i.quantity} scanned`)}</p>
               </div>
             </div>
             <div className="mt-3 grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]">
               <div className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">Condition</span>
+                <span className="text-2xs font-semibold text-secondary">Condition</span>
                 <SegmentedControl size="sm" ariaLabel={`Condition of ${i.sku}`} value={i.disposition} onChange={(d) => onChange(i.key, { disposition: d })} options={RETURN_DISPOSITIONS.map((d) => ({ value: d, label: d }))} />
-                <span className="text-[11px] text-secondary">{dispositionHint(i.disposition, targetCode, stationCode)}</span>
+                <span className="text-2xs text-secondary">{dispositionHint(i.disposition, targetCode, stationCode)}</span>
               </div>
               {i.disposition === "Damaged" ? (
                 <div className="flex flex-col gap-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">Damage reason <span className="text-danger">*</span></span>
+                  <span className="text-2xs font-semibold text-secondary">Damage reason <span className="text-danger">*</span></span>
                   <Select aria-label={`Damage reason for ${i.sku}`} value={i.damageReasonId} invalid={Boolean(e?.damageReasonId)} options={damageReasons} onChange={(v) => onChange(i.key, { damageReasonId: v })} placeholder="Choose a reason" />
-                  {e?.damageReasonId ? <span className="text-[11px] text-danger">{e.damageReasonId}</span> : null}
+                  {e?.damageReasonId ? <span className="text-2xs text-danger">{e.damageReasonId}</span> : null}
                 </div>
               ) : <div className="hidden lg:block" />}
               <div className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">Actual return reason</span>
+                <span className="text-2xs font-semibold text-secondary">Actual return reason</span>
                 <Select aria-label={`Actual return reason for ${i.sku}`} value={i.actualReturnReasonId} clearable options={returnReasons} onChange={(v) => onChange(i.key, { actualReturnReasonId: v })} placeholder="Optional" />
               </div>
             </div>
-            {e?.disposition ? <p role="alert" className="mt-2 text-[12px] font-medium text-danger">{e.disposition}</p> : null}
+            {e?.disposition ? <p role="alert" className="mt-2 text-xs font-medium text-danger">{e.disposition}</p> : null}
             <TrackingCapture item={i} errors={e} rules={rules} onChange={(patch) => onChange(i.key, patch)} />
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <div className="min-w-[200px] flex-1"><TextField aria-label={`Note for ${i.sku}`} className="h-9 w-full" value={i.note} maxLength={500} placeholder="Note (optional)" onChange={(ev) => onChange(i.key, { note: ev.target.value })} /></div>
-              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 text-[12px] font-medium text-body hover:bg-surface-sunken focus-within:ring-2 focus-within:ring-primary/40">
+              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-body hover:bg-surface-sunken focus-within:ring-2 focus-within:ring-primary/40">
                 <Camera className="h-3.5 w-3.5" aria-hidden />
                 {photo ? <span className="max-w-[140px] truncate">{photo.name}</span> : "Add photo"}
                 <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(ev) => onPhoto(i.key, ev.target.files?.[0] ?? null)} />
@@ -104,7 +104,7 @@ export function useReturnRules(): ReturnRules | null {
   return q.data?.data ?? null;
 }
 
-const LABEL = "text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary";
+const LABEL = "text-2xs font-semibold text-secondary";
 
 /**
  * Lot / expiry / production date / serial capture for a tracked SKU. Required marks follow the
@@ -128,7 +128,7 @@ function TrackingCapture({ item: i, errors: e, rules, onChange }: {
     <div className="flex min-w-[150px] flex-1 flex-col gap-1">
       <span className={LABEL}>{label}{required ? <span className="text-danger"> *</span> : null}</span>
       {input}
-      {error ? <span className="text-[11px] font-medium text-danger">{error}</span> : hint ? <span className="text-[11px] text-secondary">{hint}</span> : null}
+      {error ? <span className="text-2xs font-medium text-danger">{error}</span> : hint ? <span className="text-2xs text-secondary">{hint}</span> : null}
     </div>
   );
   const shippedHint = (values: readonly string[] | undefined) => (values?.length ? `Shipped: ${values.slice(0, 3).join(", ")}${values.length > 3 ? ` +${values.length - 3}` : ""}` : undefined);
@@ -156,15 +156,15 @@ function TrackingCapture({ item: i, errors: e, rules, onChange }: {
           {serials.length ? (
             <ul className="flex flex-wrap gap-1" aria-label={`Serials of ${i.sku}`}>
               {serials.map((s) => (
-                <li key={s} className="inline-flex items-center gap-1 rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[11px]">
+                <li key={s} className="inline-flex items-center gap-1 rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-2xs">
                   {s}
                   <button type="button" className="rounded text-secondary hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" aria-label={`Remove serial ${s}`} onClick={() => onChange({ serials: serials.filter((x) => x !== s) })}><X className="h-3 w-3" aria-hidden /></button>
                 </li>
               ))}
             </ul>
           ) : null}
-          {e?.serials ? <span className="text-[11px] font-medium text-danger">{e.serials}</span>
-            : <span className="text-[11px] text-secondary">{serials.length ? "Each serial counts one unit." : "Optional: leave empty to bring back the serials that shipped on the order line."}</span>}
+          {e?.serials ? <span className="text-2xs font-medium text-danger">{e.serials}</span>
+            : <span className="text-2xs text-secondary">{serials.length ? "Each serial counts one unit." : "Optional: leave empty to bring back the serials that shipped on the order line."}</span>}
         </div>
       ) : null}
     </div>

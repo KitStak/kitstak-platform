@@ -43,8 +43,8 @@ function Preview({ values }: { readonly values: PreferencesFormValues }) {
   ];
   return (
     <div aria-live="polite" className="rounded-lg border border-border bg-surface-sunken px-4 py-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-faint">Live preview</p>
-      <dl className="mt-1.5 grid grid-cols-[110px_1fr] gap-y-1 text-[13px]">
+      <p className="text-2xs font-bold text-faint">Live preview</p>
+      <dl className="mt-1.5 grid grid-cols-[110px_1fr] gap-y-1 text-sm">
         {rows.map(([k, v]) => (
           <React.Fragment key={k}><dt className="text-secondary">{k}</dt><dd className="tabular-nums text-foreground">{v}</dd></React.Fragment>
         ))}
@@ -70,11 +70,11 @@ export function AccountPreferencesForm({ initial, timezone, warehouse }: { reado
   return (
     <Form form={form} onSubmit={(v) => mutation.mutateAsync(v)} className="flex flex-col gap-4" guardUnsaved>
       <div className="flex flex-col gap-1">
-        <span className="text-[12px] font-medium text-body">Time zone</span>
-        <p className="flex items-center gap-2 rounded-md border border-border bg-surface-sunken px-3 py-2 text-[13px] text-foreground">
+        <span className="text-xs font-medium text-body">Time zone</span>
+        <p className="flex items-center gap-2 rounded-md border border-border bg-surface-sunken px-3 py-2 text-sm text-foreground">
           <Globe2 className="h-3.5 w-3.5 text-faint" aria-hidden />{timezone}
         </p>
-        <span className="text-[11.5px] text-faint">Set by {warehouse ?? "your warehouse"}. Ask an administrator to change it.</span>
+        <span className="text-2xs text-faint">Set by {warehouse ?? "your warehouse"}. Ask an administrator to change it.</span>
       </div>
       <FormField<PreferencesFormValues> name="dateFormat" label="Date format" required>
         {(c) => <Select id={c.id} value={c.value ?? null} onChange={(v) => c.onChange(v ?? initial.dateFormat)} onBlur={c.onBlur} invalid={c.invalid} aria-describedby={c["aria-describedby"]} options={optionsFor(c.value ?? initial.dateFormat)} />}

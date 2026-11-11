@@ -30,11 +30,11 @@ export function PasswordChangeGate({ reason, children }: { readonly reason: "res
     <div className="flex flex-1 items-center justify-center p-6">
       <div role="alert" className="flex max-w-md flex-col items-center gap-3 rounded-lg border border-border bg-surface p-6 text-center shadow-sm">
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-warning-soft text-warning"><KeyRound className="h-5 w-5" aria-hidden /></span>
-        <h1 className="text-[16px] font-semibold text-foreground">Choose a new password to continue</h1>
-        <p className="text-[13px] text-secondary">
+        <h1 className="text-md font-semibold text-foreground">Choose a new password to continue</h1>
+        <p className="text-sm text-secondary">
           {reason === "reset" ? "An administrator reset your password." : "Your password has passed your company's maximum age."} Opening Change Password…
         </p>
-        <Link href={PASSWORD_CHANGE_PATH} className="text-[13px] font-semibold text-primary hover:underline">Go to Change Password</Link>
+        <Link href={PASSWORD_CHANGE_PATH} className="text-sm font-semibold text-primary hover:underline">Go to Change Password</Link>
       </div>
     </div>
   );

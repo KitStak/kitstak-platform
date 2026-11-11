@@ -93,7 +93,7 @@ export function ShowcaseNav() {
                   if (event.detail > 0) event.currentTarget.blur();
                 }}
                 className={cn(
-                  "relative block rounded-md px-3 py-1.5 text-[13px] transition-colors hover:bg-neutral-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                  "relative block rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-neutral-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
                   // Active = 2px indigo rail + indigo text; hover only ever changes the background.
                   "before:absolute before:inset-y-1 before:left-0 before:w-[2px] before:rounded-full before:bg-transparent before:transition-colors",
                   "aria-[current=location]:font-semibold aria-[current=location]:text-primary aria-[current=location]:before:bg-primary",

@@ -63,13 +63,13 @@ export function RadioCards<V extends string>({ options, value, onChange, columns
               </span>
             )}
             <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
+              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 {option.title}
                 {option.badge ? (
-                  <span className={cn("rounded px-1.5 py-px text-[10px] font-bold tracking-wide", option.badge === "NEW" ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>{option.badge}</span>
+                  <span className={cn("rounded px-1.5 py-px text-2xs font-bold tracking-wide", option.badge === "NEW" ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>{option.badge}</span>
                 ) : null}
               </span>
-              {option.description ? <span className="mt-0.5 block text-[12px] leading-4 text-secondary">{option.description}</span> : null}
+              {option.description ? <span className="mt-0.5 block text-xs leading-4 text-secondary">{option.description}</span> : null}
             </span>
             {chevron ? <ChevronRight className="h-4 w-4 shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-secondary" aria-hidden /> : null}
           </RadioGroup.Item>

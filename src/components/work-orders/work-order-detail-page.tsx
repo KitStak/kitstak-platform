@@ -173,7 +173,7 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
       {can.createKit ? (
         !rKit && picksPending ? (
           <Tooltip content={`Components not yet picked to the kitting area (${picks.done}/${picks.total} picked). The drawer asks you to confirm completing the pending picks before it builds.`}>
-            <Button variant="secondary" onClick={() => setKitOpen(true)}><Boxes className="h-3.5 w-3.5" aria-hidden />Create kit<span className="ml-1 rounded-full bg-warning-soft px-1.5 text-[10px] font-semibold tabular-nums text-warning">{picks.done}/{picks.total} picked</span></Button>
+            <Button variant="secondary" onClick={() => setKitOpen(true)}><Boxes className="h-3.5 w-3.5" aria-hidden />Create kit<span className="ml-1 rounded-full bg-warning-soft px-1.5 text-2xs font-semibold tabular-nums text-warning">{picks.done}/{picks.total} picked</span></Button>
           </Tooltip>
         ) : <DisabledReason reason={rKit}><Button variant={rKit ? "secondary" : "primary"} disabled={Boolean(rKit)} aria-disabled={Boolean(rKit)} onClick={() => setKitOpen(true)}><Boxes className="h-3.5 w-3.5" aria-hidden />Create kit</Button></DisabledReason>
       ) : null}
@@ -217,10 +217,10 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
       <header className="flex items-start gap-3 px-6 pt-2 pb-4 lg:pr-10">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex min-w-0 items-center gap-2">
-            <h1 className="truncate text-[22px] font-semibold tracking-tight text-foreground">{wo.code}</h1>
+            <h1 className="truncate text-xl font-semibold tracking-tight text-foreground">{wo.code}</h1>
             <WoStatusPill status={wo.status} />
           </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-secondary">{meta}</div>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-secondary">{meta}</div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div>
       </header>
@@ -228,12 +228,12 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
       <div className="grid grid-cols-1 gap-3 px-6 md:grid-cols-2 lg:pr-10 xl:grid-cols-4">
         <div className="flex flex-col justify-between gap-2 rounded-lg border border-border bg-surface p-4 shadow-xs">
           <div className="flex items-baseline justify-between">
-            <span className="text-[12px] font-semibold text-secondary">Kits built</span>
-            <span className="text-[12px] tabular-nums text-secondary">{pct}%</span>
+            <span className="text-xs font-semibold text-secondary">Kits built</span>
+            <span className="text-xs tabular-nums text-secondary">{pct}%</span>
           </div>
-          <p className="text-[22px] font-semibold tabular-nums text-foreground">{wo.processedQty}<span className="text-[14px] font-normal text-secondary"> / {wo.requestedQty}</span></p>
+          <p className="text-xl font-semibold tabular-nums text-foreground">{wo.processedQty}<span className="text-base font-normal text-secondary"> / {wo.requestedQty}</span></p>
           <ProgressBar value={wo.processedQty} max={Math.max(1, wo.requestedQty)} tone={pct >= 100 ? "success" : "primary"} label="Kits built" />
-          {data.disassembledQty > 0 ? <p className="text-[11px] text-secondary">{data.disassembledQty} disassembled since</p> : null}
+          {data.disassembledQty > 0 ? <p className="text-2xs text-secondary">{data.disassembledQty} disassembled since</p> : null}
         </div>
         <StatTile label={wo.status === "Cancelled" ? "Not built" : "Left to build"} value={(wo.status === "Cancelled" ? Math.max(0, wo.requestedQty - wo.processedQty) : terminal ? 0 : remaining).toLocaleString()}
           sublabel={terminalCopy ?? (coverage.locked.length && buildable < remaining ? `Usable stock covers ${buildable.toLocaleString()} kit${buildable === 1 ? "" : "s"} · rest locked by ${coverage.plans.join(", ")}` : `Usable stock covers ${Math.min(buildable, remaining).toLocaleString()} of ${remaining.toLocaleString()} kit${remaining === 1 ? "" : "s"}`)}
@@ -306,7 +306,7 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
         </div>
         <aside className="flex flex-col gap-4">
           <section className="rounded-lg border border-border bg-surface py-4 pl-4 pr-5 shadow-xs">
-            <h2 className="mb-3 text-[13px] font-semibold text-foreground">Details</h2>
+            <h2 className="mb-3 text-sm font-semibold text-foreground">Details</h2>
             <KvList columns={1} layout="inline" items={[
               { key: "op", label: "Operation", value: wo.operationType },
               { key: "out", label: "Output location", value: data.outputLocationCode ?? "Kitting area" },
@@ -321,10 +321,10 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
             ]} />
           </section>
           <section className="rounded-lg border border-border bg-surface p-4 shadow-xs">
-            <h2 className="mb-2 text-[13px] font-semibold text-foreground">Notes</h2>
-            <p className="whitespace-pre-wrap text-[12px] text-secondary">{wo.extraNote || "No extra note."}</p>
-            <h2 className="mb-2 mt-4 text-[13px] font-semibold text-foreground">Kitting instructions</h2>
-            <p className="whitespace-pre-wrap text-[12px] text-secondary">{wo.kittingInstructions || "No kitting instructions."}</p>
+            <h2 className="mb-2 text-sm font-semibold text-foreground">Notes</h2>
+            <p className="whitespace-pre-wrap text-xs text-secondary">{wo.extraNote || "No extra note."}</p>
+            <h2 className="mb-2 mt-4 text-sm font-semibold text-foreground">Kitting instructions</h2>
+            <p className="whitespace-pre-wrap text-xs text-secondary">{wo.kittingInstructions || "No kitting instructions."}</p>
           </section>
         </aside>
       </div>
@@ -350,11 +350,11 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
 }
 
 function SimpleTable({ head, rows, empty }: { readonly head: readonly string[]; readonly rows: readonly (readonly React.ReactNode[])[]; readonly empty: string }) {
-  if (rows.length === 0) return <p className="py-10 text-center text-[13px] text-secondary">{empty}</p>;
+  if (rows.length === 0) return <p className="py-10 text-center text-sm text-secondary">{empty}</p>;
   return (
     <div className="ks-scroll overflow-x-auto rounded-md border border-border">
-      <table className="w-full border-collapse text-[12px]">
-        <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+      <table className="w-full border-collapse text-xs">
+        <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
           <tr>{head.map((h) => <th key={h} scope="col" className="whitespace-nowrap px-3 py-2">{h}</th>)}</tr>
         </thead>
         <tbody>
@@ -369,12 +369,12 @@ function ComponentsTab({ data }: { readonly data: WorkOrderDetail }) {
   const { workOrder: wo, components } = data;
   const withPicking = wo.type === "Work Order with Picking";
   const terminal = wo.status === "Completed" || wo.status === "Cancelled";
-  if (components.length === 0) return <p className="py-10 text-center text-[13px] text-secondary">This work order has no components.</p>;
+  if (components.length === 0) return <p className="py-10 text-center text-sm text-secondary">This work order has no components.</p>;
   return (
     <div className="ks-scroll overflow-x-auto rounded-md border border-border">
-      <table className="w-full border-collapse text-[12px]">
+      <table className="w-full border-collapse text-xs">
         <caption className="sr-only">Component availability</caption>
-        <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+        <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
           <tr>
             {["Component", "Pack type", "Per kit", "Total", "Allocated", "Picked", "Consumed", "Usable now", "Status", "Source"].map((h) => <th key={h} scope="col" className={cn("whitespace-nowrap px-3 py-2", !["Component", "Pack type", "Status", "Source"].includes(h) && "text-right")}>{h}</th>)}
           </tr>
@@ -386,7 +386,7 @@ function ComponentsTab({ data }: { readonly data: WorkOrderDetail }) {
             const lockedQty = c.lockedQty ?? 0;
             return (
               <tr key={c.id} className="border-t border-border">
-                <td className="px-3 py-2"><LinkCell href={`/products/${c.componentProductId}`}>{c.sku}</LinkCell><span className="block text-[11px] text-secondary">{c.name}</span></td>
+                <td className="px-3 py-2"><LinkCell href={`/products/${c.componentProductId}`}>{c.sku}</LinkCell><span className="block text-2xs text-secondary">{c.name}</span></td>
                 <td className="px-3 py-2 text-secondary">{c.packType}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{c.componentQty}</td>
                 <td className="px-3 py-2 text-right font-semibold tabular-nums text-foreground">{c.totalQty}</td>
@@ -394,7 +394,7 @@ function ComponentsTab({ data }: { readonly data: WorkOrderDetail }) {
                 <td className="px-3 py-2 text-right tabular-nums">{withPicking ? c.pickedQty : "–"}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{c.consumedQty}</td>
                 <td className={cn("px-3 py-2 text-right tabular-nums", terminal ? "text-secondary" : ok ? "font-semibold text-foreground" : "font-semibold text-danger")}>
-                  {terminal ? "–" : <>{c.availableQty ?? c.freeQty}{lockedQty > 0 ? <span className="block text-[11px] font-normal text-warning" title={`Free stock in locations locked by ${(c.lockedBy ?? []).join(", ")}`}>+{lockedQty} locked</span> : null}</>}
+                  {terminal ? "–" : <>{c.availableQty ?? c.freeQty}{lockedQty > 0 ? <span className="block text-2xs font-normal text-warning" title={`Free stock in locations locked by ${(c.lockedBy ?? []).join(", ")}`}>+{lockedQty} locked</span> : null}</>}
                 </td>
                 <td className="px-3 py-2">
                   {wo.status === "Cancelled" ? <span className="text-secondary">Cancelled</span>
@@ -404,7 +404,7 @@ function ComponentsTab({ data }: { readonly data: WorkOrderDetail }) {
                           : cov.state === "locked" ? <span className="inline-flex items-center gap-1 font-semibold text-warning" title="Stock can't leave count-locked locations until the count is finished or cancelled"><Lock className="h-3.5 w-3.5" aria-hidden />Locked by {cov.lockedBy.join(", ")} · short {cov.shortQty}</span>
                             : <span className="inline-flex items-center gap-1 font-semibold text-danger"><AlertTriangle className="h-3.5 w-3.5" aria-hidden />Short {cov.shortQty}</span>}
                 </td>
-                <td className="px-3 py-2 text-secondary">{sourceLabel(c, withPicking)}{c.sourceLockedBy ? <span className="ml-1 inline-flex items-center gap-0.5 text-[11px] font-semibold text-warning"><Lock className="h-3 w-3" aria-hidden />{c.sourceLockedBy}</span> : null}</td>
+                <td className="px-3 py-2 text-secondary">{sourceLabel(c, withPicking)}{c.sourceLockedBy ? <span className="ml-1 inline-flex items-center gap-0.5 text-2xs font-semibold text-warning"><Lock className="h-3 w-3" aria-hidden />{c.sourceLockedBy}</span> : null}</td>
               </tr>
             );
           })}
@@ -423,7 +423,7 @@ function WoActivity({ data, onOpenLog }: { readonly data: WorkOrderDetail; reado
   const PAGE = 30;
   const [shown, setShown] = React.useState(PAGE);
   const items = data.timeline;
-  if (items.length === 0) return <p className="py-10 text-center text-[13px] text-secondary">No activity recorded for this work order yet.</p>;
+  if (items.length === 0) return <p className="py-10 text-center text-sm text-secondary">No activity recorded for this work order yet.</p>;
   const tone = (type: string) => (/delet|cancel/i.test(type) ? "bg-danger text-white" : /creat/i.test(type) ? "bg-success text-white" : /kit|disassembl|pick|alloc/i.test(type) ? "bg-primary text-white" : "bg-neutral-soft text-secondary");
   return (
     <div className="flex flex-col gap-2">
@@ -433,8 +433,8 @@ function WoActivity({ data, onOpenLog }: { readonly data: WorkOrderDetail; reado
           <li key={item.id} className="relative flex gap-3">
             <span className={cn("z-[1] flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-4 ring-surface", tone(item.type))}><History className="h-3 w-3" aria-hidden /></span>
             <div className="min-w-0 pt-0.5">
-              <p className="break-words text-[13px] text-body"><span className="font-semibold text-foreground">{item.type}</span>{item.message ? ` · ${item.message}` : ""}</p>
-              <p className="text-[11px] tabular-nums text-faint">{formatInZone(item.at, data.warehouseTimeZone)} · {item.source}</p>
+              <p className="break-words text-sm text-body"><span className="font-semibold text-foreground">{item.type}</span>{item.message ? ` · ${item.message}` : ""}</p>
+              <p className="text-2xs tabular-nums text-faint">{formatInZone(item.at, data.warehouseTimeZone)} · {item.source}</p>
             </div>
           </li>
         ))}
@@ -450,12 +450,12 @@ function WoActivity({ data, onOpenLog }: { readonly data: WorkOrderDetail; reado
 function JobTab({ data }: { readonly data: WorkOrderDetail }) {
   const { job, tasks, workOrder: wo } = data;
   if (!job && tasks.length === 0) {
-    return <p className="py-10 text-center text-[13px] text-secondary">{wo.type === "Work Order with Picking" ? "No picking job yet. Run Picking/job operations to allocate the components and create one." : "Work orders without picking build kits directly from the chosen sources, so they have no job."}</p>;
+    return <p className="py-10 text-center text-sm text-secondary">{wo.type === "Work Order with Picking" ? "No picking job yet. Run Picking/job operations to allocate the components and create one." : "Work orders without picking build kits directly from the chosen sources, so they have no job."}</p>;
   }
   return (
     <div className="flex flex-col gap-3">
       {job ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface-sunken/50 px-3 py-2 text-[12px]">
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface-sunken/50 px-3 py-2 text-xs">
           <Link href={`/jobs/${job.id}`} className="font-semibold text-primary hover:underline">{job.code}</Link>
           <StatusPill status={job.status} domain="job" size="sm" />
           <span className="text-secondary">{job.jobType}</span>

@@ -27,9 +27,9 @@ export function StatusScreen({ code, icon: Icon, tone = "neutral", title, descri
         <span className={cn("flex h-14 w-14 items-center justify-center rounded-2xl", TONE[tone])}>
           <Icon className="h-7 w-7" aria-hidden />
         </span>
-        {code ? <p className="mt-4 text-[12px] font-bold uppercase tracking-[0.18em] text-faint">Error {code}</p> : null}
-        <h1 className="mt-1 text-[24px] font-bold tracking-tight text-foreground">{title}</h1>
-        <div className="mt-2 text-[13px] leading-5 text-secondary">{description}</div>
+        {code ? <p className="mt-4 text-xs font-bold text-faint">Error {code}</p> : null}
+        <h1 className="mt-1 text-xl font-bold tracking-tight text-foreground">{title}</h1>
+        <div className="mt-2 text-sm leading-5 text-secondary">{description}</div>
         {actions ? <div className="mt-6 flex flex-wrap items-center justify-center gap-2">{actions}</div> : null}
       </div>
     </div>
@@ -38,7 +38,7 @@ export function StatusScreen({ code, icon: Icon, tone = "neutral", title, descri
 
 export function HomeLink({ label = "Go to Dashboard" }: { readonly label?: string }) {
   return (
-    <Link href="/dashboard" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40">
+    <Link href="/dashboard" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-white shadow-xs transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40">
       {label}
     </Link>
   );

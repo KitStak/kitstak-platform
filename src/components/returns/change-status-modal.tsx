@@ -76,7 +76,7 @@ export function ChangeStatusModal({ open, onOpenChange, selection, version, curr
         <DialogBody className="space-y-3">
           {transitions.isPending ? (
             <div className="space-y-2" aria-busy="true">
-              <p role="status" className="flex items-center gap-2 text-[12px] text-secondary"><Spinner className="h-3.5 w-3.5" label="Loading" />Checking which statuses are allowed for this selection…</p>
+              <p role="status" className="flex items-center gap-2 text-xs text-secondary"><Spinner className="h-3.5 w-3.5" label="Loading" />Checking which statuses are allowed for this selection…</p>
               {[0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : transitions.error ? (
@@ -108,9 +108,9 @@ export function ChangeStatusModal({ open, onOpenChange, selection, version, curr
                     <span className="flex items-center gap-2">
                       {statuses.length === 1 ? <><StatusPill status={statuses[0] ?? ""} domain="return" size="sm" /><ArrowRight className="h-3 w-3 text-faint" aria-hidden /></> : null}
                       <StatusPill status={o.status} domain="return" size="sm" />
-                      {o.ok && o.eligible !== undefined && o.eligible < count ? <span className="text-[11px] text-secondary">{o.eligible} of {count}</span> : null}
+                      {o.ok && o.eligible !== undefined && o.eligible < count ? <span className="text-2xs text-secondary">{o.eligible} of {count}</span> : null}
                     </span>
-                    <span className="mt-1 block text-[12px] text-secondary">{o.ok ? (o.reason ?? RETURN_STATUS_HELP[o.status]) : o.reason}</span>
+                    <span className="mt-1 block text-xs text-secondary">{o.ok ? (o.reason ?? RETURN_STATUS_HELP[o.status]) : o.reason}</span>
                   </span>
                 </button>
               ))}
@@ -118,10 +118,10 @@ export function ChangeStatusModal({ open, onOpenChange, selection, version, curr
             </>
           )}
           <label className="block">
-            <span className="mb-1 block text-[12px] font-medium text-body">Note <span className="font-normal text-secondary">(optional, added to the RMA)</span></span>
+            <span className="mb-1 block text-xs font-medium text-body">Note <span className="font-normal text-secondary">(optional, added to the RMA)</span></span>
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={2} placeholder="Why is the status changing?" />
           </label>
-          {error ? <p role="alert" className="text-[12px] text-danger">{error}</p> : null}
+          {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>

@@ -22,7 +22,7 @@ export const ALL_VALUE = "__all__";
  * truncated (it is short: "MLT1 · All"), so it keeps priority over the search pill.
  */
 const triggerClass =
-  "hidden h-8 w-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full text-[12px] font-medium text-fg-secondary outline-none transition-colors md:flex " +
+  "hidden h-8 w-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full text-xs font-medium text-fg-secondary outline-none transition-colors md:flex " +
   "hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-focus data-[state=open]:bg-pressed " +
   "xl:w-auto xl:justify-start xl:px-3";
 
@@ -116,8 +116,8 @@ export function ContextSwitcher() {
       </Tooltip>
       <PopoverContent align="end" className="w-[320px] space-y-3">
         <div>
-          <h2 className="text-[14px] font-semibold text-foreground">Working context</h2>
-          <p className="text-[12px] text-secondary">Lists and dashboards default to this warehouse and client.</p>
+          <h2 className="text-base font-semibold text-foreground">Working context</h2>
+          <p className="text-xs text-secondary">Lists and dashboards default to this warehouse and client.</p>
         </div>
         {loaded ? null : (
           <div className="space-y-2" aria-label="Loading context options">
@@ -128,11 +128,11 @@ export function ContextSwitcher() {
         {loaded ? (
         <>
         <label className="block space-y-1">
-          <span className="flex items-center gap-1 text-[12px] font-semibold text-body"><Warehouse className="h-3.5 w-3.5" aria-hidden /> Warehouse</span>
+          <span className="flex items-center gap-1 text-xs font-semibold text-body"><Warehouse className="h-3.5 w-3.5" aria-hidden /> Warehouse</span>
           <Select aria-label="Warehouse" value={draft.warehouseId ?? ALL_VALUE} options={toOptions(warehouses, "All warehouses")} onChange={(v) => setDraft((d) => ({ ...d, warehouseId: v && v !== ALL_VALUE ? v : null }))} />
         </label>
         <label className="block space-y-1">
-          <span className="flex items-center gap-1 text-[12px] font-semibold text-body"><Building className="h-3.5 w-3.5" aria-hidden /> Client</span>
+          <span className="flex items-center gap-1 text-xs font-semibold text-body"><Building className="h-3.5 w-3.5" aria-hidden /> Client</span>
           <Select aria-label="Client" value={draft.clientId ?? ALL_VALUE} options={toOptions(clients, "All clients")} onChange={(v) => setDraft((d) => ({ ...d, clientId: v && v !== ALL_VALUE ? v : null }))} />
         </label>
         </>

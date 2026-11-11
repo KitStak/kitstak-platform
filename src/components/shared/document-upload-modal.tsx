@@ -76,7 +76,7 @@ export function DocumentUploadModal({ open, onOpenChange, entityType, entityId, 
       <DialogContent size="md">
         <DialogHeader title="Upload document" description="Images or PDF, up to 10 MB." />
         <DialogBody className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-secondary">
             <span>
               Document Type <span className="text-danger">*</span>
             </span>

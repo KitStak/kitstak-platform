@@ -60,7 +60,7 @@ export function PlanStatusPopover({ status, nextStatuses, disabledReason, onPick
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>{trigger}</PopoverTrigger>
           <PopoverContent align="start" className="w-72 p-1.5">
-            <p className="px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">Move to</p>
+            <p className="px-2 pb-1.5 pt-1 text-2xs font-semibold text-faint">Move to</p>
             <ul role="menu" className="flex flex-col">
               {nextStatuses.map((s) => (
                 <li key={s} role="none">
@@ -79,7 +79,7 @@ export function PlanStatusPopover({ status, nextStatuses, disabledReason, onPick
                     <ArrowRight className="h-3 w-3 shrink-0 text-faint" aria-hidden />
                     <span className="flex min-w-0 flex-col">
                       <StatusPill status={s} domain="shipmentPlan" size="sm" className="self-start" />
-                      <span className={blocked?.[s] ? "mt-0.5 text-[11px] font-medium text-warning" : "mt-0.5 text-[11px] text-secondary"}>{blocked?.[s] ?? STATUS_HINT[s]}</span>
+                      <span className={blocked?.[s] ? "mt-0.5 text-2xs font-medium text-warning" : "mt-0.5 text-2xs text-secondary"}>{blocked?.[s] ?? STATUS_HINT[s]}</span>
                     </span>
                   </button>
                 </li>
@@ -89,7 +89,7 @@ export function PlanStatusPopover({ status, nextStatuses, disabledReason, onPick
                   <button type="button" role="menuitem" onClick={() => { setOpen(false); x.onSelect(); }}
                     className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-surface-sunken focus-visible:bg-surface-sunken focus-visible:outline-none">
                     <ArrowRight className="h-3 w-3 shrink-0 text-faint" aria-hidden />
-                    <span className="flex min-w-0 flex-col"><span className="text-[12px] font-semibold text-foreground">{x.label}</span><span className="mt-0.5 text-[11px] text-secondary">{x.hint}</span></span>
+                    <span className="flex min-w-0 flex-col"><span className="text-xs font-semibold text-foreground">{x.label}</span><span className="mt-0.5 text-2xs text-secondary">{x.hint}</span></span>
                   </button>
                 </li>
               ))}

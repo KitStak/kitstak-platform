@@ -48,7 +48,7 @@ export function planColumnSpecs(h: PlanColumnHandlers): readonly ColumnSpec<Plan
       cell: (r) => (
         <span className="flex w-full items-center gap-2" title={`${r.loadedCount} of ${r.orderCount} orders ready to ship or shipped`}>
           <ProgressBar value={r.loadedPercent} size="sm" tone={r.loadedPercent === 100 ? "success" : "primary"} className="flex-1" label={`${r.loadedPercent}% loaded`} />
-          <span className="w-9 text-right text-[11px] tabular-nums text-secondary">{r.loadedPercent}%</span>
+          <span className="w-9 text-right text-2xs tabular-nums text-secondary">{r.loadedPercent}%</span>
         </span>
       ),
     },

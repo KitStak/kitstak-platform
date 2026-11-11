@@ -112,7 +112,7 @@ export function PackingHistoryCard({ warehouseId, warehouseCode }: { readonly wa
   return (
     <Card className="flex flex-col gap-3 p-4" aria-labelledby="pack-history-title">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="pack-history-title" className="flex items-center gap-2 text-[13px] font-semibold"><History className="h-4 w-4 text-secondary" aria-hidden />My packing today</h2>
+        <h2 id="pack-history-title" className="flex items-center gap-2 text-sm font-semibold"><History className="h-4 w-4 text-secondary" aria-hidden />My packing today</h2>
         <div className="flex gap-1.5">
           <DisabledReason reason={!warehouseId ? "Choose a warehouse first" : empty ? "No completed orders to clear" : null}>
             <Button size="sm" variant="ghost" disabled={!warehouseId || empty} onClick={clear}><Eraser className="h-3.5 w-3.5" aria-hidden />Clear completed</Button>
@@ -125,24 +125,24 @@ export function PackingHistoryCard({ warehouseId, warehouseCode }: { readonly wa
       {q.isPending && warehouseId ? (
         <div className="space-y-2"><Skeleton className="h-8" /><Skeleton className="h-8" /></div>
       ) : q.error ? (
-        <p role="alert" className="text-[12px] text-danger">Could not load your packing history. <button type="button" className="font-medium underline" onClick={() => void q.refetch()}>Retry</button></p>
+        <p role="alert" className="text-xs text-danger">Could not load your packing history. <button type="button" className="font-medium underline" onClick={() => void q.refetch()}>Retry</button></p>
       ) : empty ? (
-        <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-[12px] text-secondary">
+        <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-secondary">
           {cleared ? <>Cleared at {fmt.time(cleared)}. Orders you pack next show here. <button type="button" className="inline-flex items-center gap-1 font-medium text-primary hover:underline" onClick={restore}><RotateCcw className="h-3 w-3" aria-hidden />Show all of today</button></> : "Orders you finish packing today show here."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border border-border">
-          <table className="w-full min-w-[520px] text-[12px]">
-            <thead className="bg-surface-sunken/60 text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">
+          <table className="w-full min-w-[520px] text-xs">
+            <thead className="bg-surface-sunken/60 text-2xs font-semibold text-secondary">
               <tr><th className="px-3 py-1.5 text-left">Order</th><th className="px-3 py-1.5 text-left">Status</th><th className="px-3 py-1.5 text-right">Units</th><th className="px-3 py-1.5 text-left">Tracking</th><th className="px-3 py-1.5 text-right">Packed</th></tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.orderId} className="border-t border-border">
-                  <td className="px-3 py-1.5"><Link href={`/orders/${r.orderId}`} className="font-medium text-primary hover:underline">{r.orderCode}</Link><span className="block truncate text-[11px] text-secondary">{r.clientName}</span></td>
+                  <td className="px-3 py-1.5"><Link href={`/orders/${r.orderId}`} className="font-medium text-primary hover:underline">{r.orderCode}</Link><span className="block truncate text-2xs text-secondary">{r.clientName}</span></td>
                   <td className="px-3 py-1.5"><StatusPill status={r.status} domain="shipmentOrder" size="sm" /></td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{r.units}</td>
-                  <td className="max-w-[160px] truncate px-3 py-1.5 font-mono text-[11px]" title={r.trackingNumber ?? undefined}>{r.trackingNumber ?? <span className="font-sans text-secondary">No label</span>}</td>
+                  <td className="max-w-[160px] truncate px-3 py-1.5 font-mono text-2xs" title={r.trackingNumber ?? undefined}>{r.trackingNumber ?? <span className="font-sans text-secondary">No label</span>}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-secondary">{fmt.time(r.packedAt)}</td>
                 </tr>
               ))}
@@ -150,7 +150,7 @@ export function PackingHistoryCard({ warehouseId, warehouseCode }: { readonly wa
           </table>
         </div>
       )}
-      {cleared && !empty ? <p className="text-[11px] text-secondary">Showing orders packed since {fmt.time(cleared)}. <button type="button" className="font-medium text-primary hover:underline" onClick={restore}>Show all of today</button></p> : null}
+      {cleared && !empty ? <p className="text-2xs text-secondary">Showing orders packed since {fmt.time(cleared)}. <button type="button" className="font-medium text-primary hover:underline" onClick={restore}>Show all of today</button></p> : null}
     </Card>
   );
 }

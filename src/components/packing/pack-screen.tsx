@@ -64,16 +64,16 @@ function ResultPanel({ result, onNext, nextLabel, printed }: { readonly result: 
     <Card className="flex flex-col items-center gap-3 p-8 text-center">
       <div role="status" className="flex flex-col items-center gap-2">
         <PackageCheck className="h-12 w-12 text-success" aria-hidden />
-        <h2 className="text-[18px] font-semibold">Order {result.orderCode} packed</h2>
-        <p className="text-[13px] text-secondary">{result.packedUnits} unit{result.packedUnits === 1 ? "" : "s"} · status <StatusPill status={result.status} domain="shipmentOrder" size="sm" />{result.shipped ? " · auto-shipped" : ""}</p>
+        <h2 className="text-lg font-semibold">Order {result.orderCode} packed</h2>
+        <p className="text-sm text-secondary">{result.packedUnits} unit{result.packedUnits === 1 ? "" : "s"} · status <StatusPill status={result.status} domain="shipmentOrder" size="sm" />{result.shipped ? " · auto-shipped" : ""}</p>
       </div>
       {printed ? (
-        <p aria-live="polite" data-testid="pack-print-status" className={cn("inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px]", printed.state === "failed" ? "bg-warning-soft text-warning" : printed.state === "done" ? "bg-success-soft text-success" : "bg-neutral-soft text-secondary")}>
+        <p aria-live="polite" data-testid="pack-print-status" className={cn("inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs", printed.state === "failed" ? "bg-warning-soft text-warning" : printed.state === "done" ? "bg-success-soft text-success" : "bg-neutral-soft text-secondary")}>
           {printed.state === "printing" ? <Spinner className="h-3 w-3" label="Printing" /> : <Printer className="h-3.5 w-3.5" aria-hidden />}{printed.text}
         </p>
       ) : null}
       {result.masterTrackingNumber ? (
-        <div className="w-full max-w-md rounded-lg border border-border text-left text-[13px]">
+        <div className="w-full max-w-md rounded-lg border border-border text-left text-sm">
           <p className="border-b border-border px-3 py-2 font-semibold">Master tracking <span className="font-mono">{result.masterTrackingNumber}</span></p>
           <ul>{result.shipments.map((s) => (
             <li key={s.trackingNumber} className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5 last:border-0">
@@ -88,8 +88,8 @@ function ResultPanel({ result, onNext, nextLabel, printed }: { readonly result: 
       <div className="flex flex-wrap justify-center gap-2">
         <Button variant="primary" autoFocus onClick={onNext}><RotateCcw className="h-3.5 w-3.5" aria-hidden />{nextLabel}</Button>
         {result.packingSlipFileId ? <Button variant="secondary" onClick={() => openFileId(result.packingSlipFileId)}><FileText className="h-3.5 w-3.5" aria-hidden />Reprint packing slip</Button> : null}
-        <Link href={`/orders/${result.orderId}`} className="inline-flex h-9 items-center rounded-md border border-border px-3 text-[13px] font-medium hover:bg-surface-sunken">View order</Link>
-        <Link href="/shipments" className="inline-flex h-9 items-center rounded-md border border-border px-3 text-[13px] font-medium hover:bg-surface-sunken">Shipments</Link>
+        <Link href={`/orders/${result.orderId}`} className="inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium hover:bg-surface-sunken">View order</Link>
+        <Link href="/shipments" className="inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium hover:bg-surface-sunken">Shipments</Link>
       </div>
     </Card>
   );
@@ -100,8 +100,8 @@ function EmptyJobCard({ mode }: { readonly mode: PackMode }) {
   const what = mode === "order" ? "Order" : MODE_LABELS[mode].tab;
   return (
     <Card className="p-4" data-testid="pack-job-empty">
-      <p className="flex items-center gap-2 text-[13px] font-semibold text-secondary"><ClipboardList className="h-4 w-4" aria-hidden />{mode === "order" ? "Scan or enter an order code to find it" : `Scan or enter ${what.toLowerCase()} code to find job`}</p>
-      <p className="mt-1 text-[12px] text-secondary">{mode === "order" ? "# of Orders" : `# of Orders in ${what}`}: <strong className="tabular-nums text-foreground">0/0</strong> packed</p>
+      <p className="flex items-center gap-2 text-sm font-semibold text-secondary"><ClipboardList className="h-4 w-4" aria-hidden />{mode === "order" ? "Scan or enter an order code to find it" : `Scan or enter ${what.toLowerCase()} code to find job`}</p>
+      <p className="mt-1 text-xs text-secondary">{mode === "order" ? "# of Orders" : `# of Orders in ${what}`}: <strong className="tabular-nums text-foreground">0/0</strong> packed</p>
     </Card>
   );
 }
@@ -111,13 +111,13 @@ function EmptyOrderCards() {
   return (
     <>
       <Card className="space-y-2 p-4 opacity-80" data-testid="pack-product-empty">
-        <label htmlFor="pack-product-disabled" className="text-[12px] font-semibold text-body">Scan product</label>
-        <input id="pack-product-disabled" disabled placeholder="Load an order to scan products" className="h-10 w-full cursor-not-allowed rounded-md border border-border bg-surface-sunken px-3 text-[13px] text-secondary" />
-        <div className="flex items-center gap-3 text-[12px] text-secondary"><span>Total qty <strong className="tabular-nums text-[15px] text-foreground">0/0</strong></span><ProgressBar value={0} max={1} className="flex-1" /></div>
+        <label htmlFor="pack-product-disabled" className="text-xs font-semibold text-body">Scan product</label>
+        <input id="pack-product-disabled" disabled placeholder="Load an order to scan products" className="h-10 w-full cursor-not-allowed rounded-md border border-border bg-surface-sunken px-3 text-sm text-secondary" />
+        <div className="flex items-center gap-3 text-xs text-secondary"><span>Total qty <strong className="tabular-nums text-base text-foreground">0/0</strong></span><ProgressBar value={0} max={1} className="flex-1" /></div>
       </Card>
       <Card className="space-y-1 p-4" data-testid="pack-order-empty">
-        <p className="text-[15px] font-semibold text-secondary">Select order to pack</p>
-        <p className="text-[12px] text-secondary">SKU qty <strong className="tabular-nums text-foreground">0/0</strong> · Total qty <strong className="tabular-nums text-foreground">0/0</strong></p>
+        <p className="text-base font-semibold text-secondary">Select order to pack</p>
+        <p className="text-xs text-secondary">SKU qty <strong className="tabular-nums text-foreground">0/0</strong> · Total qty <strong className="tabular-nums text-foreground">0/0</strong></p>
       </Card>
     </>
   );
@@ -571,7 +571,7 @@ export function PackScreen({ stationId, mode }: { readonly stationId: string; re
 
   if (stationQ.isPending) return <div className="space-y-3 p-6"><Skeleton className="h-8 w-72" /><Skeleton className="h-[480px]" /></div>;
   if (stationQ.error || !station) {
-    return <EmptyState title="Packing station not found" description={stationQ.error?.message ?? "Choose a station on the Packing Station page."} action={<Link href="/packing-station" className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-[13px] font-medium text-white">Choose a station</Link>} />;
+    return <EmptyState title="Packing station not found" description={stationQ.error?.message ?? "Choose a station on the Packing Station page."} action={<Link href="/packing-station" className="inline-flex h-9 items-center rounded-md bg-primary px-3 text-sm font-medium text-white">Choose a station</Link>} />;
   }
 
   const totals = state ? totalsOf(lines, state) : null;
@@ -590,8 +590,8 @@ export function PackScreen({ stationId, mode }: { readonly stationId: string; re
         <div className="flex flex-col gap-1">
           <Breadcrumbs items={[{ label: "Fulfillment" }, { label: "Outbound" }, { label: "Packing Station", href: "/packing-station" }, { label: station.code }]} />
           <div className="flex items-center gap-3">
-            <Link href="/packing-station" className="inline-flex items-center gap-1 text-[12px] font-semibold text-secondary hover:text-primary"><ArrowLeft className="h-3.5 w-3.5" aria-hidden />Change station</Link>
-            <h1 className="text-[18px] font-semibold">Pack at {station.code}</h1>
+            <Link href="/packing-station" className="inline-flex items-center gap-1 text-xs font-semibold text-secondary hover:text-primary"><ArrowLeft className="h-3.5 w-3.5" aria-hidden />Change station</Link>
+            <h1 className="text-lg font-semibold">Pack at {station.code}</h1>
           </div>
         </div>
         <div role="tablist" aria-label="Pack mode" className="flex rounded-lg bg-surface-sunken p-0.5"
@@ -603,7 +603,7 @@ export function PackScreen({ stationId, mode }: { readonly stationId: string; re
           }}>
           {PACK_MODES.map((m) => (
             <Link key={m} href={`/packing-station/${station.id}/${m}`} role="tab" aria-selected={m === mode} tabIndex={m === mode ? 0 : -1} aria-controls="pack-workspace" id={`pack-tab-${m}`}
-              className={cn("rounded-md px-3 py-1.5 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40", m === mode ? "bg-surface text-foreground shadow-sm" : "text-secondary hover:text-foreground")}>
+              className={cn("rounded-md px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40", m === mode ? "bg-surface text-foreground shadow-sm" : "text-secondary hover:text-foreground")}>
               {MODE_LABELS[m].tab}
             </Link>
           ))}
@@ -621,7 +621,7 @@ export function PackScreen({ stationId, mode }: { readonly stationId: string; re
         <div className="flex min-w-0 flex-col gap-3">
           <Card className="space-y-3 p-4">
             <ScanField ref={sourceRef} id="pack-source" label={MODE_LABELS[mode].scan} placeholder={MODE_LABELS[mode].placeholder} onScan={lookup} busy={scanBusy} error={scanError} autoFocus />
-            {blockedOrder ? <p className="-mt-1 text-[12px]"><Link href={`/orders/${blockedOrder.orderId}`} className="font-medium text-primary hover:underline" data-testid="pack-blocked-order-link">Open {blockedOrder.orderCode}</Link><span className="text-secondary"> to view or reprint its label</span></p> : null}
+            {blockedOrder ? <p className="-mt-1 text-xs"><Link href={`/orders/${blockedOrder.orderId}`} className="font-medium text-primary hover:underline" data-testid="pack-blocked-order-link">Open {blockedOrder.orderCode}</Link><span className="text-secondary"> to view or reprint its label</span></p> : null}
             {mode === "order" ? (
               <div className="flex gap-2">
                 <Button variant="secondary" onClick={() => setListOpen(true)}><ListChecks className="h-3.5 w-3.5" aria-hidden />List &amp; select</Button>
@@ -633,17 +633,17 @@ export function PackScreen({ stationId, mode }: { readonly stationId: string; re
           {scan ? (
             <Card className="p-4">
               <div className="flex items-center justify-between gap-2">
-                <p className="flex items-center gap-2 text-[13px] font-semibold"><ClipboardList className="h-4 w-4 text-secondary" aria-hidden />{scan.job ? `Job ${scan.job.code}` : `Source ${scan.sourceLabel}`}</p>
-                {scan.job ? <span className="rounded-full bg-neutral-soft px-2 py-0.5 text-[11px] font-medium text-secondary">{scan.job.jobType}</span> : null}
+                <p className="flex items-center gap-2 text-sm font-semibold"><ClipboardList className="h-4 w-4 text-secondary" aria-hidden />{scan.job ? `Job ${scan.job.code}` : `Source ${scan.sourceLabel}`}</p>
+                {scan.job ? <span className="rounded-full bg-neutral-soft px-2 py-0.5 text-2xs font-medium text-secondary">{scan.job.jobType}</span> : null}
               </div>
-              <p className="mt-1 text-[12px] text-secondary">{mode === "order" ? "# of Orders" : `# of Orders in ${MODE_LABELS[mode].tab}`}: <strong className="tabular-nums text-foreground">{scan.packedOrders + (result ? 1 : 0)}/{scan.totalOrders}</strong> packed</p>
+              <p className="mt-1 text-xs text-secondary">{mode === "order" ? "# of Orders" : `# of Orders in ${MODE_LABELS[mode].tab}`}: <strong className="tabular-nums text-foreground">{scan.packedOrders + (result ? 1 : 0)}/{scan.totalOrders}</strong> packed</p>
               {scan.orders.length > 1 ? (
                 <ul className="mt-2 flex flex-col gap-1">
                   {scan.orders.map((o) => (
                     <li key={o.id}>
                       <button type="button" disabled={!o.packable || o.id === result?.orderId} onClick={() => void openOrder(o.id)}
-                        className={cn("flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-[12px] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40", o.id === orderId ? "border-primary bg-primary-soft" : "border-border hover:bg-surface-sunken")}>
-                        <span className="font-semibold">{o.code}</span><span className="text-secondary">{o.unitsToPack} units</span>{o.countLock ? <span className="inline-flex items-center gap-1 rounded-full bg-danger-soft px-1.5 py-0.5 text-[10px] font-semibold text-danger" title={o.countLock.reason}><Lock className="h-3 w-3" aria-hidden />{o.countLock.planCode}</span> : null}<StatusPill status={o.id === result?.orderId ? result.status : o.status} domain="shipmentOrder" size="sm" />
+                        className={cn("flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-xs disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40", o.id === orderId ? "border-primary bg-primary-soft" : "border-border hover:bg-surface-sunken")}>
+                        <span className="font-semibold">{o.code}</span><span className="text-secondary">{o.unitsToPack} units</span>{o.countLock ? <span className="inline-flex items-center gap-1 rounded-full bg-danger-soft px-1.5 py-0.5 text-2xs font-semibold text-danger" title={o.countLock.reason}><Lock className="h-3 w-3" aria-hidden />{o.countLock.planCode}</span> : null}<StatusPill status={o.id === result?.orderId ? result.status : o.status} domain="shipmentOrder" size="sm" />
                       </button>
                     </li>
                   ))}
@@ -658,8 +658,8 @@ export function PackScreen({ stationId, mode }: { readonly stationId: string; re
                 <ScanField ref={productRef} id="pack-product" disabled={Boolean(lockReason)} label={awaiting ? `Scan serial number of ${awaiting.sku}` : "Scan product"} placeholder={awaiting ? "Serial number" : "SKU, barcode or FNSKU"} onScan={onProduct}
                   error={productError && !awaiting ? productError : null} hint={awaiting ? <>Waiting for the serial. <Kbd>Esc</Kbd> cancels.</> : "Each scan packs one unit into the open package."} />
                 {totals ? (
-                  <div className="flex items-center gap-3 text-[12px] text-secondary">
-                    <span>Total qty <strong className="tabular-nums text-[15px] text-foreground">{totals.packed}/{totals.toPack}</strong></span>
+                  <div className="flex items-center gap-3 text-xs text-secondary">
+                    <span>Total qty <strong className="tabular-nums text-base text-foreground">{totals.packed}/{totals.toPack}</strong></span>
                     <ProgressBar value={totals.packed} max={Math.max(1, totals.toPack)} tone={totals.packed >= totals.toPack ? "success" : "primary"} className="flex-1" />
                   </div>
                 ) : null}
@@ -667,16 +667,16 @@ export function PackScreen({ stationId, mode }: { readonly stationId: string; re
               <Card className="space-y-3 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <p className="flex items-center gap-2 text-[15px] font-semibold"><Link href={`/orders/${ctx.order.id}`} className="hover:underline">{ctx.order.code}</Link><StatusPill status={ctx.order.status} domain="shipmentOrder" size="sm" />{ctx.order.priority === "High" ? <span className="rounded bg-danger-soft px-1.5 text-[11px] font-semibold text-danger">High</span> : null}</p>
-                    <p className="text-[12px] text-secondary">{ctx.order.customerName} · {ctx.order.clientName}{ctx.order.storeOrderNumber ? ` · ${ctx.order.storeOrderNumber}` : ""}</p>
-                    <p className="text-[11px] text-secondary">{ctx.order.shipTo}</p>
+                    <p className="flex items-center gap-2 text-base font-semibold"><Link href={`/orders/${ctx.order.id}`} className="hover:underline">{ctx.order.code}</Link><StatusPill status={ctx.order.status} domain="shipmentOrder" size="sm" />{ctx.order.priority === "High" ? <span className="rounded bg-danger-soft px-1.5 text-2xs font-semibold text-danger">High</span> : null}</p>
+                    <p className="text-xs text-secondary">{ctx.order.customerName} · {ctx.order.clientName}{ctx.order.storeOrderNumber ? ` · ${ctx.order.storeOrderNumber}` : ""}</p>
+                    <p className="text-2xs text-secondary">{ctx.order.shipTo}</p>
                   </div>
-                  {ctx.order.isAutoShip ? <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success">Auto-ship</span> : null}
+                  {ctx.order.isAutoShip ? <span className="rounded-full bg-success-soft px-2 py-0.5 text-2xs font-semibold text-success">Auto-ship</span> : null}
                 </div>
                 {ctx.countLock ? (
                   <div data-testid="pack-lock-callout"><Callout variant="error" title={`Locked by count plan ${ctx.countLock.planCode}`}>
                     {ctx.countLock.reason}
-                    <span className="mt-1 flex flex-wrap gap-3 text-[12px]">
+                    <span className="mt-1 flex flex-wrap gap-3 text-xs">
                       <Link href={ctx.countLock.planId ? `/counts/${ctx.countLock.planId}` : "/counts"} className="font-medium text-primary hover:underline">Open {ctx.countLock.planCode}</Link>
                       <Link href="/packing-station" className="font-medium text-primary hover:underline">Choose another station</Link>
                     </span>
@@ -685,7 +685,7 @@ export function PackScreen({ stationId, mode }: { readonly stationId: string; re
                 {ctx.packingWarning ? (
                   <div data-testid="pack-warning-callout"><Callout variant="attention" title={`Packing warning: ${ctx.packingWarning.name}`}>
                     {ctx.packingWarning.text}
-                    <span className="mt-1 block text-[11px] text-secondary">
+                    <span className="mt-1 block text-2xs text-secondary">
                       {warningSeen.has(seenKey(ctx.packingWarning)) ? (ctx.packingWarning.skipConfirmation ? "Shown" : "Acknowledged") : `Shows when: ${ctx.packingWarning.triggerLabel.toLowerCase()}`}
                     </span>
                   </Callout></div>
@@ -693,14 +693,14 @@ export function PackScreen({ stationId, mode }: { readonly stationId: string; re
                 {ctx.order.packingInstructions ? <Callout variant="attention" title="Packing instructions">{ctx.order.packingInstructions}</Callout> : null}
                 {ctx.order.giftNote ? <Callout variant="info" title="Gift note"><span className="inline-flex items-center gap-1"><Gift className="h-3.5 w-3.5" aria-hidden />{ctx.order.giftNote}</span></Callout> : null}
                 {resumed ? (
-                  <div data-testid="pack-resumed" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-info/30 bg-info-soft px-2.5 py-1.5 text-[12px] text-body">
+                  <div data-testid="pack-resumed" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-info/30 bg-info-soft px-2.5 py-1.5 text-xs text-body">
                     <span>Resumed: <strong className="tabular-nums">{resumed.units}</strong> unit{resumed.units === 1 ? "" : "s"} already scanned · saved {fmt.dateTime(resumed.at)}{resumed.by ? ` by ${resumed.by}` : ""}</span>
                     <Button size="sm" variant="ghost" onClick={() => void discardProgress()} disabled={!canExecute}><RotateCcw className="h-3.5 w-3.5" aria-hidden />Start over</Button>
                   </div>
                 ) : null}
                 <ContentsSummary lines={lines} state={state} />
                 {canExecute && saveStatus ? (
-                  <p aria-live="polite" data-testid="pack-save-status" className={cn("text-[11px]", saveStatus === "error" ? "text-danger" : "text-secondary")}>
+                  <p aria-live="polite" data-testid="pack-save-status" className={cn("text-2xs", saveStatus === "error" ? "text-danger" : "text-secondary")}>
                     {saveStatus === "saving" ? "Saving progress…" : saveStatus === "saved" ? "Progress saved. Reopening this order resumes here." : "Progress not saved. Check your connection; scans stay on this screen."}
                   </p>
                 ) : null}
@@ -766,9 +766,9 @@ export function PackScreen({ stationId, mode }: { readonly stationId: string; re
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="flex items-center gap-2">
-          {state && totals ? <span className="text-[12px] text-secondary tabular-nums">{totals.packed}/{totals.toPack} packed · {state.boxes.filter((b) => Object.keys(b.items).length).length} package(s)</span> : null}
+          {state && totals ? <span className="text-xs text-secondary tabular-nums">{totals.packed}/{totals.toPack} packed · {state.boxes.filter((b) => Object.keys(b.items).length).length} package(s)</span> : null}
           {ctx && state ? (
-            <span aria-live="polite" className={cn("inline-flex max-w-[440px] items-center gap-1.5 truncate rounded-md border px-2.5 py-1 text-[12px]", rate ? "border-success/40 bg-success-soft text-success" : "border-border text-secondary")}>
+            <span aria-live="polite" className={cn("inline-flex max-w-[440px] items-center gap-1.5 truncate rounded-md border px-2.5 py-1 text-xs", rate ? "border-success/40 bg-success-soft text-success" : "border-border text-secondary")}>
               <Truck className="h-3.5 w-3.5 shrink-0" aria-hidden />
               {useUploaded ? <>Uploaded label · <strong className="truncate">{uploaded}</strong></>
                 : selectedService ? (

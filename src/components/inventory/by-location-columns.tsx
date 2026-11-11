@@ -78,7 +78,7 @@ function BucketRowMenu({ actions, label, lockPlan }: { readonly actions: readonl
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[220px] max-w-[280px]" onClick={(e) => e.stopPropagation()}>
         {lockPlan ? (
-          <div className="mb-1 flex items-center gap-1.5 rounded-md bg-warning-soft px-2 py-1.5 text-[11px] font-medium text-warning" role="note">
+          <div className="mb-1 flex items-center gap-1.5 rounded-md bg-warning-soft px-2 py-1.5 text-2xs font-medium text-warning" role="note">
             <Lock className="h-3 w-3 shrink-0" aria-hidden /> Locked by count plan {lockPlan}
           </div>
         ) : null}
@@ -109,12 +109,12 @@ function LocationCell({ row }: { readonly row: BucketRow }) {
       <span className="shrink-0">{row.location}</span>
       {lock ? (
         <Tooltip content={lock}>
-          <span tabIndex={0} role="img" aria-label={`Count-locked by ${row.countLockPlan}`} className="inline-flex items-center gap-0.5 rounded bg-warning-soft px-1 py-px text-[10px] font-semibold text-warning focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+          <span tabIndex={0} role="img" aria-label={`Count-locked by ${row.countLockPlan}`} className="inline-flex items-center gap-0.5 rounded bg-warning-soft px-1 py-px text-2xs font-semibold text-warning focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
             <Lock className="h-2.5 w-2.5" aria-hidden />Count
           </span>
         </Tooltip>
       ) : null}
-      {sub ? <span className="min-w-0 truncate text-[11px] font-normal text-faint" title={sub}>{sub}</span> : null}
+      {sub ? <span className="min-w-0 truncate text-2xs font-normal text-faint" title={sub}>{sub}</span> : null}
     </span>
   );
 }

@@ -28,7 +28,7 @@ const DEF = { ...TRANSACTION_HISTORY_DEF, title: "Receiving transactions", helpe
 function Presets() {
   const router = useRouter();
   return (
-    <div className="flex flex-wrap items-center gap-2 text-[12px]" role="group" aria-label="Transaction type presets">
+    <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="Transaction type presets">
       <span className="text-secondary">Show:</span>
       <Button size="sm" variant="secondary" onClick={() => router.push(receivingLedgerHref())}><PackageCheck className="h-3.5 w-3.5" aria-hidden />All receiving types</Button>
       <Button size="sm" variant="secondary" onClick={() => router.push(receivingLedgerHref({ types: ["Cancel Receiving"] }))}><Ban className="h-3.5 w-3.5" aria-hidden />Cancel receiving</Button>
@@ -52,7 +52,7 @@ export function ReceivingLedgerPage() {
   if (!can.allowed) {
     return (
       <div className="px-6 pt-5">
-        <h1 className="mb-3 text-[20px] font-semibold text-foreground">Receiving transactions</h1>
+        <h1 className="mb-3 text-lg font-semibold text-foreground">Receiving transactions</h1>
         <Callout variant="attention" title="You don't have access to the transaction ledger">
           Ask an administrator for the Transaction History permission. Receipts are still listed in <Link className="text-primary hover:underline" href="/receiving/history">Receiving History</Link>.
         </Callout>

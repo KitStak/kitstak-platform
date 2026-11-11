@@ -147,7 +147,7 @@ export function DashboardView({ initial = null }: { readonly initial?: Dashboard
           <div className="flex items-center gap-2">
             {data?.businessDay ? (
               <span
-                className="hidden text-[11.5px] text-faint tabular-nums md:inline"
+                className="hidden text-2xs text-faint tabular-nums md:inline"
                 data-testid="business-day"
                 title={data.businessDay.mixedZones
                   ? `The selected warehouses are in different time zones; "today" uses ${data.businessDay.zoneWarehouse ?? "the first warehouse"}'s zone (${data.businessDay.timeZone}). Select one warehouse for its own day.`
@@ -156,7 +156,7 @@ export function DashboardView({ initial = null }: { readonly initial?: Dashboard
                 {businessDayLabel(data.businessDay.date)} · {data.businessDay.timeZone.split("/").pop()?.replace(/_/g, " ")} time{data.businessDay.mixedZones ? "*" : ""}
               </span>
             ) : null}
-            <span className="text-[11.5px] text-faint tabular-nums" aria-live="polite">{updated ? `Updated ${updated}` : ""}</span>
+            <span className="text-2xs text-faint tabular-nums" aria-live="polite">{updated ? `Updated ${updated}` : ""}</span>
             <Button size="icon" variant="ghost" aria-label="Refresh dashboard" title="Refresh now (auto every 60 s)" onClick={() => void q.refetch()} disabled={q.isFetching}>
               <RefreshCw className={cn("h-4 w-4", q.isFetching && "animate-spin")} aria-hidden />
             </Button>
@@ -171,8 +171,8 @@ export function DashboardView({ initial = null }: { readonly initial?: Dashboard
         {q.error && !data ? (
           <div role="alert" className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface py-12 text-center">
             <AlertTriangle className="h-6 w-6 text-danger" aria-hidden />
-            <p className="text-[14px] font-semibold">The dashboard could not load</p>
-            <p className="text-[12.5px] text-secondary">{q.error.message}</p>
+            <p className="text-base font-semibold">The dashboard could not load</p>
+            <p className="text-xs text-secondary">{q.error.message}</p>
             <ErrorReference error={q.error} />
             <Button onClick={() => void q.refetch()}>Retry</Button>
           </div>

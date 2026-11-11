@@ -15,7 +15,7 @@ export const MENU_OPEN_DELAY_MS = 150;
 
 function NavBadgeTag({ badge }: { readonly badge: NonNullable<NavItem["badge"]> }) {
   return (
-    <span className="rounded bg-sunken px-1 py-px text-[9px] font-bold uppercase leading-3 tracking-wide text-fg-muted">
+    <span className="rounded bg-sunken px-1 py-px text-2xs font-bold leading-3 text-fg-muted">
       {badge}
     </span>
   );
@@ -30,7 +30,7 @@ function MenuLink({ navItem, activeHref }: { readonly navItem: NavItem; readonly
           href={navItem.href}
           aria-current={active ? "page" : undefined}
           className={cn(
-            "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] font-medium outline-none transition-colors",
+            "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium outline-none transition-colors",
             "hover:bg-primary-soft hover:text-primary focus-visible:bg-primary-soft focus-visible:text-primary focus-visible:ring-2 focus-visible:ring-focus/60",
             active ? "bg-primary-soft text-primary" : "text-body",
           )}
@@ -52,7 +52,7 @@ function MenuPanel({ menu, pathname }: { readonly menu: NavMenu; readonly pathna
           const Icon = NAV_ICONS[column.icon];
           return (
             <section key={column.heading} aria-label={column.heading} className="w-auto min-w-[220px] shrink-0 px-4 first:pl-5 last:pr-5">
-              <h3 className="mb-2 flex items-center gap-1.5 px-2 text-[12px] font-semibold text-foreground">
+              <h3 className="mb-2 flex items-center gap-1.5 px-2 text-xs font-semibold text-foreground">
                 <Icon className="h-3.5 w-3.5 text-primary" aria-hidden />
                 {column.heading}
               </h3>
@@ -68,7 +68,7 @@ function MenuPanel({ menu, pathname }: { readonly menu: NavMenu; readonly pathna
       {menu.footer ? (
         <div className="border-t border-border bg-surface-sunken px-5 py-2">
           <NavigationMenu.Link asChild>
-            <Link href={menu.footer.href} className="inline-flex items-center gap-1 rounded px-2 py-1 text-[12px] font-semibold text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus/60">
+            <Link href={menu.footer.href} className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus/60">
               {menu.footer.label}
               <ArrowRight className="h-3 w-3" aria-hidden />
             </Link>
@@ -80,7 +80,7 @@ function MenuPanel({ menu, pathname }: { readonly menu: NavMenu; readonly pathna
 }
 
 const triggerClass =
-  "group relative flex h-14 items-center gap-0.5 rounded-md px-1 text-[12.5px] xl:gap-1 xl:px-1.5 xl:text-[13px] min-[1440px]:px-2 font-semibold outline-none transition-colors " +
+  "group relative flex h-14 items-center gap-0.5 rounded-md px-1 text-xs xl:gap-1 xl:px-1.5 xl:text-sm min-[1440px]:px-2 font-semibold outline-none transition-colors " +
   "focus-visible:bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus data-[state=open]:text-fg";
 
 /**
