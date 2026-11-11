@@ -18,6 +18,8 @@ export const ERROR_CODES = [
   "RULE_VIOLATION",
   "DUPLICATE",
   "RATE_LIMITED",
+  // Another write held the app write lock for too long; safe to retry.
+  "BUSY",
   // Platform codes (not domain): authentication, CSRF and unexpected failures.
   "UNAUTHENTICATED",
   "CSRF",
@@ -36,6 +38,7 @@ export const ERROR_STATUS: Readonly<Record<ErrorCode, number>> = {
   RULE_VIOLATION: 422,
   DUPLICATE: 409,
   RATE_LIMITED: 429,
+  BUSY: 503,
   UNAUTHENTICATED: 401,
   CSRF: 403,
   INTERNAL: 500,

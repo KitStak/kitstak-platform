@@ -146,27 +146,37 @@ function ActiveUnderline({ show }: { readonly show: boolean }) {
 
 const VIEWPORT_GUTTER_PX = 16;
 
-/** Keeps a panel anchored under its trigger but shifted horizontally to stay on screen. */
+/** Whole-pixel horizontal shift that brings a panel spanning [left, right] back inside the gutter. */
+export function clampShift(left: number, right: number, maxRight: number, gutter: number = VIEWPORT_GUTTER_PX): number {
+  if (right <= maxRight) return 0;
+  return Math.round(Math.max(maxRight - right, gutter - left));
+}
+
+/**
+ * Keeps a panel anchored under its trigger but shifted horizontally to stay on screen.
+ * The measured wrapper is never transformed, so the result cannot depend on the shift already
+ * applied. (Measuring the shifted element and subtracting the shift fed rounding noise back into
+ * state and re-rendered forever, React error #185, when hovering menus on a zoomed page.)
+ */
 function ViewportClamp({ children }: { readonly children: React.ReactNode }) {
   const ref = React.useRef<HTMLDivElement>(null);
   const [shift, setShift] = React.useState(0);
   React.useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
-    const rect = node.getBoundingClientRect();
-    const left = rect.left - shift;
-    const right = left + rect.width;
-    const maxRight = window.innerWidth - VIEWPORT_GUTTER_PX;
-    const next = right > maxRight ? Math.max(maxRight - right, VIEWPORT_GUTTER_PX - left) : 0;
-    if (next !== shift) setShift(next);
-  }, [shift]);
+    const measure = (): void => {
+      const rect = node.getBoundingClientRect();
+      setShift(clampShift(rect.left, rect.right, window.innerWidth - VIEWPORT_GUTTER_PX));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
   return (
-    <div
-      ref={ref}
-      style={{ transform: `translateX(${shift}px)`, maxWidth: `calc(100vw - ${VIEWPORT_GUTTER_PX * 2}px)` }}
-      className="mt-1 w-max rounded-lg border border-border bg-surface shadow-lg"
-    >
-      {children}
+    <div ref={ref} style={{ maxWidth: `calc(100vw - ${VIEWPORT_GUTTER_PX * 2}px)` }} className="mt-1 w-max">
+      <div style={{ transform: `translateX(${shift}px)` }} className="rounded-lg border border-border bg-surface shadow-lg">
+        {children}
+      </div>
     </div>
   );
 }
