@@ -5,7 +5,7 @@
  * - Deterministic: content comes from a fixed-seed RNG (dates are relative to today).
  * - Idempotent: the demo org and demo users are deleted and recreated on every run; other
  *   organizations in the database are never touched.
- * - Refuses to run in production.
+ * - Refuses to run in production unless `ALLOW_DEMO_SEED=1` is set.
  *
  * Demo credentials are documented in ./README.md. They are dev-only and never used in UI code.
  */
@@ -67,15 +67,13 @@ async function seed(): Promise<void> {
         timezone: entry.timezone,
         createdAt: new Date(today.getTime() - 400 * 86_400_000),
       });
-      await tx
-        .insert(account)
-        .values({
-          accountId: id,
-          providerId: 'credential',
-          userId: id,
-          password: passwordHash,
-          updatedAt: now,
-        });
+      await tx.insert(account).values({
+        accountId: id,
+        providerId: 'credential',
+        userId: id,
+        password: passwordHash,
+        updatedAt: now,
+      });
     }
     const users = userIds as UserIds;
 
@@ -89,16 +87,14 @@ async function seed(): Promise<void> {
       })
       .returning();
     if (!org) throw new Error('Organization insert returned no row');
-    await tx
-      .insert(member)
-      .values(
-        DEMO_USERS.map((entry) => ({
-          organizationId: org.id,
-          userId: users[entry.key],
-          role: entry.role,
-          createdAt: new Date(today.getTime() - 380 * 86_400_000),
-        })),
-      );
+    await tx.insert(member).values(
+      DEMO_USERS.map((entry) => ({
+        organizationId: org.id,
+        userId: users[entry.key],
+        role: entry.role,
+        createdAt: new Date(today.getTime() - 380 * 86_400_000),
+      })),
+    );
     for (const definition of DEMO_TEAMS) {
       const [created] = await tx
         .insert(team)
@@ -275,7 +271,11 @@ async function seed(): Promise<void> {
 
 async function main(): Promise<void> {
   const env = loadEnv();
-  if (env.NODE_ENV === 'production') throw new Error('Refusing to seed in production');
+  // `ALLOW_DEMO_SEED=1` is the explicit opt-in for demo data on a deployed test environment.
+  const production = env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  if (production && process.env.ALLOW_DEMO_SEED !== '1') {
+    throw new Error('Refusing to seed in production (set ALLOW_DEMO_SEED=1 to load demo data)');
+  }
   try {
     await seed();
   } finally {

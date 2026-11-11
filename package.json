@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3100",
     "build": "next build",
-    "vercel-build": "if [ \"$VERCEL_ENV\" = \"production\" ]; then tsx scripts/db-migrate.ts; fi && next build",
+    "vercel-build": "sh scripts/vercel-build.sh",
     "start": "next start -p 3100",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
