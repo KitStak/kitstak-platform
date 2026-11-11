@@ -33,7 +33,7 @@ export function AccountShell({ active, title, description, children }: AccountSh
                   href={s.href}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] transition-colors hover:bg-neutral-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/40",
+                    "flex items-center gap-2 rounded-md px-3 py-1.5 text-[13px] transition-colors hover:bg-neutral-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40",
                     isActive ? "bg-primary-soft font-semibold text-primary" : "text-body"
                   )}
                 >

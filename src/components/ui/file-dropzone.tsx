@@ -113,7 +113,7 @@ export function FileDropzone({ onFiles, accept, maxSizeBytes, maxFiles, multiple
         }}
         className={cn(
           "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-6 py-7 text-center outline-none transition-colors",
-          "border-border-strong bg-surface-sunken hover:border-primary/60 hover:bg-primary-soft/40 focus-visible:ring-2 focus-visible:ring-info/30",
+          "border-border-strong bg-surface-sunken hover:border-primary/60 hover:bg-primary-soft/40 focus-visible:ring-2 focus-visible:ring-focus/30",
           dragging && "border-primary bg-primary-soft/60",
           disabled && "cursor-not-allowed opacity-50 hover:border-border-strong hover:bg-surface-sunken"
         )}

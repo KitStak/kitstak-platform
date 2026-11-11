@@ -65,7 +65,7 @@ function HeaderCell<T>({ header, sort, onSort, reorderable, stickyRightOffset }:
         transition,
       }}
       className={cn(
-        "group/th relative whitespace-nowrap py-2.5 align-middle text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary",
+        "group/th relative whitespace-nowrap py-2 align-middle text-xs font-medium text-fg-muted",
         meta?.cellPadding ?? "px-3",
         meta?.align === "right" ? "text-right" : "text-left",
         placement.className,
@@ -78,7 +78,7 @@ function HeaderCell<T>({ header, sort, onSort, reorderable, stickyRightOffset }:
       <span className={cn("relative flex min-w-0 max-w-full items-center gap-1", right && "justify-end", meta?.headerClassName)}>
         {canDrag ? (
           // Absolutely placed in the cell padding so the label starts at the same x as the cell content.
-          <button type="button" data-audit-skip="" title="Drag to reorder" aria-label={`Move ${name} column`} className={cn("absolute top-1/2 flex h-5 w-3 -translate-y-1/2 cursor-grab items-center justify-center rounded text-faint opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30 group-hover/th:opacity-100", meta?.align === "right" ? "-right-3" : "-left-3")} {...attributes} {...listeners}>
+          <button type="button" data-audit-skip="" title="Drag to reorder" aria-label={`Move ${name} column`} className={cn("absolute top-1/2 flex h-5 w-3 -translate-y-1/2 cursor-grab items-center justify-center rounded text-faint opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30 group-hover/th:opacity-100", meta?.align === "right" ? "-right-3" : "-left-3")} {...attributes} {...listeners}>
             <GripVertical className="h-3 w-3" aria-hidden />
           </button>
         ) : null}
@@ -87,7 +87,7 @@ function HeaderCell<T>({ header, sort, onSort, reorderable, stickyRightOffset }:
             type="button"
             onClick={(e) => onSort(field, e.shiftKey)}
             title="Click to sort · Shift-click to add a sort"
-            className="inline-flex min-w-0 max-w-full items-center gap-1 uppercase transition-colors hover:text-foreground focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
+            className="inline-flex min-w-0 max-w-full items-center gap-1 transition-colors hover:text-fg focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
           >
             {right ? arrow : null}
             {labelText}
@@ -154,7 +154,7 @@ export function HeaderDndContext<T>({ table, onReorder, children }: { readonly t
 export function DataGridHeader<T>({ table, sort, onSort, onReorder, stickyRightOffset }: DataGridHeaderProps<T>) {
   const headers = table.getHeaderGroups()[0]?.headers ?? [];
   return (
-    <thead className="sticky top-0 z-20 bg-surface shadow-[inset_0_-1px_0_var(--border)]">
+    <thead className="sticky top-0 z-20 bg-panel shadow-[inset_0_-1px_0_var(--border-default)]">
       <SortableContext items={headers.map((h) => h.column.id)} strategy={horizontalListSortingStrategy}>
         <tr role="row" aria-rowindex={1}>
           {headers.map((header) => (

@@ -54,11 +54,11 @@ function FieldList({ fields, pinned, onPin, onPick }: { readonly fields: readonl
                 aria-label={isPinned ? `Unpin ${def.label}` : `Pin ${def.label}`}
                 aria-pressed={isPinned}
                 onClick={() => onPin(def.field)}
-                className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30", isPinned ? "text-warning" : "text-faint opacity-60 group-hover:opacity-100")}
+                className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30", isPinned ? "text-warning" : "text-faint opacity-60 group-hover:opacity-100")}
               >
                 <Star className={cn("h-3.5 w-3.5", isPinned && "fill-current")} aria-hidden />
               </button>
-              <button type="button" aria-label={def.label} aria-describedby={def.description ? `ff-desc-${def.field}` : undefined} data-filter-pick={def.field} onClick={() => onPick(def)} className="flex min-w-0 flex-1 items-center justify-between gap-2 py-1.5 pr-2 text-left text-[13px] text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
+              <button type="button" aria-label={def.label} aria-describedby={def.description ? `ff-desc-${def.field}` : undefined} data-filter-pick={def.field} onClick={() => onPick(def)} className="flex min-w-0 flex-1 items-center justify-between gap-2 py-1.5 pr-2 text-left text-[13px] text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
                 <span className="min-w-0">
                   <span className="block truncate">{def.label}</span>
                   {def.description ? <span id={`ff-desc-${def.field}`} className="block truncate text-[11px] text-faint">{def.description}</span> : null}
@@ -121,7 +121,7 @@ function SavedList({ views, onApply }: { readonly views: readonly SavedView[]; r
     <ul className="ks-scroll flex max-h-72 flex-col overflow-auto" aria-label="Saved views">
       {views.map((v) => (
         <li key={v.id}>
-          <button type="button" onClick={() => onApply(v)} className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
+          <button type="button" onClick={() => onApply(v)} className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
             <span className="truncate">{v.name}</span>
             <span className="flex shrink-0 gap-1 text-[10px] font-semibold uppercase text-faint">
               {v.isDefault ? <span className="text-primary">Default</span> : null}

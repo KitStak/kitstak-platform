@@ -26,11 +26,11 @@ export interface EmptyStateProps {
 function ActionCard({ card }: { readonly card: EmptyStateAction }) {
   const Icon = card.icon;
   const classes =
-    "group flex w-full items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left shadow-xs transition-[border-color,box-shadow] hover:border-primary/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30 active:bg-surface-sunken";
+    "group flex w-full items-center gap-3 rounded-lg border border-border-subtle bg-panel px-4 py-3 text-left transition-[border-color,box-shadow] hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30 active:bg-surface-sunken";
   const inner = (
     <>
       {Icon ? (
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-fg-secondary">
           <Icon className="h-[18px] w-[18px]" aria-hidden />
         </span>
       ) : null}
@@ -38,7 +38,7 @@ function ActionCard({ card }: { readonly card: EmptyStateAction }) {
         <span className="block text-[13px] font-semibold text-foreground">{card.title}</span>
         {card.description ? <span className="mt-0.5 block text-[12px] leading-4 text-secondary">{card.description}</span> : null}
       </span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />
+      <ChevronRight className="h-4 w-4 shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-fg" aria-hidden />
     </>
   );
   if (card.href) return <Link href={card.href} className={classes}>{inner}</Link>;
@@ -63,11 +63,11 @@ export function ActionCards({ cards, className }: { readonly cards: readonly Emp
 export function EmptyState({ title, description, icon: Icon = Inbox, action, cards, compact, className }: EmptyStateProps) {
   return (
     <div className={cn("flex flex-col items-center justify-center text-center", compact ? "px-4 py-8" : "px-6 py-14", className)}>
-      <span className={cn("flex items-center justify-center rounded-full bg-neutral-soft text-faint", compact ? "h-10 w-10" : "h-14 w-14")}>
+      <span className={cn("flex items-center justify-center rounded-full bg-muted text-fg-muted", compact ? "h-10 w-10" : "h-14 w-14")}>
         <Icon className={compact ? "h-5 w-5" : "h-7 w-7"} aria-hidden />
       </span>
-      <h3 className={cn("mt-3 font-semibold text-foreground", compact ? "text-[13px]" : "text-[15px]")}>{title}</h3>
-      {description ? <p className="mt-1 max-w-[420px] text-[13px] leading-5 text-secondary">{description}</p> : null}
+      <h3 className={cn("mt-3 font-semibold text-foreground", compact ? "text-base" : "text-md")}>{title}</h3>
+      {description ? <p className="mt-1 max-w-[420px] text-sm text-fg-muted">{description}</p> : null}
       {action ? <div className="mt-4">{action}</div> : null}
       {cards?.length ? <ActionCards cards={cards} className="mt-5" /> : null}
     </div>

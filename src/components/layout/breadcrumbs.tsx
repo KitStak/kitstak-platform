@@ -12,10 +12,10 @@ export type { Crumb };
 /** `Home › …items`. "Home" and crumbs with `href` link; the rest are plain text. */
 export function Breadcrumbs({ items, className }: { readonly items: readonly Crumb[]; readonly className?: string }) {
   return (
-    <nav aria-label="Breadcrumb" className={cn("text-[11px] text-secondary", className)}>
+    <nav aria-label="Breadcrumb" className={cn("text-xs text-fg-muted", className)}>
       <ol className="flex flex-wrap items-center gap-1">
         <li>
-          <Link href="/dashboard" className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">Home</Link>
+          <Link href="/dashboard" className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">Home</Link>
         </li>
         {items.map((item, index) => {
           const last = index === items.length - 1;
@@ -23,9 +23,9 @@ export function Breadcrumbs({ items, className }: { readonly items: readonly Cru
             <li key={`${item.label}-${index}`} className="flex items-center gap-1">
               <ChevronRight className="h-3 w-3" aria-hidden />
               {item.href && !last ? (
-                <Link href={item.href} className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">{item.label}</Link>
+                <Link href={item.href} className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">{item.label}</Link>
               ) : (
-                <span className={last ? "text-body" : undefined} aria-current={last ? "page" : undefined}>{item.label}</span>
+                <span className={last ? "font-medium text-fg" : undefined} aria-current={last ? "page" : undefined}>{item.label}</span>
               )}
             </li>
           );

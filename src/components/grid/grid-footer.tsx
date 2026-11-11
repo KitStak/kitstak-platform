@@ -46,7 +46,7 @@ function PageInput({ page, pageCount, onPageChange }: { readonly page: number; r
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setText(null);
         }}
-        className="h-7 w-11 rounded-md border border-border-strong/70 bg-surface text-center text-[12px] font-semibold tabular-nums text-foreground focus:border-info focus:outline-none focus:ring-2 focus:ring-info/25"
+        className="h-7 w-11 rounded-md border border-border-strong/70 bg-surface text-center text-[12px] font-semibold tabular-nums text-foreground focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25"
       />
       <span className="tabular-nums">/ {pageCount.toLocaleString()}</span>
     </span>
@@ -77,7 +77,7 @@ export function GridFooter({ total, page, pageSize, selectedCount, density, onDe
       <div className="flex min-w-0 items-center gap-2 lg:gap-3">
         <div role="radiogroup" aria-label="Row density" className="flex rounded-md border border-border p-0.5">
           {GRID_DENSITIES.map((d) => (
-            <button key={d} type="button" role="radio" aria-checked={density === d} onClick={() => onDensityChange(d)} className={cn("rounded px-2 py-0.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30", density === d ? "bg-neutral-soft text-foreground" : "text-secondary hover:bg-surface-sunken")}>
+            <button key={d} type="button" role="radio" aria-checked={density === d} onClick={() => onDensityChange(d)} className={cn("rounded px-2 py-0.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30", density === d ? "bg-neutral-soft text-foreground" : "text-secondary hover:bg-surface-sunken")}>
               {d}
             </button>
           ))}

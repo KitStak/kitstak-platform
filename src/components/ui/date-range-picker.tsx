@@ -108,7 +108,7 @@ export function DateRangePicker({ value, onChange, presets = DEFAULT_RANGE_PRESE
                   setPresetKey(preset.key);
                 }}
                 className={cn(
-                  "rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30",
+                  "rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30",
                   presetKey === preset.key ? "bg-primary-soft font-semibold text-primary" : "text-body"
                 )}
               >

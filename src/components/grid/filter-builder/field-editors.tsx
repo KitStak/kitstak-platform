@@ -116,7 +116,7 @@ function BooleanEditor({ def, draft, onChange }: EditorProps<Extract<FilterDraft
           aria-pressed={draft.value === o.value}
           onClick={() => onChange({ type: "boolean", value: draft.value === o.value ? null : o.value })}
           className={cn(
-            "h-8 rounded-md border text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30",
+            "h-8 rounded-md border text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30",
             draft.value === o.value ? o.on : "border-border text-secondary hover:bg-surface-sunken"
           )}
         >
@@ -146,7 +146,7 @@ function DateEditor({ def, draft, onChange }: EditorProps<Extract<FilterDraft, {
             aria-checked={value.preset === o.key}
             onClick={() => set({ preset: o.key as DatePresetKey })}
             className={cn(
-              "rounded-md border px-2 py-1.5 text-left text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30",
+              "rounded-md border px-2 py-1.5 text-left text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30",
               value.preset === o.key ? "border-primary bg-primary-soft font-semibold text-primary" : "border-border text-body hover:bg-surface-sunken"
             )}
           >

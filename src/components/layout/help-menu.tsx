@@ -85,7 +85,7 @@ export function HelpMenu() {
       </HeaderIconButton>
       {/* Logiwa-style "Feedback & Updates" side tab; hidden on small screens and in print. */}
       <button type="button" onClick={() => setView({ kind: "feedback" })} aria-label="Feedback and updates"
-        className="fixed right-0 top-1/2 z-30 hidden w-7 -translate-y-1/2 items-center justify-center gap-1.5 rounded-l-md bg-inverse px-0 py-3 text-[11px] font-semibold leading-none text-fg-inverse shadow-md transition-colors [writing-mode:vertical-rl] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/60 print:hidden lg:flex">
+        className="fixed right-0 top-1/2 z-30 hidden w-7 -translate-y-1/2 items-center justify-center gap-1.5 rounded-l-md bg-inverse px-0 py-3 text-[11px] font-semibold leading-none text-fg-inverse shadow-md transition-colors [writing-mode:vertical-rl] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60 print:hidden lg:flex">
         <MessageSquarePlus className="h-3.5 w-3.5 rotate-90" aria-hidden />
         Feedback &amp; Updates
       </button>

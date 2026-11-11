@@ -26,7 +26,7 @@ export const Checkbox = React.forwardRef<React.ElementRef<typeof CheckboxPrimiti
         checked={checked}
         className={cn(
           "peer inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border border-border-strong bg-surface text-white outline-none transition-colors",
-          "hover:border-primary/60 focus-visible:ring-2 focus-visible:ring-info/30",
+          "hover:border-primary/60 focus-visible:ring-2 focus-visible:ring-focus/30",
           "data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=indeterminate]:border-primary data-[state=indeterminate]:bg-primary",
           "aria-[invalid=true]:border-danger disabled:cursor-not-allowed disabled:opacity-45",
           className

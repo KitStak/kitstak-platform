@@ -59,7 +59,7 @@ export function DebouncedSearch({ value, onCommit, placeholder, className, leadi
           placeholder={placeholder}
           aria-label={placeholder}
           className={cn(
-            "h-8 w-64 text-ellipsis border border-border-strong/70 bg-surface pl-8 pr-7 text-[13px] text-body placeholder:text-faint transition-colors hover:border-border-strong focus:border-info focus:outline-none focus:ring-2 focus:ring-info/25 [&::-webkit-search-cancel-button]:hidden",
+            "h-8 w-64 text-ellipsis border border-border-strong/70 bg-surface pl-8 pr-7 text-[13px] text-body placeholder:text-faint transition-colors hover:border-border-strong focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25 [&::-webkit-search-cancel-button]:hidden",
             leading ? "rounded-r-md" : "rounded-md"
           )}
         />

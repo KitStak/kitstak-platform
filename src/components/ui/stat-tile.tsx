@@ -61,7 +61,7 @@ export function StatTile({ label, value, sublabel, icon: Icon, delta, info, info
   const classes = cn("block rounded-lg border border-border bg-surface px-4 py-3.5 shadow-xs", className);
   if (!href) return <div className={classes}>{body}</div>;
   return (
-    <Link href={href} className={cn(classes, "transition-[border-color,box-shadow] hover:border-border-strong hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30 active:shadow-xs")}>
+    <Link href={href} className={cn(classes, "transition-[border-color,box-shadow] hover:border-border-strong hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30 active:shadow-xs")}>
       {body}
     </Link>
   );

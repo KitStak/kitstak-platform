@@ -22,7 +22,7 @@ const Empty = () => <span className="text-faint">{EMPTY_VALUE}</span>;
 /** Primary-key / hyperlink cell. Stops row-click propagation. */
 export function LinkCell({ href, children, className }: { readonly href: string; readonly children: React.ReactNode; readonly className?: string }) {
   return (
-    <Link href={href} onClick={(e) => e.stopPropagation()} className={cn("font-medium text-primary underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30", className)}>
+    <Link href={href} onClick={(e) => e.stopPropagation()} className={cn("font-medium text-primary underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30", className)}>
       {children}
     </Link>
   );
@@ -43,7 +43,7 @@ export function ExternalFilterLink({ path, filters, children, label }: { readonl
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
       aria-label={label ? `${label} (opens in a new tab)` : undefined}
-      className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
+      className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
     >
       {children}
       <ExternalLink className="h-3 w-3 opacity-70" aria-hidden />

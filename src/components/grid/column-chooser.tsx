@@ -35,14 +35,14 @@ function Row({ column, draft, onToggle, onPin, dragDisabled }: { readonly column
   const pinned = draft.pinned.includes(column.id);
   return (
     <li ref={setNodeRef} style={style} className={cn("flex items-center gap-1.5 rounded-md bg-surface px-1 py-1", isDragging && "relative z-10 shadow-md ring-1 ring-primary/30")}>
-      <button type="button" aria-label={`Reorder ${column.label}`} className={cn("flex h-6 w-5 items-center justify-center rounded text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30", dragDisabled ? "cursor-not-allowed opacity-30" : "cursor-grab hover:text-secondary")} {...attributes} {...listeners}>
+      <button type="button" aria-label={`Reorder ${column.label}`} className={cn("flex h-6 w-5 items-center justify-center rounded text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30", dragDisabled ? "cursor-not-allowed opacity-30" : "cursor-grab hover:text-secondary")} {...attributes} {...listeners}>
         <GripVertical className="h-3.5 w-3.5" aria-hidden />
       </button>
       <div className="min-w-0 flex-1">
         <Checkbox label={column.label} checked={draft.visible.has(column.id)} disabled={column.alwaysVisible} onCheckedChange={(c) => onToggle(c === true)} />
       </div>
       <Tooltip content={pinned ? "Unpin column" : "Pin to the left"}>
-        <button type="button" aria-label={pinned ? `Unpin ${column.label}` : `Pin ${column.label}`} aria-pressed={pinned} onClick={onPin} className={cn("flex h-6 w-6 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30", pinned ? "text-primary" : "text-faint hover:text-secondary")}>
+        <button type="button" aria-label={pinned ? `Unpin ${column.label}` : `Pin ${column.label}`} aria-pressed={pinned} onClick={onPin} className={cn("flex h-6 w-6 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30", pinned ? "text-primary" : "text-faint hover:text-secondary")}>
           <Pin className={cn("h-3.5 w-3.5", pinned && "fill-current")} aria-hidden />
         </button>
       </Tooltip>

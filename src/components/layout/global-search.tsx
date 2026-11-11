@@ -205,7 +205,7 @@ export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly N
               {records.isError && recordsEnabled && !records.isFetching ? (
                 <p role="alert" className="flex items-center gap-2 px-4 py-2 text-[12px] text-danger">
                   Record search is unavailable right now.
-                  <button type="button" onClick={() => void records.refetch()} className="rounded font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
+                  <button type="button" onClick={() => void records.refetch()} className="rounded font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
                     Retry
                   </button>
                 </p>

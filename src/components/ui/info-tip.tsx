@@ -15,7 +15,7 @@ export function InfoTip({ content, label = "More information", side = "top", cla
         data-audit-skip=""
         aria-label={label}
         className={cn(
-          "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-faint transition-colors hover:text-secondary focus-visible:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30",
+          "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-faint transition-colors hover:text-secondary focus-visible:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30",
           className
         )}
       >

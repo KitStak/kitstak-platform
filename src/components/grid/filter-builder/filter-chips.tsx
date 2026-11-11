@@ -35,9 +35,9 @@ const ChipBody = React.forwardRef<HTMLButtonElement, { readonly chip: FilterChip
 function Chip({ chip, onRemove, editor }: ChipProps) {
   const body = <ChipBody chip={chip} aria-label={`Edit ${chip.label} filter`} />;
   return (
-    <span className="inline-flex h-9 shrink-0 items-center rounded-lg border border-info/30 bg-info-soft transition-colors focus-within:ring-2 focus-within:ring-info/30 hover:border-info/60">
+    <span className="inline-flex h-9 shrink-0 items-center rounded-lg border border-info/30 bg-info-soft transition-colors focus-within:ring-2 focus-within:ring-focus/30 hover:border-info/60">
       {editor ? editor(body) : body}
-      <button type="button" aria-label={`Remove ${chip.label} filter`} onClick={onRemove} className="mr-1.5 flex h-5 w-5 items-center justify-center rounded text-info/70 transition-colors hover:bg-info/10 hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
+      <button type="button" aria-label={`Remove ${chip.label} filter`} onClick={onRemove} className="mr-1.5 flex h-5 w-5 items-center justify-center rounded text-info/70 transition-colors hover:bg-info/10 hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
         <X className="h-3 w-3" aria-hidden />
       </button>
     </span>
@@ -72,7 +72,7 @@ export function FilterChips({ gridKey, fields, filters, onRemove, onApply, onCle
       {overflow.length > 0 ? (
         <Popover>
           <PopoverTrigger asChild>
-            <button type="button" aria-label={`Show ${overflow.length} more filters`} className="inline-flex h-9 shrink-0 items-center rounded-lg border border-info/30 bg-surface px-2.5 text-[12px] font-semibold text-info hover:bg-info-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
+            <button type="button" aria-label={`Show ${overflow.length} more filters`} className="inline-flex h-9 shrink-0 items-center rounded-lg border border-info/30 bg-surface px-2.5 text-[12px] font-semibold text-info hover:bg-info-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
               +{overflow.length}
             </button>
           </PopoverTrigger>

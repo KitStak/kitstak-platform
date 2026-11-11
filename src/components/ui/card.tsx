@@ -12,7 +12,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-surface shadow-xs",
+        "rounded-lg border border-border-subtle bg-panel",
         className
       )}
     >
@@ -37,12 +37,12 @@ export function CardHeader({
   return (
     <div className={cn("flex items-start justify-between gap-3 px-5 pt-4 pb-3", className)}>
       <div>
-        <h3 className="flex items-center gap-1.5 text-[15px] font-semibold text-foreground">
+        <h3 className="flex items-center gap-1.5 text-md font-semibold text-fg">
           {title}
           {info ? <Info className="h-3.5 w-3.5 text-faint" aria-hidden /> : null}
         </h3>
         {description ? (
-          <p className="mt-0.5 text-[12px] leading-4 text-faint">{description}</p>
+          <p className="mt-0.5 text-xs text-fg-muted">{description}</p>
         ) : null}
       </div>
       {action}

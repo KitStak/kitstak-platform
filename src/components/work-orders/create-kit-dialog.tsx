@@ -411,7 +411,7 @@ function Body({ workOrderId, onClose, onDone }: { readonly workOrderId: string; 
                 <TextField id="scan" value={scan} autoFocus placeholder="Scan location or LP" invalid={Boolean(errors.scan)}
                   // The brand primary is red, so the autofocused scan field would read as an error on open.
                   // Until Next is pressed it takes a neutral focus ring (red only after validation).
-                  className={errors.scan ? undefined : "focus-within:border-info focus-within:ring-info/25"}
+                  className={errors.scan ? undefined : "focus-within:border-focus focus-within:ring-focus/25"}
                   leading={<ScanLine className="h-3.5 w-3.5 text-faint" aria-hidden />}
                   onChange={(e) => { setScan(e.target.value); if (!groups.length) setFefoConfirmed(null); setErr("scan"); }} />
               </Field>

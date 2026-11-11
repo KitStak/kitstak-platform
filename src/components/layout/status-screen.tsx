@@ -38,7 +38,7 @@ export function StatusScreen({ code, icon: Icon, tone = "neutral", title, descri
 
 export function HomeLink({ label = "Go to Dashboard" }: { readonly label?: string }) {
   return (
-    <Link href="/dashboard" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/40">
+    <Link href="/dashboard" className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40">
       {label}
     </Link>
   );

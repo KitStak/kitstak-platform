@@ -38,7 +38,7 @@ export function SearchChip({ grid, noun }: {
         type="button"
         aria-label={`Remove search ${label} ${q}`}
         onClick={() => grid.setSearch("")}
-        className="mr-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-info/80 transition-colors hover:bg-info/10 hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/40"
+        className="mr-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-info/80 transition-colors hover:bg-info/10 hover:text-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40"
       >
         <X className="h-3.5 w-3.5" aria-hidden />
       </button>

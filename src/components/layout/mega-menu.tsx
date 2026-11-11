@@ -31,7 +31,7 @@ function MenuLink({ navItem, activeHref }: { readonly navItem: NavItem; readonly
           aria-current={active ? "page" : undefined}
           className={cn(
             "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] font-medium outline-none transition-colors",
-            "hover:bg-primary-soft hover:text-primary focus-visible:bg-primary-soft focus-visible:text-primary focus-visible:ring-2 focus-visible:ring-info/60",
+            "hover:bg-primary-soft hover:text-primary focus-visible:bg-primary-soft focus-visible:text-primary focus-visible:ring-2 focus-visible:ring-focus/60",
             active ? "bg-primary-soft text-primary" : "text-body",
           )}
         >
@@ -68,7 +68,7 @@ function MenuPanel({ menu, pathname }: { readonly menu: NavMenu; readonly pathna
       {menu.footer ? (
         <div className="border-t border-border bg-surface-sunken px-5 py-2">
           <NavigationMenu.Link asChild>
-            <Link href={menu.footer.href} className="inline-flex items-center gap-1 rounded px-2 py-1 text-[12px] font-semibold text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-info/60">
+            <Link href={menu.footer.href} className="inline-flex items-center gap-1 rounded px-2 py-1 text-[12px] font-semibold text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus/60">
               {menu.footer.label}
               <ArrowRight className="h-3 w-3" aria-hidden />
             </Link>

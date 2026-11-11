@@ -208,7 +208,7 @@ export function PrintOptionsModal({ open, onOpenChange, typeKeys, records, clien
                       setSelectedId(t.id);
                       setPreviewId(null);
                     }}
-                    className={cn("flex items-start gap-3 rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30", active ? "border-primary bg-primary-soft" : "border-border hover:border-primary/40 hover:bg-surface-sunken")}
+                    className={cn("flex items-start gap-3 rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30", active ? "border-primary bg-primary-soft" : "border-border hover:border-primary/40 hover:bg-surface-sunken")}
                   >
                     <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-md", active ? "bg-primary text-white" : "bg-neutral-soft text-secondary")}>
                       <FileText className="h-4 w-4" aria-hidden />
