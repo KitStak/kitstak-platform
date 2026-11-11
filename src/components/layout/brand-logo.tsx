@@ -52,12 +52,14 @@ export function BrandLogo({ tone = "dark", height = 20, showProduct = false, cla
         {BRAND_NAME}
       </span>
       {showProduct ? (
+        // Product tag: a hairline divider and letter-spaced label, the same lockup as KitStak CRM.
         <span
-          className="rounded-[3px] px-1 py-px font-semibold uppercase leading-none tracking-widest"
+          className="border-l pl-2 font-semibold uppercase leading-none tracking-[0.18em]"
           style={{
-            fontSize: Math.max(9, Math.round(height * 0.45)),
+            fontSize: Math.max(9, Math.round(height * 0.6)),
+            lineHeight: `${Math.round(height * 1.1)}px`,
             color: tone === "dark" ? "rgba(243,240,231,0.72)" : "var(--logo-product)",
-            background: tone === "dark" ? "rgba(243,240,231,0.1)" : "var(--surface-hover)",
+            borderColor: tone === "dark" ? "rgba(243,240,231,0.24)" : "var(--logo-divider)",
           }}
         >
           WMS

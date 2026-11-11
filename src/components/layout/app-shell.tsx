@@ -60,8 +60,8 @@ function TopBar() {
   const menus = React.useMemo(() => (permissions ? visibleMenus(NAV_MENUS, permissions, activeApps) : NAV_MENUS), [permissions, activeApps]);
   const extraPages = React.useMemo(() => [DASHBOARD_ITEM, ...USER_MENU_ITEMS, ...HEADER_ITEMS].filter((navItem) => allows(navItem.permission)), [allows]);
   return (
-    <header className="sticky top-0 z-40 border-b border-border-subtle bg-panel">
-      <div className="flex h-14 items-center gap-1 px-3 lg:px-4">
+    <header data-testid="top-bar" className="sticky top-0 z-40 border-b border-border-subtle bg-panel">
+      <div className="flex h-[var(--topbar-height)] items-center gap-1 px-3 lg:px-4">
         <MobileNav menus={menus} dashboardHref={DASHBOARD_ITEM.href} />
         <Logo />
         <MegaMenuBar menus={menus} dashboardHref={DASHBOARD_ITEM.href} />

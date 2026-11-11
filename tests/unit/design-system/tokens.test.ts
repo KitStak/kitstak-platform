@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * This hash is pinned in BOTH repos. To change a token: edit the file, update the hash,
  * then copy the file and the hash to the other repo. A one-sided edit fails here.
  */
-const SHARED_TOKENS_SHA256 = "94fc8d6365d5569636315f1a8012e36b931b1b01f7289eb42f6cf9ee433c947b";
+const SHARED_TOKENS_SHA256 = "50f9586235084b90b0db2d4ab75071140a565405ea7425e3be3f76195d50d4cf";
 
 const read = (file: string): string => readFileSync(join(process.cwd(), file), "utf8").replace(/\r\n/g, "\n");
 
