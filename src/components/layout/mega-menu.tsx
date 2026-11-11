@@ -15,7 +15,7 @@ export const MENU_OPEN_DELAY_MS = 150;
 
 function NavBadgeTag({ badge }: { readonly badge: NonNullable<NavItem["badge"]> }) {
   return (
-    <span className="rounded bg-[#efe7fb] px-1 py-px text-[9px] font-bold uppercase leading-3 tracking-wide text-[#621db8]">
+    <span className="rounded bg-sunken px-1 py-px text-[9px] font-bold uppercase leading-3 tracking-wide text-fg-muted">
       {badge}
     </span>
   );
@@ -81,7 +81,7 @@ function MenuPanel({ menu, pathname }: { readonly menu: NavMenu; readonly pathna
 
 const triggerClass =
   "group relative flex h-14 items-center gap-0.5 rounded-md px-1 text-[12.5px] xl:gap-1 xl:px-1.5 xl:text-[13px] min-[1440px]:px-2 font-semibold outline-none transition-colors " +
-  "focus-visible:bg-white/10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/80 data-[state=open]:text-white";
+  "focus-visible:bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus data-[state=open]:text-fg";
 
 /**
  * The 7 Logiwa-parity mega-menus. Radix NavigationMenu supplies hover intent, click and
@@ -105,7 +105,7 @@ export function MegaMenuBar({ menus, dashboardHref }: { readonly menus: readonly
         {/* The logo already goes home (Logiwa parity); the text link only fits from 1440px. */}
         <NavigationMenu.Item className="hidden min-[1440px]:block">
           <NavigationMenu.Link asChild active={dashboardActive}>
-            <Link href={dashboardHref} className={cn(triggerClass, dashboardActive ? "text-white" : "text-white/80 hover:text-white")}>
+            <Link href={dashboardHref} className={cn(triggerClass, dashboardActive ? "text-fg" : "text-fg-secondary hover:text-fg")}>
               Dashboard
               <ActiveUnderline show={dashboardActive} />
             </Link>
@@ -115,7 +115,7 @@ export function MegaMenuBar({ menus, dashboardHref }: { readonly menus: readonly
           const active = menu.key === activeKey;
           return (
             <NavigationMenu.Item key={menu.key} value={menu.key} className="relative">
-              <NavigationMenu.Trigger className={cn(triggerClass, active ? "text-white" : "text-white/80 hover:text-white")}>
+              <NavigationMenu.Trigger className={cn(triggerClass, active ? "text-fg" : "text-fg-secondary hover:text-fg")}>
                 {menu.label}
                 <ChevronDown className="h-3.5 w-3.5 opacity-70 transition-transform group-data-[state=open]:rotate-180" aria-hidden />
                 <ActiveUnderline show={active} />
@@ -141,7 +141,7 @@ export function MegaMenuBar({ menus, dashboardHref }: { readonly menus: readonly
 
 /** Route-active underline; an open trigger shows it too, via Radix's own data-state. */
 function ActiveUnderline({ show }: { readonly show: boolean }) {
-  return <span aria-hidden className={cn("absolute inset-x-3 bottom-2 h-0.5 rounded-full bg-white transition-opacity", show ? "opacity-100" : "opacity-0 group-data-[state=open]:opacity-100")} />;
+  return <span aria-hidden className={cn("absolute inset-x-3 bottom-2 h-0.5 rounded-full bg-primary transition-opacity", show ? "opacity-100" : "opacity-0 group-data-[state=open]:opacity-100")} />;
 }
 
 const VIEWPORT_GUTTER_PX = 16;

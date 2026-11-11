@@ -22,8 +22,8 @@ export const ALL_VALUE = "__all__";
  * truncated (it is short: "MLT1 · All"), so it keeps priority over the search pill.
  */
 const triggerClass =
-  "hidden h-8 w-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full text-[12px] font-medium text-white/85 outline-none transition-colors md:flex " +
-  "hover:bg-white/15 hover:text-white focus-visible:ring-2 focus-visible:ring-white/80 data-[state=open]:bg-white/15 " +
+  "hidden h-8 w-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full text-[12px] font-medium text-fg-secondary outline-none transition-colors md:flex " +
+  "hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-focus data-[state=open]:bg-pressed " +
   "xl:w-auto xl:justify-start xl:px-3";
 
 export interface ContextSelectionDraft {
@@ -106,11 +106,11 @@ export function ContextSwitcher() {
         <PopoverTrigger asChild>
           {/* Named by its content (visible label first, then sr-only text) so the accessible name always contains what is shown. */}
           <button type="button" className={triggerClass}>
-            <Warehouse className="h-3.5 w-3.5 shrink-0 text-white/60" aria-hidden />
+            <Warehouse className="h-3.5 w-3.5 shrink-0 text-fg-muted" aria-hidden />
             <span className="hidden xl:max-[1439px]:inline">{label.compact}</span>
             <span className="hidden min-[1440px]:inline">{label.summary}</span>
             <span className="sr-only">{` — change working context (${label.description})`}</span>
-            <ChevronDown className="hidden h-3 w-3 shrink-0 text-white/50 xl:block" aria-hidden />
+            <ChevronDown className="hidden h-3 w-3 shrink-0 text-fg-muted xl:block" aria-hidden />
           </button>
         </PopoverTrigger>
       </Tooltip>

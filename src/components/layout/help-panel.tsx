@@ -74,14 +74,14 @@ function Home({ go, onShortcuts }: { readonly go: (v: HelpView) => void; readonl
   const openArticle = (id: string) => go({ kind: "article", id });
   return (
     <div className="flex flex-col gap-5">
-      <section className="rounded-xl bg-nav px-4 py-5 text-white">
+      <section className="rounded-lg border border-border-subtle bg-sunken px-4 py-5 text-fg">
         <p className="text-[18px] font-semibold">Help Center</p>
-        <p className="mt-0.5 text-[12.5px] text-white/75">Guides, release notes and support for every KitStak screen.</p>
+        <p className="mt-0.5 text-[12.5px] text-fg-muted">Guides, release notes and support for every KitStak screen.</p>
         <label className="relative mt-3 flex items-center">
           <span className="sr-only">Search help articles</span>
           <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-faint" aria-hidden />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search help, e.g. receive, wave, label" data-autofocus
-            className="h-9 w-full rounded-md border border-transparent bg-surface pl-8 pr-2 text-[13px] text-foreground placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70" />
+            className="h-9 w-full rounded-md border border-border-input bg-surface pl-8 pr-2 text-[13px] text-foreground placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" />
         </label>
       </section>
       {query.trim() ? (

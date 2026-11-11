@@ -32,9 +32,9 @@ function NotFoundBody() {
 function BrandFrame({ children }: { readonly children?: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <header className="flex h-14 shrink-0 items-center bg-nav px-4 shadow-md">
-        <Link href="/dashboard" aria-label={`${PRODUCT_NAME} home`} className="flex items-center rounded-md px-1 outline-none focus-visible:ring-2 focus-visible:ring-white/50">
-          <BrandLogo tone="dark" height={17} showProduct />
+      <header className="flex h-14 shrink-0 items-center border-b border-border-subtle bg-panel px-4">
+        <Link href="/dashboard" aria-label={`${PRODUCT_NAME} home`} className="flex items-center rounded-md px-1 outline-none focus-visible:ring-2 focus-visible:ring-focus">
+          <BrandLogo tone="light" height={17} showProduct />
         </Link>
       </header>
       <main className="flex flex-1 flex-col">{children}</main>

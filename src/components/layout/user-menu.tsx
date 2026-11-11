@@ -79,10 +79,10 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" className="flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-1.5 outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/50 data-[state=open]:bg-white/15">
+        <button type="button" className="flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-1.5 outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus data-[state=open]:bg-pressed">
           <Avatar name={name} size="sm" tone="brand" />
           <span className="sr-only">{` Account menu for ${name}`}</span>
-          <ChevronDown className="h-3.5 w-3.5 text-white/60" aria-hidden />
+          <ChevronDown className="h-3.5 w-3.5 text-fg-muted" aria-hidden />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">

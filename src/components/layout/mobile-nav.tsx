@@ -26,17 +26,17 @@ export function MobileNav({ menus, dashboardHref }: { readonly menus: readonly N
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
       <DialogPrimitive.Trigger asChild>
-        <button type="button" aria-label="Open navigation" className="flex h-8 w-8 items-center justify-center rounded-md text-white/85 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40 lg:hidden">
+        <button type="button" aria-label="Open navigation" className="flex h-8 w-8 items-center justify-center rounded-md text-fg-secondary hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus lg:hidden">
           <Menu className="h-5 w-5" aria-hidden />
         </button>
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className={overlayClass} />
         <DialogPrimitive.Content className="fixed inset-y-0 left-0 z-50 flex w-[320px] max-w-[88vw] flex-col bg-surface shadow-lg outline-none">
-          <div className="flex h-14 items-center justify-between bg-nav px-4">
-            <DialogPrimitive.Title className="text-[14px] font-semibold text-white">Menu</DialogPrimitive.Title>
+          <div className="flex h-14 items-center justify-between border-b border-border-subtle bg-panel px-4">
+            <DialogPrimitive.Title className="text-[14px] font-semibold text-fg">Menu</DialogPrimitive.Title>
             <DialogPrimitive.Description className="sr-only">Main navigation</DialogPrimitive.Description>
-            <DialogPrimitive.Close aria-label="Close navigation" className="flex h-8 w-8 items-center justify-center rounded-md text-white/80 hover:bg-white/10">
+            <DialogPrimitive.Close aria-label="Close navigation" className="flex h-8 w-8 items-center justify-center rounded-md text-fg-secondary hover:bg-hover">
               <X className="h-4 w-4" aria-hidden />
             </DialogPrimitive.Close>
           </div>
@@ -69,7 +69,7 @@ export function MobileNav({ menus, dashboardHref }: { readonly menus: readonly N
                               className={cn("block rounded-md px-3 py-1.5 text-[13px]", activeItemHref(menu, pathname) === navItem.href ? "bg-primary-soft font-semibold text-primary" : "text-body hover:bg-neutral-soft")}
                             >
                               {navItem.label}
-                              {navItem.badge ? <span className="ml-1.5 text-[9px] font-bold text-[#621db8]">{navItem.badge}</span> : null}
+                              {navItem.badge ? <span className="ml-1.5 text-[9px] font-bold text-fg-muted">{navItem.badge}</span> : null}
                             </Link>
                           ))}
                         </div>
