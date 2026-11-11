@@ -96,7 +96,7 @@ function ShiftSummary({ shifts }: { readonly shifts: readonly ShiftInfo[] }) {
         {shown.map(({ s, w }) => (
           <li key={s.warehouseId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 text-[11.5px]">
             <span className="truncate text-foreground" title={`${s.warehouseLabel} · ${s.timeZone.replace("_", " ")}`}>{s.warehouseLabel}</span>
-            <span className={cn("tabular-nums", w.phase === "during" ? "font-semibold text-[#17874D]" : "text-faint")}>{w.phase === "during" ? `${w.nowLabel} – ${s.end}` : w.statusLabel}</span>
+            <span className={cn("tabular-nums", w.phase === "during" ? "font-semibold text-success" : "text-faint")}>{w.phase === "during" ? `${w.nowLabel} – ${s.end}` : w.statusLabel}</span>
             <div className="col-span-2 h-1 overflow-hidden rounded-full bg-border" role="progressbar" aria-label={`${s.warehouseLabel} shift elapsed`} aria-valuenow={w.percent} aria-valuemin={0} aria-valuemax={100}>
               <div className="h-full rounded-full bg-primary transition-[width] duration-700" style={{ width: `${w.percent}%` }} />
             </div>
@@ -120,14 +120,14 @@ function ShiftClock({ shift }: { readonly shift: ShiftInfo }) {
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-[12px] font-semibold text-secondary">Day shift · {w.dateLabel}</span>
         <span className="text-[13px] font-semibold tabular-nums">
-          {w.phase === "during" ? <><span className="text-[#17874D]">{w.nowLabel}</span><span className="text-faint"> – {shift.end}</span></> : <span className="text-secondary">{w.statusLabel}</span>}
+          {w.phase === "during" ? <><span className="text-success">{w.nowLabel}</span><span className="text-faint"> – {shift.end}</span></> : <span className="text-secondary">{w.statusLabel}</span>}
         </span>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border" role="progressbar" aria-label="Shift elapsed" aria-valuenow={w.percent} aria-valuemin={0} aria-valuemax={100}>
         <div className="h-full rounded-full bg-primary transition-[width] duration-700" style={{ width: `${w.percent}%` }} />
       </div>
       <div className="mt-1.5 flex justify-between text-[11px] text-faint">
-        <span className="inline-flex items-center gap-1"><Sun className="h-3 w-3 text-[#EBAC00]" aria-hidden />{shift.start}</span>
+        <span className="inline-flex items-center gap-1"><Sun className="h-3 w-3 text-warning" aria-hidden />{shift.start}</span>
         <span className="truncate px-2">{shift.warehouseLabel} · {shift.timeZone.replace("_", " ")}</span>
         <span className="inline-flex items-center gap-1">{shift.end}<Moon className="h-3 w-3 text-primary" aria-hidden /></span>
       </div>
@@ -149,7 +149,7 @@ function SplitProgressRow({ label, verb, p }: { readonly label: string; readonly
       <div className="mt-1 h-1 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-[#17874D]" style={{ width: `${pct}%` }} /></div>
       <div className="mt-1 flex items-center justify-between gap-2 text-[11.5px] tabular-nums text-faint">
         <span>
-          <Link href={p.doneHref} className={link} title="Open the tasks completed today" data-testid="progress-tasks-done"><span className="font-semibold text-[#17874D]">{fmt(p.done)}</span> completed today</Link>
+          <Link href={p.doneHref} className={link} title="Open the tasks completed today" data-testid="progress-tasks-done"><span className="font-semibold text-success">{fmt(p.done)}</span> completed today</Link>
           <span aria-hidden> · </span>
           <Link href={p.openHref} className={link} title="Open the pending and started tasks" data-testid="progress-tasks-open"><span className="font-semibold text-foreground">{fmt(open)}</span> open</Link>
         </span>
@@ -177,11 +177,11 @@ function PartsProgressRow({ label, verb, p, hint, testId }: { readonly label: st
               {i > 0 ? <span aria-hidden>·</span> : null}
               {part.href ? (
                 <Link href={part.href} className={link} title={part.title} data-testid={testId ? `${testId}-part` : undefined} data-count={part.count}>
-                  <span className={cn("font-semibold", part.tone === "done" ? "text-[#17874D]" : "text-foreground")}>{fmt(part.count)}</span> {part.label}
+                  <span className={cn("font-semibold", part.tone === "done" ? "text-success" : "text-foreground")}>{fmt(part.count)}</span> {part.label}
                 </Link>
               ) : (
                 <span title={part.title} data-testid={testId ? `${testId}-part` : undefined} data-count={part.count}>
-                  <span className={cn("font-semibold", part.tone === "done" ? "text-[#17874D]" : "text-secondary")}>{fmt(part.count)}</span> {part.label}
+                  <span className={cn("font-semibold", part.tone === "done" ? "text-success" : "text-secondary")}>{fmt(part.count)}</span> {part.label}
                 </span>
               )}
             </React.Fragment>
@@ -205,7 +205,7 @@ function ProgressRow({ label, verb, p, hint, testId }: { readonly label: string;
       </div>
       <div className="mt-1 h-1 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-[#17874D]" style={{ width: `${pct}%` }} /></div>
       <div className="mt-1 flex items-center justify-between text-[11.5px] tabular-nums text-faint">
-        <span><span className="font-semibold text-[#17874D]">{fmt(p.done)}</span> – {fmt(p.total)}</span>
+        <span><span className="font-semibold text-success">{fmt(p.done)}</span> – {fmt(p.total)}</span>
         <ChevronRight className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
       </div>
     </Link>
@@ -232,8 +232,8 @@ export function ProgressTodayCard({ data }: { readonly data: LiveDashboard }) {
 /* --------------------------------------------------------------- unfulfilled */
 
 const SERIES = [
-  { key: "open", label: "Open", color: "#E0A500" },
-  { key: "inProgress", label: "In Progress", color: "#2E5CE6" },
+  { key: "open", label: "Open", color: "var(--chart-3)" },
+  { key: "inProgress", label: "In Progress", color: "var(--chart-1)" },
 ] as const;
 
 /** Unfulfilled backlog by order age: one bar per bucket (they add up to the total), each a drilldown. */
@@ -245,7 +245,7 @@ function UnfulfilledAge({ buckets }: { readonly buckets: readonly Metric[] }) {
     <section aria-label="Unfulfilled orders by order age" className="mt-4 border-t border-border pt-3" data-testid="unfulfilled-age">
       <h3 className="mb-2 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">
         By order age
-        {oldest && oldest.count > 0 ? <span className="normal-case tracking-normal text-[#B20B1C]">{fmt(oldest.count)} waiting 7+ days</span> : null}
+        {oldest && oldest.count > 0 ? <span className="normal-case tracking-normal text-danger">{fmt(oldest.count)} waiting 7+ days</span> : null}
       </h3>
       <ul className="flex flex-col gap-1.5">
         {buckets.map((b, i) => (
@@ -265,7 +265,7 @@ function UnfulfilledAge({ buckets }: { readonly buckets: readonly Metric[] }) {
 }
 
 /** Fresh → stale: green, blue, amber, red. */
-const AGE_COLORS = ["#1B8A55", "#2E5CE6", "#B07F00", "#C7403B"] as const;
+const AGE_COLORS = ["var(--chart-2)", "var(--chart-1)", "var(--chart-3)", "var(--chart-6)"] as const;
 
 export interface DonutArc {
   readonly key: string;
@@ -355,7 +355,7 @@ export function UnfulfilledCard({ data }: { readonly data: LiveDashboard }) {
               return (
                 <button key={s.key} type="button" aria-pressed={!off} onClick={() => toggle(s.key)}
                   className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", off ? "border-border text-faint line-through" : "border-border-strong/50 text-foreground")}>
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: off ? "#C9CDD2" : s.color }} />{s.label}
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: off ? "var(--border-strong)" : s.color }} />{s.label}
                 </button>
               );
             })}

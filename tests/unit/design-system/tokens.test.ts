@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * This hash is pinned in BOTH repos. To change a token: edit the file, update the hash,
  * then copy the file and the hash to the other repo. A one-sided edit fails here.
  */
-const SHARED_TOKENS_SHA256 = "85a4592b7deafbec7e073ec8b353ca2d0f90af9fc48b3cb64a4012ebd0905296";
+const SHARED_TOKENS_SHA256 = "bf7dd9425fefec6cbad4356feebcfaf8a356940cb4ad4b0465fb9e1f2915bdd0";
 
 const read = (file: string): string => readFileSync(join(process.cwd(), file), "utf8").replace(/\r\n/g, "\n");
 

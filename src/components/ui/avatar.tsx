@@ -23,7 +23,7 @@ export function avatarColor(name: string | null | undefined): string {
 
 const SIZES = { xs: "h-5 w-5 text-[9px]", sm: "h-6 w-6 text-[10px]", md: "h-8 w-8 text-[12px]", lg: "h-10 w-10 text-[14px]" } as const;
 
-/** `auto` = stable per-name colour; `brand` = lavender tile matching the indigo header. */
+/** Both tones render neutral initials now; `brand` is kept for the top bar call sites. */
 export type AvatarTone = "auto" | "brand";
 
 export interface AvatarProps {
@@ -36,8 +36,9 @@ export interface AvatarProps {
 
 export function Avatar({ name, src, size = "md", tone = "auto", className }: AvatarProps) {
   const rootClass = cn("inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full align-middle", SIZES[size], className);
-  const fallbackClass = cn("flex h-full w-full items-center justify-center font-semibold", tone === "brand" ? "bg-pressed text-fg" : "text-white");
-  const fallbackStyle = tone === "brand" ? undefined : { backgroundColor: avatarColor(name) };
+  // Neutral initials in both tones: people are told apart by initials, not by a colour.
+  const fallbackClass = cn("flex h-full w-full items-center justify-center bg-pressed font-medium", tone === "brand" ? "text-fg" : "text-fg-secondary");
+  const fallbackStyle = undefined;
   // Initials-only avatars render as plain markup so they are present in the server HTML
   // (Radix's Fallback only mounts after hydration, leaving an empty slot at first paint).
   if (!src) {

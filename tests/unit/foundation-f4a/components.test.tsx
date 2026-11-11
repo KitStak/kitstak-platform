@@ -123,8 +123,9 @@ describe("display & inputs", () => {
   it("StatusPill uses the domain palette and P mini-pill", () => {
     render(<StatusPill status="Partially Shipped" domain="shipmentOrder" />);
     const pill = screen.getByText("Partially Shipped").closest("[data-status]") as HTMLElement;
-    // green fg is #0E6B3B (darkened for AA 4.5:1 on the pill background, stations-returns REQ-4)
-    expect(pill.style.color).toBe("rgb(14, 107, 59)");
+    // Tones are shared label-palette tokens (AA text on the tint in both themes).
+    expect(pill.style.color).toContain("var(--label-green-text)");
+    expect(pill.style.backgroundColor).toBe("var(--label-green-subtle)");
     expect(screen.getByLabelText("Partial")).toBeTruthy();
   });
 

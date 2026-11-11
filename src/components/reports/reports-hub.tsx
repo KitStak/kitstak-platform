@@ -85,7 +85,7 @@ function ReportCard({ item, favorite, onToggle }: { readonly item: CatalogItem; 
         title={favorite ? "Remove from favorites" : "Add to favorites"}
         className={cn(
           "relative z-10 -m-1 rounded-md p-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-          favorite ? "text-[#EBAC00]" : "text-faint opacity-60 hover:text-secondary hover:opacity-100 group-hover:opacity-100",
+          favorite ? "text-warning" : "text-faint opacity-60 hover:text-secondary hover:opacity-100 group-hover:opacity-100",
         )}
       >
         <Star className="h-4 w-4" fill={favorite ? "currentColor" : "none"} aria-hidden />
@@ -218,7 +218,7 @@ export function ReportsHub({ initialPermissions = null }: { readonly initialPerm
         </div>
         <aside className="space-y-5">
           <section aria-labelledby="fav-list" className="rounded-lg border border-border bg-surface px-4 py-3.5">
-            <h2 id="fav-list" className="mb-2 flex items-center gap-1.5 text-[14px] font-semibold text-foreground"><Star className="h-4 w-4 text-[#EBAC00]" fill="currentColor" aria-hidden />Favorites</h2>
+            <h2 id="fav-list" className="mb-2 flex items-center gap-1.5 text-[14px] font-semibold text-foreground"><Star className="h-4 w-4 text-warning" fill="currentColor" aria-hidden />Favorites</h2>
             {favoriteItems.length === 0 ? (
               <p className="text-[12.5px] text-secondary">Star any report and it shows up here, ready in one click.</p>
             ) : (

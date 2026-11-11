@@ -361,7 +361,7 @@ export function ScheduleStep({ form, timezone }: { readonly form: Form; readonly
           {WEEKDAYS.map((d) => {
             const on = days.includes(d);
             return (
-              <button key={d} type="button" aria-pressed={on} onClick={() => toggleDay(d)} className={cn("inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", on ? "border-[#17874D] bg-[#D3F0E3] text-[#17874D]" : "border-border bg-surface-sunken text-secondary hover:border-border-strong")}>
+              <button key={d} type="button" aria-pressed={on} onClick={() => toggleDay(d)} className={cn("inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", on ? "border-[#17874D] bg-[#D3F0E3] text-success" : "border-border bg-surface-sunken text-secondary hover:border-border-strong")}>
                 {DAY_LABELS[d]}
                 {on ? <X className="h-3 w-3" aria-hidden /> : <Plus className="h-3 w-3" aria-hidden />}
               </button>

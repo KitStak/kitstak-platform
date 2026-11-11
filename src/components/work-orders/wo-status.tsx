@@ -8,7 +8,7 @@
  */
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { statusLabel, statusTone, TONE_ACCENTS, TONES, type StatusTone } from "@/lib/status-colors";
+import { pillClass, statusLabel, statusTone, TONES, type StatusTone } from "@/lib/status-colors";
 
 export function woStatusTone(status: string): StatusTone {
   return status.toLowerCase() === "open" ? TONES.teal : statusTone(status, "workOrder");
@@ -16,22 +16,23 @@ export function woStatusTone(status: string): StatusTone {
 
 /** Saturated accent of a status (dot, active border). */
 export function woStatusAccent(status: string): string {
-  return status.toLowerCase() === "open" ? TONE_ACCENTS.teal ?? TONES.teal.fg : woStatusTone(status).fg;
+  return woStatusTone(status).dot;
 }
 
 /**
  * Light: the pastel fill. Dark (`data-theme=dark`): a low-alpha tint of the accent with a lighter
  * foreground and a hairline ring, so pills don't glow on near-black surfaces.
  */
-export const WO_PILL_TONE = "bg-[var(--wo-bg)] text-[var(--wo-fg)] [[data-theme=dark]_&]:bg-[color-mix(in_srgb,var(--wo-acc)_20%,transparent)] [[data-theme=dark]_&]:text-[color-mix(in_srgb,var(--wo-acc)_55%,white)] [[data-theme=dark]_&]:ring-1 [[data-theme=dark]_&]:ring-inset [[data-theme=dark]_&]:ring-[color-mix(in_srgb,var(--wo-acc)_35%,transparent)]";
+export const WO_PILL_TONE = "bg-[var(--wo-bg)] text-[var(--wo-fg)]";
 
 export function WoStatusPill({ status, size = "md", className }: { readonly status: string; readonly size?: "sm" | "md"; readonly className?: string }) {
   const tone = woStatusTone(status);
   const vars = { "--wo-bg": tone.bg, "--wo-fg": tone.fg, "--wo-acc": woStatusAccent(status) } as React.CSSProperties;
   return (
     <span data-status={status} style={vars}
-      className={cn(WO_PILL_TONE, "inline-flex items-center gap-1 whitespace-nowrap rounded-full font-semibold", size === "sm" ? "px-1.5 py-px text-[10px] leading-4" : "px-2 py-0.5 text-[11px] leading-4", className)}>
-      {statusLabel(status)}
+      className={cn(WO_PILL_TONE, pillClass(size), className)}>
+      <span aria-hidden className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--wo-acc)]" />
+      <span className="truncate">{statusLabel(status)}</span>
     </span>
   );
 }

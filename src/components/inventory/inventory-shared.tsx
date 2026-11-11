@@ -13,7 +13,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useApiQuery } from "@/lib/query-client";
 import { useMe } from "@/lib/permissions-client";
 import { cn } from "@/lib/utils";
-import { pillStyle } from "@/lib/status-colors";
+import { PillDot } from "@/components/ui/status-pill";
+import { pillClass, pillStyle, TONES, type StatusTone } from "@/lib/status-colors";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { FilterFieldDef } from "@/components/grid";
 import type { InventoryGridField } from "@/lib/grid-defs/inventory/fields";
@@ -76,20 +77,21 @@ export function useInventoryFilterFields(fields: readonly InventoryGridField[]):
 
 /* ---------------- status pill ---------------- */
 
-const STATUS_TONE: Readonly<Record<string, { bg: string; fg: string }>> = {
-  Stock: { bg: "#D3F0E3", fg: "#17874D" },
-  Allocated: { bg: "#D5E5F2", fg: "#0D36A3" },
-  Picked: { bg: "#D5E5F2", fg: "#0D36A3" },
-  Sorted: { bg: "#D5E5F2", fg: "#0D36A3" },
-  Packed: { bg: "#DFCEF5", fg: "#621DB8" },
-  Loaded: { bg: "#DFCEF5", fg: "#621DB8" },
+const STATUS_TONE: Readonly<Record<string, StatusTone>> = {
+  Stock: TONES.green,
+  Allocated: TONES.blue,
+  Picked: TONES.blue,
+  Sorted: TONES.blue,
+  Packed: TONES.purple,
+  Loaded: TONES.purple,
 };
 
 export function InventoryStatusPill({ status, className }: { readonly status: string; readonly className?: string }) {
-  const tone = STATUS_TONE[status] ?? { bg: "#E3E6E8", fg: "#50575C" };
+  const tone = STATUS_TONE[status] ?? TONES.grey;
   return (
-    <span data-status={status} style={pillStyle(tone)} className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 whitespace-nowrap", className)}>
-      {status}
+    <span data-status={status} style={pillStyle(tone)} className={cn(pillClass(), className)}>
+      <PillDot tone={tone} />
+      <span className="truncate">{status}</span>
     </span>
   );
 }
