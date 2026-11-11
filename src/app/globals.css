@@ -63,7 +63,9 @@
   --color-neutral-soft: var(--neutral-soft);
   /* As text, the semantic and brand colours use their AA `-text` step in both themes;
      as fills (`bg-success`, `border-danger`) they stay the solid colour. */
-  --text-color-primary: var(--primary-text);
+  /* `text-primary` is how codes and links were marked. They are neutral ink now (hover adds an
+     underline, see below): crimson is reserved for primary buttons, active nav and focus rings. */
+  --text-color-primary: var(--text-primary);
   --text-color-success: var(--success-text);
   --text-color-warning: var(--warning-text);
   --text-color-danger: var(--danger-text);
@@ -212,9 +214,15 @@ body {
   }
 }
 
+/* Record codes and inline links: neutral text, underline on hover or keyboard focus. */
+:where(a, button).text-primary:where(:hover, :focus-visible) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 ::selection {
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--primary-200);
+  color: var(--text-primary);
 }
 
 /* Thin product scrollbars everywhere (page, popovers, search results, menus, grids), with
@@ -331,11 +339,4 @@ tr[data-highlight] > td {
   100% {
     background-color: transparent;
   }
-}
-
-/* Status pills (pillStyle): in dark mode a light pastel fill glares, so use a translucent
-   tint of the pill hue with a lifted foreground. */
-:root[data-theme="dark"] [style*="--pill-fg"] {
-  background-color: color-mix(in srgb, var(--pill-fg) 24%, transparent) !important;
-  color: color-mix(in srgb, var(--pill-fg) 45%, white) !important;
 }

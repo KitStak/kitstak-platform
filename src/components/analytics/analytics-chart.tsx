@@ -26,8 +26,8 @@ const GRID = "var(--color-border, #E4E7EB)";
 /** Heatmap rows carry one drilldown per cell under `href:<column>`. */
 export const HEAT_HREF_PREFIX = "href:";
 /** Quadrant colours: [top-right, top-left, bottom-right, bottom-left], then "Low sample". */
-const QUADRANT_COLORS = ["#17874D", "#0F8C7A", "#B07F00", "#B20B1C"] as const;
-const LOW_SAMPLE_COLOR = "#8A9099";
+const QUADRANT_COLORS = ["var(--chart-2)", "var(--chart-1)", "var(--chart-3)", "var(--chart-6)"] as const;
+const LOW_SAMPLE_COLOR = "var(--chart-5)";
 const quadrantColor = (q: unknown, labels: readonly string[] | undefined): string => {
   const i = labels ? labels.indexOf(String(q)) : -1;
   return i >= 0 ? (QUADRANT_COLORS[i] as string) : LOW_SAMPLE_COLOR;
@@ -38,7 +38,8 @@ const GAP_SERIES = new Set(["onTimePct"]);
  * Categorical donut palette: hues spaced around the wheel (blue, amber, green, purple,
  * orange, cyan, magenta, slate) so neighbouring slices never read as the same colour.
  */
-export const DONUT_COLORS = ["#2E5CE6", "#E0A500", "#17874D", "#7B3FD1", "#E8590C", "#0B8DA8", "#C2255C", "#5C6670"] as const;
+/** The shared restrained chart palette (src/styles/tokens.css), used in order. */
+export const DONUT_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"] as const;
 const shortDay = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${Number(v.slice(5, 7))}/${Number(v.slice(8, 10))}` : String(v));
 
 function DataTable({ chart, plain = false }: { readonly chart: AnalyticsChart; readonly plain?: boolean }) {
@@ -164,7 +165,7 @@ function AssociateDetail({ r, count }: { readonly r: AnalyticsRow; readonly coun
                 <XAxis dataKey="day" tick={AXIS} tickFormatter={shortDay} tickLine={false} axisLine={{ stroke: GRID }} interval="preserveStartEnd" minTickGap={12} />
                 <YAxis tick={AXIS} tickLine={false} axisLine={false} width={32} allowDecimals={false} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: GRID }} labelFormatter={(l) => shortDay(l)} />
-                <Bar dataKey="tasks" name="Tasks" fill="#2E5CE6" radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false} />
+                <Bar dataKey="tasks" name="Tasks" fill="var(--chart-1)" radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -402,9 +403,9 @@ function Chart({ chart, onDrill }: { readonly chart: AnalyticsChart; readonly on
               const real = (item as { payload?: AnalyticsRow } | undefined)?.payload?.__real;
               return [String(n) === "Tasks per hour" && real !== undefined ? String(real) : String(v), String(n)];
             }} />
-          <ReferenceLine x={med.x} stroke="#8A9099" strokeDasharray="5 4"><Label value={`median ${Math.round(med.x)}`} position="top" style={{ fontSize: 10, fill: "#6B7280" }} /></ReferenceLine>
-          <ReferenceLine y={med.y} stroke="#8A9099" strokeDasharray="5 4"><Label value={`median ${med.y}/h`} position="right" style={{ fontSize: 10, fill: "#6B7280" }} /></ReferenceLine>
-          <Scatter data={plotted} fill="#2E5CE6" cursor={clickable ? "pointer" : undefined} onClick={clickable ? click : undefined} isAnimationActive={false}
+          <ReferenceLine x={med.x} stroke="var(--chart-axis)" strokeDasharray="5 4"><Label value={`median ${Math.round(med.x)}`} position="top" style={{ fontSize: 10, fill: "#6B7280" }} /></ReferenceLine>
+          <ReferenceLine y={med.y} stroke="var(--chart-axis)" strokeDasharray="5 4"><Label value={`median ${med.y}/h`} position="right" style={{ fontSize: 10, fill: "#6B7280" }} /></ReferenceLine>
+          <Scatter data={plotted} fill="var(--chart-1)" cursor={clickable ? "pointer" : undefined} onClick={clickable ? click : undefined} isAnimationActive={false}
             shape={(props: unknown) => {
               const p = props as { cx?: number; cy?: number; payload?: AnalyticsRow };
               const real = p.payload?.__real;

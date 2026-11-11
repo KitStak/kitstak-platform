@@ -227,7 +227,7 @@ function PickPathTab({ detail }: { readonly detail: Detail }) {
         <span className="text-body"><span className="font-semibold tabular-nums">{detail.ai.stops}</span> {detail.ai.stops === 1 ? "stop" : "stops"}</span>
         <span className="text-body"><span className="font-semibold tabular-nums">{Math.round(detail.ai.optimizedM)} m</span> walk</span>
         <span className="text-secondary">Walking-path order: <span className="tabular-nums">{Math.round(detail.ai.baselineM)} m</span></span>
-        <span className={detail.ai.savingsPct > 0 ? "font-semibold text-[#17874D]" : "text-secondary"}>{detail.ai.savingsPct > 0 ? `−${detail.ai.savingsPct}% walking distance` : "Already the shortest route"}</span>
+        <span className={detail.ai.savingsPct > 0 ? "font-semibold text-success" : "text-secondary"}>{detail.ai.savingsPct > 0 ? `−${detail.ai.savingsPct}% walking distance` : "Already the shortest route"}</span>
       </div>
     ) : null}
     <ol className="relative ml-3 flex flex-col gap-3 border-l-2 border-dashed border-border pl-6">
@@ -236,7 +236,7 @@ function PickPathTab({ detail }: { readonly detail: Detail }) {
         const units = s.lines.reduce((n, l) => n + l.plannedQty, 0);
         return (
           <li key={s.location} className="relative">
-            <span className={cn("absolute -left-[37px] top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-bold", done ? "border-[#17874D] bg-[#D3F0E3] text-[#17874D]" : "border-primary bg-surface text-primary")}>{i + 1}</span>
+            <span className={cn("absolute -left-[37px] top-2 flex h-6 w-6 items-center justify-center rounded-full border-2 text-[11px] font-bold", done ? "border-[#17874D] bg-[#D3F0E3] text-success" : "border-primary bg-surface text-primary")}>{i + 1}</span>
             <div className={cn("rounded-lg border bg-surface px-4 py-3", done ? "border-border opacity-70" : "border-border shadow-sm")}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex items-center gap-2 text-[14px] font-semibold text-foreground"><MapPin className="h-4 w-4 text-primary" aria-hidden />{s.location}</span>

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { ArrowUp, ChevronsUp, FileText, ShoppingBag, Store, Truck, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { differenceTone, isPartialStatus, pillStyle, statusLabel, statusTone, type StatusDomain } from "@/lib/status-colors";
+import { differenceTone, isPartialStatus, pillClass, pillStyle, statusLabel, statusTone, type StatusTone, type StatusDomain } from "@/lib/status-colors";
 
 /**
  * Status pill (BUILD_PLAN 0.5). Colours come from `@/lib/status-colors`; pass `domain`
@@ -28,31 +28,34 @@ export function StatusPill({
     <span
       data-status={status}
       style={pillStyle(tone)}
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full font-semibold whitespace-nowrap",
-        size === "sm" ? "px-1.5 py-px text-[10px] leading-4" : "px-2 py-0.5 text-[11px] leading-4",
-        className
-      )}
+      className={cn(pillClass(size), className)}
     >
-      {statusLabel(status)}
-      {showPartial ? (
-        // 6px half-filled dot: reads as "partial" without a stray letter glyph.
-        <span
-          role="img"
-          aria-label="Partial"
-          title="Partial"
-          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full border"
-          style={{ borderColor: tone.fg, background: `linear-gradient(90deg, ${tone.fg} 50%, transparent 50%)` }}
-        />
-      ) : null}
+      <PillDot tone={tone} partial={showPartial} />
+      <span className="truncate">{statusLabel(status)}</span>
     </span>
   );
+}
+
+/** Leading 6px dot. A partial status draws it half-filled instead of adding a second mark. */
+export function PillDot({ tone, partial = false }: { readonly tone: StatusTone; readonly partial?: boolean }) {
+  if (partial) {
+    return (
+      <span
+        role="img"
+        aria-label="Partial"
+        title="Partial"
+        className="inline-block h-1.5 w-1.5 shrink-0 rounded-full border"
+        style={{ borderColor: tone.dot, background: `linear-gradient(90deg, ${tone.dot} 50%, transparent 50%)` }}
+      />
+    );
+  }
+  return <span aria-hidden className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: tone.dot }} />;
 }
 
 /** One soft treatment for every priority; High gets an up arrow, Urgent a double arrow. */
 export function PriorityFlag({ priority }: { priority: string | null }) {
   if (!priority || priority.toLowerCase() === "none") {
-    return <span className="text-faint text-[12px]">—</span>;
+    return <span className="text-xs text-fg-muted">—</span>;
   }
   const key = priority.toLowerCase();
   const tone = statusTone(priority, "priority");
@@ -61,7 +64,7 @@ export function PriorityFlag({ priority }: { priority: string | null }) {
     <span
       data-priority={key}
       style={pillStyle(tone)}
-      className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold"
+      className={cn(pillClass(), "gap-0.5")}
     >
       {Icon ? <Icon className="h-3 w-3" aria-hidden /> : null}
       {statusLabel(priority)}

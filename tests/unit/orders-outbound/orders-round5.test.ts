@@ -126,11 +126,11 @@ describe("wizard", () => {
     expect(hasDirtyFields({ billing: { city: true } })).toBe(true);
     expect(codeTakenMessage("SO010873")).toBe("Order code SO010873 is already taken");
   });
-  it("status pill uses the Logiwa palette", () => {
-    expect(orderStatusTone("Open").light).toEqual({ bg: "rgb(211,240,227)", fg: "rgb(23,135,77)" });
+  it("status pill uses the shared label palette", () => {
+    expect(orderStatusTone("Open")).toEqual({ bg: "var(--label-green-subtle)", fg: "var(--label-green-text)", dot: "var(--label-green)" });
     expect(orderStatusTone("Packing Started")).toBe(orderStatusTone("Ready to Pick"));
-    expect(orderStatusTone("Ready to Pick").light.fg).toBe("rgb(13,54,163)");
-    expect(orderStatusTone("Ready to Ship").light.bg).toBe("rgb(223,206,245)");
-    expect(orderStatusTone("Shortage").light.fg).toBe("rgb(161,52,6)");
+    expect(orderStatusTone("Ready to Pick").fg).toBe("var(--label-blue-text)");
+    expect(orderStatusTone("Ready to Ship").bg).toBe("var(--label-purple-subtle)");
+    expect(orderStatusTone("Shortage").fg).toBe("var(--label-brown-text)");
   });
 });

@@ -59,8 +59,8 @@ function StatusPills({ counts, active, onPick }: { readonly counts: Readonly<Rec
         return (
           <button key={s} type="button" aria-pressed={on} title={RETURN_STATUS_HELP[s]} onClick={() => onPick(on ? null : s)}
             className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-              "bg-[var(--pill-bg)] text-[var(--pill-fg)] [[data-theme=dark]_&]:bg-[color-mix(in_srgb,var(--pill-fg)_24%,transparent)] [[data-theme=dark]_&]:text-[color-mix(in_srgb,var(--pill-fg)_40%,white)]",
-              on ? "border-[var(--pill-fg)] shadow-sm ring-1 ring-current [[data-theme=dark]_&]:border-[color-mix(in_srgb,var(--pill-fg)_40%,white)]" : "border-transparent hover:brightness-95 [[data-theme=dark]_&]:hover:brightness-125")}
+              "bg-[var(--pill-bg)] text-[var(--pill-fg)]",
+              on ? "border-[var(--pill-fg)] shadow-sm ring-1 ring-current" : "border-transparent hover:brightness-95")}
             style={vars}>
             <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
             {s}

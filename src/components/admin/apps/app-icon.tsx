@@ -12,7 +12,7 @@ const ICONS: Readonly<Record<string, React.ComponentType<{ className?: string }>
 
 const TONES: Readonly<Record<AppTone, string>> = {
   violet: "bg-[#EFE7FB] text-[#621DB8]", blue: "bg-[#D5E5F2] text-[#0D36A3]", teal: "bg-[#D0F3EE] text-[#0E8C7A]", amber: "bg-[#FDF1D3] text-[#9A6B00]",
-  rose: "bg-[#FBDBDE] text-[#B20B1C]", slate: "bg-[#E3E6E8] text-[#394357]", green: "bg-[#D3F0E3] text-[#17874D]", indigo: "bg-[#E2E5FB] text-[#3B3FB6]",
+  rose: "bg-[#FBDBDE] text-danger", slate: "bg-[#E3E6E8] text-[#394357]", green: "bg-[#D3F0E3] text-success", indigo: "bg-[#E2E5FB] text-[#3B3FB6]",
 };
 
 export function AppIcon({ def, size = "md" }: { readonly def: AppDef | null; readonly size?: "md" | "lg" }) {

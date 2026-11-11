@@ -25,7 +25,7 @@ export type JobRow = GridRow & JobFacts & { readonly waveId: string | null; read
 function LabelPill({ value }: { readonly value: unknown }) {
   const v = String(value ?? "");
   if (!v) return <Dash />;
-  const tone = v === "Labeled" || v === "Printed" ? "bg-[#D3F0E3] text-[#17874D]" : v.startsWith("Partially") ? "bg-[#FFF3D6] text-[#9A6700]" : "bg-[#E3E6E8] text-[#50575C]";
+  const tone = v === "Labeled" || v === "Printed" ? "bg-[#D3F0E3] text-success" : v.startsWith("Partially") ? "bg-[#FFF3D6] text-[#9A6700]" : "bg-[#E3E6E8] text-[#50575C]";
   return <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 ${tone}`}>{v}</span>;
 }
 

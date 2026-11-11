@@ -1,50 +1,58 @@
 import type { CSSProperties } from "react";
 
 /**
- * Status pill color maps (BUILD_PLAN 0.5). Logiwa semantics in the KitStaks palette.
+ * Status pill color maps (BUILD_PLAN 0.5). Status semantics on the shared label palette.
  * Every status in the product renders through `<StatusPill domain=… status=…>` using
  * these tones. Lookups are case-insensitive; unknown statuses fall back to the
  * generic map and finally to neutral grey.
  */
 
 export interface StatusTone {
+  /** Tinted pill background (`--label-*-subtle`). */
   readonly bg: string;
+  /** Pill text colour (`--label-*-text`), AA on the tint and on panels in both themes. */
   readonly fg: string;
+  /** Solid dot colour (`--label-*`). */
+  readonly dot: string;
 }
 
+/** A tone from the shared label palette (src/styles/tokens.css, same tokens as KitStak CRM). */
+function label(name: string): StatusTone {
+  return { bg: `var(--label-${name}-subtle)`, fg: `var(--label-${name}-text)`, dot: `var(--label-${name})` };
+}
+
+/**
+ * Status tones. Every tone is a label-palette token trio, so pills follow the light and dark
+ * themes without per-theme overrides and match the CRM status pill exactly.
+ */
 export const TONES = {
-  // fg darkened from #17874D (3.76:1) to meet AA 4.5:1 on the pill background.
-  green: { bg: "#D3F0E3", fg: "#0E6B3B" },
-  blue: { bg: "#D5E5F2", fg: "#0D36A3" },
+  green: label("green"),
+  blue: label("blue"),
   /** "Ready …" queue states (Ready To Pick / Pack / Sort). */
-  readyBlue: { bg: "rgba(46,92,230,.10)", fg: "#2E5CE6" },
+  readyBlue: label("sky"),
   /** "… Started" in-progress states (Picking / Packing / Sorting Started). */
-  indigo: { bg: "rgba(79,70,229,.10)", fg: "#4F46E5" },
-  purple: { bg: "#DFCEF5", fg: "#621DB8" },
-  shortage: { bg: "#F7E9E4", fg: "#A13406" },
-  hold: { bg: "#D7D9DD", fg: "#394357" },
-  red: { bg: "#FBDBDE", fg: "#B20B1C" },
-  grey: { bg: "#E3E6E8", fg: "#50575C" },
-  amber: { bg: "rgba(235,172,0,.16)", fg: "#B07F00" },
-  teal: { bg: "#D0F3EE", fg: "#0F8C7A" },
-  priorityHigh: { bg: "rgba(229,97,86,.24)", fg: "#C7403B" },
-  exportDone: { bg: "#28B5733D", fg: "#1B8A55" },
-  negativeDiff: { bg: "#ED634A3D", fg: "#C2412A" },
+  indigo: label("indigo"),
+  purple: label("purple"),
+  shortage: label("brown"),
+  hold: label("gray"),
+  red: label("red"),
+  grey: label("gray"),
+  amber: label("orange"),
+  teal: label("teal"),
+  priorityHigh: label("peach"),
+  exportDone: label("green"),
+  negativeDiff: label("red"),
 } as const satisfies Readonly<Record<string, StatusTone>>;
 
 export type ToneName = keyof typeof TONES;
 
-/*
- * Note on contrast: a few spec foregrounds (#EBAC00, #16C2AA, #E55B56, #28B573, #ED634A)
- * fail WCAG AA at 11px on their tints, so the text uses a darker shade of the same hue.
- * The spec's original value is kept below as `accent` for icons and dots.
- */
+/** Solid accent per tone, for icons and dots drawn outside a pill. */
 export const TONE_ACCENTS: Readonly<Partial<Record<ToneName, string>>> = {
-  amber: "#EBAC00",
-  teal: "#16C2AA",
-  priorityHigh: "#E55B56",
-  exportDone: "#28B573",
-  negativeDiff: "#ED634A",
+  amber: TONES.amber.dot,
+  teal: TONES.teal.dot,
+  priorityHigh: TONES.priorityHigh.dot,
+  exportDone: TONES.exportDone.dot,
+  negativeDiff: TONES.negativeDiff.dot,
 };
 
 type StatusMap = Readonly<Record<string, ToneName>>;
@@ -175,12 +183,17 @@ export function statusTone(status: string | null | undefined, domain: StatusDoma
   return TONES[statusToneName(status, domain)];
 }
 
-/**
- * Inline style for a pill. Carries `--pill-fg` so the dark theme (globals.css) can swap the
- * light pastel fill for a translucent tint of the same hue with a lifted foreground.
- */
+/** Inline style for a pill: tinted background and text colour, both theme-aware tokens. */
 export function pillStyle(tone: StatusTone): CSSProperties {
-  return { backgroundColor: tone.bg, color: tone.fg, "--pill-fg": tone.fg } as CSSProperties;
+  return { backgroundColor: tone.bg, color: tone.fg };
+}
+
+/**
+ * The one status pill shape, shared with KitStak CRM: tinted background, text colour and a
+ * solid 6px dot, 22px tall (18px at `sm`), 12px medium text.
+ */
+export function pillClass(size: "sm" | "md" = "md"): string {
+  return `inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full font-medium ${size === "sm" ? "h-[18px] px-1.5 text-2xs" : "h-[22px] px-2 text-xs"}`;
 }
 
 /** Receiving difference pill: negative red-orange, positive green, zero grey. */
