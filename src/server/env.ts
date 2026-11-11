@@ -46,6 +46,9 @@ const envSchema = z.object({
   HEALTH_TOKEN: z.string().min(24, 'HEALTH_TOKEN must be at least 24 characters').optional(),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
   UPLOAD_DIR: z.string().default('.data/uploads'),
+  /** Vercel Blob credentials. When either is set, uploads go to Blob instead of local disk. */
+  BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
+  BLOB_STORE_ID: z.string().min(1).optional(),
   MAX_UPLOAD_BYTES: z.coerce
     .number()
     .int()

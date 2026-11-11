@@ -1,15 +1,14 @@
 /**
- * File attachments (item files, update attachments, files columns). Local disk storage under
- * `UPLOAD_DIR` keyed by opaque ids — user-supplied names never touch the filesystem.
+ * File attachments (item files, update attachments, files columns). Bytes live in the object
+ * store (`@/server/storage`) keyed by opaque ids — user-supplied names never reach storage.
  */
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { files, updates } from '@/server/db/schema';
 import { env } from '@/server/env';
 import { BadRequestError, NotFoundError, PayloadTooLargeError, ValidationError } from '@/server/http/errors';
 import { publish } from '@/server/realtime/publisher';
+import { localObjectPath, objectStore, uploadRoot } from '@/server/storage';
 import { requireBoard, requireItem } from './access';
 import { logActivity } from './activity';
 import { inTransaction, isOrgAdmin, type ServiceContext } from './context';
@@ -74,18 +73,14 @@ export function toFileDto(row: FileRow): FileDto {
   };
 }
 
-function uploadRoot(): string {
-  // Runtime-configured directory: keep the bundler from tracing the whole project.
-  return path.resolve(/*turbopackIgnore: true*/ process.cwd(), env.UPLOAD_DIR);
+function assertStorageKey(storageKey: string): void {
+  if (!/^[0-9a-f-]{36}\/[0-9a-f-]{36}$/.test(storageKey)) throw new BadRequestError('Invalid storage key');
 }
 
-/** Resolve a storage key to an absolute path, refusing anything that escapes the root. */
+/** Resolve a storage key to an absolute local path, refusing anything that escapes the root. */
 export function storagePath(storageKey: string): string {
-  if (!/^[0-9a-f-]{36}\/[0-9a-f-]{36}$/.test(storageKey)) throw new BadRequestError('Invalid storage key');
-  const root = uploadRoot();
-  const resolved = path.resolve(/*turbopackIgnore: true*/ root, storageKey);
-  if (!resolved.startsWith(root + path.sep)) throw new BadRequestError('Invalid storage key');
-  return resolved;
+  assertStorageKey(storageKey);
+  return localObjectPath(uploadRoot(), storageKey);
 }
 
 /** Strip path separators and control characters from a display file name. */
@@ -144,9 +139,8 @@ export async function uploadFile(ctx: ServiceContext, input: UploadInput): Promi
     bytes,
   });
   const storageKey = `${ctx.orgId}/${randomUUID()}`;
-  const target = storagePath(storageKey);
-  await mkdir(path.dirname(target), { recursive: true });
-  await writeFile(target, bytes, { flag: 'wx' });
+  assertStorageKey(storageKey);
+  await objectStore().put(storageKey, bytes, mime);
   try {
     return await inTransaction(ctx, async (tx) => {
       const [row] = await tx.db
@@ -182,7 +176,7 @@ export async function uploadFile(ctx: ServiceContext, input: UploadInput): Promi
       return toFileDto(row);
     });
   } catch (error) {
-    await rm(target, { force: true });
+    await objectStore().delete(storageKey);
     throw error;
   }
 }
@@ -236,12 +230,9 @@ export async function readFileForDownload(
   forceDownload: boolean,
 ): Promise<FileDownload> {
   const row = await requireFile(ctx, fileId);
-  let body: Uint8Array;
-  try {
-    body = new Uint8Array(await readFile(storagePath(row.storageKey)));
-  } catch {
-    throw new NotFoundError('File', 'The file content is no longer available');
-  }
+  assertStorageKey(row.storageKey);
+  const body = await objectStore().get(row.storageKey);
+  if (!body) throw new NotFoundError('File', 'The file content is no longer available');
   const inline = !forceDownload && INLINE_MIME.has(row.mime);
   const encoded = encodeURIComponent(row.name);
   return {
