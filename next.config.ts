@@ -118,7 +118,7 @@ const nextConfig: NextConfig = {
   // The migration SQL is read from disk at runtime (src/server/db/migrate.ts), so ship it with
   // the routes that migrate: the one-off bootstrap and the health check that reports it.
   outputFileTracingIncludes: {
-    "/api/admin/bootstrap": ["./drizzle/**/*"],
+    "/api/admin/bootstrap": ["./drizzle/**/*", "./seed-snapshot/**/*"],
     "/api/health": ["./drizzle/**/*"],
   },
   cacheComponents: true,
