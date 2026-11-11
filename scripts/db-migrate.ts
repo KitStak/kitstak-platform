@@ -6,7 +6,7 @@ import { loadEnv } from '../src/server/env';
 
 async function main(): Promise<void> {
   const env = loadEnv();
-  const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
+  const pool = new pg.Pool({ connectionString: env.DATABASE_URL_UNPOOLED ?? env.DATABASE_URL, max: 1 });
   try {
     await migrate(drizzle(pool), { migrationsFolder: 'drizzle' });
     process.stdout.write('Migrations applied\n');
