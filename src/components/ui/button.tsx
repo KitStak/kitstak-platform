@@ -8,7 +8,7 @@ import { Spinner } from './spinner';
 export const buttonVariants = cva(
   [
     'relative inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap select-none',
-    'font-medium rounded-sm border border-transparent',
+    'font-medium rounded-md border border-transparent',
     'transition-[background-color,border-color,color,box-shadow,opacity] duration-[var(--duration-instant)] ease-out',
     'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
     'disabled:pointer-events-none disabled:opacity-[0.38] aria-disabled:pointer-events-none aria-disabled:opacity-[0.38]',
@@ -18,22 +18,23 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          'bg-primary text-primary-fg shadow-xs hover:bg-primary-hover active:bg-primary-active data-[pressed=true]:bg-primary-active',
+          'bg-primary text-primary-fg hover:bg-primary-hover active:bg-primary-active data-[pressed=true]:bg-primary-active',
         secondary:
-          'bg-panel text-fg border-border-input hover:bg-muted hover:border-border-input-hover active:bg-pressed data-[pressed=true]:bg-selected data-[pressed=true]:border-primary',
+          'bg-panel text-fg border-border-input hover:bg-muted hover:border-border-input-hover active:bg-pressed data-[pressed=true]:bg-selected data-[pressed=true]:border-border-strong',
         tertiary:
-          'bg-transparent text-primary-text hover:bg-primary-subtle active:bg-primary-selected data-[pressed=true]:bg-primary-selected',
+          'bg-transparent text-fg hover:bg-hover active:bg-pressed data-[pressed=true]:bg-selected',
         ghost:
-          'bg-transparent text-fg hover:bg-hover active:bg-pressed data-[pressed=true]:bg-selected data-[pressed=true]:text-primary-text',
+          'bg-transparent text-fg-secondary hover:bg-hover hover:text-fg active:bg-pressed data-[pressed=true]:bg-selected data-[pressed=true]:text-fg',
         danger:
-          'bg-danger text-white shadow-xs hover:bg-danger-hover active:bg-danger-active data-[pressed=true]:bg-danger-active',
+          // Destructive actions are outlined, not filled, so they never read as the crimson primary.
+          'bg-panel text-danger-text border-danger/45 hover:bg-danger-subtle hover:border-danger active:bg-danger-subtle data-[pressed=true]:bg-danger-subtle',
         'danger-ghost': 'bg-transparent text-danger-text hover:bg-danger-subtle active:bg-danger-subtle',
       },
       size: {
         xs: 'h-6 px-2 text-xs [&_svg]:size-3.5',
-        sm: 'h-7 px-2.5 text-sm [&_svg]:size-4',
-        md: 'h-8 px-3 text-base [&_svg]:size-4',
-        lg: 'h-10 px-4 text-md [&_svg]:size-[18px]',
+        sm: 'h-7 px-2.5 text-xs [&_svg]:size-4',
+        md: 'h-8 px-3 text-sm [&_svg]:size-4',
+        lg: 'h-10 px-4 text-base [&_svg]:size-5',
       },
       iconOnly: { true: 'px-0', false: '' },
       fullWidth: { true: 'w-full', false: '' },

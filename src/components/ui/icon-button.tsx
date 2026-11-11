@@ -7,7 +7,7 @@ import { Tooltip } from './tooltip';
 
 const iconButtonVariants = cva(
   [
-    'relative inline-flex shrink-0 items-center justify-center rounded-sm text-icon select-none',
+    'relative inline-flex shrink-0 items-center justify-center rounded-md text-icon select-none',
     'transition-[background-color,color] duration-[var(--duration-instant)] ease-out',
     'hover:bg-hover hover:text-icon-strong active:bg-pressed',
     'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus',

@@ -13,7 +13,7 @@ import { Spinner } from './spinner';
 
 export const inputSurface = cva(
   [
-    'flex w-full items-center gap-2 rounded-sm border bg-panel text-fg',
+    'flex w-full items-center gap-2 rounded-md border bg-panel text-fg',
     'transition-[border-color,box-shadow,background-color] duration-[var(--duration-fast)] ease-out',
     'border-border-input hover:border-border-input-hover',
     'focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--focus-ring-soft)] focus-within:hover:border-primary',
@@ -23,9 +23,9 @@ export const inputSurface = cva(
   {
     variants: {
       size: {
-        sm: 'h-7 px-2 text-sm [&_svg]:size-3.5',
-        md: 'h-8 px-2.5 text-base [&_svg]:size-4',
-        lg: 'h-10 px-3 text-base [&_svg]:size-4',
+        sm: 'h-7 px-2 text-xs [&_svg]:size-3.5',
+        md: 'h-8 px-2.5 text-sm [&_svg]:size-4',
+        lg: 'h-10 px-3 text-sm [&_svg]:size-4',
       },
     },
     defaultVariants: { size: 'md' },
@@ -79,7 +79,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       rows={rows}
       aria-invalid={invalid || undefined}
       className={cn(
-        'block w-full resize-y rounded-sm border border-border-input bg-panel px-2.5 py-2 text-base text-fg',
+        'block w-full resize-y rounded-md border border-border-input bg-panel px-2.5 py-2 text-sm text-fg',
         'transition-[border-color,box-shadow] duration-[var(--duration-fast)] ease-out outline-none',
         'hover:border-border-input-hover focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]',
         'disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60',
@@ -164,7 +164,7 @@ export function Field({ label, children, hint, error, required, labelAside, clas
   return (
     <div className={cn('flex flex-col gap-1.5', className)}>
       <div className="flex items-baseline justify-between gap-2">
-        <label htmlFor={inputId} className="text-sm font-semibold text-fg-secondary">
+        <label htmlFor={inputId} className="text-xs font-medium text-fg-secondary">
           {label}
           {required ? (
             <span aria-hidden className="ml-0.5 text-danger-text">
@@ -176,12 +176,12 @@ export function Field({ label, children, hint, error, required, labelAside, clas
       </div>
       {children({ inputId, describedBy, invalid: Boolean(error) })}
       {error ? (
-        <p id={errorId} role="alert" className="flex items-center gap-1 text-sm text-danger-text">
+        <p id={errorId} role="alert" className="flex items-center gap-1 text-2xs font-medium text-danger-text">
           <CircleAlert aria-hidden className="size-3.5 shrink-0" />
           {error}
         </p>
       ) : hint ? (
-        <p id={hintId} className="text-sm text-fg-muted">
+        <p id={hintId} className="text-2xs text-fg-muted">
           {hint}
         </p>
       ) : null}

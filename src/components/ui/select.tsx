@@ -29,8 +29,8 @@ export interface SelectProps {
 
 const SIZE: Readonly<Record<NonNullable<SelectProps['size']>, string>> = {
   sm: 'h-7 px-2 text-sm',
-  md: 'h-8 px-2.5 text-base',
-  lg: 'h-10 px-3 text-base',
+  md: 'h-8 px-2.5 text-sm',
+  lg: 'h-10 px-3 text-sm',
 };
 
 /** Single-select dropdown with typeahead, built on Radix Select. */
@@ -48,7 +48,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(function Select
         aria-describedby={aria['aria-describedby']}
         aria-invalid={invalid || undefined}
         className={cn(
-          'group inline-flex w-full items-center justify-between gap-2 rounded-sm border border-border-input bg-panel text-left text-fg',
+          'group inline-flex w-full items-center justify-between gap-2 rounded-md border border-border-input bg-panel text-left text-fg',
           'transition-[border-color,box-shadow] duration-[var(--duration-fast)] ease-out outline-none',
           'hover:border-border-input-hover focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_var(--focus-ring-soft)]',
           'data-[state=open]:border-primary disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60',
