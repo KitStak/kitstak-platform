@@ -1,6 +1,20 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
 
+/**
+ * tailwind-merge aware of the shared font-size scale (same as KitStak CRM). Without this,
+ * `text-2xs` and `text-md` are unknown to it and get treated as text colours, so a later
+ * colour class such as `text-fg` would silently drop the size.
+ */
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [{ text: ["2xs", "xs", "sm", "base", "md", "lg", "xl", "2xl"] }],
+    },
+  },
+});
+
+/** Merge conditional class names, resolving Tailwind conflicts (last one wins). */
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
