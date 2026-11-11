@@ -19,8 +19,8 @@ export const COUNT_TONE_OVERRIDES: Readonly<Record<string, StatusTone & { readon
 };
 /** Static class strings (so Tailwind generates them). `!` beats the pill's inline style. */
 const OVERRIDE_CLASS: Readonly<Record<string, string>> = {
-  "count completed": "!bg-[var(--label-teal-subtle)] !text-[var(--label-teal-text)] [&>span:first-child]:!bg-[var(--label-teal)]",
-  "recount created": "!bg-[var(--label-purple-subtle)] !text-[var(--label-purple-text)] [&>span:first-child]:!bg-[var(--label-purple)]",
+  "count completed": "!bg-[var(--label-teal-subtle)] !text-[color-mix(in_srgb,var(--label-teal-text),var(--text-primary)_var(--pill-text-mix))] [&>span:first-child]:!bg-[var(--label-teal)]",
+  "recount created": "!bg-[var(--label-purple-subtle)] !text-[color-mix(in_srgb,var(--label-purple-text),var(--text-primary)_var(--pill-text-mix))] [&>span:first-child]:!bg-[var(--label-purple)]",
 };
 
 /** Count tone for a status: the override when there is one, else the shared map. */
