@@ -1,6 +1,8 @@
 # Seed data
 
-`npm run db:seed` runs `index.ts`. It refuses to run when `NODE_ENV=production`.
+`npm run db:seed` runs `index.ts`. It refuses to run in production unless `ALLOW_DEMO_SEED=1`
+is set. On Vercel, a production deploy with that variable set reloads the demo organization on
+every build (`scripts/vercel-build.sh`), so remove the variable once the data is in place.
 
 - **Idempotent:** each run deletes the demo org (`northwind-robotics`) and the eight demo users,
   then recreates them. Other organizations are never touched.
