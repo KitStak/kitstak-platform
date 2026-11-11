@@ -24,12 +24,12 @@ const LIST: Readonly<Record<TabsVariant, string>> = {
 
 const TRIGGER: Readonly<Record<TabsVariant, string>> = {
   underline: [
-    'relative -mb-px inline-flex h-10 items-center gap-1.5 rounded-t-sm border-b-2 border-transparent px-0.5 text-base text-fg-secondary',
+    'relative -mb-px inline-flex h-9 items-center gap-1.5 rounded-t-sm border-b-2 border-transparent px-0.5 text-sm font-medium text-fg-secondary',
     'transition-[color,border-color] duration-[var(--duration-fast)] ease-out hover:text-fg',
-    'data-[state=active]:border-primary data-[state=active]:font-medium data-[state=active]:text-fg',
+    'data-[state=active]:border-primary data-[state=active]:text-fg',
   ].join(' '),
   view: [
-    'relative inline-flex h-8 items-center gap-1.5 rounded-sm px-2.5 text-base text-fg-secondary',
+    'relative inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-fg-secondary',
     'transition-[background-color,color] duration-[var(--duration-instant)] ease-out hover:bg-hover hover:text-fg',
     'after:absolute after:inset-x-2 after:-bottom-[5px] after:h-0.5 after:rounded-full after:bg-transparent after:transition-colors',
     'data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:after:bg-primary',

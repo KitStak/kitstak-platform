@@ -226,8 +226,10 @@
     border-right: 1px solid var(--bt-grid);
     border-bottom: 1px solid var(--bt-grid);
     background: var(--surface-panel);
-    color: var(--bt-header-fg);
-    font-size: var(--type-base);
+    /* Shared table header style (same as KitStak WMS): 12px medium muted, sentence case. */
+    color: var(--text-muted);
+    font-size: var(--type-xs);
+    font-weight: var(--weight-medium);
     transition: background-color var(--duration-instant) var(--ease-out);
   }
   .bt-colhead:hover,

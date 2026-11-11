@@ -35,9 +35,9 @@ export function EmptyState({
     >
       {visual ?? <Illustration name={illustration} size={art} className="animate-fade-in" />}
       <div className="flex max-w-sm flex-col gap-1">
-        <h3 className={cn('font-heading font-semibold text-fg', size === 'sm' ? 'text-base' : 'text-lg')}>{title}</h3>
+        <h3 className={cn('font-heading font-semibold text-fg', size === 'sm' ? 'text-base' : 'text-md')}>{title}</h3>
         {description ? (
-          <p className={cn('text-fg-secondary', size === 'sm' ? 'text-sm' : 'text-base')}>{description}</p>
+          <p className={cn('text-fg-muted', 'text-sm')}>{description}</p>
         ) : null}
       </div>
       {actions ? <div className="mt-2 flex flex-wrap items-center justify-center gap-2">{actions}</div> : null}

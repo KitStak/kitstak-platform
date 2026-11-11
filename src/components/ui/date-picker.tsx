@@ -136,7 +136,7 @@ export function DatePicker({
             aria-label={aria['aria-label']}
             disabled={disabled}
             className={cn(
-              'inline-flex h-8 w-full items-center gap-2 rounded-sm border border-border-input bg-panel px-2.5 text-left text-base',
+              'inline-flex h-8 w-full items-center gap-2 rounded-md border border-border-input bg-panel px-2.5 text-left text-sm',
               'transition-[border-color,box-shadow] duration-[var(--duration-fast)] outline-none hover:border-border-input-hover',
               'focus-visible:border-primary focus-visible:shadow-[0_0_0_3px_var(--focus-ring-soft)] data-[state=open]:border-primary',
               'disabled:cursor-not-allowed disabled:opacity-60',

@@ -5,7 +5,7 @@ import { cn } from './cn';
 import { labelColorStyle, type LabelColor } from './label-color';
 
 const badgeVariants = cva(
-  'inline-flex items-center gap-1 whitespace-nowrap rounded-sm font-semibold [&_svg]:size-3 [&_svg]:shrink-0',
+  'inline-flex items-center gap-1 whitespace-nowrap rounded-sm font-medium [&_svg]:size-3 [&_svg]:shrink-0',
   {
     variants: {
       tone: {
