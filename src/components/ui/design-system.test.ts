@@ -14,7 +14,7 @@ const lightBlock = tokens.slice(0, tokens.indexOf("[data-theme='dark']"));
  * This hash is pinned in BOTH repos. To change a token: edit the file, update the hash,
  * then copy the file and the hash to the other repo. A one-sided edit fails here.
  */
-const SHARED_TOKENS_SHA256 = '94fc8d6365d5569636315f1a8012e36b931b1b01f7289eb42f6cf9ee433c947b';
+const SHARED_TOKENS_SHA256 = 'bf7dd9425fefec6cbad4356feebcfaf8a356940cb4ad4b0465fb9e1f2915bdd0';
 
 describe('shared design tokens', () => {
   it('matches the hash pinned in both KitStak repos (no drift)', () => {
@@ -99,6 +99,36 @@ describe('label palette tokens', () => {
     expect(tokens).toContain(":root[data-theme='dark']");
     expect(tokens).toContain('@media (prefers-color-scheme: dark)');
     expect(tokens).toContain(":root:not([data-theme='light'])");
+  });
+});
+
+describe('status pill contrast', () => {
+  const darkBlock = tokens.slice(tokens.indexOf("[data-theme='dark']"), tokens.indexOf('@media (prefers-color-scheme: dark)'));
+
+  function resolve(block: string, name: string, depth = 0): string {
+    const raw = new RegExp(`--${name}:\\s*([^;]+);`).exec(block)?.[1]?.trim() ?? new RegExp(`--${name}:\\s*([^;]+);`).exec(lightBlock)?.[1]?.trim();
+    if (!raw) throw new Error(`token --${name} missing`);
+    const alias = /^var\(--([a-z0-9-]+)\)$/.exec(raw)?.[1];
+    return alias && depth < 5 ? resolve(block, alias, depth + 1) : raw;
+  }
+
+  function mix(a: string, b: string, share: number): string {
+    const channel = (hex: string, i: number) => parseInt(hex.slice(i, i + 2), 16);
+    const out = [1, 3, 5].map((i) => Math.round(channel(a, i) * (1 - share) + channel(b, i) * share));
+    return `#${out.map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  it.each([
+    ['light', lightBlock],
+    ['dark', darkBlock],
+  ])('keeps pill text at AA on its own tint for every label colour (%s)', (_theme, block) => {
+    const share = parseFloat(resolve(block, 'pill-text-mix')) / 100;
+    const ink = resolve(block, 'text-primary');
+    for (const color of LABEL_COLORS) {
+      const text = mix(resolve(block, `label-${color}-text`), ink, share);
+      const ratio = contrast(text, resolve(block, `label-${color}-subtle`));
+      expect(ratio, `${color} pill ${ratio.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });
 

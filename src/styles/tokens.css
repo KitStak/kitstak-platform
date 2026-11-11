@@ -141,6 +141,12 @@
   --info-subtle: #e7edf5;
   --info-text: #244d7f;
 
+  /* ---------------------------------------------------------------- Status pill text
+   * A pill puts --label-*-text on its own --label-*-subtle tint, which is lower contrast than on
+   * a panel. Pills mix this share of ink into the text so every label colour stays >= 4.5:1:
+   *   color-mix(in srgb, var(--label-x-text), var(--text-primary) var(--pill-text-mix)) */
+  --pill-text-mix: 20%;
+
   /* ---------------------------------------------------------------- Chart palette
    * One restrained series palette for both apps. Use in order; series tied to a user-picked
    * label keep that label colour instead. */
@@ -448,6 +454,7 @@
   --mark-fg: #fbe3e7;
   --text-inverse: #0d0e10;
   --text-link: var(--text-primary);
+  --pill-text-mix: 60%;
   --chart-1: #7f9fd0;
   --chart-2: #5cc0b2;
   --chart-3: #d9a54a;
@@ -679,6 +686,7 @@
     --mark-fg: #fbe3e7;
     --text-inverse: #0d0e10;
     --text-link: var(--text-primary);
+    --pill-text-mix: 60%;
     --chart-1: #7f9fd0;
     --chart-2: #5cc0b2;
     --chart-3: #d9a54a;
