@@ -13,7 +13,7 @@ function useSections(): readonly { readonly title: string; readonly items: reado
       title: 'Navigation',
       items: [
         { keys: [mod, 'K'], label: 'Search & commands' },
-        { keys: [mod, '\\'], label: 'Toggle sidebar' },
+        { keys: [mod, '\\'], label: 'Open the Workspaces menu' },
         { keys: ['G', 'H'], label: 'Go to Home' },
         { keys: ['G', 'M'], label: 'Go to My work' },
         { keys: ['G', 'I'], label: 'Go to Inbox' },

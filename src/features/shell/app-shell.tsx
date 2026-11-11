@@ -9,7 +9,6 @@ import { MobileNav } from './mobile-nav';
 import { ShortcutsDialog } from './dialogs/shortcuts-dialog';
 import { OrgProvider, type OrgContextValue } from './org-context';
 import { routes } from './routes';
-import { Sidebar } from './sidebar/sidebar';
 import { useShellStore, type CreateRequest } from './store';
 import { TopBar } from './top-bar';
 import { useShellLayout } from './use-media-query';
@@ -105,8 +104,9 @@ function Panels({ slots, orgSlug }: { readonly slots?: AppShellSlots; readonly o
 }
 
 /**
- * Authenticated application frame: an L-shaped canvas (top bar + sidebar) around a rounded
- * content surface. Pages render into the surface; it owns its own scrolling.
+ * Authenticated application frame, the same shell as KitStak WMS: a 56px top bar holding the
+ * primary navigation, with the page below it. Below the md breakpoint the navigation collapses
+ * into an off-canvas drawer. Pages render into <main>, which owns its own scrolling.
  */
 export function AppShell({ context, slots, children }: AppShellProps) {
   useShellHotkeys(context.org.slug);
@@ -122,18 +122,11 @@ export function AppShell({ context, slots, children }: AppShellProps) {
       </a>
       <div data-testid="app-shell" className="flex h-dvh min-h-[560px] flex-col overflow-hidden bg-app">
         <TopBar />
-        <div className="flex min-h-0 flex-1">
-          {layout === 'drawer' ? null : <Sidebar variant={layout === 'rail' ? 'rail' : 'docked'} />}
-          <main
-            id="main-content"
-            tabIndex={-1}
-            className="relative mr-2 mb-2 ml-2 min-w-0 md:ml-1 flex-1 overflow-hidden rounded-xl border border-border-subtle bg-panel shadow-sm outline-none"
-          >
-            <div className="h-full overflow-auto">{children}</div>
-          </main>
-        </div>
+        <main id="main-content" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-panel outline-none">
+          <div className="h-full overflow-auto">{children}</div>
+        </main>
       </div>
-      {layout === 'full' ? null : <MobileNav />}
+      {layout === 'drawer' ? <MobileNav /> : null}
       <Panels slots={slots} orgSlug={context.org.slug} />
       <CreateDialogs slots={slots} />
     </OrgProvider>

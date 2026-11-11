@@ -11,6 +11,7 @@ import {
   publicTest,
   sidebar,
   sidebarBoardLinks,
+  openCrmMenu,
   waitForSettled,
 } from './support/fixtures';
 
@@ -74,11 +75,12 @@ authedTest.describe('signed in', () => {
     expect(diagnostics.errors, 'console errors in app shell').toEqual([]);
   });
 
-  authedTest('sidebar lists the seeded boards', async ({ page }) => {
+  authedTest('navigation lists the seeded boards', async ({ page }) => {
     await page.goto('/');
     await expect(sidebar(page)).toBeVisible();
+    await openCrmMenu(page);
     await expect(sidebarBoardLinks(page).first()).toBeVisible();
-    // The workspace tree loads after the favorites section; poll until it has rendered.
+    // The CRM boards load after first paint; poll until the menu has rendered them.
     await expect
       .poll(async () => sidebarBoardLinks(page).count(), { message: 'seeded board count', timeout: 20_000 })
       .toBeGreaterThanOrEqual(3);
@@ -86,6 +88,7 @@ authedTest.describe('signed in', () => {
 
   authedTest('opening a board shows its header and table', async ({ page, diagnostics }) => {
     await page.goto('/');
+    await openCrmMenu(page);
     const firstBoard = sidebarBoardLinks(page).first();
     await expect(firstBoard).toBeVisible();
     const boardName = (await firstBoard.innerText()).trim().split('\n')[0];

@@ -19,18 +19,23 @@ export function favoriteHref(orgSlug: string, favorite: FavoriteDto): string | n
   return entityHref(orgSlug, favorite.entityType, favorite.entityId);
 }
 
-/** Collapsible list of starred boards, dashboards and folders (crosses workspaces). */
-export function FavoritesSection() {
+/**
+ * Collapsible list of starred boards, dashboards and folders (crosses workspaces).
+ * `collapsible={false}` renders just the list, always open, for the top bar's Favorites menu.
+ */
+export function FavoritesSection({ collapsible = true }: { readonly collapsible?: boolean } = {}) {
   const { org } = useOrg();
   const pathname = usePathname() ?? '';
   const favorites = useFavorites(org.id);
   const toggleFavorite = useToggleFavorite(org.id);
-  const open = useShellStore((state) => state.favoritesOpen);
+  const storedOpen = useShellStore((state) => state.favoritesOpen);
+  const open = collapsible ? storedOpen : true;
   const setOpen = useShellStore((state) => state.setFavoritesOpen);
   const items = (favorites.data ?? []).filter((favorite) => favoriteHref(org.slug, favorite));
 
   return (
-    <section aria-labelledby="sidebar-favorites" className="flex flex-col gap-px">
+    <section aria-label="Favorites" className="flex flex-col gap-px">
+      {collapsible ? (
       <button
         type="button"
         id="sidebar-favorites"
@@ -46,6 +51,7 @@ export function FavoritesSection() {
         <span className="flex-1 text-left">Favorites</span>
         {items.length > 0 ? <span className="text-xs text-fg-muted tabular-nums">{items.length}</span> : null}
       </button>
+      ) : null}
       {open ? (
         favorites.isPending ? (
           <SkeletonRows rows={2} className="px-1" />
@@ -59,7 +65,7 @@ export function FavoritesSection() {
           </button>
         ) : items.length === 0 ? (
           <div className="mx-2 mb-1 flex items-start gap-2 rounded-md border border-dashed border-border-default px-3 py-2.5 text-sm text-fg-muted">
-            <Star aria-hidden className="mt-0.5 size-3.5 shrink-0 text-[var(--label-yellow-text)]" />
+            <Star aria-hidden className="mt-0.5 size-3.5 shrink-0 text-icon" />
             <span>Star boards, dashboards and folders to pin them here.</span>
           </div>
         ) : (

@@ -4,7 +4,6 @@ import {
   BookOpen,
   Bell,
   CircleHelp,
-  Inbox,
   Keyboard,
   LifeBuoy,
   Menu,
@@ -30,6 +29,7 @@ import { Logo } from './logo';
 import { useCan, useOrg } from './org-context';
 import { routes } from './routes';
 import { useShellStore } from './store';
+import { TopNav } from './top-nav/top-nav';
 import { UserMenu } from './user-menu';
 import { NotificationsRealtime } from '@/features/notifications';
 
@@ -81,7 +81,10 @@ function HelpMenu() {
   );
 }
 
-/** Slim top bar: brand, global search trigger, activity icons, invite, help and account. */
+/**
+ * The 56px top bar, identical in structure to KitStak WMS: logo with product badge, primary
+ * navigation, search with its shortcut hint, notifications, help and the account menu.
+ */
 export function TopBar() {
   const { org } = useOrg();
   const me = useMe(org.id);
@@ -97,7 +100,11 @@ export function TopBar() {
     panel === target ? closePanel() : openPanel(target);
 
   return (
-    <header role="banner" className="flex h-[var(--topbar-height)] shrink-0 items-center gap-1.5 px-2 sm:gap-3 sm:px-3">
+    <header
+      role="banner"
+      data-testid="top-bar"
+      className="relative z-[var(--z-header)] flex h-[var(--topbar-height)] shrink-0 items-center gap-1 border-b border-border-subtle bg-panel px-3 lg:px-4"
+    >
       <IconButton
         label="Open navigation"
         icon={<Menu aria-hidden />}
@@ -106,73 +113,70 @@ export function TopBar() {
       />
       <Link
         href={routes.home(org.slug)}
-        className="flex h-9 items-center rounded-md px-1.5 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus"
+        className="mr-1 flex h-9 shrink-0 items-center rounded-md px-1.5 transition-colors hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus lg:mr-3"
       >
-        <Logo size={26} />
+        <Logo size={22} />
         <span className="sr-only"> – home</span>
       </Link>
 
-      <div className="flex min-w-0 flex-1 justify-end sm:justify-center sm:px-4">
-        <IconButton
-          label="Search everything"
-          icon={<Search aria-hidden />}
-          className="sm:hidden"
-          data-search-trigger=""
-          onClick={() => togglePanel('search')}
-        />
-        <button
-          type="button"
-          onClick={() => togglePanel('search')}
-          data-search-trigger=""
-          data-testid="topbar-search"
-          aria-keyshortcuts="Control+K Meta+K"
-          className="group hidden h-9 w-full max-w-[520px] items-center sm:flex gap-2 rounded-lg border border-border-default bg-panel px-3 text-left text-base text-fg-placeholder shadow-xs transition-[border-color,box-shadow] duration-[var(--duration-fast)] hover:border-border-strong hover:shadow-sm focus-visible:outline-2 focus-visible:outline-focus"
-        >
-          <Search aria-hidden className="size-4 text-icon" />
-          <span className="flex-1 truncate">Search boards, items and people</span>
-          <span className="hidden items-center gap-0.5 lg:inline-flex">
-            <Kbd>{mod}</Kbd>
-            <Kbd>K</Kbd>
-          </span>
-        </button>
-      </div>
+      <TopNav />
 
-      <nav aria-label="Quick actions" className="flex shrink-0 items-center gap-1">
-        <NotificationsRealtime />
-        <IconButton
-          label={unread > 0 ? `Notifications (${unread} unread)` : 'Notifications'}
-          icon={<Bell aria-hidden />}
-          active={panel === 'notifications'}
-          aria-expanded={panel === 'notifications'}
-          aria-haspopup="dialog"
-          data-notifications-trigger=""
-          data-testid="notifications-bell"
-          onClick={() => togglePanel('notifications')}
-          badge={<CountBadge count={unread} />}
-        />
-        <Tooltip content="Inbox">
-          <Link
-            href={routes.inbox(org.slug)}
-            aria-label="Inbox"
-            className="hidden size-8 items-center justify-center rounded-sm text-icon sm:inline-flex transition-colors hover:bg-hover hover:text-icon-strong focus-visible:outline-2 focus-visible:outline-focus [&_svg]:size-[18px]"
+      <div className="ml-auto flex min-w-0 items-center gap-1.5">
+        <Tooltip
+          content={
+            <span className="flex items-center gap-1.5">
+              Search boards, items and people <Kbd>{mod}</Kbd>
+              <Kbd>K</Kbd>
+            </span>
+          }
+        >
+          <button
+            type="button"
+            onClick={() => togglePanel('search')}
+            data-search-trigger=""
+            data-testid="topbar-search"
+            aria-label="Search boards, items and people"
+            aria-keyshortcuts="Control+K Meta+K"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border-subtle bg-sunken text-xs text-fg-secondary transition-colors hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus xl:w-56 xl:px-3"
           >
-            <Inbox aria-hidden />
-          </Link>
+            <span className="flex min-w-0 flex-1 items-center gap-2">
+              <Search aria-hidden className="size-3.5 shrink-0" />
+              <span className="hidden min-w-0 flex-1 truncate text-left xl:inline">Search…</span>
+              <span className="hidden items-center gap-0.5 xl:inline-flex">
+                <Kbd>{mod}</Kbd>
+                <Kbd>K</Kbd>
+              </span>
+            </span>
+          </button>
         </Tooltip>
-        {canInvite ? (
+
+        <nav aria-label="Quick actions" className="flex shrink-0 items-center gap-0.5">
+          <NotificationsRealtime />
+          {canInvite ? (
+            <IconButton
+              label="Invite members"
+              icon={<UserPlus aria-hidden />}
+              className="hidden lg:inline-flex"
+              onClick={() => openPanel('invite')}
+            />
+          ) : null}
+          <span className="hidden sm:contents">
+            <HelpMenu />
+          </span>
           <IconButton
-            label="Invite members"
-            icon={<UserPlus aria-hidden />}
-            className="hidden sm:inline-flex"
-            onClick={() => openPanel('invite')}
+            label={unread > 0 ? `Notifications (${unread} unread)` : 'Notifications'}
+            icon={<Bell aria-hidden />}
+            active={panel === 'notifications'}
+            aria-expanded={panel === 'notifications'}
+            aria-haspopup="dialog"
+            data-notifications-trigger=""
+            data-testid="notifications-bell"
+            onClick={() => togglePanel('notifications')}
+            badge={<CountBadge count={unread} ringClassName="ring-[var(--surface-panel)]" />}
           />
-        ) : null}
-        <span className="hidden sm:contents">
-          <HelpMenu />
-        </span>
-        <span aria-hidden className="mx-1.5 hidden h-6 w-px bg-border-default sm:block" />
+        </nav>
         <UserMenu />
-      </nav>
+      </div>
     </header>
   );
 }

@@ -70,17 +70,35 @@ export function appShell(page: Page): Locator {
   return page.getByTestId('app-shell').or(page.locator('[data-app-shell]')).first();
 }
 
-/** The left sidebar / workspace navigation. */
+/** The primary navigation. It lives in the top bar; the name is kept for existing specs. */
 export function sidebar(page: Page): Locator {
   return page
-    .getByTestId('app-sidebar')
-    .or(page.getByRole('navigation', { name: /sidebar|workspace|primary|main/i }))
+    .getByTestId('top-nav')
+    .or(page.getByRole('navigation', { name: /main navigation/i }))
     .first();
 }
 
-/** Board links inside the sidebar. */
+/** Opens the top bar's Workspaces menu (switcher + folder / board tree) if it is closed. */
+export async function openWorkspacesMenu(page: Page): Promise<Locator> {
+  const menu = page.getByTestId('workspaces-menu');
+  if (!(await menu.isVisible())) await page.getByTestId('topnav-workspaces').click();
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** Opens the top bar's CRM menu (Pipeline and the CRM object boards) if it is closed. */
+export async function openCrmMenu(page: Page): Promise<Locator> {
+  const menu = page.getByTestId('crm-nav-menu');
+  if (!(await menu.isVisible())) await page.getByTestId('topnav-crm').click();
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** Board links inside whichever navigation menu is open. */
 export function sidebarBoardLinks(page: Page): Locator {
-  return sidebar(page).locator('[data-testid="sidebar-board-link"], a[href*="/boards/"]');
+  return page
+    .locator('[data-testid="workspaces-menu"], [data-testid="crm-nav-menu"], [data-testid="favorites-menu"]')
+    .locator('[data-testid="sidebar-board-link"], a[href*="/boards/"]');
 }
 
 /** The main board surface (table/grid view). */

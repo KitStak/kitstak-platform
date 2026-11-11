@@ -28,6 +28,9 @@ export interface CreateRequest {
 
 export type TreeSortMode = 'manual' | 'alpha';
 
+/** Dropdowns of the top bar navigation. */
+export type NavMenuKey = 'crm' | 'workspaces' | 'favorites';
+
 interface ShellState {
   readonly sidebarCollapsed: boolean;
   readonly sidebarWidth: number;
@@ -42,6 +45,9 @@ interface ShellState {
   readonly createRequest: CreateRequest | null;
   /** Off-canvas navigation drawer (narrow viewports). Session-only. */
   readonly mobileNavOpen: boolean;
+  /** Open top-bar navigation menu, if any. Session-only. */
+  readonly navMenu: NavMenuKey | null;
+  setNavMenu: (menu: NavMenuKey | null) => void;
   setMobileNavOpen: (open: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebar: () => void;
@@ -110,9 +116,13 @@ export const useShellStore = create<ShellState>()(
       panel: null,
       createRequest: null,
       mobileNavOpen: false,
+      navMenu: null,
+      setNavMenu: (menu) => set({ navMenu: menu }),
       setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
-      toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+      // The workspace tree lives in the top bar's Workspaces menu now, so the old sidebar
+      // shortcut (Ctrl/⌘ + \) opens and closes that menu. The name is kept for its callers.
+      toggleSidebar: () => set((state) => ({ navMenu: state.navMenu === 'workspaces' ? null : 'workspaces' })),
       setSidebarWidth: (width) => set({ sidebarWidth: clampSidebarWidth(width) }),
       setActiveWorkspace: (orgId, workspaceId) =>
         set((state) => ({ activeWorkspaceByOrg: { ...state.activeWorkspaceByOrg, [orgId]: workspaceId } })),

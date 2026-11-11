@@ -16,7 +16,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * Global shortcuts: ⌘/Ctrl+K palette, ⌘/Ctrl+\ sidebar, "?" cheat sheet, and g-chords
+ * Global shortcuts: ⌘/Ctrl+K palette, ⌘/Ctrl+\ Workspaces menu (formerly the sidebar), "?" cheat sheet, and g-chords
  * (g h home, g m my work, g i inbox, g d dashboards, g p pipeline). Ignored while typing.
  */
 export function useShellHotkeys(orgSlug: string): void {
