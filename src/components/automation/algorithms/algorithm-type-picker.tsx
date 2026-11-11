@@ -41,7 +41,7 @@ const CARDS = [
     body: "Decide where received and transferred stock goes: same SKU, empty bins, zones, capacity and dynamic replenishment.",
   },
   {
-    href: "/automation/algorithms/allocation", title: "Allocation Algorithm", icon: Boxes, tone: "bg-[#621DB8] text-white hover:bg-[#621DB8]/90",
+    href: "/automation/algorithms/allocation", title: "Allocation Algorithm", icon: Boxes, tone: "bg-[var(--label-purple-text)] text-white hover:bg-[var(--label-purple-text)]/90",
     body: "Decide which stock an order reserves: FEFO, pick faces first, lots, full LPs and order conditions per client or channel.",
   },
 ] as const;
@@ -60,9 +60,9 @@ export function AlgorithmTypePicker() {
           {CARDS.map((c) => (
             <Link key={c.href} href={c.href} aria-label={`${c.title}: open the ${c.title.toLowerCase()} list`}
               className={cn("group flex flex-col gap-3 rounded-xl p-5 shadow-sm transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 hover:-translate-y-0.5", c.tone)}>
-              <span className="flex items-center gap-2 text-[16px] font-semibold"><c.icon className="h-5 w-5" aria-hidden />{c.title}
+              <span className="flex items-center gap-2 text-md font-semibold"><c.icon className="h-5 w-5" aria-hidden />{c.title}
                 <ArrowRight className="ml-auto h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden /></span>
-              <span className="text-[13px] leading-5 text-white/85">{c.body}</span>
+              <span className="text-sm leading-5 text-white/85">{c.body}</span>
             </Link>
           ))}
         </nav>

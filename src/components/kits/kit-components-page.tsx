@@ -49,7 +49,7 @@ export function IncludedKits({ kits }: { readonly kits: readonly string[] }) {
     <Tooltip content={<ul className="flex flex-col gap-0.5">{kits.map((k) => <li key={k} className="font-medium">{k}</li>)}</ul>}>
       <span className="inline-flex min-w-0 items-center gap-1.5" tabIndex={0}>
         <span className="truncate">{kits.map((k, i) => (<React.Fragment key={k}>{i > 0 ? "," : null}<Link href={kitHref(k)} className="text-link hover:underline">{k}</Link></React.Fragment>))}</span>
-        {kits.length > 1 ? <span className="shrink-0 rounded-full bg-surface-sunken px-1.5 text-[10px] font-semibold text-secondary">{kits.length}</span> : null}
+        {kits.length > 1 ? <span className="shrink-0 rounded-full bg-surface-sunken px-1.5 text-2xs font-semibold text-secondary">{kits.length}</span> : null}
       </span>
     </Tooltip>
   );
@@ -70,7 +70,7 @@ export function buildKitComponentColumns(): ColumnDef<KitComponentRow, unknown>[
     {
       id: "reorderQty", accessorKey: "reorderQty", header: "Reorder Quantity", size: headerWidth("Reorder Quantity"), minSize: headerWidth("Reorder Quantity"), meta: { align: "right", headerTip: "max(0, total order quantity − total available)." },
       cell: ({ row }) => (row.original.reorderQty > 0
-        ? <Tooltip content={`Create a purchase order for ${row.original.sku}`}><Link href={reorderHref(row.original)} className="rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-semibold tabular-nums text-danger hover:underline">{row.original.reorderQty.toLocaleString()}</Link></Tooltip>
+        ? <Tooltip content={`Create a purchase order for ${row.original.sku}`}><Link href={reorderHref(row.original)} className="rounded-full bg-danger-soft px-2 py-0.5 text-2xs font-semibold tabular-nums text-danger hover:underline">{row.original.reorderQty.toLocaleString()}</Link></Tooltip>
         : <QtyCell value={0} muteZero />),
     },
   ];

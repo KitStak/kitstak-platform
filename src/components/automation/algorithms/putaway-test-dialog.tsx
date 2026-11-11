@@ -39,7 +39,7 @@ export interface PutawayTestTarget {
 }
 
 function Label({ htmlFor, children, required }: { readonly htmlFor: string; readonly children: React.ReactNode; readonly required?: boolean }) {
-  return <label htmlFor={htmlFor} className="text-[12px] font-medium text-body">{children}{required ? <span className="text-danger"> *</span> : null}</label>;
+  return <label htmlFor={htmlFor} className="text-xs font-medium text-body">{children}{required ? <span className="text-danger"> *</span> : null}</label>;
 }
 
 export function PutawayTestDialog({ target, onOpenChange }: { readonly target: PutawayTestTarget | null; readonly onOpenChange: (open: boolean) => void }) {
@@ -128,18 +128,18 @@ export function PutawayTestDialog({ target, onOpenChange }: { readonly target: P
                 selectedOptions={productId && productLabel ? [{ value: productId, label: productLabel }] : undefined}
                 onChange={(v, o) => { setProductId(v); setProductLabel(o ? String(o.label) : null); setBucket(null); setErrors((e) => ({ ...e, product: "" })); }}
                 placeholder="Search SKU or name" invalid={Boolean(errors.product)} clearable />
-              {errors.product ? <p role="alert" className="text-[12px] text-danger">{errors.product}</p> : null}
+              {errors.product ? <p role="alert" className="text-xs text-danger">{errors.product}</p> : null}
             </div>
             <div className="flex flex-col gap-1">
               <Label htmlFor="pt-qty" required>Quantity</Label>
               <NumberInput id="pt-qty" value={qty} onChange={setQty} min={1} invalid={Boolean(errors.qty)} />
-              {errors.qty ? <p role="alert" className="text-[12px] text-danger">{errors.qty}</p> : null}
+              {errors.qty ? <p role="alert" className="text-xs text-danger">{errors.qty}</p> : null}
             </div>
             {tab === "lp" ? (
               <div className="flex flex-col gap-1">
                 <Label htmlFor="pt-lp" required>LP or parent LP</Label>
                 <LpPicker id="pt-lp" warehouseId={target?.warehouseId} value={lpId} onChange={(v) => { setLpId(v); setErrors((e) => ({ ...e, lp: "" })); }} invalid={Boolean(errors.lp)} placeholder="Search or scan LP" clearable />
-                {errors.lp ? <p role="alert" className="text-[12px] text-danger">{errors.lp}</p> : null}
+                {errors.lp ? <p role="alert" className="text-xs text-danger">{errors.lp}</p> : null}
               </div>
             ) : null}
             <div className="flex flex-col gap-1">
@@ -153,7 +153,7 @@ export function PutawayTestDialog({ target, onOpenChange }: { readonly target: P
           {tab === "product" && productId ? <InventoryRows rows={inv.data?.data ?? []} loading={inv.isPending} selected={bucket?.id ?? null} onPick={pickBucket} /> : null}
           {needsLocation ? <Callout variant="attention" title="Choose a current location">This algorithm has conditions on the current location (area type, zone, aisle…). Without one those rules cannot match.</Callout> : null}
           {failure ? <Callout variant="error" title="Test failed">{failure}</Callout> : null}
-          {pending ? <div className="flex items-center gap-2 py-6 text-[13px] text-secondary"><Spinner className="h-4 w-4" />Running the rule chain…</div> : result ? <TestResult result={result} hasCurrentLocation={fromLocationId !== null} /> : (
+          {pending ? <div className="flex items-center gap-2 py-6 text-sm text-secondary"><Spinner className="h-4 w-4" />Running the rule chain…</div> : result ? <TestResult result={result} hasCurrentLocation={fromLocationId !== null} /> : (
             <EmptyState compact icon={FlaskConical} title="No test run yet" description="Pick a product and quantity, then press Test to see the suggested locations and which rule chose them." />
           )}
         </DialogBody>
@@ -170,20 +170,20 @@ function TestResult({ result, hasCurrentLocation }: { readonly result: PutawayTe
   return (
     <div className="grid gap-4 md:grid-cols-[1fr_240px]">
       <section className="flex flex-col gap-2">
-        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Suggested locations · {result.product.sku}</h3>
+        <h3 className="text-xs font-semibold text-secondary">Suggested locations · {result.product.sku}</h3>
         {result.suggestions.length === 0 ? (
           <Callout variant="attention" title="No location found">No rule produced a location for this product. Check the trace for the rule that came closest.</Callout>
         ) : (
           <ol className="flex flex-col divide-y divide-border rounded-lg border border-border">
             {result.suggestions.map((sug, i) => (
               <li key={sug.locationId} className={cn("flex items-start gap-3 px-3 py-2", i === 0 && "bg-success-soft/40")}>
-                <span className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold", i === 0 ? "bg-success text-white" : "bg-neutral-soft text-secondary")}>{i + 1}</span>
+                <span className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-2xs font-semibold", i === 0 ? "bg-success text-white" : "bg-neutral-soft text-secondary")}>{i + 1}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-2 text-[13px] font-semibold text-foreground"><MapPin className="h-3.5 w-3.5 text-faint" aria-hidden />{sug.code}
+                  <p className="flex items-center gap-2 text-sm font-semibold text-foreground"><MapPin className="h-3.5 w-3.5 text-faint" aria-hidden />{sug.code}
                     {sug.areaType ? <Badge size="sm" tone="info" shape="pill">{sug.areaType}</Badge> : null}
-                    {sug.zone ? <span className="text-[11px] font-normal text-faint">Zone {sug.zone}</span> : null}
-                    <span className="ml-auto text-[11px] font-normal tabular-nums text-secondary">{sug.onHand.toLocaleString("en-US")} on hand</span></p>
-                  <p className="mt-0.5 truncate text-[11px] text-faint" title={sug.reasons.join(" · ")}>{sug.reasons.join(" · ")}</p>
+                    {sug.zone ? <span className="text-2xs font-normal text-faint">Zone {sug.zone}</span> : null}
+                    <span className="ml-auto text-2xs font-normal tabular-nums text-secondary">{sug.onHand.toLocaleString("en-US")} on hand</span></p>
+                  <p className="mt-0.5 truncate text-2xs text-faint" title={sug.reasons.join(" · ")}>{sug.reasons.join(" · ")}</p>
                 </div>
               </li>
             ))}
@@ -191,23 +191,23 @@ function TestResult({ result, hasCurrentLocation }: { readonly result: PutawayTe
         )}
       </section>
       <section className="flex flex-col gap-2">
-        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Rule trace</h3>
-        <p className="text-[12px] text-secondary">{result.algorithm}{result.rule ? <> · chose <span className="font-semibold text-foreground">{result.rule}</span></> : null}</p>
+        <h3 className="text-xs font-semibold text-secondary">Rule trace</h3>
+        <p className="text-xs text-secondary">{result.algorithm}{result.rule ? <> · chose <span className="font-semibold text-foreground">{result.rule}</span></> : null}</p>
         <ol className="flex flex-col gap-1.5">
           {result.trace.map((t, i) => {
             const won = t.rule === result.rule && t.candidates > 0;
             const Icon = won ? CheckCircle2 : t.matched ? XCircle : CircleSlash;
             return (
               <li key={`${t.rule}-${i}`} className={cn("rounded-md border px-2.5 py-1.5", won ? "border-success/40 bg-success-soft/40" : "border-border")}>
-                <p className="flex items-center gap-1.5 text-[12px] font-medium text-foreground"><Icon className={cn("h-3.5 w-3.5", won ? "text-success" : t.matched ? "text-danger" : "text-faint")} aria-hidden />
+                <p className="flex items-center gap-1.5 text-xs font-medium text-foreground"><Icon className={cn("h-3.5 w-3.5", won ? "text-success" : t.matched ? "text-danger" : "text-faint")} aria-hidden />
                   <span className="text-faint">{i === 0 ? "If" : `${i}. If else`}</span>{t.rule}</p>
-                <p className="mt-0.5 text-[11px] text-secondary">{t.message}</p>
+                <p className="mt-0.5 text-2xs text-secondary">{t.message}</p>
               </li>
             );
           })}
         </ol>
         {!hasCurrentLocation && result.trace.some((t) => !t.matched) ? (
-          <p className="text-[11px] text-faint">Location conditions (area type, zone, aisle…) check the current location. Pick one above to test rules that use them.</p>
+          <p className="text-2xs text-faint">Location conditions (area type, zone, aisle…) check the current location. Pick one above to test rules that use them.</p>
         ) : null}
       </section>
     </div>
@@ -225,13 +225,13 @@ function InventoryRows({ rows, loading, selected, onPick }: {
   return (
     <section aria-labelledby="pt-inventory" className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        <h3 id="pt-inventory" className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Inventory to put away</h3>
-        <span className="text-[11px] text-faint">Optional · pick a row to test moving that stock; leave empty to test a new receipt</span>
+        <h3 id="pt-inventory" className="text-xs font-semibold text-secondary">Inventory to put away</h3>
+        <span className="text-2xs text-faint">Optional · pick a row to test moving that stock; leave empty to test a new receipt</span>
         {selected ? <Button size="sm" variant="ghost" className="ml-auto" onClick={() => onPick(null)}>Clear</Button> : null}
       </div>
       <div className="max-h-48 overflow-auto rounded-lg border border-border">
-        <table className="w-full text-[12px]">
-          <thead className="sticky top-0 bg-surface-sunken text-[10px] uppercase text-secondary">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 bg-surface-sunken text-2xs text-secondary">
             <tr>{["", "Location", "Status", "Pack type", "LP", "Lot", "Expiry", "Production", "Received", "PO", "Damage", "Allocated", "Qty"].map((h, i) => <th key={i} className={cn("px-2 py-1.5 text-left font-semibold", i >= 11 && "text-right")}>{h}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-border">

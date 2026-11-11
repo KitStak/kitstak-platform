@@ -52,8 +52,8 @@ export function ProfileForm({ profile }: { readonly profile: ProfileData }) {
       <div className="flex items-center gap-3">
         <Avatar name={displayName || profile.displayName} size="lg" tone="brand" />
         <div className="min-w-0">
-          <p className="truncate text-[15px] font-semibold text-foreground">{displayName || profile.displayName}</p>
-          <p className="flex flex-wrap items-center gap-1 text-[12px] text-faint">
+          <p className="truncate text-base font-semibold text-foreground">{displayName || profile.displayName}</p>
+          <p className="flex flex-wrap items-center gap-1 text-xs text-faint">
             {profile.roles.map((r) => <Badge key={r} tone="primary" size="sm" shape="pill">{r}</Badge>)}
             <span>· {profile.userType} user</span>
           </p>
@@ -72,19 +72,19 @@ export function ProfileForm({ profile }: { readonly profile: ProfileData }) {
           </FormField>
         ) : null}
         <div className="flex flex-col gap-1">
-          <span className="text-[12px] font-medium text-body">Language</span>
-          <p className="rounded-md border border-border bg-surface-sunken px-3 py-2 text-[13px] text-foreground">English (United States)</p>
+          <span className="text-xs font-medium text-body">Language</span>
+          <p className="rounded-md border border-border bg-surface-sunken px-3 py-2 text-sm text-foreground">English (United States)</p>
         </div>
         <SubmitBar submitLabel="Update my profile" cancelLabel="Reset" requireDirty onCancel={() => form.reset(initial)} pending={mutation.isPending} />
       </Form>
-      <dl className="grid grid-cols-[140px_minmax(0,1fr)] gap-y-2 border-t border-border pt-4 text-[13px]">
+      <dl className="grid grid-cols-[140px_minmax(0,1fr)] gap-y-2 border-t border-border pt-4 text-sm">
         <dt className="text-secondary">Warehouses</dt><dd className="text-foreground">{profile.warehouses.join(", ") || "None assigned"}</dd>
         <dt className="text-secondary">Clients</dt><dd className="text-foreground">{profile.allClients ? "All clients" : `${profile.clientCount} assigned`}</dd>
         <dt className="text-secondary">Last sign-in</dt><dd className="text-foreground">{profile.lastLoginAt ? fmt.gridDateTime(profile.lastLoginAt) : "—"}</dd>
         <dt className="text-secondary">Password changed</dt>
         <dd className="text-foreground">{profile.passwordChangedAt ? fmt.gridDateTime(profile.passwordChangedAt) : "Change required"} · <Link href="/account/password" className="font-medium text-primary hover:underline">Change password</Link></dd>
       </dl>
-      <p className="text-[12px] text-faint">Roles, warehouses and client access are managed by an administrator in Users & Roles.</p>
+      <p className="text-xs text-faint">Roles, warehouses and client access are managed by an administrator in Users & Roles.</p>
     </div>
   );
 }

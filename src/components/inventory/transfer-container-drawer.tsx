@@ -145,12 +145,12 @@ function TransferContainerBody({ kind, onClose, onDone, onDirty }: { readonly ki
   if (result) {
     return (
       <div className="flex h-full flex-col gap-4">
-        <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success-soft px-3 py-2 text-[13px] text-success">
+        <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success-soft px-3 py-2 text-sm text-success">
           <CheckCircle2 className="h-4 w-4" aria-hidden />
           {summary?.code} transferred · {formatQty(result.totalQty)} units
         </div>
-        <table className="w-full text-[13px]">
-          <thead className="text-left text-[11px] uppercase tracking-wide text-faint"><tr><th className="py-1">SKU</th><th>From</th><th>To</th><th className="text-right">Qty</th></tr></thead>
+        <table className="w-full text-sm">
+          <thead className="text-left text-2xs text-faint"><tr><th className="py-1">SKU</th><th>From</th><th>To</th><th className="text-right">Qty</th></tr></thead>
           <tbody>
             {result.moved.map((m) => (
               <tr key={`${m.sku}:${m.from}:${m.to}`} className="border-t border-border"><td className="py-1.5 font-medium">{m.sku}</td><td>{m.from}</td><td>{m.to}</td><td className="text-right tabular-nums">{formatQty(m.qty)}</td></tr>
@@ -194,11 +194,11 @@ function TransferContainerBody({ kind, onClose, onDone, onDirty }: { readonly ki
       {summary ? (
         <section aria-label="Contents" className="rounded-lg border border-border bg-surface-sunken/60 p-3">
           <div className="flex items-baseline justify-between">
-            <span className="text-[15px] font-semibold text-foreground">{summary.code}</span>
-            {summary.kind === "lp" ? <span className="text-[12px] text-secondary">in {summary.locationCode ?? "no location"}</span> : null}
+            <span className="text-base font-semibold text-foreground">{summary.code}</span>
+            {summary.kind === "lp" ? <span className="text-xs text-secondary">in {summary.locationCode ?? "no location"}</span> : null}
           </div>
           {summary.lockMessage ? (
-            <p role="alert" className="mt-2 flex items-start gap-1.5 rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-[12px] text-danger">
+            <p role="alert" className="mt-2 flex items-start gap-1.5 rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-xs text-danger">
               <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
               <span>{summary.lockMessage} Nothing can move out of it until then.</span>
             </p>
@@ -214,18 +214,18 @@ function TransferContainerBody({ kind, onClose, onDone, onDirty }: { readonly ki
             <Fact label="Production Date">{summary.productionLabel}</Fact>
           </dl>
           {summary.lines.length > 0 ? (
-            <ul className="mt-3 max-h-40 divide-y divide-border overflow-auto rounded-md border border-border bg-surface text-[12px]">
+            <ul className="mt-3 max-h-40 divide-y divide-border overflow-auto rounded-md border border-border bg-surface text-xs">
               {summary.lines.map((l, i) => (
                 <li key={`${l.sku}:${i}`} className="flex items-center gap-2 px-2 py-1.5">
                   <span className="font-medium text-foreground">{l.sku}</span>
                   <InventoryStatusPill status={l.status} />
                   {l.lpNumber && kind === "location" ? <span className="text-faint">LP {l.lpNumber}</span> : null}
                   <span className="ml-auto tabular-nums">{formatQty(l.qty)} {l.packType}</span>
-                  {l.allocated > 0 ? <span className="text-[11px] text-primary">({formatQty(l.allocated)} allocated, moves with it)</span> : null}
+                  {l.allocated > 0 ? <span className="text-2xs text-primary">({formatQty(l.allocated)} allocated, moves with it)</span> : null}
                 </li>
               ))}
             </ul>
-          ) : <p className="mt-3 text-[12px] text-secondary">{kind === "lp" ? "This LP is empty; it will move on its own." : "This location is empty."}</p>}
+          ) : <p className="mt-3 text-xs text-secondary">{kind === "lp" ? "This LP is empty; it will move on its own." : "This location is empty."}</p>}
         </section>
       ) : null}
 

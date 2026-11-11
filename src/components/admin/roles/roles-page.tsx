@@ -55,7 +55,7 @@ function columns(onOpen: (id: string) => void): GridColumnDef<RoleRow>[] {
         return (
           <span className="flex items-center gap-2">
             <span className="h-1.5 w-14 overflow-hidden rounded-full bg-neutral-soft" aria-hidden><span className="block h-full rounded-full bg-primary" style={{ width: `${pct}%` }} /></span>
-            <span className="tabular-nums text-[12px] text-body">{row.original.permissionCount}/{row.original.totalPermissions}</span>
+            <span className="tabular-nums text-xs text-body">{row.original.permissionCount}/{row.original.totalPermissions}</span>
           </span>
         );
       },
@@ -84,14 +84,14 @@ function RestrictionsDialog({ roles, onClose, onSaved }: { readonly roles: reado
       <DialogContent size="md">
         <DialogHeader title="Manage restrictions" description={`Selected role${(roles?.length ?? 0) === 1 ? "" : "s"}: ${(roles ?? []).map((r) => r.name).join(", ")}`} />
         <DialogBody className="flex flex-col gap-3">
-          <p className="text-[13px] text-secondary">Select the restrictions to apply to the selected roles. Changes apply at their next page load.</p>
+          <p className="text-sm text-secondary">Select the restrictions to apply to the selected roles. Changes apply at their next page load.</p>
           <Callout variant="info" title="Applies app-wide">
             {RESTRICTION_COVERAGE}
           </Callout>
           {RESTRICTION_DEFS.map((d) => (
             <div key={d.key} className="rounded-lg border border-border px-3 py-2.5">
               <Checkbox checked={value.has(d.key)} onCheckedChange={() => setValue((prev) => { const next = new Set(prev); if (next.has(d.key)) next.delete(d.key); else next.add(d.key); return next; })}
-                label={<span className="text-[13px] font-semibold text-foreground">{d.label}</span>} description={d.description} />
+                label={<span className="text-sm font-semibold text-foreground">{d.label}</span>} description={d.description} />
             </div>
           ))}
         </DialogBody>

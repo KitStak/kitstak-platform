@@ -42,7 +42,7 @@ function DerivedValue({ value, hint }: { readonly value: string | null | undefin
   if (!value) return <span className="text-faint">—</span>;
   return (
     <span className="block min-w-0 break-words pr-1" title={hint ? `${value} (${hint})` : value}>
-      {value}{hint ? <span className="ml-1 text-[11px] text-faint">({hint.length > 40 ? "mixed" : hint})</span> : null}
+      {value}{hint ? <span className="ml-1 text-2xs text-faint">({hint.length > 40 ? "mixed" : hint})</span> : null}
     </span>
   );
 }
@@ -60,9 +60,9 @@ function ExpectedLoadTile({ plan }: { readonly plan: PlanDetail }) {
   });
   return (
     <div className={cn("rounded-lg border bg-surface px-4 py-3.5 shadow-xs", load.warning ? "border-warning/40" : "border-border")}>
-      <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">Expected load</span>
-      <div className="mt-1 text-[24px] font-semibold leading-8 tracking-tight tabular-nums text-foreground">{load.weightLb.toFixed(2)} lb</div>
-      <div className="mt-1 flex min-w-0 flex-col gap-0.5 text-[12px] text-faint">
+      <span className="text-2xs font-semibold text-faint">Expected load</span>
+      <div className="mt-1 text-xl font-semibold leading-8 tracking-tight tabular-nums text-foreground">{load.weightLb.toFixed(2)} lb</div>
+      <div className="mt-1 flex min-w-0 flex-col gap-0.5 text-xs text-faint">
         <span className="break-words">{load.volumeFt3.toFixed(2)} ft³ · {load.sourceLabel}</span>
         {load.detail ? <span className="whitespace-normal break-words">{load.detail}</span> : null}
         {load.warning ? <span className="whitespace-normal break-words text-warning" role="note">{load.warning}</span> : null}
@@ -77,7 +77,7 @@ function ExpectedLoadTile({ plan }: { readonly plan: PlanDetail }) {
  */
 function Lifecycle({ status, reached, stamps }: { readonly status: ShipmentPlanStatus; readonly reached: ReadonlySet<string>; readonly stamps: Readonly<Partial<Record<ShipmentPlanStatus, string | null>>> }) {
   if (status === "Cancelled") {
-    return <div className="flex items-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-[13px] font-medium text-danger"><X className="h-4 w-4" aria-hidden />This plan was cancelled. Its orders were released.</div>;
+    return <div className="flex items-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm font-medium text-danger"><X className="h-4 w-4" aria-hidden />This plan was cancelled. Its orders were released.</div>;
   }
   const steps = lifecycleSteps(status, reached, stamps);
   return (
@@ -90,12 +90,12 @@ function Lifecycle({ status, reached, stamps }: { readonly status: ShipmentPlanS
         return (
           <li key={s} className="flex min-w-0 flex-1 items-start gap-1" aria-current={current ? "step" : undefined} data-stage={s} data-state={state}>
             <span title={skipped ? `${s} was skipped: the plan went straight past this stage` : undefined}
-              className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold", skipped ? "border-dashed border-border-strong text-faint" : done ? "border-success bg-success text-white" : current ? "border-primary bg-primary-soft text-primary" : "border-border text-faint")}>
+              className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-2xs font-semibold", skipped ? "border-dashed border-border-strong text-faint" : done ? "border-success bg-success text-white" : current ? "border-primary bg-primary-soft text-primary" : "border-border text-faint")}>
               {skipped ? <Minus className="h-3.5 w-3.5" aria-hidden /> : done ? <Check className="h-3.5 w-3.5" aria-hidden /> : i + 1}
             </span>
             <span className="flex min-w-0 flex-col leading-tight">
-              <span className={cn("truncate pt-1 text-[12px]", current ? "font-semibold text-foreground" : skipped ? "text-faint" : "text-secondary")}>{s}{skipped ? <span className="sr-only"> (skipped)</span> : null}</span>
-              {stamp ? <span className="truncate text-[11px] tabular-nums text-faint" title={formatDateTime(stamp)}>{formatDateTime(stamp)}</span> : skipped ? <span aria-hidden className="text-[11px] text-faint">Skipped</span> : null}
+              <span className={cn("truncate pt-1 text-xs", current ? "font-semibold text-foreground" : skipped ? "text-faint" : "text-secondary")}>{s}{skipped ? <span className="sr-only"> (skipped)</span> : null}</span>
+              {stamp ? <span className="truncate text-2xs tabular-nums text-faint" title={formatDateTime(stamp)}>{formatDateTime(stamp)}</span> : skipped ? <span aria-hidden className="text-2xs text-faint">Skipped</span> : null}
             </span>
             {i < steps.length - 1 ? <span className={cn("mx-1 mt-3 h-px flex-1", done ? "bg-success" : "bg-border")} aria-hidden /> : null}
           </li>
@@ -128,7 +128,7 @@ function OrdersSection({ plan, canEdit, onChanged }: { readonly plan: PlanDetail
   return (
     <section className="rounded-lg border border-border bg-surface shadow-xs">
       <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <h2 className="text-[14px] font-semibold">Orders <span className="ml-1 text-secondary">{plan.orders.length}</span></h2>
+        <h2 className="text-base font-semibold">Orders <span className="ml-1 text-secondary">{plan.orders.length}</span></h2>
         <span className="flex items-center gap-2">
         {canLabel && plan.status !== "Shipped" ? (
           <DisabledReason reason={labelReason}>
@@ -143,11 +143,11 @@ function OrdersSection({ plan, canEdit, onChanged }: { readonly plan: PlanDetail
         </span>
       </header>
       {plan.orders.length === 0 ? (
-        <p className="px-4 py-8 text-center text-[12px] text-secondary">{canEdit && !terminal ? "No order added yet. Add orders to start loading this truck." : "No orders on this plan."}</p>
+        <p className="px-4 py-8 text-center text-xs text-secondary">{canEdit && !terminal ? "No order added yet. Add orders to start loading this truck." : "No orders on this plan."}</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-[12px]">
-            <thead className="text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+          <table className="w-full text-xs">
+            <thead className="text-left text-2xs font-semibold text-faint">
               <tr><th className="px-4 py-2">Order</th><th className="px-2">Order status</th><th className="px-2">Plan status</th><th className="px-2">Customer</th><th className="px-2">Carrier / service</th><th className="px-2 text-right">Qty</th>{canEdit && !terminal ? <th className="w-10"><span className="sr-only">Actions</span></th> : null}</tr>
             </thead>
             <tbody>
@@ -193,17 +193,17 @@ function LpsSection({ plan }: { readonly plan: PlanDetail }) {
   return (
     <section className="rounded-lg border border-border bg-surface shadow-xs">
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-[14px] font-semibold">License plates <span className="ml-1 text-secondary">{plan.lps.length}</span></h2>
-        <Link href={`/shipment-plans/lps?f.planCode=eq:${encodeURIComponent(plan.code)}`} className="text-[12px] text-primary hover:underline">Open in Plan LPs</Link>
+        <h2 className="text-base font-semibold">License plates <span className="ml-1 text-secondary">{plan.lps.length}</span></h2>
+        <Link href={`/shipment-plans/lps?f.planCode=eq:${encodeURIComponent(plan.code)}`} className="text-xs text-primary hover:underline">Open in Plan LPs</Link>
       </header>
       {loose.length > 0 ? (
-        <p className="border-b border-border bg-surface-sunken px-4 py-2 text-[12px] text-secondary">
+        <p className="border-b border-border bg-surface-sunken px-4 py-2 text-xs text-secondary">
           <span className="font-semibold text-foreground">{loose.length === 1 ? "1 order" : `${loose.length} orders`} without a license plate:</span>{" "}
           {loose.map((o) => `${String(o.orderCode)} (${isGone(String(o.orderStatus)) ? "shipped loose" : "not on an LP yet"})`).join(", ")}
         </p>
       ) : null}
-      {plan.lps.length === 0 ? <p className="px-4 py-6 text-center text-[12px] text-secondary">{plan.orders.length === 0 ? "No orders on this plan." : "No license plates were used for these orders."}</p> : (
-        <ul className="divide-y divide-border text-[12px]">
+      {plan.lps.length === 0 ? <p className="px-4 py-6 text-center text-xs text-secondary">{plan.orders.length === 0 ? "No orders on this plan." : "No license plates were used for these orders."}</p> : (
+        <ul className="divide-y divide-border text-xs">
           {plan.lps.map((l) => (
             <li key={String(l.id)} className="flex items-center justify-between gap-3 px-4 py-2">
               <span className="font-semibold">{String(l.lpNumber)}{l.parentLpNumber ? <span className="ml-2 font-normal text-secondary">in {String(l.parentLpNumber)}</span> : null}</span>
@@ -255,7 +255,7 @@ export function PlanDetailPage({ id }: { readonly id: string }) {
         title={p.code}
         backHref="/shipment-plans"
         backLabel="Shipment Plan"
-        badges={<span className="flex flex-wrap items-center gap-2"><PlanStatusPopover status={p.status} nextStatuses={p.nextStatuses} disabledReason={a.statusReason(p)} canChange={a.can.status} blocked={p.statusBlocks} extras={[a.departExtra(p)].filter((x): x is NonNullable<typeof x> => x !== null)} onPick={(s) => a.requestStatus(p, s)} />{progressNote ? <span className="rounded-full border border-warning/40 bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning" title="Some orders on this plan already shipped. The plan becomes Shipped when the rest ship.">{progressNote}</span> : null}{p.unlabeledReadyCount > 0 && p.status !== "Shipped" && p.status !== "Cancelled" ? <span role="status" className="rounded-full border border-danger/40 bg-danger-soft px-2 py-0.5 text-[11px] font-semibold text-danger" title={`${unlabeledLabel(p.unlabeledReadyCount, p.unlabeledReadyCodes)}. Ship skips orders without an active label.`}>{p.unlabeledReadyCount === 1 ? "1 order has no label" : `${p.unlabeledReadyCount} orders have no label`}</span> : null}{loadMismatch ? <span role="status" className="rounded-full border border-danger/40 bg-danger-soft px-2 py-0.5 text-[11px] font-semibold text-danger" title="The plan is loading but some orders are not packed and Ready to Ship. Ship skips them.">{loadMismatch}</span> : null}</span>}
+        badges={<span className="flex flex-wrap items-center gap-2"><PlanStatusPopover status={p.status} nextStatuses={p.nextStatuses} disabledReason={a.statusReason(p)} canChange={a.can.status} blocked={p.statusBlocks} extras={[a.departExtra(p)].filter((x): x is NonNullable<typeof x> => x !== null)} onPick={(s) => a.requestStatus(p, s)} />{progressNote ? <span className="rounded-full border border-warning/40 bg-warning-soft px-2 py-0.5 text-2xs font-semibold text-warning" title="Some orders on this plan already shipped. The plan becomes Shipped when the rest ship.">{progressNote}</span> : null}{p.unlabeledReadyCount > 0 && p.status !== "Shipped" && p.status !== "Cancelled" ? <span role="status" className="rounded-full border border-danger/40 bg-danger-soft px-2 py-0.5 text-2xs font-semibold text-danger" title={`${unlabeledLabel(p.unlabeledReadyCount, p.unlabeledReadyCodes)}. Ship skips orders without an active label.`}>{p.unlabeledReadyCount === 1 ? "1 order has no label" : `${p.unlabeledReadyCount} orders have no label`}</span> : null}{loadMismatch ? <span role="status" className="rounded-full border border-danger/40 bg-danger-soft px-2 py-0.5 text-2xs font-semibold text-danger" title="The plan is loading but some orders are not packed and Ready to Ship. Ship skips them.">{loadMismatch}</span> : null}</span>}
         meta={<span>{p.warehouseCode as string}{p.clientName ? ` · ${String(p.clientName)}` : ""} · created {dt(p.createdAt)}</span>}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -270,7 +270,7 @@ export function PlanDetailPage({ id }: { readonly id: string }) {
         }
       />
       </div>
-      <div className="rounded-lg border border-border bg-surface p-4 shadow-xs"><Lifecycle status={p.status} reached={reachedPlanStages(p.status, p.timeline.map((t) => t.message))} stamps={{ "Loading Started": p.loadingStartedAt as string | null, "Loading Completed": p.loadingCompletedAt as string | null, Shipped: (p.actualShipmentAt ?? p.truckDepartedAt) as string | null }} />{shipBlocked && p.status !== "Shipped" && p.status !== "Cancelled" ? <p className="mt-3 border-t border-border pt-3 text-[12px] text-secondary"><span className="font-semibold text-foreground">Ship is unavailable:</span> {shipBlocked}</p> : null}</div>
+      <div className="rounded-lg border border-border bg-surface p-4 shadow-xs"><Lifecycle status={p.status} reached={reachedPlanStages(p.status, p.timeline.map((t) => t.message))} stamps={{ "Loading Started": p.loadingStartedAt as string | null, "Loading Completed": p.loadingCompletedAt as string | null, Shipped: (p.actualShipmentAt ?? p.truckDepartedAt) as string | null }} />{shipBlocked && p.status !== "Shipped" && p.status !== "Cancelled" ? <p className="mt-3 border-t border-border pt-3 text-xs text-secondary"><span className="font-semibold text-foreground">Ship is unavailable:</span> {shipBlocked}</p> : null}</div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="Orders" value={p.orderCount} sublabel={plural(units, "unit")} />
         <StatTile label="Loaded" value={`${p.loadedPercent}%`} info="Orders that are Ready to Ship or already shipped, out of all orders on the plan." sublabel={<span className="flex w-full flex-col gap-1"><span>{loadedCount} of {p.orderCount} ready or shipped</span><ProgressBar value={p.loadedPercent} size="sm" tone={p.loadedPercent === 100 ? "success" : "primary"} label="Loading progress" /></span>} tone={p.loadedPercent === 100 ? "success" : "default"} />
@@ -285,14 +285,14 @@ export function PlanDetailPage({ id }: { readonly id: string }) {
           {tab === "lps" ? <LpsSection plan={p} /> : null}
           {tab === "history" ? (
             <section className="rounded-lg border border-border bg-surface p-4 shadow-xs">
-              <div className="mb-3 flex items-center justify-between"><h2 className="text-[14px] font-semibold">History</h2><Button size="sm" variant="ghost" onClick={() => setLog(true)}>Open full change log</Button></div>
+              <div className="mb-3 flex items-center justify-between"><h2 className="text-base font-semibold">History</h2><Button size="sm" variant="ghost" onClick={() => setLog(true)}>Open full change log</Button></div>
               <PlanTimeline planId={p.id} limit={100} />
             </section>
           ) : null}
         </div>
         <div className="flex flex-col gap-5">
           <section className="rounded-lg border border-border bg-surface p-4 shadow-xs">
-            <h2 className="mb-3 text-[14px] font-semibold">Plan details</h2>
+            <h2 className="mb-3 text-base font-semibold">Plan details</h2>
             <KvList columns={1} layout="inline" items={[
               { key: "carrier", label: "Carrier", value: <Derived plan={p.carrierName} orders={p.orders.map((o) => [o.orderCarrier, o.shippingService].filter(Boolean).join(" · "))} /> },
               { key: "truck", label: "Truck plate", value: p.truckPlateNumber },
@@ -310,7 +310,7 @@ export function PlanDetailPage({ id }: { readonly id: string }) {
             ]} />
           </section>
           <section className="rounded-lg border border-border bg-surface p-4 shadow-xs">
-            <h2 className="mb-3 text-[14px] font-semibold">Timeline</h2>
+            <h2 className="mb-3 text-base font-semibold">Timeline</h2>
             <PlanTimeline planId={p.id} />
           </section>
         </div>

@@ -44,11 +44,11 @@ function TypeCard({ t }: { readonly t: PrintoutTypeInfo }) {
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary"><Icon className="h-5 w-5" aria-hidden /></span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
-          <span className="truncate text-[14px] font-semibold text-foreground">{t.name}</span>
+          <span className="truncate text-base font-semibold text-foreground">{t.name}</span>
           {t.beta ? <Badge tone="info" size="sm">BETA</Badge> : null}
         </span>
-        <span className="mt-0.5 block text-[12px] text-secondary">{t.printerType}</span>
-        <span className="mt-2 flex items-center gap-2 text-[12px]">
+        <span className="mt-0.5 block text-xs text-secondary">{t.printerType}</span>
+        <span className="mt-2 flex items-center gap-2 text-xs">
           <span className={cn("tabular-nums font-medium", t.count ? "text-body" : "text-faint")}>{t.count} {t.count === 1 ? "template" : "templates"}</span>
           {!t.implemented ? <Badge tone="outline" size="sm">Generic layout</Badge> : null}
         </span>
@@ -79,12 +79,12 @@ export function PrintoutTypesPage() {
       <PageHeader title="Printouts & Labels" helper="Choose a printout type to list, design and assign its templates." />
       <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-6 pt-4 lg:flex-row lg:gap-6 lg:px-6">
         <aside className="shrink-0 lg:w-[220px]">
-          <p className="mb-3 flex h-9 items-center px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-faint">Categories</p>
+          <p className="mb-3 flex h-9 items-center px-3 text-2xs font-bold text-faint">Categories</p>
           <VerticalNav ariaLabel="Printout categories" items={navItems} active={category} onChange={select} />
         </aside>
         <section className="flex min-w-0 flex-1 flex-col gap-3" aria-label={`${CATEGORY_LABELS[category]} printout types`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-[15px] font-semibold text-foreground">{CATEGORY_LABELS[category]} <span className="font-normal text-faint">· {visible.length}</span></h2>
+            <h2 className="text-base font-semibold text-foreground">{CATEGORY_LABELS[category]} <span className="font-normal text-faint">· {visible.length}</span></h2>
             <div className="relative w-full sm:w-72">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden />
               <TextField aria-label="Search printout types" placeholder="Search printout types" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8" />

@@ -102,7 +102,7 @@ export const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
           className="h-full min-w-0 flex-1 bg-transparent text-right tabular-nums outline-none [appearance:textfield] placeholder:text-faint disabled:cursor-not-allowed [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           {...props}
         />
-        {suffix ? <span className="shrink-0 text-[12px] text-faint">{suffix}</span> : null}
+        {suffix ? <span className="shrink-0 text-xs text-faint">{suffix}</span> : null}
         {hideStepper ? <span className="w-1.5" /> : (
           <span className="flex h-full flex-col self-stretch border-l border-border-strong/50">
             <button type="button" tabIndex={-1} aria-label="Increase" disabled={disabled || atMax} onClick={() => bump(1)} className={cn(stepBtn, "rounded-tr-md")}>

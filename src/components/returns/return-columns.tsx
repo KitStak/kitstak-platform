@@ -64,7 +64,7 @@ export function buildReturnColumns(): Col[] {
     { id: "status", accessorKey: "status", header: "Status", size: 132, minSize: 132, meta: { clip: false }, cell: ({ row }) => <span className="whitespace-nowrap"><StatusPill status={row.original.status} domain="return" className={DARK_SAFE_PILL} /></span> },
     {
       id: "sku", accessorKey: "sku", header: "SKU", size: 150,
-      cell: ({ row }) => <span className="flex min-w-0 flex-col leading-tight"><span className="truncate font-medium" title={row.original.sku}>{row.original.sku}</span><span className="truncate text-[11px] text-secondary" title={row.original.productName ?? undefined}>{row.original.productName}</span></span>,
+      cell: ({ row }) => <span className="flex min-w-0 flex-col leading-tight"><span className="truncate font-medium" title={row.original.sku}>{row.original.sku}</span><span className="truncate text-2xs text-secondary" title={row.original.productName ?? undefined}>{row.original.productName}</span></span>,
     },
     plain("storeOrderNumber", "Store order number", 150),
     { id: "store", accessorKey: "store", header: "Store", size: 130, meta: { clip: false }, cell: ({ row }) => (row.original.store ? <ChannelCell channel={row.original.store} /> : dash) },
@@ -90,7 +90,7 @@ export function buildReturnColumns(): Col[] {
       cell: ({ getValue }) => {
         const v = getValue() as string | null;
         if (!v) return dash;
-        return <span className="flex min-w-0 gap-1 overflow-hidden">{v.split(", ").slice(0, 2).map((t) => <span key={t} className="truncate rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary">{t}</span>)}</span>;
+        return <span className="flex min-w-0 gap-1 overflow-hidden">{v.split(", ").slice(0, 2).map((t) => <span key={t} className="truncate rounded-full bg-primary-soft px-2 py-0.5 text-2xs font-medium text-primary">{t}</span>)}</span>;
       },
     },
     { id: "lineStatus", accessorKey: "lineStatus", header: "Line status", size: 120, meta: { clip: false, defaultVisible: false }, cell: ({ row }) => <StatusPill status={row.original.lineStatus} domain="return" size="sm" className={DARK_SAFE_PILL} /> },

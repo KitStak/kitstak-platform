@@ -54,8 +54,8 @@ function Section({ k, title, description, summary, open, onToggle, invalid, chil
             {open ? <Minus className="h-3.5 w-3.5" aria-hidden /> : <Plus className="h-3.5 w-3.5" aria-hidden />}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[13px] font-semibold text-foreground">{title}</span>
-            <span className="block truncate text-[12px] text-secondary">{description}</span>
+            <span className="block text-sm font-semibold text-foreground">{title}</span>
+            <span className="block truncate text-xs text-secondary">{description}</span>
           </span>
           {invalid ? <Badge tone="danger" size="sm">Needs attention</Badge> : summary ? <Badge tone="success" size="sm">{summary}</Badge> : null}
         </button>
@@ -99,12 +99,12 @@ function ChannelAllocations() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <p className="text-[13px] font-semibold text-foreground">Allocations</p>
+        <p className="text-sm font-semibold text-foreground">Allocations</p>
         <Button size="sm" variant="primary" onClick={() => setEditing(fresh())}><Plus className="h-3.5 w-3.5" aria-hidden />Add allocation</Button>
       </div>
       <div className="overflow-x-auto rounded-md border border-border">
-        <table className="w-full min-w-[560px] text-[12px]">
-          <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+        <table className="w-full min-w-[560px] text-xs">
+          <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
             <tr><th className="px-3 py-2">Channel setup</th><th className="px-3 py-2">Warehouse</th><th className="px-3 py-2 text-right">Static qty</th><th className="px-3 py-2 text-right">Reserve qty</th><th className="px-3 py-2 text-right">Allocation %</th><th className="px-3 py-2 text-right">Synced qty</th><th className="w-16 px-3 py-2"><span className="sr-only">Actions</span></th></tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -168,8 +168,8 @@ function Replenishment() {
             </Button>
           </div>
           <div className="overflow-hidden rounded-md border border-border">
-            <table className="w-full text-[12px]">
-              <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+            <table className="w-full text-xs">
+              <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
                 <tr><th className="px-3 py-2">Warehouse</th><th className="px-3 py-2 text-right">Min. rep. level</th><th className="px-3 py-2 text-right">Max. rep. level</th><th className="w-16 px-3 py-2"><span className="sr-only">Actions</span></th></tr>
               </thead>
               <tbody className="divide-y divide-border">

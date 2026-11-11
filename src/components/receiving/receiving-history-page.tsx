@@ -55,7 +55,7 @@ export function ReceivingHistoryPage() {
           onRowClick={(row) => setOpenId(row.id)}
           emptyTitle="There is no receiving history."
           emptyDescription="Receipts appear here when purchase orders, returns or kits are received. Clear the filters to see every receipt."
-          emptyAction={canCreatePo ? <Link href="/receiving/new" className="text-[13px] font-medium text-primary hover:underline">You can create purchase orders here.</Link> : undefined}
+          emptyAction={canCreatePo ? <Link href="/receiving/new" className="text-sm font-medium text-primary hover:underline">You can create purchase orders here.</Link> : undefined}
         />
       </div>
       <ReceiptDrawer receiptId={openId} seed={openId ? g.rows.find((row) => row.id === openId) ?? null : null} onOpenChange={(open) => !open && setOpenId(null)} canCancel={canCancel} onCancel={(row) => cancel.ask(row)} onOpenReceipt={setOpenId} />

@@ -49,21 +49,21 @@ function DetailsDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: str
             { label: "Status", value: <StatusPill status={d.status === "Completed" ? "Completed" : d.status} /> },
             { label: "Orders", value: d.counts.orders }, { label: "Listings", value: d.counts.listings }, { label: "Missing orders", value: d.openMissing, tone: d.openMissing > 0 ? "danger" : undefined },
           ]} />
-          {d.demoFeed ? <p className="rounded-lg bg-info-soft px-3 py-2 text-[12px] text-body">{DEMO_FEED_NOTE}</p> : null}
-          {d.pauseReason ? <p className={pauseLabel(d.pauseReason)?.tone === "neutral" ? "rounded-lg bg-surface-sunken px-3 py-2 text-[12px] text-secondary" : "rounded-lg bg-warning-soft px-3 py-2 text-[12px] text-warning"}>{pauseLabel(d.pauseReason)?.label ?? "Paused"}: {d.pauseReason.replace(/^Demo store: /, "")}</p> : null}
+          {d.demoFeed ? <p className="rounded-lg bg-info-soft px-3 py-2 text-xs text-body">{DEMO_FEED_NOTE}</p> : null}
+          {d.pauseReason ? <p className={pauseLabel(d.pauseReason)?.tone === "neutral" ? "rounded-lg bg-surface-sunken px-3 py-2 text-xs text-secondary" : "rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning"}>{pauseLabel(d.pauseReason)?.label ?? "Paused"}: {d.pauseReason.replace(/^Demo store: /, "")}</p> : null}
           <DetailList title="General" items={[
             { label: "Client", value: d.clientName }, { label: "Connection", value: d.isActive ? "Activated" : "Deactivated" },
             { label: "Authorization", value: d.isSandbox ? "Not needed" : `${d.authMethod}${Object.values(d.credentialHints).length > 0 ? ` · ${Object.values(d.credentialHints).map(maskSecret).join(" ")}` : " · none stored"}` },
             { label: "API version", value: d.apiVersion }, { label: "Warehouses", value: d.mappings.map((m) => `${m.channelLocationName} → ${m.warehouseCode}`).join(", ") || "Not linked", wide: true },
           ]} />
           <section className="flex flex-col gap-2">
-            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Channel methods</h3>
+            <h3 className="text-xs font-semibold text-secondary">Channel methods</h3>
             <ul className="divide-y divide-border rounded-lg border border-border">
               {d.methods.map((m) => (
-                <li key={m.id} className="flex items-center gap-3 px-3 py-2 text-[13px]">
+                <li key={m.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                   <span className="flex-1 font-medium">{m.method}</span>
-                  <span className="text-[11px] text-secondary">every {m.intervalMinutes >= 60 ? `${Math.round(m.intervalMinutes / 60)} h` : `${m.intervalMinutes} min`}</span>
-                  <span className="w-36 text-right text-[11px] text-faint">{m.lastRunAt ? `Last ${dates.dateTime(m.lastRunAt)}` : "Never run"}</span>
+                  <span className="text-2xs text-secondary">every {m.intervalMinutes >= 60 ? `${Math.round(m.intervalMinutes / 60)} h` : `${m.intervalMinutes} min`}</span>
+                  <span className="w-36 text-right text-2xs text-faint">{m.lastRunAt ? `Last ${dates.dateTime(m.lastRunAt)}` : "Never run"}</span>
                   <StatusPill status={m.status} domain="active" size="sm" />
                 </li>
               ))}
@@ -126,7 +126,7 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
         helper={`Your connected ${name} stores. Create another connection or configure an existing one.`}
         actions={
           <div className="flex items-center gap-3">
-            <Link href="/integrations/channels" className="inline-flex items-center gap-1 text-[13px] text-secondary hover:text-primary"><ChevronLeft className="h-4 w-4" />Go back to integration list</Link>
+            <Link href="/integrations/channels" className="inline-flex items-center gap-1 text-sm text-secondary hover:text-primary"><ChevronLeft className="h-4 w-4" />Go back to integration list</Link>
             {perms.create_setup ? <DisabledReason reason={entry.availability === "coming-soon" ? "This integration isn't available yet" : null}>
               <Button variant="primary" disabled={entry.availability === "coming-soon"} onClick={() => setConnect(true)}><Plus className="h-4 w-4" />Connect Store</Button>
             </DisabledReason> : null}
@@ -137,11 +137,11 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
         <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={svgDataUri(brandMarkSvg("channel", entry.key, entry.logoSvg))} alt="" width={40} height={40} className="rounded-lg" />
-          <div className="min-w-0 flex-1"><p className="text-[14px] font-semibold">{name}</p><p className="truncate text-[12px] text-secondary">{entry.description}</p></div>
+          <div className="min-w-0 flex-1"><p className="text-base font-semibold">{name}</p><p className="truncate text-xs text-secondary">{entry.description}</p></div>
           {card && !card.hasLiveApi ? <Badge tone="neutral" title="KitStak has no live API adapter for this channel yet: connections are simulated KitStak Sandbox stores">Sandbox only · no live API yet</Badge> : null}
           {card?.hasLiveApi && !card.liveVerified ? <Badge tone="warning" title="The live adapter has not yet completed a successful call against a real store in this workspace. Connect a store with its credentials and Run a method to verify it.">Beta · live adapter not yet verified</Badge> : null}
           {card?.liveVerified ? <Badge tone="success" title="A credentialed store in this workspace has completed successful live API calls">Live API · verified</Badge> : null}
-          <Link href={`/integrations/help#${provider}`} target="_blank" className="text-[12px] font-medium text-primary hover:underline">Learn more</Link>
+          <Link href={`/integrations/help#${provider}`} target="_blank" className="text-xs font-medium text-primary hover:underline">Learn more</Link>
           {list.isPending ? <Skeleton className="h-5 w-24 rounded-full" aria-label="Loading connections" /> : list.isError ? null : <Badge tone={rows.length > 0 ? "success" : "neutral"}>{rows.length} connected</Badge>}
         </div>
         {list.isPending ? <SkeletonTable rows={4} columns={6} /> : list.isError ? (
@@ -150,8 +150,8 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
           <EmptyState icon={Store} title={`No ${name} stores connected`} description="Connect a store with a custom app, or try the flow with a KitStak Sandbox store." action={perms.create_setup ? <Button variant="primary" onClick={() => setConnect(true)}><Plus className="h-4 w-4" />Connect Store</Button> : undefined} />
         ) : (
           <div className="overflow-x-auto rounded-xl border border-border bg-surface">
-            <table className="w-full text-[13px]">
-              <thead className="border-b border-border bg-surface-sunken text-[11px] font-semibold uppercase tracking-wide text-secondary">
+            <table className="w-full text-sm">
+              <thead className="border-b border-border bg-surface-sunken text-2xs font-semibold text-secondary">
                 <tr><th className="px-4 py-2.5 text-left">Store name</th><th className="px-3 py-2.5 text-left">Client</th><th className="px-3 py-2.5 text-left">Warehouse</th><th className="px-3 py-2.5 text-left">Status</th><th className="px-3 py-2.5 text-left">Connection</th><th className="px-3 py-2.5 text-left">Methods</th><th className="px-3 py-2.5 text-left">Last order</th><th className="w-12" /></tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -168,7 +168,7 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
                     <td className="px-3 py-2.5"><StatusPill status={r.status} /></td>
                     <td className="px-3 py-2.5">{r.isActive ? <span className="font-medium text-success">Activated</span> : <span className="text-secondary">Deactivated</span>}</td>
                     <td className="px-3 py-2.5">{r.pauseReason ? <Tooltip content={r.pauseReason}><span tabIndex={0}><Badge size="sm" tone={pauseLabel(r.pauseReason)?.tone ?? "warning"}>{pauseLabel(r.pauseReason)?.label ?? "Paused"}</Badge></span></Tooltip> : <span className="tabular-nums">{r.activeMethods} of 4 active</span>}</td>
-                    <td className="px-3 py-2.5 text-[12px] text-secondary"><DateTimeText value={r.lastOrderAt} empty="None yet" /></td>
+                    <td className="px-3 py-2.5 text-xs text-secondary"><DateTimeText value={r.lastOrderAt} empty="None yet" /></td>
                     <td className="px-2 py-1.5 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild><Button size="icon-sm" variant="ghost" aria-label={`Actions for ${r.storeName}`}><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>

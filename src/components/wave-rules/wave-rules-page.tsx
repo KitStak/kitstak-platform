@@ -65,8 +65,8 @@ function NextRunCell({ value, timezone, onElapsed }: { readonly value: unknown; 
   }, [ms, onElapsed]);
   if (!value) return <Dash />;
   if (ms === null) return <span className="text-faint">…</span>;
-  if (ms <= 0) return <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-primary"><Spinner className="h-3 w-3" label="Running" />Running now</span>;
-  return <span className={`font-mono text-[12px] tabular-nums ${ms < 120_000 ? "font-semibold text-[#B26A00]" : "text-body"}`} title={timezone ? `Next run ${formatInZone(new Date(target), timezone)} (warehouse time)` : new Date(target).toLocaleString()}>{formatWaveCountdown(ms)}</span>;
+  if (ms <= 0) return <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary"><Spinner className="h-3 w-3" label="Running" />Running now</span>;
+  return <span className={`font-mono text-xs tabular-nums ${ms < 120_000 ? "font-semibold text-[#B26A00]" : "text-body"}`} title={timezone ? `Next run ${formatInZone(new Date(target), timezone)} (warehouse time)` : new Date(target).toLocaleString()}>{formatWaveCountdown(ms)}</span>;
 }
 
 const AI_PENDING: ReadonlySet<string> = new Set(["Preparing For Optimization", "Optimizing", "Optimization Completed"]);

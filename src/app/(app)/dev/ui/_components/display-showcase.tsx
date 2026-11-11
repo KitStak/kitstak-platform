@@ -32,7 +32,7 @@ function StatusMaps() {
     <div className="w-full gap-3 md:columns-2 xl:columns-3">
       {domains.map((domain) => (
         <div key={domain} className="mb-3 break-inside-avoid rounded-lg border border-border p-3">
-          <p className="mb-2 text-[11px] font-semibold text-secondary">{DOMAIN_LABELS[domain] ?? titleCase(domain)}</p>
+          <p className="mb-2 text-2xs font-semibold text-secondary">{DOMAIN_LABELS[domain] ?? titleCase(domain)}</p>
           <div className="flex flex-wrap gap-1.5">
             {Object.keys(STATUS_DOMAINS[domain as keyof typeof STATUS_DOMAINS]).map((status) => (
               <StatusPill key={status} status={statusLabel(status)} domain={domain} />

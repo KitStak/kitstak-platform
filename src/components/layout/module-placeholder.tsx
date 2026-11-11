@@ -57,7 +57,7 @@ async function GuardedPlaceholder({ info }: { readonly info: RouteInfo }) {
             title={PLACEHOLDER_TITLE}
             description={
               <>
-                <span className="mb-1.5 inline-flex rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">{shipsInLabel(info.owner)}</span>
+                <span className="mb-1.5 inline-flex rounded-full bg-primary-soft px-2 py-0.5 text-2xs font-semibold text-primary">{shipsInLabel(info.owner)}</span>
                 <span className="block">{PLACEHOLDER_COPY}</span>
               </>
             }

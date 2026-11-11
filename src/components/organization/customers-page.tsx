@@ -138,12 +138,12 @@ function CustomerDetailsDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly
               { key: "orders", label: "Orders", value: d.orderCount > 0 ? <LinkCell href={`/orders?q=${encodeURIComponent(d.email)}`}>{d.orderCount.toLocaleString("en-US")}</LinkCell> : "0" },
             ]} />
             <section className="flex flex-col gap-2" aria-label="Addresses">
-              <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Addresses ({d.addresses.length})</h3>
-              {d.addresses.length === 0 ? <p className="text-[13px] text-faint">No addresses.</p> : (
+              <h3 className="text-xs font-semibold text-secondary">Addresses ({d.addresses.length})</h3>
+              {d.addresses.length === 0 ? <p className="text-sm text-faint">No addresses.</p> : (
                 <ul className="grid gap-2 md:grid-cols-2">
                   {d.addresses.map((a) => (
-                    <li key={a.id} className="rounded-lg border border-border bg-surface p-3 text-[13px]">
-                      <div className="flex items-center gap-1.5 font-medium text-foreground">{a.name || a.usageType}<span className="text-[11px] font-normal text-secondary">· {a.usageType}{a.isDefault ? " · Default" : ""}{a.isActive ? "" : " · Inactive"}</span></div>
+                    <li key={a.id} className="rounded-lg border border-border bg-surface p-3 text-sm">
+                      <div className="flex items-center gap-1.5 font-medium text-foreground">{a.name || a.usageType}<span className="text-2xs font-normal text-secondary">· {a.usageType}{a.isDefault ? " · Default" : ""}{a.isActive ? "" : " · Inactive"}</span></div>
                       {[a.firstName, a.lastName].filter(Boolean).length ? <div className="text-secondary">{[a.firstName, a.lastName].filter(Boolean).join(" ")}</div> : null}
                       {addressLines(a).map((l) => <div key={l} className="text-body">{l}</div>)}
                     </li>
@@ -153,9 +153,9 @@ function CustomerDetailsDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly
             </section>
             {d.recentOrders.length ? (
               <section className="flex flex-col gap-2" aria-label="Recent orders">
-                <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Recent orders</h3>
+                <h3 className="text-xs font-semibold text-secondary">Recent orders</h3>
                 <ul className="divide-y divide-border rounded-lg border border-border">
-                  {d.recentOrders.map((o) => <li key={o.id} className="flex items-center justify-between px-3 py-2 text-[13px]"><LinkCell href={`/orders/${o.id}`}>{o.code}</LinkCell><span className="text-secondary">{o.status} · {new Date(o.orderDate).toLocaleDateString("en-US")}</span></li>)}
+                  {d.recentOrders.map((o) => <li key={o.id} className="flex items-center justify-between px-3 py-2 text-sm"><LinkCell href={`/orders/${o.id}`}>{o.code}</LinkCell><span className="text-secondary">{o.status} · {new Date(o.orderDate).toLocaleDateString("en-US")}</span></li>)}
                 </ul>
               </section>
             ) : null}

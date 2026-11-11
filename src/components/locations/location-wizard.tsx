@@ -149,8 +149,8 @@ function CapacityTable<R>({ rows, columns, onEdit, onRemove, emptyTitle, emptyHi
         <EmptyState compact title={emptyTitle} description={emptyHint} icon={Boxes} />
       ) : (
         <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-[13px]">
-            <thead className="bg-surface-sunken text-[11px] uppercase tracking-wide text-secondary">
+          <table className="w-full text-sm">
+            <thead className="bg-surface-sunken text-2xs text-secondary">
               <tr>{columns.map((c) => <th key={c.label} className={`px-3 py-2 font-semibold ${c.align === "right" ? "text-right" : "text-left"}`}>{c.label}</th>)}<th className="w-20" /></tr>
             </thead>
             <tbody className="divide-y divide-border">

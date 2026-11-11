@@ -226,7 +226,7 @@ function Steps({ head, selectFields, kit, comps, warehouseId, clientId, buckets,
               {selectFields}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <Field id="sourceInventoryId" label="Source location / LP" required error={allErrors.sourceInventoryId} info="Free, undamaged kit stock to break down.">
-                  {bucketsPending ? <span role="status" className="flex h-8 items-center gap-2 rounded-md border border-border bg-surface-sunken px-2.5 text-[12px] text-secondary"><Spinner className="h-3.5 w-3.5" label="Loading" />Loading kit stock…</span> : (
+                  {bucketsPending ? <span role="status" className="flex h-8 items-center gap-2 rounded-md border border-border bg-surface-sunken px-2.5 text-xs text-secondary"><Spinner className="h-3.5 w-3.5" label="Loading" />Loading kit stock…</span> : (
                     <Select id="sourceInventoryId" value={bucketId} onChange={(v) => { setBucketId(v); clear("sourceInventoryId"); }} invalid={Boolean(allErrors.sourceInventoryId)}
                       placeholder={!kit ? "Select a kit first" : buckets.length ? "Select kit stock" : "No free kit stock"} disabled={buckets.length === 0}
                       options={buckets.map((b) => ({ value: b.id, label: bucketLabel(b), textValue: b.locationCode }))} />
@@ -246,7 +246,7 @@ function Steps({ head, selectFields, kit, comps, warehouseId, clientId, buckets,
           ) : (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-[13px] font-semibold text-foreground">Components</h3>
+                <h3 className="text-sm font-semibold text-foreground">Components</h3>
                 <Button type="button" size="sm" variant="secondary" disabled={comps.length === 0} onClick={() => { setPrintOnly(null); setPrinting(true); }}><Printer className="h-3.5 w-3.5" aria-hidden />Print product barcode</Button>
               </div>
               <ul className="flex flex-col gap-2" aria-label="Components returned to stock">
@@ -258,8 +258,8 @@ function Steps({ head, selectFields, kit, comps, warehouseId, clientId, buckets,
                     <li key={c.productId} id={`dis-comp-${c.productId}`} className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
                       <div className="flex items-start gap-2">
                         <div className="flex min-w-0 flex-1 flex-col gap-1">
-                          <span className="flex items-center gap-2"><span className="font-semibold text-foreground">{c.sku}</span><span className="truncate text-[12px] text-secondary">{c.name}</span>{tracked ? <span className="rounded-full bg-primary-soft px-1.5 text-[10px] font-semibold text-primary">Tracked</span> : null}</span>
-                          <span className="flex flex-wrap gap-1.5"><QtyChip label="Component SKU qty" value={c.perKit} /><QtyChip label="Component total qty" value={c.perKit * n} /><QtyChip label={targetId ? "Stock qty at target" : "Stock qty (all bins)"} value={targetId && compStock.data ? componentStockAt(compStock.data.data?.[c.productId] ?? [], targetId, targetLp) : c.stockQty} />{attrSeed?.[c.productId] ? <span className="text-[11px] text-faint">Attributes prefilled from kitting</span> : null}</span>
+                          <span className="flex items-center gap-2"><span className="font-semibold text-foreground">{c.sku}</span><span className="truncate text-xs text-secondary">{c.name}</span>{tracked ? <span className="rounded-full bg-primary-soft px-1.5 text-2xs font-semibold text-primary">Tracked</span> : null}</span>
+                          <span className="flex flex-wrap gap-1.5"><QtyChip label="Component SKU qty" value={c.perKit} /><QtyChip label="Component total qty" value={c.perKit * n} /><QtyChip label={targetId ? "Stock qty at target" : "Stock qty (all bins)"} value={targetId && compStock.data ? componentStockAt(compStock.data.data?.[c.productId] ?? [], targetId, targetLp) : c.stockQty} />{attrSeed?.[c.productId] ? <span className="text-2xs text-faint">Attributes prefilled from kitting</span> : null}</span>
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild><Button type="button" size="sm" variant="ghost" aria-label={`Actions for ${c.sku}`}><MoreHorizontal className="h-4 w-4" aria-hidden /></Button></DropdownMenuTrigger>
@@ -273,12 +273,12 @@ function Steps({ head, selectFields, kit, comps, warehouseId, clientId, buckets,
                           <Field id={`prod-${c.productId}`} label="Production date" required={c.trackProductionDate}><DatePicker id={`prod-${c.productId}`} value={a.production} onChange={(v) => set({ production: v })} /></Field>
                         </div>
                       ) : null}
-                      {attrErrors[c.productId] ? <p role="alert" className="text-[12px] text-danger">{attrErrors[c.productId]}</p> : null}
+                      {attrErrors[c.productId] ? <p role="alert" className="text-xs text-danger">{attrErrors[c.productId]}</p> : null}
                     </li>
                   );
                 })}
               </ul>
-              <h3 className="text-[13px] font-semibold text-foreground">Inventory transaction summary</h3>
+              <h3 className="text-sm font-semibold text-foreground">Inventory transaction summary</h3>
               <KitDeltaTable lines={deltas} caption="Inventory transaction summary: current stock and the change this disassembly posts" currentLabel="Current qty at location"
                 unavailable={compStock.error ? new Set(comps.map((c) => c.productId)) : undefined}
                 actions={Object.fromEntries(comps.map((c) => [c.productId, (
@@ -385,7 +385,7 @@ function WoBody({ workOrderId, onClose, onDone }: { readonly workOrderId: string
     return (
       <div className="px-5 py-4">
         {detail.error ? <Callout variant="error" title="Work order not available" action={<Button type="button" size="sm" variant="secondary" disabled={detail.isFetching} onClick={() => void detail.refetch()}><RefreshCw className="h-3.5 w-3.5" aria-hidden />Retry</Button>}>{detail.error.message}</Callout> : (
-          <div role="status" aria-live="polite" className="flex flex-col gap-3"><span className="flex items-center gap-2 text-[12px] text-secondary"><Spinner className="h-3.5 w-3.5" label="Loading" />Loading work order and kit stock…</span><Skeleton className="h-7 w-56" /><Skeleton className="h-10 w-full" /><Skeleton className="h-24 w-full" /></div>
+          <div role="status" aria-live="polite" className="flex flex-col gap-3"><span className="flex items-center gap-2 text-xs text-secondary"><Spinner className="h-3.5 w-3.5" label="Loading" />Loading work order and kit stock…</span><Skeleton className="h-7 w-56" /><Skeleton className="h-10 w-full" /><Skeleton className="h-24 w-full" /></div>
         )}
       </div>
     );
@@ -424,7 +424,7 @@ function WoBody({ workOrderId, onClose, onDone }: { readonly workOrderId: string
         }
       }}
       head={
-        <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-surface-sunken/60 px-3 py-2.5 text-[12px]">
+        <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-surface-sunken/60 px-3 py-2.5 text-xs">
           <span className="flex items-center gap-2"><PackageOpen className="h-4 w-4 text-primary" aria-hidden /><span className="font-semibold text-foreground">{wo.code}</span><span className="text-secondary">{d.kit.sku}</span></span>
           <span className="ml-auto flex items-center gap-4 tabular-nums text-secondary">
             <span>Built <strong className="text-foreground">{wo.processedQty}</strong></span>

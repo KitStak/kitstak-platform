@@ -68,9 +68,9 @@ export const DropdownMenuItem = React.forwardRef<React.ElementRef<typeof Menu.It
         {Icon ? <Icon className={cn("h-4 w-4 shrink-0", subline ? "mt-0.5" : null, isDisabled ? "text-faint" : danger ? "text-danger" : "text-secondary")} aria-hidden /> : null}
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate">{children}</span>
-          {subline ? <span className="mt-0.5 text-[11px] leading-4 text-faint">{subline}</span> : null}
+          {subline ? <span className="mt-0.5 text-2xs leading-4 text-faint">{subline}</span> : null}
         </span>
-        {shortcut ? <span className="ml-auto pl-3 text-[11px] tracking-wide text-faint">{shortcut}</span> : null}
+        {shortcut ? <span className="ml-auto pl-3 text-2xs tracking-wide text-faint">{shortcut}</span> : null}
       </>
     );
     const item = (
@@ -125,7 +125,7 @@ DropdownMenuRadioItem.displayName = "DropdownMenuRadioItem";
 
 /** Section header. */
 export function DropdownMenuLabel({ className, children }: { readonly className?: string; readonly children: React.ReactNode }) {
-  return <Menu.Label className={cn("px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint", className)}>{children}</Menu.Label>;
+  return <Menu.Label className={cn("px-2 pb-1 pt-2 text-2xs font-semibold text-faint", className)}>{children}</Menu.Label>;
 }
 
 export function DropdownMenuSeparator({ className }: { readonly className?: string }) {

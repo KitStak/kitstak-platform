@@ -79,7 +79,7 @@ export const PriorityPill = PriorityFlag;
 export function DifferencePill({ value, className }: { value: number; className?: string }) {
   const tone = differenceTone(value);
   return (
-    <span style={pillStyle(tone)} className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums", className)}>
+    <span style={pillStyle(tone)} className={cn("inline-flex rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums", className)}>
       {value > 0 ? `+${value}` : value}
     </span>
   );
@@ -98,7 +98,7 @@ const CHANNEL_META: Record<
   shopify: { icon: ShoppingBag, tile: "bg-[#e8f5e2] text-[#5e8e3e]" },
   amazon: { icon: Store, tile: "bg-[#fff3e0] text-[#e47911]" },
   "tiktok shop": { icon: Zap, tile: "bg-[#111]/5 text-[#111]" },
-  walmart: { icon: Store, tile: "bg-[#e8f0fe] text-[#0071ce]" },
+  walmart: { icon: Store, tile: "bg-[#e8f0fe] text-[var(--label-blue-text)]" },
   wholesale: { icon: Truck, tile: "bg-info-soft text-info" },
   manual: { icon: FileText, tile: "bg-success-soft text-success", label: "Created Manually" },
 };
@@ -126,11 +126,11 @@ export function ChannelBadge({
         <Icon className="h-3 w-3" aria-hidden />
       </span>
       <span className="flex min-w-0 flex-col leading-tight">
-        <span className="truncate text-[12px] font-medium text-body">
+        <span className="truncate text-xs font-medium text-body">
           {meta.label ?? channel}
         </span>
         {store ? (
-          <span className="truncate text-[11px] text-faint">{store}</span>
+          <span className="truncate text-2xs text-faint">{store}</span>
         ) : null}
       </span>
     </span>

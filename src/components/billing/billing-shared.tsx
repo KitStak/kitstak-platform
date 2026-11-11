@@ -67,7 +67,7 @@ export function At({ value, empty = "Never" }: { readonly value: string | null |
 
 export function BillingPill({ status, className }: { readonly status: string; readonly className?: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4", PILL[status] ?? PILL.Draft, className)}>
+    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold leading-4", PILL[status] ?? PILL.Draft, className)}>
       <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />{status}
     </span>
   );
@@ -101,7 +101,7 @@ export function useActiveClients(): { readonly options: readonly { value: string
 /** Inline error + Retry under a picker whose options failed to load (never an endless "Loading…"). */
 export function PickerLoadError({ message, onRetry, retrying }: { readonly message: string; readonly onRetry: () => void; readonly retrying?: boolean }) {
   return (
-    <p role="alert" className="mt-1 flex items-center gap-2 text-[12px] text-danger">
+    <p role="alert" className="mt-1 flex items-center gap-2 text-xs text-danger">
       <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
       <span>{message}</span>
       <button type="button" className="font-semibold text-primary underline-offset-2 hover:underline disabled:opacity-60" onClick={onRetry} disabled={retrying}>{retrying ? "Retrying…" : "Retry"}</button>
@@ -124,7 +124,7 @@ const OP_TONE: Readonly<Record<string, string>> = {
 };
 
 export function OperationPill({ operation, className }: { readonly operation: string; readonly className?: string }) {
-  return <span className={cn("inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4", OP_TONE[operation] ?? "bg-neutral-soft text-neutral", className)}>{operation}</span>;
+  return <span className={cn("inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-2xs font-semibold leading-4", OP_TONE[operation] ?? "bg-neutral-soft text-neutral", className)}>{operation}</span>;
 }
 
 const vasTypeRow = z.object({ id: z.string(), name: z.string(), calculationType: z.enum(["Total Price", "Vas Quantity"]), clientId: z.string().nullable(), isActive: z.boolean() });
@@ -221,20 +221,20 @@ export function CalculateDialog({ open, onOpenChange, contracts, onDone }: { rea
           {results ? (
             <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
               {results.map((r) => (
-                <li key={r.reportId} className="flex items-center gap-3 px-3 py-2.5 text-[13px]">
+                <li key={r.reportId} className="flex items-center gap-3 px-3 py-2.5 text-sm">
                   {r.status === "Successful" ? <CheckCircle2 className="h-4 w-4 text-success" aria-hidden /> : <XCircle className="h-4 w-4 text-danger" aria-hidden />}
                   <div className="flex-1">
                     <div className="font-medium text-foreground">{name(r.contractId)}</div>
-                    <div className="text-[12px] text-secondary">{r.status === "Successful" ? `Bill ${r.billNumber} · ${moneyRail(r.totalPrice)}` : r.errorMessage ?? "Calculation failed"}{r.periodStart && r.periodEnd ? ` · ${dates.period(r.periodStart, r.periodEnd)}` : ""}</div>
-                    {r.replaced?.length ? <div className="text-[12px] text-warning">Replaced draft bill {r.replaced.join(", ")} (now canceled)</div> : null}
+                    <div className="text-xs text-secondary">{r.status === "Successful" ? `Bill ${r.billNumber} · ${moneyRail(r.totalPrice)}` : r.errorMessage ?? "Calculation failed"}{r.periodStart && r.periodEnd ? ` · ${dates.period(r.periodStart, r.periodEnd)}` : ""}</div>
+                    {r.replaced?.length ? <div className="text-xs text-warning">Replaced draft bill {r.replaced.join(", ")} (now canceled)</div> : null}
                   </div>
-                  <Link className="text-[12px] font-semibold text-primary hover:underline" href={`/billing/reports/${r.reportId}`} onClick={() => onOpenChange(false)}>View bill</Link>
+                  <Link className="text-xs font-semibold text-primary hover:underline" href={`/billing/reports/${r.reportId}`} onClick={() => onOpenChange(false)}>View bill</Link>
                 </li>
               ))}
               {skipped.map((s) => (
-                <li key={s.id} className="flex items-center gap-3 px-3 py-2.5 text-[13px]">
+                <li key={s.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
                   <Ban className="h-4 w-4 text-faint" aria-hidden />
-                  <div className="flex-1"><div className="font-medium text-foreground">{name(s.id)}</div><div className="text-[12px] text-secondary">Skipped: {s.message}</div></div>
+                  <div className="flex-1"><div className="font-medium text-foreground">{name(s.id)}</div><div className="text-xs text-secondary">Skipped: {s.message}</div></div>
                 </li>
               ))}
             </ul>
@@ -247,35 +247,35 @@ export function CalculateDialog({ open, onOpenChange, contracts, onDone }: { rea
               ]} />
               {mode === "custom" ? (
                 <div className="grid grid-cols-2 gap-3">
-                  <label className="flex flex-col gap-1 text-[12px] font-medium text-secondary">Start date *<input type="date" className="h-8 rounded-md border border-border-strong/70 bg-surface px-2 text-[13px] text-foreground" value={start} onChange={(e) => setStart(e.target.value)} aria-invalid={Boolean(customError && !start)} /></label>
-                  <label className="flex flex-col gap-1 text-[12px] font-medium text-secondary">End date *<input type="date" className="h-8 rounded-md border border-border-strong/70 bg-surface px-2 text-[13px] text-foreground" value={end} onChange={(e) => setEnd(e.target.value)} aria-invalid={Boolean(customError && !end)} /></label>
-                  {customError ? <p className="col-span-2 text-[12px] text-danger" role="alert">{customError}</p> : null}
+                  <label className="flex flex-col gap-1 text-xs font-medium text-secondary">Start date *<input type="date" className="h-8 rounded-md border border-border-strong/70 bg-surface px-2 text-sm text-foreground" value={start} onChange={(e) => setStart(e.target.value)} aria-invalid={Boolean(customError && !start)} /></label>
+                  <label className="flex flex-col gap-1 text-xs font-medium text-secondary">End date *<input type="date" className="h-8 rounded-md border border-border-strong/70 bg-surface px-2 text-sm text-foreground" value={end} onChange={(e) => setEnd(e.target.value)} aria-invalid={Boolean(customError && !end)} /></label>
+                  {customError ? <p className="col-span-2 text-xs text-danger" role="alert">{customError}</p> : null}
                 </div>
               ) : null}
               {customError ? null : (
                 <section aria-label="Billing period preview" aria-busy={previewing} className="rounded-lg border border-border bg-surface-sunken/40">
-                  <h3 className="flex items-center gap-2 border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-secondary">
+                  <h3 className="flex items-center gap-2 border-b border-border px-3 py-2 text-2xs font-semibold text-secondary">
                     Bills this range {previewing ? <Spinner className="h-3.5 w-3.5" label="Checking the period" /> : null}
                     {previews?.[0] ? <span className="ml-auto font-normal normal-case tracking-normal text-faint">Warehouse time · today {dates.day(previews[0].today)}</span> : null}
                   </h3>
                   {!previews ? (previewError && !previewing ? (
-                    <div role="alert" className="flex items-center gap-2 px-3 py-2.5 text-[12px] text-danger">
+                    <div role="alert" className="flex items-center gap-2 px-3 py-2.5 text-xs text-danger">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
                       <span className="flex-1">Couldn&apos;t check the period: {previewError}</span>
                       <Button size="sm" variant="secondary" onClick={() => setPreviewNonce((n) => n + 1)}>Retry</Button>
                     </div>
-                  ) : <p className="px-3 py-2.5 text-[12px] text-faint">Checking each contract&apos;s period…</p>) : (
+                  ) : <p className="px-3 py-2.5 text-xs text-faint">Checking each contract&apos;s period…</p>) : (
                     <ul className="flex max-h-56 flex-col divide-y divide-border overflow-y-auto">
                       {previews.map((p) => {
                         const draft = p.conflicts.filter((c) => c.billStatus === "Draft");
                         return (
-                          <li key={p.contractId} className="flex flex-col gap-0.5 px-3 py-2 text-[13px]">
+                          <li key={p.contractId} className="flex flex-col gap-0.5 px-3 py-2 text-sm">
                             <div className="flex items-center justify-between gap-3">
                               <span className="truncate font-medium text-foreground">{p.contractName}</span>
                               <span className="shrink-0 tabular-nums text-foreground">{dates.period(p.periodStart, p.periodEnd)}</span>
                             </div>
-                            {p.blocked ? <p className="flex items-start gap-1.5 text-[12px] text-danger"><Ban className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />{p.blocked}</p>
-                              : draft.length ? <p className="flex items-start gap-1.5 text-[12px] text-warning"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />Draft bill {draft.map((d) => d.billNumber).join(", ")} already covers {dates.period(draft[0]!.periodStart, draft[0]!.periodEnd)}.</p>
+                            {p.blocked ? <p className="flex items-start gap-1.5 text-xs text-danger"><Ban className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />{p.blocked}</p>
+                              : draft.length ? <p className="flex items-start gap-1.5 text-xs text-warning"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />Draft bill {draft.map((d) => d.billNumber).join(", ")} already covers {dates.period(draft[0]!.periodStart, draft[0]!.periodEnd)}.</p>
                               : null}
                           </li>
                         );
@@ -285,7 +285,7 @@ export function CalculateDialog({ open, onOpenChange, contracts, onDone }: { rea
                 </section>
               )}
               {drafts.length ? (
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-warning/40 bg-warning-soft px-3 py-2.5 text-[13px] text-body">
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-warning/40 bg-warning-soft px-3 py-2.5 text-sm text-body">
                   <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[var(--primary)]" checked={replace} onChange={(e) => setReplace(e.target.checked)} />
                   <span><strong className="text-foreground">Replace the existing draft {drafts.length === 1 ? "bill" : "bills"}</strong><br />The draft is recalculated in place: it keeps its bill number, and its lines and total are replaced with the new results, so the client is never billed twice.</span>
                 </label>

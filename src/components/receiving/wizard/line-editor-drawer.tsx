@@ -56,8 +56,8 @@ function Total({ control }: { readonly control: ReturnType<typeof useZodForm<typ
   const total = lineTotalOrNull(qty, price);
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[12px] font-medium text-body">Total price</span>
-      <span className="flex h-9 items-center justify-end rounded-md border border-border bg-surface-sunken px-3 text-[13px] font-semibold tabular-nums text-foreground" aria-live="polite">
+      <span className="text-xs font-medium text-body">Total price</span>
+      <span className="flex h-9 items-center justify-end rounded-md border border-border bg-surface-sunken px-3 text-sm font-semibold tabular-nums text-foreground" aria-live="polite">
         {total === null ? "—" : fmt.money(total)}
       </span>
     </div>
@@ -106,8 +106,8 @@ function EditorForm({ line, warehouseId, readOnly, formId, onApply, onDirty, onI
         <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-sunken p-3">
           <ProductThumb url={line.imageUrl} label={line.sku} size={44} />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-semibold text-foreground">{line.sku}</p>
-            <p className="truncate text-[12px] text-secondary">{line.productName}</p>
+            <p className="truncate text-sm font-semibold text-foreground">{line.sku}</p>
+            <p className="truncate text-xs text-secondary">{line.productName}</p>
           </div>
           <div className="flex flex-wrap justify-end gap-1">
             {t.lot ? <Badge tone="info" size="sm">Lot</Badge> : null}

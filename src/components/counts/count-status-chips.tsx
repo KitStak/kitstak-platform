@@ -31,7 +31,7 @@ interface Summary {
 function StatusChip({ status, value, active, onClick }: { readonly status: string; readonly value: string; readonly active: boolean; readonly onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={active}
-      className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition-colors hover:border-border-strong hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+      className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors hover:border-border-strong hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
         active ? "border-primary bg-primary-soft text-primary" : "border-border bg-surface text-body")}>
       <span className="h-2 w-2 rounded-full" style={{ backgroundColor: countToneOf(status, "count").fg }} aria-hidden />
       <span className="text-secondary">{statusLabel(status)}</span>
@@ -61,14 +61,14 @@ export function CountStatusChips({ kind, statuses, grid, gridFetching }: { reado
 
   if (summary.isPending) {
     return (
-      <div className="flex h-10 items-center gap-2 px-6 pt-3 text-[12px] text-secondary" role="status" aria-live="polite">
+      <div className="flex h-10 items-center gap-2 px-6 pt-3 text-xs text-secondary" role="status" aria-live="polite">
         <Spinner className="h-3.5 w-3.5" />Loading status totals…
       </div>
     );
   }
   if (!data) {
     return (
-      <div className="flex h-10 items-center gap-2 px-6 pt-3 text-[12px] text-secondary" role="alert">
+      <div className="flex h-10 items-center gap-2 px-6 pt-3 text-xs text-secondary" role="alert">
         <AlertTriangle className="h-3.5 w-3.5 text-warning" aria-hidden />Status totals could not be loaded.
         <Button size="sm" variant="ghost" onClick={() => void summary.refetch()}>Retry</Button>
       </div>
@@ -81,7 +81,7 @@ export function CountStatusChips({ kind, statuses, grid, gridFetching }: { reado
         <StatusChip key={s} status={s} value={(data.byStatus[s] ?? 0).toLocaleString()} active={only === s} onClick={() => toggle(s)} />
       ))}
       {data.locked > 0 ? (
-        <span className="ml-auto inline-flex items-center gap-1.5 text-[12px] text-secondary">
+        <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-secondary">
           <Lock className="h-3.5 w-3.5 text-warning" aria-hidden />
           <strong className="font-semibold tabular-nums text-foreground">{data.locked}</strong> {kind === "plans" ? (data.locked === 1 ? "plan is" : "plans are") : (data.locked === 1 ? "line is" : "lines are")} locking locations
         </span>

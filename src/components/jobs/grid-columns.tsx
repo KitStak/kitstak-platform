@@ -36,20 +36,20 @@ export function textCell(v: unknown): React.ReactNode {
 export function JobPriorityPill({ priority }: { readonly priority: unknown }) {
   const v = String(priority ?? "None");
   if (v === "None" || v === "") {
-    return <span data-priority="normal" className="inline-flex whitespace-nowrap rounded-full bg-surface-sunken px-2 py-0.5 text-[11px] font-semibold text-secondary">None</span>;
+    return <span data-priority="normal" className="inline-flex whitespace-nowrap rounded-full bg-surface-sunken px-2 py-0.5 text-2xs font-semibold text-secondary">None</span>;
   }
   return <PriorityFlag priority={v} />;
 }
 
 /** Overdue badge: a live job past its planned finish (critic R5; Logiwa shows only raw dates). */
 export function OverduePill({ title }: { readonly title?: string }) {
-  return <span className="inline-flex shrink-0 whitespace-nowrap rounded-full bg-[#FDE7E3] px-1.5 py-px text-[10px] font-semibold leading-4 text-[#B42318] dark:bg-[#3A1A16] dark:text-[#F7A99C]" title={title ?? "Past its planned finish date"}>Overdue</span>;
+  return <span className="inline-flex shrink-0 whitespace-nowrap rounded-full bg-[#FDE7E3] px-1.5 py-px text-2xs font-semibold leading-4 text-[var(--danger-text)] dark:bg-[#3A1A16] dark:text-[var(--label-red-light)]" title={title ?? "Past its planned finish date"}>Overdue</span>;
 }
 
 export function ShortPill({ value }: { readonly value: unknown }) {
   const v = String(value ?? "None");
-  if (v === "None") return <span className="text-[12px] text-faint">None</span>;
-  if (v === "Open") return <span className="inline-flex rounded-full bg-[#F7E9E4] px-1.5 py-px text-[10px] font-semibold leading-4 text-[#A13406]">Open</span>;
+  if (v === "None") return <span className="text-xs text-faint">None</span>;
+  if (v === "Open") return <span className="inline-flex rounded-full bg-[var(--label-brown-subtle)] px-1.5 py-px text-2xs font-semibold leading-4 text-[var(--label-brown-text)]">Open</span>;
   return <StatusPill status={v} size="sm" />;
 }
 

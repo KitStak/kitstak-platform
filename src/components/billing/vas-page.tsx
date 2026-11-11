@@ -50,7 +50,7 @@ const COLUMNS: GridColumnDef<VasRow>[] = [
   { id: "calculationType", header: "Calculation type", size: 140, cell: ({ row }) => <Badge tone={row.original.calculationType === "Total Price" ? "warning" : "info"} shape="pill">{row.original.calculationType === "Vas Quantity" ? "VAS quantity" : "Total price"}</Badge> },
   { id: "value", header: "Value", size: 100, meta: { align: "right" }, cell: ({ row }) => <div className="text-right tabular-nums">{row.original.calculationType === "Total Price" ? `$${row.original.value.toFixed(2)}` : row.original.value.toLocaleString("en-US", { maximumFractionDigits: 2 })}</div> },
   { id: "referenceOrderType", header: "Reference order type", size: 170, cell: ({ row }) => row.original.referenceOrderType ?? <Muted /> },
-  { id: "referenceNumber", header: "Reference number", size: 150, cell: ({ row }) => (row.original.referenceNumber ? <span className="font-mono text-[12px]">{row.original.referenceNumber}</span> : <Muted />) },
+  { id: "referenceNumber", header: "Reference number", size: 150, cell: ({ row }) => (row.original.referenceNumber ? <span className="font-mono text-xs">{row.original.referenceNumber}</span> : <Muted />) },
   { id: "note", header: "Note", size: 240, enableSorting: false, cell: ({ row }) => (row.original.note ? <span className="text-secondary">{row.original.note}</span> : <Muted />) },
   { id: "createdByName", header: "Created by", size: 140, cell: ({ row }) => row.original.createdByName ?? <Muted /> },
   { id: "createdAt", header: "Created date", size: 150, meta: { defaultVisible: false }, cell: ({ row }) => <At value={row.original.createdAt} /> },
@@ -101,9 +101,9 @@ function VasForm({ initial, row, onDone, onCancel, onDirtyChange }: { readonly i
           <ComboField<F> name="warehouseId" label="Warehouse" required options={warehouses.options} />
           <ComboField<F> name="vasTypeId" label="VAS type" required options={types.map((t) => ({ value: t.id, label: t.name }))} placeholder={vas.loading ? "Loading VAS types…" : undefined} emptyText={vas.loading ? "Loading VAS types…" : clientId ? "No VAS types for this client (Data Setup › VAS Type)" : "Choose a client first"} />
           <div className="flex flex-col gap-1">
-            <span className="text-[12px] font-medium text-secondary">Calculation type</span>
-            <div className="flex h-8 items-center">{type ? <Badge tone={isPrice ? "warning" : "info"} shape="pill">{isPrice ? "Total price" : "VAS quantity"}</Badge> : <span className="text-[12px] text-faint">Set by the VAS type</span>}</div>
-            <span className="text-[11px] text-faint">{type ? (isPrice ? "Value is billed as a price" : "Value × the fee's rate") : "From Data Setup › VAS Type"}</span>
+            <span className="text-xs font-medium text-secondary">Calculation type</span>
+            <div className="flex h-8 items-center">{type ? <Badge tone={isPrice ? "warning" : "info"} shape="pill">{isPrice ? "Total price" : "VAS quantity"}</Badge> : <span className="text-xs text-faint">Set by the VAS type</span>}</div>
+            <span className="text-2xs text-faint">{type ? (isPrice ? "Value is billed as a price" : "Value × the fee's rate") : "From Data Setup › VAS Type"}</span>
           </div>
           <FormField<F> name="operationAt" label="Operation date" required>
             {(c) => <DateTimePicker id={c.id} value={c.value ? new Date(c.value as string) : null} onChange={(d) => c.onChange(d ? d.toISOString() : "")} onBlur={c.onBlur} invalid={c.invalid} aria-label="Operation date" />}
@@ -169,7 +169,7 @@ function VasDetailsDrawer({ row, onOpenChange, onEdit, editReason }: { readonly 
             { key: "at", label: "Operation date", value: <At value={row.operationAt} /> },
             { key: "value", label: row.calculationType === "Total Price" ? "Operation price" : "Operation value", value: <span className="tabular-nums">{row.calculationType === "Total Price" ? `${row.value.toFixed(2)}` : row.value.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span> },
             { key: "rt", label: "Reference order type", value: row.referenceOrderType },
-            { key: "rn", label: "Reference number", value: row.referenceNumber ? <span className="font-mono text-[12px]">{row.referenceNumber}</span> : null },
+            { key: "rn", label: "Reference number", value: row.referenceNumber ? <span className="font-mono text-xs">{row.referenceNumber}</span> : null },
             { key: "note", label: "Note", value: row.note, full: true },
             { key: "by", label: "Created by", value: row.createdByName },
             { key: "created", label: "Created date", value: <At value={row.createdAt} /> },

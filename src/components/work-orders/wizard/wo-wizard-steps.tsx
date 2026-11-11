@@ -96,10 +96,10 @@ export function GeneralStep({ form, errors, onChange, lockOrg, lockCore, codeLoa
             aria-busy={(codeLoading && !form.code) || codeChecking} trailing={codeLoading && !form.code ? <Spinner className="h-3.5 w-3.5" label="Loading next code" /> : codeChecking ? <Spinner className="h-3.5 w-3.5" label="Checking code" /> : undefined}
             onChange={(e) => onChange({ code: e.target.value })} />
           {codeError && !form.code ? (
-            <p className="text-[11px] text-secondary">The next code could not be loaded. <button type="button" onClick={onRetryCode} className="font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">Retry</button> or type a code.</p>
+            <p className="text-2xs text-secondary">The next code could not be loaded. <button type="button" onClick={onRetryCode} className="font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">Retry</button> or type a code.</p>
           ) : null}
           {suggestedCode && form.code.trim() !== suggestedCode && !lockCore ? (
-            <p className="text-[11px] text-secondary">
+            <p className="text-2xs text-secondary">
               Next in sequence: <button type="button" onClick={() => onChange({ code: suggestedCode })} className="font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">Use {suggestedCode}</button>
             </p>
           ) : null}
@@ -206,8 +206,8 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, kitError = nu
     <section aria-label="Kit" className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
         <div>
-          <h3 className="text-[13px] font-semibold text-foreground">Select kit</h3>
-          <p className="text-[12px] text-secondary">The kit-to-stock product selection for this work order</p>
+          <h3 className="text-sm font-semibold text-foreground">Select kit</h3>
+          <p className="text-xs text-secondary">The kit-to-stock product selection for this work order</p>
         </div>
         <Field id="kitProductId" label="Kit SKU" required error={errors.kitProductId}>
           <Combobox id="kitProductId" aria-label="Kit SKU" loadOptions={loadKits} minChars={0} value={form.kitProductId}
@@ -227,7 +227,7 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, kitError = nu
             <span className="block text-secondary">The components and quantities can&rsquo;t be shown until the kit loads. Retry, or choose another kit.</span>
           </Callout>
         ) : kitLoading ? (
-          <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-lg border border-border bg-surface p-3"><Spinner className="h-4 w-4" label="Loading kit" /><span className="text-[12px] text-secondary">Loading kit and components…</span><Skeleton className="ml-auto h-10 w-40" /></div>
+          <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-lg border border-border bg-surface p-3"><Spinner className="h-4 w-4" label="Loading kit" /><span className="text-xs text-secondary">Loading kit and components…</span><Skeleton className="ml-auto h-10 w-40" /></div>
         ) : kit ? (
           <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-surface p-3 shadow-xs">
             <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-surface-sunken text-faint">
@@ -238,8 +238,8 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, kitError = nu
             </span>
             <div className="flex min-w-0 flex-1 flex-col gap-1.5">
               <div className="flex flex-wrap items-baseline gap-2">
-                <span className="text-[14px] font-semibold text-foreground">{kit.sku}</span>
-                <span className="truncate text-[12px] text-secondary">{kit.name}</span>
+                <span className="text-base font-semibold text-foreground">{kit.sku}</span>
+                <span className="truncate text-xs text-secondary">{kit.name}</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 <MetaChip label="Pack type" value={kit.packType} />
@@ -248,7 +248,7 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, kitError = nu
                 <TrackFlag label="Prod. date tracking" on={kit.trackProductionDate} />
               </div>
               {form.warehouseId ? (
-                <p className="text-[11px] text-secondary">
+                <p className="text-2xs text-secondary">
                   On hand <strong className="tabular-nums text-foreground">{kit.onHandQty}</strong> · can build <strong className={cn("tabular-nums", kit.netKittingCapacity >= qty ? "text-success" : "text-warning")}>{kit.netKittingCapacity}</strong> from usable component stock
                   {kit.components.some((c) => (c.lockedQty ?? 0) > 0) ? <span className="text-warning"> · count-locked stock excluded ({[...new Set(kit.components.flatMap((c) => c.lockedBy ?? []))].join(", ")})</span> : null}
                 </p>
@@ -266,10 +266,10 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, kitError = nu
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
-              <h3 className="text-[13px] font-semibold text-foreground">Components</h3>
-              <p className="text-[12px] text-secondary">Components of the selected kit-to-stock product</p>
+              <h3 className="text-sm font-semibold text-foreground">Components</h3>
+              <p className="text-xs text-secondary">Components of the selected kit-to-stock product</p>
             </div>
-            <div className="flex items-center gap-2 text-[12px]">
+            <div className="flex items-center gap-2 text-xs">
               <span className="rounded-md bg-surface-sunken px-2 py-1"><strong className="tabular-nums text-foreground">{kit.components.length}</strong> Component Qty</span>
               <span className="rounded-md bg-surface-sunken px-2 py-1"><strong className="tabular-nums text-foreground">{totalUnits}</strong> Total Qty</span>
             </div>
@@ -284,7 +284,7 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, kitError = nu
               : <>Without picking, every component needs a source. Use the pencil to choose the location, LP and lot, or auto-assign FEFO/FIFO sources. Locations locked by a count plan can&rsquo;t be used.</>}</Callout>
           ) : null}
           {assigning && kit ? (
-            <p role="status" aria-live="polite" className="flex items-center gap-2 text-[12px] text-secondary">
+            <p role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-secondary">
               <Spinner className="h-3.5 w-3.5" label="Assigning" />Finding FEFO/FIFO sources for {kit.components.length} component{kit.components.length === 1 ? "" : "s"}…
             </p>
           ) : null}
@@ -297,14 +297,14 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, kitError = nu
                 <li key={c.productId} data-field={`components.${c.productId}`} className={cn("flex flex-col gap-2 rounded-lg border bg-surface p-3", err ? "border-danger" : "border-border")}>
                   <div className="flex flex-wrap items-center gap-3">
                     <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="text-[13px] font-semibold text-foreground">{c.sku}</span>
-                      <span className="truncate text-[12px] text-secondary">{c.name}</span>
+                      <span className="text-sm font-semibold text-foreground">{c.sku}</span>
+                      <span className="truncate text-xs text-secondary">{c.name}</span>
                     </div>
-                    <span className="text-[12px] text-secondary">Pack type <strong className="text-foreground">{c.packType}</strong></span>
-                    <span className="text-[12px] text-secondary">BOM <strong className="tabular-nums text-foreground">{c.bomQty}</strong></span>
-                    <span className="text-[12px] text-secondary">Qty <strong className="tabular-nums text-foreground">{need}</strong></span>
+                    <span className="text-xs text-secondary">Pack type <strong className="text-foreground">{c.packType}</strong></span>
+                    <span className="text-xs text-secondary">BOM <strong className="tabular-nums text-foreground">{c.bomQty}</strong></span>
+                    <span className="text-xs text-secondary">Qty <strong className="tabular-nums text-foreground">{need}</strong></span>
                     <Tooltip content={!form.warehouseId ? "Select a warehouse to see stock" : (c.lockedQty ?? 0) > 0 ? `Usable free stock in the selected warehouse. ${c.lockedQty} more sit in locations locked by count plan ${(c.lockedBy ?? []).join(", ")} and can't be used until the count is finished or cancelled.` : "Usable free stock in the selected warehouse (count-locked locations excluded)"}>
-                      <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums", c.freeQty >= need && need > 0 ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
+                      <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums", c.freeQty >= need && need > 0 ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
                         {c.freeQty} free{(c.lockedQty ?? 0) > 0 ? <><span aria-hidden>·</span><Lock className="h-2.5 w-2.5" aria-hidden />{c.lockedQty} locked</> : null}
                       </span>
                     </Tooltip>
@@ -322,9 +322,9 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, kitError = nu
                     <MetaChip label="Exp Date" value={src.expiryDate?.slice(0, 10)} />
                     <MetaChip label="Prod Date" value={src.productionDate?.slice(0, 10)} />
                   </div>
-                  {err ? <p role="alert" className="text-[12px] font-medium text-danger">{err}</p> : null}
+                  {err ? <p role="alert" className="text-xs font-medium text-danger">{err}</p> : null}
                   {!err && sourceLocks?.[c.productId] ? (
-                    <p className="flex items-center gap-1.5 text-[12px] font-medium text-danger"><Lock className="h-3 w-3" aria-hidden />{src.locationCode ?? "The source"} is locked by count plan {sourceLocks[c.productId]}. Kits can&rsquo;t be built from it until the count is finished; choose another source.</p>
+                    <p className="flex items-center gap-1.5 text-xs font-medium text-danger"><Lock className="h-3 w-3" aria-hidden />{src.locationCode ?? "The source"} is locked by count plan {sourceLocks[c.productId]}. Kits can&rsquo;t be built from it until the count is finished; choose another source.</p>
                   ) : null}
                 </li>
               );
@@ -334,8 +334,8 @@ export function KitStep({ form, errors, onChange, kit, kitLoading, kitError = nu
       ) : !kitLoading && !kitError && form.clientId ? (
         <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
           <Boxes className="mx-auto h-6 w-6 text-faint" aria-hidden />
-          <p className="mt-2 text-[13px] font-semibold text-foreground">No kit selected</p>
-          <p className="text-[12px] text-secondary">Pick a kit-to-stock SKU to see its components and quantities.</p>
+          <p className="mt-2 text-sm font-semibold text-foreground">No kit selected</p>
+          <p className="text-xs text-secondary">Pick a kit-to-stock SKU to see its components and quantities.</p>
         </div>
       ) : null}
     </section>
@@ -370,8 +370,8 @@ export function AdvancedStep({ form, errors, onChange, files, onFiles, isNew = f
       </div>
       <div className="flex flex-col gap-2">
         <div>
-          <h3 className="text-[13px] font-semibold text-foreground">Document</h3>
-          <p className="text-[12px] text-secondary">Upload documents for the kitting process</p>
+          <h3 className="text-sm font-semibold text-foreground">Document</h3>
+          <p className="text-xs text-secondary">Upload documents for the kitting process</p>
         </div>
         <input ref={inputRef} type="file" multiple className="sr-only" aria-label="Upload document" accept="image/*,application/pdf"
           onChange={(e) => {
@@ -382,15 +382,15 @@ export function AdvancedStep({ form, errors, onChange, files, onFiles, isNew = f
             e.target.value = "";
           }} />
         <button type="button" onClick={() => inputRef.current?.click()}
-          className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border-strong/70 bg-surface-sunken/40 px-4 py-5 text-[13px] font-semibold text-primary transition-colors hover:border-primary hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+          className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-border-strong/70 bg-surface-sunken/40 px-4 py-5 text-sm font-semibold text-primary transition-colors hover:border-primary hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
           <Upload className="h-4 w-4" aria-hidden />Upload document
           <span className="font-normal text-secondary">PDF or image, up to 10 MB each</span>
         </button>
-        {fileError ? <p role="alert" className="text-[12px] text-danger">{fileError}</p> : null}
+        {fileError ? <p role="alert" className="text-xs text-danger">{fileError}</p> : null}
         {files.length ? (
           <ul className="flex flex-col gap-1.5">
             {files.map((f, i) => (
-              <li key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5 text-[12px]">
+              <li key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5 text-xs">
                 {f.type === "application/pdf" ? <FileText className="h-3.5 w-3.5 text-secondary" aria-hidden /> : <Paperclip className="h-3.5 w-3.5 text-secondary" aria-hidden />}
                 <span className="min-w-0 flex-1 truncate text-foreground">{f.name}</span>
                 <span className="text-faint">{Math.max(1, Math.round(f.size / 1024))} KB</span>
@@ -401,7 +401,7 @@ export function AdvancedStep({ form, errors, onChange, files, onFiles, isNew = f
             ))}
           </ul>
         ) : null}
-        {files.length ? <p className="text-[11px] text-secondary">Files are attached to the work order when you save.</p> : null}
+        {files.length ? <p className="text-2xs text-secondary">Files are attached to the work order when you save.</p> : null}
       </div>
     </section>
   );
@@ -412,7 +412,7 @@ export function AdvancedStep({ form, errors, onChange, files, onFiles, isNew = f
 export function OtherStep({ form, onChange, canManage }: { readonly form: WoForm; readonly onChange: Patch; readonly canManage: boolean }) {
   return (
     <section aria-label="Other info" className="flex flex-col gap-3">
-      <p className="text-[12px] text-secondary">You can optionally add or edit custom fields under &lsquo;Other Info&rsquo; tab.</p>
+      <p className="text-xs text-secondary">You can optionally add or edit custom fields under &lsquo;Other Info&rsquo; tab.</p>
       <CustomFieldsSection entityType="work_order" values={form.customFields} onChange={(v) => onChange({ customFields: v })} canManage={canManage} />
     </section>
   );

@@ -27,11 +27,11 @@ export function WizardRail({ title = "Status", percent, statusLabel, children, s
       <div className="flex items-center gap-3">
         <ProgressRing value={percent} size={56} thickness={5} tone={percent >= 100 ? "success" : "primary"} label="Completion" />
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{title}</p>
-          <p className="text-[13px] font-semibold text-foreground">{statusLabel ?? (percent >= 100 ? "Ready to save" : "In progress")}</p>
+          <p className="text-2xs font-semibold text-faint">{title}</p>
+          <p className="text-sm font-semibold text-foreground">{statusLabel ?? (percent >= 100 ? "Ready to save" : "In progress")}</p>
         </div>
       </div>
-      {children ? <div className="flex flex-col gap-2 border-t border-border pt-3 text-[12px]">{children}</div> : null}
+      {children ? <div className="flex flex-col gap-2 border-t border-border pt-3 text-xs">{children}</div> : null}
       {onSave ? (
         <DisabledReason reason={saving ? null : saveDisabledReason}>
           <Button variant="primary" size="lg" className="w-full" onClick={onSave} disabled={saving || Boolean(saveDisabledReason)} aria-busy={saving}>

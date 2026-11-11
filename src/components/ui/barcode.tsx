@@ -63,7 +63,7 @@ export function Barcode({ value, type = "code128", height, scale, showText, clas
   const result = React.useMemo(() => renderBarcodeSvg({ value, type, height, scale, showText }), [value, type, height, scale, showText]);
   if (!result.svg) {
     return (
-      <span role="img" aria-label={`Barcode unavailable: ${result.error ?? ""}`} className={cn("inline-flex items-center rounded border border-dashed border-danger/40 bg-danger-soft px-2 py-1 text-[11px] text-danger", className)}>
+      <span role="img" aria-label={`Barcode unavailable: ${result.error ?? ""}`} className={cn("inline-flex items-center rounded border border-dashed border-danger/40 bg-danger-soft px-2 py-1 text-2xs text-danger", className)}>
         Invalid barcode: {result.error}
       </span>
     );

@@ -61,8 +61,8 @@ export function StepComponents() {
   return (
     <div className="flex flex-col gap-4" data-field="components">
       <div>
-        <h3 className="text-[14px] font-semibold text-foreground">Search and add component</h3>
-        <p className="text-[12px] text-secondary">Find the products that make up the kit. Only this client&apos;s active products and kit-to-stock kits are listed.</p>
+        <h3 className="text-base font-semibold text-foreground">Search and add component</h3>
+        <p className="text-xs text-secondary">Find the products that make up the kit. Only this client&apos;s active products and kit-to-stock kits are listed.</p>
       </div>
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" aria-hidden />
@@ -80,29 +80,29 @@ export function StepComponents() {
           disabled={!clientId}
           placeholder={clientId ? "Search by SKU, name or barcode" : "Select a client on the General step first"}
           aria-label="Search components"
-          className="h-9 w-full rounded-md border border-border-strong/70 bg-surface pl-8 pr-3 text-[13px] placeholder:text-faint focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:bg-surface-sunken"
+          className="h-9 w-full rounded-md border border-border-strong/70 bg-surface pl-8 pr-3 text-sm placeholder:text-faint focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25 disabled:bg-surface-sunken"
         />
       </div>
       {clientId ? (
         <div className="max-h-56 overflow-y-auto rounded-lg border border-border ks-scroll" aria-label="Search results">
           {search.isPending ? (
-            <div className="flex items-center gap-2 px-3 py-3 text-[12px] text-secondary"><Spinner className="h-3.5 w-3.5" label="Searching" />Searching…</div>
+            <div className="flex items-center gap-2 px-3 py-3 text-xs text-secondary"><Spinner className="h-3.5 w-3.5" label="Searching" />Searching…</div>
           ) : results.length === 0 ? (
-            <p className="px-3 py-3 text-[12px] text-faint">No data found{term ? ` for “${term}”` : ""}.</p>
+            <p className="px-3 py-3 text-xs text-faint">No data found{term ? ` for “${term}”` : ""}.</p>
           ) : (
             <ul className="divide-y divide-border">
               {results.map((o) => (
                 <li key={o.id} className="flex items-center gap-3 px-3 py-2 hover:bg-surface-sunken">
                   <Thumb url={o.imageUrl} label={o.name || o.sku} />
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 truncate text-[13px] font-semibold text-foreground">
+                    <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
                       {o.sku}
                       {o.category === "Kit" ? <Badge tone="info" size="sm">Kit to stock</Badge> : null}
                     </span>
-                    <span className="block truncate text-[12px] text-secondary">{o.name}</span>
+                    <span className="block truncate text-xs text-secondary">{o.name}</span>
                   </span>
-                  <span className="w-20 text-right text-[12px]">
-                    <span className="block text-[10px] font-semibold uppercase tracking-[0.04em] text-faint">Available</span>
+                  <span className="w-20 text-right text-xs">
+                    <span className="block text-2xs font-semibold text-faint">Available</span>
                     <span className={o.available > 0 ? "font-semibold tabular-nums text-success" : "font-semibold tabular-nums text-faint"}>{o.available}</span>
                   </span>
                   <Button size="sm" variant={added.has(o.id) ? "secondary" : "primary"} onClick={() => add(o)} aria-label={`Add ${o.sku}`}>
@@ -116,15 +116,15 @@ export function StepComponents() {
       ) : null}
 
       <div className="overflow-hidden rounded-lg border border-border">
-        <table className="w-full text-[13px]">
-          <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+        <table className="w-full text-sm">
+          <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
             <tr><th className="w-12 px-3 py-2">Image</th><th className="px-3 py-2">Item</th><th className="w-36 px-3 py-2">Quantity</th><th className="w-12 px-3 py-2"><span className="sr-only">Remove</span></th></tr>
           </thead>
           <tbody className="divide-y divide-border">
             {components.map((c, i) => (
               <tr key={c.productId}>
                 <td className="px-3 py-2"><Thumb url={c.imageUrl} label={c.name || c.sku} /></td>
-                <td className="px-3 py-2"><span className="block font-semibold text-foreground">{c.sku}</span><span className="block text-[12px] text-secondary">{c.name}</span></td>
+                <td className="px-3 py-2"><span className="block font-semibold text-foreground">{c.sku}</span><span className="block text-xs text-secondary">{c.name}</span></td>
                 <td className="px-3 py-2">
                   <NumberInput size="sm" min={1} aria-label={`Quantity of ${c.sku}`} value={c.quantity} invalid={!c.quantity || c.quantity < 1}
                     onChange={(v) => commit(components.map((x, j) => (j === i ? { ...x, quantity: v } : x)))} />
@@ -139,7 +139,7 @@ export function StepComponents() {
         {components.length === 0 ? (
           <EmptyState compact icon={PackageSearch} title="No components yet" description="A kit needs at least one component. Search above and click Add." />
         ) : (
-          <p className="border-t border-border bg-surface-sunken px-3 py-2 text-[12px] text-secondary">{components.length} component{components.length === 1 ? "" : "s"} · {components.reduce((s, c) => s + (c.quantity ?? 0), 0)} units per kit</p>
+          <p className="border-t border-border bg-surface-sunken px-3 py-2 text-xs text-secondary">{components.length} component{components.length === 1 ? "" : "s"} · {components.reduce((s, c) => s + (c.quantity ?? 0), 0)} units per kit</p>
         )}
       </div>
       <FieldError id="components-error" message={message} />

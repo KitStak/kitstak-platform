@@ -41,7 +41,7 @@ export function RateShoppingPage() {
     { id: "serviceCount", header: "Options", size: 84, meta: { align: "right" }, cell: ({ row }) => <div className="text-right tabular-nums">{row.original.useAllServices ? <Muted>All</Muted> : row.original.serviceCount}</div> },
     { id: "useAllServices", header: "All services", size: 104, cell: ({ row }) => <YesNo value={row.original.useAllServices} /> },
     { id: "showErrors", header: "Show errors", size: 104, cell: ({ row }) => <YesNo value={row.original.showErrors} /> },
-    { id: "description", header: "Description", size: 220, cell: ({ row }) => (row.original.description ? <Tooltip content={row.original.description}><span tabIndex={0} className="line-clamp-2 whitespace-normal break-words text-[12px] leading-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{row.original.description}</span></Tooltip> : <span className="text-faint">—</span>) },
+    { id: "description", header: "Description", size: 220, cell: ({ row }) => (row.original.description ? <Tooltip content={row.original.description}><span tabIndex={0} className="line-clamp-2 whitespace-normal break-words text-xs leading-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{row.original.description}</span></Tooltip> : <span className="text-faint">—</span>) },
   ];
 
   const bulkActions: readonly BulkAction[] = !perms.delete ? [] : [

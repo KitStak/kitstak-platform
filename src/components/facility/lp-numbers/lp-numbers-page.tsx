@@ -82,10 +82,10 @@ function LpDetailDrawer({ id, onOpenChange }: { readonly id: string | null; read
             { label: "Label printed", value: d.labelPrintedAt ? new Date(d.labelPrintedAt).toLocaleString("en-US") : "Not yet", wide: true },
           ]} />
           <section className="flex flex-col gap-2">
-            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Contents</h3>
+            <h3 className="text-xs font-semibold text-secondary">Contents</h3>
             {d.contents.length === 0 ? <EmptyState compact title="Empty" description="No stock on this LP." /> : (
-              <table className="w-full overflow-hidden rounded-lg border border-border text-[13px]">
-                <thead className="bg-surface-sunken text-[11px] uppercase text-secondary"><tr><th className="px-3 py-2 text-left">SKU</th><th className="px-3 py-2 text-left">Lot</th><th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right">Allocated</th></tr></thead>
+              <table className="w-full overflow-hidden rounded-lg border border-border text-sm">
+                <thead className="bg-surface-sunken text-2xs text-secondary"><tr><th className="px-3 py-2 text-left">SKU</th><th className="px-3 py-2 text-left">Lot</th><th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right">Allocated</th></tr></thead>
                 <tbody className="divide-y divide-border">{d.contents.map((c) => <tr key={c.id}><td className="px-3 py-2"><span className="font-medium">{c.sku}</span><span className="ml-1 text-faint">{c.productName}</span></td><td className="px-3 py-2">{c.lotNumber ?? "—"}</td><td className="px-3 py-2 text-right tabular-nums">{c.onHand}</td><td className="px-3 py-2 text-right tabular-nums">{c.allocated}</td></tr>)}</tbody>
               </table>
             )}
@@ -146,7 +146,7 @@ function RemoveLpDialog({ rows, onOpenChange, onDone }: { readonly rows: readonl
         rows: (rows ?? []).map((r) => {
           const p = plan.find((x) => x.id === r.id);
           return {
-            number: <span className="font-mono text-[12px]">{r.number}</span>,
+            number: <span className="font-mono text-xs">{r.number}</span>,
             status: <LpStatusPill status={r.status} />,
             outcome: p ? OUTCOME[p.mode] : <Muted>…</Muted>,
             why: !p ? "" : p.mode === "blocked" ? `It ${p.reason}` : p.mode === "void" ? `Kept because ${p.because}` : "Never used",

@@ -22,7 +22,7 @@ export interface YesNoToggleProps {
 export const YesNoToggle = React.forwardRef<HTMLDivElement, YesNoToggleProps>(
   ({ value, onChange, disabled, yesLabel = "Yes", noLabel = "No", ariaLabel, className, id, "aria-invalid": invalid, tone = "danger" }, ref) => {
     const current = value === null ? "" : value ? "yes" : "no";
-    const item = "inline-flex h-7 min-w-[44px] items-center justify-center px-3 text-[12px] font-semibold outline-none transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus/35 disabled:cursor-not-allowed";
+    const item = "inline-flex h-7 min-w-[44px] items-center justify-center px-3 text-xs font-semibold outline-none transition-colors focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus/35 disabled:cursor-not-allowed";
     return (
       <ToggleGroup.Root
         ref={ref}

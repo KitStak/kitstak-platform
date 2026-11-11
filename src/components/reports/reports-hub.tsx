@@ -72,10 +72,10 @@ function ReportCard({ item, favorite, onToggle }: { readonly item: CatalogItem; 
   return (
     <div className="group relative flex items-start gap-3 rounded-lg border border-border bg-surface p-3.5 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-sm focus-within:border-primary/50">
       <div className="min-w-0 flex-1">
-        <Link href={item.href} className="text-[14px] font-semibold text-foreground after:absolute after:inset-0 after:rounded-lg after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-primary/40">
+        <Link href={item.href} className="text-base font-semibold text-foreground after:absolute after:inset-0 after:rounded-lg after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-primary/40">
           {item.label}
         </Link>
-        <p className="mt-0.5 text-[12.5px] leading-[18px] text-secondary">{item.description || "Open the report."}</p>
+        <p className="mt-0.5 text-xs leading-[18px] text-secondary">{item.description || "Open the report."}</p>
       </div>
       <button
         type="button"
@@ -105,27 +105,27 @@ function RecentExports() {
   return (
     <section aria-labelledby="recent-exports" className="rounded-lg border border-border bg-surface">
       <div className="flex items-center justify-between px-4 pt-3.5 pb-2">
-        <h2 id="recent-exports" className="text-[14px] font-semibold text-foreground">Recent exports</h2>
-        <Link href="/reports/export-history" className="text-[12px] font-medium text-primary hover:underline">View all</Link>
+        <h2 id="recent-exports" className="text-base font-semibold text-foreground">Recent exports</h2>
+        <Link href="/reports/export-history" className="text-xs font-medium text-primary hover:underline">View all</Link>
       </div>
       {q.isPending ? (
         <div className="space-y-2 px-4 pb-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
       ) : q.error ? (
-        <p className="px-4 pb-4 text-[12.5px] text-danger">Could not load your exports. <button type="button" className="font-medium underline" onClick={() => void q.refetch()}>Retry</button></p>
+        <p className="px-4 pb-4 text-xs text-danger">Could not load your exports. <button type="button" className="font-medium underline" onClick={() => void q.refetch()}>Retry</button></p>
       ) : rows.length === 0 ? (
-        <p className="px-4 pb-4 text-[12.5px] text-secondary">No exports yet. Use Export As Excel at the bottom of any report and the file lands here.</p>
+        <p className="px-4 pb-4 text-xs text-secondary">No exports yet. Use Export As Excel at the bottom of any report and the file lands here.</p>
       ) : (
         <ul className="divide-y divide-border">
           {rows.map((r) => (
             <li key={r.id} className="flex items-center gap-3 px-4 py-2.5">
-              <FileSpreadsheet className="h-4 w-4 shrink-0 text-[#1B8A55]" aria-hidden />
+              <FileSpreadsheet className="h-4 w-4 shrink-0 text-[var(--success-text)]" aria-hidden />
               <div className="min-w-0 flex-1">
                 {/* Title + status pill share the first line; the meta line below has the full width (never runs under the pill). */}
                 <div className="flex min-w-0 items-start gap-2">
-                  <span className="line-clamp-2 min-w-0 flex-1 break-words text-[13px] font-medium leading-snug text-foreground" title={r.title}>{r.title}</span>
+                  <span className="line-clamp-2 min-w-0 flex-1 break-words text-sm font-medium leading-snug text-foreground" title={r.title}>{r.title}</span>
                   <span className="shrink-0"><ReportPill status={r.status} domain="export" /></span>
                 </div>
-                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden text-[11.5px] text-faint" data-testid="export-meta">
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden text-2xs text-faint" data-testid="export-meta">
                   <span className="min-w-0 truncate"><DateCell value={r.createdAt} /></span>
                   {r.rowCount !== null ? <span className="shrink-0 whitespace-nowrap">· {r.rowCount.toLocaleString("en-US")} rows</span> : null}
                 </div>
@@ -186,7 +186,7 @@ export function ReportsHub({ initialPermissions = null }: { readonly initialPerm
               onChange={setView}
               options={[{ value: "all", label: "All reports" }, { value: "favorites", label: `Favorites (${favoriteItems.length})` }]}
             />
-            <span className="ml-auto text-[12px] text-faint" aria-live="polite">{isLoading ? "" : `${total} report${total === 1 ? "" : "s"}`}</span>
+            <span className="ml-auto text-xs text-faint" aria-live="polite">{isLoading ? "" : `${total} report${total === 1 ? "" : "s"}`}</span>
           </div>
 
           {isLoading ? (
@@ -203,7 +203,7 @@ export function ReportsHub({ initialPermissions = null }: { readonly initialPerm
               const Icon = NAV_ICONS[g.icon];
               return (
                 <section key={g.heading} aria-labelledby={`grp-${g.heading}`}>
-                  <h2 id={`grp-${g.heading}`} className="mb-2 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-secondary">
+                  <h2 id={`grp-${g.heading}`} className="mb-2 flex items-center gap-2 text-xs font-semibold text-secondary">
                     <span className="grid h-6 w-6 place-items-center rounded-md bg-primary/10 text-primary"><Icon className="h-3.5 w-3.5" aria-hidden /></span>
                     {g.heading}
                     <span className="font-normal normal-case tracking-normal text-faint">· {g.items.length}</span>
@@ -218,13 +218,13 @@ export function ReportsHub({ initialPermissions = null }: { readonly initialPerm
         </div>
         <aside className="space-y-5">
           <section aria-labelledby="fav-list" className="rounded-lg border border-border bg-surface px-4 py-3.5">
-            <h2 id="fav-list" className="mb-2 flex items-center gap-1.5 text-[14px] font-semibold text-foreground"><Star className="h-4 w-4 text-warning" fill="currentColor" aria-hidden />Favorites</h2>
+            <h2 id="fav-list" className="mb-2 flex items-center gap-1.5 text-base font-semibold text-foreground"><Star className="h-4 w-4 text-warning" fill="currentColor" aria-hidden />Favorites</h2>
             {favoriteItems.length === 0 ? (
-              <p className="text-[12.5px] text-secondary">Star any report and it shows up here, ready in one click.</p>
+              <p className="text-xs text-secondary">Star any report and it shows up here, ready in one click.</p>
             ) : (
               <ul className="space-y-1">
                 {favoriteItems.map((i) => (
-                  <li key={i.href}><Link href={i.href} className="flex items-center justify-between rounded-md px-2 py-1.5 text-[13px] font-medium text-foreground hover:bg-primary/5 hover:text-primary">{i.label}<ArrowRight className="h-3.5 w-3.5 text-faint" aria-hidden /></Link></li>
+                  <li key={i.href}><Link href={i.href} className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm font-medium text-foreground hover:bg-primary/5 hover:text-primary">{i.label}<ArrowRight className="h-3.5 w-3.5 text-faint" aria-hidden /></Link></li>
                 ))}
               </ul>
             )}

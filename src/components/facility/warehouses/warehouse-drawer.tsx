@@ -136,7 +136,7 @@ function SettingsStep({ form, warehouseId }: { readonly form: UseFormReturn<F>; 
           <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface-sunken/50 p-3">
             <CheckboxField<F> name="createStarterLocations" label="Create starter locations and use them as defaults"
               hint={starter.length ? `Adds ${starter.join(", ")} (receiving, packing, shipment and returns stations).` : "Enter a prefix on the Information step to see the codes."} />
-            {!createStarter ? <p className="text-[12px] text-secondary">A new warehouse has no locations yet: add them after it’s created, then pick the defaults below from Edit warehouse.</p> : null}
+            {!createStarter ? <p className="text-xs text-secondary">A new warehouse has no locations yet: add them after it’s created, then pick the defaults below from Edit warehouse.</p> : null}
           </div>
         ) : null}
         {/* Logiwa always shows the three pickers; in create mode without starter locations they are visible but disabled. */}
@@ -147,7 +147,7 @@ function SettingsStep({ form, warehouseId }: { readonly form: UseFormReturn<F>; 
             <SelectField<F> name="defaultReturnLocationId" label="Default return location" options={returns.options} clearable disabled={!warehouseId} placeholder={locPlaceholder(returns, "Returns")} />
           </FormGrid>
         ) : starter.length ? (
-          <dl className="grid grid-cols-1 gap-2 text-[12px] sm:grid-cols-3">
+          <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
             {[["Default receiving location", `${prefix}-RECV`], ["Default ship location", `${prefix}-SHIP`], ["Default return location", `${prefix}-RET`]].map(([label, code]) => (
               <div key={label} className="rounded-md border border-border bg-surface px-3 py-2"><dt className="text-faint">{label}</dt><dd className="mt-0.5 font-mono text-foreground">{code ?? "—"}</dd></div>
             ))}

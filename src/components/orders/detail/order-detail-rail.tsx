@@ -46,7 +46,7 @@ type Pending = "ship" | "delete" | "cancel" | "jobs" | "hold" | "release" | "dup
 
 function Row({ label, value, action }: { readonly label: React.ReactNode; readonly value: React.ReactNode; readonly action?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-2 text-[13px]">
+    <div className="flex items-center justify-between gap-2 text-sm">
       <span className="text-secondary">{label}</span>
       <span className="flex min-w-0 items-center gap-1.5 text-right font-medium text-foreground">{value}{action}</span>
     </div>
@@ -56,7 +56,7 @@ function Row({ label, value, action }: { readonly label: React.ReactNode; readon
 const BUSY_LABEL: Readonly<Record<string, string>> = { hold: "Putting on hold…", release: "Releasing…", duplicate: "Duplicating…" };
 
 function Availability({ ok }: { readonly ok: boolean }) {
-  return <span className={ok ? "text-[12px] font-semibold text-success" : "text-[12px] text-faint"}>{ok ? "Available" : "Not available"}</span>;
+  return <span className={ok ? "text-xs font-semibold text-success" : "text-xs text-faint"}>{ok ? "Available" : "Not available"}</span>;
 }
 
 export interface OrderDetailRailProps {
@@ -243,7 +243,7 @@ export function SummaryCard({ detail }: { readonly detail: OrderDetail }) {
   return (
     <RailCard title="Summary">
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 truncate text-[20px] font-semibold tracking-[-0.01em] text-foreground" title={o.code}>{o.code}</p>
+        <p className="min-w-0 truncate text-lg font-semibold tracking-[-0.01em] text-foreground" title={o.code}>{o.code}</p>
         <OrderStatusPill status={o.status} />
       </div>
       <div className="flex flex-col gap-1.5">
@@ -268,7 +268,7 @@ export function SummaryCard({ detail }: { readonly detail: OrderDetail }) {
           Show change log
         </Button>
       </DisabledReason>
-      <dl className="flex flex-col gap-1.5 border-t border-border pt-2 text-[13px]">
+      <dl className="flex flex-col gap-1.5 border-t border-border pt-2 text-sm">
         <div className="flex justify-between"><dt className="text-secondary">Price</dt><dd className="tabular-nums">{fmt.money(t.price, "USD", "summary")}</dd></div>
         <div className="flex justify-between"><dt className="text-secondary">Discount</dt><dd className="tabular-nums">{fmt.money(t.discount, "USD", "summary")}</dd></div>
         <div className="flex justify-between font-semibold"><dt>Total</dt><dd className="tabular-nums">{fmt.money(t.total, "USD", "summary")}</dd></div>
@@ -302,8 +302,8 @@ export function JobsCard({ detail, onChanged }: OrderDetailRailProps) {
       {detail.jobs.length === 0 ? (
         <div className="flex flex-col items-center gap-1 rounded-md border border-dashed border-border px-3 py-4 text-center">
           <ClipboardList className="h-5 w-5 text-faint" aria-hidden />
-          <p className="text-[13px] font-semibold text-foreground">No job assigned</p>
-          <p className="text-[12px] text-secondary">
+          <p className="text-sm font-semibold text-foreground">No job assigned</p>
+          <p className="text-xs text-secondary">
             {terminal
               ? o.status === "Cancelled" ? "The order is cancelled, so no job can be assigned." : `The order is ${o.status}; it was fulfilled without a job on record.`
               : o.status === "Ready to Pick" ? "Stock is allocated. Create a picking job to start picking and print the picking list." : "Press the + button to assign a new job."}
@@ -320,8 +320,8 @@ export function JobsCard({ detail, onChanged }: OrderDetailRailProps) {
           {detail.jobs.map((j) => (
             <li key={j.id} className="flex items-center gap-2 rounded-md border border-border px-2.5 py-2">
               <div className="min-w-0 flex-1">
-                <Link href={`/jobs/${encodeURIComponent(j.id)}`} className="block truncate text-[13px] font-semibold text-primary hover:underline">{j.code}</Link>
-                <span className="block truncate text-[12px] text-secondary">{j.jobType}</span>
+                <Link href={`/jobs/${encodeURIComponent(j.id)}`} className="block truncate text-sm font-semibold text-primary hover:underline">{j.code}</Link>
+                <span className="block truncate text-xs text-secondary">{j.jobType}</span>
               </div>
               <StatusPill status={j.status} domain="job" size="sm" />
               {j.status === "Pending" ? (
@@ -422,7 +422,7 @@ export function DocumentsCards({ detail, onChanged }: OrderDetailRailProps) {
             Download billing charges
           </Button>
         </DisabledReason>
-        <p className="text-[12px] text-secondary">Click to download the latest billing charges.</p>
+        <p className="text-xs text-secondary">Click to download the latest billing charges.</p>
       </RailCard>
 
       <RailCard title="Printouts">
@@ -441,14 +441,14 @@ export function DocumentsCards({ detail, onChanged }: OrderDetailRailProps) {
               </Button>
             </DisabledReason>
           } />
-          <Row label="Picking list" value={pickListState === "ready" ? <Availability ok /> : pickListState === "na" ? <Availability ok={false} /> : <span className="text-[12px] text-warning">{pickListState === "unreleased" ? "Job not released" : "Needs a job"}</span>} action={
+          <Row label="Picking list" value={pickListState === "ready" ? <Availability ok /> : pickListState === "na" ? <Availability ok={false} /> : <span className="text-xs text-warning">{pickListState === "unreleased" ? "Job not released" : "Needs a job"}</span>} action={
             <DisabledReason reason={pickListState === "na" ? `Not available on a ${o.status} order` : !hasJob ? "Available once a picking job exists" : !pickListReady ? "The picking list is available once the job is released." : perm(ORDER_PERMISSIONS.printPickList)}>
               <Button variant="ghost" size="icon-sm" aria-label="Print picking list" disabled={pickListState !== "ready" || busy === "picking-list" || Boolean(perm(ORDER_PERMISSIONS.printPickList))} onClick={() => void printType("picking-list", "Print picking list")}>
                 <Printer className="h-3.5 w-3.5" aria-hidden />
               </Button>
             </DisabledReason>
           } />
-          <Row label="Other documents" value={<span className="text-[12px] text-secondary">Upload or view</span>} action={
+          <Row label="Other documents" value={<span className="text-xs text-secondary">Upload or view</span>} action={
             <Button variant="ghost" size="icon-sm" aria-label="Go to documents" onClick={() => window.dispatchEvent(new CustomEvent("order:show-documents"))}>
               <FileText className="h-3.5 w-3.5" aria-hidden />
             </Button>
@@ -458,16 +458,16 @@ export function DocumentsCards({ detail, onChanged }: OrderDetailRailProps) {
 
       <RailCard title="Packages & tracking">
         {detail.shipments.length === 0 ? (
-          <p className="text-[12px] text-secondary">No labels yet. Labels appear here once the order is packed and labeled.</p>
+          <p className="text-xs text-secondary">No labels yet. Labels appear here once the order is packed and labeled.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {detail.shipments.map((s) => (
               <li key={s.id} className="flex flex-col gap-1 rounded-md border border-border px-2.5 py-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-mono text-[12px] font-semibold text-foreground" title={s.trackingNumber}>{s.trackingNumber}</span>
+                  <span className="truncate font-mono text-xs font-semibold text-foreground" title={s.trackingNumber}>{s.trackingNumber}</span>
                   <StatusPill status={s.labelStatus} size="sm" />
                 </div>
-                <div className="flex items-center justify-between gap-2 text-[12px] text-secondary">
+                <div className="flex items-center justify-between gap-2 text-xs text-secondary">
                   <span className="truncate">{s.carrierCode} · {s.serviceName} · Pkg {s.packageSeq}</span>
                   <span className="flex shrink-0 items-center">
                     <Button variant="ghost" size="icon-sm" aria-label={`Reprint label ${s.trackingNumber}`} disabled={!s.labelFileId} onClick={() => s.labelFileId && openFiles([s.labelFileId])}>
@@ -480,7 +480,7 @@ export function DocumentsCards({ detail, onChanged }: OrderDetailRailProps) {
                     </DisabledReason>
                   </span>
                 </div>
-                <span className="text-[11px] text-faint">{fmt.money(s.shippingCost)} · {fmt.dateTime(s.labelCreatedAt)}</span>
+                <span className="text-2xs text-faint">{fmt.money(s.shippingCost)} · {fmt.dateTime(s.labelCreatedAt)}</span>
               </li>
             ))}
           </ul>

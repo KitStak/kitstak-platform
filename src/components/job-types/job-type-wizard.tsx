@@ -151,7 +151,7 @@ export function JobTypeDrawer({ open, onOpenChange, editId, onSaved }: { readonl
       width={60}
       title={editId ? `Edit job type ${d?.code ?? ""}`.trim() : "Create new job type"}
       description={chosen ? undefined : "Choose the operation type this job type is for."}
-      headerExtra={chosen ? <span className="inline-flex w-fit rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">{chosen}</span> : null}
+      headerExtra={chosen ? <span className="inline-flex w-fit rounded-full bg-primary-soft px-2 py-0.5 text-2xs font-semibold text-primary">{chosen}</span> : null}
     >
       {editId && detail.isError ? (
         <EmptyState title="Couldn't load this job type" description={detail.error.message} action={<Button onClick={() => void detail.refetch()}>Retry</Button>} />

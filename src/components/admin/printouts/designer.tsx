@@ -55,7 +55,7 @@ interface Item { readonly key: string; readonly enabled: boolean }
 function Labeled({ label, htmlFor, children, className }: { readonly label: string; readonly htmlFor?: string; readonly children: React.ReactNode; readonly className?: string }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-1", className)}>
-      <label htmlFor={htmlFor} className="text-[12px] font-medium text-body">{label}</label>
+      <label htmlFor={htmlFor} className="text-xs font-medium text-body">{label}</label>
       {children}
     </div>
   );
@@ -202,14 +202,14 @@ function BlockEditor({ block, fields, onChange, family }: { readonly block: Prin
             onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) readImage(f).then((url) => set("imageDataUrl", url)).catch((err: Error) => toast.error("Image not added", err.message)); }} />
           <Button size="sm" variant="secondary" onClick={() => fileRef.current?.click()}>{block.imageDataUrl ? "Replace image" : "Upload image"}</Button>
           {block.imageDataUrl ? <Button size="sm" variant="ghost" onClick={() => set("imageDataUrl", "")}>Use company logo</Button> : null}
-          <span className="text-[11px] text-faint">PNG or JPEG, up to about 150 KB.</span>
+          <span className="text-2xs text-faint">PNG or JPEG, up to about 150 KB.</span>
         </div>
       ) : null}
       {showsText ? (
         <>
           <Labeled label="Size (pt)" htmlFor={`${id}-size`}><NumberInput id={`${id}-size`} value={block.size} min={6} max={48} onChange={(v) => set("size", Math.min(48, Math.max(6, v ?? 10)))} /></Labeled>
           <Labeled label="Color" htmlFor={`${id}-color`}><ColorChip id={`${id}-color`} label="text color" value={block.color} onChange={(v) => set("color", v)} /></Labeled>
-          <div className="col-span-2 flex items-center gap-2"><Switch id={`${id}-bold`} checked={block.bold} onCheckedChange={(v) => set("bold", v === true)} /><label htmlFor={`${id}-bold`} className="text-[12.5px] text-body">Bold</label></div>
+          <div className="col-span-2 flex items-center gap-2"><Switch id={`${id}-bold`} checked={block.bold} onCheckedChange={(v) => set("bold", v === true)} /><label htmlFor={`${id}-bold`} className="text-xs text-body">Bold</label></div>
         </>
       ) : null}
       {block.kind === "barcode" || block.kind === "image" || block.kind === "spacer" || block.kind === "divider" ? (
@@ -270,13 +270,13 @@ function LayoutList({ layout, typeKey, fields, onSections, onBlocks, selected, s
             className={cn("bg-surface", dragOver === i && dragFrom !== null && dragFrom !== i && "shadow-[inset_0_2px_0_0_var(--color-primary)]", dragFrom === i && "opacity-50")}>
             <div className={cn("flex items-center gap-2 px-2 py-2", !it.enabled && "bg-surface-sunken/50", open && "bg-primary-soft/40")}>
               <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-faint" aria-hidden />
-              <span className="w-5 text-right text-[11px] tabular-nums text-faint">{i + 1}</span>
+              <span className="w-5 text-right text-2xs tabular-nums text-faint">{i + 1}</span>
               {Icon ? <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-info-soft text-info"><Icon className="h-3.5 w-3.5" /></span> : null}
               <button type="button" disabled={!b} onClick={() => b && setSelected(open ? null : b.id)}
                 onKeyDown={(e) => { if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) { e.preventDefault(); onSections(moveItem(items, i, e.key === "ArrowUp" ? -1 : 1)); } }}
                 aria-expanded={b ? open : undefined} className={cn("min-w-0 flex-1 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40", b && "cursor-pointer")}>
-                <span className={cn("block text-[13px]", it.enabled ? "font-medium text-foreground" : "text-faint")}>{meta.title}{b ? <span className="ml-1.5 text-[11px] font-normal text-primary">{open ? "Close" : "Edit"}</span> : null}</span>
-                {meta.hint ? <span className="block truncate text-[11px] text-faint">{meta.hint}</span> : null}
+                <span className={cn("block text-sm", it.enabled ? "font-medium text-foreground" : "text-faint")}>{meta.title}{b ? <span className="ml-1.5 text-2xs font-normal text-primary">{open ? "Close" : "Edit"}</span> : null}</span>
+                {meta.hint ? <span className="block truncate text-2xs text-faint">{meta.hint}</span> : null}
               </button>
               <Button size="icon-sm" variant="ghost" aria-label={`Move ${meta.title} up`} disabled={i === 0} onClick={() => onSections(moveItem(items, i, -1))}><ArrowUp className="h-3.5 w-3.5" /></Button>
               <Button size="icon-sm" variant="ghost" aria-label={`Move ${meta.title} down`} disabled={i === items.length - 1} onClick={() => onSections(moveItem(items, i, 1))}><ArrowDown className="h-3.5 w-3.5" /></Button>
@@ -296,8 +296,8 @@ function ColumnsList({ items, labelOf, onChange }: { readonly items: readonly It
     <ol className="flex flex-col divide-y divide-border rounded-lg border border-border">
       {items.map((it, i) => (
         <li key={it.key} className={cn("flex items-center gap-2 px-3 py-2", !it.enabled && "bg-surface-sunken/50")}>
-          <span className="w-5 text-right text-[11px] tabular-nums text-faint">{i + 1}</span>
-          <span className={cn("min-w-0 flex-1 text-[13px]", it.enabled ? "font-medium text-foreground" : "text-faint")}>{labelOf(it.key)}</span>
+          <span className="w-5 text-right text-2xs tabular-nums text-faint">{i + 1}</span>
+          <span className={cn("min-w-0 flex-1 text-sm", it.enabled ? "font-medium text-foreground" : "text-faint")}>{labelOf(it.key)}</span>
           <Button size="icon-sm" variant="ghost" aria-label={`Move ${labelOf(it.key)} left`} disabled={i === 0} onClick={() => onChange(moveItem(items, i, -1))}><ArrowUp className="h-3.5 w-3.5" /></Button>
           <Button size="icon-sm" variant="ghost" aria-label={`Move ${labelOf(it.key)} right`} disabled={i === items.length - 1} onClick={() => onChange(moveItem(items, i, 1))}><ArrowDown className="h-3.5 w-3.5" /></Button>
           <Switch aria-label={`Show ${labelOf(it.key)}`} checked={it.enabled} onCheckedChange={(v) => onChange(items.map((x) => (x.key === it.key ? { ...x, enabled: v === true } : x)))} />
@@ -312,8 +312,8 @@ function Panel({ title, description, children, action }: { readonly title: strin
     <section className="flex flex-col gap-2">
       <div className="flex items-end justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="text-[13px] font-semibold text-foreground">{title}</h3>
-          {description ? <p className="text-[12px] text-secondary">{description}</p> : null}
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          {description ? <p className="text-xs text-secondary">{description}</p> : null}
         </div>
         {action}
       </div>
@@ -415,13 +415,13 @@ export function DesignerStep({ form, typeKey }: { readonly form: UseFormReturn<F
               const Icon = KIND_ICON[kind];
               return (
                 <button key={kind} type="button" onClick={() => addBlock(kind)} disabled={blocks.length >= MAX_BLOCKS}
-                  className="flex items-center gap-2 rounded-lg border border-border bg-surface px-2.5 py-2 text-left text-[12.5px] font-medium text-body shadow-xs transition-colors hover:border-primary/50 hover:bg-primary-soft/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50">
+                  className="flex items-center gap-2 rounded-lg border border-border bg-surface px-2.5 py-2 text-left text-xs font-medium text-body shadow-xs transition-colors hover:border-primary/50 hover:bg-primary-soft/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50">
                   <Plus className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden /><Icon className="h-3.5 w-3.5 shrink-0 text-secondary" aria-hidden /><span className="truncate">{BLOCK_KIND_LABELS[kind]}</span>
                 </button>
               );
             })}
           </div>
-          <p className="text-[11px] text-faint">{blocks.length} of {MAX_BLOCKS} blocks used.{fields.some((f) => f.key.startsWith("custom:")) ? " Custom fields are available as Data field bindings." : ""}</p>
+          <p className="text-2xs text-faint">{blocks.length} of {MAX_BLOCKS} blocks used.{fields.some((f) => f.key.startsWith("custom:")) ? " Custom fields are available as Data field bindings." : ""}</p>
         </Panel>
         <Panel title="Layout" description="Drag rows (or Alt + ↑ / ↓) to set the print order. Switch a row off to hide it; click a block to edit it.">
           <LayoutList layout={full} typeKey={typeKey} fields={fields} selected={selected} setSelected={setSelected}
@@ -435,9 +435,9 @@ export function DesignerStep({ form, typeKey }: { readonly form: UseFormReturn<F
       </div>
       <section className="flex min-h-[560px] flex-col gap-2 rounded-lg border border-border bg-surface-sunken/60 p-3 xl:sticky xl:top-2 xl:self-start" aria-label="Live preview">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-[13px] font-semibold text-foreground">Live preview</h3>
+          <h3 className="text-sm font-semibold text-foreground">Live preview</h3>
           <Badge tone="neutral" size="sm">{paperLabel(layout.paper)}</Badge>
-          {tab !== "canvas" && preview.loading ? <Spinner className="h-3.5 w-3.5" label="Rendering preview" /> : tab !== "canvas" && preview.ms !== null ? <span className="text-[11px] text-faint">Rendered in {preview.ms} ms</span> : null}
+          {tab !== "canvas" && preview.loading ? <Spinner className="h-3.5 w-3.5" label="Rendering preview" /> : tab !== "canvas" && preview.ms !== null ? <span className="text-2xs text-faint">Rendered in {preview.ms} ms</span> : null}
           <span className="ml-auto flex flex-wrap items-center gap-2">
             <SegmentedControl ariaLabel="Preview format" value={tab} onChange={setTab} options={[{ value: "canvas", label: "Canvas" }, { value: "pdf", label: "PDF" }, ...(zpl ? [{ value: "zpl" as const, label: "ZPL" }] : [])]} />
             {!isLabel ? <span className="w-72"><Select aria-label="Preview record" value={sampleId} onChange={(v) => { if (!v || v === "__loading") return; samplePicked.current = true; setSampleId(v); }} options={sampleOptions} /></span> : null}
@@ -449,32 +449,32 @@ export function DesignerStep({ form, typeKey }: { readonly form: UseFormReturn<F
         {tab === "canvas" ? (
           <div className="flex flex-1 flex-col gap-2">
             {canvas.error ? <Callout variant="attention" title="Showing placeholder data" action={<Button size="sm" variant="secondary" onClick={canvas.retry}>Retry</Button>}>The selected order couldn&apos;t be loaded, so the canvas shows placeholder values. The saved template is not affected.</Callout> : null}
-            {canvas.loading && !canvas.data ? <p className="flex items-center gap-1.5 text-[11px] text-faint"><Spinner className="h-3 w-3" label="Loading sample record" />Loading the sample record…</p> : null}
+            {canvas.loading && !canvas.data ? <p className="flex items-center gap-1.5 text-2xs text-faint"><Spinner className="h-3 w-3" label="Loading sample record" />Loading the sample record…</p> : null}
             <CanvasPreview layout={full} typeKey={typeKey} record={canvas.data?.records[0] ?? null} companyName={canvas.data?.companyName ?? "KitStaks"} logoUrl={canvas.data?.logoUrl ?? null} selected={selected} onSelect={setSelected} />
-            <p className="text-[11px] text-faint">Click a block on the canvas to edit it. The PDF tab shows exact page breaks and fonts.</p>
+            <p className="text-2xs text-faint">Click a block on the canvas to edit it. The PDF tab shows exact page breaks and fonts.</p>
           </div>
         ) : zpl && tab === "zpl" ? (
           <div className="flex flex-1 flex-col gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-[12px] text-secondary">Raw ZPL II at 203 dpi. Send it to the printer on port 9100 or through your print agent.</span>
+              <span className="text-xs text-secondary">Raw ZPL II at 203 dpi. Send it to the printer on port 9100 or through your print agent.</span>
               <span className="ml-auto flex gap-2">
                 <Button size="sm" variant="secondary" disabled={!preview.zpl} onClick={() => void copyZpl()}><Copy className="h-3.5 w-3.5" />Copy</Button>
                 <Button size="sm" variant="secondary" disabled={!preview.zpl} onClick={downloadZpl}><Download className="h-3.5 w-3.5" />Download .zpl</Button>
               </span>
             </div>
-            <pre className="min-h-[440px] flex-1 overflow-auto rounded-md border border-border bg-surface p-3 font-mono text-[11.5px] leading-5 text-body" aria-label="ZPL output">{preview.zpl ?? "Rendering…"}</pre>
+            <pre className="min-h-[440px] flex-1 overflow-auto rounded-md border border-border bg-surface p-3 font-mono text-2xs leading-5 text-body" aria-label="ZPL output">{preview.zpl ?? "Rendering…"}</pre>
           </div>
         ) : frameBlocked === null ? (
-          <div className="flex flex-1 items-center justify-center text-[13px] text-secondary"><Spinner className="mr-2 h-4 w-4" label="Preparing" />Preparing preview…</div>
+          <div className="flex flex-1 items-center justify-center text-sm text-secondary"><Spinner className="mr-2 h-4 w-4" label="Preparing" />Preparing preview…</div>
         ) : frameBlocked ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border bg-surface p-6 text-center">
-            <p className="max-w-sm text-[13px] text-secondary">Embedded PDFs are blocked by this page&apos;s security policy. Open the rendered PDF in a new tab, or use the Canvas view.</p>
+            <p className="max-w-sm text-sm text-secondary">Embedded PDFs are blocked by this page&apos;s security policy. Open the rendered PDF in a new tab, or use the Canvas view.</p>
             <Button variant="primary" onClick={() => void openFullPdf()} disabled={opening}><ExternalLink className="h-4 w-4" />Open PDF</Button>
           </div>
         ) : preview.url ? (
           <iframe title="Printout preview" src={`${preview.url}#toolbar=0&navpanes=0&view=FitH`} className={cn("w-full flex-1 rounded-md border border-border bg-white transition-opacity", isLabel ? "min-h-[440px]" : "min-h-[640px]", preview.loading && "opacity-60")} />
         ) : !preview.error ? (
-          <div className="flex flex-1 items-center justify-center text-[13px] text-secondary"><Spinner className="mr-2 h-4 w-4" label="Rendering" />Rendering preview…</div>
+          <div className="flex flex-1 items-center justify-center text-sm text-secondary"><Spinner className="mr-2 h-4 w-4" label="Rendering" />Rendering preview…</div>
         ) : null}
       </section>
     </div>

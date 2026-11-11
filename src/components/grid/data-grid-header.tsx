@@ -47,7 +47,7 @@ function HeaderCell<T>({ header, sort, onSort, reorderable, stickyRightOffset }:
   const arrow = indicator ? (
     <span className="inline-flex shrink-0 items-center text-primary">
       {indicator.dir === "asc" ? <ArrowUp className="h-3 w-3" aria-hidden /> : <ArrowDown className="h-3 w-3" aria-hidden />}
-      {indicator.position ? <sup className="text-[9px] font-bold">{indicator.position}</sup> : null}
+      {indicator.position ? <sup className="text-2xs font-bold">{indicator.position}</sup> : null}
     </span>
   ) : (
     <ArrowUpDown data-sort-affordance="" className="h-3 w-3 shrink-0 text-faint opacity-0 transition-opacity group-hover/th:opacity-100 group-focus-within/th:opacity-100" aria-hidden />

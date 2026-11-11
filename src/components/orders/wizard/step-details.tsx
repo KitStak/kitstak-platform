@@ -207,12 +207,12 @@ export function StepDetails() {
         trailing={
           create ? (
             checking ? (
-              <span className="flex items-center gap-1 whitespace-nowrap text-[11px] text-faint" role="status">
+              <span className="flex items-center gap-1 whitespace-nowrap text-2xs text-faint" role="status">
                 <Spinner className="h-3 w-3" label="Checking code" />
                 {generating ? "Generating…" : "Checking…"}
               </span>
             ) : (
-              <button type="button" onClick={() => void regenerate(true)} className="flex items-center gap-1 whitespace-nowrap rounded text-[11px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+              <button type="button" onClick={() => void regenerate(true)} className="flex items-center gap-1 whitespace-nowrap rounded text-2xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
                 <RefreshCw className="h-3 w-3" aria-hidden />
                 auto generated
               </button>

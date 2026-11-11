@@ -90,7 +90,7 @@ export const ChipInput = React.forwardRef<HTMLInputElement, ChipInputProps>(
           className={cn(controlVariants({ size: "md" }), "flex h-auto min-h-8 flex-wrap items-center gap-1 py-1", className)}
         >
           {value.map((chip) => (
-            <span key={chip} className="inline-flex max-w-full items-center gap-1 rounded bg-neutral-soft py-0.5 pl-1.5 pr-0.5 font-mono text-[12px] text-body">
+            <span key={chip} className="inline-flex max-w-full items-center gap-1 rounded bg-neutral-soft py-0.5 pl-1.5 pr-0.5 font-mono text-xs text-body">
               <span className="truncate">{chip}</span>
               <button type="button" disabled={disabled} aria-label={`Remove ${chip}`} onClick={() => onChange(value.filter((v) => v !== chip))} className="rounded p-px text-faint hover:bg-border hover:text-body">
                 <X className="h-3 w-3" aria-hidden />

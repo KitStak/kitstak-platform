@@ -45,10 +45,10 @@ export function GuardModal({ state, onClose }: { readonly state: GuardState | nu
           <DialogHeader title={state?.title ?? "Warning"} className="p-0" />
         </div>
         <DialogBody className="flex flex-col gap-3">
-          {state?.heading ? <p className="text-[14px] font-semibold text-foreground">{state.heading}</p> : null}
-          <p className="text-[13px] leading-5 text-body">{state?.message}</p>
+          {state?.heading ? <p className="text-base font-semibold text-foreground">{state.heading}</p> : null}
+          <p className="text-sm leading-5 text-body">{state?.message}</p>
           {state?.orders && state.orders.length > 0 ? (
-            <ul className="ks-scroll max-h-40 divide-y divide-border overflow-auto rounded-md border border-border text-[12px]">
+            <ul className="ks-scroll max-h-40 divide-y divide-border overflow-auto rounded-md border border-border text-xs">
               {state.orders.map((o) => (
                 <li key={o.code} className="flex gap-3 px-3 py-1.5">
                   <span className="w-28 shrink-0 font-semibold text-foreground">{o.code}</span>
@@ -98,7 +98,7 @@ export function SuccessResultDialog({ open, title, description, primaryLabel, on
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-success text-white"><CheckCircle2 className="h-4 w-4" aria-hidden /></span>
           <DialogHeader title={title} className="p-0" />
         </div>
-        <DialogBody><p className="text-[13px] leading-5 text-body">{description}</p></DialogBody>
+        <DialogBody><p className="text-sm leading-5 text-body">{description}</p></DialogBody>
         <DialogFooter>
           <Button variant="secondary" onClick={onClose}>{closeLabel}</Button>
           <Button variant="primary" autoFocus onClick={() => { onPrimary(); onClose(); }}>{primaryLabel}</Button>
@@ -140,11 +140,11 @@ export function BulkResultModal({ state, onClose }: { readonly state: BulkResult
             <Badge tone="danger" shape="pill">Error {bad}</Badge>
           </div>
           <div className="ks-scroll max-h-[300px] overflow-auto rounded-md border border-border">
-            <table className="w-full border-collapse text-left text-[12px]">
+            <table className="w-full border-collapse text-left text-xs">
               <thead className="sticky top-0 bg-surface-sunken">
                 <tr>
                   {["SO code", "Description"].map((h) => (
-                    <th key={h} scope="col" className="border-b border-border px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{h}</th>
+                    <th key={h} scope="col" className="border-b border-border px-2.5 py-1.5 text-2xs font-semibold text-faint">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -170,11 +170,11 @@ export function BulkResultModal({ state, onClose }: { readonly state: BulkResult
 function OrdersTable({ rows, extra }: { readonly rows: readonly OrderRow[]; readonly extra?: (r: OrderRow) => React.ReactNode }) {
   return (
     <div className="ks-scroll max-h-[220px] overflow-auto rounded-md border border-border">
-      <table className="w-full border-collapse text-left text-[12px]">
+      <table className="w-full border-collapse text-left text-xs">
         <thead className="sticky top-0 bg-surface-sunken">
           <tr>
             {["Order code", "Order status", "Order date", ...(extra ? ["Note"] : [])].map((h) => (
-              <th key={h} scope="col" className="border-b border-border px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{h}</th>
+              <th key={h} scope="col" className="border-b border-border px-2.5 py-1.5 text-2xs font-semibold text-faint">{h}</th>
             ))}
           </tr>
         </thead>
@@ -259,14 +259,14 @@ export function CancelOrdersModal({ rows, open, onOpenChange, onDone }: { readon
       <DialogContent size="lg" hideClose>
         <div className="flex items-center gap-3 rounded-t-lg bg-danger px-5 py-4 text-white">
           <Ban className="h-5 w-5 shrink-0" aria-hidden />
-          <DialogTitle className="flex-1 text-[15px] font-semibold">Are you sure you want to cancel {rows.length === 1 ? "this order" : `${rows.length} orders`}?</DialogTitle>
+          <DialogTitle className="flex-1 text-base font-semibold">Are you sure you want to cancel {rows.length === 1 ? "this order" : `${rows.length} orders`}?</DialogTitle>
           {/* White close on the danger header (the default dark icon is unreadable on red). */}
           <DialogClose aria-label="Close" className="rounded p-1 text-white/90 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60">
             <X className="h-4 w-4" aria-hidden />
           </DialogClose>
         </div>
         <DialogBody className="flex flex-col gap-4">
-          <p className="text-[13px] text-body">
+          <p className="text-sm text-body">
             Please select <strong>cancel reason</strong> for the selected order(s). Allocated inventory is released and each order gets a change-log entry.
           </p>
           <div className="flex flex-col gap-1">
@@ -290,7 +290,7 @@ export function CancelOrdersModal({ rows, open, onOpenChange, onDone }: { readon
           </div>
           <OrdersTable rows={rows} />
           {failure ? (
-            <p role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-[12.5px] text-danger">
+            <p role="alert" className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
               Couldn&apos;t cancel: {failure}
             </p>
           ) : null}
@@ -350,11 +350,11 @@ export function ChangeWarehouseModal({ rows, open, onOpenChange, onDone }: { rea
         <DialogBody className="flex flex-col gap-4">
           {report ? (
             <>
-              <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-[13px] text-body">
+              <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-body">
                 <AlertTriangle className="h-4 w-4 text-warning" aria-hidden />
                 {report.succeeded.length} of {n} moved · {report.failed.length} skipped
               </div>
-              <ul className="ks-scroll max-h-48 divide-y divide-border overflow-auto rounded-md border border-border text-[12px]">
+              <ul className="ks-scroll max-h-48 divide-y divide-border overflow-auto rounded-md border border-border text-xs">
                 {report.failed.map((f) => (
                   <li key={f.id} className="flex gap-3 px-3 py-1.5"><span className="w-28 shrink-0 font-semibold">{codes.get(f.id)}</span><span className="text-secondary">{f.message}</span></li>
                 ))}
@@ -364,7 +364,7 @@ export function ChangeWarehouseModal({ rows, open, onOpenChange, onDone }: { rea
             <>
               <div className="flex gap-3 rounded-md border border-warning/40 bg-warning-soft p-3">
                 <Warehouse className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
-                <p className="text-[13px] leading-5 text-body">
+                <p className="text-sm leading-5 text-body">
                   You are about to change {n} order{n === 1 ? "'s" : "s'"} warehouse. It may cause shortage for orders. This operation does not cause any changes to the orders that have picking jobs.
                   {withJobs.length > 0 ? <strong className="block pt-1">{withJobs.length} selected order{withJobs.length === 1 ? " has" : "s have"} a job and will be skipped.</strong> : null}
                 </p>
@@ -419,15 +419,15 @@ export function BackorderModal({ rows, open, onOpenChange, onCreated }: { readon
       <DialogContent size="md">
         <div className="relative overflow-hidden rounded-t-lg bg-gradient-to-br from-primary to-[#2448b8] px-6 py-6 text-white">
           <PackageOpen className="absolute -right-3 -top-3 h-24 w-24 opacity-15" aria-hidden />
-          <p className="text-[16px] font-semibold">Create backorder</p>
-          <p className="mt-1 text-[13px] text-white/85">
+          <p className="text-md font-semibold">Create backorder</p>
+          <p className="mt-1 text-sm text-white/85">
             {eligible.length} of {rows.length} order{rows.length === 1 ? " is" : "s are"} eligible for creating picking job and backorder
           </p>
         </div>
         <DialogBody className="flex flex-col gap-3">
-          <p className="text-[13px] text-body">The allocated quantity stays on the original order and gets a picking job. The short quantity moves to a new back order that keeps the original as its master.</p>
+          <p className="text-sm text-body">The allocated quantity stays on the original order and gets a picking job. The short quantity moves to a new back order that keeps the original as its master.</p>
           {ineligible.length > 0 ? (
-            <ul className="ks-scroll max-h-36 divide-y divide-border overflow-auto rounded-md border border-border text-[12px]">
+            <ul className="ks-scroll max-h-36 divide-y divide-border overflow-auto rounded-md border border-border text-xs">
               {ineligible.map((r) => (
                 <li key={r.id} className="flex gap-3 px-3 py-1.5">
                   <span className="w-28 shrink-0 font-semibold">{r.code}</span>
@@ -504,7 +504,7 @@ export function ReturnInfoDrawer({ rows, open, onOpenChange, onDone }: { readonl
       width={35}
       footer={
         <div className="flex w-full items-center justify-between gap-2">
-          <Link href="/imports/shipment-orders-update" className="text-[12px] font-medium text-primary hover:underline">Import return info from Excel</Link>
+          <Link href="/imports/shipment-orders-update" className="text-xs font-medium text-primary hover:underline">Import return info from Excel</Link>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
             <DisabledReason reason={dirty ? null : "Enter at least one return field"}>
@@ -515,7 +515,7 @@ export function ReturnInfoDrawer({ rows, open, onOpenChange, onDone }: { readonl
       }
     >
       <div className="flex flex-col gap-4">
-        <div className="flex items-start gap-2 rounded-md bg-primary-soft px-3 py-2 text-[12px] text-body"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />Return info is used by return labels and RMAs created from these orders.</div>
+        <div className="flex items-start gap-2 rounded-md bg-primary-soft px-3 py-2 text-xs text-body"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />Return info is used by return labels and RMAs created from these orders.</div>
         <div className="flex flex-col gap-1">
           <label htmlFor="ri-service" className={labelClass}>Return carrier and shipping option</label>
           <Select id="ri-service" options={services} value={serviceId} onChange={setServiceId} placeholder={options.isPending ? "Loading carrier services…" : !warehouseId ? "Select orders from one warehouse to set a service" : services.length ? "Select a service" : "No carrier services for this warehouse"}
@@ -529,7 +529,7 @@ export function ReturnInfoDrawer({ rows, open, onOpenChange, onDone }: { readonl
           <label htmlFor="ri-tracking" className={labelClass}>Return tracking numbers</label>
           <ChipInput id="ri-tracking" value={tracking} onChange={setTracking} placeholder="Enter and add tracking number" maxItems={50} maxLength={100} />
         </div>
-        <ul className={cn("ks-scroll max-h-48 divide-y divide-border overflow-auto rounded-md border border-border text-[12px]")}>
+        <ul className={cn("ks-scroll max-h-48 divide-y divide-border overflow-auto rounded-md border border-border text-xs")}>
           {rows.map((r) => (
             <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-1.5"><span className="font-semibold">{r.code}</span><OrderStatusPill status={r.status} size="sm" /></li>
           ))}

@@ -37,8 +37,8 @@ const COLUMNS: GridColumnDef<LpTypeRow>[] = [
   { id: "code", header: "Code", size: 200, meta: { alwaysVisible: true }, cell: ({ row }) => <CodeCell label={`LP type ${row.original.code} (${row.original.warehouseCode})`}>{row.original.code}</CodeCell> },
   { id: "description", header: "Description", size: 200, cell: ({ row }) => row.original.description ?? <Muted /> },
   { id: "warehouseCode", header: "Warehouse", size: 100, cell: ({ row }) => row.original.warehouseCode },
-  { id: "numberPrefix", header: "Number prefix", size: 120, cell: ({ row }) => <code className="font-mono text-[12px]">{row.original.numberPrefix}</code> },
-  { id: "nextNumber", header: "Next number", size: 140, meta: { headerTip: "Issued by the next Create LP Number from sequence" }, cell: ({ row }) => <code className="font-mono text-[12px] text-secondary">{row.original.nextNumber}</code> },
+  { id: "numberPrefix", header: "Number prefix", size: 120, cell: ({ row }) => <code className="font-mono text-xs">{row.original.numberPrefix}</code> },
+  { id: "nextNumber", header: "Next number", size: 140, meta: { headerTip: "Issued by the next Create LP Number from sequence" }, cell: ({ row }) => <code className="font-mono text-xs text-secondary">{row.original.nextNumber}</code> },
   { id: "numberLength", header: "Number length", size: 136, meta: { align: "right" }, cell: ({ row }) => right(row.original.numberLength, 0) },
   { id: "lpCount", header: "LP count", size: 100, meta: { align: "right" }, cell: ({ row }) => <div className="text-right"><LinkCell href={`/settings/lp-numbers?f.lpTypeId=in:${row.original.id}`}>{row.original.lpCount.toLocaleString("en-US")}</LinkCell></div> },
   { id: "length", header: "Length", size: 90, meta: { align: "right" }, cell: ({ row }) => right(row.original.length) },
@@ -63,14 +63,14 @@ function LpTypeDetailDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id
       footer={d && canEdit ? <div className="flex justify-end"><Button variant="primary" onClick={() => onEdit(d.id)}><Pencil className="h-4 w-4" />Edit</Button></div> : undefined}>
       {q.isPending ? <Skeleton className="h-64 w-full" /> : q.isError || !d ? <EmptyState title="Couldn't load this LP type" description={q.error?.message} action={<Button onClick={() => void q.refetch()}>Retry</Button>} /> : (
         <div className="flex flex-col gap-5">
-          <StatRow stats={[{ label: "LP numbers", value: d.lpCount.toLocaleString("en-US") }, { label: "Empty", value: count("Empty") }, { label: "Occupied", value: count("Occupied") }, { label: "Next number", value: <span className="font-mono text-[14px]">{d.nextNumber}</span> }]} />
+          <StatRow stats={[{ label: "LP numbers", value: d.lpCount.toLocaleString("en-US") }, { label: "Empty", value: count("Empty") }, { label: "Occupied", value: count("Occupied") }, { label: "Next number", value: <span className="font-mono text-base">{d.nextNumber}</span> }]} />
           <DetailList title="General" items={[
             { label: "Warehouse", value: d.warehouseCode }, { label: "Number format", value: `${d.numberPrefix} + ${d.numberLength} digits` },
             { label: "Dimensions", value: `${d.length} × ${d.width} × ${d.height} ${d.dimensionUnit}` }, { label: "Max volume", value: d.maxVolume ? `${d.maxVolume} ${d.volumeUnit}` : "No limit" },
             { label: "Empty weight", value: `${d.emptyWeight} ${d.weightUnit}` }, { label: "Max weight", value: d.maxWeight ? `${d.maxWeight} ${d.weightUnit}` : "No limit" },
           ]} />
           <section className="flex flex-col gap-2">
-            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Parameters</h3>
+            <h3 className="text-xs font-semibold text-secondary">Parameters</h3>
             <div className="flex flex-wrap gap-1.5">
               {LP_TYPE_PARAMETERS.map((p) => <Badge key={p.key} tone={d[p.key] ? "success" : "outline"} size="md" shape="pill">{d[p.key] ? "✓ " : ""}{p.label}</Badge>)}
             </div>

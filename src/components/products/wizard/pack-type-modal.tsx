@@ -226,7 +226,7 @@ export function PackTypeModal({ open, onOpenChange, kind, initial, packs, client
                 creatable={canManagePackTypes}
                 onCreate={createPackType}
               />
-              <span className="flex items-center justify-between gap-2 text-[12px] text-secondary">
+              <span className="flex items-center justify-between gap-2 text-xs text-secondary">
                 <span>{canManagePackTypes ? "Type a new name to add it to the master." : "Custom pack types are added in the master."}</span>
                 <Link href="/settings/data-setup/pack-types" target="_blank" rel="noopener" className="inline-flex shrink-0 items-center gap-1 font-semibold text-primary hover:underline">
                   Manage pack types<ExternalLink className="h-3 w-3" aria-hidden />
@@ -306,7 +306,7 @@ export function PackTypeModal({ open, onOpenChange, kind, initial, packs, client
           </Field>
           </div>
           {dataGaps.length ? (
-            <ul data-testid="pack-data-gaps" className="flex flex-col gap-0.5 rounded-md border border-warning/30 bg-warning-soft px-2.5 py-1.5 text-[12px] text-body" aria-live="polite">
+            <ul data-testid="pack-data-gaps" className="flex flex-col gap-0.5 rounded-md border border-warning/30 bg-warning-soft px-2.5 py-1.5 text-xs text-body" aria-live="polite">
               {dataGaps.map((m) => (
                 <li key={m} className="flex items-start gap-1.5">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
@@ -322,13 +322,13 @@ export function PackTypeModal({ open, onOpenChange, kind, initial, packs, client
               {conflictCodes.length ? <style>{conflictChipCss(chipScope, conflictCodes)}</style> : null}
             </div>
             {checking ? (
-              <p className="flex items-center gap-1.5 text-[12px] text-secondary" role="status" aria-live="polite">
+              <p className="flex items-center gap-1.5 text-xs text-secondary" role="status" aria-live="polite">
                 <Spinner className="h-3 w-3" />
                 Checking barcode{draft.barcodes.length === 1 ? "" : "s"}…
               </p>
             ) : null}
             {blocking.length ? (
-              <ul className="flex flex-col gap-0.5 rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-[12px] text-body" role="alert">
+              <ul className="flex flex-col gap-0.5 rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-xs text-body" role="alert">
                 {blocking.map((u) => (
                   <li key={`${u.barcode}-${u.sku}-${u.packType}`} className="flex items-center gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-danger" aria-hidden />
@@ -338,7 +338,7 @@ export function PackTypeModal({ open, onOpenChange, kind, initial, packs, client
               </ul>
             ) : null}
             {otherClient.length ? (
-              <ul className="flex flex-col gap-0.5 rounded-md border border-warning/30 bg-warning-soft px-2.5 py-1.5 text-[12px] text-body" aria-live="polite">
+              <ul className="flex flex-col gap-0.5 rounded-md border border-warning/30 bg-warning-soft px-2.5 py-1.5 text-xs text-body" aria-live="polite">
                 {otherClient.map((u) => (
                   <li key={`${u.barcode}-${u.sku}-${u.packType}`} className="flex items-center gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />

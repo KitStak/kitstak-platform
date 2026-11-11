@@ -48,7 +48,7 @@ function TestSend({ disabled, defaultTo }: { readonly disabled: string | null; r
   return (
     <FormSection title="Send a test email" description="Uses the saved settings. Save your changes first.">
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex min-w-[240px] flex-1 flex-col gap-1 text-[12px] font-medium text-secondary">
+        <label className="flex min-w-[240px] flex-1 flex-col gap-1 text-xs font-medium text-secondary">
           Send to
           <TextField type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="you@company.com" autoComplete="email" />
         </label>
@@ -134,7 +134,7 @@ export function MailSection({ canEdit, defaultTo }: { readonly canEdit: boolean;
   if (q.isError || !m) return <EmptyState title="Couldn't load email delivery" description={q.error?.message} action={<Button onClick={() => void q.refetch()}>Retry</Button>} />;
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2 text-[12.5px] text-secondary">
+      <div className="flex items-center gap-2 text-xs text-secondary">
         Status:
         {m.ready ? <Badge tone="success" size="sm" shape="pill">Sending through {m.host}</Badge> : <Badge tone="warning" size="sm" shape="pill">Server log only</Badge>}
       </div>

@@ -63,9 +63,9 @@ function SortableRule({ rule, index, selected, readOnly, onSelect, onToggle, onD
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn("flex items-center gap-2 rounded-lg border px-2 py-1.5", selected ? "border-primary bg-primary-soft/40" : "border-border bg-surface hover:bg-surface-sunken", isDragging && "z-10 shadow-lg")}>
-      <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold", index === 0 ? "bg-primary text-white" : "bg-neutral-soft text-secondary")}>{index === 0 ? "If" : `${index}. If else`}</span>
+      <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-2xs font-bold", index === 0 ? "bg-primary text-white" : "bg-neutral-soft text-secondary")}>{index === 0 ? "If" : `${index}. If else`}</span>
       <Checkbox aria-label={`${rule.name} active`} checked={rule.isActive ?? true} disabled={readOnly} onCheckedChange={(v) => onToggle(v === true)} />
-      <button type="button" onClick={onSelect} className={cn("min-w-0 flex-1 truncate text-left text-[13px] focus-visible:outline-none focus-visible:underline", rule.isActive === false ? "text-faint line-through" : "text-foreground", selected && "font-semibold")}>{rule.name || "Untitled rule"}</button>
+      <button type="button" onClick={onSelect} className={cn("min-w-0 flex-1 truncate text-left text-sm focus-visible:outline-none focus-visible:underline", rule.isActive === false ? "text-faint line-through" : "text-foreground", selected && "font-semibold")}>{rule.name || "Untitled rule"}</button>
       {selected && !readOnly ? <button type="button" aria-label={`Delete ${rule.name}`} onClick={onDelete} className="rounded p-1 text-secondary hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"><Trash2 className="h-3.5 w-3.5" /></button> : null}
       <button type="button" aria-label={`Reorder ${rule.name}`} disabled={readOnly} {...attributes} {...listeners} className="cursor-grab rounded p-1 text-faint hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed"><GripVertical className="h-3.5 w-3.5" /></button>
     </li>
@@ -257,7 +257,7 @@ function EditorBody({ slug, kind, detail }: { readonly slug: AlgorithmSlug; read
       <UnsavedChangesGuard when={dirty && !saving} />
       <PageHeader title={isEdit ? `Edit ${kind} Algorithm` : `Create ${kind} Algorithm`} crumbLabel="Algorithm Details"
         helper={isEdit ? detail.name : "Primary information first, then the If / If-else rule chain."}
-        actions={<Link href={backHref} className="inline-flex items-center gap-1 text-[13px] text-secondary hover:text-primary"><ChevronLeft className="h-4 w-4" />Back to algorithms</Link>} />
+        actions={<Link href={backHref} className="inline-flex items-center gap-1 text-sm text-secondary hover:text-primary"><ChevronLeft className="h-4 w-4" />Back to algorithms</Link>} />
       {conflict ? <div className="px-6 pb-2"><Callout variant="attention" title="This record changed since you opened it" action={<Button size="sm" onClick={() => window.location.reload()}>Reload</Button>}>Someone else saved this algorithm. Reload to see their changes.</Callout></div> : null}
       <div className="flex min-h-[560px] flex-1 overflow-hidden border-t border-border">
         <aside className="flex w-[300px] shrink-0 flex-col border-r border-border bg-surface">
@@ -269,28 +269,28 @@ function EditorBody({ slug, kind, detail }: { readonly slug: AlgorithmSlug; read
             {step === "info" ? (
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="algo-name" className="text-[12px] font-medium text-body">Algorithm name <span className="text-danger">*</span></label>
+                  <label htmlFor="algo-name" className="text-xs font-medium text-body">Algorithm name <span className="text-danger">*</span></label>
                   <TextField id="algo-name" value={header.name} maxLength={80} placeholder="Enter algorithm name" disabled={readOnly || (detail?.isSystem ?? false)} invalid={Boolean(errors.name)}
                     aria-describedby={errors.name ? "algo-name-error" : undefined} onChange={(e) => { setHeader((h) => ({ ...h, name: e.target.value })); setErrors((x) => ({ ...x, name: "" })); }} />
-                  {errors.name ? <p id="algo-name-error" role="alert" className="text-[12px] text-danger">{errors.name}</p> : detail?.isSystem ? <p className="text-[11px] text-faint">System algorithms keep their name.</p> : null}
+                  {errors.name ? <p id="algo-name-error" role="alert" className="text-xs text-danger">{errors.name}</p> : detail?.isSystem ? <p className="text-2xs text-faint">System algorithms keep their name.</p> : null}
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="algo-warehouseId" className="text-[12px] font-medium text-body">Warehouse <span className="text-danger">*</span></label>
+                  <label htmlFor="algo-warehouseId" className="text-xs font-medium text-body">Warehouse <span className="text-danger">*</span></label>
                   <Select id="algo-warehouseId" value={header.warehouseId || null} options={warehouses.options} placeholder="Select warehouse" disabled={readOnly || isEdit} invalid={Boolean(errors.warehouseId)}
                     onChange={(v) => { setHeader((h) => ({ ...h, warehouseId: v ?? "" })); setErrors((x) => ({ ...x, warehouseId: "" })); }} />
-                  {errors.warehouseId ? <p role="alert" className="text-[12px] text-danger">{errors.warehouseId}</p> : isEdit ? <p className="text-[11px] text-faint">An algorithm can’t move to another warehouse.</p> : null}
+                  {errors.warehouseId ? <p role="alert" className="text-xs text-danger">{errors.warehouseId}</p> : isEdit ? <p className="text-2xs text-faint">An algorithm can’t move to another warehouse.</p> : null}
                 </div>
                 <div className="flex flex-col gap-1">
-                  <span id="algo-status-label" className="text-[12px] font-medium text-body">Algorithm status</span>
+                  <span id="algo-status-label" className="text-xs font-medium text-body">Algorithm status</span>
                   <SegmentedControl ariaLabel="Algorithm status" value={header.status} disabled={readOnly || lockedRepl} onChange={(v) => setHeader((h) => ({ ...h, status: v }))}
                     options={[{ value: "Active", label: "Active" }, { value: "Passive", label: "Passive" }]} />
-                  {errors.status ? <p role="alert" className="text-[12px] text-danger">{errors.status}</p> : null}
+                  {errors.status ? <p role="alert" className="text-xs text-danger">{errors.status}</p> : null}
                 </div>
                 {kind === "Putaway" ? (
                   <>
                     <Checkbox checked={header.isDynamicReplenishment} disabled={readOnly || lockedRepl} onCheckedChange={(v) => setHeader((h) => ({ ...h, isDynamicReplenishment: v === true }))}
                       label="Use this algorithm as dynamic replenishment algorithm." />
-                    {errors.isDynamicReplenishment ? <p role="alert" className="text-[12px] text-danger">{errors.isDynamicReplenishment}</p> : null}
+                    {errors.isDynamicReplenishment ? <p role="alert" className="text-xs text-danger">{errors.isDynamicReplenishment}</p> : null}
                     <div className="flex items-start gap-1">
                       <Checkbox checked={header.enforceSuggestedLocations} disabled={readOnly} onCheckedChange={(v) => setHeader((h) => ({ ...h, enforceSuggestedLocations: v === true }))}
                         label="Enforce suggested locations on mobile directed putaway." />
@@ -304,20 +304,20 @@ function EditorBody({ slug, kind, detail }: { readonly slug: AlgorithmSlug; read
                     ) : null}
                   </>
                 ) : (
-                  <p className="rounded-lg bg-surface-sunken px-3 py-2 text-[12px] text-secondary">Orders are allocated with the first rule whose order conditions match; its inventory conditions filter stock and its order-by keys pick what goes first.</p>
+                  <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-secondary">Orders are allocated with the first rule whose order conditions match; its inventory conditions filter stock and its order-by keys pick what goes first.</p>
                 )}
               </div>
             ) : (
               <div className="flex flex-col gap-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <h2 className="text-[13px] font-semibold text-foreground">Rule List</h2>
-                    <p className="text-[11px] text-secondary">All the rules for this {kind.toLowerCase()} algorithm, evaluated top to bottom.</p>
+                    <h2 className="text-sm font-semibold text-foreground">Rule List</h2>
+                    <p className="text-2xs text-secondary">All the rules for this {kind.toLowerCase()} algorithm, evaluated top to bottom.</p>
                   </div>
                   <DisabledReason reason={readOnly ? NO_PERMISSION : null}><Button size="sm" variant="secondary" disabled={readOnly} onClick={createNew}><Plus className="h-3.5 w-3.5" />Create New</Button></DisabledReason>
                 </div>
                 <div id="open-rule-warning" aria-live="polite">{openRuleWarning ? <Callout variant="attention" title="Finish the open rule">{openRuleWarning}</Callout> : null}</div>
-                {rules.length === 0 ? <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] text-secondary">No rules yet. Without rules the {kind === "Putaway" ? "default same SKU / empty location" : "default FEFO"} chain is used.</p> : (
+                {rules.length === 0 ? <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-secondary">No rules yet. Without rules the {kind === "Putaway" ? "default same SKU / empty location" : "default FEFO"} chain is used.</p> : (
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                     <SortableContext items={rules.map((r) => r.key)} strategy={verticalListSortingStrategy}>
                       <ul className="flex flex-col gap-1.5" aria-label="Rules">
@@ -330,7 +330,7 @@ function EditorBody({ slug, kind, detail }: { readonly slug: AlgorithmSlug; read
                     </SortableContext>
                   </DndContext>
                 )}
-                <p className="flex items-start gap-1.5 rounded-lg bg-surface-sunken px-3 py-2 text-[11px] text-secondary"><Info className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />Use Create New to add an If else rule. Drag the handle to change the order.</p>
+                <p className="flex items-start gap-1.5 rounded-lg bg-surface-sunken px-3 py-2 text-2xs text-secondary"><Info className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />Use Create New to add an If else rule. Drag the handle to change the order.</p>
               </div>
             )}
           </div>

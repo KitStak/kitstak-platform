@@ -30,7 +30,7 @@ export function ContextChip() {
   // The switcher only exists when there is something to switch; otherwise no "Change".
   const switchable = data ? data.contextOptions.warehouses.length > 1 || data.contextOptions.clients.length > 1 : (initialContext?.visible ?? false);
   return (
-    <div className="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-[12px] shadow-xs">
+    <div className="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs shadow-xs">
       <Warehouse className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
       <span className="text-secondary">Viewing</span>
       <span className="font-semibold text-body">{label.long}</span>

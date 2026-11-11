@@ -12,7 +12,7 @@ export function CustomFieldsLink({ entity }: { readonly entity: CustomFieldEntit
   const { allowed } = useCan(info ? [info.permission, "settings.company_settings.view"] : [], "any");
   if (!info || !allowed) return null;
   return (
-    <Link href={customFieldsHref(entity)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-[13px] font-medium text-body shadow-xs hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+    <Link href={customFieldsHref(entity)} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm font-medium text-body shadow-xs hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
       <SlidersHorizontal className="h-4 w-4 text-secondary" aria-hidden />Custom fields
     </Link>
   );

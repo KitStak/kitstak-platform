@@ -11,8 +11,8 @@ import { useInventoryDates } from "./inventory-dates";
 export function Fact({ label, children, className }: { readonly label: string; readonly children: React.ReactNode; readonly className?: string }) {
   return (
     <div className={cn("min-w-0", className)}>
-      <dt className="text-[11px] font-medium uppercase tracking-wide text-faint">{label}</dt>
-      <dd className="mt-0.5 truncate text-[13px] text-body" title={typeof children === "string" || typeof children === "number" ? String(children) : undefined}>{children}</dd>
+      <dt className="text-2xs font-medium text-faint">{label}</dt>
+      <dd className="mt-0.5 truncate text-sm text-body" title={typeof children === "string" || typeof children === "number" ? String(children) : undefined}>{children}</dd>
     </div>
   );
 }
@@ -30,16 +30,16 @@ export function BucketCard({ row, compact = false, locationLabel = "Location" }:
             <InventoryStatusPill status={row.status} />
             {row.damageReason ? <DamagePill reason={row.damageReason} /> : null}
             {row.countLockPlan ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold leading-4 text-warning" title={`Locked by count plan ${row.countLockPlan}`}>
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-2xs font-semibold leading-4 text-warning" title={`Locked by count plan ${row.countLockPlan}`}>
                 <Lock className="h-3 w-3" aria-hidden />Count {row.countLockPlan}
               </span>
             ) : null}
           </div>
-          <p className="truncate text-[12px] text-secondary">{row.productName} · {row.client}</p>
+          <p className="truncate text-xs text-secondary">{row.productName} · {row.client}</p>
         </div>
         <div className="text-right">
           <div className="text-lg font-semibold tabular-nums text-foreground">{formatQty(row.totalPackQty)}</div>
-          <div className="text-[11px] text-faint">{row.packType}{row.unitsPerPack > 1 ? ` (${formatQty(row.totalQty)} ${row.uomPackType})` : ""}</div>
+          <div className="text-2xs text-faint">{row.packType}{row.unitsPerPack > 1 ? ` (${formatQty(row.totalQty)} ${row.uomPackType})` : ""}</div>
         </div>
       </div>
       <dl className={cn("mt-3 grid gap-x-4 gap-y-2", compact ? "grid-cols-3" : "grid-cols-4")}>

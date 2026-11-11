@@ -27,8 +27,8 @@ type Detail = Awaited<ReturnType<typeof getWaveRuleDetail>>;
 function Row({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[160px_minmax(0,1fr)] gap-3 border-b border-border py-2 last:border-b-0">
-      <dt className="text-[12px] font-semibold text-secondary">{label}</dt>
-      <dd className="min-w-0 text-[13px] text-foreground">{children}</dd>
+      <dt className="text-xs font-semibold text-secondary">{label}</dt>
+      <dd className="min-w-0 text-sm text-foreground">{children}</dd>
     </div>
   );
 }
@@ -71,7 +71,7 @@ export function WaveRuleDetailDrawer({ rule, onClose, onEdit }: { readonly rule:
             {d.operationType === "Cycle Count" ? <Row label="Count type">{d.countType ?? "Location"} · Lock locations {d.lockLocations ? "Yes" : "No"}</Row> : null}
             {d.operationType === "Replenishment" ? <Row label="Soft allocation">{d.softAllocation ? "Yes" : "No"}</Row> : null}
             <Row label="Delete if not started">{d.deleteIfNotStarted ? `${d.deleteMethod}${d.deleteTime ? ` · ${d.deleteMethod === "After Hours" ? `${d.deleteTime} h` : d.deleteTime}` : ""}` : "No"}</Row>
-            <Row label="Filters">{d.filters.length ? <span className="flex flex-wrap gap-1">{d.filters.map((f) => <span key={f.field} className="rounded-full bg-primary-soft px-2 py-0.5 text-[12px] text-primary">{f.label}</span>)}</span> : <span className="text-secondary">Every open order of the warehouse</span>}</Row>
+            <Row label="Filters">{d.filters.length ? <span className="flex flex-wrap gap-1">{d.filters.map((f) => <span key={f.field} className="rounded-full bg-primary-soft px-2 py-0.5 text-xs text-primary">{f.label}</span>)}</span> : <span className="text-secondary">Every open order of the warehouse</span>}</Row>
             <Row label="Order by">{d.orderBy.length ? d.orderBy.map((o) => `${orderLabel(o.field)} (${o.dir === "asc" ? "ascending" : "descending"})`).join(" → ") : none}</Row>
             <Row label="Schedule">{d.scheduleDays.length ? `${d.scheduleDays.join(", ")} at ${d.scheduleTimes.join(", ")} (${d.timezone})` : "Not scheduled"}</Row>
             <Row label="Next run">{d.nextRunAt ? <span title={`Your time: ${fmt.gridDateTime(d.nextRunAt)}`}>{formatInZone(d.nextRunAt, d.timezone)}</span> : "—"}</Row>
@@ -81,12 +81,12 @@ export function WaveRuleDetailDrawer({ rule, onClose, onEdit }: { readonly rule:
             <Row label="Runs">{d.runCount} · last by {d.lastRunBy === "Integration" ? "Auto Run" : d.lastRunBy ?? "—"}</Row>
           </dl>
           <section>
-            <h3 className="mb-2 text-[13px] font-semibold text-foreground">Recent waves</h3>
+            <h3 className="mb-2 text-sm font-semibold text-foreground">Recent waves</h3>
             {d.recentWaves.length === 0 ? (
-              <p className="text-[12px] text-faint">This rule hasn&apos;t run yet.</p>
+              <p className="text-xs text-faint">This rule hasn&apos;t run yet.</p>
             ) : (
-              <table className="w-full border-collapse text-left text-[12px]">
-                <thead><tr className="text-[11px] uppercase tracking-[0.04em] text-faint">{["Wave", "Status", "Met", "Allocated", "Short", "Jobs", "Run"].map((h) => <th key={h} className="border-b border-border px-2 py-1.5 font-semibold">{h}</th>)}</tr></thead>
+              <table className="w-full border-collapse text-left text-xs">
+                <thead><tr className="text-2xs text-faint">{["Wave", "Status", "Met", "Allocated", "Short", "Jobs", "Run"].map((h) => <th key={h} className="border-b border-border px-2 py-1.5 font-semibold">{h}</th>)}</tr></thead>
                 <tbody>
                   {d.recentWaves.map((w) => (
                     <tr key={w.id} className="border-b border-border last:border-b-0">

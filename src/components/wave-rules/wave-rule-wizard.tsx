@@ -161,7 +161,7 @@ export function WaveRuleDrawer({ open, onOpenChange, editId, defaultWarehouseId,
       width={60}
       title={editId ? `Edit wave rule ${d?.name ?? ""}`.trim() : "Create a new wave rule"}
       description={editId || chosen ? undefined : "Choose the operation type of the jobs this rule creates."}
-      headerExtra={chosen ? <span className="inline-flex w-fit rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">{chosen}</span> : null}
+      headerExtra={chosen ? <span className="inline-flex w-fit rounded-full bg-primary-soft px-2 py-0.5 text-2xs font-semibold text-primary">{chosen}</span> : null}
     >
       {warehouseIds.map((id) => <PrefetchOptions key={id} warehouseId={id} />)}
       {editId && detail.isError ? (

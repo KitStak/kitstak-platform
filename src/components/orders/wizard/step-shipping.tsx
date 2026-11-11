@@ -42,8 +42,8 @@ function RatesDialog({ open, onOpenChange, quotes, errors, labelOf, onPick }: {
             <EmptyState icon={Truck} title="No rates returned" description={errors[0]?.message ?? "No carrier service quoted this shipment. Check the carrier setups for this warehouse."} />
           ) : (
             <div className="overflow-hidden rounded-lg border border-border">
-              <table className="w-full text-[12px]">
-                <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+              <table className="w-full text-xs">
+                <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
                   <tr><th className="px-3 py-2">Carrier</th><th className="px-3 py-2">Service</th><th className="px-3 py-2 text-right">Transit</th><th className="px-3 py-2 text-right">Rate</th><th className="px-3 py-2" /></tr>
                 </thead>
                 <tbody>
@@ -52,7 +52,7 @@ function RatesDialog({ open, onOpenChange, quotes, errors, labelOf, onPick }: {
                       <td className="px-3 py-2">{labelOf(q.carrierConnectionId)}</td>
                       <td className="px-3 py-2 font-medium text-foreground">
                         {q.serviceName}
-                        {i === 0 ? <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-semibold text-success">Best</span> : null}
+                        {i === 0 ? <span className="ml-2 rounded bg-success-soft px-1.5 py-0.5 text-2xs font-semibold text-success">Best</span> : null}
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">{q.transitDays} {q.transitDays === 1 ? "day" : "days"}</td>
                       <td className="px-3 py-2 text-right font-semibold tabular-nums">{fmt.money(q.price)}</td>
@@ -63,7 +63,7 @@ function RatesDialog({ open, onOpenChange, quotes, errors, labelOf, onPick }: {
               </table>
             </div>
           )}
-          {errors.length > 0 && quotes.length > 0 ? <p className="mt-2 text-[12px] text-secondary">{errors.length} carrier{errors.length === 1 ? "" : "s"} did not quote: {errors[0]?.message}</p> : null}
+          {errors.length > 0 && quotes.length > 0 ? <p className="mt-2 text-xs text-secondary">{errors.length} carrier{errors.length === 1 ? "" : "s"} did not quote: {errors[0]?.message}</p> : null}
         </DialogBody>
         <DialogFooter><Button variant="secondary" onClick={() => onOpenChange(false)}>Close</Button></DialogFooter>
       </DialogContent>
@@ -151,11 +151,11 @@ export function StepShipping() {
           <SelectF name="reasonForExport" label="Carrier reason for export" options={EXPORT_OPTIONS} clearable disabled={lock} info="Required by carriers for international shipments." />
           <div className="flex flex-col gap-2">
             <YesNoF name="useCustomShippingAccount" label="Use custom shipping account" disabled={lock} />
-            {useCustomShip ? <TextF name="shippingAccountNumber" label="Shipping charges account number" maxLength={100} disabled={lock} /> : <p className="text-[12px] text-secondary">Uses the account on the carrier setup{connection ? ` (${connection.label})` : ""}.</p>}
+            {useCustomShip ? <TextF name="shippingAccountNumber" label="Shipping charges account number" maxLength={100} disabled={lock} /> : <p className="text-xs text-secondary">Uses the account on the carrier setup{connection ? ` (${connection.label})` : ""}.</p>}
           </div>
           <div className="flex flex-col gap-2">
             <YesNoF name="useCustomTaxAccount" label="Use custom tax & duties account" disabled={lock} />
-            {useCustomTax ? <TextF name="taxDutiesAccountNumber" label="Tax & duties account number" maxLength={100} disabled={lock} /> : <p className="text-[12px] text-secondary">Uses the account on the carrier setup.</p>}
+            {useCustomTax ? <TextF name="taxDutiesAccountNumber" label="Tax & duties account number" maxLength={100} disabled={lock} /> : <p className="text-xs text-secondary">Uses the account on the carrier setup.</p>}
           </div>
         </FormGrid>
       </FormSection>
@@ -174,7 +174,7 @@ export function StepShipping() {
         </FormGrid>
       </FormSection>
 
-      <FormSection title={<span className="flex items-center gap-2">Return <span className="rounded bg-primary-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary">Beta</span></span>} description="Prefill how this order comes back if the customer returns it.">
+      <FormSection title={<span className="flex items-center gap-2">Return <span className="rounded bg-primary-soft px-1.5 py-0.5 text-2xs font-semibold text-primary">Beta</span></span>} description="Prefill how this order comes back if the customer returns it.">
         <FormGrid columns={3}>
           <SelectF name="returnAddressId" label="Return address name" options={(options?.returnAddresses ?? []).map((a) => ({ value: a.value, label: a.label, description: a.description ?? undefined }))} clearable />
           <ComboF name="returnCarrierConnectionId" label="Return carrier" options={carrierOptions} clearable onValue={() => setValue("returnCarrierServiceId", null, opts)} />

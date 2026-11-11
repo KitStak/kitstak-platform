@@ -22,7 +22,7 @@ export function ErrorView({ error, retry }: { readonly error: unknown; readonly 
       description={
         <>
           <p>This page hit an unexpected error. Your data is safe — try again, or head back to the dashboard.</p>
-          {digest ? <p className="mt-2 text-[11px] text-faint">Reference: <code className="font-mono">{digest}</code></p> : null}
+          {digest ? <p className="mt-2 text-2xs text-faint">Reference: <code className="font-mono">{digest}</code></p> : null}
         </>
       }
       actions={

@@ -27,11 +27,11 @@ export function KvList({ items, columns = 2, layout = "stacked", className }: { 
     <dl className={cn("grid gap-x-6 gap-y-3", COLS[columns], className)}>
       {items.map((item) => (
         <div key={item.key} className={cn(layout === "inline" ? "flex items-baseline justify-between gap-3" : "flex flex-col gap-0.5", item.full && "col-span-full")}>
-          <dt className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+          <dt className="flex items-center gap-1 text-2xs font-semibold text-faint">
             {item.label}
             {item.tip ? <InfoTip content={item.tip} /> : null}
           </dt>
-          <dd className={cn("min-w-0 break-words text-[13px] text-foreground", layout === "inline" && "text-right")}>{isEmpty(item.value) ? <span className="text-faint">{EMPTY_VALUE}</span> : item.value}</dd>
+          <dd className={cn("min-w-0 break-words text-sm text-foreground", layout === "inline" && "text-right")}>{isEmpty(item.value) ? <span className="text-faint">{EMPTY_VALUE}</span> : item.value}</dd>
         </div>
       ))}
     </dl>

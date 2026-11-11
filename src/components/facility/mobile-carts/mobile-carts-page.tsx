@@ -72,14 +72,14 @@ function CartDetailDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: 
           ]} />
           <CartJobPanel cart={d} />
           <section className="flex flex-col gap-2">
-            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Cells <span className="font-normal normal-case text-faint">· level letter + column, scanned as {d.code}-A01</span></h3>
+            <h3 className="text-xs font-semibold text-secondary">Cells <span className="font-normal normal-case text-faint">· level letter + column, scanned as {d.code}-A01</span></h3>
             <div className="overflow-x-auto rounded-lg border border-border bg-surface-sunken/50 p-3">
               <div className="inline-grid gap-1.5" style={{ gridTemplateColumns: `2rem repeat(${Math.max(1, d.columns)}, minmax(5.5rem, 1fr))` }}>
                 <span />
-                {Array.from({ length: d.columns }, (_, c) => <span key={c} className="text-center text-[11px] font-medium text-faint">{String(c + 1).padStart(2, "0")}</span>)}
+                {Array.from({ length: d.columns }, (_, c) => <span key={c} className="text-center text-2xs font-medium text-faint">{String(c + 1).padStart(2, "0")}</span>)}
                 {levels.map((l) => (
                   <React.Fragment key={l}>
-                    <span className="flex items-center text-[11px] font-semibold text-faint">{String.fromCharCode(64 + l)}</span>
+                    <span className="flex items-center text-2xs font-semibold text-faint">{String.fromCharCode(64 + l)}</span>
                     {Array.from({ length: d.columns }, (_, c) => {
                       const cell = d.cells.find((x) => x.level === l && x.column === c + 1);
                       const held = cell ? cellOrder.get(cell.barcode.toUpperCase()) : undefined;
@@ -87,8 +87,8 @@ function CartDetailDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: 
                       return (
                         <span key={c} className={`flex flex-col rounded-md border px-1.5 py-1 text-center shadow-xs ${code ? "border-info/40 bg-info-soft" : "border-border bg-surface"}`}
                           title={code ? `Cell ${cellDisplayName(l, c + 1)} (scan ${cell?.barcode ?? ""}) holds ${code}${held ? ` · ${held.picked} of ${held.planned} units picked` : ""}` : `Cell ${cellDisplayName(l, c + 1)} (scan ${cell?.barcode ?? ""}) is free`}>
-                          <span className="truncate text-[12px] font-semibold text-foreground">{cellDisplayName(l, c + 1)}</span>
-                          <span className={`truncate text-[10px] ${code ? "font-medium text-info" : "text-faint"}`}>{code ? `${code}${held ? ` · ${held.picked}/${held.planned}` : ""}` : "Free"}</span>
+                          <span className="truncate text-xs font-semibold text-foreground">{cellDisplayName(l, c + 1)}</span>
+                          <span className={`truncate text-2xs ${code ? "font-medium text-info" : "text-faint"}`}>{code ? `${code}${held ? ` · ${held.picked}/${held.planned}` : ""}` : "Free"}</span>
                         </span>
                       );
                     })}
@@ -99,21 +99,21 @@ function CartDetailDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: 
           </section>
           {d.status === "Occupied" || d.orders.length > 0 ? (
             <section className="flex flex-col gap-2">
-              <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Orders on this cart</h3>
+              <h3 className="text-xs font-semibold text-secondary">Orders on this cart</h3>
               {d.orders.length === 0 ? (
-                <p className="text-[12px] text-secondary">The job on this cart has no orders yet.</p>
+                <p className="text-xs text-secondary">The job on this cart has no orders yet.</p>
               ) : (
                 <>
                   {unsorted > 0 ? (
-                    <p className="text-[12px] text-secondary">
+                    <p className="text-xs text-secondary">
                       {unsorted === d.orders.length
                         ? "No order is in a cell yet. Use Put on cart above to give each order a cell."
                         : `${unsorted} of ${d.orders.length} orders are not in a cell yet.`}
                     </p>
                   ) : null}
                   <div className="overflow-hidden rounded-lg border border-border">
-                    <table className="w-full text-[13px]">
-                      <thead className="bg-surface-sunken text-[11px] uppercase text-secondary">
+                    <table className="w-full text-sm">
+                      <thead className="bg-surface-sunken text-2xs text-secondary">
                         <tr><th className="px-3 py-2 text-left">Order</th><th className="px-3 py-2 text-left">Job</th><th className="px-3 py-2 text-left">Cell / tote</th><th className="px-3 py-2 text-right">Picked</th><th className="px-3 py-2 text-right">Open tasks</th></tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -121,7 +121,7 @@ function CartDetailDrawer({ id, onOpenChange, onEdit, canEdit }: { readonly id: 
                           <tr key={`${o.jobId}-${o.orderId}`}>
                             <td className="px-3 py-1.5"><LinkCell href={`/orders/${o.orderId}`}>{o.orderCode}</LinkCell></td>
                             <td className="px-3 py-1.5"><LinkCell href={`/jobs/${o.jobId}`}>{o.jobCode}</LinkCell></td>
-                            <td className="px-3 py-1.5">{o.cell ? <span><span className="font-semibold">{cellLabel(d.cells, o.cell)}</span> <span className="font-mono text-[11px] text-faint">{o.cell}</span></span> : o.tote ? <span>Tote <span className="font-mono text-[12px]">{o.tote}</span></span> : <Muted>Not assigned yet</Muted>}</td>
+                            <td className="px-3 py-1.5">{o.cell ? <span><span className="font-semibold">{cellLabel(d.cells, o.cell)}</span> <span className="font-mono text-2xs text-faint">{o.cell}</span></span> : o.tote ? <span>Tote <span className="font-mono text-xs">{o.tote}</span></span> : <Muted>Not assigned yet</Muted>}</td>
                             <td className="px-3 py-1.5 text-right tabular-nums">{o.picked.toLocaleString("en-US")} / {o.planned.toLocaleString("en-US")}</td>
                             <td className="px-3 py-1.5 text-right tabular-nums">{o.openTasks}</td>
                           </tr>
@@ -179,14 +179,14 @@ function CartJobPanel({ cart }: { readonly cart: MobileCartDetail }) {
     <section className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-3" aria-label="Put a job on this cart">
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[14rem] flex-1">
-          <label className="mb-1 block text-[12px] font-medium text-secondary" htmlFor="cart-job">Put a picking job on this cart</label>
+          <label className="mb-1 block text-xs font-medium text-secondary" htmlFor="cart-job">Put a picking job on this cart</label>
           <Select id="cart-job" aria-label="Picking job" options={options} value={jobId} onChange={setJobId} disabled={busyCart || action.pending}
             placeholder={busyCart ? "In use; this cart takes one job at a time" : candidates.isPending ? "Loading jobs…" : options.length === 0 ? "No open picking job in this warehouse" : "Choose an open picking job"} />
         </div>
         <Button variant="primary" disabled={!jobId || action.pending} onClick={() => void assign()}><ShoppingCart className="h-4 w-4" />Put on cart</Button>
         <Button variant="secondary" disabled={(held === 0 && cart.status !== "Occupied") || action.pending} onClick={() => setConfirmEmpty(true)}><PackageOpen className="h-4 w-4" />Empty cart</Button>
       </div>
-      <p className="text-[12px] text-faint">{free} of {cart.cells.length} cells free. Each order gets the next free cell (A01, A02, …); the picker scans {cart.code}-A01 to sort into it.</p>
+      <p className="text-xs text-faint">{free} of {cart.cells.length} cells free. Each order gets the next free cell (A01, A02, …); the picker scans {cart.code}-A01 to sort into it.</p>
       <ConfirmDialog open={confirmEmpty} onOpenChange={setConfirmEmpty} title={`Empty cart ${cart.code}?`} description={`Frees ${held} cell${held === 1 ? "" : "s"} and takes the open job off the cart. Picked units are not moved.`}
         confirmLabel="Empty cart" cancelLabel="Cancel" onConfirm={empty} />
     </section>
@@ -212,10 +212,10 @@ function DuplicateDialog({ row, onOpenChange, onDone }: { readonly row: MobileCa
         <DialogHeader title={`Duplicate ${row?.code ?? ""}`} description={`Copies the type, layout and ${row?.cellCount ?? 0} cells. Cell barcodes follow the new code.`} />
         <DialogBody>
           <form id="dup-cart" onSubmit={(e) => { e.preventDefault(); void submit(); }} className="flex flex-col gap-1">
-            <label htmlFor="dup-code" className="text-[12px] font-medium text-body">New cart code *</label>
+            <label htmlFor="dup-code" className="text-xs font-medium text-body">New cart code *</label>
             <TextField id="dup-code" autoFocus value={code} maxLength={40} invalid={Boolean(error)} aria-describedby={error ? "dup-code-err" : undefined}
               onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null); }} />
-            {error ? <p id="dup-code-err" role="alert" className="text-[12px] text-danger">{error}</p> : null}
+            {error ? <p id="dup-code-err" role="alert" className="text-xs text-danger">{error}</p> : null}
           </form>
         </DialogBody>
         <DialogFooter>

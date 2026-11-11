@@ -50,7 +50,7 @@ const toForm = (d: CarrierConnectionDetail): Form => ({
 const TAB_OF = (k: string): Tab => (k.startsWith("clients") ? "clients" : k.startsWith("services") ? "services" : k.startsWith("packages") ? "packages" : k.startsWith("settings") || k.startsWith("thirdParty") ? "advanced" : "general");
 
 function L({ htmlFor, children, required }: { readonly htmlFor?: string; readonly children: React.ReactNode; readonly required?: boolean }) {
-  return <label htmlFor={htmlFor} className="text-[12px] font-medium text-body">{children}{required ? <span className="text-danger"> *</span> : null}</label>;
+  return <label htmlFor={htmlFor} className="text-xs font-medium text-body">{children}{required ? <span className="text-danger"> *</span> : null}</label>;
 }
 
 function ToggleTable({ title, allLabel, all, onAll, rows, toggles, onChange, error }: {
@@ -72,17 +72,17 @@ function ToggleTable({ title, allLabel, all, onAll, rows, toggles, onChange, err
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {error ? <p role="alert" className="text-[12px] text-danger">{error}</p> : null}
+      {error ? <p role="alert" className="text-xs text-danger">{error}</p> : null}
       <div className="max-h-[50vh] overflow-auto rounded-lg border border-border">
-        <table className="w-full text-[13px]">
-          <thead className="sticky top-0 bg-surface-sunken text-[11px] uppercase text-secondary"><tr>
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-surface-sunken text-2xs text-secondary"><tr>
             <th className="w-10 px-3 py-2"><Checkbox aria-label={`Select all ${title}`} disabled={all} checked={rows.length > 0 && rows.every((r) => checked.has(r.id))} onCheckedChange={(v) => setChecked(v === true ? new Set(rows.map((r) => r.id)) : new Set())} /></th>
             <th className="px-3 py-2 text-left">Carrier</th><th className="px-3 py-2 text-left">{title}</th><th className="w-24 px-3 py-2 text-left">Active</th></tr></thead>
           <tbody className="divide-y divide-border">
             {rows.map((r) => (
               <tr key={r.id}>
                 <td className="px-3 py-1.5"><Checkbox aria-label={`Select ${r.name}`} disabled={all} checked={checked.has(r.id)} onCheckedChange={(v) => setChecked((c) => { const n = new Set(c); if (v === true) n.add(r.id); else n.delete(r.id); return n; })} /></td>
-                <td className="px-3 py-1.5 uppercase text-secondary">{r.carrier}</td>
+                <td className="px-3 py-1.5 text-secondary">{r.carrier}</td>
                 <td className="px-3 py-1.5">{r.name}{r.meta}</td>
                 <td className="px-3 py-1.5"><Switch size="sm" aria-label={`${r.name} active`} disabled={all} checked={all || (on.get(r.id) ?? false)} onCheckedChange={(v) => set([r.id], v === true)} /></td>
               </tr>
@@ -131,7 +131,7 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
   const st = form.settings;
   const setSt = (fn: (s: CarrierSettings) => CarrierSettings) => setForm((f) => ({ ...f, settings: fn(f.settings) }));
   const sandbox = detail.provider === "kitstaks-sandbox";
-  const err = (k: string) => (errors[k] ? <p role="alert" className="text-[12px] text-danger">{errors[k]}</p> : null);
+  const err = (k: string) => (errors[k] ? <p role="alert" className="text-xs text-danger">{errors[k]}</p> : null);
   const addr = st.shipFrom.address;
 
   const save = async () => {
@@ -173,7 +173,7 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
       {tab === "general" ? (
         <div className="grid gap-3 md:grid-cols-2">
           <div className="flex flex-col gap-1"><L htmlFor="ec-setupName" required>Setup name</L><TextField id="ec-setupName" value={form.setupName} maxLength={60} invalid={Boolean(errors.setupName)} onChange={(e) => setForm((f) => ({ ...f, setupName: e.target.value }))} />{err("setupName")}</div>
-          <div className="flex flex-col gap-1"><L>Warehouse</L><p className="rounded-md border border-border bg-surface-sunken px-3 py-2 text-[13px] text-secondary">{detail.warehouseCode} · locked</p></div>
+          <div className="flex flex-col gap-1"><L>Warehouse</L><p className="rounded-md border border-border bg-surface-sunken px-3 py-2 text-sm text-secondary">{detail.warehouseCode} · locked</p></div>
           {detail.credentialFields.map((f) => (
             <div key={f.key} className="flex flex-col gap-1">
               <L htmlFor={`ec-cred-${f.key}`}>{f.label}</L>
@@ -185,17 +185,17 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
           {!sandbox ? <div className="flex flex-col gap-1"><L htmlFor="ec-payor">Payor account number</L><TextField id="ec-payor" value={form.payorAccountNumber} maxLength={40} onChange={(e) => setForm((f) => ({ ...f, payorAccountNumber: e.target.value }))} /></div> : null}
           <div className="flex flex-col gap-1"><L>Active</L><YesNoToggle value={form.isActive} onChange={(v) => setForm((f) => ({ ...f, isActive: v }))} ariaLabel="Active" /></div>
           {!sandbox ? <div className="flex flex-col gap-1"><L>Environment</L><SegmentedControl className="w-full [&>button]:flex-1" ariaLabel="Environment" value={form.environment} onChange={(v) => setForm((f) => ({ ...f, environment: v }))} options={[{ value: "Test", label: "Test" }, { value: "Production", label: "Production" }]} />
-            <p className="text-[11px] text-faint">{form.environment === "Test" ? "Requests are validated like the carrier; labels and rates are sandbox." : "Live carrier API. Credentials are checked when you save."}</p></div> : null}
+            <p className="text-2xs text-faint">{form.environment === "Test" ? "Requests are validated like the carrier; labels and rates are sandbox." : "Live carrier API. Credentials are checked when you save."}</p></div> : null}
         </div>
       ) : null}
       {tab === "clients" ? (
         <div className="flex flex-col gap-3">
           <Checkbox checked={form.allClients} onCheckedChange={(v) => setForm((f) => ({ ...f, allClients: v === true }))} label="Give access to all existing and future clients." />
           {err("clients")}
-          <p className="text-[12px] text-secondary">Client markups apply on top of carrier rates and take priority over the general markup (Advanced).</p>
+          <p className="text-xs text-secondary">Client markups apply on top of carrier rates and take priority over the general markup (Advanced).</p>
           <div className="max-h-[50vh] overflow-auto rounded-lg border border-border">
-            <table className="w-full text-[13px]">
-              <thead className="sticky top-0 bg-surface-sunken text-[11px] uppercase text-secondary"><tr><th className="px-3 py-2 text-left">Client</th><th className="w-24 px-3 py-2 text-left">Access</th><th className="w-40 px-3 py-2 text-left">Markup type</th><th className="w-36 px-3 py-2 text-left">Markup</th></tr></thead>
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-surface-sunken text-2xs text-secondary"><tr><th className="px-3 py-2 text-left">Client</th><th className="w-24 px-3 py-2 text-left">Access</th><th className="w-40 px-3 py-2 text-left">Markup type</th><th className="w-36 px-3 py-2 text-left">Markup</th></tr></thead>
               <tbody className="divide-y divide-border">
                 {form.clients.map((c, i) => (
                   <tr key={c.clientId}>
@@ -213,7 +213,7 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
       ) : null}
       {tab === "services" ? (
         <ToggleTable title="Shipping service" allLabel="Give access to all existing and future services" all={form.allServices} onAll={(v) => setForm((f) => ({ ...f, allServices: v }))} error={errors.services}
-          rows={detail.services.map((x) => ({ id: x.id, carrier: x.carrierCode, name: x.name, meta: <span className="ml-2 text-[11px] text-faint">{x.transitDays}d{x.isInternational ? " · Intl" : ""}{x.presetCount > 0 ? ` · in ${x.presetCount} preset(s)` : ""}</span> }))}
+          rows={detail.services.map((x) => ({ id: x.id, carrier: x.carrierCode, name: x.name, meta: <span className="ml-2 text-2xs text-faint">{x.transitDays}d{x.isInternational ? " · Intl" : ""}{x.presetCount > 0 ? ` · in ${x.presetCount} preset(s)` : ""}</span> }))}
           toggles={form.services} onChange={(services) => setForm((f) => ({ ...f, services }))} />
       ) : null}
       {tab === "packages" ? (
@@ -223,7 +223,7 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
       {tab === "advanced" ? (
         <div className="flex flex-col gap-4">
           <section className="rounded-lg border border-border p-4">
-            <h3 className="text-[13px] font-semibold">Ship from address</h3>
+            <h3 className="text-sm font-semibold">Ship from address</h3>
             <Checkbox className="mt-2" checked={st.shipFrom.useRetailerAddress} onCheckedChange={(v) => setSt((s) => ({ ...s, shipFrom: { ...s.shipFrom, useRetailerAddress: v === true } }))} label="Use the order's retailer address as the ship from address" />
             {!st.shipFrom.useRetailerAddress ? (
               <div className="mt-3 grid gap-2 md:grid-cols-3">
@@ -233,12 +233,12 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
                       onChange={(e) => setSt((s) => ({ ...s, shipFrom: { ...s.shipFrom, address: { line1: "", city: "", postalCode: "", country: "United States", ...(s.shipFrom.address ?? {}), [k]: e.target.value } } }))} />
                     {err(`settings.shipFrom.address.${k}`)}</div>
                 ))}
-                <p className="text-[11px] text-faint md:col-span-3">Leave empty to use the warehouse address; once you enter one, address line 1, city, zip and country are required. Carriers such as UPS reject phone numbers under 10 digits.</p>
+                <p className="text-2xs text-faint md:col-span-3">Leave empty to use the warehouse address; once you enter one, address line 1, city, zip and country are required. Carriers such as UPS reject phone numbers under 10 digits.</p>
               </div>
             ) : null}
           </section>
           <section className="rounded-lg border border-border p-4">
-            <h3 className="text-[13px] font-semibold">Third party accounts</h3>
+            <h3 className="text-sm font-semibold">Third party accounts</h3>
             <div className="mt-2 flex flex-wrap items-end gap-2">
               <TextField size="sm" aria-label="Account number" placeholder="Account number" value={newAcct.accountNumber} onChange={(e) => setNewAcct((a) => ({ ...a, accountNumber: e.target.value }))} />
               <TextField size="sm" aria-label="Billing country" placeholder="Country" value={newAcct.billingCountry} onChange={(e) => setNewAcct((a) => ({ ...a, billingCountry: e.target.value }))} wrapperClassName="w-24" />
@@ -247,14 +247,14 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
             </div>
             {form.thirdParty.length > 0 ? (
               <ul className="mt-2 divide-y divide-border rounded-lg border border-border">{form.thirdParty.map((a, i) => (
-                <li key={`${a.accountNumber}-${i}`} className="flex items-center gap-3 px-3 py-1.5 text-[13px]"><span className="flex-1 font-medium">{a.accountNumber}</span><span className="text-secondary">{a.billingCountry} · {a.billingZip}</span>
+                <li key={`${a.accountNumber}-${i}`} className="flex items-center gap-3 px-3 py-1.5 text-sm"><span className="flex-1 font-medium">{a.accountNumber}</span><span className="text-secondary">{a.billingCountry} · {a.billingZip}</span>
                   <Button size="icon-sm" variant="ghost" aria-label={`Remove ${a.accountNumber}`} onClick={() => setForm((f) => ({ ...f, thirdParty: f.thirdParty.filter((_, j) => j !== i) }))}><Trash2 className="h-3.5 w-3.5" /></Button></li>
               ))}</ul>
-            ) : <p className="mt-2 text-[12px] text-faint">No third party accounts.</p>}
+            ) : <p className="mt-2 text-xs text-faint">No third party accounts.</p>}
           </section>
           <section className="rounded-lg border border-border p-4">
-            <h3 className="text-[13px] font-semibold">Markup rate</h3>
-            <p className="text-[12px] text-secondary">Set a general markup, or client-based markups on the Clients tab — those take priority.</p>
+            <h3 className="text-sm font-semibold">Markup rate</h3>
+            <p className="text-xs text-secondary">Set a general markup, or client-based markups on the Clients tab — those take priority.</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Select size="sm" value={st.generalMarkup?.type ?? null} clearable placeholder="No general markup" options={MARKUP_TYPES.map((m) => ({ value: m, label: m }))} className="w-48"
                 onChange={(v) => setSt((s) => ({ ...s, generalMarkup: v ? { type: v, amount: s.generalMarkup?.amount ?? 0 } : null }))} />
@@ -262,7 +262,7 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
             </div>
           </section>
           <section className="rounded-lg border border-border p-4">
-            <h3 className="text-[13px] font-semibold">Label settings</h3>
+            <h3 className="text-sm font-semibold">Label settings</h3>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <SegmentedControl className="w-full [&>button]:flex-1" ariaLabel="Label format" value={st.label.format} onChange={(v) => setSt((s) => ({ ...s, label: { ...s.label, format: v } }))} options={LABEL_FORMATS.map((f) => ({ value: f, label: f }))} />
               <Select size="sm" value={st.label.size} onChange={(v) => v && setSt((s) => ({ ...s, label: { ...s.label, size: v } }))} options={[{ value: "4x6", label: "4 × 6 in" }, { value: "4x8", label: "4 × 8 in" }, { value: "6x4", label: "6 × 4 in" }]} className="w-36" />
@@ -278,7 +278,7 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
             </div>
           </section>
           <section className="rounded-lg border border-border p-4">
-            <h3 className="text-[13px] font-semibold">International settings</h3>
+            <h3 className="text-sm font-semibold">International settings</h3>
             <div className="mt-2 grid gap-3 md:grid-cols-2">
               <div className="flex flex-col gap-1"><L>Tax type</L><SegmentedControl className="w-full [&>button]:flex-1" ariaLabel="Tax type" value={st.international.taxType ?? "EIN"} onChange={(v) => setSt((s) => ({ ...s, international: { ...s.international, taxType: v } }))} options={[{ value: "EIN", label: "EIN" }, { value: "DNS", label: "DNS" }, { value: "FGN", label: "FGN" }]} /></div>
               <div className="flex flex-col gap-1"><L htmlFor="ec-taxid">Tax ID</L><TextField id="ec-taxid" size="sm" value={st.international.taxId ?? ""} onChange={(e) => setSt((s) => ({ ...s, international: { ...s.international, taxId: e.target.value || null } }))} /></div>
@@ -288,7 +288,7 @@ function Body({ detail, onDirtyChange, onCancel, onSaved }: { readonly detail: C
             </div>
           </section>
           <section className="rounded-lg border border-border p-4">
-            <h3 className="flex items-center gap-2 text-[13px] font-semibold">Return label settings <Badge size="sm" tone="info">NEW</Badge></h3>
+            <h3 className="flex items-center gap-2 text-sm font-semibold">Return label settings <Badge size="sm" tone="info">NEW</Badge></h3>
             <Checkbox className="mt-2" checked={st.returnLabel.generateWithShippingLabel} onCheckedChange={(v) => setSt((s) => ({ ...s, returnLabel: { generateWithShippingLabel: v === true } }))} label="Generate return label with shipping label" />
           </section>
         </div>

@@ -87,7 +87,7 @@ export function DropdownItem({
     <button
       type="button"
       className={cn(
-        "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] text-body transition-colors hover:bg-surface-sunken",
+        "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-body transition-colors hover:bg-surface-sunken",
         destructive && "text-danger hover:bg-danger-soft",
         className
       )}

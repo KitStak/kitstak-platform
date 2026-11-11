@@ -58,12 +58,12 @@ function TransactionDrawer({ id, onOpenChange }: { readonly id: string | null; r
           ]} />
           {d.error ? (
             <section className="rounded-lg border border-danger/30 bg-danger-soft/30 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-danger">Error details · carrier returned an error</p>
-              <p className="mt-1 text-[14px] font-medium text-foreground">{brandText(d.error)}</p>
+              <p className="text-2xs font-semibold text-danger">Error details · carrier returned an error</p>
+              <p className="mt-1 text-base font-medium text-foreground">{brandText(d.error)}</p>
             </section>
           ) : null}
           <div className="flex flex-col gap-2">
-            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">API log details</h3>
+            <h3 className="text-xs font-semibold text-secondary">API log details</h3>
             <SegmentedTabs ariaLabel="Request or response" tabs={[{ key: "request", label: "REQUEST" }, { key: "response", label: "RESPONSE" }]} active={tab} onChange={(k) => setTab(k as "request" | "response")} />
             {tab === "request" ? <JsonViewer title="Request body (JSON)" value={d.requestJson} filename={`${d.orderCode ?? d.id}-request.json`} /> : <JsonViewer title="Response body (JSON)" value={d.responseJson} filename={`${d.orderCode ?? d.id}-response.json`} />}
           </div>
@@ -93,7 +93,7 @@ export function CarrierErrorsPage({ step }: { readonly step: CallStep }) {
   const COLUMNS: GridColumnDef<CallLogRow>[] = [
     { id: "at", header: "Timestamp", size: 180, meta: { alwaysVisible: true }, cell: ({ row }) => <DateTimeText value={row.original.at} /> },
     { id: "step", header: "Integration step", size: 140, enableSorting: false, cell: ({ row }) => STEP_LABEL[row.original.step] },
-    ...(step === "VoidLabel" ? [{ id: "trackingNumber", header: "Tracking number", size: 190, cell: ({ row }) => <span className="font-mono text-[12px]">{row.original.trackingNumber ?? "—"}</span> } satisfies GridColumnDef<CallLogRow>, order] : [order,
+    ...(step === "VoidLabel" ? [{ id: "trackingNumber", header: "Tracking number", size: 190, cell: ({ row }) => <span className="font-mono text-xs">{row.original.trackingNumber ?? "—"}</span> } satisfies GridColumnDef<CallLogRow>, order] : [order,
       { id: "destinationType", header: "Destination type", size: 130, enableSorting: false, cell: ({ row }) => (row.original.destinationType ? <Badge size="sm" shape="pill" tone={row.original.destinationType === "International" ? "info" : "neutral"}>{row.original.destinationType}</Badge> : <Muted />) } satisfies GridColumnDef<CallLogRow>]),
     { id: "provider", header: "Carrier", size: 190, cell: ({ row }) => <ProviderCell kind="carrier" provider={row.original.provider} /> },
     { id: "status", header: "Status", size: 90, cell: ({ row }) => <StatusPill size="sm" status={row.original.status === "Success" ? "Successful" : "Error"} domain={integrationDomain(row.original.status === "Success" ? "Successful" : "Error")} /> },

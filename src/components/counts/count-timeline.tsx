@@ -84,7 +84,7 @@ export function CountTimeline({ planId }: { readonly planId: string }) {
   if (changes.isPending || ledger.isPending) return <SkeletonText lines={5} />;
   if (changes.error || ledger.error) {
     return (
-      <p role="alert" className="text-[12px] text-danger">
+      <p role="alert" className="text-xs text-danger">
         Activity could not be loaded.{" "}
         <button type="button" className="font-semibold underline" onClick={() => { void changes.refetch(); void ledger.refetch(); }}>Retry</button>
       </p>
@@ -103,14 +103,14 @@ export function CountTimeline({ planId }: { readonly planId: string }) {
       <div role="radiogroup" aria-label="Filter activity" className="flex flex-wrap items-center gap-2">
         {chips.map((c) => (
           <button key={c.key} type="button" role="radio" aria-checked={filter === c.key} onClick={() => { setFilter(c.key); setShown(PAGE); }}
-            className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+            className={cn("inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
               filter === c.key ? "border-primary bg-primary-soft text-primary" : "border-border bg-surface text-secondary hover:text-foreground")}>
             {c.label}<span className="tabular-nums opacity-80">{counts[c.key]}</span>
           </button>
         ))}
       </div>
       {visible.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border-strong px-4 py-8 text-center text-[13px] text-secondary">
+        <p className="rounded-lg border border-dashed border-border-strong px-4 py-8 text-center text-sm text-secondary">
           {filter === "inventory" ? "No inventory has been posted from this count yet. Update Inv. writes Count transactions here." : filter === "lines" ? "No line activity yet." : "No activity recorded for this count plan yet."}
         </p>
       ) : (
@@ -123,8 +123,8 @@ export function CountTimeline({ planId }: { readonly planId: string }) {
               <li key={item.id} className="relative flex gap-3">
                 <span className={cn("z-[1] flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-4 ring-surface", meta.dot)}><Icon className="h-3 w-3" aria-hidden /></span>
                 <div className="min-w-0 pt-0.5">
-                  <p className="break-words text-[13px] text-body">{item.label ? <><span className="font-semibold text-foreground">{item.label}</span><span className="px-1.5 text-faint" aria-hidden>·</span><span className="sr-only">: </span></> : null}{item.title}</p>
-                  <p className="text-[11px] text-faint">{fmt.gridDateTime(item.at)} · {item.source}</p>
+                  <p className="break-words text-sm text-body">{item.label ? <><span className="font-semibold text-foreground">{item.label}</span><span className="px-1.5 text-faint" aria-hidden>·</span><span className="sr-only">: </span></> : null}{item.title}</p>
+                  <p className="text-2xs text-faint">{fmt.gridDateTime(item.at)} · {item.source}</p>
                 </div>
               </li>
             );

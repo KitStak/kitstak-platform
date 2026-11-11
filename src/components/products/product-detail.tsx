@@ -321,7 +321,7 @@ function ProductDetailView({ data }: { readonly data: ProductDetailData }) {
         icon={deleteCheck?.reason ? Ban : Trash2}
         title={deleteCheck?.reason ? `${p.sku} can't be deleted` : `Delete ${p.sku}?`}
         description={deleteCheck?.reason ? `${deleteCheck.reason}. Deactivate it instead so it can't be ordered or received.` : "This action cannot be undone. Linked channel listings become unlinked."}
-        records={{ columns: [{ key: "sku", label: "Product" }, { key: "result", label: "Delete" }], rows: [{ sku: <span className="block max-w-[260px]" title={`${p.sku} · ${p.name}`}><span className="block truncate whitespace-nowrap font-mono">{p.sku}</span><span className="block truncate whitespace-nowrap text-[11px] text-secondary">{p.name}</span></span>, result: deleteCheck?.reason ? <span className="whitespace-nowrap text-danger">Blocked</span> : <span className="whitespace-nowrap text-success">Can be deleted</span> }] }}
+        records={{ columns: [{ key: "sku", label: "Product" }, { key: "result", label: "Delete" }], rows: [{ sku: <span className="block max-w-[260px]" title={`${p.sku} · ${p.name}`}><span className="block truncate whitespace-nowrap font-mono">{p.sku}</span><span className="block truncate whitespace-nowrap text-2xs text-secondary">{p.name}</span></span>, result: deleteCheck?.reason ? <span className="whitespace-nowrap text-danger">Blocked</span> : <span className="whitespace-nowrap text-success">Can be deleted</span> }] }}
         confirmLabel={deleteCheck?.reason ? (active && can.edit ? "Deactivate" : "Close") : "Yes"}
         cancelLabel="No"
         onConfirm={async () => {

@@ -108,7 +108,7 @@ export function DateRangePicker({ value, onChange, presets = DEFAULT_RANGE_PRESE
                   setPresetKey(preset.key);
                 }}
                 className={cn(
-                  "rounded-md px-2.5 py-1.5 text-left text-[12px] transition-colors hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30",
+                  "rounded-md px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30",
                   presetKey === preset.key ? "bg-primary-soft font-semibold text-primary" : "text-body"
                 )}
               >
@@ -128,7 +128,7 @@ export function DateRangePicker({ value, onChange, presets = DEFAULT_RANGE_PRESE
               }}
             />
             <div className="mt-2 flex items-center justify-between gap-2 border-t border-border pt-2">
-              <span className="text-[12px] tabular-nums text-secondary">{formatRange(draft) || "No range selected"}</span>
+              <span className="text-xs tabular-nums text-secondary">{formatRange(draft) || "No range selected"}</span>
               <div className="flex gap-2">
                 <Button size="sm" variant="ghost" onClick={() => setDraft({ from: null, to: null })}>
                   Clear

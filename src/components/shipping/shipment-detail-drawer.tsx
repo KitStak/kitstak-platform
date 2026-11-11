@@ -80,7 +80,7 @@ function Body({ d, actions }: { readonly d: Detail; readonly actions: ShipmentAc
         </DisabledReason>
       </div>
       <section className="rounded-lg border border-border p-4">
-        <h3 className="mb-3 text-[13px] font-semibold">Label</h3>
+        <h3 className="mb-3 text-sm font-semibold">Label</h3>
         <KvList items={[
           { key: "order", label: "Order", value: <Link className="text-primary hover:underline" href={`/orders/${encodeURIComponent(d.orderCode)}`}>{d.orderCode}</Link> },
           { key: "carrier", label: "Carrier", value: d.carrier },
@@ -98,7 +98,7 @@ function Body({ d, actions }: { readonly d: Detail; readonly actions: ShipmentAc
         ]} />
       </section>
       <section className="rounded-lg border border-border p-4">
-        <h3 className="mb-3 text-[13px] font-semibold">Shipment</h3>
+        <h3 className="mb-3 text-sm font-semibold">Shipment</h3>
         <KvList items={[
           { key: "client", label: "Client", value: str(d.clientName) },
           { key: "warehouse", label: "Warehouse", value: str(d.warehouseCode) },
@@ -121,25 +121,25 @@ function Body({ d, actions }: { readonly d: Detail; readonly actions: ShipmentAc
         ]} />
       </section>
       <section className="rounded-lg border border-border p-4">
-        <h3 className="mb-1 text-[13px] font-semibold">{d.itemsSource === "order" ? "Items on the order" : "Items in this package"}</h3>
+        <h3 className="mb-1 text-sm font-semibold">{d.itemsSource === "order" ? "Items on the order" : "Items in this package"}</h3>
         {d.itemsSource === "order" && d.items.length > 0 ? (
-          <p className="mb-2 text-[12px] text-secondary">Packing didn&apos;t record a per-package breakdown for this label, so the order&apos;s open lines are shown{d.siblings.length > 1 ? ` (shared by all ${d.siblings.length} packages)` : ""}.</p>
+          <p className="mb-2 text-xs text-secondary">Packing didn&apos;t record a per-package breakdown for this label, so the order&apos;s open lines are shown{d.siblings.length > 1 ? ` (shared by all ${d.siblings.length} packages)` : ""}.</p>
         ) : null}
-        {d.items.length === 0 ? <p className="text-[12px] text-secondary">This order has no open lines.</p> : (
-          <table className="mt-2 w-full text-[12px]">
-            <thead className="text-left text-[11px] uppercase text-faint"><tr><th className="py-1">SKU</th><th>Product</th><th>Lot</th><th className="text-right">Qty</th></tr></thead>
+        {d.items.length === 0 ? <p className="text-xs text-secondary">This order has no open lines.</p> : (
+          <table className="mt-2 w-full text-xs">
+            <thead className="text-left text-2xs text-faint"><tr><th className="py-1">SKU</th><th>Product</th><th>Lot</th><th className="text-right">Qty</th></tr></thead>
             <tbody>{d.items.map((i) => <tr key={i.id} className="border-t border-border"><td className="py-1.5 font-medium">{i.sku}</td><td className="max-w-[180px] truncate" title={i.productName}>{i.productName}</td><td>{i.lotNumber ?? "—"}</td><td className="text-right tabular-nums">{i.quantity} {i.packType}</td></tr>)}</tbody>
           </table>
         )}
       </section>
       <section className="rounded-lg border border-border p-4">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="text-[13px] font-semibold">Carrier activity</h3>
-          {d.carrierMode ? <span className="text-[11px] text-faint" data-testid="carrier-mode">{d.carrierEnvironment} connection · {d.carrierMode === "simulated" ? "simulated" : d.carrierMode === "carrier-test" ? "carrier test API" : "live API"}</span> : null}
+          <h3 className="text-sm font-semibold">Carrier activity</h3>
+          {d.carrierMode ? <span className="text-2xs text-faint" data-testid="carrier-mode">{d.carrierEnvironment} connection · {d.carrierMode === "simulated" ? "simulated" : d.carrierMode === "carrier-test" ? "carrier test API" : "live API"}</span> : null}
         </div>
-        {d.carrierMode ? <p className="mb-3 rounded-md bg-surface-sunken px-2.5 py-1.5 text-[11px] text-secondary">{MODE_NOTE[d.carrierMode]}</p> : null}
-        {d.events.length === 0 ? <p className="text-[12px] text-secondary">No carrier calls were logged for this package.</p> : (
-          <ol className="flex flex-col gap-2 text-[12px]" data-testid="carrier-activity">
+        {d.carrierMode ? <p className="mb-3 rounded-md bg-surface-sunken px-2.5 py-1.5 text-2xs text-secondary">{MODE_NOTE[d.carrierMode]}</p> : null}
+        {d.events.length === 0 ? <p className="text-xs text-secondary">No carrier calls were logged for this package.</p> : (
+          <ol className="flex flex-col gap-2 text-xs" data-testid="carrier-activity">
             {d.events.map((e) => (
               <li key={e.id} className="flex flex-col gap-1 border-t border-border pt-2 first:border-t-0 first:pt-0">
                 <span className="flex items-start justify-between gap-3">
@@ -151,10 +151,10 @@ function Body({ d, actions }: { readonly d: Detail; readonly actions: ShipmentAc
                   <span className="shrink-0 tabular-nums text-secondary">{formatDateTime(e.at)}</span>
                 </span>
                 {e.responseJson ? (
-                  <details className="text-[11px]">
+                  <details className="text-2xs">
                     <summary className="cursor-pointer text-primary">Carrier response</summary>
-                    <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded bg-surface-sunken p-2 font-mono text-[11px] text-secondary">{pretty(e.responseJson)}</pre>
-                    {e.requestJson ? <><p className="mt-1 text-faint">Request</p><pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded bg-surface-sunken p-2 font-mono text-[11px] text-secondary">{pretty(e.requestJson)}</pre></> : null}
+                    <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded bg-surface-sunken p-2 font-mono text-2xs text-secondary">{pretty(e.responseJson)}</pre>
+                    {e.requestJson ? <><p className="mt-1 text-faint">Request</p><pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded bg-surface-sunken p-2 font-mono text-2xs text-secondary">{pretty(e.requestJson)}</pre></> : null}
                   </details>
                 ) : null}
               </li>
@@ -164,8 +164,8 @@ function Body({ d, actions }: { readonly d: Detail; readonly actions: ShipmentAc
       </section>
       {d.siblings.length > 1 ? (
         <section className="rounded-lg border border-border p-4">
-          <h3 className="mb-3 text-[13px] font-semibold">Packages in this shipment ({d.siblings.length})</h3>
-          <ul className="flex flex-col gap-1.5 text-[12px]">
+          <h3 className="mb-3 text-sm font-semibold">Packages in this shipment ({d.siblings.length})</h3>
+          <ul className="flex flex-col gap-1.5 text-xs">
             {d.siblings.map((s) => (
               <li key={s.id} className="flex items-center justify-between gap-2">
                 <span className="font-mono">{s.packageSeq}. {s.trackingNumber}{s.id === d.id ? <span className="ml-2 font-sans text-faint">(this package)</span> : null}</span>

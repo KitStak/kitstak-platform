@@ -23,7 +23,7 @@ export function SelectionBanner({ pageCount, pageAllSelected, total, selectedCou
   const showSelectedElsewhere = !allMatching && !pageAllSelected && selectedCount > 0 && selectedCount > pageCount;
   if (!allMatching && !offerAll && !showSelectedElsewhere) return null;
   return (
-    <div role="status" className="flex items-center justify-center gap-2 border-b border-primary/20 bg-primary-soft px-4 py-1.5 text-[12px] text-body">
+    <div role="status" className="flex items-center justify-center gap-2 border-b border-primary/20 bg-primary-soft px-4 py-1.5 text-xs text-body">
       {allMatching ? (
         <span>
           All <strong className="tabular-nums">{fmt.number(total)}</strong> matching records are selected.

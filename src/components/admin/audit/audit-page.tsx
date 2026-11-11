@@ -30,8 +30,8 @@ const hidden = { defaultVisible: false } as const;
 
 /** "direct" is the legacy marker for a request with no trusted client address (REQ-R6-2). */
 function IpCell({ ip }: { readonly ip: string | null }) {
-  if (!ip || ip === "direct") return <span className="text-[12px] text-faint" title="No client address was captured for this request">Not captured</span>;
-  return <code className="font-mono text-[12px] text-secondary">{ip}</code>;
+  if (!ip || ip === "direct") return <span className="text-xs text-faint" title="No client address was captured for this request">Not captured</span>;
+  return <code className="font-mono text-xs text-secondary">{ip}</code>;
 }
 
 function columns(onOpen: (r: AuditRow) => void): GridColumnDef<AuditRow>[] {
@@ -42,7 +42,7 @@ function columns(onOpen: (r: AuditRow) => void): GridColumnDef<AuditRow>[] {
     { id: "outcome", header: "Outcome", size: 92, cell: ({ row }) => row.original.outcome === "success" ? <Badge tone="success" size="sm" shape="pill">Success</Badge> : <Badge tone="danger" size="sm" shape="pill">Failure</Badge> },
     { id: "userName", header: "User", size: 150, cell: ({ row }) => row.original.userName ? <span className="truncate">{row.original.userName}</span> : row.original.userEmail ? <span className="truncate text-secondary">{row.original.userEmail}</span> : <Muted>Not signed in</Muted> },
     { id: "entityLabel", header: "Target", size: 170, cell: ({ row }) => <span className="block truncate text-body" title={row.original.entityLabel ?? undefined}>{row.original.entityLabel ?? "—"}</span> },
-    { id: "summary", header: "Details", size: 250, cell: ({ row }) => row.original.summary ? <button type="button" onClick={() => onOpen(row.original)} className="line-clamp-2 block w-full whitespace-normal break-words text-left text-[12px] leading-4 text-secondary hover:text-body" title={`${row.original.summary} (click for full details)`}>{row.original.summary}</button> : <Muted /> },
+    { id: "summary", header: "Details", size: 250, cell: ({ row }) => row.original.summary ? <button type="button" onClick={() => onOpen(row.original)} className="line-clamp-2 block w-full whitespace-normal break-words text-left text-xs leading-4 text-secondary hover:text-body" title={`${row.original.summary} (click for full details)`}>{row.original.summary}</button> : <Muted /> },
     { id: "ip", header: "IP address", size: 112, cell: ({ row }) => <IpCell ip={row.original.ip} /> },
     { id: "userAgent", header: "Device", size: 260, meta: hidden, cell: ({ row }) => <span className="truncate text-faint">{row.original.userAgent ?? "—"}</span> },
   ];
@@ -66,8 +66,8 @@ function StatTiles({ onFilter }: { readonly onFilter: (category: AuditCategory, 
           className="group flex items-center gap-3 rounded-xl border border-border bg-surface px-3 py-2.5 text-left shadow-xs transition hover:-translate-y-px hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
           <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", t.tone)}><t.icon className="h-4 w-4" aria-hidden /></span>
           <span className="min-w-0">
-            <span className="block text-[11px] text-faint">{t.label} · last 24 h</span>
-            {q.isPending ? <Skeleton className="mt-1 h-6 w-12" /> : <span className="block text-[20px] font-semibold tabular-nums text-foreground" title={q.isError ? "Couldn't load these counts" : undefined}>{t.value ?? (q.isError ? "!" : "0")}</span>}
+            <span className="block text-2xs text-faint">{t.label} · last 24 h</span>
+            {q.isPending ? <Skeleton className="mt-1 h-6 w-12" /> : <span className="block text-lg font-semibold tabular-nums text-foreground" title={q.isError ? "Couldn't load these counts" : undefined}>{t.value ?? (q.isError ? "!" : "0")}</span>}
           </span>
         </button>
       ))}
@@ -87,13 +87,13 @@ function EventDrawer({ row, onClose }: { readonly row: AuditRow | null; readonly
           <DetailList items={[
             { label: "Event type", value: row.category }, { label: "Outcome", value: row.outcome === "success" ? "Success" : "Failure" },
             { label: "User", value: row.userName ?? row.userEmail ?? "Not signed in" }, { label: "Target", value: row.entityLabel },
-            { label: "IP address", value: <IpCell ip={row.ip} /> }, { label: "Action key", value: <code className="font-mono text-[12px]">{row.action}</code> },
+            { label: "IP address", value: <IpCell ip={row.ip} /> }, { label: "Action key", value: <code className="font-mono text-xs">{row.action}</code> },
             { label: "Device", value: row.userAgent, wide: true },
           ]} />
           {pretty ? (
             <section className="flex flex-col gap-2">
-              <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Details</h3>
-              <pre className="max-h-72 overflow-auto rounded-lg border border-border bg-surface-sunken p-3 font-mono text-[12px] text-body">{pretty}</pre>
+              <h3 className="text-xs font-semibold text-secondary">Details</h3>
+              <pre className="max-h-72 overflow-auto rounded-lg border border-border bg-surface-sunken p-3 font-mono text-xs text-body">{pretty}</pre>
             </section>
           ) : null}
         </div>

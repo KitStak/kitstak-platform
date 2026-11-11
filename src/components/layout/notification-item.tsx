@@ -46,9 +46,9 @@ export function NotificationItem({ notification: n, onOpen, onMarkRead, onDelete
         <Icon className="h-3.5 w-3.5" aria-hidden />
       </span>
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
-        <span className={cn("block text-[13px] text-foreground", unread ? "font-semibold" : "font-medium")}>{n.title}</span>
-        {n.body ? <span className={cn("block text-[12px] text-secondary", compact ? "line-clamp-2" : "")}>{n.body}</span> : null}
-        <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-faint">
+        <span className={cn("block text-sm text-foreground", unread ? "font-semibold" : "font-medium")}>{n.title}</span>
+        {n.body ? <span className={cn("block text-xs text-secondary", compact ? "line-clamp-2" : "")}>{n.body}</span> : null}
+        <span className="mt-0.5 flex items-center gap-1.5 text-2xs text-faint">
           {typeLabel ? <span className="rounded bg-neutral-soft px-1.5 py-px font-medium text-secondary">{typeLabel}</span> : null}
           <time dateTime={n.createdAt} title={format.gridDateTime(n.createdAt)}>{compact ? (format.age(n.createdAt) === "now" ? "just now" : `${format.age(n.createdAt)} ago`) : format.gridDateTime(n.createdAt)}</time>
         </span>

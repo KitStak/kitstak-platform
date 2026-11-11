@@ -95,8 +95,8 @@ function Stat({ icon: Icon, label, value, tone }: { readonly icon: React.Compone
         <Icon className="h-4 w-4" aria-hidden />
       </span>
       <span className="flex flex-col leading-tight">
-        <span className="text-[16px] font-semibold tabular-nums text-foreground">{value.toLocaleString()}</span>
-        <span className="text-[11px] text-secondary">{label}</span>
+        <span className="text-md font-semibold tabular-nums text-foreground">{value.toLocaleString()}</span>
+        <span className="text-2xs text-secondary">{label}</span>
       </span>
     </div>
   );
@@ -111,12 +111,12 @@ function LinesToCancel({ items, nothingCounted }: { readonly items: readonly { r
   return (
     <Callout variant="attention" title={nothingCounted ? "Nothing has been counted yet" : "Some lines are not counted yet"}>
       {nothingCounted ? (
-        <p className="text-[12px]">No line is in Count Completed status, so <strong>no stock changes</strong>. If you proceed, {total === 1 ? "the line" : `all ${total} lines`} <strong className="text-danger">will be cancelled</strong> and the count plan is closed as Cancelled. Its pending count tasks are cancelled too.</p>
+        <p className="text-xs">No line is in Count Completed status, so <strong>no stock changes</strong>. If you proceed, {total === 1 ? "the line" : `all ${total} lines`} <strong className="text-danger">will be cancelled</strong> and the count plan is closed as Cancelled. Its pending count tasks are cancelled too.</p>
       ) : (
-        <p className="text-[12px]">If you proceed, inventory is updated for <strong className="text-success">Count Completed lines only</strong>, and the {total === 1 ? "line" : `${total} lines`} not in Count Completed status <strong className="text-danger">will be cancelled</strong>.</p>
+        <p className="text-xs">If you proceed, inventory is updated for <strong className="text-success">Count Completed lines only</strong>, and the {total === 1 ? "line" : `${total} lines`} not in Count Completed status <strong className="text-danger">will be cancelled</strong>.</p>
       )}
       <div className="mt-1.5 flex items-start gap-2">
-        <ul className="list-disc pl-4 text-[12px]">
+        <ul className="list-disc pl-4 text-xs">
           {items.slice(0, 5).map((i) => <li key={i.code}><strong>{i.code}</strong>: {i.lines} {i.lines === 1 ? "line" : "lines"}</li>)}
           {items.length > 5 ? <li>+{items.length - 5} more</li> : null}
         </ul>
@@ -140,7 +140,7 @@ function DetailLinks({ codes }: { readonly codes: readonly string[] }) {
   if (codes.length === 0) return null;
   const cls = "inline-flex items-center gap-1 font-semibold text-primary hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30";
   return (
-    <span className="mt-1 block w-full text-[11px] text-secondary">
+    <span className="mt-1 block w-full text-2xs text-secondary">
       Review the lines of {codes.length === 1 ? "this plan" : `these ${codes.length} plans`} in{" "}
       <a className={cls} href={countDetailsHref("/counts/locations", codes)} target="_blank" rel="noreferrer">Location Details<ExternalLink className="h-3 w-3" aria-hidden /></a>{" or "}
       <a className={cls} href={countDetailsHref("/counts/skus", codes)} target="_blank" rel="noreferrer">SKU Details<ExternalLink className="h-3 w-3" aria-hidden /></a>
@@ -157,7 +157,7 @@ function AffectedPlans({ codes }: { readonly codes: readonly string[] }) {
     try { await navigator.clipboard.writeText(codes.join(", ")); setCopied(true); window.setTimeout(() => setCopied(false), 1500); } catch { /* clipboard blocked */ }
   };
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-surface-sunken px-3 py-2 text-[12px]">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-surface-sunken px-3 py-2 text-xs">
       <span className="min-w-0 flex-1 truncate text-secondary" title={codes.join(", ")}><strong className="text-foreground">{codes.length} {codes.length === 1 ? "count plan" : "count plans"}</strong>: {codes.slice(0, 4).join(", ")}{codes.length > 4 ? ` +${codes.length - 4} more` : ""}</span>
       <Button size="sm" variant="ghost" onClick={() => void copy()} aria-label="Copy affected count plan codes"><Copy className="h-3.5 w-3.5" aria-hidden />{copied ? "Copied" : "Copy codes"}</Button>
       <DetailLinks codes={codes} />
@@ -219,8 +219,8 @@ function UpdateBody({ onOpenChange, level, ids, onDone }: Omit<UpdateInventoryDi
             {data.linesToCancel && data.linesToCancel.length > 0 ? <LinesToCancel items={data.linesToCancel} nothingCounted={cancelOnly} /> : null}
             {held.length > 0 ? (
               <Callout variant="attention" title={`${unitsLabel(held.length, ["counted line", "counted lines"])} can't post: the stock is committed to orders`}>
-                <p className="text-[12px]">The ledger never takes stock below what is picked, in a pick job or reserved for a work order. {allHeld ? "Nothing else posts, so the plan closes as Cancelled." : "The other counted lines post as usual."} {held.length === 1 ? "This line closes" : "These lines close"} <strong>without posting</strong> (cancelled, with your reason on the timeline) and {held.length === 1 ? "its location unlocks" : "their locations unlock"}. To post instead, short the order first and recount.</p>
-                <ul className="mt-1.5 flex flex-col gap-1 text-[12px]" data-testid="allocation-blocked">
+                <p className="text-xs">The ledger never takes stock below what is picked, in a pick job or reserved for a work order. {allHeld ? "Nothing else posts, so the plan closes as Cancelled." : "The other counted lines post as usual."} {held.length === 1 ? "This line closes" : "These lines close"} <strong>without posting</strong> (cancelled, with your reason on the timeline) and {held.length === 1 ? "its location unlocks" : "their locations unlock"}. To post instead, short the order first and recount.</p>
+                <ul className="mt-1.5 flex flex-col gap-1 text-xs" data-testid="allocation-blocked">
                   {held.slice(0, 6).map((b) => (
                     <li key={b.lineId} className="flex flex-wrap items-baseline gap-x-1.5"><Lock className="h-3 w-3 shrink-0 self-center text-warning" aria-hidden /><strong className="text-foreground">{b.planCode} · {b.label}</strong><span>{unitsLabel(b.units)} held by {b.holders}</span></li>
                   ))}
@@ -228,26 +228,26 @@ function UpdateBody({ onOpenChange, level, ids, onDone }: Omit<UpdateInventoryDi
                 </ul>
                 <div className="mt-2">
                   <Checkbox checked={closeBlocked} onCheckedChange={(c) => setCloseBlocked(c === true)}
-                    label={<span className="text-[12px] font-semibold text-foreground">Close {held.length === 1 ? "this line" : `these ${held.length} lines`} without posting</span>} />
+                    label={<span className="text-xs font-semibold text-foreground">Close {held.length === 1 ? "this line" : `these ${held.length} lines`} without posting</span>} />
                 </div>
               </Callout>
             ) : null}
             {(data.unitsUnallocated ?? 0) > 0 ? (
               <Callout variant="info" title={`${unitsLabel(data.unitsUnallocated ?? 0, ["allocated unit", "allocated units"])} will be shorted on ${(data.unitsUnallocated ?? 0) === 1 ? "its order" : "their orders"}`}>
-                <p className="text-[12px]">The count found less than is allocated. Unpicked allocations are released first, re-allocated from other locations where stock allows, and an allocation exception is logged on each order.</p>
+                <p className="text-xs">The count found less than is allocated. Unpicked allocations are released first, re-allocated from other locations where stock allows, and an allocation exception is logged on each order.</p>
               </Callout>
             ) : null}
             {data.blocked.length > 0 ? (
               <Callout variant="attention" title={`${data.blocked.length} ${data.blocked.length === 1 ? "record is" : "records are"} skipped`}>
-                <ul className="mt-1 list-disc pl-4 text-[12px]">
+                <ul className="mt-1 list-disc pl-4 text-xs">
                   {data.blocked.slice(0, 5).map((b) => <li key={b.id}><strong>{b.code}</strong>: {b.reason}</li>)}
                   {data.blocked.length > 5 ? <li>+{data.blocked.length - 5} more</li> : null}
                 </ul>
               </Callout>
             ) : null}
             {cancelOnly ? null : <div className="ks-scroll max-h-[240px] overflow-auto rounded-md border border-border">
-              <table className="w-full border-collapse text-left text-[12px]">
-                <thead className="sticky top-0 bg-surface-sunken text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+              <table className="w-full border-collapse text-left text-xs">
+                <thead className="sticky top-0 bg-surface-sunken text-2xs font-semibold text-faint">
                   <tr>
                     <th scope="col" className="px-2.5 py-1.5">Count code</th>
                     <th scope="col" className="px-2.5 py-1.5">Location</th>
@@ -346,8 +346,8 @@ function RecountBody({ lines, onOpenChange, onDone }: { readonly lines: readonly
       <DialogBody>
         <div className="flex flex-col gap-3">
           <div className="ks-scroll max-h-[200px] overflow-auto rounded-md border border-border">
-            <table className="w-full border-collapse text-left text-[12px]">
-              <thead className="sticky top-0 bg-surface-sunken text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+            <table className="w-full border-collapse text-left text-xs">
+              <thead className="sticky top-0 bg-surface-sunken text-2xs font-semibold text-faint">
                 <tr><th scope="col" className="px-2.5 py-1.5">Line</th><th scope="col" className="px-2.5 py-1.5">Count code</th><th scope="col" className="px-2.5 py-1.5 text-right">System</th><th scope="col" className="px-2.5 py-1.5 text-right">Counted</th></tr>
               </thead>
               <tbody>
@@ -388,7 +388,7 @@ export function CancelReasonField({ discards, value, onChange }: { readonly disc
     <div className="mt-3 flex flex-col gap-2">
       {discards > 0 ? (
         <Callout variant="attention" title={`${unitsLabel(discards, ["counted line", "counted lines"])} will be discarded`}>
-          <p className="text-[12px]">{discards === 1 ? "Its counted quantity was" : "Their counted quantities were"} never posted to inventory, so stock stays as it is. The reason is kept on the plan timeline.</p>
+          <p className="text-xs">{discards === 1 ? "Its counted quantity was" : "Their counted quantities were"} never posted to inventory, so stock stays as it is. The reason is kept on the plan timeline.</p>
         </Callout>
       ) : null}
       <div className="flex flex-col gap-1">

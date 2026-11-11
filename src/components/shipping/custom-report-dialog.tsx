@@ -71,19 +71,19 @@ export function CustomReportDialog({ open, onOpenChange, selected }: Props) {
         <DialogHeader title="Print custom report" description="Totals by client and service for every manifest in the range — open or closed." />
         <DialogBody className="grid gap-3">
           <label className="grid gap-1">
-            <span className="text-[12px] font-medium text-secondary">Ship date <span className="text-danger">*</span></span>
+            <span className="text-xs font-medium text-secondary">Ship date <span className="text-danger">*</span></span>
             <DateRangePicker value={range} onChange={(v) => setRange(v)} invalid={!valid} aria-label="Ship date range" />
           </label>
           <label className="grid gap-1">
-            <span className="text-[12px] font-medium text-secondary">Carrier</span>
+            <span className="text-xs font-medium text-secondary">Carrier</span>
             <Select options={opts(facets?.carriers)} value={carrier} onChange={setCarrier} placeholder="All carriers" clearable aria-label="Carrier" />
           </label>
           <label className="grid gap-1">
-            <span className="text-[12px] font-medium text-secondary">Warehouse</span>
+            <span className="text-xs font-medium text-secondary">Warehouse</span>
             <Select options={opts(facets?.warehouses)} value={warehouse} onChange={setWarehouse} placeholder="All warehouses" clearable aria-label="Warehouse" />
           </label>
           <label className="grid gap-1">
-            <span className="text-[12px] font-medium text-secondary">Client</span>
+            <span className="text-xs font-medium text-secondary">Client</span>
             <Select options={opts(facets?.clients)} value={client} onChange={setClient} placeholder="All clients" clearable aria-label="Client" />
           </label>
         </DialogBody>

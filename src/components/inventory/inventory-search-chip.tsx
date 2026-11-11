@@ -31,8 +31,8 @@ export function SearchChip({ grid, noun }: {
     // Neutral blue (info) chip, never brand red: red reads as a validation error.
     <span className="inline-flex h-8 max-w-[260px] shrink-0 items-center rounded-md border border-info/30 bg-info-soft" data-testid="search-chip">
       <span className="flex min-w-0 flex-col py-0.5 pl-2.5 pr-1 leading-tight" title={`${label} ${q}`}>
-        <span className="truncate text-[10px] font-semibold uppercase tracking-[0.04em] text-info">{label}</span>
-        <span className="truncate text-[12px] font-medium text-foreground">{q}</span>
+        <span className="truncate text-2xs font-semibold text-info">{label}</span>
+        <span className="truncate text-xs font-medium text-foreground">{q}</span>
       </span>
       <button
         type="button"

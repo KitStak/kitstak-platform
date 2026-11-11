@@ -54,7 +54,7 @@ export function CountScanPage() {
         ) : null}
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-lg font-semibold text-foreground">{planCode ?? "Count"}</h1>
-          <p className="text-[12px] text-secondary">{planCode ? "Scan a location, enter what is on the shelf, submit." : "Open one of your jobs, take one from the pool, or scan a count plan."}</p>
+          <p className="text-xs text-secondary">{planCode ? "Scan a location, enter what is on the shelf, submit." : "Open one of your jobs, take one from the pool, or scan a count plan."}</p>
         </div>
         {canInstant ? <Button variant="secondary" className="h-11" onClick={() => setInstant(true)}><Zap className="h-4 w-4" aria-hidden />Instant</Button> : null}
       </header>
@@ -115,7 +115,7 @@ function WorkChooser({ canExecute, onPick }: { readonly canExecute: boolean; rea
           return (
             <button key={v.key} ref={(el) => { tabRefs.current[v.key] = el; }} type="button" role="tab" id={`scan-tab-${v.key}`} aria-selected={active} aria-controls={`scan-panel-${v.key}`} tabIndex={active ? 0 : -1}
               onClick={() => setView(v.key)} onKeyDown={(e) => onKey(e, i)}
-              className={cn("inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-[14px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/40",
+              className={cn("inline-flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-base font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/40",
                 active ? "bg-surface text-foreground shadow-xs" : "text-secondary hover:text-foreground")}>
               <Icon className="h-4 w-4 shrink-0" aria-hidden /><span className="truncate">{v.label}</span>
             </button>
@@ -139,11 +139,11 @@ function AssignedElsewhere() {
   if (others.isPending || others.error || rows.length === 0) return null;
   return (
     <section aria-label="Count jobs assigned to other counters" className="rounded-lg border border-border bg-surface px-4 py-3" data-testid="assigned-elsewhere">
-      <p className="text-[13px] font-semibold text-foreground">{rows.length === 1 ? "1 open count job is" : `${rows.length} open count jobs are`} assigned to other counters</p>
-      <p className="mt-0.5 text-[12px] text-secondary">They are not in the pool because someone already has them. A supervisor can reassign a job from its job page.</p>
+      <p className="text-sm font-semibold text-foreground">{rows.length === 1 ? "1 open count job is" : `${rows.length} open count jobs are`} assigned to other counters</p>
+      <p className="mt-0.5 text-xs text-secondary">They are not in the pool because someone already has them. A supervisor can reassign a job from its job page.</p>
       <ul className="mt-2 flex flex-col divide-y divide-border">
         {rows.map((j) => (
-          <li key={j.id} className="flex min-h-11 items-center justify-between gap-3 py-2 text-[13px]">
+          <li key={j.id} className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm">
             <span className="min-w-0">
               <a href={`/jobs/${encodeURIComponent(j.id)}`} className="font-semibold text-primary underline-offset-2 hover:underline">{j.code}</a>
               <span className="text-secondary"> · {j.planCode} · {j.doneCount}/{j.taskCount} tasks</span>
@@ -182,8 +182,8 @@ function JobList({ view, canExecute, onOpen, onTaken }: { readonly view: "mine" 
       <div className="flex flex-col gap-3">
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border-strong px-6 py-10 text-center">
           {view === "mine" ? <User className="h-6 w-6 text-faint" aria-hidden /> : <Inbox className="h-6 w-6 text-faint" aria-hidden />}
-          <p className="text-[13px] font-semibold text-foreground">{view === "mine" ? "No count jobs assigned to you" : "The job pool is empty"}</p>
-          <p className="text-[12px] text-secondary">{view === "mine" ? "Take a job from the job pool, or ask a supervisor to assign one." : "The pool lists only unassigned jobs of Ready to Count and Count Started plans. New unassigned jobs show here."}</p>
+          <p className="text-sm font-semibold text-foreground">{view === "mine" ? "No count jobs assigned to you" : "The job pool is empty"}</p>
+          <p className="text-xs text-secondary">{view === "mine" ? "Take a job from the job pool, or ask a supervisor to assign one." : "The pool lists only unassigned jobs of Ready to Count and Count Started plans. New unassigned jobs show here."}</p>
         </div>
         <AssignedElsewhere />
       </div>
@@ -196,11 +196,11 @@ function JobList({ view, canExecute, onOpen, onTaken }: { readonly view: "mine" 
         const body = (
           <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-[15px] font-semibold text-foreground">{j.code}</span>
-              {j.priority && j.priority !== "None" ? <span className="shrink-0 rounded bg-warning-soft px-1.5 py-px text-[10px] font-semibold uppercase text-warning">{j.priority}</span> : null}
+              <span className="truncate text-base font-semibold text-foreground">{j.code}</span>
+              {j.priority && j.priority !== "None" ? <span className="shrink-0 rounded bg-warning-soft px-1.5 py-px text-2xs font-semibold text-warning">{j.priority}</span> : null}
             </span>
-            <span className="truncate text-[12px] text-secondary">{j.planCode} · {j.warehouseCode} · {j.doneCount}/{j.taskCount} tasks</span>
-            {j.nextLocations ? <span className="truncate text-[12px] text-secondary">Next: <strong className="font-semibold text-foreground">{j.nextLocations}</strong>{j.remainingLocations > 3 ? ` +${j.remainingLocations - 3}` : ""}</span> : null}
+            <span className="truncate text-xs text-secondary">{j.planCode} · {j.warehouseCode} · {j.doneCount}/{j.taskCount} tasks</span>
+            {j.nextLocations ? <span className="truncate text-xs text-secondary">Next: <strong className="font-semibold text-foreground">{j.nextLocations}</strong>{j.remainingLocations > 3 ? ` +${j.remainingLocations - 3}` : ""}</span> : null}
             <span className="mt-0.5 h-1.5 w-full overflow-hidden rounded-full bg-neutral-soft" role="progressbar" aria-label={`${j.code} progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}><span className="block h-full rounded-full bg-primary" style={{ width: `${pct}%` }} /></span>
           </span>
         );
@@ -246,7 +246,7 @@ function PlanChooser({ onPick }: { readonly onPick: (code: string) => void }) {
   return (
     <>
       <form noValidate onSubmit={submit} className="flex flex-col gap-1">
-        <label htmlFor="scan-plan" className="text-[12px] font-semibold text-foreground">Count plan</label>
+        <label htmlFor="scan-plan" className="text-xs font-semibold text-foreground">Count plan</label>
         <div className="flex gap-2">
           <div className="min-w-0 flex-1">
             <TextField id="scan-plan" autoFocus autoComplete="off" value={scan} onChange={(e) => { setScan(e.target.value); setError(null); }} placeholder="Scan count plan code" className="h-12 text-base"
@@ -257,7 +257,7 @@ function PlanChooser({ onPick }: { readonly onPick: (code: string) => void }) {
         <FieldError id="scan-plan-err" message={error ?? undefined} />
       </form>
       <section aria-label="Plans ready to count" className="flex flex-col gap-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">Ready to count</h2>
+        <h2 className="text-2xs font-semibold text-faint">Ready to count</h2>
         {plans.isPending ? (
           <div className="flex flex-col gap-2"><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>
         ) : plans.error ? (
@@ -265,8 +265,8 @@ function PlanChooser({ onPick }: { readonly onPick: (code: string) => void }) {
         ) : rows.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border-strong px-6 py-10 text-center">
             <ClipboardList className="h-6 w-6 text-faint" aria-hidden />
-            <p className="text-[13px] font-semibold text-foreground">Nothing to count right now</p>
-            <p className="text-[12px] text-secondary">Plans show here once a manager creates their count job. Use Instant to count a location on the spot.</p>
+            <p className="text-sm font-semibold text-foreground">Nothing to count right now</p>
+            <p className="text-xs text-secondary">Plans show here once a manager creates their count job. Use Instant to count a location on the spot.</p>
           </div>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -274,8 +274,8 @@ function PlanChooser({ onPick }: { readonly onPick: (code: string) => void }) {
               <li key={r.id}>
                 <button type="button" onClick={() => onPick(r.code)} className="flex min-h-16 w-full items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-semibold text-foreground">{r.code}</span>
-                    <span className="block text-[12px] text-secondary">{r.warehouseCode} · {r.countType} · {r.countedLineCount}/{r.lineCount} counted</span>
+                    <span className="block truncate text-base font-semibold text-foreground">{r.code}</span>
+                    <span className="block text-xs text-secondary">{r.warehouseCode} · {r.countType} · {r.countedLineCount}/{r.lineCount} counted</span>
                   </span>
                   <CountStatusPill status={r.status} domain="count" size="sm" />
                   <ChevronRight className="h-4 w-4 text-faint" aria-hidden />
@@ -297,7 +297,7 @@ function PlanSheet({ code, canExecute, onSubmitted }: { readonly code: string; r
   if (detail.isPending) return <div className="flex flex-col gap-2"><Skeleton className="h-12 w-full" /><Skeleton className="h-40 w-full" /></div>;
   if (detail.error || !plan) {
     return (
-      <Callout variant="error" title="Count plan not found" action={<Link href="/counts/scan" className="text-[12px] font-semibold text-primary hover:underline">Pick another plan</Link>}>
+      <Callout variant="error" title="Count plan not found" action={<Link href="/counts/scan" className="text-xs font-semibold text-primary hover:underline">Pick another plan</Link>}>
         {detail.error?.message ?? `${code} does not exist or is outside your warehouses.`}
       </Callout>
     );
@@ -306,7 +306,7 @@ function PlanSheet({ code, canExecute, onSubmitted }: { readonly code: string; r
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <CountStatusPill status={plan.status} domain="count" />
-        <Link href={`/counts/${encodeURIComponent(plan.code)}`} className="ml-auto text-[12px] font-semibold text-primary hover:underline">Desktop view</Link>
+        <Link href={`/counts/${encodeURIComponent(plan.code)}`} className="ml-auto text-xs font-semibold text-primary hover:underline">Desktop view</Link>
       </div>
       <CountSheet planId={plan.id} planCode={plan.code} planStatus={plan.status} warehouseId={plan.warehouseId} canExecute={canExecute} onSubmitted={() => { onSubmitted(); void detail.refetch(); }} />
     </div>

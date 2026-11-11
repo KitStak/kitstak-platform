@@ -25,8 +25,8 @@ const WIDTH: Readonly<Record<string, number>> = {
 
 function shortPill(value: unknown) {
   const v = String(value ?? "None");
-  if (v === "None") return <span className="text-[12px] text-faint">None</span>;
-  if (v === "Open") return <span className="inline-flex rounded-full bg-warning-soft px-1.5 py-px text-[10px] font-semibold leading-4 text-warning">Open</span>;
+  if (v === "None") return <span className="text-xs text-faint">None</span>;
+  if (v === "Open") return <span className="inline-flex rounded-full bg-warning-soft px-1.5 py-px text-2xs font-semibold leading-4 text-warning">Open</span>;
   return <StatusPill status={v} size="sm" />;
 }
 

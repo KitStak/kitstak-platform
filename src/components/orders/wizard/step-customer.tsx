@@ -200,7 +200,7 @@ function CustomerPicker({ disabled }: { readonly disabled: boolean }) {
         }}
       />
       <div className="flex flex-col gap-1.5">
-        <span className="text-[12px] font-medium text-body">Address title</span>
+        <span className="text-xs font-medium text-body">Address title</span>
         <DisabledReason reason={!customerId ? "Choose an existing customer to use a saved address" : titles.length === 0 ? "This customer has no saved addresses" : null}>
           <span>
             <Select aria-label="Address title" options={titles} value={null} onChange={(v) => v && applyAddress(v)} disabled={disabled || !customerId || titles.length === 0} placeholder="Select a saved address" />

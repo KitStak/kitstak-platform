@@ -145,10 +145,10 @@ function QuantityForm({ row, mode, onClose, onDone }: { readonly row: BucketRow;
         <FormField name="reasonId" label="Adjustment Reason" required={required} description={required ? undefined : "Optional for this warehouse"}>
           {(c) => <Combobox id={c.id} aria-label="Adjustment reason" aria-describedby={c["aria-describedby"]} options={reasonOptions} value={c.value as string | null} onChange={(v) => c.onChange(v)} onBlur={c.onBlur} invalid={c.invalid} placeholder="Select adjustment reason" />}
         </FormField>
-        {reasonMismatch ? <p role="alert" className="-mt-2 text-[12px] text-danger">{reasonMismatch}</p> : null}
+        {reasonMismatch ? <p role="alert" className="-mt-2 text-xs text-danger">{reasonMismatch}</p> : null}
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
-            <span className="text-[12px] font-medium text-secondary">Current Quantity</span>
+            <span className="text-xs font-medium text-secondary">Current Quantity</span>
             <div className="flex h-8 items-center rounded-md border border-border bg-surface-sunken px-3 tabular-nums text-body" aria-label="Current quantity">{formatQty(row.totalPackQty)} <span className="ml-1 text-faint">{row.packType}</span></div>
           </div>
           <FormField name="qty" label={QTY_LABELS[mode]} required info={mode === "adjust" ? "Replaces current inventory with this new total. Setting the quantity to 0 will delete this inventory record." : undefined}>
@@ -162,9 +162,9 @@ function QuantityForm({ row, mode, onClose, onDone }: { readonly row: BucketRow;
         ) : mode === "remove" && qty !== null && qty === row.totalPackQty && row.allocatedPackQty === 0 ? (
           <Callout variant="attention" title="Removes every unit">This row reaches 0 and is removed from Inventory by Location.</Callout>
         ) : isLargeQty(qty) ? (
-          <p className="text-[12px] text-warning">That is a large quantity ({formatQty(qty as number)} {row.packType}). Double-check it before saving.</p>
+          <p className="text-xs text-warning">That is a large quantity ({formatQty(qty as number)} {row.packType}). Double-check it before saving.</p>
         ) : null}
-        <div className={cn("flex items-center gap-3 rounded-lg border px-3 py-2 text-[13px]", after !== null && after < 0 ? "border-danger/40 bg-danger-soft" : "border-border bg-surface")} aria-live="polite">
+        <div className={cn("flex items-center gap-3 rounded-lg border px-3 py-2 text-sm", after !== null && after < 0 ? "border-danger/40 bg-danger-soft" : "border-border bg-surface")} aria-live="polite">
           <span className="text-secondary">After save</span>
           <span className="tabular-nums text-body">{formatQty(row.totalPackQty)}</span>
           <ArrowRight className="h-3.5 w-3.5 text-faint" aria-hidden />

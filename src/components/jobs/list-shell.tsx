@@ -74,12 +74,12 @@ function QuickFilterButton({ qf, path, active, onToggle }: { readonly qf: QuickF
       onClick={onToggle}
       data-testid={`quick-filter-${qf.key}`}
       className={cn(
-        "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
-        active ? "border-primary bg-primary text-white" : danger ? "border-[#F2B8AE] bg-[#FDF1EE] text-[#B42318] hover:bg-[#FBE3DD] dark:border-[#6B2A20] dark:bg-[#2B1612] dark:text-[#F7A99C]" : "border-border bg-surface text-body hover:bg-surface-sunken",
+        "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+        active ? "border-primary bg-primary text-white" : danger ? "border-[#F2B8AE] bg-[#FDF1EE] text-[var(--danger-text)] hover:bg-[#FBE3DD] dark:border-[#6B2A20] dark:bg-[#2B1612] dark:text-[var(--label-red-light)]" : "border-border bg-surface text-body hover:bg-surface-sunken",
       )}
     >
       {qf.label}
-      {typeof n === "number" ? <span className={cn("rounded-full px-1.5 text-[11px] tabular-nums", active ? "bg-white/20" : "bg-black/5 dark:bg-white/10")}>{n.toLocaleString("en-US")}</span> : null}
+      {typeof n === "number" ? <span className={cn("rounded-full px-1.5 text-2xs tabular-nums", active ? "bg-white/20" : "bg-black/5 dark:bg-white/10")}>{n.toLocaleString("en-US")}</span> : null}
     </button>
   );
 }
@@ -148,7 +148,7 @@ export function ListShell<T extends GridRow>(props: ListShellProps<T>) {
       {props.banner}
       {props.quickFilters && props.quickFilters.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 px-6 pb-2" role="group" aria-label="Quick filters">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">Quick filters</span>
+          <span className="text-2xs font-semibold text-faint">Quick filters</span>
           {props.quickFilters.map((qf) => {
             const active = g.grid.query.filters.some((f) => f.field === qf.filter.field);
             return (

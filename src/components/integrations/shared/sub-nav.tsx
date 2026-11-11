@@ -33,12 +33,12 @@ export function SubNavLayout({ items, ariaLabel, asideClassName, navClassName, c
               href={item.href}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-[13px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
                 isActive ? "border-transparent bg-neutral-soft font-semibold text-foreground" : "border-border text-secondary hover:bg-surface-sunken hover:text-body",
               )}
             >
               {item.label}
-              {typeof item.count === "number" ? <span className="rounded-full bg-surface-sunken px-1.5 text-[11px] tabular-nums">{item.count}</span> : null}
+              {typeof item.count === "number" ? <span className="rounded-full bg-surface-sunken px-1.5 text-2xs tabular-nums">{item.count}</span> : null}
             </Link>
           ) : null;
         })}

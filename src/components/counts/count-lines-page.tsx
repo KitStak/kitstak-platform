@@ -127,7 +127,7 @@ function MoreDetailsButton({ gridKey, queryString, total, allowed }: { readonly 
           {pending || running ? <Spinner className="h-3.5 w-3.5" /> : <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden />}More Details
         </Button>
       </DisabledReason>
-      <span role="status" aria-live="polite" className="text-[12px] text-secondary" data-testid="more-details-status">
+      <span role="status" aria-live="polite" className="text-xs text-secondary" data-testid="more-details-status">
         {state?.phase === "running" ? "Preparing the detailed file…"
           : state?.phase === "ready" ? (state.task.fileId
             ? <a href={downloadHref(state.task.fileId)} className="font-semibold text-primary hover:underline">Download ({state.task.rowCount ?? 0} rows)</a>

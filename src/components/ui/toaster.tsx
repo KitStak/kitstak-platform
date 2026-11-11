@@ -35,9 +35,9 @@ function ToastCard({ item }: { readonly item: ToastItem }) {
       <span className={cn("absolute inset-y-0 left-0 w-1", style.bar)} aria-hidden />
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", style.icon)} aria-hidden />
       <div className="min-w-0 flex-1">
-        <ToastPrimitive.Title className="text-[13px] font-semibold text-foreground">{item.title}</ToastPrimitive.Title>
+        <ToastPrimitive.Title className="text-sm font-semibold text-foreground">{item.title}</ToastPrimitive.Title>
         {item.message ? (
-          <ToastPrimitive.Description className="mt-0.5 text-[12px] leading-4 text-secondary break-words">
+          <ToastPrimitive.Description className="mt-0.5 text-xs leading-4 text-secondary break-words">
             {item.message}
           </ToastPrimitive.Description>
         ) : null}
@@ -46,7 +46,7 @@ function ToastCard({ item }: { readonly item: ToastItem }) {
             <button
               type="button"
               onClick={item.action.onClick}
-              className="mt-1.5 text-[12px] font-semibold text-primary hover:text-primary-hover hover:underline focus-visible:underline"
+              className="mt-1.5 text-xs font-semibold text-primary hover:text-primary-hover hover:underline focus-visible:underline"
             >
               {item.action.label}
             </button>

@@ -28,8 +28,8 @@ function fmt(n: number | null | undefined, d = 2): string {
 function DetailRow({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <dt className="text-[11px] font-medium uppercase tracking-[0.04em] text-faint">{label}</dt>
-      <dd className="truncate text-[13px] text-body">{children}</dd>
+      <dt className="text-2xs font-medium text-faint">{label}</dt>
+      <dd className="truncate text-sm text-body">{children}</dd>
     </div>
   );
 }
@@ -46,10 +46,10 @@ export function PackCard({ pack, all, onEdit, onDelete }: { readonly pack: PackT
       <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
         <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary-soft text-primary"><Icon className="h-4 w-4" aria-hidden /></span>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">{pack.kind === "Primary" ? "Primary (UOM)" : pack.kind}</p>
-          <p className="truncate text-[14px] font-semibold text-foreground">
+          <p className="text-2xs font-semibold text-faint">{pack.kind === "Primary" ? "Primary (UOM)" : pack.kind}</p>
+          <p className="truncate text-base font-semibold text-foreground">
             {pack.packType}
-            <span className="ml-2 text-[12px] font-normal text-secondary">
+            <span className="ml-2 text-xs font-normal text-secondary">
               {pack.kind === "Hierarchical" && parent ? `= ${pack.childQty ?? 2} × ${parent.packType} · ` : ""}UOM qty {qty}
             </span>
           </p>
@@ -71,9 +71,9 @@ export function PackCard({ pack, all, onEdit, onDelete }: { readonly pack: PackT
         {pack.barcodes.length ? pack.barcodes.map((b) => (
           <div key={b} className="flex flex-col items-center rounded-md border border-border bg-white px-1 pb-1">
             <Barcode value={b} height={8} scale={1} showText={false} className="px-2.5 pt-1.5 pb-0.5" aria-label={`Barcode ${b}`} />
-            <span className="font-mono text-[11px] leading-4 text-body" aria-hidden>{b}</span>
+            <span className="font-mono text-2xs leading-4 text-body" aria-hidden>{b}</span>
           </div>
-        )) : <p className="text-[12px] text-faint">No barcodes. Add one so this pack can be scanned.</p>}
+        )) : <p className="text-xs text-faint">No barcodes. Add one so this pack can be scanned.</p>}
       </div>
     </article>
   );
@@ -84,8 +84,8 @@ export function AddCard({ icon: Icon, title, description, onAdd, disabledReason 
     <div className="flex items-center gap-3 rounded-lg border border-dashed border-border-strong/70 bg-surface-sunken/60 px-4 py-3">
       <Icon className="h-6 w-6 text-faint" aria-hidden />
       <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-semibold text-foreground">{title}</p>
-        <p className="text-[12px] text-secondary">{description}</p>
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="text-xs text-secondary">{description}</p>
       </div>
       <Button variant="secondary" size="sm" onClick={onAdd} disabled={Boolean(disabledReason)} title={disabledReason ?? undefined}>
         <Plus className="h-3.5 w-3.5" aria-hidden />Add
@@ -134,7 +134,7 @@ export function StepPackTypes() {
 
   return (
     <div className="flex flex-col gap-4" data-field="packTypes">
-      <p className="text-[12px] text-secondary">Add and edit pack types here. Barcodes can be defined for each pack type; scanning any of them identifies the pack.</p>
+      <p className="text-xs text-secondary">Add and edit pack types here. Barcodes can be defined for each pack type; scanning any of them identifies the pack.</p>
       <SegmentedTabs ariaLabel="Pack type groups" active={tab} onChange={(k) => setTab(k as Tab)} tabs={[
         { key: "uom", label: "Unit of measure" },
         { key: "irregular", label: "Irregulars", count: irregulars.length },
@@ -151,9 +151,9 @@ export function StepPackTypes() {
           </div>
         ) : (
           <button type="button" onClick={() => open("Primary")} aria-invalid={Boolean(errorMessage) || undefined}
-            className="flex h-24 w-full flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-primary/40 bg-primary-soft/40 text-[13px] font-semibold text-primary transition-colors hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+            className="flex h-24 w-full flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-primary/40 bg-primary-soft/40 text-sm font-semibold text-primary transition-colors hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
             <Plus className="h-4 w-4" aria-hidden />Add primary (UOM) pack type
-            <span className="text-[12px] font-normal text-secondary">Dimensions, weight and barcodes of one unit</span>
+            <span className="text-xs font-normal text-secondary">Dimensions, weight and barcodes of one unit</span>
           </button>
         )
       ) : null}

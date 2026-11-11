@@ -28,9 +28,9 @@ export function PlanTimeline({ planId, limit = 20 }: { readonly planId: string; 
   const [shown, setShown] = React.useState(limit);
   const q = useApiQuery<unknown>(["change-log", "shipment_plan", planId, "timeline"], "/api/change-log", { query: { entityType: "shipment_plan", entityId: planId, ps: 200 } });
   if (q.isPending) return <SkeletonText lines={5} />;
-  if (q.error) return <p className="text-[12px] text-danger">Activity could not be loaded. <button type="button" className="font-semibold underline" onClick={() => void q.refetch()}>Retry</button></p>;
+  if (q.error) return <p className="text-xs text-danger">Activity could not be loaded. <button type="button" className="font-semibold underline" onClick={() => void q.refetch()}>Retry</button></p>;
   const items = buildTimeline(parseList(changeLogEntrySchema, q.data?.data), []);
-  if (items.length === 0) return <p className="text-[12px] text-faint">No activity recorded for this plan yet.</p>;
+  if (items.length === 0) return <p className="text-xs text-faint">No activity recorded for this plan yet.</p>;
   return (
     <div className="flex flex-col gap-2">
       <ol className="relative flex flex-col gap-4 pl-1" aria-label="Activity">
@@ -42,8 +42,8 @@ export function PlanTimeline({ planId, limit = 20 }: { readonly planId: string; 
             <li key={item.id} className="relative flex gap-3">
               <span className={cn("z-[1] flex h-6 w-6 shrink-0 items-center justify-center rounded-full ring-4 ring-surface", meta.dot)}><Icon className="h-3 w-3" aria-hidden /></span>
               <div className="min-w-0 pt-0.5">
-                <p className="break-words text-[13px] text-body">{localizeIsoInText(humanizePlanChange(item.title), (iso) => fmt.gridDateTime(iso))}</p>
-                <p className="text-[11px] text-faint">{fmt.gridDateTime(item.at)} · {item.source}</p>
+                <p className="break-words text-sm text-body">{localizeIsoInText(humanizePlanChange(item.title), (iso) => fmt.gridDateTime(iso))}</p>
+                <p className="text-2xs text-faint">{fmt.gridDateTime(item.at)} · {item.source}</p>
               </div>
             </li>
           );

@@ -61,8 +61,8 @@ function Highlighted({ text, query }: { readonly text: string; readonly query: s
   );
 }
 
-const itemClass = "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-body data-[selected=true]:bg-primary-soft data-[selected=true]:text-primary";
-const groupClass = "px-1.5 py-1 [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-faint";
+const itemClass = "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-body data-[selected=true]:bg-primary-soft data-[selected=true]:text-primary";
+const groupClass = "px-1.5 py-1 [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-2xs [&_[cmdk-group-heading]]:font-bold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]: [&_[cmdk-group-heading]]:text-faint";
 
 const SKELETON_ROWS = 3;
 
@@ -70,7 +70,7 @@ const SKELETON_ROWS = 3;
 function RecordsSkeleton() {
   return (
     <div role="status" aria-live="polite" className="px-1.5 py-1">
-      <p className="flex items-center gap-2 px-2.5 pb-1 pt-2 text-[12px] text-secondary">
+      <p className="flex items-center gap-2 px-2.5 pb-1 pt-2 text-xs text-secondary">
         <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-primary/30 border-t-primary" aria-hidden />
         Searching records…
       </p>
@@ -96,7 +96,7 @@ function enterTarget(sections: readonly ("pages" | SearchGroup)[], pageHits: rea
 }
 
 function TypeLabel({ children }: { readonly children: React.ReactNode }) {
-  return <span className="ml-auto shrink-0 text-[11px] text-faint">{children}</span>;
+  return <span className="ml-auto shrink-0 text-2xs text-faint">{children}</span>;
 }
 
 /**
@@ -104,7 +104,7 @@ function TypeLabel({ children }: { readonly children: React.ReactNode }) {
  * from `GET /api/search`. Keyboard navigable; recent searches persist per browser.
  */
 const searchTriggerClass =
-  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-subtle bg-sunken text-[12px] text-fg-secondary outline-none transition-colors " +
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-subtle bg-sunken text-xs text-fg-secondary outline-none transition-colors " +
   "hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-focus min-[1440px]:w-44 min-[1440px]:px-3";
 
 export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly NavMenu[]; readonly extraPages: readonly NavItem[] }) {
@@ -176,7 +176,7 @@ export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly N
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <Search className="h-3.5 w-3.5 shrink-0" aria-hidden />
               <span className="hidden min-w-0 flex-1 whitespace-nowrap text-left min-[1440px]:inline">Search…</span>
-              <kbd className="hidden shrink-0 rounded border border-border-subtle bg-panel px-1.5 py-px text-[10px] font-semibold text-fg-secondary min-[1440px]:inline">/</kbd>
+              <kbd className="hidden shrink-0 rounded border border-border-subtle bg-panel px-1.5 py-px text-2xs font-semibold text-fg-secondary min-[1440px]:inline">/</kbd>
             </span>
           </button>
         </DialogPrimitive.Trigger>
@@ -188,7 +188,7 @@ export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly N
           <Command shouldFilter={false} loop label="Global search" onKeyDown={onKeyDown}>
             <div className="flex items-center gap-2 border-b border-border px-3">
               <Search className="h-4 w-4 shrink-0 text-faint" aria-hidden />
-              <Command.Input value={query} onValueChange={setQuery} placeholder="Search pages, orders, POs, SKUs, LPs, locations, users…" className="h-12 flex-1 bg-transparent text-[14px] text-foreground outline-none placeholder:text-faint" />
+              <Command.Input value={query} onValueChange={setQuery} placeholder="Search pages, orders, POs, SKUs, LPs, locations, users…" className="h-12 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-faint" />
               {query ? (
                 <button type="button" aria-label="Clear search" onClick={() => setQuery("")} className="rounded p-1 text-faint hover:bg-neutral-soft hover:text-secondary">
                   <X className="h-4 w-4" aria-hidden />
@@ -198,12 +198,12 @@ export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly N
             <Command.List className="max-h-[min(60vh,480px)] overflow-y-auto py-1">
               {nothing ? (
                 <div role="status" className="px-4 py-8 text-center">
-                  <p className="text-[13px] font-medium text-foreground">No results for &ldquo;{query.trim()}&rdquo;</p>
-                  <p className="mt-1 text-[12px] text-faint">Try a full code (SO010916, PO002210), a SKU, an LP, a location, a user&apos;s email or a page name.</p>
+                  <p className="text-sm font-medium text-foreground">No results for &ldquo;{query.trim()}&rdquo;</p>
+                  <p className="mt-1 text-xs text-faint">Try a full code (SO010916, PO002210), a SKU, an LP, a location, a user&apos;s email or a page name.</p>
                 </div>
               ) : null}
               {records.isError && recordsEnabled && !records.isFetching ? (
-                <p role="alert" className="flex items-center gap-2 px-4 py-2 text-[12px] text-danger">
+                <p role="alert" className="flex items-center gap-2 px-4 py-2 text-xs text-danger">
                   Record search is unavailable right now.
                   <button type="button" onClick={() => void records.refetch()} className="rounded font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
                     Retry
@@ -220,7 +220,7 @@ export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly N
                   ))}
                 </Command.Group>
               ) : null}
-              {!query.trim() && recent.length === 0 ? <p className="px-4 py-6 text-center text-[12px] text-faint">Type a page name, order code, PO, SKU, barcode, LP or location.</p> : null}
+              {!query.trim() && recent.length === 0 ? <p className="px-4 py-6 text-center text-xs text-faint">Type a page name, order code, PO, SKU, barcode, LP or location.</p> : null}
               {sections.map((section) =>
                 section === "pages" ? (
                   <Command.Group key="pages" heading="Pages" className={groupClass}>
@@ -239,8 +239,8 @@ export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly N
                         <span className="min-w-0 flex-1">
                           <span className="block truncate"><Highlighted text={hit.title} query={debounced} /></span>
                           {hit.subtitle || hit.status ? (
-                            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-faint">
-                              {hit.status ? <StatusPill status={hit.status.label} domain={hit.status.domain} size="sm" className="shrink-0 text-[11px]" /> : null}
+                            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-faint">
+                              {hit.status ? <StatusPill status={hit.status.label} domain={hit.status.domain} size="sm" className="shrink-0 text-2xs" /> : null}
                               {hit.subtitle ? <span className="min-w-0 truncate"><Highlighted text={hit.subtitle} query={debounced} /></span> : null}
                             </span>
                           ) : null}
@@ -249,7 +249,7 @@ export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly N
                       </Command.Item>
                     ))}
                     {section.seeAllHref ? (
-                      <Command.Item value={`seeall:${section.key}`} onSelect={() => go(section.seeAllHref ?? "/")} className={cn(itemClass, "text-[12px] font-semibold text-primary")}>
+                      <Command.Item value={`seeall:${section.key}`} onSelect={() => go(section.seeAllHref ?? "/")} className={cn(itemClass, "text-xs font-semibold text-primary")}>
                         {seeAllLabel(section.total ?? section.hits.length, section.label)}
                         <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                       </Command.Item>
@@ -259,7 +259,7 @@ export function GlobalSearch({ menus, extraPages }: { readonly menus: readonly N
               )}
               {showSkeleton ? <RecordsSkeleton /> : null}
             </Command.List>
-            <div className={cn("flex items-center gap-3 border-t border-border bg-surface-sunken px-3 py-2 text-[11px] text-faint")}>
+            <div className={cn("flex items-center gap-3 border-t border-border bg-surface-sunken px-3 py-2 text-2xs text-faint")}>
               <span className="flex items-center gap-1"><Kbd>↑</Kbd><Kbd>↓</Kbd> navigate</span>
               <span className="flex items-center gap-1"><Kbd><CornerDownLeft className="h-2.5 w-2.5" aria-hidden /></Kbd> open</span>
               <span className="flex items-center gap-1"><Kbd>Esc</Kbd> close</span>

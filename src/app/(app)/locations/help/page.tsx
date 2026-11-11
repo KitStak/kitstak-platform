@@ -38,14 +38,14 @@ export default function Page() {
     <div className="pb-10">
       <PageHeader title="Facility help" helper="How locations, warehouses, license plates, carts and packages are set up." />
       <nav aria-label="Topics" className="mt-4 flex flex-wrap gap-2 px-6">
-        {TOPICS.map((t) => <a key={t.id} href={`#${t.id}`} className="rounded border border-border px-2 py-1 text-[13px] hover:bg-muted">{t.title}</a>)}
+        {TOPICS.map((t) => <a key={t.id} href={`#${t.id}`} className="rounded border border-border px-2 py-1 text-sm hover:bg-muted">{t.title}</a>)}
       </nav>
       <div className="mt-4 space-y-6 px-6">
         {TOPICS.map((t) => (
           <section key={t.id} id={t.id} className="max-w-[760px] scroll-mt-16">
             <h2 className="text-base font-semibold">{t.title}</h2>
-            <ul className="mt-1 list-disc space-y-1 pl-5 text-[13px] text-secondary">{t.body.map((b) => <li key={b}>{b}</li>)}</ul>
-            <a href={t.href} className="mt-1 inline-block text-[13px] text-[var(--info)] hover:underline">Open {t.title}</a>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-secondary">{t.body.map((b) => <li key={b}>{b}</li>)}</ul>
+            <a href={t.href} className="mt-1 inline-block text-sm text-[var(--info)] hover:underline">Open {t.title}</a>
           </section>
         ))}
       </div>

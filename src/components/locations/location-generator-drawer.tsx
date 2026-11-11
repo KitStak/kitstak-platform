@@ -52,7 +52,7 @@ function RangeInput({ label, value, onChange, error, hint, required }: { readonl
         <span className="text-faint" aria-hidden>–</span>
         <TextField aria-label={`${label} to`} value={value.to} onChange={(e) => onChange({ ...value, to: e.target.value.toUpperCase() })} invalid={Boolean(error)} maxLength={4} placeholder="To" className="text-center" />
       </div>
-      {error ? <p role="alert" className="text-[11px] text-danger">{error}</p> : <p className="text-[11px] text-faint">{hint}</p>}
+      {error ? <p role="alert" className="text-2xs text-danger">{error}</p> : <p className="text-2xs text-faint">{hint}</p>}
     </div>
   );
 }
@@ -180,25 +180,25 @@ export function LocationGeneratorDrawer({ open, onOpenChange, defaultWarehouseId
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" aria-hidden />
-              <h3 className="text-[14px] font-semibold text-foreground">Preview</h3>
+              <h3 className="text-base font-semibold text-foreground">Preview</h3>
               {previewing ? <Spinner className="h-3.5 w-3.5" label="Checking codes" /> : null}
             </div>
-            <span className={cn("text-[22px] font-semibold tabular-nums tracking-tight", localCount > GENERATOR_MAX ? "text-danger" : "text-foreground")}>
-              {shownCount.toLocaleString("en-US")}<span className="ml-1 text-[12px] font-normal text-secondary">{shownCount === 1 ? "location" : "locations"}</span>
+            <span className={cn("text-xl font-semibold tabular-nums tracking-tight", localCount > GENERATOR_MAX ? "text-danger" : "text-foreground")}>
+              {shownCount.toLocaleString("en-US")}<span className="ml-1 text-xs font-normal text-secondary">{shownCount === 1 ? "location" : "locations"}</span>
             </span>
           </div>
           {localCount > 0 && patternValid ? (
             <ul className="mt-3 flex flex-wrap gap-1.5" aria-label={`First ${GENERATOR_PREVIEW_COUNT} codes`}>
               {localCodes.slice(0, GENERATOR_PREVIEW_COUNT).map((g) => {
                 const clash = preview?.collisions.includes(g.code);
-                return <li key={g.code} className={cn("rounded-md border px-1.5 py-0.5 font-mono text-[11px]", clash ? "border-danger/40 bg-danger-soft text-danger line-through" : "border-border bg-surface text-body")}>{g.code}</li>;
+                return <li key={g.code} className={cn("rounded-md border px-1.5 py-0.5 font-mono text-2xs", clash ? "border-danger/40 bg-danger-soft text-danger line-through" : "border-border bg-surface text-body")}>{g.code}</li>;
               })}
-              {localCount > GENERATOR_PREVIEW_COUNT ? <li className="px-1.5 py-0.5 text-[11px] text-faint">+{(localCount - GENERATOR_PREVIEW_COUNT).toLocaleString("en-US")} more</li> : null}
+              {localCount > GENERATOR_PREVIEW_COUNT ? <li className="px-1.5 py-0.5 text-2xs text-faint">+{(localCount - GENERATOR_PREVIEW_COUNT).toLocaleString("en-US")} more</li> : null}
             </ul>
           ) : limitError ? (
             <Callout variant="error" className="mt-3" title={limitError}>One run creates at most {GENERATOR_MAX.toLocaleString("en-US")} locations. Narrow the aisle, rack, level or position range, or split the pattern into several runs.</Callout>
-          ) : <p className="mt-2 text-[12px] text-secondary">{rangesStarted && !rangesValid ? "Fix the highlighted ranges to see the codes." : "Fill the aisle and rack ranges to see the codes."}</p>}
-          {patternValid && !values.warehouseId ? <p className="mt-3 text-[12px] text-secondary">Pick a warehouse to check these codes against existing locations.</p> : null}
+          ) : <p className="mt-2 text-xs text-secondary">{rangesStarted && !rangesValid ? "Fix the highlighted ranges to see the codes." : "Fill the aisle and rack ranges to see the codes."}</p>}
+          {patternValid && !values.warehouseId ? <p className="mt-3 text-xs text-secondary">Pick a warehouse to check these codes against existing locations.</p> : null}
           {previewError ? (
             <Callout variant="error" className="mt-3" title={previewError} action={<Button size="sm" variant="secondary" onClick={() => setRetryTick((t) => t + 1)}>Retry</Button>}>
               Creating is paused until the collision check succeeds.
@@ -206,18 +206,18 @@ export function LocationGeneratorDrawer({ open, onOpenChange, defaultWarehouseId
           ) : null}
           {preview && collisionCopy ? (
             <Callout variant="attention" className="mt-3" title={collisionCopy.title}>
-              <span className="font-mono text-[11px]">{preview.collisions.slice(0, 8).join(", ")}{preview.collisionCount > 8 ? "…" : ""}</span>
-              {collisionCopy.skipLabel ? <div className="mt-2"><Checkbox checked={skipExisting} onCheckedChange={(v) => setSkipExisting(v === true)} label={collisionCopy.skipLabel} /></div> : <p className="mt-2 text-[12px] text-secondary">Change a range or the code prefix to make new codes.</p>}
+              <span className="font-mono text-2xs">{preview.collisions.slice(0, 8).join(", ")}{preview.collisionCount > 8 ? "…" : ""}</span>
+              {collisionCopy.skipLabel ? <div className="mt-2"><Checkbox checked={skipExisting} onCheckedChange={(v) => setSkipExisting(v === true)} label={collisionCopy.skipLabel} /></div> : <p className="mt-2 text-xs text-secondary">Change a range or the code prefix to make new codes.</p>}
             </Callout>
           ) : preview && preview.total > 0 ? (
-            <p className="mt-3 flex items-center gap-1.5 text-[12px] text-success"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden />No collisions with existing locations.</p>
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden />No collisions with existing locations.</p>
           ) : null}
-          {patternValid && createCount > GENERATOR_BACKGROUND_ABOVE ? <p className="mt-2 flex items-center gap-1.5 text-[12px] text-secondary"><AlertTriangle className="h-3.5 w-3.5 text-warning" aria-hidden />More than {GENERATOR_BACKGROUND_ABOVE} locations: the run continues in the background and you&apos;ll get a notification.</p> : null}
+          {patternValid && createCount > GENERATOR_BACKGROUND_ABOVE ? <p className="mt-2 flex items-center gap-1.5 text-xs text-secondary"><AlertTriangle className="h-3.5 w-3.5 text-warning" aria-hidden />More than {GENERATOR_BACKGROUND_ABOVE} locations: the run continues in the background and you&apos;ll get a notification.</p> : null}
         </section>
         </div>
 
         <div className="sticky bottom-0 -mx-5 -mb-4 flex items-center justify-end gap-2 border-t border-border bg-surface px-5 py-3">
-          <p className="mr-auto truncate text-[12px] text-secondary xl:hidden" aria-hidden>{patternValid ? `${localCount.toLocaleString("en-US")} codes${preview ? (preview.collisionCount > 0 ? ` · ${preview.collisionCount} already exist` : " · no collisions") : ""}` : limitError ?? (rangesStarted ? "Fix the highlighted ranges" : "Fill the aisle and rack ranges")}</p>
+          <p className="mr-auto truncate text-xs text-secondary xl:hidden" aria-hidden>{patternValid ? `${localCount.toLocaleString("en-US")} codes${preview ? (preview.collisionCount > 0 ? ` · ${preview.collisionCount} already exist` : " · no collisions") : ""}` : limitError ?? (rangesStarted ? "Fix the highlighted ranges" : "Fill the aisle and rack ranges")}</p>
           <Button variant="ghost" onClick={close}>Cancel</Button>
           <DisabledReason reason={!form.formState.isSubmitting && (!valid || blocked) ? blockedReason ?? null : null}>
             <Button type="submit" variant="primary" disabled={form.formState.isSubmitting || !valid || blocked}>

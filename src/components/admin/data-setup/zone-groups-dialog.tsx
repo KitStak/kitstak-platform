@@ -63,11 +63,11 @@ export function ZoneGroupsDialog({ open, onOpenChange, canEdit, onSaved }: { rea
         <DialogBody className="flex flex-col gap-4">
           {q.isError ? <Callout variant="error" title="Couldn't load zones" action={<Button size="sm" onClick={() => void q.refetch()}>Retry</Button>}>Check your connection and try again.</Callout> : null}
           {q.isLoading ? <div className="flex flex-col gap-2"><Skeleton className="h-10" /><Skeleton className="h-10" /><Skeleton className="h-10" /></div> : null}
-          {data && data.zones.length === 0 ? <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-[13px] text-secondary">Create a location zone first, then match it with product groups.</p> : null}
+          {data && data.zones.length === 0 ? <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-secondary">Create a location zone first, then match it with product groups.</p> : null}
           {data && data.zones.length > 0 && data.groups.length === 0 ? <Callout variant="info" title="No product groups yet">Create product groups in Data Setup › Product Group to match them with zones.</Callout> : null}
           {data ? [...byWarehouse.entries()].map(([wh, zones]) => (
             <section key={wh} className="flex flex-col gap-2">
-              <h3 className="text-[11px] font-bold uppercase tracking-[0.06em] text-faint">{wh}</h3>
+              <h3 className="text-2xs font-bold text-faint">{wh}</h3>
               <ul className="divide-y divide-border rounded-lg border border-border">
                 {zones.map((z) => {
                   const value = valueOf(z.id, z.productGroupIds);
@@ -75,8 +75,8 @@ export function ZoneGroupsDialog({ open, onOpenChange, canEdit, onSaved }: { rea
                   return (
                     <li key={z.id} className="grid grid-cols-1 items-center gap-2 px-3 py-2 sm:grid-cols-[200px_1fr]">
                       <span className="flex min-w-0 items-center gap-2">
-                        <span className="truncate text-[13px] font-medium text-foreground" title={z.name}>{z.name}</span>
-                        {z.code ? <span className="shrink-0 text-[11px] text-faint">{z.code}</span> : null}
+                        <span className="truncate text-sm font-medium text-foreground" title={z.name}>{z.name}</span>
+                        {z.code ? <span className="shrink-0 text-2xs text-faint">{z.code}</span> : null}
                         {!z.isActive ? <Badge size="sm" tone="neutral">Inactive</Badge> : null}
                         {dirty ? <Badge size="sm" tone="info">Changed</Badge> : null}
                       </span>
@@ -90,7 +90,7 @@ export function ZoneGroupsDialog({ open, onOpenChange, canEdit, onSaved }: { rea
           )) : null}
         </DialogBody>
         <DialogFooter>
-          <span className="mr-auto text-[12px] text-faint">{changed.length ? `${changed.length} ${changed.length === 1 ? "zone" : "zones"} changed` : "No changes yet"}</span>
+          <span className="mr-auto text-xs text-faint">{changed.length ? `${changed.length} ${changed.length === 1 ? "zone" : "zones"} changed` : "No changes yet"}</span>
           <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
           <Button variant="primary" onClick={() => void save()} disabled={!canEdit || saving || changed.length === 0} aria-busy={saving}>{saving ? "Saving…" : "Save"}</Button>
         </DialogFooter>

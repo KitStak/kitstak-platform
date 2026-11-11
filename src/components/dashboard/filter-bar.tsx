@@ -46,7 +46,7 @@ export function MultiSelect({ label, options, value, onApply }: {
           type="button"
           aria-label={`${label}: ${summary}`}
           className={cn(
-            "inline-flex h-8 max-w-[260px] items-center gap-1.5 rounded-md border bg-surface px-2.5 text-[12.5px] transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+            "inline-flex h-8 max-w-[260px] items-center gap-1.5 rounded-md border bg-surface px-2.5 text-xs transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
             value.length > 0 ? "border-primary/40 text-foreground" : "border-border text-secondary",
           )}
         >
@@ -63,10 +63,10 @@ export function MultiSelect({ label, options, value, onApply }: {
           </div>
         </div>
         <ul role="listbox" aria-multiselectable aria-label={label} className="max-h-[260px] overflow-auto py-1">
-          {shown.length === 0 ? <li className="px-3 py-2 text-[12.5px] text-faint">No matches</li> : null}
+          {shown.length === 0 ? <li className="px-3 py-2 text-xs text-faint">No matches</li> : null}
           {shown.map((o) => (
             <li key={o.id} role="option" aria-selected={draft.includes(o.id)}>
-              <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[13px] hover:bg-primary/5">
+              <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-primary/5">
                 <Checkbox checked={draft.includes(o.id)} onCheckedChange={() => toggle(o.id)} aria-label={o.label} />
                 <span className="truncate">{o.label}</span>
               </label>
@@ -94,11 +94,11 @@ export function DashboardFilterBar({ warehouses, clients, warehouseIds, clientId
   const active = warehouseIds.length + clientIds.length > 0;
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Dashboard filters">
-      <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-faint"><Filter className="h-3.5 w-3.5" aria-hidden />Filter by</span>
+      <span className="inline-flex items-center gap-1 text-2xs font-semibold text-faint"><Filter className="h-3.5 w-3.5" aria-hidden />Filter by</span>
       <MultiSelect label="Warehouse" options={warehouses} value={warehouseIds} onApply={(w) => onChange({ warehouseIds: w, clientIds })} />
       <MultiSelect label="Client" options={clients} value={clientIds} onApply={(c) => onChange({ warehouseIds, clientIds: c })} />
       {active ? (
-        <button type="button" onClick={() => onChange({ warehouseIds: [], clientIds: [] })} className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[12px] font-medium text-secondary hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+        <button type="button" onClick={() => onChange({ warehouseIds: [], clientIds: [] })} className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-secondary hover:bg-primary/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
           <X className="h-3.5 w-3.5" aria-hidden />Reset
         </button>
       ) : null}

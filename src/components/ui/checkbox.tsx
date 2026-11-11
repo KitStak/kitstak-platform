@@ -43,10 +43,10 @@ export const Checkbox = React.forwardRef<React.ElementRef<typeof CheckboxPrimiti
       <div className="flex items-start gap-2">
         <div className="pt-0.5">{box}</div>
         <div className="flex flex-col">
-          <label htmlFor={boxId} className="cursor-pointer text-[13px] text-body">
+          <label htmlFor={boxId} className="cursor-pointer text-sm text-body">
             {label}
           </label>
-          {description ? <span className="text-[11px] leading-4 text-faint">{description}</span> : null}
+          {description ? <span className="text-2xs leading-4 text-faint">{description}</span> : null}
         </div>
       </div>
     );

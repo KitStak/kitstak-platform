@@ -42,7 +42,7 @@ function EnumEditor({ def, draft, onChange }: EditorProps<Extract<FilterDraft, {
 
   return (
     <div className="flex flex-col gap-2">
-      <div role="radiogroup" aria-label={`${def.label} match`} className="inline-flex w-fit rounded-md border border-border p-0.5 text-[12px]">
+      <div role="radiogroup" aria-label={`${def.label} match`} className="inline-flex w-fit rounded-md border border-border p-0.5 text-xs">
         {([[false, "Is any of"], [true, "Is none of"]] as const).map(([ex, label]) => (
           <button key={label} type="button" role="radio" aria-checked={Boolean(draft.exclude) === ex} onClick={() => onChange({ ...draft, exclude: ex })}
             className={cn("rounded px-2 py-0.5 font-medium", Boolean(draft.exclude) === ex ? "bg-info-soft text-info" : "text-secondary hover:bg-muted")}>
@@ -53,14 +53,14 @@ function EnumEditor({ def, draft, onChange }: EditorProps<Extract<FilterDraft, {
       {(def.options?.length ?? 0) > ENUM_SEARCH_ABOVE ? (
         <TextField size="sm" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search values" aria-label={`Search ${def.label} values`} leading={<Search className="h-3.5 w-3.5" aria-hidden />} />
       ) : null}
-      <div className="flex items-center justify-between text-[11px] text-faint">
+      <div className="flex items-center justify-between text-2xs text-faint">
         <span>Selected: {draft.values.length}</span>
         <button type="button" className="font-semibold text-primary hover:underline" onClick={() => onChange({ ...draft, type: "enum", values: allOn ? [] : allValues })}>
           {allOn ? "Clear all" : "Select all"}
         </button>
       </div>
       <ul className="ks-scroll flex max-h-56 flex-col gap-1.5 overflow-auto pr-1" aria-label={`${def.label} values`}>
-        {options.length === 0 ? <li className="py-3 text-center text-[12px] text-faint">No matching values</li> : null}
+        {options.length === 0 ? <li className="py-3 text-center text-xs text-faint">No matching values</li> : null}
         {options.map((o) => (
           <li key={o.value}>
             <Checkbox label={o.label} checked={selected.has(o.value)} onCheckedChange={(c) => toggle(o.value, c === true)} />
@@ -89,11 +89,11 @@ function NumberEditor({ def, draft, onChange }: EditorProps<Extract<FilterDraft,
   const decimals = def.decimals ?? 0;
   return (
     <div className="grid grid-cols-2 gap-2">
-      <label className="flex flex-col gap-1 text-[11px] font-semibold text-secondary">
+      <label className="flex flex-col gap-1 text-2xs font-semibold text-secondary">
         Min
         <NumberInput size="sm" decimals={decimals} value={draft.min} onChange={(min) => onChange({ ...draft, min })} aria-label={`${def.label} minimum`} />
       </label>
-      <label className="flex flex-col gap-1 text-[11px] font-semibold text-secondary">
+      <label className="flex flex-col gap-1 text-2xs font-semibold text-secondary">
         Max
         <NumberInput size="sm" decimals={decimals} value={draft.max} onChange={(max) => onChange({ ...draft, max })} aria-label={`${def.label} maximum`} />
       </label>
@@ -116,7 +116,7 @@ function BooleanEditor({ def, draft, onChange }: EditorProps<Extract<FilterDraft
           aria-pressed={draft.value === o.value}
           onClick={() => onChange({ type: "boolean", value: draft.value === o.value ? null : o.value })}
           className={cn(
-            "h-8 rounded-md border text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30",
+            "h-8 rounded-md border text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30",
             draft.value === o.value ? o.on : "border-border text-secondary hover:bg-surface-sunken"
           )}
         >
@@ -146,7 +146,7 @@ function DateEditor({ def, draft, onChange }: EditorProps<Extract<FilterDraft, {
             aria-checked={value.preset === o.key}
             onClick={() => set({ preset: o.key as DatePresetKey })}
             className={cn(
-              "rounded-md border px-2 py-1.5 text-left text-[12px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30",
+              "rounded-md border px-2 py-1.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30",
               value.preset === o.key ? "border-primary bg-primary-soft font-semibold text-primary" : "border-border text-body hover:bg-surface-sunken"
             )}
           >
@@ -155,18 +155,18 @@ function DateEditor({ def, draft, onChange }: EditorProps<Extract<FilterDraft, {
         ))}
       </div>
       {option?.needsDays ? (
-        <label className="flex items-center gap-2 text-[12px] text-secondary">
+        <label className="flex items-center gap-2 text-xs text-secondary">
           X day
           <NumberInput size="sm" className="w-24" min={0} max={3650} value={value.days} onChange={(days) => set({ days: days ?? 0 })} aria-label="Number of days" />
         </label>
       ) : null}
       {option?.key === "custom" ? (
         <div className="grid grid-cols-1 gap-2">
-          <label className="flex flex-col gap-1 text-[11px] font-semibold text-secondary">
+          <label className="flex flex-col gap-1 text-2xs font-semibold text-secondary">
             From
             <DateField includeTime size="sm" value={toPickerDate(value.from)} onChange={(d) => set({ from: d ? formatInputDateTime(d) : "" })} clearable />
           </label>
-          <label className="flex flex-col gap-1 text-[11px] font-semibold text-secondary">
+          <label className="flex flex-col gap-1 text-2xs font-semibold text-secondary">
             To
             <DateField includeTime size="sm" value={toPickerDate(value.to)} onChange={(d) => set({ to: d ? formatInputDateTime(d) : "" })} clearable />
           </label>

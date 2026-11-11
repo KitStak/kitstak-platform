@@ -55,8 +55,8 @@ export function tabFromParam(v: string | null): Tab {
 function Table({ head, children }: { readonly head: readonly (string | { label: string; right?: boolean })[]; readonly children: React.ReactNode }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-[13px]">
-        <thead className="bg-surface-sunken text-[11px] uppercase tracking-wide text-secondary">
+      <table className="w-full text-sm">
+        <thead className="bg-surface-sunken text-2xs text-secondary">
           <tr>{head.map((h) => { const c = typeof h === "string" ? { label: h } : h; return <th key={c.label} className={cn("whitespace-nowrap px-3 py-2 font-semibold", c.right ? "text-right" : "text-left")}>{c.label}</th>; })}</tr>
         </thead>
         <tbody className="divide-y divide-border">{children}</tbody>
@@ -68,8 +68,8 @@ function Table({ head, children }: { readonly head: readonly (string | { label: 
 function Stat({ label, value, tone }: { readonly label: string; readonly value: React.ReactNode; readonly tone?: "warn" }) {
   return (
     <div className="rounded-lg border border-border bg-surface px-3.5 py-2.5 shadow-xs">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-faint">{label}</p>
-      <p className={cn("mt-0.5 text-[20px] font-semibold tabular-nums tracking-tight text-foreground", tone === "warn" && "text-warning")}>{value}</p>
+      <p className="text-2xs font-medium text-faint">{label}</p>
+      <p className={cn("mt-0.5 text-lg font-semibold tabular-nums tracking-tight text-foreground", tone === "warn" && "text-warning")}>{value}</p>
     </div>
   );
 }
@@ -189,16 +189,16 @@ export function LocationDetailPage({ id }: { readonly id: string }) {
               {tab === "capacity" ? (
                 <div className="flex flex-col gap-4">
                   <div>
-                    <h3 className="mb-2 text-[13px] font-semibold">Product capacity</h3>
-                    {d.productCapacities.length === 0 ? <p className="text-[12px] text-secondary">No product capacities. Edit the location to add min / max per SKU.</p> : (
+                    <h3 className="mb-2 text-sm font-semibold">Product capacity</h3>
+                    {d.productCapacities.length === 0 ? <p className="text-xs text-secondary">No product capacities. Edit the location to add min / max per SKU.</p> : (
                       <Table head={["SKU", "Product", "Client", "Pack type", { label: "Min", right: true }, { label: "Max", right: true }]}>
                         {d.productCapacities.map((p) => <tr key={p.id}><td className="px-3 py-2 font-medium"><SkuLink id={p.productId} sku={p.sku} /></td><td className="px-3 py-2">{p.productName}</td><td className="px-3 py-2">{p.clientName}</td><td className="px-3 py-2">{p.packType}</td><td className="px-3 py-2 text-right tabular-nums">{p.minQty}</td><td className="px-3 py-2 text-right tabular-nums">{p.maxQty}</td></tr>)}
                       </Table>
                     )}
                   </div>
                   <div>
-                    <h3 className="mb-2 text-[13px] font-semibold">LP capacity</h3>
-                    {d.lpCapacities.length === 0 ? <p className="text-[12px] text-secondary">No LP capacities.</p> : (
+                    <h3 className="mb-2 text-sm font-semibold">LP capacity</h3>
+                    {d.lpCapacities.length === 0 ? <p className="text-xs text-secondary">No LP capacities.</p> : (
                       <Table head={["LP type", { label: "Min", right: true }, { label: "Max", right: true }, "Product SKU"]}>
                         {d.lpCapacities.map((p) => <tr key={p.id}><td className="px-3 py-2 font-medium">{p.lpTypeCode}</td><td className="px-3 py-2 text-right tabular-nums">{p.minQty}</td><td className="px-3 py-2 text-right tabular-nums">{p.maxQty}</td><td className="px-3 py-2">{p.sku ?? <Muted>Any</Muted>}</td></tr>)}
                       </Table>
@@ -215,7 +215,7 @@ export function LocationDetailPage({ id }: { readonly id: string }) {
             </div>
           </section>
           <section className="rounded-lg border border-border bg-surface p-4 shadow-xs">
-            <h2 className="mb-3 text-[14px] font-semibold">Attributes</h2>
+            <h2 className="mb-3 text-base font-semibold">Attributes</h2>
             <KvList columns={3} items={[
               { key: "wh", label: "Warehouse", value: warehouseLabel(d.warehouseCode, d.warehouseName) },
               { key: "group", label: "Location group", value: d.locationGroup },
@@ -238,8 +238,8 @@ export function LocationDetailPage({ id }: { readonly id: string }) {
               { key: "pap", label: "Print & apply on packing", value: <YesNo value={d.printApplyOnPacking} /> },
             ]} />
             <div className="mt-4 border-t border-border pt-3">
-              <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-secondary">Location rules</h3>
-              {rules.length === 0 ? <p className="text-[12px] text-secondary">No rules: any SKU, lot and LP mix is allowed.</p> : (
+              <h3 className="mb-2 text-xs font-semibold text-secondary">Location rules</h3>
+              {rules.length === 0 ? <p className="text-xs text-secondary">No rules: any SKU, lot and LP mix is allowed.</p> : (
                 <div className="flex flex-wrap gap-1.5">{rules.map((r) => <Badge key={r.key} tone="primary" title={r.hint}>{r.label}</Badge>)}</div>
               )}
             </div>
@@ -249,19 +249,19 @@ export function LocationDetailPage({ id }: { readonly id: string }) {
         </div>
         <aside className="flex flex-col gap-3">
           <section className="rounded-lg border border-border bg-surface p-4 shadow-xs">
-            <h2 className="text-[13px] font-semibold">Label preview</h2>
-            <p className="text-[11px] text-faint">4 × 2 in · Code 128</p>
+            <h2 className="text-sm font-semibold">Label preview</h2>
+            <p className="text-2xs text-faint">4 × 2 in · Code 128</p>
             <div className="mt-3 flex flex-col items-center gap-1 rounded-md border border-dashed border-border-strong bg-white px-3 py-3 text-center text-black">
-              <span className="text-[18px] font-bold leading-tight">{d.code}</span>
-              {d.locationType ? <span className="text-[10px] text-neutral-600">{splitCamel(d.locationType)}</span> : null}
+              <span className="text-lg font-bold leading-tight">{d.code}</span>
+              {d.locationType ? <span className="text-2xs text-neutral-600">{splitCamel(d.locationType)}</span> : null}
               <Barcode value={d.barcode} height={10} scale={2} showText={false} className="mt-1 max-w-full" aria-label={`Barcode ${d.barcode}`} />
               {/* One HRI line, rendered separately so it keeps a quiet zone below the bars. */}
-              <span className="mt-1.5 font-mono text-[11px] tracking-[0.08em] text-black" aria-hidden>{d.barcode}</span>
-              <span className="text-[10px] text-neutral-600">{[d.warehouseCode, d.locationZone && `Zone ${d.locationZone}`, d.aisle && `Aisle ${d.aisle}`, d.level && d.level !== "0" ? `Level ${d.level}` : null].filter(Boolean).join(" | ")}</span>
+              <span className="mt-1.5 font-mono text-2xs tracking-[0.08em] text-black" aria-hidden>{d.barcode}</span>
+              <span className="text-2xs text-neutral-600">{[d.warehouseCode, d.locationZone && `Zone ${d.locationZone}`, d.aisle && `Aisle ${d.aisle}`, d.level && d.level !== "0" ? `Level ${d.level}` : null].filter(Boolean).join(" | ")}</span>
             </div>
             <Button className="mt-3 w-full" disabled={!perms.label} onClick={() => setPrint(true)}><Printer className="h-4 w-4" />Print label</Button>
           </section>
-          <section className="rounded-lg border border-border bg-surface p-4 text-[12px] text-secondary shadow-xs">
+          <section className="rounded-lg border border-border bg-surface p-4 text-xs text-secondary shadow-xs">
             <p>Created {fmt.dateTime(d.createdAt)}</p>
             <p className="mt-1">Last updated {fmt.dateTime(d.updatedAt)}</p>
           </section>

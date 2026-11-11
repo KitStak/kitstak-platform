@@ -94,19 +94,19 @@ export function PoLabelPrintModal({ ids, open, onOpenChange }: { readonly ids: r
           <div className="flex items-start gap-3 rounded-lg border border-primary bg-primary-soft p-3" role="group" aria-label="Printout template">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-white"><FileText className="h-4 w-4" aria-hidden /></span>
             <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">Product label <Badge tone="info" size="sm">Default</Badge></span>
-              <span className="text-[12px] text-faint">SKU, barcode, name, pack type and lot</span>
+              <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">Product label <Badge tone="info" size="sm">Default</Badge></span>
+              <span className="text-xs text-faint">SKU, barcode, name, pack type and lot</span>
             </span>
           </div>
           <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
             <Switch checked={useLineQty} onCheckedChange={(v) => { setUseLineQty(Boolean(v)); setPreviewId(null); }} label="Use as line quantity" description="Print one label per unit on each line. Off: one label per line." />
             {useLineQty ? (
-              <div className="flex flex-wrap items-center gap-2 text-[12px] text-secondary">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-secondary">
                 <span>Quantity basis</span>
                 <SegmentedControl size="sm" ariaLabel="Label quantity basis" value={basis} onChange={(v) => { setBasis(v); setPreviewId(null); }} options={[{ value: "ordered" as const, label: "Ordered" }, { value: "received" as const, label: "Received" }]} />
               </div>
             ) : null}
-            <label className="flex w-48 flex-col gap-1 text-[12px] font-semibold text-secondary">
+            <label className="flex w-48 flex-col gap-1 text-xs font-semibold text-secondary">
               Print quantity
               <NumberInput min={1} max={MAX_COPIES} value={copies} onChange={(v) => { setCopies(v); setPreviewId(null); }} aria-label="Print quantity" />
             </label>
@@ -114,8 +114,8 @@ export function PoLabelPrintModal({ ids, open, onOpenChange }: { readonly ids: r
           {q.isPending ? <div className="flex flex-col gap-1.5" aria-busy="true"><Skeleton className="h-6 w-full" /><Skeleton className="h-6 w-full" /></div> : null}
           {!q.isPending && lines.length > 0 ? (
             <div className="relative max-h-48 max-w-full overflow-auto rounded-md border border-border ks-scroll">
-              <table className="w-full border-collapse whitespace-nowrap text-[12px]">
-                <thead><tr className="text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{["PO number", "SKU", "Ordered", "Received", "Labels"].map((h) => <th key={h} className="border-b border-border px-2.5 py-1.5">{h}</th>)}</tr></thead>
+              <table className="w-full border-collapse whitespace-nowrap text-xs">
+                <thead><tr className="text-left text-2xs font-semibold text-faint">{["PO number", "SKU", "Ordered", "Received", "Labels"].map((h) => <th key={h} className="border-b border-border px-2.5 py-1.5">{h}</th>)}</tr></thead>
                 <tbody>
                   {lines.map((l, i) => {
                     const n = (useLineQty ? (basis === "received" ? l.received : l.ordered) : 1) * Math.max(1, copies ?? 1);
@@ -133,7 +133,7 @@ export function PoLabelPrintModal({ ids, open, onOpenChange }: { readonly ids: r
               </table>
             </div>
           ) : null}
-          {records.length >= MAX_LABELS ? <p className="text-[12px] text-warning">Capped at {MAX_LABELS.toLocaleString()} labels per print.</p> : null}
+          {records.length >= MAX_LABELS ? <p className="text-xs text-warning">Capped at {MAX_LABELS.toLocaleString()} labels per print.</p> : null}
           {previewId ? <iframe title="Label preview" src={fileUrl(previewId)} className="h-[60vh] w-full rounded-md border border-border bg-surface-sunken" /> : null}
         </DialogBody>
         <DialogFooter>

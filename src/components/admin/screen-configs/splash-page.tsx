@@ -15,19 +15,19 @@ export function ScreenConfigSplashPage() {
       <div className="mx-4 mb-6 mt-5 grid max-w-[1100px] grid-cols-1 items-center gap-8 rounded-xl border border-border bg-surface px-6 py-10 shadow-xs lg:mx-6 lg:grid-cols-[1fr_minmax(260px,380px)] lg:px-12">
         <div className="flex max-w-md flex-col gap-4">
           <div>
-            <h2 className="text-[20px] font-semibold text-foreground">Select operation type</h2>
-            <p className="mt-1 text-[13px] text-secondary">Select a type to build your own configuration. Each configuration decides which steps the mobile screen shows and which ones are required.</p>
+            <h2 className="text-lg font-semibold text-foreground">Select operation type</h2>
+            <p className="mt-1 text-sm text-secondary">Select a type to build your own configuration. Each configuration decides which steps the mobile screen shows and which ones are required.</p>
           </div>
           <Link href="/settings/screen-configuration/receiving"
             className="group flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3 shadow-xs transition-[border-color,box-shadow] hover:border-primary/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-success-soft text-success"><PackageOpen className="h-5 w-5" aria-hidden /></span>
             <span className="flex-1">
-              <span className="block text-[14px] font-semibold text-foreground">Receiving</span>
-              <span className="block text-[12px] text-secondary">Scan LP, lot, expiry, photo, dimensions and label steps{typeof total === "number" ? ` · ${total} ${total === 1 ? "configuration" : "configurations"}` : ""}</span>
+              <span className="block text-base font-semibold text-foreground">Receiving</span>
+              <span className="block text-xs text-secondary">Scan LP, lot, expiry, photo, dimensions and label steps{typeof total === "number" ? ` · ${total} ${total === 1 ? "configuration" : "configurations"}` : ""}</span>
             </span>
             <ChevronRight className="h-4 w-4 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden />
           </Link>
-          <p className="text-[12px] text-faint">More operation types (picking, packing, counting) are configured on their job types.</p>
+          <p className="text-xs text-faint">More operation types (picking, packing, counting) are configured on their job types.</p>
         </div>
         <div aria-hidden className="relative mx-auto hidden h-72 w-full max-w-[320px] lg:block">
           <div className="absolute left-6 top-4 h-64 w-36 rounded-[22px] border-4 border-foreground/80 bg-surface-sunken p-2 shadow-md">

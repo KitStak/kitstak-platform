@@ -70,8 +70,8 @@ export function useCodeCheck(form: UseFormReturn<PoFormValues>, excludeId: strin
 
 function CodeStatus({ state }: { readonly state: CheckState }) {
   // The reason Next is disabled is visible while the check runs, not only on hover.
-  if (state === "checking") return <span className="flex items-center gap-1 whitespace-nowrap text-[11px] text-faint" role="status"><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Checking…</span>;
-  if (state === "taken") return <span className="whitespace-nowrap text-[11px] font-medium text-danger">Already exists</span>;
+  if (state === "checking") return <span className="flex items-center gap-1 whitespace-nowrap text-2xs text-faint" role="status"><Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />Checking…</span>;
+  if (state === "taken") return <span className="whitespace-nowrap text-2xs font-medium text-danger">Already exists</span>;
   if (state === "free") return <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-label="PO number is available" />;
   return null;
 }

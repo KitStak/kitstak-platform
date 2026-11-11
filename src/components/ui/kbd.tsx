@@ -8,7 +8,7 @@ const subscribeNever = (): (() => void) => () => undefined;
 
 export function Kbd({ children, className }: { readonly children: React.ReactNode; readonly className?: string }) {
   return (
-    <kbd className={cn("inline-flex h-5 min-w-5 items-center justify-center rounded border border-border-strong bg-surface-sunken px-1 font-sans text-[11px] font-medium text-secondary shadow-[0_1px_0_var(--border-strong)]", className)}>
+    <kbd className={cn("inline-flex h-5 min-w-5 items-center justify-center rounded border border-border-strong bg-surface-sunken px-1 font-sans text-2xs font-medium text-secondary shadow-[0_1px_0_var(--border-strong)]", className)}>
       {children}
     </kbd>
   );

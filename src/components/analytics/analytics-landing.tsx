@@ -41,7 +41,7 @@ export function AnalyticsLanding({ section }: { readonly section?: "labor" | "op
             const Icon = NAV_ICONS[g.icon];
             return (
               <section key={g.heading} aria-labelledby={`an-${g.heading}`}>
-                <h2 id={`an-${g.heading}`} className="mb-2 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-secondary">
+                <h2 id={`an-${g.heading}`} className="mb-2 flex items-center gap-2 text-xs font-semibold text-secondary">
                   <span className="grid h-6 w-6 place-items-center rounded-md bg-primary/10 text-primary"><Icon className="h-3.5 w-3.5" aria-hidden /></span>
                   {g.heading}
                   <span className="font-normal normal-case tracking-normal text-faint">· {g.items.length}</span>
@@ -50,8 +50,8 @@ export function AnalyticsLanding({ section }: { readonly section?: "labor" | "op
                   {g.items.map((i) => (
                     <Link key={i.href} href={i.href} className="group flex items-start gap-3 rounded-lg border border-border bg-surface p-3.5 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
                       <div className="min-w-0 flex-1">
-                        <span className="text-[14px] font-semibold text-foreground">{i.label}</span>
-                        <p className="mt-0.5 text-[12.5px] leading-[18px] text-secondary">{i.description || "Open the dashboard."}</p>
+                        <span className="text-base font-semibold text-foreground">{i.label}</span>
+                        <p className="mt-0.5 text-xs leading-[18px] text-secondary">{i.description || "Open the dashboard."}</p>
                       </div>
                       <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-faint opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
                     </Link>

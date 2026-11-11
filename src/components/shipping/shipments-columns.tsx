@@ -34,7 +34,7 @@ function mailCell(at: string | null): React.ReactNode {
 
 function trackingCell(row: ShipmentRow): React.ReactNode {
   const multi = row.packageCount > 1;
-  const number = <span className="font-mono text-[12px]">{row.trackingNumber}</span>;
+  const number = <span className="font-mono text-xs">{row.trackingNumber}</span>;
   return (
     <span className="flex min-w-0 items-center gap-1.5">
       {row.trackingUrl ? (
@@ -45,7 +45,7 @@ function trackingCell(row: ShipmentRow): React.ReactNode {
         <span className="truncate">{number}</span>
       )}
       {multi ? (
-        <span className="shrink-0 rounded bg-surface-sunken px-1 text-[10px] font-semibold text-secondary" title={row.isMaster ? "Master package" : "Child package"}>
+        <span className="shrink-0 rounded bg-surface-sunken px-1 text-2xs font-semibold text-secondary" title={row.isMaster ? "Master package" : "Child package"}>
           {row.isMaster ? "Master" : `Pkg ${row.packageSeq ?? "?"}/${row.packageCount}`}
         </span>
       ) : null}
@@ -55,7 +55,7 @@ function trackingCell(row: ShipmentRow): React.ReactNode {
 
 export const SHIPMENT_COLUMN_SPECS: readonly ColumnSpec<ShipmentRow>[] = [
   { id: "orderCode", label: "Order code", width: 130, always: true, cell: (r) => <LinkCell href={`/orders/${encodeURIComponent(r.orderCode)}`}>{r.orderCode}</LinkCell> },
-  { id: "packageSeq", label: "Package", width: 96, sortable: false, exportKey: "packageSeq", cell: (r) => <span className="whitespace-nowrap tabular-nums" title={r.isMaster ? "Master package" : undefined}>{r.packageSeq ?? 1} of {Math.max(r.packageCount, r.packageSeq ?? 1)}{r.isMaster && r.packageCount > 1 ? <span className="ml-1 text-[10px] font-semibold text-secondary">M</span> : null}</span> },
+  { id: "packageSeq", label: "Package", width: 96, sortable: false, exportKey: "packageSeq", cell: (r) => <span className="whitespace-nowrap tabular-nums" title={r.isMaster ? "Master package" : undefined}>{r.packageSeq ?? 1} of {Math.max(r.packageCount, r.packageSeq ?? 1)}{r.isMaster && r.packageCount > 1 ? <span className="ml-1 text-2xs font-semibold text-secondary">M</span> : null}</span> },
   { id: "trackingNumber", label: "Tracking number", width: 220, cell: trackingCell },
   {
     id: "labelStatus", label: "Label status", width: 150,
@@ -63,7 +63,7 @@ export const SHIPMENT_COLUMN_SPECS: readonly ColumnSpec<ShipmentRow>[] = [
       <span className="inline-flex items-center gap-1.5">
         <LabelStatusPill status={r.labelStatus} />
         {r.duplicateActiveLabels > 0 ? (
-          <span className="whitespace-nowrap text-[11px] font-medium text-warning" title={`${r.duplicateActiveLabels} other active label(s) exist for this package. Void the extra label before it is handed to the carrier.`}>
+          <span className="whitespace-nowrap text-2xs font-medium text-warning" title={`${r.duplicateActiveLabels} other active label(s) exist for this package. Void the extra label before it is handed to the carrier.`}>
             Duplicate
           </span>
         ) : null}
@@ -74,15 +74,15 @@ export const SHIPMENT_COLUMN_SPECS: readonly ColumnSpec<ShipmentRow>[] = [
     id: "hasCarrierError", label: "Carrier errors", width: 220, exportKey: "lastCarrierError",
     cell: (r) => (r.hasCarrierError ? (
       <span className="flex min-w-0 items-center gap-1.5" title={r.lastCarrierError ?? "The carrier returned an error"}>
-        <span className="shrink-0 rounded-full border border-danger/40 bg-danger-soft px-1.5 text-[10px] font-semibold text-danger">Error</span>
-        <span className="truncate text-[12px] text-secondary">{r.lastCarrierError ?? ""}</span>
+        <span className="shrink-0 rounded-full border border-danger/40 bg-danger-soft px-1.5 text-2xs font-semibold text-danger">Error</span>
+        <span className="truncate text-xs text-secondary">{r.lastCarrierError ?? ""}</span>
       </span>
     ) : dash),
   },
   { id: "carrier", label: "Carrier", width: 150 },
   { id: "serviceName", label: "Shipment method", width: 150 },
   { id: "rate", label: "Rate", kind: "money" },
-  { id: "masterTrackingNumber", label: "Master tracking number", width: 190, cell: (r) => (r.masterTrackingNumber ? <span className="truncate font-mono text-[12px]">{r.masterTrackingNumber}</span> : dash) },
+  { id: "masterTrackingNumber", label: "Master tracking number", width: 190, cell: (r) => (r.masterTrackingNumber ? <span className="truncate font-mono text-xs">{r.masterTrackingNumber}</span> : dash) },
   { id: "orderStatus", label: "Order status", width: 140, cell: (r) => <StatusPill status={r.orderStatus} domain="shipmentOrder" /> },
   { id: "products", label: "Products", width: 200, sortable: false },
   { id: "locationCode", label: "Inventory location", width: 170 },

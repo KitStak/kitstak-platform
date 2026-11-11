@@ -94,37 +94,37 @@ function ConditionModal({ open, operation, contractId, onOpenChange, onAdd }: { 
         <DialogHeader title="Add condition" description={`The fee only charges ${operation.toLowerCase()} activity that matches every condition. ${fieldOptions.length} attributes apply to ${operation} fees.`} />
         <DialogBody>
           <div className="flex flex-col gap-4">
-            <label className="flex flex-col gap-1 text-[12px] font-medium text-secondary">Charge if *
+            <label className="flex flex-col gap-1 text-xs font-medium text-secondary">Charge if *
               <Combobox aria-label="Charge if field" placeholder="Search attributes" value={field} onChange={(v) => setField(v)} options={fieldOptions} emptyText="No matching attribute" />
             </label>
             {def ? (
-              <label className="flex flex-col gap-1 text-[12px] font-medium text-secondary">Comparison *
+              <label className="flex flex-col gap-1 text-xs font-medium text-secondary">Comparison *
                 <Select aria-label="Comparison" value={comparator} onChange={setComparator} options={comparators.map((c) => ({ value: c, label: COMPARATOR_LABELS[c] }))} />
               </label>
             ) : null}
             {def && needsValue ? (
               def.type === "boolean" ? (
-                <div className="flex flex-col gap-1 text-[12px] font-medium text-secondary">Value<YesNoToggle value={flag} onChange={setFlag} ariaLabel="Value" /></div>
+                <div className="flex flex-col gap-1 text-xs font-medium text-secondary">Value<YesNoToggle value={flag} onChange={setFlag} ariaLabel="Value" /></div>
               ) : def.type === "number" ? (
                 <div className="grid grid-cols-2 gap-3">
-                  <label className="flex flex-col gap-1 text-[12px] font-medium text-secondary">{comparator === "between" ? "From *" : "Value *"}<NumberInput value={n1} onChange={setN1} decimals={3} aria-label="Value" /></label>
-                  {comparator === "between" ? <label className="flex flex-col gap-1 text-[12px] font-medium text-secondary">To *<NumberInput value={n2} onChange={setN2} decimals={3} aria-label="To value" /></label> : null}
+                  <label className="flex flex-col gap-1 text-xs font-medium text-secondary">{comparator === "between" ? "From *" : "Value *"}<NumberInput value={n1} onChange={setN1} decimals={3} aria-label="Value" /></label>
+                  {comparator === "between" ? <label className="flex flex-col gap-1 text-xs font-medium text-secondary">To *<NumberInput value={n2} onChange={setN2} decimals={3} aria-label="To value" /></label> : null}
                 </div>
               ) : lookup && !freeText ? (
-                <div className="flex flex-col gap-1 text-[12px] font-medium text-secondary">
+                <div className="flex flex-col gap-1 text-xs font-medium text-secondary">
                   <span>{def.label} values *</span>
                   <Combobox multiple aria-label={`${def.label} values`} placeholder={values.loading ? "Loading values…" : `Select ${def.label.toLowerCase()}`} value={picked} onChange={(v) => setPicked(v)} options={valueOptions}
                     emptyText={values.loading ? "Loading values…" : `No ${def.label.toLowerCase()} values found for this client`} />
-                  <span className="text-[11px] font-normal text-faint">Values come from master data and this client&rsquo;s activity, so a typo can&rsquo;t silently stop the fee from charging.</span>
+                  <span className="text-2xs font-normal text-faint">Values come from master data and this client&rsquo;s activity, so a typo can&rsquo;t silently stop the fee from charging.</span>
                 </div>
               ) : (
-                <label className="flex flex-col gap-1 text-[12px] font-medium text-secondary">{listValue || freeText ? "Values (comma separated) *" : "Value *"}
-                  {freeText ? <span role="note" className="text-[11px] font-normal text-secondary">{values.error ? `Couldn't load the ${def.label.toLowerCase()} list.` : `No ${def.label.toLowerCase()} values found for this client yet.`} Type the values to match, separated by commas.</span> : null}
+                <label className="flex flex-col gap-1 text-xs font-medium text-secondary">{listValue || freeText ? "Values (comma separated) *" : "Value *"}
+                  {freeText ? <span role="note" className="text-2xs font-normal text-secondary">{values.error ? `Couldn't load the ${def.label.toLowerCase()} list.` : `No ${def.label.toLowerCase()} values found for this client yet.`} Type the values to match, separated by commas.</span> : null}
                   <TextField value={text} onChange={(e) => setText(e.target.value)} maxLength={200} placeholder={def.key === "locationType" ? "e.g. Bin" : def.key === "sku" ? "e.g. CPC-ESP-12" : ""} aria-label="Value" />
                 </label>
               )
             ) : null}
-            {def && comparator ? <p className="rounded-md bg-surface-sunken px-3 py-2 text-[12px] text-secondary">Charges when <strong className="text-foreground">{conditionText({ field: def.key, comparator, value })}</strong></p> : null}
+            {def && comparator ? <p className="rounded-md bg-surface-sunken px-3 py-2 text-xs text-secondary">Charges when <strong className="text-foreground">{conditionText({ field: def.key, comparator, value })}</strong></p> : null}
           </div>
         </DialogBody>
         <DialogFooter>
@@ -178,8 +178,8 @@ function Tiers({ form, unit }: { readonly form: UseFormReturn<F>; readonly unit:
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[520px] text-[13px]">
-            <thead className="bg-surface-sunken text-[11px] font-semibold uppercase tracking-wide text-secondary">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead className="bg-surface-sunken text-2xs font-semibold text-secondary">
               <tr><th className="px-3 py-2 text-left">{mode === "tierBase" ? `Total ${unit}s from` : `For each ${unit} from`}</th><th className="px-3 py-2 text-left">Up to (incl.)</th><th className="px-3 py-2 text-left">Rate</th><th className="w-10" /></tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -193,13 +193,13 @@ function Tiers({ form, unit }: { readonly form: UseFormReturn<F>; readonly unit:
               ))}
             </tbody>
           </table>
-          <p className="border-t border-border bg-surface-sunken/60 px-3 py-1.5 text-[11px] text-faint">Each charge starts where the previous one ends: 0–100 then 100–500 bills everything above 100 (including fractions such as 100.5) at the second rate.</p>
+          <p className="border-t border-border bg-surface-sunken/60 px-3 py-1.5 text-2xs text-faint">Each charge starts where the previous one ends: 0–100 then 100–500 bills everything above 100 (including fractions such as 100.5) at the second rate.</p>
         </div>
       )}
-      {message ? <p role="alert" className="text-[12px] font-medium text-danger">{message}</p> : null}
+      {message ? <p role="alert" className="text-xs font-medium text-danger">{message}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {single ? <span /> : <Button size="sm" variant="secondary" onClick={addTier}><Plus className="h-4 w-4" />Add tier</Button>}
-        <div className="flex flex-wrap items-center gap-2 rounded-md bg-surface-sunken px-3 py-1.5 text-[12px] text-secondary" aria-live="polite">
+        <div className="flex flex-wrap items-center gap-2 rounded-md bg-surface-sunken px-3 py-1.5 text-xs text-secondary" aria-live="polite">
           Preview: <NumberInput value={sample} onChange={setSample} min={0} size="sm" className="w-24" aria-label="Sample quantity" /> {unit}s →
           <strong className="tabular-nums text-foreground">{moneyRail(preview.total)}</strong>
           <span className="tabular-nums text-faint">({priceFormula(sample ?? 0, clean, mode)})</span>
@@ -287,7 +287,7 @@ export function FeeForm({ contractId, fee, onDone, onCancel, onBusyChange }: { r
   return (
     <Form form={form} onSubmit={submit} className="flex flex-col gap-5 rounded-xl border border-primary/30 bg-surface p-5 shadow-sm ring-4 ring-primary/5">
       <div className="flex items-start justify-between gap-3">
-        <div><h3 className="text-[15px] font-semibold text-foreground">{fee ? `Edit fee ${fee.name}` : "Create fee"}</h3><p className="text-[12px] text-secondary">Choose what is billed, how it&rsquo;s counted, and the price.</p></div>
+        <div><h3 className="text-base font-semibold text-foreground">{fee ? `Edit fee ${fee.name}` : "Create fee"}</h3><p className="text-xs text-secondary">Choose what is billed, how it&rsquo;s counted, and the price.</p></div>
         <Button size="icon-sm" variant="ghost" aria-label="Close fee form" onClick={requestCancel} disabled={submitting}><X className="h-4 w-4" /></Button>
       </div>
       <FormSection title="Operation type">
@@ -364,7 +364,7 @@ export function FeeForm({ contractId, fee, onDone, onCancel, onBusyChange }: { r
                 </Badge>
               ))}
             </div>
-          ) : <p className="text-[12px] text-faint">No conditions: all {op.toLowerCase()} activity is charged.</p>}
+          ) : <p className="text-xs text-faint">No conditions: all {op.toLowerCase()} activity is charged.</p>}
         </FormSection>
       ) : null}
       <SubmitBar submitLabel={fee ? "Save fee" : "Add fee"} onCancel={requestCancel} />

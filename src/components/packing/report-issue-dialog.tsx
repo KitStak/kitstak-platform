@@ -98,26 +98,26 @@ export function ReportIssueDialog({ open, onOpenChange, orderId, orderCode, ware
             </Callout>
           ) : null}
           <div className="flex flex-col gap-1">
-            <label htmlFor="ri-loc" className="text-[12px] font-medium text-body">Hospital location <span className="text-danger">*</span></label>
+            <label htmlFor="ri-loc" className="text-xs font-medium text-body">Hospital location <span className="text-danger">*</span></label>
             <Select id="ri-loc" value={locationId} invalid={Boolean(errors.location)} onChange={(v) => { if (v === LOADING) return; setLocationId(v); setErrors((x) => ({ ...x, location: undefined })); }}
               placeholder={hospitals.isPending && !defaultHospital ? "Loading hospital locations…" : noHospital ? "No hospital location configured" : "Choose a hospital location"} disabled={noHospital} options={options} />
-            {chosen ? <p className="text-[11px] text-secondary">Stock goes to <strong className="text-body">{chosen.code}</strong> · {chosen.detail}</p> : null}
-            {errors.location ? <p className="text-[11px] text-danger">{errors.location}</p> : null}
+            {chosen ? <p className="text-2xs text-secondary">Stock goes to <strong className="text-body">{chosen.code}</strong> · {chosen.detail}</p> : null}
+            {errors.location ? <p className="text-2xs text-danger">{errors.location}</p> : null}
           </div>
 
           {lines.length > 0 ? (
             <fieldset className="flex flex-col gap-1.5">
-              <legend className="mb-1 text-[12px] font-medium text-body">Units to move <span className="font-normal text-secondary">(defaults to what is not packed yet)</span></legend>
+              <legend className="mb-1 text-xs font-medium text-body">Units to move <span className="font-normal text-secondary">(defaults to what is not packed yet)</span></legend>
               <div className="overflow-hidden rounded-md border border-border">
-                <table className="w-full text-[12px]">
-                  <thead className="bg-surface-sunken text-[10px] font-semibold uppercase tracking-[0.04em] text-secondary">
+                <table className="w-full text-xs">
+                  <thead className="bg-surface-sunken text-2xs font-semibold text-secondary">
                     <tr><th className="w-10 px-2 py-1.5" /><th className="px-2 py-1.5 text-left">Product</th><th className="px-2 py-1.5 text-right">Picked</th><th className="px-2 py-1.5 text-right">Packed</th><th className="w-[120px] px-2 py-1.5 text-right">Move</th></tr>
                   </thead>
                   <tbody>
                     {lines.map((l) => (
                       <tr key={l.orderLineId} className="border-t border-border">
                         <td className="px-2 py-1"><ItemThumb url={l.imageUrl} size={28} /></td>
-                        <td className="px-2 py-1.5"><span className="block font-medium">{l.sku}</span><span className="block max-w-[260px] truncate text-[11px] text-secondary">{l.name}</span></td>
+                        <td className="px-2 py-1.5"><span className="block font-medium">{l.sku}</span><span className="block max-w-[260px] truncate text-2xs text-secondary">{l.name}</span></td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{l.toPack}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-secondary">{l.packed}</td>
                         <td className="px-2 py-1">
@@ -129,15 +129,15 @@ export function ReportIssueDialog({ open, onOpenChange, orderId, orderCode, ware
                   </tbody>
                 </table>
               </div>
-              <p className={errors.qty ? "text-[11px] text-danger" : "text-[11px] text-secondary"}>{errors.qty ?? `${totalUnits} unit${totalUnits === 1 ? "" : "s"} will move to the hospital location.`}</p>
+              <p className={errors.qty ? "text-2xs text-danger" : "text-2xs text-secondary"}>{errors.qty ?? `${totalUnits} unit${totalUnits === 1 ? "" : "s"} will move to the hospital location.`}</p>
             </fieldset>
           ) : null}
 
           <div className="flex flex-col gap-1">
-            <label htmlFor="ri-note" className="text-[12px] font-medium text-body">What is wrong? <span className="text-danger">*</span></label>
+            <label htmlFor="ri-note" className="text-xs font-medium text-body">What is wrong? <span className="text-danger">*</span></label>
             <Textarea id="ri-note" rows={3} maxLength={500} value={note} aria-invalid={errors.note ? true : undefined}
               onChange={(e) => { setNote(e.target.value); if (e.target.value.trim()) setErrors((x) => ({ ...x, note: undefined })); }} placeholder="e.g. Item damaged in the tote, wrong color picked" />
-            {errors.note ? <p className="text-[11px] text-danger">{errors.note}</p> : null}
+            {errors.note ? <p className="text-2xs text-danger">{errors.note}</p> : null}
           </div>
           {error ? <Callout variant="error" title="Not reported">{error}</Callout> : null}
         </DialogBody>

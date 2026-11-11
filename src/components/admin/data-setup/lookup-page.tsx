@@ -70,7 +70,7 @@ function typeColumns(def: LookupDef, damageNames: ReadonlyMap<string, string>): 
       return <span className="flex flex-wrap gap-1" title={on.map(soTypeFlagLabel).join("\n")}>{on.slice(0, 2).map((k) => <Badge key={k} tone="info" size="sm" shape="pill">{soTypeFlagLabel(k)}</Badge>)}{on.length > 2 ? <Badge tone="neutral" size="sm" shape="pill">+{on.length - 2}</Badge> : null}</span>;
     } }];
     case "location_zone": return [
-      { id: "code", header: "Zone code", size: 120, cell: ({ row }) => row.original.code ? <code className="font-mono text-[12px]">{row.original.code}</code> : <Muted /> },
+      { id: "code", header: "Zone code", size: 120, cell: ({ row }) => row.original.code ? <code className="font-mono text-xs">{row.original.code}</code> : <Muted /> },
       { id: "priority", header: "Priority", size: 90, meta: { align: "right" }, cell: ({ row }) => num(m(row.original).priority) },
       { id: "maxLoc", header: "Max loc. per SKU", size: 130, meta: { align: "right" }, cell: ({ row }) => num(m(row.original).maxLocationsPerSku) },
       { id: "groups", header: "Product groups", size: 130, meta: { align: "right" }, cell: ({ row }) => num(list(row.original, "productGroupIds").length || undefined) },
@@ -80,7 +80,7 @@ function typeColumns(def: LookupDef, damageNames: ReadonlyMap<string, string>): 
       { id: "skip", header: "Skip confirmation", size: 140, cell: ({ row }) => yesNo(m(row.original).skipConfirmation === true) },
     ];
     case "custom_carrier": return [
-      { id: "code", header: "Carrier code", size: 120, cell: ({ row }) => row.original.code ? <code className="font-mono text-[12px]">{row.original.code}</code> : <Muted /> },
+      { id: "code", header: "Carrier code", size: 120, cell: ({ row }) => row.original.code ? <code className="font-mono text-xs">{row.original.code}</code> : <Muted /> },
       { id: "logo", header: "Logo", size: 70, cell: ({ row }) => typeof m(row.original).logoUrl === "string" && m(row.original).logoUrl ? <img src={m(row.original).logoUrl as string} alt="" className="h-6 w-auto max-w-[56px] object-contain" /> : <Muted /> },
       { id: "services", header: "Service qty", size: 100, meta: { align: "right" }, cell: ({ row }) => num(list(row.original, "services").length) },
       { id: "packages", header: "Package qty", size: 100, meta: { align: "right" }, cell: ({ row }) => num(list(row.original, "packages").length) },
@@ -167,8 +167,8 @@ function LookupForm({ def, row, readOnly, onEdit, onDone, onCancel, onDirty }: {
             <li key={label} className="flex items-center gap-2">
               {i > 0 ? <span className="h-px w-5 bg-border" aria-hidden /> : null}
               <button type="button" onClick={() => void goTo(i)} aria-current={i === step ? "step" : undefined}
-                className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[12px] ${i === step ? "bg-primary-soft font-semibold text-primary" : "text-secondary hover:text-foreground"}`}>
-                <span aria-hidden className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ${i === step ? "bg-primary text-white" : i < step ? "bg-success-soft text-success" : "bg-neutral-soft text-secondary"}`}>{i < step ? "✓" : i + 1}</span>
+                className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-xs ${i === step ? "bg-primary-soft font-semibold text-primary" : "text-secondary hover:text-foreground"}`}>
+                <span aria-hidden className={`flex h-5 w-5 items-center justify-center rounded-full text-2xs font-semibold ${i === step ? "bg-primary text-white" : i < step ? "bg-success-soft text-success" : "bg-neutral-soft text-secondary"}`}>{i < step ? "✓" : i + 1}</span>
                 {label}
               </button>
             </li>
@@ -317,8 +317,8 @@ export function LookupPage({ def, variant = "page", sectionTitle, sectionDescrip
       <section aria-labelledby={`lookup-section-${def.type}`} className="overflow-hidden rounded-xl border border-border bg-surface shadow-xs">
         <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div className="min-w-0">
-            <h2 id={`lookup-section-${def.type}`} className="text-[15px] font-semibold text-foreground">{sectionTitle ?? def.title}</h2>
-            <p className="mt-0.5 text-[12.5px] text-secondary">{sectionDescription ?? def.description}</p>
+            <h2 id={`lookup-section-${def.type}`} className="text-base font-semibold text-foreground">{sectionTitle ?? def.title}</h2>
+            <p className="mt-0.5 text-xs text-secondary">{sectionDescription ?? def.description}</p>
           </div>
           {createButton("Add new", "secondary")}
         </header>

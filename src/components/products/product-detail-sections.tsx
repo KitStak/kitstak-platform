@@ -31,8 +31,8 @@ export function Section({ title, description, action, children, className }: { r
     <Card className={cn("overflow-hidden", className)}>
       <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-3">
         <div>
-          <h2 className="text-[14px] font-semibold text-foreground">{title}</h2>
-          {description ? <p className="text-[12px] text-secondary">{description}</p> : null}
+          <h2 className="text-base font-semibold text-foreground">{title}</h2>
+          {description ? <p className="text-xs text-secondary">{description}</p> : null}
         </div>
         {action}
       </div>
@@ -52,8 +52,8 @@ export function MiniTable<T>({ rows, columns, getKey, empty, footer }: { readonl
   if (rows.length === 0) return <EmptyState compact icon={PackageSearch} title={empty.title} description={empty.description} action={empty.action} />;
   return (
     <div className="overflow-x-auto rounded-md border border-border ks-scroll">
-      <table className="w-full min-w-[560px] text-[13px]">
-        <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+      <table className="w-full min-w-[560px] text-sm">
+        <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
           <tr>{columns.map((c) => <th key={c.key} className={cn("whitespace-nowrap px-3 py-2", c.align === "right" && "text-right")}>{c.label}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -63,7 +63,7 @@ export function MiniTable<T>({ rows, columns, getKey, empty, footer }: { readonl
             </tr>
           ))}
         </tbody>
-        {footer ? <tfoot className="border-t border-border bg-surface-sunken/60 text-[12px] font-semibold">{footer}</tfoot> : null}
+        {footer ? <tfoot className="border-t border-border bg-surface-sunken/60 text-xs font-semibold">{footer}</tfoot> : null}
       </table>
     </div>
   );
@@ -114,11 +114,11 @@ export function OverviewTab({ data }: { readonly data: D }) {
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
       <Section title="General" className="xl:col-span-2"><KvList items={general} columns={3} /></Section>
       <Section title="Handling">
-        <ul className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px]">
+        <ul className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           {flags.map(([label, on]) => <li key={label} className="flex items-center justify-between gap-2"><span className="text-secondary">{label}</span>{yes(on)}</li>)}
         </ul>
         {p.packingInstructions || p.returnInstructions ? (
-          <div className="mt-4 flex flex-col gap-2 border-t border-border pt-3 text-[12px]">
+          <div className="mt-4 flex flex-col gap-2 border-t border-border pt-3 text-xs">
             {p.packingInstructions ? <p><span className="font-semibold text-foreground">Packing: </span>{p.packingInstructions}</p> : null}
             {p.returnInstructions ? <p><span className="font-semibold text-foreground">Returns: </span>{p.returnInstructions}</p> : null}
           </div>
@@ -148,7 +148,7 @@ export function PackTypesTab({ data, canEdit = false, onSaved }: { readonly data
   if (data.packTypes.length === 0) return <EmptyState icon={Box} title="No pack types" description="Edit the product to add a primary (UOM) pack type." />;
   return (
     <div className="flex flex-col gap-4">
-    {data.product.productCategory !== "Product" ? <p className="text-[12px] text-secondary">Kit and packaging material dimensions are edited on the product&apos;s Packing step.</p> : null}
+    {data.product.productCategory !== "Product" ? <p className="text-xs text-secondary">Kit and packaging material dimensions are edited on the product&apos;s Packing step.</p> : null}
     <PackHierarchy nodes={hierarchyFromView(data.packTypes)} />
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {data.packTypes.map((pt) => {
@@ -158,10 +158,10 @@ export function PackTypesTab({ data, canEdit = false, onSaved }: { readonly data
             <div className="flex items-center gap-3 border-b border-border px-4 py-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary-soft text-primary"><Icon className="h-4 w-4" aria-hidden /></span>
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-faint">{pt.kind === "Primary" ? "Primary (UOM)" : pt.kind}</p>
-                <p className="text-[15px] font-semibold text-foreground">
+                <p className="text-2xs font-semibold text-faint">{pt.kind === "Primary" ? "Primary (UOM)" : pt.kind}</p>
+                <p className="text-base font-semibold text-foreground">
                   {pt.packType}
-                  <span className="ml-2 text-[12px] font-normal text-secondary">{pt.kind === "Hierarchical" && pt.parentPackType ? `${pt.childQty ?? ""} × ${pt.parentPackType} · ` : ""}UOM qty {pt.uomQty}</span>
+                  <span className="ml-2 text-xs font-normal text-secondary">{pt.kind === "Hierarchical" && pt.parentPackType ? `${pt.childQty ?? ""} × ${pt.parentPackType} · ` : ""}UOM qty {pt.uomQty}</span>
                 </p>
               </div>
               {hasIncompleteDimensions(pt) ? <Badge tone="warning" size="sm" title="Length, width or height is 0. Cubing and box selection need all three.">Incomplete dimensions</Badge> : null}
@@ -169,18 +169,18 @@ export function PackTypesTab({ data, canEdit = false, onSaved }: { readonly data
               {pt.shipPackage ? <Badge tone="neutral" size="sm">Box {pt.shipPackage}</Badge> : null}
               {pt.useOwnBox ? <Badge tone="info" size="sm" title="Packing puts each unit in its own package, with nothing else in it.">Ships in own box</Badge> : null}
             </div>
-            <dl className="grid grid-cols-3 gap-3 px-4 py-3 text-[13px]">
-              <div><dt className="text-[11px] uppercase tracking-[0.04em] text-faint">L × W × H</dt><dd>{n(pt.length)} × {n(pt.width)} × {n(pt.height)} {pt.dimensionUnit.toLowerCase()}</dd></div>
-              <div><dt className="text-[11px] uppercase tracking-[0.04em] text-faint">Weight</dt><dd>{n(pt.weight)} {pt.weightUnit.toLowerCase()}</dd></div>
-              <div><dt className="text-[11px] uppercase tracking-[0.04em] text-faint">Volume</dt><dd>{formatVolume(pt.volume)} {pt.volumeUnit.toLowerCase()}</dd></div>
+            <dl className="grid grid-cols-3 gap-3 px-4 py-3 text-sm">
+              <div><dt className="text-2xs text-faint">L × W × H</dt><dd>{n(pt.length)} × {n(pt.width)} × {n(pt.height)} {pt.dimensionUnit.toLowerCase()}</dd></div>
+              <div><dt className="text-2xs text-faint">Weight</dt><dd>{n(pt.weight)} {pt.weightUnit.toLowerCase()}</dd></div>
+              <div><dt className="text-2xs text-faint">Volume</dt><dd>{formatVolume(pt.volume)} {pt.volumeUnit.toLowerCase()}</dd></div>
             </dl>
             <div className="flex flex-wrap gap-3 border-t border-border bg-surface-sunken/40 px-4 py-3">
               {pt.barcodes.length ? pt.barcodes.map((b) => (
                 <figure key={b} className="flex flex-col items-center gap-1 rounded-md border border-border bg-white px-3 py-2">
                   <Barcode value={b} height={10} scale={1} showText={false} className="px-3 pt-2 pb-1" aria-label={`Barcode ${b}`} />
-                  <figcaption className="font-mono text-[11px] text-body">{b}</figcaption>
+                  <figcaption className="font-mono text-2xs text-body">{b}</figcaption>
                 </figure>
-              )) : <p className="text-[12px] text-faint">{pt.usePrimaryBarcodes ? "Scans with the primary barcodes." : "No barcodes on this pack type."}</p>}
+              )) : <p className="text-xs text-faint">{pt.usePrimaryBarcodes ? "Scans with the primary barcodes." : "No barcodes on this pack type."}</p>}
             </div>
           </Card>
         );
@@ -207,7 +207,7 @@ export function InventoryTab({ data }: { readonly data: D }) {
           { key: "planned", label: "Planned ATP", align: "right", render: (r) => fmt.quantity(r.plannedAtp) },
         ]} />
       </Section>
-      <Section title="Inventory by location" description="Every bucket with stock, by location, LP, lot and expiry. Unallocated = on hand − allocated − damaged." action={<Link href={`/inventory/by-location?q=${encodeURIComponent(data.product.sku)}&qm=eq`} className="text-[12px] font-semibold text-primary hover:underline">Open in Inventory by location</Link>}>
+      <Section title="Inventory by location" description="Every bucket with stock, by location, LP, lot and expiry. Unallocated = on hand − allocated − damaged." action={<Link href={`/inventory/by-location?q=${encodeURIComponent(data.product.sku)}&qm=eq`} className="text-xs font-semibold text-primary hover:underline">Open in Inventory by location</Link>}>
         <MiniTable rows={data.inventory} getKey={(r) => r.id} empty={{ title: "No stock on hand", description: "Receive a purchase order or adjust inventory to put this product on a location." }} columns={[
           { key: "wh", label: "Warehouse", render: (r) => r.warehouseCode },
           { key: "loc", label: "Location", render: (r) => <span className="font-mono font-semibold">{r.locationCode}</span> },
@@ -268,7 +268,7 @@ export function OrdersTab({ data }: { readonly data: D }) {
 export function ListingsTab({ data }: { readonly data: D }) {
   const fmt = useFormat();
   return (
-    <Section title="Channel listings" description="Store listings linked to this product." action={<Link href="/products/listings?link=linked" className="text-[12px] font-semibold text-primary hover:underline">All product listings</Link>}>
+    <Section title="Channel listings" description="Store listings linked to this product." action={<Link href="/products/listings?link=linked" className="text-xs font-semibold text-primary hover:underline">All product listings</Link>}>
       <MiniTable rows={data.listings} getKey={(r) => r.id} empty={{ title: "No linked listings", description: "Link a store listing to this SKU from Product Listings." }} columns={[
         { key: "store", label: "Store", render: (r) => <span className="font-semibold">{r.storeName}</span> },
         { key: "provider", label: "Channel", render: (r) => r.provider },
@@ -296,11 +296,11 @@ export function KitBuildabilitySummary({ components }: { readonly components: D[
       className={cn("mb-3 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border px-4 py-3", zero ? "border-danger/40 bg-danger-soft" : "border-border bg-surface-sunken")}
     >
       <div className="flex items-baseline gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary">Buildable kits</span>
-        <span data-testid="kit-buildable-total" className={cn("text-[22px] font-semibold tabular-nums leading-none", zero ? "text-danger" : "text-foreground")}>{fmt.quantity(buildable)}</span>
+        <span className="text-2xs font-semibold text-secondary">Buildable kits</span>
+        <span data-testid="kit-buildable-total" className={cn("text-xl font-semibold tabular-nums leading-none", zero ? "text-danger" : "text-foreground")}>{fmt.quantity(buildable)}</span>
       </div>
       {first ? (
-        <p className="min-w-0 text-[12px] text-secondary">
+        <p className="min-w-0 text-xs text-secondary">
           {allTie ? (
             <>Every component caps the kit at the same quantity.</>
           ) : (
@@ -386,7 +386,7 @@ export function PlanningTab({ data, onEdit }: { readonly data: D; readonly onEdi
 export function TransactionsTab({ data, onOpenChangeLog, canAddStock }: { readonly data: D; readonly onOpenChangeLog?: () => void; readonly canAddStock?: boolean }) {
   const fmt = useFormat();
   return (
-    <Section title="Inventory transactions" description="The last 100 ledger entries in your warehouses." action={onOpenChangeLog ? <button type="button" onClick={onOpenChangeLog} className="text-[12px] font-semibold text-primary hover:underline">View change log</button> : undefined}>
+    <Section title="Inventory transactions" description="The last 100 ledger entries in your warehouses." action={onOpenChangeLog ? <button type="button" onClick={onOpenChangeLog} className="text-xs font-semibold text-primary hover:underline">View change log</button> : undefined}>
       <MiniTable rows={data.transactions} getKey={(r) => r.id} empty={{
         title: "No transactions yet",
         description: "Stock movements for this product show up here once it is received, adjusted, moved or shipped.",

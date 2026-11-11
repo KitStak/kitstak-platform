@@ -69,21 +69,21 @@ export function CreateTagModal({ open, onOpenChange, scope = "any", onCreated }:
         >
           <DialogBody className="flex flex-col gap-4">
             <div className="flex items-center gap-3">
-              <span className="inline-flex h-7 max-w-[220px] items-center truncate rounded-full px-3 text-[12px] font-semibold" style={{ backgroundColor: color, color: contrastOn(color) }}>
+              <span className="inline-flex h-7 max-w-[220px] items-center truncate rounded-full px-3 text-xs font-semibold" style={{ backgroundColor: color, color: contrastOn(color) }}>
                 {name.trim() || "Tag preview"}
               </span>
             </div>
             <div className="flex flex-col gap-1.5">
-              <span className="text-[12px] font-semibold text-secondary">Colour</span>
+              <span className="text-xs font-semibold text-secondary">Colour</span>
               <ColorSwatchPicker value={color} onChange={setColor} ariaLabel="Tag colour" />
             </div>
-            <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+            <label className="flex flex-col gap-1 text-xs font-semibold text-secondary">
               <span>
                 Name <span className="text-danger">*</span>
               </span>
               <TextField autoFocus value={name} maxLength={TAG_NAME_MAX} showCount onChange={(e) => setName(e.target.value)} onBlur={() => setTouched(true)} invalid={touched && Boolean(nameError)} aria-describedby="create-tag-name-error" />
               {touched && nameError ? (
-                <span id="create-tag-name-error" className="text-[11px] font-medium text-danger">
+                <span id="create-tag-name-error" className="text-2xs font-medium text-danger">
                   {nameError}
                 </span>
               ) : null}

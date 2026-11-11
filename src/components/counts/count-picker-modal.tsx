@@ -111,7 +111,7 @@ function PickerBody<T>({ onOpenChange, title, description, gridKey, path, column
         <GridToolbar {...g.toolbarProps} searchPlaceholder={searchPlaceholder} views={undefined} />
         {g.isLoading ? (
           // First page still on its way (large warehouses under load): say so plainly above the skeleton rows.
-          <div role="status" aria-live="polite" className="mb-2 flex items-center gap-2 rounded-md border border-border bg-surface-sunken px-3 py-2 text-[12px] text-secondary">
+          <div role="status" aria-live="polite" className="mb-2 flex items-center gap-2 rounded-md border border-border bg-surface-sunken px-3 py-2 text-xs text-secondary">
             <Spinner className="h-3.5 w-3.5" />
             Loading {pluralNoun(title)}…
           </div>
@@ -120,7 +120,7 @@ function PickerBody<T>({ onOpenChange, title, description, gridKey, path, column
           canSelectRow={(row) => !excluded.has(getRowId(row)) && !(isBlocked?.(row) ?? false)} onAllMatchingSelectedChange={g.gridProps.onAllMatchingSelectedChange} className="pb-3" />
       </div>
       <DialogFooter>
-        <span className="mr-auto text-[12px] text-faint">{[g.isLoading ? "Loading the first page…" : null, excluded.size ? `${excluded.size} already in the plan` : null, blockedOnPage && blockedNote ? blockedNote(blockedOnPage) : null, allMatching ? `All ${count.toLocaleString()} matching records selected${g.total > PICKER_ALL_MAX ? ` (first ${PICKER_ALL_MAX.toLocaleString()})` : ""}; ones already in the plan or blocked are skipped` : null, allError].filter(Boolean).join(" · ")}</span>
+        <span className="mr-auto text-xs text-faint">{[g.isLoading ? "Loading the first page…" : null, excluded.size ? `${excluded.size} already in the plan` : null, blockedOnPage && blockedNote ? blockedNote(blockedOnPage) : null, allMatching ? `All ${count.toLocaleString()} matching records selected${g.total > PICKER_ALL_MAX ? ` (first ${PICKER_ALL_MAX.toLocaleString()})` : ""}; ones already in the plan or blocked are skipped` : null, allError].filter(Boolean).join(" · ")}</span>
         <Button variant="secondary" onClick={() => onOpenChange(false)}>Cancel</Button>
         <DisabledReason reason={reason}>
           <Button variant="primary" disabled={Boolean(reason)} onClick={() => void confirm()}>{loadingAll ? <Spinner className="h-3.5 w-3.5" /> : null}{confirmLabel}{count ? ` (${count})` : ""}</Button>

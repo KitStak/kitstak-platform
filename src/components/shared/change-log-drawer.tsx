@@ -110,7 +110,7 @@ export function ChangeLogDrawer({ open, onOpenChange, entityType, entityId, enti
       {query.isPending ? (
         <div className="flex flex-col gap-3">
           {slow ? (
-            <div role="status" className="flex items-center gap-3 text-[12px] text-secondary">
+            <div role="status" className="flex items-center gap-3 text-xs text-secondary">
               <span>Taking longer than usual.</span>
               <Button size="sm" variant="secondary" onClick={() => void query.refetch()}>
                 Retry
@@ -126,8 +126,8 @@ export function ChangeLogDrawer({ open, onOpenChange, entityType, entityId, enti
       ) : (
         <div className="flex flex-col gap-3">
           <div className="overflow-hidden rounded-lg border border-border">
-            <table className="w-full border-collapse text-[13px]">
-              <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+            <table className="w-full border-collapse text-sm">
+              <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
                 <tr>
                   <th scope="col" className="w-14 px-3 py-2">Type</th>
                   <th scope="col" className="px-3 py-2">Message</th>
@@ -158,7 +158,7 @@ export function ChangeLogDrawer({ open, onOpenChange, entityType, entityId, enti
               </tbody>
             </table>
           </div>
-          <div className="flex items-center justify-between text-[12px] text-secondary">
+          <div className="flex items-center justify-between text-xs text-secondary">
             <span>
               {fmt.number((page - 1) * CHANGE_LOG_PAGE_SIZE + 1)}–{fmt.number(Math.min(page * CHANGE_LOG_PAGE_SIZE, total))} of {fmt.number(total)}
             </span>

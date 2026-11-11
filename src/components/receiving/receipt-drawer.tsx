@@ -100,7 +100,7 @@ export function ReceiptDrawer({ receiptId, onOpenChange, onCancel, canCancel, on
     >
       {q.isPending ? (
         <div className="flex flex-col gap-3" aria-busy>
-          <p className="text-[12px] text-secondary" aria-live="polite">Loading the receipt, its ledger transaction and serial numbers…</p>
+          <p className="text-xs text-secondary" aria-live="polite">Loading the receipt, its ledger transaction and serial numbers…</p>
           {Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-6 w-full" />)}
         </div>
       ) : q.error || !r ? (
@@ -112,13 +112,13 @@ export function ReceiptDrawer({ receiptId, onOpenChange, onCancel, canCancel, on
           <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-sunken p-3">
             <ProductThumb url={r.imageUrl} label={r.sku} size={44} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold text-foreground">{r.sku}</p>
-              <p className="truncate text-[12px] text-secondary">{r.productName}</p>
-              <p className="text-[11px] text-faint">Barcode {r.barcode}</p>
+              <p className="truncate text-sm font-semibold text-foreground">{r.sku}</p>
+              <p className="truncate text-xs text-secondary">{r.productName}</p>
+              <p className="text-2xs text-faint">Barcode {r.barcode}</p>
             </div>
             <div className="text-right">
-              <p className="text-[22px] font-bold leading-6 tabular-nums text-foreground">{r.quantity.toLocaleString()}</p>
-              <p className="text-[11px] text-faint">{r.packType}</p>
+              <p className="text-xl font-bold leading-6 tabular-nums text-foreground">{r.quantity.toLocaleString()}</p>
+              <p className="text-2xs text-faint">{r.packType}</p>
             </div>
           </div>
           {r.cancelledAt ? (
@@ -128,19 +128,19 @@ export function ReceiptDrawer({ receiptId, onOpenChange, onCancel, canCancel, on
           ) : null}
           <KvList items={facts} />
           {r.damageImageFileId ? (
-            <a href={`/api/files/${r.damageImageFileId}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:underline">
+            <a href={`/api/files/${r.damageImageFileId}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
               <ExternalLink className="h-3.5 w-3.5" aria-hidden />
               Open damage photo
             </a>
           ) : null}
           <section>
-            <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-[0.04em] text-faint">Ledger transaction</h3>
+            <h3 className="mb-2 text-xs font-semibold text-faint">Ledger transaction</h3>
             {r.transaction ? (
-              <p className="text-[12px] text-body">
+              <p className="text-xs text-body">
                 {r.transaction.type} · {r.transaction.uomQty > 0 ? "+" : ""}{r.transaction.uomQty.toLocaleString()} units · {formatZoned(r.transaction.at, r.timeZone)}{" "}
               </p>
-            ) : q.isPlaceholderData ? <Skeleton className="h-4 w-3/4" /> : <p className="text-[12px] text-faint">No ledger transaction recorded.</p>}
-            <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px]" aria-label="Receiving ledger">
+            ) : q.isPlaceholderData ? <Skeleton className="h-4 w-3/4" /> : <p className="text-xs text-faint">No ledger transaction recorded.</p>}
+            <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Receiving ledger">
               <li><Link href={receivingLedgerHref({ poCode: r.poCode, sku: r.sku })} className="inline-flex items-center gap-1 font-medium text-primary hover:underline"><ScrollText className="h-3.5 w-3.5" aria-hidden />{r.poCode ? `${r.sku} on ${r.poCode}` : `${r.sku} receiving`} ledger</Link></li>
               {r.poCode ? <li><Link href={receivingLedgerHref({ poCode: r.poCode })} className="font-medium text-primary hover:underline">All {r.poCode} transactions</Link></li> : null}
               {r.poCode ? <li><Link href={receivingLedgerHref({ poCode: r.poCode, types: ["Cancel Receiving"] })} className="font-medium text-primary hover:underline">Cancelled receipts</Link></li> : null}
@@ -149,7 +149,7 @@ export function ReceiptDrawer({ receiptId, onOpenChange, onCancel, canCancel, on
           </section>
           {r.serials.length > 0 ? (
             <section>
-              <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-[0.04em] text-faint">Serial numbers ({r.serials.length})</h3>
+              <h3 className="mb-2 text-xs font-semibold text-faint">Serial numbers ({r.serials.length})</h3>
               <ul className="flex flex-wrap gap-1.5">
                 {r.serials.map((s) => <li key={s.primary}><Badge tone="outline" size="md">{s.primary}</Badge></li>)}
               </ul>
@@ -157,10 +157,10 @@ export function ReceiptDrawer({ receiptId, onOpenChange, onCancel, canCancel, on
           ) : null}
           {r.siblings.length > 0 ? (
             <section>
-              <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-[0.04em] text-faint">Other receipts on {r.poCode}</h3>
+              <h3 className="mb-2 text-xs font-semibold text-faint">Other receipts on {r.poCode}</h3>
               <ul className="divide-y divide-border rounded-md border border-border">
                 {r.siblings.map((s) => (
-                  <li key={s.id} className="flex items-center justify-between gap-2 px-3 py-2 text-[12px]">
+                  <li key={s.id} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
                     <button type="button" className="font-medium tabular-nums text-primary hover:underline" onClick={() => onOpenReceipt?.(s.id)}>{s.masterId}</button>
                     <span className="min-w-0 flex-1 truncate text-body">{s.sku}</span>
                     <span className="tabular-nums">{s.quantity.toLocaleString()}</span>

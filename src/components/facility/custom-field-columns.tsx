@@ -45,14 +45,14 @@ export function CustomFieldValuesList({ entityType, values }: { readonly entityT
   if (defs.length === 0) return null;
   return (
     <div className="mt-4 border-t border-border pt-3">
-      <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-secondary">Custom fields</h3>
+      <h3 className="mb-2 text-xs font-semibold text-secondary">Custom fields</h3>
       <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-3">
         {defs.map((d) => {
           const v = values?.[d.slot];
           return (
             <div key={d.slot} className="min-w-0">
-              <dt className="text-[11px] text-faint">{d.name}</dt>
-              <dd className="mt-0.5 break-words text-[13px] text-foreground">
+              <dt className="text-2xs text-faint">{d.name}</dt>
+              <dd className="mt-0.5 break-words text-sm text-foreground">
                 {v === null || v === undefined || v === "" ? <Muted /> : typeof v === "boolean" ? <YesNo value={v} /> : d.slot.startsWith("date") ? fmt.date(v) : v}
               </dd>
             </div>

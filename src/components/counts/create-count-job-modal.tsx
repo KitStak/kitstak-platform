@@ -110,14 +110,14 @@ function Body({ plans, onOpenChange, onDone }: Omit<CreateCountJobModalProps, "o
                 <FieldLabel htmlFor="cj-type" required>Job Type</FieldLabel>
                 <Select id="cj-type" aria-label="Job Type" value={jobTypeId} onChange={setJobTypeId} options={options} invalid={Boolean(jobTypeError)} disabled={types.isPending || options.length === 0}
                   placeholder={types.isPending ? "Loading…" : options.length ? "Select job type" : "No job type has been created yet"} />
-                {types.error ? <p role="alert" className="text-[12px] text-danger">{types.error.message}</p> : null}
+                {types.error ? <p role="alert" className="text-xs text-danger">{types.error.message}</p> : null}
                 {!types.isPending && !types.error && options.length === 0 ? (
                   <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-sunken p-3">
-                    <p className="text-[12px] text-secondary">This warehouse has no Count job type yet.{canCreateType ? " Create the default one now (lines with no difference update inventory automatically), or configure your own" : " Ask an admin to add one, or configure it"} under <Link className="font-semibold text-primary hover:underline" href="/settings/job-types">Settings → Job Types</Link>.</p>
+                    <p className="text-xs text-secondary">This warehouse has no Count job type yet.{canCreateType ? " Create the default one now (lines with no difference update inventory automatically), or configure your own" : " Ask an admin to add one, or configure it"} under <Link className="font-semibold text-primary hover:underline" href="/settings/job-types">Settings → Job Types</Link>.</p>
                     {canCreateType ? <Button type="button" size="sm" variant="secondary" className="self-start" disabled={creatingType} onClick={() => void createDefaultType()}><Plus className="h-3.5 w-3.5" aria-hidden />{creatingType ? "Creating…" : "Create default Cycle Count job type"}</Button> : null}
                   </div>
                 ) : null}
-                {selected ? <p className="text-[11px] text-secondary">{selected.autoUpdateNoDifference ? "Lines counted with no difference update inventory automatically." : "Every counted line waits for Update Inv."}</p> : null}
+                {selected ? <p className="text-2xs text-secondary">{selected.autoUpdateNoDifference ? "Lines counted with no difference update inventory automatically." : "Every counted line waits for Update Inv."}</p> : null}
                 <FieldError id="cj-type-err" message={jobTypeError} />
               </div>
               <div className="flex flex-col gap-1">
@@ -131,29 +131,29 @@ function Body({ plans, onOpenChange, onDone }: Omit<CreateCountJobModalProps, "o
               </div>
             </div>
             <aside aria-label="Jobs preview" className="flex flex-col gap-2 rounded-lg border border-border bg-surface-sunken p-3">
-              <p className="text-[12px] font-semibold text-secondary">Below jobs will be created</p>
+              <p className="text-xs font-semibold text-secondary">Below jobs will be created</p>
               <ul className="ks-scroll flex max-h-52 flex-col gap-1 overflow-auto">
                 {plans.map((p) => (
-                  <li key={p.id} className="flex items-center justify-between gap-2 rounded-md bg-surface px-2.5 py-1.5 text-[12px]">
+                  <li key={p.id} className="flex items-center justify-between gap-2 rounded-md bg-surface px-2.5 py-1.5 text-xs">
                     <span className="flex min-w-0 items-center gap-1.5 font-semibold text-foreground"><ClipboardList className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden /><span className="truncate">{p.code}</span></span>
                     <span className="flex shrink-0 flex-col items-end leading-tight">
                       {batchProblem ? <span className="font-semibold text-faint" title="Fix the batch size to see the jobs">—</span> : jobsFor(p) === null ? <Spinner className="h-3 w-3" label="Calculating" /> : <span className="font-semibold text-foreground">{jobsFor(p)} {jobsFor(p) === 1 ? "job" : "jobs"}</span>}
-                      {unitsByPlan.get(p.id) ? <span className="text-[11px] text-secondary">{unitsByPlan.get(p.id)?.units} {unitsByPlan.get(p.id)?.units === 1 ? "location" : "locations"}{(unitsByPlan.get(p.id)?.cancelled ?? 0) > 0 ? ` · ${unitsByPlan.get(p.id)?.cancelled} cancelled ${unitsByPlan.get(p.id)?.cancelled === 1 ? "line" : "lines"} skipped` : ""}</span> : null}
+                      {unitsByPlan.get(p.id) ? <span className="text-2xs text-secondary">{unitsByPlan.get(p.id)?.units} {unitsByPlan.get(p.id)?.units === 1 ? "location" : "locations"}{(unitsByPlan.get(p.id)?.cancelled ?? 0) > 0 ? ` · ${unitsByPlan.get(p.id)?.cancelled} cancelled ${unitsByPlan.get(p.id)?.cancelled === 1 ? "line" : "lines"} skipped` : ""}</span> : null}
                     </span>
                   </li>
                 ))}
               </ul>
-              {batchProblem ? <p role="status" className="text-[11px] font-semibold text-danger">Enter a valid batch size to see the jobs.</p> : null}
-              {reissue ? <p className="text-[11px] text-secondary">Started plans: only the lines whose count job was cancelled get a new job.</p> : null}
-              <p className="text-[11px] text-faint">Jobs = locations ÷ batch size, rounded up. SKU counts expand to one line per stocked location.</p>
-              {preview.error ? <p role="alert" className="text-[11px] text-danger">The preview could not be calculated: {preview.error.message}</p> : null}
+              {batchProblem ? <p role="status" className="text-2xs font-semibold text-danger">Enter a valid batch size to see the jobs.</p> : null}
+              {reissue ? <p className="text-2xs text-secondary">Started plans: only the lines whose count job was cancelled get a new job.</p> : null}
+              <p className="text-2xs text-faint">Jobs = locations ÷ batch size, rounded up. SKU counts expand to one line per stocked location.</p>
+              {preview.error ? <p role="alert" className="text-2xs text-danger">The preview could not be calculated: {preview.error.message}</p> : null}
             </aside>
             <button type="submit" hidden aria-hidden tabIndex={-1} />
           </form>
         )}
       </DialogBody>
       <DialogFooter>
-        <span className="mr-auto text-[12px] text-secondary"><strong className="text-foreground">{assignee ? 1 : 0}</strong> Person Assigned <span className="mx-1 text-border-strong">|</span> <strong className="text-foreground">{totalJobs ?? (batchProblem ? "—" : "…")}</strong> Total {totalJobs === 1 ? "Job" : "Jobs"}</span>
+        <span className="mr-auto text-xs text-secondary"><strong className="text-foreground">{assignee ? 1 : 0}</strong> Person Assigned <span className="mx-1 text-border-strong">|</span> <strong className="text-foreground">{totalJobs ?? (batchProblem ? "—" : "…")}</strong> Total {totalJobs === 1 ? "Job" : "Jobs"}</span>
         <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
         <DisabledReason reason={reason}>
           <Button variant="primary" disabled={Boolean(reason)} onClick={() => void submit()}>{saving ? <Spinner className="h-3.5 w-3.5" /> : null}Save</Button>

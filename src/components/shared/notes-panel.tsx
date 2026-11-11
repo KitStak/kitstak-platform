@@ -50,7 +50,7 @@ export function NotesPanel({ entityType, entityId, canEdit = true }: { readonly 
 
   return (
     <section aria-label="Notes" className="flex flex-col gap-3">
-      <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+      <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
         <MessageSquareText className="h-3.5 w-3.5 text-secondary" aria-hidden />
         Notes {notes.length ? <span className="text-faint">({notes.length})</span> : null}
       </h3>
@@ -86,21 +86,21 @@ export function NotesPanel({ entityType, entityId, canEdit = true }: { readonly 
       {query.isPending ? (
         <SkeletonText lines={3} />
       ) : query.error ? (
-        <p className="text-[12px] text-danger">
+        <p className="text-xs text-danger">
           Notes could not be loaded.{" "}
           <button type="button" className="font-semibold underline" onClick={() => void query.refetch()}>
             Retry
           </button>
         </p>
       ) : notes.length === 0 ? (
-        <p className="text-[12px] text-faint">No notes yet.</p>
+        <p className="text-xs text-faint">No notes yet.</p>
       ) : (
         <ul className="flex flex-col gap-3">
           {notes.map((n) => (
             <li key={n.id} className="flex gap-2.5">
               <Avatar name={n.userName ?? "System"} size="sm" />
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-2 text-[12px]">
+                <p className="flex items-center gap-2 text-xs">
                   <span className="font-semibold text-foreground">{n.userName ?? "System"}</span>
                   <span className="text-faint">{fmt.dateTime(n.createdAt)}</span>
                   {canEdit && n.userId && n.userId === myId ? (
@@ -109,7 +109,7 @@ export function NotesPanel({ entityType, entityId, canEdit = true }: { readonly 
                     </Button>
                   ) : null}
                 </p>
-                <p className="whitespace-pre-wrap break-words text-[13px] text-body">{n.body}</p>
+                <p className="whitespace-pre-wrap break-words text-sm text-body">{n.body}</p>
               </div>
             </li>
           ))}

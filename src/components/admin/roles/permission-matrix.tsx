@@ -21,7 +21,7 @@ interface MatrixProps {
 
 function Counter({ granted, total }: { readonly granted: number; readonly total: number }) {
   const tone = granted === 0 ? "text-faint" : granted === total ? "text-success" : "text-primary";
-  return <span className={cn("text-[12px] font-semibold tabular-nums", tone)}>({granted}/{total})</span>;
+  return <span className={cn("text-xs font-semibold tabular-nums", tone)}>({granted}/{total})</span>;
 }
 
 function PageColumn({ page, granted, onToggle, readOnly }: { readonly page: MatrixPage; readonly granted: ReadonlySet<string>; readonly onToggle: (keys: readonly string[]) => void; readonly readOnly: boolean }) {
@@ -32,13 +32,13 @@ function PageColumn({ page, granted, onToggle, readOnly }: { readonly page: Matr
     <div className="flex min-w-0 flex-col rounded-lg border border-border bg-surface">
       <div className={cn("flex items-center gap-2 border-b border-border px-3 py-2", count > 0 && "bg-primary-soft/40")}>
         <Checkbox checked={state} disabled={readOnly} onCheckedChange={() => onToggle(keys)} aria-label={`All ${page.label} permissions`} />
-        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-foreground" title={page.label}>{page.label}</span>
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground" title={page.label}>{page.label}</span>
         <Counter granted={count} total={keys.length} />
       </div>
       <ul className="flex flex-col gap-1 px-3 py-2">
         {page.actions.map((a) => (
           <li key={a.key}>
-            <Checkbox checked={granted.has(a.key)} disabled={readOnly} onCheckedChange={() => onToggle([a.key])} label={<span className="text-[12px] text-body">{a.label}</span>} />
+            <Checkbox checked={granted.has(a.key)} disabled={readOnly} onCheckedChange={() => onToggle([a.key])} label={<span className="text-xs text-body">{a.label}</span>} />
           </li>
         ))}
       </ul>
@@ -56,7 +56,7 @@ function GroupPanel({ group, granted, open, onOpen, onToggle, readOnly, totalKey
         <Checkbox checked={state} disabled={readOnly} onCheckedChange={() => onToggle(totalKeys)} aria-label={`All ${group.label} permissions`} />
         <button type="button" onClick={onOpen} aria-expanded={open} aria-controls={panelId}
           className="flex flex-1 items-center gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-          <span className="text-[14px] font-semibold text-foreground">{group.label}</span>
+          <span className="text-base font-semibold text-foreground">{group.label}</span>
           <Counter granted={count} total={totalKeys.length} />
           <span className="ml-auto h-1.5 w-24 overflow-hidden rounded-full bg-neutral-soft" aria-hidden>
             <span className="block h-full rounded-full bg-primary transition-[width]" style={{ width: `${totalKeys.length ? (count / totalKeys.length) * 100 : 0}%` }} />
@@ -71,7 +71,7 @@ function GroupPanel({ group, granted, open, onOpen, onToggle, readOnly, totalKey
             const sc = keys.filter((k) => granted.has(k)).length;
             return (
               <div key={section.label} className="flex flex-col gap-2">
-                <h4 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.06em] text-secondary">
+                <h4 className="flex items-center gap-2 text-2xs font-bold text-secondary">
                   {section.label} <Counter granted={sc} total={keys.length} />
                 </h4>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -107,13 +107,13 @@ export function PermissionMatrix({ value, onChange, readOnly = false }: MatrixPr
           <Search className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-faint" aria-hidden />
           <span className="sr-only">Search permissions</span>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search permissions, e.g. cancel"
-            className="h-8 w-full rounded-md border border-border bg-surface pl-7 pr-2 text-[13px] placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />
+            className="h-8 w-full rounded-md border border-border bg-surface pl-7 pr-2 text-sm placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />
         </label>
         <Button size="sm" variant="ghost" onClick={() => setOpen(new Set(PERMISSION_MATRIX.map((g) => g.key)))}><ChevronsUpDown className="h-3.5 w-3.5" aria-hidden />Expand all</Button>
         <Button size="sm" variant="ghost" onClick={() => setOpen(new Set())}><ChevronsDownUp className="h-3.5 w-3.5" aria-hidden />Collapse all</Button>
-        <span className="ml-auto text-[12px] text-secondary">Granted <span className="font-semibold tabular-nums text-foreground">{value.length}</span> of {total}</span>
+        <span className="ml-auto text-xs text-secondary">Granted <span className="font-semibold tabular-nums text-foreground">{value.length}</span> of {total}</span>
       </div>
-      {groups.length === 0 ? <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-[13px] text-faint">No permission matches &ldquo;{search}&rdquo;.</p> : null}
+      {groups.length === 0 ? <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-sm text-faint">No permission matches &ldquo;{search}&rdquo;.</p> : null}
       {groups.map((g) => (
         <GroupPanel key={g.key} group={g} granted={granted} readOnly={readOnly}
           totalKeys={searching ? g.keys : (PERMISSION_MATRIX.find((x) => x.key === g.key)?.keys ?? g.keys)}

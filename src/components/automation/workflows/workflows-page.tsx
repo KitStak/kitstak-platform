@@ -32,10 +32,10 @@ function SortRow({ row, index }: { readonly row: WorkflowRow; readonly index: nu
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.id });
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={`flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 ${isDragging ? "z-10 shadow-lg" : ""}`}>
-      <span className="w-6 text-right text-[12px] font-semibold tabular-nums text-faint">{index + 1}</span>
+      <span className="w-6 text-right text-xs font-semibold tabular-nums text-faint">{index + 1}</span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-medium text-foreground">{row.name}</p>
-        <p className="truncate text-[11px] text-secondary">{row.trigger} · {row.actions.join(" → ")}{row.stopProcessing ? " · stops processing" : ""}</p>
+        <p className="truncate text-sm font-medium text-foreground">{row.name}</p>
+        <p className="truncate text-2xs text-secondary">{row.trigger} · {row.actions.join(" → ")}{row.stopProcessing ? " · stops processing" : ""}</p>
       </div>
       {!row.isActive ? <Badge size="sm" tone="neutral">Inactive</Badge> : null}
       <button type="button" aria-label={`Move ${row.name}`} {...attributes} {...listeners} className="cursor-grab rounded p-1 text-faint hover:text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><GripVertical className="h-4 w-4" /></button>
@@ -63,7 +63,7 @@ function SequenceDialog({ open, onOpenChange, onSaved, seed }: { readonly open: 
       <DialogContent size="md">
         <DialogHeader title="Change sequence" description="Workflows run top to bottom for each trigger. A workflow with Stop processing ends the chain when it matches." />
         <DialogBody>
-          {q.isPending && rows.length === 0 ? <p className="py-6 text-center text-[13px] text-secondary">Loading workflows…</p> : (
+          {q.isPending && rows.length === 0 ? <p className="py-6 text-center text-sm text-secondary">Loading workflows…</p> : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
               <SortableContext items={rows.map((r) => r.id)} strategy={verticalListSortingStrategy}>
                 <ol className="flex max-h-[55vh] flex-col gap-1.5 overflow-auto">{rows.map((r, i) => <SortRow key={r.id} row={r} index={i} />)}</ol>
@@ -119,9 +119,9 @@ export function WorkflowsPage() {
     { id: "trigger", header: "Trigger", size: 110, cell: ({ row }) => <span className="whitespace-nowrap" title={row.original.trigger}>{shortTriggerLabel(row.original.trigger)}</span> },
     { id: "scope", header: "Scope", size: 176, enableSorting: false, cell: ({ row }) => <span className="block truncate" title={`${row.original.warehouseCode ?? "All warehouses"} · ${row.original.clientId ? clientTitle(row.original.clientCode, row.original.clientName) : "All clients"}`}>{shortScopeLabel(row.original.warehouseCode, row.original.clientName)}</span> },
     { id: "conditions", header: "Conditions", size: 150, enableSorting: false, cell: ({ row }) => (
-      <Tooltip content={row.original.conditionSummary}><span tabIndex={0} className="flex min-w-0 items-center gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Badge size="sm" tone="info" className="shrink-0">{row.original.match === "All" ? "All" : "Any"} · {row.original.conditionCount}</Badge><span className="line-clamp-2 whitespace-normal break-words text-[12px] leading-4 text-secondary">{row.original.conditionSummary}</span></span></Tooltip>
+      <Tooltip content={row.original.conditionSummary}><span tabIndex={0} className="flex min-w-0 items-center gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><Badge size="sm" tone="info" className="shrink-0">{row.original.match === "All" ? "All" : "Any"} · {row.original.conditionCount}</Badge><span className="line-clamp-2 whitespace-normal break-words text-xs leading-4 text-secondary">{row.original.conditionSummary}</span></span></Tooltip>
     ) },
-    { id: "actions", header: "Actions", size: 104, enableSorting: false, cell: ({ row }) => <span className="block truncate text-[12px]" title={row.original.actions.join(" → ")}>{row.original.actions.join(" → ")}</span> },
+    { id: "actions", header: "Actions", size: 104, enableSorting: false, cell: ({ row }) => <span className="block truncate text-xs" title={row.original.actions.join(" → ")}>{row.original.actions.join(" → ")}</span> },
   ];
 
   const bulkActions: readonly BulkAction[] = !perms.edit && !perms.delete ? [] : [

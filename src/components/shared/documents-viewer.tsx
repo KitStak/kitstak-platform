@@ -44,7 +44,7 @@ export function DocumentsViewer({ entityType, entityId, canEdit = false }: Docum
   return (
     <section aria-label="Documents" className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
           <Paperclip className="h-3.5 w-3.5 text-secondary" aria-hidden />
           Documents {docs.length ? <span className="text-faint">({docs.length})</span> : null}
         </h3>
@@ -69,8 +69,8 @@ export function DocumentsViewer({ entityType, entityId, canEdit = false }: Docum
                 <FileText className="h-4 w-4" aria-hidden />
               </span>
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-[13px] font-medium text-foreground">{d.fileName ?? d.documentType}</span>
-                <span className="truncate text-[11px] text-faint">
+                <span className="truncate text-sm font-medium text-foreground">{d.fileName ?? d.documentType}</span>
+                <span className="truncate text-2xs text-faint">
                   {d.documentType}
                   {d.size ? ` · ${formatBytes(d.size)}` : ""} · {d.uploadedByName ?? d.uploadedBy ?? "Unknown"} · {fmt.dateTime(d.createdAt)}
                 </span>

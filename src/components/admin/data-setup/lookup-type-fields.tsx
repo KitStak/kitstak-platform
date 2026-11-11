@@ -88,10 +88,10 @@ function PairList({ name, title, description, codeLabel, nameLabel }: { readonly
               <TextField aria-label={nameLabel} placeholder={nameLabel} value={label} maxLength={120} onChange={(e) => setLabel(e.target.value)} />
               <Button variant="secondary" onClick={add} disabled={!code.trim() || !label.trim()}><Plus className="h-4 w-4" aria-hidden />Add</Button>
             </div>
-            {error ? <p className="text-[12px] text-danger" role="alert">{error}</p> : null}
+            {error ? <p className="text-xs text-danger" role="alert">{error}</p> : null}
             {items.length ? (
-              <table className="w-full text-[12.5px]">
-                <thead><tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-faint"><th className="py-1.5 font-medium">{codeLabel}</th><th className="py-1.5 font-medium">{nameLabel}</th><th className="w-16" /></tr></thead>
+              <table className="w-full text-xs">
+                <thead><tr className="border-b border-border text-left text-2xs text-faint"><th className="py-1.5 font-medium">{codeLabel}</th><th className="py-1.5 font-medium">{nameLabel}</th><th className="w-16" /></tr></thead>
                 <tbody>
                   {items.map((it, i) => (
                     <tr key={it.code} className="border-b border-border/60 last:border-0">
@@ -113,7 +113,7 @@ function PairList({ name, title, description, codeLabel, nameLabel }: { readonly
                   ))}
                 </tbody>
               </table>
-            ) : <p className="rounded-md border border-dashed border-border px-3 py-2 text-[12px] text-faint">Nothing added yet.</p>}
+            ) : <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-faint">Nothing added yet.</p>}
           </div>
         )}
       </FormField>
@@ -153,7 +153,7 @@ function TextList({ name, title, description, placeholder }: { readonly name: "c
               <TextField aria-label={`New ${title.toLowerCase()}`} placeholder={placeholder} value={draft} maxLength={80} onChange={(e) => setDraft(e.target.value)} />
               <Button variant="secondary" onClick={add} disabled={!draft.trim()}><Plus className="h-4 w-4" aria-hidden />Add</Button>
             </div>
-            {error ? <p className="text-[12px] text-danger" role="alert">{error}</p> : null}
+            {error ? <p className="text-xs text-danger" role="alert">{error}</p> : null}
             {items.length ? (
               <ul className="flex flex-col divide-y divide-border/60 rounded-md border border-border">
                 {items.map((it, i) => (
@@ -162,7 +162,7 @@ function TextList({ name, title, description, placeholder }: { readonly name: "c
                       <TextField aria-label={`Rename ${it}`} value={editing.value} maxLength={80} autoFocus className="h-7"
                         onChange={(e) => setEditing({ idx: i, value: e.target.value })}
                         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); saveEdit(); } if (e.key === "Escape") { e.stopPropagation(); setEditing(null); } }} />
-                    ) : <span className="min-w-0 flex-1 truncate text-[12.5px] text-body">{it}</span>}
+                    ) : <span className="min-w-0 flex-1 truncate text-xs text-body">{it}</span>}
                     {editing?.idx === i
                       ? <Button variant="ghost" size="icon-sm" aria-label={`Save ${it}`} onClick={saveEdit}><Check className="h-3.5 w-3.5" aria-hidden /></Button>
                       : <Button variant="ghost" size="icon-sm" aria-label={`Edit ${it}`} onClick={() => setEditing({ idx: i, value: it })}><Pencil className="h-3.5 w-3.5" aria-hidden /></Button>}
@@ -170,7 +170,7 @@ function TextList({ name, title, description, placeholder }: { readonly name: "c
                   </li>
                 ))}
               </ul>
-            ) : <p className="rounded-md border border-dashed border-border px-3 py-2 text-[12px] text-faint">Nothing added yet.</p>}
+            ) : <p className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-faint">Nothing added yet.</p>}
           </div>
         )}
       </FormField>
@@ -212,8 +212,8 @@ function SoTypeFlags() {
                     return (
                       <div key={f.key} className="flex items-center justify-between gap-3 py-2">
                         <div className="min-w-0">
-                          <p className={`flex items-center gap-2 text-[13px] font-medium ${enforced ? "text-strong" : "text-secondary"}`}>{f.label}{enforced ? null : <ComingSoonBadge />}</p>
-                          {f.hint ? <p className="text-[11.5px] text-faint">{f.hint}</p> : null}
+                          <p className={`flex items-center gap-2 text-sm font-medium ${enforced ? "text-strong" : "text-secondary"}`}>{f.label}{enforced ? null : <ComingSoonBadge />}</p>
+                          {f.hint ? <p className="text-2xs text-faint">{f.hint}</p> : null}
                         </div>
                         <YesNoToggle value={value} ariaLabel={enforced ? f.label : `${f.label} (coming soon)`} disabled={c.disabled || !enforced}
                           onChange={(next) => c.onChange(next ? [...flags, f.key] : flags.filter((k) => k !== f.key))} />
@@ -241,7 +241,7 @@ function MergeRuleFields() {
           <div className="flex flex-col gap-3" role="group" aria-describedby={c["aria-describedby"]}>
             {[true, false].map((rec) => (
               <div key={String(rec)}>
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">{rec ? "Default conditions" : "Additional conditions"}</p>
+                <p className="mb-1.5 text-2xs font-semibold text-faint">{rec ? "Default conditions" : "Additional conditions"}</p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {group(rec).map((opt) => {
                     const on = criteria.includes(opt.key);
@@ -287,9 +287,9 @@ function MobileCartFields() {
       </FormGrid>
       {levels && cols ? (
         <div className="rounded-lg border border-border bg-surface-sunken p-3">
-          <p className="mb-2 text-[11px] text-faint">{levels} × {cols} = {levels * cols} cells · named <code className="font-mono">Cart_column_level</code>, sequence column-first per level</p>
+          <p className="mb-2 text-2xs text-faint">{levels} × {cols} = {levels * cols} cells · named <code className="font-mono">Cart_column_level</code>, sequence column-first per level</p>
           <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(cols, 30)}, minmax(0, 1fr))` }} aria-hidden>
-            {Array.from({ length: Math.min(levels * cols, 600) }, (_, i) => <span key={i} className="flex h-5 items-center justify-center rounded bg-surface text-[8px] text-faint ring-1 ring-border">{String.fromCharCode(65 + Math.floor(i / cols))}{(i % cols) + 1}</span>)}
+            {Array.from({ length: Math.min(levels * cols, 600) }, (_, i) => <span key={i} className="flex h-5 items-center justify-center rounded bg-surface text-2xs text-faint ring-1 ring-border">{String.fromCharCode(65 + Math.floor(i / cols))}{(i % cols) + 1}</span>)}
           </div>
         </div>
       ) : null}
@@ -339,15 +339,15 @@ export function LookupTypeFields({ def }: { readonly def: LookupDef }) {
     case "so_type": return (
       <>
         <div>
-          <p className="text-[13px] font-semibold text-strong">Order behaviours</p>
-          <p className="text-[12px] text-faint">These switches apply to every shipment order of this type. All default to No. Switches marked Coming soon are read-only until allocation, picking, packing and shipping apply them; values saved earlier are kept.</p>
+          <p className="text-sm font-semibold text-strong">Order behaviours</p>
+          <p className="text-xs text-faint">These switches apply to every shipment order of this type. All default to No. Switches marked Coming soon are read-only until allocation, picking, packing and shipping apply them; values saved earlier are kept.</p>
         </div>
         <SoTypeFlags />
       </>
     );
     case "location_zone": return (
       <fieldset disabled={!ZONE_PUTAWAY_SETTINGS_ENFORCED} className="m-0 min-w-0 border-0 p-0">
-        {ZONE_PUTAWAY_SETTINGS_ENFORCED ? null : <p className="mb-2 flex items-center gap-2 text-[12px] text-faint"><ComingSoonBadge />Put-away doesn&apos;t read zone priority or the per-SKU location limit yet. Saved values are kept.</p>}
+        {ZONE_PUTAWAY_SETTINGS_ENFORCED ? null : <p className="mb-2 flex items-center gap-2 text-xs text-faint"><ComingSoonBadge />Put-away doesn&apos;t read zone priority or the per-SKU location limit yet. Saved values are kept.</p>}
       <FormGrid>
         <NumberField<F> name="priority" label="Zone priority" nullable min={0} max={9999} info="Put-away rules sorted by Zone Priority try lower numbers first" />
         <NumberField<F> name="maxLocationsPerSku" label="Max locations per SKU" nullable min={1} max={100000} info="Put-away won't spread one SKU over more locations than this in the zone" />

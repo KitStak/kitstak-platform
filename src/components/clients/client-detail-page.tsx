@@ -72,7 +72,7 @@ function SettingsTab({ client, canEdit, onSaved }: { readonly client: ClientDeta
       <form onSubmit={(e) => void save(e)} className="flex flex-col gap-4" noValidate>
         {conflict ? <Conflict onReload={() => window.location.reload()} /> : null}
         <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-surface p-4">
-          <label className="flex w-72 flex-col gap-1 text-[12px] font-medium text-secondary">Currency
+          <label className="flex w-72 flex-col gap-1 text-xs font-medium text-secondary">Currency
             <Select aria-label="Currency" options={CURRENCY_OPTIONS} value={currency} disabled={!canEdit} onChange={(v) => v && form.setValue("currency", v as ClientInput["currency"], { shouldDirty: true })} />
           </label>
           <div className="flex items-center gap-2">
@@ -125,8 +125,8 @@ function AddressesTab({ client, canEdit, onSaved }: { readonly client: ClientDet
 function Table({ head, children, empty }: { readonly head: readonly string[]; readonly children: React.ReactNode; readonly empty?: React.ReactNode }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-surface">
-      <table className="w-full text-left text-[13px]">
-        <thead className="bg-surface-sunken text-[11px] font-semibold uppercase tracking-wide text-secondary">
+      <table className="w-full text-left text-sm">
+        <thead className="bg-surface-sunken text-2xs font-semibold text-secondary">
           <tr>{head.map((h) => <th key={h} className="px-3 py-2">{h}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-border">{children}</tbody>
@@ -155,7 +155,7 @@ function Overview({ client, canEdit, onAddAddress }: { readonly client: ClientDe
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       <section className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 lg:col-span-2">
-        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Information</h3>
+        <h3 className="text-xs font-semibold text-secondary">Information</h3>
         <KvList columns={2} items={[
           { key: "name", label: "Display name", value: client.name },
           { key: "official", label: "Official name", value: client.officialName },
@@ -169,14 +169,14 @@ function Overview({ client, canEdit, onAddAddress }: { readonly client: ClientDe
         ]} />
       </section>
       <section className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4">
-        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Default addresses</h3>
+        <h3 className="text-xs font-semibold text-secondary">Default addresses</h3>
         {(["Shipping", "Billing", "Return"] as const).map((u) => {
           const a = def(u);
           return (
             <div key={u} className="flex flex-col gap-0.5">
-              <span className="text-[11px] font-semibold text-faint">{u}</span>
-              {a ? <span className="text-[13px] leading-5 text-body">{a.name ? <strong className="font-semibold">{a.name}: </strong> : null}{addressLines(a).join(", ")}</span> : (
-                <span className="flex items-center gap-2 text-[13px] text-faint">
+              <span className="text-2xs font-semibold text-faint">{u}</span>
+              {a ? <span className="text-sm leading-5 text-body">{a.name ? <strong className="font-semibold">{a.name}: </strong> : null}{addressLines(a).join(", ")}</span> : (
+                <span className="flex items-center gap-2 text-sm text-faint">
                   Not set
                   {canEdit ? <button type="button" className="font-medium text-primary hover:underline" onClick={onAddAddress}>Add {u.toLowerCase()} address</button> : null}
                 </span>
@@ -184,8 +184,8 @@ function Overview({ client, canEdit, onAddAddress }: { readonly client: ClientDe
             </div>
           );
         })}
-        <h3 className="mt-2 text-[12px] font-semibold uppercase tracking-wide text-secondary">Settings</h3>
-        <p className="text-[13px] text-body">{on} of 28 switches on</p>
+        <h3 className="mt-2 text-xs font-semibold text-secondary">Settings</h3>
+        <p className="text-sm text-body">{on} of 28 switches on</p>
       </section>
     </div>
   );
@@ -293,7 +293,7 @@ export function ClientDetailPage({ id }: { readonly id: string }) {
         ) : null}
         {url.tab === "activity" ? (
           <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
-            <section className="rounded-lg border border-border bg-surface p-4"><h3 className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-secondary">Change history</h3><ActivityTimeline entityType="client" entityId={c.id} /></section>
+            <section className="rounded-lg border border-border bg-surface p-4"><h3 className="mb-3 text-xs font-semibold text-secondary">Change history</h3><ActivityTimeline entityType="client" entityId={c.id} /></section>
             <section className="rounded-lg border border-border bg-surface p-4"><NotesPanel entityType="client" entityId={c.id} canEdit={perms.edit} /></section>
           </div>
         ) : null}

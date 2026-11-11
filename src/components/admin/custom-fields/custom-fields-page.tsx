@@ -68,15 +68,15 @@ function EditDrawer({ row, onClose }: { readonly row: DefRow | null; readonly on
       }>
       {row ? (
         <div className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1 text-[13px] font-medium text-body">Field name<TextField value={name} maxLength={50} onChange={(e) => setName(e.target.value)} invalid={!name.trim()} /></label>
+          <label className="flex flex-col gap-1 text-sm font-medium text-body">Field name<TextField value={name} maxLength={50} onChange={(e) => setName(e.target.value)} invalid={!name.trim()} /></label>
           {isDrop ? (
             <div className="flex flex-col gap-1">
-              <span className="text-[13px] font-medium text-body">Options</span>
+              <span className="text-sm font-medium text-body">Options</span>
               <ChipInput value={options} onChange={(v) => setOptions([...v])} placeholder="Type an option and press Enter" maxItems={50} maxLength={100} invalid={options.length === 0} />
-              <span className="text-[12px] text-secondary">Records keep a value that you remove here; it just can&apos;t be chosen again.</span>
+              <span className="text-xs text-secondary">Records keep a value that you remove here; it just can&apos;t be chosen again.</span>
             </div>
           ) : null}
-          <p className="text-[12px] text-secondary">The field type can&apos;t change once records may hold values. Deactivate it and add a new one instead.</p>
+          <p className="text-xs text-secondary">The field type can&apos;t change once records may hold values. Deactivate it and add a new one instead.</p>
         </div>
       ) : null}
     </Drawer>
@@ -142,9 +142,9 @@ export function CustomFieldsPage() {
             {CUSTOM_FIELD_ENTITY_LIST.map((e) => (
               <li key={e.key}>
                 <button type="button" onClick={() => select(e.key)} aria-current={e.key === entity.key ? "page" : undefined}
-                  className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] ${e.key === entity.key ? "bg-primary-soft font-semibold text-primary" : "text-body hover:bg-surface-sunken"}`}>
+                  className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm ${e.key === entity.key ? "bg-primary-soft font-semibold text-primary" : "text-body hover:bg-surface-sunken"}`}>
                   {e.label}
-                  {counts.get(e.key) ? <span className="text-[11.5px] tabular-nums text-secondary">{counts.get(e.key)}</span> : null}
+                  {counts.get(e.key) ? <span className="text-2xs tabular-nums text-secondary">{counts.get(e.key)}</span> : null}
                 </button>
               </li>
             ))}
@@ -153,12 +153,12 @@ export function CustomFieldsPage() {
         <section className="min-w-0 flex-1 rounded-xl border border-border bg-surface shadow-xs" aria-labelledby="cf-entity">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3.5">
             <div className="min-w-0">
-              <h2 id="cf-entity" className="text-[15px] font-semibold text-foreground">{entity.label}</h2>
-              <p className="text-[12.5px] text-secondary">{activeDefs.length} active · shown under Other Info on {entity.noun.toLowerCase()} forms</p>
+              <h2 id="cf-entity" className="text-base font-semibold text-foreground">{entity.label}</h2>
+              <p className="text-xs text-secondary">{activeDefs.length} active · shown under Other Info on {entity.noun.toLowerCase()} forms</p>
             </div>
             <div className="flex items-center gap-3">
               <Capacity defs={rows} />
-              {entity.href ? <Link href={entity.href} className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-primary hover:underline">Open {entity.label}<ArrowUpRight className="h-3.5 w-3.5" aria-hidden /></Link> : null}
+              {entity.href ? <Link href={entity.href} className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">Open {entity.label}<ArrowUpRight className="h-3.5 w-3.5" aria-hidden /></Link> : null}
             </div>
           </header>
           {all.isPending ? <div className="p-5"><Skeleton className="h-40 w-full" /></div> : all.isError ? (
@@ -166,9 +166,9 @@ export function CustomFieldsPage() {
           ) : rows.length === 0 ? (
             <EmptyState title={`No custom fields on ${entity.label.toLowerCase()} yet`} description="Add a field to capture information KitStak doesn't track out of the box." action={canManage ? <Button variant="primary" onClick={() => setAdding(true)}><Plus className="h-4 w-4" />Add custom field</Button> : undefined} />
           ) : (
-            <table className="w-full text-[13px]">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border text-left text-[11.5px] uppercase tracking-wide text-secondary">
+                <tr className="border-b border-border text-left text-2xs text-secondary">
                   <th className="px-5 py-2 font-medium">Field name</th><th className="px-3 py-2 font-medium">Type</th><th className="px-3 py-2 font-medium">Options</th><th className="px-3 py-2 font-medium">Active</th><th className="w-20 px-3 py-2" />
                 </tr>
               </thead>

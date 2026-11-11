@@ -27,7 +27,7 @@ export function Callout({ variant = "info", title, children, action, onDismiss, 
   return (
     <div role={variant === "error" ? "alert" : "status"} className={cn("flex items-start gap-2.5 rounded-lg border px-3.5 py-2.5", style.box, className)}>
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", style.icon)} aria-hidden />
-      <div className="min-w-0 flex-1 text-[13px] leading-5 text-body">
+      <div className="min-w-0 flex-1 text-sm leading-5 text-body">
         {title ? <p className="font-semibold text-foreground">{title}</p> : null}
         {children ? <div className={title ? "mt-0.5 text-secondary" : undefined}>{children}</div> : null}
       </div>

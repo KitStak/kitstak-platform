@@ -150,7 +150,7 @@ export function KitInventoryPage() {
       {KIT_TYPE_OPTIONS.map((o) => (
         <Tooltip key={o.key} content={o.tip}>
           <button type="button" role="radio" aria-checked={segment === o.key} onClick={() => setSegment(o.key)}
-            className={cn("h-7 rounded px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", segment === o.key ? "bg-info-soft text-info" : "text-secondary hover:bg-muted")}>
+            className={cn("h-7 rounded px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30", segment === o.key ? "bg-info-soft text-info" : "text-secondary hover:bg-muted")}>
             {o.label}
           </button>
         </Tooltip>
@@ -162,7 +162,7 @@ export function KitInventoryPage() {
     <div className="flex items-center gap-2">
       {typeSegments}
       <Tooltip content={`Recalculated automatically every ${Math.round((stamp.data?.data.everyMs ?? 900_000) / 60_000)} minutes`}>
-        <span className="hidden items-center gap-1.5 text-[12px] text-secondary lg:inline-flex">
+        <span className="hidden items-center gap-1.5 text-xs text-secondary lg:inline-flex">
           <Clock className="h-3.5 w-3.5" aria-hidden />Last updated <strong className="font-semibold text-foreground">{updatedAt ? formatInZone(updatedAt, stampZone) : stamp.isError ? "unavailable" : "…"}</strong>
         </span>
       </Tooltip>

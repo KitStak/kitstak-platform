@@ -41,7 +41,7 @@ export function TextF({ maxLength, placeholder, showCount, trailing, onBlurExtra
           // under the input instead of below a separate counter row (REQ-8 workaround).
           showCount={false}
           placeholder={placeholder}
-          trailing={trailing ?? ((showCount ?? Boolean(maxLength)) && maxLength ? <span className="tabular-nums text-[11px] text-faint" aria-hidden>{String(c.value ?? "").length}/{maxLength}</span> : undefined)}
+          trailing={trailing ?? ((showCount ?? Boolean(maxLength)) && maxLength ? <span className="tabular-nums text-2xs text-faint" aria-hidden>{String(c.value ?? "").length}/{maxLength}</span> : undefined)}
         />
       )}
     </FormField>
@@ -86,7 +86,7 @@ export function NumF({ decimals = 0, min = 0, max, suffix, placeholder, onValue,
             suffix={suffix}
             placeholder={placeholder ?? (decimals ? (0).toFixed(decimals) : "0")}
           />
-          {live && !fieldState.error ? <p role="alert" className="text-[12px] text-danger">{live}</p> : null}
+          {live && !fieldState.error ? <p role="alert" className="text-xs text-danger">{live}</p> : null}
         </>
       )}
     </FormField>

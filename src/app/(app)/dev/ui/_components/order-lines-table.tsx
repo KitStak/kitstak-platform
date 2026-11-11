@@ -12,11 +12,11 @@ const HEADERS = [
 
 /** Compact (32px rows, 12px text) order-lines table rendered inside an expanded grid row. */
 export function OrderLinesTable({ code, lines }: { readonly code: string; readonly lines: readonly DevOrderLine[] }) {
-  if (lines.length === 0) return <p className="text-[12px] text-faint">{code} has no lines.</p>;
+  if (lines.length === 0) return <p className="text-xs text-faint">{code} has no lines.</p>;
   return (
-    <table aria-label={`${code} order lines`} className="w-auto min-w-[560px] max-w-[760px] border-collapse text-[12px]">
+    <table aria-label={`${code} order lines`} className="w-auto min-w-[560px] max-w-[760px] border-collapse text-xs">
       <thead>
-        <tr className="h-8 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+        <tr className="h-8 text-2xs font-semibold text-faint">
           {HEADERS.map((h) => (
             <th key={h.key} scope="col" className={cn("px-3 font-semibold", h.numeric ? "w-20 text-right" : "text-left")}>{h.label}</th>
           ))}

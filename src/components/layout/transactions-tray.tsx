@@ -101,8 +101,8 @@ function TaskRow({ task }: { readonly task: BackgroundTask }) {
     <li className="flex flex-col gap-1.5 px-3 py-2.5">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-[13px] font-medium text-foreground">{task.title}</p>
-          <p className="text-[11px] text-faint">
+          <p className="truncate text-sm font-medium text-foreground">{task.title}</p>
+          <p className="text-2xs text-faint">
             {format.dateTime(task.createdAt)}
             {task.rowCount !== null ? ` · ${task.rowCount} rows` : ""}
           </p>
@@ -111,9 +111,9 @@ function TaskRow({ task }: { readonly task: BackgroundTask }) {
       </div>
       {isTaskActive(task) ? <ProgressBar value={task.progress} size="sm" showValue label={`${task.title} progress`} /> : null}
       {task.status === "completed" ? <ProgressBar value={100} tone="success" size="sm" showValue label={`${task.title} progress`} /> : null}
-      {task.status === "error" && task.errorMessage ? <p className="text-[11px] text-danger">{task.errorMessage}</p> : null}
+      {task.status === "error" && task.errorMessage ? <p className="text-2xs text-danger">{task.errorMessage}</p> : null}
       {task.status === "completed" && task.fileId ? (
-        <a href={`/api/files/${task.fileId}?download=1`} className="inline-flex w-fit items-center gap-1 text-[12px] font-semibold text-primary hover:underline">
+        <a href={`/api/files/${task.fileId}?download=1`} className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-primary hover:underline">
           <Download className="h-3 w-3" aria-hidden />
           {task.fileName ?? "Download"}
         </a>
@@ -174,7 +174,7 @@ export function TransactionsTray() {
       >
         <div className="flex items-center gap-1.5 border-b border-border px-3 py-2.5">
           <ArrowLeftRight className="h-4 w-4 text-primary" aria-hidden />
-          <h2 className="text-[14px] font-semibold text-foreground">Transactions</h2>
+          <h2 className="text-base font-semibold text-foreground">Transactions</h2>
           <InfoTip content="View the progress and status of your background tasks. Completed transactions are cleared daily." />
           <button type="button" aria-label="Refresh transactions" onClick={() => void tasks.refetch()} className="ml-auto rounded p-1 text-faint hover:bg-neutral-soft hover:text-secondary">
             <RefreshCw className={tasks.isFetching ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} aria-hidden />
@@ -183,17 +183,17 @@ export function TransactionsTray() {
         {tasks.isLoading ? (
           <div className="space-y-2 p-3"><Skeleton className="h-10" /><Skeleton className="h-10" /></div>
         ) : tasks.isError ? (
-          <div className="px-3 py-6 text-center text-[12px] text-danger">
+          <div className="px-3 py-6 text-center text-xs text-danger">
             Could not load transactions.{" "}
             <button type="button" onClick={() => void tasks.refetch()} className="font-semibold underline">Retry</button>
           </div>
         ) : list.length === 0 ? (
-          <p className="px-3 py-8 text-center text-[13px] text-secondary">No background jobs today. Exports and imports appear here.</p>
+          <p className="px-3 py-8 text-center text-sm text-secondary">No background jobs today. Exports and imports appear here.</p>
         ) : (
           <ul className="max-h-[420px] divide-y divide-border overflow-y-auto">{list.map((task) => <TaskRow key={task.id} task={task} />)}</ul>
         )}
         <div className="flex flex-col gap-2 border-t border-border bg-surface-sunken px-3 py-2.5">
-          <p className="text-[11px] text-secondary">{TRAY_RETRY_HINT}</p>
+          <p className="text-2xs text-secondary">{TRAY_RETRY_HINT}</p>
           <div className="flex items-center justify-between gap-2">
             <DisabledReason reason={finishedIds.length === 0 ? NOTHING_TO_CLEAR_REASON : null}>
               <Button size="sm" variant="secondary" disabled={finishedIds.length === 0} onClick={() => clearTasks(finishedIds)}>

@@ -133,7 +133,7 @@ function WizardDemo() {
         onComplete={async (values) => { await new Promise((r) => setTimeout(r, 400)); toast.success("Success", `${values.sku} saved.`); }}
         railTitle="Product summary"
         railSummary={(values) => (
-          <div className="space-y-1.5 text-[12px]">
+          <div className="space-y-1.5 text-xs">
             <RailRow label="SKU">{values.sku || "—"}</RailRow>
             <RailRow label="Name">{values.name || "—"}</RailRow>
             <RailRow label="Components">{values.componentCount ?? "—"}</RailRow>

@@ -92,7 +92,7 @@ function InformationStep({ isEdit, onCodeChecked }: { readonly isEdit: boolean; 
           <TextInput<F> name="name" label="Display name" required maxLength={100} placeholder="e.g. Copperline Coffee" />
           <TextInput<F> name="officialName" label="Official name" required maxLength={200} placeholder="e.g. Copperline Coffee Roasters LLC" info="Legal name printed on bills and BOLs" />
           <FormField<F> name="code" label="Client code" required info={isEdit ? "Codes can't change after creation" : checking ? "Checking that the code is free…" : "Used on SKUs, imports and integrations. Suggested from the display name and checked to be free."} disabled={isEdit}>
-            {(c) => <TextField {...c} value={(c.value as string) ?? ""} disabled={isEdit} maxLength={20} className={c.value ? "font-mono uppercase" : undefined} placeholder="e.g. COPPER"
+            {(c) => <TextField {...c} value={(c.value as string) ?? ""} disabled={isEdit} maxLength={20} className={c.value ? "font-mono " : undefined} placeholder="e.g. COPPER"
               onChange={(e) => { codeTouched.current = true; c.onChange(e.target.value.toUpperCase()); }} />}
           </FormField>
           <SelectField<F> name="status" label="Status" required options={ACTIVE_STATUSES.map((s) => ({ value: s, label: s }))} info="Inactive clients are hidden from order, PO and billing client selects" />
@@ -105,7 +105,7 @@ function InformationStep({ isEdit, onCodeChecked }: { readonly isEdit: boolean; 
           <TextInput<F> name="phone" label="Phone" maxLength={40} />
         </FormGrid>
       </FormSection>
-      {!isEdit ? <p className="text-[12px] text-faint">Code preview: <code className="font-mono text-secondary">{getValues("code") || "—"}</code></p> : null}
+      {!isEdit ? <p className="text-xs text-faint">Code preview: <code className="font-mono text-secondary">{getValues("code") || "—"}</code></p> : null}
     </div>
   );
 }
@@ -122,11 +122,11 @@ export function SettingsSwitches({ disabled }: { readonly disabled?: boolean }) 
           <section key={g.key} className="rounded-lg border border-border bg-surface" aria-labelledby={`grp-${g.key}`}>
             <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
               <div>
-                <h3 id={`grp-${g.key}`} className="text-[13px] font-semibold text-foreground">{g.title}</h3>
-                <p className="text-[12px] text-secondary">{g.description}</p>
+                <h3 id={`grp-${g.key}`} className="text-sm font-semibold text-foreground">{g.title}</h3>
+                <p className="text-xs text-secondary">{g.description}</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-neutral-soft px-2 py-0.5 text-[11px] font-semibold tabular-nums text-neutral">{on} / {g.switches.length} on</span>
+                <span className="rounded-full bg-neutral-soft px-2 py-0.5 text-2xs font-semibold tabular-nums text-neutral">{on} / {g.switches.length} on</span>
                 <Button size="sm" variant="ghost" disabled={disabled} onClick={() => g.switches.forEach((sw) => setValue(`settings.${g.key}.${sw.key}` as never, !all as never, { shouldDirty: true }))}>{all ? "Turn all off" : "Turn all on"}</Button>
               </div>
             </header>
@@ -135,7 +135,7 @@ export function SettingsSwitches({ disabled }: { readonly disabled?: boolean }) 
                 <FormField<F> key={sw.key} name={`settings.${g.key}.${sw.key}` as never} disabled={disabled}>
                   {(c) => (
                     <div className="flex items-center justify-between gap-3 rounded-md px-1 py-1.5 hover:bg-surface-sunken/60">
-                      <span className="flex items-center gap-1.5 text-[13px] text-body">
+                      <span className="flex items-center gap-1.5 text-sm text-body">
                         <label htmlFor={c.id} className="cursor-pointer">{sw.label}</label>
                         <InfoTip content={sw.tip} label={`About ${sw.label}`} />
                       </span>
@@ -161,8 +161,8 @@ function SettingsStep() {
         <FormGrid><SelectField<F> name="currency" label="Currency" required options={CURRENCY_OPTIONS} /></FormGrid>
       </FormSection>
       <div className="flex items-center justify-between">
-        <h3 className="text-[13px] font-semibold text-foreground">Operational settings</h3>
-        <span className="text-[12px] text-secondary">{enabledSwitchCount(settings)} of 28 switches on</span>
+        <h3 className="text-sm font-semibold text-foreground">Operational settings</h3>
+        <span className="text-xs text-secondary">{enabledSwitchCount(settings)} of 28 switches on</span>
       </div>
       <SettingsSwitches />
     </div>
@@ -179,8 +179,8 @@ function SsccSection() {
   const prefixLen = sscc?.gs1CompanyPrefix?.length || 7;
   const seg = (label: string, value: string, tone: string) => (
     <div className="flex min-w-0 flex-col items-center gap-1">
-      <span className={`rounded px-1.5 py-0.5 font-mono text-[13px] tabular-nums ${tone}`}>{value}</span>
-      <span className="text-center text-[11px] leading-tight text-secondary">{label}</span>
+      <span className={`rounded px-1.5 py-0.5 font-mono text-sm tabular-nums ${tone}`}>{value}</span>
+      <span className="text-center text-2xs leading-tight text-secondary">{label}</span>
     </div>
   );
   return (
@@ -196,8 +196,8 @@ function SsccSection() {
         <TextInput<F> name="sscc.gs1CompanyPrefix" label="GS1 company prefix" maxLength={10} transform={digitsOnly} placeholder="e.g. 0614141" info="The 7–10 digit prefix GS1 assigned to the client" />
         <TextInput<F> name="sscc.serialNumber" label="Serial number" maxLength={16 - prefixLen} transform={digitsOnly} placeholder="e.g. 1" info={`Starting serial reference; up to ${16 - prefixLen} digits with this prefix, zero-padded`} />
       </FormGrid>
-      <p className="text-[12px] text-secondary">
-        First SSCC-18: {preview ? <code className="font-mono text-[13px] text-foreground">({"00"}) {preview}</code> : <span className="text-faint">complete all three values to preview</span>}
+      <p className="text-xs text-secondary">
+        First SSCC-18: {preview ? <code className="font-mono text-sm text-foreground">({"00"}) {preview}</code> : <span className="text-faint">complete all three values to preview</span>}
       </p>
     </FormSection>
   );

@@ -86,7 +86,7 @@ export function GeneralStep({ form, isEdit }: { readonly form: Form; readonly is
         </FormField>
         {op === "Replenishment" ? (
           <div className="flex flex-col gap-1.5">
-            <span className="flex items-center gap-1 text-[12px] font-semibold text-body">Replenishment algorithm method <InfoTip content="The algorithm selected on the Putaway Algorithms page is used for dynamic replenishment; this method orders the source stock." /></span>
+            <span className="flex items-center gap-1 text-xs font-semibold text-body">Replenishment algorithm method <InfoTip content="The algorithm selected on the Putaway Algorithms page is used for dynamic replenishment; this method orders the source stock." /></span>
             <SegmentedControl ariaLabel="Replenishment algorithm method" value={s.replenishment.algorithmMethod} onChange={(v) => setSettings(form, { ...s, replenishment: { ...s.replenishment, algorithmMethod: v } })} options={[{ value: "FEFO", label: "FEFO" }, { value: "FIFO", label: "FIFO" }, { value: "LIFO", label: "LIFO" }]} />
           </div>
         ) : (
@@ -124,7 +124,7 @@ export function TemplatesStep({ form }: { readonly form: Form }) {
 function Flag({ label, tip, value, onChange, disabled }: { readonly label: string; readonly tip?: string; readonly value: boolean; readonly onChange: (v: boolean) => void; readonly disabled?: boolean }) {
   return (
     <div className={cn("flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2", disabled && "opacity-60")}>
-      <span className="flex items-center gap-1 text-[13px] text-body">{label}{tip ? <InfoTip content={tip} /> : null}</span>
+      <span className="flex items-center gap-1 text-sm text-body">{label}{tip ? <InfoTip content={tip} /> : null}</span>
       <YesNoToggle value={value} onChange={onChange} disabled={disabled} ariaLabel={label} />
     </div>
   );
@@ -137,17 +137,17 @@ function BatchFields({ form }: { readonly form: Form }) {
     <FormSection title="Batch size" description="How many orders (or items) one job may hold.">
       <div className="grid gap-3 md:grid-cols-3">
         <div className="flex flex-col gap-1.5">
-          <span className="text-[12px] font-semibold text-body">Limitation method</span>
+          <span className="text-xs font-semibold text-body">Limitation method</span>
           <Select aria-label="Limitation method" value={s.batch.method} onChange={(v) => setSettings(form, { ...s, batch: { ...s.batch, method: (v ?? "Nof Order") as JobTypeSettings["batch"]["method"] } })} options={[{ value: "Nof Order", label: "Number of orders" }, { value: "Nof Item", label: "Number of items" }]} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-[12px] font-semibold text-body">Min</span>
+          <span className="text-xs font-semibold text-body">Min</span>
           <NumberInput aria-label="Batch min" value={s.batch.min} min={0} max={10000} onChange={(v) => setSettings(form, { ...s, batch: { ...s.batch, min: v ?? 0 } })} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-[12px] font-semibold text-body">Max</span>
+          <span className="text-xs font-semibold text-body">Max</span>
           <NumberInput aria-label="Batch max" value={s.batch.max} min={0} max={10000} invalid={Boolean(err)} onChange={(v) => setSettings(form, { ...s, batch: { ...s.batch, max: v ?? 0 } })} />
-          {err ? <p className="text-[11px] font-medium text-danger" role="alert">{err}</p> : null}
+          {err ? <p className="text-2xs font-medium text-danger" role="alert">{err}</p> : null}
         </div>
       </div>
     </FormSection>
@@ -162,7 +162,7 @@ function MobileScreens({ form, only }: { readonly form: Form; readonly only?: "p
       <div className="flex flex-col gap-2">
         {rows.map((r) => (
           <div key={r.key} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-            <span className="text-[13px] text-body">{r.label}</span>
+            <span className="text-sm text-body">{r.label}</span>
             <SegmentedControl
               size="sm"
               ariaLabel={r.label}
@@ -229,7 +229,7 @@ function RetailerFields({ form }: { readonly form: Form }) {
   const uccReason = postPicking ? undefined : "Available with Retailer Post-Picking UCC Generation.";
   const field = (label: string, tip: string, reason: string | undefined, control: React.ReactNode) => (
     <div className={cn("flex flex-col gap-1", reason && "opacity-70")} title={reason}>
-      <span className="flex items-center gap-1 text-[12px] font-semibold text-body">{label}<InfoTip content={reason ? `${tip} ${reason}` : tip} /></span>
+      <span className="flex items-center gap-1 text-xs font-semibold text-body">{label}<InfoTip content={reason ? `${tip} ${reason}` : tip} /></span>
       {control}
     </div>
   );
@@ -294,14 +294,14 @@ export function SettingsStep({ form }: { readonly form: Form }) {
         <FormSection title="Replenishment flow">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <span className="text-[12px] font-semibold text-body">Replenishment flow</span>
+              <span className="text-xs font-semibold text-body">Replenishment flow</span>
               <SegmentedControl ariaLabel="Replenishment flow" value={s.replenishment.flow} onChange={(v) => setSettings(form, { ...s, replenishment: { ...s.replenishment, flow: v } })} options={[{ value: "Pick & Put", label: "Pick & put" }, { value: "Direct Put", label: "Direct put" }]} />
-              <p className="text-[11px] text-faint">{s.replenishment.flow === "Pick & Put" ? "Pick phase to a cart or LP, then a put phase to the pick face." : "One task moves stock straight to the pick face."}</p>
+              <p className="text-2xs text-faint">{s.replenishment.flow === "Pick & Put" ? "Pick phase to a cart or LP, then a put phase to the pick face." : "One task moves stock straight to the pick face."}</p>
             </div>
             <div className="flex flex-col gap-1.5">
-              <span className="text-[12px] font-semibold text-body">Replenishment type</span>
+              <span className="text-xs font-semibold text-body">Replenishment type</span>
               <SegmentedControl ariaLabel="Replenishment type" value={s.replenishment.type} onChange={(v) => setSettings(form, { ...s, replenishment: { ...s.replenishment, type: v } })} options={[{ value: "Dynamic", label: "Dynamic" }, { value: "Static", label: "Static" }]} />
-              <p className="text-[11px] text-faint">{s.replenishment.type === "Dynamic" ? "Targets come from open demand at the pick faces." : "Targets come from each product's min / max replenishment levels."}</p>
+              <p className="text-2xs text-faint">{s.replenishment.type === "Dynamic" ? "Targets come from open demand at the pick faces." : "Targets come from each product's min / max replenishment levels."}</p>
             </div>
           </div>
         </FormSection>
@@ -336,7 +336,7 @@ function Conditions({ form, name, title, description, fields }: { readonly form:
   return (
     <FormSection title={title} description={description}>
       <ConditionsEditor scope={`job-type-${name}`} fields={fields} value={(form.watch(name) as JF["conditions"]) ?? []} addLabel="Add condition" emptyText="No conditions: applies to all." onChange={(next) => form.setValue(name, next, { shouldDirty: true, shouldValidate: form.formState.isSubmitted })} />
-      {err ? <p className="text-[11px] font-medium text-danger" role="alert">{err}</p> : null}
+      {err ? <p className="text-2xs font-medium text-danger" role="alert">{err}</p> : null}
     </FormSection>
   );
 }

@@ -49,7 +49,7 @@ function Section({ title, icon: Icon, action, children }: { readonly title: stri
   return (
     <Card className="overflow-hidden p-0">
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-        <h2 className="flex items-center gap-2 text-[13px] font-semibold text-foreground"><Icon className="h-4 w-4 text-secondary" aria-hidden />{title}</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground"><Icon className="h-4 w-4 text-secondary" aria-hidden />{title}</h2>
         {action}
       </div>
       <div className="p-4">{children}</div>
@@ -58,7 +58,7 @@ function Section({ title, icon: Icon, action, children }: { readonly title: stri
 }
 
 function Th({ children, right }: { readonly children: React.ReactNode; readonly right?: boolean }) {
-  return <th scope="col" className={`px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.04em] text-secondary ${right ? "text-right" : "text-left"}`}>{children}</th>;
+  return <th scope="col" className={`px-3 py-2 text-2xs font-semibold text-secondary ${right ? "text-right" : "text-left"}`}>{children}</th>;
 }
 
 export function RmaDetailPage({ id }: { readonly id: string }) {
@@ -212,7 +212,7 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
         backLabel="Return orders"
         status={r.status}
         statusDomain="return"
-        badges={<span className="rounded-full bg-neutral-soft px-2 py-0.5 text-[11px] font-semibold text-secondary">{r.source === "Manual" ? "Manual return" : r.source === "RMA" ? "Customer RMA" : r.source}</span>}
+        badges={<span className="rounded-full bg-neutral-soft px-2 py-0.5 text-2xs font-semibold text-secondary">{r.source === "Manual" ? "Manual return" : r.source === "RMA" ? "Customer RMA" : r.source}</span>}
         meta={<span>{r.clientName} · {r.warehouseCode} · Created {fmt.gridDateTime(r.createdAt)} by {r.createdByName}{r.createdByEmail && r.createdByEmail !== r.createdByName ? ` (${r.createdByEmail})` : ""}</span>}
         actions={actions}
       />
@@ -229,14 +229,14 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
       <div className="grid gap-4 px-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-4">
           {tab === "lines" ? (<>
-          <Section title={`Lines (${r.lines.length})`} icon={Box} action={<span className="flex items-center gap-2 text-[12px] text-secondary"><span className="tabular-nums">{r.receivedQty} of {r.requestedQty} received</span><ProgressBar value={pct} tone="success" label="Receiving progress" className="w-24" /></span>}>
+          <Section title={`Lines (${r.lines.length})`} icon={Box} action={<span className="flex items-center gap-2 text-xs text-secondary"><span className="tabular-nums">{r.receivedQty} of {r.requestedQty} received</span><ProgressBar value={pct} tone="success" label="Receiving progress" className="w-24" /></span>}>
             <div className="-m-4 overflow-x-auto">
-              <table className="w-full min-w-[720px] text-[13px]">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead className="border-b border-border bg-surface-sunken/60"><tr><Th>SKU</Th><Th>Pack type</Th><Th right>Shipped</Th><Th right>Requested</Th><Th right>Returned</Th><Th>Line status</Th><Th>Disposition</Th><Th>Customer reason</Th><Th>Actual reason</Th></tr></thead>
                 <tbody>
                   {r.lines.map((l) => (
                     <tr key={l.id} className="border-b border-border last:border-0">
-                      <td className="px-3 py-2"><Link href={`/products/${l.productId}`} className="font-medium text-primary hover:underline">{l.sku}</Link><div className="max-w-[220px] truncate text-[11px] text-secondary">{l.name}</div></td>
+                      <td className="px-3 py-2"><Link href={`/products/${l.productId}`} className="font-medium text-primary hover:underline">{l.sku}</Link><div className="max-w-[220px] truncate text-2xs text-secondary">{l.name}</div></td>
                       <td className="px-3 py-2">{l.packType}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{l.shippedQty ?? dash}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{l.requestedQty}</td>
@@ -251,12 +251,12 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
               </table>
             </div>
           </Section>
-          <Section title={`Receipts (${r.receipts.length})`} icon={PackageCheck} action={r.receipts.length ? <Link href={`/receiving/history?f.rmaNumber=eq:${encodeURIComponent(r.rmaCode)}`} className="inline-flex items-center gap-1 text-[12px] font-medium text-primary hover:underline">Receiving history<ExternalLink className="h-3 w-3" aria-hidden /></Link> : null}>
+          <Section title={`Receipts (${r.receipts.length})`} icon={PackageCheck} action={r.receipts.length ? <Link href={`/receiving/history?f.rmaNumber=eq:${encodeURIComponent(r.rmaCode)}`} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">Receiving history<ExternalLink className="h-3 w-3" aria-hidden /></Link> : null}>
             {r.receipts.length === 0 ? (
-              <p className="text-[13px] text-secondary">Nothing received yet. {open ? "Scan this RMA at the return station to receive it." : ""}</p>
+              <p className="text-sm text-secondary">Nothing received yet. {open ? "Scan this RMA at the return station to receive it." : ""}</p>
             ) : (
               <div className="-m-4 overflow-x-auto">
-                <table className="w-full min-w-[720px] text-[13px]">
+                <table className="w-full min-w-[720px] text-sm">
                   <thead className="border-b border-border bg-surface-sunken/60"><tr><Th>Receipt</Th><Th>SKU</Th><Th right>Qty</Th><Th>Location</Th><Th>LP</Th><Th>Damage reason</Th><Th>Actual reason</Th><Th>Received</Th></tr></thead>
                   <tbody>
                     {r.receipts.map((x) => (
@@ -268,7 +268,7 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
                         <td className="px-3 py-2">{x.lpNumber ?? dash}</td>
                         <td className="px-3 py-2">{x.damageReason ?? dash}</td>
                         <td className="px-3 py-2">{x.actualReturnReason ?? dash}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{fmt.gridDateTime(x.receivedAt)}<div className="text-[11px] text-secondary">{x.receivedBy}</div></td>
+                        <td className="px-3 py-2 whitespace-nowrap">{fmt.gridDateTime(x.receivedAt)}<div className="text-2xs text-secondary">{x.receivedBy}</div></td>
                       </tr>
                     ))}
                   </tbody>
@@ -290,7 +290,7 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
             {r.label ? (
               <div className="space-y-3">
                 <KvList columns={1} layout="inline" items={[
-                  { key: "tracking", label: "Tracking", value: <span className="font-mono text-[12px]">{r.label.trackingNumber}</span> },
+                  { key: "tracking", label: "Tracking", value: <span className="font-mono text-xs">{r.label.trackingNumber}</span> },
                   { key: "carrier", label: "Carrier", value: r.label.carrierCode ?? r.carrierCode ?? dash },
                   { key: "service", label: "Service", value: r.label.serviceName ?? r.carrierServiceName ?? dash },
                   { key: "cost", label: "Cost", value: fmt.money(r.label.shippingCost, "USD", "summary") },
@@ -300,7 +300,7 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
                 <Button variant="secondary" className="w-full" disabled={!r.label.labelFileId} onClick={() => openFileId(r.label?.labelFileId)}><Printer className="h-3.5 w-3.5" aria-hidden />Reprint return label</Button>
               </div>
             ) : (
-              <div className="space-y-3 text-[13px] text-secondary">
+              <div className="space-y-3 text-sm text-secondary">
                 <p>{r.trackingNumber ? `Tracking ${r.trackingNumber} (no label file).` : "No return label yet."}</p>
                 {can.label ? (
                   <DisabledReason reason={labelReason}>
@@ -314,7 +314,7 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
         </div>
         <div className="flex min-w-0 flex-col gap-4">
           <Section title="Summary" icon={FileText} action={can.status ? <DisabledReason reason={open ? null : `A ${r.status.toLowerCase()} return can't be edited.`}><Button size="sm" variant="ghost" disabled={!open} onClick={() => setInfoOpen(true)} data-testid="rma-edit-return-info">Edit return info</Button></DisabledReason> : undefined}>
-            {(() => { const addLabel = labelReason ? dash : <button type="button" onClick={() => setLabelOpen(true)} className="rounded text-[12px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Create return label</button>; return (
+            {(() => { const addLabel = labelReason ? dash : <button type="button" onClick={() => setLabelOpen(true)} className="rounded text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">Create return label</button>; return (
             <KvList columns={1} layout="inline" items={[
               { key: "order", label: "Shipment order", value: r.order ? <Link href={`/orders/${r.order.id}`} className="font-medium text-primary hover:underline">{r.order.code}</Link> : "Manual return" },
               { key: "store", label: "Store order #", value: r.order?.storeOrderNumber ?? dash },
@@ -325,7 +325,7 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
               { key: "address", label: "Return address", value: r.returnAddress ? <span title={r.returnAddress}>{r.returnAddress}</span> : dash },
               { key: "carrier", label: "Return carrier", value: r.label?.carrierCode ?? r.carrierCode ?? addLabel },
               { key: "service", label: "Shipping option", value: r.label?.serviceName ?? r.carrierServiceName ?? dash },
-              { key: "tracking", label: (r.trackingNumbers?.length ?? 0) > 1 && !r.label ? `Return tracking (${r.trackingNumbers?.length})` : "Return tracking", value: r.label?.trackingNumber ? <span className="font-mono text-[12px]">{r.label.trackingNumber}</span> : (r.trackingNumbers?.length ? <span className="flex flex-wrap gap-1">{r.trackingNumbers.map((t) => <span key={t} className="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[12px]">{t}</span>)}</span> : r.trackingNumber ? <span className="font-mono text-[12px]">{r.trackingNumber}</span> : addLabel) },
+              { key: "tracking", label: (r.trackingNumbers?.length ?? 0) > 1 && !r.label ? `Return tracking (${r.trackingNumbers?.length})` : "Return tracking", value: r.label?.trackingNumber ? <span className="font-mono text-xs">{r.label.trackingNumber}</span> : (r.trackingNumbers?.length ? <span className="flex flex-wrap gap-1">{r.trackingNumbers.map((t) => <span key={t} className="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-xs">{t}</span>)}</span> : r.trackingNumber ? <span className="font-mono text-xs">{r.trackingNumber}</span> : addLabel) },
               { key: "cost", label: "Return shipping cost", value: r.returnShippingCost !== null && r.returnShippingCost !== undefined ? <span className="tabular-nums">{fmt.money(r.returnShippingCost, "USD", "summary")}</span> : dash },
               { key: "shipped", label: "Shipped", value: r.order?.shippedAt ? fmt.gridDateTime(r.order.shippedAt) : dash },
               { key: "delivered", label: "Delivered", value: r.order?.deliveredAt ? fmt.gridDateTime(r.order.deliveredAt) : dash },
@@ -333,7 +333,7 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
               { key: "actual", label: "Actual return", value: r.actualReturnDate ? fmt.gridDateTime(r.actualReturnDate) : dash },
               { key: "updated", label: "Last updated", value: fmt.gridDateTime(r.updatedAt) },
             ]} />); })()}
-            {r.note ? <p className="mt-3 whitespace-pre-line rounded-md bg-surface-sunken px-3 py-2 text-[12px] text-body">{r.note}</p> : null}
+            {r.note ? <p className="mt-3 whitespace-pre-line rounded-md bg-surface-sunken px-3 py-2 text-xs text-body">{r.note}</p> : null}
           </Section>
         </div>
       </div>
@@ -352,11 +352,11 @@ export function RmaDetailPage({ id }: { readonly id: string }) {
         records={{ columns: [{ key: "sku", label: "SKU" }, { key: "req", label: "Requested" }, { key: "ret", label: "Returned" }, { key: "short", label: "Not received" }],
           rows: r.lines.filter((l) => l.requestedQty > l.returnedQty).map((l) => ({ sku: l.sku, req: l.requestedQty, ret: l.returnedQty, short: l.requestedQty - l.returnedQty })) }}
         confirmLabel="Reopen" cancelLabel="Keep closed" onConfirm={reopen}>
-        <label className="mt-1 flex flex-col gap-1 text-[12px] font-medium text-body" htmlFor="rma-reopen-reason">
+        <label className="mt-1 flex flex-col gap-1 text-xs font-medium text-body" htmlFor="rma-reopen-reason">
           <span>Reason <span className="text-danger">*</span></span>
           <TextField id="rma-reopen-reason" className="h-9 w-full" value={reopenReason} maxLength={300} invalid={Boolean(reopenError)} placeholder="e.g. Second box arrived"
             onChange={(ev) => { setReopenReason(ev.target.value); if (reopenError) setReopenError(null); }} />
-          {reopenError ? <span className="text-[11px] text-danger">{reopenError}</span> : null}
+          {reopenError ? <span className="text-2xs text-danger">{reopenError}</span> : null}
         </label>
       </ConfirmDialog>
       {infoOpen ? <EditReturnInfoModal open onOpenChange={setInfoOpen} detail={r} onDone={() => void invalidate()} /> : null}

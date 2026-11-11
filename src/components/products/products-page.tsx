@@ -44,8 +44,8 @@ type DeleteDialog = { rows: readonly DeleteCheckRow[] } | null;
 function DeleteProductCell({ sku, name }: { readonly sku: string; readonly name: string }) {
   return (
     <span className="block max-w-[190px]" title={`${sku} · ${name}`}>
-      <span className="block truncate whitespace-nowrap font-mono text-[12px] text-body">{sku}</span>
-      <span className="block truncate whitespace-nowrap text-[11px] text-secondary">{name}</span>
+      <span className="block truncate whitespace-nowrap font-mono text-xs text-body">{sku}</span>
+      <span className="block truncate whitespace-nowrap text-2xs text-secondary">{name}</span>
     </span>
   );
 }
@@ -249,7 +249,7 @@ function ProductsGrid() {
       product: <DeleteProductCell sku={r.sku} name={r.name} />,
       status: <StatusPill status={r.status} domain="active" size="sm" />,
       result: r.reason
-        ? <span className="block min-w-[7rem] text-danger"><span className="block whitespace-nowrap font-medium">Blocked</span><span className="block text-[11px] leading-snug">{r.reason}</span></span>
+        ? <span className="block min-w-[7rem] text-danger"><span className="block whitespace-nowrap font-medium">Blocked</span><span className="block text-2xs leading-snug">{r.reason}</span></span>
         : <span className="block min-w-[7rem] whitespace-nowrap text-success">Can be deleted</span>,
     })),
   } : undefined;

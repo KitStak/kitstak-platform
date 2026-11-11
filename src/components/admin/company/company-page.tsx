@@ -95,13 +95,13 @@ function LogoBlock({ company, canEdit, onChanged }: { readonly company: CompanyS
   };
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-[12px] font-medium text-body">Company logo</span>
+      <span className="text-xs font-medium text-body">Company logo</span>
       <div className="flex items-center gap-4">
         <div className={cn("flex h-20 w-40 items-center justify-center overflow-hidden rounded-lg border bg-surface-sunken", error ? "border-danger" : "border-dashed border-border-strong")}>
           {company.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={company.logoUrl} alt={`${company.displayName} logo`} className="max-h-16 max-w-36 object-contain" />
-          ) : <span className="text-[11px] text-faint">No logo yet</span>}
+          ) : <span className="text-2xs text-faint">No logo yet</span>}
         </div>
         <div className="flex flex-col gap-1.5">
           <input ref={input} type="file" accept="image/png,image/jpeg" className="sr-only" aria-label="Choose a logo image" onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); }} />
@@ -109,7 +109,7 @@ function LogoBlock({ company, canEdit, onChanged }: { readonly company: CompanyS
             <DisabledReason reason={canEdit ? null : NO_PERMISSION}><Button size="sm" variant="secondary" disabled={!canEdit || busy} onClick={() => input.current?.click()}><ImageUp className="h-3.5 w-3.5" aria-hidden />{busy ? "Uploading…" : company.logoUrl ? "Replace" : "Add file"}</Button></DisabledReason>
             {company.logoUrl ? <DisabledReason reason={canEdit ? null : NO_PERMISSION}><Button size="sm" variant="ghost" disabled={!canEdit || busy} onClick={() => setConfirm(true)}><Trash2 className="h-3.5 w-3.5" aria-hidden />Remove</Button></DisabledReason> : null}
           </div>
-          <span className={cn("text-[11.5px]", error ? "text-danger" : "text-faint")} role={error ? "alert" : undefined}>{error ?? "JPG, JPEG or PNG, smaller than 2 MB."}</span>
+          <span className={cn("text-2xs", error ? "text-danger" : "text-faint")} role={error ? "alert" : undefined}>{error ?? "JPG, JPEG or PNG, smaller than 2 MB."}</span>
         </div>
       </div>
       <ConfirmDialog open={confirm} onOpenChange={setConfirm} variant="danger" title="Remove the company logo?" description="The header falls back to the KitStak logo and printouts to your company name." confirmLabel="Yes, remove" cancelLabel="No"
@@ -157,8 +157,8 @@ function DefaultsSection({ company, canEdit, onSaved }: { readonly company: Comp
         <SelectField<CompanyDefaultsValues> name="weightUnit" label="Weight unit" required disabled={!canEdit} options={WEIGHT_UNITS.map((u) => ({ value: u, label: u }))} />
         <SelectField<CompanyDefaultsValues> name="dimensionUnit" label="Dimension unit" required disabled={!canEdit} options={DIMENSION_UNITS.map((u) => ({ value: u, label: u }))} />
       </FormGrid>
-      <div className="rounded-lg border border-border bg-surface-sunken px-4 py-3 text-[13px]">
-        <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-faint">Example</p>
+      <div className="rounded-lg border border-border bg-surface-sunken px-4 py-3 text-sm">
+        <p className="text-2xs font-bold text-faint">Example</p>
         <p className="mt-1 text-foreground">A new product weighs <b>2.5 {w.weightUnit}</b>, measures <b>12 × 8 × 4 {w.dimensionUnit}</b>, sells for <b>{fmt.money(24.99, w.currency)}</b> and was created <b>{today ? fmt.date(today) : "today"}</b>.</p>
       </div>
       {canEdit ? <SubmitBar submitLabel="Save defaults" cancelLabel="Reset" requireDirty onCancel={() => form.reset(initial)} /> : null}
@@ -219,8 +219,8 @@ export function CompanyPage() {
         actions={<Button variant="secondary" onClick={() => setLog(true)}><History className="h-4 w-4" aria-hidden />Change log</Button>} />
       <div className="grid max-w-[1280px] gap-6 px-6 py-5 md:grid-cols-[220px_minmax(0,1fr)]">
         <section aria-labelledby="company-section-title" className="rounded-xl border border-border bg-surface p-5 shadow-xs">
-          <h2 id="company-section-title" className="text-[16px] font-semibold text-foreground">{meta.title}</h2>
-          <p className="mt-0.5 text-[12px] text-secondary">{meta.description}</p>
+          <h2 id="company-section-title" className="text-md font-semibold text-foreground">{meta.title}</h2>
+          <p className="mt-0.5 text-xs text-secondary">{meta.description}</p>
           <div className="mt-5">
             {section === "email" ? <MailSection canEdit={perms.update} defaultTo={user?.email ?? ""} /> : q.isPending ? <Skeleton className="h-64 w-full" /> : q.isError || !company ? (
               <EmptyState title="Couldn't load company settings" description={q.error?.message} action={<Button onClick={() => void q.refetch()}>Retry</Button>} />

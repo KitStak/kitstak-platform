@@ -45,7 +45,7 @@ function Head({ label, tip }: { readonly label: string; readonly tip: string }) 
 }
 
 function RateCell({ value }: { readonly value: number | null }) {
-  if (value === null) return <span className="text-faint" title="No calls in the last 24 hours">— <span className="text-[11px]">No data</span></span>;
+  if (value === null) return <span className="text-faint" title="No calls in the last 24 hours">— <span className="text-2xs">No data</span></span>;
   const low = value < LOW_PERFORMING_PCT;
   return <span className={cn("inline-flex items-center gap-1 font-semibold tabular-nums", low ? "text-danger" : "text-success")}>{low ? <AlertTriangle className="h-3.5 w-3.5" aria-label="Low performing" /> : null}{value}%</span>;
 }
@@ -83,7 +83,7 @@ export function HealthOverviewPage() {
       <MonitoringHeader />
       <div className="flex flex-col gap-3 px-6">
         <div className="flex items-center gap-3">
-          <p className="flex items-center gap-1 text-[13px] text-secondary">Selected channel: <span className="font-semibold text-foreground">{selected ? providerMeta("channel", selected).name : "All channels"}</span><InfoTip content="Pick a channel card to filter the grid. Low-performing setups are below 80% success in 24 hours." /></p>
+          <p className="flex items-center gap-1 text-sm text-secondary">Selected channel: <span className="font-semibold text-foreground">{selected ? providerMeta("channel", selected).name : "All channels"}</span><InfoTip content="Pick a channel card to filter the grid. Low-performing setups are below 80% success in 24 hours." /></p>
           <div className="ml-auto w-64"><Combobox aria-label="Filter by client" options={clients} value={clientId} onChange={setClientId} placeholder="Filter by client" clearable /></div>
         </div>
         <div role="radiogroup" aria-label="Channels" className="flex gap-3 overflow-x-auto pb-1">
@@ -92,12 +92,12 @@ export function HealthOverviewPage() {
             return (
               <button key={c.provider ?? "all"} type="button" role="radio" aria-checked={active} onClick={() => pick(c.provider)}
                 className={cn("flex w-64 shrink-0 flex-col gap-2 rounded-xl border-2 bg-surface px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary", active ? "border-primary shadow-sm" : "border-border hover:border-border-strong")}>
-                <span className="flex items-center gap-2 text-[13px] font-semibold">{c.provider ? <ProviderLogo kind="channel" provider={c.provider} /> : null}{c.provider ? providerMeta("channel", c.provider).name : "All channels"}<span className="ml-auto text-[11px] font-normal text-faint">{c.setups} setup{c.setups === 1 ? "" : "s"}</span></span>
+                <span className="flex items-center gap-2 text-sm font-semibold">{c.provider ? <ProviderLogo kind="channel" provider={c.provider} /> : null}{c.provider ? providerMeta("channel", c.provider).name : "All channels"}<span className="ml-auto text-2xs font-normal text-faint">{c.setups} setup{c.setups === 1 ? "" : "s"}</span></span>
                 <span className="grid grid-cols-2 gap-2">
-                  <span><span className="block text-[10px] uppercase tracking-wide text-faint">Avg. success rate</span>{c.avgSuccess === null ? <span className="text-[18px] font-semibold text-faint" title="No calls in the last 24 hours">—</span> : <span className={cn("text-[18px] font-semibold tabular-nums", c.avgSuccess >= LOW_PERFORMING_PCT ? "text-success" : "text-danger")}>{c.avgSuccess}%</span>}</span>
-                  <span><span className="block text-[10px] uppercase tracking-wide text-faint">Low-performing</span><span className={cn("text-[18px] font-semibold tabular-nums", c.lowPerforming > 0 ? "text-danger" : "text-foreground")}>{c.lowPerforming}</span></span>
+                  <span><span className="block text-2xs text-faint">Avg. success rate</span>{c.avgSuccess === null ? <span className="text-lg font-semibold text-faint" title="No calls in the last 24 hours">—</span> : <span className={cn("text-lg font-semibold tabular-nums", c.avgSuccess >= LOW_PERFORMING_PCT ? "text-success" : "text-danger")}>{c.avgSuccess}%</span>}</span>
+                  <span><span className="block text-2xs text-faint">Low-performing</span><span className={cn("text-lg font-semibold tabular-nums", c.lowPerforming > 0 ? "text-danger" : "text-foreground")}>{c.lowPerforming}</span></span>
                 </span>
-                {c.avgSuccess !== null && c.setups > 0 ? <span className="text-[11px] text-secondary">Based on {c.setups - c.noData} of {c.setups} setup{c.setups === 1 ? "" : "s"} with calls in 24h{c.setups - c.noData < 3 ? " (small sample)" : ""}</span> : c.noData > 0 ? <span className="text-[11px] text-faint">{c.noData} with no calls in 24h</span> : null}
+                {c.avgSuccess !== null && c.setups > 0 ? <span className="text-2xs text-secondary">Based on {c.setups - c.noData} of {c.setups} setup{c.setups === 1 ? "" : "s"} with calls in 24h{c.setups - c.noData < 3 ? " (small sample)" : ""}</span> : c.noData > 0 ? <span className="text-2xs text-faint">{c.noData} with no calls in 24h</span> : null}
               </button>
             );
           })}
@@ -118,9 +118,9 @@ function CardShell({ title, tip, href, count, children }: { readonly title: stri
   return (
     <section className="flex min-h-[220px] flex-col rounded-xl border border-border bg-surface p-4">
       <header className="mb-2 flex items-center gap-1.5">
-        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">{title}</h3><InfoTip content={tip} />
+        <h3 className="text-xs font-semibold text-secondary">{title}</h3><InfoTip content={tip} />
         {count !== undefined ? <Badge size="sm" tone={count > 0 ? "danger" : "neutral"} className="ml-1">{count}</Badge> : null}
-        {href ? <Link href={href} className="ml-auto text-[12px] font-medium text-primary hover:underline">Show all</Link> : null}
+        {href ? <Link href={href} className="ml-auto text-xs font-medium text-primary hover:underline">Show all</Link> : null}
       </header>
       <div className="min-h-0 flex-1">{children}</div>
     </section>
@@ -130,8 +130,8 @@ function CardShell({ title, tip, href, count, children }: { readonly title: stri
 function HeaderFact({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col">
-      <span className="mb-1 text-[11px] font-medium text-secondary">{label}</span>
-      <span className="flex h-9 items-center text-[13px] text-foreground">{children}</span>
+      <span className="mb-1 text-2xs font-medium text-secondary">{label}</span>
+      <span className="flex h-9 items-center text-sm text-foreground">{children}</span>
     </div>
   );
 }
@@ -152,21 +152,21 @@ function VolumeChart({ volume }: { readonly volume: SetupDetails["volume"] }) {
   </>;
   return (
     <div>
-      <p className="mb-2 text-[12px] text-secondary"><span className="font-semibold tabular-nums text-foreground">{shape.channelTotal.toLocaleString("en-US")}</span> channel orders · <span className="font-semibold tabular-nums text-foreground">{shape.kitstaksTotal.toLocaleString("en-US")}</span> created in KitStak{shape.activeDays === 0 ? " — no orders in the last 14 days" : shape.sparse ? ` — activity on ${shape.activeDays} of ${volume.length} days` : ""}</p>
+      <p className="mb-2 text-xs text-secondary"><span className="font-semibold tabular-nums text-foreground">{shape.channelTotal.toLocaleString("en-US")}</span> channel orders · <span className="font-semibold tabular-nums text-foreground">{shape.kitstaksTotal.toLocaleString("en-US")}</span> created in KitStak{shape.activeDays === 0 ? " — no orders in the last 14 days" : shape.sparse ? ` — activity on ${shape.activeDays} of ${volume.length} days` : ""}</p>
       <div className="h-44">
-        {shape.activeDays === 0 ? <p className="flex h-full items-center justify-center text-[12px] text-faint">No order activity in the last 14 days</p> : (
+        {shape.activeDays === 0 ? <p className="flex h-full items-center justify-center text-xs text-faint">No order activity in the last 14 days</p> : (
           <ResponsiveContainer width="100%" height="100%">
             {shape.sparse ? (
               <BarChart data={data} margin={{ top: 4, right: 8, left: -18, bottom: 0 }} barGap={2}>
                 {axis}
-                <Bar dataKey="channel" name="Channel orders created" fill="#7F56D9" radius={[3, 3, 0, 0]} maxBarSize={18} />
-                <Bar dataKey="kitstaks" name="KitStak orders created" fill="#17874D" radius={[3, 3, 0, 0]} maxBarSize={18} />
+                <Bar dataKey="channel" name="Channel orders created" fill="var(--chart-4)" radius={[3, 3, 0, 0]} maxBarSize={18} />
+                <Bar dataKey="kitstaks" name="KitStak orders created" fill="var(--chart-2)" radius={[3, 3, 0, 0]} maxBarSize={18} />
               </BarChart>
             ) : (
               <AreaChart data={data} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
                 {axis}
-                <Area type="monotone" dataKey="channel" name="Channel orders created" stroke="#7F56D9" fill="#7F56D9" fillOpacity={0.12} strokeWidth={2} />
-                <Area type="monotone" dataKey="kitstaks" name="KitStak orders created" stroke="#17874D" fill="#17874D" fillOpacity={0.15} strokeWidth={2} />
+                <Area type="monotone" dataKey="channel" name="Channel orders created" stroke="var(--chart-4)" fill="var(--chart-4)" fillOpacity={0.12} strokeWidth={2} />
+                <Area type="monotone" dataKey="kitstaks" name="KitStak orders created" stroke="var(--chart-2)" fill="var(--chart-2)" fillOpacity={0.15} strokeWidth={2} />
               </AreaChart>
             )}
           </ResponsiveContainer>
@@ -177,10 +177,10 @@ function VolumeChart({ volume }: { readonly volume: SetupDetails["volume"] }) {
 }
 
 function MiniTable({ heads, rows }: { readonly heads: readonly string[]; readonly rows: readonly (readonly React.ReactNode[])[] }) {
-  if (rows.length === 0) return <p className="py-8 text-center text-[12px] text-faint">No records to display</p>;
+  if (rows.length === 0) return <p className="py-8 text-center text-xs text-faint">No records to display</p>;
   return (
-    <table className="w-full text-[12px]">
-      <thead className="text-[10px] uppercase text-faint"><tr>{heads.map((h) => <th key={h} className="px-1.5 py-1 text-left font-semibold">{h}</th>)}</tr></thead>
+    <table className="w-full text-xs">
+      <thead className="text-2xs text-faint"><tr>{heads.map((h) => <th key={h} className="px-1.5 py-1 text-left font-semibold">{h}</th>)}</tr></thead>
       <tbody className="divide-y divide-border">{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} className="max-w-[180px] truncate px-1.5 py-1.5">{c}</td>)}</tr>)}</tbody>
     </table>
   );
@@ -219,7 +219,7 @@ export function SetupDetailsPage() {
       <div className="flex flex-col gap-4 px-6 pb-6">
         <div className="flex flex-wrap items-end gap-x-8 gap-y-3 rounded-xl border border-border bg-surface px-4 py-3">
           <div className="w-72">
-            <label htmlFor="setup-select" className="mb-1 flex items-center gap-1 text-[11px] font-medium text-secondary">Setup name<InfoTip content="Select a setup from your store integrations" /></label>
+            <label htmlFor="setup-select" className="mb-1 flex items-center gap-1 text-2xs font-medium text-secondary">Setup name<InfoTip content="Select a setup from your store integrations" /></label>
             <Combobox id="setup-select" aria-label="Setup name" value={id} options={options.map((o) => ({ value: o.id, label: o.storeName, description: o.clientName }))} placeholder="Select a setup" emptyText={opts.isPending ? "Loading setups…" : "No store connections yet"} onChange={(v) => router.replace(v ? `/integrations/monitoring/setup?id=${v}` : "/integrations/monitoring/setup")} />
           </div>
           {d ? <>
@@ -246,8 +246,8 @@ export function SetupDetailsPage() {
                 // No ring at all when there is nothing to chart: a muted placeholder circle with the text inside it.
                 <div className="flex h-48 items-center justify-center">
                   <div className="flex h-36 w-36 flex-col items-center justify-center gap-1 rounded-full border-[10px] border-border px-3 text-center">
-                    <span className="text-[18px] font-semibold text-faint">—</span>
-                    <span className="text-[11px] leading-tight text-secondary">No downloads in the last 24 hours</span>
+                    <span className="text-lg font-semibold text-faint">—</span>
+                    <span className="text-2xs leading-tight text-secondary">No downloads in the last 24 hours</span>
                   </div>
                 </div>
               ) : (
@@ -259,7 +259,7 @@ export function SetupDetailsPage() {
                       </Pie>
                     </PieChart>
                   </ResponsiveContainer>
-                  {d.successRate === null ? null : <span className={cn("pointer-events-none absolute inset-0 flex items-center justify-center text-[24px] font-semibold tabular-nums", d.successRate >= LOW_PERFORMING_PCT ? "text-success" : "text-danger")}>{d.successRate}%</span>}
+                  {d.successRate === null ? null : <span className={cn("pointer-events-none absolute inset-0 flex items-center justify-center text-xl font-semibold tabular-nums", d.successRate >= LOW_PERFORMING_PCT ? "text-success" : "text-danger")}>{d.successRate}%</span>}
                 </div>
               )}
             </CardShell>
@@ -270,7 +270,7 @@ export function SetupDetailsPage() {
             </div>
             <CardShell title="Call results (14 days)" tip="Successful vs. failed records processed by all methods per day.">
               <div className="h-48">
-                {d.callTrend.every((x) => x.ok + x.errors === 0) ? <p className="flex h-full items-center justify-center text-[12px] text-faint">No calls in the last 14 days</p> : (
+                {d.callTrend.every((x) => x.ok + x.errors === 0) ? <p className="flex h-full items-center justify-center text-xs text-faint">No calls in the last 14 days</p> : (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={d.callTrend.map((v) => ({ ...v, label: dayLabel(v.day) }))} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border, #E4E7EC)" vertical={false} />
@@ -278,8 +278,8 @@ export function SetupDetailsPage() {
                       <YAxis allowDecimals={false} domain={[0, trendAxis.max]} ticks={[...trendAxis.ticks]} interval={0} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
                       <ChartTooltip />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="ok" name="Successful" stackId="a" fill="#17874D" />
-                      <Bar dataKey="errors" name="Errors" stackId="a" fill="#B20B1C" />
+                      <Bar dataKey="ok" name="Successful" stackId="a" fill="var(--chart-2)" />
+                      <Bar dataKey="errors" name="Errors" stackId="a" fill="var(--chart-6)" />
                     </BarChart>
                   </ResponsiveContainer>
                 )}

@@ -25,9 +25,9 @@ import { EMPTY_LABEL, labelPayload, validateLabel, type LabelErrors, type Return
 function Field({ label, error, children, required, id }: { readonly label: string; readonly error?: string; readonly children: React.ReactNode; readonly required?: boolean; readonly id: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <label htmlFor={id} className="text-[12px] font-medium text-body">{label}{required ? <span className="text-danger"> *</span> : null}</label>
+      <label htmlFor={id} className="text-xs font-medium text-body">{label}{required ? <span className="text-danger"> *</span> : null}</label>
       {children}
-      {error ? <p id={`${id}-err`} className="text-[11px] text-danger">{error}</p> : null}
+      {error ? <p id={`${id}-err`} className="text-2xs text-danger">{error}</p> : null}
     </div>
   );
 }

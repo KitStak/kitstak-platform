@@ -120,16 +120,16 @@ function AccessStep({ form }: { readonly form: UseFormReturn<F> }) {
         <section className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <TextField aria-label="Search clients" placeholder="Search clients" value={q} onChange={(e) => setQ(e.target.value)} size="sm" wrapperClassName="w-60" />
-            <span className="text-[12px] text-secondary">{enabledCount} of {clients.length} enabled · {selected.size} selected</span>
+            <span className="text-xs text-secondary">{enabledCount} of {clients.length} enabled · {selected.size} selected</span>
             <div className="ml-auto flex gap-2">
               <Button size="sm" variant="secondary" disabled={selected.size === 0} title={selected.size === 0 ? "Select at least one client" : undefined} onClick={() => setAccess([...selected], false)}>Disable</Button>
               <Button size="sm" variant="primary" disabled={selected.size === 0} title={selected.size === 0 ? "Select at least one client" : undefined} onClick={() => setAccess([...selected], true)}>Enable</Button>
             </div>
           </div>
-          {fieldState.error?.message ? <p role="alert" className="text-[12px] text-danger">{fieldState.error.message}</p> : null}
+          {fieldState.error?.message ? <p role="alert" className="text-xs text-danger">{fieldState.error.message}</p> : null}
           <div className="max-h-[45vh] overflow-auto rounded-lg border border-border">
-            <table className="w-full text-[13px]">
-              <thead className="sticky top-0 z-[1] bg-surface-sunken text-[11px] uppercase text-secondary">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-[1] bg-surface-sunken text-2xs text-secondary">
                 <tr>
                   <th className="w-10 px-3 py-2"><Checkbox aria-label="Select all clients" checked={rows.length > 0 && rows.every((r) => selected.has(r.value))} onCheckedChange={(v) => toggleAll(v === true)} /></th>
                   <th className="px-3 py-2 text-left">Client</th><th className="w-32 px-3 py-2 text-left">Access</th>
@@ -180,7 +180,7 @@ function TrackingStep({ form, productLabel }: { readonly form: UseFormReturn<F>;
             <ComboField<F> name="inventoryClientId" label="Inventory owner" required options={clients}
               onValueChange={() => { form.setValue("inventoryProductId", null, { shouldDirty: true }); setLabel(undefined); }} />
             <div className="flex flex-col gap-1.5 md:col-span-2">
-              <span className="text-[12px] font-medium text-body">Inventory tracking method<span className="ml-0.5 text-danger" aria-hidden>*</span></span>
+              <span className="text-xs font-medium text-body">Inventory tracking method<span className="ml-0.5 text-danger" aria-hidden>*</span></span>
               <RadioCards<"match" | "auto"> ariaLabel="Inventory tracking method" columns={2} value={method}
                 onChange={(v) => { form.setValue("trackingMethod", v, { shouldDirty: true, shouldValidate: true }); if (v === "auto") { form.setValue("inventoryProductId", null, { shouldDirty: true }); setLabel(undefined); form.clearErrors("inventoryProductId"); } }}
                 options={[
@@ -199,7 +199,7 @@ function TrackingStep({ form, productLabel }: { readonly form: UseFormReturn<F>;
             {rule === "Specific Location" ? (
               <ComboField<F> name="reductionLocationId" label="Location" required options={locations.options} placeholder={locations.loading ? "Loading locations…" : "Select a location"} />
             ) : (
-              <p className="self-end pb-2 text-[12px] text-secondary">
+              <p className="self-end pb-2 text-xs text-secondary">
                 {rule === "Packing Station" ? "Stock is taken from the packing station where the order is packed." : rule === "Any Location" ? "Stock is taken from any location that holds the SKU, fullest first." : "Choose a rule to see how stock is reduced."}
               </p>
             )}
@@ -219,12 +219,12 @@ function OtherStep({ form, canManage }: { readonly form: UseFormReturn<F>; reado
     <div className="flex flex-col gap-5">
       <CustomFieldsSection entityType="shipment_package" values={(field.value ?? {}) as CustomFieldValues} onChange={field.onChange} canManage={canManage} />
       <section className="rounded-lg border border-border bg-surface-sunken/50 p-4">
-        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Summary</h3>
-        <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-2 text-[13px]">
-          <div><dt className="text-[11px] text-faint">Package</dt><dd className="font-medium">{v.code || "—"} · {v.length} × {v.width} × {v.height} {v.dimensionUnit}</dd></div>
-          <div><dt className="text-[11px] text-faint">Clients</dt><dd>{v.allClients ? "All clients" : `${(v.clientAccess ?? []).filter((a) => a.hasAccess).length} selected`}</dd></div>
-          <div><dt className="text-[11px] text-faint">Inventory tracking</dt><dd>{v.trackInventory ? `Yes · ${v.trackingMethod === "auto" && !v.inventoryProductId ? "new SKU" : "matched SKU"} · ${v.reductionRule ?? ""}` : "No"}</dd></div>
-          <div><dt className="text-[11px] text-faint">Status</dt><dd>{v.isActive ? "Active" : "Inactive"}</dd></div>
+        <h3 className="text-xs font-semibold text-secondary">Summary</h3>
+        <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          <div><dt className="text-2xs text-faint">Package</dt><dd className="font-medium">{v.code || "—"} · {v.length} × {v.width} × {v.height} {v.dimensionUnit}</dd></div>
+          <div><dt className="text-2xs text-faint">Clients</dt><dd>{v.allClients ? "All clients" : `${(v.clientAccess ?? []).filter((a) => a.hasAccess).length} selected`}</dd></div>
+          <div><dt className="text-2xs text-faint">Inventory tracking</dt><dd>{v.trackInventory ? `Yes · ${v.trackingMethod === "auto" && !v.inventoryProductId ? "new SKU" : "matched SKU"} · ${v.reductionRule ?? ""}` : "No"}</dd></div>
+          <div><dt className="text-2xs text-faint">Status</dt><dd>{v.isActive ? "Active" : "Inactive"}</dd></div>
         </dl>
       </section>
     </div>

@@ -70,10 +70,10 @@ function ResultRow({ product, alreadyAdded, onAdd }: { readonly product: PoProdu
         )}
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-[13px] font-semibold text-foreground">{product.sku}</span>
-        <span className="truncate text-[12px] text-secondary">{product.name}</span>
+        <span className="truncate text-sm font-semibold text-foreground">{product.sku}</span>
+        <span className="truncate text-xs text-secondary">{product.name}</span>
       </span>
-      {alreadyAdded ? <span className="shrink-0 text-[11px] font-medium text-secondary">On this order</span> : null}
+      {alreadyAdded ? <span className="shrink-0 text-2xs font-medium text-secondary">On this order</span> : null}
       <NumberInput className="w-28" size="sm" min={1} value={qty} onChange={setQty} aria-label={`Quantity of ${product.sku}`} />
       <DisabledReason reason={reason}>
         <Button variant={alreadyAdded ? "secondary" : "primary"} size="icon-sm" aria-label={`Add ${product.sku}`} disabled={Boolean(reason)} onClick={() => qty && onAdd(qty)}>
@@ -114,13 +114,13 @@ export function PoProductSearch({ clientId, warehouseId, addedIds, onAdd }: PoPr
       />
       <div className="overflow-hidden rounded-lg border border-border">
         {short ? (
-          <p className="px-3 py-6 text-center text-[12px] text-faint">{minCharsMessage(PO_SEARCH_MIN_CHARS)}</p>
+          <p className="px-3 py-6 text-center text-xs text-faint">{minCharsMessage(PO_SEARCH_MIN_CHARS)}</p>
         ) : query.error ? (
-          <p className="px-3 py-6 text-center text-[12px] text-danger">{query.error.message}</p>
+          <p className="px-3 py-6 text-center text-xs text-danger">{query.error.message}</p>
         ) : query.isPending || term !== q.trim() ? (
-          <p className="px-3 py-6 text-center text-[12px] text-faint">Searching…</p>
+          <p className="px-3 py-6 text-center text-xs text-faint">Searching…</p>
         ) : products.length === 0 ? (
-          <p className="flex flex-col items-center gap-1 px-3 py-6 text-center text-[12px] text-faint">
+          <p className="flex flex-col items-center gap-1 px-3 py-6 text-center text-xs text-faint">
             <Package className="h-5 w-5" aria-hidden />
             No products match &ldquo;{term}&rdquo;
           </p>

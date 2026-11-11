@@ -223,10 +223,10 @@ export function StaticF({ label, value, info, description }: { readonly label: R
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <FieldLabel info={info}>{label}</FieldLabel>
-      <span className="flex h-8 min-w-0 items-center truncate text-[13px] font-medium text-foreground" title={typeof value === "string" ? value : undefined}>
+      <span className="flex h-8 min-w-0 items-center truncate text-sm font-medium text-foreground" title={typeof value === "string" ? value : undefined}>
         {value === null || value === undefined || value === "" ? "—" : value}
       </span>
-      {description ? <p className="text-[11px] text-faint">{description}</p> : null}
+      {description ? <p className="text-2xs text-faint">{description}</p> : null}
     </div>
   );
 }
@@ -235,8 +235,8 @@ export function StaticF({ label, value, info, description }: { readonly label: R
 export function ReadValue({ label, children }: { readonly label: React.ReactNode; readonly children: React.ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">{label}</span>
-      <span className="truncate text-[13px] text-foreground">{children === null || children === undefined || children === "" ? "—" : children}</span>
+      <span className="text-2xs font-semibold text-faint">{label}</span>
+      <span className="truncate text-sm text-foreground">{children === null || children === undefined || children === "" ? "—" : children}</span>
     </div>
   );
 }

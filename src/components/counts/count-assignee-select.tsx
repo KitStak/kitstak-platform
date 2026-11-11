@@ -21,8 +21,8 @@ export function CountAssigneeSelect({ id, warehouseId, value, onChange }: { read
     <div className="flex flex-col gap-1">
       <Select id={id} aria-label="Assign to" value={value} onChange={onChange} options={options} clearable placeholder={placeholder}
         disabled={!warehouseId || q.isPending || options.length === 0} contentClassName="max-h-[200px]" />
-      {q.error ? <p role="alert" className="text-[12px] text-danger">{q.error.message} <button type="button" className="font-semibold underline" onClick={() => void q.refetch()}>Retry</button></p> : null}
-      <p className="text-[11px] text-secondary">Only warehouse staff with count permissions are listed.</p>
+      {q.error ? <p role="alert" className="text-xs text-danger">{q.error.message} <button type="button" className="font-semibold underline" onClick={() => void q.refetch()}>Retry</button></p> : null}
+      <p className="text-2xs text-secondary">Only warehouse staff with count permissions are listed.</p>
     </div>
   );
 }

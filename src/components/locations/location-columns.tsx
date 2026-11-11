@@ -23,7 +23,7 @@ export const LOCATION_COLUMNS: GridColumnDef<LocationRow>[] = [
     ),
   },
   { id: "displayMember", header: "Cell display member", size: 150, meta: hidden, cell: ({ row }) => text(row.original.displayMember) },
-  { id: "barcode", header: "Location barcode", size: 150, meta: hidden, cell: ({ row }) => <span className="font-mono text-[12px]">{row.original.barcode}</span> },
+  { id: "barcode", header: "Location barcode", size: 150, meta: hidden, cell: ({ row }) => <span className="font-mono text-xs">{row.original.barcode}</span> },
   { id: "warehouseCode", header: "Warehouse", size: 100, meta: hidden, cell: ({ row }) => row.original.warehouseCode },
   { id: "locationGroup", header: "Location group", size: 140, cell: ({ row }) => text(row.original.locationGroup) },
   { id: "locationZone", header: "Location zone", size: 120, cell: ({ row }) => text(row.original.locationZone) },

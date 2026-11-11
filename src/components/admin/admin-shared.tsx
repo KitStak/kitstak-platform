@@ -200,7 +200,7 @@ export function ChangeLogList({ path, enabled = true }: { readonly path: string 
     <>
       {query.isPending ? (
         <div className="flex flex-col gap-3" role="status" aria-live="polite">
-          <p className="text-[12px] text-secondary">{slow ? "The history is taking longer than usual." : "Loading the history…"}{slow ? <> <button type="button" className="font-semibold text-primary hover:underline" onClick={() => void query.refetch()}>Retry</button></> : null}</p>
+          <p className="text-xs text-secondary">{slow ? "The history is taking longer than usual." : "Loading the history…"}{slow ? <> <button type="button" className="font-semibold text-primary hover:underline" onClick={() => void query.refetch()}>Retry</button></> : null}</p>
           <SkeletonTable rows={6} columns={4} />
         </div>
       ) : query.isError ? (
@@ -218,22 +218,22 @@ export function ChangeLogList({ path, enabled = true }: { readonly path: string 
                   <span className={cn("mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md", meta.tile)}><Icon className="h-3.5 w-3.5" aria-hidden /></span>
                   <div className="min-w-0 flex-1">
                     {r.type === "Update" && r.fieldLabel ? (
-                      <p className="break-words text-[13px] text-body">
+                      <p className="break-words text-sm text-body">
                         <span className="font-medium">{r.fieldLabel} changed:</span>{" "}
                         {r.fromValue ? <span className="text-faint line-through decoration-faint/60">{r.fromValue}</span> : null}
                         {r.fromValue ? <span className="mx-1 text-faint">→</span> : null}
                         <span className="font-medium text-foreground">{r.toValue || "—"}</span>
                       </p>
                     ) : (
-                      <p className="text-[13px] text-body">{prettyLogMessage(r.message)}</p>
+                      <p className="text-sm text-body">{prettyLogMessage(r.message)}</p>
                     )}
-                    <p className="mt-0.5 text-[11px] text-faint">{fmt.gridDateTime(r.at)} · {r.source}</p>
+                    <p className="mt-0.5 text-2xs text-faint">{fmt.gridDateTime(r.at)} · {r.source}</p>
                   </div>
                 </li>
               );
             })}
           </ol>
-          <div className="flex items-center justify-between text-[12px] text-secondary">
+          <div className="flex items-center justify-between text-xs text-secondary">
             <span>Total: {total}</span>
             <div className="flex items-center gap-1">
               <Button size="icon-sm" variant="ghost" aria-label="Previous page" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}><ChevronLeft className="h-4 w-4" /></Button>
@@ -272,12 +272,12 @@ export function Muted({ children }: { readonly children?: React.ReactNode }) {
 export function DetailList({ title, items }: { readonly title?: string; readonly items: readonly DetailItem[] }) {
   return (
     <section className="flex flex-col gap-2">
-      {title ? <h3 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">{title}</h3> : null}
+      {title ? <h3 className="text-xs font-semibold text-secondary">{title}</h3> : null}
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-lg border border-border bg-surface px-4 py-3">
         {items.map((i) => (
           <div key={i.label} className={cn("min-w-0", i.wide && "col-span-2")}>
-            <dt className="text-[11px] text-faint">{i.label}</dt>
-            <dd className="mt-0.5 break-words text-[13px] text-foreground">{i.value === null || i.value === undefined || i.value === "" ? <Muted /> : i.value}</dd>
+            <dt className="text-2xs text-faint">{i.label}</dt>
+            <dd className="mt-0.5 break-words text-sm text-foreground">{i.value === null || i.value === undefined || i.value === "" ? <Muted /> : i.value}</dd>
           </div>
         ))}
       </dl>
@@ -291,8 +291,8 @@ export function StatRow({ stats }: { readonly stats: readonly { readonly label: 
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {stats.map((s) => (
         <div key={s.label} className="rounded-lg border border-border bg-surface-sunken/60 px-3 py-2">
-          <p className="text-[11px] text-faint">{s.label}</p>
-          <p className={cn("text-[18px] font-semibold tabular-nums text-foreground", s.tone === "danger" && "text-danger", s.tone === "warning" && "text-warning", s.tone === "success" && "text-success")}>{s.value}</p>
+          <p className="text-2xs text-faint">{s.label}</p>
+          <p className={cn("text-lg font-semibold tabular-nums text-foreground", s.tone === "danger" && "text-danger", s.tone === "warning" && "text-warning", s.tone === "success" && "text-success")}>{s.value}</p>
         </div>
       ))}
     </div>

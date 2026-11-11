@@ -33,7 +33,7 @@ type Tone = "condition" | "inventory" | "action" | "order";
 
 const TONES: Record<Tone, { readonly ring: string; readonly chip: string; readonly icon: React.ComponentType<{ className?: string }> }> = {
   condition: { ring: "border-info/40", chip: "bg-info-soft text-info", icon: Filter },
-  inventory: { ring: "border-[#621DB8]/35", chip: "bg-[#DFCEF5] text-[#621DB8]", icon: Target },
+  inventory: { ring: "border-[var(--label-purple-text)]/35", chip: "bg-[#DFCEF5] text-[var(--label-purple-text)]", icon: Target },
   action: { ring: "border-success/40", chip: "bg-success-soft text-success", icon: Sparkles },
   order: { ring: "border-warning/45", chip: "bg-warning-soft text-warning", icon: ArrowUpNarrowWide },
 };
@@ -57,13 +57,13 @@ function ItemNode({ data }: NodeProps<Node<ItemData>>) {
     <div className={cn("group relative w-[230px] rounded-lg border bg-surface px-3 py-2 shadow-sm", tone.ring, data.placeholder && "border-dashed bg-surface/70")}>
       <Handle type="target" position={Position.Left} className="!h-1.5 !w-1.5 !border-0 !bg-border-strong" isConnectable={false} />
       <Handle type="source" position={Position.Right} className="!h-1.5 !w-1.5 !border-0 !bg-border-strong" isConnectable={false} />
-      <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
+      <p className="flex items-center gap-1.5 text-2xs font-semibold text-faint">
         <span className={cn("flex h-4 w-4 items-center justify-center rounded", tone.chip)}><Icon className="h-2.5 w-2.5" aria-hidden /></span>{data.kicker}
       </p>
       {data.placeholder ? (
-        <button type="button" disabled={data.readOnly} onClick={data.onAddAfter} className="nodrag mt-1 w-full rounded text-left text-[12px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:text-faint disabled:no-underline">{data.label}</button>
+        <button type="button" disabled={data.readOnly} onClick={data.onAddAfter} className="nodrag mt-1 w-full rounded text-left text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:text-faint disabled:no-underline">{data.label}</button>
       ) : (
-        <p className="mt-1 line-clamp-3 text-[12px] font-medium leading-4 text-foreground" title={data.label}>{data.label}</p>
+        <p className="mt-1 line-clamp-3 text-xs font-medium leading-4 text-foreground" title={data.label}>{data.label}</p>
       )}
       {!data.placeholder && !data.readOnly ? (
         <div className="nodrag absolute -top-3 right-2 hidden gap-1 group-focus-within:flex group-hover:flex">
@@ -83,7 +83,7 @@ function ItemNode({ data }: NodeProps<Node<ItemData>>) {
 
 function JoinNode({ data }: NodeProps<Node<{ label: string }>>) {
   return (
-    <div className="rounded-full border border-border-strong bg-surface-sunken px-2 py-0.5 text-[10px] font-bold tracking-wider text-secondary">
+    <div className="rounded-full border border-border-strong bg-surface-sunken px-2 py-0.5 text-2xs font-bold tracking-wider text-secondary">
       <Handle type="target" position={Position.Left} className="!opacity-0" isConnectable={false} />
       <Handle type="source" position={Position.Right} className="!opacity-0" isConnectable={false} />
       {data.label}
@@ -94,8 +94,8 @@ function JoinNode({ data }: NodeProps<Node<{ label: string }>>) {
 function SectionNode({ data }: NodeProps<Node<{ label: string; hint: string }>>) {
   return (
     <div className="w-[150px] text-right">
-      <p className="text-[12px] font-semibold text-foreground">{data.label}</p>
-      <p className="text-[10px] leading-3 text-faint">{data.hint}</p>
+      <p className="text-xs font-semibold text-foreground">{data.label}</p>
+      <p className="text-2xs leading-3 text-faint">{data.hint}</p>
       <Handle type="source" position={Position.Right} className="!opacity-0" isConnectable={false} />
       <Handle type="target" position={Position.Top} className="!opacity-0" isConnectable={false} />
     </div>
@@ -106,12 +106,12 @@ function RuleNameNode({ data }: NodeProps<Node<{ name: string; index: number; is
   return (
     <div className="w-[300px] rounded-xl border-2 border-primary/40 bg-surface px-3 py-2.5 shadow-md">
       <Handle type="source" position={Position.Bottom} className="!opacity-0" isConnectable={false} />
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">{data.index === 0 ? "If" : `${data.index}. If else`} · Rule name</p>
+      <p className="text-2xs font-semibold text-primary">{data.index === 0 ? "If" : `${data.index}. If else`} · Rule name</p>
       <div className="nodrag mt-1.5 flex items-center gap-2">
         <TextField id="rule-name" aria-label="Rule name" size="sm" value={data.name} maxLength={80} disabled={data.readOnly} invalid={Boolean(data.error)} onChange={(e) => data.onName(e.target.value)} placeholder="e.g. Same SKU in picking" wrapperClassName="flex-1" />
         <Switch aria-label="Rule active" checked={data.isActive} disabled={data.readOnly} onCheckedChange={(v) => data.onActive(v === true)} size="sm" />
       </div>
-      {data.error ? <p role="alert" className="mt-1 text-[11px] text-danger">{data.error}</p> : null}
+      {data.error ? <p role="alert" className="mt-1 text-2xs text-danger">{data.error}</p> : null}
     </div>
   );
 }
@@ -133,7 +133,7 @@ function ZoomPanel() {
   return (
     <div className="flex items-center gap-1 rounded-lg border border-border bg-surface px-1 py-1 shadow-sm">
       <Button size="icon-sm" variant="ghost" aria-label="Zoom out" onClick={() => void flow.zoomOut()}><Minus className="h-3.5 w-3.5" /></Button>
-      <button type="button" className="w-12 rounded text-center text-[12px] tabular-nums text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => void flow.zoomTo(1)} aria-label="Reset zoom to 100%">{Math.round(zoom * 100)}%</button>
+      <button type="button" className="w-12 rounded text-center text-xs tabular-nums text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" onClick={() => void flow.zoomTo(1)} aria-label="Reset zoom to 100%">{Math.round(zoom * 100)}%</button>
       <Button size="icon-sm" variant="ghost" aria-label="Zoom in" onClick={() => void flow.zoomIn()}><Plus className="h-3.5 w-3.5" /></Button>
       <Button size="icon-sm" variant="ghost" aria-label="Fit to screen" onClick={() => void readableFit(flow)}><Maximize2 className="h-3.5 w-3.5" /></Button>
     </div>
@@ -237,8 +237,8 @@ function CanvasInner(p: RuleCanvasProps) {
         if (i > 0) {
           const joinId = `${s.key}-join-${i}`;
           n.push({ id: joinId, type: "join", position: { x: LEFT + i * (W + GAP) - GAP / 2 - 18, y: y + 22 }, draggable: false, selectable: false, data: { label: s.join } });
-          e.push({ id: `e-${joinId}-a`, source: `${s.key}-${i - 1}`, target: joinId, style: { stroke: "#C5CBD3" } });
-          e.push({ id: `e-${joinId}-b`, source: joinId, target: id, style: { stroke: "#C5CBD3" } });
+          e.push({ id: `e-${joinId}-a`, source: `${s.key}-${i - 1}`, target: joinId, style: { stroke: "var(--border-strong)" } });
+          e.push({ id: `e-${joinId}-b`, source: joinId, target: id, style: { stroke: "var(--border-strong)" } });
         }
       });
       const isAllOnly = items.length === 0 && s.key === "conditions";
@@ -280,12 +280,12 @@ function CanvasInner(p: RuleCanvasProps) {
             </div>
           </Panel>
           <Panel position="top-left">
-            <p className="flex items-center gap-1.5 rounded-md bg-surface/90 px-2 py-1 text-[11px] text-secondary shadow-sm"><ArrowDownWideNarrow className="h-3 w-3" aria-hidden />Hover a node to edit, delete or add before/after it.</p>
+            <p className="flex items-center gap-1.5 rounded-md bg-surface/90 px-2 py-1 text-2xs text-secondary shadow-sm"><ArrowDownWideNarrow className="h-3 w-3" aria-hidden />Hover a node to edit, delete or add before/after it.</p>
           </Panel>
         </ReactFlow>
       </div>
       <div className="flex items-center justify-end gap-2 border-t border-border bg-surface px-4 py-2.5">
-        <span className="mr-auto text-[12px] text-secondary">{p.dirty ? "Unsaved rule changes" : "Rule saved to the list"}</span>
+        <span className="mr-auto text-xs text-secondary">{p.dirty ? "Unsaved rule changes" : "Rule saved to the list"}</span>
         <Button variant="secondary" onClick={p.onCancel} disabled={readOnly || !p.dirty}>Cancel Rule</Button>
         {p.onTest ? <DisabledReason reason={p.testReason}><Button variant="secondary" onClick={p.onTest} disabled={Boolean(p.testReason)}>Test Rule</Button></DisabledReason> : null}
         <Button variant="primary" onClick={p.onSave} disabled={readOnly || !p.dirty}>Save Rule</Button>
@@ -320,7 +320,7 @@ export function RuleCanvas(p: RuleCanvasProps) {
 export function EmptyCanvas({ message }: { readonly message: string }) {
   return (
     <div className="flex flex-1 items-center justify-center bg-surface-sunken/40 p-8" style={{ backgroundImage: "radial-gradient(#C5CBD3 1px, transparent 1px)", backgroundSize: "18px 18px" }}>
-      <p className="max-w-sm rounded-lg bg-surface px-4 py-3 text-center text-[13px] text-secondary shadow-sm">{message}</p>
+      <p className="max-w-sm rounded-lg bg-surface px-4 py-3 text-center text-sm text-secondary shadow-sm">{message}</p>
     </div>
   );
 }

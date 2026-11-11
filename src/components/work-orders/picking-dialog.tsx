@@ -121,9 +121,9 @@ function Body({ ids, onClose, onDone }: { readonly ids: readonly string[]; reado
           <div className="flex flex-col gap-3">
             <div className={cn("flex items-center gap-3 rounded-lg border p-3", allocatable.length ? "border-success/30 bg-success-soft" : "border-warning/30 bg-warning-soft")}>
               {allocatable.length ? <CheckCircle2 className="h-5 w-5 text-success" aria-hidden /> : <AlertTriangle className="h-5 w-5 text-warning" aria-hidden />}
-              <p className="text-[14px] font-semibold text-foreground">{allocatable.length} of {preview.outcomes.length} work order{preview.outcomes.length === 1 ? "" : "s"} can be fully allocated</p>
+              <p className="text-base font-semibold text-foreground">{allocatable.length} of {preview.outcomes.length} work order{preview.outcomes.length === 1 ? "" : "s"} can be fully allocated</p>
             </div>
-            <ul className="ks-scroll max-h-[46vh] divide-y divide-border overflow-auto rounded-md border border-border text-[12px]">
+            <ul className="ks-scroll max-h-[46vh] divide-y divide-border overflow-auto rounded-md border border-border text-xs">
               {preview.outcomes.map((o) => (
                 <li key={o.id} className="flex items-start gap-3 px-3 py-2">
                   <OutcomeIcon outcome={o.outcome} />
@@ -139,7 +139,7 @@ function Body({ ids, onClose, onDone }: { readonly ids: readonly string[]; reado
                 </li>
               ))}
             </ul>
-            {failed.length ? <p className="text-[12px] text-secondary">Not eligible work orders are skipped.</p> : null}
+            {failed.length ? <p className="text-xs text-secondary">Not eligible work orders are skipped.</p> : null}
           </div>
         ) : (
           <div className="flex flex-col gap-4">
@@ -158,7 +158,7 @@ function Body({ ids, onClose, onDone }: { readonly ids: readonly string[]; reado
                 <Select id="priority" value={priority} onChange={(v) => setPriority((v ?? "None") as Priority)} options={PRIORITIES.map((p) => ({ value: p, label: p }))} />
               </Field>
             </div>
-            <p className="text-[12px] text-secondary">
+            <p className="text-xs text-secondary">
               <strong className="text-foreground">{allocatable.length}</strong> picking job{allocatable.length === 1 ? "" : "s"} will be created
               {short.length ? <> · <strong className="text-warning">{short.length}</strong> work order{short.length === 1 ? "" : "s"} will be marked Shortage</> : null}
             </p>

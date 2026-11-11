@@ -26,16 +26,16 @@ export function ShipListFallback({ title, helper, tabs, chips = [] }: { readonly
           <Skeleton className="h-8 w-24" />
           {chips.map((c) => (
             <span key={c.label} className="inline-flex h-9 shrink-0 flex-col items-start justify-center rounded-lg border border-primary/30 bg-primary-soft py-0.5 pl-2.5 pr-3 leading-tight" title={`${c.label}: ${c.value}`}>
-              <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.04em] text-primary/80">{c.label}</span>
-              <span className="whitespace-nowrap text-[12px] font-medium text-foreground">{c.value}</span>
+              <span className="whitespace-nowrap text-2xs font-semibold text-primary/80">{c.label}</span>
+              <span className="whitespace-nowrap text-xs font-medium text-foreground">{c.value}</span>
             </span>
           ))}
           <Skeleton className="ml-auto h-8 w-40" />
         </div>
         <SkeletonTable rows={10} columns={8} />
-        <div className="flex items-center gap-3 text-[12px] text-secondary">
+        <div className="flex items-center gap-3 text-xs text-secondary">
           <Skeleton className="h-7 w-24" />
-          <span className="inline-flex h-7 w-[128px] items-center rounded-md border border-border px-2 text-[11px] font-medium">Show 100 items</span>
+          <span className="inline-flex h-7 w-[128px] items-center rounded-md border border-border px-2 text-2xs font-medium">Show 100 items</span>
           <span>Total: <span className="font-semibold text-foreground">—</span></span>
         </div>
       </div>

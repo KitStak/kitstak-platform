@@ -36,7 +36,7 @@ export function WizardStepper({ steps, onSelect, className }: { readonly steps: 
               >
                 <span
                   className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-[12px] font-semibold transition-colors",
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors",
                     isComplete && "border-success bg-success text-white",
                     isActive && "border-primary bg-primary text-white",
                     isAttention && "border-warning bg-warning text-white",
@@ -47,11 +47,11 @@ export function WizardStepper({ steps, onSelect, className }: { readonly steps: 
                   {isComplete ? <Check className="h-4 w-4" strokeWidth={3} /> : isAttention ? <AlertTriangle className="h-4 w-4" /> : Icon ? <Icon className="h-4 w-4" /> : index + 1}
                 </span>
                 <span className="min-w-0">
-                  <span className={cn("block text-[11px] font-medium uppercase tracking-[0.04em]", isActive ? "text-primary" : isAttention ? "text-warning" : "text-faint")}>
+                  <span className={cn("block text-2xs font-medium", isActive ? "text-primary" : isAttention ? "text-warning" : "text-faint")}>
                     Step {index + 1}
                     {step.isOptional ? " · Optional" : ""}
                   </span>
-                  <span className={cn("block truncate text-[13px] font-semibold", step.status === "upcoming" ? "text-secondary" : "text-foreground")}>{step.label}</span>
+                  <span className={cn("block truncate text-sm font-semibold", step.status === "upcoming" ? "text-secondary" : "text-foreground")}>{step.label}</span>
                 </span>
               </button>
               {index < steps.length - 1 ? <span className={cn("mx-3 h-px min-w-6 flex-1", isComplete ? "bg-success" : "bg-border-strong")} aria-hidden /> : null}

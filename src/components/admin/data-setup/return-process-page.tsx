@@ -49,8 +49,8 @@ function Card({ title, description, aside, children }: { readonly title: string;
     <section className="rounded-xl border border-border bg-surface shadow-xs">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold text-foreground">{title}</h2>
-          <p className="mt-0.5 text-[12.5px] text-secondary">{description}</p>
+          <h2 className="text-base font-semibold text-foreground">{title}</h2>
+          <p className="mt-0.5 text-xs text-secondary">{description}</p>
         </div>
         {aside}
       </header>
@@ -68,7 +68,7 @@ function RulesList({ canEdit }: { readonly canEdit: boolean }) {
     <div className="flex flex-col gap-5">
       {groups.map((g) => (
         <div key={g.key}>
-          <p className="mb-1 text-[10.5px] font-bold uppercase tracking-[0.08em] text-faint">{g.title}</p>
+          <p className="mb-1 text-2xs font-bold text-faint">{g.title}</p>
           <ul className="divide-y divide-border rounded-lg border border-border">
             {RETURN_RULE_DEFS.filter((d) => d.group === g.key).map((d) => (
               <li key={d.key}>
@@ -76,8 +76,8 @@ function RulesList({ canEdit }: { readonly canEdit: boolean }) {
                   {(c) => (
                     <label htmlFor={c.id} className="flex cursor-pointer items-center justify-between gap-4 px-4 py-3 hover:bg-surface-sunken/60">
                       <span className="min-w-0">
-                        <span className="block text-[13px] font-medium text-foreground">{d.label}</span>
-                        <span className="block text-[12px] text-secondary">{d.description}</span>
+                        <span className="block text-sm font-medium text-foreground">{d.label}</span>
+                        <span className="block text-xs text-secondary">{d.description}</span>
                       </span>
                       <Switch id={c.id} checked={Boolean(c.value)} disabled={!canEdit} onCheckedChange={(on) => c.onChange(on)} aria-label={d.label} />
                     </label>
@@ -144,13 +144,13 @@ function Editor({ rma, state, canEdit, onLog }: { readonly rma: SequenceRow; rea
             )}
           </FormField>
           <div className="flex flex-col gap-1">
-            <span className="text-[12px] font-medium text-secondary">Code preview</span>
+            <span className="text-xs font-medium text-secondary">Code preview</span>
             <div className="flex h-8 items-center gap-1.5" aria-live="polite">
-              {[0, 1].map((i) => <code key={i} className="rounded-md border border-border bg-surface-sunken px-2 py-0.5 font-mono text-[13px] text-foreground">{sequencePreview(prefix || "RMA", next + i, rma.padding)}</code>)}
+              {[0, 1].map((i) => <code key={i} className="rounded-md border border-border bg-surface-sunken px-2 py-0.5 font-mono text-sm text-foreground">{sequencePreview(prefix || "RMA", next + i, rma.padding)}</code>)}
             </div>
           </div>
         </FormGrid>
-        {!rma.autoGenerate ? <p className="mt-3 text-[12px] text-attention">RMA codes are entered by hand today. Saving turns automatic RMA codes on.</p> : null}
+        {!rma.autoGenerate ? <p className="mt-3 text-xs text-attention">RMA codes are entered by hand today. Saving turns automatic RMA codes on.</p> : null}
       </Card>
       <Card title="Return parameters" description="Customize your return procedures. Return receiving enforces these rules on every return order."
         aside={

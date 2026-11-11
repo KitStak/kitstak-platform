@@ -41,7 +41,7 @@ const COLUMNS: GridColumnDef<WarehouseRow>[] = [
   },
   { id: "name", header: "Name", size: 200, cell: ({ row }) => row.original.name },
   { id: "address", header: "Address", size: 300, cell: ({ row }) => { const issues = storedAddressIssues(row.original); return <span className="flex min-w-0 items-center gap-1.5">{issues.length ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" role="img" aria-label={`Needs fixing: ${issues.join("; ")}`}><title>{issues.join("; ")}</title></AlertTriangle> : null}<span className="truncate text-secondary">{row.original.address}</span></span>; } },
-  { id: "contactName", header: "Contact", size: 170, cell: ({ row }) => (row.original.contactName ? <span className="flex flex-col leading-tight"><span>{row.original.contactName}</span>{row.original.contactPhone ? <span className="text-[11px] text-faint">{row.original.contactPhone}</span> : null}</span> : <Muted />) },
+  { id: "contactName", header: "Contact", size: 170, cell: ({ row }) => (row.original.contactName ? <span className="flex flex-col leading-tight"><span>{row.original.contactName}</span>{row.original.contactPhone ? <span className="text-2xs text-faint">{row.original.contactPhone}</span> : null}</span> : <Muted />) },
   { id: "type", header: "Type", size: 100, cell: ({ row }) => <Badge tone={row.original.type === "Internal" ? "neutral" : "info"} size="sm">{row.original.type}</Badge> },
   { id: "isDefault", header: "Default", size: 90, cell: ({ row }) => (row.original.isDefault ? <Badge tone="warning" size="sm" shape="pill">Default</Badge> : <Muted>No</Muted>) },
   { id: "isActive", header: "Status", size: 100, cell: ({ row }) => <ActivePill active={row.original.isActive} /> },

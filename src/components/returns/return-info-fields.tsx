@@ -29,9 +29,9 @@ export function manualCarrierOptions(connections: readonly Pick<CarrierOption, "
 function Field({ id, label, hint, error, children }: { readonly id: string; readonly label: string; readonly hint?: string; readonly error?: string; readonly children: React.ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <label htmlFor={id} className="text-[12px] font-medium text-body">{label}</label>
+      <label htmlFor={id} className="text-xs font-medium text-body">{label}</label>
       {children}
-      {error ? <p className="text-[11px] text-danger">{error}</p> : hint ? <p className="text-[11px] text-secondary">{hint}</p> : null}
+      {error ? <p className="text-2xs text-danger">{error}</p> : hint ? <p className="text-2xs text-secondary">{hint}</p> : null}
     </div>
   );
 }
@@ -77,7 +77,7 @@ export function ManualReturnInfoFields({ warehouseId, clientId, value, onChange,
         </Field>
         <Field id="rma-ri-cost" label="Return shipping cost" error={costError}>
           {/* No min clamp: a negative entry is shown as an error instead of being silently changed to 0. */}
-          <NumberInput id="rma-ri-cost" value={value.shippingCost} max={100_000} decimals={2} hideStepper suffix={<span className="text-[11px] text-secondary">USD</span>} placeholder="0.00" invalid={Boolean(costError)} aria-invalid={costError ? true : undefined} onChange={(n) => onChange({ ...value, shippingCost: n })} />
+          <NumberInput id="rma-ri-cost" value={value.shippingCost} max={100_000} decimals={2} hideStepper suffix={<span className="text-2xs text-secondary">USD</span>} placeholder="0.00" invalid={Boolean(costError)} aria-invalid={costError ? true : undefined} onChange={(n) => onChange({ ...value, shippingCost: n })} />
         </Field>
       </div>
       <Field id="rma-ri-tracking" label={`Return tracking number(s)`} error={trackErr ?? errors.trackingNumbers} hint={`Up to ${MAX_TRACKING_NUMBERS}. Enter adds the number; scanners work too.`}>
@@ -93,7 +93,7 @@ export function ManualReturnInfoFields({ warehouseId, clientId, value, onChange,
       {value.trackingNumbers.length ? (
         <ul aria-label="Return tracking numbers" className="flex flex-wrap gap-1.5">
           {value.trackingNumbers.map((t) => (
-            <li key={t} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-sunken px-2.5 py-0.5 font-mono text-[12px]">
+            <li key={t} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-sunken px-2.5 py-0.5 font-mono text-xs">
               {t}
               <button type="button" aria-label={`Remove tracking number ${t}`} className="rounded-full p-0.5 text-secondary hover:bg-neutral-soft hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 onClick={() => onChange({ ...value, trackingNumbers: value.trackingNumbers.filter((x) => x !== t) })}><X className="h-3 w-3" aria-hidden /></button>

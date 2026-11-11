@@ -70,7 +70,7 @@ export function ColorSwatchPicker({ value, onChange, swatches = DEFAULT_SWATCHES
               if (isHexColor(next)) onChange(next.toUpperCase());
             }}
             aria-invalid={custom !== "" && !isHexColor(custom) ? true : undefined}
-            className={cn("h-7 w-[92px] rounded-md border border-border-strong/70 bg-surface px-2 font-mono text-[12px] uppercase focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25 aria-[invalid=true]:border-danger")}
+            className={cn("h-7 w-[92px] rounded-md border border-border-strong/70 bg-surface px-2 font-mono text-xs focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25 aria-[invalid=true]:border-danger")}
           />
         </label>
       ) : null}

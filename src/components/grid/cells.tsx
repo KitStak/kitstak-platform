@@ -79,7 +79,7 @@ export function QtyCell({ value, muteZero = false, unit }: { readonly value: num
   return (
     <span className={cn("tabular-nums", muteZero && value === 0 ? "text-faint" : "text-body", value < 0 && "text-danger")}>
       {fmt.quantity(value)}
-      {unit ? <span className="ml-1 text-[11px] text-faint">{unit}</span> : null}
+      {unit ? <span className="ml-1 text-2xs text-faint">{unit}</span> : null}
     </span>
   );
 }
@@ -97,12 +97,12 @@ export function TagsCell({ tags, max = 2 }: { readonly tags: readonly TagChip[] 
   return (
     <span className="inline-flex items-center gap-1" title={tags.map((t) => t.name).join(", ")}>
       {shown.map((t) => (
-        <span key={t.id} className="inline-flex max-w-[110px] items-center gap-1 truncate rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-body">
+        <span key={t.id} className="inline-flex max-w-[110px] items-center gap-1 truncate rounded-full border border-border px-2 py-0.5 text-2xs font-medium text-body">
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: t.color }} aria-hidden />
           <span className="truncate">{t.name}</span>
         </span>
       ))}
-      {hidden > 0 ? <span className="text-[11px] font-semibold text-faint">+{hidden}</span> : null}
+      {hidden > 0 ? <span className="text-2xs font-semibold text-faint">+{hidden}</span> : null}
     </span>
   );
 }
@@ -117,13 +117,13 @@ export function ChannelCell({ channel, kind = "channel", store }: { readonly cha
         // eslint-disable-next-line @next/next/no-img-element -- tiny inline data-URI logo
         <img src={svgDataUri(entry.logoSvg)} alt="" width={20} height={20} className="h-5 w-5 shrink-0 rounded" />
       ) : (
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-neutral-soft text-[9px] font-bold text-neutral" aria-hidden>
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-neutral-soft text-2xs font-bold text-neutral" aria-hidden>
           {channel.slice(0, 2).toUpperCase()}
         </span>
       )}
       <span className="flex min-w-0 flex-col leading-tight">
-        <span className="truncate text-[12px] font-medium text-body">{entry?.name ?? channel}</span>
-        {store ? <span className="truncate text-[11px] text-faint">{store}</span> : null}
+        <span className="truncate text-xs font-medium text-body">{entry?.name ?? channel}</span>
+        {store ? <span className="truncate text-2xs text-faint">{store}</span> : null}
       </span>
     </span>
   );
@@ -174,7 +174,7 @@ export function CountdownCell({ deadline }: { readonly deadline: string | Date |
   if (now === null) return <span className="text-faint">…</span>;
   const remaining = target - now;
   return (
-    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums", remaining < 0 ? "bg-danger-soft text-danger" : remaining < SOON_MS ? "bg-warning-soft text-warning" : "bg-neutral-soft text-secondary")}>
+    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums", remaining < 0 ? "bg-danger-soft text-danger" : remaining < SOON_MS ? "bg-warning-soft text-warning" : "bg-neutral-soft text-secondary")}>
       {formatCountdown(remaining)}
     </span>
   );

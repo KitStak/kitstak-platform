@@ -21,7 +21,7 @@ export function ErrorReference({ error }: { readonly error: (Pick<ApiError, "sta
   const text = errorReferenceText(error);
   if (!text) return null;
   return (
-    <p className="max-w-[56ch] text-[11.5px] text-faint" data-testid="error-reference">
+    <p className="max-w-[56ch] text-2xs text-faint" data-testid="error-reference">
       {text}
       <span className="block tabular-nums">{at.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "medium" })}</span>
     </p>

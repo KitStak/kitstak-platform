@@ -39,7 +39,7 @@ function Pills({ value, roles }: { readonly value: string | null; readonly roles
   return (
     <span className="flex items-center gap-1 overflow-hidden">
       {parts.slice(0, 2).map((p) => <Badge key={p} tone={roleTone(roles.find((r) => r.name === p) ?? { name: p })} size="sm" shape="pill">{p}</Badge>)}
-      {parts.length > 2 ? <span className="text-[11px] text-faint" title={parts.slice(2).join(", ")}>+{parts.length - 2}</span> : null}
+      {parts.length > 2 ? <span className="text-2xs text-faint" title={parts.slice(2).join(", ")}>+{parts.length - 2}</span> : null}
     </span>
   );
 }
@@ -61,7 +61,7 @@ function columns(onOpen: (id: string) => void, meId: string | null, roles: Admin
     { id: "warehouseCodes", header: "Warehouse", size: 150, cell: ({ row }) => row.original.warehouseCodes ?? <Muted /> },
     { id: "userType", header: "User type", size: 110, cell: ({ row }) => row.original.userType },
     { id: "status", header: "Status", size: 100, cell: ({ row }) => <StatusPill status={row.original.status} size="sm" /> },
-    { id: "isApiUser", header: "API user", size: 90, cell: ({ row }) => row.original.isApiUser ? <span className="inline-flex items-center gap-1 text-[12px] text-success" title="API user"><KeyRound className="h-3.5 w-3.5" aria-hidden />API</span> : <span className="sr-only">No</span> },
+    { id: "isApiUser", header: "API user", size: 90, cell: ({ row }) => row.original.isApiUser ? <span className="inline-flex items-center gap-1 text-xs text-success" title="API user"><KeyRound className="h-3.5 w-3.5" aria-hidden />API</span> : <span className="sr-only">No</span> },
     { id: "lastLoginAt", header: "Last sign-in", size: 172, cell: ({ row }) => row.original.lastLoginAt ? <DateCell value={row.original.lastLoginAt} /> : <Muted>Never</Muted> },
     { id: "activeSessions", header: "Live sessions", size: 110, meta: { ...hidden, align: "right" }, cell: ({ row }) => <span className="block text-right tabular-nums">{row.original.activeSessions}</span> },
     { id: "createdAt", header: "Created date", size: 172, meta: hidden, cell: ({ row }) => <DateCell value={row.original.createdAt} /> },

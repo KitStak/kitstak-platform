@@ -18,7 +18,7 @@ export interface FormSectionProps {
 export function FormSection({ title, description, action, collapsible, defaultOpen = true, className, children }: FormSectionProps) {
   const [open, setOpen] = React.useState(defaultOpen);
   const contentId = React.useId();
-  const heading = <h3 className="text-[14px] font-semibold text-foreground">{title}</h3>;
+  const heading = <h3 className="text-base font-semibold text-foreground">{title}</h3>;
   return (
     <section className={cn("flex flex-col gap-3", className)}>
       <div className="flex items-start justify-between gap-3 border-b border-border pb-2">
@@ -31,7 +31,7 @@ export function FormSection({ title, description, action, collapsible, defaultOp
           ) : (
             heading
           )}
-          {description ? <p className="mt-0.5 text-[12px] leading-4 text-secondary">{description}</p> : null}
+          {description ? <p className="mt-0.5 text-xs leading-4 text-secondary">{description}</p> : null}
         </div>
         {action}
       </div>

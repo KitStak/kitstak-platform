@@ -317,7 +317,7 @@ export function DataGrid<T>(props: DataGridProps<T>) {
         {/* Capped at the viewport so long grids scroll inside the frame and the sticky header stays visible. */}
         {refreshing ? <div role="progressbar" aria-label="Updating rows" className="ks-grid-progress pointer-events-none absolute inset-x-0 top-0 z-40 h-0.5 overflow-hidden bg-info/15" /> : null}
         <div ref={scrollRef} aria-busy={refreshing || undefined} data-refreshing={refreshing || undefined} className="ks-scroll max-h-[calc(100dvh-8rem)] min-h-0 flex-1 overflow-auto">
-          <table aria-rowcount={total + 1} aria-colcount={table.getVisibleLeafColumns().length} className={cn("w-full min-w-max border-collapse text-[13px] transition-opacity", sizingInfo.isResizingColumn && "select-none", refreshing && "[&>tbody]:opacity-60")}>
+          <table aria-rowcount={total + 1} aria-colcount={table.getVisibleLeafColumns().length} className={cn("w-full min-w-max border-collapse text-sm transition-opacity", sizingInfo.isResizingColumn && "select-none", refreshing && "[&>tbody]:opacity-60")}>
             <DataGridHeader table={table} sort={sort} onSort={(field, additive) => setSort(nextSort(sort, field, additive))} onReorder={reorder} stickyRightOffset={stickyRightOffset} />
             <DataGridBody
               table={table}

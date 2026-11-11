@@ -370,13 +370,13 @@ function Body({ mode, workOrderId, prefill, onOpenChange, onSaved, onDirty, onCa
   if (phase === "operation") {
     return (
       <div className="flex min-h-full flex-col gap-4">
-        <p className="text-[13px] text-secondary">Choose the operation type of the new work order.</p>
+        <p className="text-sm text-secondary">Choose the operation type of the new work order.</p>
         <button type="button" onClick={() => setPhase("general")} autoFocus
           className="group flex items-center gap-4 rounded-xl border border-primary/40 bg-primary-soft/50 p-4 text-left shadow-xs outline-none transition-all hover:border-primary hover:bg-primary-soft focus-visible:ring-2 focus-visible:ring-primary/30">
           <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary text-white"><Boxes className="h-5 w-5" aria-hidden /></span>
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="text-[14px] font-semibold text-foreground">Kitting</span>
-            <span className="text-[12px] text-secondary">Create a work order for kitting operations of kit-to-stock products</span>
+            <span className="text-base font-semibold text-foreground">Kitting</span>
+            <span className="text-xs text-secondary">Create a work order for kitting operations of kit-to-stock products</span>
           </span>
           <ChevronRight className="h-4 w-4 text-primary transition-transform group-hover:translate-x-0.5" aria-hidden />
         </button>

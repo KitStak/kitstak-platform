@@ -81,11 +81,11 @@ function ResultRow({ product, facts, factsLoading, alreadyAdded, onAdd }: RowPro
         )}
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-[13px] font-semibold text-foreground" title={product.sku}>{product.sku}</span>
-        <span className="truncate text-[12px] text-secondary" title={product.name}>{product.name}</span>
+        <span className="truncate text-sm font-semibold text-foreground" title={product.sku}>{product.sku}</span>
+        <span className="truncate text-xs text-secondary" title={product.name}>{product.name}</span>
       </span>
-      <span className="w-28 shrink-0 text-right text-[12px]">
-        <span className="block text-[10px] font-semibold uppercase tracking-[0.04em] text-faint">ATP</span>
+      <span className="w-28 shrink-0 text-right text-xs">
+        <span className="block text-2xs font-semibold text-faint">ATP</span>
         {factsLoading && !facts ? (
           <span className="inline-block h-3 w-8 animate-pulse rounded bg-neutral-soft align-middle" aria-label="Loading ATP" />
         ) : (
@@ -93,10 +93,10 @@ function ResultRow({ product, facts, factsLoading, alreadyAdded, onAdd }: RowPro
             {atp === null ? "—" : fmt.quantity(atp)}
           </span>
         )}
-        {tone === "over" && atp !== null ? <span className="block text-[10px] leading-3 text-warning">Only {fmt.quantity(atp)} available</span> : null}
-        {tone === "out" ? <span className="block text-[10px] leading-3 text-danger">Out of stock</span> : null}
+        {tone === "over" && atp !== null ? <span className="block text-2xs leading-3 text-warning">Only {fmt.quantity(atp)} available</span> : null}
+        {tone === "out" ? <span className="block text-2xs leading-3 text-danger">Out of stock</span> : null}
         {atp !== null && atp > 0 && facts?.allocatable != null && facts.allocatable < atp ? (
-          <span className="block text-[10px] leading-3 text-warning" title="Some stock sits in locked, inactive or no-allocation locations, so allocation can't take it now.">
+          <span className="block text-2xs leading-3 text-warning" title="Some stock sits in locked, inactive or no-allocation locations, so allocation can't take it now.">
             {fmt.quantity(facts.allocatable)} allocatable now
           </span>
         ) : null}
@@ -153,15 +153,15 @@ export function OrderProductSearch({ clientId, warehouseId, addedIds, onAdd }: O
       />
       <div className="overflow-hidden rounded-lg border border-border bg-surface">
         {!clientId ? (
-          <p className="px-3 py-6 text-center text-[12px] text-faint">Products are listed per client. Choose a client to search.</p>
+          <p className="px-3 py-6 text-center text-xs text-faint">Products are listed per client. Choose a client to search.</p>
         ) : q.trim().length < ORDER_SEARCH_MIN_CHARS ? (
-          <p className="px-3 py-6 text-center text-[12px] text-faint">{minCharsMessage(ORDER_SEARCH_MIN_CHARS)}</p>
+          <p className="px-3 py-6 text-center text-xs text-faint">{minCharsMessage(ORDER_SEARCH_MIN_CHARS)}</p>
         ) : query.error ? (
-          <p className="px-3 py-6 text-center text-[12px] text-danger">{query.error.message}</p>
+          <p className="px-3 py-6 text-center text-xs text-danger">{query.error.message}</p>
         ) : query.isPending || term !== q.trim() && products.length === 0 ? (
-          <p className="flex items-center justify-center gap-2 px-3 py-6 text-center text-[12px] text-faint"><Spinner className="h-3.5 w-3.5" /> Searching…</p>
+          <p className="flex items-center justify-center gap-2 px-3 py-6 text-center text-xs text-faint"><Spinner className="h-3.5 w-3.5" /> Searching…</p>
         ) : products.length === 0 ? (
-          <p className="flex flex-col items-center gap-1 px-3 py-6 text-center text-[12px] text-faint">
+          <p className="flex flex-col items-center gap-1 px-3 py-6 text-center text-xs text-faint">
             <Package className="h-5 w-5" aria-hidden />
             No products match &ldquo;{term}&rdquo;
           </p>

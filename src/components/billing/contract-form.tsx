@@ -65,26 +65,26 @@ export function ContractSummary({ feeCount, extra }: { readonly feeCount?: numbe
   const row = (icon: React.ReactNode, label: string, value: React.ReactNode) => (
     <div className="flex items-start gap-2.5">
       <span className="mt-0.5 text-secondary">{icon}</span>
-      <div className="min-w-0"><div className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</div><div className="truncate text-[13px] text-foreground">{value || <span className="text-faint">Not set</span>}</div></div>
+      <div className="min-w-0"><div className="text-2xs font-semibold text-faint">{label}</div><div className="truncate text-sm text-foreground">{value || <span className="text-faint">Not set</span>}</div></div>
     </div>
   );
   return (
     <aside className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-5 shadow-xs" aria-label="Summary">
-      <h2 className="text-[14px] font-semibold text-foreground">Summary</h2>
+      <h2 className="text-base font-semibold text-foreground">Summary</h2>
       {row(<Receipt className="h-4 w-4" />, "Billing form", v.name)}
       {row(<Building2 className="h-4 w-4" />, "Client · warehouse", client || wh ? `${client ?? "—"} · ${wh ?? "—"}` : "")}
       {row(<CalendarRange className="h-4 w-4" />, "Frequency", v.frequency ? FREQUENCY_LABELS[v.frequency] ?? v.frequency : "")}
       <div>
-        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Billing periods</div>
+        <div className="mb-1.5 text-2xs font-semibold text-faint">Billing periods</div>
         {periods.length ? (
           <ol className="flex flex-col gap-1">
             {periods.map((p, i) => (
-              <li key={p.start} className="flex items-center justify-between rounded-md bg-surface-sunken/70 px-2.5 py-1.5 text-[12px]">
+              <li key={p.start} className="flex items-center justify-between rounded-md bg-surface-sunken/70 px-2.5 py-1.5 text-xs">
                 <span className="font-medium text-secondary">Period {i + 1}</span><span className="tabular-nums text-foreground">{pretty(p.start)} – {pretty(p.end)}</span>
               </li>
             ))}
           </ol>
-        ) : <p className="text-[12px] text-faint">Pick a start date and frequency to preview the periods.</p>}
+        ) : <p className="text-xs text-faint">Pick a start date and frequency to preview the periods.</p>}
       </div>
       {typeof feeCount === "number" ? row(<Receipt className="h-4 w-4" />, "Fees", feeCount === 0 ? "No fees yet" : `${feeCount} fee${feeCount === 1 ? "" : "s"}`) : null}
       {extra}

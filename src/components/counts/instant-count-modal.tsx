@@ -176,8 +176,8 @@ function Body({ onOpenChange, onDone }: { readonly onOpenChange: (open: boolean)
           {location ? (
             <section aria-label={`Count ${location.code}`} className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-primary-soft px-2.5 py-1 text-[13px] font-semibold text-primary"><MapPin className="h-3.5 w-3.5" aria-hidden />{location.code}</span>
-                <span className="text-[12px] text-secondary">{location.buckets.length} {location.buckets.length === 1 ? "bucket" : "buckets"} expected</span>
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-primary-soft px-2.5 py-1 text-sm font-semibold text-primary"><MapPin className="h-3.5 w-3.5" aria-hidden />{location.code}</span>
+                <span className="text-xs text-secondary">{location.buckets.length} {location.buckets.length === 1 ? "bucket" : "buckets"} expected</span>
               </div>
               {location.lockedBy ? (
                 <Callout variant="error" title={`Locked by count plan ${location.lockedBy}`}>
@@ -191,7 +191,7 @@ function Body({ onOpenChange, onDone }: { readonly onOpenChange: (open: boolean)
               {reviewing ? <ReviewPanel code={location.code} diffs={diffs} unitsUp={unitsUp} unitsDown={unitsDown} expected={drafts.length} belowAllocated={belowAllocated.length} /> : (
                 <CountEntryTable drafts={drafts} onChange={(next) => { setDrafts(next); setSubmitError(null); }} warehouseId={location.warehouseId} disabled={saving} showErrors={tried} idPrefix="ic" blind={Boolean(location.blind)} />
               )}
-              {tried && entryError ? <p role="alert" className="text-[12px] font-medium text-danger">{entryError}</p> : null}
+              {tried && entryError ? <p role="alert" className="text-xs font-medium text-danger">{entryError}</p> : null}
               {reviewing ? null : <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="flex flex-col gap-1">
                   <FieldLabel htmlFor="ic-update" info="When off, counted differences wait on the count plan for Update Inv. A count with no difference always closes.">Update inventory now</FieldLabel>
@@ -210,8 +210,8 @@ function Body({ onOpenChange, onDone }: { readonly onOpenChange: (open: boolean)
           ) : (
             <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border-strong px-6 py-10 text-center">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary"><Zap className="h-5 w-5" aria-hidden /></span>
-              <p className="text-[13px] font-semibold text-foreground">Scan a location to start</p>
-              <p className="max-w-[420px] text-[12px] text-secondary">The expected SKUs, lots and LPs appear here. Enter what you see on the shelf, then submit. The next location is ready to scan right after.</p>
+              <p className="text-sm font-semibold text-foreground">Scan a location to start</p>
+              <p className="max-w-[420px] text-xs text-secondary">The expected SKUs, lots and LPs appear here. Enter what you see on the shelf, then submit. The next location is ready to scan right after.</p>
             </div>
           )}
         </div>
@@ -238,26 +238,26 @@ function ReviewPanel({ code, diffs, unitsUp, unitsDown, expected, belowAllocated
   return (
     <div className="flex flex-col gap-3" data-testid="quick-count-review">
       <Callout variant={unitsDown > 0 && system > 0 && unitsDown / system > 0.05 ? "attention" : "info"} title={`Review before posting to ${code}`}>
-        <p className="text-[12px]">{diffs.length === 1 ? "1 bucket differs" : `${diffs.length} of ${expected} buckets differ`} from the system. Posting writes Count transactions now; net change {net > 0 ? "+" : net < 0 ? "−" : ""}{unitsLabel(Math.abs(net))}.</p>
+        <p className="text-xs">{diffs.length === 1 ? "1 bucket differs" : `${diffs.length} of ${expected} buckets differ`} from the system. Posting writes Count transactions now; net change {net > 0 ? "+" : net < 0 ? "−" : ""}{unitsLabel(Math.abs(net))}.</p>
       </Callout>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <span className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-success-soft text-success"><ArrowUpRight className="h-4 w-4" aria-hidden /></span><span className="flex flex-col leading-tight"><span className="text-[16px] font-semibold tabular-nums text-foreground">{unitsUp.toLocaleString()}</span><span className="text-[11px] text-secondary">{unitsUp === 1 ? "unit added" : "units added"}</span></span></span>
-        <span className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-danger-soft text-danger"><ArrowDownRight className="h-4 w-4" aria-hidden /></span><span className="flex flex-col leading-tight"><span className="text-[16px] font-semibold tabular-nums text-foreground">{unitsDown.toLocaleString()}</span><span className="text-[11px] text-secondary">{unitsDown === 1 ? "unit removed" : "units removed"}</span></span></span>
+        <span className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-success-soft text-success"><ArrowUpRight className="h-4 w-4" aria-hidden /></span><span className="flex flex-col leading-tight"><span className="text-md font-semibold tabular-nums text-foreground">{unitsUp.toLocaleString()}</span><span className="text-2xs text-secondary">{unitsUp === 1 ? "unit added" : "units added"}</span></span></span>
+        <span className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-danger-soft text-danger"><ArrowDownRight className="h-4 w-4" aria-hidden /></span><span className="flex flex-col leading-tight"><span className="text-md font-semibold tabular-nums text-foreground">{unitsDown.toLocaleString()}</span><span className="text-2xs text-secondary">{unitsDown === 1 ? "unit removed" : "units removed"}</span></span></span>
       </div>
       {belowAllocated > 0 ? (
         <Callout variant="attention" title={belowAllocated === 1 ? "1 bucket is counted below its allocated qty" : `${belowAllocated} buckets are counted below their allocated qty`}>
-          <p className="text-[12px]">Unpicked orders holding this stock are shorted first, with an allocation exception on each order. Picked or in-job stock can&apos;t be posted: the count is then refused and nothing changes.</p>
+          <p className="text-xs">Unpicked orders holding this stock are shorted first, with an allocation exception on each order. Picked or in-job stock can&apos;t be posted: the count is then refused and nothing changes.</p>
         </Callout>
       ) : null}
       <div className="ks-scroll max-h-[260px] overflow-auto rounded-md border border-border">
-        <table className="w-full border-collapse text-left text-[12px]">
-          <thead className="sticky top-0 bg-surface-sunken text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+        <table className="w-full border-collapse text-left text-xs">
+          <thead className="sticky top-0 bg-surface-sunken text-2xs font-semibold text-faint">
             <tr><th scope="col" className="px-2.5 py-1.5">SKU</th><th scope="col" className="px-2.5 py-1.5">Lot / LP</th><th scope="col" className="px-2.5 py-1.5 text-right">System</th><th scope="col" className="px-2.5 py-1.5 text-right">Counted</th><th scope="col" className="px-2.5 py-1.5 text-right">Difference</th></tr>
           </thead>
           <tbody>
             {diffs.map((d) => (
               <tr key={d.key} className="border-t border-border">
-                <td className="px-2.5 py-1.5 font-semibold text-foreground">{d.sku}{d.damageReason ? <span className="ml-1.5 text-[10px] font-semibold uppercase text-danger">Damaged</span> : null}</td>
+                <td className="px-2.5 py-1.5 font-semibold text-foreground">{d.sku}{d.damageReason ? <span className="ml-1.5 text-2xs font-semibold text-danger">Damaged</span> : null}</td>
                 <td className="px-2.5 py-1.5 text-secondary">{[d.lotNumber, d.lpNumber].filter(Boolean).join(" · ") || "—"}</td>
                 <td className="px-2.5 py-1.5 text-right tabular-nums">{d.systemQty.toLocaleString()}</td>
                 <td className="px-2.5 py-1.5 text-right tabular-nums">{(d.counted ?? 0).toLocaleString()}</td>

@@ -50,7 +50,7 @@ export function SegmentedControl<V extends string>({ options, value, onChange, s
               "hover:bg-surface-sunken hover:text-body focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus/35",
               "data-[state=on]:bg-primary-soft data-[state=on]:text-primary active:bg-neutral-soft",
               "disabled:cursor-not-allowed disabled:text-faint",
-              size === "sm" ? "h-7 px-2.5 text-[12px]" : "h-8 px-3 text-[13px]"
+              size === "sm" ? "h-7 px-2.5 text-xs" : "h-8 px-3 text-sm"
             )}
           >
             {Icon ? <Icon className="h-3.5 w-3.5" aria-hidden /> : null}

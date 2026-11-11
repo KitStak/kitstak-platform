@@ -56,7 +56,7 @@ const SPECS: readonly ColumnSpec<EodRow>[] = [
   { id: "carrierCode", label: "Carrier", width: 240, minWidth: 200, cell: (r) => (
     <span className="flex min-w-0 items-center gap-1.5" title={r.carrierName && r.carrierName !== r.carrierCode ? `${r.carrierCode} · ${r.carrierName}` : r.carrierCode}>
       <span className="shrink-0"><CarrierMark code={r.carrierCode} title={r.carrierCode} /></span>
-      {r.carrierName && r.carrierName !== r.carrierCode ? <><span aria-hidden className="shrink-0 text-faint">·</span><span className="min-w-0 truncate text-[12px] text-secondary">{r.carrierName}</span></> : null}
+      {r.carrierName && r.carrierName !== r.carrierCode ? <><span aria-hidden className="shrink-0 text-faint">·</span><span className="min-w-0 truncate text-xs text-secondary">{r.carrierName}</span></> : null}
     </span>
   ) },
   {
@@ -64,7 +64,7 @@ const SPECS: readonly ColumnSpec<EodRow>[] = [
     cell: (r) => (
       <span className="inline-flex items-center gap-1.5">
         <StatusPill status={r.status} domain="eod" />
-        {r.isOverdue ? <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-warning" title="This ship day is over and the manifest was never closed. Print the End Of The Day Report to hand it to the carrier.">Not closed</span> : null}
+        {r.isOverdue ? <span className="shrink-0 whitespace-nowrap text-2xs font-medium text-warning" title="This ship day is over and the manifest was never closed. Print the End Of The Day Report to hand it to the carrier.">Not closed</span> : null}
       </span>
     ),
   },

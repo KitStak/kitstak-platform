@@ -23,9 +23,9 @@ export function KitDeltaTable({ lines, caption, currentLabel = "Current qty", fl
 }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full border-collapse text-[12px]">
+      <table className="w-full border-collapse text-xs">
         <caption className="sr-only">{caption}</caption>
-        <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+        <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
           <tr>
             <th scope="col" className="px-3 py-2">SKU</th>
             <th scope="col" className="px-3 py-2">Location</th>
@@ -64,5 +64,5 @@ export function KitDeltaTable({ lines, caption, currentLabel = "Current qty", fl
 }
 
 export function QtyChip({ label, value }: { readonly label: string; readonly value: React.ReactNode }) {
-  return <span className="inline-flex items-center gap-1 rounded-md bg-surface-sunken px-2 py-0.5 text-[11px] text-secondary">{label} <strong className="tabular-nums text-foreground">{value}</strong></span>;
+  return <span className="inline-flex items-center gap-1 rounded-md bg-surface-sunken px-2 py-0.5 text-2xs text-secondary">{label} <strong className="tabular-nums text-foreground">{value}</strong></span>;
 }

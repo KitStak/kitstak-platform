@@ -53,7 +53,7 @@ export function CustomFieldsSection({ entityType, values, onChange, canManage = 
   return (
     <section aria-labelledby={`cf-${entityType}`} className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h3 id={`cf-${entityType}`} className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+        <h3 id={`cf-${entityType}`} className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
           <SlidersHorizontal className="h-3.5 w-3.5 text-secondary" aria-hidden />
           Custom Fields
         </h3>
@@ -70,18 +70,18 @@ export function CustomFieldsSection({ entityType, values, onChange, canManage = 
           <Skeleton className="h-8" />
         </div>
       ) : query.error ? (
-        <p className="text-[12px] text-danger">
+        <p className="text-xs text-danger">
           Custom fields could not be loaded.{" "}
           <button type="button" className="font-semibold underline" onClick={() => void query.refetch()}>
             Retry
           </button>
         </p>
       ) : active.length === 0 ? (
-        <p className="text-[12px] text-faint">No custom fields are configured for this record type.</p>
+        <p className="text-xs text-faint">No custom fields are configured for this record type.</p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {active.map((def) => (
-            <label key={def.id} className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+            <label key={def.id} className="flex flex-col gap-1 text-xs font-semibold text-secondary">
               {def.name}
               <FieldInput def={def} disabled={disabled} value={values[def.slot] ?? null} onChange={(v) => onChange({ ...values, [def.slot]: v })} />
             </label>

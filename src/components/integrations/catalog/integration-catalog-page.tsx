@@ -51,9 +51,9 @@ function Card({ card, canCreate }: { readonly card: CatalogCard; readonly canCre
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={svgDataUri(card.key === "kitstaks-sandbox" ? card.logoSvg : brandMarkSvg(card.kind, card.key, card.logoSvg))} alt="" width={56} height={56} className="rounded-xl" />
       <div>
-        <h3 className="text-[14px] font-semibold text-foreground">{card.name}</h3>
-        <p className="mt-0.5 line-clamp-2 min-h-8 text-[12px] leading-4 text-secondary">{card.description}</p>
-        <Link href={`/integrations/help#${card.kind === "carrier" ? `carrier-${card.key}` : card.key}`} target="_blank" className="mt-1 inline-block text-[11px] font-medium text-primary hover:underline" aria-label={`Learn more about ${card.name}`}>Learn more</Link>
+        <h3 className="text-base font-semibold text-foreground">{card.name}</h3>
+        <p className="mt-0.5 line-clamp-2 min-h-8 text-xs leading-4 text-secondary">{card.description}</p>
+        <Link href={`/integrations/help#${card.kind === "carrier" ? `carrier-${card.key}` : card.key}`} target="_blank" className="mt-1 inline-block text-2xs font-medium text-primary hover:underline" aria-label={`Learn more about ${card.name}`}>Learn more</Link>
       </div>
       {/* Fixed-height footer pinned to the bottom so every card in the grid is the same height. */}
       <div className="mt-auto flex h-[60px] w-full flex-col items-center justify-end gap-1.5">
@@ -72,7 +72,7 @@ function Card({ card, canCreate }: { readonly card: CatalogCard; readonly canCre
       ) : (
         <>
           <Button size="sm" variant="primary" onClick={() => router.push(`${href}?connect=1`)} aria-label={sandboxOnly ? `Connect ${card.name} as a simulated sandbox ${card.kind === "carrier" ? "carrier" : "store"}` : `Connect ${card.name}`}><Plug className="h-3.5 w-3.5" />{sandboxOnly ? "Connect sandbox" : "Connect"}</Button>
-          {sandboxOnly ? <span className="text-[11px] leading-3 text-secondary" title={SANDBOX_ONLY[card.kind]}>No live connection yet · simulated {card.kind === "carrier" ? "carrier" : "store"}</span> : null}
+          {sandboxOnly ? <span className="text-2xs leading-3 text-secondary" title={SANDBOX_ONLY[card.kind]}>No live connection yet · simulated {card.kind === "carrier" ? "carrier" : "store"}</span> : null}
         </>
       )}
       </div>
@@ -103,7 +103,7 @@ export function IntegrationCatalogPage({ kind }: { readonly kind: "channel" | "c
         <section className="flex min-w-0 flex-1 flex-col gap-4">
           <div className="flex items-center gap-3">
             <TextField aria-label="Search integrations" placeholder="Search integrations" value={q} onChange={(e) => setQ(e.target.value)} leading={<Search className="h-4 w-4" />} wrapperClassName="w-72" />
-            {data.isPending ? null : <span className="text-[12px] text-secondary">{sorted.filter((c) => c.connected > 0).length} connected · {sorted.length} shown</span>}
+            {data.isPending ? null : <span className="text-xs text-secondary">{sorted.filter((c) => c.connected > 0).length} connected · {sorted.length} shown</span>}
           </div>
           {data.isPending ? (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-48 w-full rounded-xl" />)}</div>
@@ -113,7 +113,7 @@ export function IntegrationCatalogPage({ kind }: { readonly kind: "channel" | "c
             <EmptyState title="No integrations match" description={`Nothing matches “${q}”.`} action={<Button variant="secondary" onClick={() => setQ("")}>Clear search</Button>} />
           ) : (
             <>
-              {all ? <h2 className="text-[12px] font-semibold uppercase tracking-wide text-secondary">Channels &amp; carriers</h2> : null}
+              {all ? <h2 className="text-xs font-semibold text-secondary">Channels &amp; carriers</h2> : null}
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{sorted.map((c) => <Card key={`${c.kind}-${c.key}`} card={c} canCreate={perms.create_setup} />)}</div>
             </>
           )}

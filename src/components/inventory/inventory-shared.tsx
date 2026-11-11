@@ -98,7 +98,7 @@ export function InventoryStatusPill({ status, className }: { readonly status: st
 
 export function DamagePill({ reason }: { readonly reason: string | null }) {
   if (!reason) return <span className="text-faint">—</span>;
-  return <span className="inline-flex items-center rounded-full bg-[#F7E9E4] px-2 py-0.5 text-[11px] font-semibold leading-4 whitespace-nowrap text-[#A13406]">{reason}</span>;
+  return <span className="inline-flex items-center rounded-full bg-[var(--label-brown-subtle)] px-2 py-0.5 text-2xs font-semibold leading-4 whitespace-nowrap text-[var(--label-brown-text)]">{reason}</span>;
 }
 
 /* ---------------- product thumb ---------------- */
@@ -125,7 +125,7 @@ const nf = new Intl.NumberFormat("en-US");
 
 export function Qty({ value, tone = "default", muteZero = true }: { readonly value: number | null | undefined; readonly tone?: "default" | "danger" | "warning" | "success"; readonly muteZero?: boolean }) {
   if (value === null || value === undefined) return <span className="text-faint">—</span>;
-  const color = value < 0 ? "text-danger" : value === 0 && muteZero ? "text-faint" : tone === "danger" ? "text-danger" : tone === "warning" ? "text-[#A13406]" : tone === "success" ? "text-success" : "text-body";
+  const color = value < 0 ? "text-danger" : value === 0 && muteZero ? "text-faint" : tone === "danger" ? "text-danger" : tone === "warning" ? "text-[var(--label-brown-text)]" : tone === "success" ? "text-success" : "text-body";
   return <span className={cn("block text-right tabular-nums", color)}>{nf.format(value)}</span>;
 }
 
@@ -223,14 +223,14 @@ export function rightMeta(label: string, headerTip?: string): { label: string; a
 
 /** Total Inventory drilldown: By Location filtered to this SKU (same tab, like Logiwa's SKU link). */
 export function ByLocationLink({ sku, warehouseId, count }: { readonly sku: string; readonly warehouseId: string | null; readonly count?: number }) {
-  if (count === 0) return <span className="text-[12px] text-faint">No stock</span>;
+  if (count === 0) return <span className="text-xs text-faint">No stock</span>;
   const label = count === undefined ? "Locations" : `${count} location${count === 1 ? "" : "s"}`;
   return (
     <a
       href={filteredListHref("/inventory/by-location", byLocationFilters(sku, warehouseId))}
       onClick={(e) => e.stopPropagation()}
       aria-label={`${label} for ${sku} by location`}
-      className="inline-flex items-center gap-1 text-[12px] font-medium text-primary underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+      className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
     >
       {label}
     </a>
@@ -258,7 +258,7 @@ export function ShortageToggle({ grid, field, label = "Shortage" }: {
         aria-pressed={active}
         onClick={() => (active ? grid.removeFilter(field) : grid.upsertFilter({ field, op: "rng", max: "-1" }))}
         className={cn(
-          "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+          "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
           active ? "border-danger/40 bg-danger/10 text-danger" : "border-border bg-surface text-body hover:bg-muted",
         )}
       >

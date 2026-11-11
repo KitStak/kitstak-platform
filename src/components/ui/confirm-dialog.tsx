@@ -61,11 +61,11 @@ function RecordsTable({ records }: { readonly records: ConfirmRecords }) {
   const hidden = records.rows.length - shown.length;
   return (
     <div className="mt-3 max-h-[220px] overflow-auto rounded-md border border-border ks-scroll">
-      <table className="w-full border-collapse text-left text-[12px]">
+      <table className="w-full border-collapse text-left text-xs">
         <thead className="sticky top-0 bg-surface-sunken">
           <tr>
             {records.columns.map((c) => (
-              <th key={c.key} scope="col" className="border-b border-border px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+              <th key={c.key} scope="col" className="border-b border-border px-2.5 py-1.5 text-2xs font-semibold text-faint">
                 {c.label}
               </th>
             ))}
@@ -83,7 +83,7 @@ function RecordsTable({ records }: { readonly records: ConfirmRecords }) {
           ))}
         </tbody>
       </table>
-      {hidden > 0 ? <p className="border-t border-border bg-surface-sunken px-2.5 py-1.5 text-[11px] text-secondary">+{hidden} more</p> : null}
+      {hidden > 0 ? <p className="border-t border-border bg-surface-sunken px-2.5 py-1.5 text-2xs text-secondary">+{hidden} more</p> : null}
     </div>
   );
 }
@@ -151,11 +151,11 @@ export function ConfirmDialog({
         >
           <div className={cn("flex items-start gap-2.5 px-5 py-3.5", style.band)}>
             <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            <AlertDialog.Title className="text-[14px] font-semibold leading-5">{title}</AlertDialog.Title>
+            <AlertDialog.Title className="text-base font-semibold leading-5">{title}</AlertDialog.Title>
           </div>
           <div className="px-5 py-4">
             {description ? (
-              <AlertDialog.Description className="text-[13px] leading-5 text-body">{description}</AlertDialog.Description>
+              <AlertDialog.Description className="text-sm leading-5 text-body">{description}</AlertDialog.Description>
             ) : (
               <AlertDialog.Description className="sr-only">Confirm this action</AlertDialog.Description>
             )}
@@ -163,7 +163,7 @@ export function ConfirmDialog({
             {children}
             {typeToConfirm ? (
               <div className="mt-3 flex flex-col gap-1.5">
-                <label htmlFor={inputId} className="text-[12px] text-body">
+                <label htmlFor={inputId} className="text-xs text-body">
                   Type <span className="font-mono font-semibold text-foreground">{typeToConfirm}</span> to confirm
                 </label>
                 <input
@@ -178,12 +178,12 @@ export function ConfirmDialog({
                   }}
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-8 rounded-md border border-border-strong/70 bg-surface px-2.5 text-[13px] text-body focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25"
+                  className="h-8 rounded-md border border-border-strong/70 bg-surface px-2.5 text-sm text-body focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25"
                 />
               </div>
             ) : null}
             {error ? (
-              <p role="alert" className="mt-3 rounded-md bg-danger-soft px-2.5 py-1.5 text-[12px] text-danger">
+              <p role="alert" className="mt-3 rounded-md bg-danger-soft px-2.5 py-1.5 text-xs text-danger">
                 {error}
               </p>
             ) : null}

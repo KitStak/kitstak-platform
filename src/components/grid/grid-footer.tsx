@@ -35,7 +35,7 @@ function PageInput({ page, pageCount, onPageChange }: { readonly page: number; r
     if (next !== page) onPageChange(next);
   };
   return (
-    <span className="flex items-center gap-1.5 px-1 text-[12px] text-secondary">
+    <span className="flex items-center gap-1.5 px-1 text-xs text-secondary">
       <input
         aria-label="Page number"
         inputMode="numeric"
@@ -46,7 +46,7 @@ function PageInput({ page, pageCount, onPageChange }: { readonly page: number; r
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setText(null);
         }}
-        className="h-7 w-11 rounded-md border border-border-strong/70 bg-surface text-center text-[12px] font-semibold tabular-nums text-foreground focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25"
+        className="h-7 w-11 rounded-md border border-border-strong/70 bg-surface text-center text-xs font-semibold tabular-nums text-foreground focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25"
       />
       <span className="tabular-nums">/ {pageCount.toLocaleString()}</span>
     </span>
@@ -77,7 +77,7 @@ export function GridFooter({ total, page, pageSize, selectedCount, density, onDe
       <div className="flex min-w-0 items-center gap-2 lg:gap-3">
         <div role="radiogroup" aria-label="Row density" className="flex rounded-md border border-border p-0.5">
           {GRID_DENSITIES.map((d) => (
-            <button key={d} type="button" role="radio" aria-checked={density === d} onClick={() => onDensityChange(d)} className={cn("rounded px-2 py-0.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30", density === d ? "bg-neutral-soft text-foreground" : "text-secondary hover:bg-surface-sunken")}>
+            <button key={d} type="button" role="radio" aria-checked={density === d} onClick={() => onDensityChange(d)} className={cn("rounded px-2 py-0.5 text-2xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30", density === d ? "bg-neutral-soft text-foreground" : "text-secondary hover:bg-surface-sunken")}>
               {d}
             </button>
           ))}
@@ -92,12 +92,12 @@ export function GridFooter({ total, page, pageSize, selectedCount, density, onDe
               onChange={(next) => {
                 if (next !== null) onPageSizeChange(Number(next));
               }}
-              className="h-7 text-[11px] font-medium text-secondary"
-              contentClassName="text-[12px]"
+              className="h-7 text-2xs font-medium text-secondary"
+              contentClassName="text-xs"
             />
           </div>
         ) : null}
-        <span className="whitespace-nowrap text-[12px] text-secondary" aria-live="polite" aria-busy={loading || undefined}>
+        <span className="whitespace-nowrap text-xs text-secondary" aria-live="polite" aria-busy={loading || undefined}>
           Total: <span className="font-semibold tabular-nums text-foreground">{loading ? "—" : fmt.number(total)}</span>
           {showSelected ? (
             <span>

@@ -197,7 +197,7 @@ function Loaded({ data, refetch, fetching = false }: { readonly data: Detail; re
           {can.del && !finished ? <DropdownMenuItem icon={Trash2} destructive disabledReason={reasons.del} onSelect={() => setDialog({ kind: "delete" })} description="Remove a pending plan that has no jobs">Delete</DropdownMenuItem> : null}
         </DropdownMenuContent>
       </DropdownMenu>
-      {plan.status === "Inventory Updated" ? <Tooltip content="Inventory was posted from this count. The plan is locked for the audit trail: no line or quantity edits, recounts or re-posting. Only the description can still be edited."><span tabIndex={0} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface-sunken px-2.5 text-[12px] font-semibold text-secondary"><Lock className="h-3.5 w-3.5" aria-hidden />Locked</span></Tooltip> : null}
+      {plan.status === "Inventory Updated" ? <Tooltip content="Inventory was posted from this count. The plan is locked for the audit trail: no line or quantity edits, recounts or re-posting. Only the description can still be edited."><span tabIndex={0} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface-sunken px-2.5 text-xs font-semibold text-secondary"><Lock className="h-3.5 w-3.5" aria-hidden />Locked</span></Tooltip> : null}
       {can.edit && !finished ? <DisabledReason reason={reasons.edit}><Button variant="secondary" disabled={Boolean(reasons.edit)} onClick={() => setDialog({ kind: "edit" })}><Pencil className="h-3.5 w-3.5" aria-hidden />Edit</Button></DisabledReason> : null}
       {can.cancel && !finished ? <DisabledReason reason={reasons.cancel}><Button variant="secondary" disabled={Boolean(reasons.cancel)} onClick={() => setDialog({ kind: "cancel" })}><Ban className="h-3.5 w-3.5" aria-hidden />Cancel</Button></DisabledReason> : null}
       {can.job && !reasons.job ? <Button variant="primary" onClick={() => setDialog({ kind: "job" })}><ClipboardList className="h-3.5 w-3.5" aria-hidden />{plan.status === "Pending" ? "Create Job" : "Re-create job"}</Button> : null}
@@ -226,8 +226,8 @@ function Loaded({ data, refetch, fetching = false }: { readonly data: Detail; re
   return (
     <div className="flex min-h-0 flex-col pb-8">
       <DetailHeader title={plan.code} backHref="/counts" backLabel="Count plans" meta={meta} actions={headerActions}
-        badges={<><CountStatusPill status={plan.status} />{locked ? <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning"><Lock className="h-3 w-3" aria-hidden />Locations locked</span> : null}</>} />
-      {plan.description ? <p className="-mt-2 px-6 pb-3 text-[13px] text-secondary">{plan.description}</p> : null}
+        badges={<><CountStatusPill status={plan.status} />{locked ? <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-2xs font-semibold text-warning"><Lock className="h-3 w-3" aria-hidden />Locations locked</span> : null}</>} />
+      {plan.description ? <p className="-mt-2 px-6 pb-3 text-sm text-secondary">{plan.description}</p> : null}
       {orphanMessage ? (
         <div className="px-6 pb-3">
           <Callout variant="error" title={cancelledJobs.length ? `Count job ${cancelledJobs.slice(0, 3).join(", ")}${cancelledJobs.length > 3 ? ` +${cancelledJobs.length - 3}` : ""} was cancelled` : "Lines without a count task"}
@@ -247,13 +247,13 @@ function Loaded({ data, refetch, fetching = false }: { readonly data: Detail; re
       <div className="grid grid-cols-2 gap-3 px-6 pb-4 lg:grid-cols-5">
         <StatTile label={lines.length > active.length ? "Active lines" : "Lines"} value={active.length.toLocaleString()} sublabel={lines.length > active.length ? [superseded ? `${superseded} superseded by recount` : null, cancelledLines ? `${cancelledLines} cancelled` : null, `${lines.length} total`].filter(Boolean).join(" · ") : `${plural(plan.locationCount, "location", "locations")} · ${plural(plan.skuCount, "SKU", "SKUs")}`} />
         <StatTile label="Counted" value={`${accuracyLines.length} / ${active.length}`} sublabel={active.length ? `${Math.round((accuracyLines.length / active.length) * 100)}% complete` : "Nothing to count"} tone="primary" />
-        <StatTile label="Counted vs system" value={accuracyLines.length ? <span className="flex items-center gap-2">{countedTotal.toLocaleString()}<span className="text-[13px] font-normal text-secondary">/ {systemTotal.toLocaleString()}</span></span> : "—"} sublabel={accuracyLines.length ? <span className="inline-flex items-center gap-1.5"><DifferenceBadge value={percentDifference(systemTotal, countedTotal)} /><span>{accuracyLines.length === 1 ? "counted line only" : `${accuracyLines.length} counted lines only`}</span></span> : `${plural(scopeSystemTotal, "system unit", "system units")} to count`} />
+        <StatTile label="Counted vs system" value={accuracyLines.length ? <span className="flex items-center gap-2">{countedTotal.toLocaleString()}<span className="text-sm font-normal text-secondary">/ {systemTotal.toLocaleString()}</span></span> : "—"} sublabel={accuracyLines.length ? <span className="inline-flex items-center gap-1.5"><DifferenceBadge value={percentDifference(systemTotal, countedTotal)} /><span>{accuracyLines.length === 1 ? "counted line only" : `${accuracyLines.length} counted lines only`}</span></span> : `${plural(scopeSystemTotal, "system unit", "system units")} to count`} />
         <StatTile label="Unit variance" value={!accuracyLines.length ? "—" : <span className="tabular-nums">{varianceUnits > 0 ? `+${varianceUnits.toLocaleString()}` : varianceUnits < 0 ? `−${Math.abs(varianceUnits).toLocaleString()}` : "0"}</span>} sublabel={!accuracyLines.length ? "Shown once a line is counted" : differingBuckets === 1 ? "1 bucket differs" : `${differingBuckets.toLocaleString()} buckets differ`} tone={!accuracyLines.length ? "default" : varianceUnits === 0 ? "success" : "warning"} />
         <StatTile label="Exact lines" value={accuracyLines.length ? `${Math.round((exact / accuracyLines.length) * 100)}%` : "—"} sublabel={`${exact} of ${plural(accuracyLines.length, "counted line", "counted lines")} ${exact === 1 && accuracyLines.length === 1 ? "matches" : "match"}`} tone={accuracyLines.length && exact === accuracyLines.length ? "success" : "default"} />
       </div>
       <div className="relative">
         <div ref={tabStrip}><UnderlineTabs tabs={tabs} active={tab} onChange={setTab} className="px-6" ariaLabel="Count sections" /></div>
-        {fetching ? <span role="status" className="absolute right-6 top-1/2 inline-flex -translate-y-1/2 items-center gap-1.5 text-[12px] text-secondary"><Spinner className="h-3 w-3" />Updating…</span> : null}
+        {fetching ? <span role="status" className="absolute right-6 top-1/2 inline-flex -translate-y-1/2 items-center gap-1.5 text-xs text-secondary"><Spinner className="h-3 w-3" />Updating…</span> : null}
       </div>
       {/* The tab strip's triggers point aria-controls at this panel (critic r5: no role=tabpanel before). */}
       <div className="px-6 pt-4" role="tabpanel" id={panel.panelId} aria-labelledby={panel.tabId} tabIndex={-1} data-tab={tab}>
@@ -265,7 +265,7 @@ function Loaded({ data, refetch, fetching = false }: { readonly data: Detail; re
               columns={lineColumns} data={[...lines]} total={lines.length} page={1} pageSize={Math.max(100, lines.length)} onPageChange={() => undefined}
               getRowId={(l) => l.id} selection={selection} onSelectionChange={setSelection} exportName={`${plan.code}-lines`}
               selectable={lineSelectable}
-              toolbarLeft={<p className="text-[12px] text-secondary">{selectedLines.length ? <><strong className="text-foreground">{selectedLines.length}</strong> selected</> : lineSelectable ? "Select lines to update inventory, recount or cancel them. Expand a line to see each counted bucket." : "Expand a line to see each counted bucket."}</p>}
+              toolbarLeft={<p className="text-xs text-secondary">{selectedLines.length ? <><strong className="text-foreground">{selectedLines.length}</strong> selected</> : lineSelectable ? "Select lines to update inventory, recount or cancel them. Expand a line to see each counted bucket." : "Expand a line to see each counted bucket."}</p>}
               toolbarRight={() => (finished ? null :
                 <>
                   {can.lineCancel ? <DisabledReason reason={lineReasons.cancel}><Button size="sm" variant="secondary" disabled={Boolean(lineReasons.cancel)} onClick={() => setDialog({ kind: "line-cancel", lineIds: selectedLines.map((l) => l.id) })}><Ban className="h-3.5 w-3.5" aria-hidden />Cancel</Button></DisabledReason> : null}
@@ -374,12 +374,12 @@ function StickyExpansion({ children }: { readonly children: React.ReactNode }) {
 
 function EntriesTable({ line, entries }: { readonly line: CountLineListRow; readonly entries: readonly EntryRow[] }) {
   const context = [line.locationCode, line.sku ?? line.lpNumber].filter(Boolean).join(" · ");
-  if (entries.length === 0) return <p className="px-4 py-3 text-[12px] text-secondary">{context ? <><strong className="text-foreground">{context}</strong>: </> : null}not counted yet.</p>;
+  if (entries.length === 0) return <p className="px-4 py-3 text-xs text-secondary">{context ? <><strong className="text-foreground">{context}</strong>: </> : null}not counted yet.</p>;
   return (
     <div className="ks-scroll overflow-x-auto px-4 py-2">
-      {context ? <p className="pb-1 text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">Counted buckets · <span className="normal-case text-foreground">{context}</span></p> : null}
-      <table className="w-full max-w-[880px] border-collapse text-[12px]">
-        <thead className="text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+      {context ? <p className="pb-1 text-2xs font-semibold text-faint">Counted buckets · <span className="normal-case text-foreground">{context}</span></p> : null}
+      <table className="w-full max-w-[880px] border-collapse text-xs">
+        <thead className="text-left text-2xs font-semibold text-faint">
           <tr><th className="py-1 pr-3">SKU</th><th className="py-1 pr-3">Location</th><th className="py-1 pr-3">Lot / LP</th><th className="py-1 pr-3 text-right">System</th><th className="py-1 pr-3 text-right">Counted</th><th className="py-1 pr-3 text-right">Diff</th><th className="py-1 pr-3">Counted by</th><th className="py-1">At</th></tr>
         </thead>
         <tbody>
@@ -403,12 +403,12 @@ function EntriesTable({ line, entries }: { readonly line: CountLineListRow; read
 
 function JobsTable({ jobs }: { readonly jobs: readonly JobRow[] }) {
   if (jobs.length === 0) {
-    return <div className="rounded-lg border border-dashed border-border-strong px-6 py-10 text-center text-[13px] text-secondary">No jobs yet. Create Job splits a pending plan into Count jobs by location batch.</div>;
+    return <div className="rounded-lg border border-dashed border-border-strong px-6 py-10 text-center text-sm text-secondary">No jobs yet. Create Job splits a pending plan into Count jobs by location batch.</div>;
   }
   return (
     <div className="overflow-auto rounded-lg border border-border">
-      <table className="w-full border-collapse text-[13px]">
-        <thead className="bg-surface-sunken text-left text-[11px] font-semibold uppercase tracking-[0.04em] text-faint">
+      <table className="w-full border-collapse text-sm">
+        <thead className="bg-surface-sunken text-left text-2xs font-semibold text-faint">
           <tr><th className="px-3 py-2">Job code</th><th className="px-3 py-2">Job type</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Assignee</th><th className="px-3 py-2">Tasks</th><th className="px-3 py-2">Created</th></tr>
         </thead>
         <tbody>
@@ -418,7 +418,7 @@ function JobsTable({ jobs }: { readonly jobs: readonly JobRow[] }) {
               <td className="px-3 py-2">{j.jobType}</td>
               <td className="px-3 py-2"><CountStatusPill status={j.status} domain="job" size="sm" /></td>
               <td className="px-3 py-2">{j.assigneeName ?? <span className="text-faint">Job pool</span>}</td>
-              <td className="px-3 py-2 tabular-nums">{j.completedTaskCount} / {j.taskCount}{j.cancelledTaskCount ? <span className="ml-1.5 text-[12px] text-secondary">· {j.cancelledTaskCount} cancelled</span> : null}</td>
+              <td className="px-3 py-2 tabular-nums">{j.completedTaskCount} / {j.taskCount}{j.cancelledTaskCount ? <span className="ml-1.5 text-xs text-secondary">· {j.cancelledTaskCount} cancelled</span> : null}</td>
               <td className="px-3 py-2"><DateCell value={j.createdAt} /></td>
             </tr>
           ))}

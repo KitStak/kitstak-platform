@@ -20,7 +20,7 @@ export interface TextFieldProps extends Omit<React.InputHTMLAttributes<HTMLInput
 /** Counter text shared by text-field and textarea: "0 / 500". */
 export function CharacterCount({ length, max }: { readonly length: number; readonly max: number }) {
   return (
-    <span className={cn("block text-right text-[11px] tabular-nums", length >= max ? "text-danger" : "text-faint")} aria-live="polite">
+    <span className={cn("block text-right text-2xs tabular-nums", length >= max ? "text-danger" : "text-faint")} aria-live="polite">
       {length} / {max}
     </span>
   );

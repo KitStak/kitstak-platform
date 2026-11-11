@@ -107,7 +107,7 @@ export function CustomFieldsDrawer({ open, onOpenChange, entityType, existing, o
           return (
             <li key={i} className="flex flex-col gap-3 rounded-lg border border-border p-3">
               <div className="flex items-center justify-between">
-                <span className="text-[12px] font-semibold text-secondary">Field {i + 1}</span>
+                <span className="text-xs font-semibold text-secondary">Field {i + 1}</span>
                 {drafts.length > 1 ? (
                   <Button variant="ghost" size="icon-sm" aria-label={`Remove field ${i + 1}`} onClick={() => setDrafts(drafts.filter((_, j) => j !== i))}>
                     <Trash2 className="h-3.5 w-3.5" aria-hidden />
@@ -115,7 +115,7 @@ export function CustomFieldsDrawer({ open, onOpenChange, entityType, existing, o
                 ) : null}
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+                <label className="flex flex-col gap-1 text-xs font-semibold text-secondary">
                   <span>
                     Type <span className="text-danger">*</span>
                   </span>
@@ -126,23 +126,23 @@ export function CustomFieldsDrawer({ open, onOpenChange, entityType, existing, o
                     onChange={(type) => type && update(i, { type, options: [] })}
                     options={CUSTOM_FIELD_TYPES.map((t) => ({ value: t, label: CUSTOM_FIELD_TYPE_LABELS[t], description: `${Math.max(0, left[t])} left`, disabled: left[t] <= 0 && t !== d.type }))}
                   />
-                  {e.type ? <span className="text-[11px] font-medium text-danger">{e.type}</span> : null}
+                  {e.type ? <span className="text-2xs font-medium text-danger">{e.type}</span> : null}
                 </label>
-                <label className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+                <label className="flex flex-col gap-1 text-xs font-semibold text-secondary">
                   <span>
                     Name <span className="text-danger">*</span>
                   </span>
                   <TextField value={d.name} maxLength={CUSTOM_FIELD_NAME_MAX} invalid={Boolean(e.name)} onChange={(ev) => update(i, { name: ev.target.value })} aria-label={`Field ${i + 1} name`} />
-                  {e.name ? <span className="text-[11px] font-medium text-danger">{e.name}</span> : null}
+                  {e.name ? <span className="text-2xs font-medium text-danger">{e.name}</span> : null}
                 </label>
               </div>
               {d.type === "dropDown" ? (
-                <div className="flex flex-col gap-1 text-[12px] font-semibold text-secondary">
+                <div className="flex flex-col gap-1 text-xs font-semibold text-secondary">
                   <span>
                     Options <span className="text-danger">*</span>
                   </span>
                   <ChipInput value={d.options ?? []} onChange={(options) => update(i, { options: [...options] })} placeholder="Type an option and press Enter" aria-label={`Field ${i + 1} options`} />
-                  {e.options ? <span className="text-[11px] font-medium text-danger">{e.options}</span> : null}
+                  {e.options ? <span className="text-2xs font-medium text-danger">{e.options}</span> : null}
                 </div>
               ) : null}
               <Switch label="Is active" checked={d.isActive} onCheckedChange={(isActive) => update(i, { isActive })} />

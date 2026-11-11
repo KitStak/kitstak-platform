@@ -76,8 +76,8 @@ const lineColumns = (exported: boolean): GridColumnDef<LineRow>[] => [
   { id: "billingFrequency", header: "Billing frequency", size: 130, enableSorting: false, meta: { defaultVisible: false }, cell: ({ row }) => FREQUENCY_LABELS[row.original.billingFrequency] ?? row.original.billingFrequency },
   { id: "activityDate", header: "Activity date", size: 110, cell: ({ row }) => (row.original.activityDate ? <Day value={row.original.activityDate} /> : "—") },
   { id: "referenceNumber", header: "Reference", size: 120, meta: { label: "Reference number" }, cell: ({ row }) => { const href = refHref(row.original.referenceNumber, row.original.operationType); return href ? <Link className="font-mono text-primary hover:underline" href={href} onClick={(e) => e.stopPropagation()}>{row.original.referenceNumber}</Link> : <span className="font-mono">{row.original.referenceNumber ?? "—"}</span>; } },
-  { id: "sku", header: "SKU", size: 110, cell: ({ row }) => { const sku = skuLevel(row.original) ? row.original.sku : null; return sku ? <span className="font-mono text-[12px]">{sku}</span> : <span className="text-faint" title="This charge covers the whole order / receipt, not one SKU">—</span>; } },
-  { id: "lpNumber", header: "LP / tracking", size: 140, meta: { defaultVisible: false }, cell: ({ row }) => <span className="font-mono text-[12px]">{row.original.lpNumber ?? "—"}</span> },
+  { id: "sku", header: "SKU", size: 110, cell: ({ row }) => { const sku = skuLevel(row.original) ? row.original.sku : null; return sku ? <span className="font-mono text-xs">{sku}</span> : <span className="text-faint" title="This charge covers the whole order / receipt, not one SKU">—</span>; } },
+  { id: "lpNumber", header: "LP / tracking", size: 140, meta: { defaultVisible: false }, cell: ({ row }) => <span className="font-mono text-xs">{row.original.lpNumber ?? "—"}</span> },
   { id: "chargeBy", header: "Charge by", size: 120, enableSorting: false, cell: ({ row }) => row.original.chargeBy },
   { id: "quantity", header: "Qty", size: 70, meta: { align: "right", label: "Quantity" }, cell: ({ row }) => <div className="text-right tabular-nums">{num(row.original.quantity, row.original.quantity % 1 ? 2 : 0)}</div> },
   { id: "unitPrice", header: "Unit price", size: 95, meta: { align: "right" }, cell: ({ row }) => <div className="text-right tabular-nums">{num(row.original.unitPrice, 4)}</div> },
@@ -210,20 +210,20 @@ function CachedBillHeader({ row }: { readonly row: ReportRow }) {
           <div className="flex flex-wrap items-start gap-3">
             <div className="min-w-0 flex-[1_1_100%] lg:flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="whitespace-nowrap text-[20px] font-semibold tabular-nums text-foreground">Bill {row.billNumber}</h1>
+                <h1 className="whitespace-nowrap text-lg font-semibold tabular-nums text-foreground">Bill {row.billNumber}</h1>
                 {row.calcStatus === "Failed" ? <BillingPill status="Failed" /> : <><BillingPill status={row.billStatus} /><BillingPill status={row.calcStatus} /></>}
               </div>
-              <p className="mt-0.5 truncate whitespace-nowrap text-[13px] text-secondary"><Link className="text-primary hover:underline" href={`/billing/${row.contractId}`}>{row.contractName}</Link> · {row.clientName} · {row.warehouseCode}</p>
+              <p className="mt-0.5 truncate whitespace-nowrap text-sm text-secondary"><Link className="text-primary hover:underline" href={`/billing/${row.contractId}`}>{row.contractName}</Link> · {row.clientName} · {row.warehouseCode}</p>
             </div>
             <Skeleton className="h-8 w-80" />
           </div>
-          <dl className="grid grid-cols-2 gap-4 border-t border-border pt-4 text-[13px] md:grid-cols-3 lg:grid-cols-6">
+          <dl className="grid grid-cols-2 gap-4 border-t border-border pt-4 text-sm md:grid-cols-3 lg:grid-cols-6">
             {[
               ["Period", dates.period(row.periodStart, row.periodEnd)], ["Billing frequency", FREQUENCY_LABELS[row.frequency] ?? row.frequency],
               ["Calculated", dates.at(row.calculatedAt)], ["Created by", row.createdByName ?? "Scheduler"],
               ["Exported to integration", row.exportedToIntegration ? "Yes · lines Sent" : row.billStatus === "Approved" ? "No · ready to export" : "No · approve first"],
-            ].map(([k, v]) => <div key={k}><dt className="text-[11px] font-semibold uppercase tracking-wide text-faint">{k}</dt><dd className="mt-0.5 tabular-nums text-foreground">{v}</dd></div>)}
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-faint">Total</dt><dd className="mt-0.5 text-[20px] font-semibold tabular-nums text-foreground">{moneyRail(row.totalPrice, row.currency)}</dd></div>
+            ].map(([k, v]) => <div key={k}><dt className="text-2xs font-semibold text-faint">{k}</dt><dd className="mt-0.5 tabular-nums text-foreground">{v}</dd></div>)}
+            <div><dt className="text-2xs font-semibold text-faint">Total</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">{moneyRail(row.totalPrice, row.currency)}</dd></div>
           </dl>
         </section>
         <Skeleton className="h-8 w-64" />
@@ -270,11 +270,11 @@ export function BillingReportDetailPage({ id }: { readonly id: string }) {
           <div className="flex flex-wrap items-start gap-3">
             <div className="min-w-0 flex-[1_1_100%] lg:flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="whitespace-nowrap text-[20px] font-semibold tabular-nums text-foreground">Bill {b.billNumber}</h1>
+                <h1 className="whitespace-nowrap text-lg font-semibold tabular-nums text-foreground">Bill {b.billNumber}</h1>
                 <DisabledReason reason={!perms.approve ? NO_PERMISSION : b.billStatus === "Canceled" ? "Canceled bills are final" : null}><Button size="icon-sm" variant="ghost" aria-label="Edit info" disabled={!perms.approve || b.billStatus === "Canceled"} onClick={() => setInfo(true)}><Pencil className="h-4 w-4" /></Button></DisabledReason>
                 {b.calcStatus === "Failed" ? <BillingPill status="Failed" /> : <><BillingPill status={b.billStatus} /><BillingPill status={b.calcStatus} />{b.outdatedReason ? <BillingPill status="Outdated" /> : null}</>}
               </div>
-              <p className="mt-0.5 truncate whitespace-nowrap text-[13px] text-secondary" title={`${b.contractName} · ${b.clientName} · ${b.warehouseCode}`}><Link className="text-primary hover:underline" href={`/billing/${b.contractId}`}>{b.contractName}</Link> · {b.clientName} · {b.warehouseCode}</p>
+              <p className="mt-0.5 truncate whitespace-nowrap text-sm text-secondary" title={`${b.contractName} · ${b.clientName} · ${b.warehouseCode}`}><Link className="text-primary hover:underline" href={`/billing/${b.contractId}`}>{b.contractName}</Link> · {b.clientName} · {b.warehouseCode}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="ghost" onClick={() => setLog(true)}><History className="h-4 w-4" />Change log</Button>
@@ -291,13 +291,13 @@ export function BillingReportDetailPage({ id }: { readonly id: string }) {
               </DropdownMenu>
             </div>
           </div>
-          <dl className="grid grid-cols-2 gap-4 border-t border-border pt-4 text-[13px] md:grid-cols-3 lg:grid-cols-6">
+          <dl className="grid grid-cols-2 gap-4 border-t border-border pt-4 text-sm md:grid-cols-3 lg:grid-cols-6">
             {[
               ["Period", dates.period(b.periodStart, b.periodEnd)], ["Billing frequency", FREQUENCY_LABELS[b.frequency] ?? b.frequency],
               ["Calculated", dates.at(b.calculatedAt)], ["Created by", b.createdByName ?? "Scheduler"],
               ["Exported to integration", b.exportedToIntegration ? "Yes · lines Sent" : b.billStatus === "Approved" ? "No · ready to export" : "No · approve first"],
-            ].map(([k, v]) => <div key={k}><dt className="text-[11px] font-semibold uppercase tracking-wide text-faint">{k}</dt><dd className="mt-0.5 tabular-nums text-foreground">{v}</dd></div>)}
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-faint">Total</dt><dd className="mt-0.5 text-[20px] font-semibold tabular-nums text-foreground">{moneyRail(b.totalPrice, b.currency)}</dd></div>
+            ].map(([k, v]) => <div key={k}><dt className="text-2xs font-semibold text-faint">{k}</dt><dd className="mt-0.5 tabular-nums text-foreground">{v}</dd></div>)}
+            <div><dt className="text-2xs font-semibold text-faint">Total</dt><dd className="mt-0.5 text-lg font-semibold tabular-nums text-foreground">{moneyRail(b.totalPrice, b.currency)}</dd></div>
           </dl>
         </section>
         {b.outdatedReason ? <Callout variant="attention" title="This draft no longer matches its activity">{b.outdatedReason} <Link className="font-medium text-primary hover:underline" href={`/billing/${b.contractId}`}>Open the contract to recalculate</Link> (Calculate › Replace the existing draft bill).</Callout> : null}
@@ -312,14 +312,14 @@ export function BillingReportDetailPage({ id }: { readonly id: string }) {
               <Button size="sm" variant="ghost" onClick={() => downloadConsolidated(b)}>CSV</Button>
             </div>
             <div className="overflow-x-auto rounded-lg border border-border bg-surface">
-              <table className="w-full text-left text-[13px]">
-                <thead className="bg-surface-sunken text-[11px] font-semibold uppercase tracking-wide text-secondary">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-surface-sunken text-2xs font-semibold text-secondary">
                   <tr>{["Fee name", "Operation", "Fee by", "Charge by", "From qty", "To qty", "Quantity", "Unit price", "Total price", "Min/max adj.", "Adjusted price"].map((h, i) => <th key={h} className={i >= 4 ? "px-3 py-2 text-right" : "px-3 py-2"}>{h}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {b.consolidated.map((l) => (
                     <tr key={l.id} className="hover:bg-surface-sunken/40">
-                      <td className="px-3 py-2 font-medium text-foreground">{l.feeName}{l.note ? <div className="text-[11px] font-normal text-faint">{l.note}</div> : null}</td><td className="px-3 py-2"><OperationPill operation={l.operationType} /></td><td className="px-3 py-2">{l.feeBy}</td><td className="px-3 py-2">{l.chargeBy}</td>
+                      <td className="px-3 py-2 font-medium text-foreground">{l.feeName}{l.note ? <div className="text-2xs font-normal text-faint">{l.note}</div> : null}</td><td className="px-3 py-2"><OperationPill operation={l.operationType} /></td><td className="px-3 py-2">{l.feeBy}</td><td className="px-3 py-2">{l.chargeBy}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{l.fromQty !== null ? num(l.fromQty, 0) : "—"}</td><td className="px-3 py-2 text-right tabular-nums">{l.fromQty === null ? "—" : l.toQty === null ? "∞" : num(l.toQty, 0)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{num(l.quantity, l.quantity % 1 ? 2 : 0)}</td><td className="px-3 py-2 text-right tabular-nums">{num(l.unitPrice, 4)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{num(l.totalPrice)}</td>
@@ -328,14 +328,14 @@ export function BillingReportDetailPage({ id }: { readonly id: string }) {
                     </tr>
                   ))}
                 </tbody>
-                <tfoot className="bg-surface-sunken/60 text-[13px]">
-                  <tr><td className="px-3 py-2 font-semibold" colSpan={9}>{byFee.size} fees{adjustments ? ` · min/max adjustments ${num(adjustments)}` : ""}</td><td /><td className="px-3 py-2 text-right text-[15px] font-semibold tabular-nums">{moneyGrid(b.totalPrice, b.currency)}</td></tr>
+                <tfoot className="bg-surface-sunken/60 text-sm">
+                  <tr><td className="px-3 py-2 font-semibold" colSpan={9}>{byFee.size} fees{adjustments ? ` · min/max adjustments ${num(adjustments)}` : ""}</td><td /><td className="px-3 py-2 text-right text-base font-semibold tabular-nums">{moneyGrid(b.totalPrice, b.currency)}</td></tr>
                 </tfoot>
               </table>
             </div>
             {(() => {
               const zero = [...byFee.keys()].filter((name) => b.consolidated.filter((l) => l.feeName === name).every((l) => l.adjustedPrice === 0));
-              return <p className="text-[12px] text-faint">Every fee on the contract is listed. {zero.length ? `${zero.length} ${zero.length === 1 ? "fee" : "fees"} (${zero.join(", ")}) had no billable activity and came to 0.` : "All fees had billable activity."}</p>;
+              return <p className="text-xs text-faint">Every fee on the contract is listed. {zero.length ? `${zero.length} ${zero.length === 1 ? "fee" : "fees"} (${zero.join(", ")}) had no billable activity and came to 0.` : "All fees had billable activity."}</p>;
             })()}
             </div>
           )
