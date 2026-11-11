@@ -14,6 +14,7 @@
  */
 import { sql, type SQL } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
+import { AppError } from "@/server/api/errors";
 
 /** Rows of a raw `db.execute()` / query-builder result, whichever driver produced it. */
 export function rowsOf<T>(result: unknown): T[] {
@@ -66,22 +67,84 @@ export async function dbRun(db: AppDb, query: SQL): Promise<{ readonly rowCount:
  */
 export const WRITE_LOCK_KEY = 7_202_611_501;
 
-/** Serialises writers: blocks until no other write transaction holds the app lock. Transaction-scoped. */
-export async function takeWriteLock(tx: AppDb): Promise<void> {
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(${sql.raw(String(WRITE_LOCK_KEY))})`);
+/** How long a writer waits for the app write lock (and its in-process turn) before giving up with BUSY. */
+export const WRITE_LOCK_WAIT_MS = 20_000;
+const WRITE_LOCK_POLL_MS = 50;
+
+function busyError(): AppError {
+  return new AppError("BUSY", "The system is busy finishing another change. Please try again in a moment.", { headers: { "Retry-After": "5" } });
+}
+
+/**
+ * Serialises writers: waits until no other write transaction holds the app lock. Transaction-scoped
+ * and re-entrant. Polls `pg_try_advisory_xact_lock` instead of blocking in the database, so a
+ * stuck or very long writer makes later writers fail fast with BUSY (503) rather than hang forever.
+ */
+export async function takeWriteLock(tx: AppDb, waitMs: number = WRITE_LOCK_WAIT_MS): Promise<void> {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const row = await dbGet<{ locked: boolean }>(tx, sql`SELECT pg_try_advisory_xact_lock(${sql.raw(String(WRITE_LOCK_KEY))}) AS locked`);
+    if (row?.locked) return;
+    if (Date.now() >= deadline) throw busyError();
+    await new Promise((resolve) => setTimeout(resolve, WRITE_LOCK_POLL_MS));
+  }
+}
+
+/**
+ * Per-process writer gate. Only one write transaction per server instance may hold (or wait
+ * for) a pooled connection at a time. Without it, a few writers queued behind the app lock
+ * each pin a connection, the small pool (3 on Vercel) runs dry and every READ stalls too:
+ * pages sit on "Still loading" while one long write runs.
+ */
+const GATE_KEY = Symbol.for("kitstak.writeGate");
+type GateHolder = { tail: Promise<void> };
+function gate(): GateHolder {
+  const g = globalThis as unknown as Record<symbol, GateHolder | undefined>;
+  return (g[GATE_KEY] ??= { tail: Promise.resolve() });
+}
+
+async function enterWriteGate(waitMs: number): Promise<() => void> {
+  const holder = gate();
+  const previous = holder.tail;
+  let release: () => void = () => {};
+  holder.tail = new Promise<void>((resolve) => { release = resolve; });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), waitMs); });
+  const outcome = await Promise.race([previous.then(() => "ready" as const), timedOut]);
+  clearTimeout(timer);
+  if (outcome === "timeout") {
+    // Give up our place: pass the turn on as soon as the writer ahead of us finishes.
+    void previous.then(release);
+    throw busyError();
+  }
+  return release;
+}
+
+/** True for a drizzle transaction/savepoint handle (as opposed to the root database). */
+function isTransaction(db: AppDb): boolean {
+  return typeof (db as { rollback?: unknown }).rollback === "function";
 }
 
 /**
  * Runs `fn` in a transaction that holds the app write lock. Use for EVERY write path that
  * is not a `defineRoute` mutation (scheduler jobs, cron tick, imports, seeds, scripts,
  * background tasks). Called with an open transaction it nests as a savepoint (the lock is
- * re-entrant within one transaction).
+ * re-entrant within one transaction) and skips the in-process gate, which the outer
+ * transaction already holds or deliberately bypassed.
  */
 export async function withWriteTx<T>(db: AppDb, fn: (tx: AppDb) => Promise<T>): Promise<T> {
-  return db.transaction(async (tx) => {
-    await takeWriteLock(tx);
-    return await fn(tx);
-  });
+  const run = (): Promise<T> =>
+    db.transaction(async (tx) => {
+      await takeWriteLock(tx);
+      return await fn(tx);
+    });
+  if (isTransaction(db)) return run();
+  const release = await enterWriteGate(WRITE_LOCK_WAIT_MS);
+  try {
+    return await run();
+  } finally {
+    release();
+  }
 }
 
 export type BestEffortResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: unknown };

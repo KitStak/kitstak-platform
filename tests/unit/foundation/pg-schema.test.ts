@@ -136,6 +136,26 @@ describe("on PGlite", () => {
     await expect(t.db.transaction(async (tx) => { await takeWriteLock(tx); await takeWriteLock(tx); })).resolves.toBeUndefined();
   });
 
+  it("withWriteTx runs one writer at a time per process and nests without deadlock", async () => {
+    const events: string[] = [];
+    const writer = (name: string) => withWriteTx(t.db, async (tx) => {
+      events.push(`${name}:start`);
+      await withWriteTx(tx, async (inner) => { await inner.insert(schema.tags).values({ name, color: "Red" }); });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      events.push(`${name}:end`);
+    });
+    await Promise.all([writer("W1"), writer("W2"), writer("W3")]);
+    expect(events).toEqual(["W1:start", "W1:end", "W2:start", "W2:end", "W3:start", "W3:end"]);
+    // A failed writer still passes the turn on.
+    await expect(withWriteTx(t.db, async () => { throw new Error("boom"); })).rejects.toThrow("boom");
+    await expect(withWriteTx(t.db, async () => "ok")).resolves.toBe("ok");
+  });
+
+  it("takeWriteLock gives up with BUSY (503) when another writer keeps the lock", async () => {
+    const stuck = { execute: async () => ({ rows: [{ locked: false }] }) } as unknown as Parameters<typeof takeWriteLock>[0];
+    await expect(takeWriteLock(stuck, 0)).rejects.toMatchObject({ code: "BUSY", status: 503 });
+  });
+
   it("a caught DB error inside a savepoint leaves the transaction usable", async () => {
     await withWriteTx(t.db, async (tx) => {
       await tx.insert(schema.tags).values({ name: "Dup", color: "Red" });
