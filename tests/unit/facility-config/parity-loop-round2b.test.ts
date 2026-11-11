@@ -118,9 +118,9 @@ describe("location detail", () => {
     expect(tabFromParam(null)).toBe("contents");
     expect(tabFromParam("bogus")).toBe("contents");
   });
-  it("optimistic patch carries the saved values in the detail shape", () => {
+  it("optimistic patch carries the saved values in the detail shape", async () => {
     const form = newLocationForm("w");
-    const patch = savedPatch({ ...form, info: { ...form.info, code: " A-9 ", aisle: "Y", walkingPathPriority: 9991, level: 2, barcode: "" }, customFields: { textBox1: "x" } });
+    const patch = await savedPatch({ ...form, info: { ...form.info, code: " A-9 ", aisle: "Y", walkingPathPriority: 9991, level: 2, barcode: "" }, customFields: { textBox1: "x" } });
     expect(patch).toMatchObject({ code: "A-9", barcode: "A-9", aisle: "Y", walkingPathPriority: 9991, level: "2", customFields: { textBox1: "x" } });
   });
 });

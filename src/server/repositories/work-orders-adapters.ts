@@ -42,16 +42,16 @@ interface ExceptionInput {
 
 type ExceptionWriter = (tx: Tx, ctx: DomainCtx, input: ExceptionInput & { readonly waveNo: string; readonly explanation: string }) => void;
 
-export function recordWorkOrderException(tx: Tx, ctx: DomainCtx, input: ExceptionInput): void {
+export async function recordWorkOrderException(tx: Tx, ctx: DomainCtx, input: ExceptionInput): Promise<void> {
   const shared = (allocationDomain as unknown as { readonly recordWorkOrderException?: ExceptionWriter }).recordWorkOrderException;
   const payload = { ...input, waveNo: WORK_ORDER_EXCEPTION_WAVE, explanation: allocationDomain.EXPLANATION_SHORTAGE };
   if (typeof shared === "function") {
-    shared(tx, ctx, payload);
+    await shared(tx, ctx, payload);
     return;
   }
-  tx.insert(schema.allocationExceptions).values({
+  await tx.insert(schema.allocationExceptions).values({
     orderId: input.workOrder.id, waveNo: WORK_ORDER_EXCEPTION_WAVE, algorithmName: WORK_ORDER_ALGORITHM, algorithmRuleName: null,
     shortageProductId: input.productId, inventoryUomQty: Math.max(0, input.inventoryQty), orderLineQty: input.requiredQty,
     explanation: allocationDomain.EXPLANATION_SHORTAGE, runBy: ctx.source, warehouseId: input.workOrder.warehouseId, clientId: input.workOrder.clientId,
-  }).run();
+  });
 }

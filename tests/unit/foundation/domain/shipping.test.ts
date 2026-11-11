@@ -17,23 +17,23 @@ import { execute } from "@/server/domain/tasks";
 import { createWorld, orderInput, type World } from "./fixtures";
 
 let w: World;
-beforeEach(() => { w = createWorld(); });
+beforeEach(async () => { w = await createWorld(); });
 afterEach(() => w.close());
 
 const pkg = { weightOz: 20, length: 10, width: 8, height: 4 };
 
 /** Order taken through allocation, pick and pack -> Ready to Ship. */
-function packedOrder(qty = 2): string {
-  ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 3 });
-  const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]));
-  allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
-  const { jobIds: [jobId] } = createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
-  const tasks = w.db.select().from(schema.tasks).where(eq(schema.tasks.jobId, jobId)).all();
-  execute(w.db, w.ctx, { taskIds: tasks.filter((t) => t.taskType === "Picking").map((t) => t.id), targetLocationId: w.loc.pick });
-  execute(w.db, w.ctx, { taskIds: tasks.filter((t) => t.taskType === "Packing").map((t) => t.id), targetLocationId: w.loc.pack });
+async function packedOrder(qty = 2): Promise<string> {
+  await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 3 });
+  const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]));
+  await allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
+  const { jobIds: [jobId] } = await createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
+  const tasks = await w.db.select().from(schema.tasks).where(eq(schema.tasks.jobId, jobId));
+  await execute(w.db, w.ctx, { taskIds: tasks.filter((t) => t.taskType === "Picking").map((t) => t.id), targetLocationId: w.loc.pick });
+  await execute(w.db, w.ctx, { taskIds: tasks.filter((t) => t.taskType === "Packing").map((t) => t.id), targetLocationId: w.loc.pack });
   return o.id;
 }
-const status = (id: string) => w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).get()?.status;
+const status = async (id: string) => (await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).limit(1))[0]?.status;
 
 describe("sandbox carrier", () => {
   it("computes zones, rates and valid tracking numbers", () => {
@@ -72,36 +72,36 @@ describe("sandbox carrier", () => {
 
 describe("rate shopping", () => {
   it("returns sorted quotes with markup and logs calls", async () => {
-    const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
     const r = await rateShop(w.db, w.ctx, { orderId: o.id, packages: [pkg] });
     expect(r.errors).toEqual([]);
     expect(r.quotes.length).toBe(3);
     expect(r.selected?.price).toBe(Math.min(...r.quotes.map((q) => q.price)));
-    w.db.insert(schema.carrierConnectionClients).values({ connectionId: w.carrierConnectionId, clientId: w.clientId, markupType: "Percentage", markupAmount: 10 }).run();
-    const conn = w.db.select().from(schema.carrierConnections).get();
-    expect(applyMarkup(w.db, conn as NonNullable<typeof conn>, w.clientId, 10)).toBe(11);
-    expect(applyMarkup(w.db, { ...(conn as NonNullable<typeof conn>), settings: { generalMarkup: { type: "Fixed Price", amount: 2 } } }, w.otherClientId, 10)).toBe(12);
-    const preset = w.db.insert(schema.rateShoppingPresets).values({ name: "Fast", description: "f", warehouseId: w.warehouseId, clientId: w.clientId, method: "Fastest" }).returning().get();
-    w.db.insert(schema.rateShoppingPresetServices).values([{ presetId: preset.id, carrierServiceId: w.serviceIds.nextDay }, { presetId: preset.id, carrierServiceId: w.serviceIds.ground }]).run();
+    await w.db.insert(schema.carrierConnectionClients).values({ connectionId: w.carrierConnectionId, clientId: w.clientId, markupType: "Percentage", markupAmount: 10 });
+    const conn = (await w.db.select().from(schema.carrierConnections).limit(1))[0];
+    expect(await applyMarkup(w.db, conn as NonNullable<typeof conn>, w.clientId, 10)).toBe(11);
+    expect(await applyMarkup(w.db, { ...(conn as NonNullable<typeof conn>), settings: { generalMarkup: { type: "Fixed Price", amount: 2 } } }, w.otherClientId, 10)).toBe(12);
+    const preset = (await w.db.insert(schema.rateShoppingPresets).values({ name: "Fast", description: "f", warehouseId: w.warehouseId, clientId: w.clientId, method: "Fastest" }).returning())[0];
+    await w.db.insert(schema.rateShoppingPresetServices).values([{ presetId: preset.id, carrierServiceId: w.serviceIds.nextDay }, { presetId: preset.id, carrierServiceId: w.serviceIds.ground }]);
     const fast = await rateShop(w.db, w.ctx, { orderId: o.id, packages: [pkg], presetId: preset.id });
     expect(fast.selected?.serviceCode).toBe("SBX_NEXT_DAY");
-    const inTime = w.db.insert(schema.rateShoppingPresets).values({ name: "T", description: "t", warehouseId: w.warehouseId, clientId: w.clientId, method: "Cheapest In Time", transitDays: 3, useAllServices: true }).returning().get();
+    const inTime = (await w.db.insert(schema.rateShoppingPresets).values({ name: "T", description: "t", warehouseId: w.warehouseId, clientId: w.clientId, method: "Cheapest In Time", transitDays: 3, useAllServices: true }).returning())[0];
     expect((await rateShop(w.db, w.ctx, { orderId: o.id, packages: [pkg], presetId: inTime.id })).quotes.every((q) => q.transitDays <= 3)).toBe(true);
     const bad = await rateShop(w.db, w.ctx, { orderId: o.id, packages: [{ ...pkg, weightOz: 0 }] });
     expect(bad.errors[0].message).toMatch(/weight/);
-    expect(w.db.select().from(schema.carrierCallLogs).all().some((l) => l.status === "Error")).toBe(true);
+    expect((await w.db.select().from(schema.carrierCallLogs)).some((l) => l.status === "Error")).toBe(true);
     await expect(rateShop(w.db, w.ctx, { orderId: o.id, packages: [pkg], presetId: "nope" })).rejects.toThrow(/preset not found/);
   });
 });
 
 describe("labels and shipping", () => {
   it("creates a multi-package ZPL label with a master tracking number, voids it and relabels", async () => {
-    const id = packedOrder();
+    const id = await packedOrder();
     await expect(createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, packages: [] }, { files: w.files })).rejects.toThrow(/At least one/);
     const r = await createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.priority, packages: [pkg, pkg], format: "ZPL" }, { files: w.files });
     expect(r.shipments).toHaveLength(2);
     expect(new Set(r.shipments.map((s) => s.masterTrackingNumber))).toEqual(new Set([r.masterTrackingNumber]));
-    const file = w.db.select().from(schema.files).where(eq(schema.files.id, r.shipments[1].labelFileId as string)).get();
+    const file = (await w.db.select().from(schema.files).where(eq(schema.files.id, r.shipments[1].labelFileId as string)).limit(1))[0];
     expect(fs.readFileSync(path.join(w.filesRoot, file?.id as string), "utf8").startsWith("^XA")).toBe(true);
     await expect(createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, packages: [pkg] }, { files: w.files })).rejects.toThrow(/already has an active/);
     expect((await voidLabel(w.db, w.ctx, { shipmentId: r.shipments[0].id })).voided).toBe(2);
@@ -111,63 +111,63 @@ describe("labels and shipping", () => {
   });
 
   it("rejects labels for unready orders and bad carriers; logs carrier errors", async () => {
-    const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
     // Pre-pack labels are allowed on Open orders (REQ-R4-4); a second active label is refused.
     await createLabel(w.db, w.ctx, { orderId: o.id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, packages: [pkg] });
     await expect(createLabel(w.db, w.ctx, { orderId: o.id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, packages: [pkg] })).rejects.toThrow(/already has an active shipping label/);
-    const id = packedOrder();
+    const id = await packedOrder();
     await expect(createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: "nope", carrierServiceId: w.serviceIds.ground, packages: [pkg] })).rejects.toThrow(/Carrier connection not found/);
     await expect(createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: "nope", packages: [pkg] })).rejects.toThrow(/service not found/);
     await expect(createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, packages: [{ ...pkg, weightOz: 99999 }] }, { files: w.files })).rejects.toThrow(/150 lb/);
-    expect(w.db.select().from(schema.carrierCallLogs).all().find((l) => l.step === "LabelGeneration" && l.status === "Error")).toBeDefined();
-    const other = w.db.insert(schema.carrierConnections).values({ provider: "acme-freight", setupName: "Acme Freight", accountPrefix: "ACM", warehouseId: w.warehouseId, settings: {} }).returning().get();
+    expect((await w.db.select().from(schema.carrierCallLogs)).find((l) => l.step === "LabelGeneration" && l.status === "Error")).toBeDefined();
+    const other = (await w.db.insert(schema.carrierConnections).values({ provider: "acme-freight", setupName: "Acme Freight", accountPrefix: "ACM", warehouseId: w.warehouseId, settings: {} }).returning())[0];
     await expect(createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: other.id, carrierServiceId: w.serviceIds.ground, packages: [pkg] })).rejects.toThrow(/not configured yet/);
-    w.db.update(schema.carrierConnections).set({ allClients: false }).where(eq(schema.carrierConnections.id, w.carrierConnectionId)).run();
+    await w.db.update(schema.carrierConnections).set({ allClients: false }).where(eq(schema.carrierConnections.id, w.carrierConnectionId));
     await expect(createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, packages: [pkg] })).rejects.toThrow(/not available for this client/);
   });
 
   it("ships, maintains the EOD manifest from label time, opens a new one after close and creates a return label", async () => {
-    const id = packedOrder();
-    expect(shipOrders(w.db, w.ctx, { orderIds: [id] }).failed[0].message).toMatch(/no active shipping label/);
+    const id = await packedOrder();
+    expect((await shipOrders(w.db, w.ctx, { orderIds: [id] })).failed[0].message).toMatch(/no active shipping label/);
     await createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, packages: [pkg] }, { files: w.files });
-    const r = shipOrders(w.db, w.ctx, { orderIds: [id], shipDate: "2026-11-05T15:00:00Z" });
+    const r = await shipOrders(w.db, w.ctx, { orderIds: [id], shipDate: "2026-11-05T15:00:00Z" });
     expect(r.succeeded).toEqual([id]);
-    expect(status(id)).toBe("Shipped");
+    expect(await status(id)).toBe("Shipped");
     // The label joins the open manifest of its (warehouse-local) label date when it is created.
     const labelDay = localDate(new Date(), "America/Chicago");
-    const eod = w.db.select().from(schema.endOfDayManifests).get();
+    const eod = (await w.db.select().from(schema.endOfDayManifests).limit(1))[0];
     expect(eod).toMatchObject({ shipDate: labelDay, totalPackages: 1, carrierPrefix: "SBX", sequence: 1, status: "Open" });
-    await expect(voidLabel(w.db, w.ctx, { shipmentId: w.db.select().from(schema.shipments).get()?.id as string })).rejects.toThrow(/shipped/);
-    expect(closeEndOfDay(w.db, w.ctx, { manifestId: eod?.id as string }).status).toBe("Closed");
-    expect(() => closeEndOfDay(w.db, w.ctx, { manifestId: eod?.id as string })).toThrow(/already closed/);
-    expect(() => closeEndOfDay(w.db, w.ctx, { manifestId: "x" })).toThrow(/not found/);
-    const id2 = packedOrder(1);
+    await expect(voidLabel(w.db, w.ctx, { shipmentId: (await w.db.select().from(schema.shipments).limit(1))[0]?.id as string })).rejects.toThrow(/shipped/);
+    expect((await closeEndOfDay(w.db, w.ctx, { manifestId: eod?.id as string })).status).toBe("Closed");
+    await expect(async () => await closeEndOfDay(w.db, w.ctx, { manifestId: eod?.id as string })).rejects.toThrow(/already closed/);
+    await expect(async () => await closeEndOfDay(w.db, w.ctx, { manifestId: "x" })).rejects.toThrow(/not found/);
+    const id2 = await packedOrder(1);
     await createLabel(w.db, w.ctx, { orderId: id2, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, packages: [pkg] }, { files: w.files });
     // After close, the next label opens a second manifest for the same carrier/day (shipping REQ-2).
-    expect(shipOrders(w.db, w.ctx, { orderIds: [id2], shipDate: "2026-11-05T16:00:00Z" }).succeeded).toEqual([id2]);
-    const manifests = w.db.select().from(schema.endOfDayManifests).all();
+    expect((await shipOrders(w.db, w.ctx, { orderIds: [id2], shipDate: "2026-11-05T16:00:00Z" })).succeeded).toEqual([id2]);
+    const manifests = await w.db.select().from(schema.endOfDayManifests);
     expect(manifests.map((m) => [m.sequence, m.status, m.totalPackages])).toEqual([[1, "Closed", 1], [2, "Open", 1]]);
-    const ro = w.db.insert(schema.returnOrders).values({ rmaCode: "RMA9", shipmentOrderId: id, warehouseId: w.warehouseId, clientId: w.clientId }).returning().get();
+    const ro = (await w.db.insert(schema.returnOrders).values({ rmaCode: "RMA9", shipmentOrderId: id, warehouseId: w.warehouseId, clientId: w.clientId }).returning())[0];
     const ret = await createReturnLabel(w.db, w.ctx, { orderId: id, returnOrderId: ro.id, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.priority, package: pkg }, { files: w.files });
     expect(ret.shipment.labelType).toBe("Return Label");
-    expect(w.db.select().from(schema.returnOrders).where(eq(schema.returnOrders.id, ro.id)).get()).toMatchObject({ status: "In Transit", trackingNumber: ret.trackingNumber });
-    expect(w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).get()?.returnTrackingNumbers).toEqual([ret.trackingNumber]);
+    expect((await w.db.select().from(schema.returnOrders).where(eq(schema.returnOrders.id, ro.id)).limit(1))[0]).toMatchObject({ status: "In Transit", trackingNumber: ret.trackingNumber });
+    expect((await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).limit(1))[0]?.returnTrackingNumbers).toEqual([ret.trackingNumber]);
     expect((await voidLabel(w.db, w.ctx, { shipmentId: ret.shipment.id })).voided).toBe(1);
-    const unshipped = packedOrder(1);
+    const unshipped = await packedOrder(1);
     await expect(createReturnLabel(w.db, w.ctx, { orderId: unshipped, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.priority, package: pkg })).rejects.toThrow(/shipped orders/);
-    expect(ledger.reconcileLedger(w.db)).toEqual([]);
+    expect(await ledger.reconcileLedger(w.db)).toEqual([]);
   });
 
-  it("partially ships after a pack short and ships without a label when allowed", () => {
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 5 });
-    const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 3 }]));
-    allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
-    const { jobIds: [jobId] } = createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
-    const tasks = w.db.select().from(schema.tasks).where(eq(schema.tasks.jobId, jobId)).all();
-    execute(w.db, w.ctx, { taskIds: [tasks.find((t) => t.taskType === "Picking")?.id as string], targetLocationId: w.loc.pick });
-    execute(w.db, w.ctx, { taskIds: [tasks.find((t) => t.taskType === "Packing")?.id as string], targetLocationId: w.loc.pack, qty: 2 });
-    expect(shipOrders(w.db, w.ctx, { orderIds: [o.id], requireLabel: false }).succeeded).toEqual([o.id]);
-    expect(status(o.id)).toBe("Partially Shipped");
+  it("partially ships after a pack short and ships without a label when allowed", async () => {
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 5 });
+    const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 3 }]));
+    await allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
+    const { jobIds: [jobId] } = await createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
+    const tasks = await w.db.select().from(schema.tasks).where(eq(schema.tasks.jobId, jobId));
+    await execute(w.db, w.ctx, { taskIds: [tasks.find((t) => t.taskType === "Picking")?.id as string], targetLocationId: w.loc.pick });
+    await execute(w.db, w.ctx, { taskIds: [tasks.find((t) => t.taskType === "Packing")?.id as string], targetLocationId: w.loc.pack, qty: 2 });
+    expect((await shipOrders(w.db, w.ctx, { orderIds: [o.id], requireLabel: false })).succeeded).toEqual([o.id]);
+    expect(await status(o.id)).toBe("Partially Shipped");
     expect(localDate(new Date("2026-11-05T03:00:00Z"), "America/Chicago")).toBe("2026-11-04");
     expect(localDate(new Date("2026-11-05T03:00:00Z"), "Not/AZone")).toBe("2026-11-05");
   });
@@ -178,9 +178,9 @@ describe("labels and shipping", () => {
       async createLabel() { throw new Error("boom"); },
     };
     registerCarrierAdapter(fake);
-    const conn = w.db.insert(schema.carrierConnections).values({ provider: "fake-co", setupName: "Fake", accountPrefix: "FK", warehouseId: w.warehouseId, settings: {} }).returning().get();
-    const svc = w.db.insert(schema.carrierServices).values({ connectionId: conn.id, carrierCode: "FK", serviceCode: "SBX_GROUND", name: "G", transitDays: 2 }).returning().get();
-    const id = packedOrder();
+    const conn = (await w.db.insert(schema.carrierConnections).values({ provider: "fake-co", setupName: "Fake", accountPrefix: "FK", warehouseId: w.warehouseId, settings: {} }).returning())[0];
+    const svc = (await w.db.insert(schema.carrierServices).values({ connectionId: conn.id, carrierCode: "FK", serviceCode: "SBX_GROUND", name: "G", transitDays: 2 }).returning())[0];
+    const id = await packedOrder();
     await expect(createLabel(w.db, w.ctx, { orderId: id, carrierConnectionId: conn.id, carrierServiceId: svc.id, packages: [pkg] })).rejects.toThrow(/Carrier error: boom/);
   });
 });

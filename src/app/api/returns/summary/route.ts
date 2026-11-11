@@ -5,5 +5,5 @@ import { returnStatusCounts } from "@/server/repositories/returns-grid";
 
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.view,
-  handler: ({ db, auth, grid }) => returnStatusCounts(db, auth.viewScope, grid()),
+  handler: async ({ db, auth, grid }) => await returnStatusCounts(db, auth.viewScope, grid()),
 });

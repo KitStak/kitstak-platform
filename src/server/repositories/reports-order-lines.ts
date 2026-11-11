@@ -27,7 +27,7 @@ export function orderLinesSql(auth: AuthContext, days: DashboardDays = dashboard
            shipment_orders.client_id AS "clientId", c.name AS "client",
            p.sku AS "sku", p.name AS "productName", '/products/' || p.id AS "productHref", l.pack_type AS "packType",
            ${need} AS "requiredQty", l.picked_quantity AS "pickedQty", l.packed_quantity AS "packedQty",
-           MAX(${need} - l.picked_quantity, 0) AS "remainingToPick", MAX(${need} - l.packed_quantity, 0) AS "remainingToPack",
+           GREATEST(${need} - l.picked_quantity, 0) AS "remainingToPick", GREATEST(${need} - l.packed_quantity, 0) AS "remainingToPack",
            ${LINE_STATE_SQL} AS "lineState",
            shipment_orders.order_date AS "orderDate", shipment_orders.expected_ship_date AS "expectedShipDate"
     FROM order_lines l
@@ -43,12 +43,12 @@ export function orderLinesSql(auth: AuthContext, days: DashboardDays = dashboard
  * dashboard drilldown always carries its selection), else of the viewer's warehouses — the
  * same rule as the dashboard, so a part and the grid it opens agree after 7-8 PM local too.
  */
-export function orderLinesDays(db: AppDb, auth: AuthContext, query: ReportQuery, now: Date = new Date()): DashboardDays {
+export async function orderLinesDays(db: AppDb, auth: AuthContext, query: ReportQuery, now: Date = new Date()): Promise<DashboardDays> {
   const f = query.filters.find((x) => x.field === "warehouseId" && x.op === "in");
   const picked = f && f.op === "in" ? f.values.filter((id) => auth.viewScope.warehouseIds.includes(id)) : [];
-  return dashboardDays(dashboardZone(db, picked.length ? picked : auth.viewScope.warehouseIds).tz, now);
+  return dashboardDays((await dashboardZone(db, picked.length ? picked : auth.viewScope.warehouseIds)).tz, now);
 }
 
-export function listOrderLines(db: AppDb, auth: AuthContext, query: ReportQuery): ReportPage<Row> {
-  return runReport<Row>(db, orderLinesSql(auth, orderLinesDays(db, auth, query)), ORDER_LINES_DEF, query);
+export async function listOrderLines(db: AppDb, auth: AuthContext, query: ReportQuery): Promise<ReportPage<Row>> {
+  return await runReport<Row>(db, orderLinesSql(auth, await orderLinesDays(db, auth, query)), ORDER_LINES_DEF, query);
 }

@@ -8,32 +8,32 @@ const at = (ms: number): Date => new Date(T0.getTime() + ms);
 
 describe("durable rate limiter", () => {
   let t: TestDb;
-  afterEach(() => t.close());
+  afterEach(async () => await t.close());
 
-  it("allows up to the limit, then blocks with Retry-After", () => {
-    t = createTestDb();
-    expect(hitRateLimit(t.db, POLICY, "u1", at(0))).toMatchObject({ allowed: true, count: 1, remaining: 2 });
-    hitRateLimit(t.db, POLICY, "u1", at(1000));
-    expect(hitRateLimit(t.db, POLICY, "u1", at(2000))).toMatchObject({ allowed: true, count: 3, remaining: 0 });
-    const blocked = hitRateLimit(t.db, POLICY, "u1", at(10_000));
+  it("allows up to the limit, then blocks with Retry-After", async () => {
+    t = await createTestDb();
+    expect(await hitRateLimit(t.db, POLICY, "u1", at(0))).toMatchObject({ allowed: true, count: 1, remaining: 2 });
+    await hitRateLimit(t.db, POLICY, "u1", at(1000));
+    expect(await hitRateLimit(t.db, POLICY, "u1", at(2000))).toMatchObject({ allowed: true, count: 3, remaining: 0 });
+    const blocked = await hitRateLimit(t.db, POLICY, "u1", at(10_000));
     expect(blocked.allowed).toBe(false);
     expect(blocked.retryAfterSeconds).toBe(50);
   });
 
-  it("starts a new window after it elapses and keys subjects separately", () => {
-    t = createTestDb();
-    for (let i = 0; i < 4; i += 1) hitRateLimit(t.db, POLICY, "u1", at(i));
-    expect(hitRateLimit(t.db, POLICY, "u2", at(5)).allowed).toBe(true);
-    expect(hitRateLimit(t.db, POLICY, "u1", at(60_000)).count).toBe(1);
+  it("starts a new window after it elapses and keys subjects separately", async () => {
+    t = await createTestDb();
+    for (let i = 0; i < 4; i += 1) await hitRateLimit(t.db, POLICY, "u1", at(i));
+    expect((await hitRateLimit(t.db, POLICY, "u2", at(5))).allowed).toBe(true);
+    expect((await hitRateLimit(t.db, POLICY, "u1", at(60_000))).count).toBe(1);
   });
 
-  it("persists counters in SQLite and can be reset", () => {
-    t = createTestDb();
-    for (let i = 0; i < 3; i += 1) hitRateLimit(t.db, POLICY, "u1", at(i));
-    const row = t.sqlite.prepare("SELECT count FROM rate_limits WHERE key = ?").get("t:u1") as { count: number };
-    expect(row.count).toBe(3);
-    resetRateLimit(t.db, POLICY, "u1");
-    expect(hitRateLimit(t.db, POLICY, "u1", at(10)).count).toBe(1);
+  it("persists counters in the database and can be reset", async () => {
+    t = await createTestDb();
+    for (let i = 0; i < 3; i += 1) await hitRateLimit(t.db, POLICY, "u1", at(i));
+    const row = (await t.pg.query<{ count: number }>("SELECT count FROM rate_limits WHERE key = $1", ["t:u1"])).rows[0];
+    expect(row?.count).toBe(3);
+    await resetRateLimit(t.db, POLICY, "u1");
+    expect((await hitRateLimit(t.db, POLICY, "u1", at(10))).count).toBe(1);
   });
 
   it("trusts x-forwarded-for only with TRUST_PROXY=1", () => {

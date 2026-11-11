@@ -20,8 +20,8 @@ export const GET = defineRoute({
   permission: ["settings.locations.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   query: querySchema,
-  handler: ({ db, auth, params, query }) => {
-    const { rows, total } = listLocationLedger(db, auth, params.id, query);
+  handler: async ({ db, auth, params, query }) => {
+    const { rows, total } = await listLocationLedger(db, auth, params.id, query);
     return listResult(rows, { total, page: query.page, pageSize: query.ps, kind: query.kind });
   },
 });

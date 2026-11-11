@@ -6,9 +6,9 @@ import { createWorkflow, listWorkflows } from "@/server/repositories/workflows";
 
 export const GET = defineRoute({
   permission: "automation.workflows.view",
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const q = grid();
-    const { rows, total } = listWorkflows(db, auth, q);
+    const { rows, total } = await listWorkflows(db, auth, q);
     return listResult(rows, { total, page: q.page, pageSize: q.pageSize });
   },
 });
@@ -16,5 +16,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "automation.workflows.create",
   body: workflowSaveSchema,
-  handler: ({ db, auth, actor, body }) => created(createWorkflow(db, auth, actor, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createWorkflow(db, auth, actor, body)),
 });

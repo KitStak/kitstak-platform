@@ -7,5 +7,5 @@ import { INVENTORY_PERMISSIONS as P } from "@/lib/grid-defs/inventory/permission
 export const GET = defineRoute({
   permission: P.byLocationView,
   query: z.object({ kind: z.enum(["location", "lp"]), id: z.string().trim().min(1).max(64) }),
-  handler: ({ db, auth, query }) => (query.kind === "lp" ? lpSummary(db, auth, query.id) : locationSummary(db, auth, query.id)),
+  handler: async ({ db, auth, query }) => (query.kind === "lp" ? await lpSummary(db, auth, query.id) : await locationSummary(db, auth, query.id)),
 });

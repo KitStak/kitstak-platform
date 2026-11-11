@@ -6,9 +6,9 @@ import { updateOwnProfile } from "@/server/repositories/users-account";
 export const PATCH = defineRoute({
   permission: "settings.my_profile.view",
   body: profileSchema,
-  handler: ({ db, auth, actor, body, audit }) => {
-    const result = updateOwnProfile(db, auth, actor, body);
-    audit({ action: "user.profile_update", entity: "user", entityId: auth.user.id, detail: { emailChanged: result.emailChanged } });
+  handler: async ({ db, auth, actor, body, audit }) => {
+    const result = await updateOwnProfile(db, auth, actor, body);
+    await audit({ action: "user.profile_update", entity: "user", entityId: auth.user.id, detail: { emailChanged: result.emailChanged } });
     return result;
   },
 });

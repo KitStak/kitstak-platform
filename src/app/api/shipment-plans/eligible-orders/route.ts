@@ -8,9 +8,9 @@ import { listEligibleOrders } from "@/server/repositories/shipment-plans-lists";
 export const GET = defineRoute({
   permission: ["fulfillment.shipment_plan.create", "fulfillment.shipment_plan.edit"],
   query: z.object({ warehouseId: idSchema, clientId: idSchema.optional(), planId: idSchema.optional() }).loose(),
-  handler: ({ db, auth, grid, query }) => {
+  handler: async ({ db, auth, grid, query }) => {
     const q = grid();
-    const { rows, total } = listEligibleOrders(db, auth, q, query);
+    const { rows, total } = await listEligibleOrders(db, auth, q, query);
     return listResult(rows, { total, page: q.page, pageSize: q.pageSize });
   },
 });

@@ -23,34 +23,34 @@ export interface ReturnRulesState {
   readonly updatedAt: string;
 }
 
-function readDefaults(db: AppDb): Record<string, unknown> {
-  getCompany(db); // ensures the row exists
-  const row = db.select({ defaults: c.defaults }).from(c).where(eq(c.id, ID)).get();
+async function readDefaults(db: AppDb): Promise<Record<string, unknown>> {
+  await getCompany(db); // ensures the row exists
+  const row = (await db.select({ defaults: c.defaults }).from(c).where(eq(c.id, ID)).limit(1))[0];
   return (row?.defaults ?? {}) as unknown as Record<string, unknown>;
 }
 
 /** Current return rules (all on until an admin changes them). */
-export function getReturnRules(db: AppDb): ReturnRules {
-  return normalizeReturnRules(readDefaults(db).returnRules);
+export async function getReturnRules(db: AppDb): Promise<ReturnRules> {
+  return normalizeReturnRules((await readDefaults(db)).returnRules);
 }
 
-export function getReturnRulesState(db: AppDb): ReturnRulesState {
-  const rules = getReturnRules(db);
-  const company = getCompany(db);
+export async function getReturnRulesState(db: AppDb): Promise<ReturnRulesState> {
+  const rules = await getReturnRules(db);
+  const company = await getCompany(db);
   return { rules, version: company.version, updatedAt: company.updatedAt };
 }
 
-export function updateReturnRules(tx: AppDb, auth: AuthContext, actor: Actor, input: ReturnRulesInput): ReturnRulesState {
-  const company = getCompany(tx);
+export async function updateReturnRules(tx: AppDb, auth: AuthContext, actor: Actor, input: ReturnRulesInput): Promise<ReturnRulesState> {
+  const company = await getCompany(tx);
   assertVersion(company.version, input.version);
-  const defaults = readDefaults(tx);
+  const defaults = await readDefaults(tx);
   const before = normalizeReturnRules(defaults.returnRules);
   const next = Object.fromEntries(RETURN_RULE_KEYS.map((k) => [k, input[k]])) as ReturnRules;
   // Keep the other account defaults untouched; only `returnRules` changes.
-  tx.update(c).set({
+  await tx.update(c).set({
     defaults: { ...defaults, returnRules: next } as unknown as typeof c.$inferInsert.defaults,
     updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${c.version} + 1`,
-  }).where(eq(c.id, ID)).run();
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: COMPANY_ENTITY, entityId: ID, entityCode: "Return process" }, returnRulesView(before), returnRulesView(next));
-  return getReturnRulesState(tx);
+  }).where(eq(c.id, ID));
+  await logUpdate(tx, domainCtxOf(actor, auth), { entityType: COMPANY_ENTITY, entityId: ID, entityCode: "Return process" }, returnRulesView(before), returnRulesView(next));
+  return await getReturnRulesState(tx);
 }

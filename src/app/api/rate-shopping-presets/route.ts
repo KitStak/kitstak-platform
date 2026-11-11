@@ -6,9 +6,9 @@ import { createPreset, listPresets } from "@/server/repositories/rate-shopping";
 
 export const GET = defineRoute({
   permission: "automation.rate_shopping.view",
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const q = grid();
-    const { rows, total } = listPresets(db, auth, q);
+    const { rows, total } = await listPresets(db, auth, q);
     return listResult(rows, { total, page: q.page, pageSize: q.pageSize });
   },
 });
@@ -16,5 +16,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "automation.rate_shopping.create",
   body: presetSaveSchema,
-  handler: ({ db, auth, actor, body }) => created(createPreset(db, auth, actor, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createPreset(db, auth, actor, body)),
 });

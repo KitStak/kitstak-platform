@@ -23,6 +23,7 @@ import * as schema from "@/server/db/schema";
 import { stateMachines } from "@/server/domain";
 import { rollupJob } from "@/server/domain/progress";
 import { nowIso, systemCtx, type DomainCtx, type Tx } from "@/server/domain/types";
+import { dbAll, withWriteTx } from "@/server/db/sql";
 
 type JobStatus = (typeof schema.jobs.$inferSelect)["status"];
 
@@ -42,30 +43,30 @@ export interface SettleOutcome {
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** Removes links to orders the job no longer works on. Returns the number removed. */
-function dropReleasedOrders(tx: Tx, jobId: string): number {
-  const links = tx.select({ orderId: schema.jobOrders.orderId, soJob: schema.shipmentOrders.jobId }).from(schema.jobOrders)
+async function dropReleasedOrders(tx: Tx, jobId: string): Promise<number> {
+  const links = await tx.select({ orderId: schema.jobOrders.orderId, soJob: schema.shipmentOrders.jobId }).from(schema.jobOrders)
     .leftJoin(schema.shipmentOrders, eq(schema.shipmentOrders.id, schema.jobOrders.orderId))
-    .where(eq(schema.jobOrders.jobId, jobId)).all();
+    .where(eq(schema.jobOrders.jobId, jobId));
   let removed = 0;
   for (const link of links) {
-    const live = tx.select({ id: schema.tasks.id }).from(schema.tasks)
-      .where(and(eq(schema.tasks.jobId, jobId), eq(schema.tasks.orderId, link.orderId), ne(schema.tasks.status, "Cancelled"))).get();
+    const live = (await tx.select({ id: schema.tasks.id }).from(schema.tasks)
+      .where(and(eq(schema.tasks.jobId, jobId), eq(schema.tasks.orderId, link.orderId), ne(schema.tasks.status, "Cancelled"))).limit(1))[0];
     if (live) continue;
     // No task was ever built for it and the order still points here: mid-build, leave it.
-    const any = tx.select({ id: schema.tasks.id }).from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId), eq(schema.tasks.orderId, link.orderId))).get();
+    const any = (await tx.select({ id: schema.tasks.id }).from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId), eq(schema.tasks.orderId, link.orderId))).limit(1))[0];
     if (!any && link.soJob === jobId) continue;
-    tx.delete(schema.jobOrders).where(and(eq(schema.jobOrders.jobId, jobId), eq(schema.jobOrders.orderId, link.orderId))).run();
+    await tx.delete(schema.jobOrders).where(and(eq(schema.jobOrders.jobId, jobId), eq(schema.jobOrders.orderId, link.orderId)));
     if (link.soJob === jobId) {
-      tx.update(schema.shipmentOrders).set({ jobId: null }).where(eq(schema.shipmentOrders.id, link.orderId)).run();
+      await tx.update(schema.shipmentOrders).set({ jobId: null }).where(eq(schema.shipmentOrders.id, link.orderId));
     }
     removed += 1;
   }
   return removed;
 }
 
-function closingReason(tx: Tx, jobId: string, released: number, to: JobStatus): string {
-  const cancelled = tx.select({ n: sql<number>`COUNT(*)` }).from(schema.tasks)
-    .where(and(eq(schema.tasks.jobId, jobId), eq(schema.tasks.status, "Cancelled"))).get()?.n ?? 0;
+async function closingReason(tx: Tx, jobId: string, released: number, to: JobStatus): Promise<string> {
+  const cancelled = (await tx.select({ n: sql<number>`COUNT(*)` }).from(schema.tasks)
+    .where(and(eq(schema.tasks.jobId, jobId), eq(schema.tasks.status, "Cancelled"))).limit(1))[0]?.n ?? 0;
   const tasks = Number(cancelled) > 0 ? ` (${plural(Number(cancelled), "task")} cancelled)` : "";
   if (to === "Completed") return `remaining work cancelled${tasks}`;
   if (released > 0) return `${released === 1 ? "last order released" : `${released} orders released`}${tasks}`;
@@ -73,35 +74,35 @@ function closingReason(tx: Tx, jobId: string, released: number, to: JobStatus): 
 }
 
 /** Settles one job (see the module comment). Returns null when nothing changed. */
-export function settleJob(tx: Tx, ctx: DomainCtx, jobId: string): SettleOutcome | null {
-  const job = tx.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).get();
+export async function settleJob(tx: Tx, ctx: DomainCtx, jobId: string): Promise<SettleOutcome | null> {
+  const job = (await tx.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).limit(1))[0];
   if (!job || !LIVE_JOB.includes(job.status)) return null;
-  const released = dropReleasedOrders(tx, jobId);
-  rollupJob(tx, ctx, jobId);
-  const after = tx.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).get();
+  const released = await dropReleasedOrders(tx, jobId);
+  await rollupJob(tx, ctx, jobId);
+  const after = (await tx.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).limit(1))[0];
   if (!after) return null;
   let to: JobStatus = after.status;
   if (LIVE_JOB.includes(after.status)) {
-    const open = tx.select({ id: schema.tasks.id }).from(schema.tasks)
-      .where(and(eq(schema.tasks.jobId, jobId), inArray(schema.tasks.status, [...OPEN_TASK]))).get();
-    const any = tx.select({ id: schema.tasks.id }).from(schema.tasks).where(eq(schema.tasks.jobId, jobId)).get();
+    const open = (await tx.select({ id: schema.tasks.id }).from(schema.tasks)
+      .where(and(eq(schema.tasks.jobId, jobId), inArray(schema.tasks.status, [...OPEN_TASK]))).limit(1))[0];
+    const any = (await tx.select({ id: schema.tasks.id }).from(schema.tasks).where(eq(schema.tasks.jobId, jobId)).limit(1))[0];
     if (!open && any) {
-      const completed = Number(tx.select({ n: sql<number>`COUNT(*)` }).from(schema.tasks)
-        .where(and(eq(schema.tasks.jobId, jobId), eq(schema.tasks.status, "Completed"))).get()?.n ?? 0);
+      const completed = Number((await tx.select({ n: sql<number>`COUNT(*)` }).from(schema.tasks)
+        .where(and(eq(schema.tasks.jobId, jobId), eq(schema.tasks.status, "Completed"))).limit(1))[0]?.n ?? 0);
       to = stateMachines.job.transition(after.status, completed > 0 ? "Completed" : "Cancelled");
       const now = nowIso();
-      tx.update(schema.jobs).set({
+      await tx.update(schema.jobs).set({
         status: to, updatedBy: ctx.userId, version: sql`${schema.jobs.version} + 1`,
         ...(to === "Completed" ? { completedAt: after.completedAt ?? now, startedAt: after.startedAt ?? now } : {}),
-      }).where(eq(schema.jobs.id, jobId)).run();
-      tx.insert(schema.changeLog).values({
+      }).where(eq(schema.jobs.id, jobId));
+      await tx.insert(schema.changeLog).values({
         entityType: "job", entityId: jobId, entityCode: job.code, type: "Update", field: "status", fieldLabel: "Status",
         fromValue: after.status, toValue: to,
-        message: `Status is modified. ${after.status} --> ${to} · ${closingReason(tx, jobId, released, to)}`,
+        message: `Status is modified. ${after.status} --> ${to} · ${await closingReason(tx, jobId, released, to)}`,
         userId: ctx.userId, source: ctx.source,
-      }).run();
+      });
     } else if (released > 0) {
-      tx.update(schema.jobs).set({ version: sql`${schema.jobs.version} + 1` }).where(eq(schema.jobs.id, jobId)).run();
+      await tx.update(schema.jobs).set({ version: sql`${schema.jobs.version} + 1` }).where(eq(schema.jobs.id, jobId));
     }
   }
   if (to === job.status && released === 0) return null;
@@ -109,10 +110,10 @@ export function settleJob(tx: Tx, ctx: DomainCtx, jobId: string): SettleOutcome 
 }
 
 /** Live jobs with no open task, or with a link to an order the job no longer works on. */
-export function deadJobCandidates(db: AppDb | Tx, jobIds?: readonly string[]): string[] {
+export async function deadJobCandidates(db: AppDb | Tx, jobIds?: readonly string[]): Promise<string[]> {
   const scope = jobIds ? (jobIds.length === 0 ? null : sql`AND j.id IN (${sql.join(jobIds.map((id) => sql`${id}`), sql`, `)})`) : sql``;
   if (scope === null) return [];
-  const rows = db.all<{ id: string }>(sql`
+  const rows = await dbAll<{ id: string }>(db, sql`
     SELECT j.id AS id FROM jobs j
     WHERE j.status IN ('Pending', 'Started', 'In Progress') ${scope}
       AND EXISTS (SELECT 1 FROM tasks t WHERE t.job_id = j.id)
@@ -126,11 +127,11 @@ export function deadJobCandidates(db: AppDb | Tx, jobIds?: readonly string[]): s
 }
 
 /** Settles every dead job (optionally only among `jobIds`), one savepoint each. */
-export function settleDeadJobs(db: AppDb | Tx, ctx: DomainCtx, jobIds?: readonly string[]): SettleOutcome[] {
+export async function settleDeadJobs(db: AppDb | Tx, ctx: DomainCtx, jobIds?: readonly string[]): Promise<SettleOutcome[]> {
   const out: SettleOutcome[] = [];
-  for (const id of deadJobCandidates(db, jobIds)) {
+  for (const id of await deadJobCandidates(db, jobIds)) {
     try {
-      const res = db.transaction((tx) => settleJob(tx, ctx, id));
+      const res = await withWriteTx(db, async (tx) => await settleJob(tx, ctx, id));
       if (res) out.push(res);
     } catch (error) {
       console.warn("[jobs] settle skipped", id, error);
@@ -143,11 +144,11 @@ const SWEEP_EVERY_MS = 5_000;
 let lastSweep = 0;
 
 /** Throttled self-heal for read routes: at most every 5 s per server process; never throws. */
-export function sweepDeadJobs(db: AppDb, now: number = Date.now()): readonly SettleOutcome[] {
+export async function sweepDeadJobs(db: AppDb, now: number = Date.now()): Promise<readonly SettleOutcome[]> {
   if (now - lastSweep < SWEEP_EVERY_MS) return [];
   lastSweep = now;
   try {
-    return settleDeadJobs(db, systemCtx("System"));
+    return await settleDeadJobs(db, systemCtx("System"));
   } catch (error) {
     console.warn("[jobs] dead-job sweep skipped", error);
     return [];

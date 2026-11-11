@@ -47,7 +47,7 @@ function usageSql(type: LookupType): SQL {
   }
 }
 
-const statusSql = sql<string>`CASE WHEN ${qc(l.isActive)} = 1 THEN 'Active' ELSE 'Inactive' END`;
+const statusSql = sql<string>`CASE WHEN ${qc(l.isActive)} = true THEN 'Active' ELSE 'Inactive' END`;
 const warehouseCodeSql = sql<string | null>`(SELECT w.code FROM warehouses w WHERE w.id = ${qc(l.warehouseId)})`;
 const clientNameSql = sql<string | null>`(SELECT c.name FROM clients c WHERE c.id = ${qc(l.clientId)})`;
 
@@ -100,62 +100,62 @@ function columns(type: LookupType) {
 
 const toRow = (r: Record<string, unknown>): LookupGridRow => ({ ...(r as unknown as LookupGridRow), isActive: Boolean(r.isActive) });
 
-export function listLookupGrid(db: AppDb, auth: AuthContext, type: LookupType, query: GridQuery): { rows: LookupGridRow[]; total: number } {
+export async function listLookupGrid(db: AppDb, auth: AuthContext, type: LookupType, query: GridQuery): Promise<{ rows: LookupGridRow[]; total: number }> {
   const grid = compileGrid(binding(type), query, [eq(l.type, type), visibleIn(auth.scope)]);
-  const result = paginate(
+  const result = await paginate(
     db.select(columns(type)).from(l).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(l).where(grid.where).get()?.n ?? 0,
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(l).where(grid.where).limit(1))[0]?.n ?? 0,
     { page: query.page, pageSize: query.pageSize },
   );
   return { rows: (result.rows as Record<string, unknown>[]).map(toRow), total: result.total };
 }
 
 /** Counters for the Data Setup side nav. */
-export function lookupCounts(db: AppDb, auth: AuthContext): Record<string, number> {
-  const rows = db.select({ type: l.type, n: sql<number>`count(*)` }).from(l).where(visibleIn(auth.scope)).groupBy(l.type).all();
+export async function lookupCounts(db: AppDb, auth: AuthContext): Promise<Record<string, number>> {
+  const rows = await db.select({ type: l.type, n: sql<number>`count(*)` }).from(l).where(visibleIn(auth.scope)).groupBy(l.type);
   return Object.fromEntries(rows.map((r) => [r.type, r.n]));
 }
 
-export function getLookupRow(db: AppDb, auth: AuthContext, type: LookupType, id: string): LookupGridRow {
-  const row = db.select(columns(type)).from(l).where(and(eq(l.id, id), eq(l.type, type))).get();
+export async function getLookupRow(db: AppDb, auth: AuthContext, type: LookupType, id: string): Promise<LookupGridRow> {
+  const row = (await db.select(columns(type)).from(l).where(and(eq(l.id, id), eq(l.type, type))).limit(1))[0];
   if (!row) throw notFoundError("Value");
   const r = toRow(row as Record<string, unknown>);
   if ((r.warehouseId && !hasWarehouse(auth.scope, r.warehouseId)) || (r.clientId && !hasClient(auth.scope, r.clientId))) throw notFoundError("Value");
   return r;
 }
 
-function validate(db: AppDb, auth: AuthContext, def: LookupDef, input: LookupSave, exceptId?: string): { warehouseId: string | null; clientId: string | null } {
+async function validate(db: AppDb, auth: AuthContext, def: LookupDef, input: LookupSave, exceptId?: string): Promise<{ warehouseId: string | null; clientId: string | null }> {
   const issues = lookupIssues(def, input);
   if (issues.length) throw new AppError("VALIDATION", issues[0]!.message, { fieldErrors: Object.fromEntries(issues.map((i) => [i.path, [i.message]])) });
   const warehouseId = def.scope === "warehouse" ? input.warehouseId : null;
   const clientId = def.scope === "client" ? input.clientId : null;
   if (warehouseId && !hasWarehouse(auth.scope, warehouseId)) throw new AppError("VALIDATION", "Warehouse not found", { fieldErrors: { warehouseId: ["Warehouse not found"] } });
   if (clientId && !hasClient(auth.scope, clientId)) throw new AppError("VALIDATION", "Client not found", { fieldErrors: { clientId: ["Client not found"] } });
-  const clash = db.select({ id: l.id }).from(l).where(and(
+  const clash = (await db.select({ id: l.id }).from(l).where(and(
     eq(l.type, def.type), sql`lower(${l.name}) = ${input.name.trim().toLowerCase()}`,
     warehouseId ? eq(l.warehouseId, warehouseId) : isNull(l.warehouseId), clientId ? eq(l.clientId, clientId) : isNull(l.clientId),
-  )).get();
+  )).limit(1))[0];
   if (clash && clash.id !== exceptId) throw duplicateError("name", `"${input.name.trim()}" already exists`);
   if (def.hasCode && input.code) {
-    const codeClash = db.select({ id: l.id }).from(l).where(and(
+    const codeClash = (await db.select({ id: l.id }).from(l).where(and(
       eq(l.type, def.type), sql`lower(${l.code}) = ${input.code.trim().toLowerCase()}`, warehouseId ? eq(l.warehouseId, warehouseId) : isNull(l.warehouseId),
-    )).get();
+    )).limit(1))[0];
     if (codeClash && codeClash.id !== exceptId) throw duplicateError("code", `Code ${input.code.trim()} already exists`);
   }
   if (def.type === "return_reason" && input.linkDamageReason && input.linkedDamageReasonId) {
-    const dr = db.select({ id: l.id }).from(l).where(and(eq(l.id, input.linkedDamageReasonId), eq(l.type, "damage_reason"))).get();
+    const dr = (await db.select({ id: l.id }).from(l).where(and(eq(l.id, input.linkedDamageReasonId), eq(l.type, "damage_reason"))).limit(1))[0];
     if (!dr) throw new AppError("VALIDATION", "Damage reason not found", { fieldErrors: { linkedDamageReasonId: ["Damage reason not found"] } });
   }
   return { warehouseId, clientId };
 }
 
 /** Change-log snapshot: names instead of ids, meta flattened to readable fields. */
-function display(db: AppDb, def: LookupDef, r: { name: string; code: string | null; isActive: boolean; sortOrder: number; warehouseId: string | null; clientId: string | null; meta: Record<string, unknown> | null }): Record<string, unknown> {
-  const wh = r.warehouseId ? db.select({ code: s.warehouses.code }).from(s.warehouses).where(eq(s.warehouses.id, r.warehouseId)).get()?.code : null;
-  const cl = r.clientId ? db.select({ name: s.clients.name }).from(s.clients).where(eq(s.clients.id, r.clientId)).get()?.name : null;
+async function display(db: AppDb, def: LookupDef, r: { name: string; code: string | null; isActive: boolean; sortOrder: number; warehouseId: string | null; clientId: string | null; meta: Record<string, unknown> | null }): Promise<Record<string, unknown>> {
+  const wh = r.warehouseId ? (await db.select({ code: s.warehouses.code }).from(s.warehouses).where(eq(s.warehouses.id, r.warehouseId)).limit(1))[0]?.code : null;
+  const cl = r.clientId ? (await db.select({ name: s.clients.name }).from(s.clients).where(eq(s.clients.id, r.clientId)).limit(1))[0]?.name : null;
   const m = r.meta ?? {};
   const linked = typeof m.linkedDamageReasonId === "string"
-    ? db.select({ name: l.name }).from(l).where(eq(l.id, m.linkedDamageReasonId)).get()?.name ?? null
+    ? (await db.select({ name: l.name }).from(l).where(eq(l.id, m.linkedDamageReasonId)).limit(1))[0]?.name ?? null
     : null;
   return {
     name: r.name, code: r.code, status: r.isActive ? "Active" : "Inactive", sortOrder: r.sortOrder,
@@ -164,51 +164,51 @@ function display(db: AppDb, def: LookupDef, r: { name: string; code: string | nu
   };
 }
 
-export function createLookupValue(tx: AppDb, auth: AuthContext, actor: Actor, def: LookupDef, input: LookupSave): LookupGridRow {
-  const scope = validate(tx, auth, def, input);
-  const row = tx.insert(l).values({
+export async function createLookupValue(tx: AppDb, auth: AuthContext, actor: Actor, def: LookupDef, input: LookupSave): Promise<LookupGridRow> {
+  const scope = await validate(tx, auth, def, input);
+  const row = (await tx.insert(l).values({
     type: def.type, name: input.name.trim(), code: def.hasCode ? input.code : null, ...scope, isActive: input.isActive, sortOrder: input.sortOrder,
     meta: lookupMeta(def, input), createdBy: actor.userId, updatedBy: actor.userId,
-  }).returning({ id: l.id, name: l.name }).get();
-  logCreate(tx, domainCtxOf(actor, auth), { entityType: LOOKUP_ENTITY, entityId: row.id, entityCode: `${def.noun} ${row.name}` });
-  return getLookupRow(tx, auth, def.type, row.id);
+  }).returning({ id: l.id, name: l.name }))[0];
+  await logCreate(tx, domainCtxOf(actor, auth), { entityType: LOOKUP_ENTITY, entityId: row.id, entityCode: `${def.noun} ${row.name}` });
+  return await getLookupRow(tx, auth, def.type, row.id);
 }
 
-export function updateLookupValue(tx: AppDb, auth: AuthContext, actor: Actor, def: LookupDef, id: string, input: LookupSave): LookupGridRow {
-  const before = getLookupRow(tx, auth, def.type, id);
+export async function updateLookupValue(tx: AppDb, auth: AuthContext, actor: Actor, def: LookupDef, id: string, input: LookupSave): Promise<LookupGridRow> {
+  const before = await getLookupRow(tx, auth, def.type, id);
   assertVersion(before.version, input.version);
-  const scope = validate(tx, auth, def, input, id);
+  const scope = await validate(tx, auth, def, input, id);
   if (before.usageCount > 0 && before.name !== input.name.trim() && ["pack_type", "po_type", "damage_reason", "custom_carrier"].includes(def.type)) {
     throw new AppError("VALIDATION", `${before.usageCount} records use "${before.name}" by name; it can't be renamed`, { fieldErrors: { name: ["In use by name; deactivate it and create a new value instead"] } });
   }
   // Keys maintained elsewhere (Location Zone › Match With Product Groups) survive a drawer edit.
   const kept = def.type === "location_zone" && Array.isArray(before.meta?.productGroupIds) ? { productGroupIds: before.meta.productGroupIds } : {};
   const meta = "productGroupIds" in kept ? { ...lookupMeta(def, input), ...kept } : lookupMeta(def, input);
-  tx.update(l).set({
+  await tx.update(l).set({
     name: input.name.trim(), code: def.hasCode ? input.code : null, ...scope, isActive: input.isActive, sortOrder: input.sortOrder, meta,
     updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${l.version} + 1`,
-  }).where(eq(l.id, id)).run();
-  const after = getLookupRow(tx, auth, def.type, id);
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: LOOKUP_ENTITY, entityId: id, entityCode: `${def.noun} ${after.name}` }, display(tx, def, before), display(tx, def, after));
+  }).where(eq(l.id, id));
+  const after = await getLookupRow(tx, auth, def.type, id);
+  await logUpdate(tx, domainCtxOf(actor, auth), { entityType: LOOKUP_ENTITY, entityId: id, entityCode: `${def.noun} ${after.name}` }, await display(tx, def, before), await display(tx, def, after));
   return after;
 }
 
-export function setLookupsActive(tx: AppDb, auth: AuthContext, actor: Actor, def: LookupDef, ids: readonly string[], isActive: boolean): BulkResult {
+export async function setLookupsActive(tx: AppDb, auth: AuthContext, actor: Actor, def: LookupDef, ids: readonly string[], isActive: boolean): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const row = getLookupRow(inner, auth, def.type, id);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const row = await getLookupRow(inner, auth, def.type, id);
     if (row.isActive === isActive) throw new AppError("INVALID_STATE", `${row.name} is already ${isActive ? "active" : "inactive"}`);
-    inner.update(l).set({ isActive, updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${l.version} + 1` }).where(eq(l.id, id)).run();
-    logUpdate(inner, ctx, { entityType: LOOKUP_ENTITY, entityId: id, entityCode: `${def.noun} ${row.name}` }, { status: row.status }, { status: isActive ? "Active" : "Inactive" });
+    await inner.update(l).set({ isActive, updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${l.version} + 1` }).where(eq(l.id, id));
+    await logUpdate(inner, ctx, { entityType: LOOKUP_ENTITY, entityId: id, entityCode: `${def.noun} ${row.name}` }, { status: row.status }, { status: isActive ? "Active" : "Inactive" });
   });
 }
 
-export function deleteLookupValues(tx: AppDb, auth: AuthContext, actor: Actor, def: LookupDef, ids: readonly string[]): BulkResult {
+export async function deleteLookupValues(tx: AppDb, auth: AuthContext, actor: Actor, def: LookupDef, ids: readonly string[]): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const row = getLookupRow(inner, auth, def.type, id);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const row = await getLookupRow(inner, auth, def.type, id);
     if (row.usageCount > 0) throw new AppError("INVALID_STATE", `${row.name} is used by ${row.usageCount} ${row.usageCount === 1 ? "record" : "records"}. Deactivate it instead.`);
-    inner.delete(l).where(eq(l.id, id)).run();
-    logDelete(inner, ctx, { entityType: LOOKUP_ENTITY, entityId: id, entityCode: `${def.noun} ${row.name}` });
+    await inner.delete(l).where(eq(l.id, id));
+    await logDelete(inner, ctx, { entityType: LOOKUP_ENTITY, entityId: id, entityCode: `${def.noun} ${row.name}` });
   });
 }

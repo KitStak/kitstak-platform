@@ -6,9 +6,9 @@ import { createLpType, listLpTypes } from "@/server/repositories/lp-types";
 
 export const GET = defineRoute({
   permission: ["settings.lp_types.view", "settings.lp_numbers.view", "settings.locations.view", "inventory.inventory_by_location.view"],
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listLpTypes(db, auth, query);
+    const { rows, total } = await listLpTypes(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -16,5 +16,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.lp_types.create",
   body: lpTypeSchema,
-  handler: ({ db, auth, actor, body }) => created(createLpType(db, auth, actor, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createLpType(db, auth, actor, body)),
 });

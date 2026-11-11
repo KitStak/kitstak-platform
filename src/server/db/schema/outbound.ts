@@ -1,5 +1,5 @@
 /** Outbound: shipment orders, order lines, line shortages. */
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, doublePrecision, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import type { AddressValue } from "../../../lib/domain-types";
 import {
   ADDRESS_TYPES,
@@ -19,7 +19,7 @@ import { bool, customFields, json, pk, stamps } from "../columns";
 import { products } from "./catalog";
 import { clients, customers, warehouses } from "./org";
 
-export const shipmentOrders = sqliteTable("shipment_orders", {
+export const shipmentOrders = pgTable("shipment_orders", {
   id: pk(),
   code: text("code").notNull(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
@@ -41,8 +41,8 @@ export const shipmentOrders = sqliteTable("shipment_orders", {
   shippingService: text("shipping_service"),
   trackingNumber: text("tracking_number"),
   totalQuantity: integer("total_quantity").notNull(),
-  totalWeightOz: real("total_weight_oz").notNull(),
-  salesPrice: real("sales_price").notNull(),
+  totalWeightOz: doublePrecision("total_weight_oz").notNull(),
+  salesPrice: doublePrecision("sales_price").notNull(),
   jobId: text("job_id"),
   orderDate: text("order_date").notNull(),
   expectedShipDate: text("expected_ship_date"),
@@ -81,13 +81,13 @@ export const shipmentOrders = sqliteTable("shipment_orders", {
   taxDutiesAccountNumber: text("tax_duties_account_number"),
   packingInstructions: text("packing_instructions"),
   shipmentPackageId: text("shipment_package_id"),
-  totalShippingCost: real("total_shipping_cost").notNull().default(0),
-  rate: real("rate").notNull().default(0),
-  discount: real("discount").notNull().default(0),
+  totalShippingCost: doublePrecision("total_shipping_cost").notNull().default(0),
+  rate: doublePrecision("rate").notNull().default(0),
+  discount: doublePrecision("discount").notNull().default(0),
   reasonForExport: text("reason_for_export", { enum: EXPORT_REASONS }),
   returnAddressId: text("return_address_id"),
   returnCarrierServiceId: text("return_carrier_service_id"),
-  returnShippingCost: real("return_shipping_cost"),
+  returnShippingCost: doublePrecision("return_shipping_cost"),
   returnTrackingNumbers: json<string[]>("return_tracking_numbers"),
   trackingNumbers: json<string[]>("tracking_numbers"),
   extraNote1: text("extra_note1"),
@@ -135,14 +135,14 @@ export const shipmentOrders = sqliteTable("shipment_orders", {
   index("orders_job_idx").on(t.jobId),
 ]);
 
-export const orderLines = sqliteTable("order_lines", {
+export const orderLines = pgTable("order_lines", {
   id: pk(),
   orderId: text("order_id").notNull().references(() => shipmentOrders.id),
   productId: text("product_id").notNull().references(() => products.id),
   quantity: integer("quantity").notNull(),
   pickedQuantity: integer("picked_quantity").notNull().default(0),
   packedQuantity: integer("packed_quantity").notNull().default(0),
-  unitPrice: real("unit_price").notNull(),
+  unitPrice: doublePrecision("unit_price").notNull(),
   packType: text("pack_type").notNull().default("Each"),
   uomRatio: integer("uom_ratio").notNull().default(1),
   allocatedQuantity: integer("allocated_quantity").notNull().default(0),
@@ -169,7 +169,7 @@ export const orderLines = sqliteTable("order_lines", {
   index("order_lines_product_idx").on(t.productId),
 ]);
 
-export const orderLineShortages = sqliteTable("order_line_shortages", {
+export const orderLineShortages = pgTable("order_line_shortages", {
   id: pk(),
   orderId: text("order_id").notNull(),
   orderLineId: text("order_line_id").notNull(),

@@ -8,8 +8,8 @@ export const POST = defineRoute({
   permission: "automation.algorithms.test",
   body: putawayTestSchema,
   transaction: false,
-  handler: ({ db, auth, body }) => {
+  handler: async ({ db, auth, body }) => {
     if (!body.draft) throw new AppError("VALIDATION", "Send the draft rules to test");
-    return testPutaway(db, auth, null, { ...body, warehouseId: body.draft.warehouseId });
+    return await testPutaway(db, auth, null, { ...body, warehouseId: body.draft.warehouseId });
   },
 });

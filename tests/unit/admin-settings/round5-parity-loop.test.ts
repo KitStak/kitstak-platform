@@ -149,25 +149,25 @@ describe("idlePhase", () => {
 });
 
 describe("company idle sign-out persistence", () => {
-  it("saves with Security, keeps account defaults and survives a defaults save", () => {
-    const w = createWorld();
+  it("saves with Security, keeps account defaults and survives a defaults save", async () => {
+    const w = await createWorld();
     try {
       const auth = { scope: { warehouseIds: [w.warehouseId], clientIds: "all" }, permissions: new Set<string>(), restrictions: [], roleKeys: ["admin"], user: { id: w.userId, name: "Admin", email: "admin@test.io", role: "admin" }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
       const actor = { userId: w.userId, source: "Web" } as const;
-      const c0 = getCompany(w.db);
+      const c0 = await getCompany(w.db);
       expect(c0.sessionIdleMinutes).toBeNull();
       const p = c0.passwordPolicy;
       const input = companySecuritySchema.parse({ minLength: p.minLength, requireUpper: p.requireUpper, requireNumber: p.requireNumber, requireSymbol: p.requireSymbol, expires: false, maxAgeDays: 90, lockoutThreshold: p.lockoutThreshold, lockoutMinutes: p.lockoutMinutes, idleTimeout: true, idleMinutes: 20, version: c0.version });
-      const c1 = updateCompanySecurity(w.db, auth, actor, input);
+      const c1 = await updateCompanySecurity(w.db, auth, actor, input);
       expect(c1.sessionIdleMinutes).toBe(20);
-      expect(getSessionIdleMinutes(w.db)).toBe(20);
-      const c2 = updateCompanyDefaults(w.db, auth, actor, { currency: c1.defaults.currency, weightUnit: c1.defaults.weightUnit, dimensionUnit: c1.defaults.dimensionUnit, dateFormat: c1.defaults.dateFormat, version: c1.version } as never);
+      expect(await getSessionIdleMinutes(w.db)).toBe(20);
+      const c2 = await updateCompanyDefaults(w.db, auth, actor, { currency: c1.defaults.currency, weightUnit: c1.defaults.weightUnit, dimensionUnit: c1.defaults.dimensionUnit, dateFormat: c1.defaults.dateFormat, version: c1.version } as never);
       expect(c2.sessionIdleMinutes).toBe(20);
-      const off = updateCompanySecurity(w.db, auth, actor, { ...input, idleTimeout: false, version: c2.version });
+      const off = await updateCompanySecurity(w.db, auth, actor, { ...input, idleTimeout: false, version: c2.version });
       expect(off.sessionIdleMinutes).toBeNull();
       expect(companySecuritySchema.safeParse({ ...input, idleMinutes: 3 }).success).toBe(false);
     } finally {
-      w.close();
+      await w.close();
     }
   });
 });

@@ -13,8 +13,8 @@ import { searchAssignees } from "@/server/repositories/wave-rules-options";
 export const GET = defineRoute({
   permission: ["fulfillment.job_management.assign", "fulfillment.task_details.update_task"],
   query: z.object({ warehouseId: z.string().trim().min(1).max(64), q: z.string().max(100).optional(), limit: z.coerce.number().int().min(1).max(100).optional() }),
-  handler: ({ db, auth, query }) => {
+  handler: async ({ db, auth, query }) => {
     if (!hasWarehouse(auth.scope, query.warehouseId)) throw forbiddenError();
-    return searchAssignees(db, query.warehouseId, query.q ?? "", query.limit ?? 50);
+    return await searchAssignees(db, query.warehouseId, query.q ?? "", query.limit ?? 50);
   },
 });

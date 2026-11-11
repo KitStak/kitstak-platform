@@ -6,5 +6,5 @@ import { orderFormOptions, orderOptionsQuerySchema } from "@/server/repositories
 export const GET = defineRoute({
   permission: ORDER_PERMISSIONS.view,
   query: orderOptionsQuerySchema,
-  handler: ({ db, auth, query }) => orderFormOptions(db, auth.scope, query),
+  handler: async ({ db, auth, query }) => await orderFormOptions(db, auth.scope, query),
 });

@@ -17,17 +17,17 @@ export const GET = defineRoute({
   permission: PACKING_PERMISSIONS.view,
   params: idParamsSchema,
   query,
-  handler: ({ db, auth, params, query: q }) => packContext(db, auth.scope, params.id, q.stationId ?? null),
+  handler: async ({ db, auth, params, query: q }) => await packContext(db, auth.scope, params.id, q.stationId ?? null),
 });
 
 export const POST = defineRoute({
   permission: PACKING_PERMISSIONS.execute,
   params: idParamsSchema,
   query,
-  handler: ({ db, auth, actor, params, query: q }) => {
-    const ctx = packContext(db, auth.scope, params.id, q.stationId ?? null);
+  handler: async ({ db, auth, actor, params, query: q }) => {
+    const ctx = await packContext(db, auth.scope, params.id, q.stationId ?? null);
     if (ctx.countLock) return ctx;
-    startPacking(db, scopedCtx(actor, auth), params.id);
-    return packContext(db, auth.scope, params.id, q.stationId ?? null);
+    await startPacking(db, scopedCtx(actor, auth), params.id);
+    return await packContext(db, auth.scope, params.id, q.stationId ?? null);
   },
 });

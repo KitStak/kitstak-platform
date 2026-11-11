@@ -7,13 +7,14 @@ import { defineRoute } from "@/server/api/define-route";
 import { COUNT_ANY_VIEW } from "@/lib/grid-defs/counts/count-grids";
 import { resolvePlanId } from "@/server/repositories/counts-plans";
 import { idParamsSchema } from "@/server/repositories/platform-common";
+import { dbAll } from "@/server/db/sql";
 
 export const GET = defineRoute({
   permission: COUNT_ANY_VIEW,
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => {
-    const id = resolvePlanId(db, auth.scope, params.id);
-    const rows = db.all<{ source: string; name: string | null }>(sql`
+  handler: async ({ db, auth, params }) => {
+    const id = await resolvePlanId(db, auth.scope, params.id);
+    const rows = await dbAll<{ source: string; name: string | null }>(db, sql`
       SELECT s.source AS source, (SELECT u.name FROM users u WHERE lower(u.email) = lower(s.source)) AS name FROM (
         SELECT DISTINCT c.source AS source FROM change_log c
         WHERE (c.entity_type = 'count_plan' AND c.entity_id = ${id}) OR (c.parent_entity_type = 'count_plan' AND c.parent_entity_id = ${id})

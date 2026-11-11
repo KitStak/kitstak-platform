@@ -21,6 +21,7 @@ import type { GridQuery } from "@/server/query/grid-query";
 import { compileGrid, inList, scopeSql, whereClause, type GridSpec } from "./shipping-grid";
 import * as schema from "@/server/db/schema";
 import { carrierCallMode } from "@/server/integrations/carriers/common";
+import { dbAll, dbGet, mapSeq, withWriteTx } from "@/server/db/sql";
 
 const raw = (expr: string): SQL => sql.raw(expr);
 
@@ -52,7 +53,7 @@ const PARENT_LP_EXPR = `COALESCE(plp.number, (SELECT lp2.number FROM license_pla
  * for the order's store order number on its channel connection, at or after the label was created).
  */
 const SYNCED_EXPR = `(o.store_order_number IS NOT NULL AND EXISTS (SELECT 1 FROM channel_run_items cri JOIN channel_runs cr ON cr.id = cri.run_id
-  WHERE cr.method = 'Send Shipment Info' AND cri.success = 1 AND cri.store_order_number = o.store_order_number
+  WHERE cr.method = 'Send Shipment Info' AND cri.success = true AND cri.store_order_number = o.store_order_number
     AND (o.channel_connection_id IS NULL OR cr.connection_id = o.channel_connection_id) AND cri.at >= s.label_created_at))`;
 
 /**
@@ -64,7 +65,7 @@ const CALLS_OF = `FROM carrier_call_logs ccl WHERE (ccl.shipment_id = s.id OR (c
   OR (ccl.shipment_id IS NULL AND ccl.order_id = s.order_id AND ccl.step = 'LabelGeneration' AND ccl.at > ${PREV_LABEL_AT}))`;
 const HAS_ERROR_EXPR = `EXISTS (SELECT 1 ${CALLS_OF} AND ccl.status = 'Error')`;
 const LAST_ERROR_EXPR = `(SELECT ccl.error ${CALLS_OF} AND ccl.status = 'Error' ORDER BY ccl.at DESC LIMIT 1)`;
-const TRACKING_STATUS_EXPR = `(SELECT json_extract(ccl.response_json, '$.status') ${CALLS_OF} AND ccl.step = 'Tracking' AND ccl.status = 'Success' ORDER BY ccl.at DESC LIMIT 1)`;
+const TRACKING_STATUS_EXPR = `(SELECT ((ccl.response_json)::jsonb ->> 'status') ${CALLS_OF} AND ccl.step = 'Tracking' AND ccl.status = 'Success' ORDER BY ccl.at DESC LIMIT 1)`;
 
 const SQL_FOR: Readonly<Record<string, SQL>> = {
   warehouseCode: raw("w.code"),
@@ -119,7 +120,7 @@ const SQL_FOR: Readonly<Record<string, SQL>> = {
   shipmentMailSentAt: raw("s.shipment_mail_sent_at"),
   deliveryMailSentAt: raw("s.delivery_mail_sent_at"),
   /** Warehouse-local End Of The Day ship date (the manifest's), UTC label date when not on a manifest. */
-  manifestShipDate: raw("COALESCE(eodm.ship_date, date(s.label_created_at))"),
+  manifestShipDate: raw("COALESCE(eodm.ship_date, substr(s.label_created_at, 1, 10))"),
 };
 
 export const SHIPMENTS_GRID: GridSpec = {
@@ -133,31 +134,31 @@ export const SHIPMENTS_GRID: GridSpec = {
 };
 
 const SELECT = sql.raw(`
-  s.id AS id, s.order_id AS orderId, o.code AS orderCode, o.status AS orderStatus, o.customer_name AS customerName,
-  o.ship_address AS shipAddress, o.ship_address2 AS shipAddress2, o.ship_city AS shipCity, o.ship_state AS shipState,
-  o.ship_zip AS shipZip, o.ship_country AS shipCountry,
-  w.code AS warehouseCode, ${LOCATION_EXPR} AS locationCode, c.name AS clientName,
-  COALESCE((SELECT group_concat(p.sku || ' × ' || si.quantity, ', ') FROM shipment_items si JOIN products p ON p.id = si.product_id WHERE si.shipment_id = s.id),
-    (SELECT 'Order: ' || group_concat(p.sku || ' × ' || ol.quantity, ', ') FROM order_lines ol JOIN products p ON p.id = ol.product_id WHERE ol.order_id = s.order_id)) AS products,
-  s.label_created_at AS labelCreatedAt, s.carrier_expected_delivery_at AS carrierExpectedDeliveryAt,
-  s.carrier_code AS carrierCode, s.carrier_connection_id AS carrierConnectionId, s.carrier_service_id AS carrierServiceId, cc.account_prefix AS carrierPrefix, cc.setup_name AS carrierSetupName,
-  s.service_name AS serviceName, s.is_rate_shopped AS isRateShopped, rp.name AS rateShoppingName, s.rate AS rate,
-  s.label_type AS labelType, s.label_status AS labelStatus, s.label_format AS labelFormat, s.label_file_id AS labelFileId,
-  s.master_tracking_number AS masterTrackingNumber, s.tracking_number AS trackingNumber,
-  s.actual_shipment_at AS actualShipmentAt, COALESCE(s.delivered_at, o.delivered_at) AS deliveredAt, s.voided_at AS voidedAt,
-  s.insurance_type AS insuranceType, s.insurance_value AS insuranceValue, s.confirmation_type AS confirmationType,
-  s.weight AS weight, s.height AS height, s.width AS width, s.length AS length, s.dimension_unit AS dimensionUnit,
-  sp.code AS packageCode, s.weight_unit AS weightUnit, s.shipping_cost AS shippingCost, s.zone AS zone,
-  s.other_cost AS otherCost, s.currency AS currency, s.allow_saturday_delivery AS allowSaturdayDelivery,
-  s.scheduled_pickup_at AS scheduledPickupAt, s.actual_pickup_at AS actualPickupAt, ${PARENT_LP_EXPR} AS parentLpNumber,
-  s.external_reference AS externalReference, s.package_seq AS packageSeq, ${SYNCED_EXPR} AS syncedToStore,
-  ${HAS_ERROR_EXPR} AS hasCarrierError, ${LAST_ERROR_EXPR} AS lastCarrierError, ${TRACKING_STATUS_EXPR} AS trackingStatus,
-  s.shipment_mail_sent_at AS shipmentMailSentAt, s.delivery_mail_sent_at AS deliveryMailSentAt,
-  (SELECT COUNT(*) FROM shipments s2 WHERE s2.order_id = s.order_id AND s2.master_tracking_number IS s.master_tracking_number AND s2.label_type = s.label_type) AS packageCount,
-  s.end_of_day_manifest_id AS manifestId,
+  s.id AS id, s.order_id AS "orderId", o.code AS "orderCode", o.status AS "orderStatus", o.customer_name AS "customerName",
+  o.ship_address AS "shipAddress", o.ship_address2 AS "shipAddress2", o.ship_city AS "shipCity", o.ship_state AS "shipState",
+  o.ship_zip AS "shipZip", o.ship_country AS "shipCountry",
+  w.code AS "warehouseCode", ${LOCATION_EXPR} AS "locationCode", c.name AS "clientName",
+  COALESCE((SELECT string_agg((p.sku || ' × ' || si.quantity)::text, ', ') FROM shipment_items si JOIN products p ON p.id = si.product_id WHERE si.shipment_id = s.id),
+    (SELECT 'Order: ' || string_agg((p.sku || ' × ' || ol.quantity)::text, ', ') FROM order_lines ol JOIN products p ON p.id = ol.product_id WHERE ol.order_id = s.order_id)) AS products,
+  s.label_created_at AS "labelCreatedAt", s.carrier_expected_delivery_at AS "carrierExpectedDeliveryAt",
+  s.carrier_code AS "carrierCode", s.carrier_connection_id AS "carrierConnectionId", s.carrier_service_id AS "carrierServiceId", cc.account_prefix AS "carrierPrefix", cc.setup_name AS "carrierSetupName",
+  s.service_name AS "serviceName", s.is_rate_shopped AS "isRateShopped", rp.name AS "rateShoppingName", s.rate AS rate,
+  s.label_type AS "labelType", s.label_status AS "labelStatus", s.label_format AS "labelFormat", s.label_file_id AS "labelFileId",
+  s.master_tracking_number AS "masterTrackingNumber", s.tracking_number AS "trackingNumber",
+  s.actual_shipment_at AS "actualShipmentAt", COALESCE(s.delivered_at, o.delivered_at) AS "deliveredAt", s.voided_at AS "voidedAt",
+  s.insurance_type AS "insuranceType", s.insurance_value AS "insuranceValue", s.confirmation_type AS "confirmationType",
+  s.weight AS weight, s.height AS height, s.width AS width, s.length AS length, s.dimension_unit AS "dimensionUnit",
+  sp.code AS "packageCode", s.weight_unit AS "weightUnit", s.shipping_cost AS "shippingCost", s.zone AS zone,
+  s.other_cost AS "otherCost", s.currency AS currency, s.allow_saturday_delivery AS "allowSaturdayDelivery",
+  s.scheduled_pickup_at AS "scheduledPickupAt", s.actual_pickup_at AS "actualPickupAt", ${PARENT_LP_EXPR} AS "parentLpNumber",
+  s.external_reference AS "externalReference", s.package_seq AS "packageSeq", ${SYNCED_EXPR} AS "syncedToStore",
+  ${HAS_ERROR_EXPR} AS "hasCarrierError", ${LAST_ERROR_EXPR} AS "lastCarrierError", ${TRACKING_STATUS_EXPR} AS "trackingStatus",
+  s.shipment_mail_sent_at AS "shipmentMailSentAt", s.delivery_mail_sent_at AS "deliveryMailSentAt",
+  (SELECT COUNT(*) FROM shipments s2 WHERE s2.order_id = s.order_id AND s2.master_tracking_number IS NOT DISTINCT FROM s.master_tracking_number AND s2.label_type = s.label_type) AS "packageCount",
+  s.end_of_day_manifest_id AS "manifestId",
   (SELECT COUNT(*) FROM shipments s3 WHERE s.label_status = 'Active' AND s3.order_id = s.order_id AND s3.id <> s.id
     AND s3.label_type = s.label_type AND s3.label_status = 'Active' AND COALESCE(s3.package_seq, 1) = COALESCE(s.package_seq, 1)
-    AND s3.master_tracking_number IS NOT s.master_tracking_number) AS duplicateActiveLabels
+    AND s3.master_tracking_number IS DISTINCT FROM s.master_tracking_number) AS "duplicateActiveLabels"
 `);
 
 type RawShipmentRow = Readonly<Record<string, unknown>> & {
@@ -234,11 +235,11 @@ export interface ListResult<T> {
   readonly total: number;
 }
 
-export function listShipments(db: AppDb, auth: AuthContext, query: GridQuery, now: Date = new Date()): ListResult<ShipmentListRow> {
+export async function listShipments(db: AppDb, auth: AuthContext, query: GridQuery, now: Date = new Date()): Promise<ListResult<ShipmentListRow>> {
   const scope = scopeSql(raw("s.warehouse_id"), raw("s.client_id"), auth.viewScope);
   const grid = compileGrid(SHIPMENTS_GRID, query, scope);
-  const rows = db.all<RawShipmentRow>(sql`SELECT ${SELECT} FROM ${FROM} ${whereClause(grid.where)} ORDER BY ${sql.join(grid.orderBy, sql`, `)} LIMIT ${grid.pageSize} OFFSET ${grid.offset}`);
-  const total = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM ${FROM} ${whereClause(grid.where)}`)?.n ?? 0;
+  const rows = await dbAll<RawShipmentRow>(db, sql`SELECT ${SELECT} FROM ${FROM} ${whereClause(grid.where)} ORDER BY ${sql.join(grid.orderBy, sql`, `)} LIMIT ${grid.pageSize} OFFSET ${grid.offset}`);
+  const total = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM ${FROM} ${whereClause(grid.where)}`))?.n ?? 0;
   return { rows: rows.map((r) => toRow(r, auth, now)), total };
 }
 
@@ -278,37 +279,35 @@ export interface ShipmentDetail extends ShipmentListRow {
   readonly siblings: readonly { readonly id: string; readonly trackingNumber: string; readonly packageSeq: number; readonly labelStatus: string }[];
 }
 
-function loadRaw(db: AppDb, id: string): RawShipmentRow & { warehouseId: string; clientId: string } {
-  const row = db.get<RawShipmentRow & { warehouseId: string; clientId: string }>(
-    sql`SELECT ${SELECT}, s.warehouse_id AS warehouseId, s.client_id AS clientId FROM ${FROM} WHERE s.id = ${id}`,
-  );
+async function loadRaw(db: AppDb, id: string): Promise<RawShipmentRow & { warehouseId: string; clientId: string }> {
+  const row = await dbGet<RawShipmentRow & { warehouseId: string; clientId: string }>(db, sql`SELECT ${SELECT}, s.warehouse_id AS "warehouseId", s.client_id AS "clientId" FROM ${FROM} WHERE s.id = ${id}`);
   if (!row) throw notFoundError("Shipment");
   return row;
 }
 
-export function getShipment(db: AppDb, auth: AuthContext, id: string, now: Date = new Date()): ShipmentDetail {
-  const r = loadRaw(db, id);
+export async function getShipment(db: AppDb, auth: AuthContext, id: string, now: Date = new Date()): Promise<ShipmentDetail> {
+  const r = await loadRaw(db, id);
   assertInScope(auth.scope, r, "Shipment");
-  const items = db.all<ShipmentItemRow>(sql`
-    SELECT si.id AS id, p.sku AS sku, p.name AS productName, si.quantity AS quantity, si.pack_type AS packType,
-      si.lot_number AS lotNumber, si.expiry_date AS expiryDate
+  const items = await dbAll<ShipmentItemRow>(db, sql`
+    SELECT si.id AS id, p.sku AS sku, p.name AS "productName", si.quantity AS quantity, si.pack_type AS "packType",
+      si.lot_number AS "lotNumber", si.expiry_date AS "expiryDate"
     FROM shipment_items si JOIN products p ON p.id = si.product_id WHERE si.shipment_id = ${id} ORDER BY p.sku`);
   // No packing breakdown (label made outside the pack station): show the order's open lines instead.
-  const orderItems = items.length > 0 ? [] : db.all<ShipmentItemRow>(sql`
-    SELECT ol.id AS id, p.sku AS sku, p.name AS productName, (ol.quantity - ol.cancelled_quantity) AS quantity, COALESCE(ol.pack_type, 'Each') AS packType,
-      ol.lot_number AS lotNumber, ol.expiry_date AS expiryDate
+  const orderItems = items.length > 0 ? [] : await dbAll<ShipmentItemRow>(db, sql`
+    SELECT ol.id AS id, p.sku AS sku, p.name AS "productName", (ol.quantity - ol.cancelled_quantity) AS quantity, COALESCE(ol.pack_type, 'Each') AS "packType",
+      ol.lot_number AS "lotNumber", ol.expiry_date AS "expiryDate"
     FROM order_lines ol JOIN products p ON p.id = ol.product_id WHERE ol.order_id = ${r.orderId} AND ol.quantity > ol.cancelled_quantity ORDER BY p.sku`);
-  const events = db.all<ShipmentEventRow>(sql`
-    SELECT id, at, step, status, error, source, http_code AS httpCode, response_ms AS responseMs,
-      substr(response_json, 1, 4000) AS responseJson, substr(request_json, 1, 2000) AS requestJson FROM carrier_call_logs
+  const events = await dbAll<ShipmentEventRow>(db, sql`
+    SELECT id, at, step, status, error, source, http_code AS "httpCode", response_ms AS "responseMs",
+      substr(response_json, 1, 4000) AS "responseJson", substr(request_json, 1, 2000) AS "requestJson" FROM carrier_call_logs
     WHERE shipment_id = ${id} OR (tracking_number IS NOT NULL AND tracking_number = ${r.trackingNumber})
       OR (shipment_id IS NULL AND order_id = ${r.orderId} AND step = 'LabelGeneration'
         AND at > COALESCE((SELECT MAX(s5.label_created_at) FROM shipments s5 WHERE s5.order_id = ${r.orderId} AND s5.label_created_at < ${r.labelCreatedAt}), ''))
     ORDER BY at DESC LIMIT 30`);
-  const conn = r.carrierConnectionId ? db.select().from(schema.carrierConnections).where(eq(schema.carrierConnections.id, r.carrierConnectionId as string)).get() : undefined;
+  const conn = r.carrierConnectionId ? (await db.select().from(schema.carrierConnections).where(eq(schema.carrierConnections.id, r.carrierConnectionId as string)).limit(1))[0] : undefined;
   const siblings = r.masterTrackingNumber
-    ? db.all<{ id: string; trackingNumber: string; packageSeq: number; labelStatus: string }>(sql`
-        SELECT id, tracking_number AS trackingNumber, package_seq AS packageSeq, label_status AS labelStatus FROM shipments
+    ? await dbAll<{ id: string; trackingNumber: string; packageSeq: number; labelStatus: string }>(db, sql`
+        SELECT id, tracking_number AS "trackingNumber", package_seq AS "packageSeq", label_status AS "labelStatus" FROM shipments
         WHERE order_id = ${r.orderId} AND master_tracking_number = ${r.masterTrackingNumber} ORDER BY package_seq`)
     : [];
   return {
@@ -320,17 +319,17 @@ export function getShipment(db: AppDb, auth: AuthContext, id: string, now: Date 
 /* ----------------------------------------------------------------- facets */
 
 /** Distinct, scoped filter values for the M02 grids (warehouses, clients, carriers, accounts, services). */
-export function shippingFacets(db: AppDb, scope: Scope): ShippingFacets {
+export async function shippingFacets(db: AppDb, scope: Scope): Promise<ShippingFacets> {
   const wh = scopeSql(raw("id"), null, scope);
   const opt = (rows: readonly { v: string | null }[]) => rows.filter((r) => r.v).map((r) => ({ value: r.v as string, label: r.v as string }));
   const clientScope = scope.clientIds === "all" ? sql`1 = 1` : inList(raw("id"), scope.clientIds);
   const connScope = scopeSql(raw("warehouse_id"), null, scope);
   return {
-    warehouses: opt(db.all<{ v: string }>(sql`SELECT code AS v FROM warehouses WHERE ${wh} ORDER BY code`)),
-    clients: opt(db.all<{ v: string }>(sql`SELECT name AS v FROM clients WHERE ${clientScope} ORDER BY name`)),
-    carriers: opt(db.all<{ v: string }>(sql`SELECT DISTINCT carrier_code AS v FROM carrier_services WHERE connection_id IN (SELECT id FROM carrier_connections WHERE ${connScope}) ORDER BY carrier_code`)),
-    carrierAccounts: opt(db.all<{ v: string }>(sql`SELECT DISTINCT account_prefix AS v FROM carrier_connections WHERE ${connScope} ORDER BY account_prefix`)),
-    services: opt(db.all<{ v: string }>(sql`SELECT DISTINCT name AS v FROM carrier_services WHERE connection_id IN (SELECT id FROM carrier_connections WHERE ${connScope}) ORDER BY name`)),
+    warehouses: opt(await dbAll<{ v: string }>(db, sql`SELECT code AS v FROM warehouses WHERE ${wh} ORDER BY code`)),
+    clients: opt(await dbAll<{ v: string }>(db, sql`SELECT name AS v FROM clients WHERE ${clientScope} ORDER BY name`)),
+    carriers: opt(await dbAll<{ v: string }>(db, sql`SELECT DISTINCT carrier_code AS v FROM carrier_services WHERE connection_id IN (SELECT id FROM carrier_connections WHERE ${connScope}) ORDER BY carrier_code`)),
+    carrierAccounts: opt(await dbAll<{ v: string }>(db, sql`SELECT DISTINCT account_prefix AS v FROM carrier_connections WHERE ${connScope} ORDER BY account_prefix`)),
+    services: opt(await dbAll<{ v: string }>(db, sql`SELECT DISTINCT name AS v FROM carrier_services WHERE connection_id IN (SELECT id FROM carrier_connections WHERE ${connScope}) ORDER BY name`)),
   };
 }
 
@@ -360,18 +359,18 @@ export interface VoidPreview {
 }
 
 /** Every package a void of `ids` will cancel — the selection plus each master-tracking group's Active siblings. */
-export function previewVoid(db: AppDb, auth: AuthContext, ids: readonly string[], now: Date = new Date()): VoidPreview {
+export async function previewVoid(db: AppDb, auth: AuthContext, ids: readonly string[], now: Date = new Date()): Promise<VoidPreview> {
   const byId = new Map<string, VoidPreviewRow>();
   const groups = new Set<string>();
   const unique = [...new Set(ids)];
   const picked = new Set(unique);
   for (const id of unique) {
-    const r = loadRaw(db, id);
+    const r = await loadRaw(db, id);
     assertInScope(auth.scope, r, "Shipment");
     groups.add(r.masterTrackingNumber ? `${r.orderId}|${r.masterTrackingNumber}` : `single|${r.id}`);
     const members = r.masterTrackingNumber
-      ? db.all<RawShipmentRow & { warehouseId: string; clientId: string }>(sql`
-          SELECT ${SELECT}, s.warehouse_id AS warehouseId, s.client_id AS clientId FROM ${FROM}
+      ? await dbAll<RawShipmentRow & { warehouseId: string; clientId: string }>(db, sql`
+          SELECT ${SELECT}, s.warehouse_id AS "warehouseId", s.client_id AS "clientId" FROM ${FROM}
           WHERE s.order_id = ${r.orderId} AND s.master_tracking_number = ${r.masterTrackingNumber}
             AND (s.label_status = 'Active' OR s.id = ${r.id}) ORDER BY s.package_seq`)
       : [r];
@@ -404,10 +403,10 @@ export async function voidShipments(db: AppDb, auth: AuthContext, ctx: DomainCtx
   let shipmentsVoided = 0;
   for (const id of [...new Set(ids)]) {
     try {
-      const r = loadRaw(db, id);
+      const r = await loadRaw(db, id);
       assertInScope(auth.scope, r, "Shipment");
       if (r.labelStatus === "Voided" && succeeded.length > 0 && r.masterTrackingNumber) {
-        const voidedWith = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM shipments WHERE id IN (${sql.join(succeeded.map((s) => sql`${s}`), sql`, `)}) AND master_tracking_number = ${r.masterTrackingNumber}`);
+        const voidedWith = await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM shipments WHERE id IN (${sql.join(succeeded.map((s) => sql`${s}`), sql`, `)}) AND master_tracking_number = ${r.masterTrackingNumber}`);
         if (voidedWith && voidedWith.n > 0) { succeeded.push(id); continue; }
       }
       const blocked = voidBlockReason(r, now);
@@ -437,8 +436,8 @@ export interface ReprintResult {
  * concatenated ZPL) and records a "Label reprinted" change-log entry per order.
  */
 export async function reprintShipments(db: AppDb, auth: AuthContext, ctx: DomainCtx, ids: readonly string[], store: FileStore = fileStore()): Promise<ReprintResult> {
-  const rows = [...new Set(ids)].map((id) => {
-    const r = loadRaw(db, id);
+  const rows = await mapSeq([...new Set(ids)], async (id) => {
+    const r = await loadRaw(db, id);
     assertInScope(auth.scope, r, "Shipment");
     return r;
   });
@@ -446,7 +445,7 @@ export async function reprintShipments(db: AppDb, auth: AuthContext, ctx: Domain
   if (voided) throw new AppError("INVALID_STATE", `Label ${voided.trackingNumber} is voided and can't be reprinted.`);
   const missing = rows.find((r) => !r.labelFileId);
   if (missing) throw new AppError("INVALID_STATE", `Label ${missing.trackingNumber} has no stored label file.`);
-  const files = rows.map((r) => ({ row: r, ...store.read(db, r.labelFileId as string) }));
+  const files = await mapSeq(rows, async (r) => ({ row: r, ...(await store.read(db, r.labelFileId as string)) }));
   const pdfs = files.filter((f) => f.record.mime === "application/pdf");
   if (pdfs.length > 0 && pdfs.length < files.length) throw new AppError("VALIDATION", "Select labels of one format (PDF or ZPL) to reprint together.");
   let bytes: Uint8Array;
@@ -463,13 +462,13 @@ export async function reprintShipments(db: AppDb, auth: AuthContext, ctx: Domain
     bytes = new TextEncoder().encode(files.map((f) => f.bytes.toString("utf8")).join("\n"));
     format = "ZPL";
   }
-  return db.transaction((tx) => {
-    const file = store.store(tx, {
+  return await withWriteTx(db, async (tx) => {
+    const file = await store.store(tx, {
       name: `Labels reprint ${new Date().toISOString().slice(0, 16).replace("T", " ").replace(":", "")}.${format === "PDF" ? "pdf" : "zpl"}`,
       bytes, purpose: "print", uploadedBy: auth.user.id, ownerEntityType: null, ownerEntityId: null,
     });
     for (const r of rows) {
-      recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: r.orderId, entityCode: r.orderCode, before: { labelReprinted: "" }, after: { labelReprinted: r.trackingNumber } });
+      await recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: r.orderId, entityCode: r.orderCode, before: { labelReprinted: "" }, after: { labelReprinted: r.trackingNumber } });
     }
     return { fileId: file.id, count: rows.length, format };
   });

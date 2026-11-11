@@ -1,8 +1,10 @@
 /**
  * File storage (BUILD_PLAN F6 `files.ts`).
  *
- * - Bytes live at `.data/files/<id>` (override the root with `KITSTAK_FILES_DIR`); the
- *   `files` row keeps name, sniffed mime, size and sha256.
+ * - Bytes go through a `BlobStorage` adapter: local disk at `.data/files/<id>` by default
+ *   (override the root with `KITSTAK_FILES_DIR`), or Supabase Storage (private bucket
+ *   `wms-files`, object key = file id) when SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY are set
+ *   (Vercel has no persistent disk). The `files` row keeps name, sniffed mime, size and sha256.
  * - Every write declares a `purpose`, whose policy caps the size and allows a mime set:
  *   attachments are images or PDF, imports are xlsx or csv (10 MB max for uploads).
  * - Export files expire after 7 days; `deleteExpiredFiles` removes them (scheduler task
@@ -58,14 +60,134 @@ export interface StoreFileInput {
   readonly expiresAt?: string | null;
 }
 
+/** Where file bytes live. Keys are file ids (UUIDs). */
+export interface BlobStorage {
+  readonly kind: "local" | "supabase";
+  /** Stores the bytes; returns the value kept in `files.storage_path`. */
+  put(key: string, bytes: Uint8Array, mime: string): Promise<string>;
+  get(key: string): Promise<Buffer>;
+  /** Best effort; never throws for a missing object. */
+  remove(key: string): Promise<void>;
+}
+
 export interface FileStoreOptions {
-  /** Absolute directory for file bytes. */
+  /** Absolute directory for file bytes (local storage). */
   readonly root?: string;
   readonly now?: () => Date;
+  /** Explicit adapter (tests); default: Supabase Storage when configured, else local disk at `root`. */
+  readonly storage?: BlobStorage;
+}
+
+export const SUPABASE_FILES_BUCKET = "wms-files";
+
+type Env = Readonly<Record<string, string | undefined>>;
+
+/** Supabase Storage is used when both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set. */
+export function supabaseStorageConfigured(env: Env = process.env): boolean {
+  return Boolean(env.SUPABASE_URL?.trim() && env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+}
+
+/** Local-disk adapter: `<root>/<id>`, written atomically (temp file + rename). */
+export function localBlobStorage(root: string): BlobStorage {
+  const absolutePath = (id: string): string => {
+    if (!UUID_RE.test(id)) throw notFoundError("File");
+    const resolved = path.resolve(/* turbopackIgnore: true */ root, id);
+    if (path.dirname(resolved) !== path.resolve(/* turbopackIgnore: true */ root)) throw notFoundError("File");
+    return resolved;
+  };
+  return {
+    kind: "local",
+    async put(id, bytes) {
+      fs.mkdirSync(/* turbopackIgnore: true */ root, { recursive: true });
+      const target = absolutePath(id);
+      const temp = `${target}.tmp`;
+      fs.writeFileSync(/* turbopackIgnore: true */ temp, bytes, { flag: "wx" });
+      fs.renameSync(/* turbopackIgnore: true */ temp, target);
+      return path.relative(process.cwd(), target).split(path.sep).join("/");
+    },
+    async get(id) {
+      return fs.readFileSync(/* turbopackIgnore: true */ absolutePath(id));
+    },
+    async remove(id) {
+      try {
+        fs.rmSync(/* turbopackIgnore: true */ absolutePath(id), { force: true });
+      } catch {
+        // Best effort: an orphaned blob is harmless and swept by deleteExpired on next run.
+      }
+    },
+  };
+}
+
+/** Supabase Storage adapter (private bucket, service-role key; server only). */
+export function supabaseBlobStorage(env: Env = process.env, bucket: string = SUPABASE_FILES_BUCKET): BlobStorage {
+  type Client = ReturnType<typeof import("@supabase/supabase-js").createClient>;
+  let client: Promise<Client> | undefined;
+  const storage = async () => {
+    client ??= import("@supabase/supabase-js").then(({ createClient }) =>
+      createClient(env.SUPABASE_URL ?? "", env.SUPABASE_SERVICE_ROLE_KEY ?? "", { auth: { persistSession: false, autoRefreshToken: false } }),
+    );
+    return (await client).storage;
+  };
+  const checkKey = (id: string): void => {
+    if (!UUID_RE.test(id)) throw notFoundError("File");
+  };
+  return {
+    kind: "supabase",
+    async put(id, bytes, mime) {
+      checkKey(id);
+      const s = await storage();
+      const upload = () => s.from(bucket).upload(id, bytes, { contentType: mime, upsert: false });
+      let { error } = await upload();
+      if (error && /bucket not found/i.test(error.message)) {
+        await s.createBucket(bucket, { public: false });
+        ({ error } = await upload());
+      }
+      if (error) throw new AppError("INTERNAL", "The file could not be stored", { cause: error });
+      return `supabase://${bucket}/${id}`;
+    },
+    async get(id) {
+      checkKey(id);
+      const { data, error } = await (await storage()).from(bucket).download(id);
+      if (error || !data) throw new AppError("NOT_FOUND", "File content is no longer available", { cause: error ?? undefined });
+      return Buffer.from(await data.arrayBuffer());
+    },
+    async remove(id) {
+      if (!UUID_RE.test(id)) return;
+      try {
+        await (await storage()).from(bucket).remove([id]);
+      } catch {
+        // Best effort, as on disk.
+      }
+    },
+  };
+}
+
+/**
+ * Vercel has a read-only, non-persistent file system: without Supabase Storage every write
+ * would fail with an opaque EROFS. Writes fail with a clear configuration error instead.
+ */
+function unconfiguredServerlessStorage(local: BlobStorage): BlobStorage {
+  const error = (): AppError =>
+    new AppError("INTERNAL", "File storage is not configured: set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (Vercel has no persistent disk)");
+  return {
+    kind: "local",
+    async put() {
+      throw error();
+    },
+    get: (id) => local.get(id),
+    remove: (id) => local.remove(id),
+  };
+}
+
+/** The default adapter for this environment. */
+export function defaultBlobStorage(root: string = defaultFilesRoot(), env: Env = process.env): BlobStorage {
+  if (supabaseStorageConfigured(env)) return supabaseBlobStorage(env);
+  const local = localBlobStorage(root);
+  return env.VERCEL && !env.KITSTAK_FILES_DIR?.trim() ? unconfiguredServerlessStorage(local) : local;
 }
 
 export function defaultFilesRoot(): string {
-  return process.env.KITSTAK_FILES_DIR ?? path.join(process.cwd(), ".data", "files");
+  return process.env.KITSTAK_FILES_DIR ?? path.join(/* turbopackIgnore: true */ process.cwd(), ".data", "files");
 }
 
 /** Strips directories, control and reserved characters; keeps the extension. */
@@ -110,103 +232,85 @@ function defaultExpiry(purpose: FilePurpose, now: Date): string | null {
 
 export interface FileStore {
   readonly root: string;
-  store(db: AppDb, input: StoreFileInput): FileRecord;
-  get(db: AppDb, id: string): FileRecord;
-  read(db: AppDb, id: string): { readonly record: FileRecord; readonly bytes: Buffer };
-  remove(db: AppDb, id: string): void;
-  deleteExpired(db: AppDb): number;
+  readonly storage: BlobStorage;
+  store(db: AppDb, input: StoreFileInput): Promise<FileRecord>;
+  get(db: AppDb, id: string): Promise<FileRecord>;
+  read(db: AppDb, id: string): Promise<{ readonly record: FileRecord; readonly bytes: Buffer }>;
+  remove(db: AppDb, id: string): Promise<void>;
+  deleteExpired(db: AppDb): Promise<number>;
 }
 
 export function createFileStore(options: FileStoreOptions = {}): FileStore {
   const root = options.root ?? defaultFilesRoot();
   const now = options.now ?? (() => new Date());
+  // An explicit root (tests) always means local disk.
+  const storage = options.storage ?? (options.root ? localBlobStorage(root) : defaultBlobStorage(root));
 
-  const absolutePath = (id: string): string => {
-    if (!UUID_RE.test(id)) throw notFoundError("File");
-    const resolved = path.resolve(/* turbopackIgnore: true */ root, id);
-    if (path.dirname(resolved) !== path.resolve(/* turbopackIgnore: true */ root)) throw notFoundError("File");
-    return resolved;
-  };
-
-  const writeBytes = (id: string, bytes: Uint8Array): string => {
-    fs.mkdirSync(root, { recursive: true });
-    const target = absolutePath(id);
-    const temp = `${target}.tmp`;
-    fs.writeFileSync(temp, bytes, { flag: "wx" });
-    fs.renameSync(temp, target);
-    return target;
-  };
-
-  const unlinkQuietly = (target: string): void => {
-    try {
-      fs.rmSync(target, { force: true });
-    } catch {
-      // Best effort: an orphaned blob is harmless and swept by deleteExpired on next run.
-    }
-  };
-
-  const get = (db: AppDb, id: string): FileRecord => {
-    const row = db.select().from(files).where(eq(files.id, id)).get();
+  const get = async (db: AppDb, id: string): Promise<FileRecord> => {
+    const row = (await db.select().from(files).where(eq(files.id, id)).limit(1))[0];
     if (!row) throw notFoundError("File");
     return row;
   };
 
-  const store = (db: AppDb, input: StoreFileInput): FileRecord => {
+  const store = async (db: AppDb, input: StoreFileInput): Promise<FileRecord> => {
     const name = sanitizeFileName(input.name);
     const mime = validateFile(input.purpose, name, input.bytes);
     const id = randomUUID();
-    const target = writeBytes(id, input.bytes);
+    const storagePath = await storage.put(id, input.bytes, mime);
     try {
-      return db.insert(files).values({
+      const [row] = await db.insert(files).values({
         id,
         name,
         mime,
         size: input.bytes.length,
         sha256: sha256Hex(input.bytes),
-        storagePath: path.relative(process.cwd(), target).split(path.sep).join("/"),
+        storagePath,
         ownerEntityType: input.ownerEntityType ?? null,
         ownerEntityId: input.ownerEntityId ?? null,
         uploadedBy: input.uploadedBy ?? null,
         createdAt: now().toISOString(),
         expiresAt: input.expiresAt === undefined ? defaultExpiry(input.purpose, now()) : input.expiresAt,
-      }).returning().get();
+      }).returning();
+      if (!row) throw new Error("files insert returned no row");
+      return row;
     } catch (error: unknown) {
-      unlinkQuietly(target);
+      await storage.remove(id);
       throw error;
     }
   };
 
-  const read = (db: AppDb, id: string): { record: FileRecord; bytes: Buffer } => {
-    const record = get(db, id);
+  const read = async (db: AppDb, id: string): Promise<{ record: FileRecord; bytes: Buffer }> => {
+    const record = await get(db, id);
     if (record.expiresAt && record.expiresAt <= now().toISOString()) throw notFoundError("File");
     try {
-      return { record, bytes: fs.readFileSync(/* turbopackIgnore: true */ absolutePath(id)) };
+      return { record, bytes: await storage.get(id) };
     } catch (error: unknown) {
       if (error instanceof AppError) throw error;
       throw new AppError("NOT_FOUND", "File content is no longer available", { cause: error });
     }
   };
 
-  const remove = (db: AppDb, id: string): void => {
-    db.update(backgroundTasks).set({ fileId: null }).where(eq(backgroundTasks.fileId, id)).run();
-    db.delete(files).where(eq(files.id, id)).run();
-    unlinkQuietly(absolutePath(id));
+  const remove = async (db: AppDb, id: string): Promise<void> => {
+    await db.update(backgroundTasks).set({ fileId: null }).where(eq(backgroundTasks.fileId, id));
+    await db.delete(files).where(eq(files.id, id));
+    if (!UUID_RE.test(id)) throw notFoundError("File");
+    await storage.remove(id);
   };
 
-  const deleteExpired = (db: AppDb): number => {
+  const deleteExpired = async (db: AppDb): Promise<number> => {
     const cutoff = now().toISOString();
-    const expired = db.select({ id: files.id }).from(files)
-      .where(and(isNotNull(files.expiresAt), lte(files.expiresAt, cutoff))).all();
-    for (const row of expired) remove(db, row.id);
+    const expired = await db.select({ id: files.id }).from(files)
+      .where(and(isNotNull(files.expiresAt), lte(files.expiresAt, cutoff)));
+    for (const row of expired) await remove(db, row.id);
     return expired.length;
   };
 
-  return { root, store, get, read, remove, deleteExpired };
+  return { root, storage, store, get, read, remove, deleteExpired };
 }
 
 let defaultStore: FileStore | undefined;
 
-/** Process-wide store rooted at `.data/files`. */
+/** Process-wide store (`.data/files` locally, Supabase Storage when configured). */
 export function fileStore(): FileStore {
   defaultStore ??= createFileStore();
   return defaultStore;

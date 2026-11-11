@@ -8,8 +8,8 @@ import { deleteProduct } from "@/server/repositories/products-commands";
 export const POST = defineRoute({
   permission: "settings.products.delete",
   body: z.object({ ids: bulkIdsSchema }),
-  handler: ({ db, auth, actor, body }) => {
+  handler: async ({ db, auth, actor, body }) => {
     const ctx = { ...domainCtx(actor, auth), scope: auth.scope };
-    return runBulk(db, body.ids, (tx, id) => deleteProduct(tx, ctx, id));
+    return await runBulk(db, body.ids, async (tx, id) => await deleteProduct(tx, ctx, id));
   },
 });

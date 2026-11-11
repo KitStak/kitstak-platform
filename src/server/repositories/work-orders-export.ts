@@ -14,8 +14,8 @@ export const WORK_ORDER_EXPORT_COLUMNS: readonly ExportColumn[] = WORK_ORDER_COL
 
 export const workOrdersExportProvider: ExportProvider = {
   columns: WORK_ORDER_EXPORT_COLUMNS,
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listWorkOrders(ctx.db, ctx.auth.viewScope, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listWorkOrders(ctx.db, ctx.auth.viewScope, { ...ctx.query, page, pageSize });
     return {
       rows: rows.map((r): ExportRow => {
         const out: Record<string, unknown> = { ...r, tags: undefined, customFields: undefined };

@@ -71,47 +71,47 @@ describe("adjustment reason direction", () => {
 
 describe("ledger writes (in-memory DB)", () => {
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
-  const stock = (qty: number, attrs: { lotNumber?: string | null; expiryDate?: string | null } = {}) =>
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty, ...attrs }).bucket;
+  const stock = async (qty: number, attrs: { lotNumber?: string | null; expiryDate?: string | null } = {}) =>
+    (await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty, ...attrs })).bucket;
 
-  it("refuses a decrease reason for an increase on the server", () => {
-    const missing = w.db.insert(schema.lookupValues).values({ type: "adjustment_reason", name: "Inventory is missing" }).returning().get().id;
-    const b = stock(4);
-    expect(() => changeQuantity(w.db, w.ctx, b.id, { mode: "adjust", qty: 5, reasonId: missing, version: b.version })).toThrow(/decrease reason/);
-    const res = changeQuantity(w.db, w.ctx, b.id, { mode: "adjust", qty: 3, reasonId: missing, version: b.version });
+  it("refuses a decrease reason for an increase on the server", async () => {
+    const missing = (await w.db.insert(schema.lookupValues).values({ type: "adjustment_reason", name: "Inventory is missing" }).returning())[0].id;
+    const b = await stock(4);
+    await expect(async () => await changeQuantity(w.db, w.ctx, b.id, { mode: "adjust", qty: 5, reasonId: missing, version: b.version })).rejects.toThrow(/decrease reason/);
+    const res = await changeQuantity(w.db, w.ctx, b.id, { mode: "adjust", qty: 3, reasonId: missing, version: b.version });
     expect(res.to).toBe(3);
-    expect(ledger.reconcileLedger(w.db)).toEqual([]);
+    expect(await ledger.reconcileLedger(w.db)).toEqual([]);
   });
 
-  it("Add Inventory refuses attributes the product doesn't track", () => {
+  it("Add Inventory refuses attributes the product doesn't track", async () => {
     const base = { warehouseId: w.warehouseId, locationId: w.loc.storageA, clientId: w.clientId, productId: w.productId, packType: "Each", qty: 2 };
-    expect(() => addInventory(w.db, w.ctx, { ...base, lotNumber: "LOT-QA-01" })).toThrow(/doesn't track/);
-    expect(() => addInventory(w.db, w.ctx, { ...base, expiryDate: "2026-02-28" })).toThrow(/doesn't track/);
-    expect(addInventory(w.db, w.ctx, base).to).toBe(2);
+    await expect(async () => await addInventory(w.db, w.ctx, { ...base, lotNumber: "LOT-QA-01" })).rejects.toThrow(/doesn't track/);
+    await expect(async () => await addInventory(w.db, w.ctx, { ...base, expiryDate: "2026-02-28" })).rejects.toThrow(/doesn't track/);
+    expect((await addInventory(w.db, w.ctx, base)).to).toBe(2);
   });
 
-  it("finds and repairs untracked attributes, bad dates and empty buckets through the ledger", () => {
-    const lot = stock(2, { lotNumber: "LOT-QA-01" });
-    const exp = stock(3, { expiryDate: "2027-05-08T05:00:00.000Z" });
-    const empty = stock(1, { lotNumber: "OLD" });
-    ledger.adjustTo(w.db, w.ctx, { inventoryId: empty.id, targetQty: 0 });
-    const checks = findInventoryHygieneIssues(w.db).map((i) => `${i.check}:${i.id}`);
+  it("finds and repairs untracked attributes, bad dates and empty buckets through the ledger", async () => {
+    const lot = await stock(2, { lotNumber: "LOT-QA-01" });
+    const exp = await stock(3, { expiryDate: "2027-05-08T05:00:00.000Z" });
+    const empty = await stock(1, { lotNumber: "OLD" });
+    await ledger.adjustTo(w.db, w.ctx, { inventoryId: empty.id, targetQty: 0 });
+    const checks = (await findInventoryHygieneIssues(w.db)).map((i) => `${i.check}:${i.id}`);
     expect(checks).toContain(`untracked-attribute:${lot.id}`);
     expect(checks).toContain(`bad-date:${exp.id}`);
     expect(checks).toContain(`empty-bucket:${empty.id}`);
 
-    const res = repairInventoryHygiene(w.db, w.ctx);
+    const res = await repairInventoryHygiene(w.db, w.ctx);
     expect(res.skipped).toEqual([]);
     expect(res.deleted).toBeGreaterThanOrEqual(1);
-    expect(findInventoryHygieneIssues(w.db)).toEqual([]);
-    const live = w.db.select().from(schema.inventory).where(eq(schema.inventory.productId, w.productId)).all().filter((b) => b.onHand > 0);
+    expect(await findInventoryHygieneIssues(w.db)).toEqual([]);
+    const live = (await w.db.select().from(schema.inventory).where(eq(schema.inventory.productId, w.productId))).filter((b) => b.onHand > 0);
     expect(live.reduce((s, b) => s + b.onHand, 0)).toBe(5);
     expect(live.every((b) => b.lotNumber === null && b.expiryDate === null)).toBe(true);
-    const types = w.db.select().from(schema.inventoryTransactions).all().map((t) => t.type);
+    const types = (await w.db.select().from(schema.inventoryTransactions)).map((t) => t.type);
     expect(types).toContain("Attributes Change");
-    expect(ledger.reconcileLedger(w.db)).toEqual([]);
+    expect(await ledger.reconcileLedger(w.db)).toEqual([]);
   });
 
   it("knows which attribute problems a bucket has", () => {

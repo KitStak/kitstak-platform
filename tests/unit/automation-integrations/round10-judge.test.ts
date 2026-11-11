@@ -64,20 +64,20 @@ describe("relative date presets in rule conditions", () => {
 
 describe("honest live badges", () => {
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
 
-  it("a live adapter is verified only after a credentialed, non-sandbox store succeeds", () => {
+  it("a live adapter is verified only after a credentialed, non-sandbox store succeeds", async () => {
     const settings = channelSettingsSchema.parse({});
-    const demo = w.db.insert(schema.channelConnections).values({ provider: "shopify", storeName: "Demo", clientId: w.clientId, distribution: "Custom App", status: "Completed", settings }).returning().get();
-    const m = w.db.insert(schema.channelMethods).values({ connectionId: demo.id, method: "Download Orders", status: "Active", intervalMinutes: 15 }).returning().get();
-    w.db.insert(schema.channelRuns).values({ methodId: m.id, connectionId: demo.id, method: "Download Orders", status: "Successful", successCount: 3, totalCount: 3, startedAt: "2026-11-10T00:00:00Z" }).run();
-    expect(verifiedLiveProviders(w.db).channels.has("shopify")).toBe(false);
+    const demo = (await w.db.insert(schema.channelConnections).values({ provider: "shopify", storeName: "Demo", clientId: w.clientId, distribution: "Custom App", status: "Completed", settings }).returning())[0];
+    const m = (await w.db.insert(schema.channelMethods).values({ connectionId: demo.id, method: "Download Orders", status: "Active", intervalMinutes: 15 }).returning())[0];
+    await w.db.insert(schema.channelRuns).values({ methodId: m.id, connectionId: demo.id, method: "Download Orders", status: "Successful", successCount: 3, totalCount: 3, startedAt: "2026-11-10T00:00:00Z" });
+    expect((await verifiedLiveProviders(w.db)).channels.has("shopify")).toBe(false);
 
-    const live = w.db.insert(schema.channelConnections).values({ provider: "shopify", storeName: "Live", clientId: w.clientId, distribution: "Custom App", status: "Completed", settings, credentialsEnc: "enc" }).returning().get();
-    const m2 = w.db.insert(schema.channelMethods).values({ connectionId: live.id, method: "Download Orders", status: "Active", intervalMinutes: 15 }).returning().get();
-    w.db.insert(schema.channelRuns).values({ methodId: m2.id, connectionId: live.id, method: "Download Orders", status: "Successful", successCount: 1, totalCount: 1, startedAt: "2026-11-10T00:00:00Z" }).run();
-    expect(verifiedLiveProviders(w.db).channels.has("shopify")).toBe(true);
-    expect(verifiedLiveProviders(w.db).carriers.size).toBe(0);
+    const live = (await w.db.insert(schema.channelConnections).values({ provider: "shopify", storeName: "Live", clientId: w.clientId, distribution: "Custom App", status: "Completed", settings, credentialsEnc: "enc" }).returning())[0];
+    const m2 = (await w.db.insert(schema.channelMethods).values({ connectionId: live.id, method: "Download Orders", status: "Active", intervalMinutes: 15 }).returning())[0];
+    await w.db.insert(schema.channelRuns).values({ methodId: m2.id, connectionId: live.id, method: "Download Orders", status: "Successful", successCount: 1, totalCount: 1, startedAt: "2026-11-10T00:00:00Z" });
+    expect((await verifiedLiveProviders(w.db)).channels.has("shopify")).toBe(true);
+    expect((await verifiedLiveProviders(w.db)).carriers.size).toBe(0);
   });
 });

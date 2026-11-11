@@ -6,5 +6,5 @@ import { deletePresets } from "@/server/repositories/rate-shopping";
 export const POST = defineRoute({
   permission: "automation.rate_shopping.delete",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => deletePresets(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await deletePresets(db, auth, actor, body.ids),
 });

@@ -10,5 +10,5 @@ import { approveReports } from "@/server/repositories/billing-reports";
 export const POST = defineRoute({
   permission: "settings.billing_report.approve",
   body: bulkIds.extend({ allowOpenPeriod: z.boolean().optional() }),
-  handler: ({ db, auth, actor, body }) => approveReports(db, auth, actor, body.ids, { allowOpenPeriod: body.allowOpenPeriod }),
+  handler: async ({ db, auth, actor, body }) => await approveReports(db, auth, actor, body.ids, { allowOpenPeriod: body.allowOpenPeriod }),
 });

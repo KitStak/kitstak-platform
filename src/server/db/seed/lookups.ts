@@ -4,6 +4,7 @@ import * as schema from "@/server/db/schema";
 import type { Tx } from "@/server/domain/types";
 import type { ClientRef, OrgRefs } from "./org";
 import type { Id } from "./types";
+import { forEachSeq } from "@/server/db/sql";
 
 type Meta = Record<string, unknown>;
 type Value = string | readonly [string, Meta];
@@ -77,29 +78,29 @@ export function lookupId(refs: LookupRefs, type: LookupType, name: string): Id {
   return id;
 }
 
-export function seedLookups(tx: Tx, org: OrgRefs): LookupRefs {
-  const insert = (type: LookupType, name: string, sortOrder: number, scope: { clientId?: Id; warehouseId?: Id } = {}, meta?: Meta, code?: string): Id =>
-    tx.insert(schema.lookupValues).values({ type, name, code: code ?? null, sortOrder, clientId: scope.clientId ?? null, warehouseId: scope.warehouseId ?? null, meta: meta ?? null })
-      .returning({ id: schema.lookupValues.id }).get().id;
+export async function seedLookups(tx: Tx, org: OrgRefs): Promise<LookupRefs> {
+  const insert = async (type: LookupType, name: string, sortOrder: number, scope: { clientId?: Id; warehouseId?: Id } = {}, meta?: Meta, code?: string): Promise<Id> =>
+    (await tx.insert(schema.lookupValues).values({ type, name, code: code ?? null, sortOrder, clientId: scope.clientId ?? null, warehouseId: scope.warehouseId ?? null, meta: meta ?? null })
+      .returning({ id: schema.lookupValues.id }))[0].id;
   const global = new Map<string, Id>();
   for (const [type, values] of Object.entries(GLOBAL_LOOKUPS) as [LookupType, readonly Value[]][]) {
-    values.forEach((v, i) => {
+    await forEachSeq(values, async (v, i) => {
       const [name, meta] = typeof v === "string" ? [v, undefined] : v;
-      global.set(lookupKey(type, name), insert(type, name, i, {}, meta));
+      global.set(lookupKey(type, name), await insert(type, name, i, {}, meta));
     });
   }
   const byClient = new Map<string, Id>();
   for (const c of org.clients) {
-    PRODUCT_TYPES[c.category].forEach((name, i) => byClient.set(lookupKey(c.id, "product_type", name), insert("product_type", name, i, { clientId: c.id })));
-    PRODUCT_GROUPS[c.category].forEach((name, i) => byClient.set(lookupKey(c.id, "product_group", name), insert("product_group", name, i, { clientId: c.id })));
+    await forEachSeq(PRODUCT_TYPES[c.category], async (name, i) => byClient.set(lookupKey(c.id, "product_type", name), await insert("product_type", name, i, { clientId: c.id })));
+    await forEachSeq(PRODUCT_GROUPS[c.category], async (name, i) => byClient.set(lookupKey(c.id, "product_group", name), await insert("product_group", name, i, { clientId: c.id })));
   }
   const byWarehouse = new Map<string, Id>();
   for (const warehouseId of [org.mlt1, org.ks2]) {
-    LOCATION_ZONES.forEach((name, i) => {
+    await forEachSeq(LOCATION_ZONES, async (name, i) => {
       const z = LOCATION_ZONE_SETTINGS[name];
-      byWarehouse.set(lookupKey(warehouseId, "location_zone", name), insert("location_zone", name, i, { warehouseId }, { priority: z.priority, maxLocationsPerSku: z.maxLocationsPerSku }, z.code));
+      byWarehouse.set(lookupKey(warehouseId, "location_zone", name), await insert("location_zone", name, i, { warehouseId }, { priority: z.priority, maxLocationsPerSku: z.maxLocationsPerSku }, z.code));
     });
-    LOCATION_GROUPS.forEach((name, i) => byWarehouse.set(lookupKey(warehouseId, "location_group", name), insert("location_group", name, i, { warehouseId })));
+    await forEachSeq(LOCATION_GROUPS, async (name, i) => byWarehouse.set(lookupKey(warehouseId, "location_group", name), await insert("location_group", name, i, { warehouseId })));
   }
   return { global, byClient, byWarehouse };
 }
@@ -119,7 +120,7 @@ const SEQUENCES: readonly (typeof schema.codeSequences.$inferInsert)[] = [
   { key: "receipt", prefix: "", padding: 0, nextValue: 70001 },
 ];
 
-export function seedSequences(tx: Tx): number {
-  tx.insert(schema.codeSequences).values(SEQUENCES.map((s) => ({ ...s, warehouseId: "*", autoGenerate: true }))).run();
+export async function seedSequences(tx: Tx): Promise<number> {
+  await tx.insert(schema.codeSequences).values(SEQUENCES.map((s) => ({ ...s, warehouseId: "*", autoGenerate: true })));
   return SEQUENCES.length;
 }

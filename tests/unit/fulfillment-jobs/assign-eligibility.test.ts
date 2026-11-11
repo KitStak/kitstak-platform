@@ -20,6 +20,7 @@ import { assertEligibleAssignee, searchAssignees } from "@/server/repositories/w
 import { aiWaveMessage, runWave } from "@/server/repositories/waves-run";
 import { isBusyError, withBusyRetry } from "@/server/repositories/jobs-read-retry";
 import { createWorld, orderInput, type World } from "../foundation/domain/fixtures";
+import { mapSeq } from "@/server/db/sql";
 
 let w: World;
 let auth: AuthContext;
@@ -28,79 +29,79 @@ let viewer: string;
 let client: string;
 let multiType: string;
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId, name: "Admin" }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
-  const exec = w.db.insert(schema.roles).values({ key: "clerk", name: "Clerk", category: "Operation" }).returning().get().id;
-  const view = w.db.insert(schema.roles).values({ key: "finance", name: "Finance viewer", category: "Operation" }).returning().get().id;
-  const clientRole = w.db.insert(schema.roles).values({ key: "client", name: "Client", category: "Client" }).returning().get().id;
-  w.db.insert(schema.rolePermissions).values([
+  const exec = (await w.db.insert(schema.roles).values({ key: "clerk", name: "Clerk", category: "Operation" }).returning())[0].id;
+  const view = (await w.db.insert(schema.roles).values({ key: "finance", name: "Finance viewer", category: "Operation" }).returning())[0].id;
+  const clientRole = (await w.db.insert(schema.roles).values({ key: "client", name: "Client", category: "Client" }).returning())[0].id;
+  await w.db.insert(schema.rolePermissions).values([
     { roleId: exec, permission: "fulfillment.task_details.execute_task" },
     { roleId: clientRole, permission: "fulfillment.task_details.execute_task" },
-  ]).run();
-  const user = (email: string, name: string, roleId: string, extra: Partial<typeof schema.users.$inferInsert> = {}) => {
-    const id = w.db.insert(schema.users).values({ email, name, passwordHash: "x", role: "operator", ...extra }).returning().get().id;
-    w.db.insert(schema.userRoles).values({ userId: id, roleId }).run();
-    w.db.insert(schema.userWarehouses).values({ userId: id, warehouseId: w.warehouseId }).run();
+  ]);
+  const user = async (email: string, name: string, roleId: string, extra: Partial<typeof schema.users.$inferInsert> = {}) => {
+    const id = (await w.db.insert(schema.users).values({ email, name, passwordHash: "x", role: "operator", ...extra }).returning())[0].id;
+    await w.db.insert(schema.userRoles).values({ userId: id, roleId });
+    await w.db.insert(schema.userWarehouses).values({ userId: id, warehouseId: w.warehouseId });
     return id;
   };
-  clerk = user("thao@x.io", "Thao Nguyen", exec);
-  viewer = user("grace@x.io", "Grace Whitmore", view, { role: "viewer" });
-  client = user("dana@apex.io", "Dana Whitfield", clientRole, { userType: "Client" });
-  multiType = w.db.insert(schema.jobTypes).values({
+  clerk = await user("thao@x.io", "Thao Nguyen", exec);
+  viewer = await user("grace@x.io", "Grace Whitmore", view, { role: "viewer" });
+  client = await user("dana@apex.io", "Dana Whitfield", clientRole, { userType: "Client" });
+  multiType = (await w.db.insert(schema.jobTypes).values({
     code: "Multi Item Orders", description: "Multi", warehouseId: w.warehouseId, operationType: "Picking", settings: jobTypeSettingsSchema.parse({ orderScope: "All Orders" }),
-  }).returning().get().id;
+  }).returning())[0].id;
 });
 afterEach(() => w.close());
 
-function waveJob(orders = 2): { jobId: string; orderIds: string[] } {
-  ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 50 });
-  const orderIds = Array.from({ length: orders }, () => createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }])).id);
-  const rule = createWaveRule(w.db, auth, w.ctx, waveRuleInputSchema.parse({ name: "KS-ASSIGN", warehouseId: w.warehouseId, operationType: "Picking", jobTypeIds: [multiType] }));
-  runWave(w.db, w.ctx, rule.id, { runBy: "Admin" });
-  const job = w.db.select().from(schema.jobs).all()[0];
+async function waveJob(orders = 2): Promise<{ jobId: string; orderIds: string[] }> {
+  await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 50 });
+  const orderIds = await mapSeq(Array.from({ length: orders }), async () => (await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]))).id);
+  const rule = await createWaveRule(w.db, auth, w.ctx, waveRuleInputSchema.parse({ name: "KS-ASSIGN", warehouseId: w.warehouseId, operationType: "Picking", jobTypeIds: [multiType] }));
+  await runWave(w.db, w.ctx, rule.id, { runBy: "Admin" });
+  const job = (await w.db.select().from(schema.jobs))[0];
   if (!job) throw new Error("no job");
   return { jobId: job.id, orderIds };
 }
 
 describe("assign eligibility", () => {
-  it("rejects viewer and client-portal users with a validation error, accepts warehouse operators", () => {
-    const { jobId } = waveJob(1);
-    expect(() => assignJobs(w.db, w.ctx, [jobId], viewer)).toThrow(/Grace Whitmore can't be assigned/);
-    expect(() => assignJobs(w.db, w.ctx, [jobId], client)).toThrow(/can't be assigned/);
+  it("rejects viewer and client-portal users with a validation error, accepts warehouse operators", async () => {
+    const { jobId } = await waveJob(1);
+    await expect(async () => await assignJobs(w.db, w.ctx, [jobId], viewer)).rejects.toThrow(/Grace Whitmore can't be assigned/);
+    await expect(async () => await assignJobs(w.db, w.ctx, [jobId], client)).rejects.toThrow(/can't be assigned/);
     try {
-      assertEligibleAssignee(w.db, client, [w.warehouseId]);
+      await assertEligibleAssignee(w.db, client, [w.warehouseId]);
     } catch (e) {
       expect((e as { code?: string }).code).toBe("VALIDATION");
     }
-    const ok = assignJobs(w.db, w.ctx, [jobId], clerk);
+    const ok = await assignJobs(w.db, w.ctx, [jobId], clerk);
     expect(ok.failed).toEqual([]);
-    expect(w.db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).get()?.assignedToUserId).toBe(clerk);
+    expect((await w.db.select().from(schema.jobs).where(eq(schema.jobs.id, jobId)).limit(1))[0]?.assignedToUserId).toBe(clerk);
   });
 
-  it("applies the same rule to task assign", () => {
-    const { jobId } = waveJob(1);
-    const task = w.db.select().from(schema.tasks).where(eq(schema.tasks.jobId, jobId)).all()[0];
+  it("applies the same rule to task assign", async () => {
+    const { jobId } = await waveJob(1);
+    const task = (await w.db.select().from(schema.tasks).where(eq(schema.tasks.jobId, jobId)))[0];
     if (!task) throw new Error("no task");
-    expect(() => assignTasks(w.db, w.ctx, { ids: [task.id], userId: viewer })).toThrow(/can't be assigned/);
-    expect(assignTasks(w.db, w.ctx, { ids: [task.id], userId: clerk }).succeeded).toEqual([task.id]);
+    await expect(async () => await assignTasks(w.db, w.ctx, { ids: [task.id], userId: viewer })).rejects.toThrow(/can't be assigned/);
+    expect((await assignTasks(w.db, w.ctx, { ids: [task.id], userId: clerk })).succeeded).toEqual([task.id]);
   });
 
-  it("searches eligible users only, from 3 characters", () => {
-    expect(searchAssignees(w.db, w.warehouseId, "th")).toEqual([]);
-    expect(searchAssignees(w.db, w.warehouseId, "tha").map((u) => u.label)).toEqual(["Thao Nguyen"]);
-    expect(searchAssignees(w.db, w.warehouseId, "gra")).toEqual([]);
-    expect(searchAssignees(w.db, w.warehouseId, "apex")).toEqual([]);
+  it("searches eligible users only, from 3 characters", async () => {
+    expect(await searchAssignees(w.db, w.warehouseId, "th")).toEqual([]);
+    expect((await searchAssignees(w.db, w.warehouseId, "tha")).map((u) => u.label)).toEqual(["Thao Nguyen"]);
+    expect(await searchAssignees(w.db, w.warehouseId, "gra")).toEqual([]);
+    expect(await searchAssignees(w.db, w.warehouseId, "apex")).toEqual([]);
   });
 });
 
 describe("job detail released orders", () => {
-  it("marks an order whose job tasks are all cancelled as released and drops it from the live count", () => {
-    const { jobId, orderIds } = waveJob(2);
+  it("marks an order whose job tasks are all cancelled as released and drops it from the live count", async () => {
+    const { jobId, orderIds } = await waveJob(2);
     const [gone, kept] = orderIds as [string, string];
-    w.db.update(schema.tasks).set({ status: "Cancelled" }).where(and(eq(schema.tasks.jobId, jobId), eq(schema.tasks.orderId, gone))).run();
-    const d = getJobDetail(w.db, auth, jobId);
+    await w.db.update(schema.tasks).set({ status: "Cancelled" }).where(and(eq(schema.tasks.jobId, jobId), eq(schema.tasks.orderId, gone)));
+    const d = await getJobDetail(w.db, auth, jobId);
     expect(d.orders.find((o) => o.id === gone)?.released).toBe(true);
     expect(d.orders.find((o) => o.id === kept)?.released).toBe(false);
     expect(d.job.orderCount).toBe(1);
@@ -123,15 +124,15 @@ describe("schedule helpers", () => {
     expect(formatInZone("2026-11-10T19:00:00.000Z", "America/New_York")).toBe("11/10/2026 2:00 PM EST");
   });
 
-  it("retries busy reads and rethrows other errors", async () => {
+  it("passes reads through (Postgres readers never hit SQLite busy errors) and rethrows errors", async () => {
     let n = 0;
-    const out = await withBusyRetry(() => {
+    const out = await withBusyRetry(async () => {
       n += 1;
-      if (n < 3) throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
       return "ok";
     });
     expect(out).toBe("ok");
-    expect(isBusyError(new Error("x"))).toBe(false);
+    expect(n).toBe(1);
+    expect(isBusyError(Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" }))).toBe(false);
     await expect(withBusyRetry(() => { throw new Error("boom"); })).rejects.toThrow("boom");
   });
 });

@@ -63,13 +63,13 @@ export function receiptTxnType(type: ReceivingType): TxnType {
 
 const RECEIPT_SEQUENCE = "receipt";
 
-function productSku(tx: Tx, productId: string): string {
-  return tx.select({ sku: schema.products.sku }).from(schema.products).where(eq(schema.products.id, productId)).get()?.sku ?? productId;
+async function productSku(tx: Tx, productId: string): Promise<string> {
+  return (await tx.select({ sku: schema.products.sku }).from(schema.products).where(eq(schema.products.id, productId)).limit(1))[0]?.sku ?? productId;
 }
 
-function applyPoReceipt(tx: Tx, ctx: DomainCtx, input: RecordReceiptInput, qty: number): void {
+async function applyPoReceipt(tx: Tx, ctx: DomainCtx, input: RecordReceiptInput, qty: number): Promise<void> {
   if (!input.purchaseOrderId) return;
-  const po = tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, input.purchaseOrderId)).get();
+  const po = (await tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, input.purchaseOrderId)).limit(1))[0];
   if (!po) throw new DomainError("NOT_FOUND", "Purchase order not found");
   checkScope(ctx, po, "Purchase order");
   if (po.status === "Completed" || po.status === "Cancelled") {
@@ -77,54 +77,54 @@ function applyPoReceipt(tx: Tx, ctx: DomainCtx, input: RecordReceiptInput, qty: 
   }
   if (po.warehouseId !== input.warehouseId || po.clientId !== input.clientId) throw new DomainError("VALIDATION", "Receipt warehouse/client must match the purchase order.");
   const status = po.status === "Receiving" ? po.status : stateMachines.purchaseOrder.transition(po.status, "Receiving");
-  tx.update(schema.purchaseOrders).set({
+  await tx.update(schema.purchaseOrders).set({
     status, receivedQuantity: sql`${schema.purchaseOrders.receivedQuantity} + ${qty}`, receivedAt: po.receivedAt ?? nowIso(), updatedBy: ctx.userId,
-  }).where(eq(schema.purchaseOrders.id, po.id)).run();
+  }).where(eq(schema.purchaseOrders.id, po.id));
   if (!input.purchaseOrderLineId) return;
-  const line = tx.select().from(schema.purchaseOrderLines).where(eq(schema.purchaseOrderLines.id, input.purchaseOrderLineId)).get();
+  const line = (await tx.select().from(schema.purchaseOrderLines).where(eq(schema.purchaseOrderLines.id, input.purchaseOrderLineId)).limit(1))[0];
   if (!line || line.purchaseOrderId !== po.id) throw new DomainError("NOT_FOUND", "Purchase order line not found");
   if (line.productId !== input.productId) throw new DomainError("VALIDATION", "The received product does not match the purchase order line.");
-  tx.update(schema.purchaseOrderLines).set({ receivedQuantity: line.receivedQuantity + qty, updatedBy: ctx.userId })
-    .where(eq(schema.purchaseOrderLines.id, line.id)).run();
-  recordLine(tx, ctx, {
+  await tx.update(schema.purchaseOrderLines).set({ receivedQuantity: line.receivedQuantity + qty, updatedBy: ctx.userId })
+    .where(eq(schema.purchaseOrderLines.id, line.id));
+  await recordLine(tx, ctx, {
     entityType: "purchase_order", entityId: po.id, entityCode: po.code, lineEntityType: "purchase_order_line",
-    lineEntityId: line.id, lineLabel: productSku(tx, line.productId), field: "receivedQuantity", from: line.receivedQuantity, to: line.receivedQuantity + qty,
+    lineEntityId: line.id, lineLabel: await productSku(tx, line.productId), field: "receivedQuantity", from: line.receivedQuantity, to: line.receivedQuantity + qty,
   });
 }
 
-function applyReturnReceipt(tx: Tx, ctx: DomainCtx, input: RecordReceiptInput, qty: number): void {
+async function applyReturnReceipt(tx: Tx, ctx: DomainCtx, input: RecordReceiptInput, qty: number): Promise<void> {
   if (!input.returnOrderId) return;
-  const ro = tx.select().from(schema.returnOrders).where(eq(schema.returnOrders.id, input.returnOrderId)).get();
+  const ro = (await tx.select().from(schema.returnOrders).where(eq(schema.returnOrders.id, input.returnOrderId)).limit(1))[0];
   if (!ro) throw new DomainError("NOT_FOUND", "Return order not found");
   checkScope(ctx, ro, "Return order");
   if (ro.status === "Completed" || ro.status === "Cancelled") throw new DomainError("INVALID_STATE", `A return in ${ro.status.toLowerCase()} status can't be received.`);
   if (ro.status !== "Started") {
-    tx.update(schema.returnOrders).set({ status: stateMachines.returnOrder.transition(ro.status, "Started"), actualReturnDate: nowIso(), updatedBy: ctx.userId })
-      .where(eq(schema.returnOrders.id, ro.id)).run();
+    await tx.update(schema.returnOrders).set({ status: stateMachines.returnOrder.transition(ro.status, "Started"), actualReturnDate: nowIso(), updatedBy: ctx.userId })
+      .where(eq(schema.returnOrders.id, ro.id));
   }
   if (!input.returnOrderLineId) return;
-  const line = tx.select().from(schema.returnOrderLines).where(eq(schema.returnOrderLines.id, input.returnOrderLineId)).get();
+  const line = (await tx.select().from(schema.returnOrderLines).where(eq(schema.returnOrderLines.id, input.returnOrderLineId)).limit(1))[0];
   if (!line || line.returnOrderId !== ro.id) throw new DomainError("NOT_FOUND", "Return line not found");
-  tx.update(schema.returnOrderLines).set({ returnedQty: line.returnedQty + qty, lineStatus: "Started", updatedBy: ctx.userId })
-    .where(eq(schema.returnOrderLines.id, line.id)).run();
+  await tx.update(schema.returnOrderLines).set({ returnedQty: line.returnedQty + qty, lineStatus: "Started", updatedBy: ctx.userId })
+    .where(eq(schema.returnOrderLines.id, line.id));
 }
 
-export function recordReceipt(tx: Tx, ctx: DomainCtx, input: RecordReceiptInput): { receipt: ReceiptRow; txn: TxnRow } {
+export async function recordReceipt(tx: Tx, ctx: DomainCtx, input: RecordReceiptInput): Promise<{ receipt: ReceiptRow; txn: TxnRow }> {
   if (!Number.isInteger(input.quantity) || input.quantity <= 0) throw new DomainError("VALIDATION", "Received quantity must be a positive whole number");
-  const product = tx.select().from(schema.products).where(eq(schema.products.id, input.productId)).get();
+  const product = (await tx.select().from(schema.products).where(eq(schema.products.id, input.productId)).limit(1))[0];
   if (!product) throw new DomainError("NOT_FOUND", "Product not found");
   const packType = input.packType ?? product.uom;
-  const uomQuantity = input.quantity * packRatio(tx, product.id, packType);
+  const uomQuantity = input.quantity * (await packRatio(tx, product.id, packType));
   if (product.trackSerial && input.serials && input.serials.length !== uomQuantity) {
     throw new DomainError("VALIDATION", `${uomQuantity} serial numbers are required; ${input.serials.length} entered.`);
   }
-  applyPoReceipt(tx, ctx, input, input.quantity);
-  applyReturnReceipt(tx, ctx, input, input.quantity);
+  await applyPoReceipt(tx, ctx, input, input.quantity);
+  await applyReturnReceipt(tx, ctx, input, input.quantity);
   const poCode = input.purchaseOrderId
-    ? tx.select({ code: schema.purchaseOrders.code }).from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, input.purchaseOrderId)).get()?.code ?? null
+    ? (await tx.select({ code: schema.purchaseOrders.code }).from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, input.purchaseOrderId)).limit(1))[0]?.code ?? null
     : null;
-  const receipt = tx.insert(schema.receipts).values({
-    masterId: nextInteger(tx, RECEIPT_SEQUENCE), type: input.type, warehouseId: input.warehouseId, clientId: input.clientId,
+  const receipt = (await tx.insert(schema.receipts).values({
+    masterId: await nextInteger(tx, RECEIPT_SEQUENCE), type: input.type, warehouseId: input.warehouseId, clientId: input.clientId,
     purchaseOrderId: input.purchaseOrderId ?? null, purchaseOrderLineId: input.purchaseOrderLineId ?? null,
     workOrderId: input.workOrderId ?? null, shipmentOrderId: input.shipmentOrderId ?? null,
     returnOrderId: input.returnOrderId ?? null, returnOrderLineId: input.returnOrderLineId ?? null,
@@ -134,8 +134,8 @@ export function recordReceipt(tx: Tx, ctx: DomainCtx, input: RecordReceiptInput)
     damageImageFileId: input.damageImageFileId ?? null,
     customerReturnReason: input.customerReturnReason ?? null, actualReturnReason: input.actualReturnReason ?? null,
     note: input.note ?? null, lineNote: input.lineNote ?? null, receivedBy: ctx.source,
-  }).returning().get();
-  const { bucket, txn } = add(tx, ctx, {
+  }).returning())[0];
+  const { bucket, txn } = await add(tx, ctx, {
     warehouseId: input.warehouseId, clientId: input.clientId, productId: product.id, locationId: input.locationId,
     lpId: input.lpId, lotNumber: input.lotNumber, expiryDate: input.expiryDate, productionDate: input.productionDate,
     damageReason: input.damageReason, packType, qty: uomQuantity, poNumber: poCode,
@@ -146,58 +146,58 @@ export function recordReceipt(tx: Tx, ctx: DomainCtx, input: RecordReceiptInput)
     },
   });
   if (!txn) throw new DomainError("INVALID_STATE", "Receipt did not post a transaction");
-  const updated = tx.update(schema.receipts).set({ inventoryTransactionId: txn.id }).where(eq(schema.receipts.id, receipt.id)).returning().get();
+  const updated = (await tx.update(schema.receipts).set({ inventoryTransactionId: txn.id }).where(eq(schema.receipts.id, receipt.id)).returning())[0];
   if (input.serials && input.serials.length > 0) {
-    registerSerials(tx, ctx, { productId: product.id, warehouseId: input.warehouseId, clientId: input.clientId, serials: input.serials, inventoryId: bucket.id, receiptId: receipt.id, txnId: txn.id });
+    await registerSerials(tx, ctx, { productId: product.id, warehouseId: input.warehouseId, clientId: input.clientId, serials: input.serials, inventoryId: bucket.id, receiptId: receipt.id, txnId: txn.id });
   } else if (input.type === "Return" && product.trackSerial && input.returnOrderLineId) {
     // No serials scanned on the return: bring back the serials that shipped on the original order line.
-    const orderLineId = tx.select({ orderLineId: schema.returnOrderLines.orderLineId }).from(schema.returnOrderLines)
-      .where(eq(schema.returnOrderLines.id, input.returnOrderLineId)).get()?.orderLineId;
-    if (orderLineId) restockReturnedSerials(tx, ctx, { orderLineId, productId: product.id, inventoryId: bucket.id, qty: uomQuantity, txnId: txn.id });
+    const orderLineId = (await tx.select({ orderLineId: schema.returnOrderLines.orderLineId }).from(schema.returnOrderLines)
+      .where(eq(schema.returnOrderLines.id, input.returnOrderLineId)).limit(1))[0]?.orderLineId;
+    if (orderLineId) await restockReturnedSerials(tx, ctx, { orderLineId, productId: product.id, inventoryId: bucket.id, qty: uomQuantity, txnId: txn.id });
   }
   return { receipt: updated, txn };
 }
 
 export const CANCEL_COMPLETED_PO_MESSAGE = "A received line of an order in completed status can't be cancelled.";
 
-export function cancelReceipt(tx: Tx, ctx: DomainCtx, input: { receiptId: string }): { receipt: ReceiptRow; txn: TxnRow | null } {
-  const receipt = tx.select().from(schema.receipts).where(eq(schema.receipts.id, input.receiptId)).get();
+export async function cancelReceipt(tx: Tx, ctx: DomainCtx, input: { receiptId: string }): Promise<{ receipt: ReceiptRow; txn: TxnRow | null }> {
+  const receipt = (await tx.select().from(schema.receipts).where(eq(schema.receipts.id, input.receiptId)).limit(1))[0];
   if (!receipt) throw new DomainError("NOT_FOUND", "Receipt not found");
   checkScope(ctx, receipt, "Receipt");
   if (receipt.cancelledAt) throw new DomainError("INVALID_STATE", "This receipt is already cancelled.");
   if (receipt.purchaseOrderId) {
-    const po = tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, receipt.purchaseOrderId)).get();
+    const po = (await tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, receipt.purchaseOrderId)).limit(1))[0];
     if (po?.status === "Completed") throw new DomainError("INVALID_STATE", CANCEL_COMPLETED_PO_MESSAGE);
     if (po) {
-      tx.update(schema.purchaseOrders).set({ receivedQuantity: Math.max(0, po.receivedQuantity - receipt.quantity), updatedBy: ctx.userId })
-        .where(eq(schema.purchaseOrders.id, po.id)).run();
+      await tx.update(schema.purchaseOrders).set({ receivedQuantity: Math.max(0, po.receivedQuantity - receipt.quantity), updatedBy: ctx.userId })
+        .where(eq(schema.purchaseOrders.id, po.id));
     }
     if (receipt.purchaseOrderLineId) {
-      const line = tx.select().from(schema.purchaseOrderLines).where(eq(schema.purchaseOrderLines.id, receipt.purchaseOrderLineId)).get();
+      const line = (await tx.select().from(schema.purchaseOrderLines).where(eq(schema.purchaseOrderLines.id, receipt.purchaseOrderLineId)).limit(1))[0];
       if (line) {
-        tx.update(schema.purchaseOrderLines).set({ receivedQuantity: Math.max(0, line.receivedQuantity - receipt.quantity), updatedBy: ctx.userId })
-          .where(eq(schema.purchaseOrderLines.id, line.id)).run();
+        await tx.update(schema.purchaseOrderLines).set({ receivedQuantity: Math.max(0, line.receivedQuantity - receipt.quantity), updatedBy: ctx.userId })
+          .where(eq(schema.purchaseOrderLines.id, line.id));
         if (po) {
-          recordLine(tx, ctx, { entityType: "purchase_order", entityId: po.id, entityCode: po.code, lineEntityType: "purchase_order_line",
-            lineEntityId: line.id, lineLabel: productSku(tx, line.productId), field: "receivedQuantity", from: line.receivedQuantity, to: Math.max(0, line.receivedQuantity - receipt.quantity) });
+          await recordLine(tx, ctx, { entityType: "purchase_order", entityId: po.id, entityCode: po.code, lineEntityType: "purchase_order_line",
+            lineEntityId: line.id, lineLabel: await productSku(tx, line.productId), field: "receivedQuantity", from: line.receivedQuantity, to: Math.max(0, line.receivedQuantity - receipt.quantity) });
         }
       }
     }
   }
   if (receipt.returnOrderLineId) {
-    const line = tx.select().from(schema.returnOrderLines).where(eq(schema.returnOrderLines.id, receipt.returnOrderLineId)).get();
-    if (line) tx.update(schema.returnOrderLines).set({ returnedQty: Math.max(0, line.returnedQty - receipt.quantity) }).where(eq(schema.returnOrderLines.id, line.id)).run();
+    const line = (await tx.select().from(schema.returnOrderLines).where(eq(schema.returnOrderLines.id, receipt.returnOrderLineId)).limit(1))[0];
+    if (line) await tx.update(schema.returnOrderLines).set({ returnedQty: Math.max(0, line.returnedQty - receipt.quantity) }).where(eq(schema.returnOrderLines.id, line.id));
   }
   const posted = receipt.inventoryTransactionId
-    ? tx.select().from(schema.inventoryTransactions).where(eq(schema.inventoryTransactions.id, receipt.inventoryTransactionId)).get()
+    ? (await tx.select().from(schema.inventoryTransactions).where(eq(schema.inventoryTransactions.id, receipt.inventoryTransactionId)).limit(1))[0]
     : undefined;
   let txn: TxnRow | null = null;
   if (posted?.toInventoryId) {
-    const bucket = getBucket(tx, posted.toInventoryId);
-    txn = remove(tx, ctx, { inventoryId: bucket.id, qty: receipt.uomQuantity, type: "Cancel Receiving", refs: { receiptId: receipt.id, purchaseOrderId: receipt.purchaseOrderId, returnOrderId: receipt.returnOrderId } }).txn;
-    if (txn) cancelReceiptSerials(tx, ctx, receipt.id, txn.id);
+    const bucket = await getBucket(tx, posted.toInventoryId);
+    txn = (await remove(tx, ctx, { inventoryId: bucket.id, qty: receipt.uomQuantity, type: "Cancel Receiving", refs: { receiptId: receipt.id, purchaseOrderId: receipt.purchaseOrderId, returnOrderId: receipt.returnOrderId } })).txn;
+    if (txn) await cancelReceiptSerials(tx, ctx, receipt.id, txn.id);
   }
-  const updated = tx.update(schema.receipts).set({ cancelledAt: nowIso(), cancelledBy: ctx.source })
-    .where(eq(schema.receipts.id, receipt.id)).returning().get();
+  const updated = (await tx.update(schema.receipts).set({ cancelledAt: nowIso(), cancelledBy: ctx.source })
+    .where(eq(schema.receipts.id, receipt.id)).returning())[0];
   return { receipt: updated, txn };
 }

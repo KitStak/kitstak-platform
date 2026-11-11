@@ -11,6 +11,7 @@ import type { OrgRefs } from "./org";
 import { isoOf, utcAt } from "./runtime";
 import type { Id, SeedEnv } from "./types";
 import { round2 } from "./types";
+import { mapSeq } from "@/server/db/sql";
 
 export interface ProductRef {
   readonly id: Id;
@@ -64,47 +65,47 @@ function productRow(p: ProductSeed, index: number, clientId: Id, lookups: Lookup
   };
 }
 
-function insertPackTypes(tx: Tx, product: ProductRef, upc: string): void {
+async function insertPackTypes(tx: Tx, product: ProductRef, upc: string): Promise<void> {
   const [l, w, h] = product.dims;
-  const primary = tx.insert(schema.productPackTypes).values({
+  const primary = (await tx.insert(schema.productPackTypes).values({
     productId: product.id, packType: product.uom, kind: "Primary", uomQty: 1, length: l, width: w, height: h,
     volume: round2(l * w * h), weight: round2(product.weightOz / 16),
-  }).returning({ id: schema.productPackTypes.id }).get();
-  tx.insert(schema.productBarcodes).values({ productId: product.id, packTypeId: primary.id, barcode: upc }).run();
+  }).returning({ id: schema.productPackTypes.id }))[0];
+  await tx.insert(schema.productBarcodes).values({ productId: product.id, packTypeId: primary.id, barcode: upc });
   if (!product.caseQty) return;
   const caseDims: [number, number, number] = [round2(l * 3), round2(w * 2), round2(h * Math.ceil(product.caseQty / 6))];
-  const casePack = tx.insert(schema.productPackTypes).values({
+  const casePack = (await tx.insert(schema.productPackTypes).values({
     productId: product.id, packType: "Case", kind: "Hierarchical", parentPackTypeId: primary.id, childQty: product.caseQty,
     uomQty: product.caseQty, length: caseDims[0], width: caseDims[1], height: caseDims[2],
     volume: round2(caseDims[0] * caseDims[1] * caseDims[2]), weight: round2((product.weightOz * product.caseQty) / 16 + 1.2),
-  }).returning({ id: schema.productPackTypes.id }).get();
-  tx.insert(schema.productBarcodes).values({ productId: product.id, packTypeId: casePack.id, barcode: caseGtinFor(upc) }).run();
+  }).returning({ id: schema.productPackTypes.id }))[0];
+  await tx.insert(schema.productBarcodes).values({ productId: product.id, packTypeId: casePack.id, barcode: caseGtinFor(upc) });
 }
 
-export function seedCatalog(env: SeedEnv, tx: Tx, org: OrgRefs, lookups: LookupRefs): CatalogRefs {
+export async function seedCatalog(env: SeedEnv, tx: Tx, org: OrgRefs, lookups: LookupRefs): Promise<CatalogRefs> {
   const seeds = [...buildProductSeeds(), ...EXTRA_PRODUCTS];
-  const products = seeds.map((p, i): ProductRef => {
+  const products = await mapSeq(seeds, async (p, i): Promise<ProductRef> => {
     const client = org.clientByCode.get(p.clientCode);
     if (!client) throw new Error(`Seed product ${p.sku} references unknown client ${p.clientCode}`);
     const row = productRow(p, i + 1, client.id, lookups, env);
-    const id = tx.insert(schema.products).values(row).returning({ id: schema.products.id }).get().id;
+    const id = (await tx.insert(schema.products).values(row).returning({ id: schema.products.id }))[0].id;
     const ref: ProductRef = {
       id, clientId: client.id, clientCode: client.code, sku: p.sku, name: p.name, category: p.category, price: p.price,
       weightOz: p.weightOz, dims: [p.lengthIn, p.widthIn, p.heightIn], uom: row.uom ?? "Each", kitType: row.kitType ?? null,
       isPackaging: p.category === "Packaging", trackSerial: Boolean(row.trackSerial), trackLot: Boolean(row.trackLot), caseQty: caseQtyFor(p.category, p.sku),
     };
-    insertPackTypes(tx, ref, row.barcode);
+    await insertPackTypes(tx, ref, row.barcode);
     return ref;
   });
   const bySku = new Map(products.map((p) => [p.sku, p]));
   for (const kit of KIT_DEFS) {
     const kitRef = bySku.get(kit.sku);
     if (!kitRef) throw new Error(`Seed kit ${kit.sku} is missing`);
-    tx.insert(schema.kitComponents).values(kit.components.map(([sku, quantity]) => {
+    await tx.insert(schema.kitComponents).values(kit.components.map(([sku, quantity]) => {
       const component = bySku.get(sku);
       if (!component || component.clientId !== kitRef.clientId) throw new Error(`Seed kit ${kit.sku}: bad component ${sku}`);
       return { kitProductId: kitRef.id, componentProductId: component.id, quantity, packType: component.uom };
-    })).run();
+    }));
   }
   const sellableByClient = new Map<Id, ProductRef[]>();
   for (const p of products) {
@@ -115,12 +116,12 @@ export function seedCatalog(env: SeedEnv, tx: Tx, org: OrgRefs, lookups: LookupR
 }
 
 /** Retires a few SKUs at the end of the replay (they keep their history). */
-export function retireProducts(tx: Tx, catalog: CatalogRefs): number {
+export async function retireProducts(tx: Tx, catalog: CatalogRefs): Promise<number> {
   let n = 0;
   for (const sku of RETIRED_SKUS) {
     const p = catalog.bySku.get(sku);
     if (!p) continue;
-    tx.update(schema.products).set({ status: "Inactive" }).where(eq(schema.products.id, p.id)).run();
+    await tx.update(schema.products).set({ status: "Inactive" }).where(eq(schema.products.id, p.id));
     n += 1;
   }
   return n;

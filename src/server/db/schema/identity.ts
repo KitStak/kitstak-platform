@@ -1,5 +1,5 @@
 /** Identity & access: users, roles, scopes, sessions, preferences, security audit log. */
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import type { UserPreferences } from "../../../lib/domain-types";
 import {
   AUDIT_OUTCOMES,
@@ -13,7 +13,7 @@ import type { ROLE_RESTRICTIONS } from "../../../lib/enums";
 import { bool, EMPTY_JSON_ARRAY, json, nowIso, pk, stamps } from "../columns";
 import { clients, warehouses } from "./org";
 
-export const users = sqliteTable("users", {
+export const users = pgTable("users", {
   id: pk(),
   email: text("email").notNull(),
   name: text("name").notNull(),
@@ -34,7 +34,7 @@ export const users = sqliteTable("users", {
   ...stamps(),
 }, (t) => [uniqueIndex("users_email_idx").on(t.email)]);
 
-export const roles = sqliteTable("roles", {
+export const roles = pgTable("roles", {
   id: pk(),
   key: text("key").notNull(),
   name: text("name").notNull(),
@@ -45,27 +45,27 @@ export const roles = sqliteTable("roles", {
   ...stamps(),
 }, (t) => [uniqueIndex("roles_key_idx").on(t.key)]);
 
-export const rolePermissions = sqliteTable("role_permissions", {
+export const rolePermissions = pgTable("role_permissions", {
   roleId: text("role_id").notNull().references(() => roles.id, { onDelete: "cascade" }),
   permission: text("permission").notNull(), // key from the PERMISSIONS catalog
 }, (t) => [primaryKey({ columns: [t.roleId, t.permission] })]);
 
-export const userRoles = sqliteTable("user_roles", {
+export const userRoles = pgTable("user_roles", {
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   roleId: text("role_id").notNull().references(() => roles.id, { onDelete: "cascade" }),
 }, (t) => [primaryKey({ columns: [t.userId, t.roleId] })]);
 
-export const userWarehouses = sqliteTable("user_warehouses", {
+export const userWarehouses = pgTable("user_warehouses", {
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id, { onDelete: "cascade" }),
 }, (t) => [primaryKey({ columns: [t.userId, t.warehouseId] })]);
 
-export const userClients = sqliteTable("user_clients", {
+export const userClients = pgTable("user_clients", {
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   clientId: text("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
 }, (t) => [primaryKey({ columns: [t.userId, t.clientId] })]);
 
-export const userSessions = sqliteTable("user_sessions", {
+export const userSessions = pgTable("user_sessions", {
   id: pk(), // == JWT jti
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   sessionVersion: integer("session_version").notNull(),
@@ -77,7 +77,7 @@ export const userSessions = sqliteTable("user_sessions", {
   userAgent: text("user_agent"),
 }, (t) => [index("user_sessions_user_idx").on(t.userId)]);
 
-export const passwordResetTokens = sqliteTable("password_reset_tokens", {
+export const passwordResetTokens = pgTable("password_reset_tokens", {
   id: pk(),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   tokenHash: text("token_hash").notNull(),
@@ -85,13 +85,13 @@ export const passwordResetTokens = sqliteTable("password_reset_tokens", {
   usedAt: text("used_at"),
 }, (t) => [uniqueIndex("password_reset_token_idx").on(t.tokenHash)]);
 
-export const rateLimits = sqliteTable("rate_limits", {
+export const rateLimits = pgTable("rate_limits", {
   key: text("key").primaryKey(),
   count: integer("count").notNull(),
   windowStart: text("window_start").notNull(),
 });
 
-export const userPrinters = sqliteTable("user_printers", {
+export const userPrinters = pgTable("user_printers", {
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
   barcodePrinter: text("barcode_printer"),
@@ -108,13 +108,13 @@ export interface GridPrefs {
   pinned?: string[];
 }
 
-export const userGridPrefs = sqliteTable("user_grid_prefs", {
+export const userGridPrefs = pgTable("user_grid_prefs", {
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   gridKey: text("grid_key").notNull(),
   prefs: json<GridPrefs>("prefs").notNull(),
 }, (t) => [primaryKey({ columns: [t.userId, t.gridKey] })]);
 
-export const savedViews = sqliteTable("saved_views", {
+export const savedViews = pgTable("saved_views", {
   id: pk(),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   gridKey: text("grid_key").notNull(),
@@ -143,7 +143,7 @@ export interface PasswordPolicy {
   lockoutMinutes: number;
 }
 
-export const companySettings = sqliteTable("company_settings", {
+export const companySettings = pgTable("company_settings", {
   id: text("id").primaryKey().default("company"),
   displayName: text("display_name").notNull(),
   fullName: text("full_name").notNull(),
@@ -153,7 +153,7 @@ export const companySettings = sqliteTable("company_settings", {
   ...stamps(),
 });
 
-export const apps = sqliteTable("apps", {
+export const apps = pgTable("apps", {
   key: text("key").primaryKey(),
   name: text("name").notNull(),
   description: text("description").notNull(),
@@ -164,7 +164,7 @@ export const apps = sqliteTable("apps", {
   activatedBy: text("activated_by"),
 });
 
-export const notifications = sqliteTable("notifications", {
+export const notifications = pgTable("notifications", {
   id: pk(),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   kind: text("kind").notNull(), // "wave.completed" | "import.failed" | "shortage.created" | ...
@@ -177,7 +177,7 @@ export const notifications = sqliteTable("notifications", {
 }, (t) => [index("notifications_user_idx").on(t.userId, t.readAt)]);
 
 /** Security events (logins, permission changes). Business edits go to `change_log`. */
-export const auditLog = sqliteTable("audit_log", {
+export const auditLog = pgTable("audit_log", {
   id: pk(),
   userId: text("user_id").references(() => users.id),
   action: text("action").notNull(),

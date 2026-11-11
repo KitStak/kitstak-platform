@@ -4,5 +4,5 @@ import { auditStats } from "@/server/repositories/audit";
 
 export const GET = defineRoute({
   permission: "settings.users.view",
-  handler: ({ db }) => auditStats(db),
+  handler: async ({ db }) => await auditStats(db),
 });

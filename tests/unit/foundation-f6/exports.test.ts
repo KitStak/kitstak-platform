@@ -106,28 +106,28 @@ describe("generic provider", () => {
 describe("export runner", () => {
   let testDb: SeededDb;
   let temp: TempStore;
-  beforeEach(() => {
-    testDb = seededDb();
+  beforeEach(async () => {
+    testDb = await seededDb();
     temp = tempStore();
   });
-  afterEach(() => {
-    testDb.close();
+  afterEach(async () => {
+    await testDb.close();
     temp.cleanup();
   });
 
-  it("queues, validates gridKey/permission/query", () => {
-    const admin = authFor(testDb, testDb.ids.admin);
-    expect(() => queueExport(testDb.db, { auth: admin, gridKey: "nope", query: "" })).toThrow(/Unknown grid/);
-    expect(() => queueExport(testDb.db, { auth: admin, gridKey: "orders-backlog", query: "f.code=zz:1" })).toThrow(/Invalid export query/);
-    const viewer = { ...authFor(testDb, testDb.ids.viewer), permissions: new Set<string>() };
-    expect(() => queueExport(testDb.db, { auth: viewer, gridKey: "orders-backlog", query: "" })).toThrow(/permission/);
-    const task = queueExport(testDb.db, { auth: admin, gridKey: "orders-backlog", query: "f.status=in:Open" });
+  it("queues, validates gridKey/permission/query", async () => {
+    const admin = await authFor(testDb, testDb.ids.admin);
+    await expect(async () => await queueExport(testDb.db, { auth: admin, gridKey: "nope", query: "" })).rejects.toThrow(/Unknown grid/);
+    await expect(async () => await queueExport(testDb.db, { auth: admin, gridKey: "orders-backlog", query: "f.code=zz:1" })).rejects.toThrow(/Invalid export query/);
+    const viewer = { ...(await authFor(testDb, testDb.ids.viewer)), permissions: new Set<string>() };
+    await expect(async () => await queueExport(testDb.db, { auth: viewer, gridKey: "orders-backlog", query: "" })).rejects.toThrow(/permission/);
+    const task = await queueExport(testDb.db, { auth: admin, gridKey: "orders-backlog", query: "f.status=in:Open" });
     expect(task).toMatchObject({ kind: "export", status: "queued", gridKey: "orders-backlog", title: "Shipment Orders export" });
   });
 
   it("pages through the generic provider, writes the file and completes the task", async () => {
-    const admin = authFor(testDb, testDb.ids.admin);
-    const task = queueExport(testDb.db, { auth: admin, gridKey: "orders-backlog", query: "f.status=in:Open" });
+    const admin = await authFor(testDb, testDb.ids.admin);
+    const task = await queueExport(testDb.db, { auth: admin, gridKey: "orders-backlog", query: "f.status=in:Open" });
     const pages = [Array.from({ length: 1000 }, (_, i) => ({ code: `SO${i}`, qty: i })), [{ code: "SOX", qty: 1 }]];
     const listFetcher = vi.fn(async (_path: string, search: URLSearchParams) => {
       const page = Number(search.get("page"));
@@ -138,24 +138,24 @@ describe("export runner", () => {
     const done = await runExport(testDb.db, task.id, { auth: admin, listFetcher, provider, store: temp.store, columns: [{ key: "code", label: "Order" }] });
     expect(done).toMatchObject({ status: "completed", progress: 100, rowCount: 1001 });
     expect(listFetcher).toHaveBeenCalledTimes(2);
-    const { record, bytes } = temp.store.read(testDb.db, done.fileId ?? "");
+    const { record, bytes } = await temp.store.read(testDb.db, done.fileId ?? "");
     expect(record.name).toMatch(/^Shipment Orders \d{4}-\d{2}-\d{2} \d{4}\.xlsx$/);
     const sheet = await loadSheet(bytes);
     expect(sheet.rowCount).toBe(1002);
     expect(sheet.getRow(1).getCell(1).value).toBe("Order");
-    const history = listExportHistory(testDb.db, { userId: testDb.ids.admin, page: 1, pageSize: 10 });
+    const history = await listExportHistory(testDb.db, { userId: testDb.ids.admin, page: 1, pageSize: 10 });
     expect(history.total).toBe(1);
     expect(history.rows[0]?.fileName).toBe(record.name);
   });
 
   it("records a user-safe error and never throws", async () => {
-    const admin = authFor(testDb, testDb.ids.admin);
-    const task = queueExport(testDb.db, { auth: admin, gridKey: "products", query: "" });
+    const admin = await authFor(testDb, testDb.ids.admin);
+    const task = await queueExport(testDb.db, { auth: admin, gridKey: "products", query: "" });
     // Generic provider with no list fetcher; products ships a module provider, so pass the generic one explicitly.
     const failing = await runExport(testDb.db, task.id, { auth: admin, store: temp.store, provider: createGenericProvider(gridDef("products")) });
     expect(failing).toMatchObject({ status: "error", errorMessage: 'Export for "Products" is not configured yet' });
 
-    const task2 = queueExport(testDb.db, { auth: admin, gridKey: "products", query: "" });
+    const task2 = await queueExport(testDb.db, { auth: admin, gridKey: "products", query: "" });
     const provider: ExportProvider = { fetchPage: () => { throw new Error("db exploded"); } };
     const failed2 = await runExport(testDb.db, task2.id, { auth: admin, store: temp.store, provider });
     expect(failed2.errorMessage).toBe("The export failed. Please try again.");
@@ -164,13 +164,13 @@ describe("export runner", () => {
   });
 
   it("uses a module provider when one is given and fails stale tasks", async () => {
-    const admin = authFor(testDb, testDb.ids.admin);
-    const task = queueExport(testDb.db, { auth: admin, gridKey: "clients", query: "" });
+    const admin = await authFor(testDb, testDb.ids.admin);
+    const task = await queueExport(testDb.db, { auth: admin, gridKey: "clients", query: "" });
     const provider: ExportProvider = { columns: [{ key: "name", label: "Name" }], fetchPage: () => ({ rows: [{ name: "Acme" }] }) };
     expect((await runExport(testDb.db, task.id, { auth: admin, store: temp.store, provider })).rowCount).toBe(1);
 
-    testDb.db.insert(backgroundTasks).values({ kind: "export", title: "old", userId: testDb.ids.admin, status: "started", createdAt: "2020-01-01T00:00:00.000Z" }).run();
-    expect(failStaleExports(testDb.db, new Date("2021-01-01T00:00:00.000Z"))).toBe(1);
+    await testDb.db.insert(backgroundTasks).values({ kind: "export", title: "old", userId: testDb.ids.admin, status: "started", createdAt: "2020-01-01T00:00:00.000Z" });
+    expect(await failStaleExports(testDb.db, new Date("2021-01-01T00:00:00.000Z"))).toBe(1);
     expect(exportFileName("X", new Date("2026-11-05T09:07:00.000Z"))).toBe("X 2026-11-05 0907.xlsx");
   });
 
@@ -178,7 +178,7 @@ describe("export runner", () => {
     const def = getGridExportDef("users");
     if (!def) throw new Error("missing");
     const provider = createGenericProvider(def);
-    const ctx = { db: testDb.db, auth: authFor(testDb, testDb.ids.admin), gridKey: "users", query: { qm: "sw" as const, filters: [], sort: [], page: 1, pageSize: 100 }, rawQuery: "" };
+    const ctx = { db: testDb.db, auth: await authFor(testDb, testDb.ids.admin), gridKey: "users", query: { qm: "sw" as const, filters: [], sort: [], page: 1, pageSize: 100 }, rawQuery: "" };
     await expect(Promise.resolve().then(() => provider.fetchPage(ctx, 1, 10))).rejects.toThrow(/not configured/);
   });
 });

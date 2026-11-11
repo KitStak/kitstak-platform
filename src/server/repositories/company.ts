@@ -34,14 +34,19 @@ export interface CompanySettings {
   readonly version: number;
 }
 
-function ensureRow(db: AppDb): typeof c.$inferSelect {
-  const row = db.select().from(c).where(eq(c.id, ID)).get();
+async function ensureRow(db: AppDb): Promise<typeof c.$inferSelect> {
+  const row = (await db.select().from(c).where(eq(c.id, ID)).limit(1))[0];
   if (row) return row;
-  return db.insert(c).values({ id: ID, displayName: "KitStaks", fullName: "KitStaks", defaults: DEFAULTS, passwordPolicy: DEFAULT_PASSWORD_POLICY }).returning().get();
+  // Reads run outside the write lock, so two first reads can race: the loser's insert is a
+  // no-op and both return the committed singleton (was atomic on synchronous SQLite).
+  await db.insert(c).values({ id: ID, displayName: "KitStaks", fullName: "KitStaks", defaults: DEFAULTS, passwordPolicy: DEFAULT_PASSWORD_POLICY }).onConflictDoNothing({ target: c.id });
+  const created = (await db.select().from(c).where(eq(c.id, ID)).limit(1))[0];
+  if (!created) throw new Error("company_settings row could not be created");
+  return created;
 }
 
-export function getCompany(db: AppDb): CompanySettings {
-  const row = ensureRow(db);
+export async function getCompany(db: AppDb): Promise<CompanySettings> {
+  const row = await ensureRow(db);
   const policy = passwordPolicySchema.safeParse(row.passwordPolicy ?? {});
   return {
     displayName: row.displayName, fullName: row.fullName, logoFileId: row.logoFileId,
@@ -66,39 +71,39 @@ function readIdleMinutes(defaults: unknown): number | null {
 }
 
 /** Company web idle sign-out for the shell (null = off). */
-export function getSessionIdleMinutes(db: AppDb): number | null {
-  return readIdleMinutes(db.select({ defaults: c.defaults }).from(c).where(eq(c.id, ID)).get()?.defaults);
+export async function getSessionIdleMinutes(db: AppDb): Promise<number | null> {
+  return readIdleMinutes((await db.select({ defaults: c.defaults }).from(c).where(eq(c.id, ID)).limit(1))[0]?.defaults);
 }
 
-function bump(tx: AppDb, actor: Actor, set: Partial<typeof c.$inferInsert>): number {
-  return tx.update(c).set({ ...set, updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${c.version} + 1` }).where(eq(c.id, ID)).returning({ v: c.version }).get()?.v ?? 1;
+async function bump(tx: AppDb, actor: Actor, set: Partial<typeof c.$inferInsert>): Promise<number> {
+  return (await tx.update(c).set({ ...set, updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${c.version} + 1` }).where(eq(c.id, ID)).returning({ v: c.version }))[0]?.v ?? 1;
 }
 
 const ref = { entityType: COMPANY_ENTITY, entityId: ID, entityCode: "Company settings" };
 
-export function updateCompanyInfo(tx: AppDb, auth: AuthContext, actor: Actor, input: z.output<typeof companyInfoSchema>): CompanySettings {
-  const before = ensureRow(tx);
+export async function updateCompanyInfo(tx: AppDb, auth: AuthContext, actor: Actor, input: z.output<typeof companyInfoSchema>): Promise<CompanySettings> {
+  const before = await ensureRow(tx);
   assertVersion(before.version, input.version);
-  bump(tx, actor, { displayName: input.displayName, fullName: input.fullName });
-  logUpdate(tx, domainCtxOf(actor, auth), ref, { displayName: before.displayName, fullName: before.fullName }, { displayName: input.displayName, fullName: input.fullName });
-  return getCompany(tx);
+  await bump(tx, actor, { displayName: input.displayName, fullName: input.fullName });
+  await logUpdate(tx, domainCtxOf(actor, auth), ref, { displayName: before.displayName, fullName: before.fullName }, { displayName: input.displayName, fullName: input.fullName });
+  return await getCompany(tx);
 }
 
-export function updateCompanyDefaults(tx: AppDb, auth: AuthContext, actor: Actor, input: z.output<typeof companyDefaultsSchema>): CompanySettings {
-  const before = ensureRow(tx);
+export async function updateCompanyDefaults(tx: AppDb, auth: AuthContext, actor: Actor, input: z.output<typeof companyDefaultsSchema>): Promise<CompanySettings> {
+  const before = await ensureRow(tx);
   assertVersion(before.version, input.version);
   const next: CompanyDefaults = { currency: input.currency, weightUnit: input.weightUnit, dimensionUnit: input.dimensionUnit, dateFormat: input.dateFormat };
   // The JSON also carries other settings (e.g. `returnRules`); keep them.
-  bump(tx, actor, { defaults: { ...(before.defaults ?? {}), ...next } });
+  await bump(tx, actor, { defaults: { ...(before.defaults ?? {}), ...next } });
   // Only the four account-default keys are compared (the JSON also holds return rules and mail).
   const was = { ...DEFAULTS, ...(before.defaults ?? {}) };
   const prev: CompanyDefaults = { currency: was.currency, weightUnit: was.weightUnit, dimensionUnit: was.dimensionUnit, dateFormat: was.dateFormat };
-  logUpdate(tx, domainCtxOf(actor, auth), ref, prev as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>);
-  return getCompany(tx);
+  await logUpdate(tx, domainCtxOf(actor, auth), ref, prev as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>);
+  return await getCompany(tx);
 }
 
-export function updateCompanySecurity(tx: AppDb, auth: AuthContext, actor: Actor, input: z.output<typeof companySecuritySchema>): CompanySettings {
-  const before = ensureRow(tx);
+export async function updateCompanySecurity(tx: AppDb, auth: AuthContext, actor: Actor, input: z.output<typeof companySecuritySchema>): Promise<CompanySettings> {
+  const before = await ensureRow(tx);
   assertVersion(before.version, input.version);
   const next = passwordPolicySchema.parse({
     minLength: input.minLength, requireUpper: input.requireUpper, requireNumber: input.requireNumber, requireSymbol: input.requireSymbol,
@@ -109,14 +114,14 @@ export function updateCompanySecurity(tx: AppDb, auth: AuthContext, actor: Actor
   const nextIdle = input.idleTimeout ? input.idleMinutes : null;
   // `defaults` also carries account defaults and return rules; only the idle key changes.
   const defaults = { ...((before.defaults ?? {}) as Record<string, unknown>), sessionIdleMinutes: nextIdle } as unknown as typeof c.$inferInsert.defaults;
-  bump(tx, actor, { passwordPolicy: next, defaults });
+  await bump(tx, actor, { passwordPolicy: next, defaults });
   const view = (p: z.output<typeof passwordPolicySchema>) => ({
     minimumLength: p.minLength, requireUppercase: p.requireUpper, requireNumber: p.requireNumber, requireSymbol: p.requireSymbol,
     passwordExpiry: p.maxAgeDays ? `${p.maxAgeDays} days` : "Never", lockoutAfter: `${p.lockoutThreshold} failed attempts`, lockoutDuration: `${p.lockoutMinutes} minutes`,
   });
   const idle = (m: number | null) => (m ? `${m} minutes` : "Off");
-  logUpdate(tx, domainCtxOf(actor, auth), ref, { ...view(prev.success ? prev.data : DEFAULT_PASSWORD_POLICY), idleSignOut: idle(prevIdle) }, { ...view(next), idleSignOut: idle(nextIdle) });
-  return getCompany(tx);
+  await logUpdate(tx, domainCtxOf(actor, auth), ref, { ...view(prev.success ? prev.data : DEFAULT_PASSWORD_POLICY), idleSignOut: idle(prevIdle) }, { ...view(next), idleSignOut: idle(nextIdle) });
+  return await getCompany(tx);
 }
 
 /** PNG / JPEG magic bytes — the extension and the declared type are not trusted. */
@@ -126,36 +131,36 @@ export function sniffImage(bytes: Uint8Array): (typeof LOGO_MIMES)[number] | nul
   return null;
 }
 
-export function setCompanyLogo(tx: AppDb, store: FileStore, auth: AuthContext, actor: Actor, upload: { fileName: string; bytes: Uint8Array }): CompanySettings {
+export async function setCompanyLogo(tx: AppDb, store: FileStore, auth: AuthContext, actor: Actor, upload: { fileName: string; bytes: Uint8Array }): Promise<CompanySettings> {
   if (upload.bytes.length > LOGO_MAX_BYTES) throw new AppError("VALIDATION", "The logo must be smaller than 2 MB", { fieldErrors: { file: ["Use an image smaller than 2 MB"] } });
   const mime = sniffImage(upload.bytes);
   if (!mime) throw new AppError("VALIDATION", "Upload a JPG or PNG image", { fieldErrors: { file: ["Only JPG and PNG images are accepted"] } });
   const ext = mime === "image/png" ? "png" : "jpg";
-  const before = ensureRow(tx);
-  const file = store.store(tx, { name: `company-logo.${ext}`, bytes: upload.bytes, purpose: "attachment", uploadedBy: actor.userId ?? undefined, ownerEntityType: COMPANY_ENTITY, ownerEntityId: ID, expiresAt: null });
-  bump(tx, actor, { logoFileId: file.id });
-  logUpdate(tx, domainCtxOf(actor, auth), ref, { logo: before.logoFileId ? "Previous logo" : "" }, { logo: upload.fileName.slice(0, 120) });
+  const before = await ensureRow(tx);
+  const file = await store.store(tx, { name: `company-logo.${ext}`, bytes: upload.bytes, purpose: "attachment", uploadedBy: actor.userId ?? undefined, ownerEntityType: COMPANY_ENTITY, ownerEntityId: ID, expiresAt: null });
+  await bump(tx, actor, { logoFileId: file.id });
+  await logUpdate(tx, domainCtxOf(actor, auth), ref, { logo: before.logoFileId ? "Previous logo" : "" }, { logo: upload.fileName.slice(0, 120) });
   if (before.logoFileId) {
-    try { store.remove(tx, before.logoFileId); } catch { /* the old blob may already be gone */ }
+    try { await store.remove(tx, before.logoFileId); } catch { /* the old blob may already be gone */ }
   }
-  return getCompany(tx);
+  return await getCompany(tx);
 }
 
-export function removeCompanyLogo(tx: AppDb, store: FileStore, auth: AuthContext, actor: Actor): CompanySettings {
-  const before = ensureRow(tx);
+export async function removeCompanyLogo(tx: AppDb, store: FileStore, auth: AuthContext, actor: Actor): Promise<CompanySettings> {
+  const before = await ensureRow(tx);
   if (!before.logoFileId) throw new AppError("INVALID_STATE", "There is no logo to remove");
-  bump(tx, actor, { logoFileId: null });
-  logUpdate(tx, domainCtxOf(actor, auth), ref, { logo: "Logo" }, { logo: "" });
-  try { store.remove(tx, before.logoFileId); } catch { /* already removed */ }
-  return getCompany(tx);
+  await bump(tx, actor, { logoFileId: null });
+  await logUpdate(tx, domainCtxOf(actor, auth), ref, { logo: "Logo" }, { logo: "" });
+  try { await store.remove(tx, before.logoFileId); } catch { /* already removed */ }
+  return await getCompany(tx);
 }
 
 /** Logo bytes for the shell and printouts, or null. */
-export function readCompanyLogo(db: AppDb, store: FileStore): { bytes: Buffer; mime: string } | null {
-  const row = ensureRow(db);
+export async function readCompanyLogo(db: AppDb, store: FileStore): Promise<{ bytes: Buffer; mime: string } | null> {
+  const row = await ensureRow(db);
   if (!row.logoFileId) return null;
   try {
-    const { record, bytes } = store.read(db, row.logoFileId);
+    const { record, bytes } = await store.read(db, row.logoFileId);
     return { bytes, mime: record.mime };
   } catch {
     return null;

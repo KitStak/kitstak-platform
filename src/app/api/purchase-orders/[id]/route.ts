@@ -9,22 +9,22 @@ import { deletePurchaseOrder, updatePurchaseOrder } from "@/server/repositories/
 export const GET = defineRoute({
   permission: "inventory.purchase_orders.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getPurchaseOrder(db, auth.scope, params.id),
+  handler: async ({ db, auth, params }) => await getPurchaseOrder(db, auth.scope, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: "inventory.purchase_orders.edit",
   params: idParamsSchema,
   body: poUpdateSchema,
-  handler: ({ db, auth, actor, params, body }) => updatePurchaseOrder(db, domainCtx(actor, auth), auth.scope, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updatePurchaseOrder(db, domainCtx(actor, auth), auth.scope, params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: "inventory.purchase_orders.delete",
   params: idParamsSchema,
   query: z.object({ version: z.coerce.number().int().min(1).optional() }),
-  handler: ({ db, auth, actor, params, query }) => {
-    deletePurchaseOrder(db, domainCtx(actor, auth), auth.scope, params.id, query.version);
+  handler: async ({ db, auth, actor, params, query }) => {
+    await deletePurchaseOrder(db, domainCtx(actor, auth), auth.scope, params.id, query.version);
     return { id: params.id, deleted: true };
   },
 });

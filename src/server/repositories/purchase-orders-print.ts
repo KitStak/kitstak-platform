@@ -15,6 +15,7 @@ import { PdfWriter, PAGE_LETTER } from "@/server/print/pdf";
 import { getPurchaseOrder, purchaseOrdersByIds, type PurchaseOrderDetail } from "./purchase-orders";
 import { receiptsForPurchaseOrder } from "./receipts";
 import type { VendorAddress } from "./vendors";
+import { forEachSeq } from "@/server/db/sql";
 
 const money = (n: number): string => `$${n.toFixed(2)}`;
 const day = (iso: string | null): string => (iso ? new Date(iso).toLocaleDateString("en-US", { timeZone: "UTC" }) : "-");
@@ -22,11 +23,11 @@ const addressLine = (a: VendorAddress | null): string =>
   a ? [a.line1, a.line2, a.city, [a.state, a.postalCode].filter(Boolean).join(" "), a.country].filter(Boolean).join(", ") || "-" : "-";
 
 export async function renderPurchaseOrderDocuments(db: AppDb, scope: Scope, ids: readonly string[]): Promise<Uint8Array> {
-  const rows = purchaseOrdersByIds(db, scope, ids);
+  const rows = await purchaseOrdersByIds(db, scope, ids);
   if (rows.length === 0) throw new AppError("NOT_FOUND", "Purchase order not found");
   const writer = await PdfWriter.create(PAGE_LETTER, 40, rows.length === 1 ? `Purchase Order ${rows[0]?.code}` : "Purchase Orders");
-  rows.forEach((row, index) => {
-    const detail = getPurchaseOrder(db, scope, row.id);
+  await forEachSeq(rows, async (row, index) => {
+    const detail = await getPurchaseOrder(db, scope, row.id);
     if (index > 0) writer.newPage();
     writer.text("Purchase Order", { size: 9, muted: true });
     writer.text(detail.code, { size: 20, bold: true });
@@ -75,12 +76,12 @@ export interface ProductLabelRecord {
  * Product labels for the PO lines. "Use as line quantity" (default, Logiwa parity): one label
  * per ordered unit (capped per line); `perLine`: one label per line.
  */
-export function productLabelRecords(db: AppDb, scope: Scope, ids: readonly string[], options: { lineIds?: readonly string[]; maxPerLine?: number; perLine?: boolean } = {}): ProductLabelRecord[] {
-  const rows = purchaseOrdersByIds(db, scope, ids);
+export async function productLabelRecords(db: AppDb, scope: Scope, ids: readonly string[], options: { lineIds?: readonly string[]; maxPerLine?: number; perLine?: boolean } = {}): Promise<ProductLabelRecord[]> {
+  const rows = await purchaseOrdersByIds(db, scope, ids);
   const cap = options.maxPerLine ?? 500;
   const out: ProductLabelRecord[] = [];
   for (const row of rows) {
-    const detail = getPurchaseOrder(db, scope, row.id);
+    const detail = await getPurchaseOrder(db, scope, row.id);
     for (const l of detail.lines) {
       if (options.lineIds && !options.lineIds.includes(l.id)) continue;
       const record: ProductLabelRecord = {
@@ -102,10 +103,10 @@ export interface ProductLabelLine {
 }
 
 /** One entry per PO line with its ordered / received quantity (the Print Options modal expands them). */
-export function productLabelLines(db: AppDb, scope: Scope, ids: readonly string[]): ProductLabelLine[] {
+export async function productLabelLines(db: AppDb, scope: Scope, ids: readonly string[]): Promise<ProductLabelLine[]> {
   const out: ProductLabelLine[] = [];
-  for (const row of purchaseOrdersByIds(db, scope, ids)) {
-    const detail = getPurchaseOrder(db, scope, row.id);
+  for (const row of await purchaseOrdersByIds(db, scope, ids)) {
+    const detail = await getPurchaseOrder(db, scope, row.id);
     for (const l of detail.lines) {
       out.push({
         poCode: detail.code, ordered: l.orderedQuantity, received: l.receivedQuantity,
@@ -126,17 +127,17 @@ export interface BillingChargeRow {
 }
 
 /** Receiving + PO-referenced VAS charges from the client's approved contract for the warehouse. */
-export function billingCharges(db: AppDb, scope: Scope, id: string): { po: PurchaseOrderDetail; charges: BillingChargeRow[]; contract: string | null } {
-  const po = getPurchaseOrder(db, scope, id);
-  const contract = db.select().from(schema.billingContracts)
-    .where(and(eq(schema.billingContracts.clientId, po.clientId), eq(schema.billingContracts.warehouseId, po.warehouseId), eq(schema.billingContracts.approvalStatus, "Approved"))).get();
+export async function billingCharges(db: AppDb, scope: Scope, id: string): Promise<{ po: PurchaseOrderDetail; charges: BillingChargeRow[]; contract: string | null }> {
+  const po = await getPurchaseOrder(db, scope, id);
+  const contract = (await db.select().from(schema.billingContracts)
+    .where(and(eq(schema.billingContracts.clientId, po.clientId), eq(schema.billingContracts.warehouseId, po.warehouseId), eq(schema.billingContracts.approvalStatus, "Approved"))).limit(1))[0];
   if (!contract) return { po, charges: [], contract: null };
-  const fees = db.select().from(schema.billingFees).where(and(eq(schema.billingFees.contractId, contract.id), inArray(schema.billingFees.operationType, ["Receiving", "VAS"]))).all();
-  const receipts = receiptsForPurchaseOrder(db, scope, id).filter((r) => !r.cancelledAt);
+  const fees = await db.select().from(schema.billingFees).where(and(eq(schema.billingFees.contractId, contract.id), inArray(schema.billingFees.operationType, ["Receiving", "VAS"])));
+  const receipts = (await receiptsForPurchaseOrder(db, scope, id)).filter((r) => !r.cancelledAt);
   const units = receipts.reduce((s, r) => s + r.uomQuantity, 0);
   const skus = new Set(receipts.map((r) => r.productId)).size;
-  const vas = db.select().from(schema.vasOperations)
-    .where(and(eq(schema.vasOperations.referenceOrderType, "Purchase Order"), eq(schema.vasOperations.referenceNumber, po.code), eq(schema.vasOperations.clientId, po.clientId))).all();
+  const vas = await db.select().from(schema.vasOperations)
+    .where(and(eq(schema.vasOperations.referenceOrderType, "Purchase Order"), eq(schema.vasOperations.referenceNumber, po.code), eq(schema.vasOperations.clientId, po.clientId)));
   const charges = fees.flatMap((f): BillingChargeRow[] => {
     const rate = f.standardRate ?? 0;
     if (f.operationType === "VAS") {
@@ -154,7 +155,7 @@ export function billingCharges(db: AppDb, scope: Scope, id: string): { po: Purch
 }
 
 export async function billingChargesWorkbook(db: AppDb, scope: Scope, id: string): Promise<{ bytes: Buffer; fileName: string }> {
-  const { po, charges, contract } = billingCharges(db, scope, id);
+  const { po, charges, contract } = await billingCharges(db, scope, id);
   const rows = charges.length > 0
     ? charges.map((c) => ({ po: po.code, status: displayPoStatus(po.status), contract: contract ?? "", ...c }))
     : [{ po: po.code, status: po.status, contract: contract ?? "No approved contract", fee: "No billable receiving charges", operation: "", chargeBy: "", quantity: 0, rate: 0, amount: 0 }];

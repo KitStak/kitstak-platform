@@ -15,10 +15,10 @@ export const POST = defineRoute({
   permission: "settings.products.create",
   params: idParamsSchema,
   body: z.object({ product: z.record(z.string().max(40), z.unknown()).optional(), version: versionSchema.optional() }),
-  handler: ({ db, auth, actor, params, body }) => {
+  handler: async ({ db, auth, actor, params, body }) => {
     const ctx = { ...domainCtx(actor, auth), scope: auth.scope };
     return created(body.product
-      ? createQuickProductForListing(db, ctx, params.id, body.product as ListingQuickProductInput, body.version)
-      : createProductFromListing(db, ctx, params.id));
+      ? await createQuickProductForListing(db, ctx, params.id, body.product as ListingQuickProductInput, body.version)
+      : await createProductFromListing(db, ctx, params.id));
   },
 });

@@ -1,5 +1,5 @@
 /** Automation: putaway/allocation algorithms, workflows, rate shopping presets. */
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import type { OrderByClause, RuleCondition, RuleConditionNode } from "../../../lib/domain-types";
 import {
   ACTIVE_PASSIVE,
@@ -13,7 +13,7 @@ import { bool, EMPTY_JSON_ARRAY, json, nowIso, pk, stamps } from "../columns";
 import { carrierServices } from "./integrations";
 import { warehouses } from "./org";
 
-export const algorithms = sqliteTable("algorithms", {
+export const algorithms = pgTable("algorithms", {
   id: pk(),
   name: text("name").notNull(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
@@ -30,7 +30,7 @@ export interface AlgorithmAction {
   value?: unknown;
 }
 
-export const algorithmRules = sqliteTable("algorithm_rules", {
+export const algorithmRules = pgTable("algorithm_rules", {
   id: pk(),
   algorithmId: text("algorithm_id").notNull().references(() => algorithms.id, { onDelete: "cascade" }),
   sequence: integer("sequence").notNull(),
@@ -47,7 +47,7 @@ export interface WorkflowAction {
   params: Record<string, unknown>;
 }
 
-export const workflows = sqliteTable("workflows", {
+export const workflows = pgTable("workflows", {
   id: pk(),
   name: text("name").notNull(),
   description: text("description"),
@@ -65,7 +65,7 @@ export const workflows = sqliteTable("workflows", {
   ...stamps(),
 }, (t) => [index("workflows_trigger_idx").on(t.trigger, t.sequence)]);
 
-export const workflowRuns = sqliteTable("workflow_runs", {
+export const workflowRuns = pgTable("workflow_runs", {
   id: pk(),
   workflowId: text("workflow_id").notNull().references(() => workflows.id, { onDelete: "cascade" }),
   entityType: text("entity_type").notNull(),
@@ -77,7 +77,7 @@ export const workflowRuns = sqliteTable("workflow_runs", {
   at: text("at").notNull().$defaultFn(nowIso),
 }, (t) => [index("wf_runs_entity_idx").on(t.entityType, t.entityId)]);
 
-export const rateShoppingPresets = sqliteTable("rate_shopping_presets", {
+export const rateShoppingPresets = pgTable("rate_shopping_presets", {
   id: pk(),
   name: text("name").notNull(),
   description: text("description").notNull(),
@@ -91,7 +91,7 @@ export const rateShoppingPresets = sqliteTable("rate_shopping_presets", {
   ...stamps(),
 });
 
-export const rateShoppingPresetServices = sqliteTable("rate_shopping_preset_services", {
+export const rateShoppingPresetServices = pgTable("rate_shopping_preset_services", {
   presetId: text("preset_id").notNull().references(() => rateShoppingPresets.id, { onDelete: "cascade" }),
   carrierServiceId: text("carrier_service_id").notNull().references(() => carrierServices.id),
   isSelected: bool("is_selected").notNull().default(true),

@@ -9,6 +9,7 @@ import type { AppDb } from "@/server/api/db";
 import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/server/query/filters";
 import type { GridQuery } from "@/server/query/grid-query";
 import type { CountGridField } from "@/lib/grid-defs/counts/count-grids";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 export interface GridSpec {
   /** `FROM … JOIN …` (raw, no user input). */
@@ -70,19 +71,19 @@ export interface GridPage<T> {
   readonly pageSize: number;
 }
 
-export function runGrid<T>(db: AppDb, spec: GridSpec, query: GridQuery): GridPage<T> {
+export async function runGrid<T>(db: AppDb, spec: GridSpec, query: GridQuery): Promise<GridPage<T>> {
   const where = whereOf(spec, query);
-  const total = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n ${spec.from} WHERE ${where}`)?.n ?? 0;
+  const total = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n ${spec.from} WHERE ${where}`))?.n ?? 0;
   const offset = (Math.max(1, query.page) - 1) * query.pageSize;
-  const rows = db.all<T>(sql`SELECT ${selectList(spec)} ${spec.from} WHERE ${where} ORDER BY ${orderOf(spec, query)} LIMIT ${query.pageSize} OFFSET ${offset}`);
+  const rows = await dbAll<T>(db, sql`SELECT ${selectList(spec)} ${spec.from} WHERE ${where} ORDER BY ${orderOf(spec, query)} LIMIT ${query.pageSize} OFFSET ${offset}`);
   return { rows, total, page: query.page, pageSize: query.pageSize };
 }
 
 /** Rows by id (bulk confirms, exports), same projection as the grid. */
-export function gridRowsById<T>(db: AppDb, spec: GridSpec, idExpr: SQL, ids: readonly string[]): T[] {
+export async function gridRowsById<T>(db: AppDb, spec: GridSpec, idExpr: SQL, ids: readonly string[]): Promise<T[]> {
   if (ids.length === 0) return [];
   const where = sql.join([...spec.base, sql`${idExpr} IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`].map((p) => sql`(${p})`), sql` AND `);
-  return db.all<T>(sql`SELECT ${selectList(spec)} ${spec.from} WHERE ${where} ORDER BY ${spec.defaultOrder}`);
+  return await dbAll<T>(db, sql`SELECT ${selectList(spec)} ${spec.from} WHERE ${where} ORDER BY ${spec.defaultOrder}`);
 }
 
 /** `col IN (…)` for a scope id list (empty list → never true). */

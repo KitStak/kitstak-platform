@@ -5,11 +5,12 @@
  * in location stock at PACK-02 and in a cell of putwall MC-01, plus HOSP-01 holding a pack-short
  * order. Then packs each through the pack screen (tote / location / putwall modes) in headless
  * Chromium and saves screenshots. Needs the dev server on :3000 and .data/e2e-auth/admin.json.
+ * The fixture seed and read-back open the database directly, so this walk needs DATABASE_URL
+ * (a Postgres the dev server also uses): local PGlite is single-process and held by `next dev`.
  */
 const path = require("path");
 const ROOT = path.resolve(__dirname, "../../..");
 const { chromium } = require(path.join(ROOT, "node_modules/playwright"));
-const Database = require(path.join(ROOT, "node_modules/better-sqlite3"));
 const base = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const OUT = process.argv[2] ?? path.join(ROOT, ".data");
 const EXE = process.env.PW_CHROMIUM ?? `${process.env.LOCALAPPDATA}/ms-playwright/chromium_headless_shell-1254/chrome-headless-shell-win64/chrome-headless-shell.exe`;
@@ -35,11 +36,12 @@ const SKU_A = "APX-TEE-WHT-M", SKU_B = "APX-TEE-NVY-M";
   // Fixtures: seeded through the domain (idempotent), then read back. See seed-station-fixtures.ts.
   const seed = require("child_process").spawnSync(process.platform === "win32" ? "npx.cmd" : "npx", ["tsx", "tests/e2e/stations-returns/seed-station-fixtures.ts"], { cwd: ROOT, encoding: "utf8", shell: process.platform === "win32" });
   log(seed.stdout.trim()); if (seed.status !== 0) throw new Error(seed.stderr);
-  const db = new Database(path.join(ROOT, ".data/kitstak.db"), { readonly: true });
-  const fx = (tag) => db.prepare("SELECT id, code FROM shipment_orders WHERE warehouse_id = ? AND store_order_number LIKE ? AND status IN ('Ready to Pack','Packing Started') AND pack_short_status <> 'Open' ORDER BY created_at DESC").get(wh.id, `KS-FIX-M04-${tag}-%`);
-  const oTote = fx("TOTE"), oLoc = fx("LOC"), oCart = fx("CART");
-  const toteNo = db.prepare("SELECT DISTINCT lp.number FROM inventory_allocations a JOIN inventory i ON i.id = a.inventory_id JOIN license_plates lp ON lp.id = i.lp_id WHERE a.order_id = ?").get(oTote.id).number;
-  db.close();
+  const { openRawDb } = await import(require("url").pathToFileURL(path.join(ROOT, "scripts/lib/raw-db.mjs")).href);
+  const db = await openRawDb();
+  const fx = async (tag) => (await db.query("SELECT id, code FROM shipment_orders WHERE warehouse_id = $1 AND store_order_number ILIKE $2 AND status IN ('Ready to Pack','Packing Started') AND pack_short_status <> 'Open' ORDER BY created_at DESC LIMIT 1", [wh.id, `KS-FIX-M04-${tag}-%`]))[0];
+  const oTote = await fx("TOTE"), oLoc = await fx("LOC"), oCart = await fx("CART");
+  const toteNo = (await db.query("SELECT DISTINCT lp.number FROM inventory_allocations a JOIN inventory i ON i.id = a.inventory_id JOIN license_plates lp ON lp.id = i.lp_id WHERE a.order_id = $1 LIMIT 1", [oTote.id]))[0].number;
+  await db.close();
   log("fixtures", { tote: toteNo, oTote: oTote.code, oLoc: oLoc.code, oCart: oCart.code });
 
   async function packVia(mode, stationCode, sourceCode, order) {

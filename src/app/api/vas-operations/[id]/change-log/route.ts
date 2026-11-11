@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: "settings.vas_operations.view",
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    loadVas(db, auth, params.id);
-    return changeLogResult(db, "vas_operation", params.id, query);
+  handler: async ({ db, auth, params, query }) => {
+    await loadVas(db, auth, params.id);
+    return await changeLogResult(db, "vas_operation", params.id, query);
   },
 });

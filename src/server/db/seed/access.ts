@@ -11,6 +11,7 @@ import type { LEGACY_USER_ROLES, USER_TYPES } from "@/lib/enums";
 import type { OrgRefs } from "./org";
 import { isoOf, utcAt } from "./runtime";
 import type { Id, SeedUser } from "./types";
+import { mapSeq } from "@/server/db/sql";
 
 /** Local demo credential (overridable). Never used in production: seeding refuses there. */
 export const DEFAULT_SEED_PASSWORD = "KitStak!demo2026";
@@ -66,41 +67,41 @@ export interface AccessRefs {
   readonly roleIds: ReadonlyMap<RoleKey, Id>;
 }
 
-function seedRoles(tx: Tx): Map<RoleKey, Id> {
+async function seedRoles(tx: Tx): Promise<Map<RoleKey, Id>> {
   const roleIds = new Map<RoleKey, Id>();
-  const insertRole = (key: RoleKey, row: Omit<typeof schema.roles.$inferInsert, "key">, permissions: readonly string[]): void => {
-    const id = tx.insert(schema.roles).values({ key, ...row }).returning({ id: schema.roles.id }).get().id;
-    if (permissions.length > 0) tx.insert(schema.rolePermissions).values(permissions.map((permission) => ({ roleId: id, permission }))).run();
+  const insertRole = async (key: RoleKey, row: Omit<typeof schema.roles.$inferInsert, "key">, permissions: readonly string[]): Promise<void> => {
+    const id = (await tx.insert(schema.roles).values({ key, ...row }).returning({ id: schema.roles.id }))[0].id;
+    if (permissions.length > 0) await tx.insert(schema.rolePermissions).values(permissions.map((permission) => ({ roleId: id, permission })));
     roleIds.set(key, id);
   };
   for (const r of DEFAULT_ROLES) {
-    insertRole(r.key, { name: r.name, description: r.description, category: "Operation", isSystem: true, createdAt: isoOf(utcAt(720, 14)) }, DEFAULT_ROLE_PERMISSIONS[r.key]);
+    await insertRole(r.key, { name: r.name, description: r.description, category: "Operation", isSystem: true, createdAt: isoOf(utcAt(720, 14)) }, DEFAULT_ROLE_PERMISSIONS[r.key]);
   }
-  insertRole(CLIENT_ROLE_KEY, {
+  await insertRole(CLIENT_ROLE_KEY, {
     name: "Client", description: "Client portal: read-only orders, inventory and reports for the client's own data. Carrier costs and account numbers are hidden.",
     category: "Client", isSystem: true, restrictions: ["carrier_cost", "carrier_account_data", "rate_shopping_data"], createdAt: isoOf(utcAt(160, 15)),
   }, CLIENT_ROLE_PERMISSIONS);
   return roleIds;
 }
 
-export function seedAccess(tx: Tx, org: OrgRefs, password: string): AccessRefs {
-  const roleIds = seedRoles(tx);
+export async function seedAccess(tx: Tx, org: OrgRefs, password: string): Promise<AccessRefs> {
+  const roleIds = await seedRoles(tx);
   const passwordHash = hashPassword(password, SEED_BCRYPT_ROUNDS);
   const whIds = { MLT1: org.mlt1, KS2: org.ks2 } as const;
-  const users = USER_SPECS.map((u): SeedUser & { spec: UserSeedSpec } => {
+  const users = await mapSeq(USER_SPECS, async (u): Promise<SeedUser & { spec: UserSeedSpec }> => {
     const createdAt = isoOf(utcAt(u.daysAgo, 15));
     const name = `${u.firstName} ${u.lastName}`;
-    const id = tx.insert(schema.users).values({
+    const id = (await tx.insert(schema.users).values({
       email: u.email, name, firstName: u.firstName, lastName: u.lastName, passwordHash, role: u.role, userType: u.userType,
       isApiUser: u.isApiUser ?? false, allClients: !u.clientCodes, passwordChangedAt: isoOf(utcAt(14, 15)), // recent, so the 180-day expiry policy never locks the demo users (admin-settings REQ-R5-2)
       preferences: { dateFormat: "M/D/YYYY h:mm:ss A", timeFormat: "12h", numberFormat: "1,025.00", density: "Large", defaultWarehouseId: whIds[u.warehouses[0]] },
       createdAt,
-    }).returning({ id: schema.users.id }).get().id;
-    tx.insert(schema.userRoles).values({ userId: id, roleId: roleIds.get(u.roleKey) as Id }).run();
-    tx.insert(schema.userWarehouses).values(u.warehouses.map((w) => ({ userId: id, warehouseId: whIds[w] }))).run();
+    }).returning({ id: schema.users.id }))[0].id;
+    await tx.insert(schema.userRoles).values({ userId: id, roleId: roleIds.get(u.roleKey) as Id });
+    await tx.insert(schema.userWarehouses).values(u.warehouses.map((w) => ({ userId: id, warehouseId: whIds[w] })));
     for (const code of u.clientCodes ?? []) {
       const client = org.clientByCode.get(code);
-      if (client) tx.insert(schema.userClients).values({ userId: id, clientId: client.id }).run();
+      if (client) await tx.insert(schema.userClients).values({ userId: id, clientId: client.id });
     }
     return { id, email: u.email, name, spec: u };
   });
@@ -116,7 +117,7 @@ export function seedAccess(tx: Tx, org: OrgRefs, password: string): AccessRefs {
 }
 
 /** Recent security events (logins, a failed login, a role change) for the audit log. */
-export function seedAuditTrail(tx: Tx, access: AccessRefs): number {
+export async function seedAuditTrail(tx: Tx, access: AccessRefs): Promise<number> {
   const rows: (typeof schema.auditLog.$inferInsert)[] = [];
   access.users.filter((u) => !u.email.startsWith("integrations@")).forEach((u, i) => {
     for (let d = 0; d < 5; d += 1) {
@@ -127,6 +128,6 @@ export function seedAuditTrail(tx: Tx, access: AccessRefs): number {
   const marcus = access.byEmail.get("marcus@novaforge.io");
   if (marcus) rows.push({ userId: marcus.id, action: "auth.login", entity: "user", entityId: marcus.id, detail: "Invalid password", at: isoOf(utcAt(3, 13, 41)), ip: "73.92.14.6", outcome: "failure" });
   rows.push({ userId: access.admin.id, action: "role.update", entity: "role", entityId: access.roleIds.get(CLIENT_ROLE_KEY) ?? "", detail: "Client role: hid carrier costs and account numbers", at: isoOf(utcAt(20, 15, 12)) });
-  tx.insert(schema.auditLog).values(rows).run();
+  await tx.insert(schema.auditLog).values(rows);
   return rows.length;
 }

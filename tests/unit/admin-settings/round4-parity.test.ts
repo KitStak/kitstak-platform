@@ -47,15 +47,15 @@ describe("POST /api/users validation reports every field at once", () => {
     });
     expect(r.success).toBe(true);
   });
-  it("parseUserSave uses the company policy and throws one VALIDATION with all fieldErrors", () => {
-    const w = createWorld();
+  it("parseUserSave uses the company policy and throws one VALIDATION with all fieldErrors", async () => {
+    const w = await createWorld();
     try {
       let err: unknown;
-      try { parseUserSave(w.db, "create", { firstName: "", lastName: "Op", email: "sam@x.io", userType: "Operation", password: "a", confirmPassword: "a", roleIds: [], warehouseIds: [], allClients: true }); } catch (e) { err = e; }
+      try { await parseUserSave(w.db, "create", { firstName: "", lastName: "Op", email: "sam@x.io", userType: "Operation", password: "a", confirmPassword: "a", roleIds: [], warehouseIds: [], allClients: true }); } catch (e) { err = e; }
       expect(err).toBeInstanceOf(AppError);
       const fe = (err as AppError).fieldErrors ?? {};
       expect(Object.keys(fe)).toEqual(expect.arrayContaining(["firstName", "roleIds", "warehouseIds", "password"]));
-    } finally { w.close(); }
+    } finally { await w.close(); }
   });
   it("both tabs share one header", () => {
     expect(USERS_ROLES_TITLE).toBe("Users & Roles");
@@ -143,56 +143,56 @@ describe("users bulk import against the DB", () => {
   let w: World;
   let operatorId: string;
   let viewerId: string;
-  beforeEach(() => {
-    w = createWorld();
-    operatorId = w.db.insert(schema.roles).values({ key: "operator", name: "Operator", category: "Operation" }).returning().get().id;
-    viewerId = w.db.insert(schema.roles).values({ key: "viewer", name: "Viewer", category: "Operation" }).returning().get().id;
+  beforeEach(async () => {
+    w = await createWorld();
+    operatorId = (await w.db.insert(schema.roles).values({ key: "operator", name: "Operator", category: "Operation" }).returning())[0].id;
+    viewerId = (await w.db.insert(schema.roles).values({ key: "viewer", name: "Viewer", category: "Operation" }).returning())[0].id;
   });
   afterEach(() => w.close());
 
-  it("creates a user with role + warehouse and an expired password, then updates by email", () => {
-    const res = importUserRow(w.db, authFor(w), actorOf(w), { email: "New.Op@X.io", name: "New Operator", userType: "Web", roleName: "operator", defaultWarehouseCode: "mlt1", allClients: true, status: "Active" });
-    const d = getUser(w.db, res.entityId);
+  it("creates a user with role + warehouse and an expired password, then updates by email", async () => {
+    const res = await importUserRow(w.db, authFor(w), actorOf(w), { email: "New.Op@X.io", name: "New Operator", userType: "Web", roleName: "operator", defaultWarehouseCode: "mlt1", allClients: true, status: "Active" });
+    const d = await getUser(w.db, res.entityId);
     expect(d.email).toBe("new.op@x.io");
     expect(d.roleIds).toEqual([operatorId]);
     expect(d.warehouseIds).toEqual([w.warehouseId]);
-    expect(findUserByEmail(w.db, "new.op@x.io")?.passwordChangedAt).toBeNull();
-    const logs = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, res.entityId)).all();
+    expect((await findUserByEmail(w.db, "new.op@x.io"))?.passwordChangedAt).toBeNull();
+    const logs = await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, res.entityId));
     expect(logs.length).toBeGreaterThan(0);
 
-    importUserRow(w.db, authFor(w), actorOf(w), { email: "new.op@x.io", name: "Renamed Operator", userType: "Client", roleName: "Viewer", status: "Inactive" });
-    const after = getUser(w.db, res.entityId);
+    await importUserRow(w.db, authFor(w), actorOf(w), { email: "new.op@x.io", name: "Renamed Operator", userType: "Client", roleName: "Viewer", status: "Inactive" });
+    const after = await getUser(w.db, res.entityId);
     expect(after.name).toBe("Renamed Operator");
     expect(after.userType).toBe("Client");
     expect(after.isActive).toBe(false);
     expect(new Set(after.roleIds)).toEqual(new Set([operatorId, viewerId]));
   });
 
-  it("rejects unknown roles / warehouses and a new user without a role", () => {
-    expect(() => importUserRow(w.db, authFor(w), actorOf(w), { email: "a@x.io", name: "A B", roleName: "Nope", defaultWarehouseCode: "MLT1" })).toThrow(/Role "Nope"/);
-    expect(() => importUserRow(w.db, authFor(w), actorOf(w), { email: "a@x.io", name: "A B", roleName: "Operator", defaultWarehouseCode: "ZZZ" })).toThrow(/Warehouse "ZZZ"/);
-    expect(() => importUserRow(w.db, authFor(w), actorOf(w), { email: "a@x.io", name: "A B", defaultWarehouseCode: "MLT1" })).toThrow(/Role is required/);
+  it("rejects unknown roles / warehouses and a new user without a role", async () => {
+    await expect(async () => await importUserRow(w.db, authFor(w), actorOf(w), { email: "a@x.io", name: "A B", roleName: "Nope", defaultWarehouseCode: "MLT1" })).rejects.toThrow(/Role "Nope"/);
+    await expect(async () => await importUserRow(w.db, authFor(w), actorOf(w), { email: "a@x.io", name: "A B", roleName: "Operator", defaultWarehouseCode: "ZZZ" })).rejects.toThrow(/Warehouse "ZZZ"/);
+    await expect(async () => await importUserRow(w.db, authFor(w), actorOf(w), { email: "a@x.io", name: "A B", defaultWarehouseCode: "MLT1" })).rejects.toThrow(/Role is required/);
   });
 
-  it("assigns / unassigns roles, keeps at least one, and is idempotent", () => {
-    const { entityId } = importUserRow(w.db, authFor(w), actorOf(w), { email: "r@x.io", name: "R User", roleName: "Operator", defaultWarehouseCode: "MLT1" });
-    importUserLinkRow(w.db, authFor(w), actorOf(w), "role", { email: "r@x.io", roleName: "Viewer", action: "Assign" });
-    expect(new Set(getUser(w.db, entityId).roleIds)).toEqual(new Set([operatorId, viewerId]));
-    expect(importUserLinkRow(w.db, authFor(w), actorOf(w), "role", { email: "r@x.io", roleName: "Viewer", action: "Assign" }).message).toMatch(/already assigned/);
-    importUserLinkRow(w.db, authFor(w), actorOf(w), "role", { email: "r@x.io", roleName: "Operator", action: "Unassign" });
-    expect(getUser(w.db, entityId).roleIds).toEqual([viewerId]);
-    expect(() => importUserLinkRow(w.db, authFor(w), actorOf(w), "role", { email: "r@x.io", roleName: "Viewer", action: "Unassign" })).toThrow(/at least one role/);
-    expect(() => importUserLinkRow(w.db, authFor(w), actorOf(w), "role", { email: "ghost@x.io", roleName: "Viewer", action: "Assign" })).toThrow(/No user/);
+  it("assigns / unassigns roles, keeps at least one, and is idempotent", async () => {
+    const { entityId } = await importUserRow(w.db, authFor(w), actorOf(w), { email: "r@x.io", name: "R User", roleName: "Operator", defaultWarehouseCode: "MLT1" });
+    await importUserLinkRow(w.db, authFor(w), actorOf(w), "role", { email: "r@x.io", roleName: "Viewer", action: "Assign" });
+    expect(new Set((await getUser(w.db, entityId)).roleIds)).toEqual(new Set([operatorId, viewerId]));
+    expect((await importUserLinkRow(w.db, authFor(w), actorOf(w), "role", { email: "r@x.io", roleName: "Viewer", action: "Assign" })).message).toMatch(/already assigned/);
+    await importUserLinkRow(w.db, authFor(w), actorOf(w), "role", { email: "r@x.io", roleName: "Operator", action: "Unassign" });
+    expect((await getUser(w.db, entityId)).roleIds).toEqual([viewerId]);
+    await expect(async () => await importUserLinkRow(w.db, authFor(w), actorOf(w), "role", { email: "r@x.io", roleName: "Viewer", action: "Unassign" })).rejects.toThrow(/at least one role/);
+    await expect(async () => await importUserLinkRow(w.db, authFor(w), actorOf(w), "role", { email: "ghost@x.io", roleName: "Viewer", action: "Assign" })).rejects.toThrow(/No user/);
   });
 
-  it("user-client import switches to Select manually; all-clients users can't lose one client", () => {
-    importUserRow(w.db, authFor(w), actorOf(w), { email: "c@x.io", name: "C User", roleName: "Operator", defaultWarehouseCode: "MLT1" });
-    expect(() => importUserLinkRow(w.db, authFor(w), actorOf(w), "client", { email: "c@x.io", clientCode: "ACME", action: "Unassign" })).toThrow(/all clients/);
-    const id = findUserByEmail(w.db, "c@x.io")!.id;
-    w.db.update(schema.users).set({ allClients: false }).where(eq(schema.users.id, id)).run();
-    w.db.insert(schema.userClients).values({ userId: id, clientId: w.otherClientId }).run();
-    importUserLinkRow(w.db, authFor(w), actorOf(w), "client", { email: "c@x.io", clientCode: "acme", action: "Assign" });
-    expect(new Set(getUser(w.db, id).clientIds)).toEqual(new Set([w.clientId, w.otherClientId]));
-    expect(() => importUserLinkRow(w.db, authFor(w), actorOf(w), "warehouse", { email: "c@x.io", warehouseCode: "MLT1", action: "Unassign" })).toThrow(/at least one warehouse/);
+  it("user-client import switches to Select manually; all-clients users can't lose one client", async () => {
+    await importUserRow(w.db, authFor(w), actorOf(w), { email: "c@x.io", name: "C User", roleName: "Operator", defaultWarehouseCode: "MLT1" });
+    await expect(async () => await importUserLinkRow(w.db, authFor(w), actorOf(w), "client", { email: "c@x.io", clientCode: "ACME", action: "Unassign" })).rejects.toThrow(/all clients/);
+    const id = (await findUserByEmail(w.db, "c@x.io"))!.id;
+    await w.db.update(schema.users).set({ allClients: false }).where(eq(schema.users.id, id));
+    await w.db.insert(schema.userClients).values({ userId: id, clientId: w.otherClientId });
+    await importUserLinkRow(w.db, authFor(w), actorOf(w), "client", { email: "c@x.io", clientCode: "acme", action: "Assign" });
+    expect(new Set((await getUser(w.db, id)).clientIds)).toEqual(new Set([w.clientId, w.otherClientId]));
+    await expect(async () => await importUserLinkRow(w.db, authFor(w), actorOf(w), "warehouse", { email: "c@x.io", warehouseCode: "MLT1", action: "Unassign" })).rejects.toThrow(/at least one warehouse/);
   });
 });

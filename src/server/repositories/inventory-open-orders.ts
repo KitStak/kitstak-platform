@@ -10,6 +10,7 @@ import type { AuthContext } from "@/server/auth/context";
 import { OPEN_PO_STATUSES, OPEN_SO_STATUSES } from "@/server/domain/atp";
 import { serializeGridQuery } from "@/server/query/grid-query";
 import { clientIn, inList } from "./inventory-grid";
+import { dbAll } from "@/server/db/sql";
 
 const SHIPPED_TAB_STATUSES = new Set(["Partially Shipped"]);
 
@@ -18,10 +19,10 @@ export interface OpenOrderRef {
   readonly status: string;
 }
 
-export function openOrdersFor(db: AppDb, auth: AuthContext, input: { productId: string; warehouseId?: string | null }): OpenOrderRef[] {
+export async function openOrdersFor(db: AppDb, auth: AuthContext, input: { productId: string; warehouseId?: string | null }): Promise<OpenOrderRef[]> {
   const statuses: SQL = sql.join(OPEN_SO_STATUSES.map((s) => sql`${s}`), sql`, `);
   const wh = input.warehouseId ? inList(sql`o.warehouse_id`, auth.scope.warehouseIds.filter((w) => w === input.warehouseId)) : inList(sql`o.warehouse_id`, auth.viewScope.warehouseIds);
-  return db.all<OpenOrderRef>(sql`
+  return await dbAll<OpenOrderRef>(db, sql`
     SELECT DISTINCT o.code AS "code", o.status AS "status"
     FROM order_lines l JOIN shipment_orders o ON o.id = l.order_id
     WHERE l.product_id = ${input.productId}
@@ -57,16 +58,16 @@ export function openOrdersHref(orders: readonly OpenOrderRef[], fallback: { sku:
 /* ---------------- Open PO Qty drill (blind-judge round 3) ---------------- */
 
 /** Open purchase orders (Pending / Started / Receiving) with an unreceived line for the product. */
-export function openPurchaseOrdersFor(db: AppDb, auth: AuthContext, input: { productId: string; warehouseId?: string | null }): string[] {
+export async function openPurchaseOrdersFor(db: AppDb, auth: AuthContext, input: { productId: string; warehouseId?: string | null }): Promise<string[]> {
   const statuses: SQL = sql.join(OPEN_PO_STATUSES.map((s) => sql`${s}`), sql`, `);
   const wh = input.warehouseId ? inList(sql`p.warehouse_id`, auth.scope.warehouseIds.filter((w) => w === input.warehouseId)) : inList(sql`p.warehouse_id`, auth.viewScope.warehouseIds);
-  return db.all<{ code: string }>(sql`
+  return (await dbAll<{ code: string }>(db, sql`
     SELECT DISTINCT p.code AS "code"
     FROM purchase_order_lines l JOIN purchase_orders p ON p.id = l.purchase_order_id
     WHERE l.product_id = ${input.productId} AND p.status IN (${statuses})
       AND (l.ordered_quantity - l.received_quantity) > 0
       AND ${wh} AND ${clientIn(sql`p.client_id`, auth.scope.clientIds)}
-    ORDER BY p.code`).map((r) => r.code);
+    ORDER BY p.code`)).map((r) => r.code);
 }
 
 /** Purchase Orders list filtered to exactly those POs (chips: Code in …, Warehouse, Status in …). */

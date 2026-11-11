@@ -10,6 +10,7 @@ import { countIntegrityIssues } from "@/server/repositories/counts-integrity";
 import { findInventoryHygieneIssues } from "@/server/repositories/inventory-hygiene";
 import { jobsInvariants } from "@/server/repositories/jobs-invariants";
 import { poStatusDrift } from "@/server/repositories/purchase-orders-integrity";
+import { dbAll, dbGet, flatMapSeq, mapSeq } from "@/server/db/sql";
 
 export interface VerifyIssue {
   readonly check: string;
@@ -30,16 +31,16 @@ export interface VerifyResult {
  * POs fully received but not Completed or stuck in Receiving (inbound REQ-R2-9), and bucket
  * attributes on untracked products or impossible dates (inventory REQ-R2-24).
  */
-function moduleChecks(db: AppDb): { readonly issues: VerifyIssue[]; readonly warnings: VerifyIssue[] } {
-  const issues: VerifyIssue[] = [...countIntegrityIssues(db)];
-  for (const [check, n] of Object.entries(jobsInvariants(db))) {
+async function moduleChecks(db: AppDb): Promise<{ readonly issues: VerifyIssue[]; readonly warnings: VerifyIssue[] }> {
+  const issues: VerifyIssue[] = [...await countIntegrityIssues(db)];
+  for (const [check, n] of Object.entries(await jobsInvariants(db))) {
     if (Number(n) > 0) issues.push({ check, id: "jobs", message: `${n} row(s) violate ${check}` });
   }
-  for (const d of poStatusDrift(db)) {
+  for (const d of await poStatusDrift(db)) {
     issues.push({ check: "po-status-drift", id: d.code, message: `PO is ${d.status} but should be ${d.expected} (${d.received} of ${d.ordered} received)` });
   }
   const warnings: VerifyIssue[] = [];
-  for (const h of findInventoryHygieneIssues(db)) (h.check === "empty-bucket" ? warnings : issues).push({ check: h.check, id: h.id, message: h.message });
+  for (const h of await findInventoryHygieneIssues(db)) (h.check === "empty-bucket" ? warnings : issues).push({ check: h.check, id: h.id, message: h.message });
   return { issues, warnings };
 }
 
@@ -80,9 +81,9 @@ const EXTRA_CHECKS: readonly RawCheck[] = [
     message: (r) => `return line returned ${String(r.returned)} but receipts sum ${String(r.receipts)}`,
   },
   {
-    check: "serial_stock", sql: `SELECT i.id, i.on_hand AS onHand, (SELECT COUNT(*) FROM serial_numbers s WHERE s.inventory_id = i.id AND s.status IN ('Received','Updated')) AS serials
+    check: "serial_stock", sql: `SELECT i.id, i.on_hand AS "onHand", (SELECT COUNT(*) FROM serial_numbers s WHERE s.inventory_id = i.id AND s.status IN ('Received','Updated')) AS serials
       FROM inventory i JOIN products p ON p.id = i.product_id
-      WHERE p.track_serial = 1 AND i.status = 'Stock' AND i.on_hand > 0 AND i.on_hand <> (SELECT COUNT(*) FROM serial_numbers s WHERE s.inventory_id = i.id AND s.status IN ('Received','Updated'))`,
+      WHERE p.track_serial AND i.status = 'Stock' AND i.on_hand > 0 AND i.on_hand <> (SELECT COUNT(*) FROM serial_numbers s WHERE s.inventory_id = i.id AND s.status IN ('Received','Updated'))`,
     message: (r) => `serial-tracked bucket holds ${String(r.onHand)} units but ${String(r.serials)} serials`,
   },
   {
@@ -101,10 +102,10 @@ const STATS: Readonly<Record<string, string>> = {
   onHandUnits: "SELECT COALESCE(SUM(on_hand), 0) AS n FROM inventory",
 };
 
-export function verifyDatabase(db: AppDb): VerifyResult {
-  const ledgerIssues: VerifyIssue[] = reconcileLedger(db).map((i) => ({ check: i.check, id: i.id, message: i.message }));
-  const extra = EXTRA_CHECKS.flatMap((c) => db.all<Record<string, unknown>>(sql.raw(c.sql)).map((row) => ({ check: c.check, id: String(row.id), message: c.message(row) })));
-  const stats = Object.fromEntries(Object.entries(STATS).map(([k, q]) => [k, Number(db.get<{ n: number }>(sql.raw(q))?.n ?? 0)]));
-  const mod = moduleChecks(db);
+export async function verifyDatabase(db: AppDb): Promise<VerifyResult> {
+  const ledgerIssues: VerifyIssue[] = (await reconcileLedger(db)).map((i) => ({ check: i.check, id: i.id, message: i.message }));
+  const extra = await flatMapSeq(EXTRA_CHECKS, async (c) => (await dbAll<Record<string, unknown>>(db, sql.raw(c.sql))).map((row) => ({ check: c.check, id: String(row.id), message: c.message(row) })));
+  const stats = Object.fromEntries(await mapSeq(Object.entries(STATS), async ([k, q]) => [k, Number((await dbGet<{ n: number }>(db, sql.raw(q)))?.n ?? 0)]));
+  const mod = await moduleChecks(db);
   return { issues: [...ledgerIssues, ...extra, ...mod.issues], stats, warnings: mod.warnings };
 }

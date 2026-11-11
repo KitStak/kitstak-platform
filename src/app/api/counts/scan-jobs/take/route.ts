@@ -7,5 +7,5 @@ import { domainCtx } from "@/server/repositories/platform-common";
 export const POST = defineRoute({
   permission: [P.mobileJobPool, P.edit, P.updateInv],
   body: takeJobSchema,
-  handler: ({ db, auth, actor, body }) => takeScanJob(db, domainCtx(actor, auth), auth, body.jobId),
+  handler: async ({ db, auth, actor, body }) => await takeScanJob(db, domainCtx(actor, auth), auth, body.jobId),
 });

@@ -27,6 +27,7 @@ import { groupForAi, locationPoint, optimizeRoute, routeStats, savingsPct, type 
 import { slaWindow, taskWindow } from "./jobs-planning";
 import { loadWaveRule, stampRun, type WaveRuleRow } from "./wave-rules";
 import { runByDisplay } from "./waves-run-by";
+import { dbGet, flatMapSeq, forEachSeq, mapSeq, withWriteTx } from "@/server/db/sql";
 
 type JobTypeRow = typeof schema.jobTypes.$inferSelect;
 export type WaveRow = typeof schema.waves.$inferSelect;
@@ -49,9 +50,9 @@ export interface RunOptions {
 const ELIGIBLE_STATUSES = ["Open", "Shortage"] as const;
 
 /** Facts the generic order facts do not carry (Is Partial, Number of Boxes). */
-function waveFacts(db: AppDb, order: OrderRow, lines: readonly OrderLineRow[]): Facts {
-  const base = orderFacts(db, order, lines);
-  const boxes = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM shipments WHERE order_id = ${order.id} AND label_status = 'Active'`)?.n ?? 0;
+async function waveFacts(db: AppDb, order: OrderRow, lines: readonly OrderLineRow[]): Promise<Facts> {
+  const base = await orderFacts(db, order, lines);
+  const boxes = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM shipments WHERE order_id = ${order.id} AND label_status = 'Active'`))?.n ?? 0;
   return { ...base, note: order.note, extraNote1: order.extraNote1, extraNote2: order.extraNote2, isPartial: lines.some((l) => l.allocatedQuantity > 0 && l.allocatedQuantity < l.quantity - l.cancelledQuantity), numberOfBoxes: Number(boxes) };
 }
 
@@ -68,16 +69,16 @@ export function aiWaveMessage(jobs: number, baselineM: number, optimizedM: numbe
   return `AI optimized ${label}: routes were already the shortest walk (${after} m)`;
 }
 
-export function selectCandidates(db: AppDb, rule: Pick<WaveRuleRow, "warehouseId" | "filters" | "orderBy">, now: Date): Candidate[] {
-  const orders = db.select().from(schema.shipmentOrders).where(and(
+export async function selectCandidates(db: AppDb, rule: Pick<WaveRuleRow, "warehouseId" | "filters" | "orderBy">, now: Date): Promise<Candidate[]> {
+  const orders = await db.select().from(schema.shipmentOrders).where(and(
     eq(schema.shipmentOrders.warehouseId, rule.warehouseId), inArray(schema.shipmentOrders.status, [...ELIGIBLE_STATUSES]),
     isNull(schema.shipmentOrders.jobId), isNull(schema.shipmentOrders.deletedAt), ne(schema.shipmentOrders.workflowBlocked, "Fully"),
     isNull(schema.shipmentOrders.mergedIntoOrderId),
-  )).all();
-  const cands = orders.map((order) => {
-    const lines = db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, order.id)).all();
-    return { order, lines, facts: waveFacts(db, order, lines) };
-  }).filter((c) => orderUnits(c.lines) > 0 && evaluateFilters(rule.filters as FilterCondition[], c.facts, now));
+  ));
+  const cands = (await mapSeq(orders, async (order) => {
+    const lines = await db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, order.id));
+    return { order, lines, facts: await waveFacts(db, order, lines) };
+  })).filter((c) => orderUnits(c.lines) > 0 && evaluateFilters(rule.filters as FilterCondition[], c.facts, now));
   return sortByClauses(cands, rule.orderBy, (c) => c.facts);
 }
 
@@ -96,25 +97,25 @@ export const eliminatedByJobTypes = (codes: readonly string[]): string => `Elimi
  * order per rule: when the same rule eliminates the same order again, the existing row moves to the
  * new wave instead of piling up a duplicate (the wave log keeps the per-wave count).
  */
-function recordElimination(db: AppDb, wave: WaveRow, rule: WaveRuleRow, order: OrderRow, codes: readonly string[], runBy: string): void {
+async function recordElimination(db: AppDb, wave: WaveRow, rule: WaveRuleRow, order: OrderRow, codes: readonly string[], runBy: string): Promise<void> {
   const explanation = eliminatedByJobTypes(codes);
   const ex = schema.allocationExceptions;
-  const existing = db.select({ id: ex.id }).from(ex).where(and(
+  const existing = (await db.select({ id: ex.id }).from(ex).where(and(
     eq(ex.orderId, order.id), eq(ex.waveRuleName, rule.name), eq(ex.explanation, explanation), eq(ex.isRolledBack, false),
-  )).get();
+  )).limit(1))[0];
   if (existing) {
-    db.update(ex).set({ waveId: wave.id, waveNo: wave.waveNo, runBy, runAt: wave.runAt }).where(eq(ex.id, existing.id)).run();
+    await db.update(ex).set({ waveId: wave.id, waveNo: wave.waveNo, runBy, runAt: wave.runAt }).where(eq(ex.id, existing.id));
     return;
   }
-  allocation.recordException(db, {
+  await allocation.recordException(db, {
     orderId: order.id, waveId: wave.id, waveNo: wave.waveNo, waveRuleName: rule.name,
     explanation: eliminatedByJobTypes(codes), runBy, warehouseId: order.warehouseId, clientId: order.clientId,
   });
 }
 
-function setWaveStatus(db: AppDb, wave: WaveRow, status: WaveRow["status"], patch: Partial<typeof schema.waves.$inferInsert> = {}): WaveRow {
+async function setWaveStatus(db: AppDb, wave: WaveRow, status: WaveRow["status"], patch: Partial<typeof schema.waves.$inferInsert> = {}): Promise<WaveRow> {
   const next = stateMachines.wave.transition(wave.status, status);
-  return db.update(schema.waves).set({ status: next, ...patch }).where(eq(schema.waves.id, wave.id)).returning().get();
+  return (await db.update(schema.waves).set({ status: next, ...patch }).where(eq(schema.waves.id, wave.id)).returning())[0];
 }
 
 function assigneesFor(db: AppDb, rule: WaveRuleRow): string[] {
@@ -123,36 +124,36 @@ function assigneesFor(db: AppDb, rule: WaveRuleRow): string[] {
 }
 
 /** Tags wave-created jobs with the rule and the wave (count plans create their jobs without a wave no). */
-function stampJobs(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: WaveRow, jobIds: readonly string[]): void {
+async function stampJobs(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: WaveRow, jobIds: readonly string[]): Promise<void> {
   if (jobIds.length === 0) return;
-  db.update(schema.jobs).set({ ruleName: rule.name, waveRuleId: rule.id, waveId: wave.id, waveNumber: wave.waveNo }).where(inArray(schema.jobs.id, [...jobIds])).run();
+  await db.update(schema.jobs).set({ ruleName: rule.name, waveRuleId: rule.id, waveId: wave.id, waveNumber: wave.waveNo }).where(inArray(schema.jobs.id, [...jobIds]));
   // One SLA rule (critic R3): job = created + 1h / + 2h, every task planned inside the job window.
   for (const id of jobIds) {
-    const job = db.select({ createdAt: schema.jobs.createdAt }).from(schema.jobs).where(eq(schema.jobs.id, id)).get();
+    const job = (await db.select({ createdAt: schema.jobs.createdAt }).from(schema.jobs).where(eq(schema.jobs.id, id)).limit(1))[0];
     if (!job) continue;
     const window = slaWindow(job.createdAt);
-    db.update(schema.jobs).set(window).where(eq(schema.jobs.id, id)).run();
-    db.update(schema.tasks).set(taskWindow(window)).where(eq(schema.tasks.jobId, id)).run();
+    await db.update(schema.jobs).set(window).where(eq(schema.jobs.id, id));
+    await db.update(schema.tasks).set(taskWindow(window)).where(eq(schema.tasks.jobId, id));
   }
-  const users = assigneesFor(db, rule);
-  if (users.length > 1) jobIds.forEach((id, i) => jobsDomain.assign(db, ctx, { jobIds: [id], userId: users[i % users.length] as string }));
+  const users = await assigneesFor(db, rule);
+  if (users.length > 1) await forEachSeq(jobIds, async (id, i) => await jobsDomain.assign(db, ctx, { jobIds: [id], userId: users[i % users.length] as string }));
 }
 
-function ruleJobTypes(db: AppDb, rule: WaveRuleRow) {
-  return rule.jobTypeIds.flatMap((id) => db.select().from(schema.jobTypes).where(eq(schema.jobTypes.id, id)).all())
+async function ruleJobTypes(db: AppDb, rule: WaveRuleRow) {
+  return (await flatMapSeq(rule.jobTypeIds, async (id) => await db.select().from(schema.jobTypes).where(eq(schema.jobTypes.id, id))))
     .filter((t) => t.isActive).map((t) => ({ type: t, settings: parseSettings(jobTypeSettingsSchema, t.settings) }));
 }
 
 /** Steps 2–4a shared by Picking and AI waves: select, match job types (eliminate the rest), allocate. */
-function selectAndAllocate(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: WaveRow, opts: RunOptions, now: Date) {
-  const cands = selectCandidates(db, rule, now);
-  const types = ruleJobTypes(db, rule);
+async function selectAndAllocate(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: WaveRow, opts: RunOptions, now: Date) {
+  const cands = await selectCandidates(db, rule, now);
+  const types = await ruleJobTypes(db, rule);
   const groups = new Map<string, { type: JobTypeRow; orders: string[] }>();
   let eliminated = 0;
   for (const cand of cands) {
     const hit = types.find((t) => matchesJobType(cand, t.settings, t.type.conditions, now));
     if (!hit) {
-      recordElimination(db, wave, rule, cand.order, types.map((t) => t.type.code), opts.runBy);
+      await recordElimination(db, wave, rule, cand.order, types.map((t) => t.type.code), opts.runBy);
       eliminated += 1;
       continue;
     }
@@ -163,7 +164,7 @@ function selectAndAllocate(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: W
   let allocated = 0;
   const allocatedGroups: { type: JobTypeRow; orders: readonly string[] }[] = [];
   for (const { type, orders } of groups.values()) {
-    const res = allocation.allocateOrders(db, ctx, {
+    const res = await allocation.allocateOrders(db, ctx, {
       orderIds: orders, warehouseId: rule.warehouseId, algorithmId: type.allocationAlgorithmId, waveId: wave.id, waveNo: wave.waveNo,
       waveRuleName: rule.name, runBy: opts.runBy,
     });
@@ -174,18 +175,18 @@ function selectAndAllocate(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: W
   return { met, allocated, eliminated, shortage: Math.max(0, met - eliminated - allocated), groups: allocatedGroups };
 }
 
-function runPicking(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: WaveRow, opts: RunOptions, now: Date) {
-  const sel = selectAndAllocate(db, ctx, rule, wave, opts, now);
-  const users = assigneesFor(db, rule);
+async function runPicking(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: WaveRow, opts: RunOptions, now: Date) {
+  const sel = await selectAndAllocate(db, ctx, rule, wave, opts, now);
+  const users = await assigneesFor(db, rule);
   const jobIds: string[] = [];
   for (const { type, orders } of sel.groups) {
-    const created = jobsDomain.createJobsFromOrders(db, ctx, {
+    const created = await jobsDomain.createJobsFromOrders(db, ctx, {
       orderIds: orders, jobTypeId: type.id, waveId: wave.id, waveNo: wave.waveNo, priority: rule.priority as Priority,
       assigneeUserId: users.length === 1 ? users[0] : null, now,
     });
     jobIds.push(...created.jobIds);
   }
-  stampJobs(db, ctx, rule, wave, jobIds);
+  await stampJobs(db, ctx, rule, wave, jobIds);
   return { met: sel.met, allocated: sel.allocated, shortage: sel.shortage, jobIds, merged: 0, message: sel.eliminated > 0 ? `${count(sel.eliminated, "order")} eliminated by job type conditions` : null };
 }
 
@@ -195,8 +196,8 @@ function runPicking(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: WaveRow,
 export const AI_INTERIM_STATUSES = ["Preparing For Optimization", "Optimizing", "Optimization Completed"] as const;
 const DEFAULT_AI_MAX_ORDERS = 20;
 
-function aiMaxOrders(db: AppDb): number {
-  const settings = db.select({ s: schema.apps.settings }).from(schema.apps).where(eq(schema.apps.key, "ai-jobs")).get()?.s ?? null;
+async function aiMaxOrders(db: AppDb): Promise<number> {
+  const settings = (await db.select({ s: schema.apps.settings }).from(schema.apps).where(eq(schema.apps.key, "ai-jobs")).limit(1))[0]?.s ?? null;
   const n = Number((settings as Record<string, unknown> | null)?.maxOrdersPerJob);
   return Number.isFinite(n) && n >= 1 ? Math.min(500, Math.floor(n)) : DEFAULT_AI_MAX_ORDERS;
 }
@@ -205,30 +206,30 @@ function aiMaxOrders(db: AppDb): number {
  * Legacy gate, no longer called by `runAiWave` (blind judge R1: AI waves are built in and run
  * with the default settings when the AI Jobs app is inactive). Kept for callers that opt in.
  */
-export function assertAiJobsActive(db: AppDb): void {
-  const on = Boolean(db.select({ on: schema.apps.isActive }).from(schema.apps).where(eq(schema.apps.key, "ai-jobs")).get()?.on);
+export async function assertAiJobsActive(db: AppDb): Promise<void> {
+  const on = Boolean((await db.select({ on: schema.apps.isActive }).from(schema.apps).where(eq(schema.apps.key, "ai-jobs")).limit(1))[0]?.on);
   if (!on) throw new AppError("RULE_VIOLATION", "AI Jobs is not active. Activate the AI Jobs app in Settings → Apps to run AI waves.");
 }
 
 type LocRow = PickLocation;
 
-function locationsById(db: AppDb, ids: readonly string[]): Map<string, LocRow> {
+async function locationsById(db: AppDb, ids: readonly string[]): Promise<Map<string, LocRow>> {
   if (ids.length === 0) return new Map();
   const l = schema.locations;
-  return new Map(db.select({ id: l.id, code: l.code, aisle: l.aisle, rack: l.rack, bay: l.bay, walkingPathPriority: l.walkingPathPriority })
-    .from(l).where(inArray(l.id, [...new Set(ids)])).all().map((r) => [r.id, r]));
+  return new Map((await db.select({ id: l.id, code: l.code, aisle: l.aisle, rack: l.rack, bay: l.bay, walkingPathPriority: l.walkingPathPriority })
+    .from(l).where(inArray(l.id, [...new Set(ids)]))).map((r) => [r.id, r]));
 }
 
 /** Allocated, not-yet-jobbed orders of the wave, grouped by the rule job type they match. */
-function pendingAiGroups(db: AppDb, rule: WaveRuleRow, wave: WaveRow, now: Date) {
+async function pendingAiGroups(db: AppDb, rule: WaveRuleRow, wave: WaveRow, now: Date) {
   const ia = schema.inventoryAllocations;
-  const orderIds = [...new Set(db.select({ o: ia.orderId }).from(ia).where(and(eq(ia.waveId, wave.id), eq(ia.status, "Allocated"), isNull(ia.taskId))).all().map((r) => r.o).filter((o): o is string => Boolean(o)))];
+  const orderIds = [...new Set((await db.select({ o: ia.orderId }).from(ia).where(and(eq(ia.waveId, wave.id), eq(ia.status, "Allocated"), isNull(ia.taskId)))).map((r) => r.o).filter((o): o is string => Boolean(o)))];
   if (orderIds.length === 0) return [];
-  const types = ruleJobTypes(db, rule);
+  const types = await ruleJobTypes(db, rule);
   const groups = new Map<string, { type: JobTypeRow; orders: string[] }>();
-  for (const order of db.select().from(schema.shipmentOrders).where(and(inArray(schema.shipmentOrders.id, orderIds), isNull(schema.shipmentOrders.jobId))).all()) {
-    const lines = db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, order.id)).all();
-    const cand = { order, lines, facts: waveFacts(db, order, lines) };
+  for (const order of await db.select().from(schema.shipmentOrders).where(and(inArray(schema.shipmentOrders.id, orderIds), isNull(schema.shipmentOrders.jobId)))) {
+    const lines = await db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, order.id));
+    const cand = { order, lines, facts: await waveFacts(db, order, lines) };
     const hit = types.find((t) => matchesJobType(cand, t.settings, t.type.conditions, now)) ?? types[0];
     if (!hit) continue;
     const g = groups.get(hit.type.id) ?? { type: hit.type, orders: [] };
@@ -238,12 +239,12 @@ function pendingAiGroups(db: AppDb, rule: WaveRuleRow, wave: WaveRow, now: Date)
   return [...groups.values()];
 }
 
-function aiOrders(db: AppDb, wave: WaveRow, orderIds: readonly string[]): AiOrder[] {
+async function aiOrders(db: AppDb, wave: WaveRow, orderIds: readonly string[]): Promise<AiOrder[]> {
   const ia = schema.inventoryAllocations;
-  const allocs = db.select({ orderId: ia.orderId, productId: schema.inventory.productId, locationId: schema.inventory.locationId, qty: ia.qty })
+  const allocs = await db.select({ orderId: ia.orderId, productId: schema.inventory.productId, locationId: schema.inventory.locationId, qty: ia.qty })
     .from(ia).innerJoin(schema.inventory, eq(schema.inventory.id, ia.inventoryId))
-    .where(and(inArray(ia.orderId, [...orderIds]), eq(ia.waveId, wave.id), eq(ia.status, "Allocated"))).all();
-  const locs = locationsById(db, allocs.map((a) => a.locationId));
+    .where(and(inArray(ia.orderId, [...orderIds]), eq(ia.waveId, wave.id), eq(ia.status, "Allocated")));
+  const locs = await locationsById(db, allocs.map((a) => a.locationId));
   return orderIds.map((id) => {
     const mine = allocs.filter((a) => a.orderId === id);
     const perProduct = new Map<string, number>();
@@ -260,11 +261,11 @@ function aiOrders(db: AppDb, wave: WaveRow, orderIds: readonly string[]): AiOrde
  * Re-sequences a job's pick tasks on the optimized route (stops visited once; tasks at one stop
  * stay together). Non-pick tasks keep their relative order after the picks. Returns the route stats.
  */
-export function sequenceAiJob(db: AppDb, jobId: string) {
+export async function sequenceAiJob(db: AppDb, jobId: string) {
   const t = schema.tasks;
-  const rows = db.select({ id: t.id, type: t.taskType, seq: t.sequence, loc: t.sourceLocationId }).from(t).where(eq(t.jobId, jobId)).orderBy(t.sequence).all();
+  const rows = await db.select({ id: t.id, type: t.taskType, seq: t.sequence, loc: t.sourceLocationId }).from(t).where(eq(t.jobId, jobId)).orderBy(t.sequence);
   const picks = rows.filter((r) => r.type === "Picking" && r.loc);
-  const locs = locationsById(db, picks.map((p) => p.loc as string));
+  const locs = await locationsById(db, picks.map((p) => p.loc as string));
   const stopIds = [...new Set(picks.map((p) => p.loc as string))].filter((id) => locs.has(id));
   const stops = stopIds.map((id) => locs.get(id) as LocRow);
   const baseline = stops.map((_, i) => i).sort((a, b) => (stops[a] as LocRow).walkingPathPriority - (stops[b] as LocRow).walkingPathPriority || (stops[a] as LocRow).code.localeCompare((stops[b] as LocRow).code));
@@ -272,7 +273,7 @@ export function sequenceAiJob(db: AppDb, jobId: string) {
   const rank = new Map(order.map((idx, pos) => [stopIds[idx] as string, pos]));
   const sortedPicks = [...picks].sort((a, b) => (rank.get(a.loc as string) ?? 1e9) - (rank.get(b.loc as string) ?? 1e9) || a.seq - b.seq);
   const rest = rows.filter((r) => !sortedPicks.includes(r));
-  [...sortedPicks, ...rest].forEach((r, i) => db.update(t).set({ sequence: i + 1 }).where(eq(t.id, r.id)).run());
+  await forEachSeq([...sortedPicks, ...rest], async (r, i) => await db.update(t).set({ sequence: i + 1 }).where(eq(t.id, r.id)));
   return routeStats(order.map((i) => stops[i] as LocRow));
 }
 
@@ -282,32 +283,32 @@ export function sequenceAiJob(db: AppDb, jobId: string) {
  * them to the AI type, re-sequences their picks, stamps the SLA window and completes the wave.
  * Idempotent: a wave that is no longer Optimizing is left alone.
  */
-export function completeAiWave(db: AppDb, ctx: DomainCtx, waveId: string, input: RunOptions): WaveRunResult | null {
-  const opts: RunOptions = { ...input, runBy: runByDisplay(db, input.runBy) };
-  let wave = db.select().from(schema.waves).where(eq(schema.waves.id, waveId)).get();
+export async function completeAiWave(db: AppDb, ctx: DomainCtx, waveId: string, input: RunOptions): Promise<WaveRunResult | null> {
+  const opts: RunOptions = { ...input, runBy: await runByDisplay(db, input.runBy) };
+  let wave = (await db.select().from(schema.waves).where(eq(schema.waves.id, waveId)).limit(1))[0];
   if (!wave || (wave.status !== "Optimizing" && wave.status !== "Preparing For Optimization")) return null;
-  const rule = loadWaveRule(db, null, wave.waveRuleId as string);
+  const rule = await loadWaveRule(db, null, wave.waveRuleId as string);
   const now = opts.now ?? new Date();
-  if (wave.status === "Preparing For Optimization") wave = setWaveStatus(db, wave, "Optimizing");
+  if (wave.status === "Preparing For Optimization") wave = await setWaveStatus(db, wave, "Optimizing");
   const current = wave;
   try {
-    const out = db.transaction((tx) => {
-      const users = assigneesFor(tx, rule);
-      const max = aiMaxOrders(tx);
+    const out = await withWriteTx(db, async (tx) => {
+      const users = await assigneesFor(tx, rule);
+      const max = await aiMaxOrders(tx);
       const jobIds: string[] = [];
       let optimized = 0;
       let baseline = 0;
       let rr = 0;
-      for (const { type, orders } of pendingAiGroups(tx, rule, current, now)) {
-        for (const group of groupForAi(aiOrders(tx, current, orders), max)) {
+      for (const { type, orders } of await pendingAiGroups(tx, rule, current, now)) {
+        for (const group of groupForAi(await aiOrders(tx, current, orders), max)) {
           const assignee = users.length === 0 ? null : (users[rr++ % users.length] as string);
-          const created = jobsDomain.createJobsFromOrders(tx, ctx, {
+          const created = await jobsDomain.createJobsFromOrders(tx, ctx, {
             orderIds: group.orderIds, jobTypeId: type.id, batchSize: group.orderIds.length, waveId: current.id, waveNo: current.waveNo,
             priority: rule.priority as Priority, assigneeUserId: assignee, now,
           });
           for (const jobId of created.jobIds) {
-            tx.update(schema.jobs).set({ jobType: group.aiType }).where(eq(schema.jobs.id, jobId)).run();
-            const stats = sequenceAiJob(tx, jobId);
+            await tx.update(schema.jobs).set({ jobType: group.aiType }).where(eq(schema.jobs.id, jobId));
+            const stats = await sequenceAiJob(tx, jobId);
             optimized += stats.optimizedM;
             baseline += stats.baselineM;
             jobIds.push(jobId);
@@ -315,22 +316,22 @@ export function completeAiWave(db: AppDb, ctx: DomainCtx, waveId: string, input:
         }
       }
       // Assignment already round-robined per AI job; stamp rule/wave/SLA without re-assigning.
-      stampJobs(tx, ctx, { ...rule, assignMode: "Pool", assigneeUserIds: [] }, current, jobIds);
+      await stampJobs(tx, ctx, { ...rule, assignMode: "Pool", assigneeUserIds: [] }, current, jobIds);
       return { jobIds, optimized, baseline };
     });
     const pct = savingsPct({ stops: 0, optimizedM: out.optimized, baselineM: out.baseline });
     const aiMsg = aiWaveMessage(out.jobIds.length, out.baseline, out.optimized, pct);
     const prior = current.message ? `${current.message} · ` : "";
-    wave = setWaveStatus(db, current, "Optimization Completed", { jobsCreated: out.jobIds.length, message: `${prior}${aiMsg}`.slice(0, 500) });
-    wave = setWaveStatus(db, wave, "Started");
-    wave = setWaveStatus(db, wave, "Completed", { finishedAt: new Date().toISOString() });
+    wave = await setWaveStatus(db, current, "Optimization Completed", { jobsCreated: out.jobIds.length, message: `${prior}${aiMsg}`.slice(0, 500) });
+    wave = await setWaveStatus(db, wave, "Started");
+    wave = await setWaveStatus(db, wave, "Completed", { finishedAt: new Date().toISOString() });
     const summary = summarize(wave, "AI Job");
-    notifyWave(db, ctx, opts, rule.name, wave, summary);
+    await notifyWave(db, ctx, opts, rule.name, wave, summary);
     return { wave, ruleName: rule.name, jobIds: out.jobIds, summary };
   } catch (error) {
-    wave = setWaveStatus(db, current, "Failed", { message: describeError(error).message.slice(0, 500), finishedAt: new Date().toISOString() });
+    wave = await setWaveStatus(db, current, "Failed", { message: describeError(error).message.slice(0, 500), finishedAt: new Date().toISOString() });
     const summary = summarize(wave, "AI Job");
-    notifyWave(db, ctx, opts, rule.name, wave, summary);
+    await notifyWave(db, ctx, opts, rule.name, wave, summary);
     return { wave, ruleName: rule.name, jobIds: [], summary };
   }
 }
@@ -338,19 +339,19 @@ export function completeAiWave(db: AppDb, ctx: DomainCtx, waveId: string, input:
 /** AI waves left mid-optimization (process restart) are finished by the scheduler after this age. */
 export const AI_RECOVERY_SECONDS = 60;
 
-export function resumeStalledAiWaves(db: AppDb, ctx: DomainCtx, now: Date): number {
+export async function resumeStalledAiWaves(db: AppDb, ctx: DomainCtx, now: Date): Promise<number> {
   const cutoff = new Date(now.getTime() - AI_RECOVERY_SECONDS * 1000).toISOString();
-  const stalled = db.select({ id: schema.waves.id }).from(schema.waves)
-    .where(and(inArray(schema.waves.status, ["Preparing For Optimization", "Optimizing"]), sql`${schema.waves.runAt} < ${cutoff}`)).all();
-  for (const w of stalled) completeAiWave(db, ctx, w.id, { runBy: "Integration", now, notifyUserIds: [] });
+  const stalled = await db.select({ id: schema.waves.id }).from(schema.waves)
+    .where(and(inArray(schema.waves.status, ["Preparing For Optimization", "Optimizing"]), sql`${schema.waves.runAt} < ${cutoff}`));
+  for (const w of stalled) await completeAiWave(db, ctx, w.id, { runBy: "Integration", now, notifyUserIds: [] });
   return stalled.length;
 }
 
-function runReplenishment(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: WaveRow, now: Date) {
+async function runReplenishment(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: WaveRow, now: Date) {
   const jobTypeId = rule.jobTypeIds[0];
   if (!jobTypeId) throw new AppError("VALIDATION", "The rule has no replenishment job type.");
-  const users = assigneesFor(db, rule);
-  const res = createReplenishmentJob(db, ctx, {
+  const users = await assigneesFor(db, rule);
+  const res = await createReplenishmentJob(db, ctx, {
     warehouseId: rule.warehouseId, jobTypeId, waveId: wave.id, waveNo: wave.waveNo, ruleName: rule.name, waveRuleId: rule.id,
     priority: rule.priority as Priority, assigneeUserId: users[0] ?? null, now,
   });
@@ -358,12 +359,12 @@ function runReplenishment(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: Wa
   return { met: 0, allocated: 0, shortage: 0, jobIds: res.jobId ? [res.jobId] : [], merged: 0, message: `${res.taskCount} replenishment tasks created${skipped}` };
 }
 
-function runCycleCount(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: WaveRow) {
-  const res = createCountPlanFromWave(db, ctx, {
+async function runCycleCount(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: WaveRow) {
+  const res = await createCountPlanFromWave(db, ctx, {
     warehouseId: rule.warehouseId, waveId: wave.id, waveRuleId: rule.id, countType: rule.countType ?? "Location",
-    lockLocations: rule.lockLocations, assigneeUserIds: assigneesFor(db, rule),
+    lockLocations: rule.lockLocations, assigneeUserIds: await assigneesFor(db, rule),
   });
-  stampJobs(db, ctx, rule, wave, res.jobIds);
+  await stampJobs(db, ctx, rule, wave, res.jobIds);
   return { met: 0, allocated: 0, shortage: 0, jobIds: res.jobIds, merged: 0, message: `Count plan ${res.code} created with ${count(res.lineCount, "line")}` };
 }
 
@@ -374,16 +375,16 @@ function runCycleCount(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, wave: WaveR
  * The rule's conditions (incl. order tags) and data inheritance (oldest / newest / clean state)
  * come from `order-merge-policy`.
  */
-function runOrderMerge(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, now: Date) {
-  const rules = (rule.mergeRuleIds ?? []).flatMap((id) => db.select().from(schema.lookupValues).where(eq(schema.lookupValues.id, id)).all());
-  let pool = selectCandidates(db, rule, now).filter((c) => c.order.status === "Open" && !c.order.isMerged && !c.order.mergedIntoOrderId && !c.order.jobId);
+async function runOrderMerge(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, now: Date) {
+  const rules = await flatMapSeq((rule.mergeRuleIds ?? []), async (id) => await db.select().from(schema.lookupValues).where(eq(schema.lookupValues.id, id)));
+  let pool = (await selectCandidates(db, rule, now)).filter((c) => c.order.status === "Open" && !c.order.isMerged && !c.order.mergedIntoOrderId && !c.order.jobId);
   const met = pool.length;
   let merged = 0;
   for (const mr of rules) {
     const meta = mr.meta as MergeRuleMetaShape | null;
     const criteria = (meta?.criteria ?? DEFAULT_MERGE_CRITERIA).filter(Boolean);
     const mode = mergeInheritance(meta);
-    const tags = criteria.includes("orderTag") ? orderTagNames(db, pool.map((c) => c.order.id)) : new Map<string, string[]>();
+    const tags = criteria.includes("orderTag") ? await orderTagNames(db, pool.map((c) => c.order.id)) : new Map<string, string[]>();
     const groups = new Map<string, Candidate[]>();
     for (const c of pool) {
       // mergeOrders only merges within one client, so the client is always part of the key.
@@ -396,8 +397,8 @@ function runOrderMerge(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, now: Date) 
       if (group.length < 2) continue;
       const ordered = orderMergeGroup(group.map((c) => ({ c, orderDate: c.order.orderDate, code: c.order.code })), mode).map((x) => x.c);
       const [master, ...children] = ordered;
-      const res = ordersDomain.mergeOrders(db, ctx, { masterOrderId: master.order.id, childOrderIds: children.map((c) => c.order.id) });
-      if (mode === "clean") applyCleanState(db, ctx, master.order.id);
+      const res = await ordersDomain.mergeOrders(db, ctx, { masterOrderId: master.order.id, childOrderIds: children.map((c) => c.order.id) });
+      if (mode === "clean") await applyCleanState(db, ctx, master.order.id);
       for (const id of res.merged) used.add(id);
       merged += res.merged.length;
       used.add(master.order.id);
@@ -415,8 +416,8 @@ export const RUN_LOCK_SECONDS = 15;
  * Pending/Started, or when it started less than `RUN_LOCK_SECONDS` ago, so a double click or a
  * replayed POST cannot create two waves with duplicate exceptions. Throws CONFLICT (409).
  */
-export function assertRuleRunnable(db: AppDb, ruleId: string, now: Date = new Date()): void {
-  const last = db.select().from(schema.waves).where(eq(schema.waves.waveRuleId, ruleId)).orderBy(sql`${schema.waves.runAt} DESC`).limit(1).get();
+export async function assertRuleRunnable(db: AppDb, ruleId: string, now: Date = new Date()): Promise<void> {
+  const last = (await db.select().from(schema.waves).where(eq(schema.waves.waveRuleId, ruleId)).orderBy(sql`${schema.waves.runAt} DESC`).limit(1))[0];
   if (!last) return;
   if (last.status === "Pending" || last.status === "Started" || last.status === "In Progress") throw new AppError("CONFLICT", `Wave ${last.waveNo} of this rule is still running.`);
   if ((AI_INTERIM_STATUSES as readonly string[]).includes(last.status)) throw new AppError("CONFLICT", `Wave ${last.waveNo} of this rule is still being optimized (${last.status}).`);
@@ -442,10 +443,10 @@ export function summarize(wave: Pick<WaveRow, "waveNo" | "ordersMet" | "allocate
   return `Wave ${wave.waveNo} completed: ${wave.ordersMet} met · ${wave.allocatedOrders} allocated · ${count(wave.jobsCreated, "job")} · ${tail}${ai ? ` · ${ai.trim()}` : ""}`;
 }
 
-function notifyWave(db: AppDb, ctx: DomainCtx, opts: RunOptions, ruleName: string, wave: WaveRow, summary: string): void {
+async function notifyWave(db: AppDb, ctx: DomainCtx, opts: RunOptions, ruleName: string, wave: WaveRow, summary: string): Promise<void> {
   const recipients = opts.notifyUserIds ?? (ctx.userId ? [ctx.userId] : []);
   if (recipients.length === 0) return;
-  notify(db, recipients, {
+  await notify(db, recipients, {
     kind: "wave.completed", title: wave.status === "Failed" ? `Wave ${wave.waveNo} failed` : `Wave ${wave.waveNo} completed`, body: `${ruleName}: ${summary}`,
     href: `/jobs/wave-log?q=${encodeURIComponent(wave.waveNo)}&qm=eq`, severity: wave.status === "Failed" ? "error" : "success",
   });
@@ -461,41 +462,41 @@ export interface RunWaveOptions extends RunOptions {
 }
 
 /** Runs one rule now. The caller owns the transaction. */
-export function runWave(db: AppDb, ctx: DomainCtx, ruleId: string, input: RunWaveOptions): WaveRunResult {
-  const opts: RunWaveOptions = { ...input, runBy: runByDisplay(db, input.runBy) };
+export async function runWave(db: AppDb, ctx: DomainCtx, ruleId: string, input: RunWaveOptions): Promise<WaveRunResult> {
+  const opts: RunWaveOptions = { ...input, runBy: await runByDisplay(db, input.runBy) };
   const now = opts.now ?? new Date();
-  const rule = loadWaveRule(db, null, ruleId);
+  const rule = await loadWaveRule(db, null, ruleId);
   if (ctx.scope && !ctx.scope.warehouseIds.includes(rule.warehouseId)) throw new AppError("NOT_FOUND", "Wave rule not found");
   const waveNo = waveNumber(rule.ruleSeq, rule.runCount + 1);
-  let wave = db.insert(schema.waves).values({ waveNo, waveRuleId: rule.id, warehouseId: rule.warehouseId, status: "Pending", runBy: opts.runBy, runAt: now.toISOString() }).returning().get();
-  if (rule.operationType === "AI Job") return runAiWave(db, ctx, rule, wave, opts, now);
-  wave = setWaveStatus(db, wave, "Started");
+  let wave = (await db.insert(schema.waves).values({ waveNo, waveRuleId: rule.id, warehouseId: rule.warehouseId, status: "Pending", runBy: opts.runBy, runAt: now.toISOString() }).returning())[0];
+  if (rule.operationType === "AI Job") return await runAiWave(db, ctx, rule, wave, opts, now);
+  wave = await setWaveStatus(db, wave, "Started");
   let jobIds: readonly string[] = [];
   try {
-    const out = db.transaction((tx) => {
+    const out = await withWriteTx(db, async (tx) => {
       switch (rule.operationType) {
         case "Picking":
         case "AI Job":
-          return runPicking(tx, ctx, rule, wave, opts, now);
+          return await runPicking(tx, ctx, rule, wave, opts, now);
         case "Replenishment":
-          return runReplenishment(tx, ctx, rule, wave, now);
+          return await runReplenishment(tx, ctx, rule, wave, now);
         case "Cycle Count":
-          return runCycleCount(tx, ctx, rule, wave);
+          return await runCycleCount(tx, ctx, rule, wave);
         case "Order Merge":
-          return runOrderMerge(tx, ctx, rule, now);
+          return await runOrderMerge(tx, ctx, rule, now);
       }
     });
     jobIds = out.jobIds;
-    wave = setWaveStatus(db, wave, "Completed", {
+    wave = await setWaveStatus(db, wave, "Completed", {
       ordersMet: out.met, allocatedOrders: out.allocated, shortageOrders: out.shortage, jobsCreated: out.jobIds.length, mergedOrders: out.merged,
       message: out.message, finishedAt: new Date().toISOString(),
     });
   } catch (error) {
-    wave = setWaveStatus(db, wave, "Failed", { message: describeError(error).message.slice(0, 500), finishedAt: new Date().toISOString() });
+    wave = await setWaveStatus(db, wave, "Failed", { message: describeError(error).message.slice(0, 500), finishedAt: new Date().toISOString() });
   }
-  stampRun(db, ctx, rule, waveNo, opts.runBy, now);
+  await stampRun(db, ctx, rule, waveNo, opts.runBy, now);
   const summary = summarize(wave, rule.operationType);
-  notifyWave(db, ctx, opts, rule.name, wave, summary);
+  await notifyWave(db, ctx, opts, rule.name, wave, summary);
   return { wave, ruleName: rule.name, jobIds, summary };
 }
 
@@ -503,26 +504,26 @@ export function runWave(db: AppDb, ctx: DomainCtx, ruleId: string, input: RunWav
  * AI wave phase 1 (Pending → Preparing For Optimization → Optimizing): select, eliminate and
  * allocate exactly like a picking wave, then either defer phase 2 (`completeAiWave`) or run it inline.
  */
-function runAiWave(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, pending: WaveRow, opts: RunWaveOptions, now: Date): WaveRunResult {
-  let wave = setWaveStatus(db, pending, "Preparing For Optimization");
+async function runAiWave(db: AppDb, ctx: DomainCtx, rule: WaveRuleRow, pending: WaveRow, opts: RunWaveOptions, now: Date): Promise<WaveRunResult> {
+  let wave = await setWaveStatus(db, pending, "Preparing For Optimization");
   try {
     const prepared = wave;
-    const sel = db.transaction((tx) => selectAndAllocate(tx, ctx, rule, prepared, opts, now));
-    wave = setWaveStatus(db, wave, "Optimizing", {
+    const sel = await withWriteTx(db, async (tx) => await selectAndAllocate(tx, ctx, rule, prepared, opts, now));
+    wave = await setWaveStatus(db, wave, "Optimizing", {
       ordersMet: sel.met, allocatedOrders: sel.allocated, shortageOrders: sel.shortage,
       message: sel.eliminated > 0 ? `${count(sel.eliminated, "order")} eliminated by job type conditions` : null,
     });
   } catch (error) {
-    wave = setWaveStatus(db, wave, "Failed", { message: describeError(error).message.slice(0, 500), finishedAt: new Date().toISOString() });
-    stampRun(db, ctx, rule, wave.waveNo, opts.runBy, now);
+    wave = await setWaveStatus(db, wave, "Failed", { message: describeError(error).message.slice(0, 500), finishedAt: new Date().toISOString() });
+    await stampRun(db, ctx, rule, wave.waveNo, opts.runBy, now);
     const summary = summarize(wave, rule.operationType);
-    notifyWave(db, ctx, opts, rule.name, wave, summary);
+    await notifyWave(db, ctx, opts, rule.name, wave, summary);
     return { wave, ruleName: rule.name, jobIds: [], summary };
   }
-  stampRun(db, ctx, rule, wave.waveNo, opts.runBy, now);
+  await stampRun(db, ctx, rule, wave.waveNo, opts.runBy, now);
   if (opts.deferOptimization) {
     opts.deferOptimization(wave.id);
     return { wave, ruleName: rule.name, jobIds: [], summary: summarize(wave, rule.operationType) };
   }
-  return completeAiWave(db, ctx, wave.id, opts) ?? { wave, ruleName: rule.name, jobIds: [], summary: summarize(wave, rule.operationType) };
+  return await completeAiWave(db, ctx, wave.id, opts) ?? { wave, ruleName: rule.name, jobIds: [], summary: summarize(wave, rule.operationType) };
 }

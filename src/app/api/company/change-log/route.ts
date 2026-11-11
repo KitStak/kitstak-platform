@@ -6,5 +6,5 @@ import { changeLogPageSchema, changeLogResult } from "@/server/repositories/user
 export const GET = defineRoute({
   permission: "settings.company_settings.view",
   query: changeLogPageSchema,
-  handler: ({ db, query }) => changeLogResult(db, COMPANY_ENTITY, "company", query),
+  handler: async ({ db, query }) => await changeLogResult(db, COMPANY_ENTITY, "company", query),
 });

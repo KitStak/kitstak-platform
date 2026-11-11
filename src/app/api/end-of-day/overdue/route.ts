@@ -4,5 +4,5 @@ import { overdueManifests } from "@/server/repositories/shipping-carrier-ops";
 
 export const GET = defineRoute({
   permission: "fulfillment.end_of_day.view",
-  handler: ({ db, auth }) => overdueManifests(db, auth),
+  handler: async ({ db, auth }) => await overdueManifests(db, auth),
 });

@@ -4,5 +4,5 @@ import { screenConfigOptions } from "@/server/repositories/screen-configs";
 
 export const GET = defineRoute({
   permission: "settings.screen_configuration.view",
-  handler: ({ db, auth }) => screenConfigOptions(db, auth),
+  handler: async ({ db, auth }) => await screenConfigOptions(db, auth),
 });

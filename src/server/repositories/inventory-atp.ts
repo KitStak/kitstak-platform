@@ -41,24 +41,24 @@ export function atpGridSql(warehouseIds: readonly string[], clientIds: readonly 
   const components = atpComponentsSql({ warehouseIds, clientIds: clientIds === "all" ? undefined : clientIds });
   return sql`
     SELECT
-      a.productId || ':' || a.warehouseId AS "rowId",
-      a.productId AS "productId", a.warehouseId AS "warehouseId", CASE WHEN w.name LIKE w.code || '%' THEN w.name ELSE w.code || ' - ' || w.name END AS "warehouse",
-      a.clientId AS "clientId", c.name AS "client",
+      a."productId" || ':' || a."warehouseId" AS "rowId",
+      a."productId" AS "productId", a."warehouseId" AS "warehouseId", CASE WHEN w.name ILIKE w.code || '%' THEN w.name ELSE w.code || ' - ' || w.name END AS "warehouse",
+      a."clientId" AS "clientId", c.name AS "client",
       p.sku AS "sku", p.name AS "productName", p.barcode AS "barcode", p.kit_type AS "kitType",
       a.total AS "totalQty", a.damaged AS "damagedQty", (a.total - a.damaged) AS "undamagedQty",
-      a.allocatedSo AS "allocatedSoQty", a.openSo AS "openSoQty", a.openPo AS "openPoQty",
-      (a.total - a.damaged - a.openSo) AS "currentAtp",
-      (a.total - a.damaged - a.openSo + a.openPo) AS "plannedAtp",
+      a."allocatedSo" AS "allocatedSoQty", a."openSo" AS "openSoQty", a."openPo" AS "openPoQty",
+      (a.total - a.damaged - a."openSo") AS "currentAtp",
+      (a.total - a.damaged - a."openSo" + a."openPo") AS "plannedAtp",
       a.total AS "onHandQty",
-      (a.onHand - a.openSo) AS "sellableQty",
+      (a."onHand" - a."openSo") AS "sellableQty",
       a.pickable AS "pickableQty",
-      MAX(a.openSo - a.allocatedSo, 0) AS "unallocatedSoQty"
+      GREATEST(a."openSo" - a."allocatedSo", 0) AS "unallocatedSoQty"
     FROM (${components}) a
-    JOIN products p ON p.id = a.productId
-    JOIN clients c ON c.id = a.clientId
-    JOIN warehouses w ON w.id = a.warehouseId`;
+    JOIN products p ON p.id = a."productId"
+    JOIN clients c ON c.id = a."clientId"
+    JOIN warehouses w ON w.id = a."warehouseId"`;
 }
 
-export function listAtp(db: AppDb, auth: AuthContext, query: GridQuery): GridPage<AtpGridRow> {
-  return runGrid<AtpGridRow>(db, atpGridSql(auth.viewScope.warehouseIds, auth.viewScope.clientIds), ATP_DEF, query, "rowId");
+export async function listAtp(db: AppDb, auth: AuthContext, query: GridQuery): Promise<GridPage<AtpGridRow>> {
+  return await runGrid<AtpGridRow>(db, atpGridSql(auth.viewScope.warehouseIds, auth.viewScope.clientIds), ATP_DEF, query, "rowId");
 }

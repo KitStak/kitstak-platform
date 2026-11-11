@@ -5,16 +5,16 @@ import { deleteSavedView, getSavedView, savedViewUpdateSchema, updateSavedView }
 
 export const GET = defineRoute({
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getSavedView(db, auth.user.id, params.id),
+  handler: async ({ db, auth, params }) => await getSavedView(db, auth.user.id, params.id),
 });
 
 export const PATCH = defineRoute({
   params: idParamsSchema,
   body: savedViewUpdateSchema,
-  handler: ({ db, auth, params, body }) => updateSavedView(db, auth.user.id, params.id, body),
+  handler: async ({ db, auth, params, body }) => await updateSavedView(db, auth.user.id, params.id, body),
 });
 
 export const DELETE = defineRoute({
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => deleteSavedView(db, auth.user.id, params.id),
+  handler: async ({ db, auth, params }) => await deleteSavedView(db, auth.user.id, params.id),
 });

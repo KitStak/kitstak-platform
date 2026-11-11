@@ -29,8 +29,8 @@ let w: World;
 let auth: AuthContext;
 const q = (qs = ""): GridQuery => ({ ...EMPTY_GRID_QUERY, ...parseGridQuery(qs).query, pageSize: 500 });
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = {
     scope, viewScope: scope,
@@ -67,14 +67,14 @@ describe("rank cards", () => {
 });
 
 describe("dashboard reconciliation", () => {
-  it("the breakdown lists every backlog status, so its lines add up to the backlog total", () => {
+  it("the breakdown lists every backlog status, so its lines add up to the backlog total", async () => {
     expect([...BREAKDOWN_BACKLOG_STATUSES].sort()).toEqual([...BACKLOG_VIEW_STATUSES].sort());
-    const a = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 2 }]));
-    createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    const c = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    w.db.update(schema.shipmentOrders).set({ status: "Partially Shipped" }).where(eq(schema.shipmentOrders.id, a.id)).run();
-    w.db.update(schema.shipmentOrders).set({ status: "Sorting Started" }).where(eq(schema.shipmentOrders.id, c.id)).run();
-    const d = getLiveDashboard(w.db, auth, { warehouseIds: [], clientIds: [] });
+    const a = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 2 }]));
+    await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    const c = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    await w.db.update(schema.shipmentOrders).set({ status: "Partially Shipped" }).where(eq(schema.shipmentOrders.id, a.id));
+    await w.db.update(schema.shipmentOrders).set({ status: "Sorting Started" }).where(eq(schema.shipmentOrders.id, c.id));
+    const d = await getLiveDashboard(w.db, auth, { warehouseIds: [], clientIds: [] });
     const backlogLines = d.breakdown.flat().filter((m) => (BREAKDOWN_BACKLOG_STATUSES as readonly string[]).includes(m.label));
     expect(backlogLines.map((m) => m.label)).toEqual(expect.arrayContaining(["Partially Shipped", "Sorting Started"]));
     expect(backlogLines.map((m) => m.label)).not.toContain("Ready to Sort"); // optional line hidden at zero
@@ -85,27 +85,27 @@ describe("dashboard reconciliation", () => {
     expect(d.ranks.carriersShipped).toEqual([]);
   });
 
-  it("each Order Lines part opens a line grid whose Total equals the part", () => {
-    const a = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 4 }, { productId: w.productId, quantity: 2 }]));
-    createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    const lines = w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, a.id)).all();
-    w.db.update(schema.orderLines).set({ pickedQuantity: 4, packedQuantity: 4 }).where(eq(schema.orderLines.id, lines[0]!.id)).run();
-    w.db.update(schema.orderLines).set({ pickedQuantity: 2 }).where(eq(schema.orderLines.id, lines[1]!.id)).run();
-    const d = getLiveDashboard(w.db, auth, { warehouseIds: [w.warehouseId], clientIds: [] });
+  it("each Order Lines part opens a line grid whose Total equals the part", async () => {
+    const a = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 4 }, { productId: w.productId, quantity: 2 }]));
+    await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    const lines = await w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, a.id));
+    await w.db.update(schema.orderLines).set({ pickedQuantity: 4, packedQuantity: 4 }).where(eq(schema.orderLines.id, lines[0]!.id));
+    await w.db.update(schema.orderLines).set({ pickedQuantity: 2 }).where(eq(schema.orderLines.id, lines[1]!.id));
+    const d = await getLiveDashboard(w.db, auth, { warehouseIds: [w.warehouseId], clientIds: [] });
     const parts = d.progress.lines.parts ?? [];
     expect(parts.map((p) => p.count)).toEqual([1, 1, 1]);
     for (const p of parts) {
       const [path, qs] = (p.href ?? "").split("?");
       expect(path).toBe("/reports/order-lines");
-      expect(listOrderLines(w.db, auth, q(qs)).total).toBe(p.count);
+      expect((await listOrderLines(w.db, auth, q(qs))).total).toBe(p.count);
     }
-    const all = listOrderLines(w.db, auth, q());
+    const all = await listOrderLines(w.db, auth, q());
     expect(all.total).toBe(d.progress.lines.total);
     expect(new Set(all.rows.map((r) => r.lineState))).toEqual(new Set(LINE_STATES));
     expect(all.rows.every((r) => r.progressScope === "Backlog")).toBe(true);
     // Out of scope: nothing.
     const other = { ...auth, viewScope: { warehouseIds: ["nope"], clientIds: "all" } } as unknown as AuthContext;
-    expect(listOrderLines(w.db, other, q()).total).toBe(0);
+    expect((await listOrderLines(w.db, other, q())).total).toBe(0);
   });
 
   it("line-state values with commas survive the drilldown URL", () => {
@@ -115,17 +115,17 @@ describe("dashboard reconciliation", () => {
 });
 
 describe("snapshot gap alert", () => {
-  it("lists recent missed nights for warehouses in the selection, only for snapshot viewers", () => {
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 5 });
-    for (const at of ["2026-11-04T06:02:00.000Z", "2026-11-05T06:02:00.000Z", "2026-11-09T06:02:00.000Z"]) snapshotWarehouse(w.db, w.warehouseId, at);
+  it("lists recent missed nights for warehouses in the selection, only for snapshot viewers", async () => {
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 5 });
+    for (const at of ["2026-11-04T06:02:00.000Z", "2026-11-05T06:02:00.000Z", "2026-11-09T06:02:00.000Z"]) await snapshotWarehouse(w.db, w.warehouseId, at);
     const now = dashboardDays("UTC", new Date("2026-11-10T12:00:00Z"));
-    const gaps = snapshotGaps(w.db, auth, auth.viewScope, now);
+    const gaps = await snapshotGaps(w.db, auth, auth.viewScope, now);
     expect(gaps).toHaveLength(1);
     expect(gaps[0]?.missingDays).toEqual(["2026-11-06", "2026-11-07", "2026-11-08"]);
     expect(gaps[0]?.href).toContain("/reports/inventory-snapshot?f.warehouseId=in:");
     const noPerm = { ...auth, permissions: new Set<string>() } as unknown as AuthContext;
-    expect(snapshotGaps(w.db, noPerm, auth.viewScope, now)).toEqual([]);
-    expect(snapshotGaps(w.db, auth, { warehouseIds: ["other"], clientIds: "all" }, now)).toEqual([]);
+    expect(await snapshotGaps(w.db, noPerm, auth.viewScope, now)).toEqual([]);
+    expect(await snapshotGaps(w.db, auth, { warehouseIds: ["other"], clientIds: "all" }, now)).toEqual([]);
     expect(describeNights(["2026-11-06", "2026-11-07", "2026-11-08"])).toBe("Nov 6, Nov 7 and Nov 8");
   });
 });
@@ -139,22 +139,22 @@ describe("M13 local Export As Excel", () => {
   });
 
   it("queues a task, builds the workbook and lists it in Export History with a source link", async () => {
-    createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 3 }]));
-    const task = queueLocalExport(w.db, { auth, gridKey: ORDER_LINES_DEF.gridKey, query: "f.lineState=in:Not%20picked" });
+    await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 3 }]));
+    const task = await queueLocalExport(w.db, { auth, gridKey: ORDER_LINES_DEF.gridKey, query: "f.lineState=in:Not%20picked" });
     expect(task).toMatchObject({ kind: "export", status: "queued", title: "Order Line Progress export" });
     const done = await runLocalExport(w.db, task.id, { auth, store: w.files, columns: [{ key: "orderCode", label: "Order Code" }, { key: "bogus", label: "x" }] });
     expect(done).toMatchObject({ status: "completed", rowCount: 1 });
     expect(done.fileId).toBeTruthy();
-    const hist = listExportHistory(w.db, auth, q());
+    const hist = await listExportHistory(w.db, auth, q());
     expect(hist.rows[0]).toMatchObject({ title: "Order Line Progress export", status: "completed", action: "Download", hasFilters: 1 });
     expect(exportSourceHref(ORDER_LINES_DEF.gridKey, "f.lineState=in:Packed&page=2")).toBe("/reports/order-lines?f.lineState=in%3APacked");
   });
 
-  it("rejects unknown keys, missing permission and a bad query", () => {
-    expect(() => queueLocalExport(w.db, { auth, gridKey: "nope", query: "" })).toThrow(/Unknown report/);
+  it("rejects unknown keys, missing permission and a bad query", async () => {
+    await expect(async () => await queueLocalExport(w.db, { auth, gridKey: "nope", query: "" })).rejects.toThrow(/Unknown report/);
     const noPerm = { ...auth, permissions: new Set<string>() } as unknown as AuthContext;
-    expect(() => queueLocalExport(w.db, { auth: noPerm, gridKey: AGING_DEF.gridKey, query: "" })).toThrow(/permission/);
-    expect(() => queueLocalExport(w.db, { auth, gridKey: AGING_DEF.gridKey, query: "page=abc" })).toThrow(/Invalid export query/);
+    await expect(async () => await queueLocalExport(w.db, { auth: noPerm, gridKey: AGING_DEF.gridKey, query: "" })).rejects.toThrow(/permission/);
+    await expect(async () => await queueLocalExport(w.db, { auth, gridKey: AGING_DEF.gridKey, query: "page=abc" })).rejects.toThrow(/Invalid export query/);
   });
 });
 
@@ -164,13 +164,13 @@ describe("Export History filters", () => {
     for (const id of ["title", "createdAt", "rowCount", "status", "exportedBy", "finishedAt", "errorMessage", "action"]) expect(fields.has(id)).toBe(true);
     expect(fields.has("hasFilters")).toBe(true);
   });
-  it("filters on Exported By and Has Filters", () => {
+  it("filters on Exported By and Has Filters", async () => {
     for (const query of ["", "f.status=in:Open"]) {
-      w.db.insert(schema.backgroundTasks).values({ kind: "export", title: "Shipment Orders export", gridKey: "orders-backlog", query, status: "completed", progress: 100, userId: w.userId }).run();
+      await w.db.insert(schema.backgroundTasks).values({ kind: "export", title: "Shipment Orders export", gridKey: "orders-backlog", query, status: "completed", progress: 100, userId: w.userId });
     }
-    expect(listExportHistory(w.db, auth, q("f.hasFilters=bool:true")).total).toBe(1);
-    expect(listExportHistory(w.db, auth, q("f.hasFilters=bool:false")).total).toBe(1);
-    expect(listExportHistory(w.db, auth, q("f.exportedBy=eq:Admin")).total).toBe(2);
+    expect((await listExportHistory(w.db, auth, q("f.hasFilters=bool:true"))).total).toBe(1);
+    expect((await listExportHistory(w.db, auth, q("f.hasFilters=bool:false"))).total).toBe(1);
+    expect((await listExportHistory(w.db, auth, q("f.exportedBy=eq:Admin"))).total).toBe(2);
   });
 });
 

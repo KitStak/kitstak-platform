@@ -12,10 +12,10 @@ const FEEDBACK_LIMIT = { name: "account-feedback", limit: 10, windowMs: 60 * 60_
 export const POST = defineRoute({
   body: feedbackSchema,
   rateLimit: FEEDBACK_LIMIT,
-  handler: ({ db, auth, body, audit }) => {
-    audit({ action: "feedback.submitted", entity: "feedback", entityId: auth.user.id, detail: { type: body.type, page: body.page, rating: body.rating, message: body.message } });
+  handler: async ({ db, auth, body, audit }) => {
+    await audit({ action: "feedback.submitted", entity: "feedback", entityId: auth.user.id, detail: { type: body.type, page: body.page, rating: body.rating, message: body.message } });
     const who = auth.user.name || auth.user.email;
-    const notified = notify(db, { roleKey: "admin" }, {
+    const notified = await notify(db, { roleKey: "admin" }, {
       kind: "feedback.submitted",
       title: `New feedback from ${who}: ${FEEDBACK_TYPE_LABELS[body.type]}`,
       body: `${body.message.slice(0, 280)}${body.message.length > 280 ? "…" : ""} (on ${body.page})`,

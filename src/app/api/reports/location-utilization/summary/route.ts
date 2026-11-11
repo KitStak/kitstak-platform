@@ -7,5 +7,5 @@ import { utilizationSummary } from "@/server/repositories/reports-analysis";
 export const GET = defineRoute({
   name: "GET /api/reports/location-utilization/summary",
   permission: UTILIZATION_DEF.permission,
-  handler: ({ db, auth }) => result(utilizationSummary(db, auth)),
+  handler: async ({ db, auth }) => result(await utilizationSummary(db, auth)),
 });

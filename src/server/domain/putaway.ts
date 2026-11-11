@@ -8,7 +8,8 @@
  *
  * `dynamicReplenishmentTargets`: To Replenish = Max + Open Order Qty − Target Available − Open Replenish Task Qty.
  */
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import type { OrderByClause, RuleCondition } from "@/lib/domain-types";
 import { zoneGroupIds } from "@/lib/grid-defs/admin/lookups";
 import { CUSTOM_FIELD_SLOTS } from "@/lib/enums";
@@ -21,6 +22,7 @@ import { sortByClauses } from "./facts";
 import { assertLocationAccepts, type LocationRow } from "./ledger/rules";
 import { findPutawayAction, zoneSpreadAllows, type LocationStats, type PutawayItem } from "./putaway-actions";
 import type { Tx } from "./types";
+import { dbGet, filterSeq } from "@/server/db/sql";
 
 export interface SuggestInput {
   readonly warehouseId: string;
@@ -75,29 +77,29 @@ export const DEFAULT_PUTAWAY_RULES: readonly PutawayRule[] = [
   { name: "Default Empty Location", conditions: [], actions: [{ action: "checkDamagedLocations" }, { action: "suggestEmptyLocation" }], orderBy: WALK },
 ];
 
-function loadRules(tx: Tx, warehouseId: string, algorithmId?: string | null): { name: string; rules: readonly PutawayRule[] } {
+async function loadRules(tx: Tx, warehouseId: string, algorithmId?: string | null): Promise<{ name: string; rules: readonly PutawayRule[] }> {
   const a = schema.algorithms;
   const algo = algorithmId
-    ? tx.select().from(a).where(eq(a.id, algorithmId)).get()
-    : tx.select().from(a).where(and(eq(a.warehouseId, warehouseId), eq(a.kind, "Putaway"), eq(a.status, "Active"), eq(a.isDynamicReplenishment, false))).orderBy(asc(a.createdAt)).get();
+    ? (await tx.select().from(a).where(eq(a.id, algorithmId)).limit(1))[0]
+    : (await tx.select().from(a).where(and(eq(a.warehouseId, warehouseId), eq(a.kind, "Putaway"), eq(a.status, "Active"), eq(a.isDynamicReplenishment, false))).orderBy(asc(a.createdAt)).limit(1))[0];
   if (algorithmId && (!algo || algo.kind !== "Putaway")) throw new DomainError("NOT_FOUND", "Putaway algorithm not found");
   if (!algo) return { name: "Default", rules: DEFAULT_PUTAWAY_RULES };
-  const rules = tx.select().from(schema.algorithmRules).where(and(eq(schema.algorithmRules.algorithmId, algo.id), eq(schema.algorithmRules.isActive, true)))
-    .orderBy(asc(schema.algorithmRules.sequence)).all()
+  const rules = (await tx.select().from(schema.algorithmRules).where(and(eq(schema.algorithmRules.algorithmId, algo.id), eq(schema.algorithmRules.isActive, true)))
+    .orderBy(asc(schema.algorithmRules.sequence)))
     .map((r) => ({ name: r.name, conditions: r.conditions, actions: r.actions ?? [], orderBy: r.orderBy.length > 0 ? r.orderBy : WALK }));
   return { name: algo.name, rules };
 }
 
-const lookupName = (tx: Tx, id: string | null): string | null =>
-  id ? tx.select({ name: schema.lookupValues.name }).from(schema.lookupValues).where(eq(schema.lookupValues.id, id)).get()?.name ?? null : null;
+const lookupName = async (tx: Tx, id: string | null): Promise<string | null> =>
+  id ? (await tx.select({ name: schema.lookupValues.name }).from(schema.lookupValues).where(eq(schema.lookupValues.id, id)).limit(1))[0]?.name ?? null : null;
 
-function locationStats(tx: Tx, warehouseId: string, productId: string): Map<string, LocationStats> {
-  const locs = tx.select().from(schema.locations).where(and(eq(schema.locations.warehouseId, warehouseId), eq(schema.locations.isActive, true))).all();
-  const stock = tx.select({ inv: schema.inventory, groupId: schema.products.productGroupId, typeId: schema.products.productTypeId, l: schema.products.lengthIn, w: schema.products.widthIn, h: schema.products.heightIn })
+async function locationStats(tx: Tx, warehouseId: string, productId: string): Promise<Map<string, LocationStats>> {
+  const locs = await tx.select().from(schema.locations).where(and(eq(schema.locations.warehouseId, warehouseId), eq(schema.locations.isActive, true)));
+  const stock = await tx.select({ inv: schema.inventory, groupId: schema.products.productGroupId, typeId: schema.products.productTypeId, l: schema.products.lengthIn, w: schema.products.widthIn, h: schema.products.heightIn })
     .from(schema.inventory).innerJoin(schema.products, eq(schema.products.id, schema.inventory.productId))
-    .where(and(eq(schema.inventory.warehouseId, warehouseId), gt(schema.inventory.onHand, 0))).all();
-  const caps = tx.select().from(schema.locationProductCapacity).all();
-  const zones = tx.select({ id: schema.lookupValues.id, name: schema.lookupValues.name, meta: schema.lookupValues.meta }).from(schema.lookupValues).where(eq(schema.lookupValues.type, "location_zone")).all();
+    .where(and(eq(schema.inventory.warehouseId, warehouseId), gt(schema.inventory.onHand, 0)));
+  const caps = await tx.select().from(schema.locationProductCapacity);
+  const zones = await tx.select({ id: schema.lookupValues.id, name: schema.lookupValues.name, meta: schema.lookupValues.meta }).from(schema.lookupValues).where(eq(schema.lookupValues.type, "location_zone"));
   const zoneNames = new Map(zones.map((z) => [z.id, z.name]));
   const zoneGroups = new Map(zones.map((z) => [z.id, new Set(zoneGroupIds(z.meta))]));
   const zoneNum = (meta: unknown, key: string): number | null => {
@@ -134,18 +136,18 @@ function prefixedCustomFields(prefix: string, values: Readonly<Record<string, st
   return Object.fromEntries(CUSTOM_FIELD_SLOTS.map((slot) => [`${prefix}.${slot}`, values?.[slot] ?? null]));
 }
 
-function ruleFacts(tx: Tx, input: SuggestInput, product: typeof schema.products.$inferSelect, source: LocationRow | null): Facts {
-  const lp = input.lpId ? tx.select({ typeId: schema.licensePlates.lpTypeId, parentLpId: schema.licensePlates.parentLpId }).from(schema.licensePlates).where(eq(schema.licensePlates.id, input.lpId)).get() : undefined;
-  const lpTypeRow = lp ? tx.select({ code: schema.lpTypes.code, customFields: schema.lpTypes.customFields }).from(schema.lpTypes).where(eq(schema.lpTypes.id, lp.typeId)).get() : undefined;
+async function ruleFacts(tx: Tx, input: SuggestInput, product: typeof schema.products.$inferSelect, source: LocationRow | null): Promise<Facts> {
+  const lp = input.lpId ? (await tx.select({ typeId: schema.licensePlates.lpTypeId, parentLpId: schema.licensePlates.parentLpId }).from(schema.licensePlates).where(eq(schema.licensePlates.id, input.lpId)).limit(1))[0] : undefined;
+  const lpTypeRow = lp ? (await tx.select({ code: schema.lpTypes.code, customFields: schema.lpTypes.customFields }).from(schema.lpTypes).where(eq(schema.lpTypes.id, lp.typeId)).limit(1))[0] : undefined;
   const lpType = lpTypeRow?.code ?? null;
   // A parent LP (it holds child LPs) or an LP nested in a parent is a parent-LP-based transfer.
-  const hasChildren = input.lpId ? Boolean(tx.select({ id: schema.licensePlates.id }).from(schema.licensePlates).where(eq(schema.licensePlates.parentLpId, input.lpId)).limit(1).get()) : false;
+  const hasChildren = input.lpId ? Boolean((await tx.select({ id: schema.licensePlates.id }).from(schema.licensePlates).where(eq(schema.licensePlates.parentLpId, input.lpId)).limit(1))[0]) : false;
   // LP Carrier: carrier of the open shipment order whose line is pinned to this LP.
   const lpCarrier = input.lpId
-    ? tx.select({ carrier: schema.shipmentOrders.carrier }).from(schema.orderLines).innerJoin(schema.shipmentOrders, eq(schema.shipmentOrders.id, schema.orderLines.orderId))
-      .where(and(eq(schema.orderLines.pinnedLpId, input.lpId), inArray(schema.shipmentOrders.status, [...OPEN_SO_STATUSES]))).limit(1).get()?.carrier ?? null
+    ? (await tx.select({ carrier: schema.shipmentOrders.carrier }).from(schema.orderLines).innerJoin(schema.shipmentOrders, eq(schema.shipmentOrders.id, schema.orderLines.orderId))
+      .where(and(eq(schema.orderLines.pinnedLpId, input.lpId), inArray(schema.shipmentOrders.status, [...OPEN_SO_STATUSES]))).limit(1))[0]?.carrier ?? null
     : null;
-  const sourceCustom = source ? tx.select({ cf: schema.locations.customFields, preventAllocation: schema.locations.preventAllocation }).from(schema.locations).where(eq(schema.locations.id, source.id)).get() : undefined;
+  const sourceCustom = source ? (await tx.select({ cf: schema.locations.customFields, preventAllocation: schema.locations.preventAllocation }).from(schema.locations).where(eq(schema.locations.id, source.id)).limit(1))[0] : undefined;
   return {
     allocatedTransferQuantity: input.allocatedQty ?? 0,
     isPreventAllocation: sourceCustom ? sourceCustom.preventAllocation : null,
@@ -175,22 +177,22 @@ function orderFactsOf(s: LocationStats): Facts {
   };
 }
 
-export function suggestLocations(tx: Tx, input: SuggestInput): SuggestResult {
+export async function suggestLocations(tx: Tx, input: SuggestInput): Promise<SuggestResult> {
   if (!Number.isInteger(input.qty) || input.qty <= 0) throw new DomainError("VALIDATION", "Quantity must be a positive whole number");
-  const product = tx.select().from(schema.products).where(eq(schema.products.id, input.productId)).get();
+  const product = (await tx.select().from(schema.products).where(eq(schema.products.id, input.productId)).limit(1))[0];
   if (!product) throw new DomainError("NOT_FOUND", "Product not found");
-  const source = input.fromLocationId ? tx.select().from(schema.locations).where(eq(schema.locations.id, input.fromLocationId)).get() ?? null : null;
-  const { name, rules } = loadRules(tx, input.warehouseId, input.algorithmId);
+  const source = input.fromLocationId ? (await tx.select().from(schema.locations).where(eq(schema.locations.id, input.fromLocationId)).limit(1))[0] ?? null : null;
+  const { name, rules } = await loadRules(tx, input.warehouseId, input.algorithmId);
   const item: PutawayItem = {
     productId: product.id, clientId: product.clientId, packType: input.packType ?? product.uom, qty: input.qty, lotNumber: input.lot ?? null,
     expiryDate: input.expiry ?? null, productionDate: input.productionDate ?? null, damageReason: input.damageReason ?? null,
     receivedAt: input.receivedAt ?? new Date().toISOString(), productGroupId: product.productGroupId, productTypeId: product.productTypeId,
     unitVolume: product.lengthIn * product.widthIn * product.heightIn,
   };
-  const stats = locationStats(tx, input.warehouseId, product.id);
+  const stats = await locationStats(tx, input.warehouseId, product.id);
   const productLocationIds = new Set([...stats.values()].filter((s) => s.skus.has(product.id)).map((s) => s.location.id));
-  const productGroupName = lookupName(tx, product.productGroupId);
-  const facts = ruleFacts(tx, input, product, source);
+  const productGroupName = await lookupName(tx, product.productGroupId);
+  const facts = await ruleFacts(tx, input, product, source);
   // Zone "Max locations per SKU": count the zones' locations already holding the product.
   const productLocationsByZone = new Map<string, number>();
   for (const s of stats.values()) {
@@ -212,9 +214,9 @@ export function suggestLocations(tx: Tx, input: SuggestInput): SuggestResult {
       cands = cands.filter((s) => def.fn({ item, stats: s, value: a.value, productGroupName, productLocationIds }) === null);
       for (const s of cands) reasons.set(s.location.id, [...(reasons.get(s.location.id) ?? []), def.label]);
     }
-    cands = cands.filter((s) => {
+    cands = await filterSeq(cands, async (s) => {
       try {
-        assertLocationAccepts(tx, { warehouseId: input.warehouseId, clientId: product.clientId, productId: product.id, locationId: s.location.id, lpId: null,
+        await assertLocationAccepts(tx, { warehouseId: input.warehouseId, clientId: product.clientId, productId: product.id, locationId: s.location.id, lpId: null,
           lotNumber: item.lotNumber, expiryDate: item.expiryDate, productionDate: item.productionDate, damageReason: item.damageReason, packType: item.packType, status: "Stock" }, input.qty);
         return true;
       } catch {
@@ -246,13 +248,13 @@ export interface ReplenishmentTarget {
   readonly toReplenish: number;
 }
 
-export function dynamicReplenishmentTargets(tx: Tx, warehouseId: string, opts: { onlyNeeded?: boolean } = {}): ReplenishmentTarget[] {
-  const levels = tx.select().from(schema.productReplenishmentLevels).where(eq(schema.productReplenishmentLevels.warehouseId, warehouseId)).all();
+export async function dynamicReplenishmentTargets(tx: Tx, warehouseId: string, opts: { onlyNeeded?: boolean } = {}): Promise<ReplenishmentTarget[]> {
+  const levels = await tx.select().from(schema.productReplenishmentLevels).where(eq(schema.productReplenishmentLevels.warehouseId, warehouseId));
   const perWh = new Map(levels.map((l) => [l.productId, l]));
-  const globals = tx.select().from(schema.products).where(and(eq(schema.products.replenishmentStrategy, "Global"), gt(schema.products.replenishmentMax, 0))).all();
+  const globals = await tx.select().from(schema.products).where(and(eq(schema.products.replenishmentStrategy, "Global"), gt(schema.products.replenishmentMax, 0)));
   const ids = [...new Set([...perWh.keys(), ...globals.map((p) => p.id)])];
   if (ids.length === 0) return [];
-  const products = new Map(tx.select().from(schema.products).where(inArray(schema.products.id, ids)).all().map((p) => [p.id, p]));
+  const products = new Map((await tx.select().from(schema.products).where(inArray(schema.products.id, ids))).map((p) => [p.id, p]));
   const statusList = sql.raw(OPEN_SO_STATUSES.map((s) => `'${s}'`).join(","));
   const out: ReplenishmentTarget[] = [];
   for (const id of ids) {
@@ -261,14 +263,14 @@ export function dynamicReplenishmentTargets(tx: Tx, warehouseId: string, opts: {
     const lvl = perWh.get(id);
     const min = lvl?.minLevel ?? product.replenishmentMin;
     const max = lvl?.maxLevel ?? product.replenishmentMax;
-    const open = tx.get<{ q: number }>(sql`SELECT COALESCE(SUM(l.quantity - l.cancelled_quantity - l.picked_quantity), 0) AS q
+    const open = (await dbGet<{ q: number }>(tx, sql`SELECT COALESCE(SUM(l.quantity - l.cancelled_quantity - l.picked_quantity), 0) AS q
       FROM order_lines l JOIN shipment_orders o ON o.id = l.order_id
-      WHERE l.product_id = ${id} AND o.warehouse_id = ${warehouseId} AND o.deleted_at IS NULL AND o.status IN (${statusList})`)?.q ?? 0;
-    const avail = tx.get<{ q: number }>(sql`SELECT COALESCE(SUM(i.on_hand - i.allocated), 0) AS q FROM inventory i JOIN locations loc ON loc.id = i.location_id
+      WHERE l.product_id = ${id} AND o.warehouse_id = ${warehouseId} AND o.deleted_at IS NULL AND o.status IN (${statusList})`))?.q ?? 0;
+    const avail = (await dbGet<{ q: number }>(tx, sql`SELECT COALESCE(SUM(i.on_hand - i.allocated), 0) AS q FROM inventory i JOIN locations loc ON loc.id = i.location_id
       WHERE i.product_id = ${id} AND i.warehouse_id = ${warehouseId} AND i.status = 'Stock' AND i.damage_reason IS NULL
-        AND (loc.replenishment_type = 'Target' OR loc.area_type = 'Picking')`)?.q ?? 0;
-    const tasks = tx.get<{ q: number }>(sql`SELECT COALESCE(SUM(planned_qty - actual_qty), 0) AS q FROM tasks
-      WHERE product_id = ${id} AND warehouse_id = ${warehouseId} AND task_type = 'Replenishment' AND status IN ('Pending','Started')`)?.q ?? 0;
+        AND (loc.replenishment_type = 'Target' OR loc.area_type = 'Picking')`))?.q ?? 0;
+    const tasks = (await dbGet<{ q: number }>(tx, sql`SELECT COALESCE(SUM(planned_qty - actual_qty), 0) AS q FROM tasks
+      WHERE product_id = ${id} AND warehouse_id = ${warehouseId} AND task_type = 'Replenishment' AND status IN ('Pending','Started')`))?.q ?? 0;
     const toReplenish = Math.max(0, max + Number(open) - Number(avail) - Number(tasks));
     const row = { productId: id, sku: product.sku, min, max, openOrderQty: Number(open), targetAvailable: Number(avail), openTaskQty: Number(tasks), toReplenish };
     if (!opts.onlyNeeded || toReplenish > 0) out.push(row);

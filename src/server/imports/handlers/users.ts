@@ -10,5 +10,5 @@ import type { ImportHandler } from "../types";
 export const handler: ImportHandler = {
   configured: true,
   owner: "M14",
-  apply: ({ db, auth, actor }, row) => importUserRow(db, auth, actor, row),
+  apply: async ({ db, auth, actor }, row) => await importUserRow(db, auth, actor, row),
 };

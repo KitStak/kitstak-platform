@@ -10,5 +10,5 @@ export const GET = defineRoute({
     ids: z.string().max(20_000).transform((v) => v.split(",").map((s) => s.trim()).filter(Boolean)).pipe(z.array(z.string().max(64)).max(500)),
     warehouseId: z.string().max(64).optional(),
   }),
-  handler: ({ db, auth, query }) => productFacts(db, auth.scope, query),
+  handler: async ({ db, auth, query }) => await productFacts(db, auth.scope, query),
 });

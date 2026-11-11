@@ -6,9 +6,9 @@ import { INVENTORY_PERMISSIONS as P } from "@/lib/grid-defs/inventory/permission
 
 export const GET = defineRoute({
   permission: P.byLocationView,
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listBuckets(db, auth, query);
+    const { rows, total } = await listBuckets(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });

@@ -8,7 +8,7 @@ import { connectStore, listChannelConnections } from "@/server/repositories/chan
 export const GET = defineRoute({
   permission: ["integrations.integrations.create_setup", "integrations.integrations.edit_setup", "integrations.integrations.delete_setup", "integrations.integration_logs.view", "integrations.integration_monitoring.view"],
   query: z.object({ provider: z.string().trim().max(40).optional() }),
-  handler: ({ db, auth, query }) => listChannelConnections(db, auth, query.provider ?? null),
+  handler: async ({ db, auth, query }) => await listChannelConnections(db, auth, query.provider ?? null),
 });
 
 export const POST = defineRoute({

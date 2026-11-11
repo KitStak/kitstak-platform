@@ -23,8 +23,8 @@ async function Showcase() {
   await requirePagePermission(SHOWCASE_PERMISSION, "/dev/ui");
   const auth = await getAuthContext();
   const db = await getAppDb();
-  const rows = auth ? loadDevOrders(db, auth.viewScope) : [];
-  const lines = loadDevOrderLines(db, rows.map((r) => r.id));
+  const rows = auth ? await loadDevOrders(db, auth.viewScope) : [];
+  const lines = await loadDevOrderLines(db, rows.map((r) => r.id));
   return (
     <div className="grid gap-6 px-6 py-5 lg:grid-cols-[180px_minmax(0,1fr)]">
       <ShowcaseNav />

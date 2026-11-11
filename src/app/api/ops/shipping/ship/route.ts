@@ -7,6 +7,6 @@ import { SHIPPING_PERMISSIONS, shipOrdersSchema } from "@/server/repositories/pl
 export const POST = defineRoute({
   permission: SHIPPING_PERMISSIONS.ship,
   body: shipOrdersSchema,
-  handler: ({ db, auth, actor, body }) =>
-    shipping.shipOrders(db, domainCtx(actor, auth), { orderIds: body.ids, shipDate: body.shipDate, requireLabel: body.requireLabel }),
+  handler: async ({ db, auth, actor, body }) =>
+    await shipping.shipOrders(db, domainCtx(actor, auth), { orderIds: body.ids, shipDate: body.shipDate, requireLabel: body.requireLabel }),
 });

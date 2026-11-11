@@ -8,5 +8,5 @@ export const POST = defineRoute({
   permission: "settings.vendors.edit",
   params: idParamsSchema,
   body: z.object({ active: z.boolean(), version: z.number().int().min(1).optional() }),
-  handler: ({ db, auth, actor, params, body }) => setVendorActive(db, domainCtx(actor, auth), auth.scope, params.id, body.active, body.version),
+  handler: async ({ db, auth, actor, params, body }) => await setVendorActive(db, domainCtx(actor, auth), auth.scope, params.id, body.active, body.version),
 });

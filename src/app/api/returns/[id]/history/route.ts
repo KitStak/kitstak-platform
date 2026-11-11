@@ -15,10 +15,10 @@ export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.view,
   params: idParamsSchema,
   query: querySchema,
-  handler: ({ db, auth, params, query }) => {
+  handler: async ({ db, auth, params, query }) => {
     // Throws NOT_FOUND (JSON envelope) when the RMA is missing or out of scope.
-    const ro = getReturnDetail(db, auth.scope, params.id);
-    const { rows, total } = listChangeLog(db, auth, { entityType: "return_order", entityId: ro.id, page: query.page, ps: query.ps, includeLines: true });
+    const ro = await getReturnDetail(db, auth.scope, params.id);
+    const { rows, total } = await listChangeLog(db, auth, { entityType: "return_order", entityId: ro.id, page: query.page, ps: query.ps, includeLines: true });
     return listResult(rows, { total, page: query.page, pageSize: query.ps });
   },
 });

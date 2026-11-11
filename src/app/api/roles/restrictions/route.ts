@@ -6,9 +6,9 @@ import { setRestrictions } from "@/server/repositories/roles";
 export const POST = defineRoute({
   permission: "settings.roles.manage_restrictions",
   body: restrictionsSchema,
-  handler: ({ db, auth, actor, body, audit }) => {
-    const result = setRestrictions(db, auth, actor, body.ids, body.restrictions);
-    for (const id of result.succeeded) audit({ action: "role.restrictions", entity: "role", entityId: id, detail: { restrictions: body.restrictions } });
+  handler: async ({ db, auth, actor, body, audit }) => {
+    const result = await setRestrictions(db, auth, actor, body.ids, body.restrictions);
+    for (const id of result.succeeded) await audit({ action: "role.restrictions", entity: "role", entityId: id, detail: { restrictions: body.restrictions } });
     return result;
   },
 });

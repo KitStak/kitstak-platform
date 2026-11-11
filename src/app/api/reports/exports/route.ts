@@ -18,9 +18,9 @@ export const POST = defineRoute({
   transaction: false,
   rateLimit: RATE_LIMITS.bulkIo,
   body: queueExportSchema,
-  handler: ({ db, auth, body }) => {
-    const task = queueLocalExport(db, { auth, gridKey: body.gridKey, query: body.query });
-    const timeZone = resolveExportTimeZone(db, auth, body.timeZone);
+  handler: async ({ db, auth, body }) => {
+    const task = await queueLocalExport(db, { auth, gridKey: body.gridKey, query: body.query });
+    const timeZone = await resolveExportTimeZone(db, auth, body.timeZone);
     after(async () => {
       try {
         await runLocalExport(db, task.id, { auth, columns: body.columns, timeZone });

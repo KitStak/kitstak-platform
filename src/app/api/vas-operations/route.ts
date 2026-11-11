@@ -6,9 +6,9 @@ import { createVas, listVas } from "@/server/repositories/vas";
 
 export const GET = defineRoute({
   permission: "settings.vas_operations.view",
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listVas(db, auth, query);
+    const { rows, total } = await listVas(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -16,5 +16,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.vas_operations.create",
   body: vasSchema,
-  handler: ({ db, auth, actor, body }) => created(createVas(db, auth, actor, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createVas(db, auth, actor, body)),
 });

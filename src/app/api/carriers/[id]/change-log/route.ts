@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: ["integrations.integrations.create_setup", "integrations.integrations.edit_setup", "integrations.integrations.delete_setup"],
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    loadCarrierConnection(db, auth, params.id);
-    return changeLogResult(db, "carrier_connection", params.id, query);
+  handler: async ({ db, auth, params, query }) => {
+    await loadCarrierConnection(db, auth, params.id);
+    return await changeLogResult(db, "carrier_connection", params.id, query);
   },
 });

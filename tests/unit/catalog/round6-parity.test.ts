@@ -94,33 +94,33 @@ describe("demo product images", () => {
 
 describe("applyDemoImages", () => {
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
   const ctx = () => ({ ...w.ctx, scope: { warehouseIds: [w.warehouseId], clientIds: "all" as const } });
-  const make = (sku: string, imageUrl = "") => createProductFromWizard(w.db, ctx(), {
+  const make = async (sku: string, imageUrl = "") => await createProductFromWizard(w.db, ctx(), {
     ...emptyProductForm("Product", w.clientId), sku, name: sku, imageUrl,
     packTypes: [{ ...newPackType("Primary", []), key: "u", packType: "Each", length: 1, width: 1, height: 1, barcodes: [] }],
   } as unknown as ProductInput);
 
-  it("fills only image-less, non-test products, bumps version and writes the change log", () => {
-    const tee = make("APX-TEE-BLK-M");
-    const withImg = make("APX-TEE-WHT-M", "https://cdn.example.com/w.jpg");
-    const test = make("KS-E2E-TEE");
-    expect(planDemoImages(w.db).map((r) => r.sku)).toContain("APX-TEE-BLK-M");
-    const applied = applyDemoImages(w.db, w.ctx);
+  it("fills only image-less, non-test products, bumps version and writes the change log", async () => {
+    const tee = await make("APX-TEE-BLK-M");
+    const withImg = await make("APX-TEE-WHT-M", "https://cdn.example.com/w.jpg");
+    const test = await make("KS-E2E-TEE");
+    expect((await planDemoImages(w.db)).map((r) => r.sku)).toContain("APX-TEE-BLK-M");
+    const applied = await applyDemoImages(w.db, w.ctx);
     const skus = applied.map((r) => r.sku);
     expect(skus).toContain("APX-TEE-BLK-M");
     expect(skus).not.toContain("APX-TEE-WHT-M");
     expect(skus).not.toContain("KS-E2E-TEE");
-    const row = w.db.select().from(schema.products).where(eq(schema.products.id, tee.id)).get();
+    const row = (await w.db.select().from(schema.products).where(eq(schema.products.id, tee.id)).limit(1))[0];
     expect(row?.imageUrl).toBe("/api/products/demo-image/tee-1f2937.svg");
     expect(row?.version).toBe((tee.version ?? 1) + 1);
-    expect(w.db.select().from(schema.products).where(eq(schema.products.id, withImg.id)).get()?.imageUrl).toBe("https://cdn.example.com/w.jpg");
-    expect(w.db.select().from(schema.products).where(eq(schema.products.id, test.id)).get()?.imageUrl ?? null).toBeNull();
-    const log = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, tee.id)).all();
+    expect((await w.db.select().from(schema.products).where(eq(schema.products.id, withImg.id)).limit(1))[0]?.imageUrl).toBe("https://cdn.example.com/w.jpg");
+    expect((await w.db.select().from(schema.products).where(eq(schema.products.id, test.id)).limit(1))[0]?.imageUrl ?? null).toBeNull();
+    const log = await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, tee.id));
     expect(log.some((l) => JSON.stringify(l).includes("demo-image"))).toBe(true);
     // Idempotent
-    expect(applyDemoImages(w.db, w.ctx).map((r) => r.sku)).not.toContain("APX-TEE-BLK-M");
+    expect((await applyDemoImages(w.db, w.ctx)).map((r) => r.sku)).not.toContain("APX-TEE-BLK-M");
     // A demo URL round-trips through the product schema (editing a seeded product saves).
     const parsed = productInputSchema.safeParse({ ...emptyProductForm("Product", w.clientId), sku: "X1", name: "X1", imageUrl: row?.imageUrl, packTypes: [{ ...newPackType("Primary", []), key: "u", packType: "Each", length: 1, width: 1, height: 1, barcodes: [] }] });
     expect(parsed.success ? null : parsed.error.issues.filter((i) => String(i.path[0]) === "imageUrl")).toBeNull();

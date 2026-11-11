@@ -16,18 +16,18 @@ import { createWorld, type World } from "../foundation/domain/fixtures";
 let w: World;
 let auth: AuthContext;
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
 afterEach(() => w.close());
 
 const address = { name: "Dock", line1: "1 Supply Way", line2: "", postalCode: "38118", city: "Memphis", phone: "", country: "US", state: "TN" };
-const vendor = () => createVendor(w.db, w.ctx, auth.scope, vendorFormSchema.parse({ clientId: w.clientId, displayName: "Acme Supply", vendorName: "Acme Supply LLC", useShipAsBilling: true, shipping: address }));
-function createPo(code = "KS-R2-PO-1") {
-  return createPurchaseOrder(w.db, w.ctx, auth.scope, poCreateSchema.parse({
-    warehouseId: w.warehouseId, clientId: w.clientId, code, poType: "Purchase Order", poDate: "2026-11-09T15:00:00.000Z", vendorId: vendor().id,
+const vendor = async () => await createVendor(w.db, w.ctx, auth.scope, vendorFormSchema.parse({ clientId: w.clientId, displayName: "Acme Supply", vendorName: "Acme Supply LLC", useShipAsBilling: true, shipping: address }));
+async function createPo(code = "KS-R2-PO-1") {
+  return await createPurchaseOrder(w.db, w.ctx, auth.scope, poCreateSchema.parse({
+    warehouseId: w.warehouseId, clientId: w.clientId, code, poType: "Purchase Order", poDate: "2026-11-09T15:00:00.000Z", vendorId: (await vendor()).id,
     lines: [
       { productId: w.productId, packType: "Each", orderedQuantity: 10, unitCost: 2.5 },
       { productId: w.product2Id, packType: "Each", orderedQuantity: 4, unitCost: 7.25 },
@@ -36,23 +36,23 @@ function createPo(code = "KS-R2-PO-1") {
 }
 const receiveBody = (lineId: string, quantity: number, locationId: string, extra: Record<string, unknown> = {}) =>
   receiveBodySchema.parse({ lines: [{ lineId, quantity, locationId, ...extra }] });
-const poLog = (id: string) => w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id)).all();
+const poLog = async (id: string) => await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id));
 
 describe("Actual Receiving Date change log", () => {
-  it("writes no entry for partial receipts and exactly one set entry on completion", () => {
-    const po = createPo("KS-R4-PO-1");
+  it("writes no entry for partial receipts and exactly one set entry on completion", async () => {
+    const po = await createPo("KS-R4-PO-1");
     const [l1, l2] = po.lines;
-    receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, receiveBody(l1?.id ?? "", 3, w.loc.storageA));
-    receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, receiveBody(l1?.id ?? "", 3, w.loc.storageA));
-    expect(getPurchaseOrder(w.db, auth.scope, po.id).receivedAt).toBeNull();
-    expect(poLog(po.id).filter((l) => l.field === "receivedAt")).toEqual([]);
-    receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, { lines: [
+    await receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, receiveBody(l1?.id ?? "", 3, w.loc.storageA));
+    await receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, receiveBody(l1?.id ?? "", 3, w.loc.storageA));
+    expect((await getPurchaseOrder(w.db, auth.scope, po.id)).receivedAt).toBeNull();
+    expect((await poLog(po.id)).filter((l) => l.field === "receivedAt")).toEqual([]);
+    await receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, { lines: [
       ...receiveBody(l1?.id ?? "", 4, w.loc.storageA).lines, ...receiveBody(l2?.id ?? "", 4, w.loc.storageA).lines,
     ], allowOverReceipt: false, allowExpired: false });
-    const entries = poLog(po.id).filter((l) => l.field === "receivedAt");
+    const entries = (await poLog(po.id)).filter((l) => l.field === "receivedAt");
     expect(entries).toHaveLength(1);
     expect(entries[0]?.message).toMatch(/^Actual Receiving Date is modified\. \(empty\) --> \d{4}\/\d{2}\/\d{2} /);
-    expect(getPurchaseOrder(w.db, auth.scope, po.id).status).toBe("Completed");
+    expect((await getPurchaseOrder(w.db, auth.scope, po.id)).status).toBe("Completed");
   });
 });
 

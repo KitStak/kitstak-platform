@@ -6,5 +6,5 @@ import { deleteAlgorithms } from "@/server/repositories/algorithms";
 export const POST = defineRoute({
   permission: "automation.algorithms.delete",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => deleteAlgorithms(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await deleteAlgorithms(db, auth, actor, body.ids),
 });

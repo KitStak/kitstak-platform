@@ -8,5 +8,5 @@ export const GET = defineRoute({
   query: z.object({
     ids: z.string().trim().min(1).max(20_000).transform((v) => v.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 500)),
   }),
-  handler: ({ db, auth, query }) => productInfo(db, auth.scope, query.ids),
+  handler: async ({ db, auth, query }) => await productInfo(db, auth.scope, query.ids),
 });

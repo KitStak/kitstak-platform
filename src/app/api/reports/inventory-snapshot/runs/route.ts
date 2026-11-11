@@ -11,5 +11,5 @@ import { snapshotCoverage } from "@/server/repositories/reports-inventory";
 export const GET = defineRoute({
   name: "GET /api/reports/inventory-snapshot/runs",
   permission: SNAPSHOT_DEF.permission,
-  handler: ({ db, auth }) => result(snapshotCoverage(db, auth)),
+  handler: async ({ db, auth }) => result(await snapshotCoverage(db, auth)),
 });

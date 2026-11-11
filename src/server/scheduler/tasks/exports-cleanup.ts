@@ -9,9 +9,9 @@ import type { SchedulerTask, SchedulerTaskContext, TaskResult } from "../types";
 
 export const STALE_EXPORT_MS = 60 * 60 * 1000;
 
-export function runExportsCleanup(ctx: SchedulerTaskContext, store: FileStore = fileStore()): TaskResult {
-  const deleted = store.deleteExpired(ctx.db);
-  const stale = failStaleExports(ctx.db, new Date(ctx.now.getTime() - STALE_EXPORT_MS), ctx.now);
+export async function runExportsCleanup(ctx: SchedulerTaskContext, store: FileStore = fileStore()): Promise<TaskResult> {
+  const deleted = await store.deleteExpired(ctx.db);
+  const stale = await failStaleExports(ctx.db, new Date(ctx.now.getTime() - STALE_EXPORT_MS), ctx.now);
   if (deleted === 0 && stale === 0) return { status: "skipped", message: "Nothing to clean up" };
   return { status: "ok", message: `Deleted ${deleted} expired files; failed ${stale} interrupted exports` };
 }
@@ -22,5 +22,5 @@ export const exportsCleanupTask: SchedulerTask = {
   owner: "foundation",
   configured: true,
   schedule: { kind: "interval", everyMs: 60 * 60 * 1000 },
-  run: (ctx) => runExportsCleanup(ctx),
+  run: async (ctx) => await runExportsCleanup(ctx),
 };

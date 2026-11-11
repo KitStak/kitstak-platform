@@ -7,12 +7,12 @@ export const POST = defineRoute({
   permission: "fulfillment.shipment_plan.edit",
   params: idParamsSchema,
   body: planOrdersSchema,
-  handler: ({ db, auth, actor, params, body }) => addPlanOrders(db, auth, domainCtx(actor, auth), params.id, body.orderIds),
+  handler: async ({ db, auth, actor, params, body }) => await addPlanOrders(db, auth, domainCtx(actor, auth), params.id, body.orderIds),
 });
 
 export const DELETE = defineRoute({
   permission: "fulfillment.shipment_plan.edit",
   params: idParamsSchema,
   body: planOrdersSchema,
-  handler: ({ db, auth, actor, params, body }) => removePlanOrders(db, auth, domainCtx(actor, auth), params.id, body.orderIds),
+  handler: async ({ db, auth, actor, params, body }) => await removePlanOrders(db, auth, domainCtx(actor, auth), params.id, body.orderIds),
 });

@@ -43,6 +43,6 @@ export function logSnapshot(snapshot: Readonly<Record<string, unknown>>, timeZon
   return Object.fromEntries(Object.entries(snapshot).map(([k, v]) => [k, logValue(k, v, timeZone)]));
 }
 
-export function warehouseTimeZone(db: AppDb, warehouseId: string): string {
-  return db.select({ tz: schema.warehouses.timezone }).from(schema.warehouses).where(eq(schema.warehouses.id, warehouseId)).get()?.tz ?? "UTC";
+export async function warehouseTimeZone(db: AppDb, warehouseId: string): Promise<string> {
+  return (await db.select({ tz: schema.warehouses.timezone }).from(schema.warehouses).where(eq(schema.warehouses.id, warehouseId)).limit(1))[0]?.tz ?? "UTC";
 }

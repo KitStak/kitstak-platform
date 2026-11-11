@@ -44,6 +44,7 @@ import { resetWorkState } from "./work";
 import { managerCtx, noteFailure, type World } from "./world";
 import { repairPoStatusDrift } from "@/server/repositories/purchase-orders-integrity";
 import { recalcKitInventory } from "@/server/repositories/kits";
+import { dbGet, mapSeq } from "@/server/db/sql";
 
 export const DEFAULT_SEED = 20261105;
 
@@ -61,17 +62,17 @@ export interface SeedReport {
   readonly ledgerIssues: readonly LedgerIssue[];
 }
 
-function setup(env: SeedEnv, password: string) {
-  return txAt(env, utcAt(60, 14), (tx) => {
-    const org = seedOrg(env, tx);
-    const access = seedAccess(tx, org, password);
-    const lookups = seedLookups(tx, org);
-    seedSequences(tx);
-    const catalog = seedCatalog(env, tx, org, lookups);
-    const facility = seedFacility(tx, org, catalog, lookups);
-    const carriers = seedCarriers(tx, org);
-    const channels = seedChannels(tx, org, catalog);
-    const config = seedConfig(tx, org, carriers);
+async function setup(env: SeedEnv, password: string) {
+  return await txAt(env, utcAt(60, 14), async (tx) => {
+    const org = await seedOrg(env, tx);
+    const access = await seedAccess(tx, org, password);
+    const lookups = await seedLookups(tx, org);
+    await seedSequences(tx);
+    const catalog = await seedCatalog(env, tx, org, lookups);
+    const facility = await seedFacility(tx, org, catalog, lookups);
+    const carriers = await seedCarriers(tx, org);
+    const channels = await seedChannels(tx, org, catalog);
+    const config = await seedConfig(tx, org, carriers);
     return { org, access, lookups, catalog, facility, carriers, channels, config };
   });
 }
@@ -89,26 +90,26 @@ function scheduleHistory(w: World): void {
   scheduleSnapshots(w);
 }
 
-function finish(w: World): void {
-  txAt(w.env, ANCHOR_MS - 60_000, (tx) => {
-    seedShipmentPlans(w, tx);
-    seedChannelHistory(w, tx);
-    seedBilling(w, tx);
-    seedPlatform(w, tx);
-    seedAuditTrail(tx, w.access);
-    retireProducts(tx, w.catalog);
+async function finish(w: World): Promise<void> {
+  await txAt(w.env, ANCHOR_MS - 60_000, async (tx) => {
+    await seedShipmentPlans(w, tx);
+    await seedChannelHistory(w, tx);
+    await seedBilling(w, tx);
+    await seedPlatform(w, tx);
+    await seedAuditTrail(tx, w.access);
+    await retireProducts(tx, w.catalog);
     // Fully received seeded POs settle to Completed (and none stays in the transient Receiving),
     // the same way receiving does (inbound-receiving REQ-R2-9).
-    repairPoStatusDrift(tx, managerCtx(w));
+    await repairPoStatusDrift(tx, managerCtx(w));
     // Two open picking jobs on mobile carts, each order in a cell (M10 / REQ-R10-6).
-    seedCartOccupancy(tx, managerCtx(w), w.org.mlt1);
+    await seedCartOccupancy(tx, managerCtx(w), w.org.mlt1);
     const pxp = w.org.clientByCode.get("PXP");
-    if (pxp) tx.update(schema.clients).set({ status: "Inactive" }).where(eq(schema.clients.id, pxp.id)).run();
+    if (pxp) await tx.update(schema.clients).set({ status: "Inactive" }).where(eq(schema.clients.id, pxp.id));
   });
 }
 
-export function countRows(db: AppDb): Record<string, number> {
-  return Object.fromEntries(listDataTables(db).map((t) => [t, db.get<{ n: number }>(sql.raw(`SELECT COUNT(*) AS n FROM "${t}"`))?.n ?? 0]));
+export async function countRows(db: AppDb): Promise<Record<string, number>> {
+  return Object.fromEntries(await mapSeq((await listDataTables(db)), async (t) => [t, (await dbGet<{ n: number }>(db, sql.raw(`SELECT COUNT(*) AS n FROM "${t}"`)))?.n ?? 0]));
 }
 
 export async function runSeed(db: AppDb, opts: SeedOptions): Promise<SeedReport> {
@@ -120,20 +121,20 @@ export async function runSeed(db: AppDb, opts: SeedOptions): Promise<SeedReport>
     resetWorkState();
     resetShippingState();
     resetReturnState();
-    wipeAllRows(db);
+    await wipeAllRows(db);
     const env: SeedEnv = { db, rng: new Rng(seed), files: opts.files };
-    const refs = setup(env, opts.password ?? DEFAULT_SEED_PASSWORD);
+    const refs = await setup(env, opts.password ?? DEFAULT_SEED_PASSWORD);
     const w: World = { env, queue: createEventQueue(ANCHOR_MS), endMs: ANCHOR_MS, ...refs, orders: new Map(), counters: { events: 0, failures: 0, failureSamples: [] } };
     const openingAt = utcAt(34, 13);
-    txAt(env, openingAt, (tx) => postOpeningBalance(w, tx, openingAt));
+    await txAt(env, openingAt, async (tx) => await postOpeningBalance(w, tx, openingAt));
     scheduleHistory(w);
     w.counters.events = await w.queue.drain({ before: setClock, onError: (label, error) => noteFailure(w, label, error) });
-    finish(w);
+    await finish(w);
     // Kit Inventory reads a derived snapshot: stamp it at seed time so a fresh install never reads "Last updated never".
-    try { recalcKitInventory(db); } catch (error) { noteFailure(w, "kit inventory recalc", error); }
+    try { await recalcKitInventory(db); } catch (error) { noteFailure(w, "kit inventory recalc", error); }
     return {
-      counts: countRows(db), events: w.counters.events, failures: w.counters.failures, failureSamples: [...w.counters.failureSamples],
-      ledgerIssues: ledger.reconcileLedger(db),
+      counts: await countRows(db), events: w.counters.events, failures: w.counters.failures, failureSamples: [...w.counters.failureSamples],
+      ledgerIssues: await ledger.reconcileLedger(db),
     };
   } finally {
     uninstallRuntime();

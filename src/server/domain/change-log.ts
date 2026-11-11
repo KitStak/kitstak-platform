@@ -2,9 +2,11 @@
  * Field-level change log (BUILD_PLAN 0.4 #3): every create/update/delete on a business
  * entity writes `change_log` rows as `old --> new` with human-readable labels.
  */
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+import { desc } from "@/server/db/order";
 import * as schema from "@/server/db/schema";
 import { formatLogDateTime, isIsoDateTime } from "@/lib/format-zone";
+import { bestEffort, chunked, dbGet } from "@/server/db/sql";
 import type { DomainCtx, Tx } from "./types";
 
 /** Display names per entity type (used in messages, e.g. "Shipment Order SO000123 is created."). */
@@ -96,15 +98,12 @@ const ID_RESOLVERS: Readonly<Record<string, string>> = {
 };
 
 /** Display value for an id-valued field, or the formatted value when the field has no resolver / the id is unknown. */
-export function resolveFieldValue(tx: Tx, field: string, value: string): string {
+export async function resolveFieldValue(tx: Tx, field: string, value: string): Promise<string> {
   const query = ID_RESOLVERS[field];
   if (!query || value === "") return value;
-  try {
-    return tx.get<{ v: string | null }>(sql`${sql.raw(query)} ${value}`)?.v || value;
-  } catch {
-    // A failed lookup must never block the write it documents; keep the raw value.
-    return value;
-  }
+  // A failed lookup must never block the write it documents (savepoint); keep the raw value.
+  const found = await bestEffort(tx, async (sp) => await dbGet<{ v: string | null }>(sp, sql`${sql.raw(query)} ${value}`));
+  return (found.ok ? found.value?.v : null) || value;
 }
 
 /** Columns that never produce change-log rows. */
@@ -132,14 +131,11 @@ export function messageSide(value: string, timeZone?: string): string {
 }
 
 /** IANA zone of the warehouse a snapshot belongs to (for message datetimes), or undefined. */
-function snapshotZone(tx: Tx, snapshot: Readonly<Record<string, unknown>>): string | undefined {
+async function snapshotZone(tx: Tx, snapshot: Readonly<Record<string, unknown>>): Promise<string | undefined> {
   const warehouseId = snapshot.warehouseId;
   if (typeof warehouseId !== "string" || warehouseId === "") return undefined;
-  try {
-    return tx.get<{ tz: string | null }>(sql`SELECT timezone AS tz FROM warehouses WHERE id = ${warehouseId}`)?.tz ?? undefined;
-  } catch {
-    return undefined;
-  }
+  const found = await bestEffort(tx, async (sp) => await dbGet<{ tz: string | null }>(sp, sql`SELECT timezone AS tz FROM warehouses WHERE id = ${warehouseId}`));
+  return (found.ok ? found.value?.tz : null) ?? undefined;
 }
 
 export function fieldLabel(entityType: string, field: string): string {
@@ -165,20 +161,23 @@ interface EntityRef {
 
 type ChangeRow = typeof schema.changeLog.$inferInsert;
 
-function insert(tx: Tx, ctx: DomainCtx, rows: readonly ChangeRow[]): number {
+async function insert(tx: Tx, ctx: DomainCtx, rows: readonly ChangeRow[]): Promise<number> {
   if (rows.length === 0) return 0;
-  tx.insert(schema.changeLog).values(rows.map((r) => ({ ...r, userId: ctx.userId, source: ctx.source }))).run();
+  // Rows keep their array order in `rowid` (identity), exactly like SQLite's implicit rowid.
+  for (const chunk of chunked(rows.map((r) => ({ ...r, userId: ctx.userId, source: ctx.source })), 500)) {
+    await tx.insert(schema.changeLog).values(chunk);
+  }
   return rows.length;
 }
 
-export function recordCreate(tx: Tx, ctx: DomainCtx, ref: EntityRef): void {
+export async function recordCreate(tx: Tx, ctx: DomainCtx, ref: EntityRef): Promise<void> {
   const name = ref.entityCode ? `${entityLabel(ref.entityType)} ${ref.entityCode}` : entityLabel(ref.entityType);
-  insert(tx, ctx, [{ ...ref, entityCode: ref.entityCode ?? null, type: "Create", message: `${name} is created.`, source: ctx.source }]);
+  await insert(tx, ctx, [{ ...ref, entityCode: ref.entityCode ?? null, type: "Create", message: `${name} is created.`, source: ctx.source }]);
 }
 
-export function recordDelete(tx: Tx, ctx: DomainCtx, ref: EntityRef): void {
+export async function recordDelete(tx: Tx, ctx: DomainCtx, ref: EntityRef): Promise<void> {
   const name = ref.entityCode ? `${entityLabel(ref.entityType)} ${ref.entityCode}` : entityLabel(ref.entityType);
-  insert(tx, ctx, [{ ...ref, entityCode: ref.entityCode ?? null, type: "Delete", message: `${name} is deleted.`, source: ctx.source }]);
+  await insert(tx, ctx, [{ ...ref, entityCode: ref.entityCode ?? null, type: "Delete", message: `${name} is deleted.`, source: ctx.source }]);
 }
 
 export interface FieldChange {
@@ -202,17 +201,19 @@ export function diffRows(entityType: string, before: Readonly<Record<string, unk
 }
 
 /** Writes one row per changed field: "<Label> is modified. old --> new". Returns the count. */
-export function recordUpdate(
+export async function recordUpdate(
   tx: Tx,
   ctx: DomainCtx,
   ref: EntityRef & { readonly before: Readonly<Record<string, unknown>>; readonly after: Readonly<Record<string, unknown>> },
-): number {
-  const changes = diffRows(ref.entityType, ref.before, ref.after)
-    .map((c) => (ID_RESOLVERS[c.field] ? { ...c, from: resolveFieldValue(tx, c.field, c.from), to: resolveFieldValue(tx, c.field, c.to) } : c));
+): Promise<number> {
+  const changes: FieldChange[] = [];
+  for (const c of diffRows(ref.entityType, ref.before, ref.after)) {
+    changes.push(ID_RESOLVERS[c.field] ? { ...c, from: await resolveFieldValue(tx, c.field, c.from), to: await resolveFieldValue(tx, c.field, c.to) } : c);
+  }
   if (changes.length === 0) return 0;
   // from/to stay machine-readable; the message gets "—" for an empty side and zoned datetimes.
-  const zone = changes.some((c) => isIsoDateTime(c.from) || isIsoDateTime(c.to)) ? snapshotZone(tx, { ...ref.before, ...ref.after }) : undefined;
-  return insert(tx, ctx, changes.map((c) => ({
+  const zone = changes.some((c) => isIsoDateTime(c.from) || isIsoDateTime(c.to)) ? await snapshotZone(tx, { ...ref.before, ...ref.after }) : undefined;
+  return await insert(tx, ctx, changes.map((c) => ({
     entityType: ref.entityType, entityId: ref.entityId, entityCode: ref.entityCode ?? null, type: "Update",
     field: c.field, fieldLabel: c.label, fromValue: c.from, toValue: c.to,
     message: `${c.label} is modified. ${messageSide(c.from, zone)} --> ${messageSide(c.to, zone)}`, source: ctx.source,
@@ -220,7 +221,7 @@ export function recordUpdate(
 }
 
 /** Line-level entry, e.g. "MLT-WIDGET-01 -> Received Qty is modified. 0 --> 24". */
-export function recordLine(
+export async function recordLine(
   tx: Tx,
   ctx: DomainCtx,
   ref: EntityRef & {
@@ -231,12 +232,12 @@ export function recordLine(
     readonly from: unknown;
     readonly to: unknown;
   },
-): void {
+): Promise<void> {
   const label = fieldLabel(ref.lineEntityType, ref.field);
   const from = formatValue(ref.from);
   const to = formatValue(ref.to);
   if (from === to) return;
-  insert(tx, ctx, [{
+  await insert(tx, ctx, [{
     entityType: ref.lineEntityType, entityId: ref.lineEntityId, entityCode: ref.entityCode ?? null,
     parentEntityType: ref.entityType, parentEntityId: ref.entityId, type: "Update",
     field: ref.field, fieldLabel: label, fromValue: from, toValue: to,
@@ -250,9 +251,9 @@ interface LineRef extends EntityRef {
   readonly lineLabel: string;
 }
 
-function lineEvent(tx: Tx, ctx: DomainCtx, ref: LineRef, type: "Create" | "Delete"): void {
+async function lineEvent(tx: Tx, ctx: DomainCtx, ref: LineRef, type: "Create" | "Delete"): Promise<void> {
   const verb = type === "Create" ? "created" : "deleted";
-  insert(tx, ctx, [{
+  await insert(tx, ctx, [{
     entityType: ref.lineEntityType, entityId: ref.lineEntityId, entityCode: ref.entityCode ?? null,
     parentEntityType: ref.entityType, parentEntityId: ref.entityId, type,
     message: `${ref.lineLabel} -> ${entityLabel(ref.lineEntityType)} is ${verb}.`, source: ctx.source,
@@ -260,20 +261,20 @@ function lineEvent(tx: Tx, ctx: DomainCtx, ref: LineRef, type: "Create" | "Delet
 }
 
 /** Line-level Create row with parent ids, e.g. "MLT-WIDGET-01 -> Purchase Order Line is created." */
-export function recordLineCreate(tx: Tx, ctx: DomainCtx, ref: LineRef): void {
-  lineEvent(tx, ctx, ref, "Create");
+export async function recordLineCreate(tx: Tx, ctx: DomainCtx, ref: LineRef): Promise<void> {
+  await lineEvent(tx, ctx, ref, "Create");
 }
 
 /** Line-level Delete row with parent ids, e.g. "MLT-WIDGET-01 -> Purchase Order Line is deleted." */
-export function recordLineDelete(tx: Tx, ctx: DomainCtx, ref: LineRef): void {
-  lineEvent(tx, ctx, ref, "Delete");
+export async function recordLineDelete(tx: Tx, ctx: DomainCtx, ref: LineRef): Promise<void> {
+  await lineEvent(tx, ctx, ref, "Delete");
 }
 
 /** Most recent value a field changed *from* when it became `toValue` (e.g. status before On Hold). */
-export function lastFromValue(tx: Tx, entityType: string, entityId: string, field: string, toValue: string): string | null {
-  const row = tx.select({ fromValue: schema.changeLog.fromValue }).from(schema.changeLog)
+export async function lastFromValue(tx: Tx, entityType: string, entityId: string, field: string, toValue: string): Promise<string | null> {
+  const [row] = await tx.select({ fromValue: schema.changeLog.fromValue }).from(schema.changeLog)
     .where(and(eq(schema.changeLog.entityType, entityType), eq(schema.changeLog.entityId, entityId),
       eq(schema.changeLog.field, field), eq(schema.changeLog.toValue, toValue)))
-    .orderBy(desc(sql`rowid`)).get();
+    .orderBy(desc(sql`"change_log"."rowid"`)).limit(1);
   return row?.fromValue ?? null;
 }

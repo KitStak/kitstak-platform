@@ -7,5 +7,5 @@ import { scopedCtx } from "@/server/repositories/returns";
 export const POST = defineRoute({
   permission: PACKING_PERMISSIONS.execute,
   body: moveBackSchema,
-  handler: ({ db, auth, actor, body }) => moveBackFromHospital(db, scopedCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await moveBackFromHospital(db, scopedCtx(actor, auth), body),
 });

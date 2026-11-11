@@ -15,20 +15,20 @@ export const GET = defineRoute({
   permission: KIT_PERMISSIONS.inventory,
   // The first read on a fresh install computes the snapshot, so the stamp never reads "never".
   transaction: false,
-  handler: ({ db }) => ({ updatedAt: lastKitRecalcAt(db) ?? recalcKitInventory(db).updatedAt, everyMs: KIT_RECALC_EVERY_MS }),
+  handler: async ({ db }) => ({ updatedAt: await lastKitRecalcAt(db) ?? (await recalcKitInventory(db)).updatedAt, everyMs: KIT_RECALC_EVERY_MS }),
 });
 
 export const POST = defineRoute({
   permission: WO_PERMISSIONS.create,
   // recalcKitInventory opens its own transaction.
   transaction: false,
-  handler: ({ db, audit }) => {
-    const last = lastKitRecalcAt(db);
+  handler: async ({ db, audit }) => {
+    const last = await lastKitRecalcAt(db);
     if (last && Date.now() - Date.parse(last) < RECALC_COOLDOWN_MS) {
       return { rows: null, updatedAt: last, throttled: true };
     }
-    const res = recalcKitInventory(db);
-    audit({ action: "kit_inventory.recalculate", entity: "kit_inventory_stats", entityId: "all", detail: { rows: res.rows } });
+    const res = await recalcKitInventory(db);
+    await audit({ action: "kit_inventory.recalculate", entity: "kit_inventory_stats", entityId: "all", detail: { rows: res.rows } });
     return { ...res, throttled: false };
   },
 });

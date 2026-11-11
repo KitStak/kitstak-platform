@@ -3,7 +3,7 @@
  * attachments, notes, background tasks, imports, printouts, screen configs.
  */
 import { sql } from "drizzle-orm";
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import {
   ATTACHMENT_DOCUMENT_TYPES,
   BG_TASK_KINDS,
@@ -22,7 +22,7 @@ import { bool, json, nowIso, pk, stamps } from "../columns";
 import { users } from "./identity";
 import { clients, warehouses } from "./org";
 
-export const lookupValues = sqliteTable("lookup_values", {
+export const lookupValues = pgTable("lookup_values", {
   id: pk(),
   type: text("type", { enum: LOOKUP_TYPES }).notNull(),
   name: text("name").notNull(),
@@ -47,7 +47,7 @@ export const lookupValues = sqliteTable("lookup_values", {
   ),
 ]);
 
-export const codeSequences = sqliteTable("code_sequences", {
+export const codeSequences = pgTable("code_sequences", {
   key: text("key").notNull(),
   warehouseId: text("warehouse_id").notNull().default("*"),
   prefix: text("prefix").notNull(),
@@ -56,7 +56,7 @@ export const codeSequences = sqliteTable("code_sequences", {
   autoGenerate: bool("auto_generate").notNull().default(true),
 }, (t) => [primaryKey({ columns: [t.key, t.warehouseId] })]);
 
-export const changeLog = sqliteTable("change_log", {
+export const changeLog = pgTable("change_log", {
   id: pk(),
   entityType: text("entity_type").notNull(),
   entityId: text("entity_id").notNull(),
@@ -78,7 +78,7 @@ export const changeLog = sqliteTable("change_log", {
   index("change_log_parent_idx").on(t.parentEntityType, t.parentEntityId),
 ]);
 
-export const tags = sqliteTable("tags", {
+export const tags = pgTable("tags", {
   id: pk(),
   name: text("name").notNull(),
   color: text("color").notNull(),
@@ -86,7 +86,7 @@ export const tags = sqliteTable("tags", {
   ...stamps(),
 }, (t) => [uniqueIndex("tags_name_scope_idx").on(t.name, t.scope)]);
 
-export const entityTags = sqliteTable("entity_tags", {
+export const entityTags = pgTable("entity_tags", {
   tagId: text("tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
   entityType: text("entity_type").notNull(),
   entityId: text("entity_id").notNull(),
@@ -95,7 +95,7 @@ export const entityTags = sqliteTable("entity_tags", {
   index("entity_tags_entity_idx").on(t.entityType, t.entityId),
 ]);
 
-export const customFieldDefs = sqliteTable("custom_field_defs", {
+export const customFieldDefs = pgTable("custom_field_defs", {
   id: pk(),
   entityType: text("entity_type", { enum: CUSTOM_FIELD_ENTITIES }).notNull(),
   slot: text("slot", { enum: CUSTOM_FIELD_SLOTS }).notNull(),
@@ -105,7 +105,7 @@ export const customFieldDefs = sqliteTable("custom_field_defs", {
   ...stamps(),
 }, (t) => [uniqueIndex("cfd_slot_idx").on(t.entityType, t.slot)]);
 
-export const files = sqliteTable("files", {
+export const files = pgTable("files", {
   id: pk(),
   name: text("name").notNull(),
   mime: text("mime").notNull(),
@@ -119,7 +119,7 @@ export const files = sqliteTable("files", {
   expiresAt: text("expires_at"),
 }, (t) => [index("files_owner_idx").on(t.ownerEntityType, t.ownerEntityId)]);
 
-export const attachments = sqliteTable("attachments", {
+export const attachments = pgTable("attachments", {
   id: pk(),
   entityType: text("entity_type").notNull(),
   entityId: text("entity_id").notNull(),
@@ -129,7 +129,7 @@ export const attachments = sqliteTable("attachments", {
   createdAt: text("created_at").notNull().$defaultFn(nowIso),
 }, (t) => [index("attachments_entity_idx").on(t.entityType, t.entityId)]);
 
-export const entityNotes = sqliteTable("entity_notes", {
+export const entityNotes = pgTable("entity_notes", {
   id: pk(),
   entityType: text("entity_type").notNull(),
   entityId: text("entity_id").notNull(),
@@ -138,7 +138,7 @@ export const entityNotes = sqliteTable("entity_notes", {
   createdAt: text("created_at").notNull().$defaultFn(nowIso),
 }, (t) => [index("entity_notes_entity_idx").on(t.entityType, t.entityId)]);
 
-export const backgroundTasks = sqliteTable("background_tasks", {
+export const backgroundTasks = pgTable("background_tasks", {
   id: pk(),
   kind: text("kind", { enum: BG_TASK_KINDS }).notNull(),
   title: text("title").notNull(),
@@ -154,7 +154,7 @@ export const backgroundTasks = sqliteTable("background_tasks", {
   finishedAt: text("finished_at"),
 }, (t) => [index("bg_tasks_user_idx").on(t.userId, t.createdAt)]);
 
-export const importBatches = sqliteTable("import_batches", {
+export const importBatches = pgTable("import_batches", {
   id: pk(),
   importKey: text("import_key").notNull(),
   status: text("status", { enum: IMPORT_STATUSES }).notNull(),
@@ -168,7 +168,7 @@ export const importBatches = sqliteTable("import_batches", {
   finishedAt: text("finished_at"),
 }, (t) => [index("import_batches_key_idx").on(t.importKey, t.createdAt)]);
 
-export const importRows = sqliteTable("import_rows", {
+export const importRows = pgTable("import_rows", {
   id: pk(),
   batchId: text("batch_id").notNull().references(() => importBatches.id, { onDelete: "cascade" }),
   rowNumber: integer("row_number").notNull(),
@@ -178,7 +178,7 @@ export const importRows = sqliteTable("import_rows", {
   entityId: text("entity_id"),
 }, (t) => [index("import_rows_batch_idx").on(t.batchId)]);
 
-export const printoutTemplates = sqliteTable("printout_templates", {
+export const printoutTemplates = pgTable("printout_templates", {
   id: pk(),
   typeKey: text("type_key").notNull(), // F6 print type catalog (25 types)
   name: text("name").notNull(),
@@ -195,7 +195,7 @@ export const printoutTemplates = sqliteTable("printout_templates", {
   ...stamps(),
 }, (t) => [index("printout_type_idx").on(t.typeKey)]);
 
-export const printoutTemplateClients = sqliteTable("printout_template_clients", {
+export const printoutTemplateClients = pgTable("printout_template_clients", {
   templateId: text("template_id").notNull().references(() => printoutTemplates.id, { onDelete: "cascade" }),
   clientId: text("client_id").notNull().references(() => clients.id),
   hasAccess: bool("has_access").notNull().default(true),
@@ -213,7 +213,7 @@ export interface ScreenConfigSteps {
   steps: { key: string; enabled: boolean; required: boolean }[];
 }
 
-export const screenConfigs = sqliteTable("screen_configs", {
+export const screenConfigs = pgTable("screen_configs", {
   id: pk(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
   name: text("name").notNull(),

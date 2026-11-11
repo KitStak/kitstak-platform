@@ -12,29 +12,30 @@ import { AUDIT_FIELDS, AUDIT_SEARCH_FIELDS, AUDIT_SORT_FIELDS, auditActionLabel,
 import { lookupByType } from "@/lib/grid-defs/admin/lookups";
 import { getPrintType } from "@/server/print/catalog";
 import { compileGrid, qc, type GridBinding } from "./users-shared";
+import { dbGet } from "@/server/db/sql";
 
 const a = s.auditLog;
 
 const categorySql = sql<string>`CASE
-  WHEN ${qc(a.action)} LIKE 'auth.login%' THEN 'Sign-in'
-  WHEN ${qc(a.action)} LIKE 'auth.logout%' OR ${qc(a.action)} LIKE 'session.%' THEN 'Session'
-  WHEN ${qc(a.action)} LIKE 'auth.password%' OR ${qc(a.action)} = 'user.password_reset' THEN 'Password'
-  WHEN ${qc(a.action)} LIKE 'security.csrf%' THEN 'CSRF rejected'
-  WHEN ${qc(a.action)} LIKE 'security.permission%' THEN 'Permission denied'
-  WHEN ${qc(a.action)} LIKE 'user.%' THEN 'User change'
-  WHEN ${qc(a.action)} LIKE 'role.%' THEN 'Role change'
-  WHEN ${qc(a.action)} LIKE 'company.%' OR ${qc(a.action)} LIKE 'app.%' OR ${qc(a.action)} LIKE 'printout.%' OR ${qc(a.action)} LIKE 'screen_config.%' OR ${qc(a.action)} LIKE 'lookup.%' OR ${qc(a.action)} LIKE 'sequence.%' THEN 'Settings change'
+  WHEN ${qc(a.action)} ILIKE 'auth.login%' THEN 'Sign-in'
+  WHEN ${qc(a.action)} ILIKE 'auth.logout%' OR ${qc(a.action)} ILIKE 'session.%' THEN 'Session'
+  WHEN ${qc(a.action)} ILIKE 'auth.password%' OR ${qc(a.action)} = 'user.password_reset' THEN 'Password'
+  WHEN ${qc(a.action)} ILIKE 'security.csrf%' THEN 'CSRF rejected'
+  WHEN ${qc(a.action)} ILIKE 'security.permission%' THEN 'Permission denied'
+  WHEN ${qc(a.action)} ILIKE 'user.%' THEN 'User change'
+  WHEN ${qc(a.action)} ILIKE 'role.%' THEN 'Role change'
+  WHEN ${qc(a.action)} ILIKE 'company.%' OR ${qc(a.action)} ILIKE 'app.%' OR ${qc(a.action)} ILIKE 'printout.%' OR ${qc(a.action)} ILIKE 'screen_config.%' OR ${qc(a.action)} ILIKE 'lookup.%' OR ${qc(a.action)} ILIKE 'sequence.%' THEN 'Settings change'
   ELSE 'Other' END`;
 
 const userNameSql = sql<string | null>`(SELECT x.name FROM users x WHERE x.id = ${qc(a.userId)})`;
-const userEmailSql = sql<string | null>`COALESCE((SELECT x.email FROM users x WHERE x.id = ${qc(a.userId)}), json_extract(${qc(a.detail)}, '$.email'))`;
+const userEmailSql = sql<string | null>`COALESCE((SELECT x.email FROM users x WHERE x.id = ${qc(a.userId)}), ((${qc(a.detail)})::jsonb ->> 'email'))`;
 const entityLabelSql = sql<string | null>`CASE
   WHEN ${qc(a.entity)} = 'user' THEN COALESCE((SELECT x.email FROM users x WHERE x.id = ${qc(a.entityId)}), ${qc(a.entityId)})
-  WHEN ${qc(a.entity)} = 'role' THEN COALESCE((SELECT x.name FROM roles x WHERE x.id = ${qc(a.entityId)}), json_extract(${qc(a.detail)}, '$.name'), 'Deleted role')
+  WHEN ${qc(a.entity)} = 'role' THEN COALESCE((SELECT x.name FROM roles x WHERE x.id = ${qc(a.entityId)}), ((${qc(a.detail)})::jsonb ->> 'name'), 'Deleted role')
   WHEN ${qc(a.entity)} = 'app' THEN COALESCE((SELECT x.name FROM apps x WHERE x.key = ${qc(a.entityId)}), ${qc(a.entityId)})
   WHEN ${qc(a.entity)} = 'company' THEN 'Company settings'
-  WHEN ${qc(a.entity)} = 'printout' THEN COALESCE((SELECT x.name FROM printout_templates x WHERE x.id = ${qc(a.entityId)}), json_extract(${qc(a.detail)}, '$.name'), 'Deleted printout')
-  ELSE COALESCE(json_extract(${qc(a.detail)}, '$.name'), ${qc(a.entityId)}) END`;
+  WHEN ${qc(a.entity)} = 'printout' THEN COALESCE((SELECT x.name FROM printout_templates x WHERE x.id = ${qc(a.entityId)}), ((${qc(a.detail)})::jsonb ->> 'name'), 'Deleted printout')
+  ELSE COALESCE(((${qc(a.detail)})::jsonb ->> 'name'), ${qc(a.entityId)}) END`;
 
 const AUDIT_SQL: Readonly<Record<string, SQL>> = {
   at: sql`${qc(a.at)}`,
@@ -108,19 +109,19 @@ export interface AuditListOptions {
   readonly entity?: string | null;
 }
 
-export function listAuditLog(db: AppDb, query: GridQuery, opts: AuditListOptions = {}): { rows: AuditRow[]; total: number } {
+export async function listAuditLog(db: AppDb, query: GridQuery, opts: AuditListOptions = {}): Promise<{ rows: AuditRow[]; total: number }> {
   const grid = compileGrid(BINDING, query, [
     opts.groupRepeats ? latestOfGroupSql : undefined,
     opts.entityId ? sql`${a.entityId} = ${opts.entityId}` : undefined,
     opts.entity ? sql`${a.entity} = ${opts.entity}` : undefined,
   ]);
-  const result = paginate(
+  const result = await paginate(
     db.select({
       id: a.id, at: a.at, action: a.action, outcome: a.outcome, entity: a.entity, ip: a.ip, userAgent: a.userAgent, detail: a.detail,
       category: categorySql, userName: userNameSql, userEmail: userEmailSql, entityLabel: entityLabelSql,
       repeatCount: opts.groupRepeats ? repeatCountSql : sql<number>`1`,
     }).from(a).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(a).where(grid.where).get()?.n ?? 0,
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(a).where(grid.where).limit(1))[0]?.n ?? 0,
     { page: query.page, pageSize: query.pageSize },
   );
   const rows = result.rows.map((r) => ({
@@ -133,13 +134,13 @@ export function listAuditLog(db: AppDb, query: GridQuery, opts: AuditListOptions
 }
 
 /** Counters for the page header strip (last 24 hours). */
-export function auditStats(db: AppDb, now: Date = new Date()): { signIns: number; failedSignIns: number; denied: number; csrf: number } {
+export async function auditStats(db: AppDb, now: Date = new Date()): Promise<{ signIns: number; failedSignIns: number; denied: number; csrf: number }> {
   const since = new Date(now.getTime() - 86_400_000).toISOString();
-  const row = db.get<{ signIns: number; failedSignIns: number; denied: number; csrf: number }>(sql`SELECT
-    SUM(CASE WHEN action = 'auth.login' AND outcome = 'success' THEN 1 ELSE 0 END) AS signIns,
-    SUM(CASE WHEN action LIKE 'auth.login%' AND outcome = 'failure' THEN 1 ELSE 0 END) AS failedSignIns,
-    SUM(CASE WHEN action LIKE 'security.permission%' THEN 1 ELSE 0 END) AS denied,
-    SUM(CASE WHEN action LIKE 'security.csrf%' THEN 1 ELSE 0 END) AS csrf
+  const row = await dbGet<{ signIns: number; failedSignIns: number; denied: number; csrf: number }>(db, sql`SELECT
+    SUM(CASE WHEN action = 'auth.login' AND outcome = 'success' THEN 1 ELSE 0 END) AS "signIns",
+    SUM(CASE WHEN action ILIKE 'auth.login%' AND outcome = 'failure' THEN 1 ELSE 0 END) AS "failedSignIns",
+    SUM(CASE WHEN action ILIKE 'security.permission%' THEN 1 ELSE 0 END) AS denied,
+    SUM(CASE WHEN action ILIKE 'security.csrf%' THEN 1 ELSE 0 END) AS csrf
     FROM audit_log WHERE at >= ${since}`);
   return { signIns: row?.signIns ?? 0, failedSignIns: row?.failedSignIns ?? 0, denied: row?.denied ?? 0, csrf: row?.csrf ?? 0 };
 }

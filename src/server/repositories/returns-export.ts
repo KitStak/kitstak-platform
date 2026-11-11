@@ -5,8 +5,8 @@ import { listReturnLines } from "./returns-grid";
 
 export const returnOrdersExportProvider: ExportProvider = {
   columns: RETURN_EXPORT_COLUMNS,
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listReturnLines(ctx.db, ctx.auth.viewScope, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listReturnLines(ctx.db, ctx.auth.viewScope, { ...ctx.query, page, pageSize });
     const out: readonly ExportRow[] = rows.map((r) => ({ ...r }));
     return { rows: out, total };
   },

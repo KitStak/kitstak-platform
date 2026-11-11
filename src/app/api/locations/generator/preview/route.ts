@@ -8,5 +8,5 @@ export const POST = defineRoute({
   transaction: false,
   rateLimit: false,
   body: generatorSchema,
-  handler: ({ db, auth, body }) => previewGenerator(db, auth, body),
+  handler: async ({ db, auth, body }) => await previewGenerator(db, auth, body),
 });

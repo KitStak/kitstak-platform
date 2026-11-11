@@ -12,6 +12,7 @@ import { PRINT_TYPES } from "@/server/print/catalog";
 import { setClock, isoOf, utcAt } from "./runtime";
 import type { Id } from "./types";
 import type { World } from "./world";
+import { forEachSeq, mapSeq } from "@/server/db/sql";
 
 /** App catalog rows: key, name, description, category, active in the demo seed. */
 export const SEED_APPS: readonly (readonly [string, string, string, string, boolean])[] = [
@@ -40,53 +41,53 @@ const TAGS: readonly (readonly [string, string, NonNullable<(typeof schema.tags.
   ["Damaged Inbound", "#A13406", "purchase_order"], ["Cross-dock", "#0D36A3", "purchase_order"], ["Sample", "#50575C", "any"], ["Return to Vendor", "#B20B1C", "return_order"],
 ];
 
-function seedPrintouts(tx: Tx): number {
+async function seedPrintouts(tx: Tx): Promise<number> {
   for (const t of PRINT_TYPES) {
-    tx.insert(schema.printoutTemplates).values({
+    await tx.insert(schema.printoutTemplates).values({
       typeKey: t.key, name: `${t.name} (Default)`, description: `Default ${t.name.toLowerCase()} template`, recordsPerPage: t.category === "labels" ? "Single Record" : "Multiple Records",
       printMode: t.printerType === "Label Printer" ? "Direct Print" : "PDF Preview", printerType: t.printerType, baseTemplate: t.renderer ?? t.key,
       layout: { size: t.printerType === "Label Printer" ? "4x6" : "Letter" }, options: { showLogo: true, showBarcode: true }, isDefault: true,
-    }).run();
+    });
   }
   return PRINT_TYPES.length;
 }
 
-function seedApps(w: World, tx: Tx): void {
-  tx.insert(schema.apps).values(SEED_APPS.map(([key, name, description, category, active]) => ({
+async function seedApps(w: World, tx: Tx): Promise<void> {
+  await tx.insert(schema.apps).values(SEED_APPS.map(([key, name, description, category, active]) => ({
     key, name, description, category, isActive: active, activatedAt: active ? isoOf(utcAt(140, 15)) : null, activatedBy: active ? w.access.admin.id : null,
-  }))).run();
+  })));
 }
 
-function seedCompany(tx: Tx): void {
-  tx.insert(schema.companySettings).values({
+async function seedCompany(tx: Tx): Promise<void> {
+  await tx.insert(schema.companySettings).values({
     id: "company", displayName: "KitStaks", fullName: "KitStaks Fulfillment LLC",
     defaults: { currency: "USD", dateFormat: "M/D/YYYY h:mm:ss A", weightUnit: "Pound", dimensionUnit: "Inch" },
     passwordPolicy: { minLength: 12, requireUpper: true, requireNumber: true, requireSymbol: true, maxAgeDays: 180, lockoutThreshold: 5, lockoutMinutes: 15 },
-  }).run();
-  tx.insert(schema.customFieldDefs).values([
+  });
+  await tx.insert(schema.customFieldDefs).values([
     { entityType: "shipment_order", slot: "textBox1", name: "Gift Wrap Code" },
     { entityType: "product", slot: "textBox1", name: "Training" },
     { entityType: "purchase_order", slot: "dropDown1", name: "Inbound Appointment", options: ["Morning", "Afternoon", "Drop Trailer"] },
-  ]).run();
+  ]);
 }
 
 /**
  * Upserts the demo tags. Workflow "Add Tag" actions replayed earlier in the seed may already
  * have created some by name, so an existing (name, scope) row is reused and given the palette color.
  */
-function tagIds(tx: Tx): Map<string, Id> {
-  return new Map(TAGS.map(([name, color, tagScope]) => {
+async function tagIds(tx: Tx): Promise<Map<string, Id>> {
+  return new Map(await mapSeq(TAGS, async ([name, color, tagScope]) => {
     const scope = tagScope ?? "any";
-    const found = tx.select({ id: schema.tags.id }).from(schema.tags).where(and(eq(schema.tags.name, name), eq(schema.tags.scope, scope))).get();
+    const found = (await tx.select({ id: schema.tags.id }).from(schema.tags).where(and(eq(schema.tags.name, name), eq(schema.tags.scope, scope))).limit(1))[0];
     if (found) {
-      tx.update(schema.tags).set({ color }).where(eq(schema.tags.id, found.id)).run();
+      await tx.update(schema.tags).set({ color }).where(eq(schema.tags.id, found.id));
       return [name, found.id] as const;
     }
-    return [name, tx.insert(schema.tags).values({ name, color, scope }).returning({ id: schema.tags.id }).get().id] as const;
+    return [name, (await tx.insert(schema.tags).values({ name, color, scope }).returning({ id: schema.tags.id }))[0].id] as const;
   }));
 }
 
-function applyTags(w: World, tx: Tx, tags: ReadonlyMap<string, Id>): number {
+async function applyTags(w: World, tx: Tx, tags: ReadonlyMap<string, Id>): Promise<number> {
   const o = schema.shipmentOrders;
   const smt = w.org.clientByCode.get("SMT")?.id ?? "";
   const rules: readonly (readonly [string, ReturnType<typeof eq>])[] = [
@@ -97,35 +98,35 @@ function applyTags(w: World, tx: Tx, tags: ReadonlyMap<string, Id>): number {
   for (const [name, where] of rules) {
     const tagId = tags.get(name);
     if (!tagId) continue;
-    const ids = tx.select({ id: o.id }).from(o).where(where).all();
-    if (ids.length > 0) tx.insert(schema.entityTags).values(ids.map((r) => ({ tagId, entityType: "shipment_order", entityId: r.id }))).onConflictDoNothing().run();
+    const ids = await tx.select({ id: o.id }).from(o).where(where);
+    if (ids.length > 0) await tx.insert(schema.entityTags).values(ids.map((r) => ({ tagId, entityType: "shipment_order", entityId: r.id }))).onConflictDoNothing();
     n += ids.length;
   }
-  const pos = tx.select({ id: schema.purchaseOrders.id, poType: schema.purchaseOrders.poType }).from(schema.purchaseOrders).all();
-  const damaged = new Set(tx.select({ id: schema.purchaseOrderLines.purchaseOrderId }).from(schema.purchaseOrderLines).where(sql`${schema.purchaseOrderLines.damagedQuantity} > 0`).all().map((r) => r.id));
-  pos.forEach((po, i) => {
+  const pos = await tx.select({ id: schema.purchaseOrders.id, poType: schema.purchaseOrders.poType }).from(schema.purchaseOrders);
+  const damaged = new Set((await tx.select({ id: schema.purchaseOrderLines.purchaseOrderId }).from(schema.purchaseOrderLines).where(sql`${schema.purchaseOrderLines.damagedQuantity} > 0`)).map((r) => r.id));
+  await forEachSeq(pos, async (po, i) => {
     const name = damaged.has(po.id) ? "Damaged Inbound" : po.poType === "Purchase Order- Non Crossdock" ? "Cross-dock" : i % 4 === 0 ? "Priority Vendor" : null;
     const tagId = name ? tags.get(name) : undefined;
     if (tagId) {
-      tx.insert(schema.entityTags).values({ tagId, entityType: "purchase_order", entityId: po.id }).onConflictDoNothing().run();
+      await tx.insert(schema.entityTags).values({ tagId, entityType: "purchase_order", entityId: po.id }).onConflictDoNothing();
       n += 1;
     }
   });
   return n;
 }
 
-function seedSavedViews(w: World, tx: Tx): void {
+async function seedSavedViews(w: World, tx: Tx): Promise<void> {
   const userId = w.access.manager.id;
-  tx.insert(schema.savedViews).values([
+  await tx.insert(schema.savedViews).values([
     { userId, gridKey: "orders-backlog", name: "Prime & urgent backlog", query: "f.priority=in:High,Urgent&sort=orderDate", isShared: true },
     { userId, gridKey: "purchase-orders", name: "Arriving this week", query: "f.status=in:Pending,Started&f.plannedArrivalDate=date:withinNext7d&sort=plannedArrivalDate", isShared: true },
     { userId: w.access.admin.id, gridKey: "inventory-total", name: "Coffee lots by expiry", query: "q=CPL-&qm=sw&sort=expiryDate", isShared: true, pinnedFields: ["sku", "lotNumber", "expiryDate"] },
-  ]).run();
+  ]);
 }
 
-function seedProductCustomFields(w: World, tx: Tx): void {
+async function seedProductCustomFields(w: World, tx: Tx): Promise<void> {
   const ids = w.catalog.products.filter((p) => p.trackSerial || p.isPackaging).map((p) => p.id);
-  if (ids.length > 0) tx.update(schema.products).set({ customFields: { textBox1: "Required - see SOP-114" } }).where(inArray(schema.products.id, ids)).run();
+  if (ids.length > 0) await tx.update(schema.products).set({ customFields: { textBox1: "Required - see SOP-114" } }).where(inArray(schema.products.id, ids));
 }
 
 /** Seeded admin notifications: [daysAgo, kind, title, body, href, severity, read]. Every href must be a real route. */
@@ -142,26 +143,26 @@ export const NOTIFICATIONS: readonly (readonly [number, string, string, string, 
   [9, "billing.calculated", "October bills calculated", "Apex Threads and NovaForge bills are ready for review.", "/billing", "info", true],
 ];
 
-function seedNotifications(w: World, tx: Tx): number {
+async function seedNotifications(w: World, tx: Tx): Promise<number> {
   let n = 0;
   for (const [daysAgo, kind, title, body, href, severity, read] of NOTIFICATIONS) {
     const at = utcAt(daysAgo, 15, 10 + n);
     setClock(at);
-    n += notify(tx, [w.access.admin.id], { kind, title, body, href, severity });
+    n += (await notify(tx, [w.access.admin.id], { kind, title, body, href, severity }));
     if (read) {
-      tx.update(schema.notifications).set({ readAt: isoOf(at + 3_600_000) })
-        .where(and(eq(schema.notifications.userId, w.access.admin.id), eq(schema.notifications.title, title))).run();
+      await tx.update(schema.notifications).set({ readAt: isoOf(at + 3_600_000) })
+        .where(and(eq(schema.notifications.userId, w.access.admin.id), eq(schema.notifications.title, title)));
     }
   }
   return n;
 }
 
-export function seedPlatform(w: World, tx: Tx): void {
-  seedPrintouts(tx);
-  seedApps(w, tx);
-  seedCompany(tx);
-  seedSavedViews(w, tx);
-  seedProductCustomFields(w, tx);
-  applyTags(w, tx, tagIds(tx));
-  seedNotifications(w, tx);
+export async function seedPlatform(w: World, tx: Tx): Promise<void> {
+  await seedPrintouts(tx);
+  await seedApps(w, tx);
+  await seedCompany(tx);
+  await seedSavedViews(w, tx);
+  await seedProductCustomFields(w, tx);
+  await applyTags(w, tx, await tagIds(tx));
+  await seedNotifications(w, tx);
 }

@@ -7,5 +7,5 @@ import { countAssignees } from "@/server/repositories/counts-assignees";
 export const GET = defineRoute({
   permission: [P.createJob, P.locRecount, P.skuRecount],
   query: z.object({ warehouseId: z.string().min(1, "Choose a warehouse first").max(64) }),
-  handler: ({ db, auth, query }) => countAssignees(db, auth.scope, query.warehouseId),
+  handler: async ({ db, auth, query }) => await countAssignees(db, auth.scope, query.warehouseId),
 });

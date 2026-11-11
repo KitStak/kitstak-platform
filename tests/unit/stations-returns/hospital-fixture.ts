@@ -3,8 +3,8 @@ import { and, eq } from "drizzle-orm";
 import * as schema from "@/server/db/schema";
 import { locationRow, type World } from "../foundation/domain/fixtures";
 
-export function hospitalOf(w: World, code = "HOSP-01", extra: Partial<typeof schema.locations.$inferInsert> = {}): string {
-  const found = w.db.select({ id: schema.locations.id }).from(schema.locations).where(and(eq(schema.locations.warehouseId, w.warehouseId), eq(schema.locations.code, code))).get();
+export async function hospitalOf(w: World, code = "HOSP-01", extra: Partial<typeof schema.locations.$inferInsert> = {}): Promise<string> {
+  const found = (await w.db.select({ id: schema.locations.id }).from(schema.locations).where(and(eq(schema.locations.warehouseId, w.warehouseId), eq(schema.locations.code, code))).limit(1))[0];
   if (found) return found.id;
-  return w.db.insert(schema.locations).values(locationRow(w.warehouseId, code, { type: "Damaged", areaType: "Storage", locationType: "Shelves", preventAllocation: true, ...extra })).returning().get().id;
+  return (await w.db.insert(schema.locations).values(locationRow(w.warehouseId, code, { type: "Damaged", areaType: "Storage", locationType: "Shelves", preventAllocation: true, ...extra })).returning())[0].id;
 }

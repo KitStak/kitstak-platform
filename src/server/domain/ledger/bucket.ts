@@ -5,7 +5,7 @@
  */
 import { createHash } from "node:crypto";
 import { and, eq, inArray, isNull, notInArray, sql, type SQL } from "drizzle-orm";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import type { InventoryStatus } from "@/lib/enums";
 import * as schema from "@/server/db/schema";
 import { DomainError } from "../errors";
@@ -46,29 +46,29 @@ export function specOf(row: InventoryRow): BucketSpec {
   };
 }
 
-const eqOrNull = (col: SQLiteColumn, value: string | null): SQL => (value === null ? isNull(col) : eq(col, value));
+const eqOrNull = (col: PgColumn, value: string | null): SQL => (value === null ? isNull(col) : eq(col, value));
 
-export function getBucket(tx: Tx, inventoryId: string): InventoryRow {
-  const row = tx.select().from(schema.inventory).where(eq(schema.inventory.id, inventoryId)).get();
+export async function getBucket(tx: Tx, inventoryId: string): Promise<InventoryRow> {
+  const [row] = await tx.select().from(schema.inventory).where(eq(schema.inventory.id, inventoryId)).limit(1);
   if (!row) throw new DomainError("NOT_FOUND", "Inventory not found");
   return row;
 }
 
-export function findBucket(tx: Tx, spec: BucketSpec): InventoryRow | undefined {
+export async function findBucket(tx: Tx, spec: BucketSpec): Promise<InventoryRow | undefined> {
   const key = bucketKey(spec);
-  const byKey = tx.select().from(schema.inventory).where(eq(schema.inventory.bucketKey, key)).get();
+  const [byKey] = await tx.select().from(schema.inventory).where(eq(schema.inventory.bucketKey, key)).limit(1);
   if (byKey) return byKey;
   const i = schema.inventory;
   // Legacy rows (placeholder key): match the tuple and adopt the real key.
-  const legacy = tx.select().from(i).where(and(
+  const [legacy] = await tx.select().from(i).where(and(
     eq(i.warehouseId, spec.warehouseId), eq(i.clientId, spec.clientId), eq(i.productId, spec.productId),
     eq(i.locationId, spec.locationId), eqOrNull(i.lpId, spec.lpId), eqOrNull(i.lotNumber, spec.lotNumber),
     eqOrNull(i.expiryDate, spec.expiryDate), eqOrNull(i.productionDate, spec.productionDate),
     eqOrNull(i.damageReason, spec.damageReason), eq(i.packType, spec.packType), eq(i.status, spec.status),
-    sql`${i.bucketKey} LIKE ${`${schema.LEGACY_BUCKET_KEY_PREFIX}%`}`,
-  )).get();
+    sql`${i.bucketKey} ILIKE ${`${schema.LEGACY_BUCKET_KEY_PREFIX}%`}`,
+  )).limit(1);
   if (!legacy) return undefined;
-  tx.update(i).set({ bucketKey: key }).where(eq(i.id, legacy.id)).run();
+  await tx.update(i).set({ bucketKey: key }).where(eq(i.id, legacy.id));
   return { ...legacy, bucketKey: key };
 }
 
@@ -77,10 +77,10 @@ export interface BucketExtras {
   readonly poNumber?: string | null;
 }
 
-export function findOrCreateBucket(tx: Tx, spec: BucketSpec, extras: BucketExtras = {}): InventoryRow {
-  const existing = findBucket(tx, spec);
+export async function findOrCreateBucket(tx: Tx, spec: BucketSpec, extras: BucketExtras = {}): Promise<InventoryRow> {
+  const existing = await findBucket(tx, spec);
   if (existing) return existing;
-  return tx.insert(schema.inventory).values({
+  const [created] = await tx.insert(schema.inventory).values({
     ...spec,
     bucketKey: bucketKey(spec),
     onHand: 0,
@@ -88,16 +88,17 @@ export function findOrCreateBucket(tx: Tx, spec: BucketSpec, extras: BucketExtra
     damaged: 0,
     receivedAt: extras.receivedAt ?? nowIso(),
     poNumber: extras.poNumber ?? null,
-  }).returning().get();
+  }).returning();
+  if (!created) throw new Error("inventory insert returned no row");
+  return created;
 }
 
 /** Sum of active allocation qty pointing at a bucket. */
-export function activeAllocatedQty(tx: Tx, inventoryId: string): number {
-  const row = tx.select({ total: sql<number>`COALESCE(SUM(${schema.inventoryAllocations.qty}), 0)` })
+export async function activeAllocatedQty(tx: Tx, inventoryId: string): Promise<number> {
+  const [row] = await tx.select({ total: sql<number>`COALESCE(SUM(${schema.inventoryAllocations.qty}), 0)`.mapWith(Number) })
     .from(schema.inventoryAllocations)
     .where(and(eq(schema.inventoryAllocations.inventoryId, inventoryId),
-      inArray(schema.inventoryAllocations.status, [...ACTIVE_ALLOCATION_STATUSES])))
-    .get();
+      inArray(schema.inventoryAllocations.status, [...ACTIVE_ALLOCATION_STATUSES])));
   return Number(row?.total ?? 0);
 }
 
@@ -105,42 +106,44 @@ export function activeAllocatedQty(tx: Tx, inventoryId: string): number {
  * Applies a signed on-hand delta and re-derives `allocated` / `damaged`.
  * Enforces the 0.4 #1 invariants: on-hand >= 0 and allocated <= on-hand - damaged.
  */
-export function applyDelta(tx: Tx, bucket: InventoryRow, delta: number): InventoryRow {
+export async function applyDelta(tx: Tx, bucket: InventoryRow, delta: number): Promise<InventoryRow> {
   const onHand = bucket.onHand + delta;
   if (onHand < 0) {
     throw new DomainError("INSUFFICIENT_STOCK", `Not enough stock: ${bucket.onHand} on hand, ${-delta} requested.`, { inventoryId: bucket.id });
   }
-  const allocated = activeAllocatedQty(tx, bucket.id);
+  const allocated = await activeAllocatedQty(tx, bucket.id);
   const damaged = bucket.damageReason ? onHand : 0;
   if (allocated > onHand - damaged) {
     throw new DomainError("INSUFFICIENT_STOCK", `Stock is allocated: ${allocated} of ${onHand - damaged} available units are reserved.`, { inventoryId: bucket.id });
   }
-  return tx.update(schema.inventory)
+  const [updated] = await tx.update(schema.inventory)
     .set({ onHand, allocated, damaged, version: sql`${schema.inventory.version} + 1` })
-    .where(eq(schema.inventory.id, bucket.id)).returning().get();
+    .where(eq(schema.inventory.id, bucket.id)).returning();
+  if (!updated) throw new DomainError("NOT_FOUND", "Inventory not found");
+  return updated;
 }
 
 /** Re-derives `allocated` after allocation rows changed (on-hand unchanged). */
-export function syncAllocated(tx: Tx, inventoryId: string): InventoryRow {
-  const bucket = getBucket(tx, inventoryId);
-  return applyDelta(tx, bucket, 0);
+export async function syncAllocated(tx: Tx, inventoryId: string): Promise<InventoryRow> {
+  const bucket = await getBucket(tx, inventoryId);
+  return await applyDelta(tx, bucket, 0);
 }
 
 export const freeQty = (bucket: InventoryRow): number => bucket.onHand - bucket.allocated;
 
 /** Updates the LP's status after its buckets changed. */
-export function refreshLpStatus(tx: Tx, lpId: string | null): void {
+export async function refreshLpStatus(tx: Tx, lpId: string | null): Promise<void> {
   if (!lpId) return;
-  const row = tx.select({ total: sql<number>`COALESCE(SUM(${schema.inventory.onHand}), 0)` })
-    .from(schema.inventory).where(eq(schema.inventory.lpId, lpId)).get();
+  const [row] = await tx.select({ total: sql<number>`COALESCE(SUM(${schema.inventory.onHand}), 0)`.mapWith(Number) })
+    .from(schema.inventory).where(eq(schema.inventory.lpId, lpId));
   const status = Number(row?.total ?? 0) > 0 ? "Occupied" : "Empty";
-  tx.update(schema.licensePlates).set({ status })
-    .where(and(eq(schema.licensePlates.id, lpId), notInArray(schema.licensePlates.status, ["Shipped", "Removed"]))).run();
+  await tx.update(schema.licensePlates).set({ status })
+    .where(and(eq(schema.licensePlates.id, lpId), notInArray(schema.licensePlates.status, ["Shipped", "Removed"])));
 }
 
 /** UOM units per pack for a product pack type (1 when the pack type is not defined). */
-export function packRatio(tx: Tx, productId: string, packType: string): number {
-  const row = tx.select({ uomQty: schema.productPackTypes.uomQty }).from(schema.productPackTypes)
-    .where(and(eq(schema.productPackTypes.productId, productId), eq(schema.productPackTypes.packType, packType))).get();
+export async function packRatio(tx: Tx, productId: string, packType: string): Promise<number> {
+  const [row] = await tx.select({ uomQty: schema.productPackTypes.uomQty }).from(schema.productPackTypes)
+    .where(and(eq(schema.productPackTypes.productId, productId), eq(schema.productPackTypes.packType, packType))).limit(1);
   return row && row.uomQty > 0 ? row.uomQty : 1;
 }

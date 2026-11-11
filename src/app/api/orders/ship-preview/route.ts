@@ -8,5 +8,5 @@ export const POST = defineRoute({
   body: insightIdsSchema,
   transaction: false,
   rateLimit: false,
-  handler: ({ db, auth, body }) => shipPreview(db, auth.scope, body.ids),
+  handler: async ({ db, auth, body }) => await shipPreview(db, auth.scope, body.ids),
 });

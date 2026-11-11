@@ -11,6 +11,7 @@ import { shipping } from "@/server/domain";
 import { DomainError, describeError } from "@/server/domain/errors";
 import type { DomainCtx } from "@/server/domain/types";
 import { jobOrderIds, loadJob, refreshLabelStatus } from "./jobs";
+import { flatMapSeq } from "@/server/db/sql";
 
 export const DEFAULT_PACKAGE = { length: 10, width: 8, height: 4 } as const;
 
@@ -21,17 +22,17 @@ export interface LabelOutcome {
   readonly files: readonly { readonly orderCode: string; readonly trackingNumber: string; readonly fileId: string | null }[];
 }
 
-function orderRows(db: AppDb, auth: AuthContext, jobIds: readonly string[]) {
-  const ids = jobIds.flatMap((id) => {
-    loadJob(db, auth, id);
-    return jobOrderIds(db, id);
+async function orderRows(db: AppDb, auth: AuthContext, jobIds: readonly string[]) {
+  const ids = await flatMapSeq(jobIds, async (id) => {
+    await loadJob(db, auth, id);
+    return await jobOrderIds(db, id);
   });
-  return [...new Set(ids)].flatMap((id) => db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).all());
+  return await flatMapSeq([...new Set(ids)], async (id) => await db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)));
 }
 
-function packagesFor(db: AppDb, order: typeof schema.shipmentOrders.$inferSelect) {
+async function packagesFor(db: AppDb, order: typeof schema.shipmentOrders.$inferSelect) {
   const pkg = order.shipmentPackageId
-    ? db.select().from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, order.shipmentPackageId)).get()
+    ? (await db.select().from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, order.shipmentPackageId)).limit(1))[0]
     : undefined;
   const dims = pkg as { length?: number | null; width?: number | null; height?: number | null } | undefined;
   return [{
@@ -43,20 +44,20 @@ function packagesFor(db: AppDb, order: typeof schema.shipmentOrders.$inferSelect
   }];
 }
 
-function activeLabels(db: AppDb, orderId: string) {
-  return db.select().from(schema.shipments).where(and(
+async function activeLabels(db: AppDb, orderId: string) {
+  return await db.select().from(schema.shipments).where(and(
     eq(schema.shipments.orderId, orderId), eq(schema.shipments.labelType, "Shipping Label"), eq(schema.shipments.labelStatus, "Active"), isNull(schema.shipments.actualShipmentAt),
-  )).all();
+  ));
 }
 
 export async function runJobLabels(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: { jobIds: readonly string[]; op: "create" | "reprint" | "void" }): Promise<LabelOutcome> {
-  const orders = orderRows(db, auth, input.jobIds);
+  const orders = await orderRows(db, auth, input.jobIds);
   const succeeded: string[] = [];
   const failed: { id: string; code: string; message: string }[] = [];
   const files: { orderCode: string; trackingNumber: string; fileId: string | null }[] = [];
   for (const order of orders) {
     try {
-      const labels = activeLabels(db, order.id);
+      const labels = await activeLabels(db, order.id);
       if (input.op === "create") {
         if (labels.length > 0) throw new DomainError("INVALID_STATE", `Order ${order.code} already has an active label.`);
         if (!order.carrierConnectionId || !order.carrierServiceId) {
@@ -64,7 +65,7 @@ export async function runJobLabels(db: AppDb, auth: AuthContext, ctx: DomainCtx,
         }
         const res = await shipping.createLabel(db, ctx, {
           orderId: order.id, carrierConnectionId: order.carrierConnectionId, carrierServiceId: order.carrierServiceId,
-          packages: packagesFor(db, order), source: "JobManagement",
+          packages: await packagesFor(db, order), source: "JobManagement",
         });
         for (const s of res.shipments) files.push({ orderCode: order.code, trackingNumber: s.trackingNumber, fileId: s.labelFileId });
       } else if (input.op === "reprint") {
@@ -79,6 +80,6 @@ export async function runJobLabels(db: AppDb, auth: AuthContext, ctx: DomainCtx,
       failed.push({ id: order.id, ...describeError(error) });
     }
   }
-  for (const id of input.jobIds) refreshLabelStatus(db, id);
+  for (const id of input.jobIds) await refreshLabelStatus(db, id);
   return { succeeded, failed, files };
 }

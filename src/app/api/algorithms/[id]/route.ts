@@ -8,21 +8,21 @@ import { deleteAlgorithms, getAlgorithm, updateAlgorithm } from "@/server/reposi
 export const GET = defineRoute({
   permission: "automation.algorithms.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getAlgorithm(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await getAlgorithm(db, auth, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: "automation.algorithms.edit",
   params: idParamsSchema,
   body: algorithmSaveSchema,
-  handler: ({ db, auth, actor, params, body }) => updateAlgorithm(db, auth, actor, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updateAlgorithm(db, auth, actor, params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: "automation.algorithms.delete",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
-    const result = deleteAlgorithms(db, auth, actor, [params.id]);
+  handler: async ({ db, auth, actor, params }) => {
+    const result = await deleteAlgorithms(db, auth, actor, [params.id]);
     const failure = result.failed[0];
     if (failure) throw new AppError(failure.code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_STATE", failure.message);
     return result;

@@ -5,7 +5,8 @@
  * + scope via the entity registry), an attachment row, the caller's own background task or
  * import batch, or the caller's own upload. Anything else is NOT_FOUND.
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { desc } from "@/server/db/order";
 import { z } from "zod";
 import { ATTACHMENT_DOCUMENT_TYPES } from "@/lib/enums";
 import type { AppDb } from "@/server/api/db";
@@ -67,46 +68,46 @@ export const toPublicFile = (f: FileRecord): PublicFile => ({
 });
 
 /** Stores an attachment-purpose upload, optionally owned by a record the caller may edit. */
-export function storeUpload(db: AppDb, store: FileStore, auth: AuthContext, upload: Upload): PublicFile {
+export async function storeUpload(db: AppDb, store: FileStore, auth: AuthContext, upload: Upload): Promise<PublicFile> {
   const fields = fileUploadFieldsSchema.safeParse(upload.fields);
   if (!fields.success) throw validationError(fields.error.issues[0]?.message ?? "Invalid upload");
   const { ownerEntityType, ownerEntityId } = fields.data;
-  if (ownerEntityType && ownerEntityId) requireEntity(db, auth, ownerEntityType, ownerEntityId, "edit");
-  return toPublicFile(store.store(db, {
+  if (ownerEntityType && ownerEntityId) await requireEntity(db, auth, ownerEntityType, ownerEntityId, "edit");
+  return toPublicFile(await store.store(db, {
     name: upload.fileName, bytes: upload.bytes, purpose: "attachment",
     ownerEntityType: ownerEntityType ?? null, ownerEntityId: ownerEntityId ?? null, uploadedBy: auth.user.id,
   }));
 }
 
-function canReadOwned(db: AppDb, auth: AuthContext, file: FileRecord): boolean {
+async function canReadOwned(db: AppDb, auth: AuthContext, file: FileRecord): Promise<boolean> {
   const { ownerEntityType: type, ownerEntityId: id } = file;
   if (!type || !id) return false;
   if (type === "background_task") {
-    return db.select({ userId: backgroundTasks.userId }).from(backgroundTasks).where(eq(backgroundTasks.id, id)).get()?.userId === auth.user.id;
+    return (await db.select({ userId: backgroundTasks.userId }).from(backgroundTasks).where(eq(backgroundTasks.id, id)).limit(1))[0]?.userId === auth.user.id;
   }
   if (type === "import_batch") {
-    const batch = db.select({ key: importBatches.importKey }).from(importBatches).where(eq(importBatches.id, id)).get();
+    const batch = (await db.select({ key: importBatches.importKey }).from(importBatches).where(eq(importBatches.id, id)).limit(1))[0];
     const permission = batch ? IMPORT_PERMISSIONS[batch.key] : undefined;
     return permission !== undefined && can(auth, permission);
   }
   if (!getEntityDef(type)) return false;
-  requireEntity(db, auth, type, id, "view");
+  await requireEntity(db, auth, type, id, "view");
   return true;
 }
 
-function canReadViaAttachment(db: AppDb, auth: AuthContext, fileId: string): boolean {
-  const att = db.select().from(attachments).where(eq(attachments.fileId, fileId)).get();
+async function canReadViaAttachment(db: AppDb, auth: AuthContext, fileId: string): Promise<boolean> {
+  const att = (await db.select().from(attachments).where(eq(attachments.fileId, fileId)).limit(1))[0];
   if (!att) return false;
-  requireEntity(db, auth, att.entityType, att.entityId, "view");
+  await requireEntity(db, auth, att.entityType, att.entityId, "view");
   return true;
 }
 
 /** Throws NOT_FOUND unless the caller may download `id`. */
-export function authorizeFileRead(db: AppDb, store: FileStore, auth: AuthContext, id: string): FileRecord {
-  const file = store.get(db, id);
+export async function authorizeFileRead(db: AppDb, store: FileStore, auth: AuthContext, id: string): Promise<FileRecord> {
+  const file = await store.get(db, id);
   if (file.uploadedBy === auth.user.id) return file;
   try {
-    if (canReadOwned(db, auth, file) || canReadViaAttachment(db, auth, file.id)) return file;
+    if (await canReadOwned(db, auth, file) || await canReadViaAttachment(db, auth, file.id)) return file;
   } catch (error: unknown) {
     if (error instanceof AppError && (error.code === "FORBIDDEN" || error.code === "NOT_FOUND")) throw notFoundError("File");
     throw error;
@@ -166,38 +167,38 @@ const attachmentColumns = {
   uploadedBy: attachments.uploadedBy, uploadedByName: users.name, createdAt: attachments.createdAt,
 };
 
-export function listAttachments(db: AppDb, auth: AuthContext, ref: z.output<typeof entityRefSchema>): AttachmentView[] {
-  requireEntity(db, auth, ref.entityType, ref.entityId, "view");
-  return db.select(attachmentColumns).from(attachments)
+export async function listAttachments(db: AppDb, auth: AuthContext, ref: z.output<typeof entityRefSchema>): Promise<AttachmentView[]> {
+  await requireEntity(db, auth, ref.entityType, ref.entityId, "view");
+  return await db.select(attachmentColumns).from(attachments)
     .innerJoin(files, eq(files.id, attachments.fileId))
     .leftJoin(users, eq(users.id, attachments.uploadedBy))
     .where(and(eq(attachments.entityType, ref.entityType), eq(attachments.entityId, ref.entityId)))
-    .orderBy(desc(attachments.createdAt)).all();
+    .orderBy(desc(attachments.createdAt));
 }
 
-export function createAttachment(db: AppDb, store: FileStore, auth: AuthContext, input: z.output<typeof attachmentCreateSchema>): AttachmentView {
-  requireEntity(db, auth, input.entityType, input.entityId, "edit");
-  const file = store.get(db, input.fileId);
+export async function createAttachment(db: AppDb, store: FileStore, auth: AuthContext, input: z.output<typeof attachmentCreateSchema>): Promise<AttachmentView> {
+  await requireEntity(db, auth, input.entityType, input.entityId, "edit");
+  const file = await store.get(db, input.fileId);
   const ownedElsewhere = file.ownerEntityType !== null
     && (file.ownerEntityType !== input.entityType || file.ownerEntityId !== input.entityId);
   if (file.uploadedBy !== auth.user.id || ownedElsewhere) throw notFoundError("File");
   if (file.expiresAt !== null) throw validationError("This file cannot be attached", { fileId: ["Upload the file again"] });
-  db.update(files).set({ ownerEntityType: input.entityType, ownerEntityId: input.entityId }).where(eq(files.id, file.id)).run();
-  const row = db.insert(attachments).values({
+  await db.update(files).set({ ownerEntityType: input.entityType, ownerEntityId: input.entityId }).where(eq(files.id, file.id));
+  const row = (await db.insert(attachments).values({
     entityType: input.entityType, entityId: input.entityId, documentType: input.documentType, fileId: file.id, uploadedBy: auth.user.id,
-  }).returning().get();
-  const view = db.select(attachmentColumns).from(attachments).innerJoin(files, eq(files.id, attachments.fileId))
-    .leftJoin(users, eq(users.id, attachments.uploadedBy)).where(eq(attachments.id, row.id)).get();
+  }).returning())[0];
+  const view = (await db.select(attachmentColumns).from(attachments).innerJoin(files, eq(files.id, attachments.fileId))
+    .leftJoin(users, eq(users.id, attachments.uploadedBy)).where(eq(attachments.id, row.id)).limit(1))[0];
   if (!view) throw notFoundError("Attachment");
   return view;
 }
 
-export function deleteAttachment(db: AppDb, store: FileStore, auth: AuthContext, id: string): { id: string } {
-  const att = db.select().from(attachments).where(eq(attachments.id, id)).get();
-  if (!att || !findEntity(db, att.entityType, att.entityId)) throw notFoundError("Attachment");
-  requireEntity(db, auth, att.entityType, att.entityId, "edit");
-  db.delete(attachments).where(eq(attachments.id, id)).run();
-  store.remove(db, att.fileId);
+export async function deleteAttachment(db: AppDb, store: FileStore, auth: AuthContext, id: string): Promise<{ id: string }> {
+  const att = (await db.select().from(attachments).where(eq(attachments.id, id)).limit(1))[0];
+  if (!att || !(await findEntity(db, att.entityType, att.entityId))) throw notFoundError("Attachment");
+  await requireEntity(db, auth, att.entityType, att.entityId, "edit");
+  await db.delete(attachments).where(eq(attachments.id, id));
+  await store.remove(db, att.fileId);
   return { id };
 }
 
@@ -214,25 +215,25 @@ const noteColumns = {
   userId: entityNotes.userId, createdAt: entityNotes.createdAt, userName: users.name,
 };
 
-export function listNotes(db: AppDb, auth: AuthContext, ref: z.output<typeof entityRefSchema>): NoteView[] {
-  requireEntity(db, auth, ref.entityType, ref.entityId, "view");
-  return db.select(noteColumns).from(entityNotes).leftJoin(users, eq(users.id, entityNotes.userId))
+export async function listNotes(db: AppDb, auth: AuthContext, ref: z.output<typeof entityRefSchema>): Promise<NoteView[]> {
+  await requireEntity(db, auth, ref.entityType, ref.entityId, "view");
+  return await db.select(noteColumns).from(entityNotes).leftJoin(users, eq(users.id, entityNotes.userId))
     .where(and(eq(entityNotes.entityType, ref.entityType), eq(entityNotes.entityId, ref.entityId)))
-    .orderBy(desc(entityNotes.createdAt)).all();
+    .orderBy(desc(entityNotes.createdAt));
 }
 
-export function createNote(db: AppDb, auth: AuthContext, input: z.output<typeof noteCreateSchema>): NoteView {
-  requireEntity(db, auth, input.entityType, input.entityId, "edit");
-  const row = db.insert(entityNotes).values({ entityType: input.entityType, entityId: input.entityId, body: input.body, userId: auth.user.id }).returning().get();
+export async function createNote(db: AppDb, auth: AuthContext, input: z.output<typeof noteCreateSchema>): Promise<NoteView> {
+  await requireEntity(db, auth, input.entityType, input.entityId, "edit");
+  const row = (await db.insert(entityNotes).values({ entityType: input.entityType, entityId: input.entityId, body: input.body, userId: auth.user.id }).returning())[0];
   return { ...row, userName: auth.user.name };
 }
 
 /** The author may delete their note; anyone else needs edit on the record. */
-export function deleteNote(db: AppDb, auth: AuthContext, id: string): { id: string } {
-  const note = db.select().from(entityNotes).where(eq(entityNotes.id, id)).get();
+export async function deleteNote(db: AppDb, auth: AuthContext, id: string): Promise<{ id: string }> {
+  const note = (await db.select().from(entityNotes).where(eq(entityNotes.id, id)).limit(1))[0];
   if (!note) throw notFoundError("Note");
-  requireEntity(db, auth, note.entityType, note.entityId, "view");
+  await requireEntity(db, auth, note.entityType, note.entityId, "view");
   if (note.userId !== auth.user.id && !canOnEntity(auth, note.entityType, "edit")) throw forbiddenError();
-  db.delete(entityNotes).where(eq(entityNotes.id, id)).run();
+  await db.delete(entityNotes).where(eq(entityNotes.id, id));
   return { id };
 }

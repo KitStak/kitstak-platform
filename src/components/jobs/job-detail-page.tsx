@@ -37,7 +37,7 @@ import { progressTone } from "@/lib/grid-defs/jobs/progress-tone";
 import { JOB_PERMS, JobActions, type JobFacts } from "./job-actions";
 import { errorMessage, jobTasksHref } from "./jobs-client";
 
-type Detail = ReturnType<typeof getJobDetail>;
+type Detail = Awaited<ReturnType<typeof getJobDetail>>;
 type DetailTask = Detail["tasks"][number];
 type DetailOrder = Detail["orders"][number];
 

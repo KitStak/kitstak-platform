@@ -6,9 +6,9 @@ import { KIT_PERMISSIONS } from "@/server/repositories/work-orders-api";
 
 export const GET = defineRoute({
   permission: KIT_PERMISSIONS.inventory,
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total, updatedAt } = listKitInventory(db, auth.viewScope, query);
+    const { rows, total, updatedAt } = await listKitInventory(db, auth.viewScope, query);
     return result(rows, { meta: { total, page: query.page, pageSize: query.pageSize, updatedAt } });
   },
 });

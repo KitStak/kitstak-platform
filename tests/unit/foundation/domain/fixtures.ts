@@ -27,7 +27,7 @@ export interface World {
   readonly serviceIds: { ground: string; priority: string; nextDay: string };
   readonly files: FileStore;
   readonly filesRoot: string;
-  close(): void;
+  close(): Promise<void>;
 }
 
 let counter = 0;
@@ -40,56 +40,56 @@ export function locationRow(warehouseId: string, code: string, extra: Partial<ty
   };
 }
 
-export function createWorld(): World {
-  const t = createTestDb();
+export async function createWorld(): Promise<World> {
+  const t = await createTestDb();
   const db = t.db;
-  const userId = db.insert(schema.users).values({ email: "admin@test.io", name: "Admin", passwordHash: "x", role: "admin" }).returning().get().id;
-  const warehouseId = db.insert(schema.warehouses).values({
+  const userId = (await db.insert(schema.users).values({ email: "admin@test.io", name: "Admin", passwordHash: "x", role: "admin" }).returning())[0].id;
+  const warehouseId = (await db.insert(schema.warehouses).values({
     code: "MLT1", name: "Memphis", addressLine: "100 Main St", city: "Memphis", state: "TN", postalCode: "38118", timezone: "America/Chicago",
     mandatoryAdjustmentReason: false,
-  }).returning().get().id;
-  const client = (code: string) => db.insert(schema.clients).values({
+  }).returning())[0].id;
+  const client = async (code: string) => (await db.insert(schema.clients).values({
     code, name: `${code} Inc`, contactName: "C", contactEmail: "c@x.io", phone: "1", billingPlan: "per-order", status: "Active",
-  }).returning().get().id;
-  const clientId = client("ACME");
-  const otherClientId = client("BETA");
-  const product = (sku: string, cid = clientId) => db.insert(schema.products).values({
+  }).returning())[0].id;
+  const clientId = await client("ACME");
+  const otherClientId = await client("BETA");
+  const product = async (sku: string, cid = clientId) => (await db.insert(schema.products).values({
     clientId: cid, sku, barcode: sku, name: sku, category: "General", weightOz: 8, lengthIn: 4, widthIn: 4, heightIn: 2, price: 10, status: "Active",
-  }).returning().get().id;
-  const productId = product("MLT-WIDGET-01");
-  const product2Id = product("MLT-GADGET-02");
-  const mk = (code: string, extra: Partial<typeof schema.locations.$inferInsert> = {}) => db.insert(schema.locations).values(locationRow(warehouseId, code, extra)).returning().get().id;
+  }).returning())[0].id;
+  const productId = await product("MLT-WIDGET-01");
+  const product2Id = await product("MLT-GADGET-02");
+  const mk = async (code: string, extra: Partial<typeof schema.locations.$inferInsert> = {}) => (await db.insert(schema.locations).values(locationRow(warehouseId, code, extra)).returning())[0].id;
   const loc = {
-    receiving: mk("RCV-01", { type: "Receiving", areaType: "Receiving" }),
-    storageA: mk("A-01-01", { areaType: "Storage" }),
-    storageB: mk("A-02-01", { areaType: "Picking", replenishmentType: "Target" }),
-    pick: mk("TOTE-01", { type: "Picking", areaType: "Packing", preventAllocation: true }),
-    pack: mk("PACK-01", { type: "Shipping", areaType: "Packing", preventAllocation: true }),
-    ship: mk("SHIP-01", { type: "Shipping", areaType: "Shipment", preventAllocation: true }),
-    returns: mk("RET-01", { type: "Returns", areaType: "Returns" }),
-    damaged: mk("DMG-01", { type: "Damaged", onlyDamaged: true, preventAllocation: true }),
+    receiving: await mk("RCV-01", { type: "Receiving", areaType: "Receiving" }),
+    storageA: await mk("A-01-01", { areaType: "Storage" }),
+    storageB: await mk("A-02-01", { areaType: "Picking", replenishmentType: "Target" }),
+    pick: await mk("TOTE-01", { type: "Picking", areaType: "Packing", preventAllocation: true }),
+    pack: await mk("PACK-01", { type: "Shipping", areaType: "Packing", preventAllocation: true }),
+    ship: await mk("SHIP-01", { type: "Shipping", areaType: "Shipment", preventAllocation: true }),
+    returns: await mk("RET-01", { type: "Returns", areaType: "Returns" }),
+    damaged: await mk("DMG-01", { type: "Damaged", onlyDamaged: true, preventAllocation: true }),
   };
-  const jobTypeId = db.insert(schema.jobTypes).values({
+  const jobTypeId = (await db.insert(schema.jobTypes).values({
     code: "MULTI", description: "Multi", warehouseId, operationType: "Picking", settings: jobTypeSettingsSchema.parse({}),
-  }).returning().get().id;
-  const carrierConnectionId = db.insert(schema.carrierConnections).values({
+  }).returning())[0].id;
+  const carrierConnectionId = (await db.insert(schema.carrierConnections).values({
     provider: "kitstaks-sandbox", setupName: "Sandbox", accountPrefix: "SBX", warehouseId, settings: {},
-  }).returning().get().id;
-  const svc = (serviceCode: string, name: string, carrierCode: string, transitDays: number) => db.insert(schema.carrierServices).values({
+  }).returning())[0].id;
+  const svc = async (serviceCode: string, name: string, carrierCode: string, transitDays: number) => (await db.insert(schema.carrierServices).values({
     connectionId: carrierConnectionId, carrierCode, serviceCode, name, transitDays,
-  }).returning().get().id;
+  }).returning())[0].id;
   const serviceIds = {
-    ground: svc("SBX_GROUND", "Ground", "UPS", 5),
-    priority: svc("SBX_PRIORITY", "Priority Mail", "USPS", 3),
-    nextDay: svc("SBX_NEXT_DAY", "Next Day Air", "UPS", 1),
+    ground: await svc("SBX_GROUND", "Ground", "UPS", 5),
+    priority: await svc("SBX_PRIORITY", "Priority Mail", "USPS", 3),
+    nextDay: await svc("SBX_NEXT_DAY", "Next Day Air", "UPS", 1),
   };
   const filesRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ks-f5-"));
   const files = createFileStore({ root: filesRoot });
   return {
     t, db, ctx: { userId, source: "admin@test.io" }, userId, warehouseId, clientId, otherClientId, productId, product2Id, loc,
     jobTypeId, carrierConnectionId, serviceIds, files, filesRoot,
-    close() {
-      t.close();
+    async close() {
+      await t.close();
       fs.rmSync(filesRoot, { recursive: true, force: true });
     },
   };
@@ -103,6 +103,6 @@ export function orderInput(w: World, lines: { productId: string; quantity: numbe
   };
 }
 
-export function onHand(w: World, productId: string): number {
-  return w.db.select().from(schema.inventory).where(eq(schema.inventory.productId, productId)).all().reduce((s, r) => s + r.onHand, 0);
+export async function onHand(w: World, productId: string): Promise<number> {
+  return (await w.db.select().from(schema.inventory).where(eq(schema.inventory.productId, productId))).reduce((s, r) => s + r.onHand, 0);
 }

@@ -5,5 +5,5 @@ import { idParamsSchema } from "@/server/repositories/platform-common";
 
 export const GET = defineRoute({
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getBackgroundTask(db, auth.user.id, params.id),
+  handler: async ({ db, auth, params }) => await getBackgroundTask(db, auth.user.id, params.id),
 });

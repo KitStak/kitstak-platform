@@ -2,10 +2,10 @@
 import type { WorkflowActionExecutor } from "./types";
 import { loadOrder, patchOrder } from "./order-patch";
 
-const block = (kind: "Fully" | "Partially"): WorkflowActionExecutor => (tx, ctx, input) => {
-  const order = loadOrder(tx, input);
+const block = (kind: "Fully" | "Partially"): WorkflowActionExecutor => async (tx, ctx, input) => {
+  const order = await loadOrder(tx, input);
   if (order.workflowBlocked === "Fully" && kind === "Partially") return { applied: false, blockType: "Fully", message: `Order ${order.code} is already fully blocked.` };
-  patchOrder(tx, ctx, order, { workflowBlocked: kind }, input.workflowName);
+  await patchOrder(tx, ctx, order, { workflowBlocked: kind }, input.workflowName);
   return { applied: true, blockType: kind, message: `Blocked ${kind.toLowerCase()} by ${input.workflowName}` };
 };
 

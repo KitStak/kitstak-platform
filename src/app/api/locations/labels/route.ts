@@ -7,5 +7,5 @@ export const POST = defineRoute({
   permission: "settings.locations.label",
   transaction: false,
   body: bulkIds,
-  handler: ({ db, auth, body }) => locationLabelRecords(db, auth, body.ids),
+  handler: async ({ db, auth, body }) => await locationLabelRecords(db, auth, body.ids),
 });

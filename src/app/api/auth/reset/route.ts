@@ -18,15 +18,15 @@ export const POST = defineRoute({
   rateLimit: false,
   transaction: false,
   body: bodySchema,
-  handler: ({ db, request, body, ip }) => {
+  handler: async ({ db, request, body, ip }) => {
     if (!isSameOriginRequest(request)) throw new AppError("CSRF", "Cross-site requests are not allowed");
-    const limit = hitRateLimit(db, RATE_LIMITS.passwordReset, `reset:${ip}`);
+    const limit = await hitRateLimit(db, RATE_LIMITS.passwordReset, `reset:${ip}`);
     if (!limit.allowed) {
       throw new AppError("RATE_LIMITED", "Too many attempts. Please try again later.", {
         headers: { "Retry-After": String(limit.retryAfterSeconds) },
       });
     }
-    resetPassword(db, { token: body.token, password: body.password, ip });
+    await resetPassword(db, { token: body.token, password: body.password, ip });
     return { reset: true };
   },
 });

@@ -6,5 +6,5 @@ import { searchShippedOrders, shippedSearchSchema } from "@/server/repositories/
 export const GET = defineRoute({
   permission: [RETURN_PERMISSIONS.createRma, RETURN_PERMISSIONS.receive],
   query: shippedSearchSchema,
-  handler: ({ db, auth, query }) => searchShippedOrders(db, auth.scope, query),
+  handler: async ({ db, auth, query }) => await searchShippedOrders(db, auth.scope, query),
 });

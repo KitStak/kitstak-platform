@@ -13,11 +13,11 @@ let auth: AuthContext;
 let cartTypeId: string;
 const actor = () => ({ userId: w.userId, source: "Web" });
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
-  cartTypeId = w.db.insert(schema.lookupValues).values({ type: "mobile_cart_type", name: "12-bin 3×4", meta: { levels: 3, columns: 4 } }).returning().get().id;
+  cartTypeId = (await w.db.insert(schema.lookupValues).values({ type: "mobile_cart_type", name: "12-bin 3×4", meta: { levels: 3, columns: 4 } }).returning())[0].id;
 });
 afterEach(() => w.close());
 
@@ -44,69 +44,69 @@ describe("mobile cart schema", () => {
 });
 
 describe("mobile cart repository", () => {
-  it("creates the cart and its cells, lists it Available with counts", () => {
-    const { id } = createMobileCart(w.db, auth, actor(), input());
-    const { rows, total } = listMobileCarts(w.db, auth, EMPTY_GRID_QUERY);
+  it("creates the cart and its cells, lists it Available with counts", async () => {
+    const { id } = await createMobileCart(w.db, auth, actor(), input());
+    const { rows, total } = await listMobileCarts(w.db, auth, EMPTY_GRID_QUERY);
     expect(total).toBe(1);
     expect(rows[0]).toMatchObject({ id, code: "KS-TEST-MC1", status: "Available", cellCount: 12, levels: 3, columns: 4, cartTypeName: "12-bin 3×4", taskCount: 0, orderCount: 0, jobCode: null });
-    const change = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id)).all();
+    const change = await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id));
     expect(change.map((c) => c.type)).toEqual(["Create"]);
   });
 
-  it("rejects duplicate codes and cell barcodes used by another cart", () => {
-    createMobileCart(w.db, auth, actor(), input());
-    expect(() => createMobileCart(w.db, auth, actor(), input())).toThrow(/already exists/);
+  it("rejects duplicate codes and cell barcodes used by another cart", async () => {
+    await createMobileCart(w.db, auth, actor(), input());
+    await expect(async () => await createMobileCart(w.db, auth, actor(), input())).rejects.toThrow(/already exists/);
     const clash = { ...input("KS-TEST-MC2"), cells: input("KS-TEST-MC1").cells };
-    expect(() => createMobileCart(w.db, auth, actor(), clash)).toThrow(/already used by cart KS-TEST-MC1/);
+    await expect(async () => await createMobileCart(w.db, auth, actor(), clash)).rejects.toThrow(/already used by cart KS-TEST-MC1/);
   });
 
-  it("derives Occupied from an open job and blocks delete and cell edits", () => {
-    const { id } = createMobileCart(w.db, auth, actor(), input());
-    const job = w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code: "Job900001", jobType: "Picking", warehouseId: w.warehouseId, status: "Started", mobileCartId: id }).returning().get();
-    const row = listMobileCarts(w.db, auth, EMPTY_GRID_QUERY).rows[0];
+  it("derives Occupied from an open job and blocks delete and cell edits", async () => {
+    const { id } = await createMobileCart(w.db, auth, actor(), input());
+    const job = (await w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code: "Job900001", jobType: "Picking", warehouseId: w.warehouseId, status: "Started", mobileCartId: id }).returning())[0];
+    const row = (await listMobileCarts(w.db, auth, EMPTY_GRID_QUERY)).rows[0];
     expect(row).toMatchObject({ status: "Occupied", jobCode: "Job900001", jobId: job.id });
-    const del = deleteMobileCarts(w.db, auth, actor(), [id]);
+    const del = await deleteMobileCarts(w.db, auth, actor(), [id]);
     expect(del.failed[0]?.message).toMatch(/only Available carts can be deleted/);
-    const detail = getMobileCart(w.db, auth, id);
-    expect(() => updateMobileCart(w.db, auth, actor(), id, { ...input("KS-TEST-MC1", 2, 2), version: detail.version })).toThrow(/cells can't change/);
-    w.db.update(schema.jobs).set({ status: "Completed" }).where(eq(schema.jobs.id, job.id)).run();
-    expect(listMobileCarts(w.db, auth, EMPTY_GRID_QUERY).rows[0]?.status).toBe("Available");
-    expect(deleteMobileCarts(w.db, auth, actor(), [id]).succeeded).toEqual([id]);
+    const detail = await getMobileCart(w.db, auth, id);
+    await expect(async () => await updateMobileCart(w.db, auth, actor(), id, { ...input("KS-TEST-MC1", 2, 2), version: detail.version })).rejects.toThrow(/cells can't change/);
+    await w.db.update(schema.jobs).set({ status: "Completed" }).where(eq(schema.jobs.id, job.id));
+    expect((await listMobileCarts(w.db, auth, EMPTY_GRID_QUERY)).rows[0]?.status).toBe("Available");
+    expect((await deleteMobileCarts(w.db, auth, actor(), [id])).succeeded).toEqual([id]);
   });
 
-  it("updates fields with a field-level change log and enforces the version", () => {
-    const { id } = createMobileCart(w.db, auth, actor(), input());
-    const v1 = getMobileCart(w.db, auth, id).version;
-    const out = updateMobileCart(w.db, auth, actor(), id, { ...input("KS-TEST-MC1", 2, 2), description: "Smaller", version: v1 });
+  it("updates fields with a field-level change log and enforces the version", async () => {
+    const { id } = await createMobileCart(w.db, auth, actor(), input());
+    const v1 = (await getMobileCart(w.db, auth, id)).version;
+    const out = await updateMobileCart(w.db, auth, actor(), id, { ...input("KS-TEST-MC1", 2, 2), description: "Smaller", version: v1 });
     expect(out.version).toBe(v1 + 1);
-    expect(getMobileCart(w.db, auth, id).cells).toHaveLength(4);
-    const labels = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id)).all().filter((c) => c.type === "Update").map((c) => c.field);
+    expect((await getMobileCart(w.db, auth, id)).cells).toHaveLength(4);
+    const labels = (await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id))).filter((c) => c.type === "Update").map((c) => c.field);
     expect(labels).toEqual(expect.arrayContaining(["description", "levels", "columns", "cellCount", "cellList"]));
-    expect(() => updateMobileCart(w.db, auth, actor(), id, { ...input(), version: v1 })).toThrow(/changed since you opened it/);
+    await expect(async () => await updateMobileCart(w.db, auth, actor(), id, { ...input(), version: v1 })).rejects.toThrow(/changed since you opened it/);
   });
 
-  it("duplicates with cell barcodes re-derived from the new code", () => {
-    const { id } = createMobileCart(w.db, auth, actor(), input());
-    const copy = duplicateMobileCart(w.db, auth, actor(), id, "ks-test-mc9");
-    const d = getMobileCart(w.db, auth, copy.id);
+  it("duplicates with cell barcodes re-derived from the new code", async () => {
+    const { id } = await createMobileCart(w.db, auth, actor(), input());
+    const copy = await duplicateMobileCart(w.db, auth, actor(), id, "ks-test-mc9");
+    const d = await getMobileCart(w.db, auth, copy.id);
     expect(d.code).toBe("KS-TEST-MC9");
     expect(d.cells[0]?.barcode).toBe("KS-TEST-MC9-A01");
     expect(d.cellCount).toBe(12);
   });
 
-  it("builds cart and cell label records", () => {
-    const { id } = createMobileCart(w.db, auth, actor(), input("KS-TEST-MC1", 1, 2));
-    expect(mobileCartLabelRecords(w.db, auth, [id], "carts")).toEqual([{ code: "KS-TEST-MC1", name: "Test cart", cartType: "12-bin 3×4" }]);
-    const both = mobileCartLabelRecords(w.db, auth, [id], "both");
+  it("builds cart and cell label records", async () => {
+    const { id } = await createMobileCart(w.db, auth, actor(), input("KS-TEST-MC1", 1, 2));
+    expect(await mobileCartLabelRecords(w.db, auth, [id], "carts")).toEqual([{ code: "KS-TEST-MC1", name: "Test cart", cartType: "12-bin 3×4" }]);
+    const both = await mobileCartLabelRecords(w.db, auth, [id], "both");
     expect(both.map((r) => r.code)).toEqual(["KS-TEST-MC1", "KS-TEST-MC1-A01", "KS-TEST-MC1-A02"]);
-    expect(mobileCartLabelRecords(w.db, auth, [id], "cells")).toHaveLength(2);
+    expect(await mobileCartLabelRecords(w.db, auth, [id], "cells")).toHaveLength(2);
   });
 
-  it("hides carts outside the warehouse scope (404)", () => {
-    const { id } = createMobileCart(w.db, auth, actor(), input());
+  it("hides carts outside the warehouse scope (404)", async () => {
+    const { id } = await createMobileCart(w.db, auth, actor(), input());
     const none = { warehouseIds: [] as string[], clientIds: "all" as const };
     const outside = { ...auth, scope: none, viewScope: none } as unknown as AuthContext;
-    expect(() => getMobileCart(w.db, outside, id)).toThrow(/not found/i);
-    expect(listMobileCarts(w.db, outside, EMPTY_GRID_QUERY).total).toBe(0);
+    await expect(async () => await getMobileCart(w.db, outside, id)).rejects.toThrow(/not found/i);
+    expect((await listMobileCarts(w.db, outside, EMPTY_GRID_QUERY)).total).toBe(0);
   });
 });

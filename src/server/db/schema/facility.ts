@@ -1,5 +1,5 @@
 /** Facility: locations, capacities, LP types, license plates, mobile carts, shipment packages. */
-import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, doublePrecision, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import {
   ABC_CODES,
   AREA_TYPES,
@@ -15,7 +15,7 @@ import { products } from "./catalog";
 import { clients, warehouses } from "./org";
 
 /** Existing `type` is kept as the legacy role; `locationType` / `areaType` are authoritative. */
-export const locations = sqliteTable("locations", {
+export const locations = pgTable("locations", {
   id: pk(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
   code: text("code").notNull(),
@@ -42,11 +42,11 @@ export const locations = sqliteTable("locations", {
   column: integer("column").notNull().default(0),
   position: text("position"),
   dimensionUnit: text("dimension_unit").notNull().default("Inch"),
-  height: real("height").notNull().default(0),
-  width: real("width").notNull().default(0),
-  length: real("length").notNull().default(0),
+  height: doublePrecision("height").notNull().default(0),
+  width: doublePrecision("width").notNull().default(0),
+  length: doublePrecision("length").notNull().default(0),
   volumeUnit: text("volume_unit").notNull().default("Cubic Inch"),
-  volume: real("volume").notNull().default(0),
+  volume: doublePrecision("volume").notNull().default(0),
   abcCode: text("abc_code", { enum: ABC_CODES }).notNull().default("None"),
   singleClient: bool("single_client").notNull().default(false),
   isLocked: bool("is_locked").notNull().default(false),
@@ -71,7 +71,7 @@ export const locations = sqliteTable("locations", {
   index("locations_area_idx").on(t.warehouseId, t.areaType),
 ]);
 
-export const locationProductCapacity = sqliteTable("location_product_capacity", {
+export const locationProductCapacity = pgTable("location_product_capacity", {
   id: pk(),
   locationId: text("location_id").notNull().references(() => locations.id, { onDelete: "cascade" }),
   clientId: text("client_id").notNull().references(() => clients.id),
@@ -81,22 +81,22 @@ export const locationProductCapacity = sqliteTable("location_product_capacity", 
   maxQty: integer("max_qty").notNull().default(0),
 }, (t) => [uniqueIndex("lpc_idx").on(t.locationId, t.productId, t.packType)]);
 
-export const lpTypes = sqliteTable("lp_types", {
+export const lpTypes = pgTable("lp_types", {
   id: pk(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
   code: text("code").notNull(),
   description: text("description"),
   numberPrefix: text("number_prefix").notNull(),
   numberLength: integer("number_length").notNull(),
-  length: real("length").notNull().default(0),
-  width: real("width").notNull().default(0),
-  height: real("height").notNull().default(0),
+  length: doublePrecision("length").notNull().default(0),
+  width: doublePrecision("width").notNull().default(0),
+  height: doublePrecision("height").notNull().default(0),
   dimensionUnit: text("dimension_unit").notNull().default("Inch"),
   weightUnit: text("weight_unit").notNull().default("Ounce"),
   volumeUnit: text("volume_unit").notNull().default("Cubic Inch"),
-  emptyWeight: real("empty_weight").notNull().default(0),
-  maxWeight: real("max_weight").notNull().default(0),
-  maxVolume: real("max_volume").notNull().default(0),
+  emptyWeight: doublePrecision("empty_weight").notNull().default(0),
+  maxWeight: doublePrecision("max_weight").notNull().default(0),
+  maxVolume: doublePrecision("max_volume").notNull().default(0),
   onlyOneExpiry: bool("only_one_expiry").notNull().default(false),
   onlyOneProductionDate: bool("only_one_production_date").notNull().default(false),
   onlyOneLot: bool("only_one_lot").notNull().default(false),
@@ -111,7 +111,7 @@ export const lpTypes = sqliteTable("lp_types", {
   ...stamps(),
 }, (t) => [uniqueIndex("lp_types_code_idx").on(t.warehouseId, t.code)]);
 
-export const locationLpCapacity = sqliteTable("location_lp_capacity", {
+export const locationLpCapacity = pgTable("location_lp_capacity", {
   id: pk(),
   locationId: text("location_id").notNull().references(() => locations.id, { onDelete: "cascade" }),
   lpTypeId: text("lp_type_id").notNull().references(() => lpTypes.id),
@@ -121,7 +121,7 @@ export const locationLpCapacity = sqliteTable("location_lp_capacity", {
   productId: text("product_id"),
 }, (t) => [index("llc_location_idx").on(t.locationId)]);
 
-export const licensePlates = sqliteTable("license_plates", {
+export const licensePlates = pgTable("license_plates", {
   id: pk(),
   number: text("number").notNull(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
@@ -132,11 +132,11 @@ export const licensePlates = sqliteTable("license_plates", {
   alternateBarcode: text("alternate_barcode"),
   isSscc18: bool("is_sscc18").notNull().default(false),
   clientId: text("client_id").references(() => clients.id),
-  length: real("length").notNull().default(0),
-  width: real("width").notNull().default(0),
-  height: real("height").notNull().default(0),
-  weight: real("weight").notNull().default(0),
-  actualVolume: real("actual_volume").notNull().default(0),
+  length: doublePrecision("length").notNull().default(0),
+  width: doublePrecision("width").notNull().default(0),
+  height: doublePrecision("height").notNull().default(0),
+  weight: doublePrecision("weight").notNull().default(0),
+  actualVolume: doublePrecision("actual_volume").notNull().default(0),
   status: text("status", { enum: LP_STATUSES }).notNull().default("Empty"),
   labelPrintedAt: text("label_printed_at"),
   ...stamps(),
@@ -146,7 +146,7 @@ export const licensePlates = sqliteTable("license_plates", {
   index("lp_parent_idx").on(t.parentLpId),
 ]);
 
-export const mobileCarts = sqliteTable("mobile_carts", {
+export const mobileCarts = pgTable("mobile_carts", {
   id: pk(),
   code: text("code").notNull(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
@@ -162,7 +162,7 @@ export const mobileCarts = sqliteTable("mobile_carts", {
   ...stamps(),
 }, (t) => [uniqueIndex("mobile_cart_code_idx").on(t.warehouseId, t.code)]);
 
-export const mobileCartCells = sqliteTable("mobile_cart_cells", {
+export const mobileCartCells = pgTable("mobile_cart_cells", {
   id: pk(),
   cartId: text("cart_id").notNull().references(() => mobileCarts.id, { onDelete: "cascade" }),
   level: integer("level").notNull(),
@@ -171,22 +171,22 @@ export const mobileCartCells = sqliteTable("mobile_cart_cells", {
   orderId: text("order_id"),
 }, (t) => [uniqueIndex("cart_cell_idx").on(t.cartId, t.level, t.column)]);
 
-export const shipmentPackages = sqliteTable("shipment_packages", {
+export const shipmentPackages = pgTable("shipment_packages", {
   id: pk(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
   code: text("code").notNull(),
   description: text("description"),
   weightUnit: text("weight_unit").notNull().default("Pound"),
-  emptyWeight: real("empty_weight").notNull().default(0),
-  maxWeight: real("max_weight"),
+  emptyWeight: doublePrecision("empty_weight").notNull().default(0),
+  maxWeight: doublePrecision("max_weight"),
   dimensionUnit: text("dimension_unit").notNull().default("Inch"),
-  length: real("length").notNull(),
-  width: real("width").notNull(),
-  height: real("height").notNull(),
+  length: doublePrecision("length").notNull(),
+  width: doublePrecision("width").notNull(),
+  height: doublePrecision("height").notNull(),
   volumeUnit: text("volume_unit").notNull().default("Cubic Inch"),
-  maxVolume: real("max_volume"),
+  maxVolume: doublePrecision("max_volume"),
   currency: text("currency").notNull().default("USD"),
-  purchasePrice: real("purchase_price").notNull().default(0),
+  purchasePrice: doublePrecision("purchase_price").notNull().default(0),
   isActive: bool("is_active").notNull().default(true),
   allClients: bool("all_clients").notNull().default(true),
   trackInventory: bool("track_inventory").notNull().default(false),
@@ -198,7 +198,7 @@ export const shipmentPackages = sqliteTable("shipment_packages", {
   ...stamps(),
 }, (t) => [uniqueIndex("ship_pkg_code_idx").on(t.warehouseId, t.code)]);
 
-export const shipmentPackageClients = sqliteTable("shipment_package_clients", {
+export const shipmentPackageClients = pgTable("shipment_package_clients", {
   packageId: text("package_id").notNull().references(() => shipmentPackages.id, { onDelete: "cascade" }),
   clientId: text("client_id").notNull().references(() => clients.id),
   hasAccess: bool("has_access").notNull().default(true),

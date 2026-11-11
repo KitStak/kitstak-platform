@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: ["settings.clients.change_log", "settings.clients.view"],
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    loadClient(db, auth, params.id);
-    return changeLogResult(db, "client", params.id, query);
+  handler: async ({ db, auth, params, query }) => {
+    await loadClient(db, auth, params.id);
+    return await changeLogResult(db, "client", params.id, query);
   },
 });

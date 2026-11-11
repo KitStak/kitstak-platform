@@ -29,21 +29,21 @@ import { hospitalOf } from "./hospital-fixture";
 let w: World;
 let scope: Scope;
 const previousFilesDir = process.env.KITSTAK_FILES_DIR;
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   process.env.KITSTAK_FILES_DIR = w.filesRoot;
   scope = { warehouseIds: [w.warehouseId], clientIds: "all" } as unknown as Scope;
 });
 afterEach(() => { w.close(); process.env.KITSTAK_FILES_DIR = previousFilesDir; });
 const ctx = (): ScopedCtx => ({ ...w.ctx, scope }) as ScopedCtx;
 
-function picked(qty = 2, pickTo?: string): string {
-  ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 3 });
-  const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]));
-  allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
-  const { jobIds: [jobId] } = createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
-  const tasks = w.db.select().from(schema.tasks).where(eq(schema.tasks.jobId, jobId ?? "")).all();
-  execute(w.db, w.ctx, { taskIds: tasks.filter((t) => t.taskType === "Picking").map((t) => t.id), targetLocationId: pickTo ?? w.loc.pick });
+async function picked(qty = 2, pickTo?: string): Promise<string> {
+  await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 3 });
+  const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]));
+  await allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
+  const { jobIds: [jobId] } = await createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
+  const tasks = await w.db.select().from(schema.tasks).where(eq(schema.tasks.jobId, jobId ?? ""));
+  await execute(w.db, w.ctx, { taskIds: tasks.filter((t) => t.taskType === "Picking").map((t) => t.id), targetLocationId: pickTo ?? w.loc.pick });
   return o.id;
 }
 
@@ -54,8 +54,8 @@ const line = (over: Partial<PackLine> = {}): PackLine => ({
 
 describe("pack progress is kept on the server per order", () => {
   it("saves, reopens with the draft, refuses over-pack and clears on Complete", async () => {
-    const id = picked(2);
-    const c = packContext(w.db, scope, id);
+    const id = await picked(2);
+    const c = await packContext(w.db, scope, id);
     expect(c.draft).toBeNull();
     const l = c.lines[0];
     if (!l) throw new Error("line");
@@ -63,25 +63,25 @@ describe("pack progress is kept on the server per order", () => {
       stationId: w.loc.pack,
       state: { boxes: [{ seq: 1, shipmentPackageId: null, length: 10, width: 8, height: 4, weightLb: 1, weightOz: 0, items: { [l.orderLineId]: 1 }, closed: true }, { seq: 2, shipmentPackageId: null, length: 10, width: 8, height: 4, weightLb: null, weightOz: null, items: {}, closed: false }], active: 1, captures: {}, choice: null, rate: null },
     });
-    savePackDraft(w.db, ctx(), id, state, { status: c.order.status, lines: c.lines });
-    const again = packContext(w.db, scope, id);
+    await savePackDraft(w.db, ctx(), id, state, { status: c.order.status, lines: c.lines });
+    const again = await packContext(w.db, scope, id);
     expect(again.draft?.state.boxes[0]?.items[l.orderLineId]).toBe(1);
     expect(again.draft?.state.active).toBe(1);
-    expect(() => savePackDraft(w.db, ctx(), id, { ...state, state: { ...state.state, boxes: [{ ...state.state.boxes[0]!, items: { [l.orderLineId]: 9 } }], active: 0 } }, { status: c.order.status, lines: c.lines })).toThrow(/do not match/);
+    await expect(async () => await savePackDraft(w.db, ctx(), id, { ...state, state: { ...state.state, boxes: [{ ...state.state.boxes[0]!, items: { [l.orderLineId]: 9 } }], active: 0 } }, { status: c.order.status, lines: c.lines })).rejects.toThrow(/do not match/);
     await completePacking(w.db, ctx(), completePackingSchema.parse({ orderId: id, stationId: w.loc.pack, withLabel: false, packages: [{ shipmentPackageId: null, length: 10, width: 8, height: 4, weightOz: 20, items: [{ orderLineId: l.orderLineId, qty: 2 }] }] }));
-    expect(readPackDraft(w.db, id)).toBeNull();
+    expect(await readPackDraft(w.db, id)).toBeNull();
   });
 
-  it("Report Issue clears the draft; a draft that no longer fits is dropped from the context", () => {
-    const id = picked(2);
-    const c = packContext(w.db, scope, id);
+  it("Report Issue clears the draft; a draft that no longer fits is dropped from the context", async () => {
+    const id = await picked(2);
+    const c = await packContext(w.db, scope, id);
     const l = c.lines[0]!;
     const box = { seq: 1, shipmentPackageId: null, length: 1, width: 1, height: 1, weightLb: 1, weightOz: 0, items: { [l.orderLineId]: 2 }, closed: false };
-    savePackDraft(w.db, ctx(), id, saveDraftSchema.parse({ state: { boxes: [box], active: 0, captures: {}, choice: null, rate: null } }), { status: c.order.status, lines: c.lines });
+    await savePackDraft(w.db, ctx(), id, saveDraftSchema.parse({ state: { boxes: [box], active: 0, captures: {}, choice: null, rate: null } }), { status: c.order.status, lines: c.lines });
     expect(draftFits({ boxes: [{ ...box, items: { other: 1 } }], active: 0, captures: {}, choice: null, rate: null }, c.lines)).toBe(false);
-    reportIssue(w.db, ctx(), { orderId: id, hospitalLocationId: hospitalOf(w), note: "Crushed" });
-    expect(readPackDraft(w.db, id)).toBeNull();
-    clearPackDraft(w.db, id); // idempotent
+    await reportIssue(w.db, ctx(), { orderId: id, hospitalLocationId: await hospitalOf(w), note: "Crushed" });
+    expect(await readPackDraft(w.db, id)).toBeNull();
+    await clearPackDraft(w.db, id); // idempotent
   });
 
   it("client restore: resumes units and boxes, rejects a snapshot that over-packs", () => {
@@ -122,44 +122,44 @@ describe("the quote survives Close pack", () => {
 
 describe("packing KPIs", () => {
   it("counts pack-short orders held, hospital units and the station's totals today", async () => {
-    const short = picked(2);
-    reportIssue(w.db, ctx(), { orderId: short, hospitalLocationId: hospitalOf(w), note: "Torn" });
-    const id = picked(1);
-    const l = packContext(w.db, scope, id).lines[0]!;
+    const short = await picked(2);
+    await reportIssue(w.db, ctx(), { orderId: short, hospitalLocationId: await hospitalOf(w), note: "Torn" });
+    const id = await picked(1);
+    const l = (await packContext(w.db, scope, id)).lines[0]!;
     await completePacking(w.db, ctx(), completePackingSchema.parse({ orderId: id, stationId: w.loc.pack, withLabel: false, packages: [{ shipmentPackageId: null, length: 1, width: 1, height: 1, weightOz: 4, items: [{ orderLineId: l.orderLineId, qty: 1 }] }] }));
-    const k = packingKpis(w.db, scope, w.warehouseId, w.ctx.userId, new Date(), w.loc.pack);
+    const k = await packingKpis(w.db, scope, w.warehouseId, w.ctx.userId, new Date(), w.loc.pack);
     expect(k.packShortHeld).toBe(1);
     expect(k.hospitalUnits).toBe(2);
     expect(k.ordersWithWarnings).toBe(0);
     expect(k.station?.ordersPackedToday).toBe(1);
     expect(k.station?.productsPackedToday).toBe(1);
-    expect(packingKpis(w.db, scope, w.warehouseId, w.ctx.userId).station).toBeNull();
+    expect((await packingKpis(w.db, scope, w.warehouseId, w.ctx.userId)).station).toBeNull();
   });
 });
 
 describe("Loop Returns import", () => {
-  function shipped(): { code: string; sku: string } {
-    const id = picked(2);
-    const tasks = w.db.select().from(schema.tasks).where(and(eq(schema.tasks.orderId, id), eq(schema.tasks.taskType, "Packing"))).all();
-    execute(w.db, w.ctx, { taskIds: tasks.map((t) => t.id), targetLocationId: w.loc.pack });
-    shipOrders(w.db, w.ctx, { orderIds: [id], requireLabel: false });
-    const o = w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).get()!;
-    const p = w.db.select().from(schema.products).where(eq(schema.products.id, w.productId)).get()!;
+  async function shipped(): Promise<{ code: string; sku: string }> {
+    const id = await picked(2);
+    const tasks = await w.db.select().from(schema.tasks).where(and(eq(schema.tasks.orderId, id), eq(schema.tasks.taskType, "Packing")));
+    await execute(w.db, w.ctx, { taskIds: tasks.map((t) => t.id), targetLocationId: w.loc.pack });
+    await shipOrders(w.db, w.ctx, { orderIds: [id], requireLabel: false });
+    const o = (await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).limit(1))[0]!;
+    const p = (await w.db.select().from(schema.products).where(eq(schema.products.id, w.productId)).limit(1))[0]!;
     return { code: o.code, sku: p.sku };
   }
-  it("creates a Pending RMA with source Loop Returns, is idempotent per return id, reports bad SKUs per return", () => {
-    const { code, sku } = shipped();
+  it("creates a Pending RMA with source Loop Returns, is idempotent per return id, reports bad SKUs per return", async () => {
+    const { code, sku } = await shipped();
     const body = importReturnsSchema.parse({ returns: [{ externalId: "LR-1", order: code, lines: [{ sku, quantity: 1, reason: "Wrong size" }], trackingNumber: "1ZLOOP" }, { externalId: "LR-2", order: code, lines: [{ sku: "NOPE", quantity: 1 }] }] });
-    const r1 = importReturns(w.db, ctx(), body);
+    const r1 = await importReturns(w.db, ctx(), body);
     expect(r1.created).toBe(1);
     expect(r1.failed).toBe(1);
     expect(r1.results[1]?.message).toMatch(/NOPE is not on/);
-    const ro = w.db.select().from(schema.returnOrders).where(eq(schema.returnOrders.id, r1.results[0]?.id ?? "")).get();
+    const ro = (await w.db.select().from(schema.returnOrders).where(eq(schema.returnOrders.id, r1.results[0]?.id ?? "")).limit(1))[0];
     expect(ro?.source).toBe("Loop Returns");
     expect(ro?.status).toBe("Pending");
     expect(ro?.note).toContain(externalMarker("Loop Returns", "LR-1"));
     expect(ro?.trackingNumber).toBe("1ZLOOP");
-    const r2 = importReturns(w.db, ctx(), body);
+    const r2 = await importReturns(w.db, ctx(), body);
     expect(r2.created).toBe(0);
     expect(r2.duplicates).toBe(1);
     expect(r2.results[0]?.rmaCode).toBe(ro?.rmaCode);
@@ -172,11 +172,11 @@ describe("Loop Returns import", () => {
 });
 
 describe("fixtures and copy", () => {
-  it("HOSP-01 lands in the Hospital location group and is the default hospital", () => {
+  it("HOSP-01 lands in the Hospital location group and is the default hospital", async () => {
     const created: string[] = [];
-    ensureHospitalLocation(w.db, w.warehouseId, created, []);
-    ensureHospitalLocation(w.db, w.warehouseId, created, []); // idempotent
-    const h = hospitalLocations(w.db, w.warehouseId);
+    await ensureHospitalLocation(w.db, w.warehouseId, created, []);
+    await ensureHospitalLocation(w.db, w.warehouseId, created, []); // idempotent
+    const h = await hospitalLocations(w.db, w.warehouseId);
     expect(h.map((x) => [x.code, x.designation])).toEqual([["HOSP-01", "group"]]);
     expect(created.filter((c) => c.startsWith("location HOSP-01"))).toHaveLength(1);
   });

@@ -21,6 +21,7 @@ import { insertRma, type ScopedCtx } from "@/server/repositories/returns";
 import { lookupRmas, receiveManual, receiveManualSchema, receiveRma, receiveRmaSchema } from "@/server/repositories/returns-receive";
 import { createWorld, orderInput, type World } from "../foundation/domain/fixtures";
 import { hospitalOf } from "./hospital-fixture";
+import { withWriteTx } from "@/server/db/sql";
 
 const line = (over: Partial<PackLine> = {}): PackLine => ({
   orderLineId: "l1", productId: "p1", sku: "SKU-1", name: "Widget", imageUrl: null, packType: "Each", ordered: 2, toPack: 2, packed: 0, weightOz: 8,
@@ -103,70 +104,71 @@ describe("index-friendly scans and receive KPIs (DB)", () => {
   let w: World;
   let scope: Scope;
   let ctx: ScopedCtx;
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     scope = { warehouseIds: [w.warehouseId], clientIds: "all" } as unknown as Scope;
     ctx = { ...w.ctx, scope } as ScopedCtx;
   });
   afterEach(() => w.close());
 
-  function shipped(qty: number): { orderId: string; lineId: string; code: string } {
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 5 });
-    const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]));
-    allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
-    const { jobIds: [jobId] } = createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
+  async function shipped(qty: number): Promise<{ orderId: string; lineId: string; code: string }> {
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 5 });
+    const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]));
+    await allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
+    const { jobIds: [jobId] } = await createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
     for (const [type, loc] of [["Picking", w.loc.pick], ["Packing", w.loc.pack]] as const) {
-      const ids = w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId ?? ""), eq(schema.tasks.taskType, type))).all().map((t) => t.id);
-      if (ids.length) execute(w.db, w.ctx, { taskIds: ids, targetLocationId: loc });
+      const ids = (await w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId ?? ""), eq(schema.tasks.taskType, type)))).map((t) => t.id);
+      if (ids.length) await execute(w.db, w.ctx, { taskIds: ids, targetLocationId: loc });
     }
-    shipOrders(w.db, w.ctx, { orderIds: [o.id], requireLabel: false });
-    const l = w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, o.id)).get();
-    const code = w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, o.id)).get()?.code ?? "";
+    await shipOrders(w.db, w.ctx, { orderIds: [o.id], requireLabel: false });
+    const l = (await w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, o.id)).limit(1))[0];
+    const code = (await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, o.id)).limit(1))[0]?.code ?? "";
     return { orderId: o.id, lineId: l?.id ?? "", code };
   }
 
-  it("order scans match exactly or in any case; variants are deduped", () => {
+  it("order scans match exactly or in any case; variants are deduped", async () => {
     expect(codeVariants(" so1 ")).toEqual(["so1", "SO1"]);
-    const { orderId, code } = shipped(1);
-    expect(findOrdersByCode(w.db, w.warehouseId, code)).toEqual([orderId]);
-    expect(findOrdersByCode(w.db, w.warehouseId, code.toLowerCase())).toEqual([orderId]);
+    const { orderId, code } = await shipped(1);
+    expect(await findOrdersByCode(w.db, w.warehouseId, code)).toEqual([orderId]);
+    expect(await findOrdersByCode(w.db, w.warehouseId, code.toLowerCase())).toEqual([orderId]);
     const mixed = code.charAt(0) + code.slice(1).toLowerCase();
-    expect(findOrdersByCode(w.db, w.warehouseId, mixed)).toEqual([orderId]);
-    expect(findOrdersByCode(w.db, w.warehouseId, "nope-0")).toEqual([]);
+    expect(await findOrdersByCode(w.db, w.warehouseId, mixed)).toEqual([orderId]);
+    expect(await findOrdersByCode(w.db, w.warehouseId, "nope-0")).toEqual([]);
   });
 
-  it("RMA lookup by RMA code (any case) and by order code", () => {
-    const { orderId, lineId, code } = shipped(2);
-    const rma = insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
-    expect(lookupRmas(w.db, scope, w.warehouseId, rma.rmaCode.toLowerCase())[0]?.id).toBe(rma.id);
-    expect(lookupRmas(w.db, scope, w.warehouseId, code)[0]?.id).toBe(rma.id);
-    expect(lookupRmas(w.db, scope, w.warehouseId, "zzz")).toEqual([]);
+  it("RMA lookup by RMA code (any case) and by order code", async () => {
+    const { orderId, lineId, code } = await shipped(2);
+    const rma = await insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
+    expect((await lookupRmas(w.db, scope, w.warehouseId, rma.rmaCode.toLowerCase()))[0]?.id).toBe(rma.id);
+    expect((await lookupRmas(w.db, scope, w.warehouseId, code))[0]?.id).toBe(rma.id);
+    expect(await lookupRmas(w.db, scope, w.warehouseId, "zzz")).toEqual([]);
   });
 
-  it("receive and manual return return the updated station KPIs", () => {
-    const { orderId, lineId } = shipped(2);
-    const rma = insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
-    const res = receiveRma(w.db, ctx, receiveRmaSchema.parse({ returnOrderId: rma.id, stationLocationId: w.loc.returns, items: [{ productId: w.productId, quantity: 1, disposition: "Restock" }] }));
+  it("receive and manual return return the updated station KPIs", async () => {
+    const { orderId, lineId } = await shipped(2);
+    const rma = await insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
+    const res = await receiveRma(w.db, ctx, receiveRmaSchema.parse({ returnOrderId: rma.id, stationLocationId: w.loc.returns, items: [{ productId: w.productId, quantity: 1, disposition: "Restock" }] }));
     expect(res.status).toBe("Completed");
     expect(res.kpis).toMatchObject({ returnedOrdersToday: 1, returnedProductsToday: 1, openReturns: 0 });
-    const manual = receiveManual(w.db, ctx, receiveManualSchema.parse({ warehouseId: w.warehouseId, clientId: w.clientId, stationLocationId: w.loc.returns, items: [{ productId: w.productId, quantity: 2, disposition: "Restock" }] }));
+    const manual = await receiveManual(w.db, ctx, receiveManualSchema.parse({ warehouseId: w.warehouseId, clientId: w.clientId, stationLocationId: w.loc.returns, items: [{ productId: w.productId, quantity: 2, disposition: "Restock" }] }));
     expect(manual.kpis).toMatchObject({ returnedOrdersToday: 2, returnedProductsToday: 3 });
   });
 
-  it("pack context carries the default hospital code; Report Issue moves only the chosen units", () => {
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 5 });
-    const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 3 }]));
-    allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
-    const { jobIds: [jobId] } = createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
-    const picks = w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId ?? ""), eq(schema.tasks.taskType, "Picking"))).all().map((t) => t.id);
-    execute(w.db, w.ctx, { taskIds: picks, targetLocationId: w.loc.pick });
-    hospitalOf(w);
-    const c = packContext(w.db, scope, o.id);
+  it("pack context carries the default hospital code; Report Issue moves only the chosen units", async () => {
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 5 });
+    const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 3 }]));
+    await allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
+    const { jobIds: [jobId] } = await createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
+    const picks = (await w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId ?? ""), eq(schema.tasks.taskType, "Picking")))).map((t) => t.id);
+    await execute(w.db, w.ctx, { taskIds: picks, targetLocationId: w.loc.pick });
+    await hospitalOf(w);
+    const c = await packContext(w.db, scope, o.id);
     expect(c.hospital?.id).toBe(c.hospitalLocationId);
     expect(c.hospital?.code).toBe("HOSP-01");
     const lineId = c.lines[0]?.orderLineId as string;
-    const res = w.db.transaction((tx) => reportIssue(tx, ctx, { orderId: o.id, hospitalLocationId: hospitalOf(w), note: "1 crushed", lines: [{ orderLineId: lineId, qty: 1 }] }));
+    const hospId = await hospitalOf(w);
+    const res = await withWriteTx(w.db, async (tx) => await reportIssue(tx, ctx, { orderId: o.id, hospitalLocationId: hospId, note: "1 crushed", lines: [{ orderLineId: lineId, qty: 1 }] }));
     expect(res.movedUnits).toBe(1);
-    expect(ledger.reconcileLedger(w.db)).toEqual([]);
+    expect(await ledger.reconcileLedger(w.db)).toEqual([]);
   });
 });

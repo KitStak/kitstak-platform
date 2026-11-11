@@ -8,5 +8,5 @@ export const GET = defineRoute({
   query: scanJobsQuerySchema,
   transaction: false,
   rateLimit: false,
-  handler: ({ db, auth, query }) => listScanJobs(db, auth, query.view),
+  handler: async ({ db, auth, query }) => await listScanJobs(db, auth, query.view),
 });

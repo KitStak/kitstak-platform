@@ -36,21 +36,21 @@ export function current(): F7World {
 }
 
 /** Admin (from the domain world) + viewer (one warehouse, one client) + operator. */
-export function openWorld(): F7World {
-  const w = createWorld();
+export async function openWorld(): Promise<F7World> {
+  const w = await createWorld();
   const db = w.db;
-  const otherWarehouseId = db.insert(schema.warehouses).values({
+  const otherWarehouseId = (await db.insert(schema.warehouses).values({
     code: "RNO1", name: "Reno", addressLine: "1 Desert Rd", city: "Reno", state: "NV",
-  }).returning().get().id;
-  const viewerId = db.insert(schema.users).values({
+  }).returning())[0].id;
+  const viewerId = (await db.insert(schema.users).values({
     email: "viewer@test.io", name: "Viewer", passwordHash: "x", role: "viewer", allClients: false,
-  }).returning().get().id;
-  const operatorId = db.insert(schema.users).values({
+  }).returning())[0].id;
+  const operatorId = (await db.insert(schema.users).values({
     email: "operator@test.io", name: "Operator", passwordHash: "x", role: "operator", allClients: false,
-  }).returning().get().id;
+  }).returning())[0].id;
   for (const userId of [viewerId, operatorId]) {
-    db.insert(schema.userWarehouses).values({ userId, warehouseId: w.warehouseId }).run();
-    db.insert(schema.userClients).values({ userId, clientId: w.clientId }).run();
+    await db.insert(schema.userWarehouses).values({ userId, warehouseId: w.warehouseId });
+    await db.insert(schema.userClients).values({ userId, clientId: w.clientId });
   }
   world = { ...w, viewerId, operatorId, otherWarehouseId };
   return world;

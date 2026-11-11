@@ -47,12 +47,12 @@ export const hasPreferences = (p: AllocationPreferences): boolean => p.prioritiz
 interface WithBucket { readonly bucket: InventoryRow }
 
 /** Stable re-rank: same pack type first, then higher pack type; ties keep the order-by ranking. */
-export function rankByPackType<C extends WithBucket>(tx: Tx, line: OrderLineRow, ranked: readonly C[], prefs: AllocationPreferences): C[] {
+export async function rankByPackType<C extends WithBucket>(tx: Tx, line: OrderLineRow, ranked: readonly C[], prefs: AllocationPreferences): Promise<C[]> {
   if (!prefs.prioritizeSamePackType && !prefs.prioritizeHigherPackType) return [...ranked];
   const uom = new Map<string, number>();
   if (prefs.prioritizeHigherPackType) {
     const ppt = schema.productPackTypes;
-    for (const r of tx.select({ packType: ppt.packType, uomQty: ppt.uomQty }).from(ppt).where(eq(ppt.productId, line.productId)).all()) uom.set(r.packType, r.uomQty);
+    for (const r of await tx.select({ packType: ppt.packType, uomQty: ppt.uomQty }).from(ppt).where(eq(ppt.productId, line.productId))) uom.set(r.packType, r.uomQty);
   }
   const size = (c: C): number => uom.get(c.bucket.packType ?? "") ?? 1;
   return ranked.map((c, i) => ({ c, i })).sort((a, b) => {
@@ -75,7 +75,7 @@ export interface FullLpSlice<C> { readonly candidate: C; readonly qty: number }
  * Whole-LP selection: walks LPs in ranking order and takes an LP only when all of its stock
  * (every inventory row on it) is this product, unallocated, unused in this run and fits in `need`.
  */
-export function planFullLps<C extends WithBucket>(tx: Tx, line: OrderLineRow, ranked: readonly C[], need: number, used: ReadonlyMap<string, number>): FullLpSlice<C>[] {
+export async function planFullLps<C extends WithBucket>(tx: Tx, line: OrderLineRow, ranked: readonly C[], need: number, used: ReadonlyMap<string, number>): Promise<FullLpSlice<C>[]> {
   const order: string[] = [];
   const groups = new Map<string, C[]>();
   for (const c of ranked) {
@@ -86,8 +86,8 @@ export function planFullLps<C extends WithBucket>(tx: Tx, line: OrderLineRow, ra
   }
   if (order.length === 0) return [];
   const inv = schema.inventory;
-  const all = tx.select({ id: inv.id, lpId: inv.lpId, productId: inv.productId, onHand: inv.onHand, allocated: inv.allocated })
-    .from(inv).where(and(inArray(inv.lpId, order))).all().filter((r) => r.onHand > 0);
+  const all = (await tx.select({ id: inv.id, lpId: inv.lpId, productId: inv.productId, onHand: inv.onHand, allocated: inv.allocated })
+    .from(inv).where(and(inArray(inv.lpId, order)))).filter((r) => r.onHand > 0);
   const byLp = new Map<string, typeof all>();
   for (const r of all) if (r.lpId) byLp.set(r.lpId, [...(byLp.get(r.lpId) ?? []), r]);
   const out: FullLpSlice<C>[] = [];

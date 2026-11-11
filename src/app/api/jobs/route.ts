@@ -10,8 +10,8 @@ export const GET = defineRoute({
   handler: async ({ db, auth, grid }) => {
     const query = grid();
     // Self-heal (throttled): jobs whose last live task was cancelled elsewhere close before they are listed.
-    sweepDeadJobs(db);
-    const { rows, total } = await withBusyRetry(() => listJobs(db, auth, query));
+    await sweepDeadJobs(db);
+    const { rows, total } = await withBusyRetry(async () => await listJobs(db, auth, query));
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });

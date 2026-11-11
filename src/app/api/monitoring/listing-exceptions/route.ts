@@ -5,9 +5,9 @@ import { listListingExceptions } from "@/server/repositories/monitoring";
 
 export const GET = defineRoute({
   permission: "integrations.integration_monitoring.view",
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const q = grid();
-    const { rows, total } = listListingExceptions(db, auth, q);
+    const { rows, total } = await listListingExceptions(db, auth, q);
     return listResult(rows, { total, page: q.page, pageSize: q.pageSize });
   },
 });

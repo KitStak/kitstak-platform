@@ -13,14 +13,14 @@ export const PATCH = defineRoute({
   permission: "settings.company_settings.update",
   params,
   body,
-  handler: ({ db, auth, actor, params: p, body: b, audit }) => {
+  handler: async ({ db, auth, actor, params: p, body: b, audit }) => {
     if ("isActive" in b) {
-      const result = setAppActive(db, auth, actor, p.key, b.isActive);
-      audit({ action: b.isActive ? "app.activate" : "app.deactivate", entity: "app", entityId: p.key });
+      const result = await setAppActive(db, auth, actor, p.key, b.isActive);
+      await audit({ action: b.isActive ? "app.activate" : "app.deactivate", entity: "app", entityId: p.key });
       return result;
     }
-    const result = updateAppSettings(db, auth, actor, p.key, b.settings);
-    audit({ action: "app.settings", entity: "app", entityId: p.key });
+    const result = await updateAppSettings(db, auth, actor, p.key, b.settings);
+    await audit({ action: "app.settings", entity: "app", entityId: p.key });
     return result;
   },
 });

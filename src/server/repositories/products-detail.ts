@@ -3,13 +3,15 @@
  * real tables: pack types + barcodes, inventory buckets, ATP per warehouse, open orders and
  * POs, listings, kit components / used-in-kits, replenishment levels and the ledger.
  */
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { asc, desc } from "@/server/db/order";
 import type { AppDb } from "@/server/api/db";
 import { assertInScope, type Scope } from "@/server/auth/scope";
 import { schema } from "@/server/db";
 import { getAtp, OPEN_PO_STATUSES, OPEN_SO_STATUSES } from "@/server/domain/atp";
 import { emptyProductForm, normalizeCountryCode, type ProductFormValues } from "@/lib/grid-defs/products/product-form";
 import { kitsUsing } from "./products-options";
+import { dbAll, dbGet, mapSeq } from "@/server/db/sql";
 
 const { products: p, clients, productPackTypes: ppt, productBarcodes: pb, kitComponents: kc, inventory: inv, locations, warehouses, licensePlates } = schema;
 
@@ -34,11 +36,11 @@ export interface PackTypeView {
   readonly barcodes: readonly string[];
 }
 
-export function loadPackTypes(db: AppDb, productId: string): PackTypeView[] {
-  const packs = db.select().from(ppt).where(eq(ppt.productId, productId)).all();
-  const codes = db.select().from(pb).where(eq(pb.productId, productId)).all();
+export async function loadPackTypes(db: AppDb, productId: string): Promise<PackTypeView[]> {
+  const packs = await db.select().from(ppt).where(eq(ppt.productId, productId));
+  const codes = await db.select().from(pb).where(eq(pb.productId, productId));
   const pkgIds = packs.map((x) => x.useShipPackageId).filter((x): x is string => Boolean(x));
-  const pkgs = pkgIds.length ? db.select({ id: schema.shipmentPackages.id, code: schema.shipmentPackages.code }).from(schema.shipmentPackages).where(inArray(schema.shipmentPackages.id, pkgIds)).all() : [];
+  const pkgs = pkgIds.length ? await db.select({ id: schema.shipmentPackages.id, code: schema.shipmentPackages.code }).from(schema.shipmentPackages).where(inArray(schema.shipmentPackages.id, pkgIds)) : [];
   const order = { Primary: 0, Hierarchical: 1, Irregular: 2 } as const;
   return packs
     .map((x) => ({
@@ -93,13 +95,13 @@ export interface ProductDetailData {
   readonly transactions: readonly { id: string; seq: number; type: string; at: string; warehouseCode: string; fromLocation: string | null; toLocation: string | null; qty: number; lotNumber: string | null; source: string; reference: string | null }[];
 }
 
-const lookupName = (db: AppDb, id: string | null): string | null =>
-  id ? db.select({ n: schema.lookupValues.name }).from(schema.lookupValues).where(eq(schema.lookupValues.id, id)).get()?.n ?? null : null;
+const lookupName = async (db: AppDb, id: string | null): Promise<string | null> =>
+  id ? (await db.select({ n: schema.lookupValues.name }).from(schema.lookupValues).where(eq(schema.lookupValues.id, id)).limit(1))[0]?.n ?? null : null;
 
 const sqlList = (values: readonly string[]) => sql.raw(values.map((v) => `'${v.replace(/'/g, "''")}'`).join(","));
 
-export function getProductDetail(db: AppDb, scope: Scope, viewScope: Scope, id: string): ProductDetailData | null {
-  const row = db.select().from(p).innerJoin(clients, eq(clients.id, p.clientId)).where(eq(p.id, id)).get();
+export async function getProductDetail(db: AppDb, scope: Scope, viewScope: Scope, id: string): Promise<ProductDetailData | null> {
+  const row = (await db.select().from(p).innerJoin(clients, eq(clients.id, p.clientId)).where(eq(p.id, id)).limit(1))[0];
   if (!row) return null;
   try {
     assertInScope(scope, { clientId: row.products.clientId }, "Product");
@@ -108,70 +110,70 @@ export function getProductDetail(db: AppDb, scope: Scope, viewScope: Scope, id: 
   }
   const product = row.products;
   const whIds = viewScope.warehouseIds.length ? [...viewScope.warehouseIds] : ["__none__"];
-  const whs = db.select({ id: warehouses.id, code: warehouses.code }).from(warehouses).all();
+  const whs = await db.select({ id: warehouses.id, code: warehouses.code }).from(warehouses);
   const whCode = (w: string | null) => whs.find((x) => x.id === w)?.code ?? "";
 
-  const buckets = db.select({
+  const buckets = (await db.select({
     id: inv.id, warehouseId: inv.warehouseId, locationId: inv.locationId, locationCode: locations.code, zone: locations.zone, lpNumber: licensePlates.number,
     status: inv.status, packType: inv.packType, lotNumber: inv.lotNumber, expiryDate: inv.expiryDate, onHand: inv.onHand, allocated: inv.allocated,
     damaged: inv.damaged, receivedAt: inv.receivedAt,
   }).from(inv).innerJoin(locations, eq(locations.id, inv.locationId)).leftJoin(licensePlates, eq(licensePlates.id, inv.lpId))
     .where(and(eq(inv.productId, id), inArray(inv.warehouseId, whIds), sql`${inv.onHand} > 0`))
-    .orderBy(asc(locations.code)).all()
+    .orderBy(asc(locations.code)))
     .map((b) => ({ ...b, warehouseCode: whCode(b.warehouseId), available: b.onHand - b.allocated - b.damaged }));
 
-  const atp = getAtp(db, { productIds: [id], warehouseIds: whIds }).map((a) => ({
+  const atp = (await getAtp(db, { productIds: [id], warehouseIds: whIds })).map((a) => ({
     warehouseId: a.warehouseId, warehouseCode: whCode(a.warehouseId), onHand: a.total, undamaged: a.undamaged, openSo: a.openSo,
     allocatedSo: a.allocatedSo, openPo: a.openPo, currentAtp: a.currentAtp, plannedAtp: a.plannedAtp, pickable: a.pickable,
   }));
 
-  const openOrders = db.all<{ id: string; code: string; status: string; warehouseId: string; orderDate: string; customerName: string | null; quantity: number; allocated: number }>(sql`
-    SELECT o.id, o.code, o.status, o.warehouse_id AS warehouseId, o.order_date AS orderDate, o.customer_name AS customerName,
+  const openOrders = (await dbAll<{ id: string; code: string; status: string; warehouseId: string; orderDate: string; customerName: string | null; quantity: number; allocated: number }>(db, sql`
+    SELECT o.id, o.code, o.status, o.warehouse_id AS "warehouseId", o.order_date AS "orderDate", o.customer_name AS "customerName",
       SUM(l.quantity - l.cancelled_quantity) AS quantity, SUM(l.allocated_quantity) AS allocated
     FROM order_lines l JOIN shipment_orders o ON o.id = l.order_id
     WHERE l.product_id = ${id} AND o.deleted_at IS NULL AND o.status IN (${sqlList(OPEN_SO_STATUSES)}) AND o.warehouse_id IN (${sqlList(whIds)})
-    GROUP BY o.id ORDER BY o.order_date DESC LIMIT 100`).map((o) => ({ ...o, warehouseCode: whCode(o.warehouseId), quantity: Number(o.quantity), allocated: Number(o.allocated) }));
+    GROUP BY o.id ORDER BY o.order_date DESC LIMIT 100`)).map((o) => ({ ...o, warehouseCode: whCode(o.warehouseId), quantity: Number(o.quantity), allocated: Number(o.allocated) }));
 
-  const openPos = db.all<{ id: string; code: string; status: string; warehouseId: string; vendorName: string; ordered: number; received: number; expectedAt: string | null }>(sql`
-    SELECT o.id, o.code, o.status, o.warehouse_id AS warehouseId, o.vendor_name AS vendorName,
-      SUM(l.ordered_quantity * l.uom_quantity) AS ordered, SUM(l.received_quantity * l.uom_quantity) AS received, o.expected_date AS expectedAt
+  const openPos = (await dbAll<{ id: string; code: string; status: string; warehouseId: string; vendorName: string; ordered: number; received: number; expectedAt: string | null }>(db, sql`
+    SELECT o.id, o.code, o.status, o.warehouse_id AS "warehouseId", o.vendor_name AS "vendorName",
+      SUM(l.ordered_quantity * l.uom_quantity) AS ordered, SUM(l.received_quantity * l.uom_quantity) AS received, o.expected_date AS "expectedAt"
     FROM purchase_order_lines l JOIN purchase_orders o ON o.id = l.purchase_order_id
     WHERE l.product_id = ${id} AND o.status IN (${sqlList(OPEN_PO_STATUSES)}) AND o.warehouse_id IN (${sqlList(whIds)})
-    GROUP BY o.id ORDER BY o.code DESC LIMIT 100`).map((o) => ({ ...o, warehouseCode: whCode(o.warehouseId), ordered: Number(o.ordered), received: Number(o.received) }));
+    GROUP BY o.id ORDER BY o.code DESC LIMIT 100`)).map((o) => ({ ...o, warehouseCode: whCode(o.warehouseId), ordered: Number(o.ordered), received: Number(o.received) }));
 
-  const listings = db.select({
+  const listings = await db.select({
     id: schema.productListings.id, storeName: schema.channelConnections.storeName, provider: schema.channelConnections.provider,
     sellerSku: schema.productListings.sellerSku, channelProductId: schema.productListings.channelProductId,
     storePrice: schema.productListings.storePrice, neverSync: schema.productListings.neverSync,
   }).from(schema.productListings).innerJoin(schema.channelConnections, eq(schema.channelConnections.id, schema.productListings.channelConnectionId))
-    .where(eq(schema.productListings.productId, id)).orderBy(asc(schema.channelConnections.storeName)).all();
+    .where(eq(schema.productListings.productId, id)).orderBy(asc(schema.channelConnections.storeName));
 
-  const comp = db.select({ id: p.id, sku: p.sku, name: p.name, quantity: kc.quantity, imageUrl: p.imageUrl }).from(kc)
-    .innerJoin(p, eq(p.id, kc.componentProductId)).where(eq(kc.kitProductId, id)).orderBy(asc(p.sku)).all();
-  const components = comp.map((c) => ({
+  const comp = await db.select({ id: p.id, sku: p.sku, name: p.name, quantity: kc.quantity, imageUrl: p.imageUrl }).from(kc)
+    .innerJoin(p, eq(p.id, kc.componentProductId)).where(eq(kc.kitProductId, id)).orderBy(asc(p.sku));
+  const components = await mapSeq(comp, async (c) => ({
     ...c,
-    available: Number(db.get<{ n: number }>(sql`SELECT COALESCE(SUM(on_hand - allocated - damaged), 0) AS n FROM inventory WHERE product_id = ${c.id} AND warehouse_id IN (${sqlList(whIds)})`)?.n ?? 0),
+    available: Number((await dbGet<{ n: number }>(db, sql`SELECT COALESCE(SUM(on_hand - allocated - damaged), 0) AS n FROM inventory WHERE product_id = ${c.id} AND warehouse_id IN (${sqlList(whIds)})`))?.n ?? 0),
   }));
 
   const replenishment = product.replenishmentStrategy === "Per Warehouse"
-    ? db.select({ warehouseId: schema.productReplenishmentLevels.warehouseId, min: schema.productReplenishmentLevels.minLevel, max: schema.productReplenishmentLevels.maxLevel })
-      .from(schema.productReplenishmentLevels).where(eq(schema.productReplenishmentLevels.productId, id)).all().map((r) => ({ warehouseCode: whCode(r.warehouseId), min: r.min, max: r.max }))
+    ? (await db.select({ warehouseId: schema.productReplenishmentLevels.warehouseId, min: schema.productReplenishmentLevels.minLevel, max: schema.productReplenishmentLevels.maxLevel })
+      .from(schema.productReplenishmentLevels).where(eq(schema.productReplenishmentLevels.productId, id))).map((r) => ({ warehouseCode: whCode(r.warehouseId), min: r.min, max: r.max }))
     : [{ warehouseCode: "All warehouses", min: product.replenishmentMin, max: product.replenishmentMax }];
 
-  const allocations = db.select({
+  const allocations = (await db.select({
     storeName: schema.channelConnections.storeName, warehouseId: schema.productChannelAllocations.warehouseId, staticQty: schema.productChannelAllocations.staticQty,
     reserveQty: schema.productChannelAllocations.reserveQty, allocationPct: schema.productChannelAllocations.allocationPct, syncedQty: schema.productChannelAllocations.syncedQty,
   }).from(schema.productChannelAllocations).innerJoin(schema.channelConnections, eq(schema.channelConnections.id, schema.productChannelAllocations.channelConnectionId))
-    .where(eq(schema.productChannelAllocations.productId, id)).all().map((a) => ({ ...a, warehouseCode: a.warehouseId ? whCode(a.warehouseId) : null }));
+    .where(eq(schema.productChannelAllocations.productId, id))).map((a) => ({ ...a, warehouseCode: a.warehouseId ? whCode(a.warehouseId) : null }));
 
   const tx = schema.inventoryTransactions;
-  const txns = db.select().from(tx).where(and(eq(tx.productId, id), inArray(tx.warehouseId, whIds))).orderBy(desc(tx.seq)).limit(100).all();
+  const txns = await db.select().from(tx).where(and(eq(tx.productId, id), inArray(tx.warehouseId, whIds))).orderBy(desc(tx.seq)).limit(100);
   const locIds = [...new Set(txns.flatMap((t) => [t.fromLocationId, t.toLocationId]).filter((x): x is string => Boolean(x)))];
-  const locs = locIds.length ? db.select({ id: locations.id, code: locations.code }).from(locations).where(inArray(locations.id, locIds)).all() : [];
+  const locs = locIds.length ? await db.select({ id: locations.id, code: locations.code }).from(locations).where(inArray(locations.id, locIds)) : [];
   const orderIds = [...new Set(txns.map((t) => t.orderId).filter((x): x is string => Boolean(x)))];
   const poIds = [...new Set(txns.map((t) => t.purchaseOrderId).filter((x): x is string => Boolean(x)))];
-  const orderCodes = orderIds.length ? db.select({ id: schema.shipmentOrders.id, code: schema.shipmentOrders.code }).from(schema.shipmentOrders).where(inArray(schema.shipmentOrders.id, orderIds)).all() : [];
-  const poCodes = poIds.length ? db.select({ id: schema.purchaseOrders.id, code: schema.purchaseOrders.code }).from(schema.purchaseOrders).where(inArray(schema.purchaseOrders.id, poIds)).all() : [];
+  const orderCodes = orderIds.length ? await db.select({ id: schema.shipmentOrders.id, code: schema.shipmentOrders.code }).from(schema.shipmentOrders).where(inArray(schema.shipmentOrders.id, orderIds)) : [];
+  const poCodes = poIds.length ? await db.select({ id: schema.purchaseOrders.id, code: schema.purchaseOrders.code }).from(schema.purchaseOrders).where(inArray(schema.purchaseOrders.id, poIds)) : [];
   const transactions = txns.map((t) => ({
     id: t.id, seq: t.seq, type: t.type, at: t.at, warehouseCode: whCode(t.warehouseId),
     fromLocation: locs.find((l) => l.id === t.fromLocationId)?.code ?? null, toLocation: locs.find((l) => l.id === t.toLocationId)?.code ?? null,
@@ -183,22 +185,22 @@ export function getProductDetail(db: AppDb, scope: Scope, viewScope: Scope, id: 
     { onHand: 0, allocated: 0, damaged: 0, available: 0, openSo: atp.reduce((s, a) => s + a.openSo, 0), openPo: atp.reduce((s, a) => s + a.openPo, 0) });
 
   const shipPackage = product.useShipPackageId
-    ? db.select({ code: schema.shipmentPackages.code }).from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, product.useShipPackageId)).get()?.code ?? null
+    ? (await db.select({ code: schema.shipmentPackages.code }).from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, product.useShipPackageId)).limit(1))[0]?.code ?? null
     : null;
 
   return {
-    product: { ...omitLegacyCategory(product), clientName: row.clients.name, clientCode: row.clients.code, productType: lookupName(db, product.productTypeId), productGroup: lookupName(db, product.productGroupId), shipPackage },
-    packTypes: loadPackTypes(db, id), barcodeConflicts: product.barcode ? db.all<{ id: string; sku: string; name: string }>(sql`
+    product: { ...omitLegacyCategory(product), clientName: row.clients.name, clientCode: row.clients.code, productType: await lookupName(db, product.productTypeId), productGroup: await lookupName(db, product.productGroupId), shipPackage },
+    packTypes: await loadPackTypes(db, id), barcodeConflicts: product.barcode ? await dbAll<{ id: string; sku: string; name: string }>(db, sql`
       SELECT p2.id, p2.sku, p2.name FROM products p2 WHERE p2.client_id = ${product.clientId} AND p2.id <> ${id}
         AND (p2.barcode = ${product.barcode} OR EXISTS (SELECT 1 FROM product_barcodes b2 WHERE b2.product_id = p2.id AND b2.barcode = ${product.barcode}))
       ORDER BY p2.sku LIMIT 20`) : [], totals, inventory: buckets, atp, openOrders, openPos, listings, components,
-    usedInKits: kitsUsing(db, id), replenishment, allocations, transactions,
+    usedInKits: await kitsUsing(db, id), replenishment, allocations, transactions,
   };
 }
 
 /** Wizard form values for an existing product (edit mode / duplicate). */
-export function getProductForm(db: AppDb, scope: Scope, id: string): (ProductFormValues & { id: string; version: number; clientName: string }) | null {
-  const row = db.select().from(p).innerJoin(clients, eq(clients.id, p.clientId)).where(eq(p.id, id)).get();
+export async function getProductForm(db: AppDb, scope: Scope, id: string): Promise<(ProductFormValues & { id: string; version: number; clientName: string }) | null> {
+  const row = (await db.select().from(p).innerJoin(clients, eq(clients.id, p.clientId)).where(eq(p.id, id)).limit(1))[0];
   if (!row) return null;
   try {
     assertInScope(scope, { clientId: row.products.clientId }, "Product");
@@ -207,15 +209,15 @@ export function getProductForm(db: AppDb, scope: Scope, id: string): (ProductFor
   }
   const r = row.products;
   const base = emptyProductForm(r.productCategory, r.clientId);
-  const packs = db.select().from(ppt).where(eq(ppt.productId, id)).all();
-  const codes = db.select().from(pb).where(eq(pb.productId, id)).all();
+  const packs = await db.select().from(ppt).where(eq(ppt.productId, id));
+  const codes = await db.select().from(pb).where(eq(pb.productId, id));
   const primary = packs.find((x) => x.kind === "Primary");
   const customs = (r.customs ?? {}) as Record<string, unknown>;
   const hazmat = (r.hazmat ?? {}) as Record<string, unknown>;
-  const components = db.select({ productId: p.id, sku: p.sku, name: p.name, imageUrl: p.imageUrl, quantity: kc.quantity }).from(kc)
-    .innerJoin(p, eq(p.id, kc.componentProductId)).where(eq(kc.kitProductId, id)).orderBy(asc(p.sku)).all();
-  const levels = db.select().from(schema.productReplenishmentLevels).where(eq(schema.productReplenishmentLevels.productId, id)).all();
-  const allocations = db.select().from(schema.productChannelAllocations).where(eq(schema.productChannelAllocations.productId, id)).all();
+  const components = await db.select({ productId: p.id, sku: p.sku, name: p.name, imageUrl: p.imageUrl, quantity: kc.quantity }).from(kc)
+    .innerJoin(p, eq(p.id, kc.componentProductId)).where(eq(kc.kitProductId, id)).orderBy(asc(p.sku));
+  const levels = await db.select().from(schema.productReplenishmentLevels).where(eq(schema.productReplenishmentLevels.productId, id));
+  const allocations = await db.select().from(schema.productChannelAllocations).where(eq(schema.productChannelAllocations.productId, id));
   const isProduct = r.productCategory === "Product";
   return {
     ...base,

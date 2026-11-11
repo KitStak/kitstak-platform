@@ -1,5 +1,5 @@
 /** Catalog: products, pack types (UOM model), barcodes, kits, listings, serials. */
-import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, doublePrecision, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import {
   ACTIVE_STATUSES,
   HAZMAT_TYPES,
@@ -38,7 +38,7 @@ export interface ProductHazmat {
 }
 
 /** Existing `price` == Sales Price, `uom` == primary pack type, `isHazmat` == hazmat switch. */
-export const products = sqliteTable("products", {
+export const products = pgTable("products", {
   id: pk(),
   clientId: text("client_id").notNull().references(() => clients.id),
   sku: text("sku").notNull(),
@@ -46,11 +46,11 @@ export const products = sqliteTable("products", {
   name: text("name").notNull(),
   category: text("category").notNull(),
   uom: text("uom").notNull().default("Each"),
-  weightOz: real("weight_oz").notNull(),
-  lengthIn: real("length_in").notNull(),
-  widthIn: real("width_in").notNull(),
-  heightIn: real("height_in").notNull(),
-  price: real("price").notNull(),
+  weightOz: doublePrecision("weight_oz").notNull(),
+  lengthIn: doublePrecision("length_in").notNull(),
+  widthIn: doublePrecision("width_in").notNull(),
+  heightIn: doublePrecision("height_in").notNull(),
+  price: doublePrecision("price").notNull(),
   isKit: bool("is_kit").notNull().default(false),
   isFragile: bool("is_fragile").notNull().default(false),
   isHazmat: bool("is_hazmat").notNull().default(false),
@@ -63,8 +63,8 @@ export const products = sqliteTable("products", {
   productTypeId: text("product_type_id"), // lookup_values (client-scoped)
   productGroupId: text("product_group_id"),
   currency: text("currency").notNull().default("USD"),
-  purchasePrice: real("purchase_price").notNull().default(0),
-  taxRate: real("tax_rate").notNull().default(0),
+  purchasePrice: doublePrecision("purchase_price").notNull().default(0),
+  taxRate: doublePrecision("tax_rate").notNull().default(0),
   minSafetyStock: integer("min_safety_stock").notNull().default(0),
   fnsku: text("fnsku"),
   isDigital: bool("is_digital").notNull().default(false),
@@ -109,7 +109,7 @@ export const products = sqliteTable("products", {
   index("products_barcode_idx").on(t.barcode),
 ]);
 
-export const productPackTypes = sqliteTable("product_pack_types", {
+export const productPackTypes = pgTable("product_pack_types", {
   id: pk(),
   productId: text("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
   packType: text("pack_type").notNull(), // lookup pack_type name
@@ -118,27 +118,27 @@ export const productPackTypes = sqliteTable("product_pack_types", {
   childQty: integer("child_qty"),
   uomQty: integer("uom_qty").notNull().default(1),
   dimensionUnit: text("dimension_unit").notNull().default("Inch"),
-  length: real("length").notNull().default(0),
-  width: real("width").notNull().default(0),
-  height: real("height").notNull().default(0),
+  length: doublePrecision("length").notNull().default(0),
+  width: doublePrecision("width").notNull().default(0),
+  height: doublePrecision("height").notNull().default(0),
   volumeUnit: text("volume_unit").notNull().default("Cubic Inch"),
-  volume: real("volume").notNull().default(0),
+  volume: doublePrecision("volume").notNull().default(0),
   weightUnit: text("weight_unit").notNull().default("Pound"),
-  weight: real("weight").notNull().default(0),
+  weight: doublePrecision("weight").notNull().default(0),
   useShipPackageId: text("use_ship_package_id"),
   useOwnBox: bool("use_own_box").notNull().default(false),
   usePrimaryBarcodes: bool("use_primary_barcodes").notNull().default(false),
   ...stamps(),
 }, (t) => [uniqueIndex("ppt_product_pack_idx").on(t.productId, t.packType)]);
 
-export const productBarcodes = sqliteTable("product_barcodes", {
+export const productBarcodes = pgTable("product_barcodes", {
   id: pk(),
   productId: text("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
   packTypeId: text("pack_type_id").notNull().references(() => productPackTypes.id, { onDelete: "cascade" }),
   barcode: text("barcode").notNull(),
 }, (t) => [index("product_barcodes_code_idx").on(t.barcode)]);
 
-export const kitComponents = sqliteTable("kit_components", {
+export const kitComponents = pgTable("kit_components", {
   id: pk(),
   kitProductId: text("kit_product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
   componentProductId: text("component_product_id").notNull().references(() => products.id),
@@ -146,25 +146,25 @@ export const kitComponents = sqliteTable("kit_components", {
   packType: text("pack_type").notNull().default("Each"),
 }, (t) => [uniqueIndex("kit_component_idx").on(t.kitProductId, t.componentProductId)]);
 
-export const productReplenishmentLevels = sqliteTable("product_replenishment_levels", {
+export const productReplenishmentLevels = pgTable("product_replenishment_levels", {
   productId: text("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
   minLevel: integer("min_level").notNull(),
   maxLevel: integer("max_level").notNull(),
 }, (t) => [primaryKey({ columns: [t.productId, t.warehouseId] })]);
 
-export const productChannelAllocations = sqliteTable("product_channel_allocations", {
+export const productChannelAllocations = pgTable("product_channel_allocations", {
   id: pk(),
   productId: text("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
   channelConnectionId: text("channel_connection_id").notNull().references(() => channelConnections.id),
   warehouseId: text("warehouse_id").references(() => warehouses.id),
   staticQty: integer("static_qty"),
   reserveQty: integer("reserve_qty"),
-  allocationPct: real("allocation_pct"),
+  allocationPct: doublePrecision("allocation_pct"),
   syncedQty: integer("synced_qty").notNull().default(0),
 }, (t) => [index("pca_product_idx").on(t.productId)]);
 
-export const productListings = sqliteTable("product_listings", {
+export const productListings = pgTable("product_listings", {
   id: pk(),
   channelConnectionId: text("channel_connection_id").notNull().references(() => channelConnections.id),
   clientId: text("client_id").notNull().references(() => clients.id),
@@ -173,7 +173,7 @@ export const productListings = sqliteTable("product_listings", {
   channelProductId: text("channel_product_id").notNull(),
   name: text("name").notNull(),
   description: text("description"),
-  storePrice: real("store_price"),
+  storePrice: doublePrecision("store_price"),
   imageUrl: text("image_url"),
   neverSync: bool("never_sync").notNull().default(false),
   linkedAt: text("linked_at"),
@@ -186,7 +186,7 @@ export const productListings = sqliteTable("product_listings", {
   index("listing_product_idx").on(t.productId),
 ]);
 
-export const serialNumbers = sqliteTable("serial_numbers", {
+export const serialNumbers = pgTable("serial_numbers", {
   id: pk(),
   productId: text("product_id").notNull().references(() => products.id),
   warehouseId: text("warehouse_id").notNull(),
@@ -202,7 +202,7 @@ export const serialNumbers = sqliteTable("serial_numbers", {
   ...stamps(),
 }, (t) => [uniqueIndex("serial_unique_idx").on(t.productId, t.primarySerial)]);
 
-export const serialTransactions = sqliteTable("serial_transactions", {
+export const serialTransactions = pgTable("serial_transactions", {
   id: pk(),
   serialId: text("serial_id").notNull().references(() => serialNumbers.id),
   inventoryTransactionId: text("inventory_transaction_id").notNull(),

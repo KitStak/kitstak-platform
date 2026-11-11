@@ -130,92 +130,92 @@ describe("returns and packing (DB)", () => {
   let w: World;
   let scope: Scope;
   let ctx: ScopedCtx;
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     scope = { warehouseIds: [w.warehouseId], clientIds: "all" } as unknown as Scope;
     ctx = { ...w.ctx, scope } as ScopedCtx;
   });
   afterEach(() => w.close());
 
-  function shipped(qty: number, pack = true) {
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 5 });
-    const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]));
-    allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
-    const { jobIds: [jobId] } = createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
+  async function shipped(qty: number, pack = true) {
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 5 });
+    const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]));
+    await allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
+    const { jobIds: [jobId] } = await createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
     for (const [type, loc] of [["Picking", w.loc.pick], ["Packing", w.loc.pack]] as const) {
       if (type === "Packing" && !pack) continue;
-      const ids = w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId ?? ""), eq(schema.tasks.taskType, type))).all().map((t) => t.id);
-      if (ids.length) execute(w.db, w.ctx, { taskIds: ids, targetLocationId: loc });
+      const ids = (await w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId ?? ""), eq(schema.tasks.taskType, type)))).map((t) => t.id);
+      if (ids.length) await execute(w.db, w.ctx, { taskIds: ids, targetLocationId: loc });
     }
-    if (pack) shipOrders(w.db, w.ctx, { orderIds: [o.id], requireLabel: false });
-    const l = w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, o.id)).get();
-    const code = w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, o.id)).get()?.code ?? "";
+    if (pack) await shipOrders(w.db, w.ctx, { orderIds: [o.id], requireLabel: false });
+    const l = (await w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, o.id)).limit(1))[0];
+    const code = (await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, o.id)).limit(1))[0]?.code ?? "";
     return { orderId: o.id, lineId: l?.id ?? "", code };
   }
 
-  it("creates an RMA with a return address and manual return info, logs line creation", () => {
-    const addr = w.db.insert(schema.addresses).values({ ownerType: "warehouse", ownerId: w.warehouseId, name: "Returns dock", usageType: "Return", line1: "1 Dock Rd", city: "Louisville", postalCode: "40201", country: "US" }).returning().get();
-    const { orderId, lineId } = shipped(2);
-    const order = shippableOrder(w.db, scope, orderId);
+  it("creates an RMA with a return address and manual return info, logs line creation", async () => {
+    const addr = (await w.db.insert(schema.addresses).values({ ownerType: "warehouse", ownerId: w.warehouseId, name: "Returns dock", usageType: "Return", line1: "1 Dock Rd", city: "Louisville", postalCode: "40201", country: "US" }).returning())[0];
+    const { orderId, lineId } = await shipped(2);
+    const order = await shippableOrder(w.db, scope, orderId);
     expect(order.returnAddresses[0]).toMatchObject({ id: addr.id, label: "Returns dock", owner: "warehouse" });
     expect(order.defaultReturnAddressId).toBe(addr.id);
     const input = createRmaSchema.parse({
       shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }], expectedReturnDate: "2026-11-20", returnAddressId: addr.id,
       returnInfo: { carrierCode: "UPS", carrierServiceName: "Ground", shippingCost: 8.25, trackingNumbers: ["1ZA", "1ZB"] },
     });
-    const rma = insertRma(w.db, ctx, input);
-    const d = getReturnDetail(w.db, scope, rma.id);
+    const rma = await insertRma(w.db, ctx, input);
+    const d = await getReturnDetail(w.db, scope, rma.id);
     expect(d).toMatchObject({ expectedReturnDate: "2026-11-20", carrierCode: "UPS", carrierServiceName: "Ground", trackingNumber: "1ZA, 1ZB", trackingNumbers: ["1ZA", "1ZB"], returnShippingCost: 8.25, returnAddressId: addr.id });
     expect(d.returnAddress).toContain("1 Dock Rd");
-    const log = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.parentEntityId, rma.id)).all().map((r) => r.message);
+    const log = (await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.parentEntityId, rma.id))).map((r) => r.message);
     expect(log).toContain("SKU-1 -> Return Order Line is created.".replace("SKU-1", d.lines[0]?.sku ?? ""));
     // An address of another owner is refused.
-    const foreign = w.db.insert(schema.addresses).values({ ownerType: "customer", ownerId: "x", line1: "9 Elsewhere", city: "X", postalCode: "1", country: "US" }).returning().get();
-    expect(() => insertRma(w.db, ctx, { ...input, lines: [{ orderLineId: lineId, quantity: 1 }], returnAddressId: foreign.id })).toThrow(/return address/);
+    const foreign = (await w.db.insert(schema.addresses).values({ ownerType: "customer", ownerId: "x", line1: "9 Elsewhere", city: "X", postalCode: "1", country: "US" }).returning())[0];
+    await expect(async () => await insertRma(w.db, ctx, { ...input, lines: [{ orderLineId: lineId, quantity: 1 }], returnAddressId: foreign.id })).rejects.toThrow(/return address/);
   });
 
-  it("logs disposition per line with the SKU", () => {
-    const { orderId, lineId } = shipped(1);
-    const rma = insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
-    receiveRma(w.db, ctx, receiveRmaSchema.parse({ returnOrderId: rma.id, stationLocationId: w.loc.returns, items: [{ productId: w.productId, quantity: 1, disposition: "Quarantine" }] }));
-    const sku = w.db.select().from(schema.products).where(eq(schema.products.id, w.productId)).get()?.sku ?? "";
-    const msgs = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.parentEntityId, rma.id)).all().map((r) => r.message);
+  it("logs disposition per line with the SKU", async () => {
+    const { orderId, lineId } = await shipped(1);
+    const rma = await insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
+    await receiveRma(w.db, ctx, receiveRmaSchema.parse({ returnOrderId: rma.id, stationLocationId: w.loc.returns, items: [{ productId: w.productId, quantity: 1, disposition: "Quarantine" }] }));
+    const sku = (await w.db.select().from(schema.products).where(eq(schema.products.id, w.productId)).limit(1))[0]?.sku ?? "";
+    const msgs = (await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.parentEntityId, rma.id))).map((r) => r.message);
     expect(msgs).toContain(`${sku} -> Disposition is modified. — --> Quarantine`);
     expect(msgs.some((m) => m.startsWith("Disposition is modified"))).toBe(false);
   });
 
-  it("selection transitions report line counts for partial selections", () => {
-    const { orderId, lineId } = shipped(2);
-    const rma = insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
-    const lines = w.db.select().from(schema.returnOrderLines).where(eq(schema.returnOrderLines.returnOrderId, rma.id)).all();
-    const res = selectionTransitions(w.db, scope, [rma.id], [lines[0]?.id ?? ""]);
+  it("selection transitions report line counts for partial selections", async () => {
+    const { orderId, lineId } = await shipped(2);
+    const rma = await insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
+    const lines = await w.db.select().from(schema.returnOrderLines).where(eq(schema.returnOrderLines.returnOrderId, rma.id));
+    const res = await selectionTransitions(w.db, scope, [rma.id], [lines[0]?.id ?? ""]);
     expect(res.returns[0]).toMatchObject({ lineCount: 1, selectedLines: 1 });
-    expect(selectionTransitions(w.db, scope, [rma.id]).returns[0]?.selectedLines).toBeNull();
+    expect((await selectionTransitions(w.db, scope, [rma.id])).returns[0]?.selectedLines).toBeNull();
   });
 
-  it("scan misses are typed results, not errors; out-of-scope warehouse still throws", () => {
-    const miss = scanOutcome(w.db, scope, { warehouseId: w.warehouseId, mode: "order", code: "SO000000" });
+  it("scan misses are typed results, not errors; out-of-scope warehouse still throws", async () => {
+    const miss = await scanOutcome(w.db, scope, { warehouseId: w.warehouseId, mode: "order", code: "SO000000" });
     expect(miss).toMatchObject({ miss: { kind: "NOT_FOUND", message: expect.stringMatching(/No order found/) } });
-    expect(scanOutcome(w.db, scope, { warehouseId: w.warehouseId, mode: "tote", code: "LP-NOPE" })).toHaveProperty("miss");
-    expect(() => scanOutcome(w.db, { warehouseIds: [], clientIds: "all" } as unknown as Scope, { warehouseId: w.warehouseId, mode: "order", code: "x" })).toThrow(/Warehouse not found/);
+    expect(await scanOutcome(w.db, scope, { warehouseId: w.warehouseId, mode: "tote", code: "LP-NOPE" })).toHaveProperty("miss");
+    await expect(async () => await scanOutcome(w.db, { warehouseIds: [], clientIds: "all" } as unknown as Scope, { warehouseId: w.warehouseId, mode: "order", code: "x" })).rejects.toThrow(/Warehouse not found/);
   });
 
-  it("packing history lists today's packed orders for the user and honours the clear mark", () => {
-    const { code } = shipped(2);
-    const rows = packingHistory(w.db, scope, w.warehouseId, w.ctx.userId);
+  it("packing history lists today's packed orders for the user and honours the clear mark", async () => {
+    const { code } = await shipped(2);
+    const rows = await packingHistory(w.db, scope, w.warehouseId, w.ctx.userId);
     expect(rows.map((r) => r.orderCode)).toContain(code);
     expect(rows[0]?.units).toBe(2);
     const later = new Date(Date.now() + 60_000).toISOString();
-    expect(packingHistory(w.db, scope, w.warehouseId, w.ctx.userId, { since: later })).toEqual([]);
-    expect(packingHistory(w.db, scope, w.warehouseId, "someone-else")).toEqual([]);
+    expect(await packingHistory(w.db, scope, w.warehouseId, w.ctx.userId, { since: later })).toEqual([]);
+    expect(await packingHistory(w.db, scope, w.warehouseId, "someone-else")).toEqual([]);
   });
 
-  it("return stations list physical stations before virtual ones; targets skip packing / virtual", () => {
-    w.db.insert(schema.locations).values(locationRow(w.warehouseId, "AAA-RTN-V", { areaType: "Returns", locationType: "Virtual" } as never)).run();
-    const st = returnStations(w.db, scope, w.warehouseId);
+  it("return stations list physical stations before virtual ones; targets skip packing / virtual", async () => {
+    await w.db.insert(schema.locations).values(locationRow(w.warehouseId, "AAA-RTN-V", { areaType: "Returns", locationType: "Virtual" } as never));
+    const st = await returnStations(w.db, scope, w.warehouseId);
     const virtualIdx = st.findIndex((s) => s.code === "AAA-RTN-V");
     expect(virtualIdx).toBe(st.length - 1);
-    const targets = returnTargets(w.db, scope, { warehouseId: w.warehouseId, kind: "location" });
+    const targets = await returnTargets(w.db, scope, { warehouseId: w.warehouseId, kind: "location" });
     expect(targets.some((t) => t.code === "AAA-RTN-V")).toBe(false);
     expect(targets.every((t) => !/^Packing/.test(t.detail ?? ""))).toBe(true);
   });

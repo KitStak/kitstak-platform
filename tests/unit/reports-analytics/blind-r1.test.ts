@@ -29,10 +29,10 @@ let w: World;
 let auth: AuthContext;
 const q = (qs = ""): GridQuery => ({ ...EMPTY_GRID_QUERY, ...parseGridQuery(qs).query, pageSize: 500 });
 
-beforeEach(() => {
-  w = createWorld();
-  const user = w.db.select().from(schema.users).all()[0]!;
-  auth = buildAuthContext(w.db, { id: user.id, email: user.email, name: user.name, role: user.role, userType: user.userType, allClients: true, isApiUser: false, sessionId: "t", sessionVersion: 0, sessionExpiresAt: "" } as never);
+beforeEach(async () => {
+  w = await createWorld();
+  const user = (await w.db.select().from(schema.users))[0]!;
+  auth = await buildAuthContext(w.db, { id: user.id, email: user.email, name: user.name, role: user.role, userType: user.userType, allClients: true, isApiUser: false, sessionId: "t", sessionVersion: 0, sessionExpiresAt: "" } as never);
 });
 afterEach(() => w.close());
 
@@ -64,15 +64,15 @@ describe("location utilization capacity", () => {
     expect(CAPACITY_SOURCES).toContain("Cube (volume)");
     expect(UTILIZATION_DEFAULT_FILTER).toBe("f.estimated=bool:false");
   });
-  it("uses cube when the location has a volume, and keeps legacy units only as a hidden-by-default estimate", () => {
-    const loc = w.db.select().from(schema.locations).all();
+  it("uses cube when the location has a volume, and keeps legacy units only as a hidden-by-default estimate", async () => {
+    const loc = await w.db.select().from(schema.locations);
     const [a, b] = loc;
-    w.db.update(schema.locations).set({ volume: 1000, maxCapacityQty: 0, capacityUnits: 240 }).run();
-    if (b) w.db.update(schema.locations).set({ volume: 0 }).where(eq(schema.locations.id, b.id)).run();
-    w.db.update(schema.products).set({ lengthIn: 10, widthIn: 5, heightIn: 2 }).run(); // 100 in³ per unit
-    const inv = w.db.select().from(schema.inventory).all().filter((i) => i.onHand > 0);
+    await w.db.update(schema.locations).set({ volume: 1000, maxCapacityQty: 0, capacityUnits: 240 });
+    if (b) await w.db.update(schema.locations).set({ volume: 0 }).where(eq(schema.locations.id, b.id));
+    await w.db.update(schema.products).set({ lengthIn: 10, widthIn: 5, heightIn: 2 }); // 100 in³ per unit
+    const inv = (await w.db.select().from(schema.inventory)).filter((i) => i.onHand > 0);
     const at = inv.find((i) => i.locationId === a?.id);
-    const rows = listUtilization(w.db, auth, q()).rows;
+    const rows = (await listUtilization(w.db, auth, q())).rows;
     const rowA = rows.find((r) => r.rowId === a?.id);
     expect(rowA?.capacitySource).toBe("Cube (volume)");
     if (at) {
@@ -81,7 +81,7 @@ describe("location utilization capacity", () => {
       expect(rowA?.capacity).toBe(10);
     }
     if (b) expect(rows.find((r) => r.rowId === b.id)?.capacitySource).toBe("Legacy Capacity Units (estimate)");
-    const exact = listUtilization(w.db, auth, q(UTILIZATION_DEFAULT_FILTER)).rows;
+    const exact = (await listUtilization(w.db, auth, q(UTILIZATION_DEFAULT_FILTER))).rows;
     expect(exact.every((r) => r.estimated === 0)).toBe(true);
     expect(UTILIZATION_DEF.columns.some((c) => c.id === "usedCube")).toBe(true);
   });
@@ -148,31 +148,31 @@ describe("scheduled report delivery", () => {
   });
   it("creates, lists, delivers a CSV into Export History and moves the next run on", async () => {
     const now = new Date("2026-11-10T12:00:00Z");
-    const s = createSchedule(w.db, auth, {
+    const s = await createSchedule(w.db, auth, {
       gridKey: "report-location-utilization", name: "Daily space", query: "f.estimated=bool:false", frequency: "daily", time: "06:00",
       timeZone: "America/New_York", format: "csv", recipients: ["ops@example.com", "OPS@example.com"],
     }, now);
     expect(s.recipients).toEqual(["ops@example.com"]);
-    expect(listSchedules(w.db, auth).map((x) => x.id)).toEqual([s.id]);
+    expect((await listSchedules(w.db, auth)).map((x) => x.id)).toEqual([s.id]);
     const sent: string[] = [];
     const mail = async (_db: unknown, m: { to: string; subject: string; text: string }) => { sent.push(`${m.to}|${m.subject}|${m.text}`); return { transport: "log" as const, delivered: false }; };
     const r = await deliverSchedule(w.db, auth.user.id, { ...s }, { now, store: w.files, mail: mail as never, baseUrl: "https://wms.test" });
     expect(r.status).toBe("ok");
-    const task = w.db.select().from(schema.backgroundTasks).all().find((t) => t.id === r.taskId)!;
+    const task = (await w.db.select().from(schema.backgroundTasks)).find((t) => t.id === r.taskId)!;
     expect(task).toMatchObject({ kind: "export", status: "completed", gridKey: "report-location-utilization", rowCount: r.rows });
     expect(sent[0]).toContain("https://wms.test/api/files/");
     expect(sent[0]).toContain("Location Utilization Report - Daily space");
     // Due run: the scheduler tick delivers it and schedules the next day.
     const due = await runDueSchedules(w.db, new Date("2026-11-11T11:30:00Z"));
     expect(due).toEqual({ delivered: 1, failed: 0 });
-    const after = listSchedules(w.db, auth)[0]!;
+    const after = (await listSchedules(w.db, auth))[0]!;
     expect(after.lastStatus).toBe("ok");
     expect(after.nextRunAt).toBe("2026-11-12T11:00:00.000Z");
   });
-  it("rejects unknown reports, bad times and empty recipients", () => {
-    expect(() => createSchedule(w.db, auth, { gridKey: "report-export-history", name: "x", frequency: "daily", time: "07:00", timeZone: "UTC", recipients: ["a@b.co"] })).toThrow();
-    expect(() => createSchedule(w.db, auth, { gridKey: "report-change-log", name: "x", frequency: "daily", time: "7am", timeZone: "UTC", recipients: ["a@b.co"] })).toThrow();
-    expect(() => createSchedule(w.db, auth, { gridKey: "report-change-log", name: "x", frequency: "daily", time: "07:00", timeZone: "UTC", recipients: [] })).toThrow();
+  it("rejects unknown reports, bad times and empty recipients", async () => {
+    await expect(async () => await createSchedule(w.db, auth, { gridKey: "report-export-history", name: "x", frequency: "daily", time: "07:00", timeZone: "UTC", recipients: ["a@b.co"] })).rejects.toThrow();
+    await expect(async () => await createSchedule(w.db, auth, { gridKey: "report-change-log", name: "x", frequency: "daily", time: "7am", timeZone: "UTC", recipients: ["a@b.co"] })).rejects.toThrow();
+    await expect(async () => await createSchedule(w.db, auth, { gridKey: "report-change-log", name: "x", frequency: "daily", time: "07:00", timeZone: "UTC", recipients: [] })).rejects.toThrow();
   });
 });
 

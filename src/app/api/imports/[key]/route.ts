@@ -18,8 +18,8 @@ import {
 export const GET = defineRoute({
   params: importKeyParamsSchema,
   query: importHistoryQuerySchema,
-  handler: ({ db, auth, params, query }) => {
-    const { definition, history, total } = importOverview(db, auth, params.key, query);
+  handler: async ({ db, auth, params, query }) => {
+    const { definition, history, total } = await importOverview(db, auth, params.key, query);
     return listResult(history, { total, page: query.page, pageSize: query.ps, definition });
   },
 });

@@ -8,10 +8,10 @@ import { bulkIdsSchema, domainCtx } from "@/server/repositories/platform-common"
 export const POST = defineRoute({
   permission: "settings.product_listing.search_a_product",
   body: z.object({ ids: bulkIdsSchema, neverSync: z.boolean() }),
-  handler: ({ db, auth, actor, body }) => {
+  handler: async ({ db, auth, actor, body }) => {
     const ctx = { ...domainCtx(actor, auth), scope: auth.scope };
-    return runBulk(db, body.ids, (tx, id) => {
-      setNeverSync(tx, ctx, id, body.neverSync);
+    return await runBulk(db, body.ids, async (tx, id) => {
+      await setNeverSync(tx, ctx, id, body.neverSync);
     });
   },
 });

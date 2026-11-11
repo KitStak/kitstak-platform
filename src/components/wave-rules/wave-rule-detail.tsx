@@ -22,7 +22,7 @@ import type { WaveRuleOptions } from "@/server/repositories/wave-rules-options";
 import { jobsOfWaveHref } from "@/components/jobs/report-pages";
 import type { GridRow } from "@/components/jobs/jobs-client";
 
-type Detail = ReturnType<typeof getWaveRuleDetail>;
+type Detail = Awaited<ReturnType<typeof getWaveRuleDetail>>;
 
 function Row({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
   return (

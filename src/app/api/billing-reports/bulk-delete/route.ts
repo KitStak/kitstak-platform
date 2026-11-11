@@ -6,5 +6,5 @@ import { deleteReports } from "@/server/repositories/billing-reports";
 export const POST = defineRoute({
   permission: "settings.billing_report.delete",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => deleteReports(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await deleteReports(db, auth, actor, body.ids),
 });

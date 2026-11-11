@@ -20,10 +20,10 @@ export const POST = defineRoute({
   permission: [P.addLine, P.adjustLine, P.removeLine],
   params: idParamsSchema,
   body: quantityChangeSchema,
-  handler: ({ db, auth, actor, params, body }) => {
+  handler: async ({ db, auth, actor, params, body }) => {
     if (!can(auth, BY_MODE[body.mode])) throw forbiddenError();
-    const result = changeQuantity(db, domainCtx(actor, auth), params.id, body);
-    const bucket = result.to > 0 ? findBucketRow(db, auth, result.inventoryId) : null;
+    const result = await changeQuantity(db, domainCtx(actor, auth), params.id, body);
+    const bucket = result.to > 0 ? await findBucketRow(db, auth, result.inventoryId) : null;
     return { ...result, deleted: result.to === 0, bucket };
   },
 });

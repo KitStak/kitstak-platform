@@ -7,8 +7,8 @@ import { duplicateCodeMessage } from "@/server/repositories/purchase-orders-comm
 export const GET = defineRoute({
   permission: ["inventory.purchase_orders.create", "inventory.purchase_orders.edit"],
   query: z.object({ code: z.string().trim().min(1).max(50), excludeId: z.string().trim().max(64).optional() }),
-  handler: ({ db, query }) => {
-    const hit = poCodeTaken(db, query.code, query.excludeId);
+  handler: async ({ db, query }) => {
+    const hit = await poCodeTaken(db, query.code, query.excludeId);
     return { code: query.code, taken: hit.taken, message: hit.taken ? duplicateCodeMessage(query.code) : null };
   },
 });

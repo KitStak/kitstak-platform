@@ -5,9 +5,9 @@ import { listPutawayTasks } from "@/server/repositories/putaway-worklist";
 
 export const GET = defineRoute({
   permission: "inventory.purchase_orders.view",
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total, units } = listPutawayTasks(db, auth, query);
+    const { rows, total, units } = await listPutawayTasks(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize, units });
   },
 });

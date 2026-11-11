@@ -4,7 +4,8 @@
  * allocation Dry Run. Tests and dry runs execute the real foundation engines in a savepoint that
  * is always rolled back, so drafts can be tested before saving.
  */
-import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import type { AppDb } from "@/server/api/db";
 import { AppError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
@@ -23,6 +24,7 @@ import {
   assertFound, assertVersion, assertWarehouseInScope, compileGrid, domainCtxOf, dryRun, duplicateError, fieldError, labelsOf, listScope,
   logCreate, logDelete, logUpdate, type Actor, type GridBinding,
 } from "./integration-logs-kit";
+import { mapSeq } from "@/server/db/sql";
 
 const t = s.algorithms;
 const r = s.algorithmRules;
@@ -65,89 +67,89 @@ export interface AlgorithmDetail extends AlgorithmRow {
 }
 
 /** Why an algorithm can't be deleted (null = deletable). */
-function inUseReason(db: AppDb, a: Pick<AlgoRow, "id" | "kind" | "isSystem" | "isDynamicReplenishment" | "status" | "warehouseId">): string | null {
+async function inUseReason(db: AppDb, a: Pick<AlgoRow, "id" | "kind" | "isSystem" | "isDynamicReplenishment" | "status" | "warehouseId">): Promise<string | null> {
   if (a.isSystem) return "System algorithms can't be deleted; set them passive instead";
   if (a.kind === "Allocation") {
-    const jt = db.select({ code: s.jobTypes.code }).from(s.jobTypes).where(eq(s.jobTypes.allocationAlgorithmId, a.id)).get();
+    const jt = (await db.select({ code: s.jobTypes.code }).from(s.jobTypes).where(eq(s.jobTypes.allocationAlgorithmId, a.id)).limit(1))[0];
     if (jt) return `Used by job type ${jt.code}`;
   }
   if (a.kind === "Putaway" && a.isDynamicReplenishment && a.status === "Active") {
-    const others = db.select({ id: t.id }).from(t).where(and(eq(t.warehouseId, a.warehouseId), eq(t.kind, "Putaway"), eq(t.isDynamicReplenishment, true), eq(t.status, "Active"), ne(t.id, a.id))).all();
+    const others = await db.select({ id: t.id }).from(t).where(and(eq(t.warehouseId, a.warehouseId), eq(t.kind, "Putaway"), eq(t.isDynamicReplenishment, true), eq(t.status, "Active"), ne(t.id, a.id)));
     if (others.length === 0) return "At least one replenishment algorithm must stay active";
   }
   return null;
 }
 
-function toRow(db: AppDb, a: AlgoRow, ruleCount: number, warehouseCode: string): AlgorithmRow {
+async function toRow(db: AppDb, a: AlgoRow, ruleCount: number, warehouseCode: string): Promise<AlgorithmRow> {
   return {
     id: a.id, name: a.name, kind: a.kind, warehouseId: a.warehouseId, warehouseCode, status: a.status, isDynamicReplenishment: a.isDynamicReplenishment,
-    enforceSuggestedLocations: a.enforceSuggestedLocations, isSystem: a.isSystem, ruleCount, inUse: inUseReason(db, a), updatedAt: a.updatedAt, version: a.version,
+    enforceSuggestedLocations: a.enforceSuggestedLocations, isSystem: a.isSystem, ruleCount, inUse: await inUseReason(db, a), updatedAt: a.updatedAt, version: a.version,
   };
 }
 
-export function listAlgorithms(db: AppDb, auth: AuthContext, kind: Kind, query: GridQuery): { rows: AlgorithmRow[]; total: number } {
+export async function listAlgorithms(db: AppDb, auth: AuthContext, kind: Kind, query: GridQuery): Promise<{ rows: AlgorithmRow[]; total: number }> {
   const grid = compileGrid(BINDING, query, [listScope(t, auth, { warehouseId: t.warehouseId }), eq(t.kind, kind)]);
-  const result = paginate(
+  const result = await paginate(
     db.select({ a: t, ruleCount: ruleCountSql, warehouseCode: warehouseCodeSql }).from(t).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(t).where(grid.where).get()?.n ?? 0,
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(t).where(grid.where).limit(1))[0]?.n ?? 0,
     { page: query.page, pageSize: query.pageSize },
   );
-  return { rows: result.rows.map((x) => toRow(db, x.a, Number(x.ruleCount), x.warehouseCode)), total: result.total };
+  return { rows: await mapSeq(result.rows, async (x) => await toRow(db, x.a, Number(x.ruleCount), x.warehouseCode)), total: result.total };
 }
 
-export function loadAlgorithm(db: AppDb, auth: AuthContext, id: string): AlgoRow {
-  const row = assertFound(db.select().from(t).where(eq(t.id, id)).get(), "Algorithm");
+export async function loadAlgorithm(db: AppDb, auth: AuthContext, id: string): Promise<AlgoRow> {
+  const row = assertFound((await db.select().from(t).where(eq(t.id, id)).limit(1))[0], "Algorithm");
   assertWarehouseInScope(auth, row.warehouseId, "Algorithm");
   return row;
 }
 
-function loadRules(db: AppDb, id: string): AlgorithmDetail["rules"] {
-  return db.select().from(r).where(eq(r.algorithmId, id)).orderBy(asc(r.sequence)).all().map((x) => ({
+async function loadRules(db: AppDb, id: string): Promise<AlgorithmDetail["rules"]> {
+  return (await db.select().from(r).where(eq(r.algorithmId, id)).orderBy(asc(r.sequence))).map((x) => ({
     id: x.id, sequence: x.sequence, name: x.name, isActive: x.isActive, conditions: x.conditions, inventoryConditions: x.inventoryConditions ?? [],
     actions: (x.actions ?? []).map((a) => ({ action: a.action, value: a.value })), orderBy: x.orderBy,
   }));
 }
 
-export function getAlgorithm(db: AppDb, auth: AuthContext, id: string): AlgorithmDetail {
-  const a = loadAlgorithm(db, auth, id);
-  const rules = loadRules(db, id);
-  const wh = labelsOf(db, "warehouses", [a.warehouseId]).get(a.warehouseId) ?? "";
+export async function getAlgorithm(db: AppDb, auth: AuthContext, id: string): Promise<AlgorithmDetail> {
+  const a = await loadAlgorithm(db, auth, id);
+  const rules = await loadRules(db, id);
+  const wh = (await labelsOf(db, "warehouses", [a.warehouseId])).get(a.warehouseId) ?? "";
   const other = a.kind === "Putaway"
-    ? db.select({ id: t.id, name: t.name }).from(t).where(and(eq(t.warehouseId, a.warehouseId), eq(t.kind, "Putaway"), eq(t.isDynamicReplenishment, true), eq(t.status, "Active"), ne(t.id, a.id))).get() ?? null
+    ? (await db.select({ id: t.id, name: t.name }).from(t).where(and(eq(t.warehouseId, a.warehouseId), eq(t.kind, "Putaway"), eq(t.isDynamicReplenishment, true), eq(t.status, "Active"), ne(t.id, a.id))).limit(1))[0] ?? null
     : null;
-  return { ...toRow(db, a, rules.length, wh), rules, otherReplenishment: other };
+  return { ...(await toRow(db, a, rules.length, wh)), rules, otherReplenishment: other };
 }
 
 /* ---------------- save ---------------- */
 
-function snapshot(db: AppDb, a: Pick<AlgoRow, "name" | "warehouseId" | "status" | "isDynamicReplenishment" | "enforceSuggestedLocations">, rules: readonly AlgorithmRuleSave[]) {
+async function snapshot(db: AppDb, a: Pick<AlgoRow, "name" | "warehouseId" | "status" | "isDynamicReplenishment" | "enforceSuggestedLocations">, rules: readonly AlgorithmRuleSave[]) {
   return {
-    name: a.name, warehouse: labelsOf(db, "warehouses", [a.warehouseId]).get(a.warehouseId) ?? a.warehouseId, status: a.status,
+    name: a.name, warehouse: (await labelsOf(db, "warehouses", [a.warehouseId])).get(a.warehouseId) ?? a.warehouseId, status: a.status,
     dynamicReplenishment: a.isDynamicReplenishment, enforceSuggestedLocations: a.enforceSuggestedLocations,
     rules: rules.map((x, i) => `${i === 0 ? "If" : `${i}. If else`} ${x.name}${x.isActive ? "" : " (off)"}`).join(" · ") || "None",
   };
 }
 
-function writeRules(tx: AppDb, algorithmId: string, rules: readonly AlgorithmRuleSave[], kind: Kind): void {
-  tx.delete(r).where(eq(r.algorithmId, algorithmId)).run();
+async function writeRules(tx: AppDb, algorithmId: string, rules: readonly AlgorithmRuleSave[], kind: Kind): Promise<void> {
+  await tx.delete(r).where(eq(r.algorithmId, algorithmId));
   if (rules.length === 0) return;
-  tx.insert(r).values(rules.map((x, i) => ({
+  await tx.insert(r).values(rules.map((x, i) => ({
     algorithmId, sequence: i + 1, name: x.name, isActive: x.isActive, conditions: x.conditions,
     inventoryConditions: kind === "Allocation" ? x.inventoryConditions : null,
     actions: kind === "Putaway" ? x.actions.map((a) => (a.value === undefined || a.value === null || a.value === "" ? { action: a.action } : { action: a.action, value: a.value })) : null,
     orderBy: x.orderBy,
-  }))).run();
+  })));
 }
 
 /**
  * Dynamic replenishment exclusivity (spec 06 §3): enabling it on one algorithm makes the other
  * active replenishment algorithms of the warehouse passive; the last active one can't be switched off.
  */
-function applyReplenishmentRules(tx: AppDb, actor: Actor, auth: AuthContext, id: string | null, body: AlgorithmSave, before: AlgoRow | null): string[] {
+async function applyReplenishmentRules(tx: AppDb, actor: Actor, auth: AuthContext, id: string | null, body: AlgorithmSave, before: AlgoRow | null): Promise<string[]> {
   const notes: string[] = [];
   if (body.kind !== "Putaway") return notes;
-  const others = tx.select().from(t).where(and(eq(t.warehouseId, body.warehouseId), eq(t.kind, "Putaway"), eq(t.isDynamicReplenishment, true), eq(t.status, "Active"),
-    id ? ne(t.id, id) : sql`1 = 1`)).all();
+  const others = await tx.select().from(t).where(and(eq(t.warehouseId, body.warehouseId), eq(t.kind, "Putaway"), eq(t.isDynamicReplenishment, true), eq(t.status, "Active"),
+    id ? ne(t.id, id) : sql`1 = 1`));
   const wasActiveRepl = before?.isDynamicReplenishment && before.status === "Active";
   const isActiveRepl = body.isDynamicReplenishment && body.status === "Active";
   if (wasActiveRepl && !isActiveRepl && others.length === 0) {
@@ -156,72 +158,72 @@ function applyReplenishmentRules(tx: AppDb, actor: Actor, auth: AuthContext, id:
   if (isActiveRepl && !wasActiveRepl) {
     const ctx = domainCtxOf(actor, auth);
     for (const o of others) {
-      tx.update(t).set({ status: "Passive", version: sql`${t.version} + 1` }).where(eq(t.id, o.id)).run();
-      logUpdate(tx, ctx, { entityType: ENTITY, entityId: o.id, entityCode: o.name }, { status: "Active" }, { status: "Passive" });
+      await tx.update(t).set({ status: "Passive", version: sql`${t.version} + 1` }).where(eq(t.id, o.id));
+      await logUpdate(tx, ctx, { entityType: ENTITY, entityId: o.id, entityCode: o.name }, { status: "Active" }, { status: "Passive" });
       notes.push(`${o.name} is now passive because ${body.name} handles dynamic replenishment.`);
     }
   }
   return notes;
 }
 
-function assertUniqueName(tx: AppDb, body: AlgorithmSave, id: string | null): void {
-  const dup = tx.select({ id: t.id }).from(t).where(and(eq(t.warehouseId, body.warehouseId), eq(t.kind, body.kind), sql`lower(${t.name}) = lower(${body.name})`, id ? ne(t.id, id) : sql`1 = 1`)).get();
+async function assertUniqueName(tx: AppDb, body: AlgorithmSave, id: string | null): Promise<void> {
+  const dup = (await tx.select({ id: t.id }).from(t).where(and(eq(t.warehouseId, body.warehouseId), eq(t.kind, body.kind), sql`lower(${t.name}) = lower(${body.name})`, id ? ne(t.id, id) : sql`1 = 1`)).limit(1))[0];
   if (dup) throw duplicateError("name", `An ${body.kind.toLowerCase()} algorithm named "${body.name}" already exists in this warehouse`);
 }
 
 export interface SaveResult { readonly algorithm: AlgorithmDetail; readonly notes: readonly string[] }
 
-export function createAlgorithm(tx: AppDb, auth: AuthContext, actor: Actor, body: AlgorithmSave): SaveResult {
+export async function createAlgorithm(tx: AppDb, auth: AuthContext, actor: Actor, body: AlgorithmSave): Promise<SaveResult> {
   assertWarehouseInScope(auth, body.warehouseId);
-  assertUniqueName(tx, body, null);
-  const notes = applyReplenishmentRules(tx, actor, auth, null, body, null);
-  const row = tx.insert(t).values({
+  await assertUniqueName(tx, body, null);
+  const notes = await applyReplenishmentRules(tx, actor, auth, null, body, null);
+  const row = (await tx.insert(t).values({
     name: body.name, warehouseId: body.warehouseId, kind: body.kind, status: body.status,
     isDynamicReplenishment: body.kind === "Putaway" && body.isDynamicReplenishment, enforceSuggestedLocations: body.kind === "Putaway" && body.enforceSuggestedLocations,
     createdBy: actor.userId, updatedBy: actor.userId,
-  }).returning().get();
-  writeRules(tx, row.id, body.rules, body.kind);
-  logCreate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: row.id, entityCode: row.name });
-  return { algorithm: getAlgorithm(tx, auth, row.id), notes };
+  }).returning())[0];
+  await writeRules(tx, row.id, body.rules, body.kind);
+  await logCreate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: row.id, entityCode: row.name });
+  return { algorithm: await getAlgorithm(tx, auth, row.id), notes };
 }
 
-export function updateAlgorithm(tx: AppDb, auth: AuthContext, actor: Actor, id: string, body: AlgorithmSave): SaveResult {
-  const before = loadAlgorithm(tx, auth, id);
+export async function updateAlgorithm(tx: AppDb, auth: AuthContext, actor: Actor, id: string, body: AlgorithmSave): Promise<SaveResult> {
+  const before = await loadAlgorithm(tx, auth, id);
   assertVersion(before.version, body.version);
   if (before.kind !== body.kind) throw fieldError("kind", "An algorithm's type can't change");
   if (before.warehouseId !== body.warehouseId) throw fieldError("warehouseId", "An algorithm can't move to another warehouse");
   if (before.isSystem && body.name !== before.name) throw fieldError("name", "System algorithms keep their name");
-  assertUniqueName(tx, body, id);
-  const oldRules = loadRules(tx, id);
-  const notes = applyReplenishmentRules(tx, actor, auth, id, body, before);
-  tx.update(t).set({
+  await assertUniqueName(tx, body, id);
+  const oldRules = await loadRules(tx, id);
+  const notes = await applyReplenishmentRules(tx, actor, auth, id, body, before);
+  await tx.update(t).set({
     name: body.name, status: body.status, isDynamicReplenishment: body.kind === "Putaway" && body.isDynamicReplenishment,
     enforceSuggestedLocations: body.kind === "Putaway" && body.enforceSuggestedLocations, updatedBy: actor.userId, version: sql`${t.version} + 1`,
-  }).where(eq(t.id, id)).run();
-  writeRules(tx, id, body.rules, body.kind);
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: id, entityCode: body.name }, snapshot(tx, before, oldRules), snapshot(tx, { ...body }, body.rules));
-  return { algorithm: getAlgorithm(tx, auth, id), notes };
+  }).where(eq(t.id, id));
+  await writeRules(tx, id, body.rules, body.kind);
+  await logUpdate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: id, entityCode: body.name }, await snapshot(tx, before, oldRules), await snapshot(tx, { ...body }, body.rules));
+  return { algorithm: await getAlgorithm(tx, auth, id), notes };
 }
 
-export function deleteAlgorithms(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult {
+export async function deleteAlgorithms(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const a = loadAlgorithm(inner, auth, id);
-    const reason = inUseReason(inner, a);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const a = await loadAlgorithm(inner, auth, id);
+    const reason = await inUseReason(inner, a);
     if (reason) throw new AppError("INVALID_STATE", `${a.name}: ${reason}`);
-    inner.delete(t).where(eq(t.id, id)).run();
-    logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: a.name });
+    await inner.delete(t).where(eq(t.id, id));
+    await logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: a.name });
   });
 }
 
 /* ---------------- test / dry run ---------------- */
 
-function withDraft<T>(db: AppDb, kind: Kind, draft: { warehouseId: string; rules: readonly AlgorithmRuleSave[] } | undefined, algorithmId: string | null, fn: (tx: AppDb, algorithmId: string | null) => T): T {
-  if (!draft) return dryRun(db, (tx) => fn(tx, algorithmId));
-  return dryRun(db, (tx) => {
-    const tmp = tx.insert(t).values({ name: `__draft_${crypto.randomUUID()}`, warehouseId: draft.warehouseId, kind, status: "Active" }).returning().get();
-    writeRules(tx, tmp.id, draft.rules, kind);
-    return fn(tx, tmp.id);
+async function withDraft<T>(db: AppDb, kind: Kind, draft: { warehouseId: string; rules: readonly AlgorithmRuleSave[] } | undefined, algorithmId: string | null, fn: (tx: AppDb, algorithmId: string | null) => T): Promise<T> {
+  if (!draft) return await dryRun(db, async (tx) => await fn(tx, algorithmId));
+  return await dryRun(db, async (tx) => {
+    const tmp = (await tx.insert(t).values({ name: `__draft_${crypto.randomUUID()}`, warehouseId: draft.warehouseId, kind, status: "Active" }).returning())[0];
+    await writeRules(tx, tmp.id, draft.rules, kind);
+    return await fn(tx, tmp.id);
   });
 }
 
@@ -249,37 +251,37 @@ export interface PutawayInventoryRow {
 }
 
 /** Test Algorithm › Product Putaway: the product's inventory rows in the warehouse to test from (Logiwa parity). */
-export function putawayTestInventory(db: AppDb, auth: AuthContext, warehouseId: string, productId: string): PutawayInventoryRow[] {
+export async function putawayTestInventory(db: AppDb, auth: AuthContext, warehouseId: string, productId: string): Promise<PutawayInventoryRow[]> {
   assertWarehouseInScope(auth, warehouseId);
-  const product = assertFound(db.select({ clientId: s.products.clientId }).from(s.products).where(eq(s.products.id, productId)).get(), "Product");
+  const product = assertFound((await db.select({ clientId: s.products.clientId }).from(s.products).where(eq(s.products.id, productId)).limit(1))[0], "Product");
   if (!hasClient(auth.scope, product.clientId)) throw new AppError("NOT_FOUND", "Product not found");
   const i = s.inventory;
-  return db.select({ i, code: s.locations.code, lp: s.licensePlates.number }).from(i)
+  return (await db.select({ i, code: s.locations.code, lp: s.licensePlates.number }).from(i)
     .innerJoin(s.locations, eq(s.locations.id, i.locationId)).leftJoin(s.licensePlates, eq(s.licensePlates.id, i.lpId))
     .where(and(eq(i.warehouseId, warehouseId), eq(i.productId, productId), sql`${i.onHand} > 0`))
-    .orderBy(asc(s.locations.code)).limit(200).all()
+    .orderBy(asc(s.locations.code)).limit(200))
     .map(({ i: r, code, lp }) => ({
       id: r.id, locationId: r.locationId, locationCode: code, status: r.status, packType: r.packType, lpId: r.lpId, lpNumber: lp ?? null, lotNumber: r.lotNumber,
       expiryDate: r.expiryDate, productionDate: r.productionDate, receivedAt: r.receivedAt, poNumber: r.poNumber, damageReason: r.damageReason, onHand: r.onHand, allocated: r.allocated,
     }));
 }
 
-export function testPutaway(db: AppDb, auth: AuthContext, algorithmId: string | null, input: {
+export async function testPutaway(db: AppDb, auth: AuthContext, algorithmId: string | null, input: {
   warehouseId: string; productId: string; qty: number; fromLocationId?: string | null; lpId?: string | null; isReceiving: boolean;
   lot?: string | null; expiry?: string | null; damageReason?: string | null; packType?: string | null; productionDate?: string | null; receivedAt?: string | null; allocatedQty?: number | null;
   draft?: { warehouseId: string; rules: readonly AlgorithmRuleSave[] };
-}): PutawayTestResult {
+}): Promise<PutawayTestResult> {
   assertWarehouseInScope(auth, input.warehouseId);
-  const product = assertFound(db.select().from(s.products).where(eq(s.products.id, input.productId)).get(), "Product");
+  const product = assertFound((await db.select().from(s.products).where(eq(s.products.id, input.productId)).limit(1))[0], "Product");
   if (!hasClient(auth.scope, product.clientId)) throw new AppError("NOT_FOUND", "Product not found");
-  const result = withDraft(db, "Putaway", input.draft, algorithmId, (tx, id) => suggestLocations(tx, {
+  const result = await withDraft(db, "Putaway", input.draft, algorithmId, async (tx, id) => await suggestLocations(tx, {
     warehouseId: input.warehouseId, productId: input.productId, qty: input.qty, fromLocationId: input.fromLocationId ?? null, lpId: input.lpId ?? null,
     isReceiving: input.isReceiving, lot: input.lot ?? null, expiry: input.expiry ?? null, damageReason: input.damageReason ?? null, algorithmId: id, limit: 10,
     ...(input.packType ? { packType: input.packType } : {}), productionDate: input.productionDate ?? null, ...(input.receivedAt ? { receivedAt: input.receivedAt } : {}), allocatedQty: input.allocatedQty ?? 0,
   }));
   const ids = result.suggestions.map((x) => x.locationId);
-  const locs = ids.length === 0 ? [] : db.select({ id: s.locations.id, areaType: s.locations.areaType, zone: s.locations.zone }).from(s.locations).where(inArray(s.locations.id, ids)).all();
-  const qty = ids.length === 0 ? [] : db.select({ id: s.inventory.locationId, n: sql<number>`SUM(${s.inventory.onHand})` }).from(s.inventory).where(inArray(s.inventory.locationId, ids)).groupBy(s.inventory.locationId).all();
+  const locs = ids.length === 0 ? [] : await db.select({ id: s.locations.id, areaType: s.locations.areaType, zone: s.locations.zone }).from(s.locations).where(inArray(s.locations.id, ids));
+  const qty = ids.length === 0 ? [] : await db.select({ id: s.inventory.locationId, n: sql<number>`SUM(${s.inventory.onHand})` }).from(s.inventory).where(inArray(s.inventory.locationId, ids)).groupBy(s.inventory.locationId);
   const byId = new Map(locs.map((l) => [l.id, l]));
   const qtyBy = new Map(qty.map((q) => [q.id, Number(q.n)]));
   return {
@@ -306,19 +308,19 @@ export interface DryRunResult {
   readonly exceptions: readonly string[];
 }
 
-export function allocationDryRun(db: AppDb, auth: AuthContext, algorithmId: string | null, input: { orderId: string; draft?: { warehouseId: string; rules: readonly AlgorithmRuleSave[] } }, actor: Actor): DryRunResult {
-  const order = assertFound(db.select().from(s.shipmentOrders).where(eq(s.shipmentOrders.id, input.orderId)).get(), "Shipment order");
+export async function allocationDryRun(db: AppDb, auth: AuthContext, algorithmId: string | null, input: { orderId: string; draft?: { warehouseId: string; rules: readonly AlgorithmRuleSave[] } }, actor: Actor): Promise<DryRunResult> {
+  const order = assertFound((await db.select().from(s.shipmentOrders).where(eq(s.shipmentOrders.id, input.orderId)).limit(1))[0], "Shipment order");
   assertWarehouseInScope(auth, order.warehouseId, "Shipment order");
-  return withDraft(db, "Allocation", input.draft, algorithmId, (tx, id) => {
-    const algoName = id ? tx.select({ n: t.name }).from(t).where(eq(t.id, id)).get()?.n ?? "Default" : "Default";
-    const res = allocateOrders(tx, { ...domainCtxOf(actor, auth), source: "Dry run" }, { orderIds: [order.id], warehouseId: order.warehouseId, algorithmId: id, runBy: "Dry run" });
-    const lines = tx.select({ l: s.orderLines, sku: s.products.sku }).from(s.orderLines).innerJoin(s.products, eq(s.products.id, s.orderLines.productId)).where(eq(s.orderLines.orderId, order.id)).all();
+  return await withDraft(db, "Allocation", input.draft, algorithmId, async (tx, id) => {
+    const algoName = id ? (await tx.select({ n: t.name }).from(t).where(eq(t.id, id)).limit(1))[0]?.n ?? "Default" : "Default";
+    const res = await allocateOrders(tx, { ...domainCtxOf(actor, auth), source: "Dry run" }, { orderIds: [order.id], warehouseId: order.warehouseId, algorithmId: id, runBy: "Dry run" });
+    const lines = await tx.select({ l: s.orderLines, sku: s.products.sku }).from(s.orderLines).innerJoin(s.products, eq(s.products.id, s.orderLines.productId)).where(eq(s.orderLines.orderId, order.id));
     const ia = s.inventoryAllocations;
-    const allocs = tx.select({ a: ia, loc: s.locations.code, areaType: s.locations.areaType, lot: s.inventory.lotNumber, expiry: s.inventory.expiryDate, lp: s.licensePlates.number })
+    const allocs = await tx.select({ a: ia, loc: s.locations.code, areaType: s.locations.areaType, lot: s.inventory.lotNumber, expiry: s.inventory.expiryDate, lp: s.licensePlates.number })
       .from(ia).innerJoin(s.inventory, eq(s.inventory.id, ia.inventoryId)).innerJoin(s.locations, eq(s.locations.id, s.inventory.locationId))
       .leftJoin(s.licensePlates, eq(s.licensePlates.id, s.inventory.lpId))
-      .where(and(eq(ia.orderId, order.id), eq(ia.status, "Allocated"))).all();
-    const ex = tx.select({ e: s.allocationExceptions.explanation, rule: s.allocationExceptions.algorithmRuleName }).from(s.allocationExceptions).where(eq(s.allocationExceptions.orderId, order.id)).all();
+      .where(and(eq(ia.orderId, order.id), eq(ia.status, "Allocated")));
+    const ex = await tx.select({ e: s.allocationExceptions.explanation, rule: s.allocationExceptions.algorithmRuleName }).from(s.allocationExceptions).where(eq(s.allocationExceptions.orderId, order.id));
     const failure = res.failed[0];
     const rule = allocs.find((x) => x.a.ruleName)?.a.ruleName ?? ex.find((x) => x.rule)?.rule ?? null;
     return {
@@ -335,12 +337,12 @@ export function allocationDryRun(db: AppDb, auth: AuthContext, algorithmId: stri
 }
 
 /** Orders a dry run can target: open orders in the algorithm's warehouse. */
-export function dryRunOrderOptions(db: AppDb, auth: AuthContext, warehouseId: string, q: string | null): { id: string; code: string; label: string }[] {
+export async function dryRunOrderOptions(db: AppDb, auth: AuthContext, warehouseId: string, q: string | null): Promise<{ id: string; code: string; label: string }[]> {
   assertWarehouseInScope(auth, warehouseId);
   const o = s.shipmentOrders;
   const conds: (SQL | undefined)[] = [eq(o.warehouseId, warehouseId), inArray(o.status, ["Open", "Shortage"]), sql`${o.deletedAt} IS NULL`];
   if (auth.scope.clientIds !== "all") conds.push(inArray(o.clientId, auth.scope.clientIds.length > 0 ? [...auth.scope.clientIds] : ["-"]));
-  if (q) conds.push(sql`(${o.code} LIKE ${`%${q}%`} OR ${o.customerName} LIKE ${`%${q}%`})`);
-  return db.select({ id: o.id, code: o.code, customer: o.customerName, units: o.totalQuantity }).from(o).where(and(...conds)).orderBy(sql`${o.orderDate} DESC`).limit(30).all()
+  if (q) conds.push(sql`(${o.code} ILIKE ${`%${q}%`} ESCAPE '' OR ${o.customerName} ILIKE ${`%${q}%`} ESCAPE '')`);
+  return (await db.select({ id: o.id, code: o.code, customer: o.customerName, units: o.totalQuantity }).from(o).where(and(...conds)).orderBy(sql`${o.orderDate} DESC`).limit(30))
     .map((x) => ({ id: x.id, code: x.code, label: `${x.code} · ${x.customer}` }));
 }

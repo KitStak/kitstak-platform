@@ -18,6 +18,7 @@ import { DomainError } from "@/server/domain/errors";
 import { validationError } from "@/server/api/errors";
 import { idSchema } from "./platform-common";
 import { insertRma, shippableOrder, type ScopedCtx } from "./returns";
+import { dbAll, dbGet, mapSeq, withWriteTx } from "@/server/db/sql";
 
 /** Platforms an RMA can be imported from (the `return_orders.source` values other than RMA / Manual). */
 export const RETURN_PLATFORMS = ["Loop Returns"] as const;
@@ -61,9 +62,9 @@ export function externalMarker(platform: string, externalId: string): string {
   return `${platform} return #${externalId}`;
 }
 
-function findOrderId(tx: AppDb, ctx: ScopedCtx, ref: string): string {
+async function findOrderId(tx: AppDb, ctx: ScopedCtx, ref: string): Promise<string> {
   const q = ref.trim().toLowerCase();
-  const rows = tx.all<{ id: string; warehouseId: string; clientId: string }>(sql`SELECT id, warehouse_id AS warehouseId, client_id AS clientId FROM shipment_orders
+  const rows = await dbAll<{ id: string; warehouseId: string; clientId: string }>(tx, sql`SELECT id, warehouse_id AS "warehouseId", client_id AS "clientId" FROM shipment_orders
     WHERE deleted_at IS NULL AND (lower(code) = ${q} OR lower(store_order_number) = ${q} OR lower(COALESCE(client_reference_code, '')) = ${q})
     ORDER BY CASE WHEN lower(code) = ${q} THEN 0 ELSE 1 END, created_at DESC LIMIT 20`);
   const inScope = rows.filter((r) => ctx.scope.warehouseIds.includes(r.warehouseId) && (ctx.scope.clientIds === "all" || ctx.scope.clientIds.includes(r.clientId)));
@@ -72,29 +73,29 @@ function findOrderId(tx: AppDb, ctx: ScopedCtx, ref: string): string {
   return hit.id;
 }
 
-function reasonId(tx: AppDb, clientId: string, name: string | null | undefined): string | null {
+async function reasonId(tx: AppDb, clientId: string, name: string | null | undefined): Promise<string | null> {
   if (!name) return null;
   const lv = schema.lookupValues;
-  const rows = tx.select({ id: lv.id, clientId: lv.clientId }).from(lv)
-    .where(and(eq(lv.type, "return_reason"), eq(lv.isActive, true), sql`lower(${lv.name}) = ${name.trim().toLowerCase()}`)).all();
+  const rows = await tx.select({ id: lv.id, clientId: lv.clientId }).from(lv)
+    .where(and(eq(lv.type, "return_reason"), eq(lv.isActive, true), sql`lower(${lv.name}) = ${name.trim().toLowerCase()}`));
   return (rows.find((r) => r.clientId === clientId) ?? rows.find((r) => !r.clientId))?.id ?? null;
 }
 
 /** Imports one external return in the caller's transaction. Throws on any problem (the caller reports it per return). */
-export function importOneReturn(tx: AppDb, ctx: ScopedCtx, platform: ReturnPlatform, r: ImportReturnsInput["returns"][number], channelName: string | null): ImportedReturn {
+export async function importOneReturn(tx: AppDb, ctx: ScopedCtx, platform: ReturnPlatform, r: ImportReturnsInput["returns"][number], channelName: string | null): Promise<ImportedReturn> {
   const marker = externalMarker(platform, r.externalId);
-  const dup = tx.get<{ id: string; rmaCode: string }>(sql`SELECT id, rma_code AS rmaCode FROM return_orders WHERE source = ${platform} AND instr(COALESCE(note, ''), ${marker}) > 0 LIMIT 1`);
+  const dup = await dbGet<{ id: string; rmaCode: string }>(tx, sql`SELECT id, rma_code AS "rmaCode" FROM return_orders WHERE source = ${platform} AND strpos(COALESCE(note, ''), ${marker}) > 0 LIMIT 1`);
   if (dup) return { externalId: r.externalId, ok: true, duplicate: true, id: dup.id, rmaCode: dup.rmaCode, message: `Already imported as ${dup.rmaCode}` };
-  const order = shippableOrder(tx, ctx.scope, findOrderId(tx, ctx, r.order));
+  const order = await shippableOrder(tx, ctx.scope, await findOrderId(tx, ctx, r.order));
   const fieldErrors: Record<string, string[]> = {};
-  const lines = r.lines.map((l, i) => {
+  const lines = await mapSeq(r.lines, async (l, i) => {
     const line = order.lines.find((x) => x.sku.toLowerCase() === l.sku.trim().toLowerCase() && x.returnable > 0) ?? order.lines.find((x) => x.sku.toLowerCase() === l.sku.trim().toLowerCase());
     if (!line) { fieldErrors[`lines.${i}.sku`] = [`${l.sku} is not on ${order.code}`]; return null; }
-    return { orderLineId: line.orderLineId, quantity: l.quantity, customerReturnReasonId: reasonId(tx, order.clientId, l.reason) };
+    return { orderLineId: line.orderLineId, quantity: l.quantity, customerReturnReasonId: await reasonId(tx, order.clientId, l.reason) };
   });
   if (Object.keys(fieldErrors).length) throw validationError(Object.values(fieldErrors)[0]?.[0] ?? "Unknown SKU", fieldErrors);
   const note = [`Imported from ${platform}${channelName ? ` (${channelName})` : ""} · ${marker}`, r.note].filter(Boolean).join("\n");
-  const created = insertRma(tx, ctx, {
+  const created = await insertRma(tx, ctx, {
     shipmentOrderId: order.id,
     lines: lines.filter((l): l is NonNullable<typeof l> => Boolean(l)),
     expectedReturnDate: r.expectedReturnDate ?? null,
@@ -107,15 +108,15 @@ export function importOneReturn(tx: AppDb, ctx: ScopedCtx, platform: ReturnPlatf
 }
 
 /** Batch import: each return in its own savepoint, so one bad return does not block the rest. */
-export function importReturns(tx: AppDb, ctx: ScopedCtx, input: ImportReturnsInput): { readonly results: readonly ImportedReturn[]; readonly created: number; readonly duplicates: number; readonly failed: number } {
+export async function importReturns(tx: AppDb, ctx: ScopedCtx, input: ImportReturnsInput): Promise<{ readonly results: readonly ImportedReturn[]; readonly created: number; readonly duplicates: number; readonly failed: number }> {
   const channel = input.channelConnectionId
-    ? tx.select({ name: schema.channelConnections.storeName }).from(schema.channelConnections).where(eq(schema.channelConnections.id, input.channelConnectionId)).get()
+    ? (await tx.select({ name: schema.channelConnections.storeName }).from(schema.channelConnections).where(eq(schema.channelConnections.id, input.channelConnectionId)).limit(1))[0]
     : undefined;
   if (input.channelConnectionId && !channel) throw validationError("Channel connection not found", { channelConnectionId: ["Not found"] });
   const results: ImportedReturn[] = [];
   for (const r of input.returns) {
     try {
-      results.push(tx.transaction((t) => importOneReturn(t, ctx, input.platform, r, channel?.name ?? null)));
+      results.push(await withWriteTx(tx, async (t) => await importOneReturn(t, ctx, input.platform, r, channel?.name ?? null)));
     } catch (error) {
       results.push({ externalId: r.externalId, ok: false, message: error instanceof Error ? error.message : "Import failed" });
     }

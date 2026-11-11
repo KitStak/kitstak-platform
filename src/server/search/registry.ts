@@ -71,8 +71,8 @@ interface ProviderResult {
 
 async function runProvider(provider: SearchProvider, ctx: SearchContext): Promise<ProviderResult> {
   const [hits, total] = await Promise.all([
-    Promise.resolve().then(() => provider.search(ctx)),
-    provider.count ? Promise.resolve().then(() => provider.count?.(ctx) ?? null) : Promise.resolve(null),
+    Promise.resolve().then(async () => await provider.search(ctx)),
+    provider.count ? Promise.resolve().then(async () => await provider.count?.(ctx) ?? null) : Promise.resolve(null),
   ]);
   return { hits, total };
 }

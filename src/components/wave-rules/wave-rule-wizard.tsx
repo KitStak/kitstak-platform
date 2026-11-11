@@ -28,7 +28,7 @@ import { FormBridge } from "./rule-editors";
 import { AssignStep, GeneralStep, ScheduleStep, SelectionStep, type F } from "./wave-rule-steps";
 
 type Op = (typeof WAVE_OP_TYPES)[number];
-type Detail = ReturnType<typeof getWaveRuleDetail>;
+type Detail = Awaited<ReturnType<typeof getWaveRuleDetail>>;
 
 const OP_CARDS: readonly { readonly value: Op; readonly title: string; readonly description: string; readonly icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "Picking", title: "Picking", description: "Set up rules for picking jobs.", icon: PackageSearch },

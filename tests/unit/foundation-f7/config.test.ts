@@ -13,7 +13,7 @@ const cfItemRoute = await import("@/app/api/custom-fields/[id]/route");
 const lookupsRoute = await import("@/app/api/lookups/[type]/route");
 const lookupRoute = await import("@/app/api/lookups/[type]/[id]/route");
 
-beforeEach(() => { openWorld(); });
+beforeEach(async () => { await openWorld(); });
 afterEach(() => closeWorld());
 afterAll(() => removeFilesRoot());
 
@@ -22,8 +22,8 @@ const admin = (): Promise<string> => cookieFor(current().userId);
 describe("GET /api/change-log", () => {
   it("returns paged field-level rows for an order in scope and 404 out of scope", async () => {
     const w = current();
-    const order = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    recordUpdate(w.db, w.ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { customerName: "Jane Doe" }, after: { customerName: "John Roe" } });
+    const order = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    await recordUpdate(w.db, w.ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { customerName: "Jane Doe" }, after: { customerName: "John Roe" } });
     const url = `/api/change-log?entityType=shipment_order&entityId=${order.id}&ps=100`;
     const res = await call(changeLogRoute.GET, req("GET", url, { cookie: await cookieFor(w.viewerId) }));
     expect(res.status).toBe(200);
@@ -32,10 +32,10 @@ describe("GET /api/change-log", () => {
     expect(rows.some((r) => r.fieldLabel === "Customer Name" && r.toValue === "John Roe")).toBe(true);
     expect(res.json.meta).toMatchObject({ page: 1, pageSize: 100 });
 
-    const other = w.db.insert(schema.products).values({
+    const other = (await w.db.insert(schema.products).values({
       clientId: w.otherClientId, sku: "B-1", barcode: "B-1", name: "B", category: "General", weightOz: 1, lengthIn: 1, widthIn: 1, heightIn: 1, price: 1, status: "Active",
-    }).returning().get().id;
-    const foreign = createOrder(w.db, w.ctx, orderInput(w, [{ productId: other, quantity: 1 }], { clientId: w.otherClientId }));
+    }).returning())[0].id;
+    const foreign = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: other, quantity: 1 }], { clientId: w.otherClientId }));
     const hidden = await call(changeLogRoute.GET, req("GET", `/api/change-log?entityType=shipment_order&entityId=${foreign.id}`, { cookie: await cookieFor(w.viewerId) }));
     expect(hidden.status).toBe(404);
   });
@@ -100,7 +100,7 @@ describe("/api/lookups/[type]", () => {
     const id = String((global.data as { id: string }).id);
     const patched = await call(lookupRoute.PATCH, req("PATCH", `/api/lookups/damage_reason/${id}`, { cookie: await admin(), body: { name: "Crushed Box", version: 1 } }), { type: "damage_reason", id });
     expect(patched.data).toMatchObject({ name: "Crushed Box", version: 2 });
-    expect(w.db.select().from(schema.changeLog).all().filter((r) => r.entityType === "lookup_value").map((r) => r.type)).toEqual(["Create", "Create", "Update"]);
+    expect((await w.db.select().from(schema.changeLog)).filter((r) => r.entityType === "lookup_value").map((r) => r.type)).toEqual(["Create", "Create", "Update"]);
 
     expect((await call(lookupRoute.GET, req("GET", `/api/lookups/so_type/${id}`, { cookie: await admin() }), { type: "so_type", id })).status).toBe(404);
     const del = await call(lookupRoute.DELETE, req("DELETE", `/api/lookups/damage_reason/${id}`, { cookie: await admin() }), { type: "damage_reason", id });

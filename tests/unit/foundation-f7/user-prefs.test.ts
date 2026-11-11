@@ -13,7 +13,7 @@ const readRoute = await import("@/app/api/notifications/read/route");
 const tasksRoute = await import("@/app/api/background-tasks/route");
 const taskRoute = await import("@/app/api/background-tasks/[id]/route");
 
-beforeEach(() => { openWorld(); });
+beforeEach(async () => { await openWorld(); });
 afterEach(() => closeWorld());
 afterAll(() => removeFilesRoot());
 
@@ -87,10 +87,10 @@ describe("/api/printers", () => {
 describe("/api/notifications", () => {
   it("lists own notifications with an unread badge and marks them read", async () => {
     const w = current();
-    const add = (userId: string, title: string) => w.db.insert(schema.notifications).values({ userId, kind: "test", title }).returning().get().id;
-    const n1 = add(w.viewerId, "One");
-    add(w.viewerId, "Two");
-    add(w.userId, "Admin only");
+    const add = async (userId: string, title: string) => (await w.db.insert(schema.notifications).values({ userId, kind: "test", title }).returning())[0].id;
+    const n1 = await add(w.viewerId, "One");
+    await add(w.viewerId, "Two");
+    await add(w.userId, "Admin only");
     const cookie = await cookieFor(w.viewerId);
     const list = await call(notificationsRoute.GET, req("GET", "/api/notifications", { cookie }));
     expect(asArray(list.data)).toHaveLength(2);
@@ -109,8 +109,8 @@ describe("/api/notifications", () => {
 describe("/api/background-tasks", () => {
   it("shows only the caller's tasks", async () => {
     const w = current();
-    const mine = w.db.insert(schema.backgroundTasks).values({ kind: "export", title: "Mine", userId: w.viewerId }).returning().get().id;
-    const theirs = w.db.insert(schema.backgroundTasks).values({ kind: "import", title: "Theirs", userId: w.userId }).returning().get().id;
+    const mine = (await w.db.insert(schema.backgroundTasks).values({ kind: "export", title: "Mine", userId: w.viewerId }).returning())[0].id;
+    const theirs = (await w.db.insert(schema.backgroundTasks).values({ kind: "import", title: "Theirs", userId: w.userId }).returning())[0].id;
     const cookie = await cookieFor(w.viewerId);
     const list = await call(tasksRoute.GET, req("GET", "/api/background-tasks?kind=export", { cookie }));
     expect(asArray(list.data).map((t) => t.title)).toEqual(["Mine"]);

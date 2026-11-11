@@ -32,7 +32,7 @@ export const WAVE_SQL: FieldSqlMap = {
   allocatedOrders: sql`${qc(w.allocatedOrders)}`,
   mergedOrders: sql`${qc(w.mergedOrders)}`,
   // Not stored: picking waves keep the invariant met = allocated + shortage + eliminated (see waves-run.ts).
-  eliminatedOrders: sql`(CASE WHEN (SELECT r.operation_type FROM wave_rules r WHERE r.id = ${qc(w.waveRuleId)}) IN ('Picking', 'AI Job') AND ${qc(w.status)} = 'Completed' THEN MAX(0, ${qc(w.ordersMet)} - ${qc(w.allocatedOrders)} - ${qc(w.shortageOrders)}) ELSE 0 END)`,
+  eliminatedOrders: sql`(CASE WHEN (SELECT r.operation_type FROM wave_rules r WHERE r.id = ${qc(w.waveRuleId)}) IN ('Picking', 'AI Job') AND ${qc(w.status)} = 'Completed' THEN GREATEST(0, ${qc(w.ordersMet)} - ${qc(w.allocatedOrders)} - ${qc(w.shortageOrders)}) ELSE 0 END)`,
   runAt: sql`${qc(w.runAt)}`,
   runBy: sql`COALESCE((SELECT u.name FROM users u WHERE u.email = ${qc(w.runBy)}), ${qc(w.runBy)})`,
   message: sql`${qc(w.message)}`,
@@ -40,13 +40,13 @@ export const WAVE_SQL: FieldSqlMap = {
   operationType: sql`(SELECT r.operation_type FROM wave_rules r WHERE r.id = ${qc(w.waveRuleId)})`,
 };
 
-export function listWaves(db: AppDb, auth: AuthContext, query: GridQuery) {
+export async function listWaves(db: AppDb, auth: AuthContext, query: GridQuery) {
   const { where, orderBy } = compileGrid(query, WAVE_LOG_GRID, WAVE_SQL, {
     defaultSort: [{ field: "runAt", dir: "desc" }], tiebreaker: sql`${qc(w.id)}`, extra: [scopedWhere(w, auth.viewScope)],
   });
   const select: Record<string, SQL> = { id: sql`${qc(w.id)}`, waveRuleId: sql`${qc(w.waveRuleId)}`, finishedAt: sql`${qc(w.finishedAt)}`, ...WAVE_SQL };
-  const rows = db.select(select).from(w).where(where).orderBy(...orderBy).limit(query.pageSize).offset(pageOffset(query)).all();
-  const total = db.select({ n: count() }).from(w).where(where).get()?.n ?? 0;
+  const rows = await db.select(select).from(w).where(where).orderBy(...orderBy).limit(query.pageSize).offset(pageOffset(query));
+  const total = (await db.select({ n: count() }).from(w).where(where).limit(1))[0]?.n ?? 0;
   return { rows, total };
 }
 
@@ -74,9 +74,9 @@ export const EXCEPTION_SQL: FieldSqlMap = {
  * One explanation per order per wave (critic R4): the order-level "Order bypassed: all items out of
  * stock" row is hidden when the same wave already lists the order's line-level SKU shortages.
  */
-export const NOT_REDUNDANT_BYPASS: SQL = sql`NOT (${qc(e.shortageProductId)} IS NULL AND ${qc(e.explanation)} LIKE 'Order bypassed:%' AND EXISTS (SELECT 1 FROM allocation_exceptions x WHERE x.order_id = ${qc(e.orderId)} AND x.wave_id IS ${qc(e.waveId)} AND x.shortage_product_id IS NOT NULL))`;
+export const NOT_REDUNDANT_BYPASS: SQL = sql`NOT (${qc(e.shortageProductId)} IS NULL AND ${qc(e.explanation)} ILIKE 'Order bypassed:%' AND EXISTS (SELECT 1 FROM allocation_exceptions x WHERE x.order_id = ${qc(e.orderId)} AND x.wave_id IS NOT DISTINCT FROM ${qc(e.waveId)} AND x.shortage_product_id IS NOT NULL))`;
 
-export function listAllocationExceptions(db: AppDb, auth: AuthContext, query: GridQuery) {
+export async function listAllocationExceptions(db: AppDb, auth: AuthContext, query: GridQuery) {
   const { where, orderBy } = compileGrid(query, ALLOCATION_EXCEPTIONS_GRID, EXCEPTION_SQL, {
     defaultSort: [{ field: "runAt", dir: "desc" }], tiebreaker: sql`${qc(e.id)}`, extra: [scopedWhere(e, auth.viewScope), NOT_REDUNDANT_BYPASS],
   });
@@ -84,8 +84,8 @@ export function listAllocationExceptions(db: AppDb, auth: AuthContext, query: Gr
     id: sql`${qc(e.id)}`, orderId: sql`${qc(e.orderId)}`, waveId: sql`${qc(e.waveId)}`, warehouseId: sql`${qc(e.warehouseId)}`,
     orderStatus: sql`(SELECT o.status FROM shipment_orders o WHERE o.id = ${qc(e.orderId)})`, ...EXCEPTION_SQL,
   };
-  const rows = db.select(select).from(e).where(where).orderBy(...orderBy).limit(query.pageSize).offset(pageOffset(query)).all() as Record<string, unknown>[];
-  const total = db.select({ n: count() }).from(e).where(where).get()?.n ?? 0;
+  const rows = await db.select(select).from(e).where(where).orderBy(...orderBy).limit(query.pageSize).offset(pageOffset(query)) as Record<string, unknown>[];
+  const total = (await db.select({ n: count() }).from(e).where(where).limit(1))[0]?.n ?? 0;
   return { rows: rows.map((r) => ({ ...r, isRolledBack: Boolean(r.isRolledBack) })), total };
 }
 
@@ -94,9 +94,9 @@ export function listAllocationExceptions(db: AppDb, auth: AuthContext, query: Gr
  * through `allocation.allocateOrders` as "Manual Allocation"; Ready to Pick orders that
  * no longer need stock report success without re-allocating.
  */
-export function retryAllocation(db: AppDb, ctx: DomainCtx, orderIds: readonly string[], runByInput: string): BulkResult & { readonly allocated: readonly string[] } {
-  const runBy = runByDisplay(db, runByInput);
-  const orders = db.select().from(schema.shipmentOrders).where(inArray(schema.shipmentOrders.id, [...new Set(orderIds)])).all();
+export async function retryAllocation(db: AppDb, ctx: DomainCtx, orderIds: readonly string[], runByInput: string): Promise<BulkResult & { readonly allocated: readonly string[] }> {
+  const runBy = await runByDisplay(db, runByInput);
+  const orders = await db.select().from(schema.shipmentOrders).where(inArray(schema.shipmentOrders.id, [...new Set(orderIds)]));
   const failed: { id: string; code: string; message: string }[] = [];
   const succeeded: string[] = [];
   const allocated: string[] = [];
@@ -111,7 +111,7 @@ export function retryAllocation(db: AppDb, ctx: DomainCtx, orderIds: readonly st
     byWarehouse.set(order.warehouseId, [...(byWarehouse.get(order.warehouseId) ?? []), id]);
   }
   for (const [warehouseId, ids] of byWarehouse) {
-    const res = allocation.allocateOrders(db, ctx, { orderIds: ids, warehouseId, runBy });
+    const res = await allocation.allocateOrders(db, ctx, { orderIds: ids, warehouseId, runBy });
     allocated.push(...res.allocated);
     succeeded.push(...res.allocated);
     for (const id of res.shortage) {
@@ -136,9 +136,9 @@ export const SHORTAGE_SQL: FieldSqlMap = {
   sku: productCol("sku"),
   productName: productCol("name"),
   orderDate: orderCol("order_date"),
-  orderType: sql`(SELECT COALESCE(lv.name, (SELECT lx.name FROM lookup_values lx WHERE lx.type = 'so_type' AND (lx.name = o.order_type OR lx.code = o.order_type OR lx.name LIKE o.order_type || ' %') ORDER BY lx.sort_order LIMIT 1), o.order_type) FROM shipment_orders o LEFT JOIN lookup_values lv ON lv.id = o.order_type_id WHERE o.id = ${qc(s.orderId)})`,
+  orderType: sql`(SELECT COALESCE(lv.name, (SELECT lx.name FROM lookup_values lx WHERE lx.type = 'so_type' AND (lx.name = o.order_type OR lx.code = o.order_type OR lx.name ILIKE o.order_type || ' %') ORDER BY lx.sort_order LIMIT 1), o.order_type) FROM shipment_orders o LEFT JOIN lookup_values lv ON lv.id = o.order_type_id WHERE o.id = ${qc(s.orderId)})`,
   reason: sql`${qc(s.reason)}`,
-  missingTriggered: asBool(sql`${qc(s.missingTriggered)} = 1`),
+  missingTriggered: asBool(sql`${qc(s.missingTriggered)} = true`),
   orderStatus: orderCol("status"),
   linePackQty: sql`(SELECT l.quantity - l.cancelled_quantity FROM order_lines l WHERE l.id = ${qc(s.orderLineId)})`,
   packType: lineCol("pack_type"),
@@ -153,7 +153,7 @@ export const SHORTAGE_SQL: FieldSqlMap = {
   lastTrialAt: sql`${qc(s.lastTrialAt)}`,
   warehouse: sql`(SELECT x.name FROM shipment_orders o JOIN warehouses x ON x.id = o.warehouse_id WHERE o.id = ${qc(s.orderId)})`,
   client: sql`(SELECT c.name FROM shipment_orders o JOIN clients c ON c.id = o.client_id WHERE o.id = ${qc(s.orderId)})`,
-  orderAge: sql`(SELECT CAST(julianday('now') - julianday(o.order_date) AS INTEGER) FROM shipment_orders o WHERE o.id = ${qc(s.orderId)})`,
+  orderAge: sql`(SELECT trunc(EXTRACT(EPOCH FROM (now() - (o.order_date)::timestamptz)) / 86400.0::float8)::int FROM shipment_orders o WHERE o.id = ${qc(s.orderId)})`,
   expectedShipDate: orderCol("expected_ship_date"),
   masterOrderCode: sql`(SELECT m.code FROM shipment_orders o JOIN shipment_orders m ON m.id = o.master_order_id WHERE o.id = ${qc(s.orderId)})`,
 };
@@ -163,7 +163,7 @@ const shortageScope = (auth: AuthContext): SQL | undefined => {
   return inner ? sql`EXISTS (SELECT 1 FROM ${schema.shipmentOrders} WHERE ${schema.shipmentOrders.id} = ${qc(s.orderId)} AND ${inner})` : undefined;
 };
 
-export function listShortages(db: AppDb, auth: AuthContext, query: GridQuery) {
+export async function listShortages(db: AppDb, auth: AuthContext, query: GridQuery) {
   const { where, orderBy } = compileGrid(query, SHORTAGES_GRID, SHORTAGE_SQL, {
     defaultSort: [{ field: "lastTrialAt", dir: "desc" }], tiebreaker: sql`${qc(s.id)}`, extra: [shortageScope(auth), sql`${qc(s.resolvedAt)} IS NULL`],
   });
@@ -171,8 +171,8 @@ export function listShortages(db: AppDb, auth: AuthContext, query: GridQuery) {
     id: sql`${qc(s.id)}`, orderId: sql`${qc(s.orderId)}`, orderLineId: sql`${qc(s.orderLineId)}`, productId: lineCol("product_id"),
     allocatedQty: lineCol("allocated_quantity"), ...SHORTAGE_SQL,
   };
-  const rows = db.select(select).from(s).where(where).orderBy(...orderBy).limit(query.pageSize).offset(pageOffset(query)).all() as Record<string, unknown>[];
-  const total = db.select({ n: count() }).from(s).where(where).get()?.n ?? 0;
+  const rows = await db.select(select).from(s).where(where).orderBy(...orderBy).limit(query.pageSize).offset(pageOffset(query)) as Record<string, unknown>[];
+  const total = (await db.select({ n: count() }).from(s).where(where).limit(1))[0]?.n ?? 0;
   return { rows: rows.map((r) => ({ ...r, missingTriggered: Boolean(r.missingTriggered) })), total };
 }
 
@@ -180,32 +180,32 @@ export function listShortages(db: AppDb, auth: AuthContext, query: GridQuery) {
  * Maps shortage-line ids to their distinct open orders inside the caller's scope. Ids that
  * do not exist, are already resolved, or are out of scope come back in `missing`.
  */
-export function resolveShortageIds(db: AppDb, auth: AuthContext, shortageIds: readonly string[]): { orderIds: string[]; missing: string[] } {
+export async function resolveShortageIds(db: AppDb, auth: AuthContext, shortageIds: readonly string[]): Promise<{ orderIds: string[]; missing: string[] }> {
   const ids = [...new Set(shortageIds)];
   if (ids.length === 0) return { orderIds: [], missing: [] };
-  const rows = db.select({ id: s.id, orderId: s.orderId }).from(s)
-    .where(and(inArray(s.id, ids), sql`${qc(s.resolvedAt)} IS NULL`, shortageScope(auth))).all();
+  const rows = await db.select({ id: s.id, orderId: s.orderId }).from(s)
+    .where(and(inArray(s.id, ids), sql`${qc(s.resolvedAt)} IS NULL`, shortageScope(auth)));
   const found = new Set(rows.map((r) => r.id));
   return { orderIds: [...new Set(rows.map((r) => r.orderId))], missing: ids.filter((id) => !found.has(id)) };
 }
 
-export function shortageOrderIds(db: AppDb, shortageIds: readonly string[]): string[] {
+export async function shortageOrderIds(db: AppDb, shortageIds: readonly string[]): Promise<string[]> {
   if (shortageIds.length === 0) return [];
-  return [...new Set(db.select({ id: s.orderId }).from(s).where(inArray(s.id, [...shortageIds])).all().map((r) => r.id))];
+  return [...new Set((await db.select({ id: s.orderId }).from(s).where(inArray(s.id, [...shortageIds]))).map((r) => r.id))];
 }
 
 /** Create Backorder for each distinct order of the selected shortage rows. */
-export function createBackorders(db: AppDb, ctx: DomainCtx, orderIds: readonly string[]): BulkResult {
-  return runBulk(db, orderIds, (tx, id) => {
-    createBackorder(tx, ctx, { orderId: id });
+export async function createBackorders(db: AppDb, ctx: DomainCtx, orderIds: readonly string[]): Promise<BulkResult> {
+  return await runBulk(db, orderIds, async (tx, id) => {
+    await createBackorder(tx, ctx, { orderId: id });
   });
 }
 
-export function orderIdsOfExceptions(db: AppDb, ids: readonly string[]): string[] {
+export async function orderIdsOfExceptions(db: AppDb, ids: readonly string[]): Promise<string[]> {
   if (ids.length === 0) return [];
-  return [...new Set(db.select({ id: e.orderId }).from(e).where(inArray(e.id, [...ids])).all().map((r) => r.id))];
+  return [...new Set((await db.select({ id: e.orderId }).from(e).where(inArray(e.id, [...ids]))).map((r) => r.id))];
 }
 
-export function waveById(db: AppDb, id: string) {
-  return db.select().from(w).where(eq(w.id, id)).get() ?? null;
+export async function waveById(db: AppDb, id: string) {
+  return (await db.select().from(w).where(eq(w.id, id)).limit(1))[0] ?? null;
 }

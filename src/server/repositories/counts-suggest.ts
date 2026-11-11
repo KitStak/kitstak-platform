@@ -17,6 +17,7 @@ import { notFoundError } from "@/server/api/errors";
 import { hasWarehouse, type Scope } from "@/server/auth/scope";
 import { scoreCountRisk } from "@/lib/grid-defs/counts/count-math";
 import { inList, raw } from "./counts-grid";
+import { dbAll } from "@/server/db/sql";
 
 export const countSuggestQuerySchema = z.object({
   warehouseId: z.string().min(1, "Choose a warehouse first").max(64),
@@ -41,7 +42,7 @@ interface Raw { id: string; label: string; sub1: string | null; sub2: string | n
 
 const daysSince = (iso: string | null, now: number): number | null => (iso ? Math.max(0, Math.floor((now - Date.parse(iso)) / 86_400_000)) : null);
 
-export function suggestCountTargets(db: AppDb, scope: Scope, input: z.output<typeof countSuggestQuerySchema>): CountSuggestion[] {
+export async function suggestCountTargets(db: AppDb, scope: Scope, input: z.output<typeof countSuggestQuerySchema>): Promise<CountSuggestion[]> {
   if (!hasWarehouse(scope, input.warehouseId)) throw notFoundError("Warehouse");
   const wh = input.warehouseId;
   const since30 = new Date(Date.now() - 30 * 86_400_000).toISOString();
@@ -57,24 +58,24 @@ export function suggestCountTargets(db: AppDb, scope: Scope, input: z.output<typ
     FROM count_line_entries e JOIN count_plan_lines l ON l.id = e.line_id JOIN count_plans p ON p.id = l.plan_id WHERE p.warehouse_id = ${wh}`;
 
   const rows = input.countType === "Location"
-    ? db.all<Raw>(sql`
-        WITH mv AS (${moves}), ce AS (SELECT loc, MAX(at) AS lastCount, SUM(var) AS variances FROM (${entries}) GROUP BY loc)
-        SELECT lo.id, lo.code AS label, lo.location_type AS sub1, lg.name AS sub2, stock.on_hand AS onHand, lo.abc_code AS abc,
-          ce.lastCount, COALESCE(mv.n, 0) AS moves, COALESCE(ce.variances, 0) AS variances
+    ? await dbAll<Raw>(db, sql`
+        WITH mv AS (${moves}), ce AS (SELECT loc, MAX(at) AS "lastCount", SUM(var) AS variances FROM (${entries}) GROUP BY loc)
+        SELECT lo.id, lo.code AS label, lo.location_type AS sub1, lg.name AS sub2, stock.on_hand AS "onHand", lo.abc_code AS abc,
+          ce."lastCount", COALESCE(mv.n, 0) AS moves, COALESCE(ce.variances, 0) AS variances
         FROM locations lo
         JOIN (SELECT i.location_id AS lid, SUM(i.on_hand) AS on_hand FROM inventory i WHERE i.warehouse_id = ${wh} AND i.on_hand > 0 AND ${clientScope} GROUP BY i.location_id) stock ON stock.lid = lo.id
         LEFT JOIN lookup_values lg ON lg.id = lo.location_group_id
         LEFT JOIN mv ON mv.loc = lo.id LEFT JOIN ce ON ce.loc = lo.id
-        WHERE lo.warehouse_id = ${wh} AND lo.is_active = 1
+        WHERE lo.warehouse_id = ${wh} AND lo.is_active = true
           -- storage and pick faces only: stations, ramps and virtual locations hold transient stock
           AND lo.area_type IN ('Storage', 'Picking') AND COALESCE(lo.location_type, '') NOT IN ('Virtual', 'BusinessStation')
           AND lo.id NOT IN (SELECT l.location_id FROM count_plan_lines l JOIN count_plans p ON p.id = l.plan_id
             WHERE l.location_id IS NOT NULL AND l.status IN ${raw(OPEN_LINE)} AND p.status NOT IN ('Cancelled', 'Inventory Updated'))`)
-    : db.all<Raw>(sql`
+    : await dbAll<Raw>(db, sql`
         WITH mv AS (SELECT t.product_id AS pid, COUNT(*) AS n FROM inventory_transactions t WHERE t.warehouse_id = ${wh} AND t.at >= ${since30} AND t.type IN ${raw(MOVE_TYPES)} GROUP BY t.product_id),
-          ce AS (SELECT pid, MAX(at) AS lastCount, SUM(var) AS variances FROM (${entries}) GROUP BY pid)
-        SELECT pr.id, pr.sku AS label, pt.name AS sub1, pg.name AS sub2, stock.on_hand AS onHand, NULL AS abc,
-          ce.lastCount, COALESCE(mv.n, 0) AS moves, COALESCE(ce.variances, 0) AS variances
+          ce AS (SELECT pid, MAX(at) AS "lastCount", SUM(var) AS variances FROM (${entries}) GROUP BY pid)
+        SELECT pr.id, pr.sku AS label, pt.name AS sub1, pg.name AS sub2, stock.on_hand AS "onHand", NULL AS abc,
+          ce."lastCount", COALESCE(mv.n, 0) AS moves, COALESCE(ce.variances, 0) AS variances
         FROM products pr
         JOIN (SELECT i.product_id AS pid, SUM(i.on_hand) AS on_hand FROM inventory i WHERE i.warehouse_id = ${wh} AND i.on_hand > 0 AND ${clientScope} GROUP BY i.product_id) stock ON stock.pid = pr.id
         LEFT JOIN lookup_values pt ON pt.id = pr.product_type_id LEFT JOIN lookup_values pg ON pg.id = pr.product_group_id

@@ -10,6 +10,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { AnyColumn } from "drizzle-orm";
 import { ruleViolation } from "../errors";
 import type { Tx } from "../types";
+import { dbGet } from "@/server/db/sql";
 
 export const LOCKING_PLAN_STATUSES = ["Pending", "Ready To Count", "Count Started", "Count Completed"] as const;
 export const RELEASED_LINE_STATUSES = ["Cancelled", "Inventory Updated", "Recount Created"] as const;
@@ -18,7 +19,7 @@ export const RELEASED_LINE_STATUSES = ["Cancelled", "Inventory Updated", "Recoun
 function lockExists(locationId: AnyColumn | string): SQL {
   return sql`EXISTS (
     SELECT 1 FROM count_plan_lines cl JOIN count_plans cp ON cp.id = cl.plan_id
-    WHERE cp.lock_locations = 1
+    WHERE cp.lock_locations
       AND cp.status IN ('Pending', 'Ready To Count', 'Count Started', 'Count Completed')
       AND cl.status NOT IN ('Cancelled', 'Inventory Updated', 'Recount Created')
       AND (
@@ -36,10 +37,10 @@ export function notCountLocked(locationIdColumn: AnyColumn): SQL {
 }
 
 /** Code of the open count plan that locks `locationId`, or null. */
-export function countLockFor(tx: Tx, locationId: string): string | null {
-  const row = tx.get<{ code: string }>(sql`
+export async function countLockFor(tx: Tx, locationId: string): Promise<string | null> {
+  const row = await dbGet<{ code: string }>(tx, sql`
     SELECT cp.code AS code FROM count_plan_lines cl JOIN count_plans cp ON cp.id = cl.plan_id
-    WHERE cp.lock_locations = 1
+    WHERE cp.lock_locations
       AND cp.status IN ('Pending', 'Ready To Count', 'Count Started', 'Count Completed')
       AND cl.status NOT IN ('Cancelled', 'Inventory Updated', 'Recount Created')
       AND (
@@ -49,7 +50,7 @@ export function countLockFor(tx: Tx, locationId: string): string | null {
           WHERE ci.location_id = ${locationId} AND ci.product_id = cl.product_id
             AND ci.warehouse_id = cp.warehouse_id AND ci.on_hand > 0))
       )
-    ORDER BY cp.created_at
+    ORDER BY cp.created_at, cp.id
     LIMIT 1`);
   return row?.code ?? null;
 }
@@ -59,7 +60,7 @@ export function countLockMessage(locationCode: string, planCode: string): string
 }
 
 /** Throws RULE_VIOLATION naming the count plan when the location is count-locked. */
-export function assertNotCountLocked(tx: Tx, location: { readonly id: string; readonly code: string }): void {
-  const plan = countLockFor(tx, location.id);
+export async function assertNotCountLocked(tx: Tx, location: { readonly id: string; readonly code: string }): Promise<void> {
+  const plan = await countLockFor(tx, location.id);
   if (plan) throw ruleViolation(countLockMessage(location.code, plan), { countPlanCode: plan, locationId: location.id, locationCode: location.code });
 }

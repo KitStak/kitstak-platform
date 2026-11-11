@@ -7,5 +7,5 @@ import { shipPlans } from "@/server/repositories/shipment-plans";
 export const POST = defineRoute({
   permission: "fulfillment.shipment_plan.ship_order",
   body: z.object({ ids: bulkIdsSchema }),
-  handler: ({ db, auth, actor, body }) => shipPlans(db, auth, domainCtx(actor, auth), body.ids),
+  handler: async ({ db, auth, actor, body }) => await shipPlans(db, auth, domainCtx(actor, auth), body.ids),
 });

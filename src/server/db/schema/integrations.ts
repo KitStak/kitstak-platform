@@ -1,5 +1,5 @@
 /** Integrations: sales channels (stores) and carriers. */
-import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, doublePrecision, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import type { CarrierSettingsInput, ChannelSettingsInput } from "../../../lib/domain-types";
 import {
   CALL_STATUSES,
@@ -20,7 +20,7 @@ import {
 import { bool, json, nowIso, pk, stamps } from "../columns";
 import { clients, warehouses } from "./org";
 
-export const channelConnections = sqliteTable("channel_connections", {
+export const channelConnections = pgTable("channel_connections", {
   id: pk(),
   provider: text("provider").notNull(), // one of CHANNEL_PROVIDERS
   storeName: text("store_name").notNull(),
@@ -35,7 +35,7 @@ export const channelConnections = sqliteTable("channel_connections", {
   ...stamps(),
 }, (t) => [index("channel_conn_client_idx").on(t.clientId)]);
 
-export const channelLocationMappings = sqliteTable("channel_location_mappings", {
+export const channelLocationMappings = pgTable("channel_location_mappings", {
   id: pk(),
   connectionId: text("connection_id").notNull().references(() => channelConnections.id, { onDelete: "cascade" }),
   channelLocationId: text("channel_location_id").notNull(),
@@ -43,7 +43,7 @@ export const channelLocationMappings = sqliteTable("channel_location_mappings", 
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
 }, (t) => [uniqueIndex("channel_loc_map_idx").on(t.connectionId, t.channelLocationId)]);
 
-export const channelMethods = sqliteTable("channel_methods", {
+export const channelMethods = pgTable("channel_methods", {
   id: pk(),
   connectionId: text("connection_id").notNull().references(() => channelConnections.id, { onDelete: "cascade" }),
   method: text("method", { enum: CHANNEL_METHODS }).notNull(),
@@ -55,7 +55,7 @@ export const channelMethods = sqliteTable("channel_methods", {
   lastSuccessAt: text("last_success_at"),
 }, (t) => [uniqueIndex("channel_method_idx").on(t.connectionId, t.method)]);
 
-export const channelRuns = sqliteTable("channel_runs", {
+export const channelRuns = pgTable("channel_runs", {
   id: pk(),
   methodId: text("method_id").notNull().references(() => channelMethods.id, { onDelete: "cascade" }),
   connectionId: text("connection_id").notNull(),
@@ -68,7 +68,7 @@ export const channelRuns = sqliteTable("channel_runs", {
   endedAt: text("ended_at"),
 }, (t) => [index("channel_runs_conn_idx").on(t.connectionId, t.startedAt)]);
 
-export const channelRunItems = sqliteTable("channel_run_items", {
+export const channelRunItems = pgTable("channel_run_items", {
   id: pk(),
   runId: text("run_id").notNull().references(() => channelRuns.id, { onDelete: "cascade" }),
   success: bool("success").notNull(),
@@ -80,7 +80,7 @@ export const channelRunItems = sqliteTable("channel_run_items", {
   at: text("at").notNull().$defaultFn(nowIso),
 }, (t) => [index("channel_run_items_run_idx").on(t.runId)]);
 
-export const channelMissingOrders = sqliteTable("channel_missing_orders", {
+export const channelMissingOrders = pgTable("channel_missing_orders", {
   id: pk(),
   connectionId: text("connection_id").notNull().references(() => channelConnections.id),
   orderCode: text("order_code").notNull(),
@@ -92,7 +92,7 @@ export const channelMissingOrders = sqliteTable("channel_missing_orders", {
   status: text("status", { enum: CHANNEL_MISSING_ORDER_STATUSES }).notNull().default("Error"),
 }, (t) => [index("channel_missing_conn_idx").on(t.connectionId, t.status)]);
 
-export const carrierConnections = sqliteTable("carrier_connections", {
+export const carrierConnections = pgTable("carrier_connections", {
   id: pk(),
   provider: text("provider").notNull(), // one of CARRIER_PROVIDERS
   setupName: text("setup_name").notNull(),
@@ -109,15 +109,15 @@ export const carrierConnections = sqliteTable("carrier_connections", {
   ...stamps(),
 }, (t) => [index("carrier_conn_wh_idx").on(t.warehouseId)]);
 
-export const carrierConnectionClients = sqliteTable("carrier_connection_clients", {
+export const carrierConnectionClients = pgTable("carrier_connection_clients", {
   connectionId: text("connection_id").notNull().references(() => carrierConnections.id, { onDelete: "cascade" }),
   clientId: text("client_id").notNull().references(() => clients.id),
   markupType: text("markup_type", { enum: MARKUP_TYPES }),
-  markupAmount: real("markup_amount"),
+  markupAmount: doublePrecision("markup_amount"),
   hasAccess: bool("has_access").notNull().default(true),
 }, (t) => [primaryKey({ columns: [t.connectionId, t.clientId] })]);
 
-export const carrierServices = sqliteTable("carrier_services", {
+export const carrierServices = pgTable("carrier_services", {
   id: pk(),
   connectionId: text("connection_id").notNull().references(() => carrierConnections.id, { onDelete: "cascade" }),
   carrierCode: text("carrier_code").notNull(),
@@ -128,7 +128,7 @@ export const carrierServices = sqliteTable("carrier_services", {
   isInternational: bool("is_international").notNull().default(false),
 }, (t) => [uniqueIndex("carrier_service_idx").on(t.connectionId, t.serviceCode)]);
 
-export const carrierPackages = sqliteTable("carrier_packages", {
+export const carrierPackages = pgTable("carrier_packages", {
   id: pk(),
   connectionId: text("connection_id").notNull().references(() => carrierConnections.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
@@ -136,7 +136,7 @@ export const carrierPackages = sqliteTable("carrier_packages", {
   isActive: bool("is_active").notNull().default(true),
 }, (t) => [uniqueIndex("carrier_package_idx").on(t.connectionId, t.code)]);
 
-export const carrierThirdPartyAccounts = sqliteTable("carrier_third_party_accounts", {
+export const carrierThirdPartyAccounts = pgTable("carrier_third_party_accounts", {
   id: pk(),
   connectionId: text("connection_id").notNull().references(() => carrierConnections.id, { onDelete: "cascade" }),
   accountNumber: text("account_number").notNull(),
@@ -144,7 +144,7 @@ export const carrierThirdPartyAccounts = sqliteTable("carrier_third_party_accoun
   billingZip: text("billing_zip").notNull(),
 }, (t) => [index("carrier_3p_conn_idx").on(t.connectionId)]);
 
-export const carrierCallLogs = sqliteTable("carrier_call_logs", {
+export const carrierCallLogs = pgTable("carrier_call_logs", {
   id: pk(),
   step: text("step", { enum: CARRIER_CALL_STEPS }).notNull(),
   connectionId: text("connection_id").notNull(),

@@ -8,21 +8,21 @@ import { deleteWorkflows, getWorkflow, updateWorkflow } from "@/server/repositor
 export const GET = defineRoute({
   permission: "automation.workflows.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getWorkflow(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await getWorkflow(db, auth, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: "automation.workflows.edit",
   params: idParamsSchema,
   body: workflowSaveSchema,
-  handler: ({ db, auth, actor, params, body }) => updateWorkflow(db, auth, actor, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updateWorkflow(db, auth, actor, params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: "automation.workflows.delete",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
-    const result = deleteWorkflows(db, auth, actor, [params.id]);
+  handler: async ({ db, auth, actor, params }) => {
+    const result = await deleteWorkflows(db, auth, actor, [params.id]);
     const failure = result.failed[0];
     if (failure) throw new AppError(failure.code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_STATE", failure.message);
     return result;

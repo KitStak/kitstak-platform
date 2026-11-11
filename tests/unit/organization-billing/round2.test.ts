@@ -10,6 +10,7 @@ import { createContract, createFee, getContract } from "@/server/repositories/bi
 import { calculateContracts } from "@/server/repositories/billing-reports";
 import { wideBillNumber } from "@/server/repositories/billing-engine";
 import { createWorld, type World } from "../foundation/domain/fixtures";
+import { forEachSeq } from "@/server/db/sql";
 
 describe("Charge If catalogue", () => {
   it("offers SO, carrier, SO detail and 50 custom-field slots, scoped per operation", () => {
@@ -50,57 +51,57 @@ describe("engine round 2", () => {
   let w: World;
   let auth: AuthContext;
   const actor = () => ({ userId: w.userId, source: "Web" });
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   });
   afterEach(() => w.close());
 
-  it("numbers bills with 16 digits and a sequence that is not capped at 999", () => {
+  it("numbers bills with 16 digits and a sequence that is not capped at 999", async () => {
     const at = new Date("2026-11-06T12:00:00.000Z");
-    const a = wideBillNumber(w.db, at);
-    const b2 = wideBillNumber(w.db, at);
+    const a = await wideBillNumber(w.db, at);
+    const b2 = await wideBillNumber(w.db, at);
     expect(a).toMatch(/^261106\d{10}$/);
     expect(Number(b2.slice(6))).toBe(Number(a.slice(6)) + 1);
   });
 
-  it("charges a one-time recurring fee only on the first successful bill", () => {
-    const contract = createContract(w.db, auth, actor(), contractSchema.parse({ name: "Setup co", clientId: w.clientId, warehouseId: w.warehouseId, calcStartDate: "2026-09-01", frequency: "Monthly" }));
-    createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Onboarding", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", chargeOneTime: true, tiers: [{ fromQty: 1, toQty: null, rate: 500 }] }));
-    createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Account", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", tiers: [{ fromQty: 1, toQty: null, rate: 50 }] }));
-    expect(getContract(w.db, auth, contract.id).fees.find((f) => f.name === "Onboarding")?.chargeOneTime).toBe(true);
-    expect(getContract(w.db, auth, contract.id).fees.find((f) => f.name === "Onboarding")?.conditions).toEqual([]);
-    const row = w.db.select().from(schema.billingFees).where(eq(schema.billingFees.name, "Onboarding")).get()!;
+  it("charges a one-time recurring fee only on the first successful bill", async () => {
+    const contract = await createContract(w.db, auth, actor(), contractSchema.parse({ name: "Setup co", clientId: w.clientId, warehouseId: w.warehouseId, calcStartDate: "2026-09-01", frequency: "Monthly" }));
+    await createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Onboarding", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", chargeOneTime: true, tiers: [{ fromQty: 1, toQty: null, rate: 500 }] }));
+    await createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Account", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", tiers: [{ fromQty: 1, toQty: null, rate: 50 }] }));
+    expect((await getContract(w.db, auth, contract.id)).fees.find((f) => f.name === "Onboarding")?.chargeOneTime).toBe(true);
+    expect((await getContract(w.db, auth, contract.id)).fees.find((f) => f.name === "Onboarding")?.conditions).toEqual([]);
+    const row = (await w.db.select().from(schema.billingFees).where(eq(schema.billingFees.name, "Onboarding")).limit(1))[0]!;
     expect(Boolean(row.chargeOneTime)).toBe(true); // R2-1: a real column, no reserved marker
     expect(row.conditions.some((c) => c.field === ONE_TIME_FIELD)).toBe(false);
-    const first = calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "custom", start: "2026-09-01", end: "2026-09-30" }, new Date("2026-10-02T12:00:00.000Z")).reports[0]!;
+    const first = (await calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "custom", start: "2026-09-01", end: "2026-09-30" }, new Date("2026-10-02T12:00:00.000Z"))).reports[0]!;
     expect(first.totalPrice).toBe(550);
-    const second = calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "custom", start: "2026-10-01", end: "2026-10-31" }, new Date("2026-11-02T12:00:00.000Z")).reports[0]!;
+    const second = (await calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "custom", start: "2026-10-01", end: "2026-10-31" }, new Date("2026-11-02T12:00:00.000Z"))).reports[0]!;
     expect(second.totalPrice).toBe(50);
-    const rows = w.db.select().from(schema.billingReports).where(eq(schema.billingReports.contractId, contract.id)).all();
+    const rows = await w.db.select().from(schema.billingReports).where(eq(schema.billingReports.contractId, contract.id));
     expect(rows).toHaveLength(2);
   });
 });
 
 describe("engine SQL with SO / carrier / custom facts", () => {
-  it("runs every shipment and pick & pack collector with conditions without SQL errors", () => {
-    const w = createWorld();
+  it("runs every shipment and pick & pack collector with conditions without SQL errors", async () => {
+    const w = await createWorld();
     try {
       const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
       const auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
       const actor = { userId: w.userId, source: "Web" };
-      const contract = createContract(w.db, auth, actor, contractSchema.parse({ name: "SQL", clientId: w.clientId, warehouseId: w.warehouseId, calcStartDate: "2026-10-01", frequency: "Monthly" }));
+      const contract = await createContract(w.db, auth, actor, contractSchema.parse({ name: "SQL", clientId: w.clientId, warehouseId: w.warehouseId, calcStartDate: "2026-10-01", frequency: "Monthly" }));
       const cond = [{ field: "carrier", comparator: "equals" as const, value: "UPS" }, { field: "cf.so.toggle1", comparator: "equals" as const, value: true }];
       const fees: [string, string, string][] = [["Shipment", "Per SO", "SO"], ["Shipment", "Per Label", "Label"], ["Shipment", "Shipment Package", "Shipment Package"], ["Shipment", "Per Product", "Kit (UOM Quantity)"], ["Shipment", "Per Product", "Component (UOM Quantity)"], ["Pick & Pack", "Per Picking", "SO"]];
-      fees.forEach(([op, feeBy, chargeBy], i) => createFee(w.db, auth, actor, contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: `F${i}`, operationType: op, feeBy, chargeBy, conditions: [...cond, ...(op === "Shipment" && feeBy === "Per Product" ? [{ field: "lineNote1", comparator: "isNotEmpty" as const, value: null }] : [])], tiers: [{ fromQty: 1, toQty: null, rate: 1 }] })));
-      createFee(w.db, auth, actor, contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Store", operationType: "Storage", calculationType: "At Period End", feeBy: "Location", chargeBy: "Location", conditions: [{ field: "cf.lpType.textBox1", comparator: "equals", value: "X" }, { field: "onlySingleSku", comparator: "equals", value: true }], tiers: [{ fromQty: 1, toQty: null, rate: 1 }] }));
-      createFee(w.db, auth, actor, contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Recv", operationType: "Receiving", feeBy: "Per LP", chargeBy: "LP", conditions: [{ field: "cf.location.textBox1", comparator: "equals", value: "X" }], tiers: [{ fromQty: 1, toQty: null, rate: 1 }] }));
-      const out = calculateContracts(w.db, auth, actor, { ids: [contract.id], mode: "lastClosed" }, new Date("2026-11-06T12:00:00.000Z")).reports[0]!;
+      await forEachSeq(fees, async ([op, feeBy, chargeBy], i) => await createFee(w.db, auth, actor, contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: `F${i}`, operationType: op, feeBy, chargeBy, conditions: [...cond, ...(op === "Shipment" && feeBy === "Per Product" ? [{ field: "lineNote1", comparator: "isNotEmpty" as const, value: null }] : [])], tiers: [{ fromQty: 1, toQty: null, rate: 1 }] })));
+      await createFee(w.db, auth, actor, contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Store", operationType: "Storage", calculationType: "At Period End", feeBy: "Location", chargeBy: "Location", conditions: [{ field: "cf.lpType.textBox1", comparator: "equals", value: "X" }, { field: "onlySingleSku", comparator: "equals", value: true }], tiers: [{ fromQty: 1, toQty: null, rate: 1 }] }));
+      await createFee(w.db, auth, actor, contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Recv", operationType: "Receiving", feeBy: "Per LP", chargeBy: "LP", conditions: [{ field: "cf.location.textBox1", comparator: "equals", value: "X" }], tiers: [{ fromQty: 1, toQty: null, rate: 1 }] }));
+      const out = (await calculateContracts(w.db, auth, actor, { ids: [contract.id], mode: "lastClosed" }, new Date("2026-11-06T12:00:00.000Z"))).reports[0]!;
       expect(out.errorMessage).toBeNull();
       expect(out.status).toBe("Successful");
     } finally {
-      w.close();
+      await w.close();
     }
   });
 });
@@ -109,17 +110,17 @@ describe("client wizard Others step: SSCC-18", () => {
   it("persists the SSCC-18 settings and returns them on the detail", async () => {
     const { CLIENT_DEFAULTS, clientSchema } = await import("@/lib/grid-defs/organization/clients");
     const { createClient, getClient } = await import("@/server/repositories/clients");
-    const w = createWorld();
+    const w = await createWorld();
     try {
       const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
       const auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
       const bad = clientSchema.safeParse({ ...CLIENT_DEFAULTS, name: "SSCC Co", code: "SSCC1", officialName: "SSCC Co LLC", sscc: { extensionDigit: "1", gs1CompanyPrefix: "061414", serialNumber: "" } });
       expect(bad.success).toBe(false);
       const input = clientSchema.parse({ ...CLIENT_DEFAULTS, name: "SSCC Co", code: "SSCC1", officialName: "SSCC Co LLC", sscc: { extensionDigit: "1", gs1CompanyPrefix: "0614141", serialNumber: "1" } });
-      const { id } = createClient(w.db, auth, { userId: w.userId, source: "Web" }, input);
-      expect(getClient(w.db, auth, id).sscc).toEqual({ extensionDigit: "1", gs1CompanyPrefix: "0614141", serialNumber: "1" });
+      const { id } = await createClient(w.db, auth, { userId: w.userId, source: "Web" }, input);
+      expect((await getClient(w.db, auth, id)).sscc).toEqual({ extensionDigit: "1", gs1CompanyPrefix: "0614141", serialNumber: "1" });
     } finally {
-      w.close();
+      await w.close();
     }
   });
 });

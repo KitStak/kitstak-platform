@@ -5,8 +5,8 @@ import { changeLogQuerySchema, listChangeLog } from "@/server/repositories/platf
 
 export const GET = defineRoute({
   query: changeLogQuerySchema,
-  handler: ({ db, auth, query }) => {
-    const { rows, total } = listChangeLog(db, auth, query);
+  handler: async ({ db, auth, query }) => {
+    const { rows, total } = await listChangeLog(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.ps });
   },
 });

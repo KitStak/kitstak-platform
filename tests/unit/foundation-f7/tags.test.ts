@@ -10,7 +10,7 @@ const tagsRoute = await import("@/app/api/tags/route");
 const tagRoute = await import("@/app/api/tags/[id]/route");
 const applyRoute = await import("@/app/api/tags/apply/route");
 
-beforeEach(() => { openWorld(); });
+beforeEach(async () => { await openWorld(); });
 afterEach(() => closeWorld());
 afterAll(() => removeFilesRoot());
 
@@ -68,11 +68,11 @@ describe("/api/tags", () => {
 
   it("bulk applies and removes per id, with cross-scope ids reported as NOT_FOUND", async () => {
     const w = current();
-    const mine = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    const otherClientProduct = w.db.insert(schema.products).values({
+    const mine = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    const otherClientProduct = (await w.db.insert(schema.products).values({
       clientId: w.otherClientId, sku: "BETA-1", barcode: "BETA-1", name: "Beta", category: "General", weightOz: 1, lengthIn: 1, widthIn: 1, heightIn: 1, price: 1, status: "Active",
-    }).returning().get().id;
-    const foreign = createOrder(w.db, w.ctx, orderInput(w, [{ productId: otherClientProduct, quantity: 1 }], { clientId: w.otherClientId }));
+    }).returning())[0].id;
+    const foreign = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: otherClientProduct, quantity: 1 }], { clientId: w.otherClientId }));
     const tag = await createTag("Rush");
     const poTag = await createTag("Inbound", "purchase_order");
 
@@ -85,7 +85,7 @@ describe("/api/tags", () => {
     const result = applied.data as { succeeded: string[]; failed: { id: string; code: string }[] };
     expect(result.succeeded).toEqual([mine.id]);
     expect(result.failed.map((f) => [f.id, f.code])).toEqual([[foreign.id, "NOT_FOUND"], ["missing", "NOT_FOUND"]]);
-    expect(w.db.select().from(schema.entityTags).all()).toHaveLength(1);
+    expect(await w.db.select().from(schema.entityTags)).toHaveLength(1);
 
     const wrongScope = await call(applyRoute.POST, req("POST", "/api/tags/apply", {
       cookie: operator, body: { entityType: "shipment_order", ids: [mine.id], tagIds: [poTag.id], mode: "add" },
@@ -96,7 +96,7 @@ describe("/api/tags", () => {
       cookie: operator, body: { entityType: "shipment_order", ids: [mine.id], tagIds: [tag.id], mode: "remove" },
     }));
     expect((removed.data as { succeeded: string[] }).succeeded).toEqual([mine.id]);
-    expect(w.db.select().from(schema.entityTags).all()).toHaveLength(0);
+    expect(await w.db.select().from(schema.entityTags)).toHaveLength(0);
   });
 
   it("requires a session", async () => {

@@ -9,7 +9,8 @@
  *
  * `previewImport` runs step 1 only (validation preview, nothing written).
  */
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+import { desc } from "@/server/db/order";
 import type { AppDb } from "@/server/api/db";
 import { AppError, toAppError, validationError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
@@ -21,6 +22,7 @@ import { parseImportFile, type ParsedImportFile } from "./parser";
 import { buildErrorFile, errorFileName, type FailedRow } from "./template";
 import type { ImportDefinition, ImportRowValues } from "./types";
 import { buildPreview, validateRows, type ImportPreview, type RowValidation } from "./validate";
+import { mapSeq, withWriteTx } from "@/server/db/sql";
 
 /** Prefix of the actor source for rows written by an import (Logiwa change-log SOURCE: UI / import / integration). */
 export const IMPORT_SOURCE_PREFIX = "Import · ";
@@ -73,11 +75,11 @@ export async function previewImport(upload: ImportUpload, db?: AppDb): Promise<I
   if (valid.length === 0) return preview;
   const failures = new Map<number, string>();
   try {
-    db.transaction((tx) => {
-      const file = tx.insert(files).values({ name: upload.fileName, mime: "application/octet-stream", size: upload.bytes.length, sha256: "dry-run", storagePath: "dry-run", uploadedBy: upload.auth.user.id, ownerEntityType: "import_batch" }).returning({ id: files.id }).get();
-      const batch = tx.insert(importBatches).values({ importKey: upload.def.key, status: "Processing", masterRowCount: valid.length, fileId: file.id, uploadedBy: upload.auth.user.id }).returning({ id: importBatches.id }).get();
+    await withWriteTx(db, async (tx) => {
+      const file = (await tx.insert(files).values({ name: upload.fileName, mime: "application/octet-stream", size: upload.bytes.length, sha256: "dry-run", storagePath: "dry-run", uploadedBy: upload.auth.user.id, ownerEntityType: "import_batch" }).returning({ id: files.id }))[0];
+      const batch = (await tx.insert(importBatches).values({ importKey: upload.def.key, status: "Processing", masterRowCount: valid.length, fileId: file.id, uploadedBy: upload.auth.user.id }).returning({ id: importBatches.id }))[0];
       for (const row of valid) {
-        const outcome = applyRow(tx, upload, batch.id, row);
+        const outcome = await applyRow(tx, upload, batch.id, row);
         if (!outcome.success) failures.set(row.rowNumber, outcome.message ?? "Failed");
       }
       throw new PreviewRollback("dry run");
@@ -106,11 +108,11 @@ interface RowOutcome {
   readonly raw: Readonly<Record<string, string>>;
 }
 
-function applyRow(tx: AppDb, upload: ImportUpload, batchId: string, row: RowValidation): RowOutcome {
+async function applyRow(tx: AppDb, upload: ImportUpload, batchId: string, row: RowValidation): Promise<RowOutcome> {
   const base = { rowNumber: row.rowNumber, raw: row.raw };
   if (row.errors.length > 0) return { ...base, success: false, message: row.errors.join("; "), entityId: null };
   try {
-    const result = tx.transaction((savepoint) => upload.def.handler.apply({
+    const result = await withWriteTx(tx, async (savepoint) => await upload.def.handler.apply({
       db: savepoint,
       auth: upload.auth,
       // The channel is part of the source, so change-log rows written by imports read "Import · <user>".
@@ -126,17 +128,17 @@ function applyRow(tx: AppDb, upload: ImportUpload, batchId: string, row: RowVali
   }
 }
 
-function applyChunk(db: AppDb, upload: ImportUpload, batchId: string, chunk: readonly RowValidation[]): RowOutcome[] {
-  return db.transaction((tx) => {
-    const outcomes = chunk.map((row) => applyRow(tx, upload, batchId, row));
-    tx.insert(importRows).values(outcomes.map((o) => ({
+async function applyChunk(db: AppDb, upload: ImportUpload, batchId: string, chunk: readonly RowValidation[]): Promise<RowOutcome[]> {
+  return await withWriteTx(db, async (tx) => {
+    const outcomes = await mapSeq(chunk, async (row) => await applyRow(tx, upload, batchId, row));
+    await tx.insert(importRows).values(outcomes.map((o) => ({
       batchId,
       rowNumber: o.rowNumber,
       success: o.success,
       data: JSON.stringify(o.raw),
       message: o.message,
       entityId: o.entityId,
-    }))).run();
+    })));
     return outcomes;
   });
 }
@@ -163,25 +165,25 @@ export async function runImport(db: AppDb, upload: ImportUpload, options: RunImp
   assertHeaders(preview.missingColumns);
   if (rows.length === 0) throw validationError("The file has no data rows");
 
-  const original = store.store(db, { name: upload.fileName, bytes: upload.bytes, purpose: "import", uploadedBy: upload.auth.user.id, ownerEntityType: "import_batch" });
-  const batch = db.insert(importBatches).values({
+  const original = await store.store(db, { name: upload.fileName, bytes: upload.bytes, purpose: "import", uploadedBy: upload.auth.user.id, ownerEntityType: "import_batch" });
+  const batch = (await db.insert(importBatches).values({
     importKey: upload.def.key,
     status: "Processing",
     masterRowCount: rows.length,
     fileId: original.id,
     uploadedBy: upload.auth.user.id,
     createdAt: now().toISOString(),
-  }).returning().get();
+  }).returning())[0];
 
   const outcomes: RowOutcome[] = [];
   for (let i = 0; i < rows.length; i += IMPORT_CHUNK_SIZE) {
-    outcomes.push(...applyChunk(db, upload, batch.id, rows.slice(i, i + IMPORT_CHUNK_SIZE)));
+    outcomes.push(...await applyChunk(db, upload, batch.id, rows.slice(i, i + IMPORT_CHUNK_SIZE)));
   }
 
   const failed: FailedRow[] = outcomes.filter((o) => !o.success).map((o) => ({ rowNumber: o.rowNumber, raw: o.raw, message: o.message ?? "Failed" }));
   const successCount = outcomes.length - failed.length;
   const errorFileId = failed.length > 0
-    ? store.store(db, {
+    ? (await store.store(db, {
       name: errorFileName(upload.def),
       bytes: await buildErrorFile(upload.def, file.headers, failed),
       purpose: "import-errors",
@@ -189,18 +191,18 @@ export async function runImport(db: AppDb, upload: ImportUpload, options: RunImp
       ownerEntityType: "import_batch",
       ownerEntityId: batch.id,
       expiresAt: null,
-    }).id
+    })).id
     : null;
 
-  db.update(importBatches).set({
+  await db.update(importBatches).set({
     status: batchStatus(successCount, failed.length),
     successCount,
     errorCount: failed.length,
     errorFileId,
     finishedAt: now().toISOString(),
-  }).where(eq(importBatches.id, batch.id)).run();
+  }).where(eq(importBatches.id, batch.id));
   log.info("import finished", { importKey: upload.def.key, batchId: batch.id, rows: rows.length, failed: failed.length });
-  return db.select().from(importBatches).where(eq(importBatches.id, batch.id)).get() ?? batch;
+  return (await db.select().from(importBatches).where(eq(importBatches.id, batch.id)).limit(1))[0] ?? batch;
 }
 
 export interface ImportBatchListRow extends ImportBatch {
@@ -208,36 +210,35 @@ export interface ImportBatchListRow extends ImportBatch {
 }
 
 /** Import history grid for one import key (newest first). */
-export function listImportBatches(db: AppDb, importKey: string, page: number, pageSize: number): { rows: ImportBatchListRow[]; total: number } {
+export async function listImportBatches(db: AppDb, importKey: string, page: number, pageSize: number): Promise<{ rows: ImportBatchListRow[]; total: number }> {
   const where = eq(importBatches.importKey, importKey);
-  const total = db.select({ n: sql<number>`count(*)` }).from(importBatches).where(where).get()?.n ?? 0;
-  const rows = db.select({ batch: importBatches, uploadedByName: users.name })
+  const total = (await db.select({ n: sql<number>`count(*)` }).from(importBatches).where(where).limit(1))[0]?.n ?? 0;
+  const rows = (await db.select({ batch: importBatches, uploadedByName: users.name })
     .from(importBatches)
     .leftJoin(users, eq(users.id, importBatches.uploadedBy))
     .where(where)
     .orderBy(desc(importBatches.createdAt))
     .limit(pageSize)
-    .offset((Math.max(1, page) - 1) * pageSize)
-    .all()
+    .offset((Math.max(1, page) - 1) * pageSize))
     .map((r) => ({ ...r.batch, uploadedByName: r.uploadedByName }));
   return { rows, total };
 }
 
-export function getImportBatch(db: AppDb, batchId: string): ImportBatch | undefined {
-  return db.select().from(importBatches).where(eq(importBatches.id, batchId)).get();
+export async function getImportBatch(db: AppDb, batchId: string): Promise<ImportBatch | undefined> {
+  return (await db.select().from(importBatches).where(eq(importBatches.id, batchId)).limit(1))[0];
 }
 
 /** Details drawer rows (paged at 100 in the UI); `errorsOnly` = the "Show Errors" box. */
-export function listImportRows(
+export async function listImportRows(
   db: AppDb,
   batchId: string,
   options: { readonly errorsOnly?: boolean; readonly page: number; readonly pageSize: number },
-): { rows: ImportRowRecord[]; total: number } {
+): Promise<{ rows: ImportRowRecord[]; total: number }> {
   const where = options.errorsOnly
     ? and(eq(importRows.batchId, batchId), eq(importRows.success, false))
     : eq(importRows.batchId, batchId);
-  const total = db.select({ n: sql<number>`count(*)` }).from(importRows).where(where).get()?.n ?? 0;
-  const rows = db.select().from(importRows).where(where).orderBy(importRows.rowNumber)
-    .limit(options.pageSize).offset((Math.max(1, options.page) - 1) * options.pageSize).all();
+  const total = (await db.select({ n: sql<number>`count(*)` }).from(importRows).where(where).limit(1))[0]?.n ?? 0;
+  const rows = await db.select().from(importRows).where(where).orderBy(importRows.rowNumber)
+    .limit(options.pageSize).offset((Math.max(1, options.page) - 1) * options.pageSize);
   return { rows, total };
 }

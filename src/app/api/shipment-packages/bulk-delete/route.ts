@@ -6,5 +6,5 @@ import { deleteShipmentPackages } from "@/server/repositories/shipment-packages"
 export const POST = defineRoute({
   permission: "settings.shipment_packages.delete",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => deleteShipmentPackages(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await deleteShipmentPackages(db, auth, actor, body.ids),
 });

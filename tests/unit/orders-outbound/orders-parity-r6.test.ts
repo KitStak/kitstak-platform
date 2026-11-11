@@ -100,49 +100,49 @@ describe("dates, zones and weights", () => {
 describe("repository flows", () => {
   let w: World;
   const scope = () => ({ warehouseIds: [w.warehouseId], clientIds: "all" as const });
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
   });
   afterEach(() => w.close());
-  const mk = (qty = 2, extra: Record<string, unknown> = {}) => createOrder(w.db, w.ctx, createOrderBodySchema.parse(orderInput(w, [{ productId: w.productId, quantity: qty }], extra)));
+  const mk = async (qty = 2, extra: Record<string, unknown> = {}) => await createOrder(w.db, w.ctx, createOrderBodySchema.parse(orderInput(w, [{ productId: w.productId, quantity: qty }], extra)));
 
-  it("hold reason is logged, noted and shown on the detail", () => {
-    const o = mk();
-    const res = runOrderBulk("hold", w.db, w.ctx, { ids: [o.id], reason: "Address check with customer" });
+  it("hold reason is logged, noted and shown on the detail", async () => {
+    const o = await mk();
+    const res = await runOrderBulk("hold", w.db, w.ctx, { ids: [o.id], reason: "Address check with customer" });
     expect(res.succeeded).toEqual([o.id]);
-    const detail = getOrderDetail(w.db, { scope: scope() }, o.id);
+    const detail = await getOrderDetail(w.db, { scope: scope() }, o.id);
     expect(detail?.hold?.reason).toBe("Address check with customer");
-    const logs = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, o.id)).all().map((r) => r.message);
+    const logs = (await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, o.id))).map((r) => r.message);
     expect(logs).toContain("Hold reason: Address check with customer");
-    const notes = w.db.select().from(schema.entityNotes).where(eq(schema.entityNotes.entityId, o.id)).all();
+    const notes = await w.db.select().from(schema.entityNotes).where(eq(schema.entityNotes.entityId, o.id));
     expect(notes.some((n) => n.body === "Hold reason: Address check with customer")).toBe(true);
-    runOrderBulk("release", w.db, w.ctx, { ids: [o.id] });
-    expect(getOrderDetail(w.db, { scope: scope() }, o.id)?.hold).toBeNull();
+    await runOrderBulk("release", w.db, w.ctx, { ids: [o.id] });
+    expect((await getOrderDetail(w.db, { scope: scope() }, o.id))?.hold).toBeNull();
   });
 
-  it("duplicate never expects shipment before its order date", () => {
-    const o = mk(2, { expectedShipDate: "2020-01-01T00:00:00.000Z" });
-    const copy = duplicateOrder(w.db, w.ctx, o.id);
-    const row = w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, copy.id)).get();
+  it("duplicate never expects shipment before its order date", async () => {
+    const o = await mk(2, { expectedShipDate: "2020-01-01T00:00:00.000Z" });
+    const copy = await duplicateOrder(w.db, w.ctx, o.id);
+    const row = (await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, copy.id)).limit(1))[0];
     if (row?.expectedShipDate) expect(Date.parse(row.expectedShipDate)).toBeGreaterThanOrEqual(Date.parse(row.orderDate));
   });
 
-  it("explains a shortage caused by a locked location", () => {
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 7 });
-    w.db.update(schema.locations).set({ isLocked: true }).where(eq(schema.locations.id, w.loc.storageA)).run();
-    const o = mk(2);
-    const out = explainShortages(w.db, scope(), [o.id]);
+  it("explains a shortage caused by a locked location", async () => {
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 7 });
+    await w.db.update(schema.locations).set({ isLocked: true }).where(eq(schema.locations.id, w.loc.storageA));
+    const o = await mk(2);
+    const out = await explainShortages(w.db, scope(), [o.id]);
     expect(out[o.id]?.summary).toMatch(/needs 2, 0 allocatable: 7 in locked location/);
-    const ok = mk(1);
-    w.db.update(schema.locations).set({ isLocked: false }).where(eq(schema.locations.id, w.loc.storageA)).run();
-    expect(explainShortages(w.db, scope(), [ok.id])[ok.id]).toBeUndefined();
+    const ok = await mk(1);
+    await w.db.update(schema.locations).set({ isLocked: false }).where(eq(schema.locations.id, w.loc.storageA));
+    expect((await explainShortages(w.db, scope(), [ok.id]))[ok.id]).toBeUndefined();
   });
 
-  it("ship preview counts Packed allocations (what shipOrders consumes), in scope", () => {
-    const o = mk(2);
+  it("ship preview counts Packed allocations (what shipOrders consumes), in scope", async () => {
+    const o = await mk(2);
     // The line counter alone doesn't ship anything: no Packed / Loaded allocation yet.
-    w.db.update(schema.orderLines).set({ packedQuantity: 1 }).where(eq(schema.orderLines.orderId, o.id)).run();
-    expect(shipPreview(w.db, scope(), [o.id]).partial[o.id]).toMatch(/^Partially shipped: 2 of 2 units of .+ remain$/);
-    expect(shipPreview(w.db, { warehouseIds: [], clientIds: "all" }, [o.id]).partial).toEqual({});
+    await w.db.update(schema.orderLines).set({ packedQuantity: 1 }).where(eq(schema.orderLines.orderId, o.id));
+    expect((await shipPreview(w.db, scope(), [o.id])).partial[o.id]).toMatch(/^Partially shipped: 2 of 2 units of .+ remain$/);
+    expect((await shipPreview(w.db, { warehouseIds: [], clientIds: "all" }, [o.id])).partial).toEqual({});
   });
 });

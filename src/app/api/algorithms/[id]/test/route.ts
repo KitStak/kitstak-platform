@@ -10,9 +10,9 @@ export const POST = defineRoute({
   params: idParamsSchema,
   body: putawayTestSchema,
   transaction: false,
-  handler: ({ db, auth, params, body }) => {
-    const a = loadAlgorithm(db, auth, params.id);
+  handler: async ({ db, auth, params, body }) => {
+    const a = await loadAlgorithm(db, auth, params.id);
     if (a.kind !== "Putaway") throw new AppError("VALIDATION", "Test Algorithm is available for putaway algorithms; use Dry run for allocation");
-    return testPutaway(db, auth, a.id, { ...body, warehouseId: a.warehouseId });
+    return await testPutaway(db, auth, a.id, { ...body, warehouseId: a.warehouseId });
   },
 });

@@ -17,8 +17,8 @@ export function exportColumnsFor(view: OrderView): readonly ExportColumn[] {
 export function createOrdersExportProvider(view: OrderView): ExportProvider {
   return {
     columns: exportColumnsFor(view),
-    fetchPage(ctx, page, pageSize) {
-      const { rows, total } = listOrders(ctx.db, ctx.auth.viewScope, { view, query: { ...ctx.query, page, pageSize } });
+    async fetchPage(ctx, page, pageSize) {
+      const { rows, total } = await listOrders(ctx.db, ctx.auth.viewScope, { view, query: { ...ctx.query, page, pageSize } });
       return {
         total,
         rows: rows.map((r) => ({ ...r, tags: r.tags.map((t) => t.name).join(", ") })),

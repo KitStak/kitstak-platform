@@ -1,12 +1,12 @@
 /** Shipping: carrier shipments (labels), shipment items, end-of-day manifests, shipment plans. */
-import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, doublePrecision, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { EOD_STATUSES, LABEL_FORMATS, LABEL_STATUSES, LABEL_TYPES, SHIPMENT_PLAN_STATUSES } from "../../../lib/enums";
 import { bool, customFields, nowIso, pk, stamps } from "../columns";
 import { warehouses } from "./org";
 import { shipmentOrders } from "./outbound";
 
 /** One row per package/label (Carrier Shipment Details). */
-export const shipments = sqliteTable("shipments", {
+export const shipments = pgTable("shipments", {
   id: pk(),
   orderId: text("order_id").notNull().references(() => shipmentOrders.id),
   warehouseId: text("warehouse_id").notNull(),
@@ -25,19 +25,19 @@ export const shipments = sqliteTable("shipments", {
   trackingNumber: text("tracking_number").notNull(),
   shipmentPackageId: text("shipment_package_id"),
   packageSeq: integer("package_seq").notNull().default(1),
-  weight: real("weight").notNull(),
+  weight: doublePrecision("weight").notNull(),
   weightUnit: text("weight_unit").notNull().default("Ounce"),
-  length: real("length").notNull(),
-  width: real("width").notNull(),
-  height: real("height").notNull(),
+  length: doublePrecision("length").notNull(),
+  width: doublePrecision("width").notNull(),
+  height: doublePrecision("height").notNull(),
   dimensionUnit: text("dimension_unit").notNull().default("Inch"),
-  rate: real("rate").notNull().default(0),
-  shippingCost: real("shipping_cost").notNull().default(0),
-  otherCost: real("other_cost").notNull().default(0),
+  rate: doublePrecision("rate").notNull().default(0),
+  shippingCost: doublePrecision("shipping_cost").notNull().default(0),
+  otherCost: doublePrecision("other_cost").notNull().default(0),
   currency: text("currency").notNull().default("USD"),
   zone: text("zone"),
   insuranceType: text("insurance_type"),
-  insuranceValue: real("insurance_value"),
+  insuranceValue: doublePrecision("insurance_value"),
   confirmationType: text("confirmation_type"),
   allowSaturdayDelivery: bool("allow_saturday_delivery").notNull().default(false),
   carrierExpectedDeliveryAt: text("carrier_expected_delivery_at"),
@@ -62,7 +62,7 @@ export const shipments = sqliteTable("shipments", {
   index("shipments_eod_idx").on(t.endOfDayManifestId),
 ]);
 
-export const shipmentItems = sqliteTable("shipment_items", {
+export const shipmentItems = pgTable("shipment_items", {
   id: pk(),
   shipmentId: text("shipment_id").notNull().references(() => shipments.id, { onDelete: "cascade" }),
   orderLineId: text("order_line_id").notNull(),
@@ -74,7 +74,7 @@ export const shipmentItems = sqliteTable("shipment_items", {
   serialNumberId: text("serial_number_id"),
 }, (t) => [index("shipment_items_shipment_idx").on(t.shipmentId)]);
 
-export const endOfDayManifests = sqliteTable("end_of_day_manifests", {
+export const endOfDayManifests = pgTable("end_of_day_manifests", {
   id: pk(),
   warehouseId: text("warehouse_id").notNull(),
   carrierConnectionId: text("carrier_connection_id").notNull(),
@@ -91,7 +91,7 @@ export const endOfDayManifests = sqliteTable("end_of_day_manifests", {
   ...stamps(),
 }, (t) => [uniqueIndex("eod_unique_idx").on(t.warehouseId, t.carrierConnectionId, t.shipDate, t.sequence)]);
 
-export const shipmentPlans = sqliteTable("shipment_plans", {
+export const shipmentPlans = pgTable("shipment_plans", {
   id: pk(),
   code: text("code").notNull(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
@@ -105,8 +105,8 @@ export const shipmentPlans = sqliteTable("shipment_plans", {
   loadingStartedAt: text("loading_started_at"),
   loadingCompletedAt: text("loading_completed_at"),
   truckDepartedAt: text("truck_departed_at"),
-  expectedTotalVolume: real("expected_total_volume").notNull().default(0),
-  expectedTotalWeight: real("expected_total_weight").notNull().default(0),
+  expectedTotalVolume: doublePrecision("expected_total_volume").notNull().default(0),
+  expectedTotalWeight: doublePrecision("expected_total_weight").notNull().default(0),
   preventLpnEditDuringLoading: bool("prevent_lpn_edit_during_loading").notNull().default(false),
   note: text("note"),
   customerId: text("customer_id"),
@@ -116,7 +116,7 @@ export const shipmentPlans = sqliteTable("shipment_plans", {
   ...stamps(),
 }, (t) => [uniqueIndex("shipment_plan_code_idx").on(t.code)]);
 
-export const shipmentPlanOrders = sqliteTable("shipment_plan_orders", {
+export const shipmentPlanOrders = pgTable("shipment_plan_orders", {
   planId: text("plan_id").notNull().references(() => shipmentPlans.id, { onDelete: "cascade" }),
   orderId: text("order_id").notNull().references(() => shipmentOrders.id),
   status: text("status", { enum: SHIPMENT_PLAN_STATUSES }).notNull().default("Open"),

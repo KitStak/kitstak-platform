@@ -26,4 +26,4 @@ export interface WorkflowActionResult {
   readonly message?: string;
 }
 
-export type WorkflowActionExecutor = (tx: Tx, ctx: DomainCtx, input: WorkflowActionInput) => WorkflowActionResult;
+export type WorkflowActionExecutor = (tx: Tx, ctx: DomainCtx, input: WorkflowActionInput) => WorkflowActionResult | Promise<WorkflowActionResult>;

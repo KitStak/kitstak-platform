@@ -32,7 +32,7 @@ const route = async (path: string): Promise<RouteModule> => {
   return loader();
 };
 
-beforeEach(() => { openWorld(); });
+beforeEach(async () => { await openWorld(); });
 afterEach(() => closeWorld());
 afterAll(() => removeFilesRoot());
 
@@ -69,7 +69,7 @@ describe("M10 route modules", () => {
     const lock = await call((await route("locations/bulk-lock")).POST!, req("POST", "/api/locations/bulk-lock", { cookie, body: { ids: [w.loc.pack], locked: true } }));
     expect(lock.status).toBe(200);
 
-    const free = w.db.insert(schema.locations).values(locationRow(w.warehouseId, "KS-SMOKE-01")).returning().get();
+    const free = (await w.db.insert(schema.locations).values(locationRow(w.warehouseId, "KS-SMOKE-01")).returning())[0];
     const del = await call((await route("locations/bulk-delete")).POST!, req("POST", "/api/locations/bulk-delete", { cookie, body: { ids: [free.id] } }));
     expect(del.status).toBe(200);
   });
@@ -104,7 +104,7 @@ describe("M10 route modules", () => {
 
   it("change log is scoped: a location in a warehouse the viewer can't see is not found", async () => {
     const w = current();
-    const other = w.db.insert(schema.locations).values(locationRow(w.otherWarehouseId, "RNO-01")).returning().get();
+    const other = (await w.db.insert(schema.locations).values(locationRow(w.otherWarehouseId, "RNO-01")).returning())[0];
     const res = await call((await route("locations/[id]/change-log")).GET!, req("GET", `/api/locations/${other.id}/change-log`, { cookie: await cookieFor(w.viewerId) }), { id: other.id });
     expect([403, 404]).toContain(res.status);
   });
@@ -117,13 +117,13 @@ describe("M10 route modules", () => {
       trackInventory: true, trackingMethod: "auto", inventoryClientId: w.clientId, inventoryProductId: null, reductionRule: "Any Location" };
     const res = await call(mod.POST!, req("POST", "/api/shipment-packages", { cookie, body }));
     expect(res.status, JSON.stringify(res.json)).toBe(201);
-    const pkg = w.db.select().from(schema.shipmentPackages).where(eq(schema.shipmentPackages.code, "BOX-AUTO-1")).get()!;
-    const product = w.db.select().from(schema.products).where(eq(schema.products.id, pkg.inventoryProductId!)).get()!;
+    const pkg = (await w.db.select().from(schema.shipmentPackages).where(eq(schema.shipmentPackages.code, "BOX-AUTO-1")).limit(1))[0]!;
+    const product = (await w.db.select().from(schema.products).where(eq(schema.products.id, pkg.inventoryProductId!)).limit(1))[0]!;
     expect(product).toMatchObject({ sku: "BOX-AUTO-1", clientId: w.clientId, productCategory: "Packaging Material", lengthIn: 10 });
     // A second package with the same code in another warehouse matches the existing SKU instead of duplicating it.
     const again = await call(mod.POST!, req("POST", "/api/shipment-packages", { cookie, body: { ...body, warehouseId: w.otherWarehouseId } }));
     expect(again.status).toBe(201);
-    expect(w.db.select().from(schema.products).where(eq(schema.products.sku, "BOX-AUTO-1")).all()).toHaveLength(1);
+    expect(await w.db.select().from(schema.products).where(eq(schema.products.sku, "BOX-AUTO-1"))).toHaveLength(1);
     // "Match" still requires a SKU.
     const match = await call(mod.POST!, req("POST", "/api/shipment-packages", { cookie, body: { ...body, code: "BOX-M", trackingMethod: "match" } }));
     expect(match.status).toBe(400);
@@ -131,8 +131,8 @@ describe("M10 route modules", () => {
 
   it("custom LP number availability flags a number taken by another LP type in the warehouse", async () => {
     const w = current();
-    const t = w.db.insert(schema.lpTypes).values({ warehouseId: w.warehouseId, code: "SMK", numberPrefix: "SMK-", numberLength: 5 }).returning().get();
-    w.db.insert(schema.licensePlates).values({ warehouseId: w.warehouseId, lpTypeId: t.id, number: "KSC-00001" }).run();
+    const t = (await w.db.insert(schema.lpTypes).values({ warehouseId: w.warehouseId, code: "SMK", numberPrefix: "SMK-", numberLength: 5 }).returning())[0];
+    await w.db.insert(schema.licensePlates).values({ warehouseId: w.warehouseId, lpTypeId: t.id, number: "KSC-00001" });
     const mod = await route("lp-numbers/availability");
     const cookie = await cookieFor(w.userId);
     const taken = await call(mod.GET!, req("GET", `/api/lp-numbers/availability?warehouseId=${w.warehouseId}&code=ksc-00001`, { cookie }));

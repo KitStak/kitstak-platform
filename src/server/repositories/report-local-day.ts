@@ -9,6 +9,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import { isValidTimeZone, zoneOffsetMs } from "@/server/scheduler/timezone";
+import { dbAll } from "@/server/db/sql";
 
 const MIN_YEAR = 2018;
 const MAX_YEAR = 2036;
@@ -53,24 +54,27 @@ export function offsetSegments(tzIn: string): readonly OffsetSegment[] {
 
 const modifier = (m: number): string => `${m >= 0 ? "+" : ""}${m} minutes`;
 
+/** YYYY-MM-DD of an ISO timestamp shifted by an interval expression (was SQLite `date(col, '+N minutes')`). */
+const shiftedDay = (col: SQL, shift: SQL): SQL => sql`to_char(((${col})::timestamptz + (${shift})::interval) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
+
 /** `date(<col> shifted into tz)`: the local YYYY-MM-DD of an ISO timestamp column. */
 export function zoneDateSql(colExpr: string, tz: string): SQL {
   const col = sql.raw(colExpr);
   const segs = offsetSegments(tz);
-  if (segs.length === 1) return sql`date(${col}, ${modifier(segs[0]!.offsetMinutes)})`;
+  if (segs.length === 1) return shiftedDay(col, sql`${modifier(segs[0]!.offsetMinutes)}::text`);
   const parts: SQL[] = [sql`CASE`];
-  for (let i = 1; i < segs.length; i += 1) parts.push(sql` WHEN ${col} < ${segs[i]!.from} THEN ${modifier(segs[i - 1]!.offsetMinutes)}`);
-  parts.push(sql` ELSE ${modifier(segs[segs.length - 1]!.offsetMinutes)} END`);
-  return sql`date(${col}, ${sql.join(parts, sql``)})`;
+  for (let i = 1; i < segs.length; i += 1) parts.push(sql` WHEN ${col} < ${segs[i]!.from} THEN ${modifier(segs[i - 1]!.offsetMinutes)}::text`);
+  parts.push(sql` ELSE ${modifier(segs[segs.length - 1]!.offsetMinutes)}::text END`);
+  return shiftedDay(col, sql.join(parts, sql``));
 }
 
 /**
  * Local day of `colExpr` in the zone of the row's warehouse (`whExpr`). Warehouses are grouped
  * by zone, so two Eastern warehouses share one CASE. Unknown warehouses fall back to UTC.
  */
-export function warehouseDateSql(db: AppDb, colExpr: string, whExpr: string, warehouseIds: readonly string[]): SQL {
+export async function warehouseDateSql(db: AppDb, colExpr: string, whExpr: string, warehouseIds: readonly string[]): Promise<SQL> {
   if (warehouseIds.length === 0) return sql`substr(${sql.raw(colExpr)}, 1, 10)`;
-  const rows = db.all<{ id: string; tz: string | null }>(sql`SELECT id, timezone AS tz FROM warehouses
+  const rows = await dbAll<{ id: string; tz: string | null }>(db, sql`SELECT id, timezone AS tz FROM warehouses
     WHERE id IN (${sql.join(warehouseIds.map((id) => sql`${id}`), sql`, `)})`);
   const byZone = new Map<string, string[]>();
   for (const r of rows) {

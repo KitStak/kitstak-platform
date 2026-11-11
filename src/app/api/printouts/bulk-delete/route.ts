@@ -6,5 +6,5 @@ import { deletePrintouts } from "@/server/repositories/printouts";
 export const POST = defineRoute({
   permission: "settings.printouts_labels.delete",
   body: bulkIdsSchema,
-  handler: ({ db, auth, actor, body }) => deletePrintouts(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await deletePrintouts(db, auth, actor, body.ids),
 });

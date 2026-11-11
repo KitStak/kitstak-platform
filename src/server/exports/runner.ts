@@ -10,7 +10,8 @@
  * file storage (expires after 7 days) and completes the task. Failures set `error` with a
  * user-safe message; they never throw out of `runExport`.
  */
-import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
+import { desc } from "@/server/db/order";
 import { z } from "zod";
 import type { AppDb } from "@/server/api/db";
 import { AppError, notFoundError, toAppError, validationError } from "@/server/api/errors";
@@ -66,7 +67,7 @@ export interface QueueExportInput {
 }
 
 /** Validates the gridKey, permission and query grammar, then records a queued export. */
-export function queueExport(db: AppDb, input: QueueExportInput): BackgroundTask {
+export async function queueExport(db: AppDb, input: QueueExportInput): Promise<BackgroundTask> {
   const def = getGridExportDef(input.gridKey);
   if (!def) throw validationError(`Unknown grid "${input.gridKey}"`, { gridKey: ["Unknown grid"] });
   if (!can(input.auth, def.permission)) throw new AppError("FORBIDDEN", "You do not have permission to export this list");
@@ -75,7 +76,7 @@ export function queueExport(db: AppDb, input: QueueExportInput): BackgroundTask 
     const first = parsed.issues[0];
     throw validationError(`Invalid export query: ${first?.param ?? ""} ${first?.message ?? ""}`.trim());
   }
-  return db.insert(backgroundTasks).values({
+  return (await db.insert(backgroundTasks).values({
     kind: "export",
     title: `${def.title} export`,
     gridKey: def.gridKey,
@@ -83,7 +84,7 @@ export function queueExport(db: AppDb, input: QueueExportInput): BackgroundTask 
     status: "queued",
     progress: 0,
     userId: input.auth.user.id,
-  }).returning().get();
+  }).returning())[0];
 }
 
 export interface RunExportDeps {
@@ -103,8 +104,8 @@ export function resolveExportProvider(def: GridExportDef): ExportProvider {
   return getModuleExportProvider(def.gridKey) ?? createGenericProvider(def);
 }
 
-function setTask(db: AppDb, id: string, patch: Partial<typeof backgroundTasks.$inferInsert>): void {
-  db.update(backgroundTasks).set(patch).where(eq(backgroundTasks.id, id)).run();
+async function setTask(db: AppDb, id: string, patch: Partial<typeof backgroundTasks.$inferInsert>): Promise<void> {
+  await db.update(backgroundTasks).set(patch).where(eq(backgroundTasks.id, id));
 }
 
 /**
@@ -136,10 +137,10 @@ async function collectRows(ctx: ExportContext, provider: ExportProvider, onProgr
  * context warehouse's zone (else the first warehouse in scope) — never raw UTC, so the
  * name matches the local time the Transactions tray shows.
  */
-export function resolveExportTimeZone(db: AppDb, auth: Pick<AuthContext, "context" | "scope">, requested?: string): string {
+export async function resolveExportTimeZone(db: AppDb, auth: Pick<AuthContext, "context" | "scope">, requested?: string): Promise<string> {
   if (requested && isValidTimeZone(requested)) return requested;
   const warehouseId = auth.context.warehouseId ?? auth.scope.warehouseIds[0] ?? null;
-  const zone = warehouseId ? db.select({ timezone: warehouses.timezone }).from(warehouses).where(eq(warehouses.id, warehouseId)).get()?.timezone : undefined;
+  const zone = warehouseId ? (await db.select({ timezone: warehouses.timezone }).from(warehouses).where(eq(warehouses.id, warehouseId)).limit(1))[0]?.timezone : undefined;
   return zone && isValidTimeZone(zone) ? zone : DEFAULT_WAREHOUSE_TIME_ZONE;
 }
 
@@ -154,11 +155,11 @@ export function exportFileName(title: string, at: Date, timeZone = "UTC"): strin
 /** Runs a queued export to completion. Never throws; the task row records the outcome. */
 export async function runExport(db: AppDb, taskId: string, deps: RunExportDeps): Promise<BackgroundTask> {
   const now = deps.now ?? (() => new Date());
-  const task = db.select().from(backgroundTasks).where(eq(backgroundTasks.id, taskId)).get();
+  const task = (await db.select().from(backgroundTasks).where(eq(backgroundTasks.id, taskId)).limit(1))[0];
   if (!task || task.kind !== "export") throw notFoundError("Export");
   if (task.status !== "queued") return task;
 
-  setTask(db, taskId, { status: "started", progress: 1 });
+  await setTask(db, taskId, { status: "started", progress: 1 });
   try {
     const def = task.gridKey ? getGridExportDef(task.gridKey) : undefined;
     if (!def) throw new AppError("VALIDATION", `Unknown grid "${task.gridKey ?? ""}"`);
@@ -173,10 +174,10 @@ export async function runExport(db: AppDb, taskId: string, deps: RunExportDeps):
     };
     const provider = deps.provider ?? resolveExportProvider(def);
     // Role data restrictions: restricted columns are dropped and nested values nulled, as in the JSON API.
-    const rows = deepRedactFor(deps.auth, await collectRows(ctx, provider, (progress) => setTask(db, taskId, { progress })));
+    const rows = deepRedactFor(deps.auth, await collectRows(ctx, provider, async (progress) => await setTask(db, taskId, { progress })));
     const columns = restrictedExportColumns(deps.auth, deps.columns && deps.columns.length > 0 ? deps.columns : provider.columns ?? inferColumns(rows));
     const bytes = await buildXlsx({ name: def.title, columns, rows });
-    const file = (deps.store ?? fileStore()).store(db, {
+    const file = await (deps.store ?? fileStore()).store(db, {
       name: exportFileName(def.title, now(), deps.timeZone),
       bytes,
       purpose: "export",
@@ -184,15 +185,15 @@ export async function runExport(db: AppDb, taskId: string, deps: RunExportDeps):
       ownerEntityId: taskId,
       uploadedBy: task.userId,
     });
-    setTask(db, taskId, { status: "completed", progress: 100, rowCount: rows.length, fileId: file.id, finishedAt: now().toISOString() });
+    await setTask(db, taskId, { status: "completed", progress: 100, rowCount: rows.length, fileId: file.id, finishedAt: now().toISOString() });
   } catch (error: unknown) {
     const appError = toAppError(error);
     const message = appError.code === "INTERNAL" ? "The export failed. Please try again." : appError.message;
     if (appError.code === "INTERNAL") log.error("export failed", { taskId, gridKey: task.gridKey, err: error });
     else log.warn("export rejected", { taskId, gridKey: task.gridKey, code: appError.code, message: appError.message });
-    setTask(db, taskId, { status: "error", errorMessage: message, finishedAt: now().toISOString() });
+    await setTask(db, taskId, { status: "error", errorMessage: message, finishedAt: now().toISOString() });
   }
-  return db.select().from(backgroundTasks).where(eq(backgroundTasks.id, taskId)).get() ?? task;
+  return (await db.select().from(backgroundTasks).where(eq(backgroundTasks.id, taskId)).limit(1))[0] ?? task;
 }
 
 export interface ExportHistoryRow {
@@ -210,15 +211,15 @@ export interface ExportHistoryRow {
 }
 
 /** Export History for one user (newest first). `userId` null = all users (admin report). */
-export function listExportHistory(
+export async function listExportHistory(
   db: AppDb,
   options: { readonly userId: string | null; readonly page: number; readonly pageSize: number },
-): { readonly rows: ExportHistoryRow[]; readonly total: number } {
+): Promise<{ readonly rows: ExportHistoryRow[]; readonly total: number }> {
   const where = options.userId
     ? and(eq(backgroundTasks.kind, "export"), eq(backgroundTasks.userId, options.userId))
     : eq(backgroundTasks.kind, "export");
-  const total = db.select({ n: sql<number>`count(*)` }).from(backgroundTasks).where(where).get()?.n ?? 0;
-  const rows = db.select({
+  const total = (await db.select({ n: sql<number>`count(*)` }).from(backgroundTasks).where(where).limit(1))[0]?.n ?? 0;
+  const rows = await db.select({
     id: backgroundTasks.id,
     title: backgroundTasks.title,
     gridKey: backgroundTasks.gridKey,
@@ -235,23 +236,22 @@ export function listExportHistory(
     .where(where)
     .orderBy(desc(backgroundTasks.createdAt))
     .limit(options.pageSize)
-    .offset((Math.max(1, options.page) - 1) * options.pageSize)
-    .all();
+    .offset((Math.max(1, options.page) - 1) * options.pageSize);
   return { rows, total };
 }
 
 /** Marks exports stuck in queued/started (e.g. the server restarted mid-run) as failed. */
-export function failStaleExports(db: AppDb, olderThan: Date, now: Date = new Date()): number {
-  const stale = db.select({ id: backgroundTasks.id }).from(backgroundTasks).where(and(
+export async function failStaleExports(db: AppDb, olderThan: Date, now: Date = new Date()): Promise<number> {
+  const stale = await db.select({ id: backgroundTasks.id }).from(backgroundTasks).where(and(
     eq(backgroundTasks.kind, "export"),
     inArray(backgroundTasks.status, ["queued", "started"]),
     lt(backgroundTasks.createdAt, olderThan.toISOString()),
-  )).all();
+  ));
   if (stale.length === 0) return 0;
-  db.update(backgroundTasks).set({
+  await db.update(backgroundTasks).set({
     status: "error",
     errorMessage: "The export was interrupted. Please run it again.",
     finishedAt: now.toISOString(),
-  }).where(inArray(backgroundTasks.id, stale.map((row) => row.id))).run();
+  }).where(inArray(backgroundTasks.id, stale.map((row) => row.id)));
   return stale.length;
 }

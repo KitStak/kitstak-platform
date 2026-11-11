@@ -11,6 +11,7 @@ import { inArray } from "drizzle-orm";
 import { cancelPicking, logOrderComment, removeSerials, resolvePackShort, resolvePickShort, returnInfoSchema, updateReturnInfo } from "./orders-commands";
 import { bulkIdsSchema, idSchema } from "./platform-common";
 import { withTidyLog } from "./orders-change-log";
+import { withWriteTx } from "@/server/db/sql";
 
 const ids = z.object({ ids: bulkIdsSchema });
 
@@ -32,57 +33,57 @@ export const BULK_BODY_SCHEMAS: Readonly<Record<OrderBulkAction, z.ZodType>> = {
 export type OrderBulkResult = BulkResult & { readonly childIds?: readonly string[] };
 
 /** Runs the action, then tidies the change-log rows it wrote (formatted dates, "—" for empty sides). */
-export function runOrderBulk(action: OrderBulkAction, db: AppDb, ctx: DomainCtx, body: Record<string, unknown>): OrderBulkResult {
+export async function runOrderBulk(action: OrderBulkAction, db: AppDb, ctx: DomainCtx, body: Record<string, unknown>): Promise<OrderBulkResult> {
   const list = body.ids as string[];
-  return withTidyLog(db, list, () => dispatch(action, db, ctx, body, list));
+  return await withTidyLog(db, list, async () => await dispatch(action, db, ctx, body, list));
 }
 
-function dispatch(action: OrderBulkAction, db: AppDb, ctx: DomainCtx, body: Record<string, unknown>, list: string[]): OrderBulkResult {
+async function dispatch(action: OrderBulkAction, db: AppDb, ctx: DomainCtx, body: Record<string, unknown>, list: string[]): Promise<OrderBulkResult> {
   switch (action) {
     case "cancel":
       // The change log resolves cancelReasonId to the lookup name itself (REQ-8 applied).
       // The dialog's note is context for the cancel, never a replacement for the order's own Note.
-      return db.transaction((tx) => {
-        const res = orders.cancelOrders(tx, ctx, { ids: list, reasonId: body.reasonId as string });
+      return await withWriteTx(db, async (tx) => {
+        const res = await orders.cancelOrders(tx, ctx, { ids: list, reasonId: body.reasonId as string });
         const note = typeof body.note === "string" ? body.note.trim() : "";
-        if (note && res.succeeded.length > 0) recordCancelNotes(tx, ctx, res.succeeded, note);
+        if (note && res.succeeded.length > 0) await recordCancelNotes(tx, ctx, res.succeeded, note);
         return res;
       });
     case "hold":
       // Enterprise audit: the optional hold reason is a change-log entry plus an order note (critic r5).
-      return db.transaction((tx) => {
-        const res = orders.holdOrders(tx, ctx, { ids: list });
+      return await withWriteTx(db, async (tx) => {
+        const res = await orders.holdOrders(tx, ctx, { ids: list });
         const reason = typeof body.reason === "string" ? body.reason.trim() : "";
-        if (reason && res.succeeded.length > 0) recordHoldReasons(tx, ctx, res.succeeded, reason);
+        if (reason && res.succeeded.length > 0) await recordHoldReasons(tx, ctx, res.succeeded, reason);
         return res;
       });
     case "release":
-      return orders.releaseOrders(db, ctx, { ids: list });
+      return await orders.releaseOrders(db, ctx, { ids: list });
     case "change-warehouse":
-      return orders.changeWarehouse(db, ctx, { ids: list, warehouseId: body.warehouseId as string });
+      return await orders.changeWarehouse(db, ctx, { ids: list, warehouseId: body.warehouseId as string });
     case "delete":
-      return orders.deleteOrders(db, ctx, { ids: list });
+      return await orders.deleteOrders(db, ctx, { ids: list });
     case "backorder": {
       const childIds: string[] = [];
-      const res = runBulk(db, list, (inner, id) => {
-        childIds.push(orders.createBackorder(inner, ctx, { orderId: id }).id);
+      const res = await runBulk(db, list, async (inner, id) => {
+        childIds.push((await orders.createBackorder(inner, ctx, { orderId: id })).id);
       });
       return { ...res, childIds };
     }
     case "unmerge":
-      return runBulk(db, list, (inner, id) => {
-        orders.unmergeOrder(inner, ctx, { orderId: id });
+      return await runBulk(db, list, async (inner, id) => {
+        await orders.unmergeOrder(inner, ctx, { orderId: id });
       });
     case "cancel-picking":
-      return cancelPicking(db, ctx, list);
+      return await cancelPicking(db, ctx, list);
     case "resolve-pick-short":
-      return resolvePickShort(db, ctx, list);
+      return await resolvePickShort(db, ctx, list);
     case "resolve-pack-short":
-      return resolvePackShort(db, ctx, list);
+      return await resolvePackShort(db, ctx, list);
     case "update-return-info":
-      return updateReturnInfo(db, ctx, body as z.output<typeof returnInfoSchema>);
+      return await updateReturnInfo(db, ctx, body as z.output<typeof returnInfoSchema>);
     case "remove-serials":
-      return removeSerials(db, ctx, list);
+      return await removeSerials(db, ctx, list);
   }
 }
 
@@ -91,18 +92,18 @@ function dispatch(action: OrderBulkAction, db: AppDb, ctx: DomainCtx, body: Reco
 export const HOLD_REASON_PREFIX = "Hold reason: ";
 
 /** "Hold reason: …" on each held order's change log and Notes (shown on the detail hold banner). */
-export function recordHoldReasons(tx: AppDb, ctx: DomainCtx, ids: readonly string[], reason: string): void {
-  const rows = tx.select({ id: schema.shipmentOrders.id, code: schema.shipmentOrders.code }).from(schema.shipmentOrders).where(inArray(schema.shipmentOrders.id, [...ids])).all();
+export async function recordHoldReasons(tx: AppDb, ctx: DomainCtx, ids: readonly string[], reason: string): Promise<void> {
+  const rows = await tx.select({ id: schema.shipmentOrders.id, code: schema.shipmentOrders.code }).from(schema.shipmentOrders).where(inArray(schema.shipmentOrders.id, [...ids]));
   for (const r of rows) {
-    logOrderComment(tx, ctx, { orderId: r.id, code: r.code, field: "holdReason", label: "Hold Reason", value: reason, message: HOLD_REASON_PREFIX + reason });
-    tx.insert(schema.entityNotes).values({ entityType: "shipment_order", entityId: r.id, body: HOLD_REASON_PREFIX + reason, userId: ctx.userId }).run();
+    await logOrderComment(tx, ctx, { orderId: r.id, code: r.code, field: "holdReason", label: "Hold Reason", value: reason, message: HOLD_REASON_PREFIX + reason });
+    await tx.insert(schema.entityNotes).values({ entityType: "shipment_order", entityId: r.id, body: HOLD_REASON_PREFIX + reason, userId: ctx.userId });
   }
 }
 
-export function recordCancelNotes(tx: AppDb, ctx: DomainCtx, ids: readonly string[], note: string): void {
-  const rows = tx.select({ id: schema.shipmentOrders.id, code: schema.shipmentOrders.code }).from(schema.shipmentOrders).where(inArray(schema.shipmentOrders.id, [...ids])).all();
+export async function recordCancelNotes(tx: AppDb, ctx: DomainCtx, ids: readonly string[], note: string): Promise<void> {
+  const rows = await tx.select({ id: schema.shipmentOrders.id, code: schema.shipmentOrders.code }).from(schema.shipmentOrders).where(inArray(schema.shipmentOrders.id, [...ids]));
   for (const r of rows) {
-    logOrderComment(tx, ctx, { orderId: r.id, code: r.code, field: "cancelNote", label: "Cancel Note", value: note, message: `Cancel note: ${note}` });
-    tx.insert(schema.entityNotes).values({ entityType: "shipment_order", entityId: r.id, body: `Cancel note: ${note}`, userId: ctx.userId }).run();
+    await logOrderComment(tx, ctx, { orderId: r.id, code: r.code, field: "cancelNote", label: "Cancel Note", value: note, message: `Cancel note: ${note}` });
+    await tx.insert(schema.entityNotes).values({ entityType: "shipment_order", entityId: r.id, body: `Cancel note: ${note}`, userId: ctx.userId });
   }
 }

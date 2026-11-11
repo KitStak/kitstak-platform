@@ -11,24 +11,24 @@ import { createWorld, type World } from "../foundation/domain/fixtures";
 
 describe("printout system defaults", () => {
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
 
-  it("every print type has exactly one locked default, idempotently", () => {
-    ensureDefaultPrintouts(w.db);
-    expect(ensureDefaultPrintouts(w.db)).toBe(0);
-    const types = printoutTypes(w.db);
+  it("every print type has exactly one locked default, idempotently", async () => {
+    await ensureDefaultPrintouts(w.db);
+    expect(await ensureDefaultPrintouts(w.db)).toBe(0);
+    const types = await printoutTypes(w.db);
     expect(types).toHaveLength(PRINT_TYPES.length);
     for (const t of types) expect(t.count).toBeGreaterThan(0);
-    const rows = listPrintouts(w.db, EMPTY_GRID_QUERY, "packing-list").rows;
+    const rows = (await listPrintouts(w.db, EMPTY_GRID_QUERY, "packing-list")).rows;
     expect(rows.filter((r) => r.isDefault)).toHaveLength(1);
   });
 
-  it("the default can't be deleted", () => {
-    const def = listPrintouts(w.db, EMPTY_GRID_QUERY, "packing-list").rows.find((r) => r.isDefault)!;
+  it("the default can't be deleted", async () => {
+    const def = (await listPrintouts(w.db, EMPTY_GRID_QUERY, "packing-list")).rows.find((r) => r.isDefault)!;
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     const auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
-    const res = deletePrintouts(w.db, auth, { userId: w.userId, source: "Web" }, [def.id]);
+    const res = await deletePrintouts(w.db, auth, { userId: w.userId, source: "Web" }, [def.id]);
     expect(res.succeeded).toEqual([]);
     expect(res.failed[0]?.message).toMatch(/default template/);
   });
@@ -36,16 +36,16 @@ describe("printout system defaults", () => {
 
 describe("audit repeat grouping", () => {
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
 
-  it("collapses identical events within a day into one row with a count", () => {
+  it("collapses identical events within a day into one row with a count", async () => {
     const base = { action: "security.csrf_rejected", entity: "request", entityId: "POST /api/billing/calculate", detail: '{"reason":"missing_header"}', ip: "127.0.0.1", outcome: "failure" as const };
-    w.db.insert(auditLog).values([0, 1, 2, 3].map((i) => ({ ...base, at: `2026-11-09T10:0${i}:00.000Z` }))).run();
-    w.db.insert(auditLog).values({ ...base, at: "2026-11-10T11:30:00.000Z" }).run();
-    const raw = listAuditLog(w.db, EMPTY_GRID_QUERY).rows.filter((r) => r.action === base.action);
+    await w.db.insert(auditLog).values([0, 1, 2, 3].map((i) => ({ ...base, at: `2026-11-09T10:0${i}:00.000Z` })));
+    await w.db.insert(auditLog).values({ ...base, at: "2026-11-10T11:30:00.000Z" });
+    const raw = (await listAuditLog(w.db, EMPTY_GRID_QUERY)).rows.filter((r) => r.action === base.action);
     expect(raw).toHaveLength(5);
-    const grouped = listAuditLog(w.db, EMPTY_GRID_QUERY, { groupRepeats: true }).rows.filter((r) => r.action === base.action);
+    const grouped = (await listAuditLog(w.db, EMPTY_GRID_QUERY, { groupRepeats: true })).rows.filter((r) => r.action === base.action);
     expect(grouped.map((r) => r.repeatCount).sort()).toEqual([1, 4]);
   });
 });

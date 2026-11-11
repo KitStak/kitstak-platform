@@ -6,5 +6,5 @@ import { getCallLog } from "@/server/repositories/carriers";
 export const GET = defineRoute({
   permission: "integrations.carrier_monitoring.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getCallLog(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await getCallLog(db, auth, params.id),
 });

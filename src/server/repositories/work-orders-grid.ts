@@ -2,7 +2,8 @@
  * Grid-grammar compilation for `GET /api/work-orders` (BUILD_PLAN 0.2): quick search,
  * `f.<field>` filters (whitelisted by `@/lib/grid-defs/work-orders`), multi-sort.
  */
-import { asc, desc, sql, type SQL } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
+import { asc, desc } from "@/server/db/order";
 import { AppError } from "@/server/api/errors";
 import * as schema from "@/server/db/schema";
 import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/server/query/filters";
@@ -11,7 +12,7 @@ import { WORK_ORDER_GRID_FIELDS, WORK_ORDER_SEARCH_FIELDS, WORK_ORDER_SORT_FIELD
 
 const wo = schema.workOrders;
 
-const TAG_NAMES_SQL: SQL = sql`(SELECT group_concat(t.name, ', ') FROM entity_tags et JOIN tags t ON t.id = et.tag_id WHERE et.entity_type = 'work_order' AND et.entity_id = ${wo.id})`;
+const TAG_NAMES_SQL: SQL = sql`(SELECT string_agg((t.name)::text, ', ') FROM entity_tags et JOIN tags t ON t.id = et.tag_id WHERE et.entity_type = 'work_order' AND et.entity_id = ${wo.id})`;
 
 /** Correlated expressions so they work in the list and the count query alike. */
 export const WO_EXPR: Readonly<Record<string, SQL>> = {
@@ -19,12 +20,12 @@ export const WO_EXPR: Readonly<Record<string, SQL>> = {
   warehouseCode: sql`(SELECT w.code FROM warehouses w WHERE w.id = ${wo.warehouseId})`,
   clientName: sql`(SELECT c.name FROM clients c WHERE c.id = ${wo.clientId})`,
   status: sql`${wo.status}`,
-  age: sql`CAST(julianday('now') - julianday(${wo.createdAt}) AS INTEGER)`,
+  age: sql`trunc(EXTRACT(EPOCH FROM (now() - (${wo.createdAt})::timestamptz)) / 86400.0::float8)::int`,
   operationType: sql`${wo.operationType}`,
   type: sql`${wo.type}`,
   jobCode: sql`(SELECT j.code FROM jobs j WHERE j.id = ${wo.jobId})`,
   kitSku: sql`(SELECT p.sku FROM products p WHERE p.id = ${wo.kitProductId})`,
-  processedSku: sql`((SELECT p.sku FROM products p WHERE p.id = ${wo.kitProductId}) || ',' || COALESCE((SELECT group_concat(p.sku, ',') FROM work_order_components c JOIN products p ON p.id = c.component_product_id WHERE c.work_order_id = ${wo.id}), ''))`,
+  processedSku: sql`((SELECT p.sku FROM products p WHERE p.id = ${wo.kitProductId}) || ',' || COALESCE((SELECT string_agg((p.sku)::text, ',') FROM work_order_components c JOIN products p ON p.id = c.component_product_id WHERE c.work_order_id = ${wo.id}), ''))`,
   requestedQty: sql`${wo.requestedQty}`,
   processedQty: sql`${wo.processedQty}`,
   extraNote: sql`${wo.extraNote}`,

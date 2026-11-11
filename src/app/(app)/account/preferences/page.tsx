@@ -19,8 +19,8 @@ async function PreferencesBody() {
   const auth = await getAuthContext();
   if (!auth) redirect(`/login?next=${encodeURIComponent(ROUTE)}`);
   const db = await getAppDb();
-  const prefs = loadAccountPreferences(db, auth.user.id);
-  const tz = accountTimezone(db, auth, prefs.defaultWarehouseId);
+  const prefs = await loadAccountPreferences(db, auth.user.id);
+  const tz = await accountTimezone(db, auth, prefs.defaultWarehouseId);
   return (
     <AccountPreferencesForm
       initial={{ dateFormat: prefs.dateFormat, timeFormat: prefs.timeFormat, numberFormat: prefs.numberFormat }}

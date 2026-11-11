@@ -6,5 +6,5 @@ import { deleteLocations } from "@/server/repositories/locations";
 export const POST = defineRoute({
   permission: "settings.locations.delete",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => deleteLocations(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await deleteLocations(db, auth, actor, body.ids),
 });

@@ -19,7 +19,7 @@ async function ProfileBody() {
   await requirePagePermission("settings.my_profile.view", ROUTE);
   const auth = await getAuthContext();
   if (!auth) redirect(`/login?next=${encodeURIComponent(ROUTE)}`);
-  const d = getUser(await getAppDb(), auth.user.id);
+  const d = await getUser(await getAppDb(), auth.user.id);
   const split = splitName(d.name);
   return (
     <ProfileForm profile={{

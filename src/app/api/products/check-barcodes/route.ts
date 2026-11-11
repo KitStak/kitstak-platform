@@ -5,5 +5,5 @@ import { barcodeCheckSchema, checkBarcodes } from "@/server/repositories/product
 export const GET = defineRoute({
   permission: ["settings.products.create", "settings.products.edit"],
   query: barcodeCheckSchema,
-  handler: ({ db, auth, query }) => checkBarcodes(db, auth.scope, query),
+  handler: async ({ db, auth, query }) => await checkBarcodes(db, auth.scope, query),
 });

@@ -38,16 +38,16 @@ const tagDefinition: ImportDefinition = {
     configured: true,
     owner: "test",
     rowSchema: z.object({ name: z.string().refine((n) => n !== "forbidden", "Name is reserved") }).loose(),
-    apply: (ctx, row) => {
+    apply: async (ctx, row) => {
       if (row.name === "explode") throw new Error("boom");
-      const tag = ctx.db.insert(tags).values({ name: String(row.name), color: String(row.color) }).returning().get();
+      const tag = (await ctx.db.insert(tags).values({ name: String(row.name), color: String(row.color) }).returning())[0];
       return { entityId: tag.id };
     },
   },
 };
 
 describe("import registry", () => {
-  it("covers every 0.6 handler stub with a valid permission", () => {
+  it("covers every 0.6 handler stub with a valid permission", async () => {
     expect([...IMPORT_DEFINITIONS.map((d) => d.key)].sort()).toEqual(Object.keys(OWNERS).sort());
     for (const def of IMPORT_DEFINITIONS) {
       expect(isPermissionKey(def.permission), def.permission).toBe(true);
@@ -63,7 +63,7 @@ describe("import registry", () => {
     expect(summarizeImport(inventory)).toMatchObject({ key: "inventory", configured: inventory.handler.configured, backLabel: "Go back to inventory" });
     // Any handler still left as a stub must refuse to apply rows.
     for (const def of IMPORT_DEFINITIONS.filter((d) => !d.handler.configured)) {
-      expect(() => def.handler.apply({} as never, {}), def.key).toThrow(NotImplementedError);
+      await expect(async () => await def.handler.apply({} as never, {})).rejects.toThrow(NotImplementedError);
     }
   });
 });
@@ -133,50 +133,50 @@ describe("validation", () => {
 describe("pipeline", () => {
   let testDb: SeededDb;
   let temp: TempStore;
-  beforeEach(() => {
-    testDb = seededDb();
+  beforeEach(async () => {
+    testDb = await seededDb();
     temp = tempStore();
   });
-  afterEach(() => {
-    testDb.close();
+  afterEach(async () => {
+    await testDb.close();
     temp.cleanup();
   });
 
   const csv = (text: string) => Buffer.from(text);
 
   it("previews without writing", async () => {
-    const auth = authFor(testDb, testDb.ids.admin);
+    const auth = await authFor(testDb, testDb.ids.admin);
     const preview = await previewImport({ def: tagDefinition, auth, fileName: "t.csv", bytes: csv("Tag Name,Color\nA,Red\nB,Green\nforbidden,Blue") });
     expect(preview).toMatchObject({ configured: true, totalRows: 3, validCount: 1, errorCount: 2 });
     expect(preview.rows[0]?.valid).toBe(false);
     expect(preview.rows.flatMap((r) => r.errors)).toEqual(["Color must be one of: Red, Blue", "Name is reserved"]);
-    expect(testDb.db.select().from(tags).all()).toHaveLength(0);
+    expect(await testDb.db.select().from(tags)).toHaveLength(0);
   });
 
   it("applies valid rows, isolates failing rows and writes an error file", async () => {
-    const auth = authFor(testDb, testDb.ids.admin);
+    const auth = await authFor(testDb, testDb.ids.admin);
     const batch = await runImport(testDb.db, {
       def: tagDefinition, auth, fileName: "tags.csv",
       bytes: csv("Tag Name,Color,Weight\nA,Red,1\nB,Green,2\nexplode,Blue,3\nC,Blue,\nA,Red,1"),
     }, { store: temp.store });
     expect(batch).toMatchObject({ status: "Partially Successful", masterRowCount: 5, successCount: 2, errorCount: 3 });
-    expect(testDb.db.select().from(tags).all().map((t) => t.name).sort()).toEqual(["A", "C"]);
-    const rows = listImportRows(testDb.db, batch.id, { page: 1, pageSize: 100 });
+    expect((await testDb.db.select().from(tags)).map((t) => t.name).sort()).toEqual(["A", "C"]);
+    const rows = await listImportRows(testDb.db, batch.id, { page: 1, pageSize: 100 });
     expect(rows.total).toBe(5);
-    const errors = listImportRows(testDb.db, batch.id, { errorsOnly: true, page: 1, pageSize: 100 });
+    const errors = await listImportRows(testDb.db, batch.id, { errorsOnly: true, page: 1, pageSize: 100 });
     expect(errors.rows.map((r) => r.rowNumber)).toEqual([3, 4, 6]);
     expect(errors.rows[1]?.message).toBe("Unexpected error while importing this row");
     expect(errors.rows[2]?.message).toMatch(/UNIQUE|Internal|Unexpected/i);
     expect(batch.errorFileId).toBeTruthy();
-    const errorFile = await parseImportFile(temp.store.read(testDb.db, batch.errorFileId ?? "").bytes, "e.xlsx");
+    const errorFile = await parseImportFile((await temp.store.read(testDb.db, batch.errorFileId ?? "")).bytes, "e.xlsx");
     expect(errorFile.headers).toEqual(["Row", "Tag Name", "Color", "Weight", "Error"]);
     expect(errorFile.rows).toHaveLength(3);
-    expect(getImportBatch(testDb.db, batch.id)?.finishedAt).toBeTruthy();
-    expect(listImportBatches(testDb.db, "test-tags", 1, 10).rows[0]?.uploadedByName).toBe("Admin");
+    expect((await getImportBatch(testDb.db, batch.id))?.finishedAt).toBeTruthy();
+    expect((await listImportBatches(testDb.db, "test-tags", 1, 10)).rows[0]?.uploadedByName).toBe("Admin");
   });
 
   it("refuses stubs, missing columns, empty files and unauthorized users", async () => {
-    const auth = authFor(testDb, testDb.ids.admin);
+    const auth = await authFor(testDb, testDb.ids.admin);
     const base = getImportDefinition("products");
     if (!base) throw new Error("missing");
     // The products import has since been configured by its module; force a stub to cover the refusal path.
@@ -184,9 +184,9 @@ describe("pipeline", () => {
     await expect(runImport(testDb.db, { def: stub, auth, fileName: "p.csv", bytes: csv("SKU\nA") }, { store: temp.store })).rejects.toThrow(/not configured yet/);
     await expect(runImport(testDb.db, { def: tagDefinition, auth, fileName: "t.csv", bytes: csv("Tag Name\nA") }, { store: temp.store })).rejects.toThrow(/Missing required column: Color/);
     await expect(runImport(testDb.db, { def: tagDefinition, auth, fileName: "t.csv", bytes: csv("Tag Name,Color\n") }, { store: temp.store })).rejects.toThrow(/no data rows/);
-    const noPerms = { ...authFor(testDb, testDb.ids.viewer), permissions: new Set<string>() };
+    const noPerms = { ...(await authFor(testDb, testDb.ids.viewer)), permissions: new Set<string>() };
     await expect(previewImport({ def: tagDefinition, auth: noPerms, fileName: "t.csv", bytes: csv("Tag Name,Color\nA,Red") })).rejects.toThrow(/permission/);
-    expect(testDb.db.select().from(tags).where(eq(tags.name, "A")).all()).toHaveLength(0);
+    expect(await testDb.db.select().from(tags).where(eq(tags.name, "A"))).toHaveLength(0);
   });
 
   it("derives batch status", () => {

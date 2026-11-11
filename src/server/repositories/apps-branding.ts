@@ -18,8 +18,8 @@ export interface Branding {
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
-export function getBranding(db: AppDb): Branding | null {
-  const row = db.select({ isActive: s.apps.isActive, settings: s.apps.settings }).from(s.apps).where(eq(s.apps.key, "custom-branding")).get();
+export async function getBranding(db: AppDb): Promise<Branding | null> {
+  const row = (await db.select({ isActive: s.apps.isActive, settings: s.apps.settings }).from(s.apps).where(eq(s.apps.key, "custom-branding")).limit(1))[0];
   if (!row?.isActive) return null;
   const st = (row.settings ?? {}) as Record<string, unknown>;
   const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 300) : null);

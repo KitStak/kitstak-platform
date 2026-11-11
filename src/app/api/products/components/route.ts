@@ -5,5 +5,5 @@ import { componentSearchSchema, searchComponents } from "@/server/repositories/p
 export const GET = defineRoute({
   permission: ["settings.products.create", "settings.products.edit"],
   query: componentSearchSchema,
-  handler: ({ db, auth, query }) => searchComponents(db, auth.scope, query),
+  handler: async ({ db, auth, query }) => await searchComponents(db, auth.scope, query),
 });

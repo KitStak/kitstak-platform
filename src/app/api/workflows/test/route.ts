@@ -8,8 +8,8 @@ export const POST = defineRoute({
   permission: "automation.workflows.view",
   body: workflowTestSchema,
   transaction: false,
-  handler: ({ db, auth, actor, body }) => {
+  handler: async ({ db, auth, actor, body }) => {
     if (!body.draft) throw new AppError("VALIDATION", "Send the workflow to test");
-    return testWorkflow(db, auth, actor, body.draft, body.orderId);
+    return await testWorkflow(db, auth, actor, body.draft, body.orderId);
   },
 });

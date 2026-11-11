@@ -1,5 +1,6 @@
 /**
  * `POST /api/cron/tick` — external scheduler trigger, `Authorization: Bearer <CRON_SECRET>`.
+ * `GET` does the same for Vercel Cron (vercel.json), which sends GET with that bearer header.
  * 503 when CRON_SECRET is not configured, 401 on a wrong token; otherwise runs one tick.
  */
 import { NextResponse } from "next/server";
@@ -7,7 +8,7 @@ import { defineRoute } from "@/server/api/define-route";
 import { unauthenticatedError } from "@/server/api/errors";
 import { runSchedulerTick, verifyCronAuthorization } from "@/server/scheduler";
 
-export const POST = defineRoute({
+const tickRoute = defineRoute({
   auth: "public",
   csrf: false,
   rateLimit: false,
@@ -24,3 +25,6 @@ export const POST = defineRoute({
     return runSchedulerTick();
   },
 });
+
+export const POST = tickRoute;
+export const GET = tickRoute;

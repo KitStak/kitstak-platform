@@ -8,5 +8,5 @@ export const PATCH = defineRoute({
   permission: "settings.clients.edit",
   params: idParamsSchema,
   body: clientSettingsPatchSchema,
-  handler: ({ db, auth, actor, params, body }) => updateClientSettings(db, auth, actor, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updateClientSettings(db, auth, actor, params.id, body),
 });

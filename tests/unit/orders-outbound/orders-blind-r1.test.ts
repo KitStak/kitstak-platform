@@ -53,47 +53,47 @@ describe("grid labels open in the browser", () => {
 describe("repository flows", () => {
   let w: World;
   const scope = { warehouseIds: [] as string[], clientIds: "all" as const };
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
   });
   afterEach(() => w.close());
-  const mk = (extra: Record<string, unknown> = {}) => createOrder(w.db, w.ctx, createOrderBodySchema.parse(orderInput(w, [{ productId: w.productId, quantity: 1 }], extra)));
+  const mk = async (extra: Record<string, unknown> = {}) => await createOrder(w.db, w.ctx, createOrderBodySchema.parse(orderInput(w, [{ productId: w.productId, quantity: 1 }], extra)));
 
-  it("customer search finds saved customers and one-time customers from the client's orders", () => {
-    w.db.insert(schema.customers).values({ clientId: w.clientId, firstName: "Oliver", lastName: "Stone", email: "o@x.io", phone: "1" }).run();
-    mk({ customerName: "Olivia Martinez", customerEmail: "olivia@example.com" });
-    mk({ customerName: "Olivia Martinez", customerEmail: "olivia@example.com" });
-    const hits = customerSearch(w.db, scope, w.clientId, "Oli");
+  it("customer search finds saved customers and one-time customers from the client's orders", async () => {
+    await w.db.insert(schema.customers).values({ clientId: w.clientId, firstName: "Oliver", lastName: "Stone", email: "o@x.io", phone: "1" });
+    await mk({ customerName: "Olivia Martinez", customerEmail: "olivia@example.com" });
+    await mk({ customerName: "Olivia Martinez", customerEmail: "olivia@example.com" });
+    const hits = await customerSearch(w.db, scope, w.clientId, "Oli");
     expect(hits.map((h) => h.label)).toEqual(["Oliver Stone", "Olivia Martinez"]);
     const fromOrder = hits.find((h) => h.source === "order")!;
     expect(fromOrder.value.startsWith(ORDER_CUSTOMER_PREFIX)).toBe(true);
     expect(fromOrder.description).toMatch(/^From order /);
-    const pre = customerPrefill(w.db, scope, fromOrder.value);
+    const pre = await customerPrefill(w.db, scope, fromOrder.value);
     expect(pre?.firstName).toBe("Olivia");
     expect(pre?.lastName).toBe("Martinez");
     expect(pre?.addresses[0]?.line1).toBe("200 Oak Ave");
     // another client never sees them
-    expect(customerSearch(w.db, scope, w.otherClientId, "Oli")).toEqual([]);
-    expect(customerSearch(w.db, { warehouseIds: [], clientIds: [w.otherClientId] }, w.clientId, "Oli")).toEqual([]);
+    expect(await customerSearch(w.db, scope, w.otherClientId, "Oli")).toEqual([]);
+    expect(await customerSearch(w.db, { warehouseIds: [], clientIds: [w.otherClientId] }, w.clientId, "Oli")).toEqual([]);
   });
 
-  it("purges critic orders, tags, order types and notes; keeps orders in a job", () => {
-    const crit = mk({ customerName: "KS-CRIT Critic", note: "KS-CRIT edited note" });
-    const real = mk();
-    const tag = w.db.insert(schema.tags).values({ name: "KS-CRIT-TAG", color: "#000", scope: "shipment_order" }).returning().get();
-    w.db.insert(schema.entityTags).values({ tagId: tag.id, entityType: "shipment_order", entityId: real.id }).run();
-    w.db.insert(schema.lookupValues).values({ type: "so_type", name: "KS-CRIT SO Type 1" }).run();
-    w.db.insert(schema.entityNotes).values({ entityType: "shipment_order", entityId: real.id, body: "Hold reason: KS-CRIT check", userId: w.userId }).run();
-    const plan = planOrderTestDataPurge(w.db);
+  it("purges critic orders, tags, order types and notes; keeps orders in a job", async () => {
+    const crit = await mk({ customerName: "KS-CRIT Critic", note: "KS-CRIT edited note" });
+    const real = await mk();
+    const tag = (await w.db.insert(schema.tags).values({ name: "KS-CRIT-TAG", color: "#000", scope: "shipment_order" }).returning())[0];
+    await w.db.insert(schema.entityTags).values({ tagId: tag.id, entityType: "shipment_order", entityId: real.id });
+    await w.db.insert(schema.lookupValues).values({ type: "so_type", name: "KS-CRIT SO Type 1" });
+    await w.db.insert(schema.entityNotes).values({ entityType: "shipment_order", entityId: real.id, body: "Hold reason: KS-CRIT check", userId: w.userId });
+    const plan = await planOrderTestDataPurge(w.db);
     expect(plan.orders.map((o) => o.id)).toEqual([crit.id]);
     expect(plan.tags).toHaveLength(1);
     expect(plan.orderTypes[0]?.inUse).toBe(false);
     expect(plan.noteIds).toHaveLength(1);
-    purgeOrderTestData(w.db, plan);
-    expect(w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, crit.id)).get()?.deletedAt).not.toBeNull();
-    expect(w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, real.id)).get()?.deletedAt).toBeNull();
-    expect(w.db.select().from(schema.tags).all().filter((t) => t.name.startsWith("KS-CRIT"))).toHaveLength(0);
-    expect(w.db.select().from(schema.entityTags).all()).toHaveLength(0);
-    expect(planOrderTestDataPurge(w.db).orders).toHaveLength(0);
+    await purgeOrderTestData(w.db, plan);
+    expect((await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, crit.id)).limit(1))[0]?.deletedAt).not.toBeNull();
+    expect((await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, real.id)).limit(1))[0]?.deletedAt).toBeNull();
+    expect((await w.db.select().from(schema.tags)).filter((t) => t.name.startsWith("KS-CRIT"))).toHaveLength(0);
+    expect(await w.db.select().from(schema.entityTags)).toHaveLength(0);
+    expect((await planOrderTestDataPurge(w.db)).orders).toHaveLength(0);
   });
 });

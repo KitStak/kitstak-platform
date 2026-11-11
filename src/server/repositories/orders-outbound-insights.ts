@@ -33,15 +33,15 @@ export interface ShipPreview {
   readonly partial: Readonly<Record<string, string>>;
 }
 
-export function shipPreview(db: AppDb, scope: Scope, ids: readonly string[]): ShipPreview {
+export async function shipPreview(db: AppDb, scope: Scope, ids: readonly string[]): Promise<ShipPreview> {
   const so = schema.shipmentOrders;
   const ol = schema.orderLines;
-  const visible = db.select({ id: so.id }).from(so).where(and(inArray(so.id, [...ids]), isNull(so.deletedAt), scopedWhere(so, scope))).all().map((r) => r.id);
+  const visible = (await db.select({ id: so.id }).from(so).where(and(inArray(so.id, [...ids]), isNull(so.deletedAt), scopedWhere(so, scope)))).map((r) => r.id);
   if (visible.length === 0) return { partial: {} };
   // Same source as `shipping.shipOrders`: it ships the Packed / Loaded allocations, not the line counter.
   const shipping = sql<number>`(SELECT COALESCE(SUM(a.qty), 0) FROM inventory_allocations a WHERE a.order_line_id = ${ol.id} AND a.status IN ('Packed','Loaded'))`;
-  const rows = db.select({ orderId: ol.orderId, sku: schema.products.sku, quantity: ol.quantity, cancelledQuantity: ol.cancelledQuantity, packedQuantity: shipping, shippedQuantity: ol.shippedQuantity })
-    .from(ol).innerJoin(schema.products, eq(schema.products.id, ol.productId)).where(inArray(ol.orderId, visible)).all()
+  const rows = (await db.select({ orderId: ol.orderId, sku: schema.products.sku, quantity: ol.quantity, cancelledQuantity: ol.cancelledQuantity, packedQuantity: shipping, shippedQuantity: ol.shippedQuantity })
+    .from(ol).innerJoin(schema.products, eq(schema.products.id, ol.productId)).where(inArray(ol.orderId, visible)))
     .map((r) => ({ ...r, packedQuantity: Number(r.packedQuantity ?? 0) }));
   const byOrder = new Map<string, ShipLineFacts[]>();
   for (const r of rows) byOrder.set(r.orderId, [...(byOrder.get(r.orderId) ?? []), r]);
@@ -120,28 +120,28 @@ export interface OrderShortage {
 }
 
 /** Why each order (Open / Shortage) can't be fully allocated. Orders that could be are omitted. */
-export function explainShortages(db: AppDb, scope: Scope, ids: readonly string[]): Readonly<Record<string, OrderShortage>> {
+export async function explainShortages(db: AppDb, scope: Scope, ids: readonly string[]): Promise<Readonly<Record<string, OrderShortage>>> {
   const so = schema.shipmentOrders;
-  const orders = db.select().from(so).where(and(inArray(so.id, [...ids]), isNull(so.deletedAt), scopedWhere(so, scope))).all();
+  const orders = await db.select().from(so).where(and(inArray(so.id, [...ids]), isNull(so.deletedAt), scopedWhere(so, scope)));
   const out: Record<string, OrderShortage> = {};
-  const algos = new Map<string, ReturnType<typeof allocation.loadAllocationAlgorithm>>();
+  const algos = new Map<string, Awaited<ReturnType<typeof allocation.loadAllocationAlgorithm>>>();
   for (const order of orders) {
-    const algo = algos.get(order.warehouseId) ?? allocation.loadAllocationAlgorithm(db, order.warehouseId);
+    const algo = algos.get(order.warehouseId) ?? await allocation.loadAllocationAlgorithm(db, order.warehouseId);
     algos.set(order.warehouseId, algo);
-    const facts = orderFacts(db, order);
+    const facts = await orderFacts(db, order);
     const rule = algo.rules.find((r) => evaluateConditions(r.conditions, facts)) ?? null;
     const filters = rule ? splitAllocationPreferences(rule.inventoryConditions).conditions : [];
-    const lines = db.select({ line: schema.orderLines, sku: schema.products.sku }).from(schema.orderLines)
-      .innerJoin(schema.products, eq(schema.products.id, schema.orderLines.productId)).where(eq(schema.orderLines.orderId, order.id)).all();
+    const lines = await db.select({ line: schema.orderLines, sku: schema.products.sku }).from(schema.orderLines)
+      .innerJoin(schema.products, eq(schema.products.id, schema.orderLines.productId)).where(eq(schema.orderLines.orderId, order.id));
     const shortLines: LineShortage[] = [];
     for (const { line, sku } of lines) {
       const need = line.quantity - line.cancelledQuantity - line.allocatedQuantity;
       if (need <= 0) continue;
       const i = schema.inventory;
       const l = schema.locations;
-      const buckets = db.select({ bucket: i, location: l, lpNumber: schema.licensePlates.number }).from(i)
+      const buckets = await db.select({ bucket: i, location: l, lpNumber: schema.licensePlates.number }).from(i)
         .innerJoin(l, eq(l.id, i.locationId)).leftJoin(schema.licensePlates, eq(schema.licensePlates.id, i.lpId))
-        .where(and(eq(i.warehouseId, order.warehouseId), eq(i.productId, line.productId), eq(i.status, "Stock"))).all();
+        .where(and(eq(i.warehouseId, order.warehouseId), eq(i.productId, line.productId), eq(i.status, "Stock")));
       let allocatable = 0;
       let otherClientQty = 0;
       const blocked = new Map<BlockReason, { qty: number; locations: Set<string>; areas: Set<string> }>();
@@ -157,7 +157,7 @@ export function explainShortages(db: AppDb, scope: Scope, ids: readonly string[]
           || (line.pinnedLpId && bucket.lpId !== line.pinnedLpId));
         const reason = bucketBlocker({
           free, locationCode: location.code, areaType: location.areaType, isActive: location.isActive, isLocked: location.isLocked,
-          preventAllocation: location.preventAllocation, damaged: bucket.damageReason !== null, countLocked: countLockFor(db, location.id) !== null,
+          preventAllocation: location.preventAllocation, damaged: bucket.damageReason !== null, countLocked: (await countLockFor(db, location.id)) !== null,
           lotMismatch, passesRule: rule ? evaluateConditions(filters, bucketFacts(bucket, location, lpNumber)) : false,
         });
         if (!reason) {

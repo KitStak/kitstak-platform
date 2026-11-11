@@ -11,5 +11,5 @@ import { removeLpNumbers } from "@/server/repositories/lp-numbers";
 export const POST = defineRoute({
   permission: "settings.lp_numbers.delete",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => removeLpNumbers(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await removeLpNumbers(db, auth, actor, body.ids),
 });

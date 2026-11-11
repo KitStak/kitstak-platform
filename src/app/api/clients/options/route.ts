@@ -5,5 +5,5 @@ import { clientOptions } from "@/server/repositories/clients";
 
 export const GET = defineRoute({
   query: z.object({ all: z.enum(["0", "1"]).optional() }),
-  handler: ({ db, auth, query }) => clientOptions(db, auth, query.all === "1"),
+  handler: async ({ db, auth, query }) => await clientOptions(db, auth, query.all === "1"),
 });

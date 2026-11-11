@@ -3,7 +3,8 @@
  * approval, duplicate, guarded delete, and fee CRUD with tiers + conditions. Every write
  * logs field-level change_log rows on entity "billing_contract".
  */
-import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import type { AppDb } from "@/server/api/db";
 import { AppError, notFoundError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
@@ -28,12 +29,12 @@ export const CONTRACT_ENTITY = "billing_contract";
  * Contract-level change-log entry with an exact message (fee names are kept verbatim;
  * the generic field diff would humanize "PickPack" into "Pick Pack").
  */
-export function logContractEvent(tx: AppDb, ctx: { userId: string | null; source: string }, contractId: string, contractName: string,
-  ev: { type: "Create" | "Update" | "Delete"; message: string; field?: string; label?: string; from?: string; to?: string }): void {
-  tx.insert(s.changeLog).values({
+export async function logContractEvent(tx: AppDb, ctx: { userId: string | null; source: string }, contractId: string, contractName: string,
+  ev: { type: "Create" | "Update" | "Delete"; message: string; field?: string; label?: string; from?: string; to?: string }): Promise<void> {
+  await tx.insert(s.changeLog).values({
     entityType: CONTRACT_ENTITY, entityId: contractId, entityCode: contractName, type: ev.type, field: ev.field ?? null, fieldLabel: ev.label ?? null,
     fromValue: ev.from ?? null, toValue: ev.to ?? null, message: ev.message, userId: ctx.userId, source: ctx.source,
-  }).run();
+  });
 }
 
 const clientNameSql = sql<string>`(SELECT cl.name FROM clients cl WHERE cl.id = billing_contracts.client_id)`;
@@ -81,15 +82,15 @@ const ROW = {
 
 export const contractScope = (auth: AuthContext, view = true): SQL | undefined => scopedWhere(c, view ? auth.viewScope : auth.scope);
 
-export function listContracts(db: AppDb, auth: AuthContext, query: GridQuery): { rows: ContractRow[]; total: number } {
+export async function listContracts(db: AppDb, auth: AuthContext, query: GridQuery): Promise<{ rows: ContractRow[]; total: number }> {
   const grid = compileGrid(BINDING, query, [contractScope(auth)]);
-  const result = paginate(db.select(ROW).from(c).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(c).where(grid.where).get()?.n ?? 0, { page: query.page, pageSize: query.pageSize });
+  const result = await paginate(db.select(ROW).from(c).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(c).where(grid.where).limit(1))[0]?.n ?? 0, { page: query.page, pageSize: query.pageSize });
   return { rows: result.rows as ContractRow[], total: result.total };
 }
 
-export function loadContract(db: AppDb, auth: AuthContext, id: string): typeof c.$inferSelect {
-  const row = db.select().from(c).where(eq(c.id, id)).get();
+export async function loadContract(db: AppDb, auth: AuthContext, id: string): Promise<typeof c.$inferSelect> {
+  const row = (await db.select().from(c).where(eq(c.id, id)).limit(1))[0];
   assertInScope(auth.scope, row, "Billing contract");
   return row!;
 }
@@ -118,11 +119,11 @@ export interface FeeView {
   readonly createdAt: string;
 }
 
-export function feesOf(db: AppDb, contractId: string): FeeView[] {
-  const fees = db.select().from(f).where(eq(f.contractId, contractId)).orderBy(asc(f.createdAt), asc(f.id)).all();
+export async function feesOf(db: AppDb, contractId: string): Promise<FeeView[]> {
+  const fees = await db.select().from(f).where(eq(f.contractId, contractId)).orderBy(asc(f.createdAt), asc(f.id));
   if (fees.length === 0) return [];
-  const tiers = db.select().from(s.billingFeeTiers).where(inArray(s.billingFeeTiers.feeId, fees.map((x) => x.id))).orderBy(asc(s.billingFeeTiers.fromQty)).all();
-  const vas = namesOf(db, "lookup_values", fees.map((x) => x.vasTypeId));
+  const tiers = await db.select().from(s.billingFeeTiers).where(inArray(s.billingFeeTiers.feeId, fees.map((x) => x.id))).orderBy(asc(s.billingFeeTiers.fromQty));
+  const vas = await namesOf(db, "lookup_values", fees.map((x) => x.vasTypeId));
   return fees.map((fee) => {
     const own = tiers.filter((t) => t.feeId === fee.id).map((t) => ({ id: t.id, fromQty: t.fromQty, toQty: t.toQty, rate: t.rate }));
     const rate = fee.calculationType === "Split Month Storage" ? fee.standardRate ?? 0 : own[0]?.rate ?? fee.standardRate ?? 0;
@@ -138,69 +139,69 @@ export function feesOf(db: AppDb, contractId: string): FeeView[] {
   });
 }
 
-export function getContract(db: AppDb, auth: AuthContext, id: string) {
-  const row = loadContract(db, auth, id);
-  const view = db.select(ROW).from(c).where(eq(c.id, id)).get() as ContractRow;
-  const client = db.select({ currency: s.clients.currency }).from(s.clients).where(eq(s.clients.id, row.clientId)).get();
-  const lastReport = db.select({ id: s.billingReports.id, billNumber: s.billingReports.billNumber, totalPrice: s.billingReports.totalPrice, billStatus: s.billingReports.billStatus, calculatedAt: s.billingReports.calculatedAt })
+export async function getContract(db: AppDb, auth: AuthContext, id: string) {
+  const row = await loadContract(db, auth, id);
+  const view = (await db.select(ROW).from(c).where(eq(c.id, id)).limit(1))[0] as ContractRow;
+  const client = (await db.select({ currency: s.clients.currency }).from(s.clients).where(eq(s.clients.id, row.clientId)).limit(1))[0];
+  const lastReport = (await db.select({ id: s.billingReports.id, billNumber: s.billingReports.billNumber, totalPrice: s.billingReports.totalPrice, billStatus: s.billingReports.billStatus, calculatedAt: s.billingReports.calculatedAt })
     .from(s.billingReports).where(and(eq(s.billingReports.contractId, id), sql`${s.billingReports.billStatus} <> 'Canceled'`, eq(s.billingReports.calcStatus, "Successful")))
-    .orderBy(sql`${s.billingReports.calculatedAt} DESC`).limit(1).get() ?? null;
-  return { ...view, currency: client?.currency ?? "USD", fees: feesOf(db, id), lastReport };
+    .orderBy(sql`${s.billingReports.calculatedAt} DESC`).limit(1))[0] ?? null;
+  return { ...view, currency: client?.currency ?? "USD", fees: await feesOf(db, id), lastReport };
 }
-export type ContractDetail = ReturnType<typeof getContract>;
+export type ContractDetail = Awaited<ReturnType<typeof getContract>>;
 
 function assertWritableScope(auth: AuthContext, input: { clientId: string; warehouseId: string }): void {
   if (!hasWarehouse(auth.scope, input.warehouseId)) throw new AppError("VALIDATION", "Choose a warehouse you have access to", { fieldErrors: { warehouseId: ["Choose a warehouse you have access to"] } });
   if (!hasClient(auth.scope, input.clientId)) throw new AppError("VALIDATION", "Choose a client you have access to", { fieldErrors: { clientId: ["Choose a client you have access to"] } });
 }
 
-function display(db: AppDb, row: typeof c.$inferSelect): Record<string, unknown> {
-  const cl = namesOf(db, "clients", [row.clientId]);
-  const wh = namesOf(db, "warehouses", [row.warehouseId]);
+async function display(db: AppDb, row: typeof c.$inferSelect): Promise<Record<string, unknown>> {
+  const cl = await namesOf(db, "clients", [row.clientId]);
+  const wh = await namesOf(db, "warehouses", [row.warehouseId]);
   return { name: row.name, clientId: cl.get(row.clientId) ?? "", warehouseId: wh.get(row.warehouseId) ?? "", calcStartDate: row.calcStartDate, frequency: row.frequency, approvalStatus: row.approvalStatus };
 }
 
-function assertNameFree(db: AppDb, clientId: string, name: string, exceptId?: string): void {
-  const clash = db.select({ id: c.id }).from(c).where(and(eq(c.clientId, clientId), sql`lower(${c.name}) = lower(${name})`)).get();
+async function assertNameFree(db: AppDb, clientId: string, name: string, exceptId?: string): Promise<void> {
+  const clash = (await db.select({ id: c.id }).from(c).where(and(eq(c.clientId, clientId), sql`lower(${c.name}) = lower(${name})`)).limit(1))[0];
   if (clash && clash.id !== exceptId) throw new AppError("DUPLICATE", `A billing form named ${name} already exists for this client`, { fieldErrors: { name: ["This client already has a billing form with this name"] } });
 }
 
-export function createContract(tx: AppDb, auth: AuthContext, actor: Actor, input: ContractSave): { id: string; name: string } {
+export async function createContract(tx: AppDb, auth: AuthContext, actor: Actor, input: ContractSave): Promise<{ id: string; name: string }> {
   assertWritableScope(auth, input);
-  const client = tx.select({ status: s.clients.status }).from(s.clients).where(eq(s.clients.id, input.clientId)).get();
+  const client = (await tx.select({ status: s.clients.status }).from(s.clients).where(eq(s.clients.id, input.clientId)).limit(1))[0];
   if (!client) throw notFoundError("Client");
   if (client.status !== "Active") throw new AppError("VALIDATION", "This client is inactive", { fieldErrors: { clientId: ["This client is inactive"] } });
-  assertNameFree(tx, input.clientId, input.name.trim());
-  const row = tx.insert(c).values({
+  await assertNameFree(tx, input.clientId, input.name.trim());
+  const row = (await tx.insert(c).values({
     name: input.name.trim(), clientId: input.clientId, warehouseId: input.warehouseId, calcStartDate: input.calcStartDate, frequency: input.frequency,
     approvalStatus: "Draft", nextPeriodStart: periodEnd(input.calcStartDate, input.frequency), createdBy: actor.userId, updatedBy: actor.userId,
-  }).returning({ id: c.id, name: c.name }).get();
-  logCreate(tx, domainCtxOf(actor, auth), CONTRACT_ENTITY, row.id, row.name);
+  }).returning({ id: c.id, name: c.name }))[0];
+  await logCreate(tx, domainCtxOf(actor, auth), CONTRACT_ENTITY, row.id, row.name);
   return row;
 }
 
-export function updateContract(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: ContractSave): { id: string; name: string; version: number } {
-  const before = loadContract(tx, auth, id);
+export async function updateContract(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: ContractSave): Promise<{ id: string; name: string; version: number }> {
+  const before = await loadContract(tx, auth, id);
   assertVersion(before.version, input.version);
   assertWritableScope(auth, input);
-  assertNameFree(tx, input.clientId, input.name.trim(), id);
-  const reports = tx.select({ n: sql<number>`count(*)` }).from(s.billingReports).where(eq(s.billingReports.contractId, id)).get()?.n ?? 0;
+  await assertNameFree(tx, input.clientId, input.name.trim(), id);
+  const reports = (await tx.select({ n: sql<number>`count(*)` }).from(s.billingReports).where(eq(s.billingReports.contractId, id)).limit(1))[0]?.n ?? 0;
   if (reports > 0 && (input.clientId !== before.clientId || input.warehouseId !== before.warehouseId)) {
     throw new AppError("VALIDATION", "Client and warehouse are locked once bills exist", { fieldErrors: { clientId: ["Locked: this contract already has bills"] } });
   }
   // The schedule is fixed by live bills: changing it would re-align every future period against bills already issued.
-  if ((input.calcStartDate !== before.calcStartDate || input.frequency !== before.frequency) && liveBillCount(tx, id) > 0) {
+  if ((input.calcStartDate !== before.calcStartDate || input.frequency !== before.frequency) && (await liveBillCount(tx, id)) > 0) {
     const fieldErrors: Record<string, string[]> = {};
     if (input.calcStartDate !== before.calcStartDate) fieldErrors.calcStartDate = ["Locked: this contract already has bills"];
     if (input.frequency !== before.frequency) fieldErrors.frequency = ["Locked: this contract already has bills"];
     throw new AppError("VALIDATION", "Calc start date and frequency are locked once bills exist. Cancel the bills, or duplicate the contract to start a new schedule.", { fieldErrors });
   }
-  const snapshot = display(tx, before);
-  const after = tx.update(c).set({
+  const snapshot = await display(tx, before);
+  const after = (await tx.update(c).set({
     name: input.name.trim(), clientId: input.clientId, warehouseId: input.warehouseId, calcStartDate: input.calcStartDate, frequency: input.frequency,
     nextPeriodStart: before.lastCalculatedAt ? before.nextPeriodStart : periodEnd(input.calcStartDate, input.frequency), updatedBy: actor.userId, version: sql`${c.version} + 1`,
-  }).where(eq(c.id, id)).returning().get();
-  logUpdate(tx, domainCtxOf(actor, auth), CONTRACT_ENTITY, id, after.name, snapshot, display(tx, after));
+  }).where(eq(c.id, id)).returning())[0];
+  await logUpdate(tx, domainCtxOf(actor, auth), CONTRACT_ENTITY, id, after.name, snapshot, await display(tx, after));
   return { id, name: after.name, version: after.version };
 }
 
@@ -208,62 +209,62 @@ export function updateContract(tx: AppDb, auth: AuthContext, actor: Actor, id: s
  * Another Approved contract for the same client and warehouse. Contracts are open-ended from their
  * calc start date, so any two approved for one client/warehouse overlap and would double-bill.
  */
-export function approvedRival(db: AppDb, row: { id: string; clientId: string; warehouseId: string }): { id: string; name: string; calcStartDate: string } | undefined {
-  return db.select({ id: c.id, name: c.name, calcStartDate: c.calcStartDate }).from(c)
-    .where(and(eq(c.clientId, row.clientId), eq(c.warehouseId, row.warehouseId), eq(c.approvalStatus, "Approved"), sql`${c.id} <> ${row.id}`)).get() ?? undefined;
+export async function approvedRival(db: AppDb, row: { id: string; clientId: string; warehouseId: string }): Promise<{ id: string; name: string; calcStartDate: string } | undefined> {
+  return (await db.select({ id: c.id, name: c.name, calcStartDate: c.calcStartDate }).from(c)
+    .where(and(eq(c.clientId, row.clientId), eq(c.warehouseId, row.warehouseId), eq(c.approvalStatus, "Approved"), sql`${c.id} <> ${row.id}`)).limit(1))[0] ?? undefined;
 }
 
 /** Bills that fix the contract's schedule: Successful and not Canceled. */
-function liveBillCount(db: AppDb, contractId: string): number {
-  return db.select({ n: sql<number>`count(*)` }).from(s.billingReports)
-    .where(and(eq(s.billingReports.contractId, contractId), eq(s.billingReports.calcStatus, "Successful"), sql`${s.billingReports.billStatus} <> 'Canceled'`)).get()?.n ?? 0;
+async function liveBillCount(db: AppDb, contractId: string): Promise<number> {
+  return (await db.select({ n: sql<number>`count(*)` }).from(s.billingReports)
+    .where(and(eq(s.billingReports.contractId, contractId), eq(s.billingReports.calcStatus, "Successful"), sql`${s.billingReports.billStatus} <> 'Canceled'`)).limit(1))[0]?.n ?? 0;
 }
 
-function setApproval(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], to: "Draft" | "Approved"): BulkResult {
+async function setApproval(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], to: "Draft" | "Approved"): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const row = loadContract(inner, auth, id);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const row = await loadContract(inner, auth, id);
     if (row.approvalStatus === to) throw new AppError("INVALID_STATE", `${row.name} is already ${to === "Approved" ? "approved" : "not approved"}`);
     if (to === "Approved") {
-      const fees = inner.select({ n: sql<number>`count(*)` }).from(f).where(eq(f.contractId, id)).get()?.n ?? 0;
+      const fees = (await inner.select({ n: sql<number>`count(*)` }).from(f).where(eq(f.contractId, id)).limit(1))[0]?.n ?? 0;
       if (fees === 0) throw new AppError("INVALID_STATE", `Add at least one fee to ${row.name} before approving`);
-      const rival = approvedRival(inner, row);
+      const rival = await approvedRival(inner, row);
       if (rival) throw new AppError("INVALID_STATE", `${rival.name} is already approved for this client and warehouse from ${rival.calcStartDate}. Approving ${row.name} too would bill the same activity twice; cancel that approval first.`);
     }
-    inner.update(c).set({ approvalStatus: to, updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, id)).run();
-    logUpdate(inner, ctx, CONTRACT_ENTITY, id, row.name, { approvalStatus: row.approvalStatus }, { approvalStatus: to });
+    await inner.update(c).set({ approvalStatus: to, updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, id));
+    await logUpdate(inner, ctx, CONTRACT_ENTITY, id, row.name, { approvalStatus: row.approvalStatus }, { approvalStatus: to });
   });
 }
 
-export const approveContracts = (tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult => setApproval(tx, auth, actor, ids, "Approved");
-export const cancelContractApprovals = (tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult => setApproval(tx, auth, actor, ids, "Draft");
+export const approveContracts = async (tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): Promise<BulkResult> => await setApproval(tx, auth, actor, ids, "Approved");
+export const cancelContractApprovals = async (tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): Promise<BulkResult> => await setApproval(tx, auth, actor, ids, "Draft");
 
-export function contractDeleteBlocker(db: AppDb, row: typeof c.$inferSelect): string | null {
+export async function contractDeleteBlocker(db: AppDb, row: typeof c.$inferSelect): Promise<string | null> {
   if (row.approvalStatus === "Approved") return "is approved; cancel the approval first";
-  const reports = db.select({ n: sql<number>`count(*)` }).from(s.billingReports).where(and(eq(s.billingReports.contractId, row.id), sql`${s.billingReports.billStatus} <> 'Canceled'`, sql`${s.billingReports.calcStatus} <> 'Failed'`)).get()?.n ?? 0;
+  const reports = (await db.select({ n: sql<number>`count(*)` }).from(s.billingReports).where(and(eq(s.billingReports.contractId, row.id), sql`${s.billingReports.billStatus} <> 'Canceled'`, sql`${s.billingReports.calcStatus} <> 'Failed'`)).limit(1))[0]?.n ?? 0;
   if (reports > 0) return `has ${reports} ${reports === 1 ? "bill" : "bills"}`;
   return null;
 }
 
-export function deleteContracts(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult {
+export async function deleteContracts(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const row = loadContract(inner, auth, id);
-    const reason = contractDeleteBlocker(inner, row);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const row = await loadContract(inner, auth, id);
+    const reason = await contractDeleteBlocker(inner, row);
     if (reason) throw new AppError("INVALID_STATE", `${row.name} ${reason}`);
-    const reports = inner.select({ id: s.billingReports.id }).from(s.billingReports).where(eq(s.billingReports.contractId, id)).all().map((r) => r.id);
-    if (reports.length) inner.delete(s.billingReports).where(inArray(s.billingReports.id, reports)).run();
-    inner.delete(c).where(eq(c.id, id)).run();
-    logDelete(inner, ctx, CONTRACT_ENTITY, id, row.name);
+    const reports = (await inner.select({ id: s.billingReports.id }).from(s.billingReports).where(eq(s.billingReports.contractId, id))).map((r) => r.id);
+    if (reports.length) await inner.delete(s.billingReports).where(inArray(s.billingReports.id, reports));
+    await inner.delete(c).where(eq(c.id, id));
+    await logDelete(inner, ctx, CONTRACT_ENTITY, id, row.name);
   });
 }
 
-function copyName(db: AppDb, clientId: string, name: string): string {
+async function copyName(db: AppDb, clientId: string, name: string): Promise<string> {
   for (let i = 1; i < 100; i += 1) {
     const suffix = i === 1 ? " (copy)" : ` (copy ${i})`;
     // Names cap at 100 (Logiwa round-trip): trim the base so the suffix always fits.
     const candidate = `${name.slice(0, 100 - suffix.length).trimEnd()}${suffix}`;
-    const clash = db.select({ id: c.id }).from(c).where(and(eq(c.clientId, clientId), sql`lower(${c.name}) = lower(${candidate})`)).get();
+    const clash = (await db.select({ id: c.id }).from(c).where(and(eq(c.clientId, clientId), sql`lower(${c.name}) = lower(${candidate})`)).limit(1))[0];
     if (!clash) return candidate;
   }
   const tail = ` (copy ${Date.now()})`;
@@ -271,27 +272,27 @@ function copyName(db: AppDb, clientId: string, name: string): string {
 }
 
 /** Copies the contract header (as Draft) with every fee, tier and condition. */
-export function duplicateContracts(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult & { created: { id: string; name: string }[]; warnings: string[] } {
+export async function duplicateContracts(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): Promise<BulkResult & { created: { id: string; name: string }[]; warnings: string[] }> {
   const createdRows: { id: string; name: string }[] = [];
   const warnings: string[] = [];
   const ctx = domainCtxOf(actor, auth);
-  const result = runBulk(tx, ids, (inner, id) => {
-    const row = loadContract(inner, auth, id);
-    const name = copyName(inner, row.clientId, row.name);
-    const copy = inner.insert(c).values({
+  const result = await runBulk(tx, ids, async (inner, id) => {
+    const row = await loadContract(inner, auth, id);
+    const name = await copyName(inner, row.clientId, row.name);
+    const copy = (await inner.insert(c).values({
       name, clientId: row.clientId, warehouseId: row.warehouseId, calcStartDate: row.calcStartDate, frequency: row.frequency, approvalStatus: "Draft",
       nextPeriodStart: periodEnd(row.calcStartDate, row.frequency), createdBy: actor.userId, updatedBy: actor.userId,
-    }).returning({ id: c.id, name: c.name }).get();
-    for (const fee of inner.select().from(f).where(eq(f.contractId, id)).all()) {
+    }).returning({ id: c.id, name: c.name }))[0];
+    for (const fee of await inner.select().from(f).where(eq(f.contractId, id))) {
       const { id: feeId, contractId: _c, createdAt: _a, updatedAt: _u, version: _v, ...rest } = fee;
       void _c; void _a; void _u; void _v;
-      const newFee = inner.insert(f).values({ ...rest, contractId: copy.id, createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: f.id }).get();
-      const tiers = inner.select().from(s.billingFeeTiers).where(eq(s.billingFeeTiers.feeId, feeId)).all();
-      if (tiers.length) inner.insert(s.billingFeeTiers).values(tiers.map((t) => ({ feeId: newFee.id, fromQty: t.fromQty, toQty: t.toQty, rate: t.rate, percentage: t.percentage }))).run();
+      const newFee = (await inner.insert(f).values({ ...rest, contractId: copy.id, createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: f.id }))[0];
+      const tiers = await inner.select().from(s.billingFeeTiers).where(eq(s.billingFeeTiers.feeId, feeId));
+      if (tiers.length) await inner.insert(s.billingFeeTiers).values(tiers.map((t) => ({ feeId: newFee.id, fromQty: t.fromQty, toQty: t.toQty, rate: t.rate, percentage: t.percentage })));
     }
-    logCreate(inner, ctx, CONTRACT_ENTITY, copy.id, copy.name);
+    await logCreate(inner, ctx, CONTRACT_ENTITY, copy.id, copy.name);
     createdRows.push(copy);
-    if (approvedRival(inner, { ...row, id: copy.id })) {
+    if (await approvedRival(inner, { ...row, id: copy.id })) {
       warnings.push(`${copy.name} is a Draft copy; ${row.name} stays approved. Cancel that approval before approving the copy, or both would bill the same activity.`);
     }
   });
@@ -326,47 +327,47 @@ function feeSummary(input: FeeSave): string {
   return `${input.operationType}${calc} · ${input.feeBy} · ${input.chargeBy} · ${price}${mm ? ` (${mm})` : ""}${once}${cond}`;
 }
 
-function assertFeeName(db: AppDb, contractId: string, name: string, exceptId?: string): void {
-  const clash = db.select({ id: f.id }).from(f).where(and(eq(f.contractId, contractId), sql`lower(${f.name}) = lower(${name})`)).get();
+async function assertFeeName(db: AppDb, contractId: string, name: string, exceptId?: string): Promise<void> {
+  const clash = (await db.select({ id: f.id }).from(f).where(and(eq(f.contractId, contractId), sql`lower(${f.name}) = lower(${name})`)).limit(1))[0];
   if (clash && clash.id !== exceptId) throw new AppError("DUPLICATE", `This contract already has a fee named ${name}`, { fieldErrors: { name: ["A fee with this name already exists"] } });
 }
 
-function assertVasType(db: AppDb, input: FeeSave): void {
+async function assertVasType(db: AppDb, input: FeeSave): Promise<void> {
   if (input.operationType !== "VAS" || !input.vasTypeId) return;
-  const lv = db.select({ id: s.lookupValues.id }).from(s.lookupValues).where(and(eq(s.lookupValues.id, input.vasTypeId), eq(s.lookupValues.type, "vas_type"))).get();
+  const lv = (await db.select({ id: s.lookupValues.id }).from(s.lookupValues).where(and(eq(s.lookupValues.id, input.vasTypeId), eq(s.lookupValues.type, "vas_type"))).limit(1))[0];
   if (!lv) throw new AppError("VALIDATION", "Choose a VAS type", { fieldErrors: { vasTypeId: ["Choose a VAS type"] } });
 }
 
-function writeTiers(tx: AppDb, feeId: string, input: FeeSave): void {
-  tx.delete(s.billingFeeTiers).where(eq(s.billingFeeTiers.feeId, feeId)).run();
+async function writeTiers(tx: AppDb, feeId: string, input: FeeSave): Promise<void> {
+  await tx.delete(s.billingFeeTiers).where(eq(s.billingFeeTiers.feeId, feeId));
   if (input.calculationType === "Split Month Storage") return;
-  tx.insert(s.billingFeeTiers).values(input.tiers.map((t) => ({ feeId, fromQty: t.fromQty, toQty: t.toQty, rate: round(t.rate, 4) }))).run();
+  await tx.insert(s.billingFeeTiers).values(input.tiers.map((t) => ({ feeId, fromQty: t.fromQty, toQty: t.toQty, rate: round(t.rate, 4) })));
 }
 
 function lockedForFees(row: typeof c.$inferSelect): void {
   if (row.approvalStatus === "Approved") throw new AppError("INVALID_STATE", "Cancel the approval before changing fees");
 }
 
-export function createFee(tx: AppDb, auth: AuthContext, actor: Actor, contractId: string, input: FeeSave): { id: string; name: string } {
-  const contract = loadContract(tx, auth, contractId);
+export async function createFee(tx: AppDb, auth: AuthContext, actor: Actor, contractId: string, input: FeeSave): Promise<{ id: string; name: string }> {
+  const contract = await loadContract(tx, auth, contractId);
   lockedForFees(contract);
-  assertFeeName(tx, contractId, input.name.trim());
-  assertVasType(tx, input);
-  const row = tx.insert(f).values({ ...feeColumns(input), contractId, createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: f.id, name: f.name }).get();
-  writeTiers(tx, row.id, input);
-  tx.update(c).set({ updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, contractId)).run();
-  logContractEvent(tx, domainCtxOf(actor, auth), contractId, contract.name, { type: "Create", field: "fee", label: `Fee ${row.name}`, to: feeSummary(input), message: `Fee ${row.name} is created. ${feeSummary(input)}` });
+  await assertFeeName(tx, contractId, input.name.trim());
+  await assertVasType(tx, input);
+  const row = (await tx.insert(f).values({ ...feeColumns(input), contractId, createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: f.id, name: f.name }))[0];
+  await writeTiers(tx, row.id, input);
+  await tx.update(c).set({ updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, contractId));
+  await logContractEvent(tx, domainCtxOf(actor, auth), contractId, contract.name, { type: "Create", field: "fee", label: `Fee ${row.name}`, to: feeSummary(input), message: `Fee ${row.name} is created. ${feeSummary(input)}` });
   return row;
 }
 
-function loadFee(db: AppDb, contractId: string, feeId: string): typeof f.$inferSelect {
-  const fee = db.select().from(f).where(and(eq(f.id, feeId), eq(f.contractId, contractId))).get();
+async function loadFee(db: AppDb, contractId: string, feeId: string): Promise<typeof f.$inferSelect> {
+  const fee = (await db.select().from(f).where(and(eq(f.id, feeId), eq(f.contractId, contractId))).limit(1))[0];
   if (!fee) throw notFoundError("Fee");
   return fee;
 }
 
-function storedFeeSummary(db: AppDb, fee: typeof f.$inferSelect): string {
-  const tiers = db.select().from(s.billingFeeTiers).where(eq(s.billingFeeTiers.feeId, fee.id)).orderBy(asc(s.billingFeeTiers.fromQty)).all();
+async function storedFeeSummary(db: AppDb, fee: typeof f.$inferSelect): Promise<string> {
+  const tiers = await db.select().from(s.billingFeeTiers).where(eq(s.billingFeeTiers.feeId, fee.id)).orderBy(asc(s.billingFeeTiers.fromQty));
   return feeSummary({
     name: fee.name, operationType: fee.operationType, calculationType: fee.calculationType, feeBy: fee.feeBy, chargeBy: fee.chargeBy, vasTypeId: fee.vasTypeId,
     useMinPrice: Boolean(fee.useMinPrice), minPrice: fee.minPrice, useMaxPrice: Boolean(fee.useMaxPrice), maxPrice: fee.maxPrice, splitDay: fee.splitDay,
@@ -376,34 +377,34 @@ function storedFeeSummary(db: AppDb, fee: typeof f.$inferSelect): string {
   });
 }
 
-export function updateFee(tx: AppDb, auth: AuthContext, actor: Actor, contractId: string, feeId: string, input: FeeSave): { id: string; name: string } {
-  const contract = loadContract(tx, auth, contractId);
+export async function updateFee(tx: AppDb, auth: AuthContext, actor: Actor, contractId: string, feeId: string, input: FeeSave): Promise<{ id: string; name: string }> {
+  const contract = await loadContract(tx, auth, contractId);
   lockedForFees(contract);
-  const before = loadFee(tx, contractId, feeId);
-  assertFeeName(tx, contractId, input.name.trim(), feeId);
-  assertVasType(tx, input);
-  const old = storedFeeSummary(tx, before);
-  tx.update(f).set({ ...feeColumns(input), updatedBy: actor.userId, version: sql`${f.version} + 1` }).where(eq(f.id, feeId)).run();
-  writeTiers(tx, feeId, input);
-  tx.update(c).set({ updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, contractId)).run();
+  const before = await loadFee(tx, contractId, feeId);
+  await assertFeeName(tx, contractId, input.name.trim(), feeId);
+  await assertVasType(tx, input);
+  const old = await storedFeeSummary(tx, before);
+  await tx.update(f).set({ ...feeColumns(input), updatedBy: actor.userId, version: sql`${f.version} + 1` }).where(eq(f.id, feeId));
+  await writeTiers(tx, feeId, input);
+  await tx.update(c).set({ updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, contractId));
   const label = before.name === input.name.trim() ? `Fee ${before.name}` : `Fee ${before.name} → ${input.name.trim()}`;
   const now = feeSummary(input);
-  if (old !== now || before.name !== input.name.trim()) logContractEvent(tx, domainCtxOf(actor, auth), contractId, contract.name, { type: "Update", field: "fee", label, from: old, to: now, message: `${label} is modified. ${old} --> ${now}` });
+  if (old !== now || before.name !== input.name.trim()) await logContractEvent(tx, domainCtxOf(actor, auth), contractId, contract.name, { type: "Update", field: "fee", label, from: old, to: now, message: `${label} is modified. ${old} --> ${now}` });
   return { id: feeId, name: input.name.trim() };
 }
 
-export function deleteFee(tx: AppDb, auth: AuthContext, actor: Actor, contractId: string, feeId: string): { id: string } {
-  const contract = loadContract(tx, auth, contractId);
+export async function deleteFee(tx: AppDb, auth: AuthContext, actor: Actor, contractId: string, feeId: string): Promise<{ id: string }> {
+  const contract = await loadContract(tx, auth, contractId);
   lockedForFees(contract);
-  const fee = loadFee(tx, contractId, feeId);
-  const old = storedFeeSummary(tx, fee);
-  tx.delete(f).where(eq(f.id, feeId)).run();
-  tx.update(c).set({ updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, contractId)).run();
-  logContractEvent(tx, domainCtxOf(actor, auth), contractId, contract.name, { type: "Delete", field: "fee", label: `Fee ${fee.name}`, from: old, message: `Fee ${fee.name} is deleted.` });
+  const fee = await loadFee(tx, contractId, feeId);
+  const old = await storedFeeSummary(tx, fee);
+  await tx.delete(f).where(eq(f.id, feeId));
+  await tx.update(c).set({ updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, contractId));
+  await logContractEvent(tx, domainCtxOf(actor, auth), contractId, contract.name, { type: "Delete", field: "fee", label: `Fee ${fee.name}`, from: old, message: `Fee ${fee.name} is deleted.` });
   return { id: feeId };
 }
 
 /** Contracts of one client (client detail "Billing contracts" tab). */
-export function contractsForClient(db: AppDb, auth: AuthContext, clientId: string): ContractRow[] {
-  return db.select(ROW).from(c).where(and(eq(c.clientId, clientId), contractScope(auth, false))).orderBy(asc(c.name)).all() as ContractRow[];
+export async function contractsForClient(db: AppDb, auth: AuthContext, clientId: string): Promise<ContractRow[]> {
+  return await db.select(ROW).from(c).where(and(eq(c.clientId, clientId), contractScope(auth, false))).orderBy(asc(c.name)) as ContractRow[];
 }

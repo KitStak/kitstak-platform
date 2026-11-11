@@ -8,21 +8,21 @@ import { deletePresets, getPreset, updatePreset } from "@/server/repositories/ra
 export const GET = defineRoute({
   permission: "automation.rate_shopping.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getPreset(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await getPreset(db, auth, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: "automation.rate_shopping.edit",
   params: idParamsSchema,
   body: presetSaveSchema,
-  handler: ({ db, auth, actor, params, body }) => updatePreset(db, auth, actor, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updatePreset(db, auth, actor, params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: "automation.rate_shopping.delete",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
-    const result = deletePresets(db, auth, actor, [params.id]);
+  handler: async ({ db, auth, actor, params }) => {
+    const result = await deletePresets(db, auth, actor, [params.id]);
     const failure = result.failed[0];
     if (failure) throw new AppError(failure.code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_STATE", failure.message);
     return result;

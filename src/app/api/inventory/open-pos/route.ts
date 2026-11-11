@@ -16,10 +16,10 @@ const id = z.string().trim().min(1).max(64);
 export const GET = defineRoute({
   permission: [P.totalView, P.atpView, P.byLocationView],
   query: z.object({ productId: id, warehouseId: id.optional() }),
-  handler: ({ db, auth, query, request }) => {
-    const product = db.select({ clientId: schema.products.clientId }).from(schema.products).where(eq(schema.products.id, query.productId)).get();
+  handler: async ({ db, auth, query, request }) => {
+    const product = (await db.select({ clientId: schema.products.clientId }).from(schema.products).where(eq(schema.products.id, query.productId)).limit(1))[0];
     if (!product || !hasClient(auth.scope, product.clientId)) throw notFoundError("Product");
-    const codes = openPurchaseOrdersFor(db, auth, { productId: query.productId, warehouseId: query.warehouseId ?? null });
+    const codes = await openPurchaseOrdersFor(db, auth, { productId: query.productId, warehouseId: query.warehouseId ?? null });
     return Response.redirect(new URL(openPurchaseOrdersHref(codes, query.warehouseId ?? null), request.url), 302);
   },
 });

@@ -6,5 +6,5 @@ import { cancelReports } from "@/server/repositories/billing-reports";
 export const POST = defineRoute({
   permission: "settings.billing_report.cancel",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => cancelReports(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await cancelReports(db, auth, actor, body.ids),
 });

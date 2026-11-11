@@ -15,68 +15,68 @@ import { hospitalOf } from "./hospital-fixture";
 
 let w: World;
 let ctx: ScopedCtx;
-beforeEach(() => { w = createWorld(); ctx = { ...w.ctx, scope: { warehouseIds: [w.warehouseId], clientIds: "all" } } as ScopedCtx; });
+beforeEach(async () => { w = await createWorld(); ctx = { ...w.ctx, scope: { warehouseIds: [w.warehouseId], clientIds: "all" } } as ScopedCtx; });
 afterEach(() => w.close());
 
-function shippedOrder(qty = 2): { orderId: string; lineId: string } {
-  ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 5 });
-  const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]));
-  allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
-  const { jobIds: [jobId] } = createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
+async function shippedOrder(qty = 2): Promise<{ orderId: string; lineId: string }> {
+  await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 5 });
+  const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]));
+  await allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
+  const { jobIds: [jobId] } = await createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
   for (const [type, loc] of [["Picking", w.loc.pick], ["Packing", w.loc.pack]] as const) {
-    const ids = w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId ?? ""), eq(schema.tasks.taskType, type))).all().map((t) => t.id);
-    if (ids.length) execute(w.db, w.ctx, { taskIds: ids, targetLocationId: loc });
+    const ids = (await w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId ?? ""), eq(schema.tasks.taskType, type)))).map((t) => t.id);
+    if (ids.length) await execute(w.db, w.ctx, { taskIds: ids, targetLocationId: loc });
   }
-  shipOrders(w.db, w.ctx, { orderIds: [o.id], requireLabel: false });
-  const line = w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, o.id)).get();
+  await shipOrders(w.db, w.ctx, { orderIds: [o.id], requireLabel: false });
+  const line = (await w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, o.id)).limit(1))[0];
   return { orderId: o.id, lineId: line?.id ?? "" };
 }
 
 describe("edit return info per RMA", () => {
-  it("stores carrier, option, several tracking numbers and cost; refuses completed RMAs", () => {
-    const { orderId, lineId } = shippedOrder(2);
-    const rma = insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
-    editReturnInfo(w.db, ctx, rma.id, editReturnInfoSchema.parse({ carrierCode: "UPS", carrierServiceName: "Ground", shippingCost: 8.25, trackingNumbers: ["1Z1", "1Z2", "1Z3"] }));
-    const d = getReturnDetail(w.db, ctx.scope, rma.id);
+  it("stores carrier, option, several tracking numbers and cost; refuses completed RMAs", async () => {
+    const { orderId, lineId } = await shippedOrder(2);
+    const rma = await insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
+    await editReturnInfo(w.db, ctx, rma.id, editReturnInfoSchema.parse({ carrierCode: "UPS", carrierServiceName: "Ground", shippingCost: 8.25, trackingNumbers: ["1Z1", "1Z2", "1Z3"] }));
+    const d = await getReturnDetail(w.db, ctx.scope, rma.id);
     expect(d.carrierCode).toBe("UPS");
     expect(d.trackingNumbers).toEqual(["1Z1", "1Z2", "1Z3"]);
     expect(d.returnShippingCost).toBe(8.25);
-    expect(() => editReturnInfo(w.db, ctx, rma.id, editReturnInfoSchema.parse({ carrierCode: null, carrierServiceName: null, shippingCost: null, trackingNumbers: [], version: 1 }))).toThrow(/changed by someone else/);
-    receiveRma(w.db, ctx, receiveRmaSchema.parse({ returnOrderId: rma.id, stationLocationId: w.loc.returns, items: [{ productId: w.productId, quantity: 1, disposition: "Restock" }] }));
-    expect(() => editReturnInfo(w.db, ctx, rma.id, editReturnInfoSchema.parse({ carrierCode: null, carrierServiceName: null, shippingCost: null, trackingNumbers: [] }))).toThrow(/completed/);
+    await expect(async () => await editReturnInfo(w.db, ctx, rma.id, editReturnInfoSchema.parse({ carrierCode: null, carrierServiceName: null, shippingCost: null, trackingNumbers: [], version: 1 }))).rejects.toThrow(/changed by someone else/);
+    await receiveRma(w.db, ctx, receiveRmaSchema.parse({ returnOrderId: rma.id, stationLocationId: w.loc.returns, items: [{ productId: w.productId, quantity: 1, disposition: "Restock" }] }));
+    await expect(async () => await editReturnInfo(w.db, ctx, rma.id, editReturnInfoSchema.parse({ carrierCode: null, carrierServiceName: null, shippingCost: null, trackingNumbers: [] }))).rejects.toThrow(/completed/);
   });
 });
 
 describe("Return Process enforced at the station", () => {
-  it("Return Manually against an order blocks more than shipped (rule on), allows it when switched off", () => {
-    const { orderId } = shippedOrder(1);
+  it("Return Manually against an order blocks more than shipped (rule on), allows it when switched off", async () => {
+    const { orderId } = await shippedOrder(1);
     const body = () => receiveManualSchema.parse({ warehouseId: w.warehouseId, clientId: w.clientId, shipmentOrderId: orderId, stationLocationId: w.loc.returns, items: [{ productId: w.productId, quantity: 2, disposition: "Restock" }] });
-    expect(() => receiveManual(w.db, ctx, body())).toThrow(/more can be returned|Prevent exceeding/);
-    const defaults = (w.db.select().from(schema.companySettings).get()?.defaults ?? {}) as Record<string, unknown>;
-    w.db.update(schema.companySettings).set({ defaults: { ...defaults, returnRules: { preventExceedingShippedQty: false } } as never }).run();
-    expect(receiveManual(w.db, ctx, body()).status).toBe("Completed");
+    await expect(async () => await receiveManual(w.db, ctx, body())).rejects.toThrow(/more can be returned|Prevent exceeding/);
+    const defaults = ((await w.db.select().from(schema.companySettings).limit(1))[0]?.defaults ?? {}) as Record<string, unknown>;
+    await w.db.update(schema.companySettings).set({ defaults: { ...defaults, returnRules: { preventExceedingShippedQty: false } } as never });
+    expect((await receiveManual(w.db, ctx, body())).status).toBe("Completed");
   });
-  it("blocks a SKU that was not shipped on the order", () => {
-    const { orderId } = shippedOrder(1);
-    expect(() => receiveManual(w.db, ctx, receiveManualSchema.parse({ warehouseId: w.warehouseId, clientId: w.clientId, shipmentOrderId: orderId, stationLocationId: w.loc.returns,
-      items: [{ productId: w.product2Id, quantity: 1, disposition: "Restock" }] }))).toThrow(/not shipped on the order/);
+  it("blocks a SKU that was not shipped on the order", async () => {
+    const { orderId } = await shippedOrder(1);
+    await expect(async () => await receiveManual(w.db, ctx, receiveManualSchema.parse({ warehouseId: w.warehouseId, clientId: w.clientId, shipmentOrderId: orderId, stationLocationId: w.loc.returns,
+      items: [{ productId: w.product2Id, quantity: 1, disposition: "Restock" }] }))).rejects.toThrow(/not shipped on the order/);
   });
 });
 
 describe("hospital locations", () => {
-  it("lists stock in designated hospitals and moves free units back to storage", () => {
-    const hosp = hospitalOf(w);
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: hosp, qty: 3 });
-    const list = listHospitals(w.db, ctx.scope, w.warehouseId);
+  it("lists stock in designated hospitals and moves free units back to storage", async () => {
+    const hosp = await hospitalOf(w);
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: hosp, qty: 3 });
+    const list = await listHospitals(w.db, ctx.scope, w.warehouseId);
     expect(list.map((h) => h.code)).toEqual(["HOSP-01"]);
     const ret = list.find((h) => h.code === "HOSP-01");
     expect(ret?.units).toBe(3);
     const row = ret?.stock[0];
     expect(row?.free).toBe(3);
-    expect(() => moveBackFromHospital(w.db, ctx, { inventoryId: row?.inventoryId ?? "", qty: 4, toLocationId: w.loc.storageA })).toThrow(/Max 3/);
-    expect(() => moveBackFromHospital(w.db, ctx, { inventoryId: row?.inventoryId ?? "", qty: 1, toLocationId: hosp })).toThrow(/not another hospital|Location/);
-    expect(moveBackFromHospital(w.db, ctx, { inventoryId: row?.inventoryId ?? "", qty: 2, toLocationId: w.loc.storageA }).moved).toBe(2);
-    expect(listHospitals(w.db, ctx.scope, w.warehouseId).find((h) => h.code === "HOSP-01")?.units).toBe(1);
-    expect(ledger.reconcileLedger(w.db)).toEqual([]);
+    await expect(async () => await moveBackFromHospital(w.db, ctx, { inventoryId: row?.inventoryId ?? "", qty: 4, toLocationId: w.loc.storageA })).rejects.toThrow(/Max 3/);
+    await expect(async () => await moveBackFromHospital(w.db, ctx, { inventoryId: row?.inventoryId ?? "", qty: 1, toLocationId: hosp })).rejects.toThrow(/not another hospital|Location/);
+    expect((await moveBackFromHospital(w.db, ctx, { inventoryId: row?.inventoryId ?? "", qty: 2, toLocationId: w.loc.storageA })).moved).toBe(2);
+    expect((await listHospitals(w.db, ctx.scope, w.warehouseId)).find((h) => h.code === "HOSP-01")?.units).toBe(1);
+    expect(await ledger.reconcileLedger(w.db)).toEqual([]);
   });
 });

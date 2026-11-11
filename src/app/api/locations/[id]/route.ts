@@ -8,7 +8,7 @@ import { deleteLocations, getLocation, updateLocation } from "@/server/repositor
 export const GET = defineRoute({
   permission: ["settings.locations.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getLocation(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await getLocation(db, auth, params.id),
 });
 
 export const PATCH = defineRoute({
@@ -16,18 +16,18 @@ export const PATCH = defineRoute({
   params: idParamsSchema,
   body: locationPatchSchema,
   /** Partial update: the body is merged onto the stored record, then validated as a whole. */
-  handler: ({ db, auth, actor, params, body }) => {
-    const merged = locationSaveSchema.safeParse(mergeLocationPatch(getLocation(db, auth, params.id), body));
+  handler: async ({ db, auth, actor, params, body }) => {
+    const merged = locationSaveSchema.safeParse(mergeLocationPatch(await getLocation(db, auth, params.id), body));
     if (!merged.success) throw fromZodError(merged.error);
-    return updateLocation(db, auth, actor, params.id, merged.data);
+    return await updateLocation(db, auth, actor, params.id, merged.data);
   },
 });
 
 export const DELETE = defineRoute({
   permission: "settings.locations.delete",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
-    const result = deleteLocations(db, auth, actor, [params.id]);
+  handler: async ({ db, auth, actor, params }) => {
+    const result = await deleteLocations(db, auth, actor, [params.id]);
     const failure = result.failed[0];
     if (failure) throw new AppError(failure.code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_STATE", failure.message);
     return result;

@@ -3,7 +3,8 @@
  * bulk activate/deactivate/delete, run history and Test against order — the real condition
  * evaluator and action executors run inside a savepoint that is always rolled back.
  */
-import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { asc, desc } from "@/server/db/order";
 import type { AppDb } from "@/server/api/db";
 import { AppError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
@@ -27,6 +28,7 @@ import {
   assertFound, assertVersion, compileGrid, domainCtxOf, dryRun, duplicateError, fieldError, labelsOf, clientLabelsOf, logCreate, logDelete, logUpdate,
   type Actor, type GridBinding,
 } from "./integration-logs-kit";
+import { dbAll, flatMapSeq, forEachSeq, withWriteTx } from "@/server/db/sql";
 
 type OrderStatus = (typeof s.shipmentOrders.$inferSelect)["status"];
 const t = s.workflows;
@@ -81,20 +83,20 @@ function scopeWhere(auth: AuthContext) {
   );
 }
 
-function names(db: AppDb, rows: readonly Row[]) {
-  return { wh: labelsOf(db, "warehouses", rows.map((r) => r.warehouseId)), cl: clientLabelsOf(db, rows.map((r) => r.clientId)) };
+async function names(db: AppDb, rows: readonly Row[]) {
+  return { wh: await labelsOf(db, "warehouses", rows.map((r) => r.warehouseId)), cl: await clientLabelsOf(db, rows.map((r) => r.clientId)) };
 }
 
-function blockedCounts(db: AppDb, ids: readonly string[]): Map<string, number> {
+async function blockedCounts(db: AppDb, ids: readonly string[]): Promise<Map<string, number>> {
   if (ids.length === 0) return new Map();
-  const rows = db.all<{ id: string; n: number }>(sql`
+  const rows = await dbAll<{ id: string; n: number }>(db, sql`
     SELECT r.workflow_id AS id, COUNT(DISTINCT r.entity_id) AS n FROM workflow_runs r
     JOIN shipment_orders o ON o.id = r.entity_id AND o.workflow_blocked <> 'None'
     WHERE r.block_type IS NOT NULL AND r.workflow_id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)}) GROUP BY r.workflow_id`);
   return new Map(rows.map((r) => [r.id, Number(r.n)]));
 }
 
-function toRow(r: Row, n: ReturnType<typeof names>, blocked: Map<string, number>): WorkflowRow {
+function toRow(r: Row, n: Awaited<ReturnType<typeof names>>, blocked: Map<string, number>): WorkflowRow {
   return {
     id: r.id, name: r.name, description: r.description, trigger: r.trigger, warehouseId: r.warehouseId, warehouseCode: r.warehouseId ? n.wh.get(r.warehouseId) ?? null : null,
     clientId: r.clientId, clientName: r.clientId ? n.cl.get(r.clientId)?.name ?? null : null, clientCode: r.clientId ? n.cl.get(r.clientId)?.code ?? null : null, match: r.match, conditionCount: conditionLeaves(r.conditions).length,
@@ -104,24 +106,24 @@ function toRow(r: Row, n: ReturnType<typeof names>, blocked: Map<string, number>
   };
 }
 
-export function listWorkflows(db: AppDb, auth: AuthContext, query: GridQuery): { rows: WorkflowRow[]; total: number } {
+export async function listWorkflows(db: AppDb, auth: AuthContext, query: GridQuery): Promise<{ rows: WorkflowRow[]; total: number }> {
   const grid = compileGrid(BINDING, query, [scopeWhere(auth)]);
-  const result = paginate(db.select().from(t).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(t).where(grid.where).get()?.n ?? 0, { page: query.page, pageSize: query.pageSize });
-  const n = names(db, result.rows);
-  const blocked = blockedCounts(db, result.rows.map((r) => r.id));
+  const result = await paginate(db.select().from(t).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(t).where(grid.where).limit(1))[0]?.n ?? 0, { page: query.page, pageSize: query.pageSize });
+  const n = await names(db, result.rows);
+  const blocked = await blockedCounts(db, result.rows.map((r) => r.id));
   return { rows: result.rows.map((r) => toRow(r, n, blocked)), total: result.total };
 }
 
-export function loadWorkflow(db: AppDb, auth: AuthContext, id: string): Row {
-  const row = assertFound(db.select().from(t).where(eq(t.id, id)).get(), "Workflow");
+export async function loadWorkflow(db: AppDb, auth: AuthContext, id: string): Promise<Row> {
+  const row = assertFound((await db.select().from(t).where(eq(t.id, id)).limit(1))[0], "Workflow");
   if ((row.warehouseId && !hasWarehouse(auth.scope, row.warehouseId)) || (row.clientId && !hasClient(auth.scope, row.clientId))) throw new AppError("NOT_FOUND", "Workflow not found");
   return row;
 }
 
-export function getWorkflow(db: AppDb, auth: AuthContext, id: string): WorkflowDetail {
-  const r = loadWorkflow(db, auth, id);
-  return { ...toRow(r, names(db, [r]), blockedCounts(db, [r.id])), conditions: r.conditions, actionList: r.actions };
+export async function getWorkflow(db: AppDb, auth: AuthContext, id: string): Promise<WorkflowDetail> {
+  const r = await loadWorkflow(db, auth, id);
+  return { ...toRow(r, await names(db, [r]), await blockedCounts(db, [r.id])), conditions: r.conditions, actionList: r.actions };
 }
 
 function assertScope(auth: AuthContext, body: WorkflowSave): void {
@@ -129,14 +131,14 @@ function assertScope(auth: AuthContext, body: WorkflowSave): void {
   if (body.clientId && !hasClient(auth.scope, body.clientId)) throw fieldError("clientId", "Client not found");
 }
 
-function assertUnique(db: AppDb, name: string, id: string | null) {
-  const dup = db.select({ id: t.id }).from(t).where(and(sql`lower(${t.name}) = lower(${name})`, id ? sql`${t.id} <> ${id}` : undefined)).get();
+async function assertUnique(db: AppDb, name: string, id: string | null) {
+  const dup = (await db.select({ id: t.id }).from(t).where(and(sql`lower(${t.name}) = lower(${name})`, id ? sql`${t.id} <> ${id}` : undefined)).limit(1))[0];
   if (dup) throw duplicateError("name", `A workflow named "${name}" already exists`);
 }
 
-function snapshot(db: AppDb, v: Pick<Row, "name" | "description" | "trigger" | "warehouseId" | "clientId" | "match" | "conditions" | "actions" | "isActive" | "stopProcessing">) {
-  const wh = v.warehouseId ? labelsOf(db, "warehouses", [v.warehouseId]).get(v.warehouseId) ?? v.warehouseId : "All warehouses";
-  const cl = v.clientId ? labelsOf(db, "clients", [v.clientId]).get(v.clientId) ?? v.clientId : "All clients";
+async function snapshot(db: AppDb, v: Pick<Row, "name" | "description" | "trigger" | "warehouseId" | "clientId" | "match" | "conditions" | "actions" | "isActive" | "stopProcessing">) {
+  const wh = v.warehouseId ? (await labelsOf(db, "warehouses", [v.warehouseId])).get(v.warehouseId) ?? v.warehouseId : "All warehouses";
+  const cl = v.clientId ? (await labelsOf(db, "clients", [v.clientId])).get(v.clientId) ?? v.clientId : "All clients";
   return {
     name: v.name, description: v.description, trigger: v.trigger, warehouse: wh, client: cl, match: v.match,
     conditions: v.conditions.map((c) => describeConditionNode("order", c)).join(v.match === "All" ? " AND " : " OR ") || "Every order",
@@ -149,59 +151,59 @@ const valuesOf = (body: WorkflowSave) => ({
   conditions: body.conditions, actions: body.actions.map((a) => ({ action: a.action, params: a.params })), isActive: body.isActive, stopProcessing: body.stopProcessing,
 });
 
-export function createWorkflow(tx: AppDb, auth: AuthContext, actor: Actor, body: WorkflowSave): WorkflowDetail {
+export async function createWorkflow(tx: AppDb, auth: AuthContext, actor: Actor, body: WorkflowSave): Promise<WorkflowDetail> {
   assertScope(auth, body);
-  assertUnique(tx, body.name, null);
-  const max = tx.select({ n: sql<number>`COALESCE(MAX(${t.sequence}), 0)` }).from(t).get()?.n ?? 0;
-  const row = tx.insert(t).values({ ...valuesOf(body), sequence: Number(max) + 1, createdBy: actor.userId, updatedBy: actor.userId }).returning().get();
-  logCreate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: row.id, entityCode: row.name });
-  return getWorkflow(tx, auth, row.id);
+  await assertUnique(tx, body.name, null);
+  const max = (await tx.select({ n: sql<number>`COALESCE(MAX(${t.sequence}), 0)` }).from(t).limit(1))[0]?.n ?? 0;
+  const row = (await tx.insert(t).values({ ...valuesOf(body), sequence: Number(max) + 1, createdBy: actor.userId, updatedBy: actor.userId }).returning())[0];
+  await logCreate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: row.id, entityCode: row.name });
+  return await getWorkflow(tx, auth, row.id);
 }
 
-export function updateWorkflow(tx: AppDb, auth: AuthContext, actor: Actor, id: string, body: WorkflowSave): WorkflowDetail {
-  const before = loadWorkflow(tx, auth, id);
+export async function updateWorkflow(tx: AppDb, auth: AuthContext, actor: Actor, id: string, body: WorkflowSave): Promise<WorkflowDetail> {
+  const before = await loadWorkflow(tx, auth, id);
   assertVersion(before.version, body.version);
   assertScope(auth, body);
-  assertUnique(tx, body.name, id);
+  await assertUnique(tx, body.name, id);
   const values = valuesOf(body);
-  tx.update(t).set({ ...values, updatedBy: actor.userId, version: sql`${t.version} + 1` }).where(eq(t.id, id)).run();
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: id, entityCode: body.name }, snapshot(tx, before), snapshot(tx, values));
-  return getWorkflow(tx, auth, id);
+  await tx.update(t).set({ ...values, updatedBy: actor.userId, version: sql`${t.version} + 1` }).where(eq(t.id, id));
+  await logUpdate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: id, entityCode: body.name }, await snapshot(tx, before), await snapshot(tx, values));
+  return await getWorkflow(tx, auth, id);
 }
 
-export function deleteWorkflows(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult {
+export async function deleteWorkflows(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const w = loadWorkflow(inner, auth, id);
-    const blocked = blockedCounts(inner, [id]).get(id) ?? 0;
+  return await runBulk(tx, ids, async (inner, id) => {
+    const w = await loadWorkflow(inner, auth, id);
+    const blocked = (await blockedCounts(inner, [id])).get(id) ?? 0;
     if (blocked > 0) throw new AppError("INVALID_STATE", `${w.name} still blocks ${blocked} order${blocked === 1 ? "" : "s"}; release them first or deactivate it`);
-    inner.delete(t).where(eq(t.id, id)).run();
-    logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: w.name });
+    await inner.delete(t).where(eq(t.id, id));
+    await logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: w.name });
   });
 }
 
-export function setWorkflowsActive(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], isActive: boolean): BulkResult {
+export async function setWorkflowsActive(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], isActive: boolean): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const w = loadWorkflow(inner, auth, id);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const w = await loadWorkflow(inner, auth, id);
     if (w.isActive === isActive) throw new AppError("INVALID_STATE", `${w.name} is already ${isActive ? "active" : "inactive"}`);
-    inner.update(t).set({ isActive, updatedBy: actor.userId, version: sql`${t.version} + 1` }).where(eq(t.id, id)).run();
-    logUpdate(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: w.name }, { active: w.isActive }, { active: isActive });
+    await inner.update(t).set({ isActive, updatedBy: actor.userId, version: sql`${t.version} + 1` }).where(eq(t.id, id));
+    await logUpdate(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: w.name }, { active: w.isActive }, { active: isActive });
   });
 }
 
 /** Drag sequence: `ids` in the new order (visible subset); others keep their relative place after them. */
-export function reorderWorkflows(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): { readonly ids: readonly string[] } {
-  const all = tx.select().from(t).orderBy(asc(t.sequence), asc(t.createdAt)).all();
+export async function reorderWorkflows(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): Promise<{ readonly ids: readonly string[] }> {
+  const all = await tx.select().from(t).orderBy(asc(t.sequence), asc(t.createdAt));
   const visible = new Set(ids);
-  for (const id of ids) loadWorkflow(tx, auth, id);
+  for (const id of ids) await loadWorkflow(tx, auth, id);
   const ordered = [...ids, ...all.filter((w) => !visible.has(w.id)).map((w) => w.id)];
   const ctx = domainCtxOf(actor, auth);
-  ordered.forEach((id, i) => {
+  await forEachSeq(ordered, async (id, i) => {
     const w = all.find((x) => x.id === id);
     if (!w || w.sequence === i + 1) return;
-    tx.update(t).set({ sequence: i + 1 }).where(eq(t.id, id)).run();
-    logUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: w.name }, { sequence: w.sequence }, { sequence: i + 1 });
+    await tx.update(t).set({ sequence: i + 1 }).where(eq(t.id, id));
+    await logUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: w.name }, { sequence: w.sequence }, { sequence: i + 1 });
   });
   return { ids: ordered };
 }
@@ -227,11 +229,11 @@ export interface WorkflowRunRow {
   readonly error: string | null;
 }
 
-export function listWorkflowRuns(db: AppDb, auth: AuthContext, id: string, query: GridQuery): { rows: WorkflowRunRow[]; total: number } {
-  loadWorkflow(db, auth, id);
+export async function listWorkflowRuns(db: AppDb, auth: AuthContext, id: string, query: GridQuery): Promise<{ rows: WorkflowRunRow[]; total: number }> {
+  await loadWorkflow(db, auth, id);
   const grid = compileGrid(RUN_BINDING, query, [eq(wr.workflowId, id)]);
-  const result = paginate(db.select({ r: wr, code: orderCodeSql }).from(wr).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(wr).where(grid.where).get()?.n ?? 0, { page: query.page, pageSize: query.pageSize });
+  const result = await paginate(db.select({ r: wr, code: orderCodeSql }).from(wr).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(wr).where(grid.where).limit(1))[0]?.n ?? 0, { page: query.page, pageSize: query.pageSize });
   return {
     rows: result.rows.map(({ r, code }) => ({ id: r.id, at: r.at, entityType: r.entityType, entityId: r.entityId, orderCode: code ?? null, matched: r.matched, actionsApplied: r.actionsApplied ?? [], blockType: r.blockType, error: r.error })),
     total: result.total,
@@ -254,14 +256,14 @@ export interface WorkflowTestResult {
 const WATCH = ["priority", "workflowBlocked", "carrier", "shippingService", "rateShoppingPresetId", "shipmentPackageId", "orderTypeId", "note", "warehouseId"] as const;
 
 /** Purchase Order Created: conditions on PO facts, Notify Users only (no order fields change). */
-function testPoWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: WorkflowSave, poId: string): WorkflowTestResult {
-  const po = assertFound(db.select().from(s.purchaseOrders).where(eq(s.purchaseOrders.id, poId)).get(), "Purchase order");
+async function testPoWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: WorkflowSave, poId: string): Promise<WorkflowTestResult> {
+  const po = assertFound((await db.select().from(s.purchaseOrders).where(eq(s.purchaseOrders.id, poId)).limit(1))[0], "Purchase order");
   if (!hasWarehouse(auth.scope, po.warehouseId) || !hasClient(auth.scope, po.clientId)) throw new AppError("NOT_FOUND", "Purchase order not found");
   const notes: string[] = [];
   if (body.warehouseId && body.warehouseId !== po.warehouseId) notes.push("the purchase order is in another warehouse");
   if (body.clientId && body.clientId !== po.clientId) notes.push("the purchase order belongs to another client");
-  return dryRun(db, (tx) => {
-    const { facts } = workflowEntityScope(tx, { type: "purchase_order", id: po.id });
+  return await dryRun(db, async (tx) => {
+    const { facts } = await workflowEntityScope(tx, { type: "purchase_order", id: po.id });
     const conditions = body.conditions.map((c) => ({ text: describeConditionNode("purchaseOrder", c), passed: evaluateConditionNode(c, facts) }));
     const matched = evaluateConditions(body.conditions, facts, body.match);
     const actions: { action: string; applied: boolean; message: string | null }[] = [];
@@ -271,7 +273,7 @@ function testPoWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: Workfl
         const exec = getWorkflowActionExecutor(a.action);
         if (!exec) { actions.push({ action: a.action, applied: false, message: "Not configured" }); continue; }
         try {
-          const res = tx.transaction((inner) => exec(inner, ctx, { entity: { type: "purchase_order", id: po.id }, params: a.params, workflowId: "test", workflowName: body.name }));
+          const res = await withWriteTx(tx, async (inner) => exec(inner, ctx, { entity: { type: "purchase_order", id: po.id }, params: a.params, workflowId: "test", workflowName: body.name }));
           actions.push({ action: a.action, applied: res.applied, message: res.message ?? null });
         } catch (error) {
           actions.push({ action: a.action, applied: false, message: describeError(error).message });
@@ -282,16 +284,16 @@ function testPoWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: Workfl
   });
 }
 
-export function testWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: WorkflowSave, orderId: string): WorkflowTestResult {
-  if (PO_TRIGGERS.has(body.trigger)) return testPoWorkflow(db, auth, actor, body, orderId);
-  const order = assertFound(db.select().from(s.shipmentOrders).where(eq(s.shipmentOrders.id, orderId)).get(), "Shipment order");
+export async function testWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: WorkflowSave, orderId: string): Promise<WorkflowTestResult> {
+  if (PO_TRIGGERS.has(body.trigger)) return await testPoWorkflow(db, auth, actor, body, orderId);
+  const order = assertFound((await db.select().from(s.shipmentOrders).where(eq(s.shipmentOrders.id, orderId)).limit(1))[0], "Shipment order");
   if (!hasWarehouse(auth.scope, order.warehouseId) || !hasClient(auth.scope, order.clientId)) throw new AppError("NOT_FOUND", "Shipment order not found");
   const notes: string[] = [];
   if (body.warehouseId && body.warehouseId !== order.warehouseId) notes.push("the order is in another warehouse");
   if (body.clientId && body.clientId !== order.clientId) notes.push("the order belongs to another client");
-  return dryRun(db, (tx) => {
+  return await dryRun(db, async (tx) => {
     // Local adapter until REQ-1 lands: address lines are not in foundation orderFacts yet.
-    const facts: Facts = { shipAddress: order.shipAddress, shipAddress2: order.shipAddress2, ...orderFacts(tx, order) };
+    const facts: Facts = { shipAddress: order.shipAddress, shipAddress2: order.shipAddress2, ...(await orderFacts(tx, order)) };
     const conditions = body.conditions.map((c) => ({ text: describeConditionNode("order", c), passed: evaluateConditionNode(c, facts) }));
     const matched = evaluateConditions(body.conditions, facts, body.match);
     const actions: { action: string; applied: boolean; message: string | null }[] = [];
@@ -302,7 +304,7 @@ export function testWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: W
         const exec = getWorkflowActionExecutor(a.action);
         if (!exec) { actions.push({ action: a.action, applied: false, message: "Not configured" }); continue; }
         try {
-          const res = tx.transaction((inner) => exec(inner, ctx, { entity: { type: "shipment_order", id: order.id }, params: a.params, workflowId: "test", workflowName: body.name }));
+          const res = await withWriteTx(tx, async (inner) => exec(inner, ctx, { entity: { type: "shipment_order", id: order.id }, params: a.params, workflowId: "test", workflowName: body.name }));
           if (res.blockType) blockType = res.blockType;
           actions.push({ action: a.action, applied: res.applied, message: res.message ?? null });
         } catch (error) {
@@ -310,19 +312,19 @@ export function testWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: W
         }
       }
     }
-    const after = tx.select().from(s.shipmentOrders).where(eq(s.shipmentOrders.id, order.id)).get() ?? order;
-    const label = (k: string, v: unknown) => {
+    const after = (await tx.select().from(s.shipmentOrders).where(eq(s.shipmentOrders.id, order.id)).limit(1))[0] ?? order;
+    const label = async (k: string, v: unknown) => {
       if (v === null || v === undefined || v === "") return "—";
-      if (k === "warehouseId") return labelsOf(tx, "warehouses", [String(v)]).get(String(v)) ?? String(v);
-      if (k === "rateShoppingPresetId") return tx.select({ n: s.rateShoppingPresets.name }).from(s.rateShoppingPresets).where(eq(s.rateShoppingPresets.id, String(v))).get()?.n ?? String(v);
-      if (k === "shipmentPackageId") return tx.select({ n: s.shipmentPackages.code }).from(s.shipmentPackages).where(eq(s.shipmentPackages.id, String(v))).get()?.n ?? String(v);
-      if (k === "orderTypeId") return tx.select({ n: s.lookupValues.name }).from(s.lookupValues).where(eq(s.lookupValues.id, String(v))).get()?.n ?? String(v);
+      if (k === "warehouseId") return (await labelsOf(tx, "warehouses", [String(v)])).get(String(v)) ?? String(v);
+      if (k === "rateShoppingPresetId") return (await tx.select({ n: s.rateShoppingPresets.name }).from(s.rateShoppingPresets).where(eq(s.rateShoppingPresets.id, String(v))).limit(1))[0]?.n ?? String(v);
+      if (k === "shipmentPackageId") return (await tx.select({ n: s.shipmentPackages.code }).from(s.shipmentPackages).where(eq(s.shipmentPackages.id, String(v))).limit(1))[0]?.n ?? String(v);
+      if (k === "orderTypeId") return (await tx.select({ n: s.lookupValues.name }).from(s.lookupValues).where(eq(s.lookupValues.id, String(v))).limit(1))[0]?.n ?? String(v);
       return String(v);
     };
-    const changes: { field: string; from: string; to: string }[] = WATCH.flatMap((k) => (order[k] !== after[k] ? [{ field: fieldLabel("shipment_order", k), from: label(k, order[k]), to: label(k, after[k]) }] : []));
+    const changes: { field: string; from: string; to: string }[] = await flatMapSeq(WATCH, async (k) => (order[k] !== after[k] ? [{ field: fieldLabel("shipment_order", k), from: await label(k, order[k]), to: await label(k, after[k]) }] : []));
     const tagsBefore = new Set((facts.orderTag as readonly string[] | undefined) ?? []);
-    const tagsAfter = tx.select({ name: s.tags.name }).from(s.entityTags).innerJoin(s.tags, eq(s.tags.id, s.entityTags.tagId))
-      .where(and(eq(s.entityTags.entityType, "shipment_order"), eq(s.entityTags.entityId, order.id))).all().map((x) => x.name);
+    const tagsAfter = (await tx.select({ name: s.tags.name }).from(s.entityTags).innerJoin(s.tags, eq(s.tags.id, s.entityTags.tagId))
+      .where(and(eq(s.entityTags.entityType, "shipment_order"), eq(s.entityTags.entityId, order.id)))).map((x) => x.name);
     const added = tagsAfter.filter((x) => !tagsBefore.has(x));
     if (added.length > 0) changes.push({ field: "Tags", from: [...tagsBefore].join(", ") || "—", to: tagsAfter.join(", ") });
     return { orderCode: order.code, inScope: notes.length === 0, scopeNote: notes.length > 0 ? `In production this workflow would skip the order: ${notes.join(" and ")}.` : null, matched, conditions, actions, changes, blockType };
@@ -332,20 +334,20 @@ export function testWorkflow(db: AppDb, auth: AuthContext, actor: Actor, body: W
 /** Records to test against: open orders, shipped orders (Order Shipped) or purchase orders. */
 export type TestEntityKind = "open" | "shipped" | "po";
 
-export function testOrderOptions(db: AppDb, auth: AuthContext, q: string | null, kind: TestEntityKind = "open"): { id: string; label: string }[] {
+export async function testOrderOptions(db: AppDb, auth: AuthContext, q: string | null, kind: TestEntityKind = "open"): Promise<{ id: string; label: string }[]> {
   if (kind === "po") {
     const p = s.purchaseOrders;
     const conds = [inArray(p.warehouseId, [...auth.viewScope.warehouseIds])];
     if (auth.viewScope.clientIds !== "all") conds.push(inArray(p.clientId, auth.viewScope.clientIds.length > 0 ? [...auth.viewScope.clientIds] : ["-"]));
-    if (q) conds.push(sql`(${p.code} LIKE ${`%${q}%`} OR ${p.vendorName} LIKE ${`%${q}%`} OR ${p.referenceNumber} LIKE ${`%${q}%`})`);
-    return db.select({ id: p.id, code: p.code, vendor: p.vendorName, status: p.status }).from(p).where(and(...conds)).orderBy(desc(p.createdAt)).limit(30).all()
+    if (q) conds.push(sql`(${p.code} ILIKE ${`%${q}%`} ESCAPE '' OR ${p.vendorName} ILIKE ${`%${q}%`} ESCAPE '' OR ${p.referenceNumber} ILIKE ${`%${q}%`} ESCAPE '')`);
+    return (await db.select({ id: p.id, code: p.code, vendor: p.vendorName, status: p.status }).from(p).where(and(...conds)).orderBy(desc(p.createdAt)).limit(30))
       .map((x) => ({ id: x.id, label: `${x.code} · ${x.vendor ?? "No vendor"} · ${x.status}` }));
   }
   const o = s.shipmentOrders;
   const statuses: OrderStatus[] = kind === "shipped" ? ["Shipped", "Partially Shipped", "Delivered", "Ready to Ship"] : ["Open", "Shortage", "On Hold", "Ready to Pick"];
   const conds = [inArray(o.status, statuses), sql`${o.deletedAt} IS NULL`, inArray(o.warehouseId, [...auth.viewScope.warehouseIds])];
   if (auth.viewScope.clientIds !== "all") conds.push(inArray(o.clientId, auth.viewScope.clientIds.length > 0 ? [...auth.viewScope.clientIds] : ["-"]));
-  if (q) conds.push(sql`(${o.code} LIKE ${`%${q}%`} OR ${o.customerName} LIKE ${`%${q}%`} OR ${o.shipAddress} LIKE ${`%${q}%`})`);
-  return db.select({ id: o.id, code: o.code, customer: o.customerName, addr: o.shipAddress }).from(o).where(and(...conds)).orderBy(desc(o.orderDate)).limit(30).all()
+  if (q) conds.push(sql`(${o.code} ILIKE ${`%${q}%`} ESCAPE '' OR ${o.customerName} ILIKE ${`%${q}%`} ESCAPE '' OR ${o.shipAddress} ILIKE ${`%${q}%`} ESCAPE '')`);
+  return (await db.select({ id: o.id, code: o.code, customer: o.customerName, addr: o.shipAddress }).from(o).where(and(...conds)).orderBy(desc(o.orderDate)).limit(30))
     .map((x) => ({ id: x.id, label: `${x.code} · ${x.customer} · ${x.addr}` }));
 }

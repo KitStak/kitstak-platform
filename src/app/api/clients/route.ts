@@ -14,9 +14,9 @@ const pickSlim = (row: object): Record<string, unknown> =>
   Object.fromEntries(SLIM_CLIENT_KEYS.map((k) => [k, (row as Record<string, unknown>)[k] ?? null]));
 
 export const GET = defineRoute({
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listClientsForCaller(db, auth, query);
+    const { rows, total } = await listClientsForCaller(db, auth, query);
     const safe = auth.permissions.has("settings.clients.view") ? (rows as readonly object[] as readonly Record<string, unknown>[]) : rows.map(pickSlim);
     return listResult(safe, { total, page: query.page, pageSize: query.pageSize });
   },
@@ -25,5 +25,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.clients.create",
   body: clientSchema,
-  handler: ({ db, auth, actor, body }) => created(createClient(db, auth, actor, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createClient(db, auth, actor, body)),
 });

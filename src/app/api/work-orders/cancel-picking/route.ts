@@ -7,10 +7,10 @@ import { cancelPicking } from "@/server/repositories/work-orders-commands";
 export const POST = defineRoute({
   permission: WO_PERMISSIONS.cancelPicking,
   body: idsBodySchema,
-  handler: ({ db, auth, actor, body }) => {
+  handler: async ({ db, auth, actor, body }) => {
     const ctx = woCtx(actor, auth);
-    return runBulk(db, body.ids, (tx, id) => {
-      cancelPicking(tx, ctx, id);
+    return await runBulk(db, body.ids, async (tx, id) => {
+      await cancelPicking(tx, ctx, id);
     });
   },
 });

@@ -18,12 +18,12 @@ let auth: AuthContext;
 const zones: string[] = [];
 const COUNT = 4_800;
 
-beforeAll(() => {
-  w = createWorld();
+beforeAll(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId, role: "manager" }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   for (const name of ["S1", "S2", "S3", "S4"]) {
-    zones.push((w.db.insert(schema.lookupValues).values({ type: "location_zone", name, code: name, warehouseId: w.warehouseId, isActive: true, sortOrder: 0, meta: { priority: 1, maxLocationsPerSku: 4 } } as never).returning().get() as { id: string }).id);
+    zones.push(((await w.db.insert(schema.lookupValues).values({ type: "location_zone", name, code: name, warehouseId: w.warehouseId, isActive: true, sortOrder: 0, meta: { priority: 1, maxLocationsPerSku: 4 } } as never).returning())[0] as { id: string }).id);
   }
   const rows: (typeof schema.locations.$inferInsert)[] = [];
   const letters = "ABCDEFGHIJKL";
@@ -36,37 +36,37 @@ beforeAll(() => {
     const code = `S${zi + 1}-${aisle}-${rack}-${level}-${pos}`;
     rows.push({ warehouseId: w.warehouseId, code, barcode: code, zone: `S${zi + 1}`, aisle, rack, bay: rack, level, position: pos, type: "Reserve", capacityUnits: 0, locationType: "Racks", areaType: "Storage", locationZoneId: zones[zi], walkingPathPriority: i });
   }
-  for (let i = 0; i < rows.length; i += 500) w.db.insert(schema.locations).values(rows.slice(i, i + 500)).run();
+  for (let i = 0; i < rows.length; i += 500) await w.db.insert(schema.locations).values(rows.slice(i, i + 500));
 }, 60_000);
 afterAll(() => w.close());
 
 const q = (s: string) => parseGridQuery(s).query;
-const timed = <T,>(fn: () => T): { value: T; ms: number } => {
+const timed = async <T,>(fn: () => Promise<T>): Promise<{ value: T; ms: number }> => {
   const t = performance.now();
-  const value = fn();
+  const value = await fn();
   return { value, ms: performance.now() - t };
 };
 
 describe(`locations at scale (${COUNT.toLocaleString("en-US")} rows)`, () => {
-  it("list paging stays fast on the first, a deep and the last page", () => {
+  it("list paging stays fast on the first, a deep and the last page", async () => {
     for (const page of [1, 50, 96]) {
-      const r = timed(() => listLocations(w.db, auth, { ...q(""), page, pageSize: 50 }));
+      const r = await timed(async () => await listLocations(w.db, auth, { ...q(""), page, pageSize: 50 }));
       expect(r.value.total).toBeGreaterThanOrEqual(COUNT);
       expect(r.value.rows.length).toBeGreaterThan(0);
       expect(r.ms).toBeLessThan(2_000);
     }
   });
-  it("zone strip, filters, sort and search stay fast", () => {
-    const strip = timed(() => getZoneSummary(w.db, auth));
+  it("zone strip, filters, sort and search stay fast", async () => {
+    const strip = await timed(async () => await getZoneSummary(w.db, auth));
     expect(strip.value.filter((z) => z.zone.startsWith("S")).map((z) => z.binCount)).toEqual([1200, 1200, 1200, 1200]);
     expect(strip.ms).toBeLessThan(2_000);
-    const byZone = timed(() => listLocations(w.db, auth, q(`f.locationZoneId=in:${zones[2]}&ps=50`)));
+    const byZone = await timed(async () => await listLocations(w.db, auth, q(`f.locationZoneId=in:${zones[2]}&ps=50`)));
     expect(byZone.value.total).toBe(1200);
     expect(byZone.ms).toBeLessThan(2_000);
-    const occupied = timed(() => listLocations(w.db, auth, q("f.inventoryStatus=in:Available&f.areaType=in:Storage&sort=-walkingPathPriority&ps=50")));
+    const occupied = await timed(async () => await listLocations(w.db, auth, q("f.inventoryStatus=in:Available&f.areaType=in:Storage&sort=-walkingPathPriority&ps=50")));
     expect(occupied.value.rows[0]?.walkingPathPriority).toBe(COUNT - 1);
     expect(occupied.ms).toBeLessThan(2_000);
-    const search = timed(() => listLocations(w.db, auth, q("q=S3-H-1&qm=sw&ps=50")));
+    const search = await timed(async () => await listLocations(w.db, auth, q("q=S3-H-1&qm=sw&ps=50")));
     expect(search.value.total).toBe(200); // racks 10-19 × 4 levels × 5 positions
     expect(search.ms).toBeLessThan(2_000);
   });

@@ -64,75 +64,75 @@ describe("bill runs", () => {
   let w: World;
   let auth: AuthContext;
   const actor = () => ({ userId: w.userId, source: "Web" });
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   });
   afterEach(() => w.close());
 
-  const contractWithFees = () => {
-    const contract = createContract(w.db, auth, actor(), contractSchema.parse({ name: "Dup guard", clientId: w.clientId, warehouseId: w.warehouseId, calcStartDate: "2026-10-01", frequency: "Monthly" }));
-    createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Account", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", tiers: [{ fromQty: 1, toQty: null, rate: 50 }] }));
-    createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, tiers: [{ fromQty: 1, toQty: null, rate: 1 }], name: "Split", operationType: "Storage", calculationType: "Split Month Storage", feeBy: "LP", chargeBy: "LP", splitDay: 15, standardRate: 10, alternateRate: 5 }));
+  const contractWithFees = async () => {
+    const contract = await createContract(w.db, auth, actor(), contractSchema.parse({ name: "Dup guard", clientId: w.clientId, warehouseId: w.warehouseId, calcStartDate: "2026-10-01", frequency: "Monthly" }));
+    await createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Account", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", tiers: [{ fromQty: 1, toQty: null, rate: 50 }] }));
+    await createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, tiers: [{ fromQty: 1, toQty: null, rate: 1 }], name: "Split", operationType: "Storage", calculationType: "Split Month Storage", feeBy: "LP", chargeBy: "LP", splitDay: 15, standardRate: 10, alternateRate: 5 }));
     return contract;
   };
 
-  it("never double-bills a period: drafts need explicit replacement, approved bills block", () => {
-    const contract = contractWithFees();
+  it("never double-bills a period: drafts need explicit replacement, approved bills block", async () => {
+    const contract = await contractWithFees();
     const now = new Date("2026-11-06T12:00:00.000Z");
-    const first = calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed" }, now);
+    const first = await calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed" }, now);
     expect(first.reports[0]).toMatchObject({ status: "Successful", periodStart: "2026-10-01", periodEnd: "2026-10-31" });
 
-    const preview = previewCalculation(w.db, auth, { ids: [contract.id], mode: "lastClosed" }, now).previews[0]!;
+    const preview = (await previewCalculation(w.db, auth, { ids: [contract.id], mode: "lastClosed" }, now)).previews[0]!;
     expect(preview).toMatchObject({ periodStart: "2026-10-01", periodEnd: "2026-10-31", blocked: null });
     expect(preview.conflicts.map((c) => c.billStatus)).toEqual(["Draft"]);
 
-    const again = calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed" }, now);
+    const again = await calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed" }, now);
     expect(again.reports).toHaveLength(0);
     expect(again.failed[0]).toMatchObject({ code: "DUPLICATE" });
 
-    const replaced = calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed", replaceDrafts: true }, now);
+    const replaced = await calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed", replaceDrafts: true }, now);
     // Round 6: recalculated in place, same bill id and number (one bill per period).
     expect(replaced.reports[0]).toMatchObject({ reportId: first.reports[0]!.reportId, billNumber: first.reports[0]!.billNumber, replaced: [] });
-    expect(w.db.select().from(schema.billingReports).all()).toHaveLength(1);
+    expect(await w.db.select().from(schema.billingReports)).toHaveLength(1);
 
-    approveReports(w.db, auth, actor(), [replaced.reports[0]!.reportId]);
-    const blocked = calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed", replaceDrafts: true }, now);
+    await approveReports(w.db, auth, actor(), [replaced.reports[0]!.reportId]);
+    const blocked = await calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed", replaceDrafts: true }, now);
     expect(blocked.failed[0]?.message).toMatch(/Approved bill .* already covers/);
   });
 
-  it("ends a to-date preview on today in the warehouse time zone", () => {
-    const contract = contractWithFees();
-    w.db.update(schema.warehouses).set({ timezone: "America/Chicago" }).where(eq(schema.warehouses.id, w.warehouseId)).run();
-    const out = calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "current" }, new Date("2026-11-10T01:30:00.000Z"));
+  it("ends a to-date preview on today in the warehouse time zone", async () => {
+    const contract = await contractWithFees();
+    await w.db.update(schema.warehouses).set({ timezone: "America/Chicago" }).where(eq(schema.warehouses.id, w.warehouseId));
+    const out = await calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "current" }, new Date("2026-11-10T01:30:00.000Z"));
     expect(out.reports[0]).toMatchObject({ periodStart: "2026-11-01", periodEnd: "2026-11-09" });
-    const stored = w.db.select().from(schema.billingReports).where(eq(schema.billingReports.id, out.reports[0]!.reportId)).get();
+    const stored = (await w.db.select().from(schema.billingReports).where(eq(schema.billingReports.id, out.reports[0]!.reportId)).limit(1))[0];
     expect(stored?.periodEnd).toBe("2026-11-09T23:59:59.999Z");
   });
 
-  it("lists every fee on the consolidated bill, including a zero split-month storage line", () => {
-    const contract = contractWithFees();
-    const out = calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed" }, new Date("2026-11-06T12:00:00.000Z"));
-    const lines = w.db.select().from(schema.billingReportLines).where(eq(schema.billingReportLines.reportId, out.reports[0]!.reportId)).all().filter((l) => !l.isDetail);
+  it("lists every fee on the consolidated bill, including a zero split-month storage line", async () => {
+    const contract = await contractWithFees();
+    const out = await calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed" }, new Date("2026-11-06T12:00:00.000Z"));
+    const lines = (await w.db.select().from(schema.billingReportLines).where(eq(schema.billingReportLines.reportId, out.reports[0]!.reportId))).filter((l) => !l.isDetail);
     expect(new Set(lines.map((l) => l.feeName))).toEqual(new Set(["Account", "Split"]));
     expect(lines.find((l) => l.feeName === "Split")).toMatchObject({ totalPrice: 0, note: "No activity in this period" });
   });
 
-  it("prices a tier-base fee and keeps its mode on the fee view", () => {
-    const contract = createContract(w.db, auth, actor(), contractSchema.parse({ name: "Volume", clientId: w.clientId, warehouseId: w.warehouseId, calcStartDate: "2026-10-01", frequency: "Monthly" }));
-    createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Acct", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", pricingMode: "tierBase", tiers: [{ fromQty: 1, toQty: 1, rate: 75 }, { fromQty: 2, toQty: null, rate: 60 }] }));
-    expect(getContract(w.db, auth, contract.id).fees[0]).toMatchObject({ pricingMode: "tierBase", conditions: [] });
-    const out = calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed" }, new Date("2026-11-06T12:00:00.000Z"));
+  it("prices a tier-base fee and keeps its mode on the fee view", async () => {
+    const contract = await createContract(w.db, auth, actor(), contractSchema.parse({ name: "Volume", clientId: w.clientId, warehouseId: w.warehouseId, calcStartDate: "2026-10-01", frequency: "Monthly" }));
+    await createFee(w.db, auth, actor(), contract.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Acct", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", pricingMode: "tierBase", tiers: [{ fromQty: 1, toQty: 1, rate: 75 }, { fromQty: 2, toQty: null, rate: 60 }] }));
+    expect((await getContract(w.db, auth, contract.id)).fees[0]).toMatchObject({ pricingMode: "tierBase", conditions: [] });
+    const out = await calculateContracts(w.db, auth, actor(), { ids: [contract.id], mode: "lastClosed" }, new Date("2026-11-06T12:00:00.000Z"));
     expect(out.reports[0]?.totalPrice).toBe(75);
   });
 
-  it("offers real Charge If values for lookup attributes", () => {
-    const contract = contractWithFees();
-    const channels = chargeIfValues(w.db, auth, contract.id, "soChannel").map((v) => v.value);
+  it("offers real Charge If values for lookup attributes", async () => {
+    const contract = await contractWithFees();
+    const channels = (await chargeIfValues(w.db, auth, contract.id, "soChannel")).map((v) => v.value);
     expect(channels).toContain("Shopify");
-    expect(chargeIfValues(w.db, auth, contract.id, "priority").map((v) => v.value)).toEqual(["None", "Low", "Medium", "High", "Urgent"]);
-    expect(chargeIfValues(w.db, auth, contract.id, "sku")).toEqual([]);
+    expect((await chargeIfValues(w.db, auth, contract.id, "priority")).map((v) => v.value)).toEqual(["None", "Low", "Medium", "High", "Urgent"]);
+    expect(await chargeIfValues(w.db, auth, contract.id, "sku")).toEqual([]);
   });
 });
 
@@ -140,8 +140,8 @@ describe("clients and addresses", () => {
   let w: World;
   let auth: AuthContext;
   const actor = () => ({ userId: w.userId, source: "Web" });
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   });
@@ -158,18 +158,18 @@ describe("clients and addresses", () => {
     expect(orgAddressSchema.safeParse({ ...ship, firstName: "Dana", lastName: "Ruiz", email: "d@example.com" }).success).toBe(true);
   });
 
-  it("returns a slim picker row without tax ID or contact data, and logs address adds explicitly", () => {
-    const created = createClient(w.db, auth, actor(), clientSchema.parse({ ...CLIENT_DEFAULTS, name: "Slim Co", code: "SLIM", officialName: "Slim Co LLC", taxId: "12-3456789", contactEmail: "a@slim.co",
+  it("returns a slim picker row without tax ID or contact data, and logs address adds explicitly", async () => {
+    const created = await createClient(w.db, auth, actor(), clientSchema.parse({ ...CLIENT_DEFAULTS, name: "Slim Co", code: "SLIM", officialName: "Slim Co LLC", taxId: "12-3456789", contactEmail: "a@slim.co",
       addresses: [{ ...ship, firstName: "Dana", lastName: "Ruiz", email: "d@slim.co" }] }));
-    const row = listClients(w.db, auth, { page: 1, pageSize: 50, filters: [], sort: [], q: "Slim" } as never).rows.find((r) => r.id === created.id)!;
+    const row = (await listClients(w.db, auth, { page: 1, pageSize: 50, filters: [], sort: [], q: "Slim" } as never)).rows.find((r) => r.id === created.id)!;
     const slim = slimClientRow(row) as Record<string, unknown>;
     expect(Object.keys(slim).sort()).toEqual(["code", "currency", "fullName", "id", "name", "officialName", "status"]);
     expect(slim.taxId).toBeUndefined();
 
-    const detail = getClient(w.db, auth, created.id);
-    updateClient(w.db, auth, actor(), created.id, clientSchema.parse({ ...CLIENT_DEFAULTS, name: "Slim Co", code: "SLIM", officialName: "Slim Co LLC", version: detail.version,
+    const detail = await getClient(w.db, auth, created.id);
+    await updateClient(w.db, auth, actor(), created.id, clientSchema.parse({ ...CLIENT_DEFAULTS, name: "Slim Co", code: "SLIM", officialName: "Slim Co LLC", version: detail.version,
       addresses: [...detail.addresses.map((a) => ({ ...a, line2: a.line2 ?? "", state: a.state ?? "", country: "US" })), { ...ship, name: "Returns", usageType: "Return" as const, isDefault: true }] }));
-    const messages = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, created.id)).all().map((l) => l.message);
+    const messages = (await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, created.id))).map((l) => l.message);
     expect(messages).toContain("Return address Returns added.");
     expect(messages.some((m) => /Address \d+ is modified/.test(m))).toBe(false);
   });

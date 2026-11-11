@@ -11,5 +11,5 @@ import { LISTING_EXCEPTIONS } from "@/lib/grid-defs/products/listings-grid";
 export const GET = defineRoute({
   permission: "settings.product_listing.view",
   query: z.object({ kind: z.enum(LISTING_EXCEPTIONS).optional() }).loose(),
-  handler: ({ db, auth, query }) => listListingExceptions(db, auth.viewScope, query.kind),
+  handler: async ({ db, auth, query }) => await listListingExceptions(db, auth.viewScope, query.kind),
 });

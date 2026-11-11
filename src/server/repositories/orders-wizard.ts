@@ -2,7 +2,8 @@
  * Create/edit wizard helpers (M01): customer prefill (Step 2) and draft rate shopping
  * (Step 4 "Get Rates" before the order exists). Reads only; scoped.
  */
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import { z } from "zod";
 import type { AppDb } from "@/server/api/db";
 import type { Scope } from "@/server/auth/scope";
@@ -61,28 +62,35 @@ function likeTerm(q: string): string {
  * then one-time customers from the client's previous orders (latest order per name + postal code).
  * Logiwa lists both, so typing "Oli" finds Olivia Martinez even when she only exists on orders.
  */
-export function customerSearch(db: AppDb, scope: Scope, clientId: string, q: string, limit = 20): readonly CustomerSearchItem[] {
+export async function customerSearch(db: AppDb, scope: Scope, clientId: string, q: string, limit = 20): Promise<readonly CustomerSearchItem[]> {
   if (!hasClient(scope, clientId)) return [];
   const term = likeTerm(q.trim());
   const cu = schema.customers;
-  const saved = db
+  const saved = (await db
     .select({ id: cu.id, firstName: cu.firstName, lastName: cu.lastName, email: cu.email })
     .from(cu)
-    .where(and(eq(cu.clientId, clientId), eq(cu.isActive, true), sql`(${cu.firstName} || ' ' || ${cu.lastName} LIKE ${term} ESCAPE '\\' OR ${cu.email} LIKE ${term} ESCAPE '\\' OR ${cu.phone} LIKE ${term} ESCAPE '\\')`))
+    .where(and(eq(cu.clientId, clientId), eq(cu.isActive, true), sql`(${cu.firstName} || ' ' || ${cu.lastName} ILIKE ${term} ESCAPE '\\' OR ${cu.email} ILIKE ${term} ESCAPE '\\' OR ${cu.phone} ILIKE ${term} ESCAPE '\\')`))
     .orderBy(asc(cu.firstName), asc(cu.lastName))
-    .limit(limit)
-    .all()
+    .limit(limit))
     .map((c): CustomerSearchItem => ({ value: c.id, label: `${c.firstName} ${c.lastName}`.trim(), description: c.email || "Saved customer", source: "customer" }));
   const so = schema.shipmentOrders;
   const savedNames = new Set(saved.map((s) => s.label.toLowerCase()));
-  const fromOrders = db
-    .select({ id: so.id, code: so.code, name: so.customerName, city: so.shipCity, state: so.shipState, zip: so.shipZip, at: sql<string>`MAX(${so.orderDate})` })
+  const fromOrders = (await db
+    // SQLite returned the bare columns of the MAX(order_date) row; Postgres needs it spelled out.
+    .select({
+      id: sql<string>`(array_agg(${so.id} ORDER BY ${so.orderDate} DESC, ${so.id} DESC))[1]`,
+      code: sql<string>`(array_agg(${so.code} ORDER BY ${so.orderDate} DESC, ${so.id} DESC))[1]`,
+      name: sql<string | null>`(array_agg(${so.customerName} ORDER BY ${so.orderDate} DESC, ${so.id} DESC))[1]`,
+      city: sql<string | null>`(array_agg(${so.shipCity} ORDER BY ${so.orderDate} DESC, ${so.id} DESC))[1]`,
+      state: sql<string | null>`(array_agg(${so.shipState} ORDER BY ${so.orderDate} DESC, ${so.id} DESC))[1]`,
+      zip: sql<string | null>`(array_agg(${so.shipZip} ORDER BY ${so.orderDate} DESC, ${so.id} DESC))[1]`,
+      at: sql<string>`MAX(${so.orderDate})`,
+    })
     .from(so)
-    .where(and(eq(so.clientId, clientId), isNull(so.deletedAt), isNull(so.customerId), sql`(${so.customerName} LIKE ${term} ESCAPE '\\' OR ${so.customerEmail} LIKE ${term} ESCAPE '\\')`))
+    .where(and(eq(so.clientId, clientId), isNull(so.deletedAt), isNull(so.customerId), sql`(${so.customerName} ILIKE ${term} ESCAPE '\\' OR ${so.customerEmail} ILIKE ${term} ESCAPE '\\')`))
     .groupBy(sql`lower(${so.customerName})`, sql`lower(COALESCE(${so.shipZip}, ''))`)
     .orderBy(sql`MAX(${so.orderDate}) DESC`)
-    .limit(limit)
-    .all()
+    .limit(limit))
     .filter((r) => r.name && !savedNames.has(r.name.toLowerCase()))
     .map((r): CustomerSearchItem => ({
       value: `${ORDER_CUSTOMER_PREFIX}${r.id}`,
@@ -94,9 +102,9 @@ export function customerSearch(db: AppDb, scope: Scope, clientId: string, q: str
 }
 
 /** Contact + ship-to of a previous order, shaped like a saved customer with one address. */
-function orderCustomerPrefill(db: AppDb, scope: Scope, orderId: string): CustomerPrefill | null {
+async function orderCustomerPrefill(db: AppDb, scope: Scope, orderId: string): Promise<CustomerPrefill | null> {
   const so = schema.shipmentOrders;
-  const o = db.select().from(so).where(and(eq(so.id, orderId), isNull(so.deletedAt))).get();
+  const o = (await db.select().from(so).where(and(eq(so.id, orderId), isNull(so.deletedAt))).limit(1))[0];
   if (!o || !hasClient(scope, o.clientId)) return null;
   const [first, ...rest] = (o.customerName ?? "").trim().split(/\s+/);
   return {
@@ -115,13 +123,13 @@ function orderCustomerPrefill(db: AppDb, scope: Scope, orderId: string): Custome
   };
 }
 
-export function customerPrefill(db: AppDb, scope: Scope, customerId: string): CustomerPrefill | null {
-  if (customerId.startsWith(ORDER_CUSTOMER_PREFIX)) return orderCustomerPrefill(db, scope, customerId.slice(ORDER_CUSTOMER_PREFIX.length));
-  const c = db.select().from(schema.customers).where(eq(schema.customers.id, customerId)).get();
+export async function customerPrefill(db: AppDb, scope: Scope, customerId: string): Promise<CustomerPrefill | null> {
+  if (customerId.startsWith(ORDER_CUSTOMER_PREFIX)) return await orderCustomerPrefill(db, scope, customerId.slice(ORDER_CUSTOMER_PREFIX.length));
+  const c = (await db.select().from(schema.customers).where(eq(schema.customers.id, customerId)).limit(1))[0];
   if (!c || !hasClient(scope, c.clientId)) return null;
   const a = schema.addresses;
-  const addresses = db.select().from(a).where(and(eq(a.ownerType, "customer"), eq(a.ownerId, c.id), eq(a.isActive, true)))
-    .orderBy(asc(a.usageType), asc(a.name)).all()
+  const addresses = (await db.select().from(a).where(and(eq(a.ownerType, "customer"), eq(a.ownerId, c.id), eq(a.isActive, true)))
+    .orderBy(asc(a.usageType), asc(a.name)))
     .map((r) => ({
       id: r.id, title: r.name ?? `${r.line1}, ${r.city}`, usageType: r.usageType, isDefault: r.isDefault, firstName: r.firstName, lastName: r.lastName,
       companyName: r.companyName, line1: r.line1, line2: r.line2, city: r.city, state: r.state, postalCode: r.postalCode, country: r.country,
@@ -170,31 +178,31 @@ const DEFAULT_BOX = { length: 10, width: 8, height: 4 };
 export async function draftRates(db: AppDb, scope: Scope, input: z.output<typeof draftRatesSchema>): Promise<DraftRatesResult> {
   if (!hasWarehouse(scope, input.warehouseId) || !hasClient(scope, input.clientId)) throw new DomainError("NOT_FOUND", "Warehouse not found");
   const pseudo = { warehouseId: input.warehouseId, clientId: input.clientId } as OrderRow;
-  const preset = input.presetId ? db.select().from(schema.rateShoppingPresets).where(eq(schema.rateShoppingPresets.id, input.presetId)).get() : undefined;
+  const preset = input.presetId ? (await db.select().from(schema.rateShoppingPresets).where(eq(schema.rateShoppingPresets.id, input.presetId)).limit(1))[0] : undefined;
   const presetServiceIds = preset && !preset.useAllServices
-    ? new Set(db.select().from(schema.rateShoppingPresetServices)
-      .where(and(eq(schema.rateShoppingPresetServices.presetId, preset.id), eq(schema.rateShoppingPresetServices.isSelected, true))).all().map((r) => r.carrierServiceId))
+    ? new Set((await db.select().from(schema.rateShoppingPresetServices)
+      .where(and(eq(schema.rateShoppingPresetServices.presetId, preset.id), eq(schema.rateShoppingPresetServices.isSelected, true)))).map((r) => r.carrierServiceId))
     : null;
-  const conns = db.select().from(schema.carrierConnections)
-    .where(and(eq(schema.carrierConnections.warehouseId, input.warehouseId), eq(schema.carrierConnections.isActive, true))).all();
+  const conns = await db.select().from(schema.carrierConnections)
+    .where(and(eq(schema.carrierConnections.warehouseId, input.warehouseId), eq(schema.carrierConnections.isActive, true)));
   const quotes: DraftRateQuote[] = [];
   const errors: { carrierConnectionId: string; message: string }[] = [];
   const box = input.package && input.package.length > 0 ? input.package : DEFAULT_BOX;
   for (const conn of conns) {
     try {
-      const { connection, adapter } = shipping.loadCarrier(db, conn.id, pseudo);
-      const services = db.select().from(schema.carrierServices)
-        .where(and(eq(schema.carrierServices.connectionId, conn.id), eq(schema.carrierServices.isActive, true))).all()
+      const { connection, adapter } = await shipping.loadCarrier(db, conn.id, pseudo);
+      const services = (await db.select().from(schema.carrierServices)
+        .where(and(eq(schema.carrierServices.connectionId, conn.id), eq(schema.carrierServices.isActive, true))))
         .filter((s) => !presetServiceIds || presetServiceIds.has(s.id));
       if (services.length === 0) continue;
       const result = await adapter.rate({
-        connection, services, from: shipping.warehouseAddress(db, input.warehouseId, connection),
+        connection, services, from: await shipping.warehouseAddress(db, input.warehouseId, connection),
         to: { ...input.to, name: input.to.name || "Recipient" }, packages: [{ weightOz: input.weightOz, ...box }],
       });
       for (const q of result) {
         quotes.push({
           carrierConnectionId: conn.id, carrierServiceId: q.carrierServiceId, serviceName: q.serviceName, carrierCode: q.carrierCode,
-          transitDays: q.transitDays, price: shipping.applyMarkup(db, connection, input.clientId, q.amount),
+          transitDays: q.transitDays, price: await shipping.applyMarkup(db, connection, input.clientId, q.amount),
         });
       }
     } catch (error) {
@@ -228,26 +236,26 @@ export interface OrderProductFacts {
 }
 
 /** Price / weight / kit flag / pack types / live ATP for products being added to an order (client-scoped). */
-export function productFacts(db: AppDb, scope: Scope, input: { ids: readonly string[]; warehouseId?: string | null }): readonly OrderProductFacts[] {
+export async function productFacts(db: AppDb, scope: Scope, input: { ids: readonly string[]; warehouseId?: string | null }): Promise<readonly OrderProductFacts[]> {
   if (input.ids.length === 0) return [];
   const p = schema.products;
-  const rows = db.select().from(p).where(inArray(p.id, [...input.ids])).all().filter((r) => hasClient(scope, r.clientId));
+  const rows = (await db.select().from(p).where(inArray(p.id, [...input.ids]))).filter((r) => hasClient(scope, r.clientId));
   if (rows.length === 0) return [];
-  const packs = db.select().from(schema.productPackTypes).where(inArray(schema.productPackTypes.productId, rows.map((r) => r.id))).all();
+  const packs = await db.select().from(schema.productPackTypes).where(inArray(schema.productPackTypes.productId, rows.map((r) => r.id)));
   const wh = input.warehouseId && hasWarehouse(scope, input.warehouseId) ? input.warehouseId : null;
   const atp = new Map<string, number>();
   const allocatable = new Map<string, number>();
   if (wh) {
     const i = schema.inventory;
-    for (const r of db.select({ productId: i.productId, n: sql<number>`COALESCE(SUM(${i.onHand} - ${i.allocated} - ${i.damaged}), 0)` }).from(i)
-      .where(and(inArray(i.productId, rows.map((x) => x.id)), eq(i.warehouseId, wh), eq(i.status, "Stock"))).groupBy(i.productId).all()) {
+    for (const r of await db.select({ productId: i.productId, n: sql<number>`COALESCE(SUM(${i.onHand} - ${i.allocated} - ${i.damaged}), 0)` }).from(i)
+      .where(and(inArray(i.productId, rows.map((x) => x.id)), eq(i.warehouseId, wh), eq(i.status, "Stock"))).groupBy(i.productId)) {
       atp.set(r.productId, Math.max(0, Number(r.n)));
     }
     const l = schema.locations;
-    for (const r of db.select({ productId: i.productId, n: sql<number>`COALESCE(SUM(${i.onHand} - ${i.allocated}), 0)` }).from(i)
+    for (const r of await db.select({ productId: i.productId, n: sql<number>`COALESCE(SUM(${i.onHand} - ${i.allocated}), 0)` }).from(i)
       .innerJoin(l, eq(l.id, i.locationId))
       .where(and(inArray(i.productId, rows.map((x) => x.id)), eq(i.warehouseId, wh), eq(i.status, "Stock"), isNull(i.damageReason),
-        eq(l.isActive, true), eq(l.isLocked, false), eq(l.preventAllocation, false), sql`${i.onHand} - ${i.allocated} > 0`)).groupBy(i.productId).all()) {
+        eq(l.isActive, true), eq(l.isLocked, false), eq(l.preventAllocation, false), sql`${i.onHand} - ${i.allocated} > 0`)).groupBy(i.productId)) {
       allocatable.set(r.productId, Math.max(0, Number(r.n)));
     }
   }
@@ -272,16 +280,16 @@ export interface OrderLedgerEntry {
 }
 
 /** Inventory events for the detail activity timeline: ledger transactions + allocations (newest first). */
-export function orderLedger(db: AppDb, orderId: string): readonly OrderLedgerEntry[] {
+export async function orderLedger(db: AppDb, orderId: string): Promise<readonly OrderLedgerEntry[]> {
   const t = schema.inventoryTransactions;
   const p = schema.products;
-  const txns = db.select({ id: t.id, type: t.type, qty: t.uomQty, at: t.at, source: t.source, sku: p.sku, loc: sql<string | null>`(SELECT code FROM locations WHERE id = COALESCE(${t.fromLocationId}, ${t.toLocationId}))` })
-    .from(t).innerJoin(p, eq(p.id, t.productId)).where(eq(t.orderId, orderId)).orderBy(sql`${t.seq} DESC`).limit(200).all()
+  const txns = (await db.select({ id: t.id, type: t.type, qty: t.uomQty, at: t.at, source: t.source, sku: p.sku, loc: sql<string | null>`(SELECT code FROM locations WHERE id = COALESCE(${t.fromLocationId}, ${t.toLocationId}))` })
+    .from(t).innerJoin(p, eq(p.id, t.productId)).where(eq(t.orderId, orderId)).orderBy(sql`${t.seq} DESC`).limit(200))
     .map((r) => ({ id: r.id, type: r.type, quantity: r.qty, at: r.at, source: r.source, sku: r.sku, detail: r.loc ? `Location ${r.loc}` : null }));
   const a = schema.inventoryAllocations;
-  const allocs = db.select({ id: a.id, qty: a.qty, status: a.status, at: a.createdAt, rule: a.ruleName, sku: p.sku, loc: sql<string | null>`(SELECT l.code FROM inventory i JOIN locations l ON l.id = i.location_id WHERE i.id = ${a.inventoryId})` })
+  const allocs = (await db.select({ id: a.id, qty: a.qty, status: a.status, at: a.createdAt, rule: a.ruleName, sku: p.sku, loc: sql<string | null>`(SELECT l.code FROM inventory i JOIN locations l ON l.id = i.location_id WHERE i.id = ${a.inventoryId})` })
     .from(a).innerJoin(schema.orderLines, eq(schema.orderLines.id, a.orderLineId)).innerJoin(p, eq(p.id, schema.orderLines.productId))
-    .where(eq(a.orderId, orderId)).limit(200).all()
+    .where(eq(a.orderId, orderId)).limit(200))
     .map((r) => ({ id: r.id, type: r.status === "Allocated" ? "Allocated" : `Allocation ${r.status.toLowerCase()}`, quantity: r.qty, at: r.at, source: r.rule ? `Rule ${r.rule}` : "Allocation", sku: r.sku, detail: r.loc ? `Location ${r.loc}` : null }));
   return [...txns, ...allocs].sort((x, y) => y.at.localeCompare(x.at));
 }

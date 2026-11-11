@@ -13,9 +13,9 @@ const bodySchema = changeStatusSchema.partial({ ids: true }).extend({ lineIds: z
 export const POST = defineRoute({
   permission: RETURN_PERMISSIONS.changeStatus,
   body: bodySchema,
-  handler: ({ db, auth, actor, body }) => {
-    const ids = body.ids ?? returnIdsForLines(db, auth.scope, body.lineIds ?? []);
+  handler: async ({ db, auth, actor, body }) => {
+    const ids = body.ids ?? await returnIdsForLines(db, auth.scope, body.lineIds ?? []);
     if (ids.length === 0) throw validationError("Select at least one return");
-    return changeReturnStatus(db, scopedCtx(actor, auth), { ...body, ids });
+    return await changeReturnStatus(db, scopedCtx(actor, auth), { ...body, ids });
   },
 });

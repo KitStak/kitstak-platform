@@ -55,51 +55,51 @@ describe("screen config repository", () => {
   const actor = () => ({ userId: w.userId, source: "Web" });
   const input = (over: Partial<ScreenConfigFormValues> = {}) => screenConfigSchema.parse({ ...screenConfigDefaults(w.warehouseId), name: "KS-TEST Inbound", ...over });
 
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   });
   afterEach(() => w.close());
 
-  it("creates, lists, edits with version checks, and logs changes", () => {
-    const { id } = createScreenConfig(w.db, auth, actor(), input());
-    const { rows, total } = listScreenConfigs(w.db, auth, EMPTY_GRID_QUERY);
+  it("creates, lists, edits with version checks, and logs changes", async () => {
+    const { id } = await createScreenConfig(w.db, auth, actor(), input());
+    const { rows, total } = await listScreenConfigs(w.db, auth, EMPTY_GRID_QUERY);
     expect(total).toBe(1);
     expect(rows[0]).toMatchObject({ name: "KS-TEST Inbound", screenName: "Receiving", isActive: true, conditionCount: 0 });
 
-    const d = loadScreenConfig(w.db, auth, id);
+    const d = await loadScreenConfig(w.db, auth, id);
     const steps = d.steps.map((s) => (s.key === "lot" ? { ...s, required: false } : s));
-    const res = updateScreenConfig(w.db, auth, actor(), id, input({ name: "KS-TEST Lot optional", steps, conditions: { join: "Or", clientIds: [w.clientId], poTypes: ["Purchase Order"], vendorIds: [] }, version: d.version }));
+    const res = await updateScreenConfig(w.db, auth, actor(), id, input({ name: "KS-TEST Lot optional", steps, conditions: { join: "Or", clientIds: [w.clientId], poTypes: ["Purchase Order"], vendorIds: [] }, version: d.version }));
     expect(res.version).toBe(2);
-    expect(() => updateScreenConfig(w.db, auth, actor(), id, input({ version: 1 }))).toThrow(/changed since you opened it/);
+    await expect(async () => await updateScreenConfig(w.db, auth, actor(), id, input({ version: 1 }))).rejects.toThrow(/changed since you opened it/);
 
-    const log = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id)).all();
+    const log = await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id));
     expect(log.map((l) => l.type)).toEqual(expect.arrayContaining(["Create", "Update"]));
   });
 
-  it("rejects a duplicate name in the same warehouse and a warehouse outside scope", () => {
-    createScreenConfig(w.db, auth, actor(), input());
-    expect(() => createScreenConfig(w.db, auth, actor(), input({ name: "ks-test inbound" }))).toThrow(/already exists/);
-    expect(() => createScreenConfig(w.db, auth, actor(), input({ warehouseId: "nope" }))).toThrow(/warehouse you have access to/);
+  it("rejects a duplicate name in the same warehouse and a warehouse outside scope", async () => {
+    await createScreenConfig(w.db, auth, actor(), input());
+    await expect(async () => await createScreenConfig(w.db, auth, actor(), input({ name: "ks-test inbound" }))).rejects.toThrow(/already exists/);
+    await expect(async () => await createScreenConfig(w.db, auth, actor(), input({ warehouseId: "nope" }))).rejects.toThrow(/warehouse you have access to/);
   });
 
-  it("duplicates as inactive, toggles status and deletes", () => {
-    const { id } = createScreenConfig(w.db, auth, actor(), input());
-    const copy = duplicateScreenConfig(w.db, auth, actor(), id);
+  it("duplicates as inactive, toggles status and deletes", async () => {
+    const { id } = await createScreenConfig(w.db, auth, actor(), input());
+    const copy = await duplicateScreenConfig(w.db, auth, actor(), id);
     expect(copy.name).toBe("KS-TEST Inbound (copy)");
-    expect(loadScreenConfig(w.db, auth, copy.id).isActive).toBe(false);
-    expect(setScreenConfigsActive(w.db, auth, actor(), [copy.id], true).succeeded).toEqual([copy.id]);
-    expect(deleteScreenConfigs(w.db, auth, actor(), [copy.id, "missing"]).failed.map((f) => f.id)).toEqual(["missing"]);
+    expect((await loadScreenConfig(w.db, auth, copy.id)).isActive).toBe(false);
+    expect((await setScreenConfigsActive(w.db, auth, actor(), [copy.id], true)).succeeded).toEqual([copy.id]);
+    expect((await deleteScreenConfigs(w.db, auth, actor(), [copy.id, "missing"])).failed.map((f) => f.id)).toEqual(["missing"]);
   });
 
-  it("picks the condition-specific config before the catch-all and feeds M05's receiving requirements", () => {
+  it("picks the condition-specific config before the catch-all and feeds M05's receiving requirements", async () => {
     const optionalLot = defaultSteps().map((s) => (s.key === "lot" ? { ...s, required: false } : s));
-    const all = createScreenConfig(w.db, auth, actor(), input({ name: "All POs" }));
-    const returns = createScreenConfig(w.db, auth, actor(), input({ name: "Returns", steps: optionalLot, conditions: { join: "And", clientIds: [], poTypes: ["Return Order"], vendorIds: [] } }));
-    expect(configForPurchaseOrder(w.db, w.warehouseId, { clientId: w.clientId, poType: "Return Order", vendorId: null })?.id).toBe(returns.id);
-    expect(configForPurchaseOrder(w.db, w.warehouseId, { clientId: w.clientId, poType: "Purchase Order", vendorId: null })?.id).toBe(all.id);
-    const req = receivingRequirements(w.db, w.warehouseId, { lot: true, expiry: true, production: false, serial: false });
+    const all = await createScreenConfig(w.db, auth, actor(), input({ name: "All POs" }));
+    const returns = await createScreenConfig(w.db, auth, actor(), input({ name: "Returns", steps: optionalLot, conditions: { join: "And", clientIds: [], poTypes: ["Return Order"], vendorIds: [] } }));
+    expect((await configForPurchaseOrder(w.db, w.warehouseId, { clientId: w.clientId, poType: "Return Order", vendorId: null }))?.id).toBe(returns.id);
+    expect((await configForPurchaseOrder(w.db, w.warehouseId, { clientId: w.clientId, poType: "Purchase Order", vendorId: null }))?.id).toBe(all.id);
+    const req = await receivingRequirements(w.db, w.warehouseId, { lot: true, expiry: true, production: false, serial: false });
     expect(req.lot).toBe(false);
     expect(req.expiry).toBe(true);
   });

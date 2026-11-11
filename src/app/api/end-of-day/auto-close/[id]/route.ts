@@ -6,5 +6,5 @@ import { deleteAutoCloseRule } from "@/server/repositories/shipping-carrier-ops"
 export const DELETE = defineRoute({
   permission: "fulfillment.end_of_day.print_end_of_the_day_report",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => deleteAutoCloseRule(db, auth, domainCtx(actor, auth), params.id),
+  handler: async ({ db, auth, actor, params }) => await deleteAutoCloseRule(db, auth, domainCtx(actor, auth), params.id),
 });

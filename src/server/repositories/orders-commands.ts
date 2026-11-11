@@ -18,6 +18,7 @@ import { checkScope } from "@/server/domain/types";
 import { BILLING_PARTY_TYPES, EXPORT_REASONS, TAX_TYPES } from "@/lib/enums";
 import type { OrderRecord } from "./orders";
 import { changeLogMark, tidyOrderChangeLog } from "./orders-change-log";
+import { dbGet, withWriteTx } from "@/server/db/sql";
 
 const so = schema.shipmentOrders;
 const optText = (max = 500) => z.string().trim().max(max).nullish();
@@ -87,28 +88,28 @@ function splitExtras<T extends Record<string, unknown>>(input: T): { header: Omi
 
 /* --------------------------------------------------- human-readable values */
 
-const nameOf = (db: AppDb, table: "retailers" | "lookup" | "package" | "service" | "address", id: unknown): string | null => {
+const nameOf = async (db: AppDb, table: "retailers" | "lookup" | "package" | "service" | "address", id: unknown): Promise<string | null> => {
   if (typeof id !== "string" || !id) return null;
   switch (table) {
-    case "retailers": return db.select({ v: schema.retailers.name }).from(schema.retailers).where(eq(schema.retailers.id, id)).get()?.v ?? null;
-    case "lookup": return db.select({ v: schema.lookupValues.name }).from(schema.lookupValues).where(eq(schema.lookupValues.id, id)).get()?.v ?? null;
-    case "package": return db.select({ v: schema.shipmentPackages.code }).from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, id)).get()?.v ?? null;
-    case "service": return db.select({ v: schema.carrierServices.name }).from(schema.carrierServices).where(eq(schema.carrierServices.id, id)).get()?.v ?? null;
-    case "address": return db.select({ v: schema.addresses.name }).from(schema.addresses).where(eq(schema.addresses.id, id)).get()?.v ?? null;
+    case "retailers": return (await db.select({ v: schema.retailers.name }).from(schema.retailers).where(eq(schema.retailers.id, id)).limit(1))[0]?.v ?? null;
+    case "lookup": return (await db.select({ v: schema.lookupValues.name }).from(schema.lookupValues).where(eq(schema.lookupValues.id, id)).limit(1))[0]?.v ?? null;
+    case "package": return (await db.select({ v: schema.shipmentPackages.code }).from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, id)).limit(1))[0]?.v ?? null;
+    case "service": return (await db.select({ v: schema.carrierServices.name }).from(schema.carrierServices).where(eq(schema.carrierServices.id, id)).limit(1))[0]?.v ?? null;
+    case "address": return (await db.select({ v: schema.addresses.name }).from(schema.addresses).where(eq(schema.addresses.id, id)).limit(1))[0]?.v ?? null;
   }
 };
 
 /** Snapshot of the extra fields with ids resolved to names (change-log values). */
-export function displayExtras(db: AppDb, values: Readonly<Record<string, unknown>>, keys: readonly string[]): Record<string, unknown> {
+export async function displayExtras(db: AppDb, values: Readonly<Record<string, unknown>>, keys: readonly string[]): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = {};
   for (const key of keys) {
     const v = values[key];
     switch (key) {
-      case "retailerId": out.retailer = nameOf(db, "retailers", v); break;
-      case "packingWarningTypeId": out.packingWarningType = nameOf(db, "lookup", v); break;
-      case "shipmentPackageId": out.shipmentPackage = nameOf(db, "package", v); break;
-      case "returnCarrierServiceId": out.returnShippingOption = nameOf(db, "service", v); break;
-      case "returnAddressId": out.returnAddress = nameOf(db, "address", v); break;
+      case "retailerId": out.retailer = await nameOf(db, "retailers", v); break;
+      case "packingWarningTypeId": out.packingWarningType = await nameOf(db, "lookup", v); break;
+      case "shipmentPackageId": out.shipmentPackage = await nameOf(db, "package", v); break;
+      case "returnCarrierServiceId": out.returnShippingOption = await nameOf(db, "service", v); break;
+      case "returnAddressId": out.returnAddress = await nameOf(db, "address", v); break;
       case "customerId": break;
       case "trackingNumbers":
       case "returnTrackingNumbers": out[key] = Array.isArray(v) ? v.join(", ") : v ?? null; break;
@@ -123,62 +124,62 @@ export function displayExtras(db: AppDb, values: Readonly<Record<string, unknown
   return out;
 }
 
-function applyExtras(tx: AppDb, ctx: DomainCtx, order: OrderRecord, extras: Partial<OrderExtras>, log: boolean): void {
+async function applyExtras(tx: AppDb, ctx: DomainCtx, order: OrderRecord, extras: Partial<OrderExtras>, log: boolean): Promise<void> {
   const keys = Object.keys(extras);
   if (keys.length === 0) return;
-  if (extras.retailerId && !tx.select({ id: schema.retailers.id }).from(schema.retailers).where(eq(schema.retailers.id, extras.retailerId)).get()) {
+  if (extras.retailerId && !(await tx.select({ id: schema.retailers.id }).from(schema.retailers).where(eq(schema.retailers.id, extras.retailerId)).limit(1))[0]) {
     throw new DomainError("VALIDATION", "Retailer not found");
   }
   if (extras.shipmentPackageId) {
-    const pkg = tx.select({ wh: schema.shipmentPackages.warehouseId }).from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, extras.shipmentPackageId)).get();
+    const pkg = (await tx.select({ wh: schema.shipmentPackages.warehouseId }).from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, extras.shipmentPackageId)).limit(1))[0];
     if (!pkg || pkg.wh !== order.warehouseId) throw new DomainError("VALIDATION", "Shipment package not found in this warehouse");
   }
   const set = Object.fromEntries(keys.map((k) => [k, (extras as Record<string, unknown>)[k] ?? null])) as Partial<typeof so.$inferInsert>;
   if (extras.totalShippingCost === undefined) delete set.totalShippingCost;
   if (extras.discount === undefined) delete set.discount;
-  tx.update(so).set({ ...set, updatedBy: ctx.userId }).where(eq(so.id, order.id)).run();
+  await tx.update(so).set({ ...set, updatedBy: ctx.userId }).where(eq(so.id, order.id));
   if (log) {
-    const before = displayExtras(tx, order as unknown as Record<string, unknown>, keys);
-    const after = displayExtras(tx, extras as Record<string, unknown>, keys);
-    changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before, after });
+    const before = await displayExtras(tx, order as unknown as Record<string, unknown>, keys);
+    const after = await displayExtras(tx, extras as Record<string, unknown>, keys);
+    await changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before, after });
   }
 }
 
 /* ------------------------------------------------------------ create/update */
 
-function loadOrder(tx: AppDb, ctx: DomainCtx, id: string): OrderRecord {
-  return orders.loadOrderRow(tx, ctx, id);
+async function loadOrder(tx: AppDb, ctx: DomainCtx, id: string): Promise<OrderRecord> {
+  return await orders.loadOrderRow(tx, ctx, id);
 }
 
 /** `opts.trigger`: imports pass "Shipment Order Imported" so M12 workflows on that trigger run. */
-export function createOrder(tx: AppDb, ctx: DomainCtx, body: z.output<typeof createOrderBodySchema>, opts: orders.CreateOrderOptions = {}): OrderRecord {
+export async function createOrder(tx: AppDb, ctx: DomainCtx, body: z.output<typeof createOrderBodySchema>, opts: orders.CreateOrderOptions = {}): Promise<OrderRecord> {
   const { autoCode, ...rest } = body;
   const { header, extras } = splitExtras(rest);
   // A stale auto code (another user saved it first) must never block the save: take the next free value.
   if (autoCode) delete (header as { code?: string }).code;
   if (extras.customerId) {
-    const customer = tx.select().from(schema.customers).where(eq(schema.customers.id, extras.customerId)).get();
+    const customer = (await tx.select().from(schema.customers).where(eq(schema.customers.id, extras.customerId)).limit(1))[0];
     if (!customer || customer.clientId !== header.clientId) throw new DomainError("VALIDATION", "Customer not found for this client");
   }
-  const order = orders.createOrder(tx, ctx, header as orders.CreateOrderInput, opts);
-  applyExtras(tx, ctx, order, extras, false);
+  const order = await orders.createOrder(tx, ctx, header as orders.CreateOrderInput, opts);
+  await applyExtras(tx, ctx, order, extras, false);
   // One change-log entry per line is written by `orders.createOrder` itself (REQ-2 applied).
-  return loadOrder(tx, ctx, order.id);
+  return await loadOrder(tx, ctx, order.id);
 }
 
-export function updateOrder(tx: AppDb, ctx: DomainCtx, id: string, body: z.output<typeof updateOrderBodySchema>): OrderRecord {
-  const mark = changeLogMark(tx);
-  const out = updateOrderInner(tx, ctx, id, body);
+export async function updateOrder(tx: AppDb, ctx: DomainCtx, id: string, body: z.output<typeof updateOrderBodySchema>): Promise<OrderRecord> {
+  const mark = await changeLogMark(tx);
+  const out = await updateOrderInner(tx, ctx, id, body);
   // One readable entry per user-visible field (Priority "3 · High --> 5 · Urgent", formatted dates).
-  tidyOrderChangeLog(tx, [out.id], mark);
+  await tidyOrderChangeLog(tx, [out.id], mark);
   return out;
 }
 
-function updateOrderInner(tx: AppDb, ctx: DomainCtx, id: string, body: z.output<typeof updateOrderBodySchema>): OrderRecord {
-  const before = loadOrder(tx, ctx, id);
+async function updateOrderInner(tx: AppDb, ctx: DomainCtx, id: string, body: z.output<typeof updateOrderBodySchema>): Promise<OrderRecord> {
+  const before = await loadOrder(tx, ctx, id);
   const { header, extras } = splitExtras(body.patch as Record<string, unknown>);
   if ("warehouseId" in header || "clientId" in header) throw new DomainError("VALIDATION", "Warehouse and client can't be changed on an existing order.");
-  const updated = orders.updateOrder(tx, ctx, { id, version: body.version, patch: header, lines: body.lines });
+  const updated = await orders.updateOrder(tx, ctx, { id, version: body.version, patch: header, lines: body.lines });
   const changedExtras = Object.fromEntries(Object.entries(extras).filter(([k, v]) => JSON.stringify(v ?? null) !== JSON.stringify((before as Record<string, unknown>)[k] ?? null)));
   if (Object.keys(changedExtras).length > 0) {
     const terminal = ["Shipped", "Partially Shipped", "Delivered", "Cancelled"].includes(before.status);
@@ -186,9 +187,9 @@ function updateOrderInner(tx: AppDb, ctx: DomainCtx, id: string, body: z.output<
     if (terminal && Object.keys(changedExtras).some((k) => !allowed.has(k))) {
       throw new DomainError("INVALID_STATE", `Only notes and return info can be changed on an order in ${before.status} status.`);
     }
-    applyExtras(tx, ctx, updated, changedExtras, true);
+    await applyExtras(tx, ctx, updated, changedExtras, true);
   }
-  return loadOrder(tx, ctx, id);
+  return await loadOrder(tx, ctx, id);
 }
 
 /** Line add / edit / delete on a saved order: the domain replaces the full line set. */
@@ -197,9 +198,9 @@ export type LineOp =
   | { readonly kind: "edit"; readonly lineId: string; readonly patch: Partial<orders.OrderLineInput> }
   | { readonly kind: "delete"; readonly lineId: string };
 
-export function changeLine(tx: AppDb, ctx: DomainCtx, orderId: string, version: number, op: LineOp): OrderRecord {
-  const order = loadOrder(tx, ctx, orderId);
-  const current = tx.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, order.id)).all();
+export async function changeLine(tx: AppDb, ctx: DomainCtx, orderId: string, version: number, op: LineOp): Promise<OrderRecord> {
+  const order = await loadOrder(tx, ctx, orderId);
+  const current = await tx.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, order.id));
   const asInput = (l: (typeof current)[number]) => ({
     id: l.id, productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice, packType: l.packType,
     lotNumber: l.lotNumber, expiryDate: l.expiryDate, productionDate: l.productionDate, damageReason: l.damageReason,
@@ -214,17 +215,17 @@ export function changeLine(tx: AppDb, ctx: DomainCtx, orderId: string, version: 
       next = next.filter((l) => l.id !== op.lineId);
     } else next = next.map((l) => (l.id === op.lineId ? { ...l, ...op.patch, id: l.id } : l));
   }
-  return orders.updateOrder(tx, ctx, { id: order.id, version, lines: next });
+  return await orders.updateOrder(tx, ctx, { id: order.id, version, lines: next });
 }
 
 /* ----------------------------------------------------------- code / address */
 
-export function peekOrderCode(tx: AppDb): string {
-  return tx.transaction((inner) => orders.peekFreeOrderCode(inner));
+export async function peekOrderCode(tx: AppDb): Promise<string> {
+  return await withWriteTx(tx, async (inner) => await orders.peekFreeOrderCode(inner));
 }
 
-export function codeAvailable(db: AppDb, code: string, excludeId?: string): boolean {
-  const row = db.select({ id: so.id }).from(so).where(eq(sql`upper(${so.code})`, code.trim().toUpperCase())).get();
+export async function codeAvailable(db: AppDb, code: string, excludeId?: string): Promise<boolean> {
+  const row = (await db.select({ id: so.id }).from(so).where(eq(sql`upper(${so.code})`, code.trim().toUpperCase())).limit(1))[0];
   return !row || row.id === excludeId;
 }
 
@@ -242,16 +243,16 @@ export function checkAddress(input: z.output<typeof addressCheckSchema>): Addres
 }
 
 /** Re-verifies a saved order's ship-to address and stores the normalized result. */
-export function verifyOrderAddress(tx: AppDb, ctx: DomainCtx, orderId: string, version: number): OrderRecord {
-  const order = loadOrder(tx, ctx, orderId);
+export async function verifyOrderAddress(tx: AppDb, ctx: DomainCtx, orderId: string, version: number): Promise<OrderRecord> {
+  const order = await loadOrder(tx, ctx, orderId);
   const check = verifyAddress({ line1: order.shipAddress, line2: order.shipAddress2, city: order.shipCity, state: order.shipState, postalCode: order.shipZip, country: order.shipCountry });
   if (order.version !== version) throw new DomainError("CONFLICT", "This record changed since you opened it — Reload");
-  const after = tx.update(so).set({
+  const after = (await tx.update(so).set({
     shipAddress: check.normalized.line1, shipAddress2: null, shipState: check.normalized.state ?? order.shipState, shipCountry: check.normalized.country,
     addressVerificationStatus: check.status, addressVerificationNotes: [...check.notes], skipAddressVerification: false,
     updatedBy: ctx.userId, version: sql`${so.version} + 1`,
-  }).where(eq(so.id, order.id)).returning().get();
-  changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: order, after });
+  }).where(eq(so.id, order.id)).returning())[0];
+  await changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: order, after });
   return after;
 }
 
@@ -266,27 +267,27 @@ export const STRANDED_ALLOCATION_MS = 15 * 60_000;
  * modal can still leave one behind, so such orders are deallocated back to Open (the domain
  * logs the status and line allocation changes). Returns the codes reverted.
  */
-export function revertStrandedAllocations(db: AppDb, ctx: DomainCtx, opts: { readonly olderThanMs?: number; readonly now?: number; readonly ids?: readonly string[] } = {}): readonly string[] {
+export async function revertStrandedAllocations(db: AppDb, ctx: DomainCtx, opts: { readonly olderThanMs?: number; readonly now?: number; readonly ids?: readonly string[] } = {}): Promise<readonly string[]> {
   const cutoff = new Date((opts.now ?? Date.now()) - (opts.olderThanMs ?? STRANDED_ALLOCATION_MS)).toISOString();
   const conds = [eq(so.status, "Ready to Pick"), isNull(so.jobId), isNull(so.deletedAt), sql`${so.updatedAt} <= ${cutoff}`];
   if (opts.ids) {
     if (opts.ids.length === 0) return [];
     conds.push(inArray(so.id, [...opts.ids]));
   }
-  const stranded = db.select({ id: so.id, code: so.code }).from(so).where(and(...conds)).all();
+  const stranded = await db.select({ id: so.id, code: so.code }).from(so).where(and(...conds));
   if (stranded.length === 0) return [];
-  const result = allocation.deallocate(db, ctx, { orderIds: stranded.map((r) => r.id) });
+  const result = await allocation.deallocate(db, ctx, { orderIds: stranded.map((r) => r.id) });
   const ok = new Set(result.succeeded);
   return stranded.filter((r) => ok.has(r.id)).map((r) => r.code);
 }
 
 let lastStrandedSweep = 0;
 /** At most once a minute per server process: sweep stranded allocations (called from the backlog list). */
-export function sweepStrandedAllocations(db: AppDb, ctx: DomainCtx, now: number = Date.now()): readonly string[] {
+export async function sweepStrandedAllocations(db: AppDb, ctx: DomainCtx, now: number = Date.now()): Promise<readonly string[]> {
   if (now - lastStrandedSweep < 60_000) return [];
   lastStrandedSweep = now;
   try {
-    return revertStrandedAllocations(db, ctx, { now });
+    return await revertStrandedAllocations(db, ctx, { now });
   } catch (error) {
     console.warn("[orders] stranded allocation sweep skipped", error);
     return [];
@@ -295,41 +296,41 @@ export function sweepStrandedAllocations(db: AppDb, ctx: DomainCtx, now: number 
 
 /* ---------------------------------------------------------- bulk commands */
 
-export function cancelPicking(tx: AppDb, ctx: DomainCtx, ids: readonly string[]): BulkResult {
-  return runBulk(tx, ids, (inner, id) => {
-    const order = loadOrder(inner, ctx, id);
-    const active = inner.select({ id: schema.tasks.id, status: schema.tasks.status }).from(schema.tasks)
-      .where(and(eq(schema.tasks.orderId, id), inArray(schema.tasks.status, ["Pending", "Started"]), inArray(schema.tasks.taskType, ["Picking", "Packing", "Sorting"]))).all();
+export async function cancelPicking(tx: AppDb, ctx: DomainCtx, ids: readonly string[]): Promise<BulkResult> {
+  return await runBulk(tx, ids, async (inner, id) => {
+    const order = await loadOrder(inner, ctx, id);
+    const active = await inner.select({ id: schema.tasks.id, status: schema.tasks.status }).from(schema.tasks)
+      .where(and(eq(schema.tasks.orderId, id), inArray(schema.tasks.status, ["Pending", "Started"]), inArray(schema.tasks.taskType, ["Picking", "Packing", "Sorting"])));
     if (active.length === 0) throw new DomainError("INVALID_STATE", "The Cancel Picking operation is only available for the orders that have active picking/packing tasks.");
     if (active.some((t) => t.status === "Started")) throw new DomainError("INVALID_STATE", `Picking has started for ${order.code}; finish or cancel the started tasks from the job first.`);
-    const mark = changeLogMark(inner);
-    const jobCode = order.jobId ? inner.select({ code: schema.jobs.code }).from(schema.jobs).where(eq(schema.jobs.id, order.jobId)).get()?.code ?? null : null;
-    tasks.cancel(inner, ctx, { taskIds: active.map((t) => t.id) });
-    const fresh = loadOrder(inner, ctx, id);
-    if (!fresh.jobId && ["Ready to Pick", "Shortage"].includes(fresh.status)) allocation.deallocate(inner, ctx, { orderIds: [id] });
+    const mark = await changeLogMark(inner);
+    const jobCode = order.jobId ? (await inner.select({ code: schema.jobs.code }).from(schema.jobs).where(eq(schema.jobs.id, order.jobId)).limit(1))[0]?.code ?? null : null;
+    await tasks.cancel(inner, ctx, { taskIds: active.map((t) => t.id) });
+    const fresh = await loadOrder(inner, ctx, id);
+    if (!fresh.jobId && ["Ready to Pick", "Shortage"].includes(fresh.status)) await allocation.deallocate(inner, ctx, { orderIds: [id] });
     // Job unassignment is logged symmetrically with assignment ("Job is modified. Job005302 --> —").
-    if (jobCode && !fresh.jobId && !jobRemovalLogged(inner, id, mark)) {
-      changeLog.recordUpdate(inner, ctx, { entityType: "shipment_order", entityId: id, entityCode: order.code, before: { jobId: jobCode }, after: { jobId: null } });
+    if (jobCode && !fresh.jobId && !(await jobRemovalLogged(inner, id, mark))) {
+      await changeLog.recordUpdate(inner, ctx, { entityType: "shipment_order", entityId: id, entityCode: order.code, before: { jobId: jobCode }, after: { jobId: null } });
     }
   });
 }
 
-function jobRemovalLogged(tx: AppDb, orderId: string, mark: number): boolean {
-  return Boolean(tx.get<{ n: number }>(sql`SELECT 1 AS n FROM change_log WHERE rowid > ${mark} AND entity_type = 'shipment_order' AND entity_id = ${orderId} AND field = 'jobId' LIMIT 1`));
+async function jobRemovalLogged(tx: AppDb, orderId: string, mark: number): Promise<boolean> {
+  return Boolean(await dbGet<{ n: number }>(tx, sql`SELECT 1 AS n FROM change_log WHERE rowid > ${mark} AND entity_type = 'shipment_order' AND entity_id = ${orderId} AND field = 'jobId' LIMIT 1`));
 }
 
-function resolveShort(tx: AppDb, ctx: DomainCtx, ids: readonly string[], field: "pickShortStatus" | "packShortStatus"): BulkResult {
+async function resolveShort(tx: AppDb, ctx: DomainCtx, ids: readonly string[], field: "pickShortStatus" | "packShortStatus"): Promise<BulkResult> {
   const label = field === "pickShortStatus" ? "pick short" : "pack short";
-  return runBulk(tx, ids, (inner, id) => {
-    const order = loadOrder(inner, ctx, id);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const order = await loadOrder(inner, ctx, id);
     if (order[field] !== "Open") throw new DomainError("INVALID_STATE", `Order ${order.code} has no open ${label} to resolve.`);
-    inner.update(so).set({ [field]: "Resolved", updatedBy: ctx.userId, version: sql`${so.version} + 1` }).where(eq(so.id, id)).run();
-    changeLog.recordUpdate(inner, ctx, { entityType: "shipment_order", entityId: id, entityCode: order.code, before: { [field]: order[field] }, after: { [field]: "Resolved" } });
+    await inner.update(so).set({ [field]: "Resolved", updatedBy: ctx.userId, version: sql`${so.version} + 1` }).where(eq(so.id, id));
+    await changeLog.recordUpdate(inner, ctx, { entityType: "shipment_order", entityId: id, entityCode: order.code, before: { [field]: order[field] }, after: { [field]: "Resolved" } });
   });
 }
 
-export const resolvePickShort = (tx: AppDb, ctx: DomainCtx, ids: readonly string[]): BulkResult => resolveShort(tx, ctx, ids, "pickShortStatus");
-export const resolvePackShort = (tx: AppDb, ctx: DomainCtx, ids: readonly string[]): BulkResult => resolveShort(tx, ctx, ids, "packShortStatus");
+export const resolvePickShort = async (tx: AppDb, ctx: DomainCtx, ids: readonly string[]): Promise<BulkResult> => await resolveShort(tx, ctx, ids, "pickShortStatus");
+export const resolvePackShort = async (tx: AppDb, ctx: DomainCtx, ids: readonly string[]): Promise<BulkResult> => await resolveShort(tx, ctx, ids, "packShortStatus");
 
 export const returnInfoSchema = z.object({
   ids: z.array(z.string().min(1).max(64)).min(1).max(1000),
@@ -340,14 +341,14 @@ export const returnInfoSchema = z.object({
   message: "Enter at least one return field", path: ["returnCarrierServiceId"],
 });
 
-export function updateReturnInfo(tx: AppDb, ctx: DomainCtx, input: z.output<typeof returnInfoSchema>): BulkResult {
+export async function updateReturnInfo(tx: AppDb, ctx: DomainCtx, input: z.output<typeof returnInfoSchema>): Promise<BulkResult> {
   const { ids, ...fields } = input;
   const extras = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)) as Partial<OrderExtras>;
-  return runBulk(tx, ids, (inner, id) => {
-    const order = loadOrder(inner, ctx, id);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const order = await loadOrder(inner, ctx, id);
     if (!["Shipped", "Partially Shipped", "Delivered"].includes(order.status)) throw new DomainError("INVALID_STATE", `Return info applies to shipped orders; ${order.code} is ${order.status}.`);
-    applyExtras(inner, ctx, order, extras, true);
-    inner.update(so).set({ version: sql`${so.version} + 1` }).where(eq(so.id, id)).run();
+    await applyExtras(inner, ctx, order, extras, true);
+    await inner.update(so).set({ version: sql`${so.version} + 1` }).where(eq(so.id, id));
   });
 }
 
@@ -355,17 +356,17 @@ export function updateReturnInfo(tx: AppDb, ctx: DomainCtx, input: z.output<type
  * LOCAL ADAPTER (REQ-3): detaches the order's not-yet-shipped serial numbers. Replace
  * with `ledger.unassignOrderSerials` once foundation adds it.
  */
-export function removeSerials(tx: AppDb, ctx: DomainCtx, ids: readonly string[]): BulkResult {
-  return runBulk(tx, ids, (inner, id) => {
-    const order = loadOrder(inner, ctx, id);
-    const lines = inner.select({ id: schema.orderLines.id, sku: schema.products.sku }).from(schema.orderLines)
-      .innerJoin(schema.products, eq(schema.products.id, schema.orderLines.productId)).where(eq(schema.orderLines.orderId, id)).all();
+export async function removeSerials(tx: AppDb, ctx: DomainCtx, ids: readonly string[]): Promise<BulkResult> {
+  return await runBulk(tx, ids, async (inner, id) => {
+    const order = await loadOrder(inner, ctx, id);
+    const lines = await inner.select({ id: schema.orderLines.id, sku: schema.products.sku }).from(schema.orderLines)
+      .innerJoin(schema.products, eq(schema.products.id, schema.orderLines.productId)).where(eq(schema.orderLines.orderId, id));
     let removed = 0;
     for (const line of lines) {
-      const serials = inner.select().from(schema.serialNumbers).where(and(eq(schema.serialNumbers.orderLineId, line.id), isNull(schema.serialNumbers.shipmentId))).all();
+      const serials = await inner.select().from(schema.serialNumbers).where(and(eq(schema.serialNumbers.orderLineId, line.id), isNull(schema.serialNumbers.shipmentId)));
       if (serials.length === 0) continue;
-      inner.update(schema.serialNumbers).set({ orderLineId: null, updatedBy: ctx.userId }).where(inArray(schema.serialNumbers.id, serials.map((s) => s.id))).run();
-      changeLog.recordLine(inner, ctx, { entityType: "shipment_order", entityId: id, entityCode: order.code, lineEntityType: "order_line", lineEntityId: line.id, lineLabel: line.sku, field: "serialNumbers", from: serials.map((s) => s.primarySerial).join(", "), to: "" });
+      await inner.update(schema.serialNumbers).set({ orderLineId: null, updatedBy: ctx.userId }).where(inArray(schema.serialNumbers.id, serials.map((s) => s.id)));
+      await changeLog.recordLine(inner, ctx, { entityType: "shipment_order", entityId: id, entityCode: order.code, lineEntityType: "order_line", lineEntityId: line.id, lineLabel: line.sku, field: "serialNumbers", from: serials.map((s) => s.primarySerial).join(", "), to: "" });
       removed += serials.length;
     }
     if (removed === 0) throw new DomainError("INVALID_STATE", `Order ${order.code} has no serial numbers to remove.`);
@@ -373,10 +374,10 @@ export function removeSerials(tx: AppDb, ctx: DomainCtx, ids: readonly string[])
 }
 
 /** Removes the order from its job (Assigned Jobs "x"). */
-export function unassignJob(tx: AppDb, ctx: DomainCtx, orderId: string, jobId: string): OrderRecord {
-  const order = loadOrder(tx, ctx, orderId);
-  jobs.removeOrderFromJob(tx, ctx, { jobId, orderId: order.id });
-  return loadOrder(tx, ctx, orderId);
+export async function unassignJob(tx: AppDb, ctx: DomainCtx, orderId: string, jobId: string): Promise<OrderRecord> {
+  const order = await loadOrder(tx, ctx, orderId);
+  await jobs.removeOrderFromJob(tx, ctx, { jobId, orderId: order.id });
+  return await loadOrder(tx, ctx, orderId);
 }
 
 /**
@@ -395,10 +396,10 @@ export function rebaseExpectedShipDate(srcOrderDate: string | null | undefined, 
 }
 
 /** Copies header + lines into a new Open order with the next code (dates re-based on now). */
-export function duplicateOrder(tx: AppDb, ctx: DomainCtx, orderId: string): OrderRecord {
-  const src = loadOrder(tx, ctx, orderId);
+export async function duplicateOrder(tx: AppDb, ctx: DomainCtx, orderId: string): Promise<OrderRecord> {
+  const src = await loadOrder(tx, ctx, orderId);
   checkScope(ctx, src, "Shipment order");
-  const lines = tx.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, src.id)).all();
+  const lines = await tx.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, src.id));
   const header: orders.CreateOrderInput = {
     warehouseId: src.warehouseId, clientId: src.clientId, channel: "Manual", storeName: null, storeOrderNumber: src.storeOrderNumber,
     customerName: src.customerName, customerEmail: src.customerEmail, customerPhone: src.customerPhone, customerFirstName: src.customerFirstName,
@@ -418,10 +419,10 @@ export function duplicateOrder(tx: AppDb, ctx: DomainCtx, orderId: string): Orde
     reasonForExport: src.reasonForExport, packingWarningTypeId: src.packingWarningTypeId, retailerId: src.retailerId, bol: src.bol, pro: src.pro,
     retailerPo: src.retailerPo, dept: src.dept, markFor: src.markFor, retailerCustomerAccount: src.retailerCustomerAccount, customerId: src.customerId,
   };
-  const copy = createOrder(tx, ctx, createOrderBodySchema.parse({
+  const copy = await createOrder(tx, ctx, createOrderBodySchema.parse({
     ...header, priorityRank: src.priorityRank, ...Object.fromEntries(Object.entries(extras).filter(([, v]) => v !== null && v !== undefined)),
   }));
-  logOrderComment(tx, ctx, { orderId: copy.id, code: copy.code, field: "duplicatedFrom", label: "Duplicated From", value: src.code, message: `Created as a duplicate of ${src.code}.` });
+  await logOrderComment(tx, ctx, { orderId: copy.id, code: copy.code, field: "duplicatedFrom", label: "Duplicated From", value: src.code, message: `Created as a duplicate of ${src.code}.` });
   return copy;
 }
 
@@ -429,28 +430,28 @@ export function duplicateOrder(tx: AppDb, ctx: DomainCtx, orderId: string): Orde
  * A change-log entry that is a statement, not an `old --> new` diff (duplicate origin, cancel
  * note). Written through the change-log table so it shows on the Activity tab and the drawer.
  */
-export function logOrderComment(
+export async function logOrderComment(
   tx: AppDb,
   ctx: DomainCtx,
   input: { readonly orderId: string; readonly code: string; readonly field: string; readonly label: string; readonly value: string; readonly message: string },
-): void {
-  tx.insert(schema.changeLog).values({
+): Promise<void> {
+  await tx.insert(schema.changeLog).values({
     entityType: "shipment_order", entityId: input.orderId, entityCode: input.code, type: "Update",
     field: input.field, fieldLabel: input.label, fromValue: null, toValue: input.value,
     message: input.message, userId: ctx.userId, source: ctx.source,
-  }).run();
+  });
 }
 
 
 /** Workflow-blocked banner "Release": clears the block so the order can be allocated. */
-export function releaseWorkflowBlock(tx: AppDb, ctx: DomainCtx, orderId: string, version: number): OrderRecord {
-  const order = loadOrder(tx, ctx, orderId);
+export async function releaseWorkflowBlock(tx: AppDb, ctx: DomainCtx, orderId: string, version: number): Promise<OrderRecord> {
+  const order = await loadOrder(tx, ctx, orderId);
   if (order.workflowBlocked === "None") throw new DomainError("INVALID_STATE", `Order ${order.code} is not blocked by a workflow.`);
   if (order.version !== version) throw new DomainError("CONFLICT", "This record changed since you opened it — Reload");
-  const after = tx.update(so).set({ workflowBlocked: "None", updatedBy: ctx.userId, version: sql`${so.version} + 1` })
-    .where(and(eq(so.id, order.id), eq(so.version, version))).returning().get();
+  const after = (await tx.update(so).set({ workflowBlocked: "None", updatedBy: ctx.userId, version: sql`${so.version} + 1` })
+    .where(and(eq(so.id, order.id), eq(so.version, version))).returning())[0];
   if (!after) throw new DomainError("CONFLICT", "This record changed since you opened it — Reload");
-  changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { workflowBlocked: order.workflowBlocked }, after: { workflowBlocked: "None" } });
+  await changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { workflowBlocked: order.workflowBlocked }, after: { workflowBlocked: "None" } });
   return after;
 }
 
@@ -466,12 +467,12 @@ export interface OrderBillingCharge {
 }
 
 /** Billing report lines that reference this order (Billing Charges card download). */
-export function orderBillingCharges(db: AppDb, ctx: DomainCtx, orderId: string): readonly OrderBillingCharge[] {
-  const order = loadOrder(db, ctx, orderId);
+export async function orderBillingCharges(db: AppDb, ctx: DomainCtx, orderId: string): Promise<readonly OrderBillingCharge[]> {
+  const order = await loadOrder(db, ctx, orderId);
   const l = schema.billingReportLines;
-  return db.select({
+  return await db.select({
     feeName: l.feeName, operationType: l.operationType, sku: l.sku, quantity: l.quantity, unitPrice: l.unitPrice, totalPrice: l.adjustedPrice,
     activityDate: l.activityDate, reportCode: schema.billingReports.billNumber,
   }).from(l).innerJoin(schema.billingReports, eq(schema.billingReports.id, l.reportId))
-    .where(and(eq(l.referenceNumber, order.code), eq(l.isDetail, true))).all();
+    .where(and(eq(l.referenceNumber, order.code), eq(l.isDetail, true)));
 }

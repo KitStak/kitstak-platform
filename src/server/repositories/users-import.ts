@@ -61,27 +61,27 @@ export function applyLink(ids: readonly string[], id: string, action: LinkAction
   return ids.filter((x) => x !== id);
 }
 
-function roleByName(db: AppDb, name: string): { id: string; name: string } {
-  const row = db.select({ id: s.roles.id, name: s.roles.name }).from(s.roles).where(sql`lower(${s.roles.name}) = ${name.toLowerCase()} OR lower(${s.roles.key}) = ${name.toLowerCase()}`).get();
+async function roleByName(db: AppDb, name: string): Promise<{ id: string; name: string }> {
+  const row = (await db.select({ id: s.roles.id, name: s.roles.name }).from(s.roles).where(sql`lower(${s.roles.name}) = ${name.toLowerCase()} OR lower(${s.roles.key}) = ${name.toLowerCase()}`).limit(1))[0];
   return row ?? fail(`Role "${name}" was not found`);
 }
 
-function warehouseByCode(db: AppDb, auth: AuthContext, code: string): { id: string; code: string } {
-  const row = db.select({ id: s.warehouses.id, code: s.warehouses.code }).from(s.warehouses).where(sql`upper(${s.warehouses.code}) = ${code.toUpperCase()}`).get();
+async function warehouseByCode(db: AppDb, auth: AuthContext, code: string): Promise<{ id: string; code: string }> {
+  const row = (await db.select({ id: s.warehouses.id, code: s.warehouses.code }).from(s.warehouses).where(sql`upper(${s.warehouses.code}) = ${code.toUpperCase()}`).limit(1))[0];
   if (!row || !hasWarehouse(auth.scope, row.id)) return fail(`Warehouse "${code}" was not found`);
   return row;
 }
 
-function clientByCode(db: AppDb, auth: AuthContext, code: string): { id: string; code: string } {
-  const row = db.select({ id: s.clients.id, code: s.clients.code }).from(s.clients).where(sql`upper(${s.clients.code}) = ${code.toUpperCase()}`).get();
+async function clientByCode(db: AppDb, auth: AuthContext, code: string): Promise<{ id: string; code: string }> {
+  const row = (await db.select({ id: s.clients.id, code: s.clients.code }).from(s.clients).where(sql`upper(${s.clients.code}) = ${code.toUpperCase()}`).limit(1))[0];
   if (!row || (auth.scope.clientIds !== "all" && !auth.scope.clientIds.includes(row.id))) return fail(`Client "${code}" was not found`);
   return row;
 }
 
-function userByEmail(db: AppDb, email: string): UserDetail {
-  const row = findUserByEmail(db, email.trim().toLowerCase());
+async function userByEmail(db: AppDb, email: string): Promise<UserDetail> {
+  const row = await findUserByEmail(db, email.trim().toLowerCase());
   if (!row) return fail(`No user signs in with ${email}`);
-  return getUser(db, row.id);
+  return await getUser(db, row.id);
 }
 
 /** The current save payload of a user (password untouched), for read-modify-write imports. */
@@ -99,32 +99,32 @@ export function saveInputOf(d: UserDetail): UserSave {
  * "Bulk Import Users" row: creates the user (role + default warehouse + client access) or, when
  * the email exists, updates name / type / status and adds the role and warehouse.
  */
-export function importUserRow(db: AppDb, auth: AuthContext, actor: Actor, row: Readonly<Record<string, ImportCell>>): { entityId: string; message: string } {
+export async function importUserRow(db: AppDb, auth: AuthContext, actor: Actor, row: Readonly<Record<string, ImportCell>>): Promise<{ entityId: string; message: string }> {
   const email = (str(row.email) ?? fail("Email is required")).toLowerCase();
   const { firstName, lastName } = splitFullName(str(row.name) ?? fail("Full Name is required"));
   const userType = importUserType(row.userType);
   const isActive = str(row.status) !== "Inactive";
   const roleName = str(row.roleName);
-  const role = roleName ? roleByName(db, roleName) : null;
+  const role = roleName ? await roleByName(db, roleName) : null;
   const whCode = str(row.defaultWarehouseCode);
-  const warehouse = whCode ? warehouseByCode(db, auth, whCode) : null;
+  const warehouse = whCode ? await warehouseByCode(db, auth, whCode) : null;
   const allClients = row.allClients === null || row.allClients === undefined || row.allClients === "" ? true : row.allClients === true || /^(yes|true|1)$/i.test(String(row.allClients));
 
-  const existing = findUserByEmail(db, email);
+  const existing = await findUserByEmail(db, email);
   if (!existing) {
     if (!role) fail("Role is required for a new user");
     if (!warehouse) fail("Default Warehouse Code is required for a new user");
     if (!allClients) fail("Set All Clients to Yes, then assign clients with the User-Client import");
     const password = generateTemporaryPassword();
-    const created = createUser(db, auth, actor, {
+    const created = await createUser(db, auth, actor, {
       firstName, lastName, email, userType, sendWelcomeEmail: false, isActive, password, confirmPassword: password,
       roleIds: [role.id], warehouseIds: [warehouse.id], allClients: true, clientIds: [],
     });
     // Expired at once: the user can't sign in until an admin resets the password.
-    db.update(s.users).set({ passwordChangedAt: null }).where(eq(s.users.id, created.id)).run();
+    await db.update(s.users).set({ passwordChangedAt: null }).where(eq(s.users.id, created.id));
     return { entityId: created.id, message: `User ${email} created. Use Reset password to issue a temporary password.` };
   }
-  const current = saveInputOf(getUser(db, existing.id));
+  const current = saveInputOf(await getUser(db, existing.id));
   const next: UserSave = {
     ...current, firstName, lastName, userType, isActive,
     roleIds: role ? applyLink(current.roleIds, role.id, "Assign") : current.roleIds,
@@ -132,32 +132,32 @@ export function importUserRow(db: AppDb, auth: AuthContext, actor: Actor, row: R
     // "All Clients = Yes" widens access; "No" never silently revokes it (use the User-Client import).
     allClients: allClients ? true : current.allClients,
   };
-  updateUser(db, auth, actor, existing.id, next);
+  await updateUser(db, auth, actor, existing.id, next);
   return { entityId: existing.id, message: `User ${email} updated` };
 }
 
 /** "Import User-Role" / "User-Warehouse" / "User-Client" rows: assign or unassign one link. */
-export function importUserLinkRow(db: AppDb, auth: AuthContext, actor: Actor, kind: LinkKind, row: Readonly<Record<string, ImportCell>>): { entityId: string; message: string } {
+export async function importUserLinkRow(db: AppDb, auth: AuthContext, actor: Actor, kind: LinkKind, row: Readonly<Record<string, ImportCell>>): Promise<{ entityId: string; message: string }> {
   const email = str(row.email) ?? fail("Email is required");
   const action = linkAction(row.action);
-  const user = userByEmail(db, email);
+  const user = await userByEmail(db, email);
   const current = saveInputOf(user);
   let next: UserSave;
   let label: string;
   if (kind === "role") {
-    const role = roleByName(db, str(row.roleName) ?? fail("Role is required"));
+    const role = await roleByName(db, str(row.roleName) ?? fail("Role is required"));
     label = `role ${role.name}`;
     const roleIds = applyLink(current.roleIds, role.id, action);
     if (roleIds.length === 0) fail(`${user.email} needs at least one role. Assign another role before removing ${role.name}.`);
     next = { ...current, roleIds };
   } else if (kind === "warehouse") {
-    const wh = warehouseByCode(db, auth, str(row.warehouseCode) ?? fail("Warehouse Code is required"));
+    const wh = await warehouseByCode(db, auth, str(row.warehouseCode) ?? fail("Warehouse Code is required"));
     label = `warehouse ${wh.code}`;
     const warehouseIds = applyLink(current.warehouseIds, wh.id, action);
     if (warehouseIds.length === 0) fail(`${user.email} needs access to at least one warehouse.`);
     next = { ...current, warehouseIds };
   } else {
-    const cl = clientByCode(db, auth, str(row.clientCode) ?? fail("Client Code is required"));
+    const cl = await clientByCode(db, auth, str(row.clientCode) ?? fail("Client Code is required"));
     label = `client ${cl.code}`;
     if (current.allClients && action === "Unassign") fail(`${user.email} has access to all clients. Edit the user and choose Select manually first.`);
     if (current.allClients && action === "Assign") return { entityId: user.id, message: `${user.email} already has access to all clients` };
@@ -167,6 +167,6 @@ export function importUserLinkRow(db: AppDb, auth: AuthContext, actor: Actor, ki
   }
   const unchanged = JSON.stringify([next.roleIds, next.warehouseIds, next.clientIds, next.allClients]) === JSON.stringify([current.roleIds, current.warehouseIds, current.clientIds, current.allClients]);
   if (unchanged) return { entityId: user.id, message: `${user.email}: ${label} was already ${action === "Assign" ? "assigned" : "unassigned"}` };
-  updateUser(db, auth, actor, user.id, next);
+  await updateUser(db, auth, actor, user.id, next);
   return { entityId: user.id, message: `${user.email}: ${label} ${action === "Assign" ? "assigned" : "unassigned"}` };
 }

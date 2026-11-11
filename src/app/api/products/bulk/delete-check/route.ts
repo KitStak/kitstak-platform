@@ -8,5 +8,5 @@ export const POST = defineRoute({
   permission: "settings.products.delete",
   body: z.object({ ids: bulkIdsSchema }),
   transaction: false,
-  handler: ({ db, auth, actor, body }) => deleteCheck(db, { ...domainCtx(actor, auth), scope: auth.scope }, body.ids),
+  handler: async ({ db, auth, actor, body }) => await deleteCheck(db, { ...domainCtx(actor, auth), scope: auth.scope }, body.ids),
 });

@@ -12,7 +12,7 @@ export const GET = defineRoute({
   permission: ["settings.locations.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    return changeLogResultOrDeleted(db, auth, "location", params.id, query, () => getLocation(db, auth, params.id));
+  handler: async ({ db, auth, params, query }) => {
+    return await changeLogResultOrDeleted(db, auth, "location", params.id, query, async () => await getLocation(db, auth, params.id));
   },
 });

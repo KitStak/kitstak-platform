@@ -4,5 +4,5 @@ import { markNotificationsRead, notificationReadSchema } from "@/server/reposito
 
 export const POST = defineRoute({
   body: notificationReadSchema,
-  handler: ({ db, auth, body }) => markNotificationsRead(db, auth.user.id, body),
+  handler: async ({ db, auth, body }) => await markNotificationsRead(db, auth.user.id, body),
 });

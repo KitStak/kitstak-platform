@@ -7,5 +7,5 @@ import { domainCtx } from "@/server/repositories/platform-common";
 export const POST = defineRoute({
   permission: [P.locCancel, P.skuCancel],
   body: cancelSchema,
-  handler: ({ db, auth, actor, body }) => cancelCountLines(db, domainCtx(actor, auth), auth, body.ids, body.reason),
+  handler: async ({ db, auth, actor, body }) => await cancelCountLines(db, domainCtx(actor, auth), auth, body.ids, body.reason),
 });

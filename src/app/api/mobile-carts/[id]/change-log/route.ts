@@ -8,7 +8,7 @@ export const GET = defineRoute({
   permission: ["settings.mobile_carts.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    return changeLogResultOrDeleted(db, auth, "mobile_cart", params.id, query, () => loadMobileCart(db, auth, params.id));
+  handler: async ({ db, auth, params, query }) => {
+    return await changeLogResultOrDeleted(db, auth, "mobile_cart", params.id, query, async () => await loadMobileCart(db, auth, params.id));
   },
 });

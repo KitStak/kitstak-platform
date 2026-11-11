@@ -10,6 +10,7 @@
 import { CarrierError, type CarrierAddress, type PackageSpec } from "@/server/domain/carriers/adapter";
 import { assertPackages, buildCarrierAdapter, carrierFetch, need, type CarrierDef } from "./common";
 import type { Credentials } from "../crypto";
+import { mapSeq } from "@/server/db/sql";
 
 const BASE = "https://ssapi.shipstation.com";
 
@@ -73,7 +74,7 @@ export const SHIPSTATION_DEF: CarrierDef = {
         const code = shipstationCarrierOf(svc.serviceCode);
         byCarrier.set(code, [...(byCarrier.get(code) ?? []), svc]);
       }
-      const quotes = await Promise.all([...byCarrier].map(async ([carrierCode, services]) => {
+      const quotes = await Promise.all(await mapSeq([...byCarrier], async ([carrierCode, services]) => {
         const res = await fetch(`${BASE}/shipments/getrates`, json(creds, {
           carrierCode, serviceCode: null, packageCode: null, fromPostalCode: req.from.postalCode, toState: req.to.state ?? null, toCountry: country(req.to.country),
           toPostalCode: req.to.postalCode, toCity: req.to.city, weight: weight(p), dimensions: dims(p), confirmation: "none", residential: !req.to.company,

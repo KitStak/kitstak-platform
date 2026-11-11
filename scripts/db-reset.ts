@@ -1,49 +1,35 @@
 /**
- * Step 1 of `npm run db:reset`: empty the SQLite database in-process.
- * (`db:reset` then runs `db:migrate` and `db:seed`.)
+ * Step 1 of `npm run db:reset` (`npm run db:drop`): drops every app object from the database.
+ * (`db:reset` then runs `db:migrate`, `db:seed` and `db:fixtures`.)
  *
- * Never deletes the file, because the dev server may be holding it open.
- * Refuses to run in production unless ALLOW_PROD_SEED=1.
+ * Targets local PGlite (.data/pglite) by default, or DIRECT_URL / DATABASE_URL when set.
+ * PGlite is single-process: stop `next dev` first. Refuses to run in production unless
+ * ALLOW_PROD_SEED=1.
  */
-import fs from "node:fs";
-import path from "node:path";
-import Database from "better-sqlite3";
+import { openPglite, openPostgres, PGLITE_DIR } from "../src/server/db";
+import { migrationUrl } from "../src/server/db/migrate";
 import { dropAllObjects } from "./lib/drop-all";
-
-const DB_PATH = path.join(process.cwd(), ".data", "kitstak.db");
-const BUSY_TIMEOUT_MS = 10_000;
 
 function out(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   if (process.env.NODE_ENV === "production" && !process.env.ALLOW_PROD_SEED) {
     throw new Error("Refusing to reset the database in production. Set ALLOW_PROD_SEED=1 to override.");
   }
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const sqlite = new Database(DB_PATH);
+  const url = migrationUrl();
+  const handle = url ? await openPostgres(url, { max: 1 }) : await openPglite(PGLITE_DIR, { migrate: false });
   try {
-    sqlite.pragma(`busy_timeout = ${BUSY_TIMEOUT_MS}`);
-    sqlite.pragma("journal_mode = WAL");
-    const dropped = dropAllObjects(sqlite);
-    try {
-      sqlite.exec("VACUUM");
-    } catch (error: unknown) {
-      // Space reclamation only; another connection (dev server) can block it.
-      const reason = error instanceof Error ? error.message : String(error);
-      out(`db:reset - VACUUM skipped (${reason})`);
-    }
-    out(`db:reset - dropped ${dropped} schema objects from ${path.relative(process.cwd(), DB_PATH)}`);
+    const dropped = await dropAllObjects(handle.db);
+    out(`db:drop - dropped ${dropped} schema objects from ${url ? "DIRECT_URL/DATABASE_URL" : "local PGlite (.data/pglite)"}`);
   } finally {
-    sqlite.close();
+    await handle.close();
   }
 }
 
-try {
-  main();
-} catch (error: unknown) {
+main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`db:reset failed: ${message}\n`);
-  process.exit(1);
-}
+  process.exitCode = 1;
+});

@@ -59,8 +59,8 @@ export function operatorFor(w: World, code: WarehouseCode, n: number): SeedUser 
 export const managerCtx = (w: World): DomainCtx => actor(w.access.manager);
 export const adminCtx = (w: World): DomainCtx => actor(w.access.admin);
 
-export function orderStatus(tx: Tx, orderId: Id): (typeof schema.shipmentOrders.$inferSelect)["status"] | null {
-  return tx.select({ status: schema.shipmentOrders.status }).from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).get()?.status ?? null;
+export async function orderStatus(tx: Tx, orderId: Id): Promise<(typeof schema.shipmentOrders.$inferSelect)["status"] | null> {
+  return (await tx.select({ status: schema.shipmentOrders.status }).from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).limit(1))[0]?.status ?? null;
 }
 
 /** Records a replay step that the domain rejected (kept for the seed report; the replay continues). */

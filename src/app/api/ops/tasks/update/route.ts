@@ -7,5 +7,5 @@ import { TASK_PERMISSIONS, taskUpdateSchema } from "@/server/repositories/platfo
 export const POST = defineRoute({
   permission: TASK_PERMISSIONS.update,
   body: taskUpdateSchema,
-  handler: ({ db, auth, actor, body }) => tasks.update(db, domainCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await tasks.update(db, domainCtx(actor, auth), body),
 });

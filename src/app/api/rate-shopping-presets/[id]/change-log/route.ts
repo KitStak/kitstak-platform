@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: "automation.rate_shopping.change_log",
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    loadPreset(db, auth, params.id);
-    return changeLogResult(db, "rate_shopping_preset", params.id, query);
+  handler: async ({ db, auth, params, query }) => {
+    await loadPreset(db, auth, params.id);
+    return await changeLogResult(db, "rate_shopping_preset", params.id, query);
   },
 });

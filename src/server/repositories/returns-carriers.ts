@@ -25,19 +25,19 @@ export interface CarrierOption {
   readonly services: readonly CarrierServiceOption[];
 }
 
-export function carrierOptions(db: AppDb, warehouseId: string, clientId?: string | null): CarrierOption[] {
-  const conns = db.select().from(schema.carrierConnections)
-    .where(and(eq(schema.carrierConnections.warehouseId, warehouseId), eq(schema.carrierConnections.isActive, true))).all()
+export async function carrierOptions(db: AppDb, warehouseId: string, clientId?: string | null): Promise<CarrierOption[]> {
+  const conns = (await db.select().from(schema.carrierConnections)
+    .where(and(eq(schema.carrierConnections.warehouseId, warehouseId), eq(schema.carrierConnections.isActive, true))))
     .filter((c) => getCarrierAdapter(c.provider) !== undefined);
   const out: CarrierOption[] = [];
   for (const conn of conns) {
     if (clientId) {
-      const access = db.select().from(schema.carrierConnectionClients)
-        .where(and(eq(schema.carrierConnectionClients.connectionId, conn.id), eq(schema.carrierConnectionClients.clientId, clientId))).get();
+      const access = (await db.select().from(schema.carrierConnectionClients)
+        .where(and(eq(schema.carrierConnectionClients.connectionId, conn.id), eq(schema.carrierConnectionClients.clientId, clientId))).limit(1))[0];
       if (access && !access.hasAccess) continue;
     }
-    const services = db.select().from(schema.carrierServices)
-      .where(and(eq(schema.carrierServices.connectionId, conn.id), eq(schema.carrierServices.isActive, true))).all();
+    const services = await db.select().from(schema.carrierServices)
+      .where(and(eq(schema.carrierServices.connectionId, conn.id), eq(schema.carrierServices.isActive, true)));
     const byCarrier = new Map<string, CarrierServiceOption[]>();
     for (const s of services) {
       const list = byCarrier.get(s.carrierCode) ?? [];

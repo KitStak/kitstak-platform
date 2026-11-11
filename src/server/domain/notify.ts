@@ -16,30 +16,30 @@ export type NotificationPayload = z.input<typeof notificationPayloadSchema>;
 
 export type NotifyTarget = readonly string[] | { readonly roleKey: string };
 
-function resolveUsers(tx: Tx, target: NotifyTarget): string[] {
+async function resolveUsers(tx: Tx, target: NotifyTarget): Promise<string[]> {
   if (Array.isArray(target)) {
     const ids = [...new Set(target as readonly string[])];
     if (ids.length === 0) return [];
-    return tx.select({ id: schema.users.id }).from(schema.users)
-      .where(and(inArray(schema.users.id, ids), eq(schema.users.isActive, true))).all().map((u) => u.id);
+    return (await tx.select({ id: schema.users.id }).from(schema.users)
+      .where(and(inArray(schema.users.id, ids), eq(schema.users.isActive, true)))).map((u) => u.id);
   }
   const { roleKey } = target as { roleKey: string };
-  const viaRoles = tx.select({ id: schema.userRoles.userId }).from(schema.userRoles)
-    .innerJoin(schema.roles, eq(schema.roles.id, schema.userRoles.roleId)).where(eq(schema.roles.key, roleKey)).all().map((r) => r.id);
+  const viaRoles = (await tx.select({ id: schema.userRoles.userId }).from(schema.userRoles)
+    .innerJoin(schema.roles, eq(schema.roles.id, schema.userRoles.roleId)).where(eq(schema.roles.key, roleKey))).map((r) => r.id);
   const legacyRole = isOneOf(LEGACY_USER_ROLES, roleKey) ? roleKey : null;
   if (viaRoles.length === 0 && !legacyRole) return [];
-  return tx.select({ id: schema.users.id }).from(schema.users).where(and(eq(schema.users.isActive, true),
-    or(viaRoles.length > 0 ? inArray(schema.users.id, viaRoles) : undefined, legacyRole ? eq(schema.users.role, legacyRole) : undefined))).all()
+  return (await tx.select({ id: schema.users.id }).from(schema.users).where(and(eq(schema.users.isActive, true),
+    or(viaRoles.length > 0 ? inArray(schema.users.id, viaRoles) : undefined, legacyRole ? eq(schema.users.role, legacyRole) : undefined))))
     .map((r) => r.id);
 }
 
 /** Inserts one notification per active target user. Returns the number written. */
-export function notify(tx: Tx, target: NotifyTarget, payload: NotificationPayload): number {
+export async function notify(tx: Tx, target: NotifyTarget, payload: NotificationPayload): Promise<number> {
   const p = notificationPayloadSchema.parse(payload);
-  const userIds = resolveUsers(tx, target);
+  const userIds = await resolveUsers(tx, target);
   if (userIds.length === 0) return 0;
-  tx.insert(schema.notifications).values(userIds.map((userId) => ({
+  await tx.insert(schema.notifications).values(userIds.map((userId) => ({
     userId, kind: p.kind, title: p.title, body: p.body ?? null, href: p.href ?? null, severity: p.severity,
-  }))).run();
+  })));
   return userIds.length;
 }

@@ -14,15 +14,15 @@ const toPage = <T extends object>(p: { rows: readonly T[]; total: number }): Exp
 
 export const totalInventoryExport: ExportProvider = {
   columns: TOTAL_INVENTORY_EXPORT_COLUMNS,
-  fetchPage: (ctx, page, pageSize) => toPage(listTotalInventory(ctx.db, ctx.auth, { ...ctx.query, page, pageSize })),
+  fetchPage: async (ctx, page, pageSize) => toPage(await listTotalInventory(ctx.db, ctx.auth, { ...ctx.query, page, pageSize })),
 };
 
 export const byLocationExport: ExportProvider = {
   columns: BY_LOCATION_EXPORT_COLUMNS,
-  fetchPage: (ctx, page, pageSize) => toPage(listBuckets(ctx.db, ctx.auth, { ...ctx.query, page, pageSize })),
+  fetchPage: async (ctx, page, pageSize) => toPage(await listBuckets(ctx.db, ctx.auth, { ...ctx.query, page, pageSize })),
 };
 
 export const atpExport: ExportProvider = {
   columns: ATP_EXPORT_COLUMNS,
-  fetchPage: (ctx, page, pageSize) => toPage(listAtp(ctx.db, ctx.auth, { ...ctx.query, page, pageSize })),
+  fetchPage: async (ctx, page, pageSize) => toPage(await listAtp(ctx.db, ctx.auth, { ...ctx.query, page, pageSize })),
 };

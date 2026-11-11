@@ -9,9 +9,9 @@ import { JOB_PERMISSIONS, getJobDetail, removeOrder } from "@/server/repositorie
 export const DELETE = defineRoute({
   permission: JOB_PERMISSIONS.cancel,
   params: z.object({ id: idSchema, orderId: idSchema }),
-  handler: ({ db, auth, actor, params }) => withM03Actor(db, actor, auth, () => {
+  handler: async ({ db, auth, actor, params }) => await withM03Actor(db, actor, auth, async () => {
     assertJobAction(auth, JOB_PERMISSIONS.cancel);
-    removeOrder(db, domainCtx(actor, auth), params.id, params.orderId);
-    return getJobDetail(db, auth, params.id);
+    await removeOrder(db, domainCtx(actor, auth), params.id, params.orderId);
+    return await getJobDetail(db, auth, params.id);
   }),
 });

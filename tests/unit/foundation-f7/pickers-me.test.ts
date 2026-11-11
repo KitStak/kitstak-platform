@@ -3,14 +3,15 @@ import * as schema from "@/server/db/schema";
 import { createOrder } from "@/server/domain/orders";
 import { locationRow, orderInput } from "../foundation/domain/fixtures";
 import { asArray, call, closeWorld, cookieFor, current, expectCsrf, openWorld, removeFilesRoot, req } from "./harness";
+import { mapSeq } from "@/server/db/sql";
 
 vi.mock("@/server/api/db", () => ({ getAppDb: async () => current().db }));
 
 const KEYS = ["locations", "lps", "users", "products", "customers", "vendors", "orders", "jobs", "carrier-services", "shipment-packages"] as const;
-const pickers = Object.fromEntries(await Promise.all(KEYS.map(async (k) => [k, (await import(`@/app/api/pickers/${k}/route`)) as { GET: Parameters<typeof call>[0] }] as const)));
+const pickers = Object.fromEntries(await Promise.all(await mapSeq(KEYS, async (k) => [k, (await import(`@/app/api/pickers/${k}/route`)) as { GET: Parameters<typeof call>[0] }] as const)));
 const meRoute = await import("@/app/api/me/route");
 
-beforeEach(() => { openWorld(); });
+beforeEach(async () => { await openWorld(); });
 afterEach(() => closeWorld());
 afterAll(() => removeFilesRoot());
 
@@ -30,7 +31,7 @@ describe("/api/pickers/*", () => {
 
   it("locations are warehouse-scoped, searchable and filterable", async () => {
     const w = current();
-    w.db.insert(schema.locations).values(locationRow(w.otherWarehouseId, "A-01-01-RENO")).run();
+    await w.db.insert(schema.locations).values(locationRow(w.otherWarehouseId, "A-01-01-RENO"));
     const viewerAll = labels(await pick("locations", "q=a-0"));
     expect(viewerAll).toContain("A-01-01");
     expect(viewerAll).not.toContain("A-01-01-RENO");
@@ -44,24 +45,24 @@ describe("/api/pickers/*", () => {
 
   it("products, orders and customers are client-scoped", async () => {
     const w = current();
-    const betaProduct = w.db.insert(schema.products).values({
+    const betaProduct = (await w.db.insert(schema.products).values({
       clientId: w.otherClientId, sku: "BETA-SKU", barcode: "BETA-SKU", name: "Beta", category: "General", weightOz: 1, lengthIn: 1, widthIn: 1, heightIn: 1, price: 1, status: "Active",
-    }).returning().get().id;
+    }).returning())[0].id;
     expect(labels(await pick("products", "q=sku"))).toEqual([]);
     expect(labels(await pick("products", "q=widget"))).toEqual(["MLT-WIDGET-01"]);
     expect(labels(await pick("products", "q=beta", w.userId))).toEqual(["BETA-SKU"]);
 
-    const mine = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    createOrder(w.db, w.ctx, orderInput(w, [{ productId: betaProduct, quantity: 1 }], { clientId: w.otherClientId }));
+    const mine = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    await createOrder(w.db, w.ctx, orderInput(w, [{ productId: betaProduct, quantity: 1 }], { clientId: w.otherClientId }));
     expect(labels(await pick("orders", ""))).toEqual([mine.code]);
     expect(labels(await pick("orders", "status=Open"))).toEqual([mine.code]);
     expect(labels(await pick("orders", "status=Shipped"))).toEqual([]);
     expect((await pick("orders", "status=Bogus")).status).toBe(400);
 
-    w.db.insert(schema.customers).values([
+    await w.db.insert(schema.customers).values([
       { clientId: w.clientId, firstName: "Ann", lastName: "Lee", email: "ann@x.io", phone: "1" },
       { clientId: w.otherClientId, firstName: "Bob", lastName: "Ray", email: "bob@x.io", phone: "2" },
-    ]).run();
+    ]);
     expect(labels(await pick("customers", ""))).toEqual(["Ann Lee"]);
   });
 

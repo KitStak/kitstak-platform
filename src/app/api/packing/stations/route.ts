@@ -8,9 +8,9 @@ import { loadStation, PACKING_PERMISSIONS, packingStations } from "@/server/repo
 export const GET = defineRoute({
   permission: PACKING_PERMISSIONS.view,
   query: z.object({ warehouseId: idSchema.optional(), stationId: idSchema.optional() }),
-  handler: ({ db, auth, query }) => {
-    if (query.stationId) return [loadStation(db, auth.scope, query.stationId)];
+  handler: async ({ db, auth, query }) => {
+    if (query.stationId) return [await loadStation(db, auth.scope, query.stationId)];
     if (!query.warehouseId) throw validationError("Choose a warehouse");
-    return packingStations(db, auth.scope, query.warehouseId);
+    return await packingStations(db, auth.scope, query.warehouseId);
   },
 });

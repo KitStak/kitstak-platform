@@ -7,12 +7,12 @@ import { getLpNumber, loadLp, lpLocks, updateLpNumber } from "@/server/repositor
 export const GET = defineRoute({
   permission: ["settings.lp_numbers.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => ({ ...getLpNumber(db, auth, params.id), locks: lpLocks(loadLp(db, auth, params.id)) }),
+  handler: async ({ db, auth, params }) => ({ ...(await getLpNumber(db, auth, params.id)), locks: lpLocks(await loadLp(db, auth, params.id)) }),
 });
 
 export const PATCH = defineRoute({
   permission: "settings.lp_numbers.edit",
   params: idParamsSchema,
   body: lpUpdateSchema,
-  handler: ({ db, auth, actor, params, body }) => updateLpNumber(db, auth, actor, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updateLpNumber(db, auth, actor, params.id, body),
 });

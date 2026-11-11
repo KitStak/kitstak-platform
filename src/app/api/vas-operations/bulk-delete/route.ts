@@ -6,5 +6,5 @@ import { deleteVas } from "@/server/repositories/vas";
 export const POST = defineRoute({
   permission: "settings.vas_operations.delete",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => deleteVas(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await deleteVas(db, auth, actor, body.ids),
 });

@@ -6,5 +6,5 @@ import { deleteLpTypes } from "@/server/repositories/lp-types";
 export const POST = defineRoute({
   permission: "settings.lp_types.delete",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => deleteLpTypes(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await deleteLpTypes(db, auth, actor, body.ids),
 });

@@ -1,10 +1,10 @@
 /** Returns: return orders (RMA) and lines. */
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, doublePrecision, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { RETURN_DISPOSITIONS, RETURN_SOURCES, RETURN_STATUSES } from "../../../lib/enums";
 import { json, pk, stamps } from "../columns";
 import { shipmentOrders } from "./outbound";
 
-export const returnOrders = sqliteTable("return_orders", {
+export const returnOrders = pgTable("return_orders", {
   id: pk(),
   rmaCode: text("rma_code").notNull(),
   shipmentOrderId: text("shipment_order_id").references(() => shipmentOrders.id),
@@ -23,7 +23,7 @@ export const returnOrders = sqliteTable("return_orders", {
   actualReturnDate: text("actual_return_date"),
   note: text("note"),
   /** Manual return shipping cost of this RMA (stations-returns R4-1). */
-  returnShippingCost: real("return_shipping_cost"),
+  returnShippingCost: doublePrecision("return_shipping_cost"),
   /** Every return tracking number of this RMA (stations-returns R4-1). */
   returnTrackingNumbers: json<string[]>("return_tracking_numbers"),
   ...stamps(),
@@ -35,7 +35,7 @@ export const returnOrders = sqliteTable("return_orders", {
   index("return_orders_created_idx").on(t.createdAt),
 ]);
 
-export const returnOrderLines = sqliteTable("return_order_lines", {
+export const returnOrderLines = pgTable("return_order_lines", {
   id: pk(),
   returnOrderId: text("return_order_id").notNull().references(() => returnOrders.id, { onDelete: "cascade" }),
   orderLineId: text("order_line_id"),

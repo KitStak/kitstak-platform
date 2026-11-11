@@ -6,5 +6,5 @@ import { setWorkflowsActive } from "@/server/repositories/workflows";
 export const POST = defineRoute({
   permission: "automation.workflows.edit",
   body: bulkActiveSchema,
-  handler: ({ db, auth, actor, body }) => setWorkflowsActive(db, auth, actor, body.ids, body.isActive),
+  handler: async ({ db, auth, actor, body }) => await setWorkflowsActive(db, auth, actor, body.ids, body.isActive),
 });

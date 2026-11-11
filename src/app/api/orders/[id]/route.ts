@@ -13,13 +13,13 @@ import { domainCtx, idParamsSchema } from "@/server/repositories/platform-common
 export const GET = defineRoute({
   permission: ORDER_PERMISSIONS.view,
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => {
-    const detail = getOrderDetail(db, auth, params.id);
+  handler: async ({ db, auth, params }) => {
+    const detail = await getOrderDetail(db, auth, params.id);
     if (!detail) throw notFoundError("Shipment order");
     // Entries other modules wrote raw on this order (jobs, shipping, merge) are made readable
     // before the change log is opened. Idempotent; a no-op once the history is clean.
     try {
-      repairOrderChangeLog(db, [detail.order.id]);
+      await repairOrderChangeLog(db, [detail.order.id]);
     } catch (error) {
       console.warn("[orders] change-log repair skipped", error);
     }
@@ -31,14 +31,14 @@ export const PATCH = defineRoute({
   permission: ORDER_PERMISSIONS.edit,
   params: idParamsSchema,
   body: z.unknown(),
-  handler: ({ db, auth, actor, params, body }) => updateOrder(db, domainCtx(actor, auth), params.id, parseOrderBody(updateOrderBodySchema, body)),
+  handler: async ({ db, auth, actor, params, body }) => await updateOrder(db, domainCtx(actor, auth), params.id, parseOrderBody(updateOrderBodySchema, body)),
 });
 
 export const DELETE = defineRoute({
   permission: ORDER_PERMISSIONS.delete,
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
-    const result = orders.deleteOrders(db, domainCtx(actor, auth), { ids: [params.id] });
+  handler: async ({ db, auth, actor, params }) => {
+    const result = await orders.deleteOrders(db, domainCtx(actor, auth), { ids: [params.id] });
     const failure = result.failed[0];
     if (failure) throw new AppError(isErrorCode(failure.code) ? failure.code : "INVALID_STATE", failure.message);
     return { deleted: true };

@@ -29,18 +29,18 @@ import { createWorld, type World } from "../foundation/domain/fixtures";
 let w: World;
 let auth: AuthContext;
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
 afterEach(() => w.close());
 
 const address = { name: "Dock", line1: "1 Supply Way", line2: "", postalCode: "38118", city: "Memphis", phone: "", country: "US", state: "TN" };
-const vendor = () => createVendor(w.db, w.ctx, auth.scope, vendorFormSchema.parse({ clientId: w.clientId, displayName: "Acme Supply", vendorName: "Acme Supply LLC", useShipAsBilling: true, shipping: address }));
-function createPo(code = "KS-R2-PO-1") {
-  return createPurchaseOrder(w.db, w.ctx, auth.scope, poCreateSchema.parse({
-    warehouseId: w.warehouseId, clientId: w.clientId, code, poType: "Purchase Order", poDate: "2026-11-09T15:00:00.000Z", vendorId: vendor().id,
+const vendor = async () => await createVendor(w.db, w.ctx, auth.scope, vendorFormSchema.parse({ clientId: w.clientId, displayName: "Acme Supply", vendorName: "Acme Supply LLC", useShipAsBilling: true, shipping: address }));
+async function createPo(code = "KS-R2-PO-1") {
+  return await createPurchaseOrder(w.db, w.ctx, auth.scope, poCreateSchema.parse({
+    warehouseId: w.warehouseId, clientId: w.clientId, code, poType: "Purchase Order", poDate: "2026-11-09T15:00:00.000Z", vendorId: (await vendor()).id,
     lines: [
       { productId: w.productId, packType: "Each", orderedQuantity: 10, unitCost: 2.5 },
       { productId: w.product2Id, packType: "Each", orderedQuantity: 4, unitCost: 7.25 },
@@ -49,25 +49,25 @@ function createPo(code = "KS-R2-PO-1") {
 }
 const receiveBody = (lineId: string, quantity: number, locationId: string, extra: Record<string, unknown> = {}) =>
   receiveBodySchema.parse({ lines: [{ lineId, quantity, locationId, ...extra }] });
-const poLog = (id: string) => w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id)).all();
+const poLog = async (id: string) => await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id));
 
 describe("Receive PO gating for tracked lines", () => {
-  it("flags a lot-tracked open line on list and detail rows, and receiveAll refuses with the same reason", () => {
-    w.db.update(schema.products).set({ trackLot: true }).where(eq(schema.products.id, w.productId)).run();
-    const po = createPo();
-    const detail = getPurchaseOrder(w.db, auth.scope, po.id);
+  it("flags a lot-tracked open line on list and detail rows, and receiveAll refuses with the same reason", async () => {
+    await w.db.update(schema.products).set({ trackLot: true }).where(eq(schema.products.id, w.productId));
+    const po = await createPo();
+    const detail = await getPurchaseOrder(w.db, auth.scope, po.id);
     expect(detail.receiveAllBlockedReason).toMatch(new RegExp(`^${RECEIVE_ALL_TRACKED_REASON}`));
-    const row = listPurchaseOrders(w.db, auth, { ...EMPTY_GRID_QUERY, q: po.code, qm: "eq" }).rows[0];
+    const row = (await listPurchaseOrders(w.db, auth, { ...EMPTY_GRID_QUERY, q: po.code, qm: "eq" })).rows[0];
     expect(row?.receiveAllBlockedReason).toBe(detail.receiveAllBlockedReason);
-    expect(() => receiveAll(w.db, w.ctx, auth.scope, po.id)).toThrowError(RECEIVE_ALL_TRACKED_REASON);
+    await expect(async () => await receiveAll(w.db, w.ctx, auth.scope, po.id)).rejects.toThrow(RECEIVE_ALL_TRACKED_REASON);
   });
-  it("is clear for untracked lines and once the tracked line is received", () => {
-    const plain = createPo("KS-R2-PLAIN");
-    expect(getPurchaseOrder(w.db, auth.scope, plain.id).receiveAllBlockedReason).toBeNull();
-    w.db.update(schema.products).set({ trackLot: true }).where(eq(schema.products.id, w.productId)).run();
-    const line = getPurchaseOrder(w.db, auth.scope, plain.id).lines.find((l) => l.productId === w.productId);
-    receivePurchaseOrder(w.db, w.ctx, auth.scope, plain.id, receiveBody(line?.id ?? "", 10, w.loc.storageA, { lotNumber: "L123" }));
-    expect(getPurchaseOrder(w.db, auth.scope, plain.id).receiveAllBlockedReason).toBeNull();
+  it("is clear for untracked lines and once the tracked line is received", async () => {
+    const plain = await createPo("KS-R2-PLAIN");
+    expect((await getPurchaseOrder(w.db, auth.scope, plain.id)).receiveAllBlockedReason).toBeNull();
+    await w.db.update(schema.products).set({ trackLot: true }).where(eq(schema.products.id, w.productId));
+    const line = (await getPurchaseOrder(w.db, auth.scope, plain.id)).lines.find((l) => l.productId === w.productId);
+    await receivePurchaseOrder(w.db, w.ctx, auth.scope, plain.id, receiveBody(line?.id ?? "", 10, w.loc.storageA, { lotNumber: "L123" }));
+    expect((await getPurchaseOrder(w.db, auth.scope, plain.id)).receiveAllBlockedReason).toBeNull();
   });
   it("client gate: status first, then fully received, then tracked lines", () => {
     const base = { code: "PO1", status: "Started", totalQuantity: 10, receivedQuantity: 0, receiveAllBlockedReason: null } as unknown as PoRow;
@@ -80,20 +80,20 @@ describe("Receive PO gating for tracked lines", () => {
 });
 
 describe("Actual Receiving Date", () => {
-  it("is not stamped on a partial receipt, is stamped on completion, and a cancelled-only receipt leaves it empty", () => {
-    const po = createPo();
+  it("is not stamped on a partial receipt, is stamped on completion, and a cancelled-only receipt leaves it empty", async () => {
+    const po = await createPo();
     const [l1, l2] = po.lines;
-    receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, receiveBody(l1?.id ?? "", 6, w.loc.storageA));
-    const started = getPurchaseOrder(w.db, auth.scope, po.id);
+    await receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, receiveBody(l1?.id ?? "", 6, w.loc.storageA));
+    const started = await getPurchaseOrder(w.db, auth.scope, po.id);
     expect(started.status).toBe("Started");
     expect(started.receivedAt).toBeNull();
-    const [receipt] = receiptsForPurchaseOrder(w.db, auth.scope, po.id);
-    cancelReceipt(w.db, w.ctx, auth.scope, receipt?.id ?? "");
-    expect(getPurchaseOrder(w.db, auth.scope, po.id).receivedAt).toBeNull();
-    receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, { lines: [
+    const [receipt] = await receiptsForPurchaseOrder(w.db, auth.scope, po.id);
+    await cancelReceipt(w.db, w.ctx, auth.scope, receipt?.id ?? "");
+    expect((await getPurchaseOrder(w.db, auth.scope, po.id)).receivedAt).toBeNull();
+    await receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, { lines: [
       ...receiveBody(l1?.id ?? "", 10, w.loc.storageA).lines, ...receiveBody(l2?.id ?? "", 4, w.loc.storageA).lines,
     ], allowOverReceipt: false, allowExpired: false });
-    const done = getPurchaseOrder(w.db, auth.scope, po.id);
+    const done = await getPurchaseOrder(w.db, auth.scope, po.id);
     expect(done.status).toBe("Completed");
     expect(done.receivedAt).not.toBeNull();
     expect(done.receivedAt).toBe(done.completedAt);
@@ -101,31 +101,31 @@ describe("Actual Receiving Date", () => {
 });
 
 describe("change log", () => {
-  it("logs line creation as 'Purchase Order Line is created.' and never a blank from-value", () => {
-    const po = createPo();
-    const lines = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.parentEntityId, po.id)).all();
+  it("logs line creation as 'Purchase Order Line is created.' and never a blank from-value", async () => {
+    const po = await createPo();
+    const lines = await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.parentEntityId, po.id));
     expect(lines.map((l) => l.message)).toEqual(expect.arrayContaining(["MLT-WIDGET-01 -> Purchase Order Line is created."]));
     expect(lines.some((l) => /is modified\.\s+-->/.test(l.message))).toBe(false);
   });
-  it("formats header dates for humans and writes (empty) for nulls", () => {
-    const po = createPo();
+  it("formats header dates for humans and writes (empty) for nulls", async () => {
+    const po = await createPo();
     const body = { ...poCreateSchema.parse({
       warehouseId: w.warehouseId, clientId: w.clientId, code: po.code, poType: po.poType, poDate: po.poDate, vendorId: po.vendorId,
       plannedArrivalDate: "2026-11-20T00:00:00.000Z",
       lines: po.lines.map((l) => ({ id: l.id, productId: l.productId, packType: l.packType, orderedQuantity: l.orderedQuantity, unitCost: l.unitCost })),
     }), version: po.version };
-    updatePurchaseOrder(w.db, w.ctx, auth.scope, po.id, body);
-    const msg = poLog(po.id).find((l) => l.field === "plannedArrivalDate")?.message;
+    await updatePurchaseOrder(w.db, w.ctx, auth.scope, po.id, body);
+    const msg = (await poLog(po.id)).find((l) => l.field === "plannedArrivalDate")?.message;
     expect(msg).toBe(`Planned Arrival Date is modified. ${EMPTY_LOG_VALUE} --> 2026/11/20`);
   });
-  it("writes an explicit receipt-cancel entry naming the master id, quantity and location", () => {
-    const po = createPo();
-    receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, receiveBody(po.lines[0]?.id ?? "", 6, w.loc.storageA));
-    const [receipt] = receiptsForPurchaseOrder(w.db, auth.scope, po.id);
-    cancelReceipt(w.db, w.ctx, auth.scope, receipt?.id ?? "");
-    const entry = poLog(po.id).find((l) => l.field === "receipt");
+  it("writes an explicit receipt-cancel entry naming the master id, quantity and location", async () => {
+    const po = await createPo();
+    await receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, receiveBody(po.lines[0]?.id ?? "", 6, w.loc.storageA));
+    const [receipt] = await receiptsForPurchaseOrder(w.db, auth.scope, po.id);
+    await cancelReceipt(w.db, w.ctx, auth.scope, receipt?.id ?? "");
+    const entry = (await poLog(po.id)).find((l) => l.field === "receipt");
     expect(entry?.message).toMatch(new RegExp(`^Receipt ${receipt?.masterId} is cancelled\\. 6 Each of MLT-WIDGET-01 reversed from \\S+\\.$`));
-    expect(ledger.reconcileLedger(w.db)).toEqual([]);
+    expect(await ledger.reconcileLedger(w.db)).toEqual([]);
   });
   it("log helpers", () => {
     expect(logDate("2026-11-09")).toBe("2026/11/09");
@@ -137,14 +137,14 @@ describe("change log", () => {
 });
 
 describe("receipts", () => {
-  it("shows the receiver's display name and stores expiry as YYYY-MM-DD", () => {
-    w.db.update(schema.products).set({ trackExpiry: true }).where(eq(schema.products.id, w.productId)).run();
-    const po = createPo();
+  it("shows the receiver's display name and stores expiry as YYYY-MM-DD", async () => {
+    await w.db.update(schema.products).set({ trackExpiry: true }).where(eq(schema.products.id, w.productId));
+    const po = await createPo();
     const line = po.lines.find((l) => l.productId === w.productId);
-    receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, receiveBody(line?.id ?? "", 2, w.loc.storageA, { expiryDate: "2027-05-08T05:00:00.000Z" }));
-    const [r] = receiptsForPurchaseOrder(w.db, auth.scope, po.id);
+    await receivePurchaseOrder(w.db, w.ctx, auth.scope, po.id, receiveBody(line?.id ?? "", 2, w.loc.storageA, { expiryDate: "2027-05-08T05:00:00.000Z" }));
+    const [r] = await receiptsForPurchaseOrder(w.db, auth.scope, po.id);
     expect(r?.expiryDate).toBe("2027-05-08");
-    const user = w.db.select().from(schema.users).where(eq(schema.users.id, w.userId)).get();
+    const user = (await w.db.select().from(schema.users).where(eq(schema.users.id, w.userId)).limit(1))[0];
     expect(r?.receivedBy).toBe(user?.name);
     expect(dateOnly("2027-06-02")).toBe("2027-06-02");
     expect(dateOnly(null)).toBeNull();
@@ -152,16 +152,16 @@ describe("receipts", () => {
 });
 
 describe("status drift repair", () => {
-  it("settles a fully received PO left in the transient Receiving status as Completed", () => {
-    const po = createPo();
-    receiveAll(w.db, w.ctx, auth.scope, po.id);
-    w.db.update(schema.purchaseOrders).set({ status: "Receiving", completedAt: null }).where(eq(schema.purchaseOrders.id, po.id)).run();
-    expect(poStatusDrift(w.db).map((d) => [d.code, d.expected])).toEqual([[po.code, "Completed"]]);
-    expect(repairPoStatusDrift(w.db, w.ctx)).toEqual([po.code]);
-    const fixed = w.db.select().from(schema.purchaseOrders).where(and(eq(schema.purchaseOrders.id, po.id))).get();
+  it("settles a fully received PO left in the transient Receiving status as Completed", async () => {
+    const po = await createPo();
+    await receiveAll(w.db, w.ctx, auth.scope, po.id);
+    await w.db.update(schema.purchaseOrders).set({ status: "Receiving", completedAt: null }).where(eq(schema.purchaseOrders.id, po.id));
+    expect((await poStatusDrift(w.db)).map((d) => [d.code, d.expected])).toEqual([[po.code, "Completed"]]);
+    expect(await repairPoStatusDrift(w.db, w.ctx)).toEqual([po.code]);
+    const fixed = (await w.db.select().from(schema.purchaseOrders).where(and(eq(schema.purchaseOrders.id, po.id))).limit(1))[0];
     expect(fixed?.status).toBe("Completed");
     expect(fixed?.completedAt).not.toBeNull();
-    expect(poStatusDrift(w.db)).toEqual([]);
+    expect(await poStatusDrift(w.db)).toEqual([]);
   });
 });
 

@@ -3,7 +3,8 @@
  * billing contracts), 4-step create, full edit, settings-only edit, bulk activate /
  * deactivate and guarded delete. Every write logs field-level change_log on "client".
  */
-import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import type { AppDb } from "@/server/api/db";
 import { AppError, notFoundError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
@@ -21,6 +22,7 @@ import {
 import { BACKLOG_VIEW_STATUSES as BACKLOG_STATUSES } from "@/lib/grid-defs/orders/shipment-orders";
 import { assertVersion, compileGrid, domainCtxOf, listAddresses, logCreate, logDelete, logUpdate, saveAddresses, type Actor, type GridBinding, type OwnedAddress } from "./clients-shared";
 import { contractsForClient, logContractEvent, type ContractRow } from "./billing";
+import { dbAll, dbGet, dbRun } from "@/server/db/sql";
 
 const c = s.clients;
 export const CLIENT_ENTITY = "client";
@@ -79,16 +81,16 @@ function pickerFilter(query: GridQuery): { query: GridQuery; activeOnly: boolean
 
 const fullName = (r: { officialName: string | null; name: string; code: string }): string => `${r.officialName || r.name} (${r.code})`;
 
-export function listClients(db: AppDb, auth: AuthContext, rawQuery: GridQuery): { rows: ClientListRow[]; total: number } {
+export async function listClients(db: AppDb, auth: AuthContext, rawQuery: GridQuery): Promise<{ rows: ClientListRow[]; total: number }> {
   const { query, activeOnly } = pickerFilter(rawQuery);
   const grid = compileGrid(BINDING, query, [clientScope(auth), activeOnly ? eq(c.status, "Active") : undefined]);
-  const result = paginate(db.select(ROW).from(c).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(c).where(grid.where).get()?.n ?? 0, { page: query.page, pageSize: query.pageSize });
+  const result = await paginate(db.select(ROW).from(c).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(c).where(grid.where).limit(1))[0]?.n ?? 0, { page: query.page, pageSize: query.pageSize });
   return { rows: (result.rows as Omit<ClientListRow, "fullName">[]).map((r) => ({ ...r, fullName: fullName(r) })), total: result.total };
 }
 
-export function loadClient(db: AppDb, auth: AuthContext, id: string): typeof c.$inferSelect {
-  const row = db.select().from(c).where(eq(c.id, id)).get();
+export async function loadClient(db: AppDb, auth: AuthContext, id: string): Promise<typeof c.$inferSelect> {
+  const row = (await db.select().from(c).where(eq(c.id, id)).limit(1))[0];
   if (!row || !hasClient(auth.scope, row.id)) throw notFoundError("Client");
   return row;
 }
@@ -103,19 +105,19 @@ export interface ClientKpis {
   readonly skusInStock: number;
 }
 
-export function clientKpis(db: AppDb, auth: AuthContext, id: string, now = new Date()): ClientKpis {
+export async function clientKpis(db: AppDb, auth: AuthContext, id: string, now = new Date()): Promise<ClientKpis> {
   const since = new Date(now.getTime() - 30 * 86_400_000).toISOString();
   const wh = auth.viewScope.warehouseIds.length ? sql.join(auth.viewScope.warehouseIds.map((w) => sql`${w}`), sql`, `) : sql`''`;
-  const one = (q: SQL): number => Number(db.get<{ n: number | null }>(q)?.n ?? 0);
+  const one = async (q: SQL): Promise<number> => Number((await dbGet<{ n: number | null }>(db, q))?.n ?? 0);
   return {
-    orders30d: one(sql`SELECT COUNT(*) AS n FROM shipment_orders WHERE client_id = ${id} AND warehouse_id IN (${wh}) AND created_at >= ${since}`),
-    unitsShipped30d: one(sql`SELECT COALESCE(SUM(ol.shipped_quantity), 0) AS n FROM order_lines ol JOIN shipment_orders so ON so.id = ol.order_id
+    orders30d: await one(sql`SELECT COUNT(*) AS n FROM shipment_orders WHERE client_id = ${id} AND warehouse_id IN (${wh}) AND created_at >= ${since}`),
+    unitsShipped30d: await one(sql`SELECT COALESCE(SUM(ol.shipped_quantity), 0) AS n FROM order_lines ol JOIN shipment_orders so ON so.id = ol.order_id
       WHERE so.client_id = ${id} AND so.warehouse_id IN (${wh}) AND so.shipped_at >= ${since}`),
-    inventoryUnits: one(sql`SELECT COALESCE(SUM(on_hand), 0) AS n FROM inventory WHERE client_id = ${id} AND warehouse_id IN (${wh})`),
-    skusInStock: one(sql`SELECT COUNT(DISTINCT product_id) AS n FROM inventory WHERE client_id = ${id} AND warehouse_id IN (${wh}) AND on_hand > 0`),
-    openPos: one(sql`SELECT COUNT(*) AS n FROM purchase_orders WHERE client_id = ${id} AND warehouse_id IN (${wh}) AND status IN ('Pending', 'Started', 'Receiving')`),
-    openOrders: one(sql`SELECT COUNT(*) AS n FROM shipment_orders WHERE client_id = ${id} AND warehouse_id IN (${wh}) AND status IN (${backlog})`),
-    products: one(sql`SELECT COUNT(*) AS n FROM products WHERE client_id = ${id}`),
+    inventoryUnits: await one(sql`SELECT COALESCE(SUM(on_hand), 0) AS n FROM inventory WHERE client_id = ${id} AND warehouse_id IN (${wh})`),
+    skusInStock: await one(sql`SELECT COUNT(DISTINCT product_id) AS n FROM inventory WHERE client_id = ${id} AND warehouse_id IN (${wh}) AND on_hand > 0`),
+    openPos: await one(sql`SELECT COUNT(*) AS n FROM purchase_orders WHERE client_id = ${id} AND warehouse_id IN (${wh}) AND status IN ('Pending', 'Started', 'Receiving')`),
+    openOrders: await one(sql`SELECT COUNT(*) AS n FROM shipment_orders WHERE client_id = ${id} AND warehouse_id IN (${wh}) AND status IN (${backlog})`),
+    products: await one(sql`SELECT COUNT(*) AS n FROM products WHERE client_id = ${id}`),
   };
 }
 
@@ -139,10 +141,10 @@ export function isTestIdentity(name: string, email: string): boolean {
   return TEST_NAME.test(name.trim()) || TEST_EMAIL.test(email.trim());
 }
 
-export function usersWithAccess(db: AppDb, clientId: string): ClientUserRow[] {
-  const rows = db.all<{ id: string; name: string; email: string; role: string; isActive: number; allClients: number }>(sql`
-    SELECT u.id, u.name, u.email, u.role, u.is_active AS isActive, u.all_clients AS allClients FROM users u
-    WHERE u.all_clients = 1 OR EXISTS (SELECT 1 FROM user_clients uc WHERE uc.user_id = u.id AND uc.client_id = ${clientId})
+export async function usersWithAccess(db: AppDb, clientId: string): Promise<ClientUserRow[]> {
+  const rows = await dbAll<{ id: string; name: string; email: string; role: string; isActive: number; allClients: number }>(db, sql`
+    SELECT u.id, u.name, u.email, u.role, u.is_active AS "isActive", u.all_clients AS "allClients" FROM users u
+    WHERE u.all_clients = true OR EXISTS (SELECT 1 FROM user_clients uc WHERE uc.user_id = u.id AND uc.client_id = ${clientId})
     ORDER BY u.all_clients ASC, u.name ASC`);
   return rows.filter((r) => !isTestIdentity(r.name, r.email)).map((r) => ({ id: r.id, name: r.name, email: r.email, role: r.role, isActive: Boolean(r.isActive), access: r.allClients ? "All clients" : "Assigned" }));
 }
@@ -158,12 +160,12 @@ export interface ClientDetail extends ClientListRow {
   readonly updatedAt: string;
 }
 
-export function getClient(db: AppDb, auth: AuthContext, id: string): ClientDetail {
-  const row = loadClient(db, auth, id);
-  const view = db.select(ROW).from(c).where(eq(c.id, id)).get() as Omit<ClientListRow, "fullName">;
+export async function getClient(db: AppDb, auth: AuthContext, id: string): Promise<ClientDetail> {
+  const row = await loadClient(db, auth, id);
+  const view = (await db.select(ROW).from(c).where(eq(c.id, id)).limit(1))[0] as Omit<ClientListRow, "fullName">;
   return {
-    ...view, fullName: fullName(view), settings: fullSettings(row.settings), sscc: readSscc(row.settings), customFields: row.customFields ?? {}, addresses: listAddresses(db, "client", id),
-    kpis: clientKpis(db, auth, id), contracts: contractsForClient(db, auth, id), users: usersWithAccess(db, id), updatedAt: row.updatedAt,
+    ...view, fullName: fullName(view), settings: fullSettings(row.settings), sscc: readSscc(row.settings), customFields: row.customFields ?? {}, addresses: await listAddresses(db, "client", id),
+    kpis: await clientKpis(db, auth, id), contracts: await contractsForClient(db, auth, id), users: await usersWithAccess(db, id), updatedAt: row.updatedAt,
   };
 }
 
@@ -183,8 +185,8 @@ function snapshot(row: typeof c.$inferSelect): Record<string, unknown> {
   return out;
 }
 
-const codeTaken = (db: AppDb, code: string, exceptId?: string): boolean => {
-  const clash = db.select({ id: c.id }).from(c).where(sql`upper(${c.code}) = upper(${code})`).get();
+const codeTaken = async (db: AppDb, code: string, exceptId?: string): Promise<boolean> => {
+  const clash = (await db.select({ id: c.id }).from(c).where(sql`upper(${c.code}) = upper(${code})`).limit(1))[0];
   return Boolean(clash && clash.id !== exceptId);
 };
 
@@ -192,26 +194,26 @@ const codeTaken = (db: AppDb, code: string, exceptId?: string): boolean => {
  * Wizard step 1: is `code` free (case-insensitive, across every client, not only the caller's
  * scope, since codes are globally unique), and the nearest free variant (APX → APX2 … APX99).
  */
-export function clientCodeCheck(db: AppDb, raw: string, exceptId?: string): { code: string; available: boolean; suggestion: string | null } {
+export async function clientCodeCheck(db: AppDb, raw: string, exceptId?: string): Promise<{ code: string; available: boolean; suggestion: string | null }> {
   const code = raw.trim().toUpperCase();
   if (!code) return { code, available: false, suggestion: null };
-  const available = !codeTaken(db, code, exceptId);
+  const available = !(await codeTaken(db, code, exceptId));
   if (available) return { code, available, suggestion: code };
   for (let n = 2; n < 1000; n += 1) {
     const tail = String(n);
     const candidate = `${code.slice(0, Math.max(2, 20 - tail.length))}${tail}`;
-    if (!codeTaken(db, candidate, exceptId)) return { code, available, suggestion: candidate };
+    if (!(await codeTaken(db, candidate, exceptId))) return { code, available, suggestion: candidate };
   }
   return { code, available, suggestion: null };
 }
 
-function assertCodeFree(db: AppDb, code: string, exceptId?: string): void {
-  const clash = db.select({ id: c.id }).from(c).where(sql`upper(${c.code}) = upper(${code})`).get();
+async function assertCodeFree(db: AppDb, code: string, exceptId?: string): Promise<void> {
+  const clash = (await db.select({ id: c.id }).from(c).where(sql`upper(${c.code}) = upper(${code})`).limit(1))[0];
   if (clash && clash.id !== exceptId) throw new AppError("DUPLICATE", `Client code ${code} is already used`, { fieldErrors: { code: ["This client code is already used"] } });
 }
 
-function assertNameFree(db: AppDb, name: string, exceptId?: string): void {
-  const clash = db.select({ id: c.id }).from(c).where(sql`lower(${c.name}) = lower(${name})`).get();
+async function assertNameFree(db: AppDb, name: string, exceptId?: string): Promise<void> {
+  const clash = (await db.select({ id: c.id }).from(c).where(sql`lower(${c.name}) = lower(${name})`).limit(1))[0];
   if (clash && clash.id !== exceptId) throw new AppError("DUPLICATE", `A client named ${name} already exists`, { fieldErrors: { name: ["A client with this display name already exists"] } });
 }
 
@@ -231,60 +233,60 @@ function columns(input: ClientSave) {
   };
 }
 
-function addNote(tx: AppDb, actor: Actor, clientId: string, body: string | null): void {
+async function addNote(tx: AppDb, actor: Actor, clientId: string, body: string | null): Promise<void> {
   if (!body) return;
-  tx.insert(s.entityNotes).values({ entityType: CLIENT_ENTITY, entityId: clientId, body, userId: actor.userId }).run();
+  await tx.insert(s.entityNotes).values({ entityType: CLIENT_ENTITY, entityId: clientId, body, userId: actor.userId });
 }
 
-export function createClient(tx: AppDb, auth: AuthContext, actor: Actor, input: ClientSave): { id: string; code: string; name: string } {
+export async function createClient(tx: AppDb, auth: AuthContext, actor: Actor, input: ClientSave): Promise<{ id: string; code: string; name: string }> {
   if (auth.scope.clientIds !== "all") throw new AppError("FORBIDDEN", "Only users with access to all clients can create clients");
-  assertCodeFree(tx, input.code);
-  assertNameFree(tx, input.name.trim());
-  const row = tx.insert(c).values({ ...columns(input), createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: c.id, code: c.code, name: c.name }).get();
+  await assertCodeFree(tx, input.code);
+  await assertNameFree(tx, input.name.trim());
+  const row = (await tx.insert(c).values({ ...columns(input), createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: c.id, code: c.code, name: c.name }))[0];
   const ctx = domainCtxOf(actor, auth);
-  logCreate(tx, ctx, CLIENT_ENTITY, row.id, row.code);
-  if (input.addresses.length) saveAddresses(tx, ctx, { type: "client", id: row.id, code: row.code, userId: actor.userId }, input.addresses);
-  addNote(tx, actor, row.id, input.note);
+  await logCreate(tx, ctx, CLIENT_ENTITY, row.id, row.code);
+  if (input.addresses.length) await saveAddresses(tx, ctx, { type: "client", id: row.id, code: row.code, userId: actor.userId }, input.addresses);
+  await addNote(tx, actor, row.id, input.note);
   return row;
 }
 
-export function updateClient(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: ClientSave): { id: string; code: string; name: string; version: number } {
-  const before = loadClient(tx, auth, id);
+export async function updateClient(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: ClientSave): Promise<{ id: string; code: string; name: string; version: number }> {
+  const before = await loadClient(tx, auth, id);
   assertVersion(before.version, input.version);
   if (input.code !== before.code) throw new AppError("VALIDATION", "Client code can't change", { fieldErrors: { code: ["Client code can't change after creation"] } });
-  assertNameFree(tx, input.name.trim(), id);
-  const after = tx.update(c).set({ ...columns(input), updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, id)).returning().get();
+  await assertNameFree(tx, input.name.trim(), id);
+  const after = (await tx.update(c).set({ ...columns(input), updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, id)).returning())[0];
   const ctx = domainCtxOf(actor, auth);
-  logUpdate(tx, ctx, CLIENT_ENTITY, id, after.code, snapshot(before), snapshot(after));
-  saveAddresses(tx, ctx, { type: "client", id, code: after.code, userId: actor.userId }, input.addresses);
-  addNote(tx, actor, id, input.note);
+  await logUpdate(tx, ctx, CLIENT_ENTITY, id, after.code, snapshot(before), snapshot(after));
+  await saveAddresses(tx, ctx, { type: "client", id, code: after.code, userId: actor.userId }, input.addresses);
+  await addNote(tx, actor, id, input.note);
   return { id, code: after.code, name: after.name, version: after.version };
 }
 
-export function updateClientSettings(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: { currency: ClientSave["currency"]; settings: ClientSettingsForm; version?: number }): { id: string; version: number } {
-  const before = loadClient(tx, auth, id);
+export async function updateClientSettings(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: { currency: ClientSave["currency"]; settings: ClientSettingsForm; version?: number }): Promise<{ id: string; version: number }> {
+  const before = await loadClient(tx, auth, id);
   assertVersion(before.version, input.version);
-  const after = tx.update(c).set({ currency: input.currency, settings: withSscc(input.settings, readSscc(before.settings)), updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, id)).returning().get();
-  logUpdate(tx, domainCtxOf(actor, auth), CLIENT_ENTITY, id, after.code, snapshot(before), snapshot(after));
+  const after = (await tx.update(c).set({ currency: input.currency, settings: withSscc(input.settings, readSscc(before.settings)), updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, id)).returning())[0];
+  await logUpdate(tx, domainCtxOf(actor, auth), CLIENT_ENTITY, id, after.code, snapshot(before), snapshot(after));
   return { id, version: after.version };
 }
 
-export function setClientStatus(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], status: ClientStatus): BulkResult {
+export async function setClientStatus(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], status: ClientStatus): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const row = loadClient(inner, auth, id);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const row = await loadClient(inner, auth, id);
     if (row.status === status) throw new AppError("INVALID_STATE", `${row.name} is already ${status.toLowerCase()}`);
     if (status === "Inactive") {
-      const open = Number(inner.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM shipment_orders WHERE client_id = ${id} AND status IN (${backlog})`)?.n ?? 0);
+      const open = Number((await dbGet<{ n: number }>(inner, sql`SELECT COUNT(*) AS n FROM shipment_orders WHERE client_id = ${id} AND status IN (${backlog})`))?.n ?? 0);
       if (open > 0) throw new AppError("INVALID_STATE", `${row.name} has ${open} open ${open === 1 ? "order" : "orders"}`);
     }
-    inner.update(c).set({ status, updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, id)).run();
-    logUpdate(inner, ctx, CLIENT_ENTITY, id, row.code, { status: row.status }, { status });
+    await inner.update(c).set({ status, updatedBy: actor.userId, version: sql`${c.version} + 1` }).where(eq(c.id, id));
+    await logUpdate(inner, ctx, CLIENT_ENTITY, id, row.code, { status: row.status }, { status });
     // The billing-periods scheduler skips contracts of Inactive clients: say so on each Approved contract's change log.
-    const approved = inner.select({ id: s.billingContracts.id, name: s.billingContracts.name }).from(s.billingContracts)
-      .where(and(eq(s.billingContracts.clientId, id), eq(s.billingContracts.approvalStatus, "Approved"))).all();
+    const approved = await inner.select({ id: s.billingContracts.id, name: s.billingContracts.name }).from(s.billingContracts)
+      .where(and(eq(s.billingContracts.clientId, id), eq(s.billingContracts.approvalStatus, "Approved")));
     for (const k of approved) {
-      logContractEvent(inner, ctx, k.id, k.name, {
+      await logContractEvent(inner, ctx, k.id, k.name, {
         type: "Update", field: "autoCalculation", label: "Automatic calculation", from: status === "Inactive" ? "Running" : "Paused", to: status === "Inactive" ? "Paused" : "Running",
         message: status === "Inactive" ? `Client ${row.name} was deactivated; automatic billing is paused. Calculate a final bill manually if needed.` : `Client ${row.name} was activated; automatic billing resumes.`,
       });
@@ -293,8 +295,8 @@ export function setClientStatus(tx: AppDb, auth: AuthContext, actor: Actor, ids:
 }
 
 /** Why a client can't be deleted (null = deletable). */
-export function clientDeleteBlocker(db: AppDb, id: string): string | null {
-  const counts = db.get<{ products: number; orders: number; pos: number; inv: number; contracts: number }>(sql`SELECT
+export async function clientDeleteBlocker(db: AppDb, id: string): Promise<string | null> {
+  const counts = await dbGet<{ products: number; orders: number; pos: number; inv: number; contracts: number }>(db, sql`SELECT
     (SELECT COUNT(*) FROM products WHERE client_id = ${id}) AS products,
     (SELECT COUNT(*) FROM shipment_orders WHERE client_id = ${id}) AS orders,
     (SELECT COUNT(*) FROM purchase_orders WHERE client_id = ${id}) AS pos,
@@ -308,18 +310,18 @@ export function clientDeleteBlocker(db: AppDb, id: string): string | null {
   return parts.length ? `has ${parts.join(", ")}; deactivate it instead` : null;
 }
 
-export function deleteClients(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult {
+export async function deleteClients(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const row = loadClient(inner, auth, id);
-    const reason = clientDeleteBlocker(inner, id);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const row = await loadClient(inner, auth, id);
+    const reason = await clientDeleteBlocker(inner, id);
     if (reason) throw new AppError("INVALID_STATE", `${row.name} ${reason}`);
     for (const table of ["customers", "vendors", "user_clients", "lookup_values", "vas_operations", "shipment_package_clients", "printout_template_clients", "carrier_connection_clients"]) {
-      inner.run(sql`DELETE FROM ${sql.raw(table)} WHERE client_id = ${id}`);
+      await dbRun(inner, sql`DELETE FROM ${sql.raw(table)} WHERE client_id = ${id}`);
     }
-    inner.delete(s.addresses).where(and(eq(s.addresses.ownerType, "client"), eq(s.addresses.ownerId, id))).run();
-    inner.delete(c).where(eq(c.id, id)).run();
-    logDelete(inner, ctx, CLIENT_ENTITY, id, row.code);
+    await inner.delete(s.addresses).where(and(eq(s.addresses.ownerType, "client"), eq(s.addresses.ownerId, id)));
+    await inner.delete(c).where(eq(c.id, id));
+    await logDelete(inner, ctx, CLIENT_ENTITY, id, row.code);
   });
 }
 
@@ -327,13 +329,13 @@ export function deleteClients(tx: AppDb, auth: AuthContext, actor: Actor, ids: r
  * GET /api/clients for any caller: holders of settings.clients.view get the full grid row, everyone
  * else (operators / viewers using client pickers) only the picker-safe fields.
  */
-export function listClientsForCaller(db: AppDb, auth: AuthContext, query: GridQuery): { rows: (ClientListRow | ReturnType<typeof slimClientRow>)[]; total: number } {
-  if (auth.permissions.has("settings.clients.view")) return listClients(db, auth, query);
+export async function listClientsForCaller(db: AppDb, auth: AuthContext, query: GridQuery): Promise<{ rows: (ClientListRow | ReturnType<typeof slimClientRow>)[]; total: number }> {
+  if (auth.permissions.has("settings.clients.view")) return await listClients(db, auth, query);
   // Never select PII for these callers: the SQL itself only reads the picker-safe columns.
   const { query: q, activeOnly } = pickerFilter(query);
   const grid = compileGrid(BINDING, q, [clientScope(auth), activeOnly ? eq(c.status, "Active") : undefined]);
-  const result = paginate(db.select(SLIM_ROW).from(c).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(c).where(grid.where).get()?.n ?? 0, { page: q.page, pageSize: q.pageSize });
+  const result = await paginate(db.select(SLIM_ROW).from(c).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(c).where(grid.where).limit(1))[0]?.n ?? 0, { page: q.page, pageSize: q.pageSize });
   const rows = (result.rows as Omit<SlimClientRow, "fullName">[]).map((r) => slimClientRow({ ...r, fullName: fullName(r) }));
   return { rows, total: result.total };
 }
@@ -348,12 +350,12 @@ export function slimClientRow(r: SlimClientRow): SlimClientRow {
 }
 
 /** Lightweight id → label options for pickers (Active only by default); one indexed query, no KPIs. */
-export function clientOptions(db: AppDb, auth: AuthContext, includeInactive = false): { id: string; code: string; name: string; status: ClientStatus; currency: string }[] {
-  return db.select({ id: c.id, code: c.code, name: c.name, status: c.status, currency: c.currency }).from(c)
-    .where(and(clientScope(auth, false), includeInactive ? undefined : eq(c.status, "Active"))).orderBy(asc(c.name)).all();
+export async function clientOptions(db: AppDb, auth: AuthContext, includeInactive = false): Promise<{ id: string; code: string; name: string; status: ClientStatus; currency: string }[]> {
+  return await db.select({ id: c.id, code: c.code, name: c.name, status: c.status, currency: c.currency }).from(c)
+    .where(and(clientScope(auth, false), includeInactive ? undefined : eq(c.status, "Active"))).orderBy(asc(c.name));
 }
 
-export function clientsByIds(db: AppDb, ids: readonly string[]): Map<string, typeof c.$inferSelect> {
+export async function clientsByIds(db: AppDb, ids: readonly string[]): Promise<Map<string, typeof c.$inferSelect>> {
   if (ids.length === 0) return new Map();
-  return new Map(db.select().from(c).where(inArray(c.id, [...ids])).all().map((r) => [r.id, r]));
+  return new Map((await db.select().from(c).where(inArray(c.id, [...ids]))).map((r) => [r.id, r]));
 }

@@ -4,7 +4,8 @@
  * (+ error catalog, Retry Download), Recent Errors (grouped, with drilldown), Workflow Blocked
  * (+ Release) and Product Listing Exceptions. All scoped to clients in the viewer's scope.
  */
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { desc } from "@/server/db/order";
 import type { IntegrationErrorInfo } from "@/lib/integration-errors";
 import { brandText } from "@/lib/grid-defs/integrations/common";
 import { applyLocalGridQuery, type FieldValue } from "@/lib/local-grid-query";
@@ -23,6 +24,7 @@ import { pauseReason, retryMissingOrders } from "@/server/integrations/runtime/c
 import { assertFound, compileGrid, domainCtxOf, type Actor, type GridBinding } from "./integration-logs-kit";
 import { connectionScope } from "./integration-logs";
 import { dayKeyInZone, lastDaysInZone, safeTimeZone } from "@/lib/grid-defs/integrations/time";
+import { dbAll } from "@/server/db/sql";
 
 const cc = s.channelConnections;
 const DAY = 86_400_000;
@@ -31,15 +33,15 @@ const DAY = 86_400_000;
  * Time zone used to cut per-day buckets: the viewer's zone (sent by the UI as `tz`), else the
  * context warehouse's zone, else the first warehouse in scope. Matches how timestamps render.
  */
-export function bucketZone(db: AppDb, auth: AuthContext, tz?: string | null): string {
+export async function bucketZone(db: AppDb, auth: AuthContext, tz?: string | null): Promise<string> {
   if (tz) return safeTimeZone(tz);
   const whId = auth.context.warehouseId ?? auth.viewScope.warehouseIds[0];
-  const row = whId ? db.select({ tz: s.warehouses.timezone }).from(s.warehouses).where(eq(s.warehouses.id, whId)).get() : undefined;
+  const row = whId ? (await db.select({ tz: s.warehouses.timezone }).from(s.warehouses).where(eq(s.warehouses.id, whId)).limit(1))[0] : undefined;
   return safeTimeZone(row?.tz);
 }
 
-function connections(db: AppDb, auth: AuthContext) {
-  return db.select({ c: cc, clientName: s.clients.name }).from(cc).innerJoin(s.clients, eq(s.clients.id, cc.clientId)).where(connectionScope(auth)).all();
+async function connections(db: AppDb, auth: AuthContext) {
+  return await db.select({ c: cc, clientName: s.clients.name }).from(cc).innerJoin(s.clients, eq(s.clients.id, cc.clientId)).where(connectionScope(auth));
 }
 
 const local = <T,>(rows: readonly T[], query: GridQuery, search: readonly string[]) =>
@@ -66,17 +68,17 @@ export interface HealthRow {
   readonly lastCallAt: string | null;
 }
 
-export function healthRows(db: AppDb, auth: AuthContext, now = new Date()): HealthRow[] {
+export async function healthRows(db: AppDb, auth: AuthContext, now = new Date()): Promise<HealthRow[]> {
   const since = new Date(now.getTime() - DAY).toISOString();
-  const conns = connections(db, auth);
+  const conns = await connections(db, auth);
   if (conns.length === 0) return [];
   const ids = conns.map((x) => x.c.id);
-  const methods = db.select().from(s.channelMethods).where(and(inArray(s.channelMethods.connectionId, ids), eq(s.channelMethods.method, "Download Orders"))).all();
-  const items = db.all<{ cid: string; ok: number; bad: number }>(sql`
-    SELECT r.connection_id AS cid, SUM(CASE WHEN i.success = 1 THEN 1 ELSE 0 END) AS ok, SUM(CASE WHEN i.success = 0 THEN 1 ELSE 0 END) AS bad
+  const methods = await db.select().from(s.channelMethods).where(and(inArray(s.channelMethods.connectionId, ids), eq(s.channelMethods.method, "Download Orders")));
+  const items = await dbAll<{ cid: string; ok: number; bad: number }>(db, sql`
+    SELECT r.connection_id AS cid, SUM(CASE WHEN i.success = true THEN 1 ELSE 0 END) AS ok, SUM(CASE WHEN i.success = false THEN 1 ELSE 0 END) AS bad
     FROM channel_run_items i JOIN channel_runs r ON r.id = i.run_id
     WHERE r.method = 'Download Orders' AND i.at >= ${since} GROUP BY r.connection_id`);
-  const orders = db.all<{ cid: string; n: number; lines: number }>(sql`
+  const orders = await dbAll<{ cid: string; n: number; lines: number }>(db, sql`
     SELECT o.channel_connection_id AS cid, COUNT(DISTINCT o.id) AS n, COUNT(l.id) AS lines FROM shipment_orders o LEFT JOIN order_lines l ON l.order_id = o.id
     WHERE o.channel_connection_id IS NOT NULL AND o.created_at >= ${since} GROUP BY o.channel_connection_id`);
   return conns.map(({ c, clientName }) => {
@@ -93,14 +95,14 @@ export function healthRows(db: AppDb, auth: AuthContext, now = new Date()): Heal
   });
 }
 
-export function listHealth(db: AppDb, auth: AuthContext, query: GridQuery) {
-  return local(healthRows(db, auth), query, ["storeName", "clientName"]);
+export async function listHealth(db: AppDb, auth: AuthContext, query: GridQuery) {
+  return local(await healthRows(db, auth), query, ["storeName", "clientName"]);
 }
 
 export interface HealthCard { readonly provider: string | null; readonly setups: number; readonly avgSuccess: number | null; readonly lowPerforming: number; readonly noData: number }
 
-export function healthCards(db: AppDb, auth: AuthContext, clientId: string | null): HealthCard[] {
-  const rows = healthRows(db, auth).filter((r) => !clientId || r.clientId === clientId);
+export async function healthCards(db: AppDb, auth: AuthContext, clientId: string | null): Promise<HealthCard[]> {
+  const rows = (await healthRows(db, auth)).filter((r) => !clientId || r.clientId === clientId);
   const card = (provider: string | null, list: readonly HealthRow[]): HealthCard => ({ provider, ...summarizeHealth(list.map((r) => r.successRate)) });
   const providers = [...new Set(rows.map((r) => r.provider))].sort();
   return [card(null, rows), ...providers.map((p) => card(p, rows.filter((r) => r.provider === p)))];
@@ -133,11 +135,11 @@ export interface MissingRow {
   readonly status: string;
 }
 
-export function listMissing(db: AppDb, auth: AuthContext, query: GridQuery): { rows: MissingRow[]; total: number } {
+export async function listMissing(db: AppDb, auth: AuthContext, query: GridQuery): Promise<{ rows: MissingRow[]; total: number }> {
   const statusFiltered = query.filters.some((f) => f.field === "status");
   const grid = compileGrid(MISSING_BINDING, query, [connectionScope(auth), statusFiltered ? undefined : sql`${mo.status} <> 'Resolved'`]);
-  const result = paginate(db.select({ m: mo, c: cc, clientName: s.clients.name }).from(mo).innerJoin(cc, eq(cc.id, mo.connectionId)).innerJoin(s.clients, eq(s.clients.id, cc.clientId)).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(mo).innerJoin(cc, eq(cc.id, mo.connectionId)).where(grid.where).get()?.n ?? 0, { page: query.page, pageSize: query.pageSize });
+  const result = await paginate(db.select({ m: mo, c: cc, clientName: s.clients.name }).from(mo).innerJoin(cc, eq(cc.id, mo.connectionId)).innerJoin(s.clients, eq(s.clients.id, cc.clientId)).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(mo).innerJoin(cc, eq(cc.id, mo.connectionId)).where(grid.where).limit(1))[0]?.n ?? 0, { page: query.page, pageSize: query.pageSize });
   return {
     rows: result.rows.map(({ m, c, clientName }) => ({
       id: m.id, orderCode: m.orderCode, channelOrderNumber: m.channelOrderNumber, connectionId: c.id, storeName: c.storeName, provider: c.provider, isSandbox: c.distribution === "API",
@@ -149,12 +151,12 @@ export function listMissing(db: AppDb, auth: AuthContext, query: GridQuery): { r
 
 export interface MissingDetail extends MissingRow { readonly payload: string; readonly error: IntegrationErrorInfo; readonly history: readonly { readonly at: string; readonly message: string | null; readonly success: boolean }[] }
 
-export function getMissing(db: AppDb, auth: AuthContext, id: string): MissingDetail {
-  const row = assertFound(db.select({ m: mo, c: cc, clientName: s.clients.name }).from(mo).innerJoin(cc, eq(cc.id, mo.connectionId)).innerJoin(s.clients, eq(s.clients.id, cc.clientId)).where(eq(mo.id, id)).get(), "Missing order");
+export async function getMissing(db: AppDb, auth: AuthContext, id: string): Promise<MissingDetail> {
+  const row = assertFound((await db.select({ m: mo, c: cc, clientName: s.clients.name }).from(mo).innerJoin(cc, eq(cc.id, mo.connectionId)).innerJoin(s.clients, eq(s.clients.id, cc.clientId)).where(eq(mo.id, id)).limit(1))[0], "Missing order");
   if (!hasClient(auth.scope, row.c.clientId)) throw new AppError("NOT_FOUND", "Missing order not found");
-  const history = db.select({ at: s.channelRunItems.at, message: s.channelRunItems.errorMessage, success: s.channelRunItems.success }).from(s.channelRunItems)
+  const history = await db.select({ at: s.channelRunItems.at, message: s.channelRunItems.errorMessage, success: s.channelRunItems.success }).from(s.channelRunItems)
     .innerJoin(s.channelRuns, eq(s.channelRuns.id, s.channelRunItems.runId))
-    .where(and(eq(s.channelRuns.connectionId, row.c.id), eq(s.channelRunItems.storeOrderNumber, row.m.channelOrderNumber))).orderBy(desc(s.channelRunItems.at)).limit(10).all();
+    .where(and(eq(s.channelRuns.connectionId, row.c.id), eq(s.channelRunItems.storeOrderNumber, row.m.channelOrderNumber))).orderBy(desc(s.channelRunItems.at)).limit(10);
   return {
     id: row.m.id, orderCode: row.m.orderCode, channelOrderNumber: row.m.channelOrderNumber, connectionId: row.c.id, storeName: row.c.storeName, provider: row.c.provider,
     isSandbox: row.c.distribution === "API", clientName: row.clientName, orderDate: row.m.orderDate, lastUpdated: row.m.lastUpdated, lastErrorCode: brandText(row.m.lastErrorCode), status: row.m.status,
@@ -163,7 +165,7 @@ export function getMissing(db: AppDb, auth: AuthContext, id: string): MissingDet
 }
 
 export async function retryMissing(db: AppDb, auth: AuthContext, ids: readonly string[]): Promise<BulkResult> {
-  const rows = db.select({ id: mo.id, clientId: cc.clientId, status: mo.status }).from(mo).innerJoin(cc, eq(cc.id, mo.connectionId)).where(inArray(mo.id, [...ids])).all();
+  const rows = await db.select({ id: mo.id, clientId: cc.clientId, status: mo.status }).from(mo).innerJoin(cc, eq(cc.id, mo.connectionId)).where(inArray(mo.id, [...ids]));
   const allowed = rows.filter((r) => hasClient(auth.scope, r.clientId) && r.status !== "Resolved").map((r) => r.id);
   const rejected = ids.filter((id) => !allowed.includes(id)).map((id) => ({ id, code: "INVALID_STATE", message: rows.some((r) => r.id === id && r.status === "Resolved") ? "Already downloaded" : "Missing order not found" }));
   const res = allowed.length > 0 ? await retryMissingOrders(db, allowed) : { succeeded: [], failed: [] };
@@ -187,19 +189,19 @@ export interface RecentErrorRow {
   readonly day: string;
 }
 
-export function recentErrorRows(db: AppDb, auth: AuthContext, now = new Date(), tz: string = safeTimeZone(null)): RecentErrorRow[] {
+export async function recentErrorRows(db: AppDb, auth: AuthContext, now = new Date(), tz: string = safeTimeZone(null)): Promise<RecentErrorRow[]> {
   const since = new Date(now.getTime() - 14 * DAY).toISOString();
-  const conns = new Map(connections(db, auth).map((x) => [x.c.id, x]));
+  const conns = new Map((await connections(db, auth)).map((x) => [x.c.id, x]));
   if (conns.size === 0) return [];
-  const rows = db.all<{ cid: string; msg: string | null; at: string; num: string | null }>(sql`
+  const rows = await dbAll<{ cid: string; msg: string | null; at: string; num: string | null }>(db, sql`
     SELECT r.connection_id AS cid, i.error_message AS msg, i.at AS at, i.store_order_number AS num
     FROM channel_run_items i JOIN channel_runs r ON r.id = i.run_id
-    WHERE i.success = 0 AND r.method = 'Download Orders' AND i.at >= ${since}`);
+    WHERE i.success = false AND r.method = 'Download Orders' AND i.at >= ${since}`);
   // Open missing orders are the same download errors (Logiwa groups them here too). Count the ones
   // that have no failed run item in the window (imports, older runs, pruned logs), so this page
   // always reconciles with Missing Shipment Orders.
   const seen = new Set(rows.filter((x) => x.num).map((x) => `${x.cid}|${x.num}`));
-  const missingRows = db.all<{ cid: string; msg: string; at: string; num: string }>(sql`
+  const missingRows = await dbAll<{ cid: string; msg: string; at: string; num: string }>(db, sql`
     SELECT m.connection_id AS cid, m.last_error_code AS msg, m.last_updated AS at, m.channel_order_number AS num
     FROM channel_missing_orders m WHERE m.status <> 'Resolved' AND m.last_updated >= ${since}`);
   for (const x of missingRows) if (!seen.has(`${x.cid}|${x.num}`)) rows.push(x);
@@ -225,25 +227,25 @@ export function recentErrorRows(db: AppDb, auth: AuthContext, now = new Date(), 
   return [...grouped.values()].map((g) => g.row).sort((a, b) => b.lastOccurrence.localeCompare(a.lastOccurrence));
 }
 
-export function listRecentErrors(db: AppDb, auth: AuthContext, query: GridQuery, tz?: string | null) {
-  return local(recentErrorRows(db, auth, new Date(), bucketZone(db, auth, tz)), { ...query, sort: query.sort.length > 0 ? query.sort : [{ field: "lastOccurrence", dir: "desc" }] }, ["errorReason", "storeName"]);
+export async function listRecentErrors(db: AppDb, auth: AuthContext, query: GridQuery, tz?: string | null) {
+  return local(await recentErrorRows(db, auth, new Date(), await bucketZone(db, auth, tz)), { ...query, sort: query.sort.length > 0 ? query.sort : [{ field: "lastOccurrence", dir: "desc" }] }, ["errorReason", "storeName"]);
 }
 
 /** Drilldown: the orders affected by one grouped error (beyond Logiwa). `day` is a local day in `tz`. */
-export function recentErrorOrders(db: AppDb, auth: AuthContext, connectionId: string, reason: string, day: string, tz?: string | null) {
-  const conn = assertFound(db.select().from(cc).where(eq(cc.id, connectionId)).get(), "Store connection");
+export async function recentErrorOrders(db: AppDb, auth: AuthContext, connectionId: string, reason: string, day: string, tz?: string | null) {
+  const conn = assertFound((await db.select().from(cc).where(eq(cc.id, connectionId)).limit(1))[0], "Store connection");
   if (!hasClient(auth.scope, conn.clientId)) throw new AppError("NOT_FOUND", "Store connection not found");
-  const zone = bucketZone(db, auth, tz);
+  const zone = await bucketZone(db, auth, tz);
   const base = Date.parse(`${day}T00:00:00Z`);
   if (Number.isNaN(base)) throw new AppError("VALIDATION", "Invalid day");
   // ±1 UTC day window in SQL, then the exact local-day match in JS.
   const from = new Date(base - DAY).toISOString();
   const to = new Date(base + 2 * DAY).toISOString();
-  const items = db.select({ i: s.channelRunItems }).from(s.channelRunItems).innerJoin(s.channelRuns, eq(s.channelRuns.id, s.channelRunItems.runId))
-    .where(and(eq(s.channelRuns.connectionId, connectionId), eq(s.channelRunItems.success, false), sql`REPLACE(${s.channelRunItems.errorMessage}, 'KitStaks', 'KitStak') LIKE ${`${brandText(reason)}%`}`, sql`${s.channelRunItems.at} >= ${from}`, sql`${s.channelRunItems.at} < ${to}`))
-    .orderBy(desc(s.channelRunItems.at)).limit(1000).all().filter((x) => dayKeyInZone(x.i.at, zone) === day).slice(0, 200);
+  const items = (await db.select({ i: s.channelRunItems }).from(s.channelRunItems).innerJoin(s.channelRuns, eq(s.channelRuns.id, s.channelRunItems.runId))
+    .where(and(eq(s.channelRuns.connectionId, connectionId), eq(s.channelRunItems.success, false), sql`REPLACE(${s.channelRunItems.errorMessage}, 'KitStaks', 'KitStak') ILIKE ${`${brandText(reason)}%`}`, sql`${s.channelRunItems.at} >= ${from}`, sql`${s.channelRunItems.at} < ${to}`))
+    .orderBy(desc(s.channelRunItems.at)).limit(1000)).filter((x) => dayKeyInZone(x.i.at, zone) === day).slice(0, 200);
   const numbers = [...new Set(items.map((x) => x.i.storeOrderNumber).filter((v): v is string => Boolean(v)))];
-  const missing = numbers.length === 0 ? [] : db.select().from(mo).where(and(eq(mo.connectionId, connectionId), inArray(mo.channelOrderNumber, numbers))).all();
+  const missing = numbers.length === 0 ? [] : await db.select().from(mo).where(and(eq(mo.connectionId, connectionId), inArray(mo.channelOrderNumber, numbers)));
   const fromItems = numbers.map((n) => {
     const m = missing.find((x) => x.channelOrderNumber === n);
     const last = items.find((x) => x.i.storeOrderNumber === n);
@@ -251,8 +253,8 @@ export function recentErrorOrders(db: AppDb, auth: AuthContext, connectionId: st
   });
   // Open missing orders with this error and no run item (same rule as recentErrorRows).
   const have = new Set(numbers);
-  const extra = db.select().from(mo).where(and(eq(mo.connectionId, connectionId), sql`${mo.status} <> 'Resolved'`, sql`REPLACE(${mo.lastErrorCode}, 'KitStaks', 'KitStak') = ${brandText(reason)}`, sql`${mo.lastUpdated} >= ${from}`, sql`${mo.lastUpdated} < ${to}`))
-    .orderBy(desc(mo.lastUpdated)).all().filter((m) => !have.has(m.channelOrderNumber) && dayKeyInZone(m.lastUpdated, zone) === day)
+  const extra = (await db.select().from(mo).where(and(eq(mo.connectionId, connectionId), sql`${mo.status} <> 'Resolved'`, sql`REPLACE(${mo.lastErrorCode}, 'KitStaks', 'KitStak') = ${brandText(reason)}`, sql`${mo.lastUpdated} >= ${from}`, sql`${mo.lastUpdated} < ${to}`))
+    .orderBy(desc(mo.lastUpdated))).filter((m) => !have.has(m.channelOrderNumber) && dayKeyInZone(m.lastUpdated, zone) === day)
     .map((m) => ({ storeOrderNumber: m.channelOrderNumber, missingOrderId: m.id, orderCode: m.orderCode, status: m.status, lastErrorCode: brandText(m.lastErrorCode), message: brandText(m.lastErrorCode) ?? null, at: m.lastUpdated }));
   return [...fromItems, ...extra].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 200);
 }
@@ -277,16 +279,16 @@ export interface BlockedRow {
   readonly blockedAt: string | null;
 }
 
-export function blockedRows(db: AppDb, auth: AuthContext): BlockedRow[] {
+export async function blockedRows(db: AppDb, auth: AuthContext): Promise<BlockedRow[]> {
   const o = s.shipmentOrders;
   const wh = auth.viewScope.warehouseIds;
   if (wh.length === 0) return [];
-  const orders = db.select({ o, clientName: s.clients.name, whCode: s.warehouses.code, store: cc.storeName, provider: cc.provider }).from(o)
+  const orders = await db.select({ o, clientName: s.clients.name, whCode: s.warehouses.code, store: cc.storeName, provider: cc.provider }).from(o)
     .innerJoin(s.clients, eq(s.clients.id, o.clientId)).innerJoin(s.warehouses, eq(s.warehouses.id, o.warehouseId)).leftJoin(cc, eq(cc.id, o.channelConnectionId))
-    .where(and(sql`${o.workflowBlocked} <> 'None'`, sql`${o.deletedAt} IS NULL`, inArray(o.warehouseId, [...wh]), connectionScope(auth, sql`${o.clientId}`))).all();
+    .where(and(sql`${o.workflowBlocked} <> 'None'`, sql`${o.deletedAt} IS NULL`, inArray(o.warehouseId, [...wh]), connectionScope(auth, sql`${o.clientId}`)));
   if (orders.length === 0) return [];
-  const runs = db.select({ r: s.workflowRuns, name: s.workflows.name }).from(s.workflowRuns).leftJoin(s.workflows, eq(s.workflows.id, s.workflowRuns.workflowId))
-    .where(and(inArray(s.workflowRuns.entityId, orders.map((x) => x.o.id)), sql`${s.workflowRuns.blockType} IS NOT NULL`)).orderBy(desc(s.workflowRuns.at)).all();
+  const runs = await db.select({ r: s.workflowRuns, name: s.workflows.name }).from(s.workflowRuns).leftJoin(s.workflows, eq(s.workflows.id, s.workflowRuns.workflowId))
+    .where(and(inArray(s.workflowRuns.entityId, orders.map((x) => x.o.id)), sql`${s.workflowRuns.blockType} IS NOT NULL`)).orderBy(desc(s.workflowRuns.at));
   return orders.map(({ o: x, clientName, whCode, store, provider }) => {
     const run = runs.find((r) => r.r.entityId === x.id);
     return {
@@ -297,19 +299,19 @@ export function blockedRows(db: AppDb, auth: AuthContext): BlockedRow[] {
   });
 }
 
-export function listBlocked(db: AppDb, auth: AuthContext, query: GridQuery) {
-  return local(blockedRows(db, auth), { ...query, sort: query.sort.length > 0 ? query.sort : [{ field: "orderDate", dir: "desc" }] }, ["orderCode", "storeName", "workflowName"]);
+export async function listBlocked(db: AppDb, auth: AuthContext, query: GridQuery) {
+  return local(await blockedRows(db, auth), { ...query, sort: query.sort.length > 0 ? query.sort : [{ field: "orderDate", dir: "desc" }] }, ["orderCode", "storeName", "workflowName"]);
 }
 
-export function releaseBlocked(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult {
+export async function releaseBlocked(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
   const o = s.shipmentOrders;
-  return runBulk(tx, ids, (inner, id) => {
-    const order = inner.select().from(o).where(eq(o.id, id)).get();
+  return await runBulk(tx, ids, async (inner, id) => {
+    const order = (await inner.select().from(o).where(eq(o.id, id)).limit(1))[0];
     if (!order || !hasWarehouse(auth.scope, order.warehouseId) || !hasClient(auth.scope, order.clientId)) throw new AppError("NOT_FOUND", "Shipment order not found");
     if (order.workflowBlocked === "None") throw new AppError("INVALID_STATE", `Order ${order.code} is not blocked by a workflow`);
-    inner.update(o).set({ workflowBlocked: "None", updatedBy: actor.userId, version: sql`${o.version} + 1` }).where(eq(o.id, id)).run();
-    recordUpdate(inner, ctx, { entityType: "shipment_order", entityId: id, entityCode: order.code, before: { workflowBlocked: order.workflowBlocked }, after: { workflowBlocked: "None" } });
+    await inner.update(o).set({ workflowBlocked: "None", updatedBy: actor.userId, version: sql`${o.version} + 1` }).where(eq(o.id, id));
+    await recordUpdate(inner, ctx, { entityType: "shipment_order", entityId: id, entityCode: order.code, before: { workflowBlocked: order.workflowBlocked }, after: { workflowBlocked: "None" } });
   });
 }
 
@@ -330,10 +332,10 @@ export interface ListingExceptionRow {
   readonly listingDate: string;
 }
 
-export function listingExceptionRows(db: AppDb, auth: AuthContext): ListingExceptionRow[] {
+export async function listingExceptionRows(db: AppDb, auth: AuthContext): Promise<ListingExceptionRow[]> {
   const l = s.productListings;
-  const rows = db.select({ l, sku: s.products.sku, c: cc, clientName: s.clients.name }).from(l).innerJoin(s.products, eq(s.products.id, l.productId))
-    .innerJoin(cc, eq(cc.id, l.channelConnectionId)).innerJoin(s.clients, eq(s.clients.id, cc.clientId)).where(connectionScope(auth)).all();
+  const rows = await db.select({ l, sku: s.products.sku, c: cc, clientName: s.clients.name }).from(l).innerJoin(s.products, eq(s.products.id, l.productId))
+    .innerJoin(cc, eq(cc.id, l.channelConnectionId)).innerJoin(s.clients, eq(s.clients.id, cc.clientId)).where(connectionScope(auth));
   const out: ListingExceptionRow[] = [];
   const groups = new Map<string, typeof rows>();
   for (const r of rows) groups.set(`${r.c.id}|${r.l.productId}`, [...(groups.get(`${r.c.id}|${r.l.productId}`) ?? []), r]);
@@ -353,8 +355,8 @@ export function listingExceptionRows(db: AppDb, auth: AuthContext): ListingExcep
   return out;
 }
 
-export function listListingExceptions(db: AppDb, auth: AuthContext, query: GridQuery) {
-  return local(listingExceptionRows(db, auth), { ...query, sort: query.sort.length > 0 ? query.sort : [{ field: "listingDate", dir: "desc" }] }, ["sku", "sellerSkus"]);
+export async function listListingExceptions(db: AppDb, auth: AuthContext, query: GridQuery) {
+  return local(await listingExceptionRows(db, auth), { ...query, sort: query.sort.length > 0 ? query.sort : [{ field: "listingDate", dir: "desc" }] }, ["sku", "sellerSkus"]);
 }
 
 /* ---------------- setup details ---------------- */
@@ -371,8 +373,8 @@ export interface SetupMethodStat {
 }
 
 /** Most recently active setup visible to the caller (default for Setup Details). */
-export function defaultSetupId(db: AppDb, auth: AuthContext): string | null {
-  const rows = healthRows(db, auth);
+export async function defaultSetupId(db: AppDb, auth: AuthContext): Promise<string | null> {
+  const rows = await healthRows(db, auth);
   if (rows.length === 0) return null;
   const key = (r: HealthRow) => r.lastCallAt ?? r.lastSuccessAt ?? "";
   return [...rows].sort((a, b) => key(b).localeCompare(key(a)) || a.storeName.localeCompare(b.storeName))[0]!.id;
@@ -398,16 +400,16 @@ export interface SetupDetails {
   readonly counts: { readonly missing: number; readonly blocked: number; readonly listingExceptions: number; readonly recentErrors: number };
 }
 
-export function setupDetails(db: AppDb, auth: AuthContext, id: string, now = new Date(), tz?: string | null): SetupDetails {
-  const conn = assertFound(db.select({ c: cc, clientName: s.clients.name }).from(cc).innerJoin(s.clients, eq(s.clients.id, cc.clientId)).where(eq(cc.id, id)).get(), "Store connection");
+export async function setupDetails(db: AppDb, auth: AuthContext, id: string, now = new Date(), tz?: string | null): Promise<SetupDetails> {
+  const conn = assertFound((await db.select({ c: cc, clientName: s.clients.name }).from(cc).innerJoin(s.clients, eq(s.clients.id, cc.clientId)).where(eq(cc.id, id)).limit(1))[0], "Store connection");
   if (!hasClient(auth.scope, conn.c.clientId)) throw new AppError("NOT_FOUND", "Store connection not found");
-  const zone = bucketZone(db, auth, tz);
-  const health = healthRows(db, auth, now).find((h) => h.id === id);
+  const zone = await bucketZone(db, auth, tz);
+  const health = (await healthRows(db, auth, now)).find((h) => h.id === id);
   // 14 local calendar days (today last). 15 UTC days of rows cover them in any zone.
   const days = lastDaysInZone(now, 14, zone);
   const daySet = new Set(days);
   const sinceIso = new Date(now.getTime() - 15 * DAY).toISOString();
-  const channelItems = db.all<{ at: string; num: string | null }>(sql`
+  const channelItems = await dbAll<{ at: string; num: string | null }>(db, sql`
     SELECT i.at AS at, i.store_order_number AS num FROM channel_run_items i JOIN channel_runs r ON r.id = i.run_id
     WHERE r.connection_id = ${id} AND r.method = 'Download Orders' AND i.at >= ${sinceIso}`);
   const channelSets = new Map<string, Set<string>>();
@@ -418,14 +420,14 @@ export function setupDetails(db: AppDb, auth: AuthContext, id: string, now = new
     channelSets.set(k, set);
   });
   const ksCounts = new Map<string, number>();
-  for (const r of db.all<{ at: string }>(sql`SELECT created_at AS at FROM shipment_orders WHERE channel_connection_id = ${id} AND created_at >= ${sinceIso}`)) {
+  for (const r of await dbAll<{ at: string }>(db, sql`SELECT created_at AS at FROM shipment_orders WHERE channel_connection_id = ${id} AND created_at >= ${sinceIso}`)) {
     const k = dayKeyInZone(r.at, zone);
     ksCounts.set(k, (ksCounts.get(k) ?? 0) + 1);
   }
   const volume = days.map((day) => ({ day, channel: channelSets.get(day)?.size ?? 0, kitstaks: ksCounts.get(day) ?? 0 }));
-  const methodRows = db.select().from(s.channelMethods).where(eq(s.channelMethods.connectionId, id)).all();
-  const runRows = db.all<{ method: string; at: string; ok: number | null; bad: number | null }>(sql`
-    SELECT method, started_at AS at, success_count AS ok, error_count AS bad FROM channel_runs WHERE connection_id = ${id} AND started_at >= ${sinceIso}`)
+  const methodRows = await db.select().from(s.channelMethods).where(eq(s.channelMethods.connectionId, id));
+  const runRows = (await dbAll<{ method: string; at: string; ok: number | null; bad: number | null }>(db, sql`
+    SELECT method, started_at AS at, success_count AS ok, error_count AS bad FROM channel_runs WHERE connection_id = ${id} AND started_at >= ${sinceIso}`))
     .map((r) => ({ ...r, day: dayKeyInZone(r.at, zone) })).filter((r) => daySet.has(r.day));
   const methods: SetupMethodStat[] = methodRows.map((m) => {
     const mine = runRows.filter((x) => x.method === m.method);
@@ -437,11 +439,11 @@ export function setupDetails(db: AppDb, auth: AuthContext, id: string, now = new
     const mine = runRows.filter((r) => r.day === day);
     return { day, ok: mine.reduce((n, x) => n + Number(x.ok ?? 0), 0), errors: mine.reduce((n, x) => n + Number(x.bad ?? 0), 0) };
   });
-  const missingAll = db.select({ m: mo }).from(mo).where(and(eq(mo.connectionId, id), sql`${mo.status} <> 'Resolved'`)).orderBy(desc(mo.lastUpdated)).all();
-  const blocked = blockedRows(db, auth).filter((b) => b.storeName === conn.c.storeName);
-  const exceptions = listingExceptionRows(db, auth).filter((e) => e.connectionId === id);
-  const errors = recentErrorRows(db, auth, now, zone).filter((e) => e.connectionId === id);
-  const wh = db.select({ code: s.warehouses.code }).from(s.channelLocationMappings).innerJoin(s.warehouses, eq(s.warehouses.id, s.channelLocationMappings.warehouseId)).where(eq(s.channelLocationMappings.connectionId, id)).all();
+  const missingAll = await db.select({ m: mo }).from(mo).where(and(eq(mo.connectionId, id), sql`${mo.status} <> 'Resolved'`)).orderBy(desc(mo.lastUpdated));
+  const blocked = (await blockedRows(db, auth)).filter((b) => b.storeName === conn.c.storeName);
+  const exceptions = (await listingExceptionRows(db, auth)).filter((e) => e.connectionId === id);
+  const errors = (await recentErrorRows(db, auth, now, zone)).filter((e) => e.connectionId === id);
+  const wh = await db.select({ code: s.warehouses.code }).from(s.channelLocationMappings).innerJoin(s.warehouses, eq(s.warehouses.id, s.channelLocationMappings.warehouseId)).where(eq(s.channelLocationMappings.connectionId, id));
   return {
     id, storeName: conn.c.storeName, provider: conn.c.provider, isSandbox: conn.c.distribution === "API", clientName: conn.clientName, warehouses: [...new Set(wh.map((w) => w.code))],
     successRate: health?.successRate ?? null, successes24h: health?.successes24h ?? 0, errors24h: health?.errors24h ?? 0, methods, callTrend, volume,

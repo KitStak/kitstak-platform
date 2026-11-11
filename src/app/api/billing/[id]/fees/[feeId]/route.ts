@@ -10,11 +10,11 @@ export const PATCH = defineRoute({
   permission: "settings.billing.edit",
   params,
   body: feeSchema,
-  handler: ({ db, auth, actor, params: p, body }) => updateFee(db, auth, actor, p.id, p.feeId, body),
+  handler: async ({ db, auth, actor, params: p, body }) => await updateFee(db, auth, actor, p.id, p.feeId, body),
 });
 
 export const DELETE = defineRoute({
   permission: "settings.billing.edit",
   params,
-  handler: ({ db, auth, actor, params: p }) => deleteFee(db, auth, actor, p.id, p.feeId),
+  handler: async ({ db, auth, actor, params: p }) => await deleteFee(db, auth, actor, p.id, p.feeId),
 });

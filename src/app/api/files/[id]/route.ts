@@ -11,10 +11,10 @@ import { authorizeFileRead, fileResponse } from "@/server/repositories/platform-
 export const GET = defineRoute({
   params: idParamsSchema,
   query: z.object({ inline: z.enum(["0", "1"]).default("0") }),
-  handler: ({ db, auth, params, query }) => {
+  handler: async ({ db, auth, params, query }) => {
     const store = fileStore();
-    authorizeFileRead(db, store, auth, params.id);
-    const { record, bytes } = store.read(db, params.id);
+    await authorizeFileRead(db, store, auth, params.id);
+    const { record, bytes } = await store.read(db, params.id);
     return fileResponse(record, bytes, query.inline === "1");
   },
 });

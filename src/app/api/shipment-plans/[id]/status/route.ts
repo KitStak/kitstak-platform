@@ -7,5 +7,5 @@ export const POST = defineRoute({
   permission: "fulfillment.shipment_plan.change_status",
   params: idParamsSchema,
   body: planStatusSchema,
-  handler: ({ db, auth, actor, params, body }) => changePlanStatus(db, auth, domainCtx(actor, auth), params.id, body.status, body.version),
+  handler: async ({ db, auth, actor, params, body }) => await changePlanStatus(db, auth, domainCtx(actor, auth), params.id, body.status, body.version),
 });

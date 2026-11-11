@@ -11,5 +11,5 @@ export const GET = defineRoute({
     q: z.string().trim().max(100).optional(),
     limit: z.coerce.number().int().min(1).max(200).optional(),
   }),
-  handler: ({ db, auth, query }) => searchKits(db, auth.scope, { clientId: query.clientId, q: query.q, limit: query.limit }),
+  handler: async ({ db, auth, query }) => await searchKits(db, auth.scope, { clientId: query.clientId, q: query.q, limit: query.limit }),
 });

@@ -11,7 +11,7 @@ import { domainCtx } from "@/server/repositories/platform-common";
 export const POST = defineRoute({
   permission: P.createJob,
   body: createCountJobSchema,
-  handler: ({ db, auth, actor, body }) => createCountJobs(db, domainCtx(actor, auth), auth, body),
+  handler: async ({ db, auth, actor, body }) => await createCountJobs(db, domainCtx(actor, auth), auth, body),
 });
 
 export const GET = defineRoute({
@@ -21,5 +21,5 @@ export const GET = defineRoute({
       .transform((s) => s.split(",").map((x) => x.trim()).filter(Boolean))
       .pipe(z.array(z.string().min(1).max(64)).min(1).max(1000)),
   }),
-  handler: ({ db, auth, query }) => previewCountJobs(db, auth, query.ids),
+  handler: async ({ db, auth, query }) => await previewCountJobs(db, auth, query.ids),
 });

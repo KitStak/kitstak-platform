@@ -7,8 +7,8 @@ import { domainCtx } from "@/server/repositories/platform-common";
 
 export const GET = defineRoute({
   permission: P.view,
-  handler: ({ db, auth, grid }) => {
-    const page = listCountPlans(db, auth.viewScope, grid());
+  handler: async ({ db, auth, grid }) => {
+    const page = await listCountPlans(db, auth.viewScope, grid());
     return listResult(page.rows, { total: page.total, page: page.page, pageSize: page.pageSize });
   },
 });
@@ -16,5 +16,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: P.create,
   body: countPlanInputSchema,
-  handler: ({ db, auth, actor, body }) => created(createCountPlan(db, domainCtx(actor, auth), auth, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createCountPlan(db, domainCtx(actor, auth), auth, body)),
 });

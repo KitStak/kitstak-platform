@@ -9,8 +9,8 @@ import { carrierOptions } from "@/server/repositories/returns-carriers";
 export const GET = defineRoute({
   permission: ["fulfillment.shipment_orders.create_return_label", "fulfillment.shipment_orders.create_label", "fulfillment.packing_station.view"],
   query: z.object({ warehouseId: idSchema, clientId: idSchema.optional() }),
-  handler: ({ db, auth, query }) => {
+  handler: async ({ db, auth, query }) => {
     if (!hasWarehouse(auth.scope, query.warehouseId)) throw notFoundError("Warehouse");
-    return carrierOptions(db, query.warehouseId, query.clientId);
+    return await carrierOptions(db, query.warehouseId, query.clientId);
   },
 });

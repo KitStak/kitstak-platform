@@ -9,5 +9,5 @@ export const POST = defineRoute({
   permission: "settings.billing.edit",
   params: idParamsSchema,
   body: feeSchema,
-  handler: ({ db, auth, actor, params, body }) => created(createFee(db, auth, actor, params.id, body)),
+  handler: async ({ db, auth, actor, params, body }) => created(await createFee(db, auth, actor, params.id, body)),
 });

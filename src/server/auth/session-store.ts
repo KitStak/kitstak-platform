@@ -12,11 +12,13 @@
  * kills every open session on the next request.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { desc } from "@/server/db/order";
 import { SignJWT, jwtVerify } from "jose";
 import { users, userSessions } from "@/server/db/schema";
 import type { AppDb } from "@/server/api/db";
 import { log } from "@/server/log";
+import { bestEffort, rowCount } from "@/server/db/sql";
 
 export const SESSION_TTL_SECONDS = 12 * 60 * 60;
 /** `last_seen_at` is only rewritten when older than this, to avoid a write per request. */
@@ -89,16 +91,16 @@ export async function issueSession(
   meta: SessionMeta = {},
   now: Date = new Date(),
 ): Promise<IssuedSession> {
-  const user = db
+  const [user] = await db
     .select({ id: users.id, isActive: users.isActive, sessionVersion: users.sessionVersion })
     .from(users)
     .where(eq(users.id, userId))
-    .get();
+    .limit(1);
   if (!user || !user.isActive) throw new Error("Cannot issue a session for a missing or inactive user");
 
   const sessionId = randomUUID();
   const expiresAt = new Date(now.getTime() + SESSION_TTL_SECONDS * 1000).toISOString();
-  db.insert(userSessions)
+  await db.insert(userSessions)
     .values({
       id: sessionId,
       userId,
@@ -108,8 +110,7 @@ export async function issueSession(
       expiresAt,
       ip: meta.ip ?? null,
       userAgent: meta.userAgent ? meta.userAgent.slice(0, 400) : null,
-    })
-    .run();
+    });
 
   const issuedAt = Math.floor(now.getTime() / 1000);
   const token = await new SignJWT({ sv: user.sessionVersion })
@@ -146,12 +147,12 @@ export async function resolveSession(db: AppDb, token: string, now: Date = new D
   const claims = await verifyToken(token, now);
   if (typeof claims === "string") return { ok: false, reason: claims };
 
-  const row = db
+  const [row] = await db
     .select({ session: userSessions, user: users })
     .from(userSessions)
     .innerJoin(users, eq(users.id, userSessions.userId))
     .where(eq(userSessions.id, claims.jti))
-    .get();
+    .limit(1);
   if (!row || row.session.userId !== claims.sub) return { ok: false, reason: "unknown_session" };
   const { session, user } = row;
   if (session.revokedAt) return { ok: false, reason: "revoked" };
@@ -161,7 +162,7 @@ export async function resolveSession(db: AppDb, token: string, now: Date = new D
     return { ok: false, reason: "version_mismatch" };
   }
 
-  touchLastSeen(db, session.id, session.lastSeenAt, now);
+  await touchLastSeen(db, session.id, session.lastSeenAt, now);
   return {
     ok: true,
     user: {
@@ -179,54 +180,51 @@ export async function resolveSession(db: AppDb, token: string, now: Date = new D
   };
 }
 
-function touchLastSeen(db: AppDb, sessionId: string, lastSeenAt: string | null, now: Date): void {
+async function touchLastSeen(db: AppDb, sessionId: string, lastSeenAt: string | null, now: Date): Promise<void> {
   const stale = !lastSeenAt || now.getTime() - Date.parse(lastSeenAt) >= LAST_SEEN_RESOLUTION_MS;
   if (!stale) return;
-  try {
-    db.update(userSessions).set({ lastSeenAt: now.toISOString() }).where(eq(userSessions.id, sessionId)).run();
-  } catch (error: unknown) {
-    // Best effort: a busy DB must not log the user out.
-    log.warn("session lastSeenAt update failed", { component: "auth", err: error });
-  }
+  // Best effort (savepoint): a busy DB must not log the user out or abort an enclosing transaction.
+  const result = await bestEffort(db, async (sp) => {
+    await sp.update(userSessions).set({ lastSeenAt: now.toISOString() }).where(eq(userSessions.id, sessionId));
+  });
+  if (!result.ok) log.warn("session lastSeenAt update failed", { component: "auth", err: result.error });
 }
 
 /** Revokes one session. Returns true when a live row was revoked. */
-export function revokeSession(db: AppDb, sessionId: string, now: Date = new Date()): boolean {
-  const res = db
+export async function revokeSession(db: AppDb, sessionId: string, now: Date = new Date()): Promise<boolean> {
+  const res = await db
     .update(userSessions)
     .set({ revokedAt: now.toISOString() })
-    .where(and(eq(userSessions.id, sessionId), isNull(userSessions.revokedAt)))
-    .run();
-  return res.changes > 0;
+    .where(and(eq(userSessions.id, sessionId), isNull(userSessions.revokedAt)));
+  return rowCount(res) > 0;
 }
 
 /** Revokes every live session of a user, optionally keeping one (the caller's). */
-export function revokeUserSessions(
+export async function revokeUserSessions(
   db: AppDb,
   userId: string,
   options: { readonly exceptSessionId?: string } = {},
   now: Date = new Date(),
-): number {
+): Promise<number> {
   const conditions = [eq(userSessions.userId, userId), isNull(userSessions.revokedAt)];
   const where = options.exceptSessionId
     ? and(...conditions, ne(userSessions.id, options.exceptSessionId))
     : and(...conditions);
-  return db.update(userSessions).set({ revokedAt: now.toISOString() }).where(where).run().changes;
+  return rowCount(await db.update(userSessions).set({ revokedAt: now.toISOString() }).where(where));
 }
 
 /**
  * Increments `users.session_version` and revokes all sessions. Call on deactivation,
  * role change and password change. Returns the new version.
  */
-export function bumpSessionVersion(db: AppDb, userId: string, now: Date = new Date()): number {
-  const row = db
+export async function bumpSessionVersion(db: AppDb, userId: string, now: Date = new Date()): Promise<number> {
+  const [row] = await db
     .update(users)
     .set({ sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now.toISOString() })
     .where(eq(users.id, userId))
-    .returning({ sessionVersion: users.sessionVersion })
-    .get();
+    .returning({ sessionVersion: users.sessionVersion });
   if (!row) throw new Error(`User ${userId} not found`);
-  revokeUserSessions(db, userId, {}, now);
+  await revokeUserSessions(db, userId, {}, now);
   return row.sessionVersion;
 }
 
@@ -240,7 +238,7 @@ export interface SessionSummary {
 }
 
 /** Live (not revoked, not expired) sessions of a user, newest first. */
-export function listActiveSessions(db: AppDb, userId: string, now: Date = new Date()): readonly SessionSummary[] {
+export async function listActiveSessions(db: AppDb, userId: string, now: Date = new Date()): Promise<readonly SessionSummary[]> {
   return db
     .select({
       id: userSessions.id,
@@ -252,15 +250,13 @@ export function listActiveSessions(db: AppDb, userId: string, now: Date = new Da
     })
     .from(userSessions)
     .where(and(eq(userSessions.userId, userId), isNull(userSessions.revokedAt), gt(userSessions.expiresAt, now.toISOString())))
-    .orderBy(desc(userSessions.createdAt))
-    .all();
+    .orderBy(desc(userSessions.createdAt));
 }
 
 /** Deletes rows that expired or were revoked more than `graceDays` ago. */
-export function purgeStaleSessions(db: AppDb, now: Date = new Date(), graceDays = 7): number {
+export async function purgeStaleSessions(db: AppDb, now: Date = new Date(), graceDays = 7): Promise<number> {
   const cutoff = new Date(now.getTime() - graceDays * 86_400_000).toISOString();
-  return db
+  return rowCount(await db
     .delete(userSessions)
-    .where(or(lt(userSessions.expiresAt, cutoff), lt(userSessions.revokedAt, cutoff)))
-    .run().changes;
+    .where(or(lt(userSessions.expiresAt, cutoff), lt(userSessions.revokedAt, cutoff))));
 }

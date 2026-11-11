@@ -15,6 +15,7 @@ import { expiryFor, lotCode } from "./opening";
 import { HOUR_MS, MINUTE_MS, dateOf, isoOf, utcAt } from "./runtime";
 import { actor, round2, txAt, type Id } from "./types";
 import { facilityOf, managerCtx, noteFailure, operatorFor, type World } from "./world";
+import { mapSeq } from "@/server/db/sql";
 
 const RECEIVING_DOORS = ["RECV-01", "RECV-02", "RECV-03"] as const;
 
@@ -37,43 +38,43 @@ const productOf = (w: World, id: Id): ProductRef => {
   return p;
 };
 
-function createPo(w: World, tx: Tx, plan: PoPlan): PoRuntime {
+async function createPo(w: World, tx: Tx, plan: PoPlan): Promise<PoRuntime> {
   const ctx = managerCtx(w);
   const fac = facilityOf(w, plan.warehouse);
   const vendor = vendorOf(w, plan);
-  const code = sequences.next(tx, "po");
+  const code = await sequences.next(tx, "po");
   const totalQuantity = plan.lines.reduce((s, l) => s + l.orderedQty, 0);
   const arrivalMs = utcAt(plan.arrivalDaysAgo, 13);
-  const po = tx.insert(schema.purchaseOrders).values({
+  const po = (await tx.insert(schema.purchaseOrders).values({
     code, warehouseId: fac.id, clientId: plan.clientId, vendorId: vendor.id, vendorName: vendor.name, referenceNumber: plan.reference, status: "Pending",
     poType: plan.poType, totalQuantity, purchasePrice: round2(plan.lines.reduce((s, l) => s + l.orderedQty * l.unitCost, 0)),
     poDate: dateOf(utcAt(plan.createdDaysAgo, 14)), expectedDate: isoOf(arrivalMs), plannedArrivalDate: isoOf(arrivalMs),
     plannedReceivingDate: isoOf(arrivalMs + 2 * HOUR_MS), createdBy: ctx.userId, updatedBy: ctx.userId,
-  }).returning().get();
-  const lineIds = plan.lines.map((l) => {
+  }).returning())[0];
+  const lineIds = await mapSeq(plan.lines, async (l) => {
     const p = productOf(w, l.productId);
-    return tx.insert(schema.purchaseOrderLines).values({
+    return (await tx.insert(schema.purchaseOrderLines).values({
       purchaseOrderId: po.id, productId: p.id, orderedQuantity: l.orderedQty, unitCost: l.unitCost, packType: l.packType === "Case" ? "Case" : p.uom,
       uomQuantity: l.packType === "Case" ? p.caseQty ?? 1 : 1, createdBy: ctx.userId, updatedBy: ctx.userId,
-    }).returning({ id: schema.purchaseOrderLines.id }).get().id;
+    }).returning({ id: schema.purchaseOrderLines.id }))[0].id;
   });
-  changeLog.recordCreate(tx, ctx, { entityType: "purchase_order", entityId: po.id, entityCode: code });
+  await changeLog.recordCreate(tx, ctx, { entityType: "purchase_order", entityId: po.id, entityCode: code });
   return { plan, id: po.id, code, lineIds };
 }
 
-function transitionPo(tx: Tx, ctx: DomainCtx, poId: Id, to: "Started" | "Completed" | "Cancelled", stamp: Partial<typeof schema.purchaseOrders.$inferInsert>): void {
-  const po = tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, poId)).get();
+async function transitionPo(tx: Tx, ctx: DomainCtx, poId: Id, to: "Started" | "Completed" | "Cancelled", stamp: Partial<typeof schema.purchaseOrders.$inferInsert>): Promise<void> {
+  const po = (await tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, poId)).limit(1))[0];
   if (!po || po.status === to) return;
   const status = stateMachines.purchaseOrder.transition(po.status, to, { activeReceipts: 0 });
-  tx.update(schema.purchaseOrders).set({ status, ...stamp, updatedBy: ctx.userId }).where(eq(schema.purchaseOrders.id, poId)).run();
-  changeLog.recordUpdate(tx, ctx, { entityType: "purchase_order", entityId: poId, entityCode: po.code, before: { status: po.status }, after: { status } });
+  await tx.update(schema.purchaseOrders).set({ status, ...stamp, updatedBy: ctx.userId }).where(eq(schema.purchaseOrders.id, poId));
+  await changeLog.recordUpdate(tx, ctx, { entityType: "purchase_order", entityId: poId, entityCode: po.code, before: { status: po.status }, after: { status } });
 }
 
 /** A storage location already holding the SKU (same-SKU putaway), else the next one in rotation. */
-function putawayTarget(tx: Tx, fac: WarehouseFacility, productId: Id, cursor: { n: number }): Id {
-  const existing = tx.select({ locationId: schema.inventory.locationId }).from(schema.inventory)
+async function putawayTarget(tx: Tx, fac: WarehouseFacility, productId: Id, cursor: { n: number }): Promise<Id> {
+  const existing = (await tx.select({ locationId: schema.inventory.locationId }).from(schema.inventory)
     .where(and(eq(schema.inventory.productId, productId), eq(schema.inventory.warehouseId, fac.id), gt(schema.inventory.onHand, 0),
-      inArray(schema.inventory.locationId, [...fac.reserve]))).get();
+      inArray(schema.inventory.locationId, [...fac.reserve]))).limit(1))[0];
   if (existing) return existing.locationId;
   cursor.n += 1;
   return fac.reserve[(cursor.n * 7) % fac.reserve.length];
@@ -88,34 +89,34 @@ interface ReceiveArgs {
   readonly damaged?: boolean;
 }
 
-function receive(w: World, tx: Tx, ctx: DomainCtx, a: ReceiveArgs): { inventoryId: Id | null; receiptId: Id } {
+async function receive(w: World, tx: Tx, ctx: DomainCtx, a: ReceiveArgs): Promise<{ inventoryId: Id | null; receiptId: Id }> {
   const line: PoLinePlan = a.po.plan.lines[a.lineIndex];
   const p = productOf(w, line.productId);
   const fac = facilityOf(w, a.po.plan.warehouse);
   const now = Date.now();
-  const { receipt, txn } = ledger.recordReceipt(tx, ctx, {
+  const { receipt, txn } = await ledger.recordReceipt(tx, ctx, {
     type: "Purchase Order", warehouseId: fac.id, clientId: a.po.plan.clientId, productId: p.id, packType: line.packType === "Case" ? "Case" : p.uom,
     quantity: a.qty, locationId: a.damaged ? fac.damaged ?? fac.recv : a.door, lpId: a.lp?.id ?? null, purchaseOrderId: a.po.id, purchaseOrderLineId: a.po.lineIds[a.lineIndex],
     lotNumber: p.trackLot ? lotCode(now, a.lineIndex) : null, expiryDate: p.trackLot ? expiryFor(now) : null,
     damageReason: a.damaged ? "Crushed Packaging" : null, lineNote: a.damaged ? "Outer carton crushed on arrival; photos attached to the BOL." : null,
   });
   if (a.damaged) {
-    tx.update(schema.purchaseOrderLines).set({ damagedQuantity: a.qty }).where(eq(schema.purchaseOrderLines.id, a.po.lineIds[a.lineIndex])).run();
+    await tx.update(schema.purchaseOrderLines).set({ damagedQuantity: a.qty }).where(eq(schema.purchaseOrderLines.id, a.po.lineIds[a.lineIndex]));
   }
   return { inventoryId: txn.toInventoryId, receiptId: receipt.id };
 }
 
-function putaway(w: World, tx: Tx, ctx: DomainCtx, fac: WarehouseFacility, inventoryId: Id, lp: LpRef | null, cursor: { n: number }): void {
-  const bucket = getBucket(tx, inventoryId);
+async function putaway(w: World, tx: Tx, ctx: DomainCtx, fac: WarehouseFacility, inventoryId: Id, lp: LpRef | null, cursor: { n: number }): Promise<void> {
+  const bucket = await getBucket(tx, inventoryId);
   if (bucket.onHand - bucket.allocated <= 0) return;
-  const target = putawayTarget(tx, fac, bucket.productId, cursor);
+  const target = await putawayTarget(tx, fac, bucket.productId, cursor);
   const refs = { algorithmName: "SAME_SKU_EMPTY_LOCATION_ALGORITHM", algorithmRuleName: "Same SKU in storage" };
   if (lp) {
-    ledger.moveLp(tx, ctx, { lpId: lp.id, toLocationId: target, refs });
+    await ledger.moveLp(tx, ctx, { lpId: lp.id, toLocationId: target, refs });
     return;
   }
   const product = productOf(w, bucket.productId);
-  ledger.move(tx, ctx, { inventoryId, qty: bucket.onHand - bucket.allocated, toLocationId: target, toPackType: product.uom, refs });
+  await ledger.move(tx, ctx, { inventoryId, qty: bucket.onHand - bucket.allocated, toLocationId: target, toPackType: product.uom, refs });
 }
 
 interface ScheduleState {
@@ -142,30 +143,30 @@ function scheduleLineReceipts(w: World, po: PoRuntime, i: number, startMs: numbe
   state.putawayCursor.set(fac.code, cursor);
   const firstQty = line.orderedQty - line.secondReceiptQty - (line.damagedQty > 0 ? line.damagedQty : 0);
   const at = startMs + i * 18 * MINUTE_MS;
-  w.queue.schedule(at, `receive ${po.code}#${i + 1}`, () => {
-    const got = txAt(w.env, at, (tx) => {
+  w.queue.schedule(at, `receive ${po.code}#${i + 1}`, async () => {
+    const got = await txAt(w.env, at, async (tx) => {
       if (po.plan.hasCancelledReceipt && i === 0) {
-        const wrong = receive(w, tx, ctx, { po, lineIndex: i, qty: firstQty + 12, lp: null, door });
-        ledger.cancelReceipt(tx, ctx, { receiptId: wrong.receiptId });
+        const wrong = await receive(w, tx, ctx, { po, lineIndex: i, qty: firstQty + 12, lp: null, door });
+        await ledger.cancelReceipt(tx, ctx, { receiptId: wrong.receiptId });
       }
-      const r = receive(w, tx, ctx, { po, lineIndex: i, qty: firstQty, lp, door });
-      if (line.damagedQty > 0) receive(w, tx, ctx, { po, lineIndex: i, qty: line.damagedQty, lp: null, door, damaged: true });
+      const r = await receive(w, tx, ctx, { po, lineIndex: i, qty: firstQty, lp, door });
+      if (line.damagedQty > 0) await receive(w, tx, ctx, { po, lineIndex: i, qty: line.damagedQty, lp: null, door, damaged: true });
       return r;
     });
     const putAt = at + 2 * HOUR_MS + w.env.rng.int(0, 40) * MINUTE_MS;
     if (got.inventoryId) {
       const inventoryId = got.inventoryId;
-      w.queue.schedule(putAt, `putaway ${po.code}#${i + 1}`, () => txAt(w.env, putAt, (tx) => putaway(w, tx, ctx, fac, inventoryId, lp, cursor)));
+      w.queue.schedule(putAt, `putaway ${po.code}#${i + 1}`, async () => await txAt(w.env, putAt, async (tx) => await putaway(w, tx, ctx, fac, inventoryId, lp, cursor)));
     }
   });
   if (line.secondReceiptQty > 0) {
     const later = at + 22 * HOUR_MS;
-    w.queue.schedule(later, `receive-2 ${po.code}#${i + 1}`, () => {
-      const r = txAt(w.env, later, (tx) => receive(w, tx, ctx, { po, lineIndex: i, qty: line.secondReceiptQty, lp: null, door }));
+    w.queue.schedule(later, `receive-2 ${po.code}#${i + 1}`, async () => {
+      const r = await txAt(w.env, later, async (tx) => await receive(w, tx, ctx, { po, lineIndex: i, qty: line.secondReceiptQty, lp: null, door }));
       if (r.inventoryId) {
         const inventoryId = r.inventoryId;
         const putAt = later + 90 * MINUTE_MS;
-        w.queue.schedule(putAt, `putaway-2 ${po.code}`, () => txAt(w.env, putAt, (tx) => putaway(w, tx, ctx, fac, inventoryId, null, cursor)));
+        w.queue.schedule(putAt, `putaway-2 ${po.code}`, async () => await txAt(w.env, putAt, async (tx) => await putaway(w, tx, ctx, fac, inventoryId, null, cursor)));
       }
     });
   }
@@ -175,23 +176,23 @@ function scheduleLineReceipts(w: World, po: PoRuntime, i: number, startMs: numbe
 function schedulePo(w: World, plan: PoPlan, state: ScheduleState): void {
   const createdAt = utcAt(plan.createdDaysAgo, 14, w.env.rng.int(0, 50));
   const arrivalAt = utcAt(plan.arrivalDaysAgo, 12, 30);
-  w.queue.schedule(createdAt, `create PO ${plan.key}`, () => {
-    const po = txAt(w.env, createdAt, (tx) => createPo(w, tx, plan));
+  w.queue.schedule(createdAt, `create PO ${plan.key}`, async () => {
+    const po = await txAt(w.env, createdAt, async (tx) => await createPo(w, tx, plan));
     const mgr = managerCtx(w);
     if (plan.status === "Cancelled") {
       const at = createdAt + 2 * 24 * HOUR_MS;
-      w.queue.schedule(at, `cancel ${po.code}`, () => txAt(w.env, at, (tx) => transitionPo(tx, mgr, po.id, "Cancelled", { cancelledAt: isoOf(at), note: "Cancelled by client: vendor could not meet the ship window." })));
+      w.queue.schedule(at, `cancel ${po.code}`, async () => await txAt(w.env, at, async (tx) => await transitionPo(tx, mgr, po.id, "Cancelled", { cancelledAt: isoOf(at), note: "Cancelled by client: vendor could not meet the ship window." })));
       return;
     }
     if (plan.status === "Pending") return;
-    w.queue.schedule(arrivalAt - 30 * MINUTE_MS, `arrive ${po.code}`, () => txAt(w.env, arrivalAt - 30 * MINUTE_MS, (tx) =>
-      plan.status === "Started" ? transitionPo(tx, mgr, po.id, "Started", { actualArrivalDate: isoOf(arrivalAt - 30 * MINUTE_MS) })
-        : void tx.update(schema.purchaseOrders).set({ actualArrivalDate: isoOf(arrivalAt - 30 * MINUTE_MS) }).where(eq(schema.purchaseOrders.id, po.id)).run()));
+    w.queue.schedule(arrivalAt - 30 * MINUTE_MS, `arrive ${po.code}`, async () => await txAt(w.env, arrivalAt - 30 * MINUTE_MS, async (tx) =>
+      plan.status === "Started" ? await transitionPo(tx, mgr, po.id, "Started", { actualArrivalDate: isoOf(arrivalAt - 30 * MINUTE_MS) })
+        : void (await tx.update(schema.purchaseOrders).set({ actualArrivalDate: isoOf(arrivalAt - 30 * MINUTE_MS) }).where(eq(schema.purchaseOrders.id, po.id)))));
     if (plan.status === "Started") return;
     const last = plan.lines.reduce((max, _l, i) => Math.max(max, scheduleLineReceipts(w, po, i, arrivalAt, state)), arrivalAt);
     if (plan.status === "Completed") {
       const doneAt = last + 3 * HOUR_MS;
-      w.queue.schedule(doneAt, `complete ${po.code}`, () => txAt(w.env, doneAt, (tx) => transitionPo(tx, mgr, po.id, "Completed", { completedAt: isoOf(doneAt) })));
+      w.queue.schedule(doneAt, `complete ${po.code}`, async () => await txAt(w.env, doneAt, async (tx) => await transitionPo(tx, mgr, po.id, "Completed", { completedAt: isoOf(doneAt) })));
     }
   });
 }

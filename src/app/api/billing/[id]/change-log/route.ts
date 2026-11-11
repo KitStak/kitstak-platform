@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: ["settings.billing.change_log", "settings.billing.view"],
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    loadContract(db, auth, params.id);
-    return changeLogResult(db, CONTRACT_ENTITY, params.id, query);
+  handler: async ({ db, auth, params, query }) => {
+    await loadContract(db, auth, params.id);
+    return await changeLogResult(db, CONTRACT_ENTITY, params.id, query);
   },
 });

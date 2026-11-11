@@ -14,11 +14,11 @@ export const POST = defineRoute({
   permission: "inventory.purchase_orders.remove_serial_number",
   rateLimit: RATE_LIMITS.bulkIo,
   body: bulkIdsBodySchema,
-  handler: ({ db, auth, actor, body }) => {
+  handler: async ({ db, auth, actor, body }) => {
     let removed = 0;
-    const result = runBulk(db, body.ids, (tx, id) => {
-      removed += removePreAdvisedSerials(tx, domainCtx(actor, auth), auth.scope, id).removed;
+    const result = await runBulk(db, body.ids, async (tx, id) => {
+      removed += (await removePreAdvisedSerials(tx, domainCtx(actor, auth), auth.scope, id)).removed;
     });
-    return { ...result, removed, rows: result.succeeded.length ? purchaseOrdersByIds(db, auth.scope, result.succeeded) : [] };
+    return { ...result, removed, rows: result.succeeded.length ? await purchaseOrdersByIds(db, auth.scope, result.succeeded) : [] };
   },
 });

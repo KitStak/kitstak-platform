@@ -12,9 +12,9 @@ import { createLocation, listLocations } from "@/server/repositories/locations";
 
 export const GET = defineRoute({
   permission: ["settings.locations.view", "inventory.inventory_by_location.view"],
-  handler: ({ db, auth, grid, searchParams }) => {
+  handler: async ({ db, auth, grid, searchParams }) => {
     const query = searchParams.has("search") && !searchParams.has("q") ? aliasSearch(searchParams) : grid();
-    const { rows, total } = listLocations(db, auth, query);
+    const { rows, total } = await listLocations(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -22,7 +22,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.locations.create",
   body: locationSaveSchema,
-  handler: ({ db, auth, actor, body }) => created(createLocation(db, auth, actor, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createLocation(db, auth, actor, body)),
 });
 
 /** Re-parses the grid grammar with `search` mapped onto `q`. */

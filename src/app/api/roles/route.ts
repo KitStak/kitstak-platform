@@ -6,9 +6,9 @@ import { createRole, listRoles } from "@/server/repositories/roles";
 
 export const GET = defineRoute({
   permission: ["settings.roles.view", "settings.users.view"],
-  handler: ({ db, grid }) => {
+  handler: async ({ db, grid }) => {
     const query = grid();
-    const { rows, total } = listRoles(db, query);
+    const { rows, total } = await listRoles(db, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -16,9 +16,9 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.roles.create",
   body: roleSchema,
-  handler: ({ db, auth, actor, body, audit }) => {
-    const role = createRole(db, auth, actor, body);
-    audit({ action: "role.create", entity: "role", entityId: role.id, detail: { name: role.name, permissions: body.permissions.length } });
+  handler: async ({ db, auth, actor, body, audit }) => {
+    const role = await createRole(db, auth, actor, body);
+    await audit({ action: "role.create", entity: "role", entityId: role.id, detail: { name: role.name, permissions: body.permissions.length } });
     return created(role);
   },
 });

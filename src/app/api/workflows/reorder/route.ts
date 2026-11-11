@@ -6,5 +6,5 @@ import { reorderWorkflows } from "@/server/repositories/workflows";
 export const POST = defineRoute({
   permission: "automation.workflows.edit",
   body: reorderSchema,
-  handler: ({ db, auth, actor, body }) => reorderWorkflows(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await reorderWorkflows(db, auth, actor, body.ids),
 });

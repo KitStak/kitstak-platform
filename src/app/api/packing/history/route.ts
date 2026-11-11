@@ -9,5 +9,5 @@ import { PACKING_PERMISSIONS, packingHistory, warehouseIdParam } from "@/server/
 export const GET = defineRoute({
   permission: PACKING_PERMISSIONS.view,
   query: z.object({ warehouseId: warehouseIdParam, since: z.string().datetime({ offset: true }).optional() }),
-  handler: ({ db, auth, query }) => packingHistory(db, auth.scope, query.warehouseId, auth.user.id, { since: query.since ?? null }),
+  handler: async ({ db, auth, query }) => await packingHistory(db, auth.scope, query.warehouseId, auth.user.id, { since: query.since ?? null }),
 });

@@ -8,7 +8,7 @@ export const GET = defineRoute({
   permission: ["settings.lp_types.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    return changeLogResultOrDeleted(db, auth, "lp_type", params.id, query, () => loadLpType(db, auth, params.id));
+  handler: async ({ db, auth, params, query }) => {
+    return await changeLogResultOrDeleted(db, auth, "lp_type", params.id, query, async () => await loadLpType(db, auth, params.id));
   },
 });

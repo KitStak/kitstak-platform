@@ -1,33 +1,40 @@
 {
   "version": "7",
-  "dialect": "sqlite",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "6",
-      "when": 1793921197513,
-      "tag": "0000_foundation_schema",
+      "version": "7",
+      "when": 1794352150785,
+      "tag": "0000_postgres_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
-      "version": "6",
-      "when": 1793988708519,
-      "tag": "0001_tan_ultimatum",
+      "version": "7",
+      "when": 1794352188854,
+      "tag": "0001_billing_period_guard",
       "breakpoints": true
     },
     {
       "idx": 2,
-      "version": "6",
-      "when": 1794300941551,
-      "tag": "0002_billing_fee_charge_one_time",
+      "version": "7",
+      "when": 1794352189912,
+      "tag": "0002_enable_rls",
       "breakpoints": true
     },
     {
       "idx": 3,
-      "version": "6",
-      "when": 1794334178656,
-      "tag": "0003_round2_indexes_and_columns",
+      "version": "7",
+      "when": 1794352480645,
+      "tag": "0003_rowid_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794352540645,
+      "tag": "0004_runtime_tables_rls",
       "breakpoints": true
     }
   ]

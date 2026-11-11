@@ -4,5 +4,5 @@ import { autoRunHistory } from "@/server/repositories/billing-reports";
 
 export const GET = defineRoute({
   permission: "settings.billing_report.view",
-  handler: ({ db, auth }) => autoRunHistory(db, auth),
+  handler: async ({ db, auth }) => await autoRunHistory(db, auth),
 });

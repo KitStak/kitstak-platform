@@ -7,5 +7,5 @@ import { setCustomersActive } from "@/server/repositories/customers";
 export const POST = defineRoute({
   permission: "settings.customers.edit",
   body: bulkIds.extend({ isActive: z.boolean() }),
-  handler: ({ db, auth, actor, body }) => setCustomersActive(db, auth, actor, body.ids, body.isActive),
+  handler: async ({ db, auth, actor, body }) => await setCustomersActive(db, auth, actor, body.ids, body.isActive),
 });

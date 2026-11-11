@@ -7,5 +7,5 @@ export const PATCH = defineRoute({
   permission: "fulfillment.shipment_plan.edit",
   params: idParamsSchema,
   body: quickPlanSchema,
-  handler: ({ db, auth, actor, params, body }) => quickUpdatePlan(db, auth, domainCtx(actor, auth), params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await quickUpdatePlan(db, auth, domainCtx(actor, auth), params.id, body),
 });

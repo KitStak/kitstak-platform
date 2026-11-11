@@ -3,8 +3,10 @@
  * (`reports.ts`, `scripts/verify-data.ts`). The inventory pages use the scoped grid
  * repositories (`inventory-total.ts`, `inventory-by-location.ts`, `inventory-atp.ts`).
  */
-import { and, asc, count, countDistinct, desc, eq, inArray, like, or, sql, type SQL } from "drizzle-orm";
-import { db, schema } from "@/server/db";
+import { and, count, countDistinct, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { asc, desc } from "@/server/db/order";
+import { getDb, schema } from "@/server/db";
+import type { AppDb } from "@/server/api/db";
 import { likePattern, offsetOf, type ListResult } from "./shared";
 
 const { inventory, products, clients, locations, purchaseOrders, purchaseOrderLines } = schema;
@@ -40,12 +42,12 @@ function productConditions(params: InventoryListParams): SQL | undefined {
   if (params.clientId) conds.push(eq(products.clientId, params.clientId));
   if (params.search) {
     const p = likePattern(params.search);
-    conds.push(or(like(products.sku, p), like(products.name, p)));
+    conds.push(or(ilike(products.sku, p), ilike(products.name, p)));
   }
   return and(...conds);
 }
 
-function invAggregate() {
+function invAggregate(db: AppDb) {
   return db
     .select({
       productId: inventory.productId,
@@ -59,10 +61,11 @@ function invAggregate() {
     .as("inv_agg");
 }
 
-export function listTotalInventory(params: InventoryListParams): ListResult<TotalInventoryRow> {
+export async function listTotalInventory(params: InventoryListParams): Promise<ListResult<TotalInventoryRow>> {
+  const db = await getDb();
   const where = productConditions(params);
-  const inv = invAggregate();
-  const rows = db
+  const inv = await invAggregate(db);
+  const rows = await db
     .select({
       productId: products.id,
       sku: products.sku,
@@ -82,15 +85,13 @@ export function listTotalInventory(params: InventoryListParams): ListResult<Tota
     .where(where)
     .orderBy(asc(products.sku))
     .limit(params.pageSize)
-    .offset(offsetOf(params.page, params.pageSize))
-    .all();
+    .offset(offsetOf(params.page, params.pageSize));
   const total =
-    db
+    (await db
       .select({ n: count() })
       .from(products)
       .innerJoin(clients, eq(products.clientId, clients.id))
-      .where(where)
-      .get()?.n ?? 0;
+      .where(where).limit(1))[0]?.n ?? 0;
   return { rows, total };
 }
 
@@ -112,13 +113,14 @@ export interface LocationInventoryRow {
   receivedAt: string;
 }
 
-export function listInventoryByLocation(params: InventoryListParams): ListResult<LocationInventoryRow> {
+export async function listInventoryByLocation(params: InventoryListParams): Promise<ListResult<LocationInventoryRow>> {
+  const db = await getDb();
   const conds: Array<SQL | undefined> = [];
   if (params.clientId) conds.push(eq(products.clientId, params.clientId));
   if (params.zone) conds.push(eq(locations.zone, params.zone));
   if (params.search) {
     const p = likePattern(params.search);
-    conds.push(or(like(products.sku, p), like(products.name, p), like(locations.code, p)));
+    conds.push(or(ilike(products.sku, p), ilike(products.name, p), ilike(locations.code, p)));
   }
   const where = and(...conds);
   const base = db
@@ -141,21 +143,19 @@ export function listInventoryByLocation(params: InventoryListParams): ListResult
     .innerJoin(products, eq(inventory.productId, products.id))
     .innerJoin(clients, eq(products.clientId, clients.id))
     .innerJoin(locations, eq(inventory.locationId, locations.id));
-  const rows = base
+  const rows = await base
     .where(where)
     .orderBy(asc(locations.code), asc(products.sku))
     .limit(params.pageSize)
-    .offset(offsetOf(params.page, params.pageSize))
-    .all();
+    .offset(offsetOf(params.page, params.pageSize));
   const total =
-    db
+    (await db
       .select({ n: count() })
       .from(inventory)
       .innerJoin(products, eq(inventory.productId, products.id))
       .innerJoin(clients, eq(products.clientId, clients.id))
       .innerJoin(locations, eq(inventory.locationId, locations.id))
-      .where(where)
-      .get()?.n ?? 0;
+      .where(where).limit(1))[0]?.n ?? 0;
   return { rows, total };
 }
 
@@ -173,9 +173,10 @@ export interface AtpRow {
   atp: number;
 }
 
-export function listAtp(params: InventoryListParams): ListResult<AtpRow> {
+export async function listAtp(params: InventoryListParams): Promise<ListResult<AtpRow>> {
+  const db = await getDb();
   const where = productConditions(params);
-  const inv = invAggregate();
+  const inv = await invAggregate(db);
   const incoming = db
     .select({
       productId: purchaseOrderLines.productId,
@@ -188,7 +189,7 @@ export function listAtp(params: InventoryListParams): ListResult<AtpRow> {
     .where(inArray(purchaseOrders.status, ["Pending", "Started", "Receiving"]))
     .groupBy(purchaseOrderLines.productId)
     .as("po_agg");
-  const rows = db
+  const rows = await db
     .select({
       productId: products.id,
       sku: products.sku,
@@ -207,14 +208,12 @@ export function listAtp(params: InventoryListParams): ListResult<AtpRow> {
     .where(where)
     .orderBy(desc(sql`coalesce(${incoming.incoming}, 0)`), asc(products.sku))
     .limit(params.pageSize)
-    .offset(offsetOf(params.page, params.pageSize))
-    .all();
+    .offset(offsetOf(params.page, params.pageSize));
   const total =
-    db
+    (await db
       .select({ n: count() })
       .from(products)
       .innerJoin(clients, eq(products.clientId, clients.id))
-      .where(where)
-      .get()?.n ?? 0;
+      .where(where).limit(1))[0]?.n ?? 0;
   return { rows, total };
 }

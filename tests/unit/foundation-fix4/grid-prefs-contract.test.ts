@@ -16,7 +16,7 @@ const COLUMNS = [
   { id: "actions", defaultVisible: true, alwaysVisible: true },
 ] as const;
 
-beforeEach(() => { openWorld(); });
+beforeEach(async () => { await openWorld(); });
 afterEach(() => closeWorld());
 afterAll(() => removeFilesRoot());
 

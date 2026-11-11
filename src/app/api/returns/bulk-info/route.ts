@@ -13,14 +13,14 @@ const bodySchema = z.object({ ids: z.array(idSchema).max(1000).optional(), lineI
 export const POST = defineRoute({
   permission: RETURN_PERMISSIONS.changeStatus,
   body: bodySchema,
-  handler: ({ db, auth, actor, body }) => {
-    const ids = body.ids ?? returnIdsForLines(db, auth.scope, body.lineIds ?? []);
+  handler: async ({ db, auth, actor, body }) => {
+    const ids = body.ids ?? await returnIdsForLines(db, auth.scope, body.lineIds ?? []);
     if (ids.length === 0) throw validationError("Select at least one return");
     const parsed = bulkReturnInfoSchema.safeParse({ ...body, ids });
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
       throw validationError(issue?.message ?? "Invalid input", { [String(issue?.path[0] ?? "form")]: [issue?.message ?? "Invalid"] });
     }
-    return bulkUpdateReturnInfo(db, scopedCtx(actor, auth), parsed.data);
+    return await bulkUpdateReturnInfo(db, scopedCtx(actor, auth), parsed.data);
   },
 });

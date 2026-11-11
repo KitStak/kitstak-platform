@@ -36,71 +36,71 @@ describe("password hashing + policy", () => {
 
 describe("authenticate", () => {
   let t: SeededDb;
-  afterEach(() => t.close());
+  afterEach(async () => await t.close());
   const attempt = (password: string, ip = "ip1") => ({ email: "Admin@KitStak.io", password, ip, userAgent: "vitest" });
 
-  it("accepts the right password, audits, and resets counters", () => {
-    t = seededDb();
-    expect(authenticate(t.db, attempt(TEST_PASSWORD))).toEqual({ ok: true, userId: t.ids.admin });
-    const row = t.db.select().from(users).where(eq(users.id, t.ids.admin)).get();
+  it("accepts the right password, audits, and resets counters", async () => {
+    t = await seededDb();
+    expect(await authenticate(t.db, attempt(TEST_PASSWORD))).toEqual({ ok: true, userId: t.ids.admin });
+    const row = (await t.db.select().from(users).where(eq(users.id, t.ids.admin)).limit(1))[0];
     expect(row?.lastLoginAt).toBeTruthy();
-    expect(t.db.select().from(auditLog).all().some((a) => a.action === "auth.login" && a.outcome === "success")).toBe(true);
+    expect((await t.db.select().from(auditLog)).some((a) => a.action === "auth.login" && a.outcome === "success")).toBe(true);
   });
 
-  it("rejects unknown emails and wrong passwords with the same reason", () => {
-    t = seededDb();
-    expect(authenticate(t.db, { ...attempt("x"), email: "ghost@kitstak.io" })).toEqual({ ok: false, reason: "invalid" });
-    expect(authenticate(t.db, attempt("wrong"))).toEqual({ ok: false, reason: "invalid" });
+  it("rejects unknown emails and wrong passwords with the same reason", async () => {
+    t = await seededDb();
+    expect(await authenticate(t.db, { ...attempt("x"), email: "ghost@kitstak.io" })).toEqual({ ok: false, reason: "invalid" });
+    expect(await authenticate(t.db, attempt("wrong"))).toEqual({ ok: false, reason: "invalid" });
   });
 
-  it("locks the account at the policy threshold", () => {
-    t = seededDb();
-    t.db.insert(companySettings).values({ displayName: "K", fullName: "K", passwordPolicy: { ...DEFAULT_PASSWORD_POLICY, lockoutThreshold: 3 } }).run();
-    expect(getPasswordPolicy(t.db).lockoutThreshold).toBe(3);
+  it("locks the account at the policy threshold", async () => {
+    t = await seededDb();
+    await t.db.insert(companySettings).values({ displayName: "K", fullName: "K", passwordPolicy: { ...DEFAULT_PASSWORD_POLICY, lockoutThreshold: 3 } });
+    expect((await getPasswordPolicy(t.db)).lockoutThreshold).toBe(3);
     const now = new Date("2026-11-05T10:00:00.000Z");
-    for (let i = 0; i < 3; i += 1) authenticate(t.db, attempt("wrong", `ip${i}`), new Date(now.getTime() + i));
-    expect(authenticate(t.db, attempt(TEST_PASSWORD, "ip9"), new Date(now.getTime() + 10))).toEqual({ ok: false, reason: "locked" });
-    expect(authenticate(t.db, attempt(TEST_PASSWORD, "ip8"), new Date(now.getTime() + 16 * 60_000))).toEqual({ ok: true, userId: t.ids.admin });
+    for (let i = 0; i < 3; i += 1) await authenticate(t.db, attempt("wrong", `ip${i}`), new Date(now.getTime() + i));
+    expect(await authenticate(t.db, attempt(TEST_PASSWORD, "ip9"), new Date(now.getTime() + 10))).toEqual({ ok: false, reason: "locked" });
+    expect(await authenticate(t.db, attempt(TEST_PASSWORD, "ip8"), new Date(now.getTime() + 16 * 60_000))).toEqual({ ok: true, userId: t.ids.admin });
   });
 
-  it("rate limits 5/min per IP", () => {
-    t = seededDb();
+  it("rate limits 5/min per IP", async () => {
+    t = await seededDb();
     const now = new Date("2026-11-05T10:00:00.000Z");
-    for (let i = 0; i < 5; i += 1) authenticate(t.db, { ...attempt("x"), email: `n${i}@x.io` }, now);
-    const blocked = authenticate(t.db, attempt(TEST_PASSWORD), now);
+    for (let i = 0; i < 5; i += 1) await authenticate(t.db, { ...attempt("x"), email: `n${i}@x.io` }, now);
+    const blocked = await authenticate(t.db, attempt(TEST_PASSWORD), now);
     expect(blocked).toMatchObject({ ok: false, reason: "rate_limited" });
   });
 });
 
 describe("password reset", () => {
   let t: SeededDb;
-  afterEach(() => {
+  afterEach(async () => {
     setMailAdapter(devLogMailAdapter);
-    t.close();
+    await t.close();
   });
 
   it("mails a single-use link, resets the password and revokes sessions", async () => {
-    t = seededDb();
+    t = await seededDb();
     const sent: MailMessage[] = [];
     setMailAdapter({ send: vi.fn(async (m: MailMessage) => void sent.push(m)) });
     const session = await issueSession(t.db, t.ids.admin);
     await requestPasswordReset(t.db, { email: "admin@kitstak.io", baseUrl: "http://localhost:3000/" });
     expect(sent).toHaveLength(1);
     const token = decodeURIComponent(/token=([^\s]+)/.exec(sent[0]?.text ?? "")?.[1] ?? "");
-    const stored = t.db.select().from(passwordResetTokens).all();
+    const stored = await t.db.select().from(passwordResetTokens);
     expect(stored).toHaveLength(1);
     expect(stored[0]?.tokenHash).toBe(hashResetToken(token));
     expect(stored[0]?.tokenHash).not.toContain(token);
 
-    expect(() => resetPassword(t.db, { token, password: "weak" })).toThrow(expect.objectContaining({ code: "VALIDATION" }));
-    resetPassword(t.db, { token, password: "BrandNew!Pass42" });
+    await expect(async () => await resetPassword(t.db, { token, password: "weak" })).rejects.toThrow(expect.objectContaining({ code: "VALIDATION" }));
+    await resetPassword(t.db, { token, password: "BrandNew!Pass42" });
     expect((await resolveSession(t.db, session.token)).ok).toBe(false);
-    expect(authenticate(t.db, { email: "admin@kitstak.io", password: "BrandNew!Pass42", ip: "z", userAgent: null }).ok).toBe(true);
-    expect(() => resetPassword(t.db, { token, password: "Another!Pass42" })).toThrow(/invalid or has expired/);
+    expect((await authenticate(t.db, { email: "admin@kitstak.io", password: "BrandNew!Pass42", ip: "z", userAgent: null })).ok).toBe(true);
+    await expect(async () => await resetPassword(t.db, { token, password: "Another!Pass42" })).rejects.toThrow(/invalid or has expired/);
   });
 
   it("does nothing (silently) for unknown emails", async () => {
-    t = seededDb();
+    t = await seededDb();
     const send = vi.fn(async () => undefined);
     setMailAdapter({ send });
     await requestPasswordReset(t.db, { email: "ghost@x.io", baseUrl: "http://x" });

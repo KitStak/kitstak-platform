@@ -8,8 +8,8 @@ import { customerPrefill } from "@/server/repositories/orders-wizard";
 export const GET = defineRoute({
   permission: [ORDER_PERMISSIONS.create, ORDER_PERMISSIONS.edit],
   query: z.object({ customerId: z.string().trim().min(1).max(64) }),
-  handler: ({ db, auth, query }) => {
-    const result = customerPrefill(db, auth.scope, query.customerId);
+  handler: async ({ db, auth, query }) => {
+    const result = await customerPrefill(db, auth.scope, query.customerId);
     if (!result) throw notFoundError("Customer");
     return result;
   },

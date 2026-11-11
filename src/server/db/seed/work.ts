@@ -3,7 +3,8 @@
  * task by task (pick shorts write missing-log rows and resolution jobs), packers pack each
  * order at its pack station, B2B orders are loaded at the dock, then labels are scheduled.
  */
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import * as schema from "@/server/db/schema";
 import { jobs, tasks } from "@/server/domain";
 import type { DomainCtx, Tx } from "@/server/domain/types";
@@ -30,24 +31,24 @@ function runtimeOf(w: World, orderId: Id | null): OrderRuntime | undefined {
   return undefined;
 }
 
-function jobCtx(w: World, tx: Tx, jobId: Id, code: WarehouseCode): DomainCtx {
-  const job = tx.select({ userId: schema.jobs.assignedToUserId }).from(schema.jobs).where(eq(schema.jobs.id, jobId)).get();
+async function jobCtx(w: World, tx: Tx, jobId: Id, code: WarehouseCode): Promise<DomainCtx> {
+  const job = (await tx.select({ userId: schema.jobs.assignedToUserId }).from(schema.jobs).where(eq(schema.jobs.id, jobId)).limit(1))[0];
   const user = w.access.users.find((u) => u.id === job?.userId) ?? operatorFor(w, code, 0);
   return actor(user);
 }
 
-const pendingTasks = (tx: Tx, where: ReturnType<typeof and>): TaskRow[] =>
-  tx.select().from(schema.tasks).where(and(where, eq(schema.tasks.status, "Pending"))).orderBy(asc(schema.tasks.sequence)).all();
+const pendingTasks = async (tx: Tx, where: ReturnType<typeof and>): Promise<TaskRow[]> =>
+  await tx.select().from(schema.tasks).where(and(where, eq(schema.tasks.status, "Pending"))).orderBy(asc(schema.tasks.sequence));
 
-function serialsFor(tx: Tx, task: TaskRow, qty: number): string[] {
+async function serialsFor(tx: Tx, task: TaskRow, qty: number): Promise<string[]> {
   if (!task.allocationId || !task.productId) return [];
-  const product = tx.select({ trackSerial: schema.products.trackSerial }).from(schema.products).where(eq(schema.products.id, task.productId)).get();
+  const product = (await tx.select({ trackSerial: schema.products.trackSerial }).from(schema.products).where(eq(schema.products.id, task.productId)).limit(1))[0];
   if (!product?.trackSerial) return [];
-  const alloc = tx.select({ inventoryId: schema.inventoryAllocations.inventoryId }).from(schema.inventoryAllocations).where(eq(schema.inventoryAllocations.id, task.allocationId)).get();
+  const alloc = (await tx.select({ inventoryId: schema.inventoryAllocations.inventoryId }).from(schema.inventoryAllocations).where(eq(schema.inventoryAllocations.id, task.allocationId)).limit(1))[0];
   if (!alloc) return [];
-  return tx.select({ serial: schema.serialNumbers.primarySerial }).from(schema.serialNumbers)
+  return (await tx.select({ serial: schema.serialNumbers.primarySerial }).from(schema.serialNumbers)
     .where(and(eq(schema.serialNumbers.inventoryId, alloc.inventoryId), inArray(schema.serialNumbers.status, ["Received", "Updated"])))
-    .orderBy(asc(schema.serialNumbers.primarySerial)).limit(qty).all().map((r) => r.serial);
+    .orderBy(asc(schema.serialNumbers.primarySerial)).limit(qty)).map((r) => r.serial);
 }
 
 function stationFor(w: World, code: WarehouseCode, seed: string): Id {
@@ -57,28 +58,28 @@ function stationFor(w: World, code: WarehouseCode, seed: string): Id {
   return stations[h % stations.length];
 }
 
-function pickOne(w: World, code: WarehouseCode, taskId: Id, atMs: number): void {
-  const outcome = txAt(w.env, atMs, (tx) => {
-    const task = tx.select().from(schema.tasks).where(eq(schema.tasks.id, taskId)).get();
+async function pickOne(w: World, code: WarehouseCode, taskId: Id, atMs: number): Promise<void> {
+  const outcome = await txAt(w.env, atMs, async (tx) => {
+    const task = (await tx.select().from(schema.tasks).where(eq(schema.tasks.id, taskId)).limit(1))[0];
     if (!task || task.status !== "Pending") return null;
-    const ctx = jobCtx(w, tx, task.jobId, code);
+    const ctx = await jobCtx(w, tx, task.jobId, code);
     const runtime = runtimeOf(w, task.orderId);
     const remaining = task.plannedQty - task.actualQty;
     const short = runtime?.plan.fate === "pickShort" && !shorted.has(runtime.id) && remaining > 0;
     if (short && runtime) shorted.add(runtime.id);
     const qty = short ? remaining - 1 : remaining;
-    const [result] = tasks.execute(tx, ctx, {
-      taskIds: [task.id], targetLocationId: stationFor(w, code, task.orderId ?? task.jobId), qty, serials: serialsFor(tx, task, qty),
+    const [result] = await tasks.execute(tx, ctx, {
+      taskIds: [task.id], targetLocationId: stationFor(w, code, task.orderId ?? task.jobId), qty, serials: await serialsFor(tx, task, qty),
       createResolutionJob: short, note: short ? "Bin count lower than expected; one unit missing." : null,
     });
-    return { orderId: task.orderId, resolutionJobId: result?.resolutionJobId ?? null, status: task.orderId ? orderStatus(tx, task.orderId) : null };
+    return { orderId: task.orderId, resolutionJobId: result?.resolutionJobId ?? null, status: task.orderId ? await orderStatus(tx, task.orderId) : null };
   });
   if (!outcome) return;
   if (outcome.resolutionJobId) {
     const resolutionJobId = outcome.resolutionJobId;
     const at = atMs + 45 * MINUTE_MS;
-    w.queue.schedule(at, "assign resolution job", () => {
-      txAt(w.env, at, (tx) => checkBulk(w, "assign resolution", jobs.assign(tx, actor(w.access.manager), { jobIds: [resolutionJobId], userId: operatorFor(w, code, 1).id })));
+    w.queue.schedule(at, "assign resolution job", async () => {
+      await txAt(w.env, at, async (tx) => checkBulk(w, "assign resolution", await jobs.assign(tx, actor(w.access.manager), { jobIds: [resolutionJobId], userId: operatorFor(w, code, 1).id })));
       schedulePickJob(w, code, resolutionJobId, at + 20 * MINUTE_MS);
     });
   }
@@ -90,22 +91,22 @@ function pickOne(w: World, code: WarehouseCode, taskId: Id, atMs: number): void 
 
 /** Schedules every pending picking task of a job, about 90 seconds apart. */
 export function schedulePickJob(w: World, code: WarehouseCode, jobId: Id, startMs: number): void {
-  w.queue.schedule(startMs, `start job ${jobId}`, () => {
-    const list = txAt(w.env, startMs, (tx) => pendingTasks(tx, and(eq(schema.tasks.jobId, jobId), eq(schema.tasks.taskType, "Picking"))));
+  w.queue.schedule(startMs, `start job ${jobId}`, async () => {
+    const list = await txAt(w.env, startMs, async (tx) => await pendingTasks(tx, and(eq(schema.tasks.jobId, jobId), eq(schema.tasks.taskType, "Picking"))));
     list.forEach((t, i) => {
       const at = startMs + i * 90_000 + w.env.rng.int(0, 45_000);
-      w.queue.schedule(at, `pick task ${t.taskNo}`, () => pickOne(w, code, t.id, at));
+      w.queue.schedule(at, `pick task ${t.taskNo}`, async () => await pickOne(w, code, t.id, at));
     });
   });
 }
 
-function executeStep(w: World, code: WarehouseCode, orderId: Id, taskType: "Packing" | "Loading", atMs: number, target: Id): string | null {
-  return txAt(w.env, atMs, (tx) => {
-    const list = pendingTasks(tx, and(eq(schema.tasks.orderId, orderId), eq(schema.tasks.taskType, taskType)));
-    if (list.length === 0) return orderStatus(tx, orderId);
+async function executeStep(w: World, code: WarehouseCode, orderId: Id, taskType: "Packing" | "Loading", atMs: number, target: Id): Promise<string | null> {
+  return await txAt(w.env, atMs, async (tx) => {
+    const list = await pendingTasks(tx, and(eq(schema.tasks.orderId, orderId), eq(schema.tasks.taskType, taskType)));
+    if (list.length === 0) return await orderStatus(tx, orderId);
     const ctx = actor(operatorFor(w, code, taskType === "Packing" ? 1 : 2));
-    tasks.execute(tx, ctx, { taskIds: list.map((t) => t.id), targetLocationId: target });
-    return orderStatus(tx, orderId);
+    await tasks.execute(tx, ctx, { taskIds: list.map((t) => t.id), targetLocationId: target });
+    return await orderStatus(tx, orderId);
   });
 }
 
@@ -113,7 +114,7 @@ function afterStep(w: World, code: WarehouseCode, orderId: Id, status: string | 
   if (status === "Ready to Load") {
     const at = atMs + w.env.rng.int(30, 70) * MINUTE_MS;
     const dock = facilityOf(w, code).load[0];
-    w.queue.schedule(at, `load ${orderId}`, () => afterStep(w, code, orderId, executeStep(w, code, orderId, "Loading", at, dock), at));
+    w.queue.schedule(at, `load ${orderId}`, async () => afterStep(w, code, orderId, await executeStep(w, code, orderId, "Loading", at, dock), at));
     return;
   }
   if (status === "Ready to Ship") {
@@ -123,9 +124,9 @@ function afterStep(w: World, code: WarehouseCode, orderId: Id, status: string | 
 }
 
 function schedulePack(w: World, code: WarehouseCode, orderId: Id, atMs: number): void {
-  w.queue.schedule(atMs, `pack ${orderId}`, () => {
+  w.queue.schedule(atMs, `pack ${orderId}`, async () => {
     try {
-      const status = executeStep(w, code, orderId, "Packing", atMs, stationFor(w, code, orderId));
+      const status = await executeStep(w, code, orderId, "Packing", atMs, stationFor(w, code, orderId));
       afterStep(w, code, orderId, status, atMs);
     } catch (error) {
       noteFailure(w, `pack ${orderId}`, error);

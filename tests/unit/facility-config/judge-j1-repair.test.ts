@@ -23,27 +23,27 @@ import { createWorld, orderInput, type World } from "../foundation/domain/fixtur
 let w: World;
 let auth: AuthContext;
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId, role: "manager" }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
 afterEach(() => w.close());
 
-function cart(code: string, levels: number, columns: number, allowMultipleJob = false) {
-  const typeId = (w.db.insert(schema.lookupValues).values({ type: "mobile_cart_type", name: `T-${code}`, warehouseId: w.warehouseId, isActive: true, sortOrder: 0 } as never).returning().get() as { id: string }).id;
-  const row = w.db.insert(schema.mobileCarts).values({ warehouseId: w.warehouseId, code, levels, columns, cartTypeId: typeId, allowMultipleJob } as typeof schema.mobileCarts.$inferInsert).returning().get();
+async function cart(code: string, levels: number, columns: number, allowMultipleJob = false) {
+  const typeId = ((await w.db.insert(schema.lookupValues).values({ type: "mobile_cart_type", name: `T-${code}`, warehouseId: w.warehouseId, isActive: true, sortOrder: 0 } as never).returning())[0] as { id: string }).id;
+  const row = (await w.db.insert(schema.mobileCarts).values({ warehouseId: w.warehouseId, code, levels, columns, cartTypeId: typeId, allowMultipleJob } as typeof schema.mobileCarts.$inferInsert).returning())[0];
   const cells = [];
   for (let l = 1; l <= levels; l += 1) for (let c = 1; c <= columns; c += 1) cells.push({ cartId: row.id, level: l, column: c, barcode: cellBarcode(code, l, c) });
-  w.db.insert(schema.mobileCartCells).values(cells).run();
+  await w.db.insert(schema.mobileCartCells).values(cells);
   return row;
 }
-function job(code: string, orders: number, status = "Pending") {
-  const j = w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code, warehouseId: w.warehouseId, jobTypeId: w.jobTypeId, jobType: "MULTI", operationType: "Picking", status } as never).returning().get() as { id: string };
+async function job(code: string, orders: number, status = "Pending") {
+  const j = (await w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code, warehouseId: w.warehouseId, jobTypeId: w.jobTypeId, jobType: "MULTI", operationType: "Picking", status } as never).returning())[0] as { id: string };
   const ids: string[] = [];
   for (let i = 0; i < orders; i += 1) {
-    const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    w.db.insert(schema.jobOrders).values({ jobId: j.id, orderId: o.id }).run();
+    const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    await w.db.insert(schema.jobOrders).values({ jobId: j.id, orderId: o.id });
     ids.push(o.id);
   }
   return { id: j.id, orderIds: ids };
@@ -64,58 +64,58 @@ describe("put-to-cart (REQ-R10-6)", () => {
     expect(planCellAssignments([{ id: "o1" }, { id: "o2" }], [{ id: "c1" }])).toBeNull();
   });
 
-  it("writes both sides of the link, occupies the cart and shows the orders in their cells", () => {
-    const c = cart("MC-J1", 2, 2);
-    const j = job("Job-J1", 3);
-    const r = assignJobToCart(w.db, w.ctx, { cartId: c.id, jobId: j.id });
+  it("writes both sides of the link, occupies the cart and shows the orders in their cells", async () => {
+    const c = await cart("MC-J1", 2, 2);
+    const j = await job("Job-J1", 3);
+    const r = await assignJobToCart(w.db, w.ctx, { cartId: c.id, jobId: j.id });
     expect(r.assignments.map((a) => a.display)).toEqual(["A01", "A02", "B01"]);
     expect(r.assignments[0]?.barcode).toBe("MC-J1-A01");
-    const jo = w.db.select().from(schema.jobOrders).where(eq(schema.jobOrders.jobId, j.id)).all();
+    const jo = await w.db.select().from(schema.jobOrders).where(eq(schema.jobOrders.jobId, j.id));
     expect(jo.every((x) => x.toteOrCell?.startsWith("MC-J1-"))).toBe(true);
-    expect(w.db.select().from(schema.jobs).where(eq(schema.jobs.id, j.id)).get()?.mobileCartId).toBe(c.id);
-    const d = getMobileCart(w.db, auth, c.id);
+    expect((await w.db.select().from(schema.jobs).where(eq(schema.jobs.id, j.id)).limit(1))[0]?.mobileCartId).toBe(c.id);
+    const d = await getMobileCart(w.db, auth, c.id);
     expect(d.status).toBe("Occupied");
     expect(d.orders).toHaveLength(3);
     expect(d.orders.every((o) => o.cell?.startsWith("MC-J1-"))).toBe(true);
     expect(d.cells.filter((x) => x.orderCode).length).toBe(3);
-    const log = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, c.id)).all();
+    const log = await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, c.id));
     expect(log.length).toBeGreaterThan(0);
   });
 
-  it("is idempotent, blocks a second job on a single-job cart and refuses a job too big for the cart", () => {
-    const c = cart("MC-J2", 1, 2);
-    const j = job("Job-J2", 2);
-    assignJobToCart(w.db, w.ctx, { cartId: c.id, jobId: j.id });
-    expect(assignJobToCart(w.db, w.ctx, { cartId: c.id, jobId: j.id }).assignments).toHaveLength(0);
-    const other = job("Job-J2b", 1);
-    expect(() => assignJobToCart(w.db, w.ctx, { cartId: c.id, jobId: other.id })).toThrow(/in use by Job-J2/);
-    const small = cart("MC-J2s", 1, 1);
-    const big = job("Job-J2c", 2);
-    expect(() => assignJobToCart(w.db, w.ctx, { cartId: small.id, jobId: big.id })).toThrow(/has 2 orders but cart MC-J2s has only 1 free cells/);
-    const closed = job("Job-J2d", 1, "Completed");
-    expect(() => assignJobToCart(w.db, w.ctx, { cartId: small.id, jobId: closed.id })).toThrow(DomainError);
+  it("is idempotent, blocks a second job on a single-job cart and refuses a job too big for the cart", async () => {
+    const c = await cart("MC-J2", 1, 2);
+    const j = await job("Job-J2", 2);
+    await assignJobToCart(w.db, w.ctx, { cartId: c.id, jobId: j.id });
+    expect((await assignJobToCart(w.db, w.ctx, { cartId: c.id, jobId: j.id })).assignments).toHaveLength(0);
+    const other = await job("Job-J2b", 1);
+    await expect(async () => await assignJobToCart(w.db, w.ctx, { cartId: c.id, jobId: other.id })).rejects.toThrow(/in use by Job-J2/);
+    const small = await cart("MC-J2s", 1, 1);
+    const big = await job("Job-J2c", 2);
+    await expect(async () => await assignJobToCart(w.db, w.ctx, { cartId: small.id, jobId: big.id })).rejects.toThrow(/has 2 orders but cart MC-J2s has only 1 free cells/);
+    const closed = await job("Job-J2d", 1, "Completed");
+    await expect(async () => await assignJobToCart(w.db, w.ctx, { cartId: small.id, jobId: closed.id })).rejects.toThrow(DomainError);
   });
 
-  it("reclaims cells whose order left the cart, and Empty cart frees everything", () => {
-    const c = cart("MC-J3", 1, 2, true);
-    const j = job("Job-J3", 2);
-    assignJobToCart(w.db, w.ctx, { cartId: c.id, jobId: j.id });
-    w.db.update(schema.shipmentOrders).set({ status: "Shipped" }).where(eq(schema.shipmentOrders.id, j.orderIds[0] as string)).run();
-    expect(getMobileCart(w.db, auth, c.id).cells.filter((x) => x.orderCode).length).toBe(1);
-    expect(reclaimCartCells(w.db, c.id)).toBe(1);
-    const r = releaseCart(w.db, w.ctx, c.id);
+  it("reclaims cells whose order left the cart, and Empty cart frees everything", async () => {
+    const c = await cart("MC-J3", 1, 2, true);
+    const j = await job("Job-J3", 2);
+    await assignJobToCart(w.db, w.ctx, { cartId: c.id, jobId: j.id });
+    await w.db.update(schema.shipmentOrders).set({ status: "Shipped" }).where(eq(schema.shipmentOrders.id, j.orderIds[0] as string));
+    expect((await getMobileCart(w.db, auth, c.id)).cells.filter((x) => x.orderCode).length).toBe(1);
+    expect(await reclaimCartCells(w.db, c.id)).toBe(1);
+    const r = await releaseCart(w.db, w.ctx, c.id);
     expect(r).toMatchObject({ cartCode: "MC-J3", freedCells: 1, releasedJobs: ["Job-J3"] });
-    const d = getMobileCart(w.db, auth, c.id);
+    const d = await getMobileCart(w.db, auth, c.id);
     expect(d.status).toBe("Available");
     expect(d.cells.every((x) => !x.orderCode)).toBe(true);
-    expect(w.db.select().from(schema.jobOrders).where(eq(schema.jobOrders.jobId, j.id)).all().every((x) => x.toteOrCell === null)).toBe(true);
+    expect((await w.db.select().from(schema.jobOrders).where(eq(schema.jobOrders.jobId, j.id))).every((x) => x.toteOrCell === null)).toBe(true);
   });
 
-  it("lists open picking jobs that can take the cart", () => {
-    const c = cart("MC-J4", 1, 4);
-    job("Job-J4", 2);
-    job("Job-J4x", 1, "Cancelled");
-    expect(cartJobCandidates(w.db, auth, c.id).map((x) => x.code)).toEqual(["Job-J4"]);
+  it("lists open picking jobs that can take the cart", async () => {
+    const c = await cart("MC-J4", 1, 4);
+    await job("Job-J4", 2);
+    await job("Job-J4x", 1, "Cancelled");
+    expect((await cartJobCandidates(w.db, auth, c.id)).map((x) => x.code)).toEqual(["Job-J4"]);
   });
 });
 

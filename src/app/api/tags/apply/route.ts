@@ -8,5 +8,5 @@ import { applyTags, tagApplySchema, TAG_MANAGE_PERMISSIONS } from "@/server/repo
 export const POST = defineRoute({
   permission: TAG_MANAGE_PERMISSIONS,
   body: tagApplySchema,
-  handler: ({ db, auth, body }) => applyTags(db, auth, body),
+  handler: async ({ db, auth, body }) => await applyTags(db, auth, body),
 });

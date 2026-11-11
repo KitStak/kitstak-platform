@@ -5,5 +5,5 @@ import { RETURN_PERMISSIONS } from "@/server/repositories/returns";
 
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.station,
-  handler: ({ db }) => getReturnRules(db),
+  handler: async ({ db }) => await getReturnRules(db),
 });

@@ -9,9 +9,9 @@ import { idParamsSchema } from "@/server/repositories/platform-common";
 export const GET = defineRoute({
   permission: ORDER_PERMISSIONS.view,
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => {
-    const order = findOrderRow(db, auth.viewScope, params.id);
+  handler: async ({ db, auth, params }) => {
+    const order = await findOrderRow(db, auth.viewScope, params.id);
     if (!order) throw notFoundError("Shipment order");
-    return orderLedger(db, order.id);
+    return await orderLedger(db, order.id);
   },
 });

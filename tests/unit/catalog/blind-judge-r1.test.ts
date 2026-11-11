@@ -70,47 +70,47 @@ describe("listing image fallback", () => {
 describe("Suggested listing demo fixture", () => {
   let w: World;
   let scope: Scope;
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     scope = { warehouseIds: [w.warehouseId], clientIds: "all" };
-    w.db.insert(schema.channelConnections).values({ provider: "shopify", storeName: DEMO_LISTING_STORE, clientId: w.clientId, settings: {} as never }).run();
+    await w.db.insert(schema.channelConnections).values({ provider: "shopify", storeName: DEMO_LISTING_STORE, clientId: w.clientId, settings: {} as never });
     for (const sku of ["BLB-HOOD-BLK-M", "BLB-HOOD-GRY-L", "BLB-CAP-OS-BLK", "BLB-CAP-OS-KHK"]) {
-      w.db.insert(schema.products).values({ clientId: w.clientId, sku, barcode: sku, name: sku, category: "Apparel", weightOz: 8, lengthIn: 4, widthIn: 4, heightIn: 2, price: 10, status: "Active" }).run();
+      await w.db.insert(schema.products).values({ clientId: w.clientId, sku, barcode: sku, name: sku, category: "Apparel", weightOz: 8, lengthIn: 4, widthIn: 4, heightIn: 2, price: 10, status: "Active" });
     }
   });
   afterEach(() => w.close());
 
-  const unlinked = () => listListings(w.db, scope, { ...EMPTY_GRID_QUERY, pageSize: 100 }, "unlinked").rows;
+  const unlinked = async () => (await listListings(w.db, scope, { ...EMPTY_GRID_QUERY, pageSize: 100 }, "unlinked")).rows;
 
-  it("inserts four Suggested listings and one No match, once, with change log", () => {
-    const first = ensureDemoSuggestedListings(w.db, w.ctx);
+  it("inserts four Suggested listings and one No match, once, with change log", async () => {
+    const first = await ensureDemoSuggestedListings(w.db, w.ctx);
     expect(first.created).toHaveLength(DEMO_SUGGESTED_LISTINGS.length);
-    const rows = unlinked();
+    const rows = await unlinked();
     expect(rows.filter((r) => r.suggestedProductId).map((r) => r.suggestedProductSku).sort()).toEqual(["BLB-CAP-OS-BLK", "BLB-CAP-OS-KHK", "BLB-HOOD-BLK-M", "BLB-HOOD-GRY-L"]);
     expect(rows.filter((r) => !r.suggestedProductId).map((r) => r.sellerSku)).toEqual(["BLB-TOTE-NAT"]);
-    const again = ensureDemoSuggestedListings(w.db, w.ctx);
+    const again = await ensureDemoSuggestedListings(w.db, w.ctx);
     expect(again.created).toHaveLength(0);
     expect(again.skipped).toHaveLength(DEMO_SUGGESTED_LISTINGS.length);
-    const logged = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityType, "listing")).all().filter((c) => c.type === "Create");
+    const logged = (await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityType, "listing"))).filter((c) => c.type === "Create");
     expect(logged).toHaveLength(DEMO_SUGGESTED_LISTINGS.length);
   });
 
-  it("reset returns matched and dismissed demo listings to Suggested", () => {
-    ensureDemoSuggestedListings(w.db, w.ctx);
-    const rows = unlinked();
+  it("reset returns matched and dismissed demo listings to Suggested", async () => {
+    await ensureDemoSuggestedListings(w.db, w.ctx);
+    const rows = await unlinked();
     const a = rows.find((r) => r.sellerSku === "BLB-HOOD-BLK-M");
     const b = rows.find((r) => r.sellerSku === "BLB-HOOD-GRY-L");
     if (!a?.suggestedProductId || !b) throw new Error("demo rows missing");
-    linkListing(w.db, { ...w.ctx, scope }, a.id, a.suggestedProductId, a.version);
-    dismissSuggestion(w.db, { ...w.ctx, scope }, b.id);
-    expect(unlinked().filter((r) => r.suggestedProductId)).toHaveLength(2);
-    const res = ensureDemoSuggestedListings(w.db, w.ctx, { reset: true });
+    await linkListing(w.db, { ...w.ctx, scope }, a.id, a.suggestedProductId, a.version);
+    await dismissSuggestion(w.db, { ...w.ctx, scope }, b.id);
+    expect((await unlinked()).filter((r) => r.suggestedProductId)).toHaveLength(2);
+    const res = await ensureDemoSuggestedListings(w.db, w.ctx, { reset: true });
     expect([...res.reset].sort()).toEqual(["BLB-HOOD-BLK-M", "BLB-HOOD-GRY-L"]);
-    expect(unlinked().filter((r) => r.suggestedProductId)).toHaveLength(4);
+    expect((await unlinked()).filter((r) => r.suggestedProductId)).toHaveLength(4);
   });
 
-  it("does nothing when the demo store does not exist", () => {
-    w.db.update(schema.channelConnections).set({ storeName: "Other" }).run();
-    expect(ensureDemoSuggestedListings(w.db, w.ctx).created).toHaveLength(0);
+  it("does nothing when the demo store does not exist", async () => {
+    await w.db.update(schema.channelConnections).set({ storeName: "Other" });
+    expect((await ensureDemoSuggestedListings(w.db, w.ctx)).created).toHaveLength(0);
   });
 });

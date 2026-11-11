@@ -23,8 +23,8 @@ export const exportProvider: ExportProvider | null = {
     { key: "orderDate", label: "Order Date", type: "datetime" },
     { key: "trackingNumber", label: "Tracking #" },
   ],
-  fetchPage(ctx, page, pageSize) {
-    const rows = loadDevOrders(ctx.db, ctx.auth.viewScope);
+  async fetchPage(ctx, page, pageSize) {
+    const rows = await loadDevOrders(ctx.db, ctx.auth.viewScope);
     const result = applyLocalGridQuery(rows, { ...ctx.query, page, pageSize }, { get: devOrderField, searchFields: DEV_SEARCH_FIELDS });
     const rowsOut: readonly ExportRow[] = result.rows.map((row) => ({ ...row }));
     return { rows: rowsOut, total: result.total };

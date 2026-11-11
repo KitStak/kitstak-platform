@@ -14,6 +14,7 @@ import type { TxnType } from "@/lib/enums";
 import * as schema from "@/server/db/schema";
 import type { DomainCtx, Tx } from "../types";
 import type { InventoryRow } from "./bucket";
+import { dbGet } from "@/server/db/sql";
 
 export type TxnRow = typeof schema.inventoryTransactions.$inferSelect;
 
@@ -44,18 +45,19 @@ export interface TxnInput {
   readonly refs?: TxnRefs;
 }
 
-function nextSeq(tx: Tx): number {
-  const row = tx.get<{ seq: number | null }>(sql`SELECT MAX(seq) AS seq FROM inventory_transactions`);
-  return (row?.seq ?? 0) + 1;
+/** Safe without a lock of its own: every writer holds the app write lock (`takeWriteLock`). */
+async function nextSeq(tx: Tx): Promise<number> {
+  const row = await dbGet<{ seq: number | null }>(tx, sql`SELECT MAX(seq) AS seq FROM inventory_transactions`);
+  return Number(row?.seq ?? 0) + 1;
 }
 
-export function writeTxn(tx: Tx, ctx: DomainCtx, input: TxnInput): TxnRow {
+export async function writeTxn(tx: Tx, ctx: DomainCtx, input: TxnInput): Promise<TxnRow> {
   const base = input.to ?? input.from;
   if (!base) throw new Error("writeTxn requires a source or target bucket");
   const { from, to } = input;
   const refs = input.refs ?? {};
-  return tx.insert(schema.inventoryTransactions).values({
-    seq: nextSeq(tx),
+  const [row] = await tx.insert(schema.inventoryTransactions).values({
+    seq: await nextSeq(tx),
     type: input.type,
     warehouseId: base.warehouseId,
     clientId: base.clientId ?? "",
@@ -96,5 +98,7 @@ export function writeTxn(tx: Tx, ctx: DomainCtx, input: TxnInput): TxnRow {
     note: refs.note ?? null,
     userId: ctx.userId,
     source: ctx.source,
-  }).returning().get();
+  }).returning();
+  if (!row) throw new Error("inventory_transactions insert returned no row");
+  return row;
 }

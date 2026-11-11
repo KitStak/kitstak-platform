@@ -10,7 +10,7 @@ import { runPicking } from "@/server/repositories/work-orders-ops";
 export const POST = defineRoute({
   permission: WO_PERMISSIONS.picking,
   body: pickingBodySchema,
-  handler: ({ db, auth, actor, body }) => runPicking(db, woCtx(actor, auth), {
+  handler: async ({ db, auth, actor, body }) => await runPicking(db, woCtx(actor, auth), {
     ids: body.ids, jobTypeId: body.jobTypeId, assigneeUserId: body.assigneeUserId, priority: body.priority, dryRun: body.dryRun,
   }),
 });

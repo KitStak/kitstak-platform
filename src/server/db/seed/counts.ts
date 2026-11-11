@@ -13,6 +13,7 @@ import { lookupId } from "./lookups";
 import { HOUR_MS, MINUTE_MS, isoOf, utcAt } from "./runtime";
 import { actor, txAt, type Id } from "./types";
 import { noteFailure, operatorFor, type World } from "./world";
+import { dbGet, forEachSeq, mapSeq } from "@/server/db/sql";
 
 interface CountSpec {
   readonly target: CountPlanStatus;
@@ -50,122 +51,122 @@ function locationsFor(w: World, spec: CountSpec): Id[] {
   return Array.from({ length: n }, (_, i) => pool[(spec.zoneOffset + i * 3) % pool.length]);
 }
 
-function insertLine(tx: Tx, planId: Id, locationId: Id, status: CountPlanStatus | "Recount Created", extra: Partial<typeof schema.countPlanLines.$inferInsert> = {}): Id {
-  const stock = tx.select().from(schema.inventory).where(and(eq(schema.inventory.locationId, locationId), gt(schema.inventory.onHand, 0))).all();
-  return tx.insert(schema.countPlanLines).values({
+async function insertLine(tx: Tx, planId: Id, locationId: Id, status: CountPlanStatus | "Recount Created", extra: Partial<typeof schema.countPlanLines.$inferInsert> = {}): Promise<Id> {
+  const stock = await tx.select().from(schema.inventory).where(and(eq(schema.inventory.locationId, locationId), gt(schema.inventory.onHand, 0)));
+  return (await tx.insert(schema.countPlanLines).values({
     planId, locationId, status, initialStockQty: stock.reduce((s, b) => s + b.onHand, 0), ...extra,
-  }).returning({ id: schema.countPlanLines.id }).get().id;
+  }).returning({ id: schema.countPlanLines.id }))[0].id;
 }
 
 /** Counts a line's buckets; returns the entries' (bucket, counted) pairs. */
-function countLine(tx: Tx, ctx: DomainCtx, lineId: Id, locationId: Id, variance: (i: number) => number): { bucketId: Id; counted: number; system: number }[] {
-  const buckets = tx.select().from(schema.inventory).where(and(eq(schema.inventory.locationId, locationId), gt(schema.inventory.onHand, 0))).all();
-  const out = buckets.map((b, i) => {
+async function countLine(tx: Tx, ctx: DomainCtx, lineId: Id, locationId: Id, variance: (i: number) => number): Promise<{ bucketId: Id; counted: number; system: number }[]> {
+  const buckets = await tx.select().from(schema.inventory).where(and(eq(schema.inventory.locationId, locationId), gt(schema.inventory.onHand, 0)));
+  const out = await mapSeq(buckets, async (b, i) => {
     const counted = Math.max(b.allocated, b.onHand + variance(i));
-    tx.insert(schema.countLineEntries).values({
+    await tx.insert(schema.countLineEntries).values({
       lineId, productId: b.productId, locationId, lpId: b.lpId, lotNumber: b.lotNumber, expiryDate: b.expiryDate, damageReason: b.damageReason,
       packType: b.packType, systemQty: b.onHand, countedQty: counted, countedBy: ctx.source,
-    }).run();
+    });
     return { bucketId: b.id, counted, system: b.onHand };
   });
   const counted = out.reduce((s, e) => s + e.counted, 0);
-  tx.update(schema.countPlanLines).set({ countedQty: counted, approvedStockQty: out.reduce((s, e) => s + e.system, 0), approvedCountQty: counted, countUserId: ctx.userId,
-    startedAt: isoOf(Date.now()), completedAt: isoOf(Date.now() + 4 * MINUTE_MS) }).where(eq(schema.countPlanLines.id, lineId)).run();
+  await tx.update(schema.countPlanLines).set({ countedQty: counted, approvedStockQty: out.reduce((s, e) => s + e.system, 0), approvedCountQty: counted, countUserId: ctx.userId,
+    startedAt: isoOf(Date.now()), completedAt: isoOf(Date.now() + 4 * MINUTE_MS) }).where(eq(schema.countPlanLines.id, lineId));
   return out;
 }
 
-function setPlanStatus(tx: Tx, ctx: DomainCtx, planId: Id, code: string, from: CountPlanStatus, to: CountPlanStatus, stamp: Partial<typeof schema.countPlans.$inferInsert> = {}): void {
+async function setPlanStatus(tx: Tx, ctx: DomainCtx, planId: Id, code: string, from: CountPlanStatus, to: CountPlanStatus, stamp: Partial<typeof schema.countPlans.$inferInsert> = {}): Promise<void> {
   const status = stateMachines.countPlan.transition(from, to);
-  tx.update(schema.countPlans).set({ status, ...stamp, updatedBy: ctx.userId }).where(eq(schema.countPlans.id, planId)).run();
-  changeLog.recordUpdate(tx, ctx, { entityType: "count_plan", entityId: planId, entityCode: code, before: { status: from }, after: { status } });
+  await tx.update(schema.countPlans).set({ status, ...stamp, updatedBy: ctx.userId }).where(eq(schema.countPlans.id, planId));
+  await changeLog.recordUpdate(tx, ctx, { entityType: "count_plan", entityId: planId, entityCode: code, before: { status: from }, after: { status } });
 }
 
-function countJob(w: World, tx: Tx, spec: CountSpec, planId: Id, lines: readonly { id: Id; locationId: Id }[], atMs: number, done: boolean): void {
+async function countJob(w: World, tx: Tx, spec: CountSpec, planId: Id, lines: readonly { id: Id; locationId: Id }[], atMs: number, done: boolean): Promise<void> {
   const fac = w.facility.MLT1;
   const user = operatorFor(w, "MLT1", spec.zoneOffset);
   const code = spec.instant ? "Instant Count" : "Cycle Count";
-  const job = tx.insert(schema.jobs).values({
-    id: crypto.randomUUID(), code: sequences.next(tx, "job"), warehouseId: fac.id, jobType: code, jobTypeId: w.config.jobTypes.get(jobTypeKey(fac.id, code)) ?? null,
+  const job = (await tx.insert(schema.jobs).values({
+    id: crypto.randomUUID(), code: await sequences.next(tx, "job"), warehouseId: fac.id, jobType: code, jobTypeId: w.config.jobTypes.get(jobTypeKey(fac.id, code)) ?? null,
     operationType: "Count", status: done ? "Completed" : spec.target === "Count Started" ? "Started" : "Pending", assignedToUserId: user.id, countPlanId: planId,
     ruleName: spec.instant ? null : w.config.waveRules.count.name, waveRuleId: spec.instant ? null : w.config.waveRules.count.id, taskCount: lines.length,
     // Matches the task rows below (rollupJob rule): Count Started seeds ceil(n/2) tasks Completed.
     completedTaskCount: done ? lines.length : spec.target === "Count Started" ? Math.ceil(lines.length / 2) : 0, plannedStartAt: isoOf(atMs), startedAt: spec.target === "Ready To Count" ? null : isoOf(atMs), completedAt: done ? isoOf(atMs + HOUR_MS) : null,
-  }).returning({ id: schema.jobs.id }).get();
-  const maxNo = tx.get<{ n: number | null }>(sql`SELECT MAX(task_no) AS n FROM tasks`)?.n ?? 0;
-  lines.forEach((l, i) => {
+  }).returning({ id: schema.jobs.id }))[0];
+  const maxNo = (await dbGet<{ n: number | null }>(tx, sql`SELECT MAX(task_no) AS n FROM tasks`))?.n ?? 0;
+  await forEachSeq(lines, async (l, i) => {
     const started = spec.target === "Count Started" && i < Math.ceil(lines.length / 2);
-    tx.insert(schema.tasks).values({
+    await tx.insert(schema.tasks).values({
       taskNo: maxNo + i + 1, jobId: job.id, warehouseId: fac.id, taskType: "Count", status: done || started ? "Completed" : "Pending", sequence: i + 1,
       countPlanId: planId, countLineId: l.id, sourceLocationId: l.locationId, assigneeUserId: user.id, executedByUserId: done || started ? user.id : null,
       plannedStartAt: isoOf(atMs), finishedAt: done || started ? isoOf(atMs + (i + 1) * 6 * MINUTE_MS) : null,
-    }).run();
-    tx.update(schema.countPlanLines).set({ jobId: job.id }).where(eq(schema.countPlanLines.id, l.id)).run();
+    });
+    await tx.update(schema.countPlanLines).set({ jobId: job.id }).where(eq(schema.countPlanLines.id, l.id));
   });
 }
 
-function runCount(w: World, tx: Tx, spec: CountSpec, atMs: number): void {
+async function runCount(w: World, tx: Tx, spec: CountSpec, atMs: number): Promise<void> {
   const ctx = actor(w.access.manager);
   const counter = actor(operatorFor(w, "MLT1", spec.zoneOffset));
-  const code = spec.instant ? sequences.instantCountCode(new Date(atMs)) : sequences.next(tx, "count");
-  const plan = tx.insert(schema.countPlans).values({
+  const code = spec.instant ? sequences.instantCountCode(new Date(atMs)) : await sequences.next(tx, "count");
+  const plan = (await tx.insert(schema.countPlans).values({
     code, warehouseId: w.facility.MLT1.id, description: spec.description, scheduledAt: isoOf(spec.target === "Pending" ? atMs + 26 * HOUR_MS : atMs),
     countType: "Location", operationType: spec.instant ? "Instant Count" : "Cycle Count", waveRuleId: spec.instant ? null : w.config.waveRules.count.id, isAi: spec.ai ?? false, createdBy: ctx.userId,
-  }).returning().get();
-  changeLog.recordCreate(tx, ctx, { entityType: "count_plan", entityId: plan.id, entityCode: code });
+  }).returning())[0];
+  await changeLog.recordCreate(tx, ctx, { entityType: "count_plan", entityId: plan.id, entityCode: code });
   const reasonId = lookupId(w.lookups, "adjustment_reason", "Cycle count correction");
   const steps = PATH_TO[spec.target];
   const lineStatus = (s: CountPlanStatus): CountPlanStatus => (s === "Count Started" ? "Count Started" : s);
-  const lines = locationsFor(w, spec).map((locationId) => ({ id: insertLine(tx, plan.id, locationId, steps.length > 0 ? lineStatus(spec.target) : "Pending"), locationId }));
-  if (spec.target !== "Pending" && spec.target !== "Cancelled") countJob(w, tx, spec, plan.id, lines, atMs, spec.target === "Count Completed" || spec.target === "Inventory Updated");
+  const lines = await mapSeq(locationsFor(w, spec), async (locationId) => ({ id: await insertLine(tx, plan.id, locationId, steps.length > 0 ? lineStatus(spec.target) : "Pending"), locationId }));
+  if (spec.target !== "Pending" && spec.target !== "Cancelled") await countJob(w, tx, spec, plan.id, lines, atMs, spec.target === "Count Completed" || spec.target === "Inventory Updated");
   let status: CountPlanStatus = "Pending";
   for (const to of steps) {
-    if (to === "Count Started") setPlanStatus(tx, ctx, plan.id, code, status, to, { startedAt: isoOf(atMs) });
+    if (to === "Count Started") await setPlanStatus(tx, ctx, plan.id, code, status, to, { startedAt: isoOf(atMs) });
     else if (to === "Count Completed") {
-      for (const [i, l] of lines.entries()) countLine(tx, counter, l.id, l.locationId, (j) => ((i + j) % 4 === 1 ? -1 : (i + j) % 7 === 3 ? 2 : 0));
-      setPlanStatus(tx, ctx, plan.id, code, status, to, { completedAt: isoOf(atMs + HOUR_MS) });
+      for (const [i, l] of lines.entries()) await countLine(tx, counter, l.id, l.locationId, (j) => ((i + j) % 4 === 1 ? -1 : (i + j) % 7 === 3 ? 2 : 0));
+      await setPlanStatus(tx, ctx, plan.id, code, status, to, { completedAt: isoOf(atMs + HOUR_MS) });
     } else if (to === "Inventory Updated") {
-      applyCount(w, tx, ctx, spec, plan.id, lines, reasonId);
-      setPlanStatus(tx, ctx, plan.id, code, status, to, { inventoryUpdatedAt: isoOf(atMs + 2 * HOUR_MS), inventoryUpdatedBy: ctx.userId });
-    } else setPlanStatus(tx, ctx, plan.id, code, status, to);
+      await applyCount(w, tx, ctx, spec, plan.id, lines, reasonId);
+      await setPlanStatus(tx, ctx, plan.id, code, status, to, { inventoryUpdatedAt: isoOf(atMs + 2 * HOUR_MS), inventoryUpdatedBy: ctx.userId });
+    } else await setPlanStatus(tx, ctx, plan.id, code, status, to);
     status = to;
   }
   if (spec.target === "Count Started") {
-    lines.slice(0, Math.ceil(lines.length / 2)).forEach((l) => {
-      countLine(tx, counter, l.id, l.locationId, () => 0);
-      tx.update(schema.countPlanLines).set({ status: "Count Completed" }).where(eq(schema.countPlanLines.id, l.id)).run();
+    await forEachSeq(lines.slice(0, Math.ceil(lines.length / 2)), async (l) => {
+      await countLine(tx, counter, l.id, l.locationId, () => 0);
+      await tx.update(schema.countPlanLines).set({ status: "Count Completed" }).where(eq(schema.countPlanLines.id, l.id));
     });
   }
-  if (spec.target === "Cancelled") tx.update(schema.countPlanLines).set({ status: "Cancelled" }).where(eq(schema.countPlanLines.planId, plan.id)).run();
+  if (spec.target === "Cancelled") await tx.update(schema.countPlanLines).set({ status: "Cancelled" }).where(eq(schema.countPlanLines.planId, plan.id));
 }
 
-function applyCount(w: World, tx: Tx, ctx: DomainCtx, spec: CountSpec, planId: Id, lines: readonly { id: Id; locationId: Id }[], reasonId: Id): void {
+async function applyCount(w: World, tx: Tx, ctx: DomainCtx, spec: CountSpec, planId: Id, lines: readonly { id: Id; locationId: Id }[], reasonId: Id): Promise<void> {
   const serial = new Set(w.catalog.products.filter((p) => p.trackSerial).map((p) => p.id));
-  lines.forEach((l, i) => {
-    const entries = tx.select().from(schema.countLineEntries).where(eq(schema.countLineEntries.lineId, l.id)).all();
+  await forEachSeq(lines, async (l, i) => {
+    const entries = await tx.select().from(schema.countLineEntries).where(eq(schema.countLineEntries.lineId, l.id));
     let lineId = l.id;
     if (spec.recount && i === 0 && entries.some((e) => e.countedQty !== e.systemQty)) {
-      tx.update(schema.countPlanLines).set({ status: "Recount Created", recounted: true }).where(eq(schema.countPlanLines.id, l.id)).run();
-      lineId = insertLine(tx, planId, l.locationId, "Inventory Updated", { isRecountLine: true, recountOfLineId: l.id, note: "Recount requested: variance above 1%." });
-      countLine(tx, ctx, lineId, l.locationId, (j) => (j === 0 ? -1 : 0));
+      await tx.update(schema.countPlanLines).set({ status: "Recount Created", recounted: true }).where(eq(schema.countPlanLines.id, l.id));
+      lineId = await insertLine(tx, planId, l.locationId, "Inventory Updated", { isRecountLine: true, recountOfLineId: l.id, note: "Recount requested: variance above 1%." });
+      await countLine(tx, ctx, lineId, l.locationId, (j) => (j === 0 ? -1 : 0));
     }
-    const final = tx.select().from(schema.countLineEntries).where(eq(schema.countLineEntries.lineId, lineId)).all();
+    const final = await tx.select().from(schema.countLineEntries).where(eq(schema.countLineEntries.lineId, lineId));
     for (const e of final) {
-      const bucket = tx.select().from(schema.inventory).where(and(eq(schema.inventory.locationId, e.locationId), eq(schema.inventory.productId, e.productId),
-        eq(schema.inventory.packType, e.packType), gt(schema.inventory.onHand, 0))).all().find((b) => b.lotNumber === e.lotNumber && b.lpId === e.lpId && b.damageReason === e.damageReason);
+      const bucket = (await tx.select().from(schema.inventory).where(and(eq(schema.inventory.locationId, e.locationId), eq(schema.inventory.productId, e.productId),
+        eq(schema.inventory.packType, e.packType), gt(schema.inventory.onHand, 0)))).find((b) => b.lotNumber === e.lotNumber && b.lpId === e.lpId && b.damageReason === e.damageReason);
       if (!bucket || e.countedQty === bucket.onHand || e.countedQty < bucket.allocated || serial.has(bucket.productId)) continue;
-      ledger.adjustTo(tx, ctx, { inventoryId: bucket.id, targetQty: e.countedQty, type: "Count", adjustmentReasonId: reasonId, refs: { countPlanId: planId, note: "Cycle count variance" } });
+      await ledger.adjustTo(tx, ctx, { inventoryId: bucket.id, targetQty: e.countedQty, type: "Count", adjustmentReasonId: reasonId, refs: { countPlanId: planId, note: "Cycle count variance" } });
     }
-    tx.update(schema.countPlanLines).set({ inventoryUpdatedAt: isoOf(Date.now()), inventoryUpdatedBy: ctx.userId })
-      .where(and(eq(schema.countPlanLines.planId, planId), eq(schema.countPlanLines.status, "Inventory Updated"))).run();
+    await tx.update(schema.countPlanLines).set({ inventoryUpdatedAt: isoOf(Date.now()), inventoryUpdatedBy: ctx.userId })
+      .where(and(eq(schema.countPlanLines.planId, planId), eq(schema.countPlanLines.status, "Inventory Updated")));
   });
 }
 
 export function scheduleCounts(w: World): number {
   SPECS.forEach((spec, i) => {
     const at = utcAt(spec.daysAgo, spec.daysAgo === 0 ? 14 : 19, 5 * i);
-    w.queue.schedule(at, `count ${spec.description}`, () => {
+    w.queue.schedule(at, `count ${spec.description}`, async () => {
       try {
-        txAt(w.env, at, (tx) => runCount(w, tx, spec, at));
+        await txAt(w.env, at, async (tx) => await runCount(w, tx, spec, at));
       } catch (error) {
         noteFailure(w, `count ${spec.description}`, error);
       }

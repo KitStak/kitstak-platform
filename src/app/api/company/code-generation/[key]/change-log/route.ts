@@ -8,5 +8,5 @@ export const GET = defineRoute({
   permission: "settings.data_setup.view",
   params: z.object({ key: z.string().trim().min(1).max(40).regex(/^[A-Za-z]+$/) }),
   query: changeLogPageSchema,
-  handler: ({ db, params, query }) => changeLogResult(db, SEQUENCE_ENTITY, params.key, query),
+  handler: async ({ db, params, query }) => await changeLogResult(db, SEQUENCE_ENTITY, params.key, query),
 });

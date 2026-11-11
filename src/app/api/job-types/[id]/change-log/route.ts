@@ -9,9 +9,9 @@ export const GET = defineRoute({
   permission: "settings.job_types.change_log",
   params: idParamsSchema,
   query: pagingSchema,
-  handler: ({ db, auth, params, query }) => {
-    loadJobType(db, auth, params.id);
-    const { rows, total } = listEntityChangeLog(db, JOB_TYPE_ENTITY, params.id, query.page, query.ps);
+  handler: async ({ db, auth, params, query }) => {
+    await loadJobType(db, auth, params.id);
+    const { rows, total } = await listEntityChangeLog(db, JOB_TYPE_ENTITY, params.id, query.page, query.ps);
     return listResult(rows, { total, page: query.page, pageSize: query.ps });
   },
 });

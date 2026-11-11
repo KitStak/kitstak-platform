@@ -8,21 +8,21 @@ import { deleteReports, getReport, updateReportInfo } from "@/server/repositorie
 export const GET = defineRoute({
   permission: ["settings.billing_report.view", "settings.billing.view"],
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getReport(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await getReport(db, auth, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: "settings.billing_report.approve",
   params: idParamsSchema,
   body: billInfoSchema,
-  handler: ({ db, auth, actor, params, body }) => updateReportInfo(db, auth, actor, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updateReportInfo(db, auth, actor, params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: "settings.billing_report.delete",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
-    const result = deleteReports(db, auth, actor, [params.id]);
+  handler: async ({ db, auth, actor, params }) => {
+    const result = await deleteReports(db, auth, actor, [params.id]);
     const failure = result.failed[0];
     if (failure) throw new AppError(failure.code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_STATE", failure.message);
     return result;

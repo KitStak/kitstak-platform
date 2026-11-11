@@ -5,5 +5,5 @@ import type { ImportHandler } from "../types";
 export const handler: ImportHandler = {
   configured: true,
   owner: "M09",
-  apply: (ctx, row) => applyProductUpdateImport(ctx, row),
+  apply: async (ctx, row) => await applyProductUpdateImport(ctx, row),
 };

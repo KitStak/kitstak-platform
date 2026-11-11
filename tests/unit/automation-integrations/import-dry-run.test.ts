@@ -22,32 +22,32 @@ const def: ImportDefinition = {
   handler: {
     configured: true,
     owner: "test",
-    apply: (ctx, row) => {
-      const client = ctx.db.select().from(clients).where(eq(clients.code, String(row.clientCode))).get();
+    apply: async (ctx, row) => {
+      const client = (await ctx.db.select().from(clients).where(eq(clients.code, String(row.clientCode))).limit(1))[0];
       if (!client) throw new AppError("VALIDATION", `Client ${String(row.clientCode)} not found`);
-      return { entityId: ctx.db.insert(tags).values({ name: String(row.name), color: "Red" }).returning().get().id };
+      return { entityId: (await ctx.db.insert(tags).values({ name: String(row.name), color: "Red" }).returning())[0].id };
     },
   },
 };
 
 describe("import dry run", () => {
   let testDb: SeededDb;
-  beforeEach(() => { testDb = seededDb(); });
-  afterEach(() => { testDb.close(); });
+  beforeEach(async () => { testDb = await seededDb(); });
+  afterEach(async () => { await testDb.close(); });
 
   it("reports the same referential errors as the real run and writes nothing", async () => {
-    const auth = authFor(testDb, testDb.ids.admin);
-    const code = testDb.db.select().from(clients).get()?.code ?? "";
+    const auth = await authFor(testDb, testDb.ids.admin);
+    const code = (await testDb.db.select().from(clients).limit(1))[0]?.code ?? "";
     const bytes = Buffer.from(`Tag Name,Client Code\nGood,${code}\nBad,ACME-DOES-NOT-EXIST`);
     const preview = await previewImport({ def, auth, fileName: "t.csv", bytes }, testDb.db);
     expect(preview).toMatchObject({ totalRows: 2, validCount: 1, errorCount: 1 });
     expect(preview.rows[0]).toMatchObject({ valid: false, errors: ["Client ACME-DOES-NOT-EXIST not found"] });
-    expect(testDb.db.select().from(tags).all()).toHaveLength(0);
-    expect(testDb.db.select().from(importBatches).all()).toHaveLength(0);
+    expect(await testDb.db.select().from(tags)).toHaveLength(0);
+    expect(await testDb.db.select().from(importBatches)).toHaveLength(0);
   });
 
   it("without a db it stays a column-only preview", async () => {
-    const auth = authFor(testDb, testDb.ids.admin);
+    const auth = await authFor(testDb, testDb.ids.admin);
     const preview = await previewImport({ def, auth, fileName: "t.csv", bytes: Buffer.from("Tag Name,Client Code\nBad,NOPE") });
     expect(preview).toMatchObject({ validCount: 1, errorCount: 0 });
   });

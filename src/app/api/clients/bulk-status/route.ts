@@ -7,5 +7,5 @@ import { setClientStatus } from "@/server/repositories/clients";
 export const POST = defineRoute({
   permission: "settings.clients.edit",
   body: bulkIds.extend({ status: z.enum(["Active", "Inactive"]) }),
-  handler: ({ db, auth, actor, body }) => setClientStatus(db, auth, actor, body.ids, body.status),
+  handler: async ({ db, auth, actor, body }) => await setClientStatus(db, auth, actor, body.ids, body.status),
 });

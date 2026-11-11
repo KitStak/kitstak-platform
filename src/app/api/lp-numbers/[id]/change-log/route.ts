@@ -12,7 +12,7 @@ export const GET = defineRoute({
   permission: ["settings.lp_numbers.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    return changeLogResultOrDeleted(db, auth, "license_plate", params.id, query, () => loadLp(db, auth, params.id));
+  handler: async ({ db, auth, params, query }) => {
+    return await changeLogResultOrDeleted(db, auth, "license_plate", params.id, query, async () => await loadLp(db, auth, params.id));
   },
 });

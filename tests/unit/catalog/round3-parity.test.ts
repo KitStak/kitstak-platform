@@ -77,23 +77,23 @@ describe("General step blur validation", () => {
 describe("kit barcode is not silently set to the SKU", () => {
   let w: World;
   let auth: AuthContext;
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   });
   afterEach(() => w.close());
 
-  it("stores an empty barcode for a kit saved without one", () => {
-    const comp = createProductFromWizard(w.db, { ...w.ctx, scope: auth.scope }, {
+  it("stores an empty barcode for a kit saved without one", async () => {
+    const comp = await createProductFromWizard(w.db, { ...w.ctx, scope: auth.scope }, {
       ...emptyProductForm("Product", w.clientId), sku: "R3-COMP", name: "comp",
       packTypes: [{ ...newPackType("Primary", []), key: "u", packType: "Unit", length: 1, width: 1, height: 1, barcodes: [] }],
     } as unknown as ProductInput);
-    const kit = createProductFromWizard(w.db, { ...w.ctx, scope: auth.scope }, {
+    const kit = await createProductFromWizard(w.db, { ...w.ctx, scope: auth.scope }, {
       ...emptyProductForm("Kit", w.clientId), sku: "R3-KIT", name: "kit", barcode: "", kitType: "Kit to Order",
       components: [{ productId: comp.id, sku: "R3-COMP", name: "comp", imageUrl: null, quantity: 2 }],
     } as unknown as ProductInput);
-    const detail = getProductDetail(w.db, auth.scope, auth.viewScope, kit.id);
+    const detail = await getProductDetail(w.db, auth.scope, auth.viewScope, kit.id);
     expect(detail?.product.barcode).toBe("");
     expect(detail?.product.sku).toBe("R3-KIT");
   });

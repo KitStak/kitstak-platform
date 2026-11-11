@@ -5,5 +5,5 @@ import { availabilityQuerySchema, checkAvailability } from "@/server/repositorie
 export const GET = defineRoute({
   permission: ["settings.lp_types.create", "settings.lp_types.edit"],
   query: availabilityQuerySchema,
-  handler: ({ db, auth, query }) => checkAvailability(db, auth, "lp_type", query),
+  handler: async ({ db, auth, query }) => await checkAvailability(db, auth, "lp_type", query),
 });

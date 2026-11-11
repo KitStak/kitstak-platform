@@ -4,7 +4,8 @@
  * expression over `shipment_orders` (correlated subqueries, so the same expressions work
  * in the page query and the bare count query).
  */
-import { asc, desc, getTableColumns, sql, type SQL } from "drizzle-orm";
+import { getTableColumns, sql, type SQL } from "drizzle-orm";
+import { asc, desc } from "@/server/db/order";
 import { schema } from "@/server/db";
 import { AppError } from "@/server/api/errors";
 import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/server/query/filters";
@@ -23,10 +24,10 @@ export const q = Object.fromEntries(
   Object.entries(getTableColumns(so)).map(([key, col]) => [key, sql.raw(`"shipment_orders"."${col.name}"`)]),
 ) as { readonly [K in keyof typeof so.$inferSelect]: SQL };
 
-const days = (from: SQL): SQL => sql`CAST(julianday(COALESCE(${q.shippedAt}, ${q.cancelledAt}, 'now')) - julianday(${from}) AS INTEGER)`;
+const days = (from: SQL): SQL => sql`trunc(EXTRACT(EPOCH FROM (COALESCE((${q.shippedAt})::timestamptz, (${q.cancelledAt})::timestamptz, now()) - (${from})::timestamptz)) / 86400.0::float8)::int`;
 /** The single integer priority (column, sort, numeric filter, export); see grid-defs/orders/priority. */
 const priorityRank = sql.raw(effectiveRankSql(`"shipment_orders"."priority"`, `"shipment_orders"."priority_rank"`));
-const cf = (key: string): SQL => sql`json_extract(${q.customFields}, ${`$.${key}`})`;
+const cf = (key: string): SQL => sql`(${q.customFields} ->> ${key}::text)`;
 
 /** SQL per column id / filter field. */
 export const ORDER_SQL: Readonly<Record<string, SQL>> = {
@@ -39,20 +40,20 @@ export const ORDER_SQL: Readonly<Record<string, SQL>> = {
   channel: sql`${q.channel}`,
   age: days(sql`${q.orderDate}`),
   processingAge: days(sql`${q.createdAt}`),
-  daysSinceShipped: sql`CASE WHEN COALESCE(${q.shippedAt}, ${q.cancelledAt}) IS NULL THEN NULL ELSE CAST(julianday('now') - julianday(COALESCE(${q.shippedAt}, ${q.cancelledAt})) AS INTEGER) END`,
+  daysSinceShipped: sql`CASE WHEN COALESCE(${q.shippedAt}, ${q.cancelledAt}) IS NULL THEN NULL ELSE trunc(EXTRACT(EPOCH FROM (now() - (COALESCE(${q.shippedAt}, ${q.cancelledAt}))::timestamptz)) / 86400.0::float8)::int END`,
   totalWeightOz: sql`${q.totalWeightOz}`,
   clientId: sql`${q.clientId}`,
   clientName: sql`(SELECT c.name FROM clients c WHERE c.id = ${q.clientId})`,
   warehouseId: sql`${q.warehouseId}`,
   // Same label as the detail page (`codeNameLabel`): "MLT1 - Main Fulfillment"; the code is not repeated when the name starts with it.
-  warehouseCode: sql`(SELECT CASE WHEN w.code IS NULL OR w.code = '' THEN w.name WHEN upper(w.name) = upper(w.code) OR upper(w.name) LIKE upper(w.code) || ' %' THEN w.name ELSE w.code || ' - ' || w.name END FROM warehouses w WHERE w.id = ${q.warehouseId})`,
+  warehouseCode: sql`(SELECT CASE WHEN w.code IS NULL OR w.code = '' THEN w.name WHEN upper(w.name) = upper(w.code) OR upper(w.name) ILIKE upper(w.code) || ' %' THEN w.name ELSE w.code || ' - ' || w.name END FROM warehouses w WHERE w.id = ${q.warehouseId})`,
   status: sql`${q.status}`,
   pickShortStatus: sql`${q.pickShortStatus}`,
   packShortStatus: sql`${q.packShortStatus}`,
   totalQuantity: sql`${q.totalQuantity}`,
-  skus: sql`(SELECT group_concat(p.sku, ' / ') FROM order_lines l JOIN products p ON p.id = l.product_id WHERE l.order_id = ${q.id})`,
-  sku: sql`(SELECT group_concat(p.sku, ' / ') FROM order_lines l JOIN products p ON p.id = l.product_id WHERE l.order_id = ${q.id})`,
-  kitSku: sql`(SELECT group_concat(p.sku, ' / ') FROM order_lines l JOIN products p ON p.id = l.kit_product_id WHERE l.order_id = ${q.id})`,
+  skus: sql`(SELECT string_agg((p.sku)::text, ' / ') FROM order_lines l JOIN products p ON p.id = l.product_id WHERE l.order_id = ${q.id})`,
+  sku: sql`(SELECT string_agg((p.sku)::text, ' / ') FROM order_lines l JOIN products p ON p.id = l.product_id WHERE l.order_id = ${q.id})`,
+  kitSku: sql`(SELECT string_agg((p.sku)::text, ' / ') FROM order_lines l JOIN products p ON p.id = l.kit_product_id WHERE l.order_id = ${q.id})`,
   jobCode: sql`(SELECT j.code FROM jobs j WHERE j.id = ${q.jobId})`,
   customerName: sql`${q.customerName}`,
   requestedShippingOption: sql`${q.requestedShippingOption}`,
@@ -107,7 +108,7 @@ export const ORDER_SQL: Readonly<Record<string, SQL>> = {
   cancelledAt: sql`${q.cancelledAt}`,
   addressVerificationStatus: sql`${q.addressVerificationStatus}`,
   canceledByMerge: sql`(${q.mergedIntoOrderId} IS NOT NULL AND ${q.status} = 'Cancelled')`,
-  isMerged: sql`(${q.isMerged} = 1 OR ${q.mergedIntoOrderId} IS NOT NULL)`,
+  isMerged: sql`(${q.isMerged} = true OR ${q.mergedIntoOrderId} IS NOT NULL)`,
   hasAllocatedInventory: sql`EXISTS (SELECT 1 FROM order_lines l WHERE l.order_id = ${q.id} AND l.allocated_quantity > 0)`,
   hasLabel: sql`EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = ${q.id} AND s.label_status = 'Active' AND s.label_type = 'Shipping Label')`,
   // No order has a printed issue label until the pick/pack short label printout ships (renderer is not configured).

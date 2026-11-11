@@ -4,5 +4,5 @@ import { printoutTypes } from "@/server/repositories/printouts";
 
 export const GET = defineRoute({
   permission: "settings.printouts_labels.view",
-  handler: ({ db }) => printoutTypes(db),
+  handler: async ({ db }) => await printoutTypes(db),
 });

@@ -8,8 +8,8 @@ import { domainCtx } from "@/server/repositories/platform-common";
 export const DELETE = defineRoute({
   permission: [P.skuDelete, P.locDelete],
   params: z.object({ lineId: z.string().min(1).max(64) }),
-  handler: ({ db, auth, actor, params }) => {
-    deleteCountLine(db, domainCtx(actor, auth), auth, params.lineId);
+  handler: async ({ db, auth, actor, params }) => {
+    await deleteCountLine(db, domainCtx(actor, auth), auth, params.lineId);
     return { id: params.lineId };
   },
 });

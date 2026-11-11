@@ -1,9 +1,9 @@
 /**
  * Pagination helpers. Page size is always capped at 1000.
  *
- *   const { rows, total } = paginate(
+ *   const { rows, total } = await paginate(
  *     db.select().from(orders).where(where).orderBy(...order).$dynamic(),
- *     () => db.select({ n: count() }).from(orders).where(where).get()?.n ?? 0,
+ *     async () => (await db.select({ n: count() }).from(orders).where(where))[0]?.n ?? 0,
  *     { page, pageSize },
  *   );
  */
@@ -36,15 +36,15 @@ export function pageOffset(request: PageRequest): number {
   return (page - 1) * pageSize;
 }
 
-/** Any Drizzle dynamic select (or test double) that supports limit/offset/all. */
+/** Any Drizzle dynamic select (or test double) that supports limit/offset and is awaitable. */
 export interface PageableQuery<T> {
-  limit(n: number): { offset(n: number): { all(): T[] } };
+  limit(n: number): { offset(n: number): PromiseLike<T[]> };
 }
 
-export function paginate<T>(query: PageableQuery<T>, countTotal: () => number, request: PageRequest): PageResult<T> {
+export async function paginate<T>(query: PageableQuery<T>, countTotal: () => number | Promise<number>, request: PageRequest): Promise<PageResult<T>> {
   const normalized = normalizePage(request);
-  const rows = query.limit(normalized.pageSize).offset(pageOffset(normalized)).all();
-  return { rows, total: countTotal() };
+  const rows = await query.limit(normalized.pageSize).offset(pageOffset(normalized));
+  return { rows, total: Number(await countTotal()) };
 }
 
 export function pageMeta(total: number, request: PageRequest): PageMeta {

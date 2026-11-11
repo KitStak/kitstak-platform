@@ -3,7 +3,8 @@
  * receipt detail drawer and Cancel (reversal through `ledger.cancelReceipt`).
  * Scoped by the receipt's warehouse/client; cross-scope ids are NOT_FOUND.
  */
-import { and, asc, eq, sql, type SQL } from "drizzle-orm";
+import { and, eq, sql, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import { displayPoStatus } from "@/lib/grid-defs/receiving/purchase-orders";
 import { RECEIPT_GRID_FIELDS, RECEIPT_SEARCH_FIELDS, RECEIPT_SORT_FIELDS } from "@/lib/grid-defs/receiving/receiving-history";
 import type { AppDb } from "@/server/api/db";
@@ -158,10 +159,10 @@ const shape = (b: Base): ReceiptRow => ({
   cancelBlockedReason: cancelBlockedReason({ cancelledAt: b.cancelledAt, poStatus: b.poStatus, type: b.type }),
 });
 
-export function listReceipts(db: AppDb, auth: AuthContext, query: GridQuery, extra: readonly (SQL | undefined)[] = []): { rows: ReceiptRow[]; total: number } {
+export async function listReceipts(db: AppDb, auth: AuthContext, query: GridQuery, extra: readonly (SQL | undefined)[] = []): Promise<{ rows: ReceiptRow[]; total: number }> {
   const { where, orderBy } = compileGrid(SPEC, query, [scopedWhere(r, auth.viewScope), ...extra]);
-  const total = db.select({ n: sql<number>`count(*)` }).from(r).where(where).get()?.n ?? 0;
-  const rows = db.select(SELECT).from(r).where(where).orderBy(...orderBy).limit(query.pageSize).offset((query.page - 1) * query.pageSize).all() as Base[];
+  const total = (await db.select({ n: sql<number>`count(*)` }).from(r).where(where).limit(1))[0]?.n ?? 0;
+  const rows = await db.select(SELECT).from(r).where(where).orderBy(...orderBy).limit(query.pageSize).offset((query.page - 1) * query.pageSize) as Base[];
   return { rows: rows.map(shape), total };
 }
 
@@ -171,57 +172,57 @@ export interface ReceiptDetail extends ReceiptRow {
   readonly siblings: readonly { readonly id: string; readonly masterId: number; readonly sku: string; readonly quantity: number; readonly receivedAt: string; readonly cancelledAt: string | null }[];
 }
 
-export function getReceipt(db: AppDb, scope: Scope, id: string): ReceiptDetail {
-  const base = db.select(SELECT).from(r).where(eq(r.id, id)).get() as Base | undefined;
+export async function getReceipt(db: AppDb, scope: Scope, id: string): Promise<ReceiptDetail> {
+  const base = (await db.select(SELECT).from(r).where(eq(r.id, id)).limit(1))[0] as Base | undefined;
   if (!base) throw notFoundError("Receipt");
   assertInScope(scope, base, "Receipt");
   const row = shape(base);
-  const serials = db.select({ primary: schema.serialNumbers.primarySerial, secondary: schema.serialNumbers.secondarySerial, status: schema.serialNumbers.status })
-    .from(schema.serialNumbers).where(eq(schema.serialNumbers.receiptId, id)).orderBy(asc(schema.serialNumbers.primarySerial)).all();
-  const txnRow = db.select({ id: schema.inventoryTransactions.id, type: schema.inventoryTransactions.type, at: schema.inventoryTransactions.at, uomQty: schema.inventoryTransactions.uomQty })
-    .from(schema.inventoryTransactions).where(eq(schema.inventoryTransactions.receiptId, id)).orderBy(asc(schema.inventoryTransactions.seq)).get();
+  const serials = await db.select({ primary: schema.serialNumbers.primarySerial, secondary: schema.serialNumbers.secondarySerial, status: schema.serialNumbers.status })
+    .from(schema.serialNumbers).where(eq(schema.serialNumbers.receiptId, id)).orderBy(asc(schema.serialNumbers.primarySerial));
+  const txnRow = (await db.select({ id: schema.inventoryTransactions.id, type: schema.inventoryTransactions.type, at: schema.inventoryTransactions.at, uomQty: schema.inventoryTransactions.uomQty })
+    .from(schema.inventoryTransactions).where(eq(schema.inventoryTransactions.receiptId, id)).orderBy(asc(schema.inventoryTransactions.seq)).limit(1))[0];
   const siblings = row.purchaseOrderId
-    ? db.select({ id: r.id, masterId: r.masterId, sku: sql<string>`${EXPRS.sku}`, quantity: r.quantity, receivedAt: r.receivedAt, cancelledAt: r.cancelledAt })
-      .from(r).where(and(eq(r.purchaseOrderId, row.purchaseOrderId), sql`${r.id} <> ${id}`)).orderBy(asc(r.receivedAt)).limit(50).all()
+    ? await db.select({ id: r.id, masterId: r.masterId, sku: sql<string>`${EXPRS.sku}`, quantity: r.quantity, receivedAt: r.receivedAt, cancelledAt: r.cancelledAt })
+      .from(r).where(and(eq(r.purchaseOrderId, row.purchaseOrderId), sql`${r.id} <> ${id}`)).orderBy(asc(r.receivedAt)).limit(50)
     : [];
   return { ...row, serials, transaction: txnRow ?? null, siblings };
 }
 
 /** Cancel = reverse the receipt through the ledger; PO line / damage counters follow. */
-export function cancelReceipt(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string): ReceiptDetail {
-  const before = getReceipt(tx, scope, id);
-  ledger.cancelReceipt(tx, ctx, { receiptId: id });
+export async function cancelReceipt(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string): Promise<ReceiptDetail> {
+  const before = await getReceipt(tx, scope, id);
+  await ledger.cancelReceipt(tx, ctx, { receiptId: id });
   if (before.purchaseOrderId) {
-    const po = tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, before.purchaseOrderId)).get();
+    const po = (await tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, before.purchaseOrderId)).limit(1))[0];
     if (po) {
       // Actual Receiving Date is a completion stamp (Logiwa parity): a PO that is open again has none.
       const reopen = po.status !== "Completed" && po.receivedAt ? { receivedAt: null } : {};
-      tx.update(schema.purchaseOrders).set({ ...reopen, version: po.version + 1, updatedBy: ctx.userId }).where(eq(schema.purchaseOrders.id, po.id)).run();
+      await tx.update(schema.purchaseOrders).set({ ...reopen, version: po.version + 1, updatedBy: ctx.userId }).where(eq(schema.purchaseOrders.id, po.id));
       const units = before.uomQuantity === before.quantity ? `${before.quantity.toLocaleString("en-US")} ${before.packType}` : `${before.quantity.toLocaleString("en-US")} ${before.packType} (${before.uomQuantity.toLocaleString("en-US")} units)`;
-      tx.insert(schema.changeLog).values({
+      await tx.insert(schema.changeLog).values({
         entityType: "purchase_order", entityId: po.id, entityCode: po.code, type: "Update", field: "receipt", fieldLabel: "Receipt",
         fromValue: `Receipt ${before.masterId}`, toValue: "Cancelled",
         message: `Receipt ${before.masterId} is cancelled. ${units} of ${before.sku} reversed from ${before.locationCode}${before.lpNumber ? ` (LP ${before.lpNumber})` : ""}.`,
         userId: ctx.userId, source: ctx.source,
-      }).run();
+      });
       if ("receivedAt" in reopen && po.receivedAt) {
-        changeLog.recordUpdate(tx, ctx, { entityType: "purchase_order", entityId: po.id, entityCode: po.code,
-          before: logSnapshot({ receivedAt: po.receivedAt }, warehouseTimeZone(tx, po.warehouseId)), after: logSnapshot({ receivedAt: null }) });
+        await changeLog.recordUpdate(tx, ctx, { entityType: "purchase_order", entityId: po.id, entityCode: po.code,
+          before: logSnapshot({ receivedAt: po.receivedAt }, await warehouseTimeZone(tx, po.warehouseId)), after: logSnapshot({ receivedAt: null }) });
       }
     }
     if (before.damageReason) {
-      const lineId = tx.select({ lineId: r.purchaseOrderLineId }).from(r).where(eq(r.id, id)).get()?.lineId;
+      const lineId = (await tx.select({ lineId: r.purchaseOrderLineId }).from(r).where(eq(r.id, id)).limit(1))[0]?.lineId;
       if (lineId) {
-        tx.update(schema.purchaseOrderLines).set({ damagedQuantity: sql`max(0, ${schema.purchaseOrderLines.damagedQuantity} - ${before.quantity})` })
-          .where(eq(schema.purchaseOrderLines.id, lineId)).run();
+        await tx.update(schema.purchaseOrderLines).set({ damagedQuantity: sql`max(0, ${schema.purchaseOrderLines.damagedQuantity} - ${before.quantity})` })
+          .where(eq(schema.purchaseOrderLines.id, lineId));
       }
     }
   }
-  return getReceipt(tx, scope, id);
+  return await getReceipt(tx, scope, id);
 }
 
 /** Receipts of one PO (detail page "Receipts" tab). */
-export function receiptsForPurchaseOrder(db: AppDb, scope: Scope, poId: string): ReceiptRow[] {
-  const rows = db.select(SELECT).from(r).where(and(eq(r.purchaseOrderId, poId), scopedWhere(r, scope))).orderBy(asc(r.receivedAt), asc(r.masterId)).all() as Base[];
+export async function receiptsForPurchaseOrder(db: AppDb, scope: Scope, poId: string): Promise<ReceiptRow[]> {
+  const rows = await db.select(SELECT).from(r).where(and(eq(r.purchaseOrderId, poId), scopedWhere(r, scope))).orderBy(asc(r.receivedAt), asc(r.masterId)) as Base[];
   return rows.map(shape);
 }

@@ -5,9 +5,9 @@ import { listShipments } from "@/server/repositories/shipping";
 
 export const GET = defineRoute({
   permission: "fulfillment.carrier_shipment_details.view",
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listShipments(db, auth, query);
+    const { rows, total } = await listShipments(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });

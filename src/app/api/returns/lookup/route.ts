@@ -13,9 +13,9 @@ import { lookupRmas, rmaWarehousesFor } from "@/server/repositories/returns-rece
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.station,
   query: z.object({ warehouseId: idSchema.optional(), code: z.string().trim().min(1, "Scan or enter a code").max(120), anyWarehouse: z.enum(["1"]).optional() }),
-  handler: ({ db, auth, query }) => {
-    if (query.anyWarehouse) return rmaWarehousesFor(db, auth.scope, query.code);
+  handler: async ({ db, auth, query }) => {
+    if (query.anyWarehouse) return await rmaWarehousesFor(db, auth.scope, query.code);
     if (!query.warehouseId) throw validationError("Choose a warehouse", { warehouseId: ["Choose a warehouse"] });
-    return lookupRmas(db, auth.scope, query.warehouseId, query.code);
+    return await lookupRmas(db, auth.scope, query.warehouseId, query.code);
   },
 });

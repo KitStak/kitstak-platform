@@ -10,5 +10,5 @@ import { PACKING_PERMISSIONS, packingKpis, warehouseIdParam } from "@/server/rep
 export const GET = defineRoute({
   permission: PACKING_PERMISSIONS.view,
   query: z.object({ warehouseId: warehouseIdParam, stationId: idSchema.optional() }),
-  handler: ({ db, auth, query }) => packingKpis(db, auth.scope, query.warehouseId, auth.user.id, new Date(), query.stationId ?? null),
+  handler: async ({ db, auth, query }) => await packingKpis(db, auth.scope, query.warehouseId, auth.user.id, new Date(), query.stationId ?? null),
 });

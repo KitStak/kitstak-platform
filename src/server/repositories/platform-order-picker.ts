@@ -4,7 +4,8 @@
  * Accepts the grid grammar (q/qm, f.*, sort, page, ps) plus `clientId`, `warehouseId` and
  * `status=a,b`, and returns `OrderPick` rows. Scoped to the caller's view scope.
  */
-import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { asc, desc } from "@/server/db/order";
 import { SO_STATUSES } from "@/lib/enums";
 import type { AppDb } from "@/server/api/db";
 import { AppError } from "@/server/api/errors";
@@ -51,7 +52,7 @@ export interface OrderPickRow {
   readonly shipBy: string | null;
 }
 
-export function listOrderPickerGrid(db: AppDb, scope: Scope, params: URLSearchParams): { rows: OrderPickRow[]; total: number; page: number; pageSize: number } {
+export async function listOrderPickerGrid(db: AppDb, scope: Scope, params: URLSearchParams): Promise<{ rows: OrderPickRow[]; total: number; page: number; pageSize: number }> {
   const known = new URLSearchParams([...params.entries()].filter(([k]) => k !== "clientId" && k !== "warehouseId" && k !== "status"));
   const { query, issues } = parseGridQuery(known);
   if (issues.length > 0) {
@@ -74,11 +75,11 @@ export function listOrderPickerGrid(db: AppDb, scope: Scope, params: URLSearchPa
   const orderBy = query.sort.length > 0
     ? query.sort.map((x) => (x.dir === "asc" ? asc(EXPR[x.field]) : desc(EXPR[x.field])))
     : [desc(EXPR.orderDate)];
-  const total = Number(db.select({ n: sql<number>`COUNT(*)` }).from(so).where(where).get()?.n ?? 0);
-  const rows = db.select({
+  const total = Number((await db.select({ n: sql<number>`COUNT(*)` }).from(so).where(where).limit(1))[0]?.n ?? 0);
+  const rows = await db.select({
     id: so.id, code: so.code, storeOrderCode: sql<string | null>`${EXPR.storeOrderCode}`, clientName: sql<string | null>`${EXPR.clientName}`,
     status: so.status, customerName: so.customerName, lineCount: sql<number>`${EXPR.lineCount}`, quantity: so.totalQuantity,
     orderDate: so.orderDate, shipBy: so.expectedShipDate,
-  }).from(so).where(where).orderBy(...orderBy).limit(query.pageSize).offset((query.page - 1) * query.pageSize).all();
+  }).from(so).where(where).orderBy(...orderBy).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
   return { rows, total, page: query.page, pageSize: query.pageSize };
 }

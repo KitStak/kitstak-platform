@@ -6,5 +6,5 @@ import { getShipment } from "@/server/repositories/shipping";
 export const GET = defineRoute({
   permission: "fulfillment.carrier_shipment_details.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getShipment(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await getShipment(db, auth, params.id),
 });

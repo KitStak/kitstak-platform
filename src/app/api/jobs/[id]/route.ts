@@ -9,8 +9,8 @@ import { systemCtx } from "@/server/domain/types";
 export const GET = defineRoute({
   permission: "fulfillment.job_management.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => withBusyRetry(() => {
-    try { settleDeadJobs(db, systemCtx("System"), [params.id]); } catch { /* best effort; the read still answers */ }
-    return getJobDetail(db, auth, params.id);
+  handler: ({ db, auth, params }) => withBusyRetry(async () => {
+    try { await settleDeadJobs(db, systemCtx("System"), [params.id]); } catch { /* best effort; the read still answers */ }
+    return await getJobDetail(db, auth, params.id);
   }),
 });

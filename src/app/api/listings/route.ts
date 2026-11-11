@@ -9,9 +9,9 @@ import { LISTING_LINK_STATES } from "@/lib/grid-defs/products/listings-grid";
 export const GET = defineRoute({
   permission: LISTING_READ_PERMISSIONS,
   query: z.object({ link: z.enum(LISTING_LINK_STATES).optional() }).loose(),
-  handler: ({ db, auth, grid, query }) => {
+  handler: async ({ db, auth, grid, query }) => {
     const q = grid();
-    const { rows, total, counts } = listListings(db, auth.viewScope, q, query.link);
+    const { rows, total, counts } = await listListings(db, auth.viewScope, q, query.link);
     return listResult(rows, { total, page: q.page, pageSize: q.pageSize, counts });
   },
 });

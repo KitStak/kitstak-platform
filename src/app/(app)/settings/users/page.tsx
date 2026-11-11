@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Users" };
 async function Guard() {
   await requirePagePermission("settings.users.view", "/settings/users");
   // Seed the live company policy so the Add user meter never shows placeholder rules.
-  const p = getPasswordPolicy(await getAppDb());
+  const p = await getPasswordPolicy(await getAppDb());
   return (
     <PasswordPolicySeed policy={{ minLength: p.minLength, requireUpper: p.requireUpper, requireNumber: p.requireNumber, requireSymbol: p.requireSymbol }}>
       <UsersPage />

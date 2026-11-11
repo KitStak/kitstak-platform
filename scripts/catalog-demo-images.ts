@@ -7,30 +7,24 @@
  * (KS-CRIT-/KS-E2E-) are left alone. Each update bumps the product version and writes the
  * change log. Without --apply it prints the plan and changes nothing.
  */
-import path from "node:path";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import * as schema from "../src/server/db/schema";
-import type { AppDb } from "../src/server/api/db";
+import { closeDb, getDb } from "../src/server/db";
+import { withWriteTx } from "../src/server/db/sql";
 import { applyDemoImages, planDemoImages } from "../src/server/repositories/products-demo-images";
 
-const DB_PATH = process.env.KITSTAK_DB_PATH ?? path.join(process.cwd(), ".data", "kitstak.db");
 const apply = process.argv.includes("--apply");
 
-function main(): number {
-  const sqlite = new Database(DB_PATH, { readonly: !apply, fileMustExist: true });
+async function main(): Promise<number> {
   try {
-    sqlite.pragma("busy_timeout = 10000");
-    const db = drizzle(sqlite, { schema }) as unknown as AppDb;
+    const db = await getDb();
     const rows = apply
-      ? sqlite.transaction(() => applyDemoImages(db, { userId: null, source: "Demo catalog images" }))()
-      : planDemoImages(db);
+      ? await withWriteTx(db, async (tx) => await applyDemoImages(tx, { userId: null, source: "Demo catalog images" }))
+      : await planDemoImages(db);
     for (const r of rows) process.stdout.write(`  ${r.sku.padEnd(22)} ${r.imageUrl}\n`);
     process.stdout.write(`${apply ? "Applied" : "Dry run"}: ${rows.length} product(s).${apply ? "" : " Re-run with --apply to change data."}\n`);
     return 0;
   } finally {
-    sqlite.close();
+    await closeDb();
   }
 }
 
-process.exitCode = main();
+void main().then((code) => { process.exitCode = code; }, (error: unknown) => { console.error(error); process.exitCode = 1; });

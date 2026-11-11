@@ -10,6 +10,7 @@ import type { AnalyticsChart, AnalyticsKpi, AnalyticsRow, LaborPage, TimingShare
 import { TASK_TYPES_BY_KIND } from "@/lib/grid-defs/jobs/tasks";
 import { RECEIPT_GRID_FIELDS } from "@/lib/grid-defs/receiving/receiving-history";
 import { clIn, dayFilter, daySql, fmtInt, localDayOf, median, PALETTE, rangeFilter, round, whIn, type Range } from "./analytics-common";
+import { dbAll } from "@/server/db/sql";
 
 export const MAX_GAP_MINUTES = 30;
 export const RECEIVING_GRID = "/receiving/history";
@@ -78,8 +79,8 @@ export function taskMinutes(startedAt: string | null, finishedAt: string, prevFi
   return null;
 }
 
-export function loadTaskFacts(db: AppDb, r: Range, wh: readonly string[]): TaskFact[] {
-  const rows = db.all<{ id: string; type: string; uid: string; user: string; started: string | null; fin: string; prev: string | null; qty: number }>(sql`
+export async function loadTaskFacts(db: AppDb, r: Range, wh: readonly string[]): Promise<TaskFact[]> {
+  const rows = await dbAll<{ id: string; type: string; uid: string; user: string; started: string | null; fin: string; prev: string | null; qty: number }>(db, sql`
     SELECT t.id, t.task_type AS type, t.executed_by_user_id AS uid, u.name AS user, t.started_at AS started, t.finished_at AS fin,
            LAG(t.finished_at) OVER (PARTITION BY t.executed_by_user_id, ${daySql("t.finished_at", r)} ORDER BY t.finished_at) AS prev,
            COALESCE(t.actual_qty, t.planned_qty, 0) AS qty
@@ -357,8 +358,8 @@ function associates(facts: readonly TaskFact[], r: Range, self: SelfScope | null
   };
 }
 
-function receivingPerformance(db: AppDb, r: Range, wh: readonly string[], self: SelfScope | null): { kpis: AnalyticsKpi[]; charts: AnalyticsChart[] } {
-  const rows = db.all<{ user: string; d: string; units: number; lines: number; first: string; last: string }>(sql`
+async function receivingPerformance(db: AppDb, r: Range, wh: readonly string[], self: SelfScope | null): Promise<{ kpis: AnalyticsKpi[]; charts: AnalyticsChart[] }> {
+  const rows = await dbAll<{ user: string; d: string; units: number; lines: number; first: string; last: string }>(db, sql`
     SELECT COALESCE(u.name, r.received_by) AS user, ${daySql("r.received_at", r)} AS d, SUM(r.uom_quantity) AS units, COUNT(*) AS lines,
            MIN(r.received_at) AS first, MAX(r.received_at) AS last
     FROM receipts r LEFT JOIN users u ON u.email = r.received_by OR u.id = r.received_by
@@ -416,10 +417,10 @@ export interface SelfScope {
  * against the team medians on the Quadrant, own scorecard with the team rank on Associate, own
  * receipts on Receiving Performance. Coworkers' names and rates never leave the server.
  */
-export function buildLabor(db: AppDb, page: LaborPage, r0: Range, wh: readonly string[], self: SelfScope | null = null): { kpis: AnalyticsKpi[]; charts: AnalyticsChart[]; timing?: TimingShare } {
+export async function buildLabor(db: AppDb, page: LaborPage, r0: Range, wh: readonly string[], self: SelfScope | null = null): Promise<{ kpis: AnalyticsKpi[]; charts: AnalyticsChart[]; timing?: TimingShare }> {
   const r: Range = self ? { ...r0, executedBy: self.name } : r0;
-  if (page === "receiving-performance") return receivingPerformance(db, r, wh, self);
-  const team = loadTaskFacts(db, r, wh);
+  if (page === "receiving-performance") return await receivingPerformance(db, r, wh, self);
+  const team = await loadTaskFacts(db, r, wh);
   const own = self ? team.filter((f) => f.userId === self.id) : team;
   // The share is over the tasks this viewer may see (own tasks in self-only mode).
   const timing = timingShare(own);

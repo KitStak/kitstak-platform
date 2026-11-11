@@ -10,7 +10,7 @@
  * is reported as NOT_FOUND (0.4 #5), never FORBIDDEN.
  */
 import { eq, sql, type SQL } from "drizzle-orm";
-import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { AppDb } from "@/server/api/db";
 import { forbiddenError, notFoundError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
@@ -23,21 +23,21 @@ export type EntityAction = "view" | "edit" | "tag" | "changeLog";
 export interface EntityDef {
   readonly type: string;
   readonly label: string;
-  readonly table: SQLiteTable;
-  readonly id: SQLiteColumn;
-  readonly code: SQLiteColumn | null;
-  readonly warehouseId: SQLiteColumn | null;
-  readonly clientId: SQLiteColumn | null;
+  readonly table: PgTable;
+  readonly id: PgColumn;
+  readonly code: PgColumn | null;
+  readonly warehouseId: PgColumn | null;
+  readonly clientId: PgColumn | null;
   readonly permissions: Readonly<Record<EntityAction, readonly string[]>>;
 }
 
 interface DefInput {
   readonly label: string;
-  readonly table: SQLiteTable;
-  readonly id: SQLiteColumn;
-  readonly code?: SQLiteColumn | null;
-  readonly warehouseId?: SQLiteColumn | null;
-  readonly clientId?: SQLiteColumn | null;
+  readonly table: PgTable;
+  readonly id: PgColumn;
+  readonly code?: PgColumn | null;
+  readonly warehouseId?: PgColumn | null;
+  readonly clientId?: PgColumn | null;
   readonly view: readonly string[];
   readonly edit: readonly string[];
   readonly tag?: readonly string[];
@@ -220,14 +220,14 @@ export interface EntityRecordRef {
 const NULL_SQL: SQL = sql`NULL`;
 
 /** Loads `(type, id)` without permission checks; null when it does not exist. */
-export function findEntity(db: AppDb, type: string, id: string): EntityRecordRef | null {
+export async function findEntity(db: AppDb, type: string, id: string): Promise<EntityRecordRef | null> {
   const d = getEntityDef(type);
   if (!d) return null;
-  const row = db.select({
+  const row = (await db.select({
     code: d.code ?? NULL_SQL,
     warehouseId: d.warehouseId ?? NULL_SQL,
     clientId: d.clientId ?? NULL_SQL,
-  }).from(d.table).where(eq(d.id, id)).get() as { code: unknown; warehouseId: unknown; clientId: unknown } | undefined;
+  }).from(d.table).where(eq(d.id, id)).limit(1))[0] as { code: unknown; warehouseId: unknown; clientId: unknown } | undefined;
   if (!row) return null;
   const text = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
   return { entityType: type, entityId: id, code: text(row.code), warehouseId: text(row.warehouseId), clientId: text(row.clientId) };
@@ -242,11 +242,11 @@ export function canOnEntity(auth: AuthContext, type: string, action: EntityActio
  * Resolves a record the caller may act on: unknown type → NOT_FOUND, missing permission →
  * FORBIDDEN, missing or out-of-scope record → NOT_FOUND.
  */
-export function requireEntity(db: AppDb, auth: AuthContext, type: string, id: string, action: EntityAction): EntityRecordRef {
+export async function requireEntity(db: AppDb, auth: AuthContext, type: string, id: string, action: EntityAction): Promise<EntityRecordRef> {
   const d = getEntityDef(type);
   if (!d) throw notFoundError("Record");
   if (!canAny(auth, d.permissions[action])) throw forbiddenError();
-  const ref = findEntity(db, type, id);
+  const ref = await findEntity(db, type, id);
   assertInScope(auth.scope, ref, d.label);
   if (!ref) throw notFoundError(d.label);
   return ref;

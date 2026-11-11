@@ -4,11 +4,11 @@ import { getGridPrefs, gridPrefsParamsSchema, gridPrefsSchema, putGridPrefs } fr
 
 export const GET = defineRoute({
   params: gridPrefsParamsSchema,
-  handler: ({ db, auth, params }) => getGridPrefs(db, auth.user.id, params.gridKey),
+  handler: async ({ db, auth, params }) => await getGridPrefs(db, auth.user.id, params.gridKey),
 });
 
 export const PUT = defineRoute({
   params: gridPrefsParamsSchema,
   body: gridPrefsSchema,
-  handler: ({ db, auth, params, body }) => putGridPrefs(db, auth.user.id, params.gridKey, body),
+  handler: async ({ db, auth, params, body }) => await putGridPrefs(db, auth.user.id, params.gridKey, body),
 });

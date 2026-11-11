@@ -12,6 +12,7 @@ import { clientSettingsSchema, parseSettings } from "@/lib/domain-types";
 import type { AppDb } from "@/server/api/db";
 import type { AuthContext } from "@/server/auth/context";
 import { assertInScope } from "@/server/auth/scope";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 export interface PickShortPreview {
   readonly taskId: string;
@@ -48,13 +49,13 @@ function readClientSettings(raw: string | null): ReturnType<typeof parseSettings
   }
 }
 
-export function pickShortPreview(db: AppDb, auth: AuthContext, taskId: string): PickShortPreview {
-  const task = db.get<TaskFacts>(sql`SELECT t.id, t.warehouse_id AS warehouseId, t.client_id AS clientId, t.task_type AS taskType,
-      t.order_line_id AS orderLineId, t.allocation_id AS allocationId, o.client_id AS orderClientId, l.product_id AS productId,
-      l.lot_number AS lotNumber, l.expiry_date AS expiryDate, l.production_date AS productionDate,
-      COALESCE(i.location_id, t.source_location_id) AS sourceLocationId,
-      (SELECT code FROM locations x WHERE x.id = COALESCE(i.location_id, t.source_location_id)) AS sourceLocation,
-      (SELECT c.settings FROM clients c WHERE c.id = o.client_id) AS clientSettings
+export async function pickShortPreview(db: AppDb, auth: AuthContext, taskId: string): Promise<PickShortPreview> {
+  const task = await dbGet<TaskFacts>(db, sql`SELECT t.id, t.warehouse_id AS "warehouseId", t.client_id AS "clientId", t.task_type AS "taskType",
+      t.order_line_id AS "orderLineId", t.allocation_id AS "allocationId", o.client_id AS "orderClientId", l.product_id AS "productId",
+      l.lot_number AS "lotNumber", l.expiry_date AS "expiryDate", l.production_date AS "productionDate",
+      COALESCE(i.location_id, t.source_location_id) AS "sourceLocationId",
+      (SELECT code FROM locations x WHERE x.id = COALESCE(i.location_id, t.source_location_id)) AS "sourceLocation",
+      (SELECT c.settings FROM clients c WHERE c.id = o.client_id) AS "clientSettings"
     FROM tasks t
     LEFT JOIN order_lines l ON l.id = t.order_line_id
     LEFT JOIN shipment_orders o ON o.id = t.order_id
@@ -69,16 +70,16 @@ export function pickShortPreview(db: AppDb, auth: AuthContext, taskId: string): 
   const eligible = t.taskType === "Picking" && Boolean(t.orderLineId && t.allocationId && t.productId);
   let locations: { code: string; free: number }[] = [];
   if (eligible) {
-    locations = db.all<{ code: string; free: number }>(sql`SELECT loc.code AS code, SUM(i.on_hand - i.allocated) AS free
+    locations = (await dbAll<{ code: string; free: number }>(db, sql`SELECT loc.code AS code, SUM(i.on_hand - i.allocated) AS free
       FROM inventory i JOIN locations loc ON loc.id = i.location_id
-      WHERE i.warehouse_id = ${t.warehouseId} AND i.client_id IS ${t.orderClientId} AND i.product_id = ${t.productId} AND i.status = 'Stock'
+      WHERE i.warehouse_id = ${t.warehouseId} AND i.client_id IS NOT DISTINCT FROM ${t.orderClientId} AND i.product_id = ${t.productId} AND i.status = 'Stock'
         AND i.damage_reason IS NULL AND i.on_hand - i.allocated > 0
-        AND loc.is_active = 1 AND loc.is_locked = 0 AND loc.prevent_allocation = 0
-        AND (${t.sourceLocationId} IS NULL OR i.location_id <> ${t.sourceLocationId})
-        AND (${t.lotNumber} IS NULL OR i.lot_number = ${t.lotNumber})
-        AND (${t.expiryDate} IS NULL OR i.expiry_date = ${t.expiryDate})
-        AND (${t.productionDate} IS NULL OR i.production_date = ${t.productionDate})
-      GROUP BY loc.code ORDER BY free DESC, loc.code LIMIT 6`).map((r) => ({ code: r.code, free: Number(r.free) }));
+        AND loc.is_active = true AND loc.is_locked = false AND loc.prevent_allocation = false
+        AND (${t.sourceLocationId}::text IS NULL OR i.location_id <> ${t.sourceLocationId})
+        AND (${t.lotNumber}::text IS NULL OR i.lot_number = ${t.lotNumber})
+        AND (${t.expiryDate}::text IS NULL OR i.expiry_date = ${t.expiryDate})
+        AND (${t.productionDate}::text IS NULL OR i.production_date = ${t.productionDate})
+      GROUP BY loc.code ORDER BY free DESC, loc.code LIMIT 6`)).map((r) => ({ code: r.code, free: Number(r.free) }));
   }
   const freeElsewhere = locations.reduce((s, r) => s + r.free, 0);
   const base = { eligible, freeElsewhere, retainsAllocation, preventsReallocation };

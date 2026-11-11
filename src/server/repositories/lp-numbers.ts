@@ -17,6 +17,7 @@ import { buildSscc18, companyPrefixFor, LP_NUMBER_FIELDS, LP_NUMBER_SEARCH_FIELD
 import { assertFound, assertVersion, assertWarehouseInScope, compileGrid, domainCtxOf, duplicateError, listScope, logCreate, logDelete, logUpdate, type Actor, type GridBinding, qc } from "./locations-shared";
 import { runBulk } from "@/server/domain/bulk";
 import type { BulkResult } from "@/server/domain/types";
+import { dbGet, filterSeq, mapSeq } from "@/server/db/sql";
 
 const lp = s.licensePlates;
 const ENTITY = "license_plate";
@@ -43,7 +44,7 @@ const lengthSql = effDim(lp.length, "length");
 const widthSql = effDim(lp.width, "width");
 const heightSql = effDim(lp.height, "height");
 const weightSql = sql<number>`CASE WHEN ${qc(lp.weight)} = 0 THEN COALESCE(${typeCol("empty_weight")}, 0) ELSE ${qc(lp.weight)} END`;
-const volumeSql = sql<number>`CASE WHEN ${qc(lp.actualVolume)} > 0 THEN ${qc(lp.actualVolume)} ELSE round(${lengthSql} * ${widthSql} * ${heightSql}, 3) END`;
+const volumeSql = sql<number>`CASE WHEN ${qc(lp.actualVolume)} > 0 THEN ${qc(lp.actualVolume)} ELSE ROUND((${lengthSql} * ${widthSql} * ${heightSql})::numeric, 3)::float8 END`;
 
 export const LP_NUMBER_SQL: Readonly<Record<string, SQL>> = {
   number: sql`${lp.number}`,
@@ -108,48 +109,48 @@ function selection() {
   };
 }
 
-export function listLpNumbers(db: AppDb, auth: AuthContext, query: GridQuery): { rows: LpNumberRow[]; total: number } {
+export async function listLpNumbers(db: AppDb, auth: AuthContext, query: GridQuery): Promise<{ rows: LpNumberRow[]; total: number }> {
   const grid = compileGrid(BINDING, query, [listScope(lp, auth, { warehouseId: lp.warehouseId })]);
-  const result = paginate(
+  const result = await paginate(
     db.select(selection()).from(lp).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(lp).where(grid.where).get()?.n ?? 0,
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(lp).where(grid.where).limit(1))[0]?.n ?? 0,
     { page: query.page, pageSize: query.pageSize },
   );
   return { rows: result.rows.map((r) => ({ ...r, isSscc18: Boolean(r.isSscc18) })) as LpNumberRow[], total: result.total };
 }
 
-export function loadLp(db: AppDb, auth: AuthContext, id: string): typeof lp.$inferSelect {
-  const row = assertFound(db.select().from(lp).where(eq(lp.id, id)).get(), "LP number");
+export async function loadLp(db: AppDb, auth: AuthContext, id: string): Promise<typeof lp.$inferSelect> {
+  const row = assertFound((await db.select().from(lp).where(eq(lp.id, id)).limit(1))[0], "LP number");
   assertWarehouseInScope(auth, row.warehouseId, "LP number");
   return row;
 }
 
-export function getLpNumber(db: AppDb, auth: AuthContext, id: string) {
-  loadLp(db, auth, id);
-  const row = db.select(selection()).from(lp).where(eq(lp.id, id)).get() as LpNumberRow;
-  const contents = db.select({ id: s.inventory.id, sku: s.products.sku, productName: s.products.name, onHand: s.inventory.onHand, allocated: s.inventory.allocated, lotNumber: s.inventory.lotNumber, expiryDate: s.inventory.expiryDate })
+export async function getLpNumber(db: AppDb, auth: AuthContext, id: string) {
+  await loadLp(db, auth, id);
+  const row = (await db.select(selection()).from(lp).where(eq(lp.id, id)).limit(1))[0] as LpNumberRow;
+  const contents = await db.select({ id: s.inventory.id, sku: s.products.sku, productName: s.products.name, onHand: s.inventory.onHand, allocated: s.inventory.allocated, lotNumber: s.inventory.lotNumber, expiryDate: s.inventory.expiryDate })
     .from(s.inventory).innerJoin(s.products, eq(s.products.id, s.inventory.productId))
-    .where(and(eq(s.inventory.lpId, id), sql`${s.inventory.onHand} > 0`)).all();
-  const children = db.select({ id: lp.id, number: lp.number, status: lp.status }).from(lp).where(eq(lp.parentLpId, id)).limit(200).all();
+    .where(and(eq(s.inventory.lpId, id), sql`${s.inventory.onHand} > 0`));
+  const children = await db.select({ id: lp.id, number: lp.number, status: lp.status }).from(lp).where(eq(lp.parentLpId, id)).limit(200);
   return { ...row, isSscc18: Boolean(row.isSscc18), contents, children };
 }
 
-export type LpNumberDetail = ReturnType<typeof getLpNumber>;
+export type LpNumberDetail = Awaited<ReturnType<typeof getLpNumber>>;
 
 /* ---------------- create ---------------- */
 
-function assertNumberFree(db: AppDb, warehouseId: string, number: string, field = "number"): void {
-  const clash = db.select({ id: lp.id }).from(lp).where(and(eq(lp.warehouseId, warehouseId), sql`upper(${lp.number}) = upper(${number})`)).get();
+async function assertNumberFree(db: AppDb, warehouseId: string, number: string, field = "number"): Promise<void> {
+  const clash = (await db.select({ id: lp.id }).from(lp).where(and(eq(lp.warehouseId, warehouseId), sql`upper(${lp.number}) = upper(${number})`)).limit(1))[0];
   if (clash) throw duplicateError(field, `LP number ${number} already exists in this warehouse`);
 }
 
-function resolveLocation(db: AppDb, warehouseId: string, locationId: string | null): string | null {
+async function resolveLocation(db: AppDb, warehouseId: string, locationId: string | null): Promise<string | null> {
   if (locationId) {
-    const loc = db.select({ warehouseId: s.locations.warehouseId }).from(s.locations).where(eq(s.locations.id, locationId)).get();
+    const loc = (await db.select({ warehouseId: s.locations.warehouseId }).from(s.locations).where(eq(s.locations.id, locationId)).limit(1))[0];
     if (!loc || loc.warehouseId !== warehouseId) throw new AppError("VALIDATION", "Pick a location of this warehouse", { fieldErrors: { locationId: ["Pick a location of this warehouse"] } });
     return locationId;
   }
-  return db.select({ id: s.warehouses.defaultReceivingLocationId }).from(s.warehouses).where(eq(s.warehouses.id, warehouseId)).get()?.id ?? null;
+  return (await db.select({ id: s.warehouses.defaultReceivingLocationId }).from(s.warehouses).where(eq(s.warehouses.id, warehouseId)).limit(1))[0]?.id ?? null;
 }
 
 export interface LpCreateResult {
@@ -158,17 +159,17 @@ export interface LpCreateResult {
   readonly numbers: readonly string[];
 }
 
-export function createLpNumbers(tx: AppDb, auth: AuthContext, actor: Actor, input: LpCreate): LpCreateResult {
+export async function createLpNumbers(tx: AppDb, auth: AuthContext, actor: Actor, input: LpCreate): Promise<LpCreateResult> {
   assertWarehouseInScope(auth, input.warehouseId);
-  const type = tx.select().from(s.lpTypes).where(eq(s.lpTypes.id, input.lpTypeId)).get();
+  const type = (await tx.select().from(s.lpTypes).where(eq(s.lpTypes.id, input.lpTypeId)).limit(1))[0];
   if (!type || type.warehouseId !== input.warehouseId) throw new AppError("VALIDATION", "Pick an LP type of this warehouse", { fieldErrors: { lpTypeId: ["Pick an LP type of this warehouse"] } });
-  const locationId = resolveLocation(tx, input.warehouseId, input.locationId);
+  const locationId = await resolveLocation(tx, input.warehouseId, input.locationId);
   let clientId: string | null = null;
   let clientCode = "";
   const sscc = input.isSscc18 && input.method === "sequence";
   // Client: required for SSCC18 (its GS1 prefix), optional otherwise to pre-assign the LPs (Logiwa shows it in From Sequence mode).
   if (sscc || input.clientId) {
-    const client = input.clientId ? tx.select({ id: s.clients.id, code: s.clients.code }).from(s.clients).where(eq(s.clients.id, input.clientId)).get() : undefined;
+    const client = input.clientId ? (await tx.select({ id: s.clients.id, code: s.clients.code }).from(s.clients).where(eq(s.clients.id, input.clientId)).limit(1))[0] : undefined;
     if (!client || !hasClient(auth.scope, client.id)) {
       const message = sscc ? "Client is required for SSCC18 numbers" : "Pick a client you have access to";
       throw new AppError("VALIDATION", message, { fieldErrors: { clientId: [message] } });
@@ -179,24 +180,24 @@ export function createLpNumbers(tx: AppDb, auth: AuthContext, actor: Actor, inpu
   const ctx = domainCtxOf(actor, auth);
   const numbers: string[] = [];
   const ids: string[] = [];
-  const insert = (number: string, extra: Partial<typeof lp.$inferInsert> = {}) => {
-    const row = tx.insert(lp).values({
+  const insert = async (number: string, extra: Partial<typeof lp.$inferInsert> = {}) => {
+    const row = (await tx.insert(lp).values({
       number, warehouseId: input.warehouseId, lpTypeId: type.id, locationId, clientId, status: "Empty",
       length: type.length, width: type.width, height: type.height, weight: type.emptyWeight, createdBy: actor.userId, updatedBy: actor.userId, ...extra,
-    }).returning({ id: lp.id }).get();
-    logCreate(tx, ctx, { entityType: ENTITY, entityId: row.id, entityCode: number });
+    }).returning({ id: lp.id }))[0];
+    await logCreate(tx, ctx, { entityType: ENTITY, entityId: row.id, entityCode: number });
     numbers.push(number);
     ids.push(row.id);
   };
 
   if (input.method === "custom") {
     const number = (input.number ?? "").trim().toUpperCase();
-    assertNumberFree(tx, input.warehouseId, number);
+    await assertNumberFree(tx, input.warehouseId, number);
     if (input.alternateBarcode) {
-      const alt = tx.select({ id: lp.id }).from(lp).where(and(eq(lp.warehouseId, input.warehouseId), eq(lp.alternateBarcode, input.alternateBarcode))).get();
+      const alt = (await tx.select({ id: lp.id }).from(lp).where(and(eq(lp.warehouseId, input.warehouseId), eq(lp.alternateBarcode, input.alternateBarcode))).limit(1))[0];
       if (alt) throw duplicateError("alternateBarcode", `Alternate barcode ${input.alternateBarcode} is already used`);
     }
-    insert(number, { alternateBarcode: input.alternateBarcode });
+    await insert(number, { alternateBarcode: input.alternateBarcode });
     return { created: 1, ids, numbers };
   }
 
@@ -205,11 +206,11 @@ export function createLpNumbers(tx: AppDb, auth: AuthContext, actor: Actor, inpu
     let number = "";
     // Skip numbers that already exist (e.g. created as custom numbers or imported).
     for (let guard = 0; guard < 1000; guard += 1) {
-      number = input.isSscc18 ? buildSscc18(SSCC_EXTENSION, companyPrefixFor(clientCode), nextValue(tx, `sscc:${clientId}`)) : nextLpNumber(tx, type.id);
-      const exists = tx.select({ id: lp.id }).from(lp).where(and(eq(lp.warehouseId, input.warehouseId), eq(lp.number, number))).get();
+      number = input.isSscc18 ? buildSscc18(SSCC_EXTENSION, companyPrefixFor(clientCode), await nextValue(tx, `sscc:${clientId}`)) : await nextLpNumber(tx, type.id);
+      const exists = (await tx.select({ id: lp.id }).from(lp).where(and(eq(lp.warehouseId, input.warehouseId), eq(lp.number, number))).limit(1))[0];
       if (!exists) break;
     }
-    insert(number, { isSscc18: input.isSscc18 });
+    await insert(number, { isSscc18: input.isSscc18 });
   }
   return { created: count, ids, numbers };
 }
@@ -225,14 +226,14 @@ export function lpLocks(row: Pick<typeof lp.$inferSelect, "status" | "isSscc18">
   };
 }
 
-export function updateLpNumber(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: LpUpdateInput): { id: string; number: string; version: number } {
-  const before = loadLp(tx, auth, id);
+export async function updateLpNumber(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: LpUpdateInput): Promise<{ id: string; number: string; version: number }> {
+  const before = await loadLp(tx, auth, id);
   assertVersion(before.version, input.version);
   const locks = lpLocks(before);
   const number = input.number.trim().toUpperCase();
   if (number !== before.number) {
     if (locks.number) throw new AppError("VALIDATION", locks.number, { fieldErrors: { number: [locks.number] } });
-    assertNumberFree(tx, before.warehouseId, number);
+    await assertNumberFree(tx, before.warehouseId, number);
   }
   if (input.isSscc18 !== before.isSscc18 && locks.isSscc18) throw new AppError("VALIDATION", locks.isSscc18, { fieldErrors: { isSscc18: [locks.isSscc18] } });
   const patch = {
@@ -240,9 +241,9 @@ export function updateLpNumber(tx: AppDb, auth: AuthContext, actor: Actor, id: s
     weight: round(input.weight), actualVolume: round(input.actualVolume, 3), isSscc18: input.isSscc18,
     originalNumber: number !== before.number ? before.originalNumber ?? before.number : before.originalNumber,
   };
-  const after = tx.update(lp).set({ ...patch, updatedBy: actor.userId, version: sql`${lp.version} + 1` }).where(eq(lp.id, id)).returning().get();
+  const after = (await tx.update(lp).set({ ...patch, updatedBy: actor.userId, version: sql`${lp.version} + 1` }).where(eq(lp.id, id)).returning())[0];
   const pick = (r: typeof lp.$inferSelect) => ({ number: r.number, alternateBarcode: r.alternateBarcode ?? "", length: r.length, width: r.width, height: r.height, weight: r.weight, actualVolume: r.actualVolume, isSscc18: r.isSscc18, originalNumber: r.originalNumber ?? "" });
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: id, entityCode: after.number }, pick(before), pick(after));
+  await logUpdate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: id, entityCode: after.number }, pick(before), pick(after));
   return { id, number: after.number, version: after.version };
 }
 
@@ -293,43 +294,43 @@ export function lpRemovalPlan(f: LpRemovalFacts): LpRemoval {
   return { mode: "void", because: `it has ${f.history.join(", ")} history` };
 }
 
-export function lpRemovalFacts(db: AppDb, row: typeof lp.$inferSelect): LpRemovalFacts {
-  const units = db.select({ n: sql<number>`COALESCE(SUM(${s.inventory.onHand}), 0)` }).from(s.inventory).where(eq(s.inventory.lpId, row.id)).get()?.n ?? 0;
-  const parentNumber = row.parentLpId ? db.select({ n: lp.number }).from(lp).where(eq(lp.id, row.parentLpId)).get()?.n ?? null : null;
-  const childCount = db.select({ n: sql<number>`count(*)` }).from(lp).where(eq(lp.parentLpId, row.id)).get()?.n ?? 0;
-  const history = LP_HISTORY_PROBES.filter((p) => db.get<{ x: number } | undefined>(sql`SELECT EXISTS (${p.where(row.id)}) AS x`)?.x === 1).map((p) => p.label);
+export async function lpRemovalFacts(db: AppDb, row: typeof lp.$inferSelect): Promise<LpRemovalFacts> {
+  const units = (await db.select({ n: sql<number>`COALESCE(SUM(${s.inventory.onHand}), 0)` }).from(s.inventory).where(eq(s.inventory.lpId, row.id)).limit(1))[0]?.n ?? 0;
+  const parentNumber = row.parentLpId ? (await db.select({ n: lp.number }).from(lp).where(eq(lp.id, row.parentLpId)).limit(1))[0]?.n ?? null : null;
+  const childCount = (await db.select({ n: sql<number>`count(*)` }).from(lp).where(eq(lp.parentLpId, row.id)).limit(1))[0]?.n ?? 0;
+  const history = (await filterSeq(LP_HISTORY_PROBES, async (p) => (await dbGet<{ x: number } | undefined>(db, sql`SELECT (EXISTS (${p.where(row.id)}))::int AS x`))?.x === 1)).map((p) => p.label);
   return { status: row.status, units, parentNumber, childCount, history };
 }
 
 /** Per-row removal preview for the confirm dialog: what will happen to each selected LP. */
-export function lpRemovalPreview(db: AppDb, auth: AuthContext, ids: readonly string[]) {
-  return [...new Set(ids)].slice(0, 1000).map((id) => {
-    const row = loadLp(db, auth, id);
-    const plan = lpRemovalPlan(lpRemovalFacts(db, row));
+export async function lpRemovalPreview(db: AppDb, auth: AuthContext, ids: readonly string[]) {
+  return await mapSeq([...new Set(ids)].slice(0, 1000), async (id) => {
+    const row = await loadLp(db, auth, id);
+    const plan = lpRemovalPlan(await lpRemovalFacts(db, row));
     return { id, number: row.number, status: row.status, ...plan };
   });
 }
 
-export type LpRemovalPreview = ReturnType<typeof lpRemovalPreview>;
+export type LpRemovalPreview = Awaited<ReturnType<typeof lpRemovalPreview>>;
 
 /** Bulk delete / void (per-id savepoints). Every success writes a Delete row, or a status Update row for a void. */
-export function removeLpNumbers(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult & { readonly deleted: readonly string[]; readonly voided: readonly string[] } {
+export async function removeLpNumbers(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): Promise<BulkResult & { readonly deleted: readonly string[]; readonly voided: readonly string[] }> {
   const ctx = domainCtxOf(actor, auth);
   const deleted: string[] = [];
   const voided: string[] = [];
-  const result = runBulk(tx, ids, (inner, id) => {
-    const row = loadLp(inner, auth, id);
-    const plan = lpRemovalPlan(lpRemovalFacts(inner, row));
+  const result = await runBulk(tx, ids, async (inner, id) => {
+    const row = await loadLp(inner, auth, id);
+    const plan = lpRemovalPlan(await lpRemovalFacts(inner, row));
     if (plan.mode === "blocked") throw new AppError("INVALID_STATE", `${row.number} ${plan.reason}`);
     if (plan.mode === "delete") {
-      inner.delete(lp).where(eq(lp.id, id)).run();
-      logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.number, warehouseId: row.warehouseId });
+      await inner.delete(lp).where(eq(lp.id, id));
+      await logDelete(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.number, warehouseId: row.warehouseId });
       deleted.push(id);
       return;
     }
-    inner.update(lp).set({ status: "Removed", locationId: null, updatedBy: actor.userId, version: sql`${lp.version} + 1` }).where(eq(lp.id, id)).run();
-    const loc = row.locationId ? inner.select({ code: s.locations.code }).from(s.locations).where(eq(s.locations.id, row.locationId)).get()?.code ?? "" : "";
-    logUpdate(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.number }, { status: row.status, location: loc }, { status: "Removed", location: "" });
+    await inner.update(lp).set({ status: "Removed", locationId: null, updatedBy: actor.userId, version: sql`${lp.version} + 1` }).where(eq(lp.id, id));
+    const loc = row.locationId ? (await inner.select({ code: s.locations.code }).from(s.locations).where(eq(s.locations.id, row.locationId)).limit(1))[0]?.code ?? "" : "";
+    await logUpdate(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.number }, { status: row.status, location: loc }, { status: "Removed", location: "" });
     voided.push(id);
   });
   return { ...result, deleted, voided };
@@ -337,11 +338,11 @@ export function removeLpNumbers(tx: AppDb, auth: AuthContext, actor: Actor, ids:
 
 /* ---------------- labels ---------------- */
 
-export function lpLabelRecords(tx: AppDb, auth: AuthContext, ids: readonly string[]) {
-  const rows = tx.select({ id: lp.id, number: lp.number, lpType: lpTypeCodeSql, warehouseCode: warehouseCodeSql, locationCode: locationCodeSql, clientName: sql<string | null>`(SELECT c.name FROM clients c WHERE c.id = ${qc(lp.clientId)})` })
-    .from(lp).where(and(inArray(lp.id, [...ids]), listScope(lp, auth, { warehouseId: lp.warehouseId }))).orderBy(lp.number).all();
+export async function lpLabelRecords(tx: AppDb, auth: AuthContext, ids: readonly string[]) {
+  const rows = await tx.select({ id: lp.id, number: lp.number, lpType: lpTypeCodeSql, warehouseCode: warehouseCodeSql, locationCode: locationCodeSql, clientName: sql<string | null>`(SELECT c.name FROM clients c WHERE c.id = ${qc(lp.clientId)})` })
+    .from(lp).where(and(inArray(lp.id, [...ids]), listScope(lp, auth, { warehouseId: lp.warehouseId }))).orderBy(lp.number);
   if (rows.length === 0) throw new AppError("NOT_FOUND", "None of the selected LP numbers were found");
-  tx.update(lp).set({ labelPrintedAt: new Date().toISOString() }).where(inArray(lp.id, rows.map((r) => r.id))).run();
+  await tx.update(lp).set({ labelPrintedAt: new Date().toISOString() }).where(inArray(lp.id, rows.map((r) => r.id)));
   return rows.map((r) => ({
     id: r.id,
     number: r.number,

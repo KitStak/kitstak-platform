@@ -6,7 +6,8 @@
  *   hot reloads and repeated `register()` calls never start a second timer.
  * - `runSchedulerTick()` backs `POST /api/cron/tick` (guard with `verifyCronAuthorization`).
  * - `getSchedulerHeartbeat()` is read by `/api/health`.
- * - Disabled under vitest and with `SCHEDULER_ENABLED=0`.
+ * - Disabled under vitest, with `SCHEDULER_ENABLED=0`, and on Vercel (`VERCEL` set), where
+ *   Vercel Cron drives `/api/cron/tick` every minute instead (vercel.json).
  */
 import { randomUUID } from "node:crypto";
 import os from "node:os";
@@ -63,6 +64,7 @@ syncRunnerTasks();
 export function schedulerDisabledReason(env: Readonly<Record<string, string | undefined>> = process.env): string | null {
   if (env.VITEST) return "Scheduler disabled under test";
   if (env.SCHEDULER_ENABLED === "0") return "Scheduler disabled (SCHEDULER_ENABLED=0)";
+  if (env.VERCEL) return "Scheduler disabled on Vercel (Vercel Cron calls /api/cron/tick)";
   return null;
 }
 

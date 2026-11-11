@@ -96,7 +96,7 @@ export async function printToFile(db: AppDb, input: PrintToFileInput): Promise<F
   const output = await renderPrint(input.request, now);
   const def = getPrintType(input.request.typeKey);
   if (!def) throw notFoundError("Printout type");
-  return (input.store ?? fileStore()).store(db, {
+  return await (input.store ?? fileStore()).store(db, {
     name: printFileName(def.name, now, output.extension),
     bytes: output.bytes,
     purpose: "print",

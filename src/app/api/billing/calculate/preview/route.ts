@@ -9,5 +9,5 @@ import { calculateSchema, previewCalculation } from "@/server/repositories/billi
 export const POST = defineRoute({
   permission: "settings.billing.calculate",
   body: calculateSchema,
-  handler: ({ db, auth, body }) => previewCalculation(db, auth, body),
+  handler: async ({ db, auth, body }) => await previewCalculation(db, auth, body),
 });

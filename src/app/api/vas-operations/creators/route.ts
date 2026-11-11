@@ -4,5 +4,5 @@ import { vasCreators } from "@/server/repositories/vas";
 
 export const GET = defineRoute({
   permission: ["settings.vas_operations.view", "settings.billing.view"],
-  handler: ({ db, auth }) => vasCreators(db, auth),
+  handler: async ({ db, auth }) => await vasCreators(db, auth),
 });

@@ -60,84 +60,84 @@ const JOB_TYPE_DEFS: readonly JobTypeDef[] = [
   { code: "Work Order Picking", description: "Component picking for kitting work orders", operationType: "Work Order", settings: { workOrder: { pickingAndKitting: true } } },
 ];
 
-function seedAlgorithms(tx: Tx, warehouseId: Id): Map<string, Id> {
-  const ins = (row: Omit<typeof schema.algorithms.$inferInsert, "warehouseId">): Id =>
-    tx.insert(schema.algorithms).values({ warehouseId, ...row }).returning({ id: schema.algorithms.id }).get().id;
-  const rule = (algorithmId: Id, sequence: number, name: string, extra: Partial<typeof schema.algorithmRules.$inferInsert>): void => {
-    tx.insert(schema.algorithmRules).values({ algorithmId, sequence, name, conditions: [], orderBy: [{ field: "walkingPathPriority", dir: "asc" }], ...extra }).run();
+async function seedAlgorithms(tx: Tx, warehouseId: Id): Promise<Map<string, Id>> {
+  const ins = async (row: Omit<typeof schema.algorithms.$inferInsert, "warehouseId">): Promise<Id> =>
+    (await tx.insert(schema.algorithms).values({ warehouseId, ...row }).returning({ id: schema.algorithms.id }))[0].id;
+  const rule = async (algorithmId: Id, sequence: number, name: string, extra: Partial<typeof schema.algorithmRules.$inferInsert>): Promise<void> => {
+    await tx.insert(schema.algorithmRules).values({ algorithmId, sequence, name, conditions: [], orderBy: [{ field: "walkingPathPriority", dir: "asc" }], ...extra });
   };
   const created = isoOf(utcAt(400, 15));
-  const replen = ins({ name: "REPLENISHMENT_ALGORITHM", kind: "Putaway", isDynamicReplenishment: true, isSystem: true, createdAt: created });
-  rule(replen, 1, "Replenish assigned pick faces", { actions: [{ action: "checkSameClient" }, { action: "checkAssignedSkus" }, { action: "checkLocationCapacity" }, { action: "suggestSameSku" }] });
-  const sameSku = ins({ name: "SAME_SKU_EMPTY_LOCATION_ALGORITHM", kind: "Putaway", isSystem: true, enforceSuggestedLocations: false, createdAt: created });
-  rule(sameSku, 1, "Same SKU in storage", {
+  const replen = await ins({ name: "REPLENISHMENT_ALGORITHM", kind: "Putaway", isDynamicReplenishment: true, isSystem: true, createdAt: created });
+  await rule(replen, 1, "Replenish assigned pick faces", { actions: [{ action: "checkSameClient" }, { action: "checkAssignedSkus" }, { action: "checkLocationCapacity" }, { action: "suggestSameSku" }] });
+  const sameSku = await ins({ name: "SAME_SKU_EMPTY_LOCATION_ALGORITHM", kind: "Putaway", isSystem: true, enforceSuggestedLocations: false, createdAt: created });
+  await rule(sameSku, 1, "Same SKU in storage", {
     conditions: [{ field: "isReceivingProcess", comparator: "equals", value: true }],
     actions: [{ action: "checkSameClient" }, { action: "checkDamagedLocations" }, { action: "checkSameLotBatchNumber" }, { action: "suggestAreaType", value: "Storage" }, { action: "suggestSameSku" }],
   });
-  rule(sameSku, 2, "Empty storage location", { actions: [{ action: "checkDamagedLocations" }, { action: "suggestAreaType", value: "Storage" }, { action: "suggestEmptyLocation" }] });
+  await rule(sameSku, 2, "Empty storage location", { actions: [{ action: "checkDamagedLocations" }, { action: "suggestAreaType", value: "Storage" }, { action: "suggestEmptyLocation" }] });
   const usable: RuleCondition[] = [
     { field: "inventoryDamageReason", comparator: "isEmpty", value: null },
     { field: "isAllowOnlyDamaged", comparator: "equals", value: false },
     { field: "areaType", comparator: "in", value: ["Picking", "Storage"] },
   ];
-  const d2c = ins({ name: "Default", kind: "Allocation", createdAt: created });
-  rule(d2c, 1, "Pick face first (FEFO)", { inventoryConditions: usable, orderBy: [
+  const d2c = await ins({ name: "Default", kind: "Allocation", createdAt: created });
+  await rule(d2c, 1, "Pick face first (FEFO)", { inventoryConditions: usable, orderBy: [
     { field: "inventoryExpiryDate", dir: "asc" }, { field: "areaType", dir: "asc" }, { field: "inventoryReceivingDate", dir: "asc" }, { field: "walkingPathPriority", dir: "asc" }] });
-  const b2b = ins({ name: "B2B Default", kind: "Allocation", createdAt: isoOf(utcAt(390, 15)) });
-  rule(b2b, 1, "Reserve first for wholesale", { conditions: [{ field: "channel", comparator: "equals", value: "Wholesale" }], inventoryConditions: usable, orderBy: [
+  const b2b = await ins({ name: "B2B Default", kind: "Allocation", createdAt: isoOf(utcAt(390, 15)) });
+  await rule(b2b, 1, "Reserve first for wholesale", { conditions: [{ field: "channel", comparator: "equals", value: "Wholesale" }], inventoryConditions: usable, orderBy: [
     { field: "areaType", dir: "desc" }, { field: "inventoryExpiryDate", dir: "asc" }, { field: "inventoryReceivingDate", dir: "asc" }] });
-  rule(b2b, 2, "Fallback (any usable stock)", { inventoryConditions: usable, orderBy: [{ field: "inventoryReceivingDate", dir: "asc" }] });
+  await rule(b2b, 2, "Fallback (any usable stock)", { inventoryConditions: usable, orderBy: [{ field: "inventoryReceivingDate", dir: "asc" }] });
   return new Map([[`${warehouseId}|Default`, d2c], [`${warehouseId}|B2B Default`, b2b]]);
 }
 
-function seedJobTypes(tx: Tx, warehouseId: Id, algos: ReadonlyMap<string, Id>, out: Map<string, Id>): void {
+async function seedJobTypes(tx: Tx, warehouseId: Id, algos: ReadonlyMap<string, Id>, out: Map<string, Id>): Promise<void> {
   for (const def of JOB_TYPE_DEFS) {
     const settings: JobTypeSettings = jobTypeSettingsSchema.parse(def.settings);
-    const id = tx.insert(schema.jobTypes).values({
+    const id = (await tx.insert(schema.jobTypes).values({
       code: def.code, description: def.description, warehouseId, operationType: def.operationType, template: settings.template,
       allocationAlgorithmId: def.code === "B2B Order Picking" ? algos.get(`${warehouseId}|B2B Default`) ?? null : def.operationType === "Picking" ? algos.get(`${warehouseId}|Default`) ?? null : null,
       settings, conditions: [...(def.conditions ?? [])], createdAt: isoOf(utcAt(380, 15)),
-    }).returning({ id: schema.jobTypes.id }).get().id;
+    }).returning({ id: schema.jobTypes.id }))[0].id;
     out.set(jobTypeKey(warehouseId, def.code), id);
   }
 }
 
-function seedWaveRules(tx: Tx, org: OrgRefs, jobTypes: ReadonlyMap<string, Id>): ConfigRefs["waveRules"] {
-  const make = (ruleSeq: number, name: string, warehouseId: Id, jobTypeCodes: readonly JobTypeCode[], extra: Partial<typeof schema.waveRules.$inferInsert>): WaveRuleRef => {
-    const id = tx.insert(schema.waveRules).values({
+async function seedWaveRules(tx: Tx, org: OrgRefs, jobTypes: ReadonlyMap<string, Id>): Promise<ConfigRefs["waveRules"]> {
+  const make = async (ruleSeq: number, name: string, warehouseId: Id, jobTypeCodes: readonly JobTypeCode[], extra: Partial<typeof schema.waveRules.$inferInsert>): Promise<WaveRuleRef> => {
+    const id = (await tx.insert(schema.waveRules).values({
       ruleSeq, name, warehouseId, operationType: "Picking", jobTypeIds: jobTypeCodes.map((c) => jobTypes.get(jobTypeKey(warehouseId, c)) as Id),
       orderBy: [{ field: "priority", dir: "desc" }, { field: "shipmentOrderDate", dir: "asc" }], createdAt: isoOf(utcAt(120, 15)), ...extra,
-    }).returning({ id: schema.waveRules.id }).get().id;
+    }).returning({ id: schema.waveRules.id }))[0].id;
     // M03: every seeded rule opens its change log with a create event.
-    tx.insert(schema.changeLog).values({ entityType: "wave_rule", entityId: id, entityCode: name, type: "Create", message: `Wave Rule ${name} is created.`, source: "System", at: isoOf(utcAt(120, 15)) }).run();
+    await tx.insert(schema.changeLog).values({ entityType: "wave_rule", entityId: id, entityCode: name, type: "Create", message: `Wave Rule ${name} is created.`, source: "System", at: isoOf(utcAt(120, 15)) });
     return { id, ruleSeq, name, warehouseId, jobTypeCodes };
   };
   return {
-    d2c: make(101, "D2C Daily Waves", org.mlt1, ["Single Unit Orders", "Multi Item Orders"], {
+    d2c: await make(101, "D2C Daily Waves", org.mlt1, ["Single Unit Orders", "Multi Item Orders"], {
       filters: [NOT_WHOLESALE], scheduleDays: ["Mon", "Tue", "Wed", "Thu", "Fri"], scheduleTimes: ["09:30", "14:30"],
       deleteIfNotStarted: true, deleteMethod: "After Hours", deleteTime: "8", softAllocation: false,
     }),
-    b2b: make(102, "B2B Wholesale Wave", org.mlt1, ["B2B Order Picking"], {
+    b2b: await make(102, "B2B Wholesale Wave", org.mlt1, ["B2B Order Picking"], {
       filters: [WHOLESALE], priority: "High", scheduleDays: ["Mon", "Wed", "Fri"], scheduleTimes: ["11:00"], assignMode: "Users",
     }),
-    rush: make(103, "Rush - Prime & Urgent", org.mlt1, ["Single Unit Orders", "Multi Item Orders"], {
+    rush: await make(103, "Rush - Prime & Urgent", org.mlt1, ["Single Unit Orders", "Multi Item Orders"], {
       filters: [{ field: "priority", op: "in", value: ["High", "Urgent"], label: "Priority is High or Urgent" }, NOT_WHOLESALE], priority: "Urgent",
     }),
-    count: make(104, "Cycle Count - Zone Rotation", org.mlt1, ["Cycle Count"], { operationType: "Cycle Count", countType: "Location", lockLocations: true }),
-    ks2: make(105, "KS2 Overflow Wave", org.ks2, ["Single Unit Orders", "Multi Item Orders"], { filters: [NOT_WHOLESALE], assignMode: "Pool" }),
+    count: await make(104, "Cycle Count - Zone Rotation", org.mlt1, ["Cycle Count"], { operationType: "Cycle Count", countType: "Location", lockLocations: true }),
+    ks2: await make(105, "KS2 Overflow Wave", org.ks2, ["Single Unit Orders", "Multi Item Orders"], { filters: [NOT_WHOLESALE], assignMode: "Pool" }),
     // M03 blind judge R1: every wave operation type has a demo rule (run live, not by the replay).
-    replen: make(106, "Dynamic Replenishment - Pick Faces", org.mlt1, ["Dynamic Replenishment"], {
+    replen: await make(106, "Dynamic Replenishment - Pick Faces", org.mlt1, ["Dynamic Replenishment"], {
       operationType: "Replenishment", priority: "High", softAllocation: true, scheduleDays: ["Mon", "Tue", "Wed", "Thu", "Fri"], scheduleTimes: ["06:00"],
     }),
-    merge: make(107, "Order Merge - Same Customer", org.mlt1, [], {
+    merge: await make(107, "Order Merge - Same Customer", org.mlt1, [], {
       operationType: "Order Merge", orderBy: [{ field: "shipmentOrderDate", dir: "asc" }],
-      mergeRuleIds: tx.select({ id: schema.lookupValues.id }).from(schema.lookupValues).where(eq(schema.lookupValues.type, "order_merge_rule")).all().map((r) => r.id),
+      mergeRuleIds: (await tx.select({ id: schema.lookupValues.id }).from(schema.lookupValues).where(eq(schema.lookupValues.type, "order_merge_rule"))).map((r) => r.id),
     }),
-    ai: make(108, "AI Wave - D2C Optimized", org.mlt1, ["Single Unit Orders", "Multi Item Orders"], { operationType: "AI Job", priority: "Medium", filters: [NOT_WHOLESALE] }),
+    ai: await make(108, "AI Wave - D2C Optimized", org.mlt1, ["Single Unit Orders", "Multi Item Orders"], { operationType: "AI Job", priority: "Medium", filters: [NOT_WHOLESALE] }),
   };
 }
 
-function seedWorkflows(tx: Tx, org: OrgRefs): void {
+async function seedWorkflows(tx: Tx, org: OrgRefs): Promise<void> {
   const smt = org.clientByCode.get("SMT");
   const rows: (typeof schema.workflows.$inferInsert)[] = [
     { name: "Block PO box addresses", description: "Hold orders shipping to a PO box until CS confirms a street address.", trigger: "Shipment Order Created",
@@ -148,37 +148,37 @@ function seedWorkflows(tx: Tx, org: OrgRefs): void {
     { name: "Tag Summit Trail Gear VIP orders", description: "Every Summit Trail Gear order gets the VIP tag for white-glove packing.", trigger: "Shipment Order Created",
       clientId: smt?.id ?? null, conditions: [], actions: [{ action: "Add Tag", params: { tag: "VIP" } }], sequence: 3 },
   ];
-  tx.insert(schema.workflows).values(rows.map((r) => ({ ...r, warehouseId: org.mlt1, createdAt: isoOf(utcAt(90, 15)) }))).run();
+  await tx.insert(schema.workflows).values(rows.map((r) => ({ ...r, warehouseId: org.mlt1, createdAt: isoOf(utcAt(90, 15)) })));
 }
 
-function seedRatePresets(tx: Tx, org: OrgRefs, carriers: CarrierRefs): ConfigRefs["ratePresets"] {
+async function seedRatePresets(tx: Tx, org: OrgRefs, carriers: CarrierRefs): Promise<ConfigRefs["ratePresets"]> {
   const conn = carriers.sandboxByWarehouse.get(org.mlt1) as Id;
   const apx = org.clientByCode.get("APX");
   const nova = org.clientByCode.get("NVF");
   const out: { id: Id; clientId: Id; name: string }[] = [];
   if (apx) {
-    const id = tx.insert(schema.rateShoppingPresets).values({ name: "Cheapest Domestic", description: "Lowest sandbox rate across UPS and USPS ground services",
-      warehouseId: org.mlt1, clientId: apx.id, method: "Cheapest", useAllServices: true }).returning({ id: schema.rateShoppingPresets.id }).get().id;
+    const id = (await tx.insert(schema.rateShoppingPresets).values({ name: "Cheapest Domestic", description: "Lowest sandbox rate across UPS and USPS ground services",
+      warehouseId: org.mlt1, clientId: apx.id, method: "Cheapest", useAllServices: true }).returning({ id: schema.rateShoppingPresets.id }))[0].id;
     out.push({ id, clientId: apx.id, name: "Cheapest Domestic" });
   }
   if (nova) {
-    const id = tx.insert(schema.rateShoppingPresets).values({ name: "Cheapest in 3 Days", description: "Cheapest service that delivers within 3 business days",
-      warehouseId: org.mlt1, clientId: nova.id, method: "Cheapest In Time", transitDays: 3, showErrors: true }).returning({ id: schema.rateShoppingPresets.id }).get().id;
-    tx.insert(schema.rateShoppingPresetServices).values(["SBX_2DAY", "SBX_NEXT_DAY", "SBX_PRIORITY", "SBX_GROUND"].map((code) => ({
-      presetId: id, carrierServiceId: carriers.services.get(serviceKey(conn, code)) as Id }))).run();
+    const id = (await tx.insert(schema.rateShoppingPresets).values({ name: "Cheapest in 3 Days", description: "Cheapest service that delivers within 3 business days",
+      warehouseId: org.mlt1, clientId: nova.id, method: "Cheapest In Time", transitDays: 3, showErrors: true }).returning({ id: schema.rateShoppingPresets.id }))[0].id;
+    await tx.insert(schema.rateShoppingPresetServices).values(["SBX_2DAY", "SBX_NEXT_DAY", "SBX_PRIORITY", "SBX_GROUND"].map((code) => ({
+      presetId: id, carrierServiceId: carriers.services.get(serviceKey(conn, code)) as Id })));
     out.push({ id, clientId: nova.id, name: "Cheapest in 3 Days" });
   }
   return out;
 }
 
-export function seedConfig(tx: Tx, org: OrgRefs, carriers: CarrierRefs): ConfigRefs {
+export async function seedConfig(tx: Tx, org: OrgRefs, carriers: CarrierRefs): Promise<ConfigRefs> {
   const allocationAlgorithms = new Map<string, Id>();
   const jobTypes = new Map<string, Id>();
   for (const wh of [org.mlt1, org.ks2]) {
-    const algos = seedAlgorithms(tx, wh);
+    const algos = await seedAlgorithms(tx, wh);
     for (const [k, v] of algos) allocationAlgorithms.set(k, v);
-    seedJobTypes(tx, wh, algos, jobTypes);
+    await seedJobTypes(tx, wh, algos, jobTypes);
   }
-  seedWorkflows(tx, org);
-  return { jobTypes, allocationAlgorithms, waveRules: seedWaveRules(tx, org, jobTypes), ratePresets: seedRatePresets(tx, org, carriers) };
+  await seedWorkflows(tx, org);
+  return { jobTypes, allocationAlgorithms, waveRules: await seedWaveRules(tx, org, jobTypes), ratePresets: await seedRatePresets(tx, org, carriers) };
 }

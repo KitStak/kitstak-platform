@@ -7,5 +7,5 @@ import { exportReportsToIntegration } from "@/server/repositories/billing-report
 export const POST = defineRoute({
   permission: "settings.billing_report.approve",
   body: bulkIds.extend({ force: z.boolean().optional() }),
-  handler: ({ db, auth, actor, body }) => exportReportsToIntegration(db, auth, actor, body.ids, { force: body.force }),
+  handler: async ({ db, auth, actor, body }) => await exportReportsToIntegration(db, auth, actor, body.ids, { force: body.force }),
 });

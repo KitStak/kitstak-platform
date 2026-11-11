@@ -8,5 +8,5 @@ export const POST = defineRoute({
   permission: "inventory.purchase_orders.change_status",
   params: idParamsSchema,
   body: poStatusChangeSchema,
-  handler: ({ db, auth, actor, params, body }) => changePurchaseOrderStatus(db, domainCtx(actor, auth), auth.scope, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await changePurchaseOrderStatus(db, domainCtx(actor, auth), auth.scope, params.id, body),
 });

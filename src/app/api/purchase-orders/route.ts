@@ -11,9 +11,9 @@ import { createPurchaseOrder } from "@/server/repositories/purchase-orders-comma
 
 export const GET = defineRoute({
   permission: "inventory.purchase_orders.view",
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listPurchaseOrders(db, auth, query);
+    const { rows, total } = await listPurchaseOrders(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -21,5 +21,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "inventory.purchase_orders.create",
   body: poCreateSchema,
-  handler: ({ db, auth, actor, body }) => created(createPurchaseOrder(db, domainCtx(actor, auth), auth.scope, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createPurchaseOrder(db, domainCtx(actor, auth), auth.scope, body)),
 });

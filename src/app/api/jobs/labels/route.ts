@@ -10,5 +10,5 @@ export const POST = defineRoute({
   permission: JOB_PERMISSIONS.label,
   transaction: false,
   body: z.object({ ids: bulkIdsSchema, op: z.enum(["create", "reprint", "void"]) }),
-  handler: ({ db, auth, actor, body }) => withM03Actor(db, actor, auth, () => runJobLabels(db, auth, domainCtx(actor, auth), { jobIds: body.ids, op: body.op })),
+  handler: async ({ db, auth, actor, body }) => await withM03Actor(db, actor, auth, () => runJobLabels(db, auth, domainCtx(actor, auth), { jobIds: body.ids, op: body.op })),
 });

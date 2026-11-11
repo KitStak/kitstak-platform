@@ -6,5 +6,5 @@ import { jobOptionsQuerySchema, orderJobOptions } from "@/server/repositories/or
 export const GET = defineRoute({
   permission: ORDER_PERMISSIONS.jobs,
   query: jobOptionsQuerySchema,
-  handler: ({ db, auth, query }) => orderJobOptions(db, auth.scope, query.warehouseId),
+  handler: async ({ db, auth, query }) => await orderJobOptions(db, auth.scope, query.warehouseId),
 });

@@ -13,5 +13,5 @@ import { ANY_JOB_OPERATION_PERMISSION, opsJobsSchema, runJobsCommand } from "@/s
 export const POST = defineRoute({
   permission: ANY_JOB_OPERATION_PERMISSION,
   body: opsJobsSchema,
-  handler: ({ db, auth, actor, body }) => runJobsCommand(db, auth, domainCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await runJobsCommand(db, auth, domainCtx(actor, auth), body),
 });

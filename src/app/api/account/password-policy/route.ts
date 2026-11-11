@@ -3,8 +3,8 @@ import { defineRoute } from "@/server/api/define-route";
 import { getPasswordPolicy } from "@/server/auth/password-policy";
 
 export const GET = defineRoute({
-  handler: ({ db }) => {
-    const p = getPasswordPolicy(db);
+  handler: async ({ db }) => {
+    const p = await getPasswordPolicy(db);
     return { minLength: p.minLength, requireUpper: p.requireUpper, requireNumber: p.requireNumber, requireSymbol: p.requireSymbol, maxAgeDays: p.maxAgeDays ?? null };
   },
 });

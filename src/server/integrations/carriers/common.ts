@@ -12,6 +12,7 @@ import {
 } from "@/server/domain/carriers/adapter";
 import { renderPdfLabel, renderZplLabel } from "@/server/domain/carriers/label";
 import { decryptCredentials, type Credentials } from "../crypto";
+import { mapSeq } from "@/server/db/sql";
 
 export interface ServiceDef {
   readonly code: string;
@@ -143,7 +144,7 @@ export function buildCarrierAdapter(def: CarrierDef): CarrierAdapter {
       const intl = isInternational(req.to.country);
       if (intl !== Boolean(s.international)) throw new CarrierError(`${req.service.name} is ${s.international ? "international only" : "domestic only"}.`, 400);
       const zone = zoneOf(req.from.postalCode, req.to.postalCode, intl);
-      const packages = await Promise.all(req.packages.map(async (pkg, i) => {
+      const packages = await Promise.all(await mapSeq(req.packages, async (pkg, i) => {
         const trackingNumber = tracking(def, `${def.provider}|${req.orderCode}|${req.labelType}|${req.attempt}|${i + 1}`);
         const data = { from: req.from, to: req.to, carrierCode: def.carrierCode, serviceName: req.service.name, trackingNumber, orderCode: req.orderCode, weightOz: pkg.weightOz, packageSeq: i + 1, packageCount: req.packages.length, shipDate: req.shipDate.slice(0, 10), labelType: req.labelType };
         const label = req.format === "PDF" ? await renderPdfLabel(data) : new TextEncoder().encode(renderZplLabel(data));

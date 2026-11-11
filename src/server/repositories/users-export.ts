@@ -15,8 +15,8 @@ export const usersExport: ExportProvider = {
     { key: "isApiUser", label: "API User", type: "boolean" }, { key: "lastLoginAt", label: "Last Sign-in", type: "datetime" },
     { key: "createdAt", label: "Created Date", type: "datetime" },
   ],
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listUsers(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listUsers(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
     return { rows: rows.map((r) => ({ ...r })), total };
   },
 };
@@ -27,8 +27,8 @@ export const rolesExport: ExportProvider = {
     { key: "restrictionLabels", label: "Restrictions" }, { key: "userCount", label: "Users", type: "integer" },
     { key: "permissionCount", label: "Permissions", type: "integer" }, { key: "isSystem", label: "System Role", type: "boolean" },
   ],
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listRoles(ctx.db, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listRoles(ctx.db, { ...ctx.query, page, pageSize });
     return { rows: rows.map((r) => ({ ...r, restrictionLabels: r.restrictions.map((k) => k.replace(/_/g, " ")).join(", ") })), total };
   },
 };
@@ -39,8 +39,8 @@ export const auditExport: ExportProvider = {
     { key: "outcome", label: "Outcome" }, { key: "userName", label: "User" }, { key: "userEmail", label: "User Email" },
     { key: "entityLabel", label: "Target" }, { key: "summary", label: "Details" }, { key: "ip", label: "IP Address" }, { key: "userAgent", label: "Device" },
   ],
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listAuditLog(ctx.db, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listAuditLog(ctx.db, { ...ctx.query, page, pageSize });
     return { rows: rows.map((r) => ({ ...r })), total };
   },
 };

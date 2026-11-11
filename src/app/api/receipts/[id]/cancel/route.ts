@@ -6,5 +6,5 @@ import { cancelReceipt } from "@/server/repositories/receipts";
 export const POST = defineRoute({
   permission: "inventory.receiving_history.cancel",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => cancelReceipt(db, domainCtx(actor, auth), auth.scope, params.id),
+  handler: async ({ db, auth, actor, params }) => await cancelReceipt(db, domainCtx(actor, auth), auth.scope, params.id),
 });

@@ -12,7 +12,7 @@ export const instant = false;
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const auth = await getAuthContext();
-  const detail = auth ? getOrderDetail(await getAppDb(), auth, decodeURIComponent(id)) : null;
+  const detail = auth ? await getOrderDetail(await getAppDb(), auth, decodeURIComponent(id)) : null;
   if (!detail) notFound();
   return <OrderDetailPage initial={detail} />;
 }

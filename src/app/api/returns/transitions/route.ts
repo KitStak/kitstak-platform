@@ -9,9 +9,9 @@ const csv = z.string().max(40000).optional().transform((v) => (v ? v.split(",").
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.view,
   query: z.object({ ids: csv, lineIds: csv }),
-  handler: ({ db, auth, query }) => {
-    const ids = query.ids.length ? query.ids : returnIdsForLines(db, auth.scope, query.lineIds);
+  handler: async ({ db, auth, query }) => {
+    const ids = query.ids.length ? query.ids : await returnIdsForLines(db, auth.scope, query.lineIds);
     if (ids.length === 0) throw validationError("Select at least one return");
-    return selectionTransitions(db, auth.scope, ids.slice(0, 1000), query.ids.length ? [] : query.lineIds);
+    return await selectionTransitions(db, auth.scope, ids.slice(0, 1000), query.ids.length ? [] : query.lineIds);
   },
 });

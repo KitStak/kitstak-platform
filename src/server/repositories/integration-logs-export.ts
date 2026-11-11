@@ -13,8 +13,8 @@ const col = (key: string, label: string, type?: ExportColumn["type"]): ExportCol
 export const historyExport: ExportProvider = {
   columns: [col("storeName", "Store name"), col("provider", "Channel"), col("method", "Method"), col("startedAt", "Date", "datetime"), col("status", "Status"),
     col("successCount", "Success", "integer"), col("errorCount", "Error", "integer"), col("totalCount", "Total", "integer")],
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listHistory(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listHistory(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
     return { rows: rows.map((r) => ({ ...r })), total };
   },
 };
@@ -22,8 +22,8 @@ export const historyExport: ExportProvider = {
 export const missingOrdersExport: ExportProvider = {
   columns: [col("orderCode", "Order code"), col("channelOrderNumber", "Channel order number"), col("storeName", "Channel setup name"), col("provider", "Channel"),
     col("clientName", "Client"), col("orderDate", "Order date", "datetime"), col("lastUpdated", "Last updated", "datetime"), col("lastErrorCode", "Last error code"), col("status", "Status")],
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listMissing(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listMissing(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
     return { rows: rows.map((r) => ({ ...r })), total };
   },
 };
@@ -32,8 +32,8 @@ export const labelErrorsExport: ExportProvider = {
   columns: [col("at", "Timestamp", "datetime"), col("step", "Integration step"), col("orderCode", "Shipment order"), col("destinationType", "Destination type"), col("status", "Status"),
     col("httpCode", "HTTP code", "integer"), col("error", "Error"), col("responseMs", "Response time (ms)", "integer"), col("provider", "Carrier"), col("serviceName", "Shipping option"),
     col("connectionLabel", "Carrier connection"), col("setupName", "Carrier setup"), col("clientName", "Client"), col("userEmail", "User"), col("source", "Source"), col("labelType", "Label type"), col("rateShoppingName", "Rate shopping name")],
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listCallLogs(ctx.db, ctx.auth, "LabelGeneration", { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listCallLogs(ctx.db, ctx.auth, "LabelGeneration", { ...ctx.query, page, pageSize });
     return { rows: rows.map((r) => ({ ...r })), total };
   },
 };

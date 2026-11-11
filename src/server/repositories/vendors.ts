@@ -34,7 +34,7 @@ const SPEC: GridSpec = {
     openPoCount: OPEN_PO_SQL,
     createdAt: sql`${v.createdAt}`,
   },
-  defaultOrder: [sql`${v.displayName} COLLATE NOCASE ASC`],
+  defaultOrder: [sql`lower(${v.displayName}) ASC`],
 };
 
 export interface VendorAddress {
@@ -90,11 +90,11 @@ function toAddress(row: AddressRow | undefined): VendorAddress | null {
   };
 }
 
-function addressesOf(db: AppDb, vendorIds: readonly string[]): Map<string, { shipping?: AddressRow; billing?: AddressRow }> {
+async function addressesOf(db: AppDb, vendorIds: readonly string[]): Promise<Map<string, { shipping?: AddressRow; billing?: AddressRow }>> {
   const out = new Map<string, { shipping?: AddressRow; billing?: AddressRow }>();
   if (vendorIds.length === 0) return out;
-  const rows = db.select().from(schema.addresses)
-    .where(and(eq(schema.addresses.ownerType, "vendor"), inArray(schema.addresses.ownerId, [...vendorIds]), eq(schema.addresses.isActive, true))).all();
+  const rows = await db.select().from(schema.addresses)
+    .where(and(eq(schema.addresses.ownerType, "vendor"), inArray(schema.addresses.ownerId, [...vendorIds]), eq(schema.addresses.isActive, true)));
   for (const row of rows) {
     const entry = out.get(row.ownerId) ?? {};
     if (row.usageType === "Billing") entry.billing = row;
@@ -115,7 +115,7 @@ export interface VendorListOptions {
   readonly activeOnly?: boolean;
 }
 
-export function listVendors(db: AppDb, auth: AuthContext, query: GridQuery, options: VendorListOptions = {}): { rows: VendorRow[]; total: number } {
+export async function listVendors(db: AppDb, auth: AuthContext, query: GridQuery, options: VendorListOptions = {}): Promise<{ rows: VendorRow[]; total: number }> {
   if (options.clientId && !hasClient(auth.scope, options.clientId)) return { rows: [], total: 0 };
   const extra = [
     vendorScope(options.clientId ? auth.scope : auth.viewScope),
@@ -123,9 +123,9 @@ export function listVendors(db: AppDb, auth: AuthContext, query: GridQuery, opti
     options.activeOnly ? eq(v.isActive, true) : undefined,
   ];
   const { where, orderBy } = compileGrid(SPEC, query, extra);
-  const total = db.select({ n: sql<number>`count(*)` }).from(v).where(where).get()?.n ?? 0;
-  const base = db.select(SELECT).from(v).where(where).orderBy(...orderBy).limit(query.pageSize).offset((query.page - 1) * query.pageSize).all();
-  const addr = addressesOf(db, base.map((r) => r.id));
+  const total = (await db.select({ n: sql<number>`count(*)` }).from(v).where(where).limit(1))[0]?.n ?? 0;
+  const base = await db.select(SELECT).from(v).where(where).orderBy(...orderBy).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
+  const addr = await addressesOf(db, base.map((r) => r.id));
   const rows = base.map((r) => {
     const ship = addr.get(r.id)?.shipping;
     return { ...r, isActive: Boolean(r.isActive), useShipAsBilling: Boolean(r.useShipAsBilling), city: ship?.city || null, state: ship?.state || null };
@@ -133,11 +133,11 @@ export function listVendors(db: AppDb, auth: AuthContext, query: GridQuery, opti
   return { rows, total };
 }
 
-export function getVendor(db: AppDb, scope: Scope, id: string): VendorDetail {
-  const row = db.select(SELECT).from(v).where(eq(v.id, id)).get();
+export async function getVendor(db: AppDb, scope: Scope, id: string): Promise<VendorDetail> {
+  const row = (await db.select(SELECT).from(v).where(eq(v.id, id)).limit(1))[0];
   if (!row) throw notFoundError("Vendor");
   assertInScope(scope, { clientId: row.clientId }, "Vendor");
-  const addr = addressesOf(db, [id]).get(id) ?? {};
+  const addr = (await addressesOf(db, [id])).get(id) ?? {};
   const shipping = toAddress(addr.shipping);
   const billing = row.useShipAsBilling ? shipping : toAddress(addr.billing);
   return {
@@ -154,24 +154,24 @@ function flatAddress(prefix: string, a: VendorAddress | null): Record<string, st
   };
 }
 
-function upsertAddress(tx: AppDb, ctx: DomainCtx, vendorId: string, usage: "Shipping" | "Billing", input: VendorAddressInput | null): void {
-  const existing = tx.select().from(schema.addresses)
-    .where(and(eq(schema.addresses.ownerType, "vendor"), eq(schema.addresses.ownerId, vendorId), eq(schema.addresses.usageType, usage))).get();
+async function upsertAddress(tx: AppDb, ctx: DomainCtx, vendorId: string, usage: "Shipping" | "Billing", input: VendorAddressInput | null): Promise<void> {
+  const existing = (await tx.select().from(schema.addresses)
+    .where(and(eq(schema.addresses.ownerType, "vendor"), eq(schema.addresses.ownerId, vendorId), eq(schema.addresses.usageType, usage))).limit(1))[0];
   if (!input) {
-    if (existing) tx.update(schema.addresses).set({ isActive: false, updatedBy: ctx.userId }).where(eq(schema.addresses.id, existing.id)).run();
+    if (existing) await tx.update(schema.addresses).set({ isActive: false, updatedBy: ctx.userId }).where(eq(schema.addresses.id, existing.id));
     return;
   }
   const values = {
     name: input.name || null, firstName: input.contactName || null, line1: input.line1 ?? "", line2: input.line2 || null, postalCode: input.postalCode ?? "", city: input.city ?? "",
     phone: input.phone || null, country: countryName(input.country) || input.country, state: input.state, isActive: true, isDefault: true, updatedBy: ctx.userId,
   };
-  if (existing) tx.update(schema.addresses).set(values).where(eq(schema.addresses.id, existing.id)).run();
-  else tx.insert(schema.addresses).values({ ...values, ownerType: "vendor", ownerId: vendorId, usageType: usage, createdBy: ctx.userId }).run();
+  if (existing) await tx.update(schema.addresses).set(values).where(eq(schema.addresses.id, existing.id));
+  else await tx.insert(schema.addresses).values({ ...values, ownerType: "vendor", ownerId: vendorId, usageType: usage, createdBy: ctx.userId });
 }
 
-function assertUniqueName(tx: AppDb, clientId: string, displayName: string, exceptId?: string): void {
-  const clash = tx.select({ id: v.id }).from(v)
-    .where(and(eq(v.clientId, clientId), sql`lower(${v.displayName}) = lower(${displayName})`, exceptId ? sql`${v.id} <> ${exceptId}` : undefined)).get();
+async function assertUniqueName(tx: AppDb, clientId: string, displayName: string, exceptId?: string): Promise<void> {
+  const clash = (await tx.select({ id: v.id }).from(v)
+    .where(and(eq(v.clientId, clientId), sql`lower(${v.displayName}) = lower(${displayName})`, exceptId ? sql`${v.id} <> ${exceptId}` : undefined)).limit(1))[0];
   if (clash) {
     throw new AppError("DUPLICATE", "A vendor with this display name already exists for the client.", {
       fieldErrors: { displayName: ["A vendor with this display name already exists for the client."] },
@@ -179,41 +179,41 @@ function assertUniqueName(tx: AppDb, clientId: string, displayName: string, exce
   }
 }
 
-export function createVendor(tx: AppDb, ctx: DomainCtx, scope: Scope, values: VendorFormValues): VendorDetail {
+export async function createVendor(tx: AppDb, ctx: DomainCtx, scope: Scope, values: VendorFormValues): Promise<VendorDetail> {
   assertInScope(scope, { clientId: values.clientId }, "Client");
-  const client = tx.select({ id: schema.clients.id }).from(schema.clients).where(eq(schema.clients.id, values.clientId)).get();
+  const client = (await tx.select({ id: schema.clients.id }).from(schema.clients).where(eq(schema.clients.id, values.clientId)).limit(1))[0];
   if (!client) throw notFoundError("Client");
-  assertUniqueName(tx, values.clientId, values.displayName);
-  const row = tx.insert(v).values({
+  await assertUniqueName(tx, values.clientId, values.displayName);
+  const row = (await tx.insert(v).values({
     clientId: values.clientId, displayName: values.displayName, vendorName: values.vendorName,
     useShipAsBilling: values.useShipAsBilling, isActive: true, createdBy: ctx.userId, updatedBy: ctx.userId,
-  }).returning().get();
-  upsertAddress(tx, ctx, row.id, "Shipping", values.shipping);
-  upsertAddress(tx, ctx, row.id, "Billing", values.useShipAsBilling ? null : values.billing ?? null);
-  changeLog.recordCreate(tx, ctx, { entityType: "vendor", entityId: row.id, entityCode: row.displayName });
-  return getVendor(tx, scope, row.id);
+  }).returning())[0];
+  await upsertAddress(tx, ctx, row.id, "Shipping", values.shipping);
+  await upsertAddress(tx, ctx, row.id, "Billing", values.useShipAsBilling ? null : values.billing ?? null);
+  await changeLog.recordCreate(tx, ctx, { entityType: "vendor", entityId: row.id, entityCode: row.displayName });
+  return await getVendor(tx, scope, row.id);
 }
 
-export function updateVendor(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string, values: Omit<VendorFormValues, "clientId"> & { clientId?: string }): VendorDetail {
-  const before = getVendor(tx, scope, id);
+export async function updateVendor(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string, values: Omit<VendorFormValues, "clientId"> & { clientId?: string }): Promise<VendorDetail> {
+  const before = await getVendor(tx, scope, id);
   assertVersion(before.version, values.version);
   if (values.clientId && values.clientId !== before.clientId) {
     throw new AppError("VALIDATION", "The client of a vendor can't be changed.", { fieldErrors: { clientId: ["The client of a vendor can't be changed."] } });
   }
-  assertUniqueName(tx, before.clientId, values.displayName, id);
-  tx.update(v).set({
+  await assertUniqueName(tx, before.clientId, values.displayName, id);
+  await tx.update(v).set({
     displayName: values.displayName, vendorName: values.vendorName, useShipAsBilling: values.useShipAsBilling,
     updatedBy: ctx.userId, version: before.version + 1,
-  }).where(eq(v.id, id)).run();
-  upsertAddress(tx, ctx, id, "Shipping", values.shipping);
-  upsertAddress(tx, ctx, id, "Billing", values.useShipAsBilling ? null : values.billing ?? null);
-  const after = getVendor(tx, scope, id);
+  }).where(eq(v.id, id));
+  await upsertAddress(tx, ctx, id, "Shipping", values.shipping);
+  await upsertAddress(tx, ctx, id, "Billing", values.useShipAsBilling ? null : values.billing ?? null);
+  const after = await getVendor(tx, scope, id);
   // Keep the PO display snapshot in sync for open orders.
   if (after.displayName !== before.displayName) {
-    tx.update(schema.purchaseOrders).set({ vendorName: after.displayName })
-      .where(and(eq(schema.purchaseOrders.vendorId, id), inArray(schema.purchaseOrders.status, ["Pending", "Started", "Receiving"]))).run();
+    await tx.update(schema.purchaseOrders).set({ vendorName: after.displayName })
+      .where(and(eq(schema.purchaseOrders.vendorId, id), inArray(schema.purchaseOrders.status, ["Pending", "Started", "Receiving"])));
   }
-  changeLog.recordUpdate(tx, ctx, {
+  await changeLog.recordUpdate(tx, ctx, {
     entityType: "vendor", entityId: id, entityCode: after.displayName,
     before: { displayName: before.displayName, vendorName: before.vendorName, useShipAsBilling: before.useShipAsBilling, ...flatAddress("shipping", before.shipping), ...flatAddress("billing", before.useShipAsBilling ? null : before.billing) },
     after: { displayName: after.displayName, vendorName: after.vendorName, useShipAsBilling: after.useShipAsBilling, ...flatAddress("shipping", after.shipping), ...flatAddress("billing", after.useShipAsBilling ? null : after.billing) },
@@ -223,37 +223,37 @@ export function updateVendor(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string
 
 export const VENDOR_OPEN_PO_MESSAGE = "This vendor has open purchase orders. Complete or cancel them before deactivating.";
 
-export function setVendorActive(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string, active: boolean, version?: number): VendorDetail {
-  const before = getVendor(tx, scope, id);
+export async function setVendorActive(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string, active: boolean, version?: number): Promise<VendorDetail> {
+  const before = await getVendor(tx, scope, id);
   assertVersion(before.version, version);
   if (before.isActive === active) return before;
   if (!active && before.openPoCount > 0) throw new AppError("INVALID_STATE", VENDOR_OPEN_PO_MESSAGE);
-  tx.update(v).set({ isActive: active, updatedBy: ctx.userId, version: before.version + 1 }).where(eq(v.id, id)).run();
-  changeLog.recordUpdate(tx, ctx, { entityType: "vendor", entityId: id, entityCode: before.displayName, before: { isActive: before.isActive }, after: { isActive: active } });
-  return getVendor(tx, scope, id);
+  await tx.update(v).set({ isActive: active, updatedBy: ctx.userId, version: before.version + 1 }).where(eq(v.id, id));
+  await changeLog.recordUpdate(tx, ctx, { entityType: "vendor", entityId: id, entityCode: before.displayName, before: { isActive: before.isActive }, after: { isActive: active } });
+  return await getVendor(tx, scope, id);
 }
 
 /** Import helper: the client's vendor with this display name, created when missing. */
-export function ensureVendor(tx: AppDb, ctx: DomainCtx, scope: Scope, clientId: string, displayName: string, vendorName?: string | null): { id: string; created: boolean } {
-  const existing = tx.select({ id: v.id }).from(v).where(and(eq(v.clientId, clientId), sql`lower(${v.displayName}) = lower(${displayName})`)).get();
+export async function ensureVendor(tx: AppDb, ctx: DomainCtx, scope: Scope, clientId: string, displayName: string, vendorName?: string | null): Promise<{ id: string; created: boolean }> {
+  const existing = (await tx.select({ id: v.id }).from(v).where(and(eq(v.clientId, clientId), sql`lower(${v.displayName}) = lower(${displayName})`)).limit(1))[0];
   if (existing) return { id: existing.id, created: false };
   assertInScope(scope, { clientId }, "Client");
-  const row = tx.insert(v).values({
+  const row = (await tx.insert(v).values({
     clientId, displayName: displayName.slice(0, 100), vendorName: (vendorName || displayName).slice(0, 255), useShipAsBilling: true,
     isActive: true, createdBy: ctx.userId, updatedBy: ctx.userId,
-  }).returning().get();
-  changeLog.recordCreate(tx, ctx, { entityType: "vendor", entityId: row.id, entityCode: row.displayName });
+  }).returning())[0];
+  await changeLog.recordCreate(tx, ctx, { entityType: "vendor", entityId: row.id, entityCode: row.displayName });
   return { id: row.id, created: true };
 }
 
 export const VENDOR_HAS_POS_MESSAGE = "This vendor is used on purchase orders. Deactivate it instead.";
 
 /** Hard-delete a vendor that no purchase order has ever referenced (its addresses go with it). */
-export function deleteVendor(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string): void {
-  const before = getVendor(tx, scope, id);
-  const used = tx.select({ n: sql<number>`count(*)` }).from(schema.purchaseOrders).where(eq(schema.purchaseOrders.vendorId, id)).get();
+export async function deleteVendor(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string): Promise<void> {
+  const before = await getVendor(tx, scope, id);
+  const used = (await tx.select({ n: sql<number>`count(*)` }).from(schema.purchaseOrders).where(eq(schema.purchaseOrders.vendorId, id)).limit(1))[0];
   if ((used?.n ?? 0) > 0) throw new AppError("INVALID_STATE", VENDOR_HAS_POS_MESSAGE);
-  tx.delete(schema.addresses).where(and(eq(schema.addresses.ownerType, "vendor"), eq(schema.addresses.ownerId, id))).run();
-  tx.delete(v).where(eq(v.id, id)).run();
-  changeLog.recordDelete(tx, ctx, { entityType: "vendor", entityId: id, entityCode: before.displayName });
+  await tx.delete(schema.addresses).where(and(eq(schema.addresses.ownerType, "vendor"), eq(schema.addresses.ownerId, id)));
+  await tx.delete(v).where(eq(v.id, id));
+  await changeLog.recordDelete(tx, ctx, { entityType: "vendor", entityId: id, entityCode: before.displayName });
 }

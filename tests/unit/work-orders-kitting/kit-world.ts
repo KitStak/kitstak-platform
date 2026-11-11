@@ -20,27 +20,27 @@ export interface KitWorld extends World {
   readonly wctx: DomainCtx & { readonly scope: Scope };
 }
 
-export function createKitWorld(): KitWorld {
-  const w = createWorld();
+export async function createKitWorld(): Promise<KitWorld> {
+  const w = await createWorld();
   const db = w.db;
-  const kitId = db.insert(schema.products).values({
+  const kitId = (await db.insert(schema.products).values({
     clientId: w.clientId, sku: "MLT-KIT-2PK", barcode: "MLT-KIT-2PK", name: "MLTest 2 Pack Kit", category: "General",
     weightOz: 16, lengthIn: 6, widthIn: 4, heightIn: 4, price: 25, status: "Active", isKit: true, kitType: "Kit to Stock",
-  }).returning().get().id;
-  db.insert(schema.kitComponents).values([
+  }).returning())[0].id;
+  await db.insert(schema.kitComponents).values([
     { kitProductId: kitId, componentProductId: w.productId, quantity: 2 },
     { kitProductId: kitId, componentProductId: w.product2Id, quantity: 1 },
-  ]).run();
-  const kittingLocId = db.insert(schema.locations).values(locationRow(w.warehouseId, "KIT-01", { type: "Picking", areaType: "Kitting", preventAllocation: true })).returning().get().id;
-  const woJobTypeId = db.insert(schema.jobTypes).values({
+  ]);
+  const kittingLocId = (await db.insert(schema.locations).values(locationRow(w.warehouseId, "KIT-01", { type: "Picking", areaType: "Kitting", preventAllocation: true })).returning())[0].id;
+  const woJobTypeId = (await db.insert(schema.jobTypes).values({
     code: "WO-PICK", description: "Work Order Picking", warehouseId: w.warehouseId, operationType: "Work Order", settings: jobTypeSettingsSchema.parse({}),
-  }).returning().get().id;
+  }).returning())[0].id;
   const scope: Scope = { warehouseIds: [w.warehouseId], clientIds: "all" } as Scope;
   return { ...w, kitId, kittingLocId, woJobTypeId, scope, wctx: { ...w.ctx, scope } };
 }
 
-export function stock(w: World, productId: string, qty: number, locationId: string = w.loc.storageA) {
-  return ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId, locationId, qty }).bucket;
+export async function stock(w: World, productId: string, qty: number, locationId: string = w.loc.storageA) {
+  return (await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId, locationId, qty })).bucket;
 }
 
 export function woInput(w: KitWorld, extra: Partial<Record<keyof WorkOrderInput, unknown>> = {}): WorkOrderInput {
@@ -55,9 +55,9 @@ export function woInput(w: KitWorld, extra: Partial<Record<keyof WorkOrderInput,
   });
 }
 
-export const onHandAt = (w: World, productId: string, locationId?: string): number =>
-  w.db.select().from(schema.inventory).where(eq(schema.inventory.productId, productId)).all()
+export const onHandAt = async (w: World, productId: string, locationId?: string): Promise<number> =>
+  (await w.db.select().from(schema.inventory).where(eq(schema.inventory.productId, productId)))
     .filter((b) => !locationId || b.locationId === locationId).reduce((s, b) => s + b.onHand, 0);
 
-export const allocatedOf = (w: World, productId: string): number =>
-  w.db.select().from(schema.inventory).where(eq(schema.inventory.productId, productId)).all().reduce((s, b) => s + b.allocated, 0);
+export const allocatedOf = async (w: World, productId: string): Promise<number> =>
+  (await w.db.select().from(schema.inventory).where(eq(schema.inventory.productId, productId))).reduce((s, b) => s + b.allocated, 0);

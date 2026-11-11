@@ -23,13 +23,13 @@ describe("GET /api/clients payload by role", () => {
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     return { scope, viewScope: scope, permissions: new Set(permissions), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   };
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
 
-  it("gives viewers and operators only the picker-safe fields (no tax ID, contacts or KPIs)", () => {
+  it("gives viewers and operators only the picker-safe fields (no tax ID, contacts or KPIs)", async () => {
     for (const role of ["viewer", "operator"] as const) {
       expect(DEFAULT_ROLE_PERMISSIONS[role]).not.toContain("settings.clients.view");
-      const { rows } = listClientsForCaller(w.db, authFor(DEFAULT_ROLE_PERMISSIONS[role]), EMPTY_GRID_QUERY);
+      const { rows } = await listClientsForCaller(w.db, authFor(DEFAULT_ROLE_PERMISSIONS[role]), EMPTY_GRID_QUERY);
       expect(rows.length).toBeGreaterThan(0);
       for (const row of rows) {
         expect(Object.keys(row).sort()).toEqual(SLIM_KEYS);
@@ -39,8 +39,8 @@ describe("GET /api/clients payload by role", () => {
     }
   });
 
-  it("gives Clients-view holders the full grid row", () => {
-    const { rows } = listClientsForCaller(w.db, authFor(DEFAULT_ROLE_PERMISSIONS.admin), EMPTY_GRID_QUERY);
+  it("gives Clients-view holders the full grid row", async () => {
+    const { rows } = await listClientsForCaller(w.db, authFor(DEFAULT_ROLE_PERMISSIONS.admin), EMPTY_GRID_QUERY);
     expect(rows[0]).toHaveProperty("taxId");
     expect(rows[0]).toHaveProperty("totalOrders");
   });
@@ -74,28 +74,28 @@ describe("Last calculation and SO-level lines", () => {
   let auth: AuthContext;
   const actor = () => ({ userId: w.userId, source: "Web" });
   const now = new Date("2026-11-06T12:00:00.000Z");
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   });
   afterEach(() => w.close());
 
-  it("a failed run never stamps Last calculation; a deleted (canceled) bill clears it", () => {
-    const c = createContract(w.db, auth, actor(), contractSchema.parse({ name: "Empty", clientId: w.clientId, warehouseId: w.warehouseId, calcStartDate: "2026-10-01", frequency: "Monthly" }));
-    calculateContracts(w.db, auth, actor(), { ids: [c.id], mode: "lastClosed" }, now);
-    expect(getContract(w.db, auth, c.id).lastCalculatedAt).toBeNull();
-    expect(w.db.select().from(schema.billingContracts).where(eq(schema.billingContracts.id, c.id)).get()?.lastCalculatedAt).toBeNull();
+  it("a failed run never stamps Last calculation; a deleted (canceled) bill clears it", async () => {
+    const c = await createContract(w.db, auth, actor(), contractSchema.parse({ name: "Empty", clientId: w.clientId, warehouseId: w.warehouseId, calcStartDate: "2026-10-01", frequency: "Monthly" }));
+    await calculateContracts(w.db, auth, actor(), { ids: [c.id], mode: "lastClosed" }, now);
+    expect((await getContract(w.db, auth, c.id)).lastCalculatedAt).toBeNull();
+    expect((await w.db.select().from(schema.billingContracts).where(eq(schema.billingContracts.id, c.id)).limit(1))[0]?.lastCalculatedAt).toBeNull();
 
-    createFee(w.db, auth, actor(), c.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Account", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", tiers: [{ fromQty: 1, toQty: null, rate: 50 }] }));
-    const ok = calculateContracts(w.db, auth, actor(), { ids: [c.id], mode: "lastClosed" }, now).reports[0]!;
-    const detail = getContract(w.db, auth, c.id);
+    await createFee(w.db, auth, actor(), c.id, feeSchema.parse({ ...FEE_DEFAULTS, name: "Account", operationType: "Recurring", feeBy: "Recurring", chargeBy: "Recurring", tiers: [{ fromQty: 1, toQty: null, rate: 50 }] }));
+    const ok = (await calculateContracts(w.db, auth, actor(), { ids: [c.id], mode: "lastClosed" }, now)).reports[0]!;
+    const detail = await getContract(w.db, auth, c.id);
     expect(detail.lastCalculatedAt).toBe(now.toISOString());
     expect(detail.lastReport?.id).toBe(ok.reportId);
-    expect(listContracts(w.db, auth, EMPTY_GRID_QUERY).rows.find((r) => r.id === c.id)?.lastCalculatedAt).toBe(now.toISOString());
+    expect((await listContracts(w.db, auth, EMPTY_GRID_QUERY)).rows.find((r) => r.id === c.id)?.lastCalculatedAt).toBe(now.toISOString());
 
-    w.db.update(schema.billingReports).set({ billStatus: "Canceled" }).where(eq(schema.billingReports.id, ok.reportId)).run();
-    const after = getContract(w.db, auth, c.id);
+    await w.db.update(schema.billingReports).set({ billStatus: "Canceled" }).where(eq(schema.billingReports.id, ok.reportId));
+    const after = await getContract(w.db, auth, c.id);
     expect(after.lastCalculatedAt).toBeNull();
     expect(after.lastReport).toBeNull();
   });

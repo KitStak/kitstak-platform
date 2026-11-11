@@ -15,15 +15,16 @@ import { settleDeadJobs } from "@/server/repositories/jobs-settle";
 import { ensureNextRuns } from "@/server/repositories/wave-rules";
 import { resumeStalledAiWaves, runWave } from "@/server/repositories/waves-run";
 import type { SchedulerTask, TaskResult } from "../types";
+import { withWriteTx } from "@/server/db/sql";
 
 const TICK_MS = 30_000;
 const HOUR_MS = 3_600_000;
 export const SCHEDULER_RUN_BY = "Integration";
 
-export function dueRules(db: AppDb, now: Date) {
-  return db.select().from(schema.waveRules).where(and(
+export async function dueRules(db: AppDb, now: Date) {
+  return await db.select().from(schema.waveRules).where(and(
     eq(schema.waveRules.isActive, true), isNotNull(schema.waveRules.nextRunAt), lte(schema.waveRules.nextRunAt, now.toISOString()),
-  )).all();
+  ));
 }
 
 /** Instant before which Pending jobs of the rule are deleted, or null when not yet due. */
@@ -41,20 +42,20 @@ export function deleteCutoff(rule: Pick<typeof schema.waveRules.$inferSelect, "d
   return null;
 }
 
-function applyDeletes(db: AppDb, now: Date): number {
-  const rules = db.select({ rule: schema.waveRules, tz: schema.warehouses.timezone }).from(schema.waveRules)
+async function applyDeletes(db: AppDb, now: Date): Promise<number> {
+  const rules = await db.select({ rule: schema.waveRules, tz: schema.warehouses.timezone }).from(schema.waveRules)
     .innerJoin(schema.warehouses, eq(schema.warehouses.id, schema.waveRules.warehouseId))
-    .where(and(eq(schema.waveRules.isActive, true), eq(schema.waveRules.deleteIfNotStarted, true))).all();
+    .where(and(eq(schema.waveRules.isActive, true), eq(schema.waveRules.deleteIfNotStarted, true)));
   let cancelled = 0;
   for (const { rule, tz } of rules) {
     const cutoff = deleteCutoff(rule, tz, now);
     if (!cutoff) continue;
-    const stale = db.select({ id: schema.jobs.id }).from(schema.jobs).where(and(
+    const stale = await db.select({ id: schema.jobs.id }).from(schema.jobs).where(and(
       eq(schema.jobs.waveRuleId, rule.id), eq(schema.jobs.status, "Pending"), sql`${schema.jobs.createdAt} < ${cutoff.toISOString()}`,
-    )).all();
+    ));
     for (const job of stale) {
       try {
-        db.transaction((tx) => cancelJobCascade(tx, systemCtx(SCHEDULER_RUN_BY), job.id));
+        await withWriteTx(db, async (tx) => await cancelJobCascade(tx, systemCtx(SCHEDULER_RUN_BY), job.id));
         cancelled += 1;
       } catch {
         // A job that started between the read and the cancel is simply kept.
@@ -66,21 +67,21 @@ function applyDeletes(db: AppDb, now: Date): number {
 
 export async function runDueWaveRules(db: AppDb, now: Date): Promise<TaskResult> {
   // Active scheduled rules always carry a next run (seeded / imported rules arrive without one).
-  ensureNextRuns(db, now);
-  const due = dueRules(db, now);
+  await ensureNextRuns(db, now);
+  const due = await dueRules(db, now);
   const results: string[] = [];
   for (const rule of due) {
-    const res = db.transaction((tx) => runWave(tx, systemCtx(SCHEDULER_RUN_BY), rule.id, {
+    const res = await withWriteTx(db, async (tx) => await runWave(tx, systemCtx(SCHEDULER_RUN_BY), rule.id, {
       runBy: SCHEDULER_RUN_BY, now, notifyUserIds: rule.createdBy ? [rule.createdBy] : [],
     }));
     results.push(res.summary);
   }
-  const deleted = applyDeletes(db, now);
+  const deleted = await applyDeletes(db, now);
   // AI waves a restart left mid-optimization are finished here (the run route normally completes them via after()).
-  const resumed = resumeStalledAiWaves(db, systemCtx(SCHEDULER_RUN_BY), now);
+  const resumed = await resumeStalledAiWaves(db, systemCtx(SCHEDULER_RUN_BY), now);
   if (resumed > 0) results.push(`${resumed} stalled AI ${resumed === 1 ? "wave" : "waves"} completed`);
   // Jobs left with no open task by cancels in other modules close here (critic R4 zombie jobs).
-  const settled = settleDeadJobs(db, systemCtx(SCHEDULER_RUN_BY)).filter((s) => s.from !== s.to).length;
+  const settled = (await settleDeadJobs(db, systemCtx(SCHEDULER_RUN_BY))).filter((s) => s.from !== s.to).length;
   if (settled > 0) results.push(`${settled} ${settled === 1 ? "job" : "jobs"} with no open tasks closed`);
   if (due.length === 0 && deleted === 0 && resumed === 0 && settled === 0) return { status: "skipped", message: "No wave rules due" };
   return { status: "ok", message: [...results, deleted > 0 ? `${deleted} not-started jobs deleted` : ""].filter(Boolean).join(" | ") };

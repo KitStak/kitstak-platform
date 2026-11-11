@@ -10,10 +10,10 @@ import type { Tx } from "@/server/domain/types";
 
 export const INTEGRATION_RUN_BY = "Integration";
 
-export function runByDisplay(db: AppDb | Tx, runBy: string | null | undefined): string {
+export async function runByDisplay(db: AppDb | Tx, runBy: string | null | undefined): Promise<string> {
   const value = (runBy ?? "").trim();
   if (!value) return INTEGRATION_RUN_BY;
   if (!value.includes("@")) return value;
-  const user = db.select({ name: schema.users.name }).from(schema.users).where(eq(sql`lower(${schema.users.email})`, value.toLowerCase())).get();
+  const user = (await db.select({ name: schema.users.name }).from(schema.users).where(eq(sql`lower(${schema.users.email})`, value.toLowerCase())).limit(1))[0];
   return user?.name?.trim() || value;
 }

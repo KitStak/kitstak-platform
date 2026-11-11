@@ -11,15 +11,15 @@ import { createNote, deleteNote, idQuerySchema, listNotes, noteCreateSchema } fr
 
 export const GET = defineRoute({
   query: entityRefSchema,
-  handler: ({ db, auth, query }) => listNotes(db, auth, query),
+  handler: async ({ db, auth, query }) => await listNotes(db, auth, query),
 });
 
 export const POST = defineRoute({
   body: noteCreateSchema,
-  handler: ({ db, auth, body }) => created(createNote(db, auth, body)),
+  handler: async ({ db, auth, body }) => created(await createNote(db, auth, body)),
 });
 
 export const DELETE = defineRoute({
   query: idQuerySchema,
-  handler: ({ db, auth, query }) => deleteNote(db, auth, query.id),
+  handler: async ({ db, auth, query }) => await deleteNote(db, auth, query.id),
 });

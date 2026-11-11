@@ -17,8 +17,8 @@ export interface ShippingOptions {
 
 export const filesOf = (opts: ShippingOptions | undefined): FileStore => opts?.files ?? fileStore();
 
-export function loadOrder(db: AppDb, ctx: DomainCtx, orderId: string): OrderRow {
-  const order = db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).get();
+export async function loadOrder(db: AppDb, ctx: DomainCtx, orderId: string): Promise<OrderRow> {
+  const order = (await db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).limit(1))[0];
   if (!order || order.deletedAt) throw new DomainError("NOT_FOUND", "Shipment order not found");
   checkScope(ctx, order, "Shipment order");
   return order;
@@ -29,14 +29,14 @@ export interface CarrierContext {
   readonly adapter: CarrierAdapter;
 }
 
-export function loadCarrier(db: AppDb, connectionId: string, order: OrderRow): CarrierContext {
-  const connection = db.select().from(schema.carrierConnections).where(eq(schema.carrierConnections.id, connectionId)).get();
+export async function loadCarrier(db: AppDb, connectionId: string, order: OrderRow): Promise<CarrierContext> {
+  const connection = (await db.select().from(schema.carrierConnections).where(eq(schema.carrierConnections.id, connectionId)).limit(1))[0];
   if (!connection) throw new DomainError("NOT_FOUND", "Carrier connection not found");
   if (!connection.isActive) throw new DomainError("INVALID_STATE", `Carrier ${connection.setupName} is inactive.`);
   if (connection.warehouseId !== order.warehouseId) throw new DomainError("VALIDATION", `Carrier ${connection.setupName} is set up for another warehouse.`);
   if (!connection.allClients) {
-    const access = db.select().from(schema.carrierConnectionClients)
-      .where(and(eq(schema.carrierConnectionClients.connectionId, connection.id), eq(schema.carrierConnectionClients.clientId, order.clientId))).get();
+    const access = (await db.select().from(schema.carrierConnectionClients)
+      .where(and(eq(schema.carrierConnectionClients.connectionId, connection.id), eq(schema.carrierConnectionClients.clientId, order.clientId))).limit(1))[0];
     if (!access?.hasAccess) throw new DomainError("FORBIDDEN", `Carrier ${connection.setupName} is not available for this client.`);
   }
   const adapter = getCarrierAdapter(connection.provider);
@@ -44,17 +44,17 @@ export function loadCarrier(db: AppDb, connectionId: string, order: OrderRow): C
   return { connection, adapter };
 }
 
-export function loadService(db: AppDb, connection: CarrierConnectionRow, serviceId: string): CarrierServiceRow {
-  const service = db.select().from(schema.carrierServices).where(eq(schema.carrierServices.id, serviceId)).get();
+export async function loadService(db: AppDb, connection: CarrierConnectionRow, serviceId: string): Promise<CarrierServiceRow> {
+  const service = (await db.select().from(schema.carrierServices).where(eq(schema.carrierServices.id, serviceId)).limit(1))[0];
   if (!service || service.connectionId !== connection.id) throw new DomainError("NOT_FOUND", "Carrier service not found");
   if (!service.isActive) throw new DomainError("INVALID_STATE", `Service ${service.name} is inactive.`);
   return service;
 }
 
-export function warehouseAddress(db: AppDb, warehouseId: string, connection?: CarrierConnectionRow): CarrierAddress {
+export async function warehouseAddress(db: AppDb, warehouseId: string, connection?: CarrierConnectionRow): Promise<CarrierAddress> {
   const settings = connection ? parseSettings(carrierSettingsSchema, connection.settings) : null;
   const custom = settings?.shipFrom.address;
-  const wh = db.select().from(schema.warehouses).where(eq(schema.warehouses.id, warehouseId)).get();
+  const wh = (await db.select().from(schema.warehouses).where(eq(schema.warehouses.id, warehouseId)).limit(1))[0];
   if (!wh) throw new DomainError("NOT_FOUND", "Warehouse not found");
   if (custom) {
     return { name: custom.companyName ?? wh.name, line1: custom.line1, line2: custom.line2, city: custom.city, state: custom.state, postalCode: custom.postalCode, country: custom.country, phone: custom.phone };
@@ -70,9 +70,9 @@ export function orderAddress(order: OrderRow): CarrierAddress {
 }
 
 /** Client markup (per-connection) or the connection's general markup applied to a carrier amount. */
-export function applyMarkup(db: AppDb, connection: CarrierConnectionRow, clientId: string, amount: number): number {
-  const client = db.select().from(schema.carrierConnectionClients)
-    .where(and(eq(schema.carrierConnectionClients.connectionId, connection.id), eq(schema.carrierConnectionClients.clientId, clientId))).get();
+export async function applyMarkup(db: AppDb, connection: CarrierConnectionRow, clientId: string, amount: number): Promise<number> {
+  const client = (await db.select().from(schema.carrierConnectionClients)
+    .where(and(eq(schema.carrierConnectionClients.connectionId, connection.id), eq(schema.carrierConnectionClients.clientId, clientId))).limit(1))[0];
   const general = parseSettings(carrierSettingsSchema, connection.settings).generalMarkup;
   const type = client?.markupType ?? general?.type ?? null;
   const value = client?.markupAmount ?? general?.amount ?? 0;
@@ -98,8 +98,8 @@ export interface CallLogInput {
   readonly response: unknown;
 }
 
-export function writeCallLog(db: AppDb, ctx: DomainCtx, input: CallLogInput): void {
-  db.insert(schema.carrierCallLogs).values({
+export async function writeCallLog(db: AppDb, ctx: DomainCtx, input: CallLogInput): Promise<void> {
+  await db.insert(schema.carrierCallLogs).values({
     step: input.step, connectionId: input.connection.id, orderId: input.order?.id ?? null, shipmentId: input.shipmentId ?? null,
     trackingNumber: input.trackingNumber ?? null,
     destinationType: input.order ? (input.order.shipCountry === "United States" ? "Domestic" : "International") : null,
@@ -108,7 +108,7 @@ export function writeCallLog(db: AppDb, ctx: DomainCtx, input: CallLogInput): vo
     warehouseId: input.connection.warehouseId, clientId: input.order?.clientId ?? null, userId: ctx.userId,
     source: input.source ?? null, labelType: input.labelType ?? null, rateShoppingName: input.rateShoppingName ?? null,
     requestJson: JSON.stringify(input.request), responseJson: JSON.stringify(input.response),
-  }).run();
+  });
 }
 
 /** YYYY-MM-DD of an instant in a warehouse time zone. */

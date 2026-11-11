@@ -7,8 +7,8 @@ import { defineRoute } from "@/server/api/define-route";
 import { getCompany } from "@/server/repositories/company";
 
 export const GET = defineRoute({
-  handler: ({ db }) => {
-    const company = getCompany(db);
+  handler: async ({ db }) => {
+    const company = await getCompany(db);
     return { displayName: company.displayName, logoUrl: company.logoUrl };
   },
 });

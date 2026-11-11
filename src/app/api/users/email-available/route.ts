@@ -10,5 +10,5 @@ import { isEmailTaken } from "@/server/repositories/users";
 export const POST = defineRoute({
   permission: ["settings.users.create", "settings.users.edit"],
   body: z.object({ email: z.string().trim().min(3).max(254), exceptId: z.string().max(64).optional() }),
-  handler: ({ db, body }) => ({ available: !isEmailTaken(db, body.email, body.exceptId) }),
+  handler: async ({ db, body }) => ({ available: !(await isEmailTaken(db, body.email, body.exceptId)) }),
 });

@@ -10,5 +10,5 @@ export const POST = defineRoute({
   body: printRecordsSchema,
   transaction: false,
   rateLimit: false,
-  handler: ({ db, auth, body }) => buildPrintRecords(db, auth.scope, body),
+  handler: async ({ db, auth, body }) => await buildPrintRecords(db, auth.scope, body),
 });

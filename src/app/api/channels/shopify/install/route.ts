@@ -8,9 +8,9 @@ export const POST = defineRoute({
   permission: "integrations.integrations.create_setup",
   body: shopifyInstallSchema,
   transaction: false,
-  handler: ({ db, auth, actor, body, request, requestId }) => {
+  handler: async ({ db, auth, actor, body, request, requestId }) => {
     const origin = process.env.APP_URL?.replace(/\/+$/, "") || new URL(request.url).origin;
-    const { url, nonce } = startShopifyInstall(db, auth, actor, body, origin);
+    const { url, nonce } = await startShopifyInstall(db, auth, actor, body, origin);
     const res = jsonOk({ url }, { headers: { "x-request-id": requestId } });
     res.cookies.set(SHOPIFY_OAUTH_COOKIE, nonce, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: SHOPIFY_CALLBACK_PATH, maxAge: 600 });
     return res;

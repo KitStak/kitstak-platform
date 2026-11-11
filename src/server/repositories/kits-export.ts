@@ -5,16 +5,16 @@ import { listKitComponents, listKitInventory } from "./kits";
 
 export const kitInventoryExportProvider: ExportProvider = {
   columns: KIT_INVENTORY_EXPORT_COLUMNS,
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listKitInventory(ctx.db, ctx.auth.viewScope, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listKitInventory(ctx.db, ctx.auth.viewScope, { ...ctx.query, page, pageSize });
     return { rows: rows.map((r): ExportRow => ({ ...r })), total };
   },
 };
 
 export const kitComponentsExportProvider: ExportProvider = {
   columns: KIT_COMPONENT_EXPORT_COLUMNS,
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listKitComponents(ctx.db, ctx.auth.viewScope, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listKitComponents(ctx.db, ctx.auth.viewScope, { ...ctx.query, page, pageSize });
     return { rows: rows.map((r): ExportRow => ({ ...r, includedKits: undefined })), total };
   },
 };

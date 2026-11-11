@@ -7,5 +7,5 @@ import { PACKING_PERMISSIONS, warehouseIdParam } from "@/server/repositories/pac
 export const GET = defineRoute({
   permission: PACKING_PERMISSIONS.view,
   query: z.object({ warehouseId: warehouseIdParam }),
-  handler: ({ db, auth, query }) => hospitalOptions(db, auth.scope, query.warehouseId),
+  handler: async ({ db, auth, query }) => await hospitalOptions(db, auth.scope, query.warehouseId),
 });

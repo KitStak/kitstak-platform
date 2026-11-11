@@ -8,21 +8,21 @@ import { deletePrintouts, getPrintout, updatePrintout } from "@/server/repositor
 export const GET = defineRoute({
   permission: "settings.printouts_labels.view",
   params: idParamsSchema,
-  handler: ({ db, params }) => getPrintout(db, params.id),
+  handler: async ({ db, params }) => await getPrintout(db, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: "settings.printouts_labels.edit",
   params: idParamsSchema,
   body: printoutSchema,
-  handler: ({ db, auth, actor, params, body }) => updatePrintout(db, auth, actor, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updatePrintout(db, auth, actor, params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: "settings.printouts_labels.delete",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
-    const result = deletePrintouts(db, auth, actor, [params.id]);
+  handler: async ({ db, auth, actor, params }) => {
+    const result = await deletePrintouts(db, auth, actor, [params.id]);
     const failure = result.failed[0];
     if (failure) throw new AppError(failure.code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_STATE", failure.message);
     return result;

@@ -8,21 +8,21 @@ import { getPlanDetail } from "@/server/repositories/shipment-plans-lists";
 export const GET = defineRoute({
   permission: "fulfillment.shipment_plan.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getPlanDetail(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await getPlanDetail(db, auth, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: "fulfillment.shipment_plan.edit",
   params: idParamsSchema,
   body: updatePlanSchema,
-  handler: ({ db, auth, actor, params, body }) => updatePlan(db, auth, domainCtx(actor, auth), params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updatePlan(db, auth, domainCtx(actor, auth), params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: "fulfillment.shipment_plan.delete",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
-    const result = deletePlans(db, auth, domainCtx(actor, auth), [params.id]);
+  handler: async ({ db, auth, actor, params }) => {
+    const result = await deletePlans(db, auth, domainCtx(actor, auth), [params.id]);
     const failure = result.failed[0];
     if (failure) throw new AppError(isErrorCode(failure.code) ? failure.code : "INVALID_STATE", failure.message);
     return result;

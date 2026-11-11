@@ -11,6 +11,7 @@ import type { AppDb } from "@/server/api/db";
 import * as schema from "@/server/db/schema";
 import type { DomainCtx } from "@/server/domain";
 import { settleStatus } from "./purchase-orders-receive";
+import { dbAll, dbRun } from "@/server/db/sql";
 
 export interface PoStatusDrift {
   readonly id: string;
@@ -21,10 +22,10 @@ export interface PoStatusDrift {
   readonly received: number;
 }
 
-export function poStatusDrift(db: AppDb): PoStatusDrift[] {
-  const rows = db.all<{ id: string; code: string; status: string; ordered: number; received: number; lineCount: number; openLines: number }>(sql`
-    SELECT po.id, po.code, po.status, SUM(l.ordered_quantity) AS ordered, SUM(l.received_quantity) AS received, COUNT(l.id) AS lineCount,
-           SUM(CASE WHEN l.received_quantity < l.ordered_quantity THEN 1 ELSE 0 END) AS openLines
+export async function poStatusDrift(db: AppDb): Promise<PoStatusDrift[]> {
+  const rows = await dbAll<{ id: string; code: string; status: string; ordered: number; received: number; lineCount: number; openLines: number }>(db, sql`
+    SELECT po.id, po.code, po.status, SUM(l.ordered_quantity) AS ordered, SUM(l.received_quantity) AS received, COUNT(l.id) AS "lineCount",
+           SUM(CASE WHEN l.received_quantity < l.ordered_quantity THEN 1 ELSE 0 END) AS "openLines"
     FROM purchase_orders po JOIN purchase_order_lines l ON l.purchase_order_id = po.id
     WHERE po.status IN ('Pending', 'Started', 'Receiving')
     GROUP BY po.id`);
@@ -37,14 +38,14 @@ export function poStatusDrift(db: AppDb): PoStatusDrift[] {
 }
 
 /** Settles every drifted PO (status + stamps + change log). Returns the codes it fixed. */
-export function repairPoStatusDrift(tx: AppDb, ctx: DomainCtx): string[] {
+export async function repairPoStatusDrift(tx: AppDb, ctx: DomainCtx): Promise<string[]> {
   const fixed: string[] = [];
-  for (const d of poStatusDrift(tx)) {
-    const row = tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, d.id)).get();
+  for (const d of await poStatusDrift(tx)) {
+    const row = (await tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, d.id)).limit(1))[0];
     if (!row) continue;
-    const lastReceipt = tx.select({ at: sql<string | null>`MAX(${schema.receipts.receivedAt})` }).from(schema.receipts)
-      .where(sql`${schema.receipts.purchaseOrderId} = ${d.id} AND ${schema.receipts.cancelledAt} IS NULL`).get()?.at ?? undefined;
-    settleStatus(tx, ctx, d.id, row.status, lastReceipt);
+    const lastReceipt = (await tx.select({ at: sql<string | null>`MAX(${schema.receipts.receivedAt})` }).from(schema.receipts)
+      .where(sql`${schema.receipts.purchaseOrderId} = ${d.id} AND ${schema.receipts.cancelledAt} IS NULL`).limit(1))[0]?.at ?? undefined;
+    await settleStatus(tx, ctx, d.id, row.status, lastReceipt);
     fixed.push(d.code);
   }
   return fixed;
@@ -65,8 +66,8 @@ export interface CalendarDateFix {
  * as "2027-05-08T05:00:00.000Z") with the calendar day they meant: the day in the warehouse's
  * time zone. Current writes store YYYY-MM-DD (`dateOnly` / `toDay`).
  */
-export function calendarDateDrift(db: AppDb): CalendarDateFix[] {
-  const tz = new Map(db.select({ id: schema.warehouses.id, tz: schema.warehouses.timezone }).from(schema.warehouses).all().map((w) => [w.id, w.tz || "UTC"]));
+export async function calendarDateDrift(db: AppDb): Promise<CalendarDateFix[]> {
+  const tz = new Map((await db.select({ id: schema.warehouses.id, tz: schema.warehouses.timezone }).from(schema.warehouses)).map((w) => [w.id, w.tz || "UTC"]));
   const out: CalendarDateFix[] = [];
   const scan = (table: CalendarDateFix["table"], rows: readonly { id: string; warehouseId: string; expiry: string | null; production: string | null }[]) => {
     for (const r of rows) {
@@ -77,22 +78,22 @@ export function calendarDateDrift(db: AppDb): CalendarDateFix[] {
       }
     }
   };
-  scan("receipts", db.all<{ id: string; warehouseId: string; expiry: string | null; production: string | null }>(sql`
-    SELECT id, warehouse_id AS warehouseId, expiry_date AS expiry, production_date AS production FROM receipts
-    WHERE expiry_date LIKE '%T%' OR production_date LIKE '%T%'`));
-  scan("purchase_order_lines", db.all<{ id: string; warehouseId: string; expiry: string | null; production: string | null }>(sql`
-    SELECT l.id, po.warehouse_id AS warehouseId, l.expiry_date AS expiry, l.production_date AS production
+  scan("receipts", await dbAll<{ id: string; warehouseId: string; expiry: string | null; production: string | null }>(db, sql`
+    SELECT id, warehouse_id AS "warehouseId", expiry_date AS expiry, production_date AS production FROM receipts
+    WHERE expiry_date ILIKE '%T%' OR production_date ILIKE '%T%'`));
+  scan("purchase_order_lines", await dbAll<{ id: string; warehouseId: string; expiry: string | null; production: string | null }>(db, sql`
+    SELECT l.id, po.warehouse_id AS "warehouseId", l.expiry_date AS expiry, l.production_date AS production
     FROM purchase_order_lines l JOIN purchase_orders po ON po.id = l.purchase_order_id
-    WHERE l.expiry_date LIKE '%T%' OR l.production_date LIKE '%T%'`));
+    WHERE l.expiry_date ILIKE '%T%' OR l.production_date ILIKE '%T%'`));
   return out;
 }
 
 /** Rewrites every drifted value to its calendar day. Returns the fixes applied. */
-export function repairCalendarDates(tx: AppDb): CalendarDateFix[] {
-  const fixes = calendarDateDrift(tx);
+export async function repairCalendarDates(tx: AppDb): Promise<CalendarDateFix[]> {
+  const fixes = await calendarDateDrift(tx);
   for (const f of fixes) {
-    if (f.table === "receipts") tx.run(sql`UPDATE receipts SET ${sql.raw(f.field)} = ${f.to} WHERE id = ${f.id}`);
-    else tx.run(sql`UPDATE purchase_order_lines SET ${sql.raw(f.field)} = ${f.to} WHERE id = ${f.id}`);
+    if (f.table === "receipts") await dbRun(tx, sql`UPDATE receipts SET ${sql.raw(f.field)} = ${f.to} WHERE id = ${f.id}`);
+    else await dbRun(tx, sql`UPDATE purchase_order_lines SET ${sql.raw(f.field)} = ${f.to} WHERE id = ${f.id}`);
   }
   return fixes;
 }

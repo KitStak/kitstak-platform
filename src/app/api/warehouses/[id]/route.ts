@@ -7,12 +7,12 @@ import { getWarehouse, updateWarehouse } from "@/server/repositories/warehouses"
 export const GET = defineRoute({
   permission: ["settings.warehouse.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getWarehouse(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await getWarehouse(db, auth, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: "settings.warehouse.edit",
   params: idParamsSchema,
   body: warehouseSchema,
-  handler: ({ db, auth, actor, params, body }) => updateWarehouse(db, auth, actor, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updateWarehouse(db, auth, actor, params.id, body),
 });

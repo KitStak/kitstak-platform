@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: "automation.workflows.change_log",
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    loadWorkflow(db, auth, params.id);
-    return changeLogResult(db, "workflow", params.id, query);
+  handler: async ({ db, auth, params, query }) => {
+    await loadWorkflow(db, auth, params.id);
+    return await changeLogResult(db, "workflow", params.id, query);
   },
 });

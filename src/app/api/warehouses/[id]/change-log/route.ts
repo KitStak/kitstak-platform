@@ -9,7 +9,7 @@ export const GET = defineRoute({
   permission: ["settings.warehouse.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    return changeLogResultOrDeleted(db, auth, "warehouse", params.id, query, () => loadWarehouse(db, auth, params.id));
+  handler: async ({ db, auth, params, query }) => {
+    return await changeLogResultOrDeleted(db, auth, "warehouse", params.id, query, async () => await loadWarehouse(db, auth, params.id));
   },
 });

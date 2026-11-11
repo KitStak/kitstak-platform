@@ -16,14 +16,14 @@ import { orderStatusTone } from "@/components/orders/order-status-pill";
 import { createWorld, orderInput, type World } from "../foundation/domain/fixtures";
 
 let w: World;
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
 });
 afterEach(() => w.close());
 
-const mk = (extra: Record<string, unknown> = {}) =>
-  createOrder(w.db, w.ctx, createOrderBodySchema.parse(orderInput(w, [{ productId: w.productId, quantity: 2 }], extra)));
-const logs = (id: string) => w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.entityType, "shipment_order"), eq(schema.changeLog.entityId, id))).all();
+const mk = async (extra: Record<string, unknown> = {}) =>
+  await createOrder(w.db, w.ctx, createOrderBodySchema.parse(orderInput(w, [{ productId: w.productId, quantity: 2 }], extra)));
+const logs = async (id: string) => await w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.entityType, "shipment_order"), eq(schema.changeLog.entityId, id)));
 const scope = () => ({ warehouseIds: [w.warehouseId], clientIds: [w.clientId, w.otherClientId] });
 
 describe("single priority model", () => {
@@ -36,44 +36,44 @@ describe("single priority model", () => {
     expect(effectiveRankSql("p", "r")).toContain("CASE WHEN r > 0");
   });
 
-  it("the grid priority column, sort and numeric filter use the integer the wizard edits", () => {
-    const a = mk({ priority: "High" }); // level only (e.g. a workflow): shows 3
-    const b = mk({ priority: "Urgent", priorityRank: 7 });
-    mk();
-    const res = listOrders(w.db, scope() as never, { view: "backlog", query: { ...EMPTY_GRID_QUERY, sort: [{ field: "priority", dir: "desc" }] } });
+  it("the grid priority column, sort and numeric filter use the integer the wizard edits", async () => {
+    const a = await mk({ priority: "High" }); // level only (e.g. a workflow): shows 3
+    const b = await mk({ priority: "Urgent", priorityRank: 7 });
+    await mk();
+    const res = await listOrders(w.db, scope() as never, { view: "backlog", query: { ...EMPTY_GRID_QUERY, sort: [{ field: "priority", dir: "desc" }] } });
     expect(res.rows.map((r) => r.priority)).toEqual([7, 3, 0]);
     expect(res.rows[0]?.id).toBe(b.id);
-    const filtered = listOrders(w.db, scope() as never, { view: "backlog", query: { ...EMPTY_GRID_QUERY, filters: [{ field: "priorityRank", op: "rng", min: "3" }] } as never });
+    const filtered = await listOrders(w.db, scope() as never, { view: "backlog", query: { ...EMPTY_GRID_QUERY, filters: [{ field: "priorityRank", op: "rng", min: "3" }] } as never });
     expect(filtered.rows.map((r) => r.id).sort()).toEqual([a.id, b.id].sort());
     // Saved views that filter by level ("High or Urgent") keep working.
-    const byLevel = listOrders(w.db, scope() as never, { view: "backlog", query: { ...EMPTY_GRID_QUERY, filters: [{ field: "priority", op: "in", values: ["High", "Urgent"] }] } as never });
+    const byLevel = await listOrders(w.db, scope() as never, { view: "backlog", query: { ...EMPTY_GRID_QUERY, filters: [{ field: "priority", op: "in", values: ["High", "Urgent"] }] } as never });
     expect(byLevel.total).toBe(2);
   });
 });
 
 describe("cancel note", () => {
-  it("never overwrites the order's own Note; it is a change-log entry and an order note", () => {
-    const o = mk();
-    const u = updateOrder(w.db, w.ctx, o.id, updateOrderBodySchema.parse({ version: o.version, patch: { note: "Ring the bell" } }));
-    const reason = w.db.insert(schema.lookupValues).values({ type: "so_cancel_reason", name: "Customer request" } as typeof schema.lookupValues.$inferInsert).returning().get();
-    expect(runOrderBulk("cancel", w.db, w.ctx, { ids: [u.id], reasonId: reason.id, note: "Customer called" }).succeeded).toEqual([o.id]);
-    const after = w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, o.id)).get();
+  it("never overwrites the order's own Note; it is a change-log entry and an order note", async () => {
+    const o = await mk();
+    const u = await updateOrder(w.db, w.ctx, o.id, updateOrderBodySchema.parse({ version: o.version, patch: { note: "Ring the bell" } }));
+    const reason = (await w.db.insert(schema.lookupValues).values({ type: "so_cancel_reason", name: "Customer request" } as typeof schema.lookupValues.$inferInsert).returning())[0];
+    expect((await runOrderBulk("cancel", w.db, w.ctx, { ids: [u.id], reasonId: reason.id, note: "Customer called" })).succeeded).toEqual([o.id]);
+    const after = (await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, o.id)).limit(1))[0];
     expect(after?.status).toBe("Cancelled");
     expect(after?.note).toBe("Ring the bell");
-    const messages = logs(o.id).map((l) => l.message);
+    const messages = (await logs(o.id)).map((l) => l.message);
     expect(messages).toContain("Cancel note: Customer called");
     expect(messages.some((m) => m.startsWith("Note is modified") && m.includes("Customer called"))).toBe(false);
-    const notes = w.db.select().from(schema.entityNotes).where(eq(schema.entityNotes.entityId, o.id)).all();
+    const notes = await w.db.select().from(schema.entityNotes).where(eq(schema.entityNotes.entityId, o.id));
     expect(notes.map((n) => n.body)).toEqual(["Cancel note: Customer called"]);
   });
 });
 
 describe("duplicate order", () => {
-  it("logs where the copy came from and keeps the priority", () => {
-    const src = mk({ priority: "Urgent", priorityRank: 6 });
-    const copy = duplicateOrder(w.db, w.ctx, src.id);
+  it("logs where the copy came from and keeps the priority", async () => {
+    const src = await mk({ priority: "Urgent", priorityRank: 6 });
+    const copy = await duplicateOrder(w.db, w.ctx, src.id);
     expect(copy.priorityRank).toBe(6);
-    expect(logs(copy.id).map((l) => l.message)).toContain(`Created as a duplicate of ${src.code}.`);
+    expect((await logs(copy.id)).map((l) => l.message)).toContain(`Created as a duplicate of ${src.code}.`);
   });
 });
 

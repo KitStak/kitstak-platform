@@ -10,6 +10,6 @@ import { domainCtx } from "@/server/repositories/platform-common";
 export const POST = defineRoute({
   permission: [P.create, P.mobileInstant],
   body: instantCountSchema,
-  handler: ({ db, auth, actor, body }) =>
-    created(createInstantCount(db, domainCtx(actor, auth), auth, body, canAny(auth, [P.updateInv, P.mobileInstantUpdate]), canSelfApprove(auth))),
+  handler: async ({ db, auth, actor, body }) =>
+    created(await createInstantCount(db, domainCtx(actor, auth), auth, body, canAny(auth, [P.updateInv, P.mobileInstantUpdate]), canSelfApprove(auth))),
 });

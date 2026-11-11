@@ -131,12 +131,12 @@ describe("renderPrint", () => {
 describe("printToFile", () => {
   let testDb: SeededDb;
   let temp: TempStore;
-  beforeEach(() => {
-    testDb = seededDb();
+  beforeEach(async () => {
+    testDb = await seededDb();
     temp = tempStore(() => new Date("2026-11-05T10:00:00.000Z"));
   });
-  afterEach(() => {
-    testDb.close();
+  afterEach(async () => {
+    await testDb.close();
     temp.cleanup();
   });
 

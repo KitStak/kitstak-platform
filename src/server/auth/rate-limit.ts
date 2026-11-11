@@ -1,6 +1,6 @@
 /**
- * Durable fixed-window rate limiter stored in SQLite (`rate_limits`), so limits survive
- * restarts and hot reloads and are shared by every worker using the same DB file.
+ * Durable fixed-window rate limiter stored in Postgres (`rate_limits`), so limits survive
+ * restarts and cold starts and are shared by every server instance.
  *
  * One atomic UPSERT per hit: a row whose window has elapsed restarts at count 1.
  *
@@ -9,6 +9,7 @@
  * `clientIp()` trusts `x-forwarded-for` only when TRUST_PROXY=1.
  */
 import { lt, sql } from "drizzle-orm";
+import { dbGet, dbRun } from "@/server/db/sql";
 import { rateLimits } from "@/server/db/schema";
 import type { AppDb } from "@/server/api/db";
 
@@ -36,11 +37,11 @@ export interface RateLimitResult {
 }
 
 /** Records one hit for `subject` under `policy` and reports whether it is within the limit. */
-export function hitRateLimit(db: AppDb, policy: RateLimitPolicy, subject: string, now: Date = new Date()): RateLimitResult {
+export async function hitRateLimit(db: AppDb, policy: RateLimitPolicy, subject: string, now: Date = new Date()): Promise<RateLimitResult> {
   const key = `${policy.name}:${subject}`;
   const nowIso = now.toISOString();
   const windowFloor = new Date(now.getTime() - policy.windowMs).toISOString();
-  const row = db.get<{ count: number; window_start: string }>(sql`
+  const row = await dbGet<{ count: number; window_start: string }>(db, sql`
     INSERT INTO rate_limits (key, count, window_start) VALUES (${key}, 1, ${nowIso})
     ON CONFLICT(key) DO UPDATE SET
       count = CASE WHEN rate_limits.window_start <= ${windowFloor} THEN 1 ELSE rate_limits.count + 1 END,
@@ -51,7 +52,7 @@ export function hitRateLimit(db: AppDb, policy: RateLimitPolicy, subject: string
   const windowStart = Date.parse(row?.window_start ?? nowIso);
   const allowed = count <= policy.limit;
   const retryAfterMs = windowStart + policy.windowMs - now.getTime();
-  maybePurge(db, now);
+  await maybePurge(db, now);
   return {
     allowed,
     count,
@@ -61,18 +62,18 @@ export function hitRateLimit(db: AppDb, policy: RateLimitPolicy, subject: string
 }
 
 /** Clears a subject's counter (e.g. account counter after a successful login). */
-export function resetRateLimit(db: AppDb, policy: RateLimitPolicy, subject: string): void {
-  db.run(sql`DELETE FROM rate_limits WHERE key = ${`${policy.name}:${subject}`}`);
+export async function resetRateLimit(db: AppDb, policy: RateLimitPolicy, subject: string): Promise<void> {
+  await dbRun(db, sql`DELETE FROM rate_limits WHERE key = ${`${policy.name}:${subject}`}`);
 }
 
 const PURGE_EVERY_MS = 10 * 60_000;
 const MAX_WINDOW_MS = 24 * 60 * 60_000;
 let lastPurgeAt = 0;
 
-function maybePurge(db: AppDb, now: Date): void {
+async function maybePurge(db: AppDb, now: Date): Promise<void> {
   if (now.getTime() - lastPurgeAt < PURGE_EVERY_MS) return;
   lastPurgeAt = now.getTime();
-  db.delete(rateLimits).where(lt(rateLimits.windowStart, new Date(now.getTime() - MAX_WINDOW_MS).toISOString())).run();
+  await db.delete(rateLimits).where(lt(rateLimits.windowStart, new Date(now.getTime() - MAX_WINDOW_MS).toISOString()));
 }
 
 /** Client IP for rate limiting. Without TRUST_PROXY all clients share the "direct" bucket. */
@@ -105,6 +106,6 @@ export function clientIp(request: Request): string {
  * per-IP login bucket only throttles failed attempts: a scanner fleet behind one NAT (or
  * every client in the "direct" bucket without TRUST_PROXY) can all sign in at shift start.
  */
-export function refundRateLimit(db: AppDb, policy: RateLimitPolicy, subject: string): void {
-  db.run(sql`UPDATE rate_limits SET count = MAX(0, count - 1) WHERE key = ${`${policy.name}:${subject}`}`);
+export async function refundRateLimit(db: AppDb, policy: RateLimitPolicy, subject: string): Promise<void> {
+  await dbRun(db, sql`UPDATE rate_limits SET count = GREATEST(0, count - 1) WHERE key = ${`${policy.name}:${subject}`}`);
 }

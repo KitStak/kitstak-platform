@@ -7,5 +7,5 @@ import { setScreenConfigsActive } from "@/server/repositories/screen-configs";
 export const POST = defineRoute({
   permission: "settings.screen_configuration.edit",
   body: bulkIdsSchema.extend({ isActive: z.boolean() }),
-  handler: ({ db, auth, actor, body }) => setScreenConfigsActive(db, auth, actor, body.ids, body.isActive),
+  handler: async ({ db, auth, actor, body }) => await setScreenConfigsActive(db, auth, actor, body.ids, body.isActive),
 });

@@ -78,19 +78,19 @@ describe("minimumPackVolume / packDataGaps", () => {
 describe("server save derives hierarchical weight", () => {
   let w: World;
   let scope: Scope;
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     scope = { warehouseIds: [w.warehouseId], clientIds: "all" };
   });
   afterEach(() => w.close());
 
-  it("stores Case weight = 12 × Unit weight when saved without one", () => {
+  it("stores Case weight = 12 × Unit weight when saved without one", async () => {
     const u = { ...newPackType("Primary", []), key: "u", packType: "Each", length: 4, width: 3, height: 2, weight: 1.2, barcodes: [] };
     const c = { ...newPackType("Hierarchical", [u]), key: "c", packType: "Case", parentKey: "u", childQty: 12, weight: null, barcodes: [] };
-    const row = createProductFromWizard(w.db, { ...w.ctx, scope }, {
+    const row = await createProductFromWizard(w.db, { ...w.ctx, scope }, {
       ...emptyProductForm("Product", w.clientId), sku: "R5-HIER", name: "R5 hier", packTypes: [u, c],
     } as unknown as ProductInput);
-    const packs = w.db.select().from(schema.productPackTypes).where(eq(schema.productPackTypes.productId, row.id)).all();
+    const packs = await w.db.select().from(schema.productPackTypes).where(eq(schema.productPackTypes.productId, row.id));
     const caseRow = packs.find((p) => p.packType === "Case");
     expect(caseRow?.uomQty).toBe(12);
     expect(caseRow?.weight).toBe(14.4);
@@ -99,28 +99,28 @@ describe("server save derives hierarchical weight", () => {
 
 describe("test-data purge options", () => {
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
   const ctx = () => ({ ...w.ctx, scope: { warehouseIds: [w.warehouseId], clientIds: "all" as const } });
-  const make = (sku: string) => createProductFromWizard(w.db, ctx(), {
+  const make = async (sku: string) => await createProductFromWizard(w.db, ctx(), {
     ...emptyProductForm("Product", w.clientId), sku, name: sku,
     packTypes: [{ ...newPackType("Primary", []), key: "u", packType: "Each", length: 1, width: 1, height: 1, barcodes: [] }],
   } as unknown as ProductInput);
 
-  it("skips records created after createdBefore and never deactivates with deleteOnly", () => {
-    const old = make("KS-CRIT-OLD");
-    const stocked = make("KS-CRIT-STOCK");
-    const fresh = make("KS-CRIT-FRESH");
-    w.db.update(schema.products).set({ createdAt: "2026-01-01T00:00:00.000Z" }).where(eq(schema.products.id, old.id)).run();
-    w.db.update(schema.products).set({ createdAt: "2026-01-01T00:00:00.000Z" }).where(eq(schema.products.id, stocked.id)).run();
-    w.db.update(schema.products).set({ createdAt: "2026-06-01T00:00:00.000Z" }).where(eq(schema.products.id, fresh.id)).run();
-    w.db.insert(schema.inventory).values({ warehouseId: w.warehouseId, locationId: w.loc.storageA, clientId: w.clientId, productId: stocked.id, onHand: 2, receivedAt: "2026-01-01" }).run();
+  it("skips records created after createdBefore and never deactivates with deleteOnly", async () => {
+    const old = await make("KS-CRIT-OLD");
+    const stocked = await make("KS-CRIT-STOCK");
+    const fresh = await make("KS-CRIT-FRESH");
+    await w.db.update(schema.products).set({ createdAt: "2026-01-01T00:00:00.000Z" }).where(eq(schema.products.id, old.id));
+    await w.db.update(schema.products).set({ createdAt: "2026-01-01T00:00:00.000Z" }).where(eq(schema.products.id, stocked.id));
+    await w.db.update(schema.products).set({ createdAt: "2026-06-01T00:00:00.000Z" }).where(eq(schema.products.id, fresh.id));
+    await w.db.insert(schema.inventory).values({ warehouseId: w.warehouseId, locationId: w.loc.storageA, clientId: w.clientId, productId: stocked.id, onHand: 2, receivedAt: "2026-01-01" });
     const cutoff = { createdBefore: "2026-03-01T00:00:00.000Z" };
-    expect(planTestDataPurge(w.db, undefined, cutoff).deletable.map((r) => r.sku)).toEqual(["KS-CRIT-OLD"]);
-    const plan = purgeTestCatalogData(w.db, ctx(), undefined, { ...cutoff, deleteOnly: true });
+    expect((await planTestDataPurge(w.db, undefined, cutoff)).deletable.map((r) => r.sku)).toEqual(["KS-CRIT-OLD"]);
+    const plan = await purgeTestCatalogData(w.db, ctx(), undefined, { ...cutoff, deleteOnly: true });
     expect(plan.deactivate).toEqual([]);
-    expect(w.db.select().from(schema.products).where(eq(schema.products.id, old.id)).get()).toBeUndefined();
-    expect(w.db.select().from(schema.products).where(eq(schema.products.id, stocked.id)).get()?.status).toBe("Active");
-    expect(w.db.select().from(schema.products).where(eq(schema.products.id, fresh.id)).get()?.status).toBe("Active");
+    expect((await w.db.select().from(schema.products).where(eq(schema.products.id, old.id)).limit(1))[0]).toBeUndefined();
+    expect((await w.db.select().from(schema.products).where(eq(schema.products.id, stocked.id)).limit(1))[0]?.status).toBe("Active");
+    expect((await w.db.select().from(schema.products).where(eq(schema.products.id, fresh.id)).limit(1))[0]?.status).toBe("Active");
   });
 });

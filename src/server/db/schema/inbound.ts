@@ -1,12 +1,12 @@
 /** Inbound: purchase orders, PO lines, receipts (Receiving History rows). */
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, doublePrecision, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { PO_STATUSES, PO_TYPES, RECEIVING_TYPES } from "../../../lib/enums";
 import { bool, customFields, nowIso, pk, stamps } from "../columns";
 import { products } from "./catalog";
 import { clients, vendors, warehouses } from "./org";
 
 /** `receivedAt` == Actual Receiving Date; `vendorName` is kept as the display snapshot. */
-export const purchaseOrders = sqliteTable("purchase_orders", {
+export const purchaseOrders = pgTable("purchase_orders", {
   id: pk(),
   code: text("code").notNull(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
@@ -17,7 +17,7 @@ export const purchaseOrders = sqliteTable("purchase_orders", {
   poType: text("po_type", { enum: PO_TYPES }).notNull().default("Purchase Order"),
   totalQuantity: integer("total_quantity").notNull(),
   receivedQuantity: integer("received_quantity").notNull().default(0),
-  purchasePrice: real("purchase_price").notNull(),
+  purchasePrice: doublePrecision("purchase_price").notNull(),
   expectedDate: text("expected_date"),
   receivedAt: text("received_at"),
   vendorId: text("vendor_id").references(() => vendors.id),
@@ -37,13 +37,13 @@ export const purchaseOrders = sqliteTable("purchase_orders", {
   index("po_vendor_idx").on(t.vendorId),
 ]);
 
-export const purchaseOrderLines = sqliteTable("purchase_order_lines", {
+export const purchaseOrderLines = pgTable("purchase_order_lines", {
   id: pk(),
   purchaseOrderId: text("purchase_order_id").notNull().references(() => purchaseOrders.id),
   productId: text("product_id").notNull().references(() => products.id),
   orderedQuantity: integer("ordered_quantity").notNull(),
   receivedQuantity: integer("received_quantity").notNull().default(0),
-  unitCost: real("unit_cost").notNull(),
+  unitCost: doublePrecision("unit_cost").notNull(),
   packType: text("pack_type").notNull().default("Each"),
   uomQuantity: integer("uom_quantity").notNull().default(1),
   receivingLocationId: text("receiving_location_id"),
@@ -57,7 +57,7 @@ export const purchaseOrderLines = sqliteTable("purchase_order_lines", {
   ...stamps(),
 }, (t) => [index("po_lines_po_idx").on(t.purchaseOrderId)]);
 
-export const receipts = sqliteTable("receipts", {
+export const receipts = pgTable("receipts", {
   id: pk(),
   masterId: integer("master_id").notNull(),
   type: text("type", { enum: RECEIVING_TYPES }).notNull(),
@@ -101,7 +101,7 @@ export const receipts = sqliteTable("receipts", {
 ]);
 
 /** Serial numbers pre-advised per PO line (Import Serial Numbers / Remove Serial Number). */
-export const purchaseOrderSerials = sqliteTable("purchase_order_serials", {
+export const purchaseOrderSerials = pgTable("purchase_order_serials", {
   id: pk(),
   purchaseOrderLineId: text("purchase_order_line_id").notNull().references(() => purchaseOrderLines.id),
   serial: text("serial").notNull(),

@@ -66,7 +66,7 @@ export function totalInventorySql(warehouseIds: readonly string[], clientIds: re
     ),
     so AS (
       SELECT l.product_id, ${split ? sql`o.warehouse_id` : sql`NULL`} AS warehouse_id,
-        SUM(MAX(l.quantity - l.cancelled_quantity - l.shipped_quantity, 0)) AS open_so
+        SUM(GREATEST(l.quantity - l.cancelled_quantity - l.shipped_quantity, 0)) AS open_so
       FROM order_lines l JOIN shipment_orders o ON o.id = l.order_id
       WHERE o.deleted_at IS NULL AND o.status IN (${OPEN_SO_LIST}) AND ${whSo} GROUP BY ${soGroup}
     )
@@ -74,7 +74,7 @@ export function totalInventorySql(warehouseIds: readonly string[], clientIds: re
       p.id || ':' || COALESCE(k.warehouse_id, 'all') AS "rowId",
       p.id AS "productId", p.image_url AS "imageUrl",
       k.warehouse_id AS "warehouseId",
-      ${split ? sql`CASE WHEN w.name LIKE w.code || '%' THEN w.name ELSE w.code || ' - ' || w.name END` : sql`${ALL_WAREHOUSES_LABEL}`} AS "warehouse",
+      ${split ? sql`CASE WHEN w.name ILIKE w.code || '%' THEN w.name ELSE w.code || ' - ' || w.name END` : sql`${ALL_WAREHOUSES_LABEL}`} AS "warehouse",
       ${split ? sql`w.code` : sql`NULL`} AS "warehouseCode",
       p.client_id AS "clientId", c.name AS "client",
       p.sku AS "sku", p.name AS "productName", p.uom AS "uomPackType",
@@ -99,8 +99,8 @@ export function totalInventorySql(warehouseIds: readonly string[], clientIds: re
     LEFT JOIN lookup_values pg ON pg.id = p.product_group_id`;
 }
 
-export function listTotalInventory(db: AppDb, auth: AuthContext, query: GridQuery): GridPage<TotalInventoryRow> {
+export async function listTotalInventory(db: AppDb, auth: AuthContext, query: GridQuery): Promise<GridPage<TotalInventoryRow>> {
   const split = perWarehouse(query, auth);
   const inner = totalInventorySql(auth.viewScope.warehouseIds, auth.viewScope.clientIds, split);
-  return runGrid<TotalInventoryRow>(db, inner, TOTAL_INVENTORY_DEF, query, "rowId");
+  return await runGrid<TotalInventoryRow>(db, inner, TOTAL_INVENTORY_DEF, query, "rowId");
 }

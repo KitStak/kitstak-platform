@@ -6,5 +6,5 @@ import { cancelContractApprovals } from "@/server/repositories/billing";
 export const POST = defineRoute({
   permission: "settings.billing.edit",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => cancelContractApprovals(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await cancelContractApprovals(db, auth, actor, body.ids),
 });

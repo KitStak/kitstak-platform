@@ -24,7 +24,7 @@ async function DashboardWithData({ searchParams }: { readonly searchParams: Prom
   let initial: LiveDashboard | null = null;
   try {
     const auth = await getAuthContext();
-    if (auth) initial = JSON.parse(JSON.stringify(getLiveDashboard(await getAppDb(), auth, { warehouseIds: wh, clientIds: cl }))) as LiveDashboard;
+    if (auth) initial = JSON.parse(JSON.stringify(await getLiveDashboard(await getAppDb(), auth, { warehouseIds: wh, clientIds: cl }))) as LiveDashboard;
   } catch {
     initial = null;
   }

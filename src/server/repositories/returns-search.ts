@@ -8,6 +8,7 @@ import type { AppDb } from "@/server/api/db";
 import type { Scope } from "@/server/auth/scope";
 import { idSchema } from "./platform-common";
 import { RETURNABLE_ORDER_STATUSES } from "./returns";
+import { dbAll } from "@/server/db/sql";
 
 export const SHIPPED_SEARCH_LIMIT = 50;
 
@@ -37,7 +38,7 @@ function inList(column: string, values: readonly string[]): SQL {
 }
 
 /** Scoped search over code, store order # and customer (case-insensitive contains; `instr`, so % and _ are literal). */
-export function searchShippedOrders(db: AppDb, scope: Scope, input: z.output<typeof shippedSearchSchema>): ShippedOrderHit[] {
+export async function searchShippedOrders(db: AppDb, scope: Scope, input: z.output<typeof shippedSearchSchema>): Promise<ShippedOrderHit[]> {
   const parts: SQL[] = [
     inList("o.status", RETURNABLE_ORDER_STATUSES),
     sql`o.deleted_at IS NULL`,
@@ -48,25 +49,25 @@ export function searchShippedOrders(db: AppDb, scope: Scope, input: z.output<typ
   if (input.warehouseId) parts.push(sql`o.warehouse_id = ${input.warehouseId}`);
   if (input.q) {
     const needle = input.q.toLowerCase();
-    parts.push(sql`(instr(lower(o.code), ${needle}) > 0 OR instr(lower(COALESCE(o.store_order_number, '')), ${needle}) > 0 OR instr(lower(o.customer_name), ${needle}) > 0)`);
+    parts.push(sql`(strpos(lower(o.code), ${needle}) > 0 OR strpos(lower(COALESCE(o.store_order_number, '')), ${needle}) > 0 OR strpos(lower(o.customer_name), ${needle}) > 0)`);
   }
   // Pick the page of ids first, then compute the unit sums for those rows only (SQLite would
   // otherwise evaluate the correlated sums for every candidate order before sorting).
-  return db.all<ShippedOrderHit>(sql`
+  return await dbAll<ShippedOrderHit>(db, sql`
     WITH hits AS (
-      SELECT o.id, COALESCE(o.shipped_at, o.updated_at) AS sortAt FROM shipment_orders o
+      SELECT o.id, COALESCE(o.shipped_at, o.updated_at) AS "sortAt" FROM shipment_orders o
       WHERE ${sql.join(parts, sql` AND `)}
-      ORDER BY sortAt DESC, o.code DESC
+      ORDER BY "sortAt" DESC, o.code DESC
       LIMIT ${SHIPPED_SEARCH_LIMIT}
     )
-    SELECT o.id, o.code, o.status, o.customer_name AS customerName, o.store_order_number AS storeOrderNumber, c.name AS clientName, o.shipped_at AS shippedAt,
-      COALESCE((SELECT SUM(l.shipped_quantity) FROM order_lines l WHERE l.order_id = o.id), 0) AS shippedUnits,
-      MAX(0, COALESCE((SELECT SUM(l.shipped_quantity) FROM order_lines l WHERE l.order_id = o.id), 0) - COALESCE((
-        SELECT SUM(CASE WHEN ro.status = 'Completed' THEN rl.returned_qty ELSE MAX(rl.requested_qty, rl.returned_qty) END)
+    SELECT o.id, o.code, o.status, o.customer_name AS "customerName", o.store_order_number AS "storeOrderNumber", c.name AS "clientName", o.shipped_at AS "shippedAt",
+      COALESCE((SELECT SUM(l.shipped_quantity) FROM order_lines l WHERE l.order_id = o.id), 0) AS "shippedUnits",
+      GREATEST(0, COALESCE((SELECT SUM(l.shipped_quantity) FROM order_lines l WHERE l.order_id = o.id), 0) - COALESCE((
+        SELECT SUM(CASE WHEN ro.status = 'Completed' THEN rl.returned_qty ELSE GREATEST(rl.requested_qty, rl.returned_qty) END)
         FROM return_order_lines rl JOIN return_orders ro ON ro.id = rl.return_order_id
-        WHERE ro.shipment_order_id = o.id AND ro.status <> 'Cancelled'), 0)) AS returnableUnits,
+        WHERE ro.shipment_order_id = o.id AND ro.status <> 'Cancelled'), 0)) AS "returnableUnits",
       (EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id AND s.label_type = 'Shipping Label' AND s.label_status = 'Voided')
-        AND NOT EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id AND s.label_type = 'Shipping Label' AND s.label_status = 'Active')) AS outboundLabelVoided
+        AND NOT EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id AND s.label_type = 'Shipping Label' AND s.label_status = 'Active'))::int AS "outboundLabelVoided"
     FROM hits h JOIN shipment_orders o ON o.id = h.id JOIN clients c ON c.id = o.client_id
-    ORDER BY h.sortAt DESC, o.code DESC`);
+    ORDER BY h."sortAt" DESC, o.code DESC`);
 }

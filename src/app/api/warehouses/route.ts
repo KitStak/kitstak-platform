@@ -9,9 +9,9 @@ import { createWarehouse, listWarehouses } from "@/server/repositories/warehouse
 
 export const GET = defineRoute({
   permission: ["settings.warehouse.view", "inventory.inventory_by_location.view"],
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listWarehouses(db, auth, query);
+    const { rows, total } = await listWarehouses(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -19,5 +19,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.warehouse.create",
   body: warehouseSchema,
-  handler: ({ db, auth, actor, body }) => created(createWarehouse(db, auth, actor, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createWarehouse(db, auth, actor, body)),
 });

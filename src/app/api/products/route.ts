@@ -13,9 +13,9 @@ import type { ProductInput } from "@/lib/grid-defs/products/product-form";
 
 export const GET = defineRoute({
   permission: PRODUCT_READ_PERMISSIONS,
-  handler: ({ db, auth, searchParams }) => {
+  handler: async ({ db, auth, searchParams }) => {
     const query = parseProductListQuery(searchParams);
-    const { rows, total } = listProducts(db, auth.viewScope, query);
+    const { rows, total } = await listProducts(db, auth.viewScope, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -23,8 +23,8 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.products.create",
   body: z.record(z.string(), z.unknown()),
-  handler: ({ db, auth, actor, body }) => {
-    const row = createProductFromWizard(db, { ...domainCtx(actor, auth), scope: auth.scope }, body as ProductInput);
+  handler: async ({ db, auth, actor, body }) => {
+    const row = await createProductFromWizard(db, { ...domainCtx(actor, auth), scope: auth.scope }, body as ProductInput);
     return created({ id: row.id, sku: row.sku, version: row.version });
   },
 });

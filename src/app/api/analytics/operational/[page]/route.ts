@@ -10,5 +10,5 @@ export const GET = defineRoute({
   permission: OPERATIONAL_APP.permission,
   params: z.object({ page: z.enum(OPERATIONAL_PAGES) }),
   query: analyticsQuerySchema,
-  handler: ({ db, auth, params, query }) => getOperationalAnalytics(db, auth, params.page, query),
+  handler: async ({ db, auth, params, query }) => await getOperationalAnalytics(db, auth, params.page, query),
 });

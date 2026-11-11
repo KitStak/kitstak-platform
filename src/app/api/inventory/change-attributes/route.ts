@@ -7,5 +7,5 @@ import { INVENTORY_PERMISSIONS as P } from "@/lib/grid-defs/inventory/permission
 export const POST = defineRoute({
   permission: P.changeAttributes,
   body: changeAttributesSchema,
-  handler: ({ db, auth, actor, body }) => changeAttributes(db, domainCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await changeAttributes(db, domainCtx(actor, auth), body),
 });

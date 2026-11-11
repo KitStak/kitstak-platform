@@ -20,6 +20,7 @@ import * as s from "@/server/db/schema";
 import { CUSTOM_ENTITIES, CUSTOM_SLOT_LABELS, minMaxAdjust, periodEnd, priceQuantity, splitOneTime, type CalculationType, type OperationType, type PricingMode } from "@/lib/grid-defs/organization/billing";
 import { logCreate, logUpdate } from "./clients-shared";
 import { logContractEvent } from "./billing";
+import { dbAll, dbGet, inSavepoint } from "@/server/db/sql";
 
 /** One unit of billable activity before pricing. */
 export interface Activity {
@@ -92,34 +93,34 @@ interface Scope { readonly clientId: string; readonly warehouseId: string; reado
 
 /* ---------------- facts ---------------- */
 
-const PRODUCT_FACTS = sql.raw(`p.sku AS sku, p.is_fragile AS isFragile, p.is_hazmat AS isHazmat, p.is_kit AS isKit, p.is_digital AS isDigital,
-  p.is_foldable AS isFoldable, p.is_oversized AS isOversized, p.is_insert AS isInsert, p.is_stackable AS isStackable, p.is_poster AS isPoster,
-  p.is_liquid AS isLiquid, (p.product_category = 'Packaging Material') AS isPackingMaterial, p.track_expiry AS expiryTracking,
-  p.track_lot AS lotTracking, p.track_serial AS serialTracking, p.weight_oz AS productWeight,
-  (p.length_in * p.width_in * p.height_in) AS productVolume,
-  (SELECT lv.name FROM lookup_values lv WHERE lv.id = p.product_type_id) AS productType,
-  (SELECT lv.name FROM lookup_values lv WHERE lv.id = p.product_group_id) AS productGroup, p.custom_fields AS productCustom`);
+const PRODUCT_FACTS = sql.raw(`p.sku AS sku, p.is_fragile AS "isFragile", p.is_hazmat AS "isHazmat", p.is_kit AS "isKit", p.is_digital AS "isDigital",
+  p.is_foldable AS "isFoldable", p.is_oversized AS "isOversized", p.is_insert AS "isInsert", p.is_stackable AS "isStackable", p.is_poster AS "isPoster",
+  p.is_liquid AS "isLiquid", (p.product_category = 'Packaging Material') AS "isPackingMaterial", p.track_expiry AS "expiryTracking",
+  p.track_lot AS "lotTracking", p.track_serial AS "serialTracking", p.weight_oz AS "productWeight",
+  (p.length_in * p.width_in * p.height_in) AS "productVolume",
+  (SELECT lv.name FROM lookup_values lv WHERE lv.id = p.product_type_id) AS "productType",
+  (SELECT lv.name FROM lookup_values lv WHERE lv.id = p.product_group_id) AS "productGroup", p.custom_fields AS "productCustom"`);
 
-const LOCATION_FACTS = sql.raw(`l.area_type AS locationAreaType, l.color_code AS locationColorCode, l.location_type AS locationType,
-  COALESCE((SELECT lv.name FROM lookup_values lv WHERE lv.id = l.location_zone_id), l.zone) AS locationZone,
-  (SELECT lv.name FROM lookup_values lv WHERE lv.id = l.location_group_id) AS locationGroup, l.volume AS locationVolume,
-  l.single_client AS onlySingleClient, l.only_one_lp AS onlySingleLp, l.only_one_lot AS onlySingleLot, l.only_one_sku AS onlySingleSku,
-  l.custom_fields AS locationCustom`);
+const LOCATION_FACTS = sql.raw(`l.area_type AS "locationAreaType", l.color_code AS "locationColorCode", l.location_type AS "locationType",
+  COALESCE((SELECT lv.name FROM lookup_values lv WHERE lv.id = l.location_zone_id), l.zone) AS "locationZone",
+  (SELECT lv.name FROM lookup_values lv WHERE lv.id = l.location_group_id) AS "locationGroup", l.volume AS "locationVolume",
+  l.single_client AS "onlySingleClient", l.only_one_lp AS "onlySingleLp", l.only_one_lot AS "onlySingleLot", l.only_one_sku AS "onlySingleSku",
+  l.custom_fields AS "locationCustom"`);
 
 /** Shipment order + carrier facts; needs the order aliased `so`. */
-const SO_FACTS = sql.raw(`so.carrier AS carrier, so.rate AS carrierRate, so.shipping_charges_billing_type AS carrierBillingType,
-  so.shipping_service AS shipmentMethod, (SELECT sp.code FROM shipment_packages sp WHERE sp.id = so.shipment_package_id) AS shipmentPackageType,
-  (SELECT COALESCE(SUM(x.shipping_cost), 0) FROM shipments x WHERE x.order_id = so.id AND x.label_status <> 'Voided') AS labelCost,
-  (SELECT COUNT(*) FROM order_lines ol WHERE ol.order_id = so.id) AS nofLines,
-  COALESCE((SELECT lv.name FROM lookup_values lv WHERE lv.id = so.order_type_id), so.order_type) AS shipmentOrderType,
-  so.store_name AS soStore, so.channel AS soChannel, so.priority AS priority, so.discount AS discount, so.total_shipping_cost AS totalShippingCost,
-  so.total_weight_oz AS soTotalWeight, so.total_quantity AS soTotalQuantity, so.ship_country AS shipCountry, so.ship_state AS shipState,
-  so.is_gift AS isGift, so.is_prime AS isPrime, so.custom_fields AS soCustom,
-  (SELECT group_concat(tg.name, '|') FROM entity_tags et JOIN tags tg ON tg.id = et.tag_id WHERE et.entity_type = 'shipment_order' AND et.entity_id = so.id) AS orderTag,
-  (SELECT pl.custom_fields FROM shipment_plan_orders spo JOIN shipment_plans pl ON pl.id = spo.plan_id WHERE spo.order_id = so.id ORDER BY spo.added_at DESC LIMIT 1) AS shipmentPlanCustom`);
+const SO_FACTS = sql.raw(`so.carrier AS carrier, so.rate AS "carrierRate", so.shipping_charges_billing_type AS "carrierBillingType",
+  so.shipping_service AS "shipmentMethod", (SELECT sp.code FROM shipment_packages sp WHERE sp.id = so.shipment_package_id) AS "shipmentPackageType",
+  (SELECT COALESCE(SUM(x.shipping_cost), 0) FROM shipments x WHERE x.order_id = so.id AND x.label_status <> 'Voided') AS "labelCost",
+  (SELECT COUNT(*) FROM order_lines ol WHERE ol.order_id = so.id) AS "nofLines",
+  COALESCE((SELECT lv.name FROM lookup_values lv WHERE lv.id = so.order_type_id), so.order_type) AS "shipmentOrderType",
+  so.store_name AS "soStore", so.channel AS "soChannel", so.priority AS priority, so.discount AS discount, so.total_shipping_cost AS "totalShippingCost",
+  so.total_weight_oz AS "soTotalWeight", so.total_quantity AS "soTotalQuantity", so.ship_country AS "shipCountry", so.ship_state AS "shipState",
+  so.is_gift AS "isGift", so.is_prime AS "isPrime", so.custom_fields AS "soCustom",
+  (SELECT string_agg((tg.name)::text, '|') FROM entity_tags et JOIN tags tg ON tg.id = et.tag_id WHERE et.entity_type = 'shipment_order' AND et.entity_id = so.id) AS "orderTag",
+  (SELECT pl.custom_fields FROM shipment_plan_orders spo JOIN shipment_plans pl ON pl.id = spo.plan_id WHERE spo.order_id = so.id ORDER BY spo.added_at DESC LIMIT 1) AS "shipmentPlanCustom"`);
 
 /** SO line facts; needs the order line aliased `ol`. */
-const LINE_FACTS = sql.raw(`ol.line_note1 AS lineNote1, ol.line_note2 AS lineNote2, ol.line_note3 AS lineNote3, (ol.kit_product_id IS NOT NULL) AS isKitComponent`);
+const LINE_FACTS = sql.raw(`ol.line_note1 AS "lineNote1", ol.line_note2 AS "lineNote2", ol.line_note3 AS "lineNote3", (ol.kit_product_id IS NOT NULL) AS "isKitComponent"`);
 
 type Raw = Record<string, unknown>;
 
@@ -171,15 +172,15 @@ const str = (v: unknown): string | null => (v === null || v === undefined || v =
 
 /* ---------------- collectors ---------------- */
 
-function receipts(db: AppDb, sc: Scope, types: readonly string[]): Raw[] {
-  return db.all<Raw>(sql`SELECT r.id, r.received_at AS at, r.uom_quantity AS qty, r.quantity AS packQty, r.product_id AS productId, r.purchase_order_id AS poId,
-      r.purchase_order_line_id AS poLineId, r.return_order_id AS rmaId, r.shipment_order_id AS soId, r.lp_id AS lpId, r.damage_reason AS damage,
-      (SELECT po.code FROM purchase_orders po WHERE po.id = r.purchase_order_id) AS poCode,
-      (SELECT ro.rma_code FROM return_orders ro WHERE ro.id = r.return_order_id) AS rmaCode,
-      (SELECT so.code FROM shipment_orders so WHERE so.id = COALESCE(r.shipment_order_id, (SELECT ro.shipment_order_id FROM return_orders ro WHERE ro.id = r.return_order_id))) AS soCode,
-      (SELECT lp.number FROM license_plates lp WHERE lp.id = r.lp_id) AS lpNumber,
-      (SELECT lt.code FROM license_plates lp JOIN lp_types lt ON lt.id = lp.lp_type_id WHERE lp.id = r.lp_id) AS lpType,
-      (SELECT lt.custom_fields FROM license_plates lp JOIN lp_types lt ON lt.id = lp.lp_type_id WHERE lp.id = r.lp_id) AS lpTypeCustom,
+async function receipts(db: AppDb, sc: Scope, types: readonly string[]): Promise<Raw[]> {
+  return await dbAll<Raw>(db, sql`SELECT r.id, r.received_at AS at, r.uom_quantity AS qty, r.quantity AS "packQty", r.product_id AS "productId", r.purchase_order_id AS "poId",
+      r.purchase_order_line_id AS "poLineId", r.return_order_id AS "rmaId", r.shipment_order_id AS "soId", r.lp_id AS "lpId", r.damage_reason AS damage,
+      (SELECT po.code FROM purchase_orders po WHERE po.id = r.purchase_order_id) AS "poCode",
+      (SELECT ro.rma_code FROM return_orders ro WHERE ro.id = r.return_order_id) AS "rmaCode",
+      (SELECT so.code FROM shipment_orders so WHERE so.id = COALESCE(r.shipment_order_id, (SELECT ro.shipment_order_id FROM return_orders ro WHERE ro.id = r.return_order_id))) AS "soCode",
+      (SELECT lp.number FROM license_plates lp WHERE lp.id = r.lp_id) AS "lpNumber",
+      (SELECT lt.code FROM license_plates lp JOIN lp_types lt ON lt.id = lp.lp_type_id WHERE lp.id = r.lp_id) AS "lpType",
+      (SELECT lt.custom_fields FROM license_plates lp JOIN lp_types lt ON lt.id = lp.lp_type_id WHERE lp.id = r.lp_id) AS "lpTypeCustom",
       ${PRODUCT_FACTS}, ${LOCATION_FACTS}
     FROM receipts r JOIN products p ON p.id = r.product_id LEFT JOIN locations l ON l.id = r.location_id
     WHERE r.client_id = ${sc.clientId} AND r.warehouse_id = ${sc.warehouseId} AND r.cancelled_at IS NULL
@@ -209,8 +210,8 @@ function distinct(rows: readonly Raw[], key: (r: Raw) => unknown, ref: (r: Raw) 
   return [...seen.values()];
 }
 
-function receivingActivity(db: AppDb, sc: Scope, fee: EngineFee): Activity[] {
-  const rows = receipts(db, sc, ["Purchase Order", "Product Receive"]).filter((r) => matches(fee, r));
+async function receivingActivity(db: AppDb, sc: Scope, fee: EngineFee): Promise<Activity[]> {
+  const rows = (await receipts(db, sc, ["Purchase Order", "Product Receive"])).filter((r) => matches(fee, r));
   switch (fee.feeBy) {
     case "Per LP": return distinct(rows, (r) => r.lpId, (r) => r.poCode);
     case "Per PO": return distinct(rows, (r) => r.poId, (r) => r.poCode);
@@ -221,8 +222,8 @@ function receivingActivity(db: AppDb, sc: Scope, fee: EngineFee): Activity[] {
   }
 }
 
-function returnActivity(db: AppDb, sc: Scope, fee: EngineFee): Activity[] {
-  const rows = receipts(db, sc, ["Return"]).filter((r) => matches(fee, r));
+async function returnActivity(db: AppDb, sc: Scope, fee: EngineFee): Promise<Activity[]> {
+  const rows = (await receipts(db, sc, ["Return"])).filter((r) => matches(fee, r));
   switch (fee.feeBy) {
     case "Per RMA": return distinct(rows, (r) => r.rmaId ?? r.id, (r) => r.rmaCode);
     case "Per SO": return distinct(rows, (r) => r.soCode, (r) => r.soCode);
@@ -231,19 +232,19 @@ function returnActivity(db: AppDb, sc: Scope, fee: EngineFee): Activity[] {
   }
 }
 
-function taskActivity(db: AppDb, sc: Scope, fee: EngineFee): Activity[] {
+async function taskActivity(db: AppDb, sc: Scope, fee: EngineFee): Promise<Activity[]> {
   const type = fee.feeBy === "Per Picking" ? "Picking" : "Packing";
-  const rows = db.all<Raw>(sql`SELECT t.id, t.finished_at AS at, t.actual_qty AS qty, t.product_id AS productId, t.order_id AS orderId,
-      COALESCE((SELECT pt.uom_qty FROM product_pack_types pt WHERE pt.product_id = t.product_id AND pt.pack_type = t.pack_type LIMIT 1), 1) AS packUom,
-      so.code AS soCode,
-      (SELECT lp.number FROM license_plates lp WHERE lp.id = COALESCE(t.target_lp_id, t.source_lp_id)) AS lpNumber,
+  const rows = (await dbAll<Raw>(db, sql`SELECT t.id, t.finished_at AS at, t.actual_qty AS qty, t.product_id AS "productId", t.order_id AS "orderId",
+      COALESCE((SELECT pt.uom_qty FROM product_pack_types pt WHERE pt.product_id = t.product_id AND pt.pack_type = t.pack_type LIMIT 1), 1) AS "packUom",
+      so.code AS "soCode",
+      (SELECT lp.number FROM license_plates lp WHERE lp.id = COALESCE(t.target_lp_id, t.source_lp_id)) AS "lpNumber",
       ${PRODUCT_FACTS}, ${LOCATION_FACTS}, ${SO_FACTS}, ${LINE_FACTS}
     FROM tasks t JOIN products p ON p.id = t.product_id LEFT JOIN locations l ON l.id = t.source_location_id
       LEFT JOIN shipment_orders so ON so.id = t.order_id
       LEFT JOIN order_lines ol ON ol.id = (SELECT ol2.id FROM order_lines ol2 WHERE ol2.order_id = t.order_id AND ol2.product_id = t.product_id LIMIT 1)
     WHERE t.client_id = ${sc.clientId} AND t.warehouse_id = ${sc.warehouseId} AND t.task_type = ${type} AND t.status = 'Completed'
       AND t.finished_at >= ${sc.from} AND t.finished_at < ${sc.to} AND t.actual_qty > 0
-    ORDER BY t.finished_at, t.task_no`).filter((r) => matches(fee, r));
+    ORDER BY t.finished_at, t.task_no`)).filter((r) => matches(fee, r));
   switch (fee.chargeBy) {
     case "SO": return distinct(rows, (r) => r.orderId, (r) => r.soCode);
     case "SKU": return distinct(rows, (r) => `${r.orderId}|${r.productId}`, (r) => r.soCode, true);
@@ -252,54 +253,54 @@ function taskActivity(db: AppDb, sc: Scope, fee: EngineFee): Activity[] {
   }
 }
 
-function shipmentActivity(db: AppDb, sc: Scope, fee: EngineFee): Activity[] {
+async function shipmentActivity(db: AppDb, sc: Scope, fee: EngineFee): Promise<Activity[]> {
   if (fee.feeBy === "Per SO") {
-    const rows = db.all<Raw>(sql`SELECT so.id, so.shipped_at AS at, so.code AS soCode, ${SO_FACTS} FROM shipment_orders so
+    const rows = (await dbAll<Raw>(db, sql`SELECT so.id, so.shipped_at AS at, so.code AS "soCode", ${SO_FACTS} FROM shipment_orders so
       WHERE so.client_id = ${sc.clientId} AND so.warehouse_id = ${sc.warehouseId} AND so.shipped_at >= ${sc.from} AND so.shipped_at < ${sc.to} AND so.deleted_at IS NULL
-      ORDER BY so.shipped_at`).filter((r) => matches(fee, r));
+      ORDER BY so.shipped_at`)).filter((r) => matches(fee, r));
     return rows.map((r) => act(r, 1, r.soCode));
   }
   if (fee.feeBy === "Per Product") {
-    const rows = db.all<Raw>(sql`SELECT si.id, so.shipped_at AS at, si.quantity AS qty, si.product_id AS productId, so.id AS orderId, so.code AS soCode,
-        COALESCE((SELECT pt.uom_qty FROM product_pack_types pt WHERE pt.product_id = si.product_id AND pt.pack_type = si.pack_type LIMIT 1), 1) AS packUom,
+    const rows = (await dbAll<Raw>(db, sql`SELECT si.id, so.shipped_at AS at, si.quantity AS qty, si.product_id AS "productId", so.id AS "orderId", so.code AS "soCode",
+        COALESCE((SELECT pt.uom_qty FROM product_pack_types pt WHERE pt.product_id = si.product_id AND pt.pack_type = si.pack_type LIMIT 1), 1) AS "packUom",
         ${PRODUCT_FACTS}, ${SO_FACTS}, ${LINE_FACTS}
       FROM shipment_items si JOIN shipments sh ON sh.id = si.shipment_id JOIN shipment_orders so ON so.id = sh.order_id JOIN products p ON p.id = si.product_id
         LEFT JOIN order_lines ol ON ol.id = si.order_line_id
       WHERE sh.client_id = ${sc.clientId} AND sh.warehouse_id = ${sc.warehouseId} AND so.shipped_at >= ${sc.from} AND so.shipped_at < ${sc.to} AND sh.label_status <> 'Voided'
-      ORDER BY so.shipped_at`).filter((r) => matches(fee, r));
+      ORDER BY so.shipped_at`)).filter((r) => matches(fee, r));
     if (fee.chargeBy === "SKU") return distinct(rows, (r) => `${r.orderId}|${r.productId}`, (r) => r.soCode, true);
     // Kit: kit products shipped as the parent; Component: lines exploded from a kit (order_lines.kit_product_id).
     if (fee.chargeBy === "Kit (UOM Quantity)") return rows.filter((r) => Boolean(r.isKit) && !r.isKitComponent).map((r) => act(r, num(r.qty), r.soCode));
     if (fee.chargeBy === "Component (UOM Quantity)") return rows.filter((r) => Boolean(r.isKitComponent)).map((r) => act(r, num(r.qty), r.soCode));
     return rows.map((r) => act(r, fee.chargeBy === "Product (Pack Quantity)" ? r2(num(r.qty) / Math.max(1, num(r.packUom))) : num(r.qty), r.soCode));
   }
-  const rows = db.all<Raw>(sql`SELECT sh.id, COALESCE(so.shipped_at, sh.label_created_at) AS at, so.code AS soCode, sh.tracking_number AS tracking, sh.shipment_package_id AS pkg,
+  const rows = (await dbAll<Raw>(db, sql`SELECT sh.id, COALESCE(so.shipped_at, sh.label_created_at) AS at, so.code AS "soCode", sh.tracking_number AS tracking, sh.shipment_package_id AS pkg,
       ${SO_FACTS}
     FROM shipments sh JOIN shipment_orders so ON so.id = sh.order_id
     WHERE sh.client_id = ${sc.clientId} AND sh.warehouse_id = ${sc.warehouseId} AND sh.label_status <> 'Voided' AND sh.label_type = 'Shipping Label'
       AND COALESCE(so.shipped_at, sh.label_created_at) >= ${sc.from} AND COALESCE(so.shipped_at, sh.label_created_at) < ${sc.to}
-    ORDER BY at`).filter((r) => matches(fee, r));
+    ORDER BY at`)).filter((r) => matches(fee, r));
 
   const list = fee.feeBy === "Shipment Package" ? rows.filter((r) => r.pkg) : rows;
   return list.map((r) => ({ ...act(r, 1, r.soCode), lpNumber: str(r.tracking) }));
 }
 
-function workOrderActivity(db: AppDb, sc: Scope, fee: EngineFee): Activity[] {
-  const rows = db.all<Raw>(sql`SELECT wo.id, wo.actual_finish_at AS at, wo.code AS woCode, wo.processed_qty AS qty,
-      (SELECT COALESCE(SUM(c.component_qty), 0) FROM work_order_components c WHERE c.work_order_id = wo.id) AS perKit, ${PRODUCT_FACTS}
+async function workOrderActivity(db: AppDb, sc: Scope, fee: EngineFee): Promise<Activity[]> {
+  const rows = (await dbAll<Raw>(db, sql`SELECT wo.id, wo.actual_finish_at AS at, wo.code AS "woCode", wo.processed_qty AS qty,
+      (SELECT COALESCE(SUM(c.component_qty), 0) FROM work_order_components c WHERE c.work_order_id = wo.id) AS "perKit", ${PRODUCT_FACTS}
     FROM work_orders wo JOIN products p ON p.id = wo.kit_product_id
     WHERE wo.client_id = ${sc.clientId} AND wo.warehouse_id = ${sc.warehouseId} AND wo.status = 'Completed'
       AND wo.actual_finish_at >= ${sc.from} AND wo.actual_finish_at < ${sc.to}
-    ORDER BY wo.actual_finish_at`).filter((r) => matches(fee, r));
+    ORDER BY wo.actual_finish_at`)).filter((r) => matches(fee, r));
   if (fee.feeBy === "Per Kit") return rows.map((r) => act(r, num(r.qty), r.woCode));
   if (fee.feeBy === "Per Component") return rows.map((r) => act(r, num(r.qty) * num(r.perKit), r.woCode));
   return rows.map((r) => act(r, 1, r.woCode));
 }
 
-function vasActivity(db: AppDb, sc: Scope, fee: EngineFee): Activity[] {
+async function vasActivity(db: AppDb, sc: Scope, fee: EngineFee): Promise<Activity[]> {
   if (!fee.vasTypeId) return [];
-  const rows = db.all<Raw>(sql`SELECT v.id, v.operation_at AS at, v.value AS qty, v.calculation_type AS calc, v.reference_number AS ref, v.note,
-      (SELECT lv.name FROM lookup_values lv WHERE lv.id = v.vas_type_id) AS vasType
+  const rows = await dbAll<Raw>(db, sql`SELECT v.id, v.operation_at AS at, v.value AS qty, v.calculation_type AS calc, v.reference_number AS ref, v.note,
+      (SELECT lv.name FROM lookup_values lv WHERE lv.id = v.vas_type_id) AS "vasType"
     FROM vas_operations v WHERE v.client_id = ${sc.clientId} AND v.warehouse_id = ${sc.warehouseId} AND v.vas_type_id = ${fee.vasTypeId}
       AND v.operation_at >= ${sc.from} AND v.operation_at < ${sc.to} ORDER BY v.operation_at`);
   return rows.map((r) => ({ ...act(r, num(r.qty), r.ref ?? r.vasType), facts: { totalPrice: r.calc === "Total Price" } }));
@@ -307,17 +308,17 @@ function vasActivity(db: AppDb, sc: Scope, fee: EngineFee): Activity[] {
 
 /* ---------------- storage ---------------- */
 
-function storageRows(db: AppDb, sc: Scope, fee: EngineFee): Raw[] {
-  return db.all<Raw>(sql`SELECT sn.snapshot_at AS at, substr(sn.snapshot_at, 1, 10) AS d, sn.location_id AS locationId, sn.lp_id AS lpId, sn.parent_lp_id AS parentLpId,
-      sn.uom_qty AS qty, sn.damage_reason AS damage, l.code AS locationCode,
-      (SELECT lp.number FROM license_plates lp WHERE lp.id = sn.lp_id) AS lpNumber,
-      (SELECT lp.number FROM license_plates lp WHERE lp.id = sn.parent_lp_id) AS parentLpNumber,
-      (SELECT lt.code FROM license_plates lp JOIN lp_types lt ON lt.id = lp.lp_type_id WHERE lp.id = sn.lp_id) AS lpType,
-      (SELECT lt.custom_fields FROM license_plates lp JOIN lp_types lt ON lt.id = lp.lp_type_id WHERE lp.id = sn.lp_id) AS lpTypeCustom,
+async function storageRows(db: AppDb, sc: Scope, fee: EngineFee): Promise<Raw[]> {
+  return (await dbAll<Raw>(db, sql`SELECT sn.snapshot_at AS at, substr(sn.snapshot_at, 1, 10) AS d, sn.location_id AS "locationId", sn.lp_id AS "lpId", sn.parent_lp_id AS "parentLpId",
+      sn.uom_qty AS qty, sn.damage_reason AS damage, l.code AS "locationCode",
+      (SELECT lp.number FROM license_plates lp WHERE lp.id = sn.lp_id) AS "lpNumber",
+      (SELECT lp.number FROM license_plates lp WHERE lp.id = sn.parent_lp_id) AS "parentLpNumber",
+      (SELECT lt.code FROM license_plates lp JOIN lp_types lt ON lt.id = lp.lp_type_id WHERE lp.id = sn.lp_id) AS "lpType",
+      (SELECT lt.custom_fields FROM license_plates lp JOIN lp_types lt ON lt.id = lp.lp_type_id WHERE lp.id = sn.lp_id) AS "lpTypeCustom",
       ${PRODUCT_FACTS}, ${LOCATION_FACTS}
     FROM inventory_snapshots sn JOIN products p ON p.id = sn.product_id LEFT JOIN locations l ON l.id = sn.location_id
     WHERE sn.client_id = ${sc.clientId} AND sn.warehouse_id = ${sc.warehouseId} AND sn.snapshot_at >= ${sc.from} AND sn.snapshot_at < ${sc.to} AND sn.uom_qty > 0
-    ORDER BY sn.snapshot_at`).filter((r) => matches(fee, { ...r, damage: r.damage }));
+    ORDER BY sn.snapshot_at`)).filter((r) => matches(fee, { ...r, damage: r.damage }));
 }
 
 function storageKey(fee: EngineFee, r: Raw): string | null {
@@ -341,8 +342,8 @@ function dailyMetric(fee: EngineFee, rows: readonly Raw[]): number {
   return new Set(rows.map((r) => storageKey(fee, r)).filter(Boolean)).size;
 }
 
-export function storageActivity(db: AppDb, sc: Scope, fee: EngineFee): Activity[] {
-  const rows = storageRows(db, sc, fee);
+export async function storageActivity(db: AppDb, sc: Scope, fee: EngineFee): Promise<Activity[]> {
+  const rows = await storageRows(db, sc, fee);
   if (rows.length === 0) return [];
   const byDay = new Map<string, Raw[]>();
   for (const r of rows) byDay.set(String(r.d), [...(byDay.get(String(r.d)) ?? []), r]);
@@ -401,24 +402,24 @@ function matches(fee: EngineFee, row: Raw): boolean {
  * True when a live bill already carries this fee (Charge One Time): Successful, not Canceled,
  * with a positive line — and never the bill being recalculated in place (`exceptReportId`).
  */
-export function alreadyCharged(db: AppDb, feeId: string, exceptReportId?: string): boolean {
-  return Boolean(db.get<{ one: number }>(sql`SELECT 1 AS one FROM billing_report_lines li JOIN billing_reports br ON br.id = li.report_id
+export async function alreadyCharged(db: AppDb, feeId: string, exceptReportId?: string): Promise<boolean> {
+  return Boolean(await dbGet<{ one: number }>(db, sql`SELECT 1 AS one FROM billing_report_lines li JOIN billing_reports br ON br.id = li.report_id
     WHERE li.fee_id = ${feeId} AND br.id <> ${exceptReportId ?? ""} AND br.calc_status = 'Successful' AND br.bill_status <> 'Canceled'
       AND li.total_price > 0 LIMIT 1`));
 }
 
-export function collect(db: AppDb, sc: Scope, fee: EngineFee, contractName: string, opts: { readonly exceptReportId?: string } = {}): Activity[] {
+export async function collect(db: AppDb, sc: Scope, fee: EngineFee, contractName: string, opts: { readonly exceptReportId?: string } = {}): Promise<Activity[]> {
   switch (fee.operationType) {
     case "Recurring":
-      if (fee.chargeOneTime && alreadyCharged(db, fee.id, opts.exceptReportId)) return [];
+      if (fee.chargeOneTime && await alreadyCharged(db, fee.id, opts.exceptReportId)) return [];
       return [{ quantity: 1, activityDate: sc.from.slice(0, 10), referenceNumber: contractName, sku: null, lpNumber: null, facts: {} }];
-    case "Receiving": return receivingActivity(db, sc, fee);
-    case "Return": return returnActivity(db, sc, fee);
-    case "Pick & Pack": return taskActivity(db, sc, fee);
-    case "Shipment": return shipmentActivity(db, sc, fee);
-    case "Work Order": return workOrderActivity(db, sc, fee);
-    case "VAS": return vasActivity(db, sc, fee);
-    case "Storage": return storageActivity(db, sc, fee);
+    case "Receiving": return await receivingActivity(db, sc, fee);
+    case "Return": return await returnActivity(db, sc, fee);
+    case "Pick & Pack": return await taskActivity(db, sc, fee);
+    case "Shipment": return await shipmentActivity(db, sc, fee);
+    case "Work Order": return await workOrderActivity(db, sc, fee);
+    case "VAS": return await vasActivity(db, sc, fee);
+    case "Storage": return await storageActivity(db, sc, fee);
     default: return [];
   }
 }
@@ -491,9 +492,9 @@ export function priceFee(fee: EngineFee, activity: readonly Activity[]): { lines
 
 /* ---------------- run ---------------- */
 
-export function loadEngineFees(db: AppDb, contractId: string): EngineFee[] {
-  const fees = db.select().from(s.billingFees).where(eq(s.billingFees.contractId, contractId)).all();
-  const tiers = db.select().from(s.billingFeeTiers).all();
+export async function loadEngineFees(db: AppDb, contractId: string): Promise<EngineFee[]> {
+  const fees = await db.select().from(s.billingFees).where(eq(s.billingFees.contractId, contractId));
+  const tiers = await db.select().from(s.billingFeeTiers);
   return fees.map((f) => ({
     id: f.id, name: f.name, operationType: f.operationType, calculationType: f.calculationType, feeBy: normalizeFeeBy(f.operationType, f.feeBy), chargeBy: normalizeChargeBy(f.chargeBy),
     vasTypeId: f.vasTypeId, useMinPrice: Boolean(f.useMinPrice), minPrice: f.minPrice, useMaxPrice: Boolean(f.useMaxPrice), maxPrice: f.maxPrice, splitDay: f.splitDay,
@@ -528,16 +529,16 @@ export interface CalcResult {
  * Bill number: `YYMMDD` + a 10-digit daily sequence (16 digits, as Logiwa) so the
  * system is never capped at 999 bills a day.
  */
-export function wideBillNumber(tx: AppDb, at: Date = new Date()): string {
+export async function wideBillNumber(tx: AppDb, at: Date = new Date()): Promise<string> {
   const p = (v: number) => String(v).padStart(2, "0");
   const ymd = `${p(at.getUTCFullYear() % 100)}${p(at.getUTCMonth() + 1)}${p(at.getUTCDate())}`;
   // Data Setup › Code generation can set a prefix and the sequence length via the global "billNumber" row (REQ R2-9).
-  const fmt = tx.get<{ prefix: string; padding: number }>(sql`SELECT prefix, padding FROM code_sequences WHERE key = 'billNumber' AND warehouse_id = '*'`);
+  const fmt = await dbGet<{ prefix: string; padding: number }>(tx, sql`SELECT prefix, padding FROM code_sequences WHERE key = 'billNumber' AND warehouse_id = '*'`);
   const padding = Math.min(12, Math.max(3, fmt?.padding ?? 10));
   // Edit Info may have taken a number the daily sequence has not issued yet; skip any value already in use.
   for (let attempt = 0; attempt < 10_000; attempt++) {
-    const candidate = `${fmt?.prefix ?? ""}${ymd}${String(nextValue(tx, `bill16:${ymd}`)).padStart(padding, "0")}`;
-    const taken = tx.get<{ one: number }>(sql`SELECT 1 AS one FROM billing_reports WHERE bill_number = ${candidate} LIMIT 1`);
+    const candidate = `${fmt?.prefix ?? ""}${ymd}${String(await nextValue(tx, `bill16:${ymd}`)).padStart(padding, "0")}`;
+    const taken = await dbGet<{ one: number }>(tx, sql`SELECT 1 AS one FROM billing_reports WHERE bill_number = ${candidate} LIMIT 1`);
     if (!taken) return candidate;
   }
   throw new AppError("CONFLICT", "Could not allocate a free bill number for today. Check Data Setup › Code generation for the bill number format.");
@@ -546,30 +547,21 @@ export function wideBillNumber(tx: AppDb, at: Date = new Date()): string {
 const usDate = (d: string): string => { const [y, m, day] = d.split("-"); return `${m}/${day}/${y}`; };
 
 /** A Successful, non-canceled bill of the contract (other than `exceptId`) sharing a day with [start, endInclusive]. */
-export function overlappingBill(tx: AppDb, contractId: string, start: string, endInclusive: string, exceptId?: string): { id: string; billNumber: string; billStatus: string } | undefined {
-  return tx.get<{ id: string; billNumber: string; billStatus: string }>(sql`SELECT id, bill_number AS billNumber, bill_status AS billStatus FROM billing_reports
+export async function overlappingBill(tx: AppDb, contractId: string, start: string, endInclusive: string, exceptId?: string): Promise<{ id: string; billNumber: string; billStatus: string } | undefined> {
+  return await dbGet<{ id: string; billNumber: string; billStatus: string }>(tx, sql`SELECT id, bill_number AS "billNumber", bill_status AS "billStatus" FROM billing_reports
     WHERE contract_id = ${contractId} AND id <> ${exceptId ?? ""} AND bill_status <> 'Canceled' AND calc_status = 'Successful'
       AND substr(period_start, 1, 10) <= ${endInclusive} AND substr(period_end, 1, 10) >= ${start} LIMIT 1`) ?? undefined;
 }
 
 export const BILL_PERIOD_GUARD = "KS_BILL_PERIOD_OVERLAP";
-const guardedDbs = new WeakSet<object>();
 
 /**
- * DB-level guarantee (REQ R2-16 asks foundation for a real migration): triggers refuse any insert
- * or update that would leave two Successful, non-canceled bills of one contract sharing a day.
- * Idempotent (IF NOT EXISTS) and created once per connection.
+ * DB-level guarantee (REQ R2-16): triggers refuse any insert or update that would leave two
+ * Successful, non-canceled bills of one contract sharing a day. They are owned by migration
+ * `0001_billing_period_guard` (raises `KS_BILL_PERIOD_OVERLAP`); nothing is created at runtime.
  */
-export function ensureBillGuards(tx: AppDb): void {
-  const key = (tx as unknown as { $client?: object }).$client ?? (tx as object);
-  if (guardedDbs.has(key)) return;
-  const body = (row: "NEW") => sql.raw(`WHEN ${row}.bill_status <> 'Canceled' AND ${row}.calc_status = 'Successful' AND EXISTS (
-      SELECT 1 FROM billing_reports b WHERE b.contract_id = ${row}.contract_id AND b.id <> ${row}.id AND b.bill_status <> 'Canceled' AND b.calc_status = 'Successful'
-        AND substr(b.period_start, 1, 10) <= substr(${row}.period_end, 1, 10) AND substr(b.period_end, 1, 10) >= substr(${row}.period_start, 1, 10))
-    BEGIN SELECT RAISE(ABORT, '${BILL_PERIOD_GUARD}'); END`);
-  tx.run(sql`CREATE TRIGGER IF NOT EXISTS billing_reports_period_guard_ins BEFORE INSERT ON billing_reports FOR EACH ROW ${body("NEW")}`);
-  tx.run(sql`CREATE TRIGGER IF NOT EXISTS billing_reports_period_guard_upd BEFORE UPDATE OF bill_status, calc_status, period_start, period_end, contract_id ON billing_reports FOR EACH ROW ${body("NEW")}`);
-  guardedDbs.add(key);
+export async function ensureBillGuards(_tx: AppDb): Promise<void> {
+  // Kept for callers; the migration installs the triggers.
 }
 const addDays = (d: string, n: number): string => new Date(Date.parse(`${d.slice(0, 10)}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
@@ -578,63 +570,66 @@ const addDays = (d: string, n: number): string => new Date(Date.parse(`${d.slice
  * With `replaceReportId` the period's existing Draft bill is recalculated in place
  * (same id and bill number, lines rewritten): one bill per period, as Logiwa.
  */
-export function calculateContract(tx: AppDb, ctx: DomainCtx, contractId: string, period: Period, now: Date = new Date(), opts: { readonly replaceReportId?: string } = {}): CalcResult {
-  const contract = tx.select().from(s.billingContracts).where(eq(s.billingContracts.id, contractId)).get();
+export async function calculateContract(tx: AppDb, ctx: DomainCtx, contractId: string, period: Period, now: Date = new Date(), opts: { readonly replaceReportId?: string } = {}): Promise<CalcResult> {
+  const contract = (await tx.select().from(s.billingContracts).where(eq(s.billingContracts.id, contractId)).limit(1))[0];
   if (!contract) throw new Error("Billing contract not found");
-  const client = tx.select({ currency: s.clients.currency }).from(s.clients).where(eq(s.clients.id, contract.clientId)).get();
+  const client = (await tx.select({ currency: s.clients.currency }).from(s.clients).where(eq(s.clients.id, contract.clientId)).limit(1))[0];
   const sc: Scope = { clientId: contract.clientId, warehouseId: contract.warehouseId, from: isoStart(period.start), to: isoStart(period.end) };
   let lines: LineOut[] = [];
   let total = 0;
   let error: string | null = null;
   try {
-    const fees = loadEngineFees(tx, contractId);
-    if (fees.length === 0) throw new Error("The contract has no fees");
-    for (const fee of fees) {
-      const priced = priceFee(fee, collect(tx, sc, fee, contract.name, { exceptReportId: opts.replaceReportId }));
-      lines = [...lines, ...priced.lines];
-      total = r2(total + priced.total);
-    }
+    // A savepoint: a failing collector query must not abort the enclosing transaction (Postgres).
+    await inSavepoint(tx, async (sp) => {
+      const fees = await loadEngineFees(sp, contractId);
+      if (fees.length === 0) throw new Error("The contract has no fees");
+      for (const fee of fees) {
+        const priced = priceFee(fee, await collect(sp, sc, fee, contract.name, { exceptReportId: opts.replaceReportId }));
+        lines = [...lines, ...priced.lines];
+        total = r2(total + priced.total);
+      }
+    });
   } catch (e) {
     error = e instanceof Error ? e.message : "Calculation failed";
     lines = [];
     total = 0;
   }
   const periodEndIso = new Date(Date.parse(sc.to) - 1).toISOString();
-  ensureBillGuards(tx);
+  await ensureBillGuards(tx);
   // Last line of defence on every write path (Calculate, scheduler, a stale dry run): one live bill per contract period.
   if (!error) {
-    const clash = overlappingBill(tx, contractId, sc.from.slice(0, 10), periodEndIso.slice(0, 10), opts.replaceReportId);
+    const clash = await overlappingBill(tx, contractId, sc.from.slice(0, 10), periodEndIso.slice(0, 10), opts.replaceReportId);
     if (clash) throw new AppError("DUPLICATE", `${clash.billStatus} bill ${clash.billNumber} already covers part of this period. Replace or cancel it before billing the period again.`);
   }
   const existing = opts.replaceReportId
-    ? tx.select({ id: s.billingReports.id, billNumber: s.billingReports.billNumber, totalPrice: s.billingReports.totalPrice }).from(s.billingReports).where(eq(s.billingReports.id, opts.replaceReportId)).get()
+    ? (await tx.select({ id: s.billingReports.id, billNumber: s.billingReports.billNumber, totalPrice: s.billingReports.totalPrice }).from(s.billingReports).where(eq(s.billingReports.id, opts.replaceReportId)).limit(1))[0]
     : undefined;
-  const number = existing?.billNumber ?? wideBillNumber(tx, now);
+  const number = existing?.billNumber ?? await wideBillNumber(tx, now);
   const values = {
     calcStatus: error ? "Failed" as const : "Successful" as const, calculatedAt: now.toISOString(), periodStart: sc.from, periodEnd: periodEndIso, billStatus: "Draft" as const,
     totalPrice: total, currency: client?.currency ?? "USD", errorMessage: error,
   };
   let report: { id: string };
   if (existing) {
-    tx.delete(s.billingReportLines).where(eq(s.billingReportLines.reportId, existing.id)).run();
-    tx.update(s.billingReports).set({ ...values, updatedBy: ctx.userId, version: sql`${s.billingReports.version} + 1` }).where(eq(s.billingReports.id, existing.id)).run();
+    await tx.delete(s.billingReportLines).where(eq(s.billingReportLines.reportId, existing.id));
+    await tx.update(s.billingReports).set({ ...values, updatedBy: ctx.userId, version: sql`${s.billingReports.version} + 1` }).where(eq(s.billingReports.id, existing.id));
     report = { id: existing.id };
   } else {
-    report = tx.insert(s.billingReports).values({ ...values, contractId, billNumber: number, clientId: contract.clientId, warehouseId: contract.warehouseId, createdBy: ctx.userId })
-      .returning({ id: s.billingReports.id }).get();
+    report = (await tx.insert(s.billingReports).values({ ...values, contractId, billNumber: number, clientId: contract.clientId, warehouseId: contract.warehouseId, createdBy: ctx.userId })
+      .returning({ id: s.billingReports.id }))[0];
   }
   for (let i = 0; i < lines.length; i += 200) {
-    tx.insert(s.billingReportLines).values(lines.slice(i, i + 200).map((l) => ({ ...l, reportId: report.id }))).run();
+    await tx.insert(s.billingReportLines).values(lines.slice(i, i + 200).map((l) => ({ ...l, reportId: report.id })));
   }
   const prevCalc = contract.lastCalculatedAt;
   // Only a full, contract-aligned period advances the schedule; custom / to-date previews do not.
   const fullPeriod = periodEnd(period.start, contract.frequency) === period.end;
   const nextStart = fullPeriod && period.end > (contract.nextPeriodStart ?? "") ? period.end : contract.nextPeriodStart;
   // A failed run neither stamps Last calculation nor advances the schedule.
-  if (!error) tx.update(s.billingContracts).set({ lastCalculatedAt: now.toISOString(), nextPeriodStart: nextStart }).where(eq(s.billingContracts.id, contractId)).run();
-  if (existing) logUpdate(tx, ctx, "billing_report", report.id, number, { totalPrice: existing.totalPrice }, { totalPrice: total, recalculatedAt: now.toISOString() });
-  else logCreate(tx, ctx, "billing_report", report.id, number);
-  logContractEvent(tx, ctx, contractId, contract.name, {
+  if (!error) await tx.update(s.billingContracts).set({ lastCalculatedAt: now.toISOString(), nextPeriodStart: nextStart }).where(eq(s.billingContracts.id, contractId));
+  if (existing) await logUpdate(tx, ctx, "billing_report", report.id, number, { totalPrice: existing.totalPrice }, { totalPrice: total, recalculatedAt: now.toISOString() });
+  else await logCreate(tx, ctx, "billing_report", report.id, number);
+  await logContractEvent(tx, ctx, contractId, contract.name, {
     type: "Update", field: "lastCalculatedAt", from: prevCalc ?? "", to: now.toISOString(),
     message: `${existing ? "Recalculated" : "Calculated"} bill ${number} for ${usDate(period.start)} – ${usDate(addDays(period.end, -1))}${error ? ` (failed: ${error})` : ""}.`,
   });

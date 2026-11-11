@@ -5,9 +5,9 @@ import { listReceipts } from "@/server/repositories/receipts";
 
 export const GET = defineRoute({
   permission: "inventory.receiving_history.view",
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listReceipts(db, auth, query);
+    const { rows, total } = await listReceipts(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });

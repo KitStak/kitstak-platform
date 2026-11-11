@@ -7,20 +7,20 @@ import {
 
 export const GET = defineRoute({
   params: lookupItemParamsSchema,
-  handler: ({ db, auth, params }) => getLookup(db, auth.scope, params.type, params.id),
+  handler: async ({ db, auth, params }) => await getLookup(db, auth.scope, params.type, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: LOOKUP_MANAGE_PERMISSION,
   params: lookupItemParamsSchema,
   body: lookupUpdateSchema,
-  handler: ({ db, auth, actor, params, body }) =>
-    updateLookup(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.type, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) =>
+    await updateLookup(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.type, params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: LOOKUP_MANAGE_PERMISSION,
   params: lookupItemParamsSchema,
-  handler: ({ db, auth, actor, params }) =>
-    deleteLookup(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.type, params.id),
+  handler: async ({ db, auth, actor, params }) =>
+    await deleteLookup(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.type, params.id),
 });

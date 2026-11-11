@@ -11,6 +11,7 @@
  */
 import { sql, type SQL } from "drizzle-orm";
 import type { Tx } from "./types";
+import { dbAll } from "../db/sql";
 
 /** SO statuses whose remaining quantity is demand. */
 export const OPEN_SO_STATUSES = ["Open", "Shortage", "On Hold", "Ready to Pick", "Picking Started", "Ready to Sort",
@@ -61,7 +62,7 @@ export interface AtpFilter {
 
 function inFilter(column: string, values: readonly string[] | undefined): SQL {
   if (!values) return sql``;
-  if (values.length === 0) return sql` AND 0`;
+  if (values.length === 0) return sql` AND false`;
   return sql` AND ${sql.raw(column)} IN (${sql.join(values.map((v) => sql`${v}`), sql`, `)})`;
 }
 
@@ -78,30 +79,30 @@ export function atpComponentsSql(filter: AtpFilter = {}): SQL {
       UNION SELECT l.product_id, p.warehouse_id FROM purchase_order_lines l JOIN purchase_orders p ON p.id = l.purchase_order_id
         WHERE p.status IN (${list(OPEN_PO_STATUSES)})
     )
-    SELECT k.product_id AS productId, k.warehouse_id AS warehouseId, pr.client_id AS clientId,
+    SELECT k.product_id AS "productId", k.warehouse_id AS "warehouseId", pr.client_id AS "clientId",
       COALESCE((SELECT SUM(i.on_hand) FROM inventory i WHERE i.product_id = k.product_id AND i.warehouse_id = k.warehouse_id), 0) AS total,
       COALESCE((SELECT SUM(i.damaged) FROM inventory i WHERE i.product_id = k.product_id AND i.warehouse_id = k.warehouse_id), 0) AS damaged,
       COALESCE((SELECT SUM(a.qty) FROM inventory_allocations a JOIN inventory i ON i.id = a.inventory_id
         WHERE i.product_id = k.product_id AND i.warehouse_id = k.warehouse_id AND a.order_line_id IS NOT NULL
-          AND a.status IN ('Allocated','Picked','Sorted','Packed','Loaded')), 0) AS allocatedSo,
+          AND a.status IN ('Allocated','Picked','Sorted','Packed','Loaded')), 0) AS "allocatedSo",
       COALESCE((SELECT SUM(l.quantity - l.cancelled_quantity - l.shipped_quantity) FROM order_lines l JOIN shipment_orders o ON o.id = l.order_id
         WHERE l.product_id = k.product_id AND o.warehouse_id = k.warehouse_id AND o.deleted_at IS NULL
-          AND o.status IN (${list(OPEN_SO_STATUSES)})), 0) AS openSo,
-      COALESCE((SELECT SUM(MAX(l.ordered_quantity - l.received_quantity, 0) * l.uom_quantity) FROM purchase_order_lines l
+          AND o.status IN (${list(OPEN_SO_STATUSES)})), 0) AS "openSo",
+      COALESCE((SELECT SUM(GREATEST(l.ordered_quantity - l.received_quantity, 0) * l.uom_quantity) FROM purchase_order_lines l
         JOIN purchase_orders p ON p.id = l.purchase_order_id
-        WHERE l.product_id = k.product_id AND p.warehouse_id = k.warehouse_id AND p.status IN (${list(OPEN_PO_STATUSES)})), 0) AS openPo,
+        WHERE l.product_id = k.product_id AND p.warehouse_id = k.warehouse_id AND p.status IN (${list(OPEN_PO_STATUSES)})), 0) AS "openPo",
       COALESCE((SELECT SUM(i.on_hand - i.damaged) FROM inventory i JOIN locations loc ON loc.id = i.location_id
-        WHERE i.product_id = k.product_id AND i.warehouse_id = k.warehouse_id AND loc.prevent_inventory_sync = 0), 0) AS onHand,
+        WHERE i.product_id = k.product_id AND i.warehouse_id = k.warehouse_id AND NOT loc.prevent_inventory_sync), 0) AS "onHand",
       COALESCE((SELECT SUM(i.on_hand - i.allocated) FROM inventory i JOIN locations loc ON loc.id = i.location_id
-        WHERE i.product_id = k.product_id AND i.warehouse_id = k.warehouse_id AND +i.status = 'Stock' AND i.damage_reason IS NULL
-          AND loc.prevent_allocation = 0 AND loc.is_locked = 0 AND loc.is_active = 1), 0) AS pickable
+        WHERE i.product_id = k.product_id AND i.warehouse_id = k.warehouse_id AND i.status = 'Stock' AND i.damage_reason IS NULL
+          AND NOT loc.prevent_allocation AND NOT loc.is_locked AND loc.is_active), 0) AS pickable
     FROM keys k JOIN products pr ON pr.id = k.product_id
-    WHERE 1${inFilter("k.warehouse_id", filter.warehouseIds)}${inFilter("pr.client_id", filter.clientIds)}${inFilter("k.product_id", filter.productIds)}
+    WHERE true${inFilter("k.warehouse_id", filter.warehouseIds)}${inFilter("pr.client_id", filter.clientIds)}${inFilter("k.product_id", filter.productIds)}
     ORDER BY k.product_id, k.warehouse_id`;
 }
 
-export function getAtp(tx: Tx, filter: AtpFilter = {}): AtpRow[] {
-  return tx.all<AtpComponents>(atpComponentsSql(filter)).map((r) => computeAtp({
+export async function getAtp(tx: Tx, filter: AtpFilter = {}): Promise<AtpRow[]> {
+  return (await dbAll<AtpComponents>(tx, atpComponentsSql(filter))).map((r) => computeAtp({
     ...r, total: Number(r.total), damaged: Number(r.damaged), allocatedSo: Number(r.allocatedSo), openSo: Number(r.openSo),
     openPo: Number(r.openPo), onHand: Number(r.onHand), pickable: Number(r.pickable),
   }));

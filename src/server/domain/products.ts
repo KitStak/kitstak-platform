@@ -34,36 +34,36 @@ export const createProductSchema = z.object({
 });
 export type CreateProductInput = z.input<typeof createProductSchema>;
 
-export function createProduct(tx: Tx, ctx: DomainCtx, raw: CreateProductInput): ProductRow {
+export async function createProduct(tx: Tx, ctx: DomainCtx, raw: CreateProductInput): Promise<ProductRow> {
   const input = createProductSchema.parse(raw);
   checkScope(ctx, { clientId: input.clientId }, "Client");
-  const client = tx.select().from(schema.clients).where(eq(schema.clients.id, input.clientId)).get();
+  const client = (await tx.select().from(schema.clients).where(eq(schema.clients.id, input.clientId)).limit(1))[0];
   if (!client) throw new DomainError("VALIDATION", "Client not found");
-  const dup = tx.select({ id: schema.products.id }).from(schema.products)
-    .where(and(eq(schema.products.clientId, input.clientId), eq(schema.products.sku, input.sku))).get();
+  const dup = (await tx.select({ id: schema.products.id }).from(schema.products)
+    .where(and(eq(schema.products.clientId, input.clientId), eq(schema.products.sku, input.sku))).limit(1))[0];
   if (dup) throw new DomainError("DUPLICATE", `SKU ${input.sku} already exists for client ${client.code}.`);
   const barcode = input.barcode && input.barcode.length > 0 ? input.barcode : input.sku;
-  const product = tx.insert(schema.products).values({
+  const product = (await tx.insert(schema.products).values({
     ...input, barcode, status: "Active", isKit: input.productCategory === "Kit", createdBy: ctx.userId, updatedBy: ctx.userId,
-  }).returning().get();
-  const pack = tx.insert(schema.productPackTypes).values({
+  }).returning())[0];
+  const pack = (await tx.insert(schema.productPackTypes).values({
     productId: product.id, packType: input.uom, kind: "Primary", uomQty: 1, length: input.lengthIn, width: input.widthIn,
     height: input.heightIn, weight: input.weightOz / 16, weightUnit: "Pound", createdBy: ctx.userId, updatedBy: ctx.userId,
-  }).returning({ id: schema.productPackTypes.id }).get();
-  tx.insert(schema.productBarcodes).values({ productId: product.id, packTypeId: pack.id, barcode }).run();
-  recordCreate(tx, ctx, { entityType: "product", entityId: product.id, entityCode: product.sku });
+  }).returning({ id: schema.productPackTypes.id }))[0];
+  await tx.insert(schema.productBarcodes).values({ productId: product.id, packTypeId: pack.id, barcode });
+  await recordCreate(tx, ctx, { entityType: "product", entityId: product.id, entityCode: product.sku });
   return product;
 }
 
 /** Finds the client's product by seller SKU, creating it when missing. */
-export function ensureProductForListing(
+export async function ensureProductForListing(
   tx: Tx, ctx: DomainCtx,
   input: { clientId: string; sellerSku: string; name: string; price?: number; barcode?: string; weightOz?: number },
-): { product: ProductRow; created: boolean } {
-  const existing = tx.select().from(schema.products)
-    .where(and(eq(schema.products.clientId, input.clientId), eq(schema.products.sku, input.sellerSku.trim()))).get();
+): Promise<{ product: ProductRow; created: boolean }> {
+  const existing = (await tx.select().from(schema.products)
+    .where(and(eq(schema.products.clientId, input.clientId), eq(schema.products.sku, input.sellerSku.trim()))).limit(1))[0];
   if (existing) return { product: existing, created: false };
-  const product = createProduct(tx, ctx, {
+  const product = await createProduct(tx, ctx, {
     clientId: input.clientId, sku: input.sellerSku, name: input.name, price: input.price ?? 0, barcode: input.barcode, weightOz: input.weightOz ?? 0,
   });
   return { product, created: true };

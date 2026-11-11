@@ -74,22 +74,22 @@ describe("checkReturnLine (M04 enforcement helper)", () => {
 
 describe("return rules repository", () => {
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
 
-  it("saves with a version check, logs the change and keeps other account defaults", () => {
+  it("saves with a version check, logs the change and keeps other account defaults", async () => {
     const actor = { userId: w.userId, source: "Web" };
-    const v0 = getCompany(w.db).version;
-    const state = updateReturnRules(w.db, authFor(w), actor, { ...DEFAULT_RETURN_RULES, lotNumberMatch: false, version: v0 });
+    const v0 = (await getCompany(w.db)).version;
+    const state = await updateReturnRules(w.db, authFor(w), actor, { ...DEFAULT_RETURN_RULES, lotNumberMatch: false, version: v0 });
     expect(state.rules.lotNumberMatch).toBe(false);
     expect(state.version).toBe(v0 + 1);
-    expect(() => updateReturnRules(w.db, authFor(w), actor, { ...DEFAULT_RETURN_RULES, version: v0 })).toThrow(/changed/);
+    await expect(async () => await updateReturnRules(w.db, authFor(w), actor, { ...DEFAULT_RETURN_RULES, version: v0 })).rejects.toThrow(/changed/);
     // Saving the account defaults must not drop the return rules stored in the same JSON.
-    const c = getCompany(w.db);
-    updateCompanyDefaults(w.db, authFor(w), actor, { currency: "EUR", weightUnit: c.defaults.weightUnit, dimensionUnit: c.defaults.dimensionUnit, dateFormat: c.defaults.dateFormat, version: c.version } as never);
-    expect(getReturnRules(w.db).lotNumberMatch).toBe(false);
-    expect(getCompany(w.db).defaults.currency).toBe("EUR");
-    const stored = w.db.select({ d: companySettings.defaults }).from(companySettings).where(eq(companySettings.id, "company")).get();
+    const c = await getCompany(w.db);
+    await updateCompanyDefaults(w.db, authFor(w), actor, { currency: "EUR", weightUnit: c.defaults.weightUnit, dimensionUnit: c.defaults.dimensionUnit, dateFormat: c.defaults.dateFormat, version: c.version } as never);
+    expect((await getReturnRules(w.db)).lotNumberMatch).toBe(false);
+    expect((await getCompany(w.db)).defaults.currency).toBe("EUR");
+    const stored = (await w.db.select({ d: companySettings.defaults }).from(companySettings).where(eq(companySettings.id, "company")).limit(1))[0];
     expect((stored?.d as unknown as { returnRules: ReturnRules }).returnRules.lotNumberMatch).toBe(false);
   });
 });
@@ -168,7 +168,7 @@ describe("printout block designer", () => {
 
 describe("user email uniqueness", () => {
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
 
   it("normalizes and shape-checks emails", () => {
@@ -182,12 +182,12 @@ describe("user email uniqueness", () => {
     expect(r.error?.issues.find((i) => i.path[0] === "email")?.message).toBe(EMAIL_TAKEN_MESSAGE);
     expect(userInfoSchemaFor(false, undefined, new Set()).safeParse(values).success).toBe(true);
   });
-  it("isEmailTaken is case-insensitive and ignores the edited user", () => {
-    const row = w.db.select().from(users).get();
+  it("isEmailTaken is case-insensitive and ignores the edited user", async () => {
+    const row = (await w.db.select().from(users).limit(1))[0];
     expect(row).toBeTruthy();
-    expect(isEmailTaken(w.db, row!.email.toUpperCase())).toBe(true);
-    expect(isEmailTaken(w.db, row!.email, row!.id)).toBe(false);
-    expect(isEmailTaken(w.db, "nobody-here@kitstak.io")).toBe(false);
+    expect(await isEmailTaken(w.db, row!.email.toUpperCase())).toBe(true);
+    expect(await isEmailTaken(w.db, row!.email, row!.id)).toBe(false);
+    expect(await isEmailTaken(w.db, "nobody-here@kitstak.io")).toBe(false);
   });
 });
 

@@ -5,5 +5,5 @@ import { INVENTORY_PERMISSIONS as P } from "@/lib/grid-defs/inventory/permission
 
 export const GET = defineRoute({
   permission: [P.byLocationView, P.totalView],
-  handler: ({ db, auth }) => inventoryReasons(db, auth),
+  handler: async ({ db, auth }) => await inventoryReasons(db, auth),
 });

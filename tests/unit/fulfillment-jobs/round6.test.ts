@@ -28,23 +28,23 @@ let w: World;
 let auth: AuthContext;
 let jobType: string;
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], roleKeys: [], user: { id: w.userId, name: "Ada Admin", email: "admin@test.io" }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
-  jobType = w.db.insert(schema.jobTypes).values({
+  jobType = (await w.db.insert(schema.jobTypes).values({
     code: "All Orders", description: "All", warehouseId: w.warehouseId, operationType: "Picking", settings: jobTypeSettingsSchema.parse({}),
-  }).returning().get().id;
+  }).returning())[0].id;
 });
 afterEach(() => w.close());
 
-function wave(): string[] {
-  const rule = createWaveRule(w.db, auth, w.ctx, waveRuleInputSchema.parse({
+async function wave(): Promise<string[]> {
+  const rule = await createWaveRule(w.db, auth, w.ctx, waveRuleInputSchema.parse({
     name: "KS-R6", warehouseId: w.warehouseId, operationType: "Picking", jobTypeIds: [jobType], batchSize: 10,
     filters: [{ field: "orderQuantity", op: "rng", value: "1..10", label: "Order Quantity between 1 and 10" }],
   }));
-  runWave(w.db, w.ctx, rule.id, { runBy: "Admin" });
-  return w.db.select().from(schema.jobs).all().map((j) => j.id);
+  await runWave(w.db, w.ctx, rule.id, { runBy: "Admin" });
+  return (await w.db.select().from(schema.jobs)).map((j) => j.id);
 }
 
 describe("progress tone", () => {
@@ -67,22 +67,22 @@ describe("overdue jobs", () => {
     expect(JOBS_GRID.sortKeys).toContain("overdue");
   });
 
-  it("flags live jobs past their planned end and filters on it", () => {
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 10 });
-    createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    const ids = wave();
+  it("flags live jobs past their planned end and filters on it", async () => {
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 10 });
+    await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    const ids = await wave();
     expect(ids.length).toBeGreaterThan(0);
     const [late] = ids;
-    w.db.update(schema.jobs).set({ plannedEndAt: "2020-01-01T00:00:00.000Z" }).where(eq(schema.jobs.id, late as string)).run();
-    const all = listJobs(w.db, auth, { ...EMPTY_GRID_QUERY, pageSize: 50 });
+    await w.db.update(schema.jobs).set({ plannedEndAt: "2020-01-01T00:00:00.000Z" }).where(eq(schema.jobs.id, late as string));
+    const all = await listJobs(w.db, auth, { ...EMPTY_GRID_QUERY, pageSize: 50 });
     const row = all.rows.find((r) => r.id === late);
     expect(Number(row?.overdue)).toBe(1);
-    const only = listJobs(w.db, auth, { ...EMPTY_GRID_QUERY, pageSize: 50, filters: [{ field: "overdue", op: "bool", value: true }] });
+    const only = await listJobs(w.db, auth, { ...EMPTY_GRID_QUERY, pageSize: 50, filters: [{ field: "overdue", op: "bool", value: true }] });
     expect(only.rows.map((r) => r.id)).toEqual([late]);
     // A completed job is never overdue.
-    w.db.update(schema.jobs).set({ status: "Completed" }).where(eq(schema.jobs.id, late as string)).run();
-    expect(listJobs(w.db, auth, { ...EMPTY_GRID_QUERY, pageSize: 50, filters: [{ field: "overdue", op: "bool", value: true }] }).total).toBe(0);
+    await w.db.update(schema.jobs).set({ status: "Completed" }).where(eq(schema.jobs.id, late as string));
+    expect((await listJobs(w.db, auth, { ...EMPTY_GRID_QUERY, pageSize: 50, filters: [{ field: "overdue", op: "bool", value: true }] })).total).toBe(0);
   });
 });
 
@@ -93,26 +93,26 @@ describe("change-log actor (withM03Actor)", () => {
     expect(actorDisplayName(null)).toBe("System");
   });
 
-  it("stamps the request's M03 rows with the display name and leaves other modules' rows alone", () => {
+  it("stamps the request's M03 rows with the display name and leaves other modules' rows alone", async () => {
     const actor = { userId: w.userId, source: "admin@test.io" };
     const row = (entityType: string, entityId: string) => ({ entityType, entityId, type: "Update" as const, message: "m", userId: w.userId, source: "admin@test.io" });
-    w.db.insert(schema.changeLog).values(row("job", "before")).run();
-    withM03Actor(w.db, actor, auth, () => {
-      w.db.insert(schema.changeLog).values(row("job", "j1")).run();
-      w.db.insert(schema.changeLog).values(row("wave_rule", "r1")).run();
-      w.db.insert(schema.changeLog).values(row("shipment_order", "o1")).run();
+    await w.db.insert(schema.changeLog).values(row("job", "before"));
+    await withM03Actor(w.db, actor, auth, async () => {
+      await w.db.insert(schema.changeLog).values(row("job", "j1"));
+      await w.db.insert(schema.changeLog).values(row("wave_rule", "r1"));
+      await w.db.insert(schema.changeLog).values(row("shipment_order", "o1"));
     });
-    const src = (entityType: string, entityId: string) => w.db.select().from(schema.changeLog)
-      .where(and(eq(schema.changeLog.entityType, entityType), eq(schema.changeLog.entityId, entityId))).get()?.source;
-    expect(src("job", "j1")).toBe("Ada Admin");
-    expect(src("wave_rule", "r1")).toBe("Ada Admin");
-    expect(src("shipment_order", "o1")).toBe("admin@test.io");
-    expect(src("job", "before")).toBe("admin@test.io");
+    const src = async (entityType: string, entityId: string) => (await w.db.select().from(schema.changeLog)
+      .where(and(eq(schema.changeLog.entityType, entityType), eq(schema.changeLog.entityId, entityId))).limit(1))[0]?.source;
+    expect(await src("job", "j1")).toBe("Ada Admin");
+    expect(await src("wave_rule", "r1")).toBe("Ada Admin");
+    expect(await src("shipment_order", "o1")).toBe("admin@test.io");
+    expect(await src("job", "before")).toBe("admin@test.io");
   });
 
-  it("does not stamp when the handler throws", () => {
+  it("does not stamp when the handler throws", async () => {
     const actor = { userId: w.userId, source: "admin@test.io" };
-    expect(() => withM03Actor(w.db, actor, auth, () => { throw new Error("boom"); })).toThrow("boom");
+    await expect(async () => await withM03Actor(w.db, actor, auth, () => { throw new Error("boom"); })).rejects.toThrow("boom");
   });
 });
 
@@ -125,34 +125,34 @@ describe("pick-short preview", () => {
     expect(suggestResolution({ eligible: false, freeElsewhere: 3, retainsAllocation: false, preventsReallocation: false })).toBe(false);
   });
 
-  it("finds free stock outside the source location and a resolution job re-picks it", () => {
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 2 });
-    createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 2 }]));
-    const [jobId] = wave();
+  it("finds free stock outside the source location and a resolution job re-picks it", async () => {
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 2 });
+    await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 2 }]));
+    const [jobId] = await wave();
     // Stock arrives elsewhere after the wave allocated from A-01-01.
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageB, qty: 5 });
-    const pick = w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId as string), eq(schema.tasks.taskType, "Picking"))).get();
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageB, qty: 5 });
+    const pick = (await w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId as string), eq(schema.tasks.taskType, "Picking"))).limit(1))[0];
     expect(pick).toBeTruthy();
-    const p = pickShortPreview(w.db, auth, pick!.id);
+    const p = await pickShortPreview(w.db, auth, pick!.id);
     expect(p.eligible).toBe(true);
     expect(p.freeElsewhere).toBe(5);
     expect(p.locations.map((l) => l.code)).toEqual(["A-02-01"]);
     expect(p.suggestResolution).toBe(true);
-    const [res] = execute(w.db, w.ctx, { taskIds: [pick!.id], targetLocationId: w.loc.pack, targetLpId: null, qty: 1, createResolutionJob: p.suggestResolution });
+    const [res] = await execute(w.db, w.ctx, { taskIds: [pick!.id], targetLocationId: w.loc.pack, targetLpId: null, qty: 1, createResolutionJob: p.suggestResolution });
     expect(res?.shortQty).toBe(1);
     expect(res?.resolutionJobId).toBeTruthy();
-    const rj = w.db.select().from(schema.jobs).where(eq(schema.jobs.id, res!.resolutionJobId as string)).get();
+    const rj = (await w.db.select().from(schema.jobs).where(eq(schema.jobs.id, res!.resolutionJobId as string)).limit(1))[0];
     expect(rj?.isResolutionJob).toBe(true);
-    const order = w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, pick!.orderId as string)).get();
+    const order = (await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, pick!.orderId as string)).limit(1))[0];
     expect(order?.pickShortStatus).toBe("Open");
   });
 
-  it("does not suggest a resolution job when nothing is free elsewhere", () => {
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 2 });
-    createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 2 }]));
-    const [jobId] = wave();
-    const pick = w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId as string), eq(schema.tasks.taskType, "Picking"))).get();
-    const p = pickShortPreview(w.db, auth, pick!.id);
+  it("does not suggest a resolution job when nothing is free elsewhere", async () => {
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 2 });
+    await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 2 }]));
+    const [jobId] = await wave();
+    const pick = (await w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId as string), eq(schema.tasks.taskType, "Picking"))).limit(1))[0];
+    const p = await pickShortPreview(w.db, auth, pick!.id);
     expect(p.freeElsewhere).toBe(0);
     expect(p.suggestResolution).toBe(false);
   });

@@ -7,5 +7,5 @@ import { TASK_PERMISSIONS, taskExecuteSchema } from "@/server/repositories/platf
 export const POST = defineRoute({
   permission: TASK_PERMISSIONS.execute,
   body: taskExecuteSchema,
-  handler: ({ db, auth, actor, body }) => tasks.execute(db, domainCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await tasks.execute(db, domainCtx(actor, auth), body),
 });

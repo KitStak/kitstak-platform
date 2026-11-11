@@ -14,5 +14,5 @@ export const GET = defineRoute({
     warehouseId: z.string().trim().min(1).max(64),
     clientId: z.string().trim().max(64).optional(),
   }),
-  handler: ({ db, auth, query }) => listStockBuckets(db, auth.scope, { productId: query.productId, warehouseId: query.warehouseId, clientId: query.clientId || null }),
+  handler: async ({ db, auth, query }) => await listStockBuckets(db, auth.scope, { productId: query.productId, warehouseId: query.warehouseId, clientId: query.clientId || null }),
 });

@@ -19,7 +19,7 @@ async function Content({ params }: { readonly params: Promise<{ id: string }> })
   const auth = await getAuthContext();
   let initial = null;
   if (auth && can(auth, "automation.algorithms.view")) {
-    try { initial = getAlgorithm(await getAppDb(), auth, id); } catch { initial = null; }
+    try { initial = await getAlgorithm(await getAppDb(), auth, id); } catch { initial = null; }
   }
   return <AlgorithmEditor slug="allocation" id={id} initial={initial} />;
 }

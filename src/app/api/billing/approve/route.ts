@@ -10,8 +10,8 @@ import { approveContracts } from "@/server/repositories/billing";
 export const POST = defineRoute({
   permission: "settings.billing.edit",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => {
-    const result = approveContracts(db, auth, actor, body.ids);
+  handler: async ({ db, auth, actor, body }) => {
+    const result = await approveContracts(db, auth, actor, body.ids);
     // Nothing approved (e.g. a single contract with no fees): a real 409, not a 200 with a failure list.
     const first = result.failed[0];
     if (result.succeeded.length === 0 && first) throw new AppError("INVALID_STATE", first.message);

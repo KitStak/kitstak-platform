@@ -7,5 +7,5 @@ import { instantLocation } from "@/server/repositories/counts-sheet";
 export const GET = defineRoute({
   permission: [P.create, P.mobileInstant],
   query: z.object({ warehouseId: z.string().min(1).max(64), code: z.string().trim().min(1, "Scan a location").max(120) }),
-  handler: ({ db, auth, query }) => instantLocation(db, auth.scope, query.warehouseId, query.code),
+  handler: async ({ db, auth, query }) => await instantLocation(db, auth.scope, query.warehouseId, query.code),
 });

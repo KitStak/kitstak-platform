@@ -5,31 +5,30 @@ import { seededDb, type SeededDb } from "./fixtures";
 
 describe("scope", () => {
   let t: SeededDb;
-  afterEach(() => t.close());
+  afterEach(async () => await t.close());
 
-  it("admin sees all warehouses; a linked user only theirs; allClients => all", () => {
-    t = seededDb();
-    const admin = getScope(t.db, { id: t.ids.admin, role: "admin", allClients: true });
+  it("admin sees all warehouses; a linked user only theirs; allClients => all", async () => {
+    t = await seededDb();
+    const admin = await getScope(t.db, { id: t.ids.admin, role: "admin", allClients: true });
     expect([...admin.warehouseIds].sort()).toEqual([t.ids.wh1, t.ids.wh2]);
     expect(admin.clientIds).toBe("all");
-    expect(getScope(t.db, { id: t.ids.viewer, role: "viewer", allClients: false })).toEqual({ warehouseIds: [t.ids.wh1], clientIds: [t.ids.c1] });
+    expect(await getScope(t.db, { id: t.ids.viewer, role: "viewer", allClients: false })).toEqual({ warehouseIds: [t.ids.wh1], clientIds: [t.ids.c1] });
     // Unlinked non-admin falls back to every warehouse (pre-seed compatibility).
-    expect(getScope(t.db, { id: t.ids.operator, role: "operator", allClients: true }).warehouseIds).toHaveLength(2);
+    expect((await getScope(t.db, { id: t.ids.operator, role: "operator", allClients: true })).warehouseIds).toHaveLength(2);
   });
 
-  it("scopedWhere filters by warehouse and client columns", () => {
-    t = seededDb();
+  it("scopedWhere filters by warehouse and client columns", async () => {
+    t = await seededDb();
     const scope: Scope = { warehouseIds: [t.ids.wh2], clientIds: [t.ids.c1] };
-    const whRows = t.db.select({ id: warehouses.id }).from(warehouses).where(scopedWhere(warehouses, scope, { warehouseId: warehouses.id })).all();
+    const whRows = await t.db.select({ id: warehouses.id }).from(warehouses).where(scopedWhere(warehouses, scope, { warehouseId: warehouses.id }));
     expect(whRows.map((r) => r.id)).toEqual([t.ids.wh2]);
-    const cRows = t.db.select({ id: clients.id }).from(clients).where(scopedWhere(clients, scope, { clientId: clients.id })).all();
+    const cRows = await t.db.select({ id: clients.id }).from(clients).where(scopedWhere(clients, scope, { clientId: clients.id }));
     expect(cRows.map((r) => r.id)).toEqual([t.ids.c1]);
     expect(scopedWhere(clients, { warehouseIds: [], clientIds: "all" }, { clientId: clients.id })).toBeUndefined();
-    const none = t.db
+    const none = await t.db
       .select({ id: warehouses.id })
       .from(warehouses)
-      .where(scopedWhere(warehouses, { warehouseIds: [], clientIds: "all" }, { warehouseId: warehouses.id }))
-      .all();
+      .where(scopedWhere(warehouses, { warehouseIds: [], clientIds: "all" }, { warehouseId: warehouses.id }));
     expect(none).toEqual([]);
   });
 

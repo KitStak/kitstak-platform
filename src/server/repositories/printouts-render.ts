@@ -5,7 +5,8 @@
  * more sample or real records into a PDF with pdf-lib, or into ZPL II for label printers.
  * Powers the designer's live preview and template-aware printing from the order rail.
  */
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
+import { asc, desc } from "@/server/db/order";
 import { toBuffer } from "bwip-js/node";
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFImage, type PDFPage, type RGB } from "pdf-lib";
 import type { AppDb } from "@/server/api/db";
@@ -18,6 +19,7 @@ import {
   blockIdOf, columnsFor, CUSTOM_FIELD_PREFIX, DOCUMENT_COLUMNS, familyOf, isTwoDimensional, printFieldValue,
   type BarcodeSymbology, type PrintBlock, type PrintoutLayout, type PrintRecord, type PrintRecordLine,
 } from "@/lib/grid-defs/admin/printouts";
+import { mapSeq } from "@/server/db/sql";
 
 export type DocLine = PrintRecordLine;
 export type DocRecord = PrintRecord;
@@ -456,17 +458,17 @@ export interface SampleOption {
 }
 
 /** Recent shipment orders in scope, offered as preview samples for order-based types. */
-export function sampleOrders(db: AppDb, auth: AuthContext, limit = 12): SampleOption[] {
+export async function sampleOrders(db: AppDb, auth: AuthContext, limit = 12): Promise<SampleOption[]> {
   const where = scopedWhere(s.shipmentOrders, auth.viewScope);
-  return db.select({ id: s.shipmentOrders.id, code: s.shipmentOrders.code, customer: s.shipmentOrders.customerName, qty: s.shipmentOrders.totalQuantity, status: s.shipmentOrders.status })
-    .from(s.shipmentOrders).where(where).orderBy(desc(s.shipmentOrders.orderDate)).limit(limit).all()
+  return (await db.select({ id: s.shipmentOrders.id, code: s.shipmentOrders.code, customer: s.shipmentOrders.customerName, qty: s.shipmentOrders.totalQuantity, status: s.shipmentOrders.status })
+    .from(s.shipmentOrders).where(where).orderBy(desc(s.shipmentOrders.orderDate)).limit(limit))
     .map((o) => ({ id: o.id, label: o.code, description: `${o.customer} · ${o.qty} units · ${o.status}` }));
 }
 
 /** Active custom field definitions for an entity, as bindable fields (`custom:<slot>`). */
-export function customBindableFields(db: AppDb, entityType: "shipment_order" | "product" | "location"): { key: string; label: string; sample: string }[] {
-  return db.select({ slot: s.customFieldDefs.slot, name: s.customFieldDefs.name }).from(s.customFieldDefs)
-    .where(eq(s.customFieldDefs.entityType, entityType)).all()
+export async function customBindableFields(db: AppDb, entityType: "shipment_order" | "product" | "location"): Promise<{ key: string; label: string; sample: string }[]> {
+  return (await db.select({ slot: s.customFieldDefs.slot, name: s.customFieldDefs.name }).from(s.customFieldDefs)
+    .where(eq(s.customFieldDefs.entityType, entityType)))
     .map((d) => ({ key: `${CUSTOM_FIELD_PREFIX}${d.slot}`, label: `Custom · ${d.name}`, sample: d.name }));
 }
 
@@ -476,13 +478,13 @@ const customValues = (raw: unknown): Record<string, string> =>
     .map(([k, v]) => [`${CUSTOM_FIELD_PREFIX}${k}`, typeof v === "boolean" ? (v ? "Yes" : "No") : String(v)]));
 
 /** A real order as a printable record (scope-checked). */
-export function orderRecord(db: AppDb, auth: AuthContext, orderId: string): DocRecord | null {
-  const o = db.select().from(s.shipmentOrders).where(eq(s.shipmentOrders.id, orderId)).get();
+export async function orderRecord(db: AppDb, auth: AuthContext, orderId: string): Promise<DocRecord | null> {
+  const o = (await db.select().from(s.shipmentOrders).where(eq(s.shipmentOrders.id, orderId)).limit(1))[0];
   if (!o || !auth.scope.warehouseIds.includes(o.warehouseId) || (auth.scope.clientIds !== "all" && !auth.scope.clientIds.includes(o.clientId))) return null;
-  const client = db.select({ name: s.clients.name }).from(s.clients).where(eq(s.clients.id, o.clientId)).get();
-  const wh = db.select().from(s.warehouses).where(eq(s.warehouses.id, o.warehouseId)).get();
-  const lines = db.select({ sku: s.products.sku, name: s.products.name, qty: s.orderLines.quantity, price: s.orderLines.unitPrice, lot: s.orderLines.lotNumber, uom: s.orderLines.packType })
-    .from(s.orderLines).innerJoin(s.products, eq(s.products.id, s.orderLines.productId)).where(eq(s.orderLines.orderId, o.id)).orderBy(asc(s.products.sku)).all();
+  const client = (await db.select({ name: s.clients.name }).from(s.clients).where(eq(s.clients.id, o.clientId)).limit(1))[0];
+  const wh = (await db.select().from(s.warehouses).where(eq(s.warehouses.id, o.warehouseId)).limit(1))[0];
+  const lines = await db.select({ sku: s.products.sku, name: s.products.name, qty: s.orderLines.quantity, price: s.orderLines.unitPrice, lot: s.orderLines.lotNumber, uom: s.orderLines.packType })
+    .from(s.orderLines).innerJoin(s.products, eq(s.products.id, s.orderLines.productId)).where(eq(s.orderLines.orderId, o.id)).orderBy(asc(s.products.sku));
   return {
     code: o.code, reference: o.storeOrderNumber ?? undefined, date: o.orderDate, clientName: client?.name, carrier: [o.carrier, o.shippingService].filter(Boolean).join(" / ") || undefined,
     shipTo: [o.customerName, o.shipAddress, o.shipAddress2 ?? "", `${o.shipCity}, ${o.shipState} ${o.shipZip}`, o.shipCountry].filter(Boolean),
@@ -512,10 +514,10 @@ export function builtInSample(typeKey: string): DocRecord {
   };
 }
 
-export function recordsForPreview(db: AppDb, auth: AuthContext, typeKey: string, sampleIds: readonly string[]): DocRecord[] {
+export async function recordsForPreview(db: AppDb, auth: AuthContext, typeKey: string, sampleIds: readonly string[]): Promise<DocRecord[]> {
   if (familyOf(typeKey) === "document" && sampleIds.length) {
     const ids = sampleIds.slice(0, 5);
-    const found = db.select({ id: s.shipmentOrders.id }).from(s.shipmentOrders).where(inArray(s.shipmentOrders.id, ids)).all().map((r) => orderRecord(db, auth, r.id)).filter((r): r is DocRecord => r !== null);
+    const found = (await mapSeq((await db.select({ id: s.shipmentOrders.id }).from(s.shipmentOrders).where(inArray(s.shipmentOrders.id, ids))), async (r) => await orderRecord(db, auth, r.id))).filter((r): r is DocRecord => r !== null);
     if (found.length) return found;
   }
   return [builtInSample(typeKey)];

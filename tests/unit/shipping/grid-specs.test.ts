@@ -24,20 +24,20 @@ describe("shipping grid specs", () => {
     });
   }
 
-  it("every sort runs against the DB for the plan grids and the order picker", () => {
-    const w = createWorld();
+  it("every sort runs against the DB for the plan grids and the order picker", async () => {
+    const w = await createWorld();
     try {
       const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
       const auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
-      const run = (spec: GridSpec, list: (q: typeof EMPTY_GRID_QUERY) => unknown) => {
-        for (const field of spec.sortFields) expect(() => list({ ...EMPTY_GRID_QUERY, sort: [{ field, dir: "asc" }], q: "SO" })).not.toThrow();
+      const run = async (spec: GridSpec, list: (q: typeof EMPTY_GRID_QUERY) => Promise<unknown>) => {
+        for (const field of spec.sortFields) await list({ ...EMPTY_GRID_QUERY, sort: [{ field, dir: "asc" }], q: "SO" });
       };
-      run(ELIGIBLE_GRID, (q) => listEligibleOrders(w.db, auth, q, { warehouseId: w.warehouseId }));
-      run(PLAN_GRID, (q) => listPlans(w.db, auth, q));
-      run(PLAN_ORDER_GRID, (q) => listPlanOrders(w.db, auth, q));
-      run(PLAN_LP_GRID, (q) => listPlanLps(w.db, auth, q));
+      await run(ELIGIBLE_GRID, async (q) => await listEligibleOrders(w.db, auth, q, { warehouseId: w.warehouseId }));
+      await run(PLAN_GRID, async (q) => await listPlans(w.db, auth, q));
+      await run(PLAN_ORDER_GRID, async (q) => await listPlanOrders(w.db, auth, q));
+      await run(PLAN_LP_GRID, async (q) => await listPlanLps(w.db, auth, q));
     } finally {
-      w.close();
+      await w.close();
     }
   });
 });

@@ -3,7 +3,8 @@
  * vendors): whitelisted filters (`f.<field>`), Equal / Starts With quick search and
  * multi-sort, all as bound SQL. Field definitions live in `@/lib/grid-defs/receiving`.
  */
-import { asc, desc, sql, type SQL } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
+import { asc, desc } from "@/server/db/order";
 import { AppError } from "@/server/api/errors";
 import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/server/query/filters";
 import type { GridFilter, GridQuery } from "@/server/query/grid-query";

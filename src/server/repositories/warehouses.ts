@@ -75,23 +75,23 @@ const openOrdersSql = sql<number>`(SELECT COUNT(*) FROM shipment_orders so WHERE
 const openPosSql = sql<number>`(SELECT COUNT(*) FROM purchase_orders po WHERE po.warehouse_id = ${qc(w.id)} AND po.status IN ('Pending','Started','Receiving'))`;
 const openJobsSql = sql<number>`(SELECT COUNT(*) FROM jobs j WHERE j.warehouse_id = ${qc(w.id)} AND j.status IN ('Pending','Started','In Progress'))`;
 
-export function listWarehouses(db: AppDb, auth: AuthContext, query: GridQuery): { rows: WarehouseRow[]; total: number } {
+export async function listWarehouses(db: AppDb, auth: AuthContext, query: GridQuery): Promise<{ rows: WarehouseRow[]; total: number }> {
   const grid = compileGrid(BINDING, query, [scopeOf(auth)]);
-  const result = paginate(
+  const result = await paginate(
     db.select({
       id: w.id, code: w.code, name: w.name, prefix: w.prefix, address: addressSql, city: w.city, state: w.state, country: w.country,
       contactName: w.contactName, contactPhone: w.contactPhone, email: w.email, type: w.type, timezone: w.timezone,
       isDefault: w.isDefault, isActive: w.isActive, locationCount: locationCountSql,
       openWork: sql<number>`${openOrdersSql} + ${openPosSql} + ${openJobsSql}`, version: w.version, createdAt: w.createdAt,
     }).from(w).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(w).where(grid.where).get()?.n ?? 0,
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(w).where(grid.where).limit(1))[0]?.n ?? 0,
     { page: query.page, pageSize: query.pageSize },
   );
   return { rows: result.rows.map((r) => ({ ...r, isDefault: Boolean(r.isDefault), isActive: Boolean(r.isActive) })) as WarehouseRow[], total: result.total };
 }
 
-export function loadWarehouse(db: AppDb, auth: AuthContext, id: string): typeof w.$inferSelect {
-  const row = assertFound(db.select().from(w).where(eq(w.id, id)).get(), "Warehouse");
+export async function loadWarehouse(db: AppDb, auth: AuthContext, id: string): Promise<typeof w.$inferSelect> {
+  const row = assertFound((await db.select().from(w).where(eq(w.id, id)).limit(1))[0], "Warehouse");
   assertWarehouseInScope(auth, row.id, "Warehouse");
   return row;
 }
@@ -102,24 +102,24 @@ export interface OpenWork {
   readonly jobs: number;
 }
 
-export function openWorkOf(db: AppDb, id: string): OpenWork {
-  const row = db.select({ orders: openOrdersSql, purchaseOrders: openPosSql, jobs: openJobsSql }).from(w).where(eq(w.id, id)).get();
+export async function openWorkOf(db: AppDb, id: string): Promise<OpenWork> {
+  const row = (await db.select({ orders: openOrdersSql, purchaseOrders: openPosSql, jobs: openJobsSql }).from(w).where(eq(w.id, id)).limit(1))[0];
   return { orders: row?.orders ?? 0, purchaseOrders: row?.purchaseOrders ?? 0, jobs: row?.jobs ?? 0 };
 }
 
-export function getWarehouse(db: AppDb, auth: AuthContext, id: string) {
-  const row = loadWarehouse(db, auth, id);
-  const locs = resolveIds(db, "locations", [row.defaultReceivingLocationId, row.defaultShipLocationId, row.defaultReturnLocationId]);
+export async function getWarehouse(db: AppDb, auth: AuthContext, id: string) {
+  const row = await loadWarehouse(db, auth, id);
+  const locs = await resolveIds(db, "locations", [row.defaultReceivingLocationId, row.defaultShipLocationId, row.defaultReturnLocationId]);
   const start = from24h(row.dayShiftStart);
   const end = from24h(row.dayShiftEnd);
-  const stats = db.select({
+  const stats = (await db.select({
     locations: locationCountSql,
     zones: sql<number>`(SELECT COUNT(DISTINCT COALESCE(l.location_zone_id, l.zone)) FROM locations l WHERE l.warehouse_id = ${qc(w.id)})`,
     lpTypes: sql<number>`(SELECT COUNT(*) FROM lp_types t WHERE t.warehouse_id = ${qc(w.id)})`,
     carts: sql<number>`(SELECT COUNT(*) FROM mobile_carts c WHERE c.warehouse_id = ${qc(w.id)})`,
     packages: sql<number>`(SELECT COUNT(*) FROM shipment_packages p WHERE p.warehouse_id = ${qc(w.id)})`,
     onHand: sql<number>`(SELECT COALESCE(SUM(i.on_hand), 0) FROM inventory i WHERE i.warehouse_id = ${qc(w.id)})`,
-  }).from(w).where(eq(w.id, id)).get();
+  }).from(w).where(eq(w.id, id)).limit(1))[0];
   return {
     ...row,
     shiftStart: start.time, shiftStartZone: start.zone, shiftEnd: end.time, shiftEndZone: end.zone,
@@ -128,21 +128,20 @@ export function getWarehouse(db: AppDb, auth: AuthContext, id: string) {
     defaultShipLocationCode: row.defaultShipLocationId ? locs.get(row.defaultShipLocationId) ?? null : null,
     defaultReturnLocationCode: row.defaultReturnLocationId ? locs.get(row.defaultReturnLocationId) ?? null : null,
     stats: { locations: stats?.locations ?? 0, zones: stats?.zones ?? 0, lpTypes: stats?.lpTypes ?? 0, carts: stats?.carts ?? 0, packages: stats?.packages ?? 0, onHand: stats?.onHand ?? 0 },
-    openWork: openWorkOf(db, id),
+    openWork: await openWorkOf(db, id),
   };
 }
 
-export type WarehouseDetail = ReturnType<typeof getWarehouse>;
+export type WarehouseDetail = Awaited<ReturnType<typeof getWarehouse>>;
 
 /** Locations of one area type for the default-location pickers. */
-export function warehouseLocationOptions(db: AppDb, auth: AuthContext, id: string, areaTypes: readonly string[]) {
-  loadWarehouse(db, auth, id);
-  return db.select({ id: s.locations.id, code: s.locations.code, areaType: s.locations.areaType })
+export async function warehouseLocationOptions(db: AppDb, auth: AuthContext, id: string, areaTypes: readonly string[]) {
+  await loadWarehouse(db, auth, id);
+  return await db.select({ id: s.locations.id, code: s.locations.code, areaType: s.locations.areaType })
     .from(s.locations)
     .where(and(eq(s.locations.warehouseId, id), areaTypes.length ? inArray(s.locations.areaType, areaTypes as never[]) : undefined))
     .orderBy(s.locations.code)
-    .limit(500)
-    .all();
+    .limit(500);
 }
 
 /* ---------------- writes ---------------- */
@@ -153,11 +152,11 @@ const AREA_FOR: Readonly<Record<"defaultReceivingLocationId" | "defaultShipLocat
   defaultReturnLocationId: ["Returns", "Receiving"],
 };
 
-function assertDefaultLocations(db: AppDb, warehouseId: string | null, input: WarehouseSave): void {
+async function assertDefaultLocations(db: AppDb, warehouseId: string | null, input: WarehouseSave): Promise<void> {
   for (const key of Object.keys(AREA_FOR) as (keyof typeof AREA_FOR)[]) {
     const id = input[key];
     if (!id) continue;
-    const loc = db.select({ warehouseId: s.locations.warehouseId, areaType: s.locations.areaType, code: s.locations.code }).from(s.locations).where(eq(s.locations.id, id)).get();
+    const loc = (await db.select({ warehouseId: s.locations.warehouseId, areaType: s.locations.areaType, code: s.locations.code }).from(s.locations).where(eq(s.locations.id, id)).limit(1))[0];
     const message = !warehouseId ? "Save the warehouse before choosing its locations"
       : !loc || loc.warehouseId !== warehouseId ? "Pick a location of this warehouse"
       : !AREA_FOR[key].includes(loc.areaType ?? "") ? `${loc.code} is a ${loc.areaType ?? "untyped"} location; pick a ${AREA_FOR[key].join(" or ")} location`
@@ -196,13 +195,13 @@ function columnsFor(input: WarehouseSave) {
   };
 }
 
-function assertCodeFree(db: AppDb, code: string, exceptId?: string): void {
-  const clash = db.select({ id: w.id }).from(w).where(sql`lower(${w.code}) = lower(${code})`).get();
+async function assertCodeFree(db: AppDb, code: string, exceptId?: string): Promise<void> {
+  const clash = (await db.select({ id: w.id }).from(w).where(sql`lower(${w.code}) = lower(${code})`).limit(1))[0];
   if (clash && clash.id !== exceptId) throw duplicateError("code", `Warehouse ${code} already exists`);
 }
 
-function display(db: AppDb, row: typeof w.$inferSelect): Record<string, unknown> {
-  const locs = resolveIds(db, "locations", [row.defaultReceivingLocationId, row.defaultShipLocationId, row.defaultReturnLocationId]);
+async function display(db: AppDb, row: typeof w.$inferSelect): Promise<Record<string, unknown>> {
+  const locs = await resolveIds(db, "locations", [row.defaultReceivingLocationId, row.defaultShipLocationId, row.defaultReturnLocationId]);
   const { id: _id, createdAt: _c, createdBy: _cb, updatedAt: _u, updatedBy: _ub, version: _v, defaultReceivingLocationId, defaultShipLocationId, defaultReturnLocationId, ...rest } = row;
   void _id; void _c; void _cb; void _u; void _ub; void _v;
   return {
@@ -229,14 +228,14 @@ export function starterLocationCode(prefix: string, suffix: string): string {
   return `${prefix.trim().toUpperCase()}-${suffix}`;
 }
 
-export function createWarehouse(tx: AppDb, auth: AuthContext, actor: Actor, input: WarehouseSave): { id: string; code: string; starterLocations: string[] } {
+export async function createWarehouse(tx: AppDb, auth: AuthContext, actor: Actor, input: WarehouseSave): Promise<{ id: string; code: string; starterLocations: string[] }> {
   if (auth.user.role !== "admin") throw new AppError("FORBIDDEN", "Only administrators can add warehouses");
-  assertCodeFree(tx, input.code.trim());
-  assertDefaultLocations(tx, null, { ...input, defaultReceivingLocationId: null, defaultShipLocationId: null, defaultReturnLocationId: null });
-  const first = (tx.select({ n: sql<number>`count(*)` }).from(w).get()?.n ?? 0) === 0;
-  const row = tx.insert(w).values({ ...columnsFor(input), defaultReceivingLocationId: null, defaultShipLocationId: null, defaultReturnLocationId: null, isDefault: first, createdBy: actor.userId, updatedBy: actor.userId })
-    .returning({ id: w.id, code: w.code }).get();
-  logCreate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: row.id, entityCode: row.code });
+  await assertCodeFree(tx, input.code.trim());
+  await assertDefaultLocations(tx, null, { ...input, defaultReceivingLocationId: null, defaultShipLocationId: null, defaultReturnLocationId: null });
+  const first = ((await tx.select({ n: sql<number>`count(*)` }).from(w).limit(1))[0]?.n ?? 0) === 0;
+  const row = (await tx.insert(w).values({ ...columnsFor(input), defaultReceivingLocationId: null, defaultShipLocationId: null, defaultReturnLocationId: null, isDefault: first, createdBy: actor.userId, updatedBy: actor.userId })
+    .returning({ id: w.id, code: w.code }))[0];
+  await logCreate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: row.id, entityCode: row.code });
   const starterLocations: string[] = [];
   if (input.createStarterLocations) {
     // The request's scope was resolved before the warehouse existed; widen it for this transaction only.
@@ -245,45 +244,45 @@ export function createWarehouse(tx: AppDb, auth: AuthContext, actor: Actor, inpu
     for (const s0 of STARTER_LOCATIONS) {
       const code = starterLocationCode(input.prefix, s0.suffix);
       const save = locationSaveSchema.parse({ info: { ...LOCATION_INFO_DEFAULTS, code, warehouseId: row.id, areaType: s0.areaType, locationType: s0.locationType, displayMember: code }, productCapacities: [], lpCapacities: [] });
-      const loc = createLocation(tx, scoped, actor, save);
+      const loc = await createLocation(tx, scoped, actor, save);
       starterLocations.push(loc.code);
       if (s0.defaultKey) defaults[s0.defaultKey] = loc.id;
     }
-    tx.update(w).set(defaults).where(eq(w.id, row.id)).run();
+    await tx.update(w).set(defaults).where(eq(w.id, row.id));
   }
   return { ...row, starterLocations };
 }
 
-export function updateWarehouse(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: WarehouseSave): { id: string; code: string; version: number } {
-  const before = loadWarehouse(tx, auth, id);
+export async function updateWarehouse(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: WarehouseSave): Promise<{ id: string; code: string; version: number }> {
+  const before = await loadWarehouse(tx, auth, id);
   assertVersion(before.version, input.version);
-  assertCodeFree(tx, input.code.trim(), id);
-  assertDefaultLocations(tx, id, input);
-  const snapshot = display(tx, before);
-  const after = tx.update(w).set({ ...columnsFor(input), updatedBy: actor.userId, version: sql`${w.version} + 1` }).where(eq(w.id, id)).returning().get();
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: id, entityCode: after.code }, snapshot, display(tx, after));
+  await assertCodeFree(tx, input.code.trim(), id);
+  await assertDefaultLocations(tx, id, input);
+  const snapshot = await display(tx, before);
+  const after = (await tx.update(w).set({ ...columnsFor(input), updatedBy: actor.userId, version: sql`${w.version} + 1` }).where(eq(w.id, id)).returning())[0];
+  await logUpdate(tx, domainCtxOf(actor, auth), { entityType: ENTITY, entityId: id, entityCode: after.code }, snapshot, await display(tx, after));
   return { id, code: after.code, version: after.version };
 }
 
-export function setDefaultWarehouse(tx: AppDb, auth: AuthContext, actor: Actor, id: string): { id: string; code: string } {
-  const row = loadWarehouse(tx, auth, id);
+export async function setDefaultWarehouse(tx: AppDb, auth: AuthContext, actor: Actor, id: string): Promise<{ id: string; code: string }> {
+  const row = await loadWarehouse(tx, auth, id);
   if (!row.isActive) throw new AppError("INVALID_STATE", `${row.code} is inactive; activate it before making it the default`);
   if (row.isDefault) throw new AppError("INVALID_STATE", `${row.code} is already the default warehouse`);
   const ctx = domainCtxOf(actor, auth);
-  const previous = tx.select({ id: w.id, code: w.code }).from(w).where(and(eq(w.isDefault, true), ne(w.id, id))).all();
+  const previous = await tx.select({ id: w.id, code: w.code }).from(w).where(and(eq(w.isDefault, true), ne(w.id, id)));
   for (const p of previous) {
-    tx.update(w).set({ isDefault: false, updatedBy: actor.userId, version: sql`${w.version} + 1` }).where(eq(w.id, p.id)).run();
-    logUpdate(tx, ctx, { entityType: ENTITY, entityId: p.id, entityCode: p.code }, { isDefault: true }, { isDefault: false });
+    await tx.update(w).set({ isDefault: false, updatedBy: actor.userId, version: sql`${w.version} + 1` }).where(eq(w.id, p.id));
+    await logUpdate(tx, ctx, { entityType: ENTITY, entityId: p.id, entityCode: p.code }, { isDefault: true }, { isDefault: false });
   }
-  tx.update(w).set({ isDefault: true, updatedBy: actor.userId, version: sql`${w.version} + 1` }).where(eq(w.id, id)).run();
-  logUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.code }, { isDefault: false }, { isDefault: true });
+  await tx.update(w).set({ isDefault: true, updatedBy: actor.userId, version: sql`${w.version} + 1` }).where(eq(w.id, id));
+  await logUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.code }, { isDefault: false }, { isDefault: true });
   return { id, code: row.code };
 }
 
 /** Why a warehouse can't be deactivated, or null. */
-export function deactivateBlocker(db: AppDb, row: Pick<typeof w.$inferSelect, "id" | "code" | "isDefault">): string | null {
+export async function deactivateBlocker(db: AppDb, row: Pick<typeof w.$inferSelect, "id" | "code" | "isDefault">): Promise<string | null> {
   if (row.isDefault) return `${row.code} is the default warehouse; make another warehouse the default first`;
-  const work = openWorkOf(db, row.id);
+  const work = await openWorkOf(db, row.id);
   const parts = [
     work.orders ? `${work.orders} open ${work.orders === 1 ? "order" : "orders"}` : null,
     work.purchaseOrders ? `${work.purchaseOrders} open ${work.purchaseOrders === 1 ? "PO" : "POs"}` : null,
@@ -292,16 +291,16 @@ export function deactivateBlocker(db: AppDb, row: Pick<typeof w.$inferSelect, "i
   return parts.length ? `${row.code} has ${parts.join(", ")}` : null;
 }
 
-export function setWarehousesActive(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], active: boolean): BulkResult {
+export async function setWarehousesActive(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], active: boolean): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const row = loadWarehouse(inner, auth, id);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const row = await loadWarehouse(inner, auth, id);
     if (row.isActive === active) throw new AppError("INVALID_STATE", `${row.code} is already ${active ? "active" : "inactive"}`);
     if (!active) {
-      const reason = deactivateBlocker(inner, row);
+      const reason = await deactivateBlocker(inner, row);
       if (reason) throw new AppError("INVALID_STATE", reason);
     }
-    inner.update(w).set({ isActive: active, updatedBy: actor.userId, version: sql`${w.version} + 1` }).where(eq(w.id, id)).run();
-    logUpdate(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.code }, { isActive: row.isActive }, { isActive: active });
+    await inner.update(w).set({ isActive: active, updatedBy: actor.userId, version: sql`${w.version} + 1` }).where(eq(w.id, id));
+    await logUpdate(inner, ctx, { entityType: ENTITY, entityId: id, entityCode: row.code }, { isActive: row.isActive }, { isActive: active });
   });
 }

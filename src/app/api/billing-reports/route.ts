@@ -7,9 +7,9 @@ import { listReports } from "@/server/repositories/billing-reports";
 export const GET = defineRoute({
   permission: ["settings.billing_report.view", "settings.billing.view"],
   query: z.object({ contractId: z.string().max(64).optional() }).passthrough(),
-  handler: ({ db, auth, grid, query }) => {
+  handler: async ({ db, auth, grid, query }) => {
     const q = grid();
-    const { rows, total } = listReports(db, auth, q, query.contractId ?? null);
+    const { rows, total } = await listReports(db, auth, q, query.contractId ?? null);
     return listResult(rows, { total, page: q.page, pageSize: q.pageSize });
   },
 });

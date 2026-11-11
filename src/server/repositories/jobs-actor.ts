@@ -10,6 +10,7 @@
 import { sql } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import type { AuthContext } from "@/server/auth/context";
+import { dbGet, dbRun } from "@/server/db/sql";
 
 export const M03_ACTOR_ENTITIES = ["job", "wave_rule", "job_type", "wave"] as const;
 
@@ -23,30 +24,30 @@ export function actorDisplayName(user: { readonly name?: string | null; readonly
 
 type Actor = { readonly userId: string | null; readonly source: string };
 
-function maxRowId(db: AppDb): number {
-  return Number(db.get<{ n: number | null }>(sql`SELECT MAX(rowid) AS n FROM change_log`)?.n ?? 0);
+async function maxRowId(db: AppDb): Promise<number> {
+  return Number((await dbGet<{ n: number | null }>(db, sql`SELECT MAX(rowid) AS n FROM change_log`))?.n ?? 0);
 }
 
 /** Rewrites the email source of this request's M03 change-log rows to the display name. */
-export function stampM03Actor(db: AppDb, actor: Actor, auth: AuthContext, sinceRowId: number): number {
+export async function stampM03Actor(db: AppDb, actor: Actor, auth: AuthContext, sinceRowId: number): Promise<number> {
   const name = actorDisplayName(auth.user);
   if (!actor.userId || !actor.source || name === actor.source) return 0;
   const list = sql.join(M03_ACTOR_ENTITIES.map((e) => sql`${e}`), sql`, `);
-  const res = db.run(sql`UPDATE change_log SET source = ${name}
+  const res = await dbRun(db, sql`UPDATE change_log SET source = ${name}
     WHERE rowid > ${sinceRowId} AND user_id = ${actor.userId} AND source = ${actor.source} AND entity_type IN (${list})`);
-  return Number((res as { changes?: number }).changes ?? 0);
+  return Number(res.rowCount ?? 0);
 }
 
 /** Runs an M03 mutation and stamps its change-log actor (sync or async handlers). */
-export function withM03Actor<R>(db: AppDb, actor: Actor, auth: AuthContext, fn: () => R): R {
-  const since = maxRowId(db);
+export async function withM03Actor<R>(db: AppDb, actor: Actor, auth: AuthContext, fn: () => R): Promise<R> {
+  const since = await maxRowId(db);
   const out = fn();
   if (out instanceof Promise) {
-    return out.then((v) => {
-      stampM03Actor(db, actor, auth, since);
+    return out.then(async (v) => {
+      await stampM03Actor(db, actor, auth, since);
       return v;
     }) as R;
   }
-  stampM03Actor(db, actor, auth, since);
+  await stampM03Actor(db, actor, auth, since);
   return out;
 }

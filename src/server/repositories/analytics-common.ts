@@ -6,6 +6,7 @@ import type { AuthContext } from "@/server/auth/context";
 import { isValidTimeZone, localMidnightUtc, localParts } from "@/server/scheduler/timezone";
 import { inList } from "./reports-grid";
 import { RANGE_ORDER_MESSAGE } from "./analytics-types";
+import { dbGet } from "@/server/db/sql";
 
 export { RANGE_ORDER_MESSAGE };
 
@@ -93,14 +94,14 @@ export function clIn(expr: string, r: Pick<Range, "clientIds">): SQL {
 }
 
 /** Time zone of the first selected warehouse (the range zone). */
-export function zoneOf(db: AppDb, wh: readonly string[]): string {
+export async function zoneOf(db: AppDb, wh: readonly string[]): Promise<string> {
   const id = wh[0];
   if (!id) return "UTC";
-  return db.get<{ tz: string }>(sql`SELECT timezone AS tz FROM warehouses WHERE id = ${id}`)?.tz ?? "UTC";
+  return (await dbGet<{ tz: string }>(db, sql`SELECT timezone AS tz FROM warehouses WHERE id = ${id}`))?.tz ?? "UTC";
 }
 
-export function isAppActive(db: AppDb, key: string): boolean {
-  return Boolean(db.get<{ a: number }>(sql`SELECT is_active AS a FROM apps WHERE key = ${key}`)?.a);
+export async function isAppActive(db: AppDb, key: string): Promise<boolean> {
+  return Boolean((await dbGet<{ a: number }>(db, sql`SELECT is_active AS a FROM apps WHERE key = ${key}`))?.a);
 }
 
 /** Warehouses: the requested ones inside the viewer's scope, else the header context. */

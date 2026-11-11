@@ -4,6 +4,6 @@ import { pickerQuerySchema, runNamedPicker } from "@/server/repositories/platfor
 
 export const GET = defineRoute({
   query: pickerQuerySchema,
-  handler: ({ db, auth, query, searchParams }) =>
-    runNamedPicker(db, "vendors", auth.viewScope, query, Object.fromEntries(searchParams.entries())),
+  handler: async ({ db, auth, query, searchParams }) =>
+    await runNamedPicker(db, "vendors", auth.viewScope, query, Object.fromEntries(searchParams.entries())),
 });

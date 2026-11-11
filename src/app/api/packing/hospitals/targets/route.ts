@@ -7,5 +7,5 @@ import { PACKING_PERMISSIONS, warehouseIdParam } from "@/server/repositories/pac
 export const GET = defineRoute({
   permission: PACKING_PERMISSIONS.view,
   query: z.object({ warehouseId: warehouseIdParam, q: z.string().max(60).default("") }),
-  handler: ({ db, auth, query }) => moveBackTargets(db, auth.scope, query.warehouseId, query.q),
+  handler: async ({ db, auth, query }) => await moveBackTargets(db, auth.scope, query.warehouseId, query.q),
 });

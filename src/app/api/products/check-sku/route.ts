@@ -5,5 +5,5 @@ import { checkSku, skuCheckSchema } from "@/server/repositories/products-options
 export const GET = defineRoute({
   permission: ["settings.products.create", "settings.products.edit"],
   query: skuCheckSchema,
-  handler: ({ db, auth, query }) => checkSku(db, auth.scope, query),
+  handler: async ({ db, auth, query }) => await checkSku(db, auth.scope, query),
 });
