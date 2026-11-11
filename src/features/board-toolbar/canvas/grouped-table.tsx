@@ -160,7 +160,7 @@ export function GroupedTable(props: GroupedTableProps) {
                       type="button"
                       aria-expanded={!row.collapsed}
                       onClick={() => toggle(row.bucket.key)}
-                      className="flex items-center gap-1.5 rounded-sm px-1 font-heading text-md font-semibold transition-colors duration-[var(--duration-instant)] hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus"
+                      className="flex items-center gap-1.5 rounded-sm px-1 text-md font-semibold transition-colors duration-[var(--duration-instant)] hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus"
                       style={{ color: `var(--label-${row.bucket.color}-text, ${color})` }}
                     >
                       <ChevronDown aria-hidden className={cn('size-4 transition-transform duration-[var(--duration-fast)]', row.collapsed && '-rotate-90')} />

@@ -80,7 +80,7 @@ export function BoardHeader(props: BoardHeaderProps) {
           <span className="mr-1 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted max-sm:hidden" aria-hidden>
             <EntityIcon type="board" boardKind={board.kind} className="size-[18px]" />
           </span>
-          <h1 className="flex min-w-0 items-center font-heading text-xl font-medium text-fg" data-testid="board-title">
+          <h1 className="flex min-w-0 items-center text-xl font-medium text-fg" data-testid="board-title">
             <InlineText
               value={board.name}
               onCommit={commands.rename}

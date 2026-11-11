@@ -18,8 +18,8 @@ function anchorFor(heading: string): string {
 export function LegalDocument({ title, updated, intro, sections }: LegalDocumentProps) {
   return (
     <article className="rounded-xl border border-border-subtle bg-panel p-6 shadow-sm sm:p-12">
-      <p className="text-xs font-semibold tracking-wide text-fg-muted uppercase">Last updated {updated}</p>
-      <h1 className="mt-2 font-heading text-3xl font-semibold tracking-[-0.02em] text-fg">{title}</h1>
+      <p className="text-xs font-semibold text-fg-muted ">Last updated {updated}</p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-[-0.02em] text-fg">{title}</h1>
       <p className="mt-4 text-md leading-relaxed text-fg-secondary">{intro}</p>
       <nav aria-label="Contents" className="mt-8 rounded-lg bg-sunken p-5">
         <ol className="grid gap-1.5 text-sm sm:grid-cols-2">
@@ -34,7 +34,7 @@ export function LegalDocument({ title, updated, intro, sections }: LegalDocument
       </nav>
       {sections.map((section, index) => (
         <section key={section.heading} id={anchorFor(section.heading)} className="mt-10 scroll-mt-20">
-          <h2 className="font-heading text-xl font-semibold text-fg">
+          <h2 className="text-xl font-semibold text-fg">
             {index + 1}. {section.heading}
           </h2>
           {section.paragraphs.map((paragraph) => (

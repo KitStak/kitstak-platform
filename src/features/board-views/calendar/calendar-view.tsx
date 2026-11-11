@@ -326,7 +326,7 @@ export function CalendarView({ boardId, view, onOpenItem, initialSettingsOpen, c
               <IconButton size="sm" label={`Previous ${mode}`} shortcut={['←']} icon={<ChevronLeft aria-hidden />} onClick={() => step(-1)} />
               <IconButton size="sm" label={`Next ${mode}`} shortcut={['→']} icon={<ChevronRight aria-hidden />} onClick={() => step(1)} />
             </div>
-            <h2 className="min-w-0 truncate font-heading text-lg font-semibold whitespace-nowrap text-fg max-[639px]:text-md" aria-live="polite" data-testid="calendar-title">
+            <h2 className="min-w-0 truncate text-lg font-semibold whitespace-nowrap text-fg max-[639px]:text-md" aria-live="polite" data-testid="calendar-title">
               <span className="max-[1100px]:hidden">{range.title}</span>
               <span className="hidden max-[1100px]:inline">{range.shortTitle}</span>
             </h2>

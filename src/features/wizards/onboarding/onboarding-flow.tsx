@@ -387,7 +387,7 @@ function OnboardingFlowInner({ firstName, retry = false, previews = {} }: Onboar
                     <h1
                       ref={headingRef}
                       tabIndex={-1}
-                      className="font-heading text-2xl font-semibold tracking-[-0.01em] text-fg outline-none"
+                      className="text-2xl font-semibold tracking-[-0.01em] text-fg outline-none"
                       data-testid="onboarding-heading"
                     >
                       {copy.title(firstName)}
@@ -654,7 +654,7 @@ function StepBody({
                 className="flex h-[124px] flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border-strong text-center"
                 data-testid="onboarding-starter-more"
               >
-                <span className="font-heading text-lg font-semibold text-fg">+{extra}</span>
+                <span className="text-lg font-semibold text-fg">+{extra}</span>
                 <span className="text-sm text-fg-secondary">{extra === 1 ? 'more board' : 'more boards'}</span>
               </li>
             ) : null}

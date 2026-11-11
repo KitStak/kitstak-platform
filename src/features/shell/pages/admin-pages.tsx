@@ -77,7 +77,7 @@ export function AdminPage() {
               {card.icon}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block font-heading text-md font-semibold text-fg">{card.title}</span>
+              <span className="block text-md font-semibold text-fg">{card.title}</span>
               <span className="block text-sm text-fg-muted">{card.detail}</span>
             </span>
             <ChevronRight aria-hidden className="size-4 text-icon transition-transform group-hover:translate-x-0.5" />
@@ -138,7 +138,7 @@ export function MembersPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[480px] text-left text-base">
               <thead>
-                <tr className="border-b border-border-subtle text-xs font-semibold tracking-wide text-fg-muted uppercase">
+                <tr className="border-b border-border-subtle text-xs font-semibold text-fg-muted ">
                   <th className="px-5 py-2.5 font-semibold">Name</th>
                   <th className="hidden px-5 py-2.5 font-semibold md:table-cell">Title</th>
                   <th className="px-5 py-2.5 font-semibold">Role</th>
@@ -174,7 +174,7 @@ export function ProfilePage() {
           <dl className="grid flex-1 gap-4 sm:grid-cols-2">
             {fields.map((field) => (
               <div key={field.label}>
-                <dt className="text-xs font-semibold tracking-wide text-fg-muted uppercase">{field.label}</dt>
+                <dt className="text-xs font-semibold text-fg-muted ">{field.label}</dt>
                 <dd className="mt-1 text-md text-fg">{field.value}</dd>
               </div>
             ))}

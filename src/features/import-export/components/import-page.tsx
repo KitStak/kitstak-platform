@@ -19,7 +19,7 @@ export function ImportPage() {
         >
           <Upload />
         </span>
-        <h1 className="truncate font-heading text-lg font-semibold text-fg">Import data</h1>
+        <h1 className="truncate text-lg font-semibold text-fg">Import data</h1>
         <p className="hidden truncate text-sm text-fg-muted md:block">· Bring leads, contacts, accounts and deals in from a spreadsheet</p>
       </header>
       <div className="mx-2 mb-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle bg-panel shadow-xs sm:mx-8 sm:mb-6">

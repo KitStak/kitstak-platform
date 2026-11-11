@@ -309,7 +309,7 @@ export function TimelineView({ boardId, view, onOpenItem, initialSettingsOpen, c
             <div role="row" className="contents">
               <div
                 role="columnheader"
-                className="sticky top-0 left-0 z-[var(--z-header)] flex items-end border-r border-b border-border-default bg-panel px-3 pb-2 text-xs font-semibold text-fg-muted uppercase"
+                className="sticky top-0 left-0 z-[var(--z-header)] flex items-end border-r border-b border-border-default bg-panel px-3 pb-2 text-xs font-semibold text-fg-muted "
                 style={{ height: HEADER_H }}
               >
                 {noun}

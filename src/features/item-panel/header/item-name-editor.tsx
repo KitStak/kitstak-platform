@@ -130,7 +130,7 @@ export function ItemNameEditor({
           }
         }}
         className={cn(
-          'block w-full min-w-0 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-2 py-1 font-heading text-lg leading-7 font-semibold break-words text-fg outline-none sm:text-xl sm:leading-8',
+          'block w-full min-w-0 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-2 py-1 text-lg leading-7 font-semibold break-words text-fg outline-none sm:text-xl sm:leading-8',
           'transition-[border-color,background-color,box-shadow] duration-[var(--duration-fast)] ease-out',
           !readOnly && 'hover:border-border-subtle hover:bg-hover focus:border-primary focus:bg-panel focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]',
           invalid && 'focus:border-danger',
@@ -140,7 +140,7 @@ export function ItemNameEditor({
       {clamped ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute right-px bottom-[5px] pl-8 font-heading text-lg leading-7 font-semibold text-fg sm:text-xl sm:leading-8"
+          className="pointer-events-none absolute right-px bottom-[5px] pl-8 text-lg leading-7 font-semibold text-fg sm:text-xl sm:leading-8"
           style={{ background: 'linear-gradient(to right, transparent, var(--surface-raised) 2rem)' }}
         >
           …

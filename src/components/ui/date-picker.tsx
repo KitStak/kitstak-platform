@@ -13,7 +13,7 @@ export type { DateRange };
 const dayPickerClassNames = {
   root: 'ks-day-picker text-base',
   months: 'relative flex flex-wrap gap-6',
-  month_caption: 'flex h-8 items-center px-1 font-heading text-base font-semibold',
+  month_caption: 'flex h-8 items-center px-1 text-base font-semibold',
   nav: 'absolute top-0 right-0 flex items-center gap-0.5',
   button_previous:
     'inline-flex size-8 items-center justify-center rounded-sm text-icon hover:bg-hover hover:text-icon-strong disabled:opacity-40',

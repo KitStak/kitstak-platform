@@ -60,7 +60,7 @@ export function InviteAccept({
           <Icon aria-hidden className="size-6" />
         </span>
         <div className="flex flex-col gap-2">
-          <h1 className="font-heading text-2xl font-semibold text-fg [text-wrap:balance]">{problem.title}</h1>
+          <h1 className="text-2xl font-semibold text-fg [text-wrap:balance]">{problem.title}</h1>
           <p className="text-md text-fg-secondary [text-wrap:pretty]">
             {state === 'mismatch'
               ? `It was sent to ${invitedEmailMasked ?? 'a different email'}, but you’re signed in as ${sessionEmail}. Sign in with the invited address to join.`
@@ -117,7 +117,7 @@ export function InviteAccept({
         </span>
       </div>
       <div className="flex flex-col gap-2">
-        <h1 className="font-heading text-2xl font-semibold text-fg [text-wrap:balance]">Join {org.name} on KitStak</h1>
+        <h1 className="text-2xl font-semibold text-fg [text-wrap:balance]">Join {org.name} on KitStak</h1>
         <p className="text-md text-fg-secondary [text-wrap:pretty]">
           {inviterName ? `${inviterName} invited you` : 'You’ve been invited'} to join as {roleLabel?.toLowerCase().startsWith('a') ? 'an' : 'a'}{' '}
           <strong className="font-semibold text-fg">{roleLabel ?? 'Member'}</strong>. You’re signed in as {sessionEmail}.

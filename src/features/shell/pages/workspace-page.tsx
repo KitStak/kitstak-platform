@@ -209,8 +209,8 @@ function Header({ workspace }: { readonly workspace: WorkspaceDto }) {
               disabled={!canWrite}
               startEditing={startRename && renameKey === 0}
               onSave={(name) => void update(workspace, { name })}
-              className="truncate font-heading text-xl font-semibold tracking-[-0.01em] text-fg sm:text-2xl"
-              inputClassName="font-heading text-xl font-semibold text-fg sm:text-2xl"
+              className="truncate text-xl font-semibold tracking-[-0.01em] text-fg sm:text-2xl"
+              inputClassName="text-xl font-semibold text-fg sm:text-2xl"
             />
           </h1>
         </div>

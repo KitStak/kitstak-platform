@@ -122,7 +122,7 @@ export function AppShell({ context, slots, children }: AppShellProps) {
       </a>
       <div data-testid="app-shell" className="flex h-dvh min-h-[560px] flex-col overflow-hidden bg-app">
         <TopBar />
-        <main id="main-content" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-panel outline-none">
+        <main id="main-content" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-app outline-none">
           <div className="h-full overflow-auto">{children}</div>
         </main>
       </div>

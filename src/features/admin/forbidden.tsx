@@ -10,7 +10,7 @@ export function AdminForbidden({ orgSlug, roleLabel }: { readonly orgSlug: strin
           <ShieldAlert aria-hidden className="size-6" />
         </span>
         <div className="flex flex-col gap-1.5">
-          <h1 className="font-heading text-xl font-semibold text-fg">Admins only</h1>
+          <h1 className="text-xl font-semibold text-fg">Admins only</h1>
           <p className="text-base text-fg-secondary">
             The admin center is available to organization owners and admins. You’re signed in as a{' '}
             <strong className="font-semibold text-fg">{roleLabel}</strong>. Ask an admin if you need access.

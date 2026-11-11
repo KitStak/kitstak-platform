@@ -99,7 +99,7 @@ function GroupTitle({
             setRenameGroup(group.id);
           }}
           className={cn(
-            'min-w-0 truncate rounded-sm border border-transparent px-1 py-0.5 text-left font-heading text-lg font-medium leading-6',
+            'min-w-0 truncate rounded-sm border border-transparent px-1 py-0.5 text-left text-lg font-medium leading-6',
             'enabled:hover:border-border-input focus-visible:outline-2 focus-visible:outline-focus disabled:cursor-default',
           )}
         >
@@ -188,7 +188,7 @@ function GroupRenameInput({
         onBlur={() => {
           if (!paletteOpen) finish(true);
         }}
-        className="h-6 min-w-[12ch] bg-transparent font-heading text-lg font-medium text-current outline-none"
+        className="h-6 min-w-[12ch] bg-transparent text-lg font-medium text-current outline-none"
         style={{ width: `${Math.max(12, draft.length + 2)}ch` }}
       />
     </div>

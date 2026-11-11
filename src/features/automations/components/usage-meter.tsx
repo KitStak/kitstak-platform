@@ -41,7 +41,7 @@ export function UsageMeter({
     >
       <div className="flex items-baseline justify-between gap-2">
         <span
-          className={cn('font-semibold text-fg tabular-nums', compact ? 'text-sm' : 'font-heading text-2xl')}
+          className={cn('font-semibold text-fg tabular-nums', compact ? 'text-sm' : 'text-2xl')}
         >
           {summary.used.toLocaleString()}
           <span className={cn('font-normal text-fg-secondary', compact ? 'text-xs' : 'text-base')}>

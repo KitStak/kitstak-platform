@@ -194,7 +194,7 @@ function ConnectEditor({ ctx }: { readonly ctx: CellRenderContext }) {
         ) : null}
         {groupResults(flat).map((group) => (
           <li key={group.key} role="presentation">
-            {group.title ? <div className="px-2.5 pt-2 pb-1 text-xs font-semibold tracking-wide text-fg-muted uppercase">{group.title}</div> : null}
+            {group.title ? <div className="px-2.5 pt-2 pb-1 text-xs font-semibold text-fg-muted ">{group.title}</div> : null}
             <ul role="group" aria-label={group.title ?? 'Results'}>
               {group.items.map((candidate) => {
                 const index = flat.indexOf(candidate);

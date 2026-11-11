@@ -75,7 +75,7 @@ export function ProfilePage() {
       <div className="mx-auto flex max-w-[960px] flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8">
         <header className="flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h1 className="font-heading text-xl font-semibold tracking-[-0.01em] text-fg">My profile</h1>
+            <h1 className="text-xl font-semibold tracking-[-0.01em] text-fg">My profile</h1>
             <p className="mt-0.5 text-base text-fg-secondary">How you appear to teammates, and how KitStak works for you.</p>
           </div>
         </header>
@@ -105,7 +105,7 @@ export function ProfilePage() {
             <div className="min-w-0 pb-1 sm:pt-16" data-testid="profile-identity">
               {data ? (
                 <>
-                  <h2 className="h-8 truncate font-heading text-2xl leading-8 font-semibold tracking-[-0.01em] text-fg">{data.user.name}</h2>
+                  <h2 className="h-8 truncate text-2xl leading-8 font-semibold tracking-[-0.01em] text-fg">{data.user.name}</h2>
                   <p className="mt-0.5 flex min-h-6 flex-wrap items-center gap-x-2 text-base text-fg-secondary">
                     <span>{data.user.title ?? 'No title yet'}</span>
                     <span aria-hidden className="text-fg-muted">·</span>

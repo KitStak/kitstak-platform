@@ -169,7 +169,7 @@ export function SettingsPanel({
   return (
     <div className="flex flex-col gap-5" data-testid="form-settings-panel">
       <section className="flex flex-col gap-3">
-        <h3 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">After submit</h3>
+        <h3 className="text-xs font-semibold text-fg-muted ">After submit</h3>
         <Field label="Thank-you title">
           <Input size="sm" value={settings.thankYouTitle} onChange={(event) => onChange({ thankYouTitle: event.target.value })} />
         </Field>
@@ -182,7 +182,7 @@ export function SettingsPanel({
         </Field>
       </section>
       <section className="flex flex-col gap-3">
-        <h3 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">Responses</h3>
+        <h3 className="text-xs font-semibold text-fg-muted ">Responses</h3>
         <Field label={`New ${noun.toLowerCase()}s go to`}>
           <Select size="sm" aria-label="Target group" value={settings.groupId ?? 'first'} onValueChange={(value) => onChange({ groupId: value === 'first' ? null : value })} options={[{ value: 'first', label: 'Top group' }, ...groups.map((group) => ({ value: group.id, label: group.title }))]} />
         </Field>
@@ -191,7 +191,7 @@ export function SettingsPanel({
         </p>
       </section>
       <section className="flex flex-col gap-3">
-        <h3 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">Access</h3>
+        <h3 className="text-xs font-semibold text-fg-muted ">Access</h3>
         <Switch size="sm" label="Close form" description="Stop accepting responses now." checked={settings.closed} onCheckedChange={(closed) => onChange({ closed })} />
         <Field label="Close on date">
           <Input size="sm" type="date" value={settings.closeAt ?? ''} onChange={(event) => onChange({ closeAt: event.target.value || null })} />

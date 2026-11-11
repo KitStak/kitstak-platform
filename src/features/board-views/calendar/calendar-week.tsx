@@ -62,7 +62,7 @@ export function CalendarWeek({
         <div />
         {days.map((day) => (
           <div role="columnheader" key={day} className="flex h-12 flex-col items-center justify-center border-l border-border-subtle">
-            <span className="text-xs font-semibold text-fg-muted uppercase">{formatIso(day, 'weekday')}</span>
+            <span className="text-xs font-semibold text-fg-muted ">{formatIso(day, 'weekday')}</span>
             <span
               aria-current={day === common.today ? 'date' : undefined}
               className={cn('inline-flex size-7 items-center justify-center rounded-full text-md font-semibold tabular-nums', day === common.today ? 'bg-primary text-primary-fg' : 'text-fg')}
@@ -73,7 +73,7 @@ export function CalendarWeek({
         ))}
       </div>
       <div className="relative grid shrink-0 border-b border-border-strong bg-panel" style={cols}>
-        <div className="flex items-start justify-end px-2 pt-2 text-2xs font-semibold text-fg-muted uppercase">All day</div>
+        <div className="flex items-start justify-end px-2 pt-2 text-2xs font-semibold text-fg-muted ">All day</div>
         {days.map((day) => (
           <AllDayCell key={day} day={day} height={slots * 24 + 12} />
         ))}

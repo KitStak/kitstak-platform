@@ -183,7 +183,7 @@ export function Integrations({ boardId, canManageWebhooks, canEditBoard }: Integ
                 </Badge>
               </div>
               <div>
-                <h3 className="font-heading text-base font-semibold text-fg">{card.name}</h3>
+                <h3 className="text-base font-semibold text-fg">{card.name}</h3>
                 <p className="text-xs text-fg-muted">{card.category}</p>
               </div>
               <p className="flex-1 text-sm text-fg-secondary">{card.description}</p>

@@ -39,7 +39,7 @@ function Clock() {
     return () => window.clearInterval(id);
   }, []);
   return (
-    <span className="font-heading text-lg font-medium tabular-nums text-fg">
+    <span className="text-lg font-medium tabular-nums text-fg">
       {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
     </span>
   );
@@ -122,7 +122,7 @@ export function PresentMode({ dashboard, filters, orgSlug, refetchInterval, acti
     >
       <div className="mx-auto flex max-w-[1920px] flex-col gap-4 p-6">
         <header className="flex flex-wrap items-center gap-4">
-          <h1 className="min-w-0 flex-1 truncate font-heading text-2xl font-semibold text-fg">{dashboard.name}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-2xl font-semibold text-fg">{dashboard.name}</h1>
           <Clock />
           <div className="flex items-center gap-2">
             <Repeat aria-hidden className="size-4 text-icon" />

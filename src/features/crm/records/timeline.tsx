@@ -90,7 +90,7 @@ function TimelineList({
             return (
               <li key={entry.id} className="relative flex flex-col">
                 {showDivider ? (
-                  <span className="relative z-[1] mb-2 ml-9 text-xs font-semibold tracking-wide text-fg-muted uppercase">
+                  <span className="relative z-[1] mb-2 ml-9 text-xs font-semibold text-fg-muted ">
                     {entry.upcoming ? 'Upcoming' : 'History'}
                   </span>
                 ) : null}

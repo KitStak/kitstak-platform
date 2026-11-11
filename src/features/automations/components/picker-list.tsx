@@ -130,7 +130,7 @@ export function PickerList({
             return (
               <div key={option.value}>
                 {header ? (
-                  <div className="px-2.5 pt-2 pb-1 text-2xs font-semibold tracking-wide text-fg-muted uppercase">
+                  <div className="px-2.5 pt-2 pb-1 text-2xs font-semibold text-fg-muted ">
                     {header}
                   </div>
                 ) : null}

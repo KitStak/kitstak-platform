@@ -305,7 +305,7 @@ export function CreateBoardWizard({
                   />
                 ) : null}
                 <div className="min-w-0">
-                  <DialogPrimitive.Title className="font-heading text-xl font-semibold text-fg">
+                  <DialogPrimitive.Title className="text-xl font-semibold text-fg">
                     {chosen ? `Create from “${chosen.name}”` : 'Create board'}
                   </DialogPrimitive.Title>
                   <DialogPrimitive.Description className="mt-1 text-base text-fg-secondary">

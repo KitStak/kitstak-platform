@@ -217,7 +217,7 @@ export function CalendarWidget({ insight, settings, orgSlug, filtered, onConfigu
                   active ? 'bg-primary-subtle text-primary-text' : 'text-fg-secondary hover:bg-hover',
                 )}
               >
-                <span className="text-[11px] font-medium">{WEEKDAYS[index]}</span>
+                <span className="text-2xs font-medium">{WEEKDAYS[index]}</span>
                 <span className={cn('flex size-6 items-center justify-center rounded-full text-sm tabular-nums', day === today && 'bg-primary font-semibold text-primary-fg')}>
                   {Number(day.slice(8))}
                 </span>
@@ -253,7 +253,7 @@ export function CalendarWidget({ insight, settings, orgSlug, filtered, onConfigu
             return (
               <li key={day} className={cn('flex gap-3 px-2 py-1.5', day === today && 'bg-primary-subtle/40')}>
                 <span className="flex w-12 shrink-0 flex-col items-center pt-0.5">
-                  <span className="text-[11px] font-medium text-fg-muted">{WEEKDAYS[index]}</span>
+                  <span className="text-2xs font-medium text-fg-muted">{WEEKDAYS[index]}</span>
                   <span className={cn('flex size-6 items-center justify-center rounded-full text-sm tabular-nums', day === today ? 'bg-primary font-semibold text-primary-fg' : 'text-fg-secondary')}>
                     {Number(day.slice(8))}
                   </span>
@@ -275,7 +275,7 @@ export function CalendarWidget({ insight, settings, orgSlug, filtered, onConfigu
   return (
     <div ref={ref} className="flex h-full min-h-0 flex-col gap-2" data-testid="calendar-widget" data-view={view}>
       {header}
-      <div className="grid grid-cols-7 text-center text-[11px] font-medium text-fg-muted">
+      <div className="grid grid-cols-7 text-center text-2xs font-medium text-fg-muted">
         {WEEKDAYS.map((day) => (
           <span key={day}>{day}</span>
         ))}
@@ -292,7 +292,7 @@ export function CalendarWidget({ insight, settings, orgSlug, filtered, onConfigu
             <div key={day} className={cn('flex min-h-0 flex-col gap-0.5 p-1', view === 'week' ? 'overflow-y-auto' : 'overflow-hidden', inMonth ? 'bg-panel' : 'bg-muted')}>
               <span
                 className={cn(
-                  'flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] tabular-nums',
+                  'flex size-5 shrink-0 items-center justify-center rounded-full text-2xs tabular-nums',
                   day === today ? 'bg-primary font-semibold text-primary-fg' : inMonth ? 'text-fg-secondary' : 'text-fg-muted',
                 )}
               >
@@ -403,7 +403,7 @@ export function TimelineWidget({ insight, settings, orgSlug, filtered, onConfigu
   };
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="timeline-widget">
-      <div className="grid grid-cols-[minmax(120px,28%)_1fr] border-b border-border-subtle pb-1 text-[11px] font-medium text-fg-muted">
+      <div className="grid grid-cols-[minmax(120px,28%)_1fr] border-b border-border-subtle pb-1 text-2xs font-medium text-fg-muted">
         <span>Item</span>
         <div ref={axisRef} className="relative h-4">
           {ticks.filter(tickVisible).map((tick) => (
@@ -412,7 +412,7 @@ export function TimelineWidget({ insight, settings, orgSlug, filtered, onConfigu
             </span>
           ))}
           {showToday ? (
-            <span className="absolute -top-0.5 z-[1] -translate-x-1/2 rounded-xs bg-primary px-1 text-[10px] leading-4 font-semibold text-primary-fg" style={{ left: `${todayPct}%` }}>
+            <span className="absolute -top-0.5 z-[1] -translate-x-1/2 rounded-xs bg-primary px-1 text-2xs leading-4 font-semibold text-primary-fg" style={{ left: `${todayPct}%` }}>
               Today
             </span>
           ) : null}
@@ -456,7 +456,7 @@ export function TimelineWidget({ insight, settings, orgSlug, filtered, onConfigu
                   {right < 82 ? (
                     <span
                       aria-hidden
-                      className="pointer-events-none absolute top-0.5 pl-1.5 text-[10px] leading-4 whitespace-nowrap text-fg-muted opacity-0 transition-opacity duration-[var(--duration-fast)] group-hover/bar:opacity-100"
+                      className="pointer-events-none absolute top-0.5 pl-1.5 text-2xs leading-4 whitespace-nowrap text-fg-muted opacity-0 transition-opacity duration-[var(--duration-fast)] group-hover/bar:opacity-100"
                       style={{ left: `${right}%` }}
                     >
                       {dates}

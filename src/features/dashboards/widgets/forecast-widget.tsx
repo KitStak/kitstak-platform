@@ -61,8 +61,8 @@ function Stat({
   return (
     <div className="flex min-w-0 flex-col">
       {hint ? <Tooltip content={hint}>{caption}</Tooltip> : caption}
-      <span className="font-heading text-lg font-medium tabular-nums text-fg">{value}</span>
-      {qualifier ? <span className="truncate text-[11px] text-fg-muted">{qualifier}</span> : null}
+      <span className="text-lg font-medium tabular-nums text-fg">{value}</span>
+      {qualifier ? <span className="truncate text-2xs text-fg-muted">{qualifier}</span> : null}
     </div>
   );
 }

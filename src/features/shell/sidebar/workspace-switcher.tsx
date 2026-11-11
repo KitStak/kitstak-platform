@@ -26,7 +26,7 @@ export function WorkspaceTile({
   return (
     <span
       aria-hidden
-      className="inline-flex shrink-0 items-center justify-center rounded-md font-heading font-semibold shadow-xs"
+      className="inline-flex shrink-0 items-center justify-center rounded-md font-semibold shadow-xs"
       style={{
         width: size,
         height: size,

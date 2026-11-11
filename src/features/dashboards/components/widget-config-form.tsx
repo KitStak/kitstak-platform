@@ -219,7 +219,7 @@ export function WidgetConfigForm({ kind, title, config, boards, dashboardBoardId
                   aria-checked={active}
                   onClick={() => set({ chartType: tile.value })}
                   className={cn(
-                    'flex flex-col items-center gap-1 rounded-md border px-1 py-2 text-[11px] font-medium outline-none transition-colors duration-[var(--duration-instant)]',
+                    'flex flex-col items-center gap-1 rounded-md border px-1 py-2 text-2xs font-medium outline-none transition-colors duration-[var(--duration-instant)]',
                     'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus [&_svg]:size-5',
                     active ? 'border-primary bg-primary-subtle text-primary-text' : 'border-border-subtle text-fg-secondary hover:border-border-input hover:bg-hover',
                   )}

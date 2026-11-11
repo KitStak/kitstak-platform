@@ -46,7 +46,7 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
             <Avatar name={org.name} src={org.logo} shape="square" size="lg" />
             <div className="min-w-0">
               <p className="truncate text-sm text-fg-muted">{org.name}</p>
-              <h1 className="font-heading text-md font-semibold text-fg">
+              <h1 className="text-md font-semibold text-fg">
                 Administration
                 <span className="sr-only">: {current.key === 'users' ? 'Users and members' : current.label}</span>
               </h1>
@@ -65,7 +65,7 @@ export function AdminShell({ children }: { readonly children: ReactNode }) {
             <div className="hidden flex-col gap-5 lg:flex">
               {sectionsByGroup(visible).map(({ group, sections }) => (
                 <div key={group}>
-                  <p className="mb-1 px-2.5 text-xs font-semibold tracking-wide text-fg-muted uppercase">{group}</p>
+                  <p className="mb-1 px-2.5 text-xs font-semibold text-fg-muted ">{group}</p>
                   <ul className="flex flex-col gap-0.5">
                     {sections.map((section) => (
                       <li key={section.key}>

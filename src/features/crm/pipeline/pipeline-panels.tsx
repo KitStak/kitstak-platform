@@ -190,7 +190,7 @@ export function VelocityStrip({ stages }: { readonly stages: readonly StageVeloc
               {isSlowest ? <Badge tone="warning">Bottleneck</Badge> : null}
             </div>
             <div className="flex items-baseline gap-1">
-              <span className="font-heading text-xl font-semibold tabular-nums text-fg">
+              <span className="text-xl font-semibold tabular-nums text-fg">
                 {stage.avgDays !== null ? stage.avgDays.toFixed(stage.avgDays < 10 ? 1 : 0) : '—'}
               </span>
               <span className="text-sm text-fg-secondary">avg days in stage</span>

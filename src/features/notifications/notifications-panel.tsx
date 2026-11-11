@@ -401,7 +401,7 @@ export function NotificationsPanel({ open, onOpenChange }: NotificationsPanelPro
           )}
         >
           <header className="flex items-center gap-2 px-5 pt-4 pb-2 sm:px-6">
-            <DialogPrimitive.Title className="min-w-0 flex-1 truncate font-heading text-xl font-semibold">
+            <DialogPrimitive.Title className="min-w-0 flex-1 truncate text-xl font-semibold">
               Notifications
             </DialogPrimitive.Title>
             <Button
@@ -576,7 +576,7 @@ export function NotificationsPanel({ open, onOpenChange }: NotificationsPanelPro
               <>
                 {groups.map((group) => (
                   <section key={group.bucket} aria-label={group.bucket}>
-                    <h3 className="sticky top-0 z-[1] bg-raised/95 px-6 pt-3 pb-1.5 text-xs font-semibold tracking-wide text-fg-muted uppercase backdrop-blur-sm">
+                    <h3 className="sticky top-0 z-[1] bg-raised/95 px-6 pt-3 pb-1.5 text-xs font-semibold text-fg-muted backdrop-blur-sm">
                       {group.bucket}
                     </h3>
                     <ul

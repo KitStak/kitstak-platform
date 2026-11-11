@@ -122,7 +122,7 @@ export function BoardTable({
                 <div role="row" className="flex">
                   <div role="rowheader" aria-colspan={rest.length + 1} className="sticky left-0 z-[2] flex h-11 w-fit max-w-[100vw] items-end gap-2 px-4 pb-1.5">
                     {/* --lc-text is the label hue tuned for AA on panels in both themes. */}
-                    <h3 className="font-heading text-lg font-medium text-[var(--lc-text)]">{group.title}</h3>
+                    <h3 className="text-lg font-medium text-[var(--lc-text)]">{group.title}</h3>
                     <span className="pb-0.5 text-sm text-fg-muted">{groupItems.length} deals</span>
                   </div>
                 </div>
@@ -192,7 +192,7 @@ export function StateMatrix({
   return (
     <div className="overflow-x-auto rounded-xl border border-border-subtle bg-panel shadow-xs">
       <div role="grid" aria-label="Cell states" className="min-w-[1080px]" data-testid="state-matrix">
-        <div role="row" className="grid grid-cols-[180px_repeat(5,minmax(160px,1fr))] border-b border-border-subtle bg-muted text-xs font-semibold tracking-wide text-fg-muted uppercase">
+        <div role="row" className="grid grid-cols-[180px_repeat(5,minmax(160px,1fr))] border-b border-border-subtle bg-muted text-xs font-semibold text-fg-muted ">
           <div role="columnheader" className="px-4 py-2.5">
             Type
           </div>

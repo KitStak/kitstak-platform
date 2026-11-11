@@ -85,7 +85,7 @@ export function DialogHeader({
     <div className={cn('flex gap-3 px-6 pt-6 pr-14 pb-4', className)}>
       {icon ? <div className="mt-0.5 shrink-0">{icon}</div> : null}
       <div className="min-w-0">
-        <DialogPrimitive.Title className="font-heading text-xl font-semibold text-fg">{title}</DialogPrimitive.Title>
+        <DialogPrimitive.Title className="text-xl font-semibold text-fg">{title}</DialogPrimitive.Title>
         {description ? (
           <DialogPrimitive.Description className="mt-1 text-base text-fg-secondary">{description}</DialogPrimitive.Description>
         ) : (

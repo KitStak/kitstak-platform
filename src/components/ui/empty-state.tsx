@@ -35,7 +35,7 @@ export function EmptyState({
     >
       {visual ?? <Illustration name={illustration} size={art} className="animate-fade-in" />}
       <div className="flex max-w-sm flex-col gap-1">
-        <h3 className={cn('font-heading font-semibold text-fg', size === 'sm' ? 'text-base' : 'text-md')}>{title}</h3>
+        <h3 className={cn('font-semibold text-fg', size === 'sm' ? 'text-base' : 'text-md')}>{title}</h3>
         {description ? (
           <p className={cn('text-fg-muted', 'text-sm')}>{description}</p>
         ) : null}

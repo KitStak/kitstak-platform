@@ -85,8 +85,8 @@ function DealsList() {
   return (
     <div className="flex w-full max-w-[760px] flex-col gap-4 p-4 sm:p-8 xl:ml-[max(0px,calc(50vw-700px))]">
       <header className="flex flex-col gap-1">
-        <p className="text-xs font-semibold tracking-wide text-fg-muted uppercase">Dev harness</p>
-        <h1 className="font-heading text-xl font-semibold">{payload.data.board.name} · item panel</h1>
+        <p className="text-xs font-semibold text-fg-muted ">Dev harness</p>
+        <h1 className="text-xl font-semibold">{payload.data.board.name} · item panel</h1>
         <p className="text-sm text-fg-secondary">Open any {payload.data.board.itemTerminology.toLowerCase()} to review the panel. The URL keeps the open item and tab.</p>
       </header>
       <DealRows items={items} groups={groups} onOpen={onOpen} />

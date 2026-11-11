@@ -95,7 +95,7 @@ export function StepMap({ model, showErrors, onChange }: StepMapProps) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="font-heading text-xl font-semibold text-balance text-fg outline-none">
+          <h2 className="text-xl font-semibold text-balance text-fg outline-none">
             Map your columns
           </h2>
           <p className="mt-1 text-base text-fg-secondary">
@@ -125,7 +125,7 @@ export function StepMap({ model, showErrors, onChange }: StepMapProps) {
         className="overflow-hidden rounded-lg border border-border-subtle bg-panel"
         data-testid="import-mapping"
       >
-        <div className="hidden grid-cols-[minmax(0,1fr)_24px_minmax(0,1.15fr)] gap-3 border-b border-border-subtle bg-sunken px-4 py-2 text-xs font-semibold uppercase tracking-wide text-fg-muted md:grid">
+        <div className="hidden grid-cols-[minmax(0,1fr)_24px_minmax(0,1.15fr)] gap-3 border-b border-border-subtle bg-sunken px-4 py-2 text-xs font-semibold text-fg-muted md:grid">
           <span>Column in file</span>
           <span />
           <span>Column on board</span>
@@ -338,7 +338,7 @@ export function StepMap({ model, showErrors, onChange }: StepMapProps) {
 
       <section aria-labelledby="import-preview-title" className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 id="import-preview-title" className="font-heading text-md font-semibold text-fg">
+          <h3 id="import-preview-title" className="text-md font-semibold text-fg">
             Preview
           </h3>
           <p className="text-sm text-fg-secondary">

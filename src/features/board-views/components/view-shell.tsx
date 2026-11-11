@@ -106,7 +106,7 @@ export function ViewToolbar({
               onOpenAutoFocus={(event) => event.preventDefault()}
             >
               <div className="sticky top-0 z-[var(--z-raised)] border-b border-border-subtle bg-raised px-4 py-3">
-                <h2 className="font-heading text-md font-semibold text-fg">{settingsTitle}</h2>
+                <h2 className="text-md font-semibold text-fg">{settingsTitle}</h2>
                 <p className="text-xs text-fg-muted">Changes apply instantly and are saved to this view.</p>
               </div>
               <div className="flex flex-col divide-y divide-border-subtle">{settings}</div>
@@ -121,7 +121,7 @@ export function ViewToolbar({
 export function SettingsSection({ title, children, hint }: { readonly title: string; readonly children: ReactNode; readonly hint?: ReactNode }) {
   return (
     <section className="flex flex-col gap-2 px-4 py-3">
-      <h3 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">{title}</h3>
+      <h3 className="text-xs font-semibold text-fg-muted ">{title}</h3>
       {children}
       {hint ? <p className="text-xs text-fg-muted">{hint}</p> : null}
     </section>

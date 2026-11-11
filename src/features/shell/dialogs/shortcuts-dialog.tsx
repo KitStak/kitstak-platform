@@ -48,7 +48,7 @@ export function ShortcutsDialog({
         <DialogBody className="grid gap-6 pb-6 sm:grid-cols-2">
           {sections.map((section) => (
             <section key={section.title}>
-              <h3 className="mb-2 font-sans text-xs font-semibold tracking-wide text-fg-muted uppercase">
+              <h3 className="mb-2 font-sans text-xs font-semibold text-fg-muted ">
                 {section.title}
               </h3>
               <dl className="flex flex-col">

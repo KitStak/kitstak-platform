@@ -234,7 +234,7 @@ export function UsersSection() {
             )}
           >
             <span className="text-sm text-fg-secondary">{label}</span>
-            <span className="font-heading text-xl font-semibold text-fg tabular-nums">{users.data ? value : '–'}</span>
+            <span className="text-xl font-semibold text-fg tabular-nums">{users.data ? value : '–'}</span>
           </button>
         ))}
       </div>
@@ -397,7 +397,7 @@ export function UsersSection() {
             data-testid="pending-invites-toggle"
           >
             <ChevronDown aria-hidden className={cn('size-4 text-icon transition-transform duration-[var(--duration-fast)]', !invitesOpen && '-rotate-90')} />
-            <span className="font-heading text-md font-semibold text-fg">Pending invitations</span>
+            <span className="text-md font-semibold text-fg">Pending invitations</span>
             <Badge tone="warning">{invites.length}</Badge>
             <span className="ml-auto hidden text-sm text-fg-muted sm:inline">Waiting for people to accept · links expire after 7 days</span>
           </button>

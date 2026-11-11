@@ -47,7 +47,7 @@ export function PermissionsSection() {
             <caption className="sr-only">Permissions granted to each organization role</caption>
             <thead className="sticky top-0 bg-panel">
               <tr className="border-b border-border-subtle">
-                <th scope="col" className="h-10 px-5 text-left text-xs font-semibold tracking-wide text-fg-muted uppercase">
+                <th scope="col" className="h-10 px-5 text-left text-xs font-semibold text-fg-muted ">
                   Action
                 </th>
                 {ORG_ROLES.map((role) => (
@@ -72,7 +72,7 @@ export function PermissionsSection() {
                     <th
                       colSpan={ORG_ROLES.length + 1}
                       scope="colgroup"
-                      className="bg-sunken/70 px-5 py-1.5 text-left text-xs font-semibold tracking-wide text-fg-muted uppercase"
+                      className="bg-sunken/70 px-5 py-1.5 text-left text-xs font-semibold text-fg-muted "
                     >
                       {group}
                     </th>

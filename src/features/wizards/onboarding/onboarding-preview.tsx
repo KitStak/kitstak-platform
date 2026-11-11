@@ -50,7 +50,7 @@ export function OnboardingPreview({ draft, starter, firstName, previews, stepId 
         <div className="flex items-center gap-3">
           <Avatar name={company} shape="square" size="lg" />
           <div className="min-w-0">
-            <p className="truncate font-heading text-md font-semibold text-fg" data-testid="onboarding-preview-company">
+            <p className="truncate text-md font-semibold text-fg" data-testid="onboarding-preview-company">
               {company}
             </p>
             <p className="truncate text-sm text-fg-secondary">
@@ -91,7 +91,7 @@ export function OnboardingPreview({ draft, starter, firstName, previews, stepId 
         </div>
 
         <div className={cn('flex flex-col gap-1 rounded-lg transition-colors duration-[var(--duration-normal)]', highlightBoards && 'bg-primary-subtle p-1.5')}>
-          <span className="px-1 text-xs font-semibold tracking-[0.02em] text-fg-muted uppercase">Boards</span>
+          <span className="px-1 text-xs font-semibold text-fg-muted ">Boards</span>
           <ul className="flex flex-col" data-testid="onboarding-preview-boards">
             {boardIds.map((id) => {
               const preview = previews[id];
@@ -124,7 +124,7 @@ export function OnboardingPreview({ draft, starter, firstName, previews, stepId 
 
         {draft.manages.length ? (
           <div className="flex flex-wrap items-center gap-1.5" aria-label="What you manage">
-            <span className="text-xs font-semibold tracking-[0.02em] text-fg-muted uppercase">You manage</span>
+            <span className="text-xs font-semibold text-fg-muted ">You manage</span>
             {draft.manages.map((id) => (
               <span key={id} className="inline-flex h-6 items-center rounded-full bg-raised px-2.5 text-sm text-fg shadow-xs">
                 {MANAGE_OPTIONS.find((option) => option.id === id)?.label ?? id}

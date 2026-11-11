@@ -354,8 +354,8 @@ export function ChartView({ boardId, view, onOpenItem, initialSettingsOpen, clas
           </div>
           {settings.type === 'donut' && size.width > 0 ? (
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center" data-testid="chart-total">
-              <span className="font-heading text-2xl font-semibold text-fg tabular-nums">{format(data.total)}</span>
-              <span className="text-xs font-medium tracking-wide text-fg-muted uppercase">Total</span>
+              <span className="text-2xl font-semibold text-fg tabular-nums">{format(data.total)}</span>
+              <span className="text-xs font-medium text-fg-muted ">Total</span>
             </div>
           ) : null}
         </div>
@@ -447,7 +447,7 @@ export function ChartView({ boardId, view, onOpenItem, initialSettingsOpen, clas
       <div ref={frame} className="flex min-h-0 flex-1 flex-col bg-sunken p-4 max-[480px]:p-2">
         <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-border-subtle bg-panel p-5 shadow-xs max-[480px]:p-3" aria-label={title}>
           <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="font-heading text-lg font-semibold text-fg" data-testid="chart-title">
+            <h2 className="text-lg font-semibold text-fg" data-testid="chart-title">
               {title}
             </h2>
             {model.query.data && !needsStack ? (

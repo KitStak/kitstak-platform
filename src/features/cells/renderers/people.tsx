@@ -167,7 +167,7 @@ function PeopleEditor({ ctx }: { readonly ctx: CellRenderContext }) {
         aria-activedescendant={entries.length ? `${listId}-${activeIndex}` : undefined}
         className="h-8 w-full rounded-sm border border-border-input bg-panel px-2.5 text-base text-fg outline-none transition-[border-color,box-shadow] duration-[var(--duration-fast)] hover:border-border-input-hover focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]"
       />
-      <div className="text-xs font-semibold tracking-wide text-fg-muted uppercase">{query ? 'Results' : 'Suggested people'}</div>
+      <div className="text-xs font-semibold text-fg-muted ">{query ? 'Results' : 'Suggested people'}</div>
       <ul id={listId} role="listbox" aria-multiselectable={allowMultiple} aria-label="People" className="-mx-1 flex max-h-64 flex-col overflow-y-auto">
         {entries.length === 0 ? <EmptyListMessage>No one matches “{query}”</EmptyListMessage> : null}
         {entries.map((entry, index) => (

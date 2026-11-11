@@ -84,7 +84,7 @@ function GroupSection({ group, items, columns, users, terminology }: GroupSectio
       <div role="row" className="sticky left-0 flex items-center gap-2 py-2">
         <span
           role="rowheader"
-          className="flex items-center gap-1.5 font-heading text-base font-semibold"
+          className="flex items-center gap-1.5 text-base font-semibold"
           style={{ color }}
         >
           <ChevronDown aria-hidden className="size-4" />
@@ -234,7 +234,7 @@ export function BoardOverview({ boardId }: { readonly boardId: string }) {
   return (
     <div className="flex min-h-full flex-col">
       <header className="flex flex-col gap-1 px-8 pt-6 pb-4">
-        <h1 className="font-heading text-2xl font-semibold text-fg">{info.name}</h1>
+        <h1 className="text-2xl font-semibold text-fg">{info.name}</h1>
         {info.description ? <p className="max-w-3xl text-sm text-fg-secondary">{info.description}</p> : null}
         <p className="text-xs text-fg-muted">
           {board.data.totalItems.toLocaleString('en-US')} {info.itemTerminology.toLowerCase()}s

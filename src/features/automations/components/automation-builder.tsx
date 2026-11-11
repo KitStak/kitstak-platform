@@ -341,7 +341,7 @@ function BuilderBody({
         {mode === 'sentence' ? (
           <div className="rounded-xl border border-border-subtle bg-sunken px-5 py-8 sm:px-8 sm:py-10">
             <p
-              className="font-heading text-xl leading-[1.9] font-light text-fg sm:text-2xl sm:leading-[1.8]"
+              className="text-xl leading-[1.9] font-light text-fg sm:text-2xl sm:leading-[1.8]"
               data-testid="automation-sentence"
             >
               {draft.trigger ? <EditableClause clause={draft.trigger} {...clauseProps} /> : 'When…'}
@@ -486,7 +486,7 @@ function BuilderBody({
         >
           {mode === 'steps' ? (
             <div>
-              <h3 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">
+              <h3 className="text-xs font-semibold text-fg-muted ">
                 In plain English
               </h3>
               <p className="mt-1 text-base leading-6 text-fg" data-testid="automation-summary">
@@ -597,7 +597,7 @@ function StepCard({
         )}
       </span>
       <div className="min-w-0 flex-1 rounded-lg border border-border-subtle bg-panel px-4 py-3 shadow-xs transition-shadow duration-[var(--duration-fast)] focus-within:border-primary hover:shadow-sm">
-        <div className="mb-1 text-xs font-semibold tracking-wide text-fg-muted uppercase">{label}</div>
+        <div className="mb-1 text-xs font-semibold text-fg-muted ">{label}</div>
         {children}
       </div>
     </li>
@@ -671,7 +671,7 @@ function TriggerChooser({ onPick }: { readonly onPick: (type: string) => void })
             <Clock aria-hidden className="size-4" />
           </span>
           <span className="min-w-0 flex-1">{title}</span>
-          <span className="shrink-0 rounded-full bg-sunken px-2 py-0.5 text-[11px] font-semibold text-fg-secondary">
+          <span className="shrink-0 rounded-full bg-sunken px-2 py-0.5 text-2xs font-semibold text-fg-secondary">
             Coming soon
           </span>
         </span>

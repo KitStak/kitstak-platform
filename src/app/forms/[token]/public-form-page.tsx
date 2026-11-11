@@ -12,7 +12,7 @@ export function PublicFormPage({ form, token }: { readonly form: PublicFormDto |
         ) : (
           <div className="flex flex-col items-center gap-3 rounded-xl border border-border-subtle bg-panel px-8 py-14 text-center shadow-sm" data-testid="form-missing">
             <FileQuestion aria-hidden className="size-10 text-icon" strokeWidth={1.5} />
-            <h1 className="font-heading text-xl font-semibold text-fg">This form isn&apos;t available</h1>
+            <h1 className="text-xl font-semibold text-fg">This form isn&apos;t available</h1>
             <p className="max-w-sm text-fg-secondary">The link may be mistyped, or the form was unpublished. Ask the person who shared it for a new link.</p>
           </div>
         )}

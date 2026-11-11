@@ -51,7 +51,7 @@ export function UsageSection() {
                   <Sparkles aria-hidden className="size-5" />
                 </span>
                 <div>
-                  <p className="flex flex-wrap items-center gap-2 font-heading text-lg font-semibold text-fg">
+                  <p className="flex flex-wrap items-center gap-2 text-lg font-semibold text-fg">
                     {data ? data.plan.name : <Skeleton width={160} height={18} rounded="full" />}
                     <DemoBadge>Demo plan · not billed</DemoBadge>
                   </p>
@@ -104,12 +104,12 @@ export function UsageSection() {
                 {ORG_ROLES.map((role) => (
                   <div key={role}>
                     <dt className="text-sm text-fg-muted">{ROLE_LABEL[role]}s</dt>
-                    <dd className="font-heading text-lg font-semibold text-fg tabular-nums">{data.seats.byRole[role]}</dd>
+                    <dd className="text-lg font-semibold text-fg tabular-nums">{data.seats.byRole[role]}</dd>
                   </div>
                 ))}
                 <div>
                   <dt className="text-sm text-fg-muted">Pending invites</dt>
-                  <dd className="font-heading text-lg font-semibold text-fg tabular-nums">{data.seats.pendingInvites}</dd>
+                  <dd className="text-lg font-semibold text-fg tabular-nums">{data.seats.pendingInvites}</dd>
                 </div>
               </dl>
             )}

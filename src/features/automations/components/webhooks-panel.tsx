@@ -111,7 +111,7 @@ export function WebhooksPanel({
       <div>
         <h2
           id="webhooks-heading"
-          className="flex items-center gap-2 font-heading text-lg font-semibold text-fg"
+          className="flex items-center gap-2 text-lg font-semibold text-fg"
         >
           <Webhook aria-hidden className="size-5 text-icon" />
           Webhooks
@@ -175,7 +175,7 @@ export function WebhooksPanel({
           <span className="flex size-11 items-center justify-center rounded-full bg-primary-subtle text-primary-text">
             <Webhook aria-hidden className="size-5" />
           </span>
-          <h3 className="font-heading text-base font-semibold text-fg">No webhooks on this board</h3>
+          <h3 className="text-base font-semibold text-fg">No webhooks on this board</h3>
           <p className="max-w-md text-sm text-fg-secondary">
             Add an endpoint to stream item events to your own service or an automation hub.
           </p>
