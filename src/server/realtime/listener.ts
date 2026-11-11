@@ -59,7 +59,7 @@ class RealtimeListener {
 
   private async connect(): Promise<void> {
     const client = new pg.Client({
-      connectionString: env.DATABASE_URL,
+      connectionString: env.DATABASE_URL_UNPOOLED ?? env.DATABASE_URL,
       application_name: 'kitstak-realtime',
       keepAlive: true,
     });

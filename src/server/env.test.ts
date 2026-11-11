@@ -27,4 +27,25 @@ describe('loadEnv', () => {
     expect(message).toContain('DATABASE_URL');
     expect(message).toContain('BETTER_AUTH_SECRET');
   });
+
+  it('falls back to the Supabase integration variables', () => {
+    const env = loadEnv({
+      ...valid,
+      DATABASE_URL: undefined,
+      POSTGRES_URL: 'postgres://u:p@pooler.example.com:6543/postgres?sslmode=require',
+      POSTGRES_URL_NON_POOLING: 'postgres://u:p@pooler.example.com:5432/postgres?sslmode=require',
+    });
+    expect(env.DATABASE_URL).toBe(
+      'postgres://u:p@pooler.example.com:6543/postgres?sslmode=require&uselibpqcompat=true',
+    );
+    expect(env.DATABASE_URL_UNPOOLED).toBe(
+      'postgres://u:p@pooler.example.com:5432/postgres?sslmode=require&uselibpqcompat=true',
+    );
+  });
+
+  it('prefers an explicit DATABASE_URL and leaves it untouched', () => {
+    const env = loadEnv({ ...valid, POSTGRES_URL: 'postgres://other:p@example.com/db' });
+    expect(env.DATABASE_URL).toBe(valid.DATABASE_URL);
+    expect(env.DATABASE_URL_UNPOOLED).toBeUndefined();
+  });
 });

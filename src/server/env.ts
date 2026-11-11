@@ -29,6 +29,14 @@ const envSchema = z.object({
     .string()
     .min(1, 'DATABASE_URL is required')
     .refine((value) => /^postgres(ql)?:\/\//.test(value), 'DATABASE_URL must be a postgres:// URL'),
+  /**
+   * Optional session-capable connection for LISTEN/NOTIFY and migrations, for hosts where
+   * `DATABASE_URL` goes through a transaction-mode pooler. Falls back to `DATABASE_URL`.
+   */
+  DATABASE_URL_UNPOOLED: z
+    .string()
+    .refine((value) => /^postgres(ql)?:\/\//.test(value), 'DATABASE_URL_UNPOOLED must be a postgres:// URL')
+    .optional(),
   BETTER_AUTH_SECRET: z.string().min(32, 'BETTER_AUTH_SECRET must be at least 32 characters'),
   BETTER_AUTH_URL: z.url('BETTER_AUTH_URL must be an absolute URL'),
   NEXT_PUBLIC_APP_URL: z.url().optional(),
@@ -47,11 +55,34 @@ const envSchema = z.object({
 
 export type ServerEnv = z.infer<typeof envSchema>;
 
+/**
+ * The Supabase integration for Vercel injects `sslmode=require`, which node-postgres reads as
+ * full certificate verification and then rejects Supabase's private CA. Opt those URLs into
+ * libpq semantics (encrypted, unverified), which is what the integration intends.
+ */
+function integrationUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (!/[?&]sslmode=/.test(value) || /[?&]uselibpqcompat=/.test(value)) return value;
+  return `${value}&uselibpqcompat=true`;
+}
+
+/**
+ * Accept the variable names the Supabase integration for Vercel provides, so a linked project
+ * works without copying connection strings by hand. Explicit `DATABASE_URL*` values win.
+ */
+function withIntegrationFallbacks(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return {
+    ...source,
+    DATABASE_URL: source.DATABASE_URL || integrationUrl(source.POSTGRES_URL),
+    DATABASE_URL_UNPOOLED: source.DATABASE_URL_UNPOOLED || integrationUrl(source.POSTGRES_URL_NON_POOLING),
+  };
+}
+
 let cached: ServerEnv | undefined;
 
 /** Parse and validate `process.env`. Throws a single readable error on failure. */
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): ServerEnv {
-  const result = envSchema.safeParse(source);
+  const result = envSchema.safeParse(withIntegrationFallbacks(source));
   if (!result.success) {
     const issues = result.error.issues
       .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
