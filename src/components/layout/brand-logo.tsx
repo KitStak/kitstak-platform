@@ -56,7 +56,7 @@ export function BrandLogo({ tone = "dark", height = 20, showProduct = false, cla
           className="rounded-[3px] px-1 py-px font-semibold uppercase leading-none tracking-widest"
           style={{
             fontSize: Math.max(9, Math.round(height * 0.45)),
-            color: tone === "dark" ? "rgba(243,240,231,0.72)" : "var(--text-secondary)",
+            color: tone === "dark" ? "rgba(243,240,231,0.72)" : "var(--text-muted)",
             background: tone === "dark" ? "rgba(243,240,231,0.1)" : "var(--neutral-soft)",
           }}
         >
