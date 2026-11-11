@@ -237,7 +237,7 @@ export function ByLocationLink({ sku, warehouseId, count }: { readonly sku: stri
 
 /** Neutral (info-blue) focus ring for free-text notes, so a focused Note never reads as an error; red stays for validation. */
 export const NOTE_FOCUS =
-  "focus-visible:border-info focus-visible:ring-info/25 focus-within:border-info focus-within:ring-info/25 aria-[invalid=true]:focus-visible:border-danger";
+  "focus-visible:border-focus focus-visible:ring-focus/25 focus-within:border-focus focus-within:ring-focus/25 aria-[invalid=true]:focus-visible:border-danger";
 
 /**
  * "Shortage" quick filter: toggles `field ≤ -1` (open demand exceeds stock). It writes an ordinary
@@ -309,7 +309,7 @@ export function GridStallNotice({ loading, onRetry, noun = "inventory" }: { read
   if (!loading) return null;
   const phase = now === null ? "ok" : gridStallPhase(loading, now - started);
   const stalled = phase === "stalled";
-  const linkCls = "shrink-0 rounded border border-current px-2 py-0.5 text-xs font-medium hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/40";
+  const linkCls = "shrink-0 rounded border border-current px-2 py-0.5 text-xs font-medium hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40";
   return (
     <div className="px-4 pb-2" data-testid="grid-stall-notice" data-phase={phase}>
       <style>{STALL_KEYFRAMES}</style>

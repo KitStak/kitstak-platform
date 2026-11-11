@@ -2,21 +2,21 @@ import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-export const badgeVariants = cva("inline-flex items-center gap-1 whitespace-nowrap font-semibold", {
+export const badgeVariants = cva("inline-flex items-center gap-1 whitespace-nowrap font-medium", {
   variants: {
     tone: {
-      neutral: "bg-neutral-soft text-neutral",
-      primary: "bg-primary-soft text-primary",
-      success: "bg-success-soft text-success",
-      warning: "bg-warning-soft text-warning",
-      danger: "bg-danger-soft text-danger",
-      info: "bg-info-soft text-info",
-      solid: "bg-primary text-white",
-      outline: "border border-border-strong bg-surface text-secondary",
+      neutral: "bg-muted text-fg-secondary",
+      primary: "bg-primary-subtle text-primary-text",
+      success: "bg-success-subtle text-success-text",
+      warning: "bg-warning-subtle text-warning-text",
+      danger: "bg-danger-subtle text-danger-text",
+      info: "bg-info-subtle text-info-text",
+      solid: "bg-primary text-primary-fg",
+      outline: "border border-border-default bg-transparent text-fg-secondary",
     },
     size: {
-      sm: "rounded px-1.5 py-px text-[10px] leading-4",
-      md: "rounded-md px-2 py-0.5 text-[11px] leading-4",
+      sm: "h-[18px] rounded-sm px-1.5 text-2xs",
+      md: "h-5 rounded-sm px-2 text-xs",
     },
     shape: { rounded: "", pill: "rounded-full" },
   },

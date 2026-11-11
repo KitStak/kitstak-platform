@@ -47,7 +47,7 @@ function findArticle(id: string): { article: HelpArticle; category: HelpCategory
   return null;
 }
 
-const rowClass = "flex w-full items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-primary-soft/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/40";
+const rowClass = "flex w-full items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-primary-soft/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40";
 
 function ArticleRow({ article, onOpen }: { readonly article: HelpArticle; readonly onOpen: (id: string) => void }) {
   return (
@@ -128,7 +128,7 @@ function Home({ go, onShortcuts }: { readonly go: (v: HelpView) => void; readonl
         </div>
       </section>
       <footer className="flex items-center gap-3 border-t border-border pt-3 text-[12px] text-faint">
-        <button type="button" className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/40" onClick={() => go({ kind: "article", id: "privacy" })}>Privacy Policy</button>
+        <button type="button" className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40" onClick={() => go({ kind: "article", id: "privacy" })}>Privacy Policy</button>
         <span aria-hidden>·</span>
         <span>{WHATS_NEW[0] ? `KitStak ${WHATS_NEW[0].version}` : "KitStak"}</span>
       </footer>
@@ -166,7 +166,7 @@ function ArticleView({ id, onNavigate }: { readonly id: string; readonly onNavig
       {article.links?.length ? (
         <div className="flex flex-wrap gap-2 border-t border-border pt-3">
           {article.links.map((l) => (
-            <Link key={l.href} href={l.href} onClick={onNavigate} className="inline-flex h-7 items-center gap-1 rounded-md border border-border-strong/70 bg-surface px-2.5 text-[12px] font-medium text-primary hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/40">
+            <Link key={l.href} href={l.href} onClick={onNavigate} className="inline-flex h-7 items-center gap-1 rounded-md border border-border-strong/70 bg-surface px-2.5 text-[12px] font-medium text-primary hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40">
               {l.label}<ChevronRight className="h-3.5 w-3.5" aria-hidden />
             </Link>
           ))}
@@ -238,7 +238,7 @@ function FeedbackView({ onDone }: { readonly onDone: () => void }) {
           <div className="flex items-center gap-1" role="radiogroup" aria-label="Rating">
             {[1, 2, 3, 4, 5].map((n) => (
               <button key={n} type="button" role="radio" aria-checked={rating === n} aria-label={`${n} of 5`} onClick={() => setRating(rating === n ? null : n)}
-                className="rounded p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/40">
+                className="rounded p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40">
                 <Star className={cn("h-5 w-5", rating !== null && n <= rating ? "fill-warning text-warning" : "text-faint")} aria-hidden />
               </button>
             ))}
@@ -333,7 +333,7 @@ function RecorderView({ onSupport }: { readonly onSupport: () => void }) {
         <div className="flex flex-col gap-2">
           <video src={url} controls className="w-full rounded-lg border border-border bg-black" aria-label="Recording preview" />
           <div className="flex flex-wrap gap-2">
-            <a href={url} download={fileName} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/40"><Download className="h-4 w-4" aria-hidden />Download video</a>
+            <a href={url} download={fileName} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-[13px] font-medium text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40"><Download className="h-4 w-4" aria-hidden />Download video</a>
             <Button variant="secondary" onClick={onSupport}><LifeBuoy className="h-4 w-4" aria-hidden />Send to support</Button>
           </div>
           <p className="text-[11.5px] text-faint">{recordingClock(seconds)} recorded. Attach the downloaded file to your email to support.</p>
@@ -362,7 +362,7 @@ export function HelpPanel({ view, onViewChange, onClose, onShortcuts }: { readon
   return (
     <Drawer open={view !== null} onOpenChange={(o) => { if (!o) onClose(); }} width={35} title={viewTitle(current)}
       headerExtra={current.kind !== "home" ? (
-        <button type="button" onClick={back} className="inline-flex items-center gap-1 rounded text-[12px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/40">
+        <button type="button" onClick={back} className="inline-flex items-center gap-1 rounded text-[12px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40">
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />Back
         </button>
       ) : undefined}>

@@ -47,7 +47,7 @@ export function SupportContact() {
       </div>
       <a
         href={supportMailto()}
-        className="self-start rounded text-[13px] font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
+        className="self-start rounded text-[13px] font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
       >
         Open email app
       </a>

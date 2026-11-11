@@ -132,7 +132,7 @@ function SelectInner<V extends string>(
           type="button"
           aria-label="Clear selection"
           onClick={() => onChange(null)}
-          className="absolute right-7 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
+          className="absolute right-7 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
         >
           <X className="h-3.5 w-3.5" aria-hidden />
         </button>

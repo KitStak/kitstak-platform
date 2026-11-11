@@ -10,7 +10,7 @@ import { useShellAllows } from "./shell-context";
 export { Breadcrumbs, AutoBreadcrumbs, type Crumb };
 
 function BetaTag() {
-  return <span className="ml-1 rounded bg-[#efe7fb] px-1 py-px text-[9px] font-bold uppercase text-[#621db8]">Beta</span>;
+  return <span className="ml-1 rounded-sm bg-muted px-1 py-px text-2xs font-medium text-fg-secondary">Beta</span>;
 }
 
 /** Route tabs for a config group, filtered by the viewer's permissions. */
@@ -59,20 +59,20 @@ export function PageHeader({ breadcrumbs, crumbLabel, title, helper, helperLink,
           {/* Phones: the title takes the full row so the CTAs wrap beneath it instead of squeezing the helper. */}
           <div className="min-w-0 flex-1 basis-full sm:basis-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold tracking-[-0.01em] text-foreground">{title}</h1>
+              <h1 className="text-xl font-semibold tracking-[-0.01em] text-fg">{title}</h1>
               {helpHref ? (
-                <a data-slot="page-help" href={helpHref} target="_blank" rel="noopener" aria-label={`Help: ${title}`} className="rounded text-[12px] font-medium text-[var(--info,#1d6fd6)] hover:underline">
+                <a data-slot="page-help" href={helpHref} target="_blank" rel="noopener" aria-label={`Help: ${title}`} className="rounded text-xs font-medium text-fg-secondary underline-offset-2 hover:text-fg hover:underline">
                   Help
                 </a>
               ) : null}
             </div>
             {helper || helperLink ? (
-              <p data-slot="page-helper" className="mt-0.5 max-w-[720px] text-[13px] text-secondary text-pretty">
+              <p data-slot="page-helper" className="mt-0.5 max-w-[720px] text-sm text-fg-muted text-pretty">
                 {helper}
                 {helperLink ? (
                   <>
                     {helper ? " " : null}
-                    <a href={helperLink.href} className="font-medium text-info hover:underline">
+                    <a href={helperLink.href} className="font-medium text-fg-secondary underline underline-offset-2 hover:text-fg">
                       {helperLink.label}
                     </a>
                   </>

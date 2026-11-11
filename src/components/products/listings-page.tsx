@@ -136,7 +136,7 @@ export function LinkStateToggle({ value, onChange, counts }: { readonly value: L
             data-state={checked ? "on" : "off"}
             className={cn(
               "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-[13px] font-medium text-secondary outline-none transition-[color,background-color,box-shadow]",
-              "hover:text-body focus-visible:ring-2 focus-visible:ring-info/40",
+              "hover:text-body focus-visible:ring-2 focus-visible:ring-focus/40",
               checked && "bg-surface text-foreground shadow-xs",
             )}
           >

@@ -3,24 +3,26 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-[13px] font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-45 outline-none focus-visible:ring-2 focus-visible:ring-info/40 select-none",
+  "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent text-sm font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-[0.38] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus select-none",
   {
     variants: {
       variant: {
         // Filled variants switch to a neutral fill when disabled; a faded red fill read as live.
-        primary: "bg-primary text-white hover:bg-primary-hover shadow-xs disabled:bg-neutral-soft disabled:text-faint disabled:border disabled:border-border disabled:shadow-none disabled:opacity-100",
+        primary: "bg-primary text-primary-fg hover:bg-primary-hover active:bg-primary-active disabled:border-border-subtle disabled:bg-sunken disabled:text-fg-muted disabled:opacity-100",
         secondary:
-          "bg-surface text-body border border-border-strong/70 hover:bg-surface-sunken hover:border-border-strong shadow-xs",
-        ghost: "text-secondary hover:bg-neutral-soft hover:text-body",
-        danger: "bg-danger text-white hover:opacity-90 shadow-xs disabled:bg-neutral-soft disabled:text-faint disabled:border disabled:border-border disabled:shadow-none disabled:opacity-100",
+          "bg-panel text-fg border-border-input hover:bg-muted hover:border-border-input-hover active:bg-pressed",
+        ghost: "text-fg-secondary hover:bg-hover hover:text-fg active:bg-pressed",
+        // Destructive actions are outlined, not filled, so they never read as the crimson primary.
+        danger: "bg-panel text-danger-text border-danger/45 hover:bg-danger-subtle hover:border-danger active:bg-danger-subtle",
         "success-outline":
-          "bg-surface text-success border border-success/40 hover:bg-success-soft shadow-xs",
+          "bg-panel text-success-text border-success/40 hover:bg-success-subtle",
         nav: "text-fg-secondary hover:bg-hover hover:text-fg",
       },
       size: {
+        xs: "h-6 px-2 text-xs",
         sm: "h-7 px-2.5 text-xs",
         md: "h-8 px-3",
-        lg: "h-9 px-4",
+        lg: "h-10 px-4 text-base",
         icon: "h-8 w-8 p-0",
         "icon-sm": "h-7 w-7 p-0",
       },

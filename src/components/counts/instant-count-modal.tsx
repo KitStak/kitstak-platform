@@ -166,7 +166,7 @@ function Body({ onOpenChange, onDone }: { readonly onOpenChange: (open: boolean)
             <div className="flex flex-col gap-1">
               <FieldLabel htmlFor="ic-loc" required>Location</FieldLabel>
               <TextField id="ic-loc" ref={scanRef} autoFocus value={code} maxLength={120} placeholder={warehouseId ? "Scan or type a location code" : "Choose a warehouse first"} onChange={(e) => { setCode(e.target.value); setLookupError(null); }} invalid={Boolean(lookupError)}
-                className={lookupError ? undefined : "focus-within:border-info focus-within:ring-info/20"} aria-describedby={lookupError ? "ic-loc-err" : undefined}
+                className={lookupError ? undefined : "focus-within:border-focus focus-within:ring-focus/20"} aria-describedby={lookupError ? "ic-loc-err" : undefined}
                 leading={<ScanLine className="h-4 w-4 text-faint" aria-hidden />} />
               <FieldError id="ic-loc-err" message={lookupError ?? undefined} />
             </div>

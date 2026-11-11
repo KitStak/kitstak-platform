@@ -112,7 +112,7 @@ export function Drawer({ open, onOpenChange, title, description, headerExtra, fo
               </div>
               <DialogPrimitive.Close
                 aria-label="Close"
-                className="-mr-1 rounded-md p-1.5 text-faint transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
+                className="-mr-1 rounded-md p-1.5 text-faint transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
               >
                 <X className="h-4 w-4" aria-hidden />
               </DialogPrimitive.Close>

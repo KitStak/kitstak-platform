@@ -44,7 +44,7 @@ export const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrim
         {hideClose ? null : (
           <DialogPrimitive.Close
             aria-label="Close"
-            className="absolute right-3 top-3 rounded-md p-1.5 text-faint transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
+            className="absolute right-3 top-3 rounded-md p-1.5 text-faint transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
           >
             <X className="h-4 w-4" aria-hidden />
           </DialogPrimitive.Close>

@@ -63,7 +63,7 @@ export const TextField = React.forwardRef<HTMLInputElement, TextFieldProps>(
                 if (!isControlled) setInner("");
                 onClear();
               }}
-              className="rounded p-0.5 text-faint transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
+              className="rounded p-0.5 text-faint transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
             >
               <X className="h-3.5 w-3.5" aria-hidden />
             </button>

@@ -23,7 +23,7 @@ export interface TabItem {
 
 function CountBadge({ count, active }: { readonly count: number; readonly active: boolean }) {
   return (
-    <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums", active ? "bg-primary-soft text-primary" : "bg-neutral-soft text-neutral")}>
+    <span className={cn("rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums", active ? "bg-pressed text-fg" : "bg-muted text-fg-secondary")}>
       {count}
     </span>
   );
@@ -43,8 +43,8 @@ const pointerFocusProps = {
 } as const;
 
 const underlineTrigger =
-  "inline-flex items-center gap-1.5 border-b-2 pb-2 pt-2.5 text-[12px] font-semibold uppercase tracking-[0.02em] whitespace-nowrap transition-colors outline-none " +
-  "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-info/40 focus-visible:rounded-sm data-[pointer]:ring-0 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center gap-1.5 border-b-2 pb-2 pt-2.5 text-sm font-medium whitespace-nowrap transition-colors outline-none " +
+  "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus/40 focus-visible:rounded-sm data-[pointer]:ring-0 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function UnderlineTabs({
   tabs,
@@ -61,7 +61,7 @@ export function UnderlineTabs({
 }) {
   return (
     <TabsPrimitive.Root value={active} onValueChange={onChange} activationMode="manual">
-      <TabsPrimitive.List aria-label={ariaLabel} className={cn("flex items-center gap-6 overflow-x-auto overflow-y-hidden px-6 shadow-[inset_0_-1px_0_var(--color-border)]", className)}>
+      <TabsPrimitive.List aria-label={ariaLabel} className={cn("flex items-center gap-6 overflow-x-auto overflow-y-hidden px-6 shadow-[inset_0_-1px_0_var(--border-subtle)]", className)}>
         {tabs.map((tab) => {
           const isActive = tab.key === active;
           const Icon = tab.icon;
@@ -71,7 +71,7 @@ export function UnderlineTabs({
               value={tab.key}
               disabled={tab.disabled}
               {...pointerFocusProps}
-              className={cn(underlineTrigger, isActive ? "border-primary text-primary" : "border-transparent text-secondary hover:border-border-strong hover:text-foreground")}
+              className={cn(underlineTrigger, isActive ? "border-primary text-fg" : "border-transparent text-fg-secondary hover:border-border-strong hover:text-fg")}
             >
               {Icon ? <Icon className="h-3.5 w-3.5" aria-hidden /> : null}
               {tab.label}
@@ -111,7 +111,7 @@ export function PageTabs({ tabs, className, ariaLabel = "Page sections" }: { rea
   const pathname = usePathname();
   const activeHref = activePageTab(tabs, pathname);
   return (
-    <nav aria-label={ariaLabel} className={cn("flex items-center gap-6 overflow-x-auto overflow-y-hidden px-6 shadow-[inset_0_-1px_0_var(--color-border)]", className)}>
+    <nav aria-label={ariaLabel} className={cn("flex items-center gap-6 overflow-x-auto overflow-y-hidden px-6 shadow-[inset_0_-1px_0_var(--border-subtle)]", className)}>
       {tabs.map((tab) => {
         const isActive = tab.href === activeHref;
         return (
@@ -119,7 +119,7 @@ export function PageTabs({ tabs, className, ariaLabel = "Page sections" }: { rea
             key={tab.href}
             href={tab.href}
             aria-current={isActive ? "page" : undefined}
-            className={cn(underlineTrigger, isActive ? "border-primary text-primary" : "border-transparent text-secondary hover:border-border-strong hover:text-foreground")}
+            className={cn(underlineTrigger, isActive ? "border-primary text-fg" : "border-transparent text-fg-secondary hover:border-border-strong hover:text-fg")}
           >
             {tab.label}
             {typeof tab.count === "number" ? <CountBadge count={tab.count} active={isActive} /> : null}
@@ -147,7 +147,7 @@ export function SegmentedTabs({
 }) {
   return (
     <TabsPrimitive.Root value={active} onValueChange={onChange}>
-      <TabsPrimitive.List aria-label={ariaLabel} className={cn("inline-flex items-center gap-0.5 rounded-lg bg-neutral-soft p-0.5", className)}>
+      <TabsPrimitive.List aria-label={ariaLabel} className={cn("inline-flex items-center gap-0.5 rounded-md bg-sunken p-0.5", className)}>
         {tabs.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -157,10 +157,10 @@ export function SegmentedTabs({
               disabled={tab.disabled}
               {...pointerFocusProps}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-md font-medium whitespace-nowrap text-secondary transition-[color,background-color,box-shadow] outline-none",
-                "hover:text-body focus-visible:ring-2 focus-visible:ring-info/40 data-[pointer]:ring-0 disabled:cursor-not-allowed disabled:opacity-50",
-                "data-[state=active]:bg-surface data-[state=active]:text-foreground data-[state=active]:shadow-xs",
-                size === "sm" ? "h-6 px-2 text-[12px]" : "h-7 px-3 text-[13px]"
+                "inline-flex items-center gap-1.5 rounded-sm font-medium whitespace-nowrap text-fg-secondary transition-[color,background-color,box-shadow] outline-none",
+                "hover:text-body focus-visible:ring-2 focus-visible:ring-focus/40 data-[pointer]:ring-0 disabled:cursor-not-allowed disabled:opacity-50",
+                "data-[state=active]:bg-raised data-[state=active]:text-fg data-[state=active]:shadow-xs data-[state=active]:ring-1 data-[state=active]:ring-[color:var(--segment-ring)]",
+                size === "sm" ? "h-6 px-2 text-xs" : "h-7 px-3 text-sm"
               )}
             >
               {Icon ? <Icon className="h-3.5 w-3.5" aria-hidden /> : null}
@@ -183,7 +183,7 @@ export interface VerticalNavItem {
 }
 
 const verticalItem =
-  "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-info/30";
+  "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-[13px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-focus/30";
 
 export function VerticalNav({
   items,

@@ -39,7 +39,7 @@ export function todayValue(includeTime: boolean, now: Date = new Date()): Date {
     : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
 }
 
-const footerButton = "h-7 rounded-md px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30";
+const footerButton = "h-7 rounded-md px-2.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30";
 
 function withTime(day: Date, source: Date | null, includeTime: boolean): Date {
   const next = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0, 0);
@@ -135,7 +135,7 @@ export function DateField({ includeTime, ...props }: DateFieldBaseProps & { read
             </button>
           ) : null}
           <PopoverPrimitive.Trigger asChild>
-            <button type="button" aria-label="Open calendar" disabled={disabled} className="rounded p-1 text-secondary transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30 disabled:cursor-not-allowed">
+            <button type="button" aria-label="Open calendar" disabled={disabled} className="rounded p-1 text-secondary transition-colors hover:bg-neutral-soft hover:text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30 disabled:cursor-not-allowed">
               <CalendarDays className="h-3.5 w-3.5" aria-hidden />
             </button>
           </PopoverPrimitive.Trigger>
@@ -184,7 +184,7 @@ export function DateField({ includeTime, ...props }: DateFieldBaseProps & { read
                   const base = value ?? new Date();
                   onChange(new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m, 0, 0));
                 }}
-                className="h-7 rounded-md border border-border-strong/70 bg-surface px-2 text-[12px] tabular-nums focus:border-info focus:outline-none focus:ring-2 focus:ring-info/25"
+                className="h-7 rounded-md border border-border-strong/70 bg-surface px-2 text-[12px] tabular-nums focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25"
               />
             </div>
           ) : null}

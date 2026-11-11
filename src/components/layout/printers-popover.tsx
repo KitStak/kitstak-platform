@@ -306,7 +306,7 @@ export function PrintersPopover() {
               {" · "}
               <button type="button" onClick={() => agent.recheck()} className="font-semibold text-primary underline-offset-2 hover:underline">Check for agent</button>
               {" · "}
-              <button type="button" onClick={() => { setOpen(false); openHelpArticle("direct-print"); }} className="font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/40">Setup guide</button>
+              <button type="button" onClick={() => { setOpen(false); openHelpArticle("direct-print"); }} className="font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40">Setup guide</button>
             </Callout>
           ) : null}
           {printers.isSuccess && rows.length > 0 ? (

@@ -128,7 +128,7 @@ function ScanButton({ kind, params, onResolved, disabled }: { readonly kind: Pic
   useBarcodeScanner(resolve, { enabled: armed, allowInInputs: true });
   return (
     <Tooltip content={armed ? "Scan now… (click to cancel)" : "Scan a barcode"}>
-      <button type="button" aria-pressed={armed} aria-label="Scan barcode" disabled={disabled} onClick={() => setArmed(!armed)} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30 disabled:opacity-45 ${armed ? "animate-pulse border-primary bg-primary-soft text-primary" : "border-border-strong/70 text-secondary hover:bg-surface-sunken"}`}>
+      <button type="button" aria-pressed={armed} aria-label="Scan barcode" disabled={disabled} onClick={() => setArmed(!armed)} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30 disabled:opacity-45 ${armed ? "animate-pulse border-primary bg-primary-soft text-primary" : "border-border-strong/70 text-secondary hover:bg-surface-sunken"}`}>
         <ScanLine className="h-4 w-4" aria-hidden />
       </button>
     </Tooltip>

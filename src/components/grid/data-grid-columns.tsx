@@ -119,7 +119,7 @@ export function expandColumn<T>(): ColumnDef<T, unknown> {
           e.stopPropagation();
           row.toggleExpanded();
         }}
-        className="flex h-6 w-6 items-center justify-center rounded text-secondary hover:bg-neutral-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30"
+        className="flex h-6 w-6 items-center justify-center rounded text-secondary hover:bg-neutral-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
       >
         <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", row.getIsExpanded() && "rotate-90")} aria-hidden />
       </button>

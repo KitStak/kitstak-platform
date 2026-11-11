@@ -81,7 +81,7 @@ export function DocumentsViewer({ entityType, entityId, canEdit = false }: Docum
                 </Button>
               </Tooltip>
               <Tooltip content="Download">
-                <a href={fileUrl(d.fileId, true)} download aria-label={`Download ${d.fileName ?? d.documentType}`} className="flex h-7 w-7 items-center justify-center rounded-md text-secondary hover:bg-neutral-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-info/30">
+                <a href={fileUrl(d.fileId, true)} download aria-label={`Download ${d.fileName ?? d.documentType}`} className="flex h-7 w-7 items-center justify-center rounded-md text-secondary hover:bg-neutral-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
                   <Download className="h-3.5 w-3.5" aria-hidden />
                 </a>
               </Tooltip>

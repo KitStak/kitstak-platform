@@ -28,7 +28,7 @@ export function WizardStepper({ steps, onSelect, className }: { readonly steps: 
                 onClick={() => onSelect(step.key)}
                 className={cn(
                   "group flex min-w-[148px] flex-none items-center gap-2.5 rounded-lg border px-3 py-2 text-left outline-none transition-[border-color,background-color,box-shadow]",
-                  "focus-visible:ring-2 focus-visible:ring-info/30 disabled:cursor-not-allowed",
+                  "focus-visible:ring-2 focus-visible:ring-focus/30 disabled:cursor-not-allowed",
                   isActive && "border-primary bg-primary-soft/60 shadow-[0_0_0_1px_var(--primary)]",
                   isAttention && "border-warning/60 bg-warning-soft",
                   !isActive && !isAttention && "border-transparent enabled:hover:border-border enabled:hover:bg-surface-sunken"
