@@ -124,7 +124,7 @@ describe("display & inputs", () => {
     render(<StatusPill status="Partially Shipped" domain="shipmentOrder" />);
     const pill = screen.getByText("Partially Shipped").closest("[data-status]") as HTMLElement;
     // Tones are shared label-palette tokens (AA text on the tint in both themes).
-    expect(pill.style.color).toBe("var(--label-green-text)");
+    expect(pill.style.color).toContain("var(--label-green-text)");
     expect(pill.style.backgroundColor).toBe("var(--label-green-subtle)");
     expect(screen.getByLabelText("Partial")).toBeTruthy();
   });

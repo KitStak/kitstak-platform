@@ -10,15 +10,23 @@ import type { CSSProperties } from "react";
 export interface StatusTone {
   /** Tinted pill background (`--label-*-subtle`). */
   readonly bg: string;
-  /** Pill text colour (`--label-*-text`), AA on the tint and on panels in both themes. */
+  /** Pill text colour: `--label-*-text` with ink mixed in (see `pillText`), AA on the tint. */
   readonly fg: string;
   /** Solid dot colour (`--label-*`). */
   readonly dot: string;
 }
 
+/**
+ * Pill text colour: the label's text colour with a share of ink mixed in (`--pill-text-mix`, set
+ * per theme in the shared tokens) so it stays AA on its own tint for every label colour.
+ */
+export function pillText(name: string): string {
+  return `color-mix(in srgb, var(--label-${name}-text), var(--text-primary) var(--pill-text-mix))`;
+}
+
 /** A tone from the shared label palette (src/styles/tokens.css, same tokens as KitStak CRM). */
 function label(name: string): StatusTone {
-  return { bg: `var(--label-${name}-subtle)`, fg: `var(--label-${name}-text)`, dot: `var(--label-${name})` };
+  return { bg: `var(--label-${name}-subtle)`, fg: pillText(name), dot: `var(--label-${name})` };
 }
 
 /**
