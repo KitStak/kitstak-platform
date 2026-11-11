@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -7,6 +8,23 @@ import { cn } from './cn';
 
 const tokens = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
 const lightBlock = tokens.slice(0, tokens.indexOf("[data-theme='dark']"));
+
+/**
+ * src/styles/tokens.css is shared byte-for-byte with KitStak WMS (same path there).
+ * This hash is pinned in BOTH repos. To change a token: edit the file, update the hash,
+ * then copy the file and the hash to the other repo. A one-sided edit fails here.
+ */
+const SHARED_TOKENS_SHA256 = '09f92259c73af5dbd61100dbde80725c50636fb06bbd7133c49d86b529063e2f';
+
+describe('shared design tokens', () => {
+  it('matches the hash pinned in both KitStak repos (no drift)', () => {
+    const actual = createHash('sha256').update(tokens.replace(/\r\n/g, '\n')).digest('hex');
+    expect(
+      actual,
+      'src/styles/tokens.css changed. Update SHARED_TOKENS_SHA256 here AND copy the file and hash to the other KitStak repo.',
+    ).toBe(SHARED_TOKENS_SHA256);
+  });
+});
 
 function tokenValue(name: string): string {
   const match = new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(lightBlock);

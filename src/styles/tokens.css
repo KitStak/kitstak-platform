@@ -1,23 +1,28 @@
 /*
- * KitStak design tokens — the single source of truth for color, type, space, depth and motion.
+ * KitStak design tokens: the single source of truth for color, type, space, depth and motion.
+ *
+ * SHARED FILE. This file is byte-identical in KitStakCRM and KitStakWMS
+ * (src/styles/tokens.css in both). A unit test in each repo pins its SHA-256, so an edit made
+ * in one repo fails that repo's tests until the pinned hash is updated, and the same file and
+ * hash must then be copied to the other repo. App-specific tokens and legacy aliases belong in
+ * each app's globals.css, never here.
  *
  * Themes
  *   - Light is primary and is the default.
  *   - Dark applies when <html data-theme="dark">, or when the OS prefers dark and the user has
- *     not forced light (<html data-theme="light">). The theme provider in src/features/shell
- *     writes the resolved theme to data-theme before first paint.
+ *     not forced light (<html data-theme="light">). Each app's theme script writes the resolved
+ *     theme to data-theme before first paint.
  *
  * Label palette
- *   Names match LABEL_COLORS in src/server/db/schema/column-types.ts. Every label has:
- *     --label-<name>          pill background (full-bleed status cells)
+ *   Every label color has:
+ *     --label-<name>          pill background (user-picked label fills, kanban column headers)
  *     --label-<name>-hover    pill hover
- *     --label-<name>-subtle   tinted surface (chips, kanban column headers, light pills)
- *     --label-<name>-fg       text on the pill, chosen per color for >= 4.5:1 (WCAG AA): white on
- *                             deep hues (red, blue, purple, berry…), ink on bright ones (green,
- *                             orange, yellow, sky…). Hues stay vivid instead of being darkened.
- *     --label-<name>-text     the color as text/icons on panels (AA on --surface-panel per theme),
- *                             e.g. group titles.
- *   Use labelColorVars() from src/components/ui/label-color.ts instead of building names by hand.
+ *     --label-<name>-subtle   tinted surface (status pills, chips)
+ *     --label-<name>-fg       text on the solid fill, chosen per color for >= 4.5:1 (WCAG AA):
+ *                             white on deep hues (red, blue, purple, berry), ink on bright ones
+ *                             (green, orange, yellow, sky).
+ *     --label-<name>-text     the color as text/icons on panels and on its own -subtle tint
+ *                             (AA on --surface-panel per theme).
  */
 
 :root {
