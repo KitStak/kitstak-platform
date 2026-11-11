@@ -9,8 +9,6 @@
  * Creates KS-TEST-E2E-R7-* records on the shared dev DB (Copperline / NovaFit · MLT1).
  * Run: npx playwright test tests/e2e/inbound-receiving/po-round7.spec.ts --project=e2e --no-deps
  */
-import Database from "better-sqlite3";
-import path from "node:path";
 import { request as pwRequest, type APIRequestContext } from "@playwright/test";
 import { expect, test } from "../fixtures/auth";
 import { e2eBaseUrl, storageStatePath } from "../fixtures/roles";
@@ -28,7 +26,11 @@ async function json<T>(res: Awaited<ReturnType<APIRequestContext["get"]>>): Prom
 }
 
 const suffix = () => Date.now().toString(36).toUpperCase();
-const readDb = () => new Database(path.resolve(".data/kitstak.db"), { readonly: true, fileMustExist: true });
+/** Direct DB reads need a Postgres the dev server also uses (local PGlite is single-process, held by `next dev`). */
+const readDb = async (): Promise<{ query: <T>(text: string, params?: unknown[]) => Promise<T[]>; close: () => Promise<void> }> => {
+  const mod = (await import("../../../scripts/lib/raw-db.mjs" as string)) as { openRawDb: () => Promise<{ query: <T>(text: string, params?: unknown[]) => Promise<T[]>; close: () => Promise<void> }> };
+  return await mod.openRawDb();
+};
 
 async function setup(a: Awaited<ReturnType<typeof api>>, sku: string, qty: number) {
   const product = (await json<{ id: string; clientId: string; sku: string }[]>(await a.c.get(`/api/products?q=${sku}&ps=5`))).find((p) => p.sku === sku);
@@ -45,6 +47,7 @@ async function setup(a: Awaited<ReturnType<typeof api>>, sku: string, qty: numbe
 }
 
 test("directed putaway stamps the algorithm even when the suggestion predates the lot; short-close keeps stock", async () => {
+  test.skip(!process.env.DATABASE_URL, "reads the ledger directly: needs DATABASE_URL (local PGlite is held by the dev server)");
   test.setTimeout(240_000);
   const a = await api();
   const { po, lineId } = await setup(a, "CPL-BAG-MED-12", 10);
@@ -58,9 +61,9 @@ test("directed putaway stamps the algorithm even when the suggestion predates th
     data: { lines: [{ lineId, quantity: 4, locationId: top?.locationId, lotNumber: `R7-${suffix()}`, expiryDate: expiry, fromSuggestion: true, suggestBasis: { qty: 4, lot: null, expiry: null, damageReason: null } }] },
   }));
   expect(r.status).toBe("Started");
-  const db = readDb();
-  const txn = db.prepare("SELECT algorithm_name AS a, algorithm_rule_name AS r FROM inventory_transactions WHERE receipt_id = ?").get(r.receiptIds[0]) as { a: string | null; r: string | null };
-  expect(txn.a).toBe(s.algorithm);
+  const db = await readDb();
+  const [txn] = await db.query<{ a: string | null; r: string | null }>("SELECT algorithm_name AS a, algorithm_rule_name AS r FROM inventory_transactions WHERE receipt_id = $1 LIMIT 1", [r.receiptIds[0]]);
+  expect(txn?.a).toBe(s.algorithm);
 
   // Cancel order on the Started PO: short-close, received stock kept.
   const detail = await json<{ version: number }>(await a.c.get(`/api/purchase-orders/${po.id}`));
@@ -68,12 +71,12 @@ test("directed putaway stamps the algorithm even when the suggestion predates th
   expect(out.shortClosed).toBe(true);
   expect(out.status).toBe("Completed");
   expect(out.cancelledUnits).toBe(6);
-  const active = db.prepare("SELECT count(*) AS n FROM receipts WHERE purchase_order_id = ? AND cancelled_at IS NULL").get(po.id) as { n: number };
-  expect(active.n).toBe(1);
-  const log = db.prepare("SELECT field, message FROM change_log WHERE entity_id = ? ORDER BY rowid").all(po.id) as { field: string; message: string }[];
+  const [active] = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM receipts WHERE purchase_order_id = $1 AND cancelled_at IS NULL", [po.id]);
+  expect(active?.n).toBe(1);
+  const log = await db.query<{ field: string; message: string }>('SELECT field, message FROM change_log WHERE entity_id = $1 ORDER BY "rowid"', [po.id]);
   expect(log.filter((l) => l.field === "receivedAt").map((l) => l.message)).toEqual([expect.stringMatching(/^Actual Receiving Date is modified\. \(empty\) --> /)]);
   expect(log.some((l) => l.field === "statusChangeReason" && /Open balance cancelled/.test(l.message))).toBe(true);
-  db.close();
+  await db.close();
 });
 
 test("Import PO Serial Numbers attaches serials and Remove Serial Number clears them", async () => {

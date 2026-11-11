@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { dbAll } from "@/server/db/sql";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { auditLog, users, warehouses } from "@/server/db/schema";
@@ -38,27 +39,27 @@ async function json(res: Response): Promise<Record<string, unknown>> {
 
 const listRoute = defineRoute({
   permission: "settings.warehouse.edit",
-  handler: ({ db, grid }) => {
+  handler: async ({ db, grid }) => {
     const query = grid();
-    const rows = db.select({ id: warehouses.id }).from(warehouses).all();
+    const rows = await db.select({ id: warehouses.id }).from(warehouses);
     return listResult(rows, { total: rows.length, page: query.page, pageSize: query.pageSize });
   },
 });
 
 const createRoute = defineRoute({
   body: z.object({ code: z.string().min(1), name: z.string().min(1) }),
-  handler: ({ db, body }) => {
-    db.insert(warehouses).values({ id: `wh-${body.code}`, code: body.code, name: body.name, addressLine: "a", city: "c", state: "s" }).run();
+  handler: async ({ db, body }) => {
+    await db.insert(warehouses).values({ id: `wh-${body.code}`, code: body.code, name: body.name, addressLine: "a", city: "c", state: "s" });
     if (body.name === "boom") throw new AppError("RULE_VIOLATION", "Not allowed");
     return created({ id: `wh-${body.code}` });
   },
 });
 
 describe("defineRoute", () => {
-  beforeEach(() => {
-    current = seededDb();
+  beforeEach(async () => {
+    current = await seededDb();
   });
-  afterEach(() => current.close());
+  afterEach(async () => await current.close());
 
   it("401 without a session, 200 with one (envelope + meta)", async () => {
     expect((await listRoute(request("GET", "/api/wh"))).status).toBe(401);
@@ -73,7 +74,7 @@ describe("defineRoute", () => {
     const res = await listRoute(request("GET", "/api/wh", { cookie: await cookieFor(current.ids.viewer) }));
     expect(res.status).toBe(403);
     expect(await json(res)).toMatchObject({ success: false, code: "FORBIDDEN" });
-    expect(current.db.select().from(auditLog).all().some((a) => a.action === "security.permission_denied")).toBe(true);
+    expect((await current.db.select().from(auditLog)).some((a) => a.action === "security.permission_denied")).toBe(true);
   });
 
   it("400 VALIDATION for a malformed grid query", async () => {
@@ -86,7 +87,7 @@ describe("defineRoute", () => {
     const res = await createRoute(request("POST", "/api/wh", { cookie: await cookieFor(current.ids.admin), csrf: false, body: { code: "W9", name: "X" } }));
     expect(res.status).toBe(403);
     expect(await json(res)).toMatchObject({ code: "CSRF" });
-    expect(current.db.select().from(auditLog).all().some((a) => a.action === "security.csrf_rejected")).toBe(true);
+    expect((await current.db.select().from(auditLog)).some((a) => a.action === "security.csrf_rejected")).toBe(true);
   });
 
   it("validates bodies and returns fieldErrors", async () => {
@@ -102,7 +103,7 @@ describe("defineRoute", () => {
     const failed = await createRoute(request("POST", "/api/wh", { cookie, body: { code: "W8", name: "boom" } }));
     expect(failed.status).toBe(422);
     expect(await json(failed)).toMatchObject({ code: "RULE_VIOLATION", error: "Not allowed" });
-    const codes = current.db.select({ code: warehouses.code }).from(warehouses).all().map((r) => r.code);
+    const codes = (await current.db.select({ code: warehouses.code }).from(warehouses)).map((r) => r.code);
     expect(codes).toContain("W9");
     expect(codes).not.toContain("W8");
   });
@@ -110,7 +111,7 @@ describe("defineRoute", () => {
   it("deactivating a user kills their session on the next request", async () => {
     const cookie = await cookieFor(current.ids.admin);
     expect((await listRoute(request("GET", "/api/wh", { cookie }))).status).toBe(200);
-    current.db.update(users).set({ isActive: false }).where(eq(users.id, current.ids.admin)).run();
+    await current.db.update(users).set({ isActive: false }).where(eq(users.id, current.ids.admin));
     expect((await listRoute(request("GET", "/api/wh", { cookie }))).status).toBe(401);
   });
 
@@ -132,9 +133,31 @@ describe("defineRoute", () => {
     expect(second.headers.get("retry-after")).toBeTruthy();
   });
 
-  it("refuses async handlers inside a transaction", async () => {
-    const asyncTx = defineRoute({ handler: async () => ({ ok: true }) });
+  it("runs async mutation handlers in one transaction holding the app write lock", async () => {
+    const asyncTx = defineRoute({
+      handler: async ({ db }) => {
+        const locks = await dbAll<{ objid: number }>(db, sql`SELECT objid::int8 AS objid FROM pg_locks WHERE locktype = 'advisory' AND granted`);
+        await db.update(warehouses).set({ name: "Renamed in tx" }).where(eq(warehouses.id, current.ids.wh1));
+        return { locked: locks.length > 0 };
+      },
+    });
     const res = await asyncTx(request("POST", "/api/t", { cookie: await cookieFor(current.ids.admin), body: {} }));
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(200);
+    expect((await json(res)).data).toEqual({ locked: true });
+    const [wh] = await current.db.select().from(warehouses).where(eq(warehouses.id, current.ids.wh1));
+    expect(wh?.name).toBe("Renamed in tx");
+  });
+
+  it("rolls the whole transaction back when an async handler throws", async () => {
+    const failing = defineRoute({
+      handler: async ({ db }) => {
+        await db.update(warehouses).set({ name: "Never committed" }).where(eq(warehouses.id, current.ids.wh1));
+        throw new AppError("CONFLICT", "stale");
+      },
+    });
+    const res = await failing(request("POST", "/api/t", { cookie: await cookieFor(current.ids.admin), body: {} }));
+    expect(res.status).toBe(409);
+    const [wh] = await current.db.select().from(warehouses).where(eq(warehouses.id, current.ids.wh1));
+    expect(wh?.name).not.toBe("Never committed");
   });
 });

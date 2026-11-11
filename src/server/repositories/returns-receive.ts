@@ -23,6 +23,7 @@ import { getReturnRules } from "./company-return-rules";
 import { moveBackBlockReason } from "./packing-hospitals";
 import { locationLock } from "./packing-locks";
 import { dateOnly, shippedAttributes } from "./returns-shipped";
+import { dbAll, dbGet, forEachSeq, mapSeq } from "@/server/db/sql";
 
 export interface RuleItem {
   readonly productId: string;
@@ -50,16 +51,16 @@ const ruleLabel = (key: ReturnRuleKey) => RETURN_RULE_DEFS.find((d) => d.key ===
  *  - pack type: the pack type received must be one that shipped.
  * Returns per-item field errors keyed `items.<i>.<field>` (empty = accepted).
  */
-export function returnRuleErrors(tx: AppDb, order: { readonly id: string; readonly warehouseId: string } | null | undefined, receivingWarehouseId: string,
-  items: readonly RuleItem[], opts: { readonly packTypeOf?: (index: number) => string | null } = {}): Record<string, string[]> {
+export async function returnRuleErrors(tx: AppDb, order: { readonly id: string; readonly warehouseId: string } | null | undefined, receivingWarehouseId: string,
+  items: readonly RuleItem[], opts: { readonly packTypeOf?: (index: number) => string | null | Promise<string | null> } = {}): Promise<Record<string, string[]>> {
   const out: Record<string, string[]> = {};
   if (!order) return out;
-  const rules = getReturnRules(tx);
-  const lines = tx.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, order.id)).all();
-  const attrs = shippedAttributes(tx, order.id);
+  const rules = await getReturnRules(tx);
+  const lines = await tx.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, order.id));
+  const attrs = await shippedAttributes(tx, order.id);
   const productIds = [...new Set(items.map((i) => i.productId))];
-  const tracking = new Map(productIds.length ? tx.select({ id: schema.products.id, sku: schema.products.sku, trackLot: schema.products.trackLot, trackExpiry: schema.products.trackExpiry, trackProductionDate: schema.products.trackProductionDate, trackSerial: schema.products.trackSerial })
-    .from(schema.products).where(inArray(schema.products.id, productIds)).all().map((p) => [p.id, p]) : []);
+  const tracking = new Map(productIds.length ? (await tx.select({ id: schema.products.id, sku: schema.products.sku, trackLot: schema.products.trackLot, trackExpiry: schema.products.trackExpiry, trackProductionDate: schema.products.trackProductionDate, trackSerial: schema.products.trackSerial })
+    .from(schema.products).where(inArray(schema.products.id, productIds))).map((p) => [p.id, p]) : []);
   const shipped: ShippedLine[] = [];
   for (const l of lines) {
     const a = attrs.get(l.productId);
@@ -70,16 +71,16 @@ export function returnRuleErrors(tx: AppDb, order: { readonly id: string; readon
     const n = Math.max(a.lots.length, a.expiryDates.length, a.productionDates.length, a.packTypes.length, 1);
     for (let k = 0; k < n; k += 1) shipped.push({ productId, qty: 0, lot: a.lots[k] ?? null, expiryDate: a.expiryDates[k] ?? null, productionDate: a.productionDates[k] ?? null, packTypeId: a.packTypes[k] ?? null, serials: k === 0 ? a.serials : [] });
   }
-  const returned = new Map(tx.all<{ productId: string; n: number }>(sql`SELECT rol.product_id AS productId, coalesce(sum(rol.returned_qty), 0) AS n FROM return_order_lines rol
-    JOIN return_orders ro ON ro.id = rol.return_order_id WHERE ro.shipment_order_id = ${order.id} AND ro.status <> 'Cancelled' GROUP BY rol.product_id`).map((r) => [r.productId, r.n]));
+  const returned = new Map((await dbAll<{ productId: string; n: number }>(tx, sql`SELECT rol.product_id AS "productId", coalesce(sum(rol.returned_qty), 0)::int AS n FROM return_order_lines rol
+    JOIN return_orders ro ON ro.id = rol.return_order_id WHERE ro.shipment_order_id = ${order.id} AND ro.status <> 'Cancelled' GROUP BY rol.product_id`)).map((r) => [r.productId, r.n]));
   const running = new Map<string, number>();
   const push = (key: string, msg: string) => { (out[key] ??= []).push(msg); };
-  items.forEach((item, i) => {
+  for (const [i, item] of items.entries()) {
     const forSku = shipped.filter((s) => s.productId === item.productId);
     const p = tracking.get(item.productId);
     const already = (returned.get(item.productId) ?? 0) + (running.get(item.productId) ?? 0);
     running.set(item.productId, (running.get(item.productId) ?? 0) + item.quantity);
-    const packType = item.packType ?? opts.packTypeOf?.(i) ?? null;
+    const packType = item.packType ?? (await opts.packTypeOf?.(i)) ?? null;
     // Required attributes: a tracked SKU whose match rule is on must say which lot / date came back.
     if (forSku.length > 0) {
       const need = (rule: ReturnRuleKey, tracked: boolean | undefined, value: string | null | undefined, has: boolean, field: string, label: string) => {
@@ -98,7 +99,7 @@ export function returnRuleErrors(tx: AppDb, order: { readonly id: string; readon
       serials: item.serials?.filter((x) => x.trim()),
     }, { warehouseMismatch: order.warehouseId !== receivingWarehouseId });
     for (const x of v) push(`items.${i}.${RULE_FIELD[x.rule] ?? "productId"}`, `${x.message} (Return Process: ${ruleLabel(x.rule)})`);
-  });
+  }
   return out;
 }
 
@@ -123,7 +124,7 @@ export interface RmaCandidate {
 }
 
 /** Finds RMAs by RMA code, shipment order code / store order #, or (return) tracking number. */
-export function lookupRmas(db: AppDb, scope: Scope, warehouseId: string, code: string): RmaCandidate[] {
+export async function lookupRmas(db: AppDb, scope: Scope, warehouseId: string, code: string): Promise<RmaCandidate[]> {
   const c = code.trim();
   if (!c) throw new DomainError("VALIDATION", "Scan or enter an RMA, order code or tracking number");
   if (!hasWarehouse(scope, warehouseId)) throw new DomainError("NOT_FOUND", "Warehouse not found");
@@ -131,19 +132,19 @@ export function lookupRmas(db: AppDb, scope: Scope, warehouseId: string, code: s
   // Index-friendly first (rma_code, orders.code / store_order_number, shipments.tracking_number);
   // the case-insensitive scan below runs only when nothing matched exactly.
   const v = sql.join([...new Set([c, c.toUpperCase(), lc])].map((x) => sql`${x}`), sql`, `);
-  const fastIds = db.all<{ id: string }>(sql`SELECT id FROM return_orders WHERE rma_code IN (${v})
+  const fastIds = (await dbAll<{ id: string }>(db, sql`SELECT id FROM return_orders WHERE rma_code IN (${v})
     UNION SELECT id FROM return_orders WHERE tracking_number IN (${v})
     UNION SELECT ro.id FROM return_orders ro WHERE ro.shipment_order_id IN (
       SELECT id FROM shipment_orders WHERE code IN (${v}) UNION SELECT id FROM shipment_orders WHERE store_order_number IN (${v})
-      UNION SELECT order_id FROM shipments WHERE tracking_number IN (${v}) AND order_id IS NOT NULL)`).map((r) => r.id);
+      UNION SELECT order_id FROM shipments WHERE tracking_number IN (${v}) AND order_id IS NOT NULL)`)).map((r) => r.id);
   const match = fastIds.length > 0
     ? sql`ro.id IN (${sql.join(fastIds.map((id) => sql`${id}`), sql`, `)})`
     : sql`(lower(ro.rma_code) = ${lc} OR lower(so.code) = ${lc} OR lower(so.store_order_number) = ${lc} OR lower(ro.tracking_number) = ${lc} OR ${trackingTokenSql([lc])} OR lower(so.tracking_number) = ${lc})`;
-  const rows = db.all<{ id: string; rmaCode: string; status: string; orderCode: string | null; customerName: string | null; trackingNumber: string | null; clientId: string; clientName: string; warehouseId: string; requestedQty: number; returnedQty: number }>(sql`
-    SELECT ro.id, ro.rma_code AS rmaCode, ro.status, so.code AS orderCode, COALESCE(ro.customer_name, so.customer_name) AS customerName,
-      ro.tracking_number AS trackingNumber, ro.client_id AS clientId, c.name AS clientName, ro.warehouse_id AS warehouseId,
-      (SELECT COALESCE(SUM(requested_qty),0) FROM return_order_lines WHERE return_order_id = ro.id) AS requestedQty,
-      (SELECT COALESCE(SUM(returned_qty),0) FROM return_order_lines WHERE return_order_id = ro.id) AS returnedQty
+  const rows = await dbAll<{ id: string; rmaCode: string; status: string; orderCode: string | null; customerName: string | null; trackingNumber: string | null; clientId: string; clientName: string; warehouseId: string; requestedQty: number; returnedQty: number }>(db, sql`
+    SELECT ro.id, ro.rma_code AS "rmaCode", ro.status, so.code AS "orderCode", COALESCE(ro.customer_name, so.customer_name) AS "customerName",
+      ro.tracking_number AS "trackingNumber", ro.client_id AS "clientId", c.name AS "clientName", ro.warehouse_id AS "warehouseId",
+      (SELECT COALESCE(SUM(requested_qty),0) FROM return_order_lines WHERE return_order_id = ro.id) AS "requestedQty",
+      (SELECT COALESCE(SUM(returned_qty),0) FROM return_order_lines WHERE return_order_id = ro.id) AS "returnedQty"
     FROM return_orders ro JOIN clients c ON c.id = ro.client_id LEFT JOIN shipment_orders so ON so.id = ro.shipment_order_id
     WHERE ro.warehouse_id = ${warehouseId} AND ${match}
     ORDER BY ro.created_at DESC LIMIT 50`);
@@ -170,15 +171,15 @@ export interface OpenRmaRow {
   readonly returnedQty: number;
 }
 
-export function openRmas(db: AppDb, scope: Scope, warehouseId: string, limit = 8): { readonly rows: readonly OpenRmaRow[]; readonly total: number } {
+export async function openRmas(db: AppDb, scope: Scope, warehouseId: string, limit = 8): Promise<{ readonly rows: readonly OpenRmaRow[]; readonly total: number }> {
   if (!hasWarehouse(scope, warehouseId)) throw new DomainError("NOT_FOUND", "Warehouse not found");
   const clients = scope.clientIds === "all" ? sql`1 = 1` : scope.clientIds.length ? sql`ro.client_id IN (${sql.join(scope.clientIds.map((c) => sql`${c}`), sql`, `)})` : sql`0 = 1`;
   const where = sql`ro.warehouse_id = ${warehouseId} AND ro.status IN ('Pending', 'In Transit', 'Started') AND ${clients}`;
-  const total = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM return_orders ro WHERE ${where}`)?.n ?? 0;
-  const rows = db.all<OpenRmaRow>(sql`SELECT ro.id, ro.rma_code AS rmaCode, ro.status, so.code AS orderCode, COALESCE(ro.customer_name, so.customer_name) AS customerName,
-      c.name AS clientName, ro.expected_return_date AS expectedReturnDate,
-      (SELECT COALESCE(SUM(requested_qty),0) FROM return_order_lines WHERE return_order_id = ro.id) AS requestedQty,
-      (SELECT COALESCE(SUM(returned_qty),0) FROM return_order_lines WHERE return_order_id = ro.id) AS returnedQty
+  const total = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM return_orders ro WHERE ${where}`))?.n ?? 0;
+  const rows = await dbAll<OpenRmaRow>(db, sql`SELECT ro.id, ro.rma_code AS "rmaCode", ro.status, so.code AS "orderCode", COALESCE(ro.customer_name, so.customer_name) AS "customerName",
+      c.name AS "clientName", ro.expected_return_date AS "expectedReturnDate",
+      (SELECT COALESCE(SUM(requested_qty),0) FROM return_order_lines WHERE return_order_id = ro.id) AS "requestedQty",
+      (SELECT COALESCE(SUM(returned_qty),0) FROM return_order_lines WHERE return_order_id = ro.id) AS "returnedQty"
     FROM return_orders ro JOIN clients c ON c.id = ro.client_id LEFT JOIN shipment_orders so ON so.id = ro.shipment_order_id
     WHERE ${where}
     ORDER BY CASE ro.status WHEN 'Started' THEN 0 WHEN 'In Transit' THEN 1 ELSE 2 END, ro.expected_return_date IS NULL, ro.expected_return_date, ro.created_at
@@ -187,12 +188,12 @@ export function openRmas(db: AppDb, scope: Scope, warehouseId: string, limit = 8
 }
 
 /** Warehouses in scope where the code matches an RMA (for "Switch to <warehouse>" at the station). */
-export function rmaWarehousesFor(db: AppDb, scope: Scope, code: string): { readonly warehouseId: string; readonly warehouseCode: string; readonly rmaCodes: readonly string[] }[] {
+export async function rmaWarehousesFor(db: AppDb, scope: Scope, code: string): Promise<{ readonly warehouseId: string; readonly warehouseCode: string; readonly rmaCodes: readonly string[] }[]> {
   const out: { warehouseId: string; warehouseCode: string; rmaCodes: string[] }[] = [];
   for (const wid of scope.warehouseIds) {
-    const hits = lookupRmas(db, scope, wid, code);
+    const hits = await lookupRmas(db, scope, wid, code);
     if (hits.length === 0) continue;
-    const wh = db.select({ code: schema.warehouses.code }).from(schema.warehouses).where(eq(schema.warehouses.id, wid)).get();
+    const wh = (await db.select({ code: schema.warehouses.code }).from(schema.warehouses).where(eq(schema.warehouses.id, wid)).limit(1))[0];
     out.push({ warehouseId: wid, warehouseCode: wh?.code ?? "", rmaCodes: hits.map((h) => h.rmaCode) });
   }
   return out;
@@ -212,13 +213,13 @@ export interface ResolvedProduct {
 }
 
 /** Exact SKU / barcode / pack-type barcode match within a client. */
-export function resolveProduct(db: AppDb, scope: Scope, clientId: string, code: string): ResolvedProduct | null {
+export async function resolveProduct(db: AppDb, scope: Scope, clientId: string, code: string): Promise<ResolvedProduct | null> {
   if (!hasClient(scope, clientId)) throw new DomainError("NOT_FOUND", "Client not found");
   const lc = code.trim().toLowerCase();
   if (!lc) return null;
   const p = schema.products;
-  const viaBarcode = db.select({ id: schema.productBarcodes.productId }).from(schema.productBarcodes).where(sql`lower(${schema.productBarcodes.barcode}) = ${lc}`).all().map((r) => r.id);
-  const row = db.select().from(p).where(and(eq(p.clientId, clientId), or(sql`lower(${p.sku}) = ${lc}`, sql`lower(${p.barcode}) = ${lc}`, viaBarcode.length ? inArray(p.id, viaBarcode) : undefined))).get();
+  const viaBarcode = (await db.select({ id: schema.productBarcodes.productId }).from(schema.productBarcodes).where(sql`lower(${schema.productBarcodes.barcode}) = ${lc}`)).map((r) => r.id);
+  const row = (await db.select().from(p).where(and(eq(p.clientId, clientId), or(sql`lower(${p.sku}) = ${lc}`, sql`lower(${p.barcode}) = ${lc}`, viaBarcode.length ? inArray(p.id, viaBarcode) : undefined))).limit(1))[0];
   if (!row) return null;
   return { id: row.id, sku: row.sku, name: row.name, imageUrl: row.imageUrl, uom: row.uom, clientId: row.clientId, trackSerial: row.trackSerial, trackLot: row.trackLot, trackExpiry: row.trackExpiry, trackProductionDate: row.trackProductionDate };
 }
@@ -297,18 +298,18 @@ interface Placement {
   readonly targetCode: string;
 }
 
-function resolvePlacement(tx: AppDb, warehouseId: string, input: z.output<typeof targetSchema>): Placement {
-  const station = tx.select().from(schema.locations).where(eq(schema.locations.id, input.stationLocationId)).get();
+async function resolvePlacement(tx: AppDb, warehouseId: string, input: z.output<typeof targetSchema>): Promise<Placement> {
+  const station = (await tx.select().from(schema.locations).where(eq(schema.locations.id, input.stationLocationId)).limit(1))[0];
   if (!station || station.warehouseId !== warehouseId) throw validationError("Choose a return station in the receiving warehouse", { stationLocationId: ["Station is in another warehouse"] });
   const base = { warehouseId, stationLocationId: station.id };
   if (input.targetLpId) {
-    const lp = tx.select().from(schema.licensePlates).where(eq(schema.licensePlates.id, input.targetLpId)).get();
+    const lp = (await tx.select().from(schema.licensePlates).where(eq(schema.licensePlates.id, input.targetLpId)).limit(1))[0];
     if (!lp || lp.warehouseId !== warehouseId) throw validationError("Target LP not found in this warehouse", { targetLpId: ["LP not found"] });
-    const at = lp.locationId ? tx.select({ areaType: schema.locations.areaType }).from(schema.locations).where(eq(schema.locations.id, lp.locationId)).get() : undefined;
+    const at = lp.locationId ? (await tx.select({ areaType: schema.locations.areaType }).from(schema.locations).where(eq(schema.locations.id, lp.locationId)).limit(1))[0] : undefined;
     return { ...base, targetLocationId: lp.locationId ?? station.id, targetLpId: lp.id, targetAreaType: lp.locationId ? at?.areaType ?? null : station.areaType, targetCode: lp.number };
   }
   if (input.targetLocationId) {
-    const loc = tx.select().from(schema.locations).where(eq(schema.locations.id, input.targetLocationId)).get();
+    const loc = (await tx.select().from(schema.locations).where(eq(schema.locations.id, input.targetLocationId)).limit(1))[0];
     if (!loc || loc.warehouseId !== warehouseId) throw validationError("Target location not found in this warehouse", { targetLocationId: ["Location not found"] });
     return { ...base, targetLocationId: loc.id, targetLpId: null, targetAreaType: loc.areaType, targetCode: loc.code };
   }
@@ -319,14 +320,14 @@ function resolvePlacement(tx: AppDb, warehouseId: string, input: z.output<typeof
  * Count-plan locks on the station and the target (the LP's location for an LP target), as field errors,
  * so a receive is refused with the plan code before any ledger write (the ledger would refuse it anyway).
  */
-export function placementLockErrors(tx: AppDb, place: Placement, items: readonly { readonly disposition: string }[]): Record<string, string[]> {
+export async function placementLockErrors(tx: AppDb, place: Placement, items: readonly { readonly disposition: string }[]): Promise<Record<string, string[]>> {
   const out: Record<string, string[]> = {};
   const needsTarget = items.some((i) => !atStation(i.disposition));
   const needsStation = items.some((i) => atStation(i.disposition)) || (needsTarget && place.targetLocationId === place.stationLocationId);
-  const station = needsStation ? locationLock(tx, place.stationLocationId) : null;
+  const station = needsStation ? await locationLock(tx, place.stationLocationId) : null;
   if (station) out.stationLocationId = [`Return station ${station.locationCode} is locked by count plan ${station.planCode}. Choose another station, or finish, update or cancel the count first.`];
   if (needsTarget && place.targetLocationId !== place.stationLocationId) {
-    const target = locationLock(tx, place.targetLocationId);
+    const target = await locationLock(tx, place.targetLocationId);
     if (target) out[place.targetLpId ? "targetLpId" : "targetLocationId"] = [`Return target ${place.targetLpId ? `${place.targetCode} (in ${target.locationCode})` : target.locationCode} is locked by count plan ${target.planCode}. Choose another target, or finish, update or cancel the count first.`];
   }
   return out;
@@ -351,8 +352,8 @@ function placementErrors(place: Placement, items: readonly { readonly dispositio
   return out;
 }
 
-const lookupName = (tx: AppDb, id: string | null | undefined): string | null =>
-  id ? tx.select({ name: schema.lookupValues.name }).from(schema.lookupValues).where(eq(schema.lookupValues.id, id)).get()?.name ?? null : null;
+const lookupName = async (tx: AppDb, id: string | null | undefined): Promise<string | null> =>
+  id ? (await tx.select({ name: schema.lookupValues.name }).from(schema.lookupValues).where(eq(schema.lookupValues.id, id)).limit(1))[0]?.name ?? null : null;
 
 /**
  * Posts one item: receipt (ledger Return Receiving) then the disposition move/removal.
@@ -361,42 +362,42 @@ const lookupName = (tx: AppDb, id: string | null | undefined): string | null =>
  * session that covers 2 RMA lines therefore writes 2 receipt rows; they share the RMA, the
  * session time and the user, and the RMA detail groups them under its Receipts card.
  */
-function postItem(tx: AppDb, ctx: Ctx, ro: typeof schema.returnOrders.$inferSelect, place: Placement, item: ReceiveItem, lineId: string): string {
-  const product = tx.select().from(schema.products).where(eq(schema.products.id, item.productId)).get();
+async function postItem(tx: AppDb, ctx: Ctx, ro: typeof schema.returnOrders.$inferSelect, place: Placement, item: ReceiveItem, lineId: string): Promise<string> {
+  const product = (await tx.select().from(schema.products).where(eq(schema.products.id, item.productId)).limit(1))[0];
   if (!product) throw new DomainError("NOT_FOUND", "Product not found");
-  const line = tx.select().from(schema.returnOrderLines).where(eq(schema.returnOrderLines.id, lineId)).get();
-  const damageReason = item.disposition === "Damaged" ? lookupName(tx, item.damageReasonId) ?? "Customer Return - Damaged" : null;
-  const actualReason = lookupName(tx, item.actualReturnReasonId);
+  const line = (await tx.select().from(schema.returnOrderLines).where(eq(schema.returnOrderLines.id, lineId)).limit(1))[0];
+  const damageReason = item.disposition === "Damaged" ? await lookupName(tx, item.damageReasonId) ?? "Customer Return - Damaged" : null;
+  const actualReason = await lookupName(tx, item.actualReturnReasonId);
   const toStation = item.disposition === "Quarantine" || item.disposition === "Dispose";
-  const { receipt, txn } = ledger.recordReceipt(tx, ctx, {
+  const { receipt, txn } = await ledger.recordReceipt(tx, ctx, {
     type: "Return", warehouseId: place.warehouseId, clientId: ro.clientId, productId: product.id, packType: item.packType || line?.packType || product.uom,
     quantity: item.quantity, locationId: toStation ? place.stationLocationId : place.targetLocationId, lpId: toStation ? null : place.targetLpId,
     lotNumber: item.lotNumber || null, expiryDate: item.expiryDate || null, productionDate: item.productionDate || null, damageReason,
     returnOrderId: ro.id, returnOrderLineId: lineId, shipmentOrderId: ro.shipmentOrderId,
-    customerReturnReason: lookupName(tx, line?.customerReturnReasonId), actualReturnReason: actualReason,
+    customerReturnReason: await lookupName(tx, line?.customerReturnReasonId), actualReturnReason: actualReason,
     note: [`${item.disposition} · ${ro.rmaCode}`, item.note].filter(Boolean).join(" · "),
     serials: item.serials?.map((primary) => ({ primary })),
   });
   if (item.disposition === "Dispose" && txn.toInventoryId) {
-    ledger.remove(tx, ctx, { inventoryId: txn.toInventoryId, qty: txn.uomQty, type: "Inventory Adjustment", refs: { returnOrderId: ro.id, receiptId: receipt.id, note: `Disposed on return ${ro.rmaCode}` } });
+    await ledger.remove(tx, ctx, { inventoryId: txn.toInventoryId, qty: txn.uomQty, type: "Inventory Adjustment", refs: { returnOrderId: ro.id, receiptId: receipt.id, note: `Disposed on return ${ro.rmaCode}` } });
   }
   const before = line ? { disposition: line.disposition, actualReturnReasonId: line.actualReturnReasonId } : {};
-  tx.update(schema.returnOrderLines).set({ disposition: item.disposition, actualReturnReasonId: item.actualReturnReasonId ?? line?.actualReturnReasonId ?? null, updatedBy: ctx.userId })
-    .where(eq(schema.returnOrderLines.id, lineId)).run();
-  changeLog.recordLine(tx, ctx, {
+  await tx.update(schema.returnOrderLines).set({ disposition: item.disposition, actualReturnReasonId: item.actualReturnReasonId ?? line?.actualReturnReasonId ?? null, updatedBy: ctx.userId })
+    .where(eq(schema.returnOrderLines.id, lineId));
+  await changeLog.recordLine(tx, ctx, {
     entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, lineEntityType: "return_order_line", lineEntityId: lineId,
     lineLabel: product.sku, field: "returnedQty", from: line?.returnedQty ?? 0, to: (line?.returnedQty ?? 0) + item.quantity,
   });
   // Line-level, named by SKU ("MLT-WIDGET -> Disposition is modified. --> Damaged"), like Logiwa.
-  changeLog.recordLine(tx, ctx, {
+  await changeLog.recordLine(tx, ctx, {
     entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, lineEntityType: "return_order_line", lineEntityId: lineId,
     lineLabel: product.sku, field: "disposition", from: before.disposition ?? null, to: item.disposition,
   });
   const newReason = item.actualReturnReasonId ?? line?.actualReturnReasonId ?? null;
   if (newReason !== (before.actualReturnReasonId ?? null)) {
-    changeLog.recordLine(tx, ctx, {
+    await changeLog.recordLine(tx, ctx, {
       entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, lineEntityType: "return_order_line", lineEntityId: lineId,
-      lineLabel: product.sku, field: "actualReturnReason", from: lookupName(tx, before.actualReturnReasonId ?? null), to: actualReason,
+      lineLabel: product.sku, field: "actualReturnReason", from: await lookupName(tx, before.actualReturnReasonId ?? null), to: actualReason,
     });
   }
   return receipt.id;
@@ -415,15 +416,15 @@ export const SHORT_CLOSE_FIELD = "shortClose";
  * `priorStatus` is the RMA status before this receive: the ledger moves Pending/In Transit to Started on
  * the first receipt without a change-log row, so the audit trail logs the real transition from it.
  */
-function rollup(tx: AppDb, ctx: Ctx, returnOrderId: string, complete: boolean, shortCloseReason?: string | null, priorStatus?: string): typeof schema.returnOrders.$inferSelect {
-  const lines = tx.select({ l: schema.returnOrderLines, sku: schema.products.sku }).from(schema.returnOrderLines)
+async function rollup(tx: AppDb, ctx: Ctx, returnOrderId: string, complete: boolean, shortCloseReason?: string | null, priorStatus?: string): Promise<typeof schema.returnOrders.$inferSelect> {
+  const lines = (await tx.select({ l: schema.returnOrderLines, sku: schema.products.sku }).from(schema.returnOrderLines)
     .innerJoin(schema.products, eq(schema.products.id, schema.returnOrderLines.productId))
-    .where(eq(schema.returnOrderLines.returnOrderId, returnOrderId)).all().map((r) => ({ ...r.l, sku: r.sku }));
+    .where(eq(schema.returnOrderLines.returnOrderId, returnOrderId))).map((r) => ({ ...r.l, sku: r.sku }));
   for (const l of lines) {
     const status = l.returnedQty >= l.requestedQty ? "Completed" : l.returnedQty > 0 ? "Started" : l.lineStatus;
-    if (status !== l.lineStatus) tx.update(schema.returnOrderLines).set({ lineStatus: status }).where(eq(schema.returnOrderLines.id, l.id)).run();
+    if (status !== l.lineStatus) await tx.update(schema.returnOrderLines).set({ lineStatus: status }).where(eq(schema.returnOrderLines.id, l.id));
   }
-  const ro = tx.select().from(schema.returnOrders).where(eq(schema.returnOrders.id, returnOrderId)).get() as typeof schema.returnOrders.$inferSelect;
+  const ro = (await tx.select().from(schema.returnOrders).where(eq(schema.returnOrders.id, returnOrderId)).limit(1))[0] as typeof schema.returnOrders.$inferSelect;
   const allDone = lines.every((l) => l.returnedQty >= l.requestedQty);
   if ((allDone || complete) && ro.status !== "Completed" && lines.some((l) => l.returnedQty > 0)) {
     const status = stateMachines.returnOrder.transition(ro.status, "Completed");
@@ -431,20 +432,20 @@ function rollup(tx: AppDb, ctx: Ctx, returnOrderId: string, complete: boolean, s
     const note = short.total > 0
       ? [ro.note, `Short closed ${new Date().toISOString().slice(0, 10)}: ${short.total} unit${short.total === 1 ? "" : "s"} not received${shortCloseReason ? ` (${shortCloseReason})` : ""}.`].filter(Boolean).join("\n").slice(0, 1000)
       : ro.note;
-    const after = tx.update(schema.returnOrders).set({ status, note, actualReturnDate: ro.actualReturnDate ?? new Date().toISOString(), updatedBy: ctx.userId, version: sql`${schema.returnOrders.version} + 1` })
-      .where(eq(schema.returnOrders.id, ro.id)).returning().get();
-    if (complete) tx.update(schema.returnOrderLines).set({ lineStatus: "Completed" }).where(eq(schema.returnOrderLines.returnOrderId, ro.id)).run();
+    const after = (await tx.update(schema.returnOrders).set({ status, note, actualReturnDate: ro.actualReturnDate ?? new Date().toISOString(), updatedBy: ctx.userId, version: sql`${schema.returnOrders.version} + 1` })
+      .where(eq(schema.returnOrders.id, ro.id)).returning())[0];
+    if (complete) await tx.update(schema.returnOrderLines).set({ lineStatus: "Completed" }).where(eq(schema.returnOrderLines.returnOrderId, ro.id));
     for (const s of short.lines) {
-      changeLog.recordLine(tx, ctx, {
+      await changeLog.recordLine(tx, ctx, {
         entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, lineEntityType: "return_order_line", lineEntityId: s.id,
         lineLabel: s.sku ?? "Line", field: "shortClosedQty", from: 0, to: s.short,
       });
     }
-    changeLog.recordUpdate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, before: { status: priorStatus ?? ro.status, note: ro.note }, after: { status, note } });
+    await changeLog.recordUpdate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, before: { status: priorStatus ?? ro.status, note: ro.note }, after: { status, note } });
     return after;
   }
   if (priorStatus && priorStatus !== ro.status) {
-    changeLog.recordUpdate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, before: { status: priorStatus }, after: { status: ro.status } });
+    await changeLog.recordUpdate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, before: { status: priorStatus }, after: { status: ro.status } });
   }
   return ro;
 }
@@ -463,44 +464,44 @@ export const reopenReturnSchema = z.object({
  * Completed → Started is outside the generic return state machine on purpose: only a short close
  * can be reopened, never a fully received return.
  */
-export function reopenReturn(tx: AppDb, ctx: Ctx, id: string, input: z.output<typeof reopenReturnSchema>): { readonly id: string; readonly status: string; readonly reopenedUnits: number } {
-  const ro = loadReturn(tx, ctx.scope, id);
+export async function reopenReturn(tx: AppDb, ctx: Ctx, id: string, input: z.output<typeof reopenReturnSchema>): Promise<{ readonly id: string; readonly status: string; readonly reopenedUnits: number }> {
+  const ro = await loadReturn(tx, ctx.scope, id);
   if (input.version !== undefined && input.version !== ro.version) throw new DomainError("CONFLICT", "This return was changed by someone else. Reload it and try again.");
   if (ro.status !== "Completed") throw new DomainError("INVALID_STATE", `Only a completed return can be reopened; ${ro.rmaCode} is ${ro.status.toLowerCase()}.`);
-  const lines = tx.select({ l: schema.returnOrderLines, sku: schema.products.sku }).from(schema.returnOrderLines)
+  const lines = (await tx.select({ l: schema.returnOrderLines, sku: schema.products.sku }).from(schema.returnOrderLines)
     .innerJoin(schema.products, eq(schema.products.id, schema.returnOrderLines.productId))
-    .where(eq(schema.returnOrderLines.returnOrderId, ro.id)).all().map((r) => ({ ...r.l, sku: r.sku }));
+    .where(eq(schema.returnOrderLines.returnOrderId, ro.id))).map((r) => ({ ...r.l, sku: r.sku }));
   const short = shortfallOf(lines);
   if (short.total === 0) throw new DomainError("INVALID_STATE", `Every unit of ${ro.rmaCode} was received, so there is nothing to reopen.`);
   for (const s of short.lines) {
     const l = lines.find((x) => x.id === s.id);
     if (!l) continue;
     const lineStatus = l.returnedQty > 0 ? "Started" : "Pending";
-    tx.update(schema.returnOrderLines).set({ lineStatus, updatedBy: ctx.userId }).where(eq(schema.returnOrderLines.id, l.id)).run();
-    changeLog.recordLine(tx, ctx, {
+    await tx.update(schema.returnOrderLines).set({ lineStatus, updatedBy: ctx.userId }).where(eq(schema.returnOrderLines.id, l.id));
+    await changeLog.recordLine(tx, ctx, {
       entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, lineEntityType: "return_order_line", lineEntityId: l.id,
       lineLabel: l.sku, field: "shortClosedQty", from: s.short, to: 0,
     });
   }
   const note = [ro.note, `Reopened ${new Date().toISOString().slice(0, 10)}: ${input.reason}`].filter(Boolean).join("\n").slice(0, 1000);
-  tx.update(schema.returnOrders).set({ status: "Started", note, updatedBy: ctx.userId, version: sql`${schema.returnOrders.version} + 1` }).where(eq(schema.returnOrders.id, ro.id)).run();
-  changeLog.recordUpdate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, before: { status: ro.status, note: ro.note }, after: { status: "Started", note } });
+  await tx.update(schema.returnOrders).set({ status: "Started", note, updatedBy: ctx.userId, version: sql`${schema.returnOrders.version} + 1` }).where(eq(schema.returnOrders.id, ro.id));
+  await changeLog.recordUpdate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: ro.rmaCode, before: { status: ro.status, note: ro.note }, after: { status: "Started", note } });
   return { id: ro.id, status: "Started", reopenedUnits: short.total };
 }
 
-function notifyClient(tx: AppDb, ro: typeof schema.returnOrders.$inferSelect, qty: number): number {
-  const userIds = tx.select({ id: schema.userClients.userId }).from(schema.userClients).where(eq(schema.userClients.clientId, ro.clientId)).all().map((r) => r.id);
-  return notify(tx, userIds, {
+async function notifyClient(tx: AppDb, ro: typeof schema.returnOrders.$inferSelect, qty: number): Promise<number> {
+  const userIds = (await tx.select({ id: schema.userClients.userId }).from(schema.userClients).where(eq(schema.userClients.clientId, ro.clientId))).map((r) => r.id);
+  return await notify(tx, userIds, {
     kind: "return.received", title: `Return ${ro.rmaCode} received`,
     body: `${qty} ${qty === 1 ? "unit was" : "units were"} received. Status: ${ro.status}.`, href: `/orders/returns/${ro.id}`, severity: "success",
   });
 }
 
-export function receiveRma(tx: AppDb, ctx: Ctx, input: z.output<typeof receiveRmaSchema>): ReceiveResult {
-  const ro = loadReturn(tx, ctx.scope, input.returnOrderId);
+export async function receiveRma(tx: AppDb, ctx: Ctx, input: z.output<typeof receiveRmaSchema>): Promise<ReceiveResult> {
+  const ro = await loadReturn(tx, ctx.scope, input.returnOrderId);
   if (!(RECEIVABLE as readonly string[]).includes(ro.status)) throw new DomainError("INVALID_STATE", `RMA ${ro.rmaCode} is ${ro.status.toLowerCase()} and can't be received.`);
-  const place = resolvePlacement(tx, ro.warehouseId, input);
-  const lines = tx.select().from(schema.returnOrderLines).where(eq(schema.returnOrderLines.returnOrderId, ro.id)).all();
+  const place = await resolvePlacement(tx, ro.warehouseId, input);
+  const lines = await tx.select().from(schema.returnOrderLines).where(eq(schema.returnOrderLines.returnOrderId, ro.id));
   const pending = new Map(lines.map((l) => [l.id, l.requestedQty - l.returnedQty]));
   const fieldErrors: Record<string, string[]> = {};
   const lineOf: (string | null)[] = [];
@@ -516,11 +517,11 @@ export function receiveRma(tx: AppDb, ctx: Ctx, input: z.output<typeof receiveRm
     if (item.disposition === "Damaged" && !item.damageReasonId) fieldErrors[`items.${i}.damageReasonId`] = ["Choose a damage reason"];
   });
   for (const [k, v] of Object.entries(placementErrors(place, input.items))) fieldErrors[k] ??= v;
-  const lockErrors = placementLockErrors(tx, place, input.items);
+  const lockErrors = await placementLockErrors(tx, place, input.items);
   if (Object.keys(lockErrors).length > 0) throw validationError(Object.values(lockErrors)[0]?.[0] ?? "Location is count-locked", lockErrors);
   if (ro.shipmentOrderId) {
-    const so = tx.select({ id: schema.shipmentOrders.id, warehouseId: schema.shipmentOrders.warehouseId }).from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, ro.shipmentOrderId)).get();
-    for (const [k, v] of Object.entries(returnRuleErrors(tx, so, ro.warehouseId, input.items, { packTypeOf: (i) => lineOf[i] ?? null }))) fieldErrors[k] ??= v;
+    const so = (await tx.select({ id: schema.shipmentOrders.id, warehouseId: schema.shipmentOrders.warehouseId }).from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, ro.shipmentOrderId)).limit(1))[0];
+    for (const [k, v] of Object.entries(await returnRuleErrors(tx, so, ro.warehouseId, input.items, { packTypeOf: (i) => lineOf[i] ?? null }))) fieldErrors[k] ??= v;
   }
   if (Object.keys(fieldErrors).length > 0) throw validationError(Object.values(fieldErrors)[0]?.[0] ?? "Invalid items", fieldErrors);
   if (input.complete && !input.shortClose) {
@@ -531,65 +532,65 @@ export function receiveRma(tx: AppDb, ctx: Ctx, input: z.output<typeof receiveRm
     }
   }
   const remaining = new Map(lines.map((l) => [l.id, l.requestedQty - l.returnedQty]));
-  const receiptIds = input.items.map((item) => {
+  const receiptIds = await mapSeq(input.items, async (item) => {
     const line = lines.find((l) => l.id === item.returnOrderLineId) ?? lines.find((l) => l.productId === item.productId && (remaining.get(l.id) ?? 0) > 0);
     if (!line) throw new DomainError("VALIDATION", "This product is not on the RMA");
     remaining.set(line.id, (remaining.get(line.id) ?? 0) - item.quantity);
-    return postItem(tx, ctx, tx.select().from(schema.returnOrders).where(eq(schema.returnOrders.id, ro.id)).get() ?? ro, place, item, line.id);
+    return await postItem(tx, ctx, (await tx.select().from(schema.returnOrders).where(eq(schema.returnOrders.id, ro.id)).limit(1))[0] ?? ro, place, item, line.id);
   });
-  const after = rollup(tx, ctx, ro.id, input.complete, input.shortCloseReason, ro.status);
+  const after = await rollup(tx, ctx, ro.id, input.complete, input.shortCloseReason, ro.status);
   const qty = input.items.reduce((s, i) => s + i.quantity, 0);
-  const notified = notifyClient(tx, after, qty);
-  return { returnOrderId: ro.id, rmaCode: ro.rmaCode, status: after.status, receivedQty: qty, receiptIds, notified, kpis: returnStationKpis(tx, ctx.scope, ro.warehouseId, ctx.source) };
+  const notified = await notifyClient(tx, after, qty);
+  return { returnOrderId: ro.id, rmaCode: ro.rmaCode, status: after.status, receivedQty: qty, receiptIds, notified, kpis: await returnStationKpis(tx, ctx.scope, ro.warehouseId, ctx.source) };
 }
 
 /** Return Manually: creates a Manual RMA for the client (optional order) and receives it. */
-export function receiveManual(tx: AppDb, ctx: Ctx, input: z.output<typeof receiveManualSchema>): ReceiveResult {
+export async function receiveManual(tx: AppDb, ctx: Ctx, input: z.output<typeof receiveManualSchema>): Promise<ReceiveResult> {
   if (!hasWarehouse(ctx.scope, input.warehouseId)) throw new DomainError("NOT_FOUND", "Warehouse not found");
   if (!hasClient(ctx.scope, input.clientId)) throw new DomainError("NOT_FOUND", "Client not found");
   let order: typeof schema.shipmentOrders.$inferSelect | undefined;
   if (input.shipmentOrderId) {
-    order = tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, input.shipmentOrderId)).get();
+    order = (await tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, input.shipmentOrderId)).limit(1))[0];
     assertInScope(ctx.scope, order, "Shipment order");
     if (order?.clientId !== input.clientId) throw validationError("The order belongs to another client", { shipmentOrderId: ["Order belongs to another client"] });
   }
   const fieldErrors: Record<string, string[]> = {};
-  input.items.forEach((item, i) => {
-    const p = tx.select({ clientId: schema.products.clientId }).from(schema.products).where(eq(schema.products.id, item.productId)).get();
+  await forEachSeq(input.items, async (item, i) => {
+    const p = (await tx.select({ clientId: schema.products.clientId }).from(schema.products).where(eq(schema.products.id, item.productId)).limit(1))[0];
     if (!p || p.clientId !== input.clientId) fieldErrors[`items.${i}.productId`] = ["Product belongs to another client"];
     if (item.disposition === "Damaged" && !item.damageReasonId) fieldErrors[`items.${i}.damageReasonId`] = ["Choose a damage reason"];
   });
-  const place = resolvePlacement(tx, input.warehouseId, input);
+  const place = await resolvePlacement(tx, input.warehouseId, input);
   for (const [k, v] of Object.entries(placementErrors(place, input.items))) fieldErrors[k] ??= v;
-  const lockErrors = placementLockErrors(tx, place, input.items);
+  const lockErrors = await placementLockErrors(tx, place, input.items);
   if (Object.keys(lockErrors).length > 0) throw validationError(Object.values(lockErrors)[0]?.[0] ?? "Location is count-locked", lockErrors);
-  const packTypeOf = (i: number): string | null => {
+  const packTypeOf = async (i: number): Promise<string | null> => {
     const item = input.items[i];
-    return order && item ? tx.select({ packType: schema.orderLines.packType }).from(schema.orderLines).where(and(eq(schema.orderLines.orderId, order.id), eq(schema.orderLines.productId, item.productId))).get()?.packType ?? null : null;
+    return order && item ? (await tx.select({ packType: schema.orderLines.packType }).from(schema.orderLines).where(and(eq(schema.orderLines.orderId, order.id), eq(schema.orderLines.productId, item.productId))).limit(1))[0]?.packType ?? null : null;
   };
-  for (const [k, v] of Object.entries(returnRuleErrors(tx, order, input.warehouseId, input.items, { packTypeOf }))) fieldErrors[k] ??= v;
+  for (const [k, v] of Object.entries(await returnRuleErrors(tx, order, input.warehouseId, input.items, { packTypeOf }))) fieldErrors[k] ??= v;
   if (Object.keys(fieldErrors).length > 0) throw validationError(Object.values(fieldErrors)[0]?.[0] ?? "Invalid items", fieldErrors);
-  const rmaCode = sequences.next(tx, "rma");
-  const ro = tx.insert(schema.returnOrders).values({
+  const rmaCode = await sequences.next(tx, "rma");
+  const ro = (await tx.insert(schema.returnOrders).values({
     rmaCode, shipmentOrderId: order?.id ?? null, warehouseId: input.warehouseId, clientId: input.clientId, source: "Manual", status: "Pending",
     customerName: input.customerName ?? order?.customerName ?? null, fromCountry: order?.shipCountry ?? null, note: input.note ?? null,
     createdBy: ctx.userId, updatedBy: ctx.userId,
-  }).returning().get();
-  changeLog.recordCreate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: rmaCode });
-  const receiptIds = input.items.map((item) => {
-    const product = tx.select().from(schema.products).where(eq(schema.products.id, item.productId)).get();
-    const orderLine = order ? tx.select().from(schema.orderLines).where(and(eq(schema.orderLines.orderId, order.id), eq(schema.orderLines.productId, item.productId))).get() : undefined;
-    const line = tx.insert(schema.returnOrderLines).values({
+  }).returning())[0];
+  await changeLog.recordCreate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: rmaCode });
+  const receiptIds = await mapSeq(input.items, async (item) => {
+    const product = (await tx.select().from(schema.products).where(eq(schema.products.id, item.productId)).limit(1))[0];
+    const orderLine = order ? (await tx.select().from(schema.orderLines).where(and(eq(schema.orderLines.orderId, order.id), eq(schema.orderLines.productId, item.productId))).limit(1))[0] : undefined;
+    const line = (await tx.insert(schema.returnOrderLines).values({
       returnOrderId: ro.id, orderLineId: orderLine?.id ?? null, productId: item.productId, packType: orderLine?.packType ?? product?.uom ?? "Unit",
       requestedQty: item.quantity, actualReturnReasonId: item.actualReturnReasonId ?? null, createdBy: ctx.userId,
-    }).returning().get();
-    changeLog.recordLineCreate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: rmaCode, lineEntityType: "return_order_line", lineEntityId: line.id, lineLabel: product?.sku ?? item.productId });
-    return postItem(tx, ctx, tx.select().from(schema.returnOrders).where(eq(schema.returnOrders.id, ro.id)).get() ?? ro, place, { ...item, returnOrderLineId: line.id }, line.id);
+    }).returning())[0];
+    await changeLog.recordLineCreate(tx, ctx, { entityType: "return_order", entityId: ro.id, entityCode: rmaCode, lineEntityType: "return_order_line", lineEntityId: line.id, lineLabel: product?.sku ?? item.productId });
+    return await postItem(tx, ctx, (await tx.select().from(schema.returnOrders).where(eq(schema.returnOrders.id, ro.id)).limit(1))[0] ?? ro, place, { ...item, returnOrderLineId: line.id }, line.id);
   });
-  const after = rollup(tx, ctx, ro.id, true, null, "Pending");
+  const after = await rollup(tx, ctx, ro.id, true, null, "Pending");
   const qty = input.items.reduce((s, i) => s + i.quantity, 0);
-  const notified = notifyClient(tx, after, qty);
-  return { returnOrderId: ro.id, rmaCode, status: after.status, receivedQty: qty, receiptIds, notified, kpis: returnStationKpis(tx, ctx.scope, input.warehouseId, ctx.source) };
+  const notified = await notifyClient(tx, after, qty);
+  return { returnOrderId: ro.id, rmaCode, status: after.status, receivedQty: qty, receiptIds, notified, kpis: await returnStationKpis(tx, ctx.scope, input.warehouseId, ctx.source) };
 }
 
 /* ------------------------------------------------------------------ KPIs */
@@ -600,15 +601,15 @@ export interface ReturnStationKpis {
   readonly openReturns: number;
 }
 
-export function returnStationKpis(db: AppDb, scope: Scope, warehouseId: string, userSource: string, now = new Date()): ReturnStationKpis {
+export async function returnStationKpis(db: AppDb, scope: Scope, warehouseId: string, userSource: string, now = new Date()): Promise<ReturnStationKpis> {
   if (!hasWarehouse(scope, warehouseId)) throw new DomainError("NOT_FOUND", "Warehouse not found");
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
   const since = start.toISOString();
-  const today = db.get<{ orders: number; units: number }>(sql`SELECT COUNT(DISTINCT return_order_id) AS orders, COALESCE(SUM(quantity),0) AS units
+  const today = await dbGet<{ orders: number; units: number }>(db, sql`SELECT COUNT(DISTINCT return_order_id) AS orders, COALESCE(SUM(quantity),0) AS units
     FROM receipts WHERE type = 'Return' AND warehouse_id = ${warehouseId} AND received_by = ${userSource} AND received_at >= ${since} AND cancelled_at IS NULL`);
   const clients = scope.clientIds === "all" ? sql`1 = 1` : scope.clientIds.length ? sql`client_id IN (${sql.join(scope.clientIds.map((c) => sql`${c}`), sql`, `)})` : sql`0 = 1`;
-  const open = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM return_orders WHERE warehouse_id = ${warehouseId} AND status IN ('Pending','In Transit','Started') AND ${clients}`);
+  const open = await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM return_orders WHERE warehouse_id = ${warehouseId} AND status IN ('Pending','In Transit','Started') AND ${clients}`);
   return { returnedOrdersToday: today?.orders ?? 0, returnedProductsToday: today?.units ?? 0, openReturns: open?.n ?? 0 };
 }
 
@@ -624,8 +625,8 @@ export interface StationOption {
   readonly lockReason?: string | null;
 }
 
-function withLock(db: AppDb, o: StationOption, locationId: string | null, label: string): StationOption {
-  const lock = locationLock(db, locationId);
+async function withLock(db: AppDb, o: StationOption, locationId: string | null, label: string): Promise<StationOption> {
+  const lock = await locationLock(db, locationId);
   return lock ? { ...o, countLockPlan: lock.planCode, lockReason: `${label} ${lock.locationCode === o.code ? o.code : `${o.code} (in ${lock.locationCode})`} is locked by count plan ${lock.planCode}. Finish, update or cancel the count first.` } : { ...o, countLockPlan: null, lockReason: null };
 }
 
@@ -633,11 +634,11 @@ function withLock(db: AppDb, o: StationOption, locationId: string | null, label:
  * Return Station locations: active Returns-area locations of the warehouse. Physical stations
  * first (a Virtual location is never the default for physical returns), then by code.
  */
-export function returnStations(db: AppDb, scope: Scope, warehouseId: string): StationOption[] {
+export async function returnStations(db: AppDb, scope: Scope, warehouseId: string): Promise<StationOption[]> {
   if (!hasWarehouse(scope, warehouseId)) throw new DomainError("NOT_FOUND", "Warehouse not found");
-  return db.all<{ id: string; code: string; detail: string | null }>(sql`SELECT id, code, CASE WHEN location_type = 'Virtual' THEN 'Virtual · not for physical returns' ELSE location_type END AS detail FROM locations
-    WHERE warehouse_id = ${warehouseId} AND area_type = 'Returns' AND is_active = 1
-    ORDER BY CASE WHEN location_type = 'Virtual' THEN 1 ELSE 0 END, code`).map((r) => withLock(db, { ...r, kind: "location" as const }, r.id, "Station"))
+  return (await mapSeq((await dbAll<{ id: string; code: string; detail: string | null }>(db, sql`SELECT id, code, CASE WHEN location_type = 'Virtual' THEN 'Virtual · not for physical returns' ELSE location_type END AS detail FROM locations
+    WHERE warehouse_id = ${warehouseId} AND area_type = 'Returns' AND is_active = true
+    ORDER BY CASE WHEN location_type = 'Virtual' THEN 1 ELSE 0 END, code`)), async (r) => await withLock(db, { ...r, kind: "location" as const }, r.id, "Station")))
     // Unlocked stations first, so the remembered / default pick is never one that can't commit.
     .sort((a, b) => Number(Boolean(a.countLockPlan)) - Number(Boolean(b.countLockPlan)));
 }
@@ -652,19 +653,19 @@ export const targetQuerySchema = z.object({
 });
 
 /** Return target candidates: locations (Returns area first) or license plates, by code prefix. */
-export function returnTargets(db: AppDb, scope: Scope, input: z.output<typeof targetQuerySchema>): StationOption[] {
+export async function returnTargets(db: AppDb, scope: Scope, input: z.output<typeof targetQuerySchema>): Promise<StationOption[]> {
   if (!hasWarehouse(scope, input.warehouseId)) throw new DomainError("NOT_FOUND", "Warehouse not found");
   const like = `${(input.q ?? "").toLowerCase()}%`;
   if (input.kind === "lp") {
-    return db.all<{ id: string; code: string; detail: string | null; locationId: string | null }>(sql`SELECT lp.id, lp.number AS code, l.code AS detail, lp.location_id AS locationId FROM license_plates lp
-      LEFT JOIN locations l ON l.id = lp.location_id WHERE lp.warehouse_id = ${input.warehouseId} AND lower(lp.number) LIKE ${like}
-      ORDER BY lp.number LIMIT 50`).map(({ locationId, ...r }) => withLock(db, { ...r, kind: "lp" as const }, locationId, "Target LP"));
+    return await mapSeq((await dbAll<{ id: string; code: string; detail: string | null; locationId: string | null }>(db, sql`SELECT lp.id, lp.number AS code, l.code AS detail, lp.location_id AS "locationId" FROM license_plates lp
+      LEFT JOIN locations l ON l.id = lp.location_id WHERE lp.warehouse_id = ${input.warehouseId} AND lower(lp.number) ILIKE ${like} ESCAPE ''
+      ORDER BY lp.number LIMIT 50`)), async ({ locationId, ...r }) => await withLock(db, { ...r, kind: "lp" as const }, locationId, "Target LP"));
   }
   // Grouped by area (Returns first, then quarantine / storage / picking …); Packing, Shipment, Loading, Kitting and
   // Virtual locations are never return targets.
   const areaRank = sql.raw(`CASE area_type ${TARGET_AREA_ORDER.map((a, i) => `WHEN '${a}' THEN ${i}`).join(" ")} ELSE ${TARGET_AREA_ORDER.length} END`);
-  return db.all<{ id: string; code: string; detail: string | null }>(sql`SELECT id, code, COALESCE(area_type, 'No') || ' area' || COALESCE(' · ' || location_type, '') AS detail FROM locations
-    WHERE warehouse_id = ${input.warehouseId} AND is_active = 1 AND lower(code) LIKE ${like}
+  return await mapSeq((await dbAll<{ id: string; code: string; detail: string | null }>(db, sql`SELECT id, code, COALESCE(area_type, 'No') || ' area' || COALESCE(' · ' || location_type, '') AS detail FROM locations
+    WHERE warehouse_id = ${input.warehouseId} AND is_active = true AND lower(code) ILIKE ${like}
       AND COALESCE(location_type, '') <> 'Virtual' AND COALESCE(area_type, '') NOT IN ('Packing', 'Shipment', 'Loading', 'Kitting')
-    ORDER BY ${areaRank}, code LIMIT 50`).map((r) => withLock(db, { ...r, kind: "location" as const }, r.id, "Target"));
+    ORDER BY ${areaRank}, code LIMIT 50`)), async (r) => await withLock(db, { ...r, kind: "location" as const }, r.id, "Target"));
 }

@@ -19,8 +19,8 @@ export const purchaseOrdersExport: ExportProvider = {
     { key: "receivedAt", label: "Actual Receiving Date", type: "datetime" }, { key: "plannedArrivalDate", label: "Planned Arrival Date", type: "datetime" },
     { key: "actualArrivalDate", label: "Actual Arrival Date", type: "datetime" },
   ],
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listPurchaseOrders(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listPurchaseOrders(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
     const out: readonly ExportRow[] = rows.map((r) => ({ ...r, tagNames: r.tags.map((t) => t.name).join(", ") }));
     return { rows: out, total };
   },
@@ -41,8 +41,8 @@ export const receivingHistoryExport: ExportProvider = {
     { key: "parentLpType", label: "Parent LP Type" }, { key: "damageReason", label: "Damage Reason" }, { key: "damageImage", label: "Damage Image" },
     { key: "receivedBy", label: "Receiving User" }, { key: "productionDate", label: "Production Date", type: "date" },
   ],
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listReceipts(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listReceipts(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
     const out: readonly ExportRow[] = rows.map((r) => ({ ...r, damageImage: r.damageImageFileId ? "Yes" : "" }));
     return { rows: out, total };
   },
@@ -54,8 +54,8 @@ export const vendorsExport: ExportProvider = {
     { key: "isActive", label: "Active", type: "boolean" }, { key: "openPoCount", label: "Open POs", type: "integer" },
     { key: "city", label: "City" }, { key: "state", label: "State" },
   ],
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listVendors(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listVendors(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
     const out: readonly ExportRow[] = rows.map((r) => ({ ...r }));
     return { rows: out, total };
   },
@@ -71,8 +71,8 @@ export const putawayWorklistExport: ExportProvider = {
     { key: "receivedAt", label: "Receiving Date", type: "datetime" }, { key: "dwellHours", label: "Waiting (Hours)", type: "integer" },
     { key: "blockedReason", label: "Blocked Reason" },
   ],
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listPutawayTasks(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listPutawayTasks(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
     return { rows: rows.map((r) => ({ ...r })) as readonly ExportRow[], total };
   },
 };

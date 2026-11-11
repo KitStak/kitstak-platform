@@ -13,16 +13,16 @@ import { clampBatch } from "@/components/orders/bulk/order-job-modal";
 import { createWorld, orderInput, type World } from "../foundation/domain/fixtures";
 
 let w: World;
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
 });
 afterEach(() => w.close());
 
-const mk = (extra: Record<string, unknown> = {}) =>
-  createOrder(w.db, w.ctx, createOrderBodySchema.parse(orderInput(w, [{ productId: w.productId, quantity: 2 }], extra)));
-const logs = (id: string) => w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.entityType, "shipment_order"), eq(schema.changeLog.entityId, id))).all();
+const mk = async (extra: Record<string, unknown> = {}) =>
+  await createOrder(w.db, w.ctx, createOrderBodySchema.parse(orderInput(w, [{ productId: w.productId, quantity: 2 }], extra)));
+const logs = async (id: string) => await w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.entityType, "shipment_order"), eq(schema.changeLog.entityId, id)));
 const scope = () => ({ warehouseIds: [w.warehouseId], clientIds: [w.clientId, w.otherClientId] });
-const reason = () => w.db.insert(schema.lookupValues).values({ type: "so_cancel_reason", name: "Customer request" } as typeof schema.lookupValues.$inferInsert).returning().get();
+const reason = async () => (await w.db.insert(schema.lookupValues).values({ type: "so_cancel_reason", name: "Customer request" } as typeof schema.lookupValues.$inferInsert).returning())[0];
 
 describe("change-log formatting helpers", () => {
   it("formats ISO timestamps in the warehouse time zone, Logiwa style", () => {
@@ -48,23 +48,23 @@ describe("change-log formatting helpers", () => {
 });
 
 describe("change log written by order commands", () => {
-  it("one priority edit writes one 'Priority' entry, never the internal Priority Rank", () => {
-    const o = mk({ priority: "High", priorityRank: 3 });
-    updateOrder(w.db, w.ctx, o.id, updateOrderBodySchema.parse({ version: o.version, patch: { priority: "Urgent", priorityRank: 5 } }));
-    const entries = logs(o.id).filter((l) => l.type === "Update");
+  it("one priority edit writes one 'Priority' entry, never the internal Priority Rank", async () => {
+    const o = await mk({ priority: "High", priorityRank: 3 });
+    await updateOrder(w.db, w.ctx, o.id, updateOrderBodySchema.parse({ version: o.version, patch: { priority: "Urgent", priorityRank: 5 } }));
+    const entries = (await logs(o.id)).filter((l) => l.type === "Update");
     expect(entries.some((l) => l.field === "priorityRank" || /Priority Rank/.test(l.message))).toBe(false);
     expect(entries.filter((l) => l.field === "priority").map((l) => l.message)).toEqual(["Priority is modified. 3 · High --> 5 · Urgent"]);
   });
 
-  it("cancel keeps the order Note, logs 'Cancel note:' and formats Cancelled At", () => {
-    const o = mk({ note: "Leave at door" });
-    expect(runOrderBulk("cancel", w.db, w.ctx, { ids: [o.id], reasonId: reason().id, note: "Customer called" }).succeeded).toEqual([o.id]);
-    const after = w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, o.id)).get();
+  it("cancel keeps the order Note, logs 'Cancel note:' and formats Cancelled At", async () => {
+    const o = await mk({ note: "Leave at door" });
+    expect((await runOrderBulk("cancel", w.db, w.ctx, { ids: [o.id], reasonId: (await reason()).id, note: "Customer called" })).succeeded).toEqual([o.id]);
+    const after = (await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, o.id)).limit(1))[0];
     expect(after?.note).toBe("Leave at door");
-    const messages = logs(o.id).map((l) => l.message);
+    const messages = (await logs(o.id)).map((l) => l.message);
     expect(messages).toContain("Cancel note: Customer called");
     expect(messages.some((m) => /Note is modified/.test(m))).toBe(false);
-    const cancelledAt = logs(o.id).find((l) => l.field === "cancelledAt");
+    const cancelledAt = (await logs(o.id)).find((l) => l.field === "cancelledAt");
     expect(cancelledAt?.message).toMatch(/^Cancelled At is modified\. — --> \d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}:\d{2} (AM|PM) [A-Z]{2,5}$/);
     expect(messages.some((m) => /\d{4}-\d{2}-\d{2}T/.test(m))).toBe(false);
     expect(messages.some((m) => m.includes("  -->"))).toBe(false);
@@ -72,10 +72,10 @@ describe("change log written by order commands", () => {
 });
 
 describe("shipped grid: Actual Shipment Date", () => {
-  it("is empty for a cancelled order, while the default 'last 7 days' chip still matches it", () => {
-    const o = mk();
-    runOrderBulk("cancel", w.db, w.ctx, { ids: [o.id], reasonId: reason().id });
-    const res = listOrders(w.db, scope() as never, {
+  it("is empty for a cancelled order, while the default 'last 7 days' chip still matches it", async () => {
+    const o = await mk();
+    await runOrderBulk("cancel", w.db, w.ctx, { ids: [o.id], reasonId: (await reason()).id });
+    const res = await listOrders(w.db, scope() as never, {
       view: "shipped",
       query: { ...EMPTY_GRID_QUERY, filters: [{ field: "shippedAt", op: "date", date: { kind: "fixed", preset: "last7d" } }], sort: [{ field: "shippedAt", dir: "desc" }] } as never,
     });

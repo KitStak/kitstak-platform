@@ -31,7 +31,7 @@ export interface LocationPickRow {
 /** Location types that never hold countable stock; hidden from the picker unless `includeAll`. */
 export const NON_COUNTABLE_LOCATION_TYPES = ["BusinessStation", "Virtual"] as const;
 
-export function listPickLocations(db: AppDb, scope: Scope, warehouseId: string, query: GridQuery, includeAll = false, exceptPlanId: string | null = null): GridPage<LocationPickRow> {
+export async function listPickLocations(db: AppDb, scope: Scope, warehouseId: string, query: GridQuery, includeAll = false, exceptPlanId: string | null = null): Promise<GridPage<LocationPickRow>> {
   if (!hasWarehouse(scope, warehouseId)) throw notFoundError("Warehouse");
   const spec: GridSpec = {
     from: sql`FROM locations lo LEFT JOIN lookup_values lg ON lg.id = lo.location_group_id LEFT JOIN clients dc ON dc.id = lo.dedicated_client_id LEFT JOIN (SELECT i.location_id AS lid, SUM(i.on_hand) AS on_hand, SUM(i.allocated) AS allocated, COUNT(DISTINCT i.product_id) AS skus FROM inventory i WHERE i.warehouse_id = ${warehouseId} AND i.on_hand > 0 GROUP BY i.location_id) inv ON inv.lid = lo.id
@@ -53,15 +53,15 @@ export function listPickLocations(db: AppDb, scope: Scope, warehouseId: string, 
       openCountCode: openCountForLocation(exceptPlanId),
       inOpenCount: sql`(CASE WHEN ${openCountForLocation(exceptPlanId)} IS NULL THEN 0 ELSE 1 END)`,
       lastCountedAt: raw("lc.at"),
-      stockClientName: sql`(SELECT group_concat(DISTINCT sc.name) FROM inventory si JOIN clients sc ON sc.id = si.client_id WHERE si.location_id = lo.id AND si.on_hand > 0)`,
+      stockClientName: sql`(SELECT string_agg(DISTINCT (sc.name)::text, ',') FROM inventory si JOIN clients sc ON sc.id = si.client_id WHERE si.location_id = lo.id AND si.on_hand > 0)`,
     },
     fields: COUNT_LOCATION_PICKER_FIELDS,
     sortable: COUNT_PICKER_SORT_FIELDS.filter((f) => !["sku", "name", "clientName"].includes(f)),
     search: ["code", "barcode"],
-    base: [sql`lo.warehouse_id = ${warehouseId}`, raw("lo.is_active = 1"), ...(includeAll ? [] : [raw(`lo.location_type NOT IN (${NON_COUNTABLE_LOCATION_TYPES.map((t) => `'${t}'`).join(", ")})`)])],
+    base: [sql`lo.warehouse_id = ${warehouseId}`, raw("lo.is_active = true"), ...(includeAll ? [] : [raw(`lo.location_type NOT IN (${NON_COUNTABLE_LOCATION_TYPES.map((t) => `'${t}'`).join(", ")})`)])],
     defaultOrder: raw("lo.walking_path_priority, lo.code"),
   };
-  const page = runGrid<LocationPickRow & Record<string, unknown>>(db, spec, query);
+  const page = await runGrid<LocationPickRow & Record<string, unknown>>(db, spec, query);
   return { ...page, rows: page.rows.map((r) => withBooleans(r, ["isLocked", "preventAllocation", "hasInventory", "inOpenCount", "singleClient", "onlyOneSku", "onlyOneLot", "onlyOneLp", "onlyDamaged", "preventInventorySync"])) };
 }
 
@@ -78,7 +78,7 @@ export interface ProductPickRow {
   readonly openCountCode: string | null;
 }
 
-export function listPickProducts(db: AppDb, scope: Scope, warehouseId: string, query: GridQuery, exceptPlanId: string | null = null): GridPage<ProductPickRow> {
+export async function listPickProducts(db: AppDb, scope: Scope, warehouseId: string, query: GridQuery, exceptPlanId: string | null = null): Promise<GridPage<ProductPickRow>> {
   if (!hasWarehouse(scope, warehouseId)) throw notFoundError("Warehouse");
   const clientScope = scope.clientIds === "all" ? raw("1 = 1") : inList(raw("pr.client_id"), scope.clientIds);
   const spec: GridSpec = {
@@ -88,7 +88,7 @@ export function listPickProducts(db: AppDb, scope: Scope, warehouseId: string, q
       id: raw("pr.id"), sku: raw("pr.sku"), name: raw("pr.name"), barcode: raw("pr.barcode"), clientName: raw("c.name"), fnsku: raw("pr.fnsku"),
       productType: raw("pt.name"), productGroup: raw("pg.name"), createdAt: raw("pr.created_at"),
       isFoldable: raw("pr.is_foldable"), isFragile: raw("pr.is_fragile"), isKit: raw("pr.is_kit"), isOversized: raw("pr.is_oversized"), price: raw("pr.price"),
-      returnable: raw("(1 - pr.is_non_returnable)"), shelfLifeDays: raw("pr.shelf_life_days"), isStackable: raw("pr.is_stackable"), status: raw("pr.status"),
+      returnable: raw("(1 - (pr.is_non_returnable)::int)"), shelfLifeDays: raw("pr.shelf_life_days"), isStackable: raw("pr.is_stackable"), status: raw("pr.status"),
       trackExpiry: raw("pr.track_expiry"), trackLot: raw("pr.track_lot"), trackProductionDate: raw("pr.track_production_date"), trackSerial: raw("pr.track_serial"),
       onHand: raw("COALESCE(inv.on_hand, 0)"),
       allocated: raw("COALESCE(inv.allocated, 0)"),
@@ -104,7 +104,7 @@ export function listPickProducts(db: AppDb, scope: Scope, warehouseId: string, q
     base: [clientScope],
     defaultOrder: raw("pr.sku"),
   };
-  const page = runGrid<ProductPickRow & Record<string, unknown>>(db, spec, query);
+  const page = await runGrid<ProductPickRow & Record<string, unknown>>(db, spec, query);
   return { ...page, rows: page.rows.map((r) => withBooleans(r, ["isKit", "trackLot", "trackSerial", "trackExpiry", "hasInventory", "inOpenCount"])) };
 }
 
@@ -122,7 +122,7 @@ export interface LpPickRow {
 }
 
 /** Add License Plate picker (LP count type): placed LPs of the warehouse in the viewer's client scope. */
-export function listPickLps(db: AppDb, scope: Scope, warehouseId: string, query: GridQuery, exceptPlanId: string | null = null): GridPage<LpPickRow> {
+export async function listPickLps(db: AppDb, scope: Scope, warehouseId: string, query: GridQuery, exceptPlanId: string | null = null): Promise<GridPage<LpPickRow>> {
   if (!hasWarehouse(scope, warehouseId)) throw notFoundError("Warehouse");
   const clientScope = scope.clientIds === "all" ? raw("1 = 1") : sql`(lp.client_id IS NULL OR ${inList(raw("lp.client_id"), scope.clientIds)})`;
   const spec: GridSpec = {
@@ -141,5 +141,5 @@ export function listPickLps(db: AppDb, scope: Scope, warehouseId: string, query:
     base: [sql`lp.warehouse_id = ${warehouseId}`, clientScope],
     defaultOrder: raw("lo.walking_path_priority, lo.code, lp.number"),
   };
-  return runGrid<LpPickRow>(db, spec, query);
+  return await runGrid<LpPickRow>(db, spec, query);
 }

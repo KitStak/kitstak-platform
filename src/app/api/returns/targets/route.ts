@@ -6,5 +6,5 @@ import { returnTargets, targetQuerySchema } from "@/server/repositories/returns-
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.station,
   query: targetQuerySchema,
-  handler: ({ db, auth, query }) => returnTargets(db, auth.scope, query),
+  handler: async ({ db, auth, query }) => await returnTargets(db, auth.scope, query),
 });

@@ -2,7 +2,8 @@
  * Search provider "users" (Users). Matches name, email, first and last name. Admin data, so it
  * needs `settings.users.view`; password hashes and session data never leave the query. Owner: M14.
  */
-import { asc, or, type SQL } from "drizzle-orm";
+import { or, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import { users } from "@/server/db/schema";
 import { COUNT_ALL, containsText, matchRank } from "../match";
 import { hitRank, listSearchHref, type SearchContext, type SearchProvider } from "../types";
@@ -19,15 +20,14 @@ export const provider: SearchProvider = {
   configured: true,
   permission: "settings.users.view",
   seeAllHref: (q) => listSearchHref("/settings/users", q),
-  count: (ctx) => ctx.db.select({ n: COUNT_ALL }).from(users).where(where(ctx)).get()?.n ?? 0,
-  search: (ctx) =>
-    ctx.db
+  count: async (ctx) => (await ctx.db.select({ n: COUNT_ALL }).from(users).where(where(ctx)).limit(1))[0]?.n ?? 0,
+  search: async (ctx) =>
+    (await ctx.db
       .select({ id: users.id, name: users.name, email: users.email, isActive: users.isActive, userType: users.userType })
       .from(users)
       .where(where(ctx))
       .orderBy(matchRank(users.email, ctx.q), asc(users.name))
-      .limit(ctx.limit)
-      .all()
+      .limit(ctx.limit))
       .map((u) => ({
         id: u.id,
         title: u.name,

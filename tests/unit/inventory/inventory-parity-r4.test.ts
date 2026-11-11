@@ -38,32 +38,32 @@ describe("bucketSubLabel attributes", () => {
 describe("destination options", () => {
   let w: World;
   let auth: AuthContext;
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   });
   afterEach(() => w.close());
 
-  it("badges and disables an occupied only-1-SKU location for another SKU, but not for the same SKU", () => {
-    const strict = w.db.insert(schema.locations).values(locationRow(w.warehouseId, "ZZ-ONE-01", { onlyOneSku: true })).returning().get().id;
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.product2Id, locationId: strict, qty: 3 });
-    const other = destinationOptions(w.db, auth, { kind: "location", q: "ZZ-ONE", warehouseId: w.warehouseId, productIds: [w.productId] });
+  it("badges and disables an occupied only-1-SKU location for another SKU, but not for the same SKU", async () => {
+    const strict = (await w.db.insert(schema.locations).values(locationRow(w.warehouseId, "ZZ-ONE-01", { onlyOneSku: true })).returning())[0].id;
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.product2Id, locationId: strict, qty: 3 });
+    const other = await destinationOptions(w.db, auth, { kind: "location", q: "ZZ-ONE", warehouseId: w.warehouseId, productIds: [w.productId] });
     expect(other).toHaveLength(1);
     expect(other[0]?.blocking).toMatch(/allows only 1 SKU \(holds /);
     expect(other[0]?.badge).toMatch(/^1 SKU · holds /);
     expect(toDestinationOption(other[0]!).disabled).toBe(true);
-    const same = destinationOptions(w.db, auth, { kind: "location", q: "ZZ-ONE", warehouseId: w.warehouseId, productIds: [w.product2Id] });
+    const same = await destinationOptions(w.db, auth, { kind: "location", q: "ZZ-ONE", warehouseId: w.warehouseId, productIds: [w.product2Id] });
     expect(same[0]?.blocking).toBeNull();
     expect(same[0]?.badge).toBe("1 SKU");
     expect(same[0]?.description).toMatch(/Only 1 SKU/);
     expect(toDestinationOption(same[0]!).disabled).toBeUndefined();
   });
 
-  it("matches exact codes for scans and stays inside the user's warehouses", () => {
-    w.db.insert(schema.locations).values(locationRow(w.warehouseId, "ZZ-EXACT-1")).run();
-    w.db.insert(schema.locations).values(locationRow(w.warehouseId, "ZZ-EXACT-10")).run();
-    expect(destinationOptions(w.db, auth, { kind: "location", q: "zz-exact-1", warehouseId: w.warehouseId, productIds: [], exact: true }).map((o) => o.label)).toEqual(["ZZ-EXACT-1"]);
-    expect(destinationOptions(w.db, auth, { kind: "location", q: "ZZ-EXACT", warehouseId: "other-warehouse", productIds: [] })).toEqual([]);
+  it("matches exact codes for scans and stays inside the user's warehouses", async () => {
+    await w.db.insert(schema.locations).values(locationRow(w.warehouseId, "ZZ-EXACT-1"));
+    await w.db.insert(schema.locations).values(locationRow(w.warehouseId, "ZZ-EXACT-10"));
+    expect((await destinationOptions(w.db, auth, { kind: "location", q: "zz-exact-1", warehouseId: w.warehouseId, productIds: [], exact: true })).map((o) => o.label)).toEqual(["ZZ-EXACT-1"]);
+    expect(await destinationOptions(w.db, auth, { kind: "location", q: "ZZ-EXACT", warehouseId: "other-warehouse", productIds: [] })).toEqual([]);
   });
 });

@@ -13,6 +13,7 @@ import { inventory, inventorySnapshots, licensePlates, productPackTypes, product
 import { isValidTimeZone, localMidnightUtc, localParts } from "../timezone";
 import type { SchedulerTask, SchedulerTaskContext, TaskResult } from "../types";
 import { backfillMissingSnapshots } from "@/server/repositories/reports-snapshot-backfill";
+import { rowCount, withWriteTx } from "@/server/db/sql";
 
 export const SNAPSHOT_LOCAL_TIME = { hour: 0, minute: 2 } as const;
 export const SNAPSHOT_RETENTION_DAYS = 400;
@@ -25,8 +26,8 @@ export function isPastSnapshotTime(hour: number, minute: number): boolean {
 const INSERT_CHUNK = 500;
 
 /** Copies the warehouse's current non-empty buckets into `inventory_snapshots`. */
-export function snapshotWarehouse(db: AppDb, warehouseId: string, snapshotAt: string): number {
-  const buckets = db.select({
+export async function snapshotWarehouse(db: AppDb, warehouseId: string, snapshotAt: string): Promise<number> {
+  const buckets = await db.select({
     warehouseId: inventory.warehouseId,
     clientId: inventory.clientId,
     productClientId: products.clientId,
@@ -44,12 +45,11 @@ export function snapshotWarehouse(db: AppDb, warehouseId: string, snapshotAt: st
   }).from(inventory)
     .innerJoin(products, eq(products.id, inventory.productId))
     .leftJoin(licensePlates, eq(licensePlates.id, inventory.lpId))
-    .where(and(eq(inventory.warehouseId, warehouseId), gt(inventory.onHand, 0)))
-    .all();
+    .where(and(eq(inventory.warehouseId, warehouseId), gt(inventory.onHand, 0)));
   if (buckets.length === 0) return 0;
 
-  const packSizes = new Map(db.select({ productId: productPackTypes.productId, packType: productPackTypes.packType, uomQty: productPackTypes.uomQty })
-    .from(productPackTypes).all().map((p) => [`${p.productId}|${p.packType}`, p.uomQty]));
+  const packSizes = new Map((await db.select({ productId: productPackTypes.productId, packType: productPackTypes.packType, uomQty: productPackTypes.uomQty })
+    .from(productPackTypes)).map((p) => [`${p.productId}|${p.packType}`, p.uomQty]));
   const rows = buckets.map((b) => {
     const perPack = Math.max(1, packSizes.get(`${b.productId}|${b.packType}`) ?? 1);
     return {
@@ -71,43 +71,43 @@ export function snapshotWarehouse(db: AppDb, warehouseId: string, snapshotAt: st
     };
   });
   for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
-    db.insert(inventorySnapshots).values(rows.slice(i, i + INSERT_CHUNK)).run();
+    await db.insert(inventorySnapshots).values(rows.slice(i, i + INSERT_CHUNK));
   }
   return rows.length;
 }
 
-function hasSnapshotSince(db: AppDb, warehouseId: string, sinceIso: string): boolean {
-  return db.select({ id: inventorySnapshots.id }).from(inventorySnapshots)
+async function hasSnapshotSince(db: AppDb, warehouseId: string, sinceIso: string): Promise<boolean> {
+  return (await db.select({ id: inventorySnapshots.id }).from(inventorySnapshots)
     .where(and(eq(inventorySnapshots.warehouseId, warehouseId), gte(inventorySnapshots.snapshotAt, sinceIso)))
-    .limit(1).get() !== undefined;
+    .limit(1))[0] !== undefined;
 }
 
-export function pruneSnapshots(db: AppDb, now: Date): number {
+export async function pruneSnapshots(db: AppDb, now: Date): Promise<number> {
   const cutoff = new Date(now.getTime() - SNAPSHOT_RETENTION_DAYS * DAY_MS).toISOString();
-  return db.delete(inventorySnapshots).where(lt(inventorySnapshots.snapshotAt, cutoff)).run().changes;
+  return rowCount(await db.delete(inventorySnapshots).where(lt(inventorySnapshots.snapshotAt, cutoff)));
 }
 
-export function runSnapshots(ctx: SchedulerTaskContext): TaskResult {
+export async function runSnapshots(ctx: SchedulerTaskContext): Promise<TaskResult> {
   const taken: string[] = [];
   let rows = 0;
   // Heal nights the server missed (rebuilt from the ledger, stamped 00:02 local, idempotent).
   try {
-    const healed = backfillMissingSnapshots(ctx.db, { now: ctx.now }).filter((r) => r.days.length > 0);
+    const healed = (await backfillMissingSnapshots(ctx.db, { now: ctx.now })).filter((r) => r.days.length > 0);
     if (healed.length > 0) ctx.log.info("inventory snapshot: rebuilt missed nights", { nights: healed.map((r) => `${r.warehouse}: ${r.days.map((d) => d.businessDate).join(", ")}`) });
   } catch (err: unknown) {
     ctx.log.warn("inventory snapshot: backfill failed", { err: err instanceof Error ? err.message : String(err) });
   }
-  for (const wh of ctx.db.select({ id: warehouses.id, code: warehouses.code, timezone: warehouses.timezone }).from(warehouses).all()) {
+  for (const wh of await ctx.db.select({ id: warehouses.id, code: warehouses.code, timezone: warehouses.timezone }).from(warehouses)) {
     const zone = isValidTimeZone(wh.timezone) ? wh.timezone : "UTC";
     if (zone !== wh.timezone) ctx.log.warn("snapshot: invalid warehouse timezone, using UTC", { warehouseId: wh.id, timezone: wh.timezone });
     const local = localParts(ctx.now, zone);
     if (!isPastSnapshotTime(local.hour, local.minute)) continue;
     const midnight = localMidnightUtc(local.date, zone).toISOString();
-    if (hasSnapshotSince(ctx.db, wh.id, midnight)) continue;
-    rows += ctx.db.transaction((tx) => snapshotWarehouse(tx, wh.id, ctx.now.toISOString()));
+    if (await hasSnapshotSince(ctx.db, wh.id, midnight)) continue;
+    rows += (await withWriteTx(ctx.db, async (tx) => await snapshotWarehouse(tx, wh.id, ctx.now.toISOString())));
     taken.push(wh.code);
   }
-  const pruned = pruneSnapshots(ctx.db, ctx.now);
+  const pruned = await pruneSnapshots(ctx.db, ctx.now);
   if (taken.length === 0) return { status: "skipped", message: pruned > 0 ? `Pruned ${pruned} old snapshot rows` : "No warehouse due" };
   ctx.log.info("inventory snapshot taken", { warehouses: taken, rows, pruned });
   return { status: "ok", message: `Snapshot of ${taken.join(", ")}: ${rows} rows` };

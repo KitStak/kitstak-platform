@@ -15,13 +15,13 @@ export const POST = defineRoute({
   permission: "inventory.purchase_orders.cancel_order",
   rateLimit: RATE_LIMITS.bulkIo,
   body: bulkIdsBodySchema,
-  handler: ({ db, auth, actor, body }) => {
+  handler: async ({ db, auth, actor, body }) => {
     const shortClosed: string[] = [];
-    const result = runBulk(db, body.ids, (tx, id) => {
-      if (cancelPurchaseOrderOutcome(tx, domainCtx(actor, auth), auth.scope, id).shortClosed) shortClosed.push(id);
+    const result = await runBulk(db, body.ids, async (tx, id) => {
+      if ((await cancelPurchaseOrderOutcome(tx, domainCtx(actor, auth), auth.scope, id)).shortClosed) shortClosed.push(id);
     });
     const ok = new Set(result.succeeded);
     // The refreshed rows let the list patch its cache at once (no stale status / actions).
-    return { ...result, shortClosed: shortClosed.filter((id) => ok.has(id)), rows: result.succeeded.length ? purchaseOrdersByIds(db, auth.scope, result.succeeded) : [] };
+    return { ...result, shortClosed: shortClosed.filter((id) => ok.has(id)), rows: result.succeeded.length ? await purchaseOrdersByIds(db, auth.scope, result.succeeded) : [] };
   },
 });

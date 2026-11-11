@@ -16,12 +16,12 @@ export const POST = defineRoute({
   params: z.object({ action: z.string().max(40) }),
   permission: Object.values(ORDER_BULK_PERMISSIONS),
   body: z.object({}).loose(),
-  handler: ({ db, auth, actor, params, body }) => {
+  handler: async ({ db, auth, actor, params, body }) => {
     if (!(ORDER_BULK_ACTIONS as readonly string[]).includes(params.action)) throw notFoundError("Bulk action");
     const action = params.action as OrderBulkAction;
     if (!can(auth, ORDER_BULK_PERMISSIONS[action])) throw forbiddenError();
     const parsed = BULK_BODY_SCHEMAS[action].safeParse(body);
     if (!parsed.success) throw fromZodError(parsed.error);
-    return runOrderBulk(action, db, domainCtx(actor, auth), parsed.data as Record<string, unknown>);
+    return await runOrderBulk(action, db, domainCtx(actor, auth), parsed.data as Record<string, unknown>);
   },
 });

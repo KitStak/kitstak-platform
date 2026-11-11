@@ -14,8 +14,8 @@ export const POST = defineRoute({
   permission: "inventory.purchase_orders.cancel_order",
   params: idParamsSchema,
   body: z.object({ version: z.number().int().min(1).optional() }),
-  handler: ({ db, auth, actor, params, body }) => {
-    const outcome = cancelPurchaseOrderOutcome(db, domainCtx(actor, auth), auth.scope, params.id, body.version);
-    return { ...getPurchaseOrder(db, auth.scope, params.id), shortClosed: outcome.shortClosed, cancelledUnits: outcome.cancelledUnits };
+  handler: async ({ db, auth, actor, params, body }) => {
+    const outcome = await cancelPurchaseOrderOutcome(db, domainCtx(actor, auth), auth.scope, params.id, body.version);
+    return { ...(await getPurchaseOrder(db, auth.scope, params.id)), shortClosed: outcome.shortClosed, cancelledUnits: outcome.cancelledUnits };
   },
 });

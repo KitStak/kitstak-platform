@@ -8,7 +8,7 @@ import { createCarrierConnection, listCarrierConnections } from "@/server/reposi
 export const GET = defineRoute({
   permission: ["integrations.integrations.create_setup", "integrations.integrations.edit_setup", "integrations.integrations.delete_setup", "integrations.carrier_monitoring.view"],
   query: z.object({ provider: z.string().trim().max(40).optional() }),
-  handler: ({ db, auth, query }) => listCarrierConnections(db, auth, query.provider ?? null),
+  handler: async ({ db, auth, query }) => await listCarrierConnections(db, auth, query.provider ?? null),
 });
 
 export const POST = defineRoute({

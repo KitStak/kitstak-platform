@@ -57,11 +57,11 @@ export interface FreeStockFilter {
 }
 
 /** Free buckets (optionally filtered) with the lock flags, in one query. */
-export function freeStockRows(db: Tx, filter: FreeStockFilter = {}): FreeStockRow[] {
+export async function freeStockRows(db: Tx, filter: FreeStockFilter = {}): Promise<FreeStockRow[]> {
   const i = schema.inventory;
   const l = schema.locations;
   if (filter.productIds && filter.productIds.length === 0) return [];
-  const rows = db.select({
+  const rows = await db.select({
     warehouseId: i.warehouseId, clientId: i.clientId, productId: i.productId, locationId: i.locationId,
     free: sql<number>`${i.onHand} - ${i.allocated}`, locked: l.isLocked, prevent: l.preventAllocation,
     countLocked: sql<number>`CASE WHEN ${notCountLocked(i.locationId)} THEN 0 ELSE 1 END`,
@@ -71,7 +71,7 @@ export function freeStockRows(db: Tx, filter: FreeStockFilter = {}): FreeStockRo
       filter.warehouseId ? eq(i.warehouseId, filter.warehouseId) : undefined,
       filter.clientId ? eq(i.clientId, filter.clientId) : undefined,
       eq(i.status, "Stock"), sql`${i.damageReason} IS NULL`, gt(sql`${i.onHand} - ${i.allocated}`, 0),
-    )).all();
+    ));
   return rows.map((r) => ({
     warehouseId: r.warehouseId, clientId: r.clientId, productId: r.productId, locationId: r.locationId, free: Number(r.free),
     locationLocked: Boolean(r.locked), preventAllocation: Boolean(r.prevent), countLocked: Number(r.countLocked) === 1,
@@ -82,7 +82,7 @@ export function freeStockRows(db: Tx, filter: FreeStockFilter = {}): FreeStockRo
  * Aggregates free rows by `keyOf`. Plan codes are looked up only for count-locked locations
  * (one lookup per distinct location).
  */
-export function aggregateAvailability<K>(db: Tx, rows: readonly FreeStockRow[], keyOf: (row: FreeStockRow) => K): Map<K, ComponentAvailability> {
+export async function aggregateAvailability<K>(db: Tx, rows: readonly FreeStockRow[], keyOf: (row: FreeStockRow) => K): Promise<Map<K, ComponentAvailability>> {
   const plans = new Map<string, string | null>();
   const acc = new Map<K, { usable: number; locked: number; blocked: number; plans: string[] }>();
   for (const r of rows) {
@@ -91,7 +91,7 @@ export function aggregateAvailability<K>(db: Tx, rows: readonly FreeStockRow[], 
     const cls = classifyFree(r);
     if (cls === "locked") {
       a.locked += r.free;
-      if (!plans.has(r.locationId)) plans.set(r.locationId, countLockFor(db, r.locationId));
+      if (!plans.has(r.locationId)) plans.set(r.locationId, await countLockFor(db, r.locationId));
       const plan = plans.get(r.locationId);
       if (plan && !a.plans.includes(plan)) a.plans.push(plan);
     } else if (cls === "blocked") a.blocked += r.free;
@@ -104,12 +104,12 @@ export function aggregateAvailability<K>(db: Tx, rows: readonly FreeStockRow[], 
 }
 
 /** Per-product availability in a warehouse (and client). Missing products get zeros. */
-export function componentAvailability(db: Tx, input: { readonly warehouseId: string; readonly clientId: string | null; readonly productIds: readonly string[] }): Map<string, ComponentAvailability> {
+export async function componentAvailability(db: Tx, input: { readonly warehouseId: string; readonly clientId: string | null; readonly productIds: readonly string[] }): Promise<Map<string, ComponentAvailability>> {
   const ids = [...new Set(input.productIds)];
   const out = new Map<string, ComponentAvailability>(ids.map((id) => [id, EMPTY_AVAILABILITY]));
   if (ids.length === 0) return out;
-  const rows = freeStockRows(db, { warehouseId: input.warehouseId, clientId: input.clientId, productIds: ids });
-  for (const [id, a] of aggregateAvailability(db, rows, (r) => r.productId)) out.set(id, a);
+  const rows = await freeStockRows(db, { warehouseId: input.warehouseId, clientId: input.clientId, productIds: ids });
+  for (const [id, a] of await aggregateAvailability(db, rows, (r) => r.productId)) out.set(id, a);
   return out;
 }
 
@@ -117,6 +117,6 @@ export function componentAvailability(db: Tx, input: { readonly warehouseId: str
 export const availabilityKey = (warehouseId: string, clientId: string | null, productId: string): string => `${warehouseId}|${clientId ?? ""}|${productId}`;
 
 /** Availability of every warehouse/client/product with free stock (Kit Inventory stats). */
-export function availabilityByKey(db: Tx): Map<string, ComponentAvailability> {
-  return aggregateAvailability(db, freeStockRows(db), (r) => availabilityKey(r.warehouseId, r.clientId, r.productId));
+export async function availabilityByKey(db: Tx): Promise<Map<string, ComponentAvailability>> {
+  return await aggregateAvailability(db, await freeStockRows(db), (r) => availabilityKey(r.warehouseId, r.clientId, r.productId));
 }

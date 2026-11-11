@@ -25,6 +25,7 @@ import { carrierOptions, type CarrierOption } from "./returns-carriers";
 import { packingWarningOf, type PackingWarning } from "./packing-warnings";
 import { packLock, packLockMessage, type CountLockInfo } from "./packing-locks";
 import { clearPackDraft, draftFits, readPackDraft, type PackDraft } from "./packing-drafts";
+import { dbGet, filterSeq, mapSeq, withWriteTx } from "@/server/db/sql";
 
 type Ctx = DomainCtx & { readonly scope: Scope };
 type OrderRow = typeof schema.shipmentOrders.$inferSelect;
@@ -90,35 +91,35 @@ export interface PackContext {
   readonly draft: PackDraft | null;
 }
 
-function scanCodesOf(db: AppDb, product: typeof schema.products.$inferSelect): string[] {
-  const alt = db.select({ b: schema.productBarcodes.barcode }).from(schema.productBarcodes).where(eq(schema.productBarcodes.productId, product.id)).all().map((r) => r.b);
+async function scanCodesOf(db: AppDb, product: typeof schema.products.$inferSelect): Promise<string[]> {
+  const alt = (await db.select({ b: schema.productBarcodes.barcode }).from(schema.productBarcodes).where(eq(schema.productBarcodes.productId, product.id))).map((r) => r.b);
   return [...new Set([product.sku, product.barcode, product.fnsku, ...alt].filter((c): c is string => !!c).map((c) => c.toLowerCase()))];
 }
 
 /** Catalog pack-type flag for the order line's pack type (case-insensitive name match). */
-function ownBoxOf(db: AppDb, productId: string, packType: string | null): boolean {
+async function ownBoxOf(db: AppDb, productId: string, packType: string | null): Promise<boolean> {
   if (!packType) return false;
-  const row = db.get<{ o: number }>(sql`SELECT use_own_box AS o FROM product_pack_types WHERE product_id = ${productId} AND lower(pack_type) = lower(${packType}) LIMIT 1`);
+  const row = await dbGet<{ o: number }>(db, sql`SELECT use_own_box AS o FROM product_pack_types WHERE product_id = ${productId} AND lower(pack_type) = lower(${packType}) LIMIT 1`);
   return Boolean(row?.o);
 }
 
-export function loadPackOrder(db: AppDb, scope: Scope, orderId: string): OrderRow {
-  const o = db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).get();
+export async function loadPackOrder(db: AppDb, scope: Scope, orderId: string): Promise<OrderRow> {
+  const o = (await db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).limit(1))[0];
   if (!o || o.deletedAt) throw new DomainError("NOT_FOUND", "Shipment order not found");
   assertInScope(scope, o, "Shipment order");
   return o;
 }
 
-function pendingPackTasks(db: AppDb, orderId: string) {
-  return db.select().from(schema.tasks).where(and(eq(schema.tasks.orderId, orderId), eq(schema.tasks.taskType, "Packing"), inArray(schema.tasks.status, ["Pending", "Started"]))).all();
+async function pendingPackTasks(db: AppDb, orderId: string) {
+  return await db.select().from(schema.tasks).where(and(eq(schema.tasks.orderId, orderId), eq(schema.tasks.taskType, "Packing"), inArray(schema.tasks.status, ["Pending", "Started"])));
 }
 
 /**
  * Default hospital: the first explicitly designated hospital (Location Group "Hospital", else a
  * HOSP* code). No fallback to Returns-area bins: null means "no hospital configured".
  */
-function defaultHospital(db: AppDb, warehouseId: string): HospitalOption | null {
-  const h = hospitalLocations(db, warehouseId)[0];
+async function defaultHospital(db: AppDb, warehouseId: string): Promise<HospitalOption | null> {
+  const h = (await hospitalLocations(db, warehouseId))[0];
   return h ? { id: h.id, code: h.code, detail: hospitalDetail(h), isDefault: true } : null;
 }
 
@@ -126,33 +127,32 @@ function hospitalDetail(h: { readonly areaType: string | null; readonly location
   return [h.designation === "group" ? "Hospital group" : "HOSP code", h.areaType, h.locationType].filter(Boolean).join(" · ");
 }
 
-export function packContext(db: AppDb, scope: Scope, orderId: string, stationId?: string | null): PackContext {
-  const o = loadPackOrder(db, scope, orderId);
-  const client = db.select().from(schema.clients).where(eq(schema.clients.id, o.clientId)).get();
+export async function packContext(db: AppDb, scope: Scope, orderId: string, stationId?: string | null): Promise<PackContext> {
+  const o = await loadPackOrder(db, scope, orderId);
+  const client = (await db.select().from(schema.clients).where(eq(schema.clients.id, o.clientId)).limit(1))[0];
   const settings = parseSettings(clientSettingsSchema, client?.settings ?? {}).packing;
-  const job = o.jobId ? db.select({ code: schema.jobs.code }).from(schema.jobs).where(eq(schema.jobs.id, o.jobId)).get() : undefined;
-  const pending = pendingPackTasks(db, o.id);
-  const lines = db.select({ l: schema.orderLines, p: schema.products }).from(schema.orderLines)
-    .innerJoin(schema.products, eq(schema.products.id, schema.orderLines.productId)).where(eq(schema.orderLines.orderId, o.id)).all();
-  const packLines: PackLine[] = lines.map(({ l, p }) => {
+  const job = o.jobId ? (await db.select({ code: schema.jobs.code }).from(schema.jobs).where(eq(schema.jobs.id, o.jobId)).limit(1))[0] : undefined;
+  const pending = await pendingPackTasks(db, o.id);
+  const lines = await db.select({ l: schema.orderLines, p: schema.products }).from(schema.orderLines)
+    .innerJoin(schema.products, eq(schema.products.id, schema.orderLines.productId)).where(eq(schema.orderLines.orderId, o.id));
+  const packLines: PackLine[] = (await mapSeq(lines, async ({ l, p }) => {
     const planned = pending.filter((t) => t.orderLineId === l.id).reduce((s, t) => s + t.plannedQty - t.actualQty, 0);
-    const picked = db.get<{ n: number }>(sql`SELECT COALESCE(SUM(qty),0) AS n FROM inventory_allocations WHERE order_line_id = ${l.id} AND status IN ('Picked','Sorted')`)?.n ?? 0;
-    const serials = p.trackSerial ? db.select({ s: schema.serialNumbers.primarySerial }).from(schema.serialNumbers)
-      .where(and(eq(schema.serialNumbers.orderLineId, l.id), eq(schema.serialNumbers.status, "Picked"))).all().map((r) => r.s) : [];
+    const picked = (await dbGet<{ n: number }>(db, sql`SELECT COALESCE(SUM(qty),0) AS n FROM inventory_allocations WHERE order_line_id = ${l.id} AND status IN ('Picked','Sorted')`))?.n ?? 0;
+    const serials = p.trackSerial ? (await db.select({ s: schema.serialNumbers.primarySerial }).from(schema.serialNumbers)
+      .where(and(eq(schema.serialNumbers.orderLineId, l.id), eq(schema.serialNumbers.status, "Picked")))).map((r) => r.s) : [];
     return {
       orderLineId: l.id, productId: p.id, sku: p.sku, name: p.name, imageUrl: p.imageUrl, packType: l.packType, ordered: l.quantity - l.cancelledQuantity,
-      toPack: Math.min(planned, picked), packed: l.packedQuantity, weightOz: p.weightOz, scanCodes: scanCodesOf(db, p), trackSerial: p.trackSerial,
+      toPack: Math.min(planned, picked), packed: l.packedQuantity, weightOz: p.weightOz, scanCodes: await scanCodesOf(db, p), trackSerial: p.trackSerial,
       captureLot: p.trackLot && p.lotScanMethod === "During Packing", captureExpiry: p.trackExpiry && p.expiryScanMethod === "During Packing",
       lotNumber: l.lotNumber, expiryDate: l.expiryDate, pickedSerials: serials, packingInstructions: p.packingInstructions,
-      useOwnBox: ownBoxOf(db, p.id, l.packType),
+      useOwnBox: await ownBoxOf(db, p.id, l.packType),
     };
-  }).filter((l) => l.toPack > 0 || l.packed > 0);
-  const packages = db.select().from(schema.shipmentPackages).where(and(eq(schema.shipmentPackages.warehouseId, o.warehouseId), eq(schema.shipmentPackages.isActive, true))).orderBy(schema.shipmentPackages.code).all()
-    .filter((p) => packageAllowsClient(db, p, o.clientId))
+  })).filter((l) => l.toPack > 0 || l.packed > 0);
+  const packages = (await filterSeq((await db.select().from(schema.shipmentPackages).where(and(eq(schema.shipmentPackages.warehouseId, o.warehouseId), eq(schema.shipmentPackages.isActive, true))).orderBy(schema.shipmentPackages.code)), async (p) => await packageAllowsClient(db, p, o.clientId)))
     .map((p): PackPackageType => ({ id: p.id, code: p.code, description: p.description, length: p.length, width: p.width, height: p.height, emptyWeightLb: p.emptyWeight, tracksInventory: p.trackInventory }));
   const productPackage = lines.map((r) => r.p.useShipPackageId).find((id) => !!id) ?? null;
-  const labels = db.select({ t: schema.shipments.trackingNumber, f: schema.shipments.labelFileId }).from(schema.shipments)
-    .where(and(eq(schema.shipments.orderId, o.id), eq(schema.shipments.labelType, "Shipping Label"), eq(schema.shipments.labelStatus, "Active"))).all();
+  const labels = await db.select({ t: schema.shipments.trackingNumber, f: schema.shipments.labelFileId }).from(schema.shipments)
+    .where(and(eq(schema.shipments.orderId, o.id), eq(schema.shipments.labelType, "Shipping Label"), eq(schema.shipments.labelStatus, "Active")));
   return {
     order: {
       id: o.id, code: o.code, status: o.status, version: o.version, warehouseId: o.warehouseId, clientId: o.clientId, clientName: client?.name ?? "",
@@ -161,20 +161,20 @@ export function packContext(db: AppDb, scope: Scope, orderId: string, stationId?
       isAutoShip: o.isAutoShip, packShortStatus: o.packShortStatus, packingInstructions: o.packingInstructions, giftNote: o.isGift ? o.giftNote : null,
       carrierServiceId: o.carrierServiceId, carrierConnectionId: o.carrierConnectionId, defaultPackageId: o.shipmentPackageId ?? productPackage,
       jobCode: job?.code ?? null, priority: o.priority,
-      retailerName: o.retailerId ? (db.select({ n: schema.retailers.name }).from(schema.retailers).where(eq(schema.retailers.id, o.retailerId)).get()?.n ?? null) : null,
+      retailerName: o.retailerId ? ((await db.select({ n: schema.retailers.name }).from(schema.retailers).where(eq(schema.retailers.id, o.retailerId)).limit(1))[0]?.n ?? null) : null,
       retailerLabelPrinted: o.isUccLabelGenerated,
     },
     lines: packLines,
     packages,
-    carriers: carrierOptions(db, o.warehouseId, o.clientId),
+    carriers: await carrierOptions(db, o.warehouseId, o.clientId),
     settings,
     activeLabels: labels.map((l) => ({ trackingNumber: l.t, labelFileId: l.f })),
-    packingWarning: packingWarningOf(db, o.packingWarningTypeId),
-    countLock: (() => { const l = packLock(db, o.id, stationId); return l ? { ...l, reason: packLockMessage(o.code, l, stationId) } : null; })(),
-    ...(() => { const h = defaultHospital(db, o.warehouseId); return { hospitalLocationId: h?.id ?? null, hospital: h }; })(),
-    draft: (() => {
+    packingWarning: await packingWarningOf(db, o.packingWarningTypeId),
+    countLock: await (async () => { const l = await packLock(db, o.id, stationId); return l ? { ...l, reason: packLockMessage(o.code, l, stationId) } : null; })(),
+    ...(await (async () => { const h = await defaultHospital(db, o.warehouseId); return { hospitalLocationId: h?.id ?? null, hospital: h }; })()),
+    draft: await (async () => {
       if (!(PACKABLE_STATUSES as readonly string[]).includes(o.status)) return null;
-      const d = readPackDraft(db, o.id);
+      const d = await readPackDraft(db, o.id);
       return d && draftFits(d.state, packLines.filter((l) => l.toPack > 0)) ? d : null;
     })(),
   };
@@ -267,31 +267,31 @@ export function validatePackages(ctxLines: readonly PackLine[], input: Pick<Comp
 }
 
 /** M10 client access: "All clients" packages fit every order; "Select manually" only the listed clients. */
-function packageAllowsClient(db: AppDb, pkg: { id: string; allClients: boolean }, clientId: string): boolean {
+async function packageAllowsClient(db: AppDb, pkg: { id: string; allClients: boolean }, clientId: string): Promise<boolean> {
   if (pkg.allClients) return true;
-  return !!db.select({ c: schema.shipmentPackageClients.clientId }).from(schema.shipmentPackageClients)
-    .where(and(eq(schema.shipmentPackageClients.packageId, pkg.id), eq(schema.shipmentPackageClients.clientId, clientId))).get();
+  return !!(await db.select({ c: schema.shipmentPackageClients.clientId }).from(schema.shipmentPackageClients)
+    .where(and(eq(schema.shipmentPackageClients.packageId, pkg.id), eq(schema.shipmentPackageClients.clientId, clientId))).limit(1))[0];
 }
 
 /** Packaging material: one unit of the package's tracked product per closed box. */
-function consumePackaging(tx: AppDb, ctx: Ctx, order: OrderRow, stationId: string, packageIds: readonly (string | null | undefined)[]): string[] {
+async function consumePackaging(tx: AppDb, ctx: Ctx, order: OrderRow, stationId: string, packageIds: readonly (string | null | undefined)[]): Promise<string[]> {
   const warnings: string[] = [];
   for (const id of packageIds) {
     if (!id) continue;
-    const pkg = tx.select().from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, id)).get();
+    const pkg = (await tx.select().from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, id)).limit(1))[0];
     if (!pkg?.trackInventory || !pkg.inventoryProductId) continue;
     const where = pkg.reductionRule === "Specific Location" && pkg.reductionLocationId ? sql`location_id = ${pkg.reductionLocationId}`
       : pkg.reductionRule === "Packing Station" ? sql`location_id = ${stationId}` : sql`1 = 1`;
-    const bucket = tx.get<{ id: string }>(sql`SELECT id FROM inventory WHERE warehouse_id = ${order.warehouseId} AND product_id = ${pkg.inventoryProductId}
+    const bucket = await dbGet<{ id: string }>(tx, sql`SELECT id FROM inventory WHERE warehouse_id = ${order.warehouseId} AND product_id = ${pkg.inventoryProductId}
       AND status = 'Stock' AND on_hand - allocated >= 1 AND damage_reason IS NULL AND ${where} ORDER BY on_hand DESC LIMIT 1`)
-      ?? (pkg.reductionRule === "Packing Station" ? tx.get<{ id: string }>(sql`SELECT id FROM inventory WHERE warehouse_id = ${order.warehouseId} AND product_id = ${pkg.inventoryProductId}
+      ?? (pkg.reductionRule === "Packing Station" ? await dbGet<{ id: string }>(tx, sql`SELECT id FROM inventory WHERE warehouse_id = ${order.warehouseId} AND product_id = ${pkg.inventoryProductId}
       AND status = 'Stock' AND on_hand - allocated >= 1 AND damage_reason IS NULL ORDER BY on_hand DESC LIMIT 1`) : undefined);
     if (!bucket) {
       warnings.push(`No stock of packaging ${pkg.code} to consume; inventory was not reduced.`);
       continue;
     }
     try {
-      ledger.remove(tx, ctx, { inventoryId: bucket.id, qty: 1, type: "Inventory Adjustment", refs: { orderId: order.id, note: `Packaging ${pkg.code} used for ${order.code}` } });
+      await ledger.remove(tx, ctx, { inventoryId: bucket.id, qty: 1, type: "Inventory Adjustment", refs: { orderId: order.id, note: `Packaging ${pkg.code} used for ${order.code}` } });
     } catch (error) {
       warnings.push(`Packaging ${pkg.code} not consumed: ${error instanceof Error ? error.message : "unknown error"}`);
     }
@@ -300,8 +300,8 @@ function consumePackaging(tx: AppDb, ctx: Ctx, order: OrderRow, stationId: strin
 }
 
 async function packingSlip(db: AppDb, ctx: Ctx, order: OrderRow, lines: readonly PackLine[], input: CompletePackingInput, tracking: string | null): Promise<string | null> {
-  const client = db.select({ name: schema.clients.name }).from(schema.clients).where(eq(schema.clients.id, order.clientId)).get();
-  const wh = db.select().from(schema.warehouses).where(eq(schema.warehouses.id, order.warehouseId)).get();
+  const client = (await db.select({ name: schema.clients.name }).from(schema.clients).where(eq(schema.clients.id, order.clientId)).limit(1))[0];
+  const wh = (await db.select().from(schema.warehouses).where(eq(schema.warehouses.id, order.warehouseId)).limit(1))[0];
   const record = {
     orderCode: order.code, storeOrderNumber: order.storeOrderNumber ?? undefined, orderDate: order.orderDate, clientName: client?.name,
     shipFrom: wh ? { name: wh.name, address1: wh.addressLine, city: wh.city, state: wh.state ?? undefined, postalCode: wh.postalCode ?? undefined, country: wh.country ?? undefined } : undefined,
@@ -322,9 +322,9 @@ async function packingSlip(db: AppDb, ctx: Ctx, order: OrderRow, lines: readonly
 }
 
 export async function completePacking(db: AppDb, ctx: Ctx, input: CompletePackingInput): Promise<CompletePackingResult> {
-  const station = loadStation(db, ctx.scope, input.stationId);
-  const context = packContext(db, ctx.scope, input.orderId);
-  const order = loadPackOrder(db, ctx.scope, input.orderId);
+  const station = await loadStation(db, ctx.scope, input.stationId);
+  const context = await packContext(db, ctx.scope, input.orderId);
+  const order = await loadPackOrder(db, ctx.scope, input.orderId);
   if (input.version !== undefined && order.version !== input.version) throw new DomainError("CONFLICT", "This order changed since you opened it — Reload");
   if (order.warehouseId !== station.warehouseId) throw new DomainError("VALIDATION", `Station ${station.code} is in another warehouse.`);
   if (!(PACKABLE_STATUSES as readonly string[]).includes(order.status)) throw new DomainError("INVALID_STATE", `Order ${order.code} is ${order.status}; it can't be packed.`);
@@ -332,24 +332,24 @@ export async function completePacking(db: AppDb, ctx: Ctx, input: CompletePackin
   if (!input.withLabel && context.settings.disablePackingWithoutLabel) throw new DomainError("INVALID_STATE", `Packing without a label is disabled for ${context.order.clientName}.`);
   if (input.packages.length > 1 && context.settings.disallowMultipleShipmentPackages) throw new DomainError("INVALID_STATE", `${context.order.clientName} does not allow multiple packages per order.`);
   validatePackages(context.lines, input);
-  const lock = packLock(db, order.id, station.id);
+  const lock = await packLock(db, order.id, station.id);
   if (lock) throw new DomainError("INVALID_STATE", packLockMessage(order.code, lock, station.id), { countPlanCode: lock.planCode, locationCode: lock.locationCode });
   const packedUnits = context.lines.reduce((s, l) => s + l.toPack, 0);
-  const warnings = db.transaction((tx) => {
-    const pending = pendingPackTasks(tx, order.id);
-    tasks.execute(tx, ctx, { taskIds: pending.map((t) => t.id), targetLocationId: station.id });
-    clearPackDraft(tx, order.id);
+  const warnings = await withWriteTx(db, async (tx) => {
+    const pending = await pendingPackTasks(tx, order.id);
+    await tasks.execute(tx, ctx, { taskIds: pending.map((t) => t.id), targetLocationId: station.id });
+    await clearPackDraft(tx, order.id);
     const pkgIds = input.packages.map((p) => p.shipmentPackageId);
     for (const pid of pkgIds) {
       if (!pid) continue;
-      const pkg = tx.select().from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, pid)).get();
-      if (pkg && !packageAllowsClient(tx, pkg, order.clientId)) throw new DomainError("VALIDATION", `Package ${pkg.code} is not available for ${context.order.clientName}.`);
+      const pkg = (await tx.select().from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, pid)).limit(1))[0];
+      if (pkg && !(await packageAllowsClient(tx, pkg, order.clientId))) throw new DomainError("VALIDATION", `Package ${pkg.code} is not available for ${context.order.clientName}.`);
     }
     if (pkgIds[0] && pkgIds[0] !== order.shipmentPackageId) {
-      tx.update(schema.shipmentOrders).set({ shipmentPackageId: pkgIds[0], updatedBy: ctx.userId }).where(eq(schema.shipmentOrders.id, order.id)).run();
-      changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { shipmentPackageId: order.shipmentPackageId }, after: { shipmentPackageId: pkgIds[0] } });
+      await tx.update(schema.shipmentOrders).set({ shipmentPackageId: pkgIds[0], updatedBy: ctx.userId }).where(eq(schema.shipmentOrders.id, order.id));
+      await changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { shipmentPackageId: order.shipmentPackageId }, after: { shipmentPackageId: pkgIds[0] } });
     }
-    return consumePackaging(tx, ctx, order, station.id, pkgIds);
+    return await consumePackaging(tx, ctx, order, station.id, pkgIds);
   });
   let labelError: string | null = null;
   let shipments: CompletePackingResult["shipments"] = [];
@@ -366,15 +366,15 @@ export async function completePacking(db: AppDb, ctx: Ctx, input: CompletePackin
       labelError = error instanceof Error ? error.message : "Label could not be created";
     }
   }
-  const fresh = loadPackOrder(db, ctx.scope, order.id);
+  const fresh = await loadPackOrder(db, ctx.scope, order.id);
   const slip = await packingSlip(db, ctx, fresh, context.lines, input, master);
   let shipped = false;
   if (fresh.isAutoShip && fresh.status === "Ready to Ship" && shipments.length > 0) {
-    const r = db.transaction((tx) => shipping.shipOrders(tx, ctx, { orderIds: [order.id], requireLabel: true }));
+    const r = await withWriteTx(db, async (tx) => await shipping.shipOrders(tx, ctx, { orderIds: [order.id], requireLabel: true }));
     shipped = r.succeeded.length > 0;
     if (!shipped) warnings.push(`Auto-ship failed: ${r.failed[0]?.message ?? "unknown error"}`);
   }
-  const final = loadPackOrder(db, ctx.scope, order.id);
+  const final = await loadPackOrder(db, ctx.scope, order.id);
   return { orderId: order.id, orderCode: order.code, status: final.status, packedUnits, shipments, masterTrackingNumber: master, packingSlipFileId: slip, labelError, shipped, warnings };
 }
 
@@ -387,7 +387,7 @@ export const retryLabelSchema = z.object({
 });
 
 export async function retryLabel(db: AppDb, ctx: Ctx, input: z.output<typeof retryLabelSchema>) {
-  loadPackOrder(db, ctx.scope, input.orderId);
+  await loadPackOrder(db, ctx.scope, input.orderId);
   return shipping.createLabel(db, ctx, {
     orderId: input.orderId, carrierConnectionId: input.carrierConnectionId, carrierServiceId: input.carrierServiceId, source: "PackingStation",
     packages: input.packages.map((p) => ({ shipmentPackageId: p.shipmentPackageId ?? null, weightOz: p.weightOz, length: p.length, width: p.width, height: p.height, items: p.items })),
@@ -412,14 +412,14 @@ export interface ReportIssueResult {
 }
 
 /** Moves the order's picked (unpacked) stock to a hospital location, keeping its allocation, and opens Pack Short. */
-export function reportIssue(tx: AppDb, ctx: Ctx, input: z.output<typeof reportIssueSchema>): ReportIssueResult {
-  const order = loadPackOrder(tx, ctx.scope, input.orderId);
+export async function reportIssue(tx: AppDb, ctx: Ctx, input: z.output<typeof reportIssueSchema>): Promise<ReportIssueResult> {
+  const order = await loadPackOrder(tx, ctx.scope, input.orderId);
   if (!(PACKABLE_STATUSES as readonly string[]).includes(order.status)) throw new DomainError("INVALID_STATE", `Order ${order.code} is ${order.status}; only orders being packed can report an issue.`);
-  const loc = tx.select().from(schema.locations).where(eq(schema.locations.id, input.hospitalLocationId)).get();
+  const loc = (await tx.select().from(schema.locations).where(eq(schema.locations.id, input.hospitalLocationId)).limit(1))[0];
   if (!loc || loc.warehouseId !== order.warehouseId) throw validationError("Choose a hospital location in the order's warehouse", { hospitalLocationId: ["Location is in another warehouse"] });
-  if (!isHospitalLocationId(tx, loc.id)) throw validationError(`${loc.code} is not a hospital location. Choose a location in the "Hospital" location group or coded HOSP…`, { hospitalLocationId: ["Not a hospital location"] });
-  const allocs = tx.select().from(schema.inventoryAllocations)
-    .where(and(eq(schema.inventoryAllocations.orderId, order.id), inArray(schema.inventoryAllocations.status, ["Picked", "Sorted"]))).all();
+  if (!(await isHospitalLocationId(tx, loc.id))) throw validationError(`${loc.code} is not a hospital location. Choose a location in the "Hospital" location group or coded HOSP…`, { hospitalLocationId: ["Not a hospital location"] });
+  const allocs = await tx.select().from(schema.inventoryAllocations)
+    .where(and(eq(schema.inventoryAllocations.orderId, order.id), inArray(schema.inventoryAllocations.status, ["Picked", "Sorted"])));
   const wanted = input.lines ? new Map(input.lines.map((l) => [l.orderLineId, l.qty])) : null;
   let moved = 0;
   for (const a of allocs) {
@@ -427,18 +427,18 @@ export function reportIssue(tx: AppDb, ctx: Ctx, input: z.output<typeof reportIs
     const left = wanted ? wanted.get(a.orderLineId ?? "") ?? 0 : a.qty;
     const qty = Math.min(left, a.qty);
     if (qty <= 0) continue;
-    const bucket = tx.select({ locationId: schema.inventory.locationId }).from(schema.inventory).where(eq(schema.inventory.id, a.inventoryId)).get();
+    const bucket = (await tx.select({ locationId: schema.inventory.locationId }).from(schema.inventory).where(eq(schema.inventory.id, a.inventoryId)).limit(1))[0];
     if (bucket?.locationId === loc.id) continue;
-    ledger.move(tx, ctx, { inventoryId: a.inventoryId, qty, toLocationId: loc.id, toLpId: null, allocationId: a.id, type: "Inventory Movement", refs: { orderId: order.id, note: `Pack issue: ${input.note}` } });
+    await ledger.move(tx, ctx, { inventoryId: a.inventoryId, qty, toLocationId: loc.id, toLpId: null, allocationId: a.id, type: "Inventory Movement", refs: { orderId: order.id, note: `Pack issue: ${input.note}` } });
     if (wanted && a.orderLineId) wanted.set(a.orderLineId, left - qty);
     moved += qty;
   }
   if (moved === 0) throw new DomainError("INVALID_STATE", "No picked stock left to move for this order.");
-  markOrderShort(tx, ctx, order.id, "pack");
-  clearPackDraft(tx, order.id);
-  tx.update(schema.shipmentOrders).set({ note: order.note ? `${order.note}\nPack issue: ${input.note}` : `Pack issue: ${input.note}`, version: sql`${schema.shipmentOrders.version} + 1` })
-    .where(eq(schema.shipmentOrders.id, order.id)).run();
-  changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { packShortStatus: order.packShortStatus }, after: { packShortStatus: "Open" } });
+  await markOrderShort(tx, ctx, order.id, "pack");
+  await clearPackDraft(tx, order.id);
+  await tx.update(schema.shipmentOrders).set({ note: order.note ? `${order.note}\nPack issue: ${input.note}` : `Pack issue: ${input.note}`, version: sql`${schema.shipmentOrders.version} + 1` })
+    .where(eq(schema.shipmentOrders.id, order.id));
+  await changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { packShortStatus: order.packShortStatus }, after: { packShortStatus: "Open" } });
   return { orderId: order.id, orderCode: order.code, movedUnits: moved, hospitalCode: loc.code, packShortStatus: "Open" };
 }
 
@@ -452,15 +452,15 @@ export interface HospitalOption {
 }
 
 /** Locations an issue can be reported to: the designated hospitals only (default first). Empty = none configured. */
-export function hospitalOptions(db: AppDb, scope: Scope, warehouseId: string): HospitalOption[] {
+export async function hospitalOptions(db: AppDb, scope: Scope, warehouseId: string): Promise<HospitalOption[]> {
   if (!scope.warehouseIds.includes(warehouseId)) throw new DomainError("NOT_FOUND", "Warehouse not found");
-  return hospitalLocations(db, warehouseId).map((h, i) => ({ id: h.id, code: h.code, detail: hospitalDetail(h), isDefault: i === 0 }));
+  return (await hospitalLocations(db, warehouseId)).map((h, i) => ({ id: h.id, code: h.code, detail: hospitalDetail(h), isDefault: i === 0 }));
 }
 
 /** Prints the packing slip of an order being packed (Print Actions), before completion. */
 export async function printPackingSlip(db: AppDb, ctx: Ctx, orderId: string): Promise<{ fileId: string | null }> {
-  const context = packContext(db, ctx.scope, orderId);
-  const order = loadPackOrder(db, ctx.scope, orderId);
+  const context = await packContext(db, ctx.scope, orderId);
+  const order = await loadPackOrder(db, ctx.scope, orderId);
   const lines = context.lines.map((l) => ({ ...l, toPack: l.toPack > 0 ? l.toPack : l.packed }));
   const fileId = await packingSlip(db, ctx, order, lines, { orderId, stationId: "", withLabel: false, packages: [], captures: [] } as unknown as CompletePackingInput, order.trackingNumber ?? null);
   if (!fileId) throw new DomainError("INVALID_STATE", "The packing slip could not be generated. Check the printout templates.");
@@ -472,16 +472,16 @@ export async function printPackingSlip(db: AppDb, ctx: Ctx, orderId: string): Pr
  * Started). Pending Packing tasks become Started, and the order status follows through the
  * normal task rollup, so the state machine and task progress stay consistent. Idempotent.
  */
-export function startPacking(db: AppDb, ctx: DomainCtx & { readonly scope: Scope }, orderId: string): { readonly status: string; readonly started: number } {
-  const order = loadPackOrder(db, ctx.scope, orderId);
+export async function startPacking(db: AppDb, ctx: DomainCtx & { readonly scope: Scope }, orderId: string): Promise<{ readonly status: string; readonly started: number }> {
+  const order = await loadPackOrder(db, ctx.scope, orderId);
   if (order.status !== "Ready to Pack" || order.packShortStatus === "Open") return { status: order.status, started: 0 };
-  return db.transaction((tx) => {
+  return await withWriteTx(db, async (tx) => {
     const now = new Date().toISOString();
-    const pending = tx.select().from(schema.tasks).where(and(eq(schema.tasks.orderId, orderId), eq(schema.tasks.taskType, "Packing"), eq(schema.tasks.status, "Pending"))).all();
+    const pending = await tx.select().from(schema.tasks).where(and(eq(schema.tasks.orderId, orderId), eq(schema.tasks.taskType, "Packing"), eq(schema.tasks.status, "Pending")));
     if (pending.length === 0) return { status: order.status, started: 0 };
-    tx.update(schema.tasks).set({ status: "Started", startedAt: now, executedByUserId: ctx.userId, updatedBy: ctx.userId })
-      .where(inArray(schema.tasks.id, pending.map((t) => t.id))).run();
-    const status = rollupOrderStatus(tx, ctx, orderId);
+    await tx.update(schema.tasks).set({ status: "Started", startedAt: now, executedByUserId: ctx.userId, updatedBy: ctx.userId })
+      .where(inArray(schema.tasks.id, pending.map((t) => t.id)));
+    const status = await rollupOrderStatus(tx, ctx, orderId);
     return { status, started: pending.length };
   });
 }
@@ -494,12 +494,12 @@ export const retailerLabelSchema = z.object({ orderId: idSchema, reprint: z.bool
  * generated (change_log); Reprint requires that it was created before.
  */
 export async function printRetailerLabel(db: AppDb, ctx: Ctx, input: z.output<typeof retailerLabelSchema>): Promise<{ fileId: string; cases: number; reprint: boolean }> {
-  const order = loadPackOrder(db, ctx.scope, input.orderId);
+  const order = await loadPackOrder(db, ctx.scope, input.orderId);
   if (!order.retailerId) throw new DomainError("INVALID_STATE", `${order.code} has no retailer, so it has no retailer label. Set a retailer on the order first.`);
   if (input.reprint && !order.isUccLabelGenerated) throw new DomainError("INVALID_STATE", `No retailer label was created for ${order.code} yet. Use Create retailer label.`);
-  const retailer = db.select().from(schema.retailers).where(eq(schema.retailers.id, order.retailerId)).get();
-  const client = db.select({ name: schema.clients.name }).from(schema.clients).where(eq(schema.clients.id, order.clientId)).get();
-  const packed = db.get<{ n: number }>(sql`SELECT count(*) AS n FROM shipments WHERE order_id = ${order.id} AND label_status = 'Active'`)?.n ?? 0;
+  const retailer = (await db.select().from(schema.retailers).where(eq(schema.retailers.id, order.retailerId)).limit(1))[0];
+  const client = (await db.select({ name: schema.clients.name }).from(schema.clients).where(eq(schema.clients.id, order.clientId)).limit(1))[0];
+  const packed = (await dbGet<{ n: number }>(db, sql`SELECT count(*) AS n FROM shipments WHERE order_id = ${order.id} AND label_status = 'Active'`))?.n ?? 0;
   const cases = input.caseCount ?? Math.max(1, packed);
   const shipTo = [order.customerName, order.shipAddress, `${order.shipCity}, ${order.shipState} ${order.shipZip}`].filter(Boolean).join(", ");
   const base = { orderCode: order.code, retailerName: retailer?.businessName || retailer?.name || undefined, storeOrderNumber: order.storeOrderNumber ?? undefined,
@@ -508,9 +508,9 @@ export async function printRetailerLabel(db: AppDb, ctx: Ctx, input: z.output<ty
   const copies = Math.max(1, retailer?.caseLabelPrintQty ?? 1);
   const file = await printToFile(db, { request: { typeKey: "retailer-case-label", records, options: { copies } }, userId: ctx.userId ?? "", ownerEntityType: "shipment_order", ownerEntityId: order.id });
   if (!input.reprint && !order.isUccLabelGenerated) {
-    db.transaction((tx) => {
-      tx.update(schema.shipmentOrders).set({ isUccLabelGenerated: true, updatedBy: ctx.userId }).where(eq(schema.shipmentOrders.id, order.id)).run();
-      changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { isUccLabelGenerated: false }, after: { isUccLabelGenerated: true } });
+    await withWriteTx(db, async (tx) => {
+      await tx.update(schema.shipmentOrders).set({ isUccLabelGenerated: true, updatedBy: ctx.userId }).where(eq(schema.shipmentOrders.id, order.id));
+      await changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { isUccLabelGenerated: false }, after: { isUccLabelGenerated: true } });
     });
   }
   return { fileId: file.id, cases, reprint: input.reprint };

@@ -3,7 +3,7 @@
  * matching with LIKE wildcards in the user's text escaped.
  */
 import { sql, type SQL } from "drizzle-orm";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import type { PgColumn } from "drizzle-orm/pg-core";
 
 const LIKE_ESCAPE = "\\";
 
@@ -26,23 +26,23 @@ export function parseCodeQuery(q: string): { readonly prefix: string; readonly d
  * Zero-insensitive code prefix: `PO0002` and `PO22` both find `PO002210`, because codes are
  * zero-padded to different widths than people type them.
  */
-function codeNumberMatch(column: SQLiteColumn, q: string): SQL | null {
+function codeNumberMatch(column: PgColumn, q: string): SQL | null {
   const code = parseCodeQuery(q);
   if (!code) return null;
   const n = code.prefix.length;
-  return sql`(upper(substr(${column}, 1, ${n})) = ${code.prefix} AND ltrim(substr(${column}, ${n + 1}), '0') LIKE ${`${escapeLike(code.digits)}%`} ESCAPE ${LIKE_ESCAPE})`;
+  return sql`(upper(substr(${column}, 1, ${n})) = ${code.prefix} AND ltrim(substr(${column}, ${n + 1}), '0') ILIKE ${`${escapeLike(code.digits)}%`} ESCAPE ${LIKE_ESCAPE})`;
 }
 
-/** `column LIKE '%q%'` (case-insensitive for ASCII in SQLite), plus zero-insensitive code prefixes. */
-export function containsText(column: SQLiteColumn, q: string): SQL {
-  const contains = sql`${column} LIKE ${`%${escapeLike(q)}%`} ESCAPE ${LIKE_ESCAPE}`;
+/** `column ILIKE '%q%'` (SQLite LIKE was case-insensitive), plus zero-insensitive code prefixes. */
+export function containsText(column: PgColumn, q: string): SQL {
+  const contains = sql`${column} ILIKE ${`%${escapeLike(q)}%`} ESCAPE ${LIKE_ESCAPE}`;
   const code = codeNumberMatch(column, q);
   return code ? sql`(${contains} OR ${code})` : contains;
 }
 
 /** Sort key: 0 = exact, 1 = prefix, 2 = contains (lower ranks first). */
-export function matchRank(column: SQLiteColumn, q: string): SQL<number> {
-  return sql<number>`CASE WHEN lower(${column}) = lower(${q}) THEN 0 WHEN ${column} LIKE ${`${escapeLike(q)}%`} ESCAPE ${LIKE_ESCAPE} THEN 1 ELSE 2 END`;
+export function matchRank(column: PgColumn, q: string): SQL<number> {
+  return sql<number>`CASE WHEN lower(${column}) = lower(${q}) THEN 0 WHEN ${column} ILIKE ${`${escapeLike(q)}%`} ESCAPE ${LIKE_ESCAPE} THEN 1 ELSE 2 END`;
 }
 
 /** `count(*)` expression for "See all N" totals. */

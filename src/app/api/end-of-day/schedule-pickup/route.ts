@@ -7,5 +7,5 @@ export const POST = defineRoute({
   permission: "fulfillment.end_of_day.print_end_of_the_day_report",
   body: schedulePickupSchema,
   transaction: false,
-  handler: ({ db, auth, actor, body }) => schedulePickup(db, auth, domainCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await schedulePickup(db, auth, domainCtx(actor, auth), body),
 });

@@ -66,41 +66,41 @@ describe("aging + utilization queries", () => {
   let w: World;
   let auth: AuthContext;
   const q = (qs = ""): GridQuery => ({ ...EMPTY_GRID_QUERY, ...parseGridQuery(qs).query, pageSize: 100 });
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   });
   afterEach(() => w.close());
 
-  const stock = (qty: number, locationId: string, clientId = w.clientId, productId = w.productId) =>
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId, productId, locationId, qty }).bucket;
+  const stock = async (qty: number, locationId: string, clientId = w.clientId, productId = w.productId) =>
+    (await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId, productId, locationId, qty })).bucket;
 
-  it("ages buckets from received date and filters by bucket", () => {
-    const old = stock(10, w.loc.storageA);
-    stock(4, w.loc.storageB);
+  it("ages buckets from received date and filters by bucket", async () => {
+    const old = await stock(10, w.loc.storageA);
+    await stock(4, w.loc.storageB);
     const past = new Date(Date.now() - 100 * 86_400_000).toISOString();
-    w.db.update(schema.inventory).set({ receivedAt: past }).where(eq(schema.inventory.id, old.id)).run();
-    const page = listAging(w.db, auth, q());
+    await w.db.update(schema.inventory).set({ receivedAt: past }).where(eq(schema.inventory.id, old.id));
+    const page = await listAging(w.db, auth, q());
     expect(page.total).toBe(2);
     expect(page.rows[0]).toMatchObject({ onHand: 10, agingBucket: "91-180 Days" });
     expect(Number(page.rows[0]?.ageDays)).toBeGreaterThanOrEqual(99);
-    expect(listAging(w.db, auth, q("f.agingBucket=eq:0-30%20Days")).total).toBe(1);
+    expect((await listAging(w.db, auth, q("f.agingBucket=eq:0-30%20Days"))).total).toBe(1);
     const other = { warehouseIds: ["nope"], clientIds: "all" as const };
-    expect(listAging(w.db, { ...auth, viewScope: other } as AuthContext, q()).total).toBe(0);
+    expect((await listAging(w.db, { ...auth, viewScope: other } as AuthContext, q())).total).toBe(0);
   });
 
-  it("measures each location against its capacity and hides other clients' units", () => {
-    w.db.update(schema.locations).set({ capacityUnits: 10, maxCapacityQty: 0 }).where(eq(schema.locations.id, w.loc.storageA)).run();
-    stock(12, w.loc.storageA);
-    const betaProduct = w.db.insert(schema.products).values({
+  it("measures each location against its capacity and hides other clients' units", async () => {
+    await w.db.update(schema.locations).set({ capacityUnits: 10, maxCapacityQty: 0 }).where(eq(schema.locations.id, w.loc.storageA));
+    await stock(12, w.loc.storageA);
+    const betaProduct = (await w.db.insert(schema.products).values({
       clientId: w.otherClientId, sku: "BETA-01", barcode: "BETA-01", name: "Beta", category: "General", weightOz: 1, lengthIn: 1, widthIn: 1, heightIn: 1, price: 1, status: "Active",
-    }).returning().get().id;
-    stock(5, w.loc.storageA, w.otherClientId, betaProduct);
-    const row = (a: AuthContext) => listUtilization(w.db, a, q()).rows.find((r) => r.rowId === w.loc.storageA);
-    expect(row(auth)).toMatchObject({ usedQty: 17, capacity: 10, band: "Over Capacity", freeQty: 0, skuCount: 2 });
+    }).returning())[0].id;
+    await stock(5, w.loc.storageA, w.otherClientId, betaProduct);
+    const row = async (a: AuthContext) => (await listUtilization(w.db, a, q())).rows.find((r) => r.rowId === w.loc.storageA);
+    expect(await row(auth)).toMatchObject({ usedQty: 17, capacity: 10, band: "Over Capacity", freeQty: 0, skuCount: 2 });
     const scoped = { warehouseIds: [w.warehouseId], clientIds: [w.clientId] };
-    expect(row({ ...auth, viewScope: scoped } as AuthContext)).toMatchObject({ usedQty: 12, utilizationPct: 120 });
-    expect(listUtilization(w.db, auth, q("f.band=eq:Over%20Capacity")).total).toBe(1);
+    expect(await row({ ...auth, viewScope: scoped } as AuthContext)).toMatchObject({ usedQty: 12, utilizationPct: 120 });
+    expect((await listUtilization(w.db, auth, q("f.band=eq:Over%20Capacity"))).total).toBe(1);
   });
 });

@@ -22,41 +22,41 @@ import { createWorld, orderInput, type World } from "../foundation/domain/fixtur
 
 describe("Shipment Order Type behaviours in allocation", () => {
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
-  const soType = (flags: string[]) => w.db.insert(schema.lookupValues).values({ type: "so_type", name: `T-${flags.join("-") || "none"}`, meta: { flags: Object.fromEntries(flags.map((k) => [k, true])) } }).returning().get().id;
-  const stock = (qty: number) => ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty });
-  const order = (qty: number, typeId: string | null) => createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }], typeId ? { orderTypeId: typeId } : {}));
-  const row = (id: string) => w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).get();
-  const allocated = (id: string) => w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, id)).all().reduce((s, l) => s + l.allocatedQuantity, 0);
-  const alloc = (id: string) => allocateOrders(w.db, w.ctx, { orderIds: [id], warehouseId: w.warehouseId });
+  const soType = async (flags: string[]) => (await w.db.insert(schema.lookupValues).values({ type: "so_type", name: `T-${flags.join("-") || "none"}`, meta: { flags: Object.fromEntries(flags.map((k) => [k, true])) } }).returning())[0].id;
+  const stock = async (qty: number) => await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty });
+  const order = async (qty: number, typeId: string | null) => await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }], typeId ? { orderTypeId: typeId } : {}));
+  const row = async (id: string) => (await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).limit(1))[0];
+  const allocated = async (id: string) => (await w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, id))).reduce((s, l) => s + l.allocatedQuantity, 0);
+  const alloc = async (id: string) => await allocateOrders(w.db, w.ctx, { orderIds: [id], warehouseId: w.warehouseId });
 
-  it("without a type (or with no flags) a short order allocates nothing", () => {
-    stock(2);
-    const o = order(5, soType([]));
-    expect(alloc(o.id).shortage).toEqual([o.id]);
-    expect(allocated(o.id)).toBe(0);
-    expect(row(o.id)?.status).toBe("Shortage");
+  it("without a type (or with no flags) a short order allocates nothing", async () => {
+    await stock(2);
+    const o = await order(5, await soType([]));
+    expect((await alloc(o.id)).shortage).toEqual([o.id]);
+    expect(await allocated(o.id)).toBe(0);
+    expect((await row(o.id))?.status).toBe("Shortage");
   });
 
-  it("Allow partial allocation keeps what is available and stays in Shortage", () => {
-    stock(2);
-    const o = order(5, soType(["allowPartialAllocation"]));
-    expect(alloc(o.id).shortage).toEqual([o.id]);
-    expect(allocated(o.id)).toBe(2);
-    expect(row(o.id)?.status).toBe("Shortage");
+  it("Allow partial allocation keeps what is available and stays in Shortage", async () => {
+    await stock(2);
+    const o = await order(5, await soType(["allowPartialAllocation"]));
+    expect((await alloc(o.id)).shortage).toEqual([o.id]);
+    expect(await allocated(o.id)).toBe(2);
+    expect((await row(o.id))?.status).toBe("Shortage");
   });
 
-  it("Create back order releases the available part and moves the rest to <code>-BO1", () => {
-    stock(2);
-    const o = order(5, soType(["createBackOrder"]));
-    expect(alloc(o.id).allocated).toEqual([o.id]);
-    expect(row(o.id)?.status).toBe("Ready to Pick");
-    const bo = w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.masterOrderId, o.id)).get();
+  it("Create back order releases the available part and moves the rest to <code>-BO1", async () => {
+    await stock(2);
+    const o = await order(5, await soType(["createBackOrder"]));
+    expect((await alloc(o.id)).allocated).toEqual([o.id]);
+    expect((await row(o.id))?.status).toBe("Ready to Pick");
+    const bo = (await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.masterOrderId, o.id)).limit(1))[0];
     expect(bo?.code).toBe(`${o.code}-BO1`);
     expect(bo?.isBackOrder).toBe(true);
     expect(bo?.totalQuantity).toBe(3);
-    expect(ledger.reconcileLedger(w.db)).toEqual([]);
+    expect(await ledger.reconcileLedger(w.db)).toEqual([]);
   });
 
   it("reads flags defensively", () => {

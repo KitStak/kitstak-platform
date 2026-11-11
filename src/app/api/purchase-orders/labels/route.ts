@@ -18,8 +18,8 @@ export const GET = defineRoute({
     perLine: z.enum(["1", "0"]).optional(),
     lines: z.enum(["1", "0"]).optional(),
   }),
-  handler: ({ db, auth, query }) =>
+  handler: async ({ db, auth, query }) =>
     query.lines === "1"
-      ? productLabelLines(db, auth.scope, query.ids)
-      : productLabelRecords(db, auth.scope, query.ids, { lineIds: query.lineIds && query.lineIds.length > 0 ? query.lineIds : undefined, perLine: query.perLine === "1" }),
+      ? await productLabelLines(db, auth.scope, query.ids)
+      : await productLabelRecords(db, auth.scope, query.ids, { lineIds: query.lineIds && query.lineIds.length > 0 ? query.lineIds : undefined, perLine: query.perLine === "1" }),
 });

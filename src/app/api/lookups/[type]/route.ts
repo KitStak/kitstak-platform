@@ -9,13 +9,13 @@ import {
 export const GET = defineRoute({
   params: lookupTypeParamsSchema,
   query: lookupListQuerySchema,
-  handler: ({ db, auth, params, query }) => listLookups(db, auth.viewScope, params.type, query),
+  handler: async ({ db, auth, params, query }) => await listLookups(db, auth.viewScope, params.type, query),
 });
 
 export const POST = defineRoute({
   permission: LOOKUP_MANAGE_PERMISSION,
   params: lookupTypeParamsSchema,
   body: lookupCreateSchema,
-  handler: ({ db, auth, actor, params, body }) =>
-    created(createLookup(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.type, body)),
+  handler: async ({ db, auth, actor, params, body }) =>
+    created(await createLookup(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.type, body)),
 });

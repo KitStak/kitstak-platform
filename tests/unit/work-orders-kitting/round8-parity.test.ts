@@ -61,42 +61,42 @@ describe("coverage (pure)", () => {
 });
 
 let w: KitWorld;
-beforeEach(() => { w = createKitWorld(); });
+beforeEach(async () => { w = await createKitWorld(); });
 afterEach(() => w.close());
 
-function lockLocation(locationId: string, code: string): void {
-  const plan = w.db.insert(schema.countPlans).values({ code, warehouseId: w.warehouseId, scheduledAt: new Date().toISOString(), lockLocations: true, countType: "Location", status: "Ready To Count" }).returning().get();
-  w.db.insert(schema.countPlanLines).values({ planId: plan.id, locationId, status: "Pending" }).run();
+async function lockLocation(locationId: string, code: string): Promise<void> {
+  const plan = (await w.db.insert(schema.countPlans).values({ code, warehouseId: w.warehouseId, scheduledAt: new Date().toISOString(), lockLocations: true, countType: "Location", status: "Ready To Count" }).returning())[0];
+  await w.db.insert(schema.countPlanLines).values({ planId: plan.id, locationId, status: "Pending" });
 }
 
 describe("lock-aware availability (DB)", () => {
-  it("reports usable vs count-locked free stock per product", () => {
-    stock(w, w.productId, 40, w.loc.storageA);
-    stock(w, w.productId, 6, w.loc.storageB);
-    lockLocation(w.loc.storageA, "CNT-R8-1");
-    const av = componentAvailability(w.db as never, { warehouseId: w.warehouseId, clientId: w.clientId, productIds: [w.productId, w.product2Id] });
+  it("reports usable vs count-locked free stock per product", async () => {
+    await stock(w, w.productId, 40, w.loc.storageA);
+    await stock(w, w.productId, 6, w.loc.storageB);
+    await lockLocation(w.loc.storageA, "CNT-R8-1");
+    const av = await componentAvailability(w.db as never, { warehouseId: w.warehouseId, clientId: w.clientId, productIds: [w.productId, w.product2Id] });
     expect(av.get(w.productId)).toEqual({ usableQty: 6, lockedQty: 40, blockedQty: 0, lockedBy: ["CNT-R8-1"] });
     expect(av.get(w.product2Id)?.usableQty).toBe(0);
   });
 
-  it("kit card and Kit Inventory capacity use usable stock only", () => {
-    stock(w, w.productId, 40, w.loc.storageA);
-    stock(w, w.product2Id, 20, w.loc.storageA);
-    expect(getKitDetail(w.db, w.scope, w.kitId, w.warehouseId).netKittingCapacity).toBe(20);
-    lockLocation(w.loc.storageA, "CNT-R8-2");
-    const kit = getKitDetail(w.db, w.scope, w.kitId, w.warehouseId);
+  it("kit card and Kit Inventory capacity use usable stock only", async () => {
+    await stock(w, w.productId, 40, w.loc.storageA);
+    await stock(w, w.product2Id, 20, w.loc.storageA);
+    expect((await getKitDetail(w.db, w.scope, w.kitId, w.warehouseId)).netKittingCapacity).toBe(20);
+    await lockLocation(w.loc.storageA, "CNT-R8-2");
+    const kit = await getKitDetail(w.db, w.scope, w.kitId, w.warehouseId);
     expect(kit.netKittingCapacity).toBe(0);
     expect(kit.components.find((c) => c.productId === w.productId)).toMatchObject({ freeQty: 0, lockedQty: 40, lockedBy: ["CNT-R8-2"] });
-    const stats = computeKitStats(w.db).find((s) => s.kitProductId === w.kitId && s.warehouseId === w.warehouseId);
+    const stats = (await computeKitStats(w.db)).find((s) => s.kitProductId === w.kitId && s.warehouseId === w.warehouseId);
     expect(stats?.netKittingCapacity).toBe(0);
   });
 
-  it("detail components show the lock, short qty and the kit/component barcodes", () => {
-    stock(w, w.productId, 40, w.loc.storageA);
-    stock(w, w.product2Id, 20, w.loc.storageA);
-    const row = createWorkOrder(w.db, w.wctx, woInput(w));
-    lockLocation(w.loc.storageA, "CNT-R8-3");
-    const d = getWorkOrderDetail(w.db, w.scope, row.id);
+  it("detail components show the lock, short qty and the kit/component barcodes", async () => {
+    await stock(w, w.productId, 40, w.loc.storageA);
+    await stock(w, w.product2Id, 20, w.loc.storageA);
+    const row = await createWorkOrder(w.db, w.wctx, woInput(w));
+    await lockLocation(w.loc.storageA, "CNT-R8-3");
+    const d = await getWorkOrderDetail(w.db, w.scope, row.id);
     const widget = d.components.find((c) => c.componentProductId === w.productId);
     expect(widget).toMatchObject({ sourceLockedBy: "CNT-R8-3", availableQty: 0, shortQty: 10, lockedQty: 40 });
     expect(componentCoverage(widget!).state).toBe("locked");
@@ -105,12 +105,12 @@ describe("lock-aware availability (DB)", () => {
     expect("barcode" in widget!).toBe(true);
   });
 
-  it("checks code availability (excluding the record itself)", () => {
-    stock(w, w.productId, 40, w.loc.storageA);
-    stock(w, w.product2Id, 20, w.loc.storageA);
-    const row = createWorkOrder(w.db, w.wctx, woInput(w));
-    expect(isWorkOrderCodeAvailable(w.db, row.code)).toBe(false);
-    expect(isWorkOrderCodeAvailable(w.db, row.code, row.id)).toBe(true);
-    expect(isWorkOrderCodeAvailable(w.db, "KS-NEW-CODE")).toBe(true);
+  it("checks code availability (excluding the record itself)", async () => {
+    await stock(w, w.productId, 40, w.loc.storageA);
+    await stock(w, w.product2Id, 20, w.loc.storageA);
+    const row = await createWorkOrder(w.db, w.wctx, woInput(w));
+    expect(await isWorkOrderCodeAvailable(w.db, row.code)).toBe(false);
+    expect(await isWorkOrderCodeAvailable(w.db, row.code, row.id)).toBe(true);
+    expect(await isWorkOrderCodeAvailable(w.db, "KS-NEW-CODE")).toBe(true);
   });
 });

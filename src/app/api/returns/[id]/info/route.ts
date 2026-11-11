@@ -7,5 +7,5 @@ export const PATCH = defineRoute({
   permission: RETURN_PERMISSIONS.changeStatus,
   params: idParamsSchema,
   body: editReturnInfoSchema,
-  handler: ({ db, auth, actor, params, body }) => editReturnInfo(db, scopedCtx(actor, auth), params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await editReturnInfo(db, scopedCtx(actor, auth), params.id, body),
 });

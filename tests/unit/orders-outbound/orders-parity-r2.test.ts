@@ -11,44 +11,44 @@ import { orderLocks } from "@/components/orders/detail/order-detail-page";
 import { createWorld, orderInput, type World } from "../foundation/domain/fixtures";
 
 let w: World;
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
 });
 afterEach(() => w.close());
 
-const nextValue = () => w.db.select().from(schema.codeSequences).where(eq(schema.codeSequences.key, "so")).get()?.nextValue ?? 0;
+const nextValue = async () => (await w.db.select().from(schema.codeSequences).where(eq(schema.codeSequences.key, "so")).limit(1))[0]?.nextValue ?? 0;
 
 /** What the wizard posts: the peeked code plus `autoCode` while the user kept the suggestion. */
-function wizardCreate(suggested: string) {
-  return createOrder(w.db, w.ctx, createOrderBodySchema.parse({ ...orderInput(w, [{ productId: w.productId, quantity: 1 }], { code: suggested }), autoCode: true }));
+async function wizardCreate(suggested: string) {
+  return await createOrder(w.db, w.ctx, createOrderBodySchema.parse({ ...orderInput(w, [{ productId: w.productId, quantity: 1 }], { code: suggested }), autoCode: true }));
 }
 
 describe("auto order code (blocker regression)", () => {
-  it("two wizard creates in a row with auto codes both succeed and advance the sequence", () => {
+  it("two wizard creates in a row with auto codes both succeed and advance the sequence", async () => {
     const suffix = (c: string) => Number(/([0-9]+)$/.exec(c)?.[1]);
-    const s1 = peekOrderCode(w.db);
-    const a = wizardCreate(s1);
+    const s1 = await peekOrderCode(w.db);
+    const a = await wizardCreate(s1);
     expect(a.code).toBe(s1);
-    expect(nextValue()).toBe(suffix(s1) + 1);
-    const s2 = peekOrderCode(w.db);
+    expect(await nextValue()).toBe(suffix(s1) + 1);
+    const s2 = await peekOrderCode(w.db);
     expect(s2).not.toBe(s1);
-    const b = wizardCreate(s2);
+    const b = await wizardCreate(s2);
     expect(b.code).toBe(s2);
-    expect(nextValue()).toBe(suffix(s2) + 1);
+    expect(await nextValue()).toBe(suffix(s2) + 1);
   });
 
-  it("a stale auto code (another user saved it first) gets the next free code instead of a DUPLICATE error", () => {
-    const stale = peekOrderCode(w.db);
-    wizardCreate(stale); // user A
-    const b = wizardCreate(stale); // user B still holds the same suggestion
+  it("a stale auto code (another user saved it first) gets the next free code instead of a DUPLICATE error", async () => {
+    const stale = await peekOrderCode(w.db);
+    await wizardCreate(stale); // user A
+    const b = await wizardCreate(stale); // user B still holds the same suggestion
     expect(b.code).not.toBe(stale);
-    expect(b.code).toBe(peekOrderCodeMinusOne());
+    expect(b.code).toBe(await peekOrderCodeMinusOne());
   });
 
-  it("a hand-typed taken code still fails with DUPLICATE", () => {
-    const code = peekOrderCode(w.db);
-    wizardCreate(code);
-    expect(() => createOrder(w.db, w.ctx, createOrderBodySchema.parse(orderInput(w, [{ productId: w.productId, quantity: 1 }], { code })))).toThrow(/already exists/);
+  it("a hand-typed taken code still fails with DUPLICATE", async () => {
+    const code = await peekOrderCode(w.db);
+    await wizardCreate(code);
+    await expect(async () => await createOrder(w.db, w.ctx, createOrderBodySchema.parse(orderInput(w, [{ productId: w.productId, quantity: 1 }], { code })))).rejects.toThrow(/already exists/);
   });
 
   it("createBody sends autoCode only while the code equals the suggestion", () => {
@@ -59,9 +59,9 @@ describe("auto order code (blocker regression)", () => {
   });
 });
 
-function peekOrderCodeMinusOne(): string {
+async function peekOrderCodeMinusOne(): Promise<string> {
   // The code assigned to B is the one just consumed: one below the current peek.
-  const peek = peekOrderCode(w.db);
+  const peek = await peekOrderCode(w.db);
   const m = /^(\D*)(\d+)$/.exec(peek) as RegExpExecArray;
   return `${m[1]}${String(Number(m[2]) - 1).padStart((m[2] as string).length, "0")}`;
 }

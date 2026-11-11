@@ -14,10 +14,10 @@ export const POST = defineRoute({
   transaction: false,
   rateLimit: RATE_LIMITS.bulkIo,
   body: queueExportSchema,
-  handler: ({ db, auth, body, request }) => {
-    const task = queueExport(db, { auth, gridKey: body.gridKey, query: body.query });
+  handler: async ({ db, auth, body, request }) => {
+    const task = await queueExport(db, { auth, gridKey: body.gridKey, query: body.query });
     const listFetcher = createHttpListFetcher({ origin: request.nextUrl.origin, cookie: request.headers.get("cookie") });
-    const timeZone = resolveExportTimeZone(db, auth, body.timeZone);
+    const timeZone = await resolveExportTimeZone(db, auth, body.timeZone);
     after(async () => {
       try {
         await runExport(db, task.id, { auth, listFetcher, columns: body.columns, timeZone });

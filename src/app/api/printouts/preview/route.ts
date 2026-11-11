@@ -20,10 +20,10 @@ export const POST = defineRoute({
   rateLimit: PREVIEW_LIMIT,
   transaction: false,
   handler: async ({ db, auth, body }) => {
-    if (body.format === "record") return previewRecords(db, auth, body.typeKey, body.sampleIds);
+    if (body.format === "record") return await previewRecords(db, auth, body.typeKey, body.sampleIds);
     if (body.format === "zpl") {
       if (familyOf(body.typeKey) !== "label") throw new AppError("VALIDATION", "ZPL is only available for label printouts");
-      const zpl = previewZpl(db, auth, body.typeKey, body.layout, body.sampleIds, body.copies);
+      const zpl = await previewZpl(db, auth, body.typeKey, body.layout, body.sampleIds, body.copies);
       return new NextResponse(zpl, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
     }
     const bytes = await previewPdf(db, auth, body.typeKey, body.layout, body.sampleIds);

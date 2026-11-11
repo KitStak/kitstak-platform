@@ -5,11 +5,11 @@ import { createTag, listTags, TAG_MANAGE_PERMISSIONS, tagCreateSchema, tagListQu
 
 export const GET = defineRoute({
   query: tagListQuerySchema,
-  handler: ({ db, query }) => listTags(db, query),
+  handler: async ({ db, query }) => await listTags(db, query),
 });
 
 export const POST = defineRoute({
   permission: TAG_MANAGE_PERMISSIONS,
   body: tagCreateSchema,
-  handler: ({ db, auth, body }) => created(createTag(db, auth.user.id, body)),
+  handler: async ({ db, auth, body }) => created(await createTag(db, auth.user.id, body)),
 });

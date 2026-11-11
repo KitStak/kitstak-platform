@@ -7,6 +7,7 @@ import type { AppDb } from "@/server/api/db";
 import type { AuthContext } from "@/server/auth/context";
 import { AGING_BUCKETS, AGING_DEF, UTILIZATION_BANDS, UTILIZATION_DEF } from "@/lib/grid-defs/reports/analysis";
 import { clientIn, inList, runReport, warehouseLabel, type ReportPage, type ReportQuery } from "./reports-grid";
+import { dbAll } from "@/server/db/sql";
 
 type Row = Record<string, unknown>;
 
@@ -21,7 +22,7 @@ export function agingBucketCase(ageExpr: string): SQL {
 
 /** Age in whole days, shifted into the warehouse calendar by `offsetMinutes`. */
 const ageExpr = (offsetMinutes: number): string =>
-  `MAX(CAST(julianday('now', '${offsetMinutes} minutes') - julianday(i.received_at, '${offsetMinutes} minutes') AS INTEGER), 0)`;
+  `GREATEST(trunc(EXTRACT(EPOCH FROM ((now() + interval '${offsetMinutes} minutes') - ((i.received_at)::timestamptz + interval '${offsetMinutes} minutes'))) / 86400.0)::int, 0)`;
 
 export function agingSql(auth: AuthContext, offsetMinutes = 0): SQL {
   const off = Math.trunc(offsetMinutes);
@@ -80,21 +81,21 @@ export function utilizationSql(auth: AuthContext): SQL {
                   ELSE 'Not Set' END AS cap_source,
              l.max_capacity_qty AS mcq, pc.max_units AS pmax, l.capacity_units AS legacy
       FROM locations l LEFT JOIN used u ON u.lid = l.id LEFT JOIN pcap pc ON pc.lid = l.id
-      WHERE l.is_active = 1 AND ${inList(sql`l.warehouse_id`, auth.viewScope.warehouseIds)}
+      WHERE l.is_active = true AND ${inList(sql`l.warehouse_id`, auth.viewScope.warehouseIds)}
     ), base AS (
       SELECT s.*,
              CASE s.cap_source
                WHEN 'Max Capacity Qty' THEN s.mcq
                WHEN 'Product Max Qty' THEN s.pmax
                -- Cube: how many units of the stored mix fit the location's volume.
-               WHEN 'Cube (volume)' THEN CASE WHEN s.qty > 0 AND s.cube > 0 THEN CAST(s.volume * s.qty / s.cube AS INTEGER) END
+               WHEN 'Cube (volume)' THEN CASE WHEN s.qty > 0 AND s.cube > 0 THEN trunc(s.volume * s.qty / s.cube)::int END
                WHEN 'Legacy Capacity Units (estimate)' THEN s.legacy
              END AS cap,
              CASE s.cap_source
-               WHEN 'Cube (volume)' THEN ROUND(s.cube * 100.0 / s.volume, 1)
-               WHEN 'Max Capacity Qty' THEN ROUND(s.qty * 100.0 / s.mcq, 1)
-               WHEN 'Product Max Qty' THEN ROUND(s.qty * 100.0 / s.pmax, 1)
-               WHEN 'Legacy Capacity Units (estimate)' THEN ROUND(s.qty * 100.0 / s.legacy, 1)
+               WHEN 'Cube (volume)' THEN ROUND((s.cube * 100.0::float8 / s.volume)::numeric, 1)::float8
+               WHEN 'Max Capacity Qty' THEN ROUND((s.qty * 100.0::float8 / s.mcq)::numeric, 1)::float8
+               WHEN 'Product Max Qty' THEN ROUND((s.qty * 100.0::float8 / s.pmax)::numeric, 1)::float8
+               WHEN 'Legacy Capacity Units (estimate)' THEN ROUND((s.qty * 100.0::float8 / s.legacy)::numeric, 1)::float8
              END AS pct
       FROM src s
     )
@@ -103,10 +104,10 @@ export function utilizationSql(auth: AuthContext): SQL {
            b.area_type AS "areaType", b.location_type AS "locationType", b.capacity_type AS "capacityType",
            b.cap_source AS "capacitySource", CASE WHEN b.cap_source = 'Legacy Capacity Units (estimate)' THEN 1 ELSE 0 END AS "estimated",
            CASE WHEN b.cap > 0 THEN b.cap END AS "capacity", b.qty AS "usedQty",
-           CASE WHEN b.cap > 0 THEN MAX(b.cap - b.qty, 0) END AS "freeQty",
+           CASE WHEN b.cap > 0 THEN GREATEST(b.cap - b.qty, 0) END AS "freeQty",
            b.pct AS "utilizationPct",
-           CASE WHEN b.volume > 0 THEN ROUND(b.cube, 0) END AS "usedCube",
-           CASE WHEN b.volume > 0 THEN ROUND(b.volume, 0) END AS "locationCube",
+           CASE WHEN b.volume > 0 THEN ROUND((b.cube)::numeric, 0)::float8 END AS "usedCube",
+           CASE WHEN b.volume > 0 THEN ROUND((b.volume)::numeric, 0)::float8 END AS "locationCube",
            CASE
              WHEN b.qty <= 0 THEN 'Empty'
              WHEN b.pct IS NULL THEN 'No Capacity Set'
@@ -119,11 +120,11 @@ export function utilizationSql(auth: AuthContext): SQL {
     FROM base b JOIN warehouses w ON w.id = b.wid`;
 }
 
-export const listAging = (db: AppDb, auth: AuthContext, q: ReportQuery): ReportPage<Row> =>
-  runReport<Row>(db, agingSql(auth, q.tzOffsetMinutes ?? 0), AGING_DEF, q);
+export const listAging = async (db: AppDb, auth: AuthContext, q: ReportQuery): Promise<ReportPage<Row>> =>
+  await runReport<Row>(db, agingSql(auth, q.tzOffsetMinutes ?? 0), AGING_DEF, q);
 
-export const listUtilization = (db: AppDb, auth: AuthContext, q: ReportQuery): ReportPage<Row> =>
-  runReport<Row>(db, utilizationSql(auth), UTILIZATION_DEF, q);
+export const listUtilization = async (db: AppDb, auth: AuthContext, q: ReportQuery): Promise<ReportPage<Row>> =>
+  await runReport<Row>(db, utilizationSql(auth), UTILIZATION_DEF, q);
 
 export interface UtilizationSummary {
   readonly total: number;
@@ -132,8 +133,8 @@ export interface UtilizationSummary {
 }
 
 /** Location count per utilization band, plus how many rows rest on estimated capacity. */
-export function utilizationSummary(db: AppDb, auth: AuthContext): UtilizationSummary {
-  const rows = db.all<{ band: string; n: number; est: number }>(sql`
+export async function utilizationSummary(db: AppDb, auth: AuthContext): Promise<UtilizationSummary> {
+  const rows = await dbAll<{ band: string; n: number; est: number }>(db, sql`
     SELECT t.band AS "band", COUNT(*) AS "n", SUM(t.estimated) AS "est" FROM (${utilizationSql(auth)}) t GROUP BY t.band`);
   const by = new Map(rows.map((r) => [r.band, Number(r.n)]));
   return {

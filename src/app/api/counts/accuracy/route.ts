@@ -6,5 +6,5 @@ import { countAccuracy, countAccuracyQuerySchema } from "@/server/repositories/c
 export const GET = defineRoute({
   permission: COUNT_ANY_VIEW,
   query: countAccuracyQuerySchema,
-  handler: ({ db, auth, query }) => countAccuracy(db, auth.viewScope, query),
+  handler: async ({ db, auth, query }) => await countAccuracy(db, auth.viewScope, query),
 });

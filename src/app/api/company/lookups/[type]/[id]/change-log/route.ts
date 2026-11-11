@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: DATA_SETUP_PERMISSION,
   params: itemParams,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    getLookupRow(db, auth, params.type, params.id);
-    return changeLogResult(db, LOOKUP_ENTITY, params.id, query);
+  handler: async ({ db, auth, params, query }) => {
+    await getLookupRow(db, auth, params.type, params.id);
+    return await changeLogResult(db, LOOKUP_ENTITY, params.id, query);
   },
 });

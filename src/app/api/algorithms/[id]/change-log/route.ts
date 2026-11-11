@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: "automation.algorithms.change_log",
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    loadAlgorithm(db, auth, params.id);
-    return changeLogResult(db, "algorithm", params.id, query);
+  handler: async ({ db, auth, params, query }) => {
+    await loadAlgorithm(db, auth, params.id);
+    return await changeLogResult(db, "algorithm", params.id, query);
   },
 });

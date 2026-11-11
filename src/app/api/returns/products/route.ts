@@ -8,5 +8,5 @@ import { resolveProduct } from "@/server/repositories/returns-receive";
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.station,
   query: z.object({ clientId: idSchema, code: z.string().trim().min(1).max(120) }),
-  handler: ({ db, auth, query }) => resolveProduct(db, auth.scope, query.clientId, query.code),
+  handler: async ({ db, auth, query }) => await resolveProduct(db, auth.scope, query.clientId, query.code),
 });

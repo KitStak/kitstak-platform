@@ -5,5 +5,5 @@ import { WO_PERMISSIONS } from "@/server/repositories/work-orders-api";
 
 export const GET = defineRoute({
   permission: WO_PERMISSIONS.view,
-  handler: ({ db, auth, grid }) => workOrderStatusCounts(db, auth.viewScope, grid()),
+  handler: async ({ db, auth, grid }) => await workOrderStatusCounts(db, auth.viewScope, grid()),
 });

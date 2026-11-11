@@ -4,13 +4,17 @@
  *   export const GET = defineRoute({
  *     permission: "fulfillment.shipment_orders.view",
  *     query: z.object({ status: z.string().optional() }),
- *     handler: ({ db, auth, query, grid }) => listResult(rows, meta),
+ *     handler: async ({ db, auth, query, grid }) => listResult(await listOrders(db, ...), meta),
  *   });
  *
  * Pipeline: session (user_sessions + sv) → CSRF (non-GET) → permission → rate limit
- * (mutations) → zod params/query/body → handler (inside a SQLite transaction for
- * mutations) → envelope. Domain errors map to `{ success:false, error, code, fieldErrors }`;
- * stack traces never reach the client. Every request emits one structured log line.
+ * (mutations) → zod params/query/body → handler → envelope. Mutations (and
+ * `transaction: true`) run the handler inside `db.transaction(async (tx) => …)` after
+ * `takeWriteLock(tx)`: one app-wide advisory lock, so writers are serialised exactly as with
+ * SQLite and allocation / ledger / sequence logic needs no per-site locking. The handler gets
+ * the transaction as `ctx.db` and MUST use only that handle (never the global db) for queries.
+ * Domain errors map to `{ success:false, error, code, fieldErrors }`; a thrown error rolls the
+ * transaction back. Stack traces never reach the client. Every request emits one log line.
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
@@ -25,6 +29,7 @@ import { getRequestSession, readCookie } from "@/server/auth/session";
 import { log } from "@/server/log";
 import { parseGridQuery, type GridQuery } from "@/server/query/grid-query";
 import { getAppDb, type AppDb } from "./db";
+import { withWriteTx } from "@/server/db/sql";
 import { jsonError, jsonOk, isRouteResult } from "./envelope";
 import { AppError, forbiddenError, fromZodError, toAppError, unauthenticatedError } from "./errors";
 import { deepRedactFor } from "@/server/repositories/roles-redaction";
@@ -53,7 +58,8 @@ export interface RouteCtx<Q, B, P, A extends AuthMode> {
   readonly userAgent: string | null;
   /** For change_log / ledger calls: `{ userId, source: <email> }`. */
   readonly actor: { readonly userId: string | null; readonly source: string };
-  audit(entry: Omit<AuditEntry, "userId" | "ip" | "userAgent">): void;
+  /** Best-effort audit row (savepoint; never fails the request). Await it. */
+  audit(entry: Omit<AuditEntry, "userId" | "ip" | "userAgent">): Promise<void>;
 }
 
 export interface RouteConfig<QS extends Schema, BS extends Schema, PS extends Schema, A extends AuthMode, R> {
@@ -69,7 +75,10 @@ export interface RouteConfig<QS extends Schema, BS extends Schema, PS extends Sc
   readonly csrf?: boolean;
   /** Default: `RATE_LIMITS.mutation` per user on non-GET. */
   readonly rateLimit?: RateLimitPolicy | false;
-  /** Default: true on non-GET. The handler must then be synchronous (better-sqlite3). */
+  /**
+   * Default: true on non-GET. The handler then runs inside one Postgres transaction holding
+   * the app write lock (`takeWriteLock`); `ctx.db` is that transaction.
+   */
   readonly transaction?: boolean;
   readonly handler: (ctx: RouteCtx<Out<QS, Record<string, string>>, Out<BS, undefined>, Out<PS, Record<string, string>>, A>) => R | Promise<R>;
 }
@@ -97,10 +106,6 @@ async function readJsonBody(request: NextRequest): Promise<unknown> {
   } catch {
     throw new AppError("VALIDATION", "Request body must be valid JSON");
   }
-}
-
-function isThenable(value: unknown): value is PromiseLike<unknown> {
-  return typeof value === "object" && value !== null && typeof (value as { then?: unknown }).then === "function";
 }
 
 /**
@@ -134,18 +139,18 @@ async function guard(
   if (required && !session.ok) throw unauthenticatedError();
 
   const auth = session.ok
-    ? buildAuthContext(db, session.user, {
+    ? await buildAuthContext(db, session.user, {
         warehouseId: readCookie(request, CONTEXT_WAREHOUSE_COOKIE) ?? null,
         clientId: readCookie(request, CONTEXT_CLIENT_COOKIE) ?? null,
       })
     : null;
-  const audit = (action: string, detail: Record<string, unknown>): void =>
-    writeAudit(db, { action, entity: "route", entityId: meta.route, userId: auth?.user.id ?? null, outcome: "failure", detail, ip: meta.ip, userAgent: meta.userAgent });
+  const audit = async (action: string, detail: Record<string, unknown>): Promise<void> =>
+    await writeAudit(db, { action, entity: "route", entityId: meta.route, userId: auth?.user.id ?? null, outcome: "failure", detail, ip: meta.ip, userAgent: meta.userAgent });
 
   if (mutation && config.csrf !== false) {
     const check = verifyCsrf(request);
     if (!check.ok) {
-      audit("security.csrf_rejected", { reason: check.reason, method: request.method });
+      await audit("security.csrf_rejected", { reason: check.reason, method: request.method });
       throw new AppError("CSRF", "Your session security token is missing or invalid. Refresh the page and try again.");
     }
   }
@@ -153,7 +158,7 @@ async function guard(
   if (config.permission) {
     const keys = typeof config.permission === "string" ? [config.permission] : config.permission;
     if (!auth || !canAny(auth, keys)) {
-      audit("security.permission_denied", { permission: keys, method: request.method });
+      await audit("security.permission_denied", { permission: keys, method: request.method });
       throw forbiddenError();
     }
   }
@@ -161,7 +166,7 @@ async function guard(
   const policy = config.rateLimit === undefined ? (mutation ? RATE_LIMITS.mutation : false) : config.rateLimit;
   if (policy) {
     const subject = auth?.user.id ?? `ip:${meta.rateIp}`;
-    const limit = hitRateLimit(db, policy, subject);
+    const limit = await hitRateLimit(db, policy, subject);
     if (!limit.allowed) {
       throw new AppError("RATE_LIMITED", "Too many requests. Please slow down and try again shortly.", {
         headers: { "Retry-After": String(limit.retryAfterSeconds) },
@@ -225,20 +230,15 @@ export function defineRoute<
           ip,
           userAgent,
           actor: { userId, source: auth?.user.email ?? "System" },
-          audit: (entry: Omit<AuditEntry, "userId" | "ip" | "userAgent">) => writeAudit(handle, { ...entry, userId, ip, userAgent }),
+          audit: async (entry: Omit<AuditEntry, "userId" | "ip" | "userAgent">) => await writeAudit(handle, { ...entry, userId, ip, userAgent }),
         }) as RouteCtx<Out<QS, Record<string, string>>, Out<BS, undefined>, Out<PS, Record<string, string>>, A>;
 
       const useTx = config.transaction ?? !isSafeMethod(request.method);
       // The viewer's UTC offset (x-tz-offset) scopes grid date chips to local days for this request.
       const tzOffset = parseTzOffset(request.headers.get(TZ_OFFSET_HEADER));
-      const value = await runWithTzOffset(tzOffset, () =>
-        useTx
-          ? db.transaction((tx) => {
-              const out = config.handler(makeCtx(tx));
-              if (isThenable(out)) throw new Error(`Transactional handler for ${route} must be synchronous`);
-              return out;
-            })
-          : config.handler(makeCtx(db))
+      // Mutations: one transaction holding the app write lock (withWriteTx = db.transaction + takeWriteLock).
+      const value = await runWithTzOffset(tzOffset, async () =>
+        useTx ? await withWriteTx(db, async (tx) => await config.handler(makeCtx(tx))) : await config.handler(makeCtx(db))
       );
 
       const response = toResponse(value, requestId, auth);

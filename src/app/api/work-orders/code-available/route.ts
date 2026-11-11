@@ -12,5 +12,5 @@ const querySchema = z.object({ code: z.string().trim().min(1).max(64), exceptId:
 export const GET = defineRoute({
   permission: [WO_PERMISSIONS.create, WO_PERMISSIONS.edit],
   query: querySchema,
-  handler: ({ db, query }) => ({ code: query.code, available: isWorkOrderCodeAvailable(db, query.code, query.exceptId) }),
+  handler: async ({ db, query }) => ({ code: query.code, available: await isWorkOrderCodeAvailable(db, query.code, query.exceptId) }),
 });

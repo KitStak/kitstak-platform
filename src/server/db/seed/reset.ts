@@ -1,30 +1,31 @@
 /**
- * Empties every table in place (keeps the schema and the Drizzle migration journal), so
- * `npm run db:seed` can run on its own against a database the dev server holds open.
+ * Empties every table in place (keeps the schema and the Drizzle migration journal, which
+ * lives in the separate `drizzle` schema), so `npm run db:seed` can re-run on a migrated database.
  */
 import { sql } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
+import { dbAll, dbRun, withWriteTx } from "@/server/db/sql";
 
 const KEEP_TABLES: ReadonlySet<string> = new Set(["__drizzle_migrations"]);
 
 const quoteIdent = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 
-export function listDataTables(db: AppDb): readonly string[] {
-  return db.all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
+/** Every app table in the `public` schema (scheduler tables included), sorted by name. */
+export async function listDataTables(db: AppDb): Promise<readonly string[]> {
+  return (await dbAll<{ name: string }>(db, sql`SELECT tablename AS name FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`))
     .map((r) => r.name)
     .filter((name) => !KEEP_TABLES.has(name));
 }
 
-/** Deletes all rows from every data table. Returns the number of tables emptied. */
-export function wipeAllRows(db: AppDb): number {
-  const tables = listDataTables(db);
-  db.run(sql`PRAGMA foreign_keys = OFF`);
-  try {
-    db.transaction((tx) => {
-      for (const table of tables) tx.run(sql.raw(`DELETE FROM ${quoteIdent(table)}`));
-    });
-  } finally {
-    db.run(sql`PRAGMA foreign_keys = ON`);
-  }
+/**
+ * Deletes all rows from every data table in one TRUNCATE (FK-safe, resets identity columns).
+ * Returns the number of tables emptied.
+ */
+export async function wipeAllRows(db: AppDb): Promise<number> {
+  const tables = await listDataTables(db);
+  if (tables.length === 0) return 0;
+  await withWriteTx(db, async (tx) => {
+    await dbRun(tx, sql.raw(`TRUNCATE ${tables.map(quoteIdent).join(", ")} RESTART IDENTITY CASCADE`));
+  });
   return tables.length;
 }

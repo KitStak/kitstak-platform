@@ -39,35 +39,35 @@ function fail(message: string): never {
 export const handler: ImportHandler = {
   configured: true,
   owner: "M06",
-  apply(ctx, row) {
+  async apply(ctx, row) {
     const { db, auth } = ctx;
     const whCode = str(row.warehouseCode) ?? fail("Warehouse Code is required");
-    const wh = db.select().from(schema.warehouses).where(eq(schema.warehouses.code, whCode)).get();
+    const wh = (await db.select().from(schema.warehouses).where(eq(schema.warehouses.code, whCode)).limit(1))[0];
     if (!wh || !hasWarehouse(auth.scope, wh.id)) fail(`Warehouse "${whCode}" was not found`);
 
     const clientCode = str(row.clientCode) ?? fail("Client Code is required");
-    const client = db.select().from(schema.clients).where(eq(schema.clients.code, clientCode)).get();
+    const client = (await db.select().from(schema.clients).where(eq(schema.clients.code, clientCode)).limit(1))[0];
     if (!client || !hasClient(auth.scope, client.id)) fail(`Client "${clientCode}" was not found`);
 
     const sku = str(row.sku) ?? fail("SKU is required");
-    const product = db.select().from(schema.products).where(and(eq(schema.products.clientId, client.id), eq(schema.products.sku, sku))).get();
+    const product = (await db.select().from(schema.products).where(and(eq(schema.products.clientId, client.id), eq(schema.products.sku, sku))).limit(1))[0];
     if (!product) fail(`SKU "${sku}" was not found for client ${clientCode}`);
 
     const locCode = str(row.locationCode) ?? fail("Location Code is required");
-    const location = db.select().from(schema.locations).where(and(eq(schema.locations.warehouseId, wh.id), eq(schema.locations.code, locCode))).get();
+    const location = (await db.select().from(schema.locations).where(and(eq(schema.locations.warehouseId, wh.id), eq(schema.locations.code, locCode))).limit(1))[0];
     if (!location) fail(`Location "${locCode}" was not found in ${whCode}`);
 
     const lpNumber = str(row.lpNumber);
     let lpId: string | null = null;
     if (lpNumber) {
-      const lp = db.select().from(schema.licensePlates).where(and(eq(schema.licensePlates.warehouseId, wh.id), eq(schema.licensePlates.number, lpNumber))).get();
+      const lp = (await db.select().from(schema.licensePlates).where(and(eq(schema.licensePlates.warehouseId, wh.id), eq(schema.licensePlates.number, lpNumber))).limit(1))[0];
       if (!lp) fail(`LP "${lpNumber}" was not found in ${whCode}`);
       lpId = lp.id;
     }
 
     const packType = str(row.packType) ?? product.uom;
     if (packType !== product.uom) {
-      const pack = db.select().from(schema.productPackTypes).where(and(eq(schema.productPackTypes.productId, product.id), eq(schema.productPackTypes.packType, packType))).get();
+      const pack = (await db.select().from(schema.productPackTypes).where(and(eq(schema.productPackTypes.productId, product.id), eq(schema.productPackTypes.packType, packType))).limit(1))[0];
       if (!pack) fail(`Pack type "${packType}" is not set up for ${sku}`);
     }
     const qty = typeof row.quantity === "number" ? row.quantity : Number(row.quantity);
@@ -77,8 +77,8 @@ export const handler: ImportHandler = {
     let damageReason = str(row.damageReason);
     if (status !== "Stock" && !damageReason) fail(`Damage Reason is required when Status is ${status}`);
     if (damageReason) {
-      const reason = db.select().from(schema.lookupValues)
-        .where(and(eq(schema.lookupValues.type, "damage_reason"), eq(schema.lookupValues.name, damageReason))).get();
+      const reason = (await db.select().from(schema.lookupValues)
+        .where(and(eq(schema.lookupValues.type, "damage_reason"), eq(schema.lookupValues.name, damageReason))).limit(1))[0];
       if (!reason) fail(`Damage Reason "${damageReason}" is not set up`);
       damageReason = reason.name;
     }
@@ -95,13 +95,13 @@ export const handler: ImportHandler = {
     if (product.trackExpiry && !expiryDate) fail(`${sku} tracks expiry dates; Expiry Date is required`);
     if (product.trackProductionDate && !productionDate) fail(`${sku} tracks production dates; Production Date is required`);
 
-    const reason = db.select({ id: schema.lookupValues.id }).from(schema.lookupValues)
+    const reason = (await db.select({ id: schema.lookupValues.id }).from(schema.lookupValues)
       .where(and(eq(schema.lookupValues.type, "adjustment_reason"), eq(schema.lookupValues.name, IMPORT_REASON_NAME),
-        or(isNull(schema.lookupValues.warehouseId), eq(schema.lookupValues.warehouseId, wh.id)))).get();
+        or(isNull(schema.lookupValues.warehouseId), eq(schema.lookupValues.warehouseId, wh.id)))).limit(1))[0];
     const domainCtx = { userId: ctx.actor.userId, source: ctx.actor.source, scope: auth.scope };
-    explainSkuRule(db, { locationId: location.id, lpId, productId: product.id });
-    const units = qty * packRatio(db, product.id, packType);
-    const { bucket } = ledger.add(db, domainCtx, {
+    await explainSkuRule(db, { locationId: location.id, lpId, productId: product.id });
+    const units = qty * (await packRatio(db, product.id, packType));
+    const { bucket } = await ledger.add(db, domainCtx, {
       warehouseId: wh.id, clientId: client.id, productId: product.id, locationId: location.id, lpId,
       lotNumber, expiryDate, productionDate, damageReason, packType, qty: units, type: "Inventory Adjustment",
       refs: { adjustmentReasonId: reason?.id ?? null, note: `${IMPORT_REASON_NAME} (row ${ctx.rowNumber})` },

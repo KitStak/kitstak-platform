@@ -21,18 +21,18 @@ let w: World;
 let auth: AuthContext;
 let cycleType: string;
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
-  cycleType = w.db.insert(schema.jobTypes).values({ code: "CC", description: "Cycle", warehouseId: w.warehouseId, operationType: "Count", settings: jobTypeSettingsSchema.parse({ count: {} }) }).returning().get().id;
+  cycleType = (await w.db.insert(schema.jobTypes).values({ code: "CC", description: "Cycle", warehouseId: w.warehouseId, operationType: "Count", settings: jobTypeSettingsSchema.parse({ count: {} }) }).returning())[0].id;
 });
 afterEach(() => w.close());
 
-const stock = (qty: number, locationId: string) => ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId, qty });
+const stock = async (qty: number, locationId: string) => await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId, qty });
 const base = { description: null, scheduledAt: new Date().toISOString(), lockLocations: false, lpIds: [] as string[] };
-const skuPlan = (code: string) => createCountPlan(w.db, w.ctx, auth, { ...base, warehouseId: w.warehouseId, code, countType: "SKU", locationIds: [], productIds: [w.productId] });
-const locPlan = (code: string, locationIds: string[]) => createCountPlan(w.db, w.ctx, auth, { ...base, warehouseId: w.warehouseId, code, countType: "Location", locationIds, productIds: [] });
+const skuPlan = async (code: string) => await createCountPlan(w.db, w.ctx, auth, { ...base, warehouseId: w.warehouseId, code, countType: "SKU", locationIds: [], productIds: [w.productId] });
+const locPlan = async (code: string, locationIds: string[]) => await createCountPlan(w.db, w.ctx, auth, { ...base, warehouseId: w.warehouseId, code, countType: "Location", locationIds, productIds: [] });
 
 describe("Create Job preview", () => {
   it("jobsForUnits is ceil(units / batch)", () => {
@@ -42,23 +42,23 @@ describe("Create Job preview", () => {
     expect(jobsForUnits(3, 0)).toBe(3);
   });
 
-  it("previews a SKU plan by its stocked locations, and matches the jobs Save creates", () => {
-    stock(5, w.loc.storageA);
-    stock(4, w.loc.storageB);
-    const p = skuPlan("KS-PREV-1");
-    const [preview] = previewCountJobs(w.db, auth, [p.id]);
+  it("previews a SKU plan by its stocked locations, and matches the jobs Save creates", async () => {
+    await stock(5, w.loc.storageA);
+    await stock(4, w.loc.storageB);
+    const p = await skuPlan("KS-PREV-1");
+    const [preview] = await previewCountJobs(w.db, auth, [p.id]);
     expect(preview?.units).toBe(2);
-    const res = createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: cycleType, batchSize: 1, assigneeUserId: null });
+    const res = await createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: cycleType, batchSize: 1, assigneeUserId: null });
     expect(res.jobIds.length).toBe(jobsForUnits(preview?.units ?? 0, 1));
   });
 });
 
 describe("line SKU columns", () => {
-  it("a location line lists the SKUs on hand before counting, and Item Type / Group come from the product", () => {
-    stock(5, w.loc.storageA);
-    const p = locPlan("KS-SKUL-1", [w.loc.storageA]);
-    const detail = getCountPlanDetail(w.db, auth.scope, p.id);
-    const sku = w.db.select().from(schema.products).where(eq(schema.products.id, w.productId)).get()?.sku;
+  it("a location line lists the SKUs on hand before counting, and Item Type / Group come from the product", async () => {
+    await stock(5, w.loc.storageA);
+    const p = await locPlan("KS-SKUL-1", [w.loc.storageA]);
+    const detail = await getCountPlanDetail(w.db, auth.scope, p.id);
+    const sku = (await w.db.select().from(schema.products).where(eq(schema.products.id, w.productId)).limit(1))[0]?.sku;
     expect(detail.lines[0]?.skuList).toBe(sku);
     expect(detail.lines[0]).toHaveProperty("productType");
     expect(detail.lines[0]).toHaveProperty("locationType");
@@ -66,10 +66,10 @@ describe("line SKU columns", () => {
 });
 
 describe("count assignees", () => {
-  it("lists active warehouse staff who can count, never client-portal or API users", () => {
-    const client = w.db.insert(schema.users).values({ email: "portal@client.test", name: "Portal User", role: "viewer", userType: "Client", passwordHash: "x" }).returning().get();
-    const api = w.db.insert(schema.users).values({ email: "api@x.test", name: "API", role: "operator", isApiUser: true, passwordHash: "x" }).returning().get();
-    const ids = countAssignees(w.db, auth.scope, w.warehouseId).map((u) => u.id);
+  it("lists active warehouse staff who can count, never client-portal or API users", async () => {
+    const client = (await w.db.insert(schema.users).values({ email: "portal@client.test", name: "Portal User", role: "viewer", userType: "Client", passwordHash: "x" }).returning())[0];
+    const api = (await w.db.insert(schema.users).values({ email: "api@x.test", name: "API", role: "operator", isApiUser: true, passwordHash: "x" }).returning())[0];
+    const ids = (await countAssignees(w.db, auth.scope, w.warehouseId)).map((u) => u.id);
     expect(ids).not.toContain(client.id);
     expect(ids).not.toContain(api.id);
   });
@@ -85,48 +85,48 @@ describe("AI count plan", () => {
     expect(cold.reasons).toEqual([]);
   });
 
-  it("suggests stocked locations not already in an open count", () => {
-    stock(5, w.loc.storageA);
-    stock(4, w.loc.storageB);
-    locPlan("KS-AI-OPEN", [w.loc.storageA]);
-    const ids = suggestCountTargets(w.db, auth.scope, { warehouseId: w.warehouseId, countType: "Location", limit: 20 }).map((s) => s.id);
+  it("suggests stocked locations not already in an open count", async () => {
+    await stock(5, w.loc.storageA);
+    await stock(4, w.loc.storageB);
+    await locPlan("KS-AI-OPEN", [w.loc.storageA]);
+    const ids = (await suggestCountTargets(w.db, auth.scope, { warehouseId: w.warehouseId, countType: "Location", limit: 20 })).map((s) => s.id);
     expect(ids).toContain(w.loc.storageB);
     expect(ids).not.toContain(w.loc.storageA);
   });
 
-  it("saves a suggested plan as an AI Count Plan", () => {
-    stock(5, w.loc.storageA);
-    const p = createCountPlan(w.db, w.ctx, auth, { ...base, warehouseId: w.warehouseId, code: "KS-AI-1", countType: "Location", locationIds: [w.loc.storageA], productIds: [], isAi: true });
+  it("saves a suggested plan as an AI Count Plan", async () => {
+    await stock(5, w.loc.storageA);
+    const p = await createCountPlan(w.db, w.ctx, auth, { ...base, warehouseId: w.warehouseId, code: "KS-AI-1", countType: "Location", locationIds: [w.loc.storageA], productIds: [], isAi: true });
     expect(p.isAi).toBe(true);
   });
 });
 
 describe("blind count", () => {
-  it("withholds system quantities on the sheet when the job type is blind, and still records the real variance", () => {
-    const blindType = w.db.insert(schema.jobTypes).values({ code: "BLIND", description: "Blind", warehouseId: w.warehouseId, operationType: "Count", settings: { ...jobTypeSettingsSchema.parse({ count: {} }), count: { ...jobTypeSettingsSchema.parse({ count: {} }).count, blindCount: true } } as never }).returning().get().id;
-    stock(5, w.loc.storageA);
-    const p = locPlan("KS-BLIND-1", [w.loc.storageA]);
-    createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: blindType, batchSize: 10, assigneeUserId: null });
-    const [line] = countSheet(w.db, auth.scope, p.id);
+  it("withholds system quantities on the sheet when the job type is blind, and still records the real variance", async () => {
+    const blindType = (await w.db.insert(schema.jobTypes).values({ code: "BLIND", description: "Blind", warehouseId: w.warehouseId, operationType: "Count", settings: { ...jobTypeSettingsSchema.parse({ count: {} }), count: { ...jobTypeSettingsSchema.parse({ count: {} }).count, blindCount: true } } as never }).returning())[0].id;
+    await stock(5, w.loc.storageA);
+    const p = await locPlan("KS-BLIND-1", [w.loc.storageA]);
+    await createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: blindType, batchSize: 10, assigneeUserId: null });
+    const [line] = await countSheet(w.db, auth.scope, p.id);
     expect(line?.blind).toBe(true);
     expect(line?.buckets.every((b) => b.systemQty === 0)).toBe(true);
-    submitSheetLine(w.db, w.ctx, auth, p.id, { lineId: line?.lineId ?? "", entries: line?.buckets.map((b) => ({ inventoryId: b.inventoryId, countedQty: 4 })) ?? [] });
-    const entry = w.db.select().from(schema.countLineEntries).all()[0];
+    await submitSheetLine(w.db, w.ctx, auth, p.id, { lineId: line?.lineId ?? "", entries: line?.buckets.map((b) => ({ inventoryId: b.inventoryId, countedQty: 4 })) ?? [] });
+    const entry = (await w.db.select().from(schema.countLineEntries))[0];
     expect(entry?.systemQty).toBe(5);
     expect(entry?.countedQty).toBe(4);
-    const job = w.db.select().from(schema.jobs).where(eq(schema.jobs.countPlanId, p.id)).get();
+    const job = (await w.db.select().from(schema.jobs).where(eq(schema.jobs.countPlanId, p.id)).limit(1))[0];
     expect(job?.startedAt).toBeTruthy();
   });
 });
 
 describe("accuracy", () => {
-  it("reports bucket accuracy from counted entries", () => {
-    stock(5, w.loc.storageA);
-    const p = locPlan("KS-ACC-1", [w.loc.storageA]);
-    createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: cycleType, batchSize: 10, assigneeUserId: null });
-    const [line] = countSheet(w.db, auth.scope, p.id);
-    submitSheetLine(w.db, w.ctx, auth, p.id, { lineId: line?.lineId ?? "", entries: line?.buckets.map((b) => ({ inventoryId: b.inventoryId, countedQty: 3 })) ?? [] });
-    const acc = countAccuracy(w.db, auth.scope, { days: 90 });
+  it("reports bucket accuracy from counted entries", async () => {
+    await stock(5, w.loc.storageA);
+    const p = await locPlan("KS-ACC-1", [w.loc.storageA]);
+    await createCountJobs(w.db, w.ctx, auth, { ids: [p.id], jobTypeId: cycleType, batchSize: 10, assigneeUserId: null });
+    const [line] = await countSheet(w.db, auth.scope, p.id);
+    await submitSheetLine(w.db, w.ctx, auth, p.id, { lineId: line?.lineId ?? "", entries: line?.buckets.map((b) => ({ inventoryId: b.inventoryId, countedQty: 3 })) ?? [] });
+    const acc = await countAccuracy(w.db, auth.scope, { days: 90 });
     expect(acc.totals.buckets).toBe(1);
     expect(acc.totals.exactBuckets).toBe(0);
     expect(acc.totals.netVarianceUnits).toBe(-2);
@@ -135,10 +135,10 @@ describe("accuracy", () => {
 });
 
 describe("product picker", () => {
-  it("returns the warehouse on-hand from one grouped join", () => {
-    stock(5, w.loc.storageA);
-    stock(4, w.loc.storageB);
-    const row = listPickProducts(w.db, auth.scope, w.warehouseId, EMPTY_GRID_QUERY).rows.find((r) => r.id === w.productId);
+  it("returns the warehouse on-hand from one grouped join", async () => {
+    await stock(5, w.loc.storageA);
+    await stock(4, w.loc.storageB);
+    const row = (await listPickProducts(w.db, auth.scope, w.warehouseId, EMPTY_GRID_QUERY)).rows.find((r) => r.id === w.productId);
     expect(row?.onHand).toBe(9);
   });
 });

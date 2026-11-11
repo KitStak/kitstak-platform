@@ -9,11 +9,11 @@ export const PATCH = defineRoute({
   name: "PATCH /api/reports/schedules/[id]",
   params,
   body: schedulePatchSchema,
-  handler: ({ db, auth, params: p, body }) => updateSchedule(db, auth, p.id, body),
+  handler: async ({ db, auth, params: p, body }) => await updateSchedule(db, auth, p.id, body),
 });
 
 export const DELETE = defineRoute({
   name: "DELETE /api/reports/schedules/[id]",
   params,
-  handler: ({ db, auth, params: p }) => deleteSchedule(db, auth, p.id),
+  handler: async ({ db, auth, params: p }) => await deleteSchedule(db, auth, p.id),
 });

@@ -28,29 +28,29 @@ export function requireImport(auth: AuthContext, key: string): ImportDefinition 
   return def;
 }
 
-export function importOverview(
+export async function importOverview(
   db: AppDb,
   auth: AuthContext,
   key: string,
   paging: z.output<typeof importHistoryQuerySchema>,
-): { readonly definition: ImportDefinitionSummary; readonly history: readonly ImportBatchListRow[]; readonly total: number } {
+): Promise<{ readonly definition: ImportDefinitionSummary; readonly history: readonly ImportBatchListRow[]; readonly total: number }> {
   const def = requireImport(auth, key);
-  const { rows, total } = listImportBatches(db, def.key, paging.page, paging.ps);
+  const { rows, total } = await listImportBatches(db, def.key, paging.page, paging.ps);
   return { definition: summarizeImport(def), history: rows, total };
 }
 
-export function importBatchDetails(
+export async function importBatchDetails(
   db: AppDb,
   auth: AuthContext,
   id: string,
   query: z.output<typeof importBatchQuerySchema>,
-): { readonly batch: ImportBatch; readonly rows: readonly ImportRowRecord[]; readonly total: number } {
-  const batch = getImportBatch(db, id);
+): Promise<{ readonly batch: ImportBatch; readonly rows: readonly ImportRowRecord[]; readonly total: number }> {
+  const batch = await getImportBatch(db, id);
   if (!batch) throw notFoundError("Import batch");
   const def = getImportDefinition(batch.importKey);
   if (!def) throw notFoundError("Import batch");
   requirePermission(auth, def.permission);
-  const { rows, total } = listImportRows(db, id, { errorsOnly: query.errorsOnly, page: query.page, pageSize: query.ps });
+  const { rows, total } = await listImportRows(db, id, { errorsOnly: query.errorsOnly, page: query.page, pageSize: query.ps });
   return { batch, rows, total };
 }
 

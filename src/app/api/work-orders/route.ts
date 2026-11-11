@@ -11,9 +11,9 @@ import { plannerBody, WO_PERMISSIONS, woCtx } from "@/server/repositories/work-o
 
 export const GET = defineRoute({
   permission: WO_PERMISSIONS.view,
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listWorkOrders(db, auth.viewScope, query);
+    const { rows, total } = await listWorkOrders(db, auth.viewScope, query);
     return result(rows, { meta: { total, page: query.page, pageSize: query.pageSize } });
   },
 });
@@ -21,9 +21,9 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: WO_PERMISSIONS.create,
   body: z.unknown(),
-  handler: ({ db, auth, actor, body: raw }) => {
+  handler: async ({ db, auth, actor, body: raw }) => {
     const body = plannerBody(auth, workOrderInputSchema, raw);
-    const record = createWorkOrder(db, woCtx(actor, auth), body);
-    return result(getWorkOrderRow(db, auth.scope, record.id), { status: 201 });
+    const record = await createWorkOrder(db, woCtx(actor, auth), body);
+    return result(await getWorkOrderRow(db, auth.scope, record.id), { status: 201 });
   },
 });

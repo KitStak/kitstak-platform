@@ -8,5 +8,5 @@ export const POST = defineRoute({
   permission: "settings.product_listing.search_a_product",
   params: idParamsSchema,
   body: z.object({ productId: idSchema, version: versionSchema.optional() }),
-  handler: ({ db, auth, actor, params, body }) => linkListing(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.id, body.productId, body.version),
+  handler: async ({ db, auth, actor, params, body }) => await linkListing(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.id, body.productId, body.version),
 });

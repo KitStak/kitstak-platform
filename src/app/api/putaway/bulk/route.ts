@@ -10,5 +10,5 @@ import { bulkPutaway, bulkPutawaySchema } from "@/server/repositories/putaway-wo
 export const POST = defineRoute({
   permission: "inventory.inventory_by_location.transfer_product",
   body: bulkPutawaySchema,
-  handler: ({ db, auth, actor, body }) => bulkPutaway(db, auth, domainCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await bulkPutaway(db, auth, domainCtx(actor, auth), body),
 });

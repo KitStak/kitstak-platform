@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: ["settings.billing_report.view", "settings.billing.view"],
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    loadReport(db, auth, params.id);
-    return changeLogResult(db, REPORT_ENTITY, params.id, query);
+  handler: async ({ db, auth, params, query }) => {
+    await loadReport(db, auth, params.id);
+    return await changeLogResult(db, REPORT_ENTITY, params.id, query);
   },
 });

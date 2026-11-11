@@ -25,6 +25,7 @@ import { localDate, writeCallLog } from "@/server/domain/shipping/common";
 import type { BulkResult, DomainCtx } from "@/server/domain/types";
 import { carrierCallMode } from "@/server/integrations/carriers/common";
 import { buildEodRows, closeManifests, resolveGroup, type EodRow } from "./end-of-day";
+import { dbAll, dbGet, dbRun, withWriteTx } from "@/server/db/sql";
 
 /* ------------------------------------------------------------- tracking */
 
@@ -81,37 +82,37 @@ export interface RefreshTrackingResult extends BulkResult {
   readonly outcomes: readonly TrackingOutcome[];
 }
 
-export function refreshTracking(db: AppDb, auth: AuthContext, ctx: DomainCtx, ids: readonly string[], now: Date = new Date()): RefreshTrackingResult {
+export async function refreshTracking(db: AppDb, auth: AuthContext, ctx: DomainCtx, ids: readonly string[], now: Date = new Date()): Promise<RefreshTrackingResult> {
   const succeeded: string[] = [];
   const failed: { id: string; code: string; message: string }[] = [];
   const outcomes: TrackingOutcome[] = [];
   for (const id of [...new Set(ids)]) {
     const startedAt = Date.now();
-    const s = db.select().from(schema.shipments).where(eq(schema.shipments.id, id)).get();
+    const s = (await db.select().from(schema.shipments).where(eq(schema.shipments.id, id)).limit(1))[0];
     try {
       if (!s) throw notFoundError("Shipment");
       assertInScope(auth.scope, s, "Shipment");
       if (s.labelStatus === "Voided") throw new AppError("INVALID_STATE", `${s.trackingNumber}: the label is voided, so the carrier has nothing to track.`);
-      const connection = s.carrierConnectionId ? db.select().from(schema.carrierConnections).where(eq(schema.carrierConnections.id, s.carrierConnectionId)).get() : undefined;
+      const connection = s.carrierConnectionId ? (await db.select().from(schema.carrierConnections).where(eq(schema.carrierConnections.id, s.carrierConnectionId)).limit(1))[0] : undefined;
       if (!connection) throw new AppError("INVALID_STATE", `${s.trackingNumber}: the label has no carrier connection.`);
-      const order = db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, s.orderId)).get() ?? null;
+      const order = (await db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, s.orderId)).limit(1))[0] ?? null;
       const mode = carrierCallMode(connection);
       if (mode !== "simulated") {
         const message = `Tracking isn't available through the ${connection.provider} integration yet; open the carrier's tracking page instead.`;
-        writeCallLog(db, ctx, { step: "Tracking", connection, order, shipmentId: s.id, trackingNumber: s.trackingNumber, ok: false, httpCode: 501, error: message, startedAt, serviceName: s.serviceName, source: "CarrierShipmentDetails", labelType: s.labelType, request: { trackingNumber: s.trackingNumber, mode }, response: { error: message } });
+        await writeCallLog(db, ctx, { step: "Tracking", connection, order, shipmentId: s.id, trackingNumber: s.trackingNumber, ok: false, httpCode: 501, error: message, startedAt, serviceName: s.serviceName, source: "CarrierShipmentDetails", labelType: s.labelType, request: { trackingNumber: s.trackingNumber, mode }, response: { error: message } });
         throw new AppError("INVALID_STATE", `${s.trackingNumber}: ${message}`);
       }
-      const manifest = s.endOfDayManifestId ? db.select().from(schema.endOfDayManifests).where(eq(schema.endOfDayManifests.id, s.endOfDayManifestId)).get() : undefined;
+      const manifest = s.endOfDayManifestId ? (await db.select().from(schema.endOfDayManifests).where(eq(schema.endOfDayManifests.id, s.endOfDayManifestId)).limit(1))[0] : undefined;
       const result = simulateTracking({
         labelCreatedAt: s.labelCreatedAt, actualShipmentAt: s.actualShipmentAt, actualPickupAt: s.actualPickupAt, scheduledPickupAt: s.scheduledPickupAt,
         manifestClosedAt: manifest?.status === "Closed" ? manifest.closeDate : null, expectedDeliveryAt: s.carrierExpectedDeliveryAt, deliveredAt: s.deliveredAt,
       }, now);
-      db.transaction((tx) => {
+      await withWriteTx(db, async (tx) => {
         const patch = { actualPickupAt: result.pickupAt ?? s.actualPickupAt, deliveredAt: result.deliveredAt ?? s.deliveredAt };
         if (patch.actualPickupAt !== s.actualPickupAt || patch.deliveredAt !== s.deliveredAt) {
-          tx.update(schema.shipments).set(patch).where(eq(schema.shipments.id, s.id)).run();
+          await tx.update(schema.shipments).set(patch).where(eq(schema.shipments.id, s.id));
         }
-        writeCallLog(tx, ctx, {
+        await writeCallLog(tx, ctx, {
           step: "Tracking", connection, order, shipmentId: s.id, trackingNumber: s.trackingNumber, ok: true, httpCode: 200, startedAt, serviceName: s.serviceName,
           source: "CarrierShipmentDetails", labelType: s.labelType, request: { trackingNumber: s.trackingNumber, mode },
           response: { status: result.status, actualPickupAt: result.pickupAt, deliveredAt: result.deliveredAt, events: result.events, simulated: true },
@@ -160,7 +161,7 @@ export function pickupWindowError(pickupAt: string, closeAt: string | null | und
 
 const confirmationOf = (seed: string): string => `PU${createHash("sha1").update(seed).digest("hex").slice(0, 10).toUpperCase()}`;
 
-export function schedulePickup(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: SchedulePickupInput, now: Date = new Date()): SchedulePickupResult {
+export async function schedulePickup(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: SchedulePickupInput, now: Date = new Date()): Promise<SchedulePickupResult> {
   const windowError = pickupWindowError(input.pickupAt, input.closeAt, now);
   if (windowError) throw new AppError("VALIDATION", windowError);
   const pickupAt = new Date(input.pickupAt).toISOString();
@@ -170,31 +171,31 @@ export function schedulePickup(db: AppDb, auth: AuthContext, ctx: DomainCtx, inp
   for (const id of [...new Set(input.ids)]) {
     const startedAt = Date.now();
     try {
-      const { row, pendingIds } = resolveGroup(db, auth.scope, id);
+      const { row, pendingIds } = await resolveGroup(db, auth.scope, id);
       if (row.totalPackages === 0) throw new AppError("INVALID_STATE", `The ${row.carrierPrefix} manifest for ${row.shipDate} has no active packages to pick up.`);
-      const connection = db.select().from(schema.carrierConnections).where(eq(schema.carrierConnections.id, row.carrierConnectionId)).get();
+      const connection = (await db.select().from(schema.carrierConnections).where(eq(schema.carrierConnections.id, row.carrierConnectionId)).limit(1))[0];
       if (!connection) throw notFoundError("Carrier connection");
       const where = row.manifestId
         ? sql`(s.end_of_day_manifest_id = ${row.manifestId}${pendingIds.length ? sql` OR s.id IN (${sql.join(pendingIds.map((p) => sql`${p}`), sql`, `)})` : sql``})`
         : pendingIds.length ? sql`s.id IN (${sql.join(pendingIds.map((p) => sql`${p}`), sql`, `)})` : sql`0 = 1`;
-      const targets = db.all<{ id: string }>(sql`SELECT s.id AS id FROM shipments s WHERE ${where} AND s.carrier_code = ${row.carrierCode} AND s.label_type = 'Shipping Label' AND s.label_status = 'Active'`).map((r) => r.id);
+      const targets = (await dbAll<{ id: string }>(db, sql`SELECT s.id AS id FROM shipments s WHERE ${where} AND s.carrier_code = ${row.carrierCode} AND s.label_type = 'Shipping Label' AND s.label_status = 'Active'`)).map((r) => r.id);
       if (targets.length === 0) throw new AppError("INVALID_STATE", `The ${row.carrierPrefix} manifest for ${row.shipDate} has no active packages to pick up.`);
       const mode = carrierCallMode(connection);
       if (mode !== "simulated") {
         const message = `Pickup booking isn't available through the ${connection.provider} integration yet; book it on the carrier's site.`;
-        writeCallLog(db, ctx, { step: "Pickup", connection, order: null, ok: false, httpCode: 501, error: message, startedAt, source: "EndOfTheDay", request: { manifest: id, pickupAt, mode }, response: { error: message } });
+        await writeCallLog(db, ctx, { step: "Pickup", connection, order: null, ok: false, httpCode: 501, error: message, startedAt, source: "EndOfTheDay", request: { manifest: id, pickupAt, mode }, response: { error: message } });
         throw new AppError("INVALID_STATE", message);
       }
       const confirmation = confirmationOf(`${row.id}|${pickupAt}`);
-      db.transaction((tx) => {
-        tx.run(sql`UPDATE shipments SET scheduled_pickup_at = ${pickupAt} WHERE id IN (${sql.join(targets.map((t) => sql`${t}`), sql`, `)})`);
-        writeCallLog(tx, ctx, {
+      await withWriteTx(db, async (tx) => {
+        await dbRun(tx, sql`UPDATE shipments SET scheduled_pickup_at = ${pickupAt} WHERE id IN (${sql.join(targets.map((t) => sql`${t}`), sql`, `)})`);
+        await writeCallLog(tx, ctx, {
           step: "Pickup", connection, order: null, ok: true, httpCode: 200, startedAt, source: "EndOfTheDay",
           request: { manifest: row.id, shipDate: row.shipDate, carrierCode: row.carrierCode, pickupAt, closeAt: input.closeAt ?? null, packages: targets.length, note: input.note ?? null, mode },
           response: { confirmation, pickupAt, packages: targets.length, simulated: true },
         });
         if (row.manifestId) {
-          recordUpdate(tx, ctx, { entityType: "end_of_day_manifest", entityId: row.manifestId, entityCode: row.shipDate, before: { scheduledPickup: row.scheduledPickupAt ?? "" }, after: { scheduledPickup: `${pickupAt} (${confirmation})` } });
+          await recordUpdate(tx, ctx, { entityType: "end_of_day_manifest", entityId: row.manifestId, entityCode: row.shipDate, before: { scheduledPickup: row.scheduledPickupAt ?? "" }, after: { scheduledPickup: `${pickupAt} (${confirmation})` } });
         }
       });
       pickups.push({ id, confirmation, packages: targets.length, pickupAt });
@@ -213,8 +214,8 @@ export function schedulePickup(db: AppDb, auth: AuthContext, ctx: DomainCtx, inp
  * warehouse and carrier setup: close that setup's Open manifests every day at `cutoff_time` (warehouse
  * local HH:mm).
  */
-function ensureAutoCloseTable(db: AppDb): void {
-  db.run(sql`CREATE TABLE IF NOT EXISTS eod_auto_close_rules (
+async function ensureAutoCloseTable(db: AppDb): Promise<void> {
+  await dbRun(db, sql`CREATE TABLE IF NOT EXISTS eod_auto_close_rules (
     id TEXT PRIMARY KEY NOT NULL,
     warehouse_id TEXT NOT NULL,
     carrier_connection_id TEXT NOT NULL,
@@ -226,7 +227,7 @@ function ensureAutoCloseTable(db: AppDb): void {
     updated_at TEXT NOT NULL,
     updated_by TEXT
   )`);
-  db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS eod_auto_close_conn_idx ON eod_auto_close_rules (warehouse_id, carrier_connection_id)`);
+  await dbRun(db, sql`CREATE UNIQUE INDEX IF NOT EXISTS eod_auto_close_conn_idx ON eod_auto_close_rules (warehouse_id, carrier_connection_id)`);
 }
 
 export interface AutoCloseRule {
@@ -255,51 +256,51 @@ export interface AutoCloseSetup {
   readonly connections: readonly { readonly id: string; readonly label: string; readonly warehouseCode: string }[];
 }
 
-function rulesIn(db: AppDb, warehouseIds: readonly string[] | null): AutoCloseRule[] {
-  ensureAutoCloseTable(db);
-  const rows = db.all<Omit<AutoCloseRule, "isActive"> & { isActive: number }>(sql`
-    SELECT r.id AS id, r.warehouse_id AS warehouseId, w.code AS warehouseCode, w.timezone AS timezone, r.carrier_connection_id AS carrierConnectionId,
-      COALESCE(cc.setup_name || ' - ' || cc.account_prefix, r.carrier_connection_id) AS carrierName, r.cutoff_time AS cutoffTime, r.is_active AS isActive,
-      r.last_run_date AS lastRunDate, r.last_run_at AS lastRunAt, r.last_result AS lastResult
+async function rulesIn(db: AppDb, warehouseIds: readonly string[] | null): Promise<AutoCloseRule[]> {
+  await ensureAutoCloseTable(db);
+  const rows = await dbAll<Omit<AutoCloseRule, "isActive"> & { isActive: number }>(db, sql`
+    SELECT r.id AS id, r.warehouse_id AS "warehouseId", w.code AS "warehouseCode", w.timezone AS timezone, r.carrier_connection_id AS "carrierConnectionId",
+      COALESCE(cc.setup_name || ' - ' || cc.account_prefix, r.carrier_connection_id) AS "carrierName", r.cutoff_time AS "cutoffTime", r.is_active AS "isActive",
+      r.last_run_date AS "lastRunDate", r.last_run_at AS "lastRunAt", r.last_result AS "lastResult"
     FROM eod_auto_close_rules r JOIN warehouses w ON w.id = r.warehouse_id LEFT JOIN carrier_connections cc ON cc.id = r.carrier_connection_id
     ${warehouseIds ? sql`WHERE r.warehouse_id IN (${warehouseIds.length ? sql.join(warehouseIds.map((w) => sql`${w}`), sql`, `) : sql`''`})` : sql``}
-    ORDER BY w.code, carrierName`);
+    ORDER BY w.code, "carrierName"`);
   return rows.map((r) => ({ ...r, isActive: Boolean(r.isActive) }));
 }
 
-export function getAutoCloseSetup(db: AppDb, auth: AuthContext): AutoCloseSetup {
-  const connections = db.select().from(schema.carrierConnections).innerJoin(schema.warehouses, eq(schema.warehouses.id, schema.carrierConnections.warehouseId))
-    .where(eq(schema.carrierConnections.isActive, true)).all()
+export async function getAutoCloseSetup(db: AppDb, auth: AuthContext): Promise<AutoCloseSetup> {
+  const connections = (await db.select().from(schema.carrierConnections).innerJoin(schema.warehouses, eq(schema.warehouses.id, schema.carrierConnections.warehouseId))
+    .where(eq(schema.carrierConnections.isActive, true)))
     .filter((c) => hasWarehouse(auth.viewScope, c.carrier_connections.warehouseId))
     .map((c) => ({ id: c.carrier_connections.id, label: `${c.carrier_connections.setupName} - ${c.carrier_connections.accountPrefix}`, warehouseCode: c.warehouses.code }));
-  return { rules: rulesIn(db, auth.viewScope.warehouseIds), connections };
+  return { rules: await rulesIn(db, auth.viewScope.warehouseIds), connections };
 }
 
-export function saveAutoCloseRule(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: z.infer<typeof autoCloseRuleSchema>): AutoCloseRule {
-  ensureAutoCloseTable(db);
-  const connection = db.select().from(schema.carrierConnections).where(eq(schema.carrierConnections.id, input.carrierConnectionId)).get();
+export async function saveAutoCloseRule(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: z.infer<typeof autoCloseRuleSchema>): Promise<AutoCloseRule> {
+  await ensureAutoCloseTable(db);
+  const connection = (await db.select().from(schema.carrierConnections).where(eq(schema.carrierConnections.id, input.carrierConnectionId)).limit(1))[0];
   if (!connection || !hasWarehouse(auth.scope, connection.warehouseId)) throw notFoundError("Carrier connection");
-  const existing = db.get<{ id: string; cutoff: string; active: number }>(sql`SELECT id, cutoff_time AS cutoff, is_active AS active FROM eod_auto_close_rules WHERE warehouse_id = ${connection.warehouseId} AND carrier_connection_id = ${connection.id}`);
+  const existing = await dbGet<{ id: string; cutoff: string; active: number }>(db, sql`SELECT id, cutoff_time AS cutoff, is_active AS active FROM eod_auto_close_rules WHERE warehouse_id = ${connection.warehouseId} AND carrier_connection_id = ${connection.id}`);
   const id = existing?.id ?? crypto.randomUUID();
   const nowIso = new Date().toISOString();
-  db.run(sql`INSERT INTO eod_auto_close_rules (id, warehouse_id, carrier_connection_id, cutoff_time, is_active, updated_at, updated_by)
+  await dbRun(db, sql`INSERT INTO eod_auto_close_rules (id, warehouse_id, carrier_connection_id, cutoff_time, is_active, updated_at, updated_by)
     VALUES (${id}, ${connection.warehouseId}, ${connection.id}, ${input.cutoffTime}, ${input.isActive ? 1 : 0}, ${nowIso}, ${ctx.userId})
     ON CONFLICT(id) DO UPDATE SET cutoff_time = excluded.cutoff_time, is_active = excluded.is_active, updated_at = excluded.updated_at, updated_by = excluded.updated_by`);
-  recordUpdate(db, ctx, {
+  await recordUpdate(db, ctx, {
     entityType: "carrier_connection", entityId: connection.id, entityCode: connection.setupName,
     before: { endOfDayAutoClose: existing ? `${existing.cutoff}${existing.active ? "" : " (off)"}` : "" },
     after: { endOfDayAutoClose: `${input.cutoffTime}${input.isActive ? "" : " (off)"}` },
   });
-  const rule = rulesIn(db, [connection.warehouseId]).find((r) => r.id === id);
+  const rule = (await rulesIn(db, [connection.warehouseId])).find((r) => r.id === id);
   if (!rule) throw notFoundError("Auto-close rule");
   return rule;
 }
 
-export function deleteAutoCloseRule(db: AppDb, auth: AuthContext, ctx: DomainCtx, id: string): { readonly id: string } {
-  const rule = rulesIn(db, null).find((r) => r.id === id);
+export async function deleteAutoCloseRule(db: AppDb, auth: AuthContext, ctx: DomainCtx, id: string): Promise<{ readonly id: string }> {
+  const rule = (await rulesIn(db, null)).find((r) => r.id === id);
   if (!rule || !hasWarehouse(auth.scope, rule.warehouseId)) throw notFoundError("Auto-close rule");
-  db.run(sql`DELETE FROM eod_auto_close_rules WHERE id = ${id}`);
-  recordUpdate(db, ctx, { entityType: "carrier_connection", entityId: rule.carrierConnectionId, entityCode: rule.carrierName, before: { endOfDayAutoClose: rule.cutoffTime }, after: { endOfDayAutoClose: "" } });
+  await dbRun(db, sql`DELETE FROM eod_auto_close_rules WHERE id = ${id}`);
+  await recordUpdate(db, ctx, { entityType: "carrier_connection", entityId: rule.carrierConnectionId, entityCode: rule.carrierName, before: { endOfDayAutoClose: rule.cutoffTime }, after: { endOfDayAutoClose: "" } });
   return { id };
 }
 
@@ -316,8 +317,8 @@ export function rowsToAutoClose(rows: readonly EodRow[], rule: Pick<AutoCloseRul
   return rows.filter((r) => r.status === "Open" && r.warehouseId === rule.warehouseId && r.carrierConnectionId === rule.carrierConnectionId && r.shipDate <= localDay && r.totalPackages > 0);
 }
 
-function systemAuth(db: AppDb, warehouseId: string, userId: string | null): AuthContext {
-  const user = userId ? db.select().from(schema.users).where(eq(schema.users.id, userId)).get() : undefined;
+async function systemAuth(db: AppDb, warehouseId: string, userId: string | null): Promise<AuthContext> {
+  const user = userId ? (await db.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1))[0] : undefined;
   const scope = { warehouseIds: [warehouseId], clientIds: "all" as const };
   return {
     permissions: new Set(), restrictions: [], roleKeys: [],
@@ -330,20 +331,20 @@ function systemAuth(db: AppDb, warehouseId: string, userId: string | null): Auth
 export async function runAutoClose(db: AppDb, now: Date = new Date()): Promise<{ readonly closed: number; readonly rules: number }> {
   let closed = 0;
   let ran = 0;
-  for (const rule of rulesIn(db, null).filter((r) => r.isActive)) {
+  for (const rule of (await rulesIn(db, null)).filter((r) => r.isActive)) {
     const due = cutoffPassed(rule.cutoffTime, rule.timezone, now);
     if (!due || rule.lastRunDate === due.localDay) continue;
-    const updatedBy = db.get<{ u: string | null }>(sql`SELECT updated_by AS u FROM eod_auto_close_rules WHERE id = ${rule.id}`)?.u ?? null;
-    const auth = systemAuth(db, rule.warehouseId, updatedBy);
+    const updatedBy = (await dbGet<{ u: string | null }>(db, sql`SELECT updated_by AS u FROM eod_auto_close_rules WHERE id = ${rule.id}`))?.u ?? null;
+    const auth = await systemAuth(db, rule.warehouseId, updatedBy);
     const ctx: DomainCtx = { userId: updatedBy, source: "EOD auto-close" };
-    const targets = rowsToAutoClose(buildEodRows(db, auth.scope, now), rule, due.localDay);
+    const targets = rowsToAutoClose(await buildEodRows(db, auth.scope, now), rule, due.localDay);
     let message = "Nothing to close";
     if (targets.length > 0) {
       const res = await closeManifests(db, auth, ctx, targets.map((t) => t.id));
       closed += res.succeeded.length;
       message = `Closed ${res.succeeded.length} of ${targets.length}${res.failed.length ? `; ${res.failed[0]?.message}` : ""}`;
     }
-    db.run(sql`UPDATE eod_auto_close_rules SET last_run_date = ${due.localDay}, last_run_at = ${now.toISOString()}, last_result = ${message} WHERE id = ${rule.id}`);
+    await dbRun(db, sql`UPDATE eod_auto_close_rules SET last_run_date = ${due.localDay}, last_run_at = ${now.toISOString()}, last_result = ${message} WHERE id = ${rule.id}`);
     ran += 1;
   }
   return { closed, rules: ran };
@@ -359,8 +360,8 @@ export interface OverdueSummary {
 }
 
 /** Open manifests from past ship days (warehouse-local) in the caller's view scope. */
-export function overdueManifests(db: AppDb, auth: AuthContext, now: Date = new Date()): OverdueSummary {
-  const rows = buildEodRows(db, auth.viewScope, now).filter((r) => r.status === "Open" && r.isOverdue && r.totalPackages > 0)
+export async function overdueManifests(db: AppDb, auth: AuthContext, now: Date = new Date()): Promise<OverdueSummary> {
+  const rows = (await buildEodRows(db, auth.viewScope, now)).filter((r) => r.status === "Open" && r.isOverdue && r.totalPackages > 0)
     .sort((a, b) => a.shipDate.localeCompare(b.shipDate) || a.carrierPrefix.localeCompare(b.carrierPrefix));
   return {
     count: rows.length, packages: rows.reduce((s, r) => s + r.totalPackages, 0), oldestShipDate: rows[0]?.shipDate ?? null,

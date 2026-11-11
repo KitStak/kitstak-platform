@@ -4,7 +4,7 @@
  * Relative imports only: drizzle-kit loads the schema without the `@/` alias.
  */
 import { sql } from "drizzle-orm";
-import { integer, text } from "drizzle-orm/sqlite-core";
+import { boolean, integer, jsonb, text } from "drizzle-orm/pg-core";
 import type { CustomFieldValues } from "../../lib/enums";
 
 export const nowIso = (): string => new Date().toISOString();
@@ -19,9 +19,11 @@ export const pk = () => text("id").primaryKey().$defaultFn(() => crypto.randomUU
  */
 export const requiredPk = () => text("id").primaryKey();
 
-export const bool = (name: string) => integer(name, { mode: "boolean" });
+/** Postgres `boolean` (was SQLite integer 0/1). Raw SQL must compare with true/false, never 1/0. */
+export const bool = (name: string) => boolean(name);
 
-export const json = <T>(name: string) => text(name, { mode: "json" }).$type<T>();
+/** Postgres `jsonb` (was SQLite JSON text). Raw SQL uses jsonb operators (->, ->>, jsonb_array_elements). */
+export const json = <T>(name: string) => jsonb(name).$type<T>();
 
 /** created/updated stamps + optimistic-concurrency version. Replaces any existing createdAt. */
 export const stamps = () => ({

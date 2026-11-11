@@ -36,13 +36,12 @@ export interface HasPermissions {
   readonly permissions: ReadonlySet<PermissionKey>;
 }
 
-export function loadPermissions(db: AppDb, user: Pick<SessionUser, "id" | "role">): PermissionGrant {
-  const assigned = db
+export async function loadPermissions(db: AppDb, user: Pick<SessionUser, "id" | "role">): Promise<PermissionGrant> {
+  const assigned = await db
     .select({ id: roles.id, key: roles.key, restrictions: roles.restrictions })
     .from(userRoles)
     .innerJoin(roles, eq(roles.id, userRoles.roleId))
-    .where(eq(userRoles.userId, user.id))
-    .all();
+    .where(eq(userRoles.userId, user.id));
 
   const restrictions = [...new Set(assigned.flatMap((r) => r.restrictions ?? []))];
   const roleKeys = assigned.map((r) => r.key);
@@ -53,11 +52,10 @@ export function loadPermissions(db: AppDb, user: Pick<SessionUser, "id" | "role"
   if (assigned.length === 0) {
     return { permissions: new Set(DEFAULT_ROLE_PERMISSIONS[user.role]), restrictions, roleKeys };
   }
-  const granted = db
+  const granted = (await db
     .select({ permission: rolePermissions.permission })
     .from(rolePermissions)
-    .where(inArray(rolePermissions.roleId, assigned.map((r) => r.id)))
-    .all()
+    .where(inArray(rolePermissions.roleId, assigned.map((r) => r.id))))
     .map((r) => r.permission)
     .filter(isPermissionKey);
   return { permissions: new Set([...granted, ...SELF_SERVICE_PERMISSIONS]), restrictions, roleKeys };
@@ -90,7 +88,7 @@ export interface PageAuth extends PermissionGrant {
 export async function requirePagePermission(key: PermissionKey | readonly PermissionKey[], from?: string): Promise<PageAuth> {
   const user = await getSessionUser();
   if (!user) redirect(from ? `/login?next=${encodeURIComponent(from)}` : "/login");
-  const grant = loadPermissions(await getAppDb(), user);
+  const grant = await loadPermissions(await getAppDb(), user);
   const keys = typeof key === "string" ? [key] : key;
   if (!canAny(grant, keys)) redirect(from ? `${FORBIDDEN_PATH}?from=${encodeURIComponent(from)}` : FORBIDDEN_PATH);
   return { user, ...grant };

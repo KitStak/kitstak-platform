@@ -1,9 +1,9 @@
 /**
  * Data scope: which warehouses and clients a user may see (BUILD_PLAN 0.4 #5).
  *
- *   const scope = getScope(db, user);                 // full entitlement
+ *   const scope = await getScope(db, user);           // full entitlement
  *   const view  = narrowScope(scope, ctxWh, ctxClient); // header context switcher
- *   db.select().from(orders).where(and(scopedWhere(orders, view), ...));
+ *   await db.select().from(orders).where(and(scopedWhere(orders, view), ...));
  *
  * Every repository must AND `scopedWhere(table, scope)` into its reads. Cross-scope access
  * returns 404 (`assertInScope`), never 403, so existence does not leak.
@@ -15,7 +15,7 @@
  *   - context cookies (`ks_ctx_wh`, `ks_ctx_client`) only ever NARROW the scope.
  */
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import { userClients, userWarehouses, warehouses } from "@/server/db/schema";
 import type { AppDb } from "@/server/api/db";
 import { notFoundError } from "@/server/api/errors";
@@ -31,19 +31,18 @@ export interface Scope {
   readonly clientIds: ClientScope;
 }
 
-export function getScope(db: AppDb, user: Pick<SessionUser, "id" | "role" | "allClients">): Scope {
-  const allWarehouseIds = (): string[] => db.select({ id: warehouses.id }).from(warehouses).all().map((r) => r.id);
-  const linked = db
+export async function getScope(db: AppDb, user: Pick<SessionUser, "id" | "role" | "allClients">): Promise<Scope> {
+  const allWarehouseIds = async (): Promise<string[]> => (await db.select({ id: warehouses.id }).from(warehouses)).map((r) => r.id);
+  const linked = (await db
     .select({ id: userWarehouses.warehouseId })
     .from(userWarehouses)
-    .where(eq(userWarehouses.userId, user.id))
-    .all()
+    .where(eq(userWarehouses.userId, user.id)))
     .map((r) => r.id);
-  const warehouseIds = user.role === "admin" || linked.length === 0 ? allWarehouseIds() : linked;
+  const warehouseIds = user.role === "admin" || linked.length === 0 ? await allWarehouseIds() : linked;
 
   const clientIds: ClientScope = user.allClients
     ? "all"
-    : db.select({ id: userClients.clientId }).from(userClients).where(eq(userClients.userId, user.id)).all().map((r) => r.id);
+    : (await db.select({ id: userClients.clientId }).from(userClients).where(eq(userClients.userId, user.id))).map((r) => r.id);
 
   return { warehouseIds, clientIds };
 }
@@ -64,15 +63,15 @@ export function narrowScope(scope: Scope, warehouseId?: string | null, clientId?
 }
 
 export interface ScopeColumns {
-  readonly warehouseId?: SQLiteColumn;
-  readonly clientId?: SQLiteColumn;
+  readonly warehouseId?: PgColumn;
+  readonly clientId?: PgColumn;
 }
 
-const FALSE_SQL: SQL = sql`0 = 1`;
+const FALSE_SQL: SQL = sql`false`;
 
 function columnsOf(table: object, explicit?: ScopeColumns): ScopeColumns {
   if (explicit) return explicit;
-  const t = table as { warehouseId?: SQLiteColumn; clientId?: SQLiteColumn };
+  const t = table as { warehouseId?: PgColumn; clientId?: PgColumn };
   return { warehouseId: t.warehouseId, clientId: t.clientId };
 }
 

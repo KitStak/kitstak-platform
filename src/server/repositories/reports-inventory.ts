@@ -10,6 +10,7 @@ import { BACKLOG_VIEW_STATUSES } from "@/lib/grid-defs/orders/shipment-orders";
 import { REPLENISHMENT_DEF, SERIAL_RECEIPTS_DEF, SERIAL_SHIPMENTS_DEF, SERIAL_TRACKING_DEF, SNAPSHOT_DEF } from "@/lib/grid-defs/reports/inventory";
 import { isValidTimeZone, localParts } from "@/server/scheduler/timezone";
 import { clientIn, inList, runReport, warehouseLabel, type ReportPage } from "./reports-grid";
+import { dbAll } from "@/server/db/sql";
 
 type Row = Record<string, unknown>;
 
@@ -97,9 +98,9 @@ export function serialReceiptsSql(auth: AuthContext): SQL {
     WHERE t.type IN ('Receiving', 'Return Receiving') AND ${scoped(auth, "r.warehouse_id", "r.client_id")}`;
 }
 
-export const listSerialTracking = (db: AppDb, auth: AuthContext, q: GridQuery): ReportPage<Row> => runReport<Row>(db, serialTrackingSql(auth), SERIAL_TRACKING_DEF, q);
-export const listSerialShipments = (db: AppDb, auth: AuthContext, q: GridQuery): ReportPage<Row> => runReport<Row>(db, serialShipmentsSql(auth), SERIAL_SHIPMENTS_DEF, q);
-export const listSerialReceipts = (db: AppDb, auth: AuthContext, q: GridQuery): ReportPage<Row> => runReport<Row>(db, serialReceiptsSql(auth), SERIAL_RECEIPTS_DEF, q);
+export const listSerialTracking = async (db: AppDb, auth: AuthContext, q: GridQuery): Promise<ReportPage<Row>> => await runReport<Row>(db, serialTrackingSql(auth), SERIAL_TRACKING_DEF, q);
+export const listSerialShipments = async (db: AppDb, auth: AuthContext, q: GridQuery): Promise<ReportPage<Row>> => await runReport<Row>(db, serialShipmentsSql(auth), SERIAL_SHIPMENTS_DEF, q);
+export const listSerialReceipts = async (db: AppDb, auth: AuthContext, q: GridQuery): Promise<ReportPage<Row>> => await runReport<Row>(db, serialReceiptsSql(auth), SERIAL_RECEIPTS_DEF, q);
 
 /* ------------------------------------------------------------ replenishment */
 
@@ -113,11 +114,11 @@ export function replenishmentSql(auth: AuthContext): SQL {
       SELECT rl.product_id AS pid, rl.warehouse_id AS wid, p.client_id AS cid, rl.min_level AS min_level, rl.max_level AS max_level,
         (SELECT COALESCE(SUM(i.on_hand), 0) FROM inventory i JOIN locations l ON l.id = i.location_id
           WHERE i.product_id = rl.product_id AND i.warehouse_id = rl.warehouse_id AND l.type = 'Reserve') AS src_total,
-        (SELECT COALESCE(SUM(MAX(i.on_hand - i.allocated - i.damaged, 0)), 0) FROM inventory i JOIN locations l ON l.id = i.location_id
+        (SELECT COALESCE(SUM(GREATEST(i.on_hand - i.allocated - i.damaged, 0)), 0) FROM inventory i JOIN locations l ON l.id = i.location_id
           WHERE i.product_id = rl.product_id AND i.warehouse_id = rl.warehouse_id AND l.type = 'Reserve' AND i.status = 'Stock') AS src_free,
-        (SELECT COALESCE(SUM(MAX(i.on_hand - i.allocated - i.damaged, 0)), 0) FROM inventory i JOIN locations l ON l.id = i.location_id
+        (SELECT COALESCE(SUM(GREATEST(i.on_hand - i.allocated - i.damaged, 0)), 0) FROM inventory i JOIN locations l ON l.id = i.location_id
           WHERE i.product_id = rl.product_id AND i.warehouse_id = rl.warehouse_id AND l.type = 'Picking' AND i.status = 'Stock') AS tgt_avail,
-        (SELECT COALESCE(SUM(MAX(ol.quantity - COALESCE(ol.shipped_quantity, 0) - COALESCE(ol.cancelled_quantity, 0), 0) * COALESCE(ol.uom_ratio, 1)), 0)
+        (SELECT COALESCE(SUM(GREATEST(ol.quantity - COALESCE(ol.shipped_quantity, 0) - COALESCE(ol.cancelled_quantity, 0), 0) * COALESCE(ol.uom_ratio, 1)), 0)
           FROM order_lines ol JOIN shipment_orders o ON o.id = ol.order_id
           WHERE ol.product_id = rl.product_id AND o.warehouse_id = rl.warehouse_id AND o.deleted_at IS NULL AND o.status IN ${OPEN_STATUSES}) AS open_qty,
         (SELECT COALESCE(SUM(t.planned_qty), 0) FROM tasks t
@@ -130,7 +131,7 @@ export function replenishmentSql(auth: AuthContext): SQL {
            b.cid AS "clientId", c.name AS "client", p.sku AS "sku", p.name AS "productName", '/products/' || p.id AS "productHref",
            b.min_level AS "minLevel", b.max_level AS "maxLevel", b.src_total AS "sourceTotalQty", b.src_free AS "sourceFreeQty",
            b.tgt_avail AS "targetAvailableQty", b.open_qty AS "openOrderQty", b.task_qty AS "openReplenishTaskQty",
-           MAX(b.max_level + b.open_qty - b.tgt_avail - b.task_qty, 0) AS "toReplenishQty", b.is_active AS "isActive"
+           GREATEST(b.max_level + b.open_qty - b.tgt_avail - b.task_qty, 0) AS "toReplenishQty", b.is_active AS "isActive"
     FROM base b JOIN products p ON p.id = b.pid JOIN clients c ON c.id = b.cid JOIN warehouses w ON w.id = b.wid`;
 }
 
@@ -138,8 +139,8 @@ export function computeToReplenish(input: { max: number; openOrderQty: number; t
   return Math.max(input.max + input.openOrderQty - input.targetAvailable - input.openTaskQty, 0);
 }
 
-export const listReplenishment = (db: AppDb, auth: AuthContext, q: GridQuery): ReportPage<Row> =>
-  runReport<Row>(db, replenishmentSql(auth), REPLENISHMENT_DEF, q);
+export const listReplenishment = async (db: AppDb, auth: AuthContext, q: GridQuery): Promise<ReportPage<Row>> =>
+  await runReport<Row>(db, replenishmentSql(auth), REPLENISHMENT_DEF, q);
 
 /* ----------------------------------------------------------------- snapshot */
 
@@ -194,12 +195,12 @@ export function missingSnapshotDays(runs: readonly SnapshotRun[], warehouseId: s
   return out;
 }
 
-export function snapshotRuns(db: AppDb, auth: AuthContext): SnapshotRun[] {
-  const raw = db.all<{ warehouseId: string; snapshotAt: string; timezone: string | null }>(sql`
+export async function snapshotRuns(db: AppDb, auth: AuthContext): Promise<SnapshotRun[]> {
+  const raw = await dbAll<{ warehouseId: string; snapshotAt: string; timezone: string | null }>(db, sql`
     SELECT s.warehouse_id AS "warehouseId", s.snapshot_at AS "snapshotAt", w.timezone AS "timezone"
     FROM inventory_snapshots s JOIN warehouses w ON w.id = s.warehouse_id
     WHERE ${inList(sql.raw("s.warehouse_id"), auth.viewScope.warehouseIds)}
-    GROUP BY s.warehouse_id, s.snapshot_at`);
+    GROUP BY s.warehouse_id, s.snapshot_at, w.timezone ORDER BY s.warehouse_id, s.snapshot_at`);
   return classifySnapshotRuns(raw);
 }
 
@@ -220,7 +221,7 @@ export function snapshotSql(auth: AuthContext, runs: readonly SnapshotRun[] = []
            s.uom_qty AS "uomQty", s.pack_qty AS "packQty", s.lot_number AS "lotNumber", s.expiry_date AS "expiryDate",
            s.damage_reason AS "damageReason", plp.number AS "parentLp", p.uom AS "uomPackType", s.pack_type AS "packType",
            s.status AS "status", s.production_date AS "productionDate",
-           p.height_in AS "productHeight", p.length_in AS "productLength", ROUND(p.weight_oz, 2) AS "productWeight", p.width_in AS "productWidth"
+           p.height_in AS "productHeight", p.length_in AS "productLength", ROUND((p.weight_oz)::numeric, 2)::float8 AS "productWeight", p.width_in AS "productWidth"
     FROM inventory_snapshots s
     JOIN (${runsTable(runs)}) r ON r.warehouse_id = s.warehouse_id AND r.snapshot_at = s.snapshot_at
     JOIN products p ON p.id = s.product_id
@@ -232,8 +233,8 @@ export function snapshotSql(auth: AuthContext, runs: readonly SnapshotRun[] = []
     WHERE ${scoped(auth, "s.warehouse_id", "s.client_id")}`;
 }
 
-export const listSnapshot = (db: AppDb, auth: AuthContext, q: GridQuery): ReportPage<Row> =>
-  runReport<Row>(db, snapshotSql(auth, snapshotRuns(db, auth)), SNAPSHOT_DEF, q);
+export const listSnapshot = async (db: AppDb, auth: AuthContext, q: GridQuery): Promise<ReportPage<Row>> =>
+  await runReport<Row>(db, snapshotSql(auth, await snapshotRuns(db, auth)), SNAPSHOT_DEF, q);
 
 export interface SnapshotCoverage {
   readonly warehouseId: string;
@@ -244,11 +245,11 @@ export interface SnapshotCoverage {
   readonly missingDays: readonly string[];
 }
 
-export function snapshotCoverage(db: AppDb, auth: AuthContext): SnapshotCoverage[] {
-  const runs = snapshotRuns(db, auth);
-  const names = new Map(db.all<{ id: string; label: string }>(sql`
+export async function snapshotCoverage(db: AppDb, auth: AuthContext): Promise<SnapshotCoverage[]> {
+  const runs = await snapshotRuns(db, auth);
+  const names = new Map((await dbAll<{ id: string; label: string }>(db, sql`
     SELECT w.id AS "id", ${warehouseLabel("w")} AS "label" FROM warehouses w
-    WHERE ${inList(sql.raw("w.id"), auth.viewScope.warehouseIds)}`).map((w) => [w.id, w.label]));
+    WHERE ${inList(sql.raw("w.id"), auth.viewScope.warehouseIds)}`)).map((w) => [w.id, w.label]));
   return [...new Set(runs.map((r) => r.warehouseId))].map((id) => {
     const own = runs.filter((r) => r.warehouseId === id);
     const latest = own.find((r) => r.latest)?.businessDate ?? null;

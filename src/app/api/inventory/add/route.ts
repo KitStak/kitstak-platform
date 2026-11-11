@@ -8,5 +8,5 @@ import { INVENTORY_PERMISSIONS as P } from "@/lib/grid-defs/inventory/permission
 export const POST = defineRoute({
   permission: [P.addByAttributes, P.addLine],
   body: addInventorySchema,
-  handler: ({ db, auth, actor, body }) => created(addInventory(db, domainCtx(actor, auth), body)),
+  handler: async ({ db, auth, actor, body }) => created(await addInventory(db, domainCtx(actor, auth), body)),
 });

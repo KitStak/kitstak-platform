@@ -7,5 +7,5 @@ import { deletePlans } from "@/server/repositories/shipment-plans";
 export const POST = defineRoute({
   permission: "fulfillment.shipment_plan.delete",
   body: z.object({ ids: bulkIdsSchema }),
-  handler: ({ db, auth, actor, body }) => deletePlans(db, auth, domainCtx(actor, auth), body.ids),
+  handler: async ({ db, auth, actor, body }) => await deletePlans(db, auth, domainCtx(actor, auth), body.ids),
 });

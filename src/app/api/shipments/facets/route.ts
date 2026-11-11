@@ -6,5 +6,5 @@ export const GET = defineRoute({
   permission: [
     "fulfillment.carrier_shipment_details.view", "fulfillment.end_of_day.view", "fulfillment.shipment_history.view", "fulfillment.shipment_plan.view",
   ],
-  handler: ({ db, auth }) => shippingFacets(db, auth.viewScope),
+  handler: async ({ db, auth }) => await shippingFacets(db, auth.viewScope),
 });

@@ -3,7 +3,8 @@
  * the caller's warehouse/client scope (scopedWhere); M10 may replace it. LPs have no
  * detail route yet, so hits open the LP Numbers list searched for that number.
  */
-import { and, asc, eq, or, type SQL } from "drizzle-orm";
+import { and, eq, or, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import { scopedWhere } from "@/server/auth/scope";
 import { licensePlates, locations } from "@/server/db/schema";
 import { COUNT_ALL, containsText, matchRank } from "../match";
@@ -25,16 +26,15 @@ export const provider: SearchProvider = {
   configured: true,
   permission: "settings.lp_numbers.view",
   seeAllHref: (q) => listSearchHref(LIST_PATH, q),
-  count: (ctx) => ctx.db.select({ n: COUNT_ALL }).from(licensePlates).where(where(ctx)).get()?.n ?? 0,
-  search: (ctx) =>
-    ctx.db
+  count: async (ctx) => (await ctx.db.select({ n: COUNT_ALL }).from(licensePlates).where(where(ctx)).limit(1))[0]?.n ?? 0,
+  search: async (ctx) =>
+    (await ctx.db
       .select({ id: licensePlates.id, number: licensePlates.number, alternateBarcode: licensePlates.alternateBarcode, status: licensePlates.status, locationCode: locations.code })
       .from(licensePlates)
       .leftJoin(locations, eq(locations.id, licensePlates.locationId))
       .where(where(ctx))
       .orderBy(matchRank(licensePlates.number, ctx.q), asc(licensePlates.number))
-      .limit(ctx.limit)
-      .all()
+      .limit(ctx.limit))
       .map((lp) => ({
         id: lp.id,
         title: lp.number,

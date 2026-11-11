@@ -56,8 +56,8 @@ export interface ImportHandler {
   readonly owner: string;
   /** Optional cross-field validation over the typed row (runs after column checks). */
   readonly rowSchema?: z.ZodType;
-  /** Applies one valid row (synchronous: better-sqlite3 transaction). */
-  apply(ctx: ImportApplyContext, row: ImportRowValues): ImportApplyResult;
+  /** Applies one valid row (async allowed; runs in a savepoint of the import transaction). */
+  apply(ctx: ImportApplyContext, row: ImportRowValues): ImportApplyResult | Promise<ImportApplyResult>;
 }
 
 export interface ImportDefinition {

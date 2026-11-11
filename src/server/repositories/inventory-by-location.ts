@@ -10,6 +10,7 @@ import { assertInScope } from "@/server/auth/scope";
 import type { GridQuery } from "@/server/query/grid-query";
 import { BY_LOCATION_DEF } from "@/lib/grid-defs/inventory/by-location";
 import { clientIn, inList, runGrid, type GridPage } from "./inventory-grid";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 export interface BucketRow {
   readonly id: string;
@@ -88,7 +89,7 @@ export function bucketSql(filter: BucketFilter): SQL {
       i.pack_type AS "packType", p.uom AS "uomPackType", i.on_hand AS "totalQty", i.damaged AS "damagedQty",
       i.lot_number AS "lotNumber", i.expiry_date AS "expiryDate",
       pt.name AS "productType", pg.name AS "productGroup",
-      i.warehouse_id AS "warehouseId", CASE WHEN w.name LIKE w.code || '%' THEN w.name ELSE w.code || ' - ' || w.name END AS "warehouse", w.code AS "warehouseCode",
+      i.warehouse_id AS "warehouseId", CASE WHEN w.name ILIKE w.code || '%' THEN w.name ELSE w.code || ' - ' || w.name END AS "warehouse", w.code AS "warehouseCode",
       i.location_id AS "locationId", l.code AS "location",
       lg.name AS "locationGroup", lz.name AS "locationZone",
       l.location_type AS "locationType", l.area_type AS "areaType", l.replenishment_type AS "replenishmentType",
@@ -99,9 +100,10 @@ export function bucketSql(filter: BucketFilter): SQL {
       mc.code AS "mobileCart",
       i.status AS "status", i.damage_reason AS "damageReason",
       i.received_at AS "receivedAt", i.production_date AS "productionDate",
-      p.track_lot AS "trackLot", p.track_expiry AS "trackExpiry", p.track_production_date AS "trackProductionDate",
+      -- 0/1 as on SQLite (the API and the row label compare against 0).
+      p.track_lot::int AS "trackLot", p.track_expiry::int AS "trackExpiry", p.track_production_date::int AS "trackProductionDate",
       (SELECT cp.code FROM count_plan_lines cl JOIN count_plans cp ON cp.id = cl.plan_id
-        WHERE cp.lock_locations = 1
+        WHERE cp.lock_locations = true
           AND cp.status IN ('Pending', 'Ready To Count', 'Count Started', 'Count Completed')
           AND cl.status NOT IN ('Cancelled', 'Inventory Updated', 'Recount Created')
           AND (cl.location_id = i.location_id
@@ -129,14 +131,14 @@ export function bucketSql(filter: BucketFilter): SQL {
       AND (i.client_id IS NULL OR ${clientIn(sql`i.client_id`, filter.clientIds)})${ids}`;
 }
 
-export function listBuckets(db: AppDb, auth: AuthContext, query: GridQuery): GridPage<BucketRow> {
+export async function listBuckets(db: AppDb, auth: AuthContext, query: GridQuery): Promise<GridPage<BucketRow>> {
   const inner = bucketSql({ warehouseIds: auth.viewScope.warehouseIds, clientIds: auth.viewScope.clientIds });
-  return runGrid<BucketRow>(db, inner, BY_LOCATION_DEF, query, "id");
+  return await runGrid<BucketRow>(db, inner, BY_LOCATION_DEF, query, "id");
 }
 
 /** One bucket in the user's full scope (cross-scope → 404). */
-export function getBucketRow(db: AppDb, auth: AuthContext, id: string): BucketRow {
-  const row = findBucketRow(db, auth, id);
+export async function getBucketRow(db: AppDb, auth: AuthContext, id: string): Promise<BucketRow> {
+  const row = await findBucketRow(db, auth, id);
   if (!row) throw notFoundError("Inventory");
   return row;
 }
@@ -145,8 +147,8 @@ export function getBucketRow(db: AppDb, auth: AuthContext, id: string): BucketRo
  * The bucket's grid row, or null when it no longer has stock (emptied by Remove all /
  * Adjust to 0 / a transfer: the row leaves the grid, as in Logiwa) or does not exist.
  */
-export function findBucketRow(db: AppDb, auth: AuthContext, id: string): BucketRow | null {
-  const row = db.get<BucketRow>(sql`SELECT * FROM (${bucketSql({ warehouseIds: auth.scope.warehouseIds, clientIds: auth.scope.clientIds, ids: [id] })}) t`);
+export async function findBucketRow(db: AppDb, auth: AuthContext, id: string): Promise<BucketRow | null> {
+  const row = await dbGet<BucketRow>(db, sql`SELECT * FROM (${bucketSql({ warehouseIds: auth.scope.warehouseIds, clientIds: auth.scope.clientIds, ids: [id] })}) t`);
   if (!row) return null;
   assertInScope(auth.scope, row, "Inventory");
   return row;
@@ -207,9 +209,9 @@ function directionOf(t: RawTxn, bucketId: string): BucketTransaction["direction"
 
 export { directionOf as bucketTxnDirection };
 
-export function getBucketDetail(db: AppDb, auth: AuthContext, id: string): BucketDetail {
-  const bucket = getBucketRow(db, auth, id);
-  const allocations = db.all<BucketAllocation>(sql`
+export async function getBucketDetail(db: AppDb, auth: AuthContext, id: string): Promise<BucketDetail> {
+  const bucket = await getBucketRow(db, auth, id);
+  const allocations = await dbAll<BucketAllocation>(db, sql`
     SELECT a.id AS "id", a.qty AS "qty", a.status AS "status", a.order_id AS "orderId", o.code AS "orderCode",
       a.job_id AS "jobId", j.code AS "jobCode", a.work_order_id AS "workOrderId", wo.code AS "workOrderCode", a.created_at AS "createdAt"
     FROM inventory_allocations a
@@ -218,7 +220,7 @@ export function getBucketDetail(db: AppDb, auth: AuthContext, id: string): Bucke
     LEFT JOIN work_orders wo ON wo.id = a.work_order_id
     WHERE a.inventory_id = ${id} AND a.status NOT IN ('Shipped', 'Cancelled')
     ORDER BY a.created_at DESC`);
-  const raw = db.all<RawTxn>(sql`
+  const raw = await dbAll<RawTxn>(db, sql`
     SELECT t.id AS "id", t.seq AS "seq", t.type AS "type", t.uom_qty AS "qty",
       t.from_inventory_id AS "fromInventoryId", t.to_inventory_id AS "toInventoryId",
       fl.code AS "fromLocation", tl.code AS "toLocation", t.from_status AS "fromStatus", t.to_status AS "toStatus",

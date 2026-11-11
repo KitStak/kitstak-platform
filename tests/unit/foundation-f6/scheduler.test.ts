@@ -15,16 +15,16 @@ import { seededDb, tempStore, type SeededDb } from "./fixtures";
 
 const quietLog = createLogger({ sink: () => undefined });
 
-function seedInventory(testDb: SeededDb): void {
+async function seedInventory(testDb: SeededDb): Promise<void> {
   const { db, ids } = testDb;
-  db.insert(products).values({ id: "p-1", clientId: ids.c1, sku: "SKU1", barcode: "1", name: "Widget", category: "General", weightOz: 1, lengthIn: 1, widthIn: 1, heightIn: 1, price: 1, status: "Active" }).run();
-  db.insert(productPackTypes).values({ productId: "p-1", packType: "Case", kind: "Hierarchical", uomQty: 12 }).run();
-  db.insert(locations).values({ id: "loc-1", warehouseId: ids.wh1, code: "A-01", zone: "A", aisle: "1", bay: "1", level: "1", type: "Picking", capacityUnits: 100 }).run();
-  db.insert(inventory).values([
+  await db.insert(products).values({ id: "p-1", clientId: ids.c1, sku: "SKU1", barcode: "1", name: "Widget", category: "General", weightOz: 1, lengthIn: 1, widthIn: 1, heightIn: 1, price: 1, status: "Active" });
+  await db.insert(productPackTypes).values({ productId: "p-1", packType: "Case", kind: "Hierarchical", uomQty: 12 });
+  await db.insert(locations).values({ id: "loc-1", warehouseId: ids.wh1, code: "A-01", zone: "A", aisle: "1", bay: "1", level: "1", type: "Picking", capacityUnits: 100 });
+  await db.insert(inventory).values([
     { warehouseId: ids.wh1, productId: "p-1", locationId: "loc-1", onHand: 30, receivedAt: "2026-01-01T00:00:00Z", packType: "Case", clientId: null },
     { warehouseId: ids.wh1, productId: "p-1", locationId: "loc-1", onHand: 5, receivedAt: "2026-01-01T00:00:00Z", lotNumber: "L1", clientId: ids.c1 },
     { warehouseId: ids.wh1, productId: "p-1", locationId: "loc-1", onHand: 0, receivedAt: "2026-01-01T00:00:00Z", lotNumber: "L2", clientId: ids.c1 },
-  ]).run();
+  ]);
 }
 
 describe("timezone helpers", () => {
@@ -41,29 +41,29 @@ describe("timezone helpers", () => {
 
 describe("lease + run state", () => {
   let testDb: SeededDb;
-  beforeEach(() => {
-    testDb = seededDb();
-    ensureSchedulerTables(testDb.db);
-    ensureSchedulerTables(testDb.db); // idempotent
+  beforeEach(async () => {
+    testDb = await seededDb();
+    await ensureSchedulerTables(testDb.db);
+    await ensureSchedulerTables(testDb.db); // idempotent
   });
-  afterEach(() => testDb.close());
+  afterEach(async () => await testDb.close());
 
-  it("grants the lease to one owner until it expires or is released", () => {
+  it("grants the lease to one owner until it expires or is released", async () => {
     const t0 = new Date("2026-11-05T00:00:00Z");
-    expect(acquireLease(testDb.db, "a", t0, 60_000)).toBe(true);
-    expect(acquireLease(testDb.db, "b", new Date(t0.getTime() + 1000), 60_000)).toBe(false);
-    expect(acquireLease(testDb.db, "a", new Date(t0.getTime() + 1000), 60_000)).toBe(true);
-    expect(acquireLease(testDb.db, "b", new Date(t0.getTime() + 62_000), 60_000)).toBe(true);
-    releaseLease(testDb.db, "b", new Date(t0.getTime() + 63_000));
-    expect(acquireLease(testDb.db, "a", new Date(t0.getTime() + 63_000), 60_000)).toBe(true);
-    expect(readLease(testDb.db)?.owner).toBe("a");
+    expect(await acquireLease(testDb.db, "a", t0, 60_000)).toBe(true);
+    expect(await acquireLease(testDb.db, "b", new Date(t0.getTime() + 1000), 60_000)).toBe(false);
+    expect(await acquireLease(testDb.db, "a", new Date(t0.getTime() + 1000), 60_000)).toBe(true);
+    expect(await acquireLease(testDb.db, "b", new Date(t0.getTime() + 62_000), 60_000)).toBe(true);
+    await releaseLease(testDb.db, "b", new Date(t0.getTime() + 63_000));
+    expect(await acquireLease(testDb.db, "a", new Date(t0.getTime() + 63_000), 60_000)).toBe(true);
+    expect((await readLease(testDb.db))?.owner).toBe("a");
   });
 });
 
 describe("runner", () => {
   let testDb: SeededDb;
-  beforeEach(() => { testDb = seededDb(); });
-  afterEach(() => testDb.close());
+  beforeEach(async () => { testDb = await seededDb(); });
+  afterEach(async () => await testDb.close());
 
   const task = (key: string, run: SchedulerTask["run"], configured = true): SchedulerTask =>
     ({ key, title: key, owner: "test", configured, schedule: { kind: "interval", everyMs: 60_000 }, run });
@@ -83,7 +83,7 @@ describe("runner", () => {
     expect(first.status).toBe("ran");
     expect(first.ran).toEqual([{ key: "ok", status: "ok", message: "done" }, { key: "boom", status: "error", message: "kaput" }]);
     expect(stub).not.toHaveBeenCalled();
-    expect(readTaskRuns(testDb.db).get("boom")).toMatchObject({ lastStatus: "error", lastMessage: "kaput", runCount: 1 });
+    expect((await readTaskRuns(testDb.db)).get("boom")).toMatchObject({ lastStatus: "error", lastMessage: "kaput", runCount: 1 });
 
     clock = new Date(clock.getTime() + 30_000);
     expect((await runner.tick()).ran).toEqual([]);
@@ -103,7 +103,7 @@ describe("runner", () => {
     release();
     expect((await pending).status).toBe("ran");
 
-    acquireLease(testDb.db, "other", new Date(), 600_000);
+    await acquireLease(testDb.db, "other", new Date(), 600_000);
     expect((await runner.tick()).status).toBe("lease-held");
   });
 
@@ -128,15 +128,23 @@ describe("runner", () => {
     expect(isTaskDue({ ...t, configured: false }, undefined, now)).toBe(false);
     expect(isTaskDue(t, { taskKey: "x", lastStartedAt: "2026-11-05T00:00:30Z", lastFinishedAt: null, lastStatus: "ok", lastMessage: null, runCount: 1 }, now)).toBe(false);
   });
+
+  it("isTaskDue tolerates cron tick jitter (a 60 s task is due on a tick 59.8 s later)", () => {
+    const t = task("x", () => ({ status: "ok" }));
+    const state = (lastStartedAt: string) => ({ taskKey: "x", lastStartedAt, lastFinishedAt: null, lastStatus: "ok" as const, lastMessage: null, runCount: 1 });
+    expect(isTaskDue(t, state("2026-11-05T00:00:00.500Z"), new Date("2026-11-05T00:01:00.300Z"))).toBe(true);
+    // A local 30 s tick is still not enough for a 60 s task.
+    expect(isTaskDue(t, state("2026-11-05T00:00:00.000Z"), new Date("2026-11-05T00:00:30.000Z"))).toBe(false);
+  });
 });
 
 describe("tasks", () => {
   let testDb: SeededDb;
-  beforeEach(() => {
-    testDb = seededDb();
-    seedInventory(testDb);
+  beforeEach(async () => {
+    testDb = await seededDb();
+    await seedInventory(testDb);
   });
-  afterEach(() => testDb.close());
+  afterEach(async () => await testDb.close());
 
   it("registry contains foundation tasks plus the 0.6 stubs", () => {
     const byKey = new Map(SCHEDULER_TASKS.map((t) => [t.key, t]));
@@ -149,37 +157,37 @@ describe("tasks", () => {
     }
   });
 
-  it("snapshots each warehouse once per local day after 00:02", () => {
-    testDb.db.update(warehouses).set({ timezone: "America/Chicago" }).where(eq(warehouses.id, testDb.ids.wh1)).run();
-    testDb.db.update(warehouses).set({ timezone: "Not/AZone" }).where(eq(warehouses.id, testDb.ids.wh2)).run();
-    const before = runSnapshots({ db: testDb.db, now: new Date("2026-11-05T06:01:00Z"), log: quietLog }); // 00:01 CST
-    expect(testDb.db.select().from(inventorySnapshots).where(eq(inventorySnapshots.warehouseId, testDb.ids.wh1)).all()).toHaveLength(0);
+  it("snapshots each warehouse once per local day after 00:02", async () => {
+    await testDb.db.update(warehouses).set({ timezone: "America/Chicago" }).where(eq(warehouses.id, testDb.ids.wh1));
+    await testDb.db.update(warehouses).set({ timezone: "Not/AZone" }).where(eq(warehouses.id, testDb.ids.wh2));
+    const before = await runSnapshots({ db: testDb.db, now: new Date("2026-11-05T06:01:00Z"), log: quietLog }); // 00:01 CST
+    expect(await testDb.db.select().from(inventorySnapshots).where(eq(inventorySnapshots.warehouseId, testDb.ids.wh1))).toHaveLength(0);
     expect(before.message).not.toContain("W1");
 
-    const taken = runSnapshots({ db: testDb.db, now: new Date("2026-11-05T06:03:00Z"), log: quietLog });
+    const taken = await runSnapshots({ db: testDb.db, now: new Date("2026-11-05T06:03:00Z"), log: quietLog });
     expect(taken.status).toBe("ok");
-    const rows = testDb.db.select().from(inventorySnapshots).where(eq(inventorySnapshots.warehouseId, testDb.ids.wh1)).all();
+    const rows = await testDb.db.select().from(inventorySnapshots).where(eq(inventorySnapshots.warehouseId, testDb.ids.wh1));
     expect(rows).toHaveLength(2);
     const caseRow = rows.find((r) => r.packType === "Case");
     expect(caseRow).toMatchObject({ uomQty: 30, packQty: 2, clientId: testDb.ids.c1 });
 
-    runSnapshots({ db: testDb.db, now: new Date("2026-11-05T20:00:00Z"), log: quietLog });
-    expect(testDb.db.select().from(inventorySnapshots).where(eq(inventorySnapshots.warehouseId, testDb.ids.wh1)).all()).toHaveLength(2);
-    runSnapshots({ db: testDb.db, now: new Date("2026-11-06T06:05:00Z"), log: quietLog });
-    expect(testDb.db.select().from(inventorySnapshots).where(eq(inventorySnapshots.warehouseId, testDb.ids.wh1)).all()).toHaveLength(4);
+    await runSnapshots({ db: testDb.db, now: new Date("2026-11-05T20:00:00Z"), log: quietLog });
+    expect(await testDb.db.select().from(inventorySnapshots).where(eq(inventorySnapshots.warehouseId, testDb.ids.wh1))).toHaveLength(2);
+    await runSnapshots({ db: testDb.db, now: new Date("2026-11-06T06:05:00Z"), log: quietLog });
+    expect(await testDb.db.select().from(inventorySnapshots).where(eq(inventorySnapshots.warehouseId, testDb.ids.wh1))).toHaveLength(4);
   });
 
-  it("exports cleanup deletes expired files and fails interrupted exports", () => {
+  it("exports cleanup deletes expired files and fails interrupted exports", async () => {
     const now = new Date("2026-11-20T00:00:00Z");
     let clock = new Date("2026-11-01T00:00:00Z");
     const temp = tempStore(() => clock);
     try {
-      temp.store.store(testDb.db, { name: "e.xlsx", bytes: Buffer.from([0x50, 0x4b, 0x03, 0x04, 1]), purpose: "export" });
-      testDb.db.insert(backgroundTasks).values({ kind: "export", title: "t", userId: testDb.ids.admin, status: "queued", createdAt: "2026-11-19T00:00:00Z" }).run();
+      await temp.store.store(testDb.db, { name: "e.xlsx", bytes: Buffer.from([0x50, 0x4b, 0x03, 0x04, 1]), purpose: "export" });
+      await testDb.db.insert(backgroundTasks).values({ kind: "export", title: "t", userId: testDb.ids.admin, status: "queued", createdAt: "2026-11-19T00:00:00Z" });
       clock = now;
-      const result = runExportsCleanup({ db: testDb.db, now, log: quietLog }, temp.store);
+      const result = await runExportsCleanup({ db: testDb.db, now, log: quietLog }, temp.store);
       expect(result).toMatchObject({ status: "ok", message: "Deleted 1 expired files; failed 1 interrupted exports" });
-      expect(runExportsCleanup({ db: testDb.db, now, log: quietLog }, temp.store).status).toBe("skipped");
+      expect((await runExportsCleanup({ db: testDb.db, now, log: quietLog }, temp.store)).status).toBe("skipped");
     } finally {
       temp.cleanup();
     }

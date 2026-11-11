@@ -6,5 +6,5 @@ import { lpRemovalPreview } from "@/server/repositories/lp-numbers";
 export const POST = defineRoute({
   permission: ["settings.lp_numbers.view", "inventory.inventory_by_location.view"],
   body: bulkIds,
-  handler: ({ db, auth, body }) => lpRemovalPreview(db, auth, body.ids),
+  handler: async ({ db, auth, body }) => await lpRemovalPreview(db, auth, body.ids),
 });

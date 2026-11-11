@@ -49,26 +49,26 @@ describe("listing Create new: Initial quantity", () => {
 describe("two-phase paging keeps the sort order", () => {
   let w: World;
   let scope: Scope;
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     scope = { warehouseIds: [w.warehouseId], clientIds: "all" } as unknown as Scope;
   });
   afterEach(() => w.close());
   const q = (extra: Partial<GridQuery> = {}): GridQuery => ({ ...EMPTY_GRID_QUERY, pageSize: 3, ...extra });
 
-  it("products sorted by SKU desc, page 2", () => {
-    for (const s of ["A1", "A2", "A3", "A4", "A5"]) w.db.insert(schema.products).values({ clientId: w.clientId, sku: s, barcode: s, name: s, category: "General", weightOz: 1, lengthIn: 1, widthIn: 1, heightIn: 1, price: 1, status: "Active" }).run();
-    const all = listProducts(w.db, scope, q({ pageSize: 100, sort: [{ field: "sku", dir: "desc" }] })).rows.map((r) => r.sku);
-    const p2 = listProducts(w.db, scope, q({ page: 2, sort: [{ field: "sku", dir: "desc" }] }));
+  it("products sorted by SKU desc, page 2", async () => {
+    for (const s of ["A1", "A2", "A3", "A4", "A5"]) await w.db.insert(schema.products).values({ clientId: w.clientId, sku: s, barcode: s, name: s, category: "General", weightOz: 1, lengthIn: 1, widthIn: 1, heightIn: 1, price: 1, status: "Active" });
+    const all = (await listProducts(w.db, scope, q({ pageSize: 100, sort: [{ field: "sku", dir: "desc" }] }))).rows.map((r) => r.sku);
+    const p2 = await listProducts(w.db, scope, q({ page: 2, sort: [{ field: "sku", dir: "desc" }] }));
     expect(p2.rows.map((r) => r.sku)).toEqual(all.slice(3, 6));
     expect(p2.total).toBe(all.length);
   });
 
-  it("listings keep order and suggestion details", () => {
-    const ch = w.db.insert(schema.channelConnections).values({ provider: "shopify", storeName: "S", clientId: w.clientId, settings: {} as never }).returning().get().id;
-    const sku = w.db.select().from(schema.products).all()[0]?.sku ?? "";
-    for (const [i, s] of [sku, "X2", "X3"].entries()) w.db.insert(schema.productListings).values({ channelConnectionId: ch, clientId: w.clientId, sellerSku: s, channelProductId: `g${i}`, name: `L${i}` }).run();
-    const res = listListings(w.db, scope, q({ sort: [{ field: "sellerSku", dir: "asc" }] }), "unlinked");
+  it("listings keep order and suggestion details", async () => {
+    const ch = (await w.db.insert(schema.channelConnections).values({ provider: "shopify", storeName: "S", clientId: w.clientId, settings: {} as never }).returning())[0].id;
+    const sku = (await w.db.select().from(schema.products))[0]?.sku ?? "";
+    for (const [i, s] of [sku, "X2", "X3"].entries()) await w.db.insert(schema.productListings).values({ channelConnectionId: ch, clientId: w.clientId, sellerSku: s, channelProductId: `g${i}`, name: `L${i}` });
+    const res = await listListings(w.db, scope, q({ sort: [{ field: "sellerSku", dir: "asc" }] }), "unlinked");
     expect(res.rows.map((r) => r.sellerSku)).toEqual([sku, "X2", "X3"].sort());
     const hit = res.rows.find((r) => r.sellerSku === sku);
     expect(hit?.suggestedProductSku).toBe(sku);

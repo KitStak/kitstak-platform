@@ -19,13 +19,13 @@ const query = z.object({
 
 export const GET = defineRoute({
   query,
-  handler: ({ db, auth, query: q, grid }) => {
-    if (q.typeKeys !== undefined) return printTemplatesFor(db, listParam(q.typeKeys), q.clientId ?? null);
+  handler: async ({ db, auth, query: q, grid }) => {
+    if (q.typeKeys !== undefined) return await printTemplatesFor(db, listParam(q.typeKeys), q.clientId ?? null);
     // The template grid is admin metadata: same gate as the /settings/printouts page. The
     // `typeKeys` branch above stays open to print callers (active template names only).
     if (!auth.permissions.has("settings.printouts_labels.view")) throw forbiddenError("You don't have permission to view printout templates");
     const gq = grid();
-    const { rows, total } = listPrintouts(db, gq, q.typeKey);
+    const { rows, total } = await listPrintouts(db, gq, q.typeKey);
     return listResult(rows, { total, page: gq.page, pageSize: gq.pageSize });
   },
 });
@@ -33,9 +33,9 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.printouts_labels.create",
   body: printoutSchema,
-  handler: ({ db, auth, actor, body, audit }) => {
-    const row = createPrintout(db, auth, actor, body);
-    audit({ action: "printout.create", entity: "printout", entityId: row.id, detail: { name: row.name, type: body.typeKey } });
+  handler: async ({ db, auth, actor, body, audit }) => {
+    const row = await createPrintout(db, auth, actor, body);
+    await audit({ action: "printout.create", entity: "printout", entityId: row.id, detail: { name: row.name, type: body.typeKey } });
     return created(row);
   },
 });

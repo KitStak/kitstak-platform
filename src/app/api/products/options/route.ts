@@ -7,5 +7,5 @@ import { getGridOptions, getWizardOptions } from "@/server/repositories/products
 export const GET = defineRoute({
   permission: PRODUCT_READ_PERMISSIONS,
   query: z.object({ for: z.enum(["grid", "wizard"]).default("grid"), clientId: z.string().trim().max(64).optional() }),
-  handler: ({ db, auth, query }) => (query.for === "grid" ? getGridOptions(db, auth.viewScope) : getWizardOptions(db, auth.scope, query.clientId ?? null)),
+  handler: async ({ db, auth, query }) => (query.for === "grid" ? await getGridOptions(db, auth.viewScope) : await getWizardOptions(db, auth.scope, query.clientId ?? null)),
 });

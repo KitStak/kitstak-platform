@@ -1,5 +1,5 @@
 /** Inventory ledger: buckets, transactions, allocations, snapshots, missing log. */
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { ALLOCATION_STATUSES, INVENTORY_STATUSES, TXN_TYPES } from "../../../lib/enums";
 import { bool, nowIso, pk, stamps } from "../columns";
 import { products } from "./catalog";
@@ -18,7 +18,7 @@ export const LEGACY_BUCKET_KEY_PREFIX = "legacy:";
  * so the pre-F2 seed (which predates the column) still inserts; the ledger
  * always sets it and `db:verify` should assert it is present.
  */
-export const inventory = sqliteTable("inventory", {
+export const inventory = pgTable("inventory", {
   id: pk(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
   productId: text("product_id").notNull().references(() => products.id),
@@ -49,7 +49,7 @@ export const inventory = sqliteTable("inventory", {
   index("inventory_lp_idx").on(t.lpId),
 ]);
 
-export const inventoryTransactions = sqliteTable("inventory_transactions", {
+export const inventoryTransactions = pgTable("inventory_transactions", {
   id: pk(),
   seq: integer("seq").notNull(), // monotonic, stable ordering
   type: text("type", { enum: TXN_TYPES }).notNull(),
@@ -103,7 +103,7 @@ export const inventoryTransactions = sqliteTable("inventory_transactions", {
   uniqueIndex("itx_seq_idx").on(t.seq),
 ]);
 
-export const inventoryAllocations = sqliteTable("inventory_allocations", {
+export const inventoryAllocations = pgTable("inventory_allocations", {
   id: pk(),
   inventoryId: text("inventory_id").notNull().references(() => inventory.id),
   orderId: text("order_id"),
@@ -124,7 +124,7 @@ export const inventoryAllocations = sqliteTable("inventory_allocations", {
   index("alloc_job_idx").on(t.jobId),
 ]);
 
-export const inventorySnapshots = sqliteTable("inventory_snapshots", {
+export const inventorySnapshots = pgTable("inventory_snapshots", {
   id: pk(),
   snapshotAt: text("snapshot_at").notNull(),
   warehouseId: text("warehouse_id").notNull(),
@@ -143,7 +143,7 @@ export const inventorySnapshots = sqliteTable("inventory_snapshots", {
   packQty: integer("pack_qty").notNull(),
 }, (t) => [index("snap_at_idx").on(t.snapshotAt, t.warehouseId)]);
 
-export const missingLog = sqliteTable("missing_log", {
+export const missingLog = pgTable("missing_log", {
   id: pk(),
   waveNo: text("wave_no"),
   jobId: text("job_id"),

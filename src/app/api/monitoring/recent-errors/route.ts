@@ -5,9 +5,9 @@ import { listRecentErrors } from "@/server/repositories/monitoring";
 
 export const GET = defineRoute({
   permission: "integrations.integration_monitoring.view",
-  handler: ({ db, auth, grid, searchParams }) => {
+  handler: async ({ db, auth, grid, searchParams }) => {
     const q = grid();
-    const { rows, total } = listRecentErrors(db, auth, q, searchParams.get("tz"));
+    const { rows, total } = await listRecentErrors(db, auth, q, searchParams.get("tz"));
     return listResult(rows, { total, page: q.page, pageSize: q.pageSize });
   },
 });

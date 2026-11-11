@@ -11,8 +11,8 @@ export const POST = defineRoute({
   permission: "settings.vendors.edit",
   rateLimit: RATE_LIMITS.bulkIo,
   body: bulkIdsBodySchema.extend({ active: z.boolean() }),
-  handler: ({ db, auth, actor, body }) =>
-    runBulk(db, body.ids, (tx, id) => {
-      setVendorActive(tx, domainCtx(actor, auth), auth.scope, id, body.active);
+  handler: async ({ db, auth, actor, body }) =>
+    await runBulk(db, body.ids, async (tx, id) => {
+      await setVendorActive(tx, domainCtx(actor, auth), auth.scope, id, body.active);
     }),
 });

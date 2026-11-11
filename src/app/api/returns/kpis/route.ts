@@ -8,5 +8,5 @@ import { returnStationKpis } from "@/server/repositories/returns-receive";
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.station,
   query: z.object({ warehouseId: warehouseIdParam }),
-  handler: ({ db, auth, actor, query }) => returnStationKpis(db, auth.scope, query.warehouseId, actor.source),
+  handler: async ({ db, auth, actor, query }) => await returnStationKpis(db, auth.scope, query.warehouseId, actor.source),
 });

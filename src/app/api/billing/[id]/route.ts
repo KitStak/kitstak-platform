@@ -9,10 +9,10 @@ import { nextAutoRun } from "@/server/repositories/billing-reports";
 export const GET = defineRoute({
   permission: "settings.billing.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => {
-    const contract = getContract(db, auth, params.id);
+  handler: async ({ db, auth, params }) => {
+    const contract = await getContract(db, auth, params.id);
     // When the period-end scheduler next bills this contract (null while Draft).
-    return { ...contract, nextAutoRun: nextAutoRun(db, contract) };
+    return { ...contract, nextAutoRun: await nextAutoRun(db, contract) };
   },
 });
 
@@ -20,14 +20,14 @@ export const PATCH = defineRoute({
   permission: "settings.billing.edit",
   params: idParamsSchema,
   body: contractSchema,
-  handler: ({ db, auth, actor, params, body }) => updateContract(db, auth, actor, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updateContract(db, auth, actor, params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: "settings.billing.delete",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
-    const result = deleteContracts(db, auth, actor, [params.id]);
+  handler: async ({ db, auth, actor, params }) => {
+    const result = await deleteContracts(db, auth, actor, [params.id]);
     const failure = result.failed[0];
     if (failure) throw new AppError(failure.code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_STATE", failure.message);
     return result;

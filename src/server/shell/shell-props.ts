@@ -31,8 +31,8 @@ export interface ShellProps {
   readonly brandCss?: string | null;
 }
 
-function loadBrandCss(db: AppDb): string | null {
-  const b = getBranding(db);
+async function loadBrandCss(db: AppDb): Promise<string | null> {
+  const b = await getBranding(db);
   return b?.applyToApp ? brandAccentCss(b.accentColor) || null : null;
 }
 
@@ -43,9 +43,9 @@ export function passwordChangeReason(row: { readonly passwordChangedAt: string |
   return isPasswordExpired(row.passwordChangedAt, { maxAgeDays } as Parameters<typeof isPasswordExpired>[1], now) ? "expired" : null;
 }
 
-function loadPasswordChange(db: AppDb, userId: string): PasswordChangeReason {
-  const row = db.select({ passwordChangedAt: users.passwordChangedAt, isApiUser: users.isApiUser }).from(users).where(eq(users.id, userId)).get();
-  return passwordChangeReason(row, getPasswordPolicy(db).maxAgeDays);
+async function loadPasswordChange(db: AppDb, userId: string): Promise<PasswordChangeReason> {
+  const row = (await db.select({ passwordChangedAt: users.passwordChangedAt, isApiUser: users.isApiUser }).from(users).where(eq(users.id, userId)).limit(1))[0];
+  return passwordChangeReason(row, (await getPasswordPolicy(db)).maxAgeDays);
 }
 
 /** Null when there is no valid session. */
@@ -54,6 +54,6 @@ export async function loadShellProps(): Promise<ShellProps | null> {
   if (!auth) return null;
   const user = { id: auth.user.id, name: auth.user.name, email: auth.user.email, role: auth.user.role };
   const db = await getAppDb();
-  const initialContext = loadInitialShellContext(db, auth);
-  return { user, permissions: [...auth.permissions].sort(), initialContext, activeApps: listActiveAppKeys(db), passwordChange: loadPasswordChange(db, auth.user.id), idleMinutes: getSessionIdleMinutes(db), brandCss: loadBrandCss(db) };
+  const initialContext = await loadInitialShellContext(db, auth);
+  return { user, permissions: [...auth.permissions].sort(), initialContext, activeApps: await listActiveAppKeys(db), passwordChange: await loadPasswordChange(db, auth.user.id), idleMinutes: await getSessionIdleMinutes(db), brandCss: await loadBrandCss(db) };
 }

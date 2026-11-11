@@ -7,5 +7,5 @@ import { closeEodSchema, SHIPPING_PERMISSIONS } from "@/server/repositories/plat
 export const POST = defineRoute({
   permission: SHIPPING_PERMISSIONS.closeEod,
   body: closeEodSchema,
-  handler: ({ db, auth, actor, body }) => shipping.closeEndOfDay(db, domainCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await shipping.closeEndOfDay(db, domainCtx(actor, auth), body),
 });

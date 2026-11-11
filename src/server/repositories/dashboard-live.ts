@@ -18,6 +18,7 @@ import { compileOrderGrid } from "./orders-grid";
 import { viewCondition } from "./orders";
 import { snapshotCoverage } from "./reports-inventory";
 import { isValidTimeZone, localMidnightUtc, localParts } from "@/server/scheduler/timezone";
+import { dbAll, dbGet, mapSeq } from "@/server/db/sql";
 
 const so = schema.shipmentOrders;
 
@@ -120,9 +121,9 @@ export const daySpan = (d: DashboardDays, from: number | null, to: number | null
  * The zone the dashboard's days are computed in: the selected warehouses' zone, or (when
  * they differ) the zone of the first warehouse by code. `mixed` tells the UI to say so.
  */
-export function dashboardZone(db: AppDb, warehouseIds: readonly string[]): { readonly tz: string; readonly mixed: boolean; readonly label: string | null } {
+export async function dashboardZone(db: AppDb, warehouseIds: readonly string[]): Promise<{ readonly tz: string; readonly mixed: boolean; readonly label: string | null }> {
   if (warehouseIds.length === 0) return { tz: "UTC", mixed: false, label: null };
-  const rows = db.all<{ code: string; tz: string | null }>(sql`SELECT code, timezone AS tz FROM warehouses
+  const rows = await dbAll<{ code: string; tz: string | null }>(db, sql`SELECT code, timezone AS tz FROM warehouses
     WHERE id IN (${sql.join(warehouseIds.map((id) => sql`${id}`), sql`, `)}) ORDER BY code`);
   const zoneOf = (tz: string | null | undefined): string => (tz && isValidTimeZone(tz) ? tz : "UTC");
   const zones = [...new Set(rows.map((r) => zoneOf(r.tz)))];
@@ -180,10 +181,10 @@ export interface SnapshotGap {
 export const SNAPSHOT_ALERT_DAYS = 7;
 
 /** Recent snapshot gaps (business days within SNAPSHOT_ALERT_DAYS of the latest run) per warehouse in scope. */
-export function snapshotGaps(db: AppDb, auth: AuthContext, scope: Scope, days: DashboardDays = dashboardDays("UTC")): SnapshotGap[] {
+export async function snapshotGaps(db: AppDb, auth: AuthContext, scope: Scope, days: DashboardDays = dashboardDays("UTC")): Promise<SnapshotGap[]> {
   if (!can(auth, SNAPSHOT_DEF.permission as Parameters<typeof can>[1])) return [];
   const cutoff = days.day(-SNAPSHOT_ALERT_DAYS);
-  return snapshotCoverage(db, auth)
+  return (await snapshotCoverage(db, auth))
     .filter((c) => scope.warehouseIds.includes(c.warehouseId))
     .map((c) => ({ warehouseId: c.warehouseId, warehouse: c.warehouse, missingDays: c.missingDays.filter((d) => d >= cutoff), href: `/reports/inventory-snapshot?f.warehouseId=in:${encodeURIComponent(c.warehouseId)}` }))
     .filter((g) => g.missingDays.length > 0);
@@ -268,9 +269,9 @@ function orderHref(view: "backlog" | "shipped", filters: readonly GridFilter[]):
   return qs ? `${path}?${qs}` : path;
 }
 
-function metric(ctx: Ctx, label: string, view: "backlog" | "shipped", extra: string): Metric {
+async function metric(ctx: Ctx, label: string, view: "backlog" | "shipped", extra: string): Promise<Metric> {
   const filters = [...ctx.base, ...parseFilters(extra)];
-  const row = ctx.db.get<{ n: number; qty: number }>(sql`SELECT COUNT(*) AS n, COALESCE(SUM(total_quantity), 0) AS qty FROM shipment_orders WHERE ${orderWhere(ctx, view, filters)}`);
+  const row = await dbGet<{ n: number; qty: number }>(ctx.db, sql`SELECT COUNT(*) AS n, COALESCE(SUM(total_quantity), 0) AS qty FROM shipment_orders WHERE ${orderWhere(ctx, view, filters)}`);
   return { label, count: Number(row?.n ?? 0), packQty: Number(row?.qty ?? 0), href: orderHref(view, filters) };
 }
 
@@ -290,9 +291,9 @@ export function unfulfilledAgeBuckets(days: DashboardDays): readonly { readonly 
   ];
 }
 
-function unfulfilledAge(ctx: Ctx): Metric[] {
+async function unfulfilledAge(ctx: Ctx): Promise<Metric[]> {
   const statuses = inStatuses(["Open", ...IN_PROGRESS_STATUSES]);
-  return unfulfilledAgeBuckets(ctx.days).map((b) => metric(ctx, b.label, "backlog", `${statuses}&f.orderDate=${b.date}`));
+  return await mapSeq(unfulfilledAgeBuckets(ctx.days), async (b) => await metric(ctx, b.label, "backlog", `${statuses}&f.orderDate=${b.date}`));
 }
 
 /** Backlog statuses Logiwa's breakdown has no fixed line for: shown only when they hold orders. */
@@ -305,30 +306,30 @@ export const BREAKDOWN_BACKLOG_STATUSES = [
   "Shortage", "On Hold", "Partially Shipped",
 ] as const;
 
-function breakdown(ctx: Ctx): Metric[][] {
-  const s = (label: string, status: string) => metric(ctx, label, "backlog", inStatuses([status]));
-  const optional = (status: (typeof OPTIONAL_BREAKDOWN_STATUSES)[number]) => {
-    const m = s(status, status);
+async function breakdown(ctx: Ctx): Promise<Metric[][]> {
+  const s = async (label: string, status: string) => await metric(ctx, label, "backlog", inStatuses([status]));
+  const optional = async (status: (typeof OPTIONAL_BREAKDOWN_STATUSES)[number]) => {
+    const m = await s(status, status);
     return m.count > 0 ? [m] : [];
   };
   return [
-    [s("Open", "Open"), s("Ready to Pick", "Ready to Pick"), s("Picking Started", "Picking Started")],
+    [await s("Open", "Open"), await s("Ready to Pick", "Ready to Pick"), await s("Picking Started", "Picking Started")],
     [
-      s("Ready to Pack", "Ready to Pack"), s("Packing Started", "Packing Started"),
-      ...optional("Ready to Sort"), ...optional("Sorting Started"),
-      s("Ready to Load", "Ready to Load"), ...optional("Loading Started"), s("Ready to Ship", "Ready to Ship"),
+      await s("Ready to Pack", "Ready to Pack"), await s("Packing Started", "Packing Started"),
+      ...await optional("Ready to Sort"), ...await optional("Sorting Started"),
+      await s("Ready to Load", "Ready to Load"), ...await optional("Loading Started"), await s("Ready to Ship", "Ready to Ship"),
     ],
     [
-      metric(ctx, "Cancelled Today", "shipped", `${inStatuses(["Cancelled"])}&f.cancelledAt=${daySpan(ctx.days, 0, 0)}`),
-      s("Shortage", "Shortage"),
-      s("On Hold", "On Hold"),
+      await metric(ctx, "Cancelled Today", "shipped", `${inStatuses(["Cancelled"])}&f.cancelledAt=${daySpan(ctx.days, 0, 0)}`),
+      await s("Shortage", "Shortage"),
+      await s("On Hold", "On Hold"),
       // Partly shipped orders stay in the backlog (and in the rank cards) until the rest ships.
-      s("Partially Shipped", "Partially Shipped"),
+      await s("Partially Shipped", "Partially Shipped"),
     ],
     [
-      metric(ctx, "Already Shipped Today", "shipped", shippedTodayQs(ctx.days)),
-      metric(ctx, "Orders to be Shipped Today", "backlog", `f.expectedShipDate=${daySpan(ctx.days, null, 0)}`),
-      metric(ctx, "Orders to be Shipped Tomorrow", "backlog", `f.expectedShipDate=${daySpan(ctx.days, 1, 1)}`),
+      await metric(ctx, "Already Shipped Today", "shipped", shippedTodayQs(ctx.days)),
+      await metric(ctx, "Orders to be Shipped Today", "backlog", `f.expectedShipDate=${daySpan(ctx.days, null, 0)}`),
+      await metric(ctx, "Orders to be Shipped Tomorrow", "backlog", `f.expectedShipDate=${daySpan(ctx.days, 1, 1)}`),
     ],
   ];
 }
@@ -358,10 +359,10 @@ export function rankRows(
   return top;
 }
 
-function ranks(ctx: Ctx, expr: SQL, field: string, kind: "enum" | "text", view: "backlog" | "shipped" = "backlog", extra = ""): RankRow[] {
+async function ranks(ctx: Ctx, expr: SQL, field: string, kind: "enum" | "text", view: "backlog" | "shipped" = "backlog", extra = ""): Promise<RankRow[]> {
   const filters = [...ctx.base, ...(extra ? parseFilters(extra) : [])];
   const where = orderWhere(ctx, view, filters);
-  const rows = ctx.db.all<{ name: string | null; n: number }>(sql`SELECT ${expr} AS name, COUNT(*) AS n FROM shipment_orders WHERE ${where} GROUP BY 1 ORDER BY n DESC, name`);
+  const rows = await dbAll<{ name: string | null; n: number }>(ctx.db, sql`SELECT ${expr} AS name, COUNT(*) AS n FROM shipment_orders WHERE ${where} GROUP BY 1 ORDER BY n DESC, name`);
   const link = (name: string | null): string => {
     const f: GridFilter = name === null || name === ""
       ? { field, op: "empty" }
@@ -381,9 +382,9 @@ function ranks(ctx: Ctx, expr: SQL, field: string, kind: "enum" | "text", view: 
 /** Carriers ranked by the orders they shipped (Shipped / Partially Shipped / Delivered) in the last 7 local days. */
 export const carrierShippedQs = (d: DashboardDays): string => `${SHIPPED_IN}&f.shippedAt=${daySpan(d, -6, 0)}`;
 
-function clientRanks(ctx: Ctx): RankRow[] {
+async function clientRanks(ctx: Ctx): Promise<RankRow[]> {
   const where = orderWhere(ctx, "backlog", ctx.base);
-  const rows = ctx.db.all<{ id: string; name: string; n: number }>(sql`SELECT c.id AS id, c.name AS name, COUNT(*) AS n FROM shipment_orders JOIN clients c ON c.id = shipment_orders.client_id WHERE ${where} GROUP BY c.id ORDER BY n DESC, c.name`);
+  const rows = await dbAll<{ id: string; name: string; n: number }>(ctx.db, sql`SELECT c.id AS id, c.name AS name, COUNT(*) AS n FROM shipment_orders JOIN clients c ON c.id = shipment_orders.client_id WHERE ${where} GROUP BY c.id ORDER BY n DESC, c.name`);
   const total = rows.reduce((a, r) => a + Number(r.n), 0);
   const pct = (n: number) => (total > 0 ? Math.round((n / total) * 10000) / 100 : 0);
   const base = ctx.base.filter((f) => f.field !== "clientId");
@@ -401,16 +402,16 @@ export const ORDER_TASK_TYPES = TASK_TYPES_BY_KIND.order;
 const TASKS_GRID = "/tasks/order-operations";
 
 /** Warehouse / client name filters for the tasks grid (it filters by name, not id). */
-function taskScopeQs(ctx: Ctx): string {
-  const names = (table: "warehouses" | "clients", ids: readonly string[]) => ids.length === 0 ? [] :
-    ctx.db.all<{ name: string }>(sql`SELECT name FROM ${sql.raw(table)} WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) ORDER BY name`).map((r) => r.name);
+async function taskScopeQs(ctx: Ctx): Promise<string> {
+  const names = async (table: "warehouses" | "clients", ids: readonly string[]) => ids.length === 0 ? [] :
+    (await dbAll<{ name: string }>(ctx.db, sql`SELECT name FROM ${sql.raw(table)} WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) ORDER BY name`)).map((r) => r.name);
   const esc = (v: string) => encodeURIComponent(v.replace(/,/g, "\\,"));
-  const wh = names("warehouses", ctx.scope.warehouseIds);
-  const cl = ctx.scope.clientIds === "all" ? [] : names("clients", ctx.scope.clientIds);
+  const wh = await names("warehouses", ctx.scope.warehouseIds);
+  const cl = ctx.scope.clientIds === "all" ? [] : await names("clients", ctx.scope.clientIds);
   return `${wh.length ? `&f.warehouse=in:${wh.map(esc).join(",")}` : ""}${cl.length ? `&f.client=in:${cl.map(esc).join(",")}` : ""}`;
 }
 
-function progress(ctx: Ctx): LiveDashboard["progress"] {
+async function progress(ctx: Ctx): Promise<LiveDashboard["progress"]> {
   const t0 = ctx.days.start(0);
   const types = sql.join(ORDER_TASK_TYPES.map((x) => sql`${x}`), sql`, `);
   const whereTasks = and(
@@ -418,26 +419,26 @@ function progress(ctx: Ctx): LiveDashboard["progress"] {
     sql`${schema.tasks.taskType} IN (${types})`,
     sql`${schema.tasks.status} <> 'Cancelled' AND (${schema.tasks.status} IN ('Pending', 'Started') OR (${schema.tasks.status} = 'Completed' AND ${schema.tasks.finishedAt} >= ${t0}))`,
   );
-  const t = ctx.db.get<{ total: number; done: number }>(sql`SELECT COUNT(*) AS total, COALESCE(SUM(status = 'Completed'), 0) AS done FROM tasks WHERE ${whereTasks}`);
+  const t = await dbGet<{ total: number; done: number }>(ctx.db, sql`SELECT COUNT(*) AS total, COALESCE(SUM((status = 'Completed')::int), 0) AS done FROM tasks WHERE ${whereTasks}`);
 
   const shippedToday = orderWhere(ctx, "shipped", [...ctx.base, ...parseFilters(shippedTodayQs(ctx.days))]);
   // Same predicate and the same line-state CASE as the Order Line Progress grid, so each
   // part's count is exactly that grid's Total.
-  const lines = ctx.db.get<{ total: number; done: number; pickedOnly: number }>(sql`
-    SELECT COUNT(*) AS total, COALESCE(SUM(${LINE_STATE_SQL} = ${LINE_STATES[0]}), 0) AS done,
-           COALESCE(SUM(${LINE_STATE_SQL} = ${LINE_STATES[1]}), 0) AS "pickedOnly"
+  const lines = await dbGet<{ total: number; done: number; pickedOnly: number }>(ctx.db, sql`
+    SELECT COUNT(*) AS total, COALESCE(SUM((${LINE_STATE_SQL} = ${LINE_STATES[0]})::int), 0) AS done,
+           COALESCE(SUM((${LINE_STATE_SQL} = ${LINE_STATES[1]})::int), 0) AS "pickedOnly"
     FROM order_lines l JOIN shipment_orders ON shipment_orders.id = l.order_id
     WHERE ${dashboardLinesWhere(ctx.scope, ctx.base, ctx.days)}`);
 
   const dueFilters = [...ctx.base, ...parseFilters(`f.expectedShipDate=${daySpan(ctx.days, null, 0)}`)];
   const due = orderWhere(ctx, "backlog", dueFilters);
   const packedStatuses = sql.raw(`(${PACKED_STATUSES.map((s) => `'${s}'`).join(",")})`);
-  const dueRow = ctx.db.get<{ total: number; done: number }>(sql`SELECT COUNT(*) AS total, COALESCE(SUM(status IN ${packedStatuses}), 0) AS done FROM shipment_orders WHERE ${due}`);
-  const shippedRow = ctx.db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM shipment_orders WHERE ${shippedToday}`);
+  const dueRow = await dbGet<{ total: number; done: number }>(ctx.db, sql`SELECT COUNT(*) AS total, COALESCE(SUM((status IN ${packedStatuses})::int), 0) AS done FROM shipment_orders WHERE ${due}`);
+  const shippedRow = await dbGet<{ n: number }>(ctx.db, sql`SELECT COUNT(*) AS n FROM shipment_orders WHERE ${shippedToday}`);
   const shippedN = Number(shippedRow?.n ?? 0);
   const shippedTodayFilters = [...ctx.base, ...parseFilters(shippedTodayQs(ctx.days))];
   const shippedTodayHref = orderHref("shipped", shippedTodayFilters);
-  const scopeQs = taskScopeQs(ctx);
+  const scopeQs = await taskScopeQs(ctx);
   const openHref = `${TASKS_GRID}?f.status=in:Pending,Started${scopeQs}`;
   const doneHref = `${TASKS_GRID}?f.status=in:Completed&f.finishedAt=${daySpan(ctx.days, 0, 0)}${scopeQs}`;
   const taskDone = Number(t?.done ?? 0);
@@ -484,14 +485,14 @@ export const inListValue = (values: readonly string[]): string => `in:${values.m
  * number of warehouses or clients, not only one). Without a selection the jobs grid
  * applies the same header scope itself, so nothing is added.
  */
-function jobScope(ctx: Ctx): { readonly where: SQL | undefined; readonly qs: string } {
-  const names = (table: "warehouses" | "clients", ids: readonly string[]) => ids.length === 0 ? [] :
-    ctx.db.all<{ name: string }>(sql`SELECT name FROM ${sql.raw(table)} WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) ORDER BY name`).map((r) => r.name);
+async function jobScope(ctx: Ctx): Promise<{ readonly where: SQL | undefined; readonly qs: string }> {
+  const names = async (table: "warehouses" | "clients", ids: readonly string[]) => ids.length === 0 ? [] :
+    (await dbAll<{ name: string }>(ctx.db, sql`SELECT name FROM ${sql.raw(table)} WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) ORDER BY name`)).map((r) => r.name);
   const whSel = ctx.base.some((f) => f.field === "warehouseId");
   const clSel = ctx.base.some((f) => f.field === "clientId") && ctx.scope.clientIds !== "all";
   const clientIds = ctx.scope.clientIds === "all" ? [] : ctx.scope.clientIds;
-  const wh = whSel ? names("warehouses", ctx.scope.warehouseIds) : [];
-  const cl = clSel ? names("clients", clientIds) : [];
+  const wh = whSel ? await names("warehouses", ctx.scope.warehouseIds) : [];
+  const cl = clSel ? await names("clients", clientIds) : [];
   // A client selection counts only that client's jobs (multi-client jobs show as
   // "Multiple" in the grid, so they cannot be part of a client drilldown).
   const where = and(
@@ -501,9 +502,9 @@ function jobScope(ctx: Ctx): { readonly where: SQL | undefined; readonly qs: str
   return { where, qs: `${wh.length ? `&f.warehouse=${inListValue(wh)}` : ""}${cl.length ? `&f.client=${inListValue(cl)}` : ""}` };
 }
 
-function jobRows(ctx: Ctx, groupExpr: SQL, filterField: string, statusFilter: SQL, statusQs: string, valueOf?: (name: string) => string): JobRow[] {
-  const scope = jobScope(ctx);
-  const rows = ctx.db.all<{ name: string | null; units: number; orders: number; n: number }>(sql`
+async function jobRows(ctx: Ctx, groupExpr: SQL, filterField: string, statusFilter: SQL, statusQs: string, valueOf?: (name: string) => string): Promise<JobRow[]> {
+  const scope = await jobScope(ctx);
+  const rows = await dbAll<{ name: string | null; units: number; orders: number; n: number }>(ctx.db, sql`
     SELECT ${groupExpr} AS name, COALESCE(SUM(unit_count), 0) AS units, COALESCE(SUM(order_count), 0) AS orders, COUNT(*) AS n
     FROM jobs WHERE ${and(scope.where, statusFilter)} GROUP BY 1 ORDER BY n DESC, name`);
   const total = rows.reduce((a, r) => a + Number(r.n), 0);
@@ -526,7 +527,7 @@ function jobRows(ctx: Ctx, groupExpr: SQL, filterField: string, statusFilter: SQ
   });
 }
 
-function jobs(ctx: Ctx): LiveDashboard["jobs"] {
+async function jobs(ctx: Ctx): Promise<LiveDashboard["jobs"]> {
   const t0 = ctx.days.start(0);
   const open = sql`status IN ('Pending', 'Started', 'In Progress')`;
   const openQs = "f.status=in:Pending,Started";
@@ -534,31 +535,31 @@ function jobs(ctx: Ctx): LiveDashboard["jobs"] {
   // no finish date and the jobs grid has no cancelled-at filter (RA-C2-7), so a
   // "cancelled today" row could not open exactly the rows it counted.
   // "In Progress" is shown as "Started", exactly as the jobs grid maps it.
-  const statusRows = jobRows(ctx, sql`(CASE WHEN status = 'In Progress' THEN 'Started' ELSE status END)`, "status",
+  const statusRows = await jobRows(ctx, sql`(CASE WHEN status = 'In Progress' THEN 'Started' ELSE status END)`, "status",
     sql`(status IN ('Pending', 'Started', 'In Progress') OR (status = 'Completed' AND completed_at >= ${t0}))`, "",
     (name) => (name === "Completed" ? `in:Completed&f.completedAt=${daySpan(ctx.days, 0, 0)}` : `in:${encodeURIComponent(name)}`));
   return {
-    priority: jobRows(ctx, sql`COALESCE(NULLIF(priority, ''), 'None')`, "priority", open, openQs),
+    priority: await jobRows(ctx, sql`COALESCE(NULLIF(priority, ''), 'None')`, "priority", open, openQs),
     status: statusRows,
-    type: jobRows(ctx, sql`job_type`, "jobType", open, openQs),
+    type: await jobRows(ctx, sql`job_type`, "jobType", open, openQs),
   };
 }
 
-function shiftInfos(db: AppDb, scope: Scope): ShiftInfo[] {
+async function shiftInfos(db: AppDb, scope: Scope): Promise<ShiftInfo[]> {
   if (scope.warehouseIds.length === 0) return [];
-  const rows = db.all<{ id: string; code: string; name: string; tz: string; s: string; e: string }>(sql`
+  const rows = await dbAll<{ id: string; code: string; name: string; tz: string; s: string; e: string }>(db, sql`
     SELECT id, code, name, timezone AS tz, day_shift_start AS s, day_shift_end AS e FROM warehouses
     WHERE id IN (${sql.join(scope.warehouseIds.map((id) => sql`${id}`), sql`, `)}) ORDER BY code`);
   return rows.map((w) => ({ warehouseId: w.id, warehouseLabel: w.name.startsWith(w.code) ? w.name : `${w.code} - ${w.name}`, timeZone: w.tz, start: w.s, end: w.e }));
 }
 
-export function getLiveDashboard(db: AppDb, auth: AuthContext, sel: DashboardSelection, now: Date = new Date()): LiveDashboard {
+export async function getLiveDashboard(db: AppDb, auth: AuthContext, sel: DashboardSelection, now: Date = new Date()): Promise<LiveDashboard> {
   const scope = effectiveScope(auth, sel);
-  const zone = dashboardZone(db, scope.warehouseIds);
+  const zone = await dashboardZone(db, scope.warehouseIds);
   const days = dashboardDays(zone.tz, now);
   const ctx: Ctx = { db, scope, base: scopeFilters(scope, sel), days };
-  const open = metric(ctx, "Open", "backlog", inStatuses(["Open"]));
-  const inProgress = metric(ctx, "In Progress", "backlog", inStatuses(IN_PROGRESS_STATUSES));
+  const open = await metric(ctx, "Open", "backlog", inStatuses(["Open"]));
+  const inProgress = await metric(ctx, "In Progress", "backlog", inStatuses(IN_PROGRESS_STATUSES));
   const total: Metric = {
     label: "Total",
     count: open.count + inProgress.count,
@@ -569,20 +570,20 @@ export function getLiveDashboard(db: AppDb, auth: AuthContext, sel: DashboardSel
     asOf: now.toISOString(),
     businessDay: { date: days.day(0), timeZone: days.tz, mixedZones: zone.mixed, zoneWarehouse: zone.label },
     selection: { warehouseIds: scope.warehouseIds, clientIds: scope.clientIds },
-    ...((shifts) => ({ shift: scope.warehouseIds.length === 1 ? shifts[0] ?? null : null, shifts }))(shiftInfos(db, scope)),
-    progress: progress(ctx),
+    ...((shifts) => ({ shift: scope.warehouseIds.length === 1 ? shifts[0] ?? null : null, shifts }))(await shiftInfos(db, scope)),
+    progress: await progress(ctx),
     unfulfilled: { total, open, inProgress },
-    unfulfilledAge: unfulfilledAge(ctx),
-    breakdown: breakdown(ctx),
-    backlogTotal: metric(ctx, "Backlog orders", "backlog", ""),
+    unfulfilledAge: await unfulfilledAge(ctx),
+    breakdown: await breakdown(ctx),
+    backlogTotal: await metric(ctx, "Backlog orders", "backlog", ""),
     ranks: {
-      channels: ranks(ctx, sql`channel`, "channel", "enum"),
-      clients: clientRanks(ctx),
-      carriers: ranks(ctx, sql`NULLIF(carrier, '')`, "carrier", "enum"),
-      countries: ranks(ctx, sql`NULLIF(ship_country, '')`, "shipCountry", "text"),
-      carriersShipped: ranks(ctx, sql`NULLIF(carrier, '')`, "carrier", "enum", "shipped", carrierShippedQs(days)),
+      channels: await ranks(ctx, sql`channel`, "channel", "enum"),
+      clients: await clientRanks(ctx),
+      carriers: await ranks(ctx, sql`NULLIF(carrier, '')`, "carrier", "enum"),
+      countries: await ranks(ctx, sql`NULLIF(ship_country, '')`, "shipCountry", "text"),
+      carriersShipped: await ranks(ctx, sql`NULLIF(carrier, '')`, "carrier", "enum", "shipped", carrierShippedQs(days)),
     },
-    snapshotGaps: snapshotGaps(db, auth, scope, days),
-    jobs: jobs(ctx),
+    snapshotGaps: await snapshotGaps(db, auth, scope, days),
+    jobs: await jobs(ctx),
   };
 }

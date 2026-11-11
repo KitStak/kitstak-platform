@@ -7,5 +7,5 @@ import { customerSearch } from "@/server/repositories/orders-wizard";
 export const GET = defineRoute({
   permission: [ORDER_PERMISSIONS.create, ORDER_PERMISSIONS.edit],
   query: z.object({ clientId: z.string().trim().min(1).max(64), q: z.string().trim().max(100).default("") }),
-  handler: ({ db, auth, query }) => ({ items: customerSearch(db, auth.scope, query.clientId, query.q) }),
+  handler: async ({ db, auth, query }) => ({ items: await customerSearch(db, auth.scope, query.clientId, query.q) }),
 });

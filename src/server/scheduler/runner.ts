@@ -8,6 +8,7 @@
  *   failing task is recorded and logged and never stops the others.
  */
 import type { AppDb } from "@/server/api/db";
+import { withWriteTx } from "@/server/db/sql";
 import { toAppError } from "@/server/api/errors";
 import { log as rootLog, type Logger } from "@/server/log";
 import { acquireLease, ensureSchedulerTables, markTaskFinished, markTaskStarted, readTaskRuns, releaseLease } from "./store";
@@ -50,10 +51,22 @@ export interface SchedulerRunner {
   heartbeat(): SchedulerHeartbeat;
 }
 
+/**
+ * Tick-jitter allowance: a task counts as due slightly before its full interval. Vercel Cron
+ * calls /api/cron/tick once a minute with variable delay, so without it a 60 s task whose next
+ * tick lands at 59.8 s would wait a whole extra minute (running every ~2 min). The slack is a
+ * quarter of the interval, capped at 10 s, which is below half the local 30 s tick, so the
+ * in-process scheduler's cadence is unchanged.
+ */
+export function dueSlackMs(everyMs: number): number {
+  return Math.min(10_000, Math.floor(everyMs / 4));
+}
+
 export function isTaskDue(task: SchedulerTask, state: TaskRunState | undefined, now: Date): boolean {
   if (!task.configured) return false;
   if (!state?.lastStartedAt) return true;
-  return now.getTime() - new Date(state.lastStartedAt).getTime() >= task.schedule.everyMs;
+  const everyMs = task.schedule.everyMs;
+  return now.getTime() - new Date(state.lastStartedAt).getTime() >= everyMs - dueSlackMs(everyMs);
 }
 
 export function createSchedulerRunner(options: RunnerOptions): SchedulerRunner {
@@ -68,15 +81,16 @@ export function createSchedulerRunner(options: RunnerOptions): SchedulerRunner {
   let tablesReady = false;
 
   const runTask = async (db: AppDb, task: SchedulerTask): Promise<TickResult["ran"][number]> => {
-    markTaskStarted(db, task.key, now());
+    await markTaskStarted(db, task.key, now());
     try {
-      const result = await task.run({ db, now: now(), log: logger.child({ task: task.key }) });
-      markTaskFinished(db, task.key, now(), result);
+      // Every scheduler write runs in one transaction holding the app write lock (docs/POSTGRES_MIGRATION.md).
+      const result = await withWriteTx(db, async (tx) => await task.run({ db: tx, now: now(), log: logger.child({ task: task.key }) }));
+      await markTaskFinished(db, task.key, now(), result);
       return { key: task.key, status: result.status, ...(result.message ? { message: result.message } : {}) };
     } catch (error: unknown) {
       const message = toAppError(error).code === "INTERNAL" ? (error instanceof Error ? error.message : String(error)) : toAppError(error).message;
       logger.error("scheduler task failed", { task: task.key, err: error });
-      markTaskFinished(db, task.key, now(), { status: "error", message });
+      await markTaskFinished(db, task.key, now(), { status: "error", message });
       return { key: task.key, status: "error", message };
     }
   };
@@ -86,19 +100,19 @@ export function createSchedulerRunner(options: RunnerOptions): SchedulerRunner {
     try {
       const db = await options.getDb();
       if (!tablesReady) {
-        ensureSchedulerTables(db);
+        await ensureSchedulerTables(db);
         tablesReady = true;
       }
-      if (!acquireLease(db, options.ownerId, now(), leaseTtlMs)) return { at, status: "lease-held", ran: [] };
+      if (!(await acquireLease(db, options.ownerId, now(), leaseTtlMs))) return { at, status: "lease-held", ran: [] };
       try {
-        const runs = readTaskRuns(db);
+        const runs = await readTaskRuns(db);
         const ran: TickResult["ran"][number][] = [];
         for (const task of options.tasks) {
           if (isTaskDue(task, runs.get(task.key), now())) ran.push(await runTask(db, task));
         }
         return { at, status: "ran", ran };
       } finally {
-        releaseLease(db, options.ownerId, now());
+        await releaseLease(db, options.ownerId, now());
       }
     } catch (error: unknown) {
       logger.error("scheduler tick failed", { err: error });

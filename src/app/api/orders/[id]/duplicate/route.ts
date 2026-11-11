@@ -8,5 +8,5 @@ import { domainCtx, idParamsSchema } from "@/server/repositories/platform-common
 export const POST = defineRoute({
   permission: ORDER_PERMISSIONS.create,
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => created(duplicateOrder(db, domainCtx(actor, auth), params.id)),
+  handler: async ({ db, auth, actor, params }) => created(await duplicateOrder(db, domainCtx(actor, auth), params.id)),
 });

@@ -5,5 +5,5 @@ import { availabilityQuerySchema, checkAvailability } from "@/server/repositorie
 export const GET = defineRoute({
   permission: ["settings.mobile_carts.create", "settings.mobile_carts.edit"],
   query: availabilityQuerySchema,
-  handler: ({ db, auth, query }) => checkAvailability(db, auth, "mobile_cart", query),
+  handler: async ({ db, auth, query }) => await checkAvailability(db, auth, "mobile_cart", query),
 });

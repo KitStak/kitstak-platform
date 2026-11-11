@@ -6,5 +6,5 @@ import { confirmPutaway, confirmPutawaySchema } from "@/server/repositories/puta
 export const POST = defineRoute({
   permission: "inventory.inventory_by_location.transfer_product",
   body: confirmPutawaySchema,
-  handler: ({ db, auth, actor, body }) => confirmPutaway(db, auth, domainCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await confirmPutaway(db, auth, domainCtx(actor, auth), body),
 });

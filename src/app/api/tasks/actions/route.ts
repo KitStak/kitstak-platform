@@ -14,6 +14,7 @@ import { cancelTasks } from "@/server/repositories/jobs-commands";
 import { assignTasks } from "@/server/repositories/tasks";
 import { pickShortPreview } from "@/server/repositories/tasks-pick-short";
 import { sql } from "drizzle-orm";
+import { dbGet, mapSeq } from "@/server/db/sql";
 
 /** Critic R3: the API speaks the same language as the Execute / Update dialogs. */
 const targetLocation = z.string({ error: "Choose the target location" }).trim().min(1, "Choose the target location").max(64);
@@ -40,7 +41,7 @@ const PERMISSION = {
 export const POST = defineRoute({
   permission: Object.values(PERMISSION),
   body,
-  handler: ({ db, auth, actor, body: input }) => withM03Actor(db, actor, auth, () => {
+  handler: async ({ db, auth, actor, body: input }) => await withM03Actor(db, actor, auth, async () => {
     assertJobAction(auth, PERMISSION[input.action]);
     const ctx = domainCtx(actor, auth);
     switch (input.action) {
@@ -50,26 +51,26 @@ export const POST = defineRoute({
         const single = input.ids.length === 1 ? input.ids[0] : undefined;
         let createResolutionJob = input.createResolutionJob;
         if (single && createResolutionJob === undefined && input.qty !== undefined) {
-          const row = db.get<{ remaining: number }>(sql`SELECT planned_qty - actual_qty AS remaining FROM tasks WHERE id = ${single}`);
-          if (row && input.qty < Number(row.remaining)) createResolutionJob = pickShortPreview(db, auth, single).suggestResolution;
+          const row = await dbGet<{ remaining: number }>(db, sql`SELECT planned_qty - actual_qty AS remaining FROM tasks WHERE id = ${single}`);
+          if (row && input.qty < Number(row.remaining)) createResolutionJob = (await pickShortPreview(db, auth, single)).suggestResolution;
         }
-        const results = tasks.execute(db, ctx, {
+        const results = await tasks.execute(db, ctx, {
           taskIds: input.ids, targetLocationId: input.targetLocationId, targetLpId: input.targetLpId ?? null,
           qty: single ? input.qty : undefined, createResolutionJob, note: input.note ?? null,
         });
-        const codes = new Map(results.filter((r) => r.resolutionJobId).map((r) => [r.resolutionJobId as string, db.get<{ code: string }>(sql`SELECT code FROM jobs WHERE id = ${r.resolutionJobId}`)?.code ?? null] as const));
+        const codes = new Map(await mapSeq(results.filter((r) => r.resolutionJobId), async (r) => [r.resolutionJobId as string, (await dbGet<{ code: string }>(db, sql`SELECT code FROM jobs WHERE id = ${r.resolutionJobId}`))?.code ?? null] as const));
         return { succeeded: input.ids, failed: [], results: results.map((r) => ({ ...r, resolutionJobCode: r.resolutionJobId ? codes.get(r.resolutionJobId) ?? null : null })) };
       }
       case "update": {
-        const task = tasks.update(db, ctx, { taskId: input.ids[0], targetLocationId: input.targetLocationId, targetLpId: input.targetLpId, moveToJobId: input.moveToJobId });
+        const task = await tasks.update(db, ctx, { taskId: input.ids[0], targetLocationId: input.targetLocationId, targetLpId: input.targetLpId, moveToJobId: input.moveToJobId });
         return { succeeded: [task.id], failed: [] };
       }
       case "cancel":
-        return cancelTasks(db, ctx, input.ids);
+        return await cancelTasks(db, ctx, input.ids);
       case "assign":
-        return assignTasks(db, ctx, { ids: input.ids, userId: input.userId });
+        return await assignTasks(db, ctx, { ids: input.ids, userId: input.userId });
       case "unassign":
-        return assignTasks(db, ctx, { ids: input.ids, userId: null });
+        return await assignTasks(db, ctx, { ids: input.ids, userId: null });
     }
   }),
 });

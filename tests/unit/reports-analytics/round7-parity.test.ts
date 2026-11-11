@@ -21,23 +21,23 @@ let w: World;
 let auth: AuthContext;
 const q = (qs = ""): GridQuery => ({ ...EMPTY_GRID_QUERY, ...parseGridQuery(qs).query, pageSize: 100 });
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(["settings.users.view"]), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
 afterEach(() => w.close());
 
 let master = 9000;
-function poLine(code: string, status: "Started" | "Completed", pack: string, ordered: number, storedRatio: number, received: number, productId = w.productId) {
-  const po = w.db.insert(schema.purchaseOrders).values({ code, warehouseId: w.warehouseId, clientId: w.clientId, vendorName: "V", status, totalQuantity: ordered, purchasePrice: 1 }).returning().get();
-  const line = w.db.insert(schema.purchaseOrderLines).values({ purchaseOrderId: po.id, productId, orderedQuantity: ordered, unitCost: 1, packType: pack, uomQuantity: storedRatio }).returning().get();
+async function poLine(code: string, status: "Started" | "Completed", pack: string, ordered: number, storedRatio: number, received: number, productId = w.productId) {
+  const po = (await w.db.insert(schema.purchaseOrders).values({ code, warehouseId: w.warehouseId, clientId: w.clientId, vendorName: "V", status, totalQuantity: ordered, purchasePrice: 1 }).returning())[0];
+  const line = (await w.db.insert(schema.purchaseOrderLines).values({ purchaseOrderId: po.id, productId, orderedQuantity: ordered, unitCost: 1, packType: pack, uomQuantity: storedRatio }).returning())[0];
   if (received > 0) {
     master += 1;
-    w.db.insert(schema.receipts).values({
+    await w.db.insert(schema.receipts).values({
       masterId: master, type: "Purchase Order", warehouseId: w.warehouseId, clientId: w.clientId, purchaseOrderId: po.id, purchaseOrderLineId: line.id,
       productId, packType: "Each", quantity: received, uomQuantity: received, locationId: w.loc.receiving, receivedBy: w.userId,
-    }).run();
+    });
   }
   return line.id;
 }
@@ -50,21 +50,21 @@ describe("PO Receiving: PO UOM Quantity = ordered × units per pack", () => {
     expect(poUomQuantity(7, null)).toBe(7);
   });
 
-  it("Each lines received in full show no difference; short lines show the real shortfall", () => {
-    const full = poLine("PO-FULL", "Completed", "Each", 180, 1, 180);
-    const short = poLine("PO-SHORT", "Started", "Each", 348, 1, 2);
-    const rows = listPoReceiving(w.db, auth, q()).rows;
+  it("Each lines received in full show no difference; short lines show the real shortfall", async () => {
+    const full = await poLine("PO-FULL", "Completed", "Each", 180, 1, 180);
+    const short = await poLine("PO-SHORT", "Started", "Each", 348, 1, 2);
+    const rows = (await listPoReceiving(w.db, auth, q())).rows;
     const byId = (id: string) => rows.find((r) => r.rowId === id);
     expect(byId(full)).toMatchObject({ poQty: 180, poUomQty: 180, receivedUomQty: 180, difference: null, hasDifference: false });
     expect(byId(short)).toMatchObject({ poQty: 348, poUomQty: 348, receivedUomQty: 2, difference: -346, hasDifference: true });
-    expect(listPoReceiving(w.db, auth, q("f.hasDifference=bool:true")).rows.map((r) => r.rowId)).toEqual([short]);
+    expect((await listPoReceiving(w.db, auth, q("f.hasDifference=bool:true"))).rows.map((r) => r.rowId)).toEqual([short]);
   });
 
-  it("takes the units per pack from the product's pack-type hierarchy, over the stored ratio", () => {
-    w.db.insert(schema.productPackTypes).values({ productId: w.product2Id, packType: "Case", kind: "Hierarchical", uomQty: 24 }).run();
+  it("takes the units per pack from the product's pack-type hierarchy, over the stored ratio", async () => {
+    await w.db.insert(schema.productPackTypes).values({ productId: w.product2Id, packType: "Case", kind: "Hierarchical", uomQty: 24 });
     // Stored ratio disagrees (1): the hierarchy wins.
-    const id = poLine("PO-CASE", "Started", "Case", 15, 1, 24, w.product2Id);
-    const row = listPoReceiving(w.db, auth, q()).rows.find((r) => r.rowId === id);
+    const id = await poLine("PO-CASE", "Started", "Case", 15, 1, 24, w.product2Id);
+    const row = (await listPoReceiving(w.db, auth, q())).rows.find((r) => r.rowId === id);
     expect(row).toMatchObject({ unitsPerPack: 24, poUomQty: 360, receivedUomQty: 24, difference: -336 });
   });
 
@@ -88,18 +88,18 @@ describe("dashboard progress and jobs", () => {
     expect(inListValue(["MLT1 - Memphis", "A, B"])).toBe("in:MLT1%20-%20Memphis,A%5C%2C%20B");
   });
 
-  it("jobs drilldowns keep a multi-warehouse selection and the Status tab counts what it opens", () => {
-    const w2 = w.db.insert(schema.warehouses).values({ code: "NYC1", name: "New York", addressLine: "1", city: "NY", state: "NY", postalCode: "1", timezone: "America/New_York", mandatoryAdjustmentReason: false }).returning().get().id;
-    const job = (code: string, status: string, warehouseId: string, extra: Record<string, unknown> = {}) =>
-      w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code, warehouseId, jobType: "Picking", status: status as "Pending", ...extra }).run();
-    job("J1", "Pending", w.warehouseId);
-    job("J2", "In Progress", w2);
-    job("J3", "Cancelled", w.warehouseId);
-    job("J4", "Completed", w2, { completedAt: new Date().toISOString() });
-    job("J5", "Completed", w2, { completedAt: "2020-01-01T00:00:00.000Z" });
+  it("jobs drilldowns keep a multi-warehouse selection and the Status tab counts what it opens", async () => {
+    const w2 = (await w.db.insert(schema.warehouses).values({ code: "NYC1", name: "New York", addressLine: "1", city: "NY", state: "NY", postalCode: "1", timezone: "America/New_York", mandatoryAdjustmentReason: false }).returning())[0].id;
+    const job = async (code: string, status: string, warehouseId: string, extra: Record<string, unknown> = {}) =>
+      await w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code, warehouseId, jobType: "Picking", status: status as "Pending", ...extra });
+    await job("J1", "Pending", w.warehouseId);
+    await job("J2", "In Progress", w2);
+    await job("J3", "Cancelled", w.warehouseId);
+    await job("J4", "Completed", w2, { completedAt: new Date().toISOString() });
+    await job("J5", "Completed", w2, { completedAt: "2020-01-01T00:00:00.000Z" });
     const scope = { warehouseIds: [w.warehouseId, w2], clientIds: "all" as const };
     const a = { ...auth, scope, viewScope: scope } as AuthContext;
-    const d = getLiveDashboard(w.db, a, { warehouseIds: [w.warehouseId, w2], clientIds: [] });
+    const d = await getLiveDashboard(w.db, a, { warehouseIds: [w.warehouseId, w2], clientIds: [] });
     const status = d.jobs.status;
     expect(status.map((r) => r.name).sort()).toEqual(["Completed", "Pending", "Started"]);
     expect(status.reduce((s, r) => s + r.jobQty, 0)).toBe(3);
@@ -147,12 +147,12 @@ describe("labor drilldowns and chart helpers", () => {
 });
 
 describe("Channel Sales: unsold listings", () => {
-  it("are not attributed to a warehouse and are hidden by the default chip", () => {
-    const cc = w.db.insert(schema.channelConnections).values({ provider: "shopify", storeName: "Main store", clientId: w.clientId, settings: {} as never }).returning().get();
-    w.db.insert(schema.productListings).values({ channelConnectionId: cc.id, clientId: w.clientId, productId: w.productId, sellerSku: "S1", channelProductId: "1", name: "Listing" }).run();
-    const all = listChannelSales(w.db, auth, q()).rows;
+  it("are not attributed to a warehouse and are hidden by the default chip", async () => {
+    const cc = (await w.db.insert(schema.channelConnections).values({ provider: "shopify", storeName: "Main store", clientId: w.clientId, settings: {} as never }).returning())[0];
+    await w.db.insert(schema.productListings).values({ channelConnectionId: cc.id, clientId: w.clientId, productId: w.productId, sellerSku: "S1", channelProductId: "1", name: "Listing" });
+    const all = (await listChannelSales(w.db, auth, q())).rows;
     expect(all).toHaveLength(1);
     expect(all[0]).toMatchObject({ warehouse: "Not sold yet", warehouseId: null, soldQty: 0, hasSales: false });
-    expect(listChannelSales(w.db, auth, q(CHANNEL_SALES_DEFAULT_FILTER)).total).toBe(0);
+    expect((await listChannelSales(w.db, auth, q(CHANNEL_SALES_DEFAULT_FILTER))).total).toBe(0);
   });
 });

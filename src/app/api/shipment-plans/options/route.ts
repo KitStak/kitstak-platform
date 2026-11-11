@@ -7,5 +7,5 @@ import { planFormOptions } from "@/server/repositories/shipment-plans";
 export const GET = defineRoute({
   permission: ["fulfillment.shipment_plan.create", "fulfillment.shipment_plan.edit"],
   query: z.object({ warehouseId: idSchema.optional(), customerId: idSchema.optional() }),
-  handler: ({ db, auth, query }) => planFormOptions(db, auth, query),
+  handler: async ({ db, auth, query }) => await planFormOptions(db, auth, query),
 });

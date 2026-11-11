@@ -5,5 +5,5 @@ import { getListingOptions } from "@/server/repositories/listings";
 
 export const GET = defineRoute({
   permission: LISTING_READ_PERMISSIONS,
-  handler: ({ db, auth }) => getListingOptions(db, auth.viewScope),
+  handler: async ({ db, auth }) => await getListingOptions(db, auth.viewScope),
 });

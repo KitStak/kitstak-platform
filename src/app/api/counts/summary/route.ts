@@ -7,5 +7,5 @@ import { countStatusSummary } from "@/server/repositories/counts-summary";
 export const GET = defineRoute({
   permission: COUNT_ANY_VIEW,
   query: z.object({ kind: z.enum(["plans", "locations", "skus"]).default("plans") }),
-  handler: ({ db, auth, query }) => countStatusSummary(db, auth.viewScope, query.kind),
+  handler: async ({ db, auth, query }) => await countStatusSummary(db, auth.viewScope, query.kind),
 });

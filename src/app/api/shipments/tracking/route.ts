@@ -7,5 +7,5 @@ export const POST = defineRoute({
   permission: ["fulfillment.shipment_orders.create_label", "fulfillment.shipment_orders.reprint_label"],
   body: refreshTrackingSchema,
   transaction: false,
-  handler: ({ db, auth, actor, body }) => refreshTracking(db, auth, domainCtx(actor, auth), body.ids),
+  handler: async ({ db, auth, actor, body }) => await refreshTracking(db, auth, domainCtx(actor, auth), body.ids),
 });

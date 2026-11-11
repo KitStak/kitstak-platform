@@ -2,7 +2,8 @@
  * Search provider "clients" (Clients). Matches client code and name inside the caller's
  * client scope; M11 may replace it with a repository-backed provider.
  */
-import { and, asc, inArray, or, type SQL } from "drizzle-orm";
+import { and, inArray, or, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import { clients } from "@/server/db/schema";
 import { COUNT_ALL, containsText, matchRank } from "../match";
 import { hitRank, listSearchHref, type SearchContext, type SearchProvider } from "../types";
@@ -24,20 +25,19 @@ export const provider: SearchProvider = {
   configured: true,
   permission: "settings.clients.view",
   seeAllHref: (q) => listSearchHref("/clients", q),
-  count: (ctx) => {
+  count: async (ctx) => {
     const w = where(ctx);
-    return w ? (ctx.db.select({ n: COUNT_ALL }).from(clients).where(w).get()?.n ?? 0) : 0;
+    return w ? ((await ctx.db.select({ n: COUNT_ALL }).from(clients).where(w).limit(1))[0]?.n ?? 0) : 0;
   },
-  search: (ctx) => {
+  search: async (ctx) => {
     const w = where(ctx);
     if (!w) return [];
-    return ctx.db
+    return (await ctx.db
       .select({ id: clients.id, code: clients.code, name: clients.name })
       .from(clients)
       .where(w)
       .orderBy(matchRank(clients.name, ctx.q), asc(clients.name))
-      .limit(ctx.limit)
-      .all()
+      .limit(ctx.limit))
       .map((c) => ({ id: c.id, title: c.name, subtitle: c.code, href: `/clients/${c.id}`, rank: hitRank(ctx.q, [c.code, c.name]) }));
   },
 };

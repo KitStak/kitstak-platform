@@ -6,5 +6,5 @@ import { deleteCustomers } from "@/server/repositories/customers";
 export const POST = defineRoute({
   permission: "settings.customers.delete",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => deleteCustomers(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await deleteCustomers(db, auth, actor, body.ids),
 });

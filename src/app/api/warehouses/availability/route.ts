@@ -5,5 +5,5 @@ import { availabilityQuerySchema, checkAvailability } from "@/server/repositorie
 export const GET = defineRoute({
   permission: ["settings.warehouse.create", "settings.warehouse.edit"],
   query: availabilityQuerySchema,
-  handler: ({ db, auth, query }) => checkAvailability(db, auth, "warehouse", query),
+  handler: async ({ db, auth, query }) => await checkAvailability(db, auth, "warehouse", query),
 });

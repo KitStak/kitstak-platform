@@ -5,7 +5,8 @@
  * cart scan and the cart-layout print read) and `job_orders.tote_or_cell` (the cell barcode the
  * picker scans). Cells whose order already left the cart (packed, shipped, cancelled) are reclaimed.
  */
-import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import * as schema from "@/server/db/schema";
 import { cellDisplayName } from "@/lib/grid-defs/facility/mobile-carts";
 import { recordUpdate } from "./change-log";
@@ -44,54 +45,54 @@ export function planCellAssignments<O extends { readonly id: string }, C extends
 }
 
 /** Frees cells whose order has left the cart (packed, shipped, cancelled or deleted). Returns how many. */
-export function reclaimCartCells(tx: Tx, cartId: string): number {
-  const held = tx.select({ id: schema.mobileCartCells.id, orderId: schema.mobileCartCells.orderId, barcode: schema.mobileCartCells.barcode })
-    .from(schema.mobileCartCells).where(and(eq(schema.mobileCartCells.cartId, cartId), isNotNull(schema.mobileCartCells.orderId))).all();
+export async function reclaimCartCells(tx: Tx, cartId: string): Promise<number> {
+  const held = await tx.select({ id: schema.mobileCartCells.id, orderId: schema.mobileCartCells.orderId, barcode: schema.mobileCartCells.barcode })
+    .from(schema.mobileCartCells).where(and(eq(schema.mobileCartCells.cartId, cartId), isNotNull(schema.mobileCartCells.orderId)));
   if (held.length === 0) return 0;
-  const live = new Set(tx.select({ id: schema.shipmentOrders.id, status: schema.shipmentOrders.status }).from(schema.shipmentOrders)
-    .where(inArray(schema.shipmentOrders.id, held.map((h) => h.orderId as string))).all()
+  const live = new Set((await tx.select({ id: schema.shipmentOrders.id, status: schema.shipmentOrders.status }).from(schema.shipmentOrders)
+    .where(inArray(schema.shipmentOrders.id, held.map((h) => h.orderId as string))))
     .filter((o) => !(CART_RELEASED_ORDER_STATUSES as readonly string[]).includes(o.status)).map((o) => o.id));
   const stale = held.filter((h) => !live.has(h.orderId as string));
-  for (const h of stale) tx.update(schema.mobileCartCells).set({ orderId: null }).where(eq(schema.mobileCartCells.id, h.id)).run();
+  for (const h of stale) await tx.update(schema.mobileCartCells).set({ orderId: null }).where(eq(schema.mobileCartCells.id, h.id));
   return stale.length;
 }
 
-function loadCart(tx: Tx, cartId: string) {
-  const cart = tx.select().from(schema.mobileCarts).where(eq(schema.mobileCarts.id, cartId)).get();
+async function loadCart(tx: Tx, cartId: string) {
+  const cart = (await tx.select().from(schema.mobileCarts).where(eq(schema.mobileCarts.id, cartId)).limit(1))[0];
   if (!cart) throw new DomainError("NOT_FOUND", "Mobile cart not found");
   return cart;
 }
 
 /** Open jobs currently holding the cart (linked on the job, or the cart's current job). */
-function openJobsOnCart(tx: Tx, cart: { readonly id: string; readonly currentJobId: string | null }) {
-  return tx.select({ id: schema.jobs.id, code: schema.jobs.code }).from(schema.jobs)
+async function openJobsOnCart(tx: Tx, cart: { readonly id: string; readonly currentJobId: string | null }) {
+  return await tx.select({ id: schema.jobs.id, code: schema.jobs.code }).from(schema.jobs)
     .where(and(inArray(schema.jobs.status, [...OPEN_JOB_STATUSES]), cart.currentJobId
       ? sql`(${schema.jobs.mobileCartId} = ${cart.id} OR ${schema.jobs.id} = ${cart.currentJobId})`
-      : eq(schema.jobs.mobileCartId, cart.id))).all();
+      : eq(schema.jobs.mobileCartId, cart.id)));
 }
 
 /** Puts an open picking job on a cart and gives each of its orders a cell. */
-export function assignJobToCart(tx: Tx, ctx: DomainCtx, input: { readonly cartId: string; readonly jobId: string }): AssignJobResult {
-  const cart = loadCart(tx, input.cartId);
-  const job = tx.select().from(schema.jobs).where(eq(schema.jobs.id, input.jobId)).get();
+export async function assignJobToCart(tx: Tx, ctx: DomainCtx, input: { readonly cartId: string; readonly jobId: string }): Promise<AssignJobResult> {
+  const cart = await loadCart(tx, input.cartId);
+  const job = (await tx.select().from(schema.jobs).where(eq(schema.jobs.id, input.jobId)).limit(1))[0];
   if (!job) throw new DomainError("NOT_FOUND", "Job not found");
   if (job.warehouseId !== cart.warehouseId) throw new DomainError("VALIDATION", `Job ${job.code} is in another warehouse than cart ${cart.code}`);
   if (!(OPEN_JOB_STATUSES as readonly string[]).includes(job.status)) throw new DomainError("INVALID_STATE", `Job ${job.code} is ${job.status}; only an open job can take a cart`);
   if (job.operationType !== "Picking") throw new DomainError("VALIDATION", `Job ${job.code} is a ${job.operationType} job; carts take picking jobs`);
   if (job.mobileCartId && job.mobileCartId !== cart.id) {
-    const other = tx.select({ code: schema.mobileCarts.code }).from(schema.mobileCarts).where(eq(schema.mobileCarts.id, job.mobileCartId)).get();
+    const other = (await tx.select({ code: schema.mobileCarts.code }).from(schema.mobileCarts).where(eq(schema.mobileCarts.id, job.mobileCartId)).limit(1))[0];
     throw new DomainError("CONFLICT", `Job ${job.code} already uses cart ${other?.code ?? "another cart"}`);
   }
-  const busy = openJobsOnCart(tx, cart).filter((j) => j.id !== job.id);
+  const busy = (await openJobsOnCart(tx, cart)).filter((j) => j.id !== job.id);
   if (busy.length > 0 && !cart.allowMultipleJob) throw new DomainError("CONFLICT", `Cart ${cart.code} is in use by ${busy.map((j) => j.code).join(", ")}; it doesn't allow multiple jobs`);
 
-  reclaimCartCells(tx, cart.id);
-  const cells = tx.select().from(schema.mobileCartCells).where(eq(schema.mobileCartCells.cartId, cart.id))
-    .orderBy(asc(schema.mobileCartCells.level), asc(schema.mobileCartCells.column)).all();
+  await reclaimCartCells(tx, cart.id);
+  const cells = await tx.select().from(schema.mobileCartCells).where(eq(schema.mobileCartCells.cartId, cart.id))
+    .orderBy(asc(schema.mobileCartCells.level), asc(schema.mobileCartCells.column));
   const placed = new Set(cells.flatMap((c) => (c.orderId ? [c.orderId] : [])));
-  const orders = tx.select({ id: schema.shipmentOrders.id, code: schema.shipmentOrders.code }).from(schema.jobOrders)
+  const orders = (await tx.select({ id: schema.shipmentOrders.id, code: schema.shipmentOrders.code }).from(schema.jobOrders)
     .innerJoin(schema.shipmentOrders, eq(schema.shipmentOrders.id, schema.jobOrders.orderId))
-    .where(eq(schema.jobOrders.jobId, job.id)).orderBy(asc(schema.shipmentOrders.code)).all()
+    .where(eq(schema.jobOrders.jobId, job.id)).orderBy(asc(schema.shipmentOrders.code)))
     .filter((o) => !placed.has(o.id));
   const free = cells.filter((c) => !c.orderId);
   const plan = planCellAssignments(orders, free);
@@ -99,38 +100,38 @@ export function assignJobToCart(tx: Tx, ctx: DomainCtx, input: { readonly cartId
 
   const assignments: CellAssignment[] = [];
   for (const { order, cell } of plan) {
-    tx.update(schema.mobileCartCells).set({ orderId: order.id }).where(eq(schema.mobileCartCells.id, cell.id)).run();
-    tx.update(schema.jobOrders).set({ toteOrCell: cell.barcode }).where(and(eq(schema.jobOrders.jobId, job.id), eq(schema.jobOrders.orderId, order.id))).run();
+    await tx.update(schema.mobileCartCells).set({ orderId: order.id }).where(eq(schema.mobileCartCells.id, cell.id));
+    await tx.update(schema.jobOrders).set({ toteOrCell: cell.barcode }).where(and(eq(schema.jobOrders.jobId, job.id), eq(schema.jobOrders.orderId, order.id)));
     assignments.push({ orderId: order.id, orderCode: order.code, cellId: cell.id, barcode: cell.barcode, display: cellDisplayName(cell.level, cell.column) });
   }
   const linkChanged = job.mobileCartId !== cart.id;
-  if (linkChanged) tx.update(schema.jobs).set({ mobileCartId: cart.id, updatedBy: ctx.userId }).where(eq(schema.jobs.id, job.id)).run();
-  const priorJob = cart.currentJobId ? tx.select({ code: schema.jobs.code }).from(schema.jobs).where(eq(schema.jobs.id, cart.currentJobId)).get()?.code ?? null : null;
-  tx.update(schema.mobileCarts).set({ currentJobId: job.id, status: "Occupied", updatedBy: ctx.userId }).where(eq(schema.mobileCarts.id, cart.id)).run();
+  if (linkChanged) await tx.update(schema.jobs).set({ mobileCartId: cart.id, updatedBy: ctx.userId }).where(eq(schema.jobs.id, job.id));
+  const priorJob = cart.currentJobId ? (await tx.select({ code: schema.jobs.code }).from(schema.jobs).where(eq(schema.jobs.id, cart.currentJobId)).limit(1))[0]?.code ?? null : null;
+  await tx.update(schema.mobileCarts).set({ currentJobId: job.id, status: "Occupied", updatedBy: ctx.userId }).where(eq(schema.mobileCarts.id, cart.id));
   if (priorJob !== job.code || assignments.length > 0) {
-    recordUpdate(tx, ctx, { entityType: "mobile_cart", entityId: cart.id, entityCode: cart.code,
+    await recordUpdate(tx, ctx, { entityType: "mobile_cart", entityId: cart.id, entityCode: cart.code,
       before: { currentJob: priorJob, ordersInCells: null }, after: { currentJob: job.code, ordersInCells: assignments.length > 0 ? assignments.map((a) => `${a.orderCode} → ${a.display}`).join(", ") : null } });
   }
-  if (linkChanged) recordUpdate(tx, ctx, { entityType: "job", entityId: job.id, entityCode: job.code, before: { mobileCart: null }, after: { mobileCart: cart.code } });
+  if (linkChanged) await recordUpdate(tx, ctx, { entityType: "job", entityId: job.id, entityCode: job.code, before: { mobileCart: null }, after: { mobileCart: cart.code } });
   return { cartId: cart.id, cartCode: cart.code, jobId: job.id, jobCode: job.code, assignments };
 }
 
 /** Empties the cart: clears every cell, unlinks its open jobs and makes it Available. Returns the cells freed. */
-export function releaseCart(tx: Tx, ctx: DomainCtx, cartId: string): { readonly cartCode: string; readonly freedCells: number; readonly releasedJobs: readonly string[] } {
-  const cart = loadCart(tx, cartId);
-  const held = tx.select({ id: schema.mobileCartCells.id, barcode: schema.mobileCartCells.barcode, orderId: schema.mobileCartCells.orderId }).from(schema.mobileCartCells)
-    .where(and(eq(schema.mobileCartCells.cartId, cart.id), isNotNull(schema.mobileCartCells.orderId))).all();
-  const jobs = openJobsOnCart(tx, cart);
-  tx.update(schema.mobileCartCells).set({ orderId: null }).where(eq(schema.mobileCartCells.cartId, cart.id)).run();
+export async function releaseCart(tx: Tx, ctx: DomainCtx, cartId: string): Promise<{ readonly cartCode: string; readonly freedCells: number; readonly releasedJobs: readonly string[] }> {
+  const cart = await loadCart(tx, cartId);
+  const held = await tx.select({ id: schema.mobileCartCells.id, barcode: schema.mobileCartCells.barcode, orderId: schema.mobileCartCells.orderId }).from(schema.mobileCartCells)
+    .where(and(eq(schema.mobileCartCells.cartId, cart.id), isNotNull(schema.mobileCartCells.orderId)));
+  const jobs = await openJobsOnCart(tx, cart);
+  await tx.update(schema.mobileCartCells).set({ orderId: null }).where(eq(schema.mobileCartCells.cartId, cart.id));
   // Every cell barcode of this cart, so links of orders reclaimed earlier are cleared too.
-  const barcodes = tx.select({ b: schema.mobileCartCells.barcode }).from(schema.mobileCartCells).where(eq(schema.mobileCartCells.cartId, cart.id)).all().map((c) => c.b);
-  if (barcodes.length > 0) tx.update(schema.jobOrders).set({ toteOrCell: null }).where(inArray(schema.jobOrders.toteOrCell, barcodes)).run();
+  const barcodes = (await tx.select({ b: schema.mobileCartCells.barcode }).from(schema.mobileCartCells).where(eq(schema.mobileCartCells.cartId, cart.id))).map((c) => c.b);
+  if (barcodes.length > 0) await tx.update(schema.jobOrders).set({ toteOrCell: null }).where(inArray(schema.jobOrders.toteOrCell, barcodes));
   for (const j of jobs) {
-    tx.update(schema.jobs).set({ mobileCartId: null, updatedBy: ctx.userId }).where(and(eq(schema.jobs.id, j.id), eq(schema.jobs.mobileCartId, cart.id))).run();
+    await tx.update(schema.jobs).set({ mobileCartId: null, updatedBy: ctx.userId }).where(and(eq(schema.jobs.id, j.id), eq(schema.jobs.mobileCartId, cart.id)));
   }
-  tx.update(schema.mobileCarts).set({ currentJobId: null, status: "Available", updatedBy: ctx.userId }).where(eq(schema.mobileCarts.id, cart.id)).run();
+  await tx.update(schema.mobileCarts).set({ currentJobId: null, status: "Available", updatedBy: ctx.userId }).where(eq(schema.mobileCarts.id, cart.id));
   if (held.length > 0 || jobs.length > 0) {
-    recordUpdate(tx, ctx, { entityType: "mobile_cart", entityId: cart.id, entityCode: cart.code,
+    await recordUpdate(tx, ctx, { entityType: "mobile_cart", entityId: cart.id, entityCode: cart.code,
       before: { currentJob: jobs.map((j) => j.code).join(", ") || null, ordersInCells: held.length > 0 ? `${held.length} cells` : null }, after: { currentJob: null, ordersInCells: null } });
   }
   return { cartCode: cart.code, freedCells: held.length, releasedJobs: jobs.map((j) => j.code) };

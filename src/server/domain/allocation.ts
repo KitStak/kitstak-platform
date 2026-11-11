@@ -8,7 +8,8 @@
  * Misses are written to `order_line_shortages` and `allocation_exceptions` with the Logiwa
  * explanation strings.
  */
-import { and, asc, eq, gt, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import type { OrderByClause, RuleCondition } from "@/lib/domain-types";
 import * as schema from "@/server/db/schema";
 import { recordLine, recordUpdate } from "./change-log";
@@ -25,6 +26,7 @@ import { orderTypeFlags } from "./so-type-flags";
 // Runtime-only use (inside allocateOne), so the orders ⇄ allocation module cycle is safe.
 import { createBackorder } from "./orders/commands";
 import { checkScope, nowIso, type BulkResult, type DomainCtx, type Tx } from "./types";
+import { dbGet, findSeq, mapSeq, withWriteTx } from "@/server/db/sql";
 
 export { evaluateConditions } from "./conditions";
 
@@ -60,23 +62,23 @@ export interface LoadedAlgorithm {
   readonly rules: readonly AllocationRule[];
 }
 
-export function loadAllocationAlgorithm(tx: Tx, warehouseId: string, algorithmId?: string | null): LoadedAlgorithm {
+export async function loadAllocationAlgorithm(tx: Tx, warehouseId: string, algorithmId?: string | null): Promise<LoadedAlgorithm> {
   const a = schema.algorithms;
   const algo = algorithmId
-    ? tx.select().from(a).where(eq(a.id, algorithmId)).get()
-    : tx.select().from(a).where(and(eq(a.warehouseId, warehouseId), eq(a.kind, "Allocation"), eq(a.status, "Active"))).orderBy(asc(a.createdAt)).get();
+    ? (await tx.select().from(a).where(eq(a.id, algorithmId)).limit(1))[0]
+    : (await tx.select().from(a).where(and(eq(a.warehouseId, warehouseId), eq(a.kind, "Allocation"), eq(a.status, "Active"))).orderBy(asc(a.createdAt)).limit(1))[0];
   if (algorithmId && (!algo || algo.kind !== "Allocation")) throw new DomainError("NOT_FOUND", "Allocation algorithm not found");
   if (!algo) return { id: null, name: "Default", rules: [DEFAULT_ALLOCATION_RULE] };
-  const rules = tx.select().from(schema.algorithmRules)
+  const rules = (await tx.select().from(schema.algorithmRules)
     .where(and(eq(schema.algorithmRules.algorithmId, algo.id), eq(schema.algorithmRules.isActive, true)))
-    .orderBy(asc(schema.algorithmRules.sequence)).all()
+    .orderBy(asc(schema.algorithmRules.sequence)))
     .map((r) => ({ name: r.name, conditions: r.conditions, inventoryConditions: r.inventoryConditions ?? [], orderBy: r.orderBy.length > 0 ? r.orderBy : DEFAULT_ALLOCATION_RULE.orderBy }));
   return { id: algo.id, name: algo.name, rules: rules.length > 0 ? rules : [DEFAULT_ALLOCATION_RULE] };
 }
 
 interface Candidate { readonly bucket: InventoryRow; readonly location: LocationRow; readonly lpNumber: string | null }
 
-function candidates(tx: Tx, order: OrderRow, line: OrderLineRow, excludeLocationIds: readonly string[] = []): Candidate[] {
+async function candidates(tx: Tx, order: OrderRow, line: OrderLineRow, excludeLocationIds: readonly string[] = []): Promise<Candidate[]> {
   const i = schema.inventory;
   const l = schema.locations;
   const conds = [
@@ -90,9 +92,9 @@ function candidates(tx: Tx, order: OrderRow, line: OrderLineRow, excludeLocation
   if (line.pinnedLocationId) conds.push(eq(i.locationId, line.pinnedLocationId));
   if (line.pinnedLpId) conds.push(eq(i.lpId, line.pinnedLpId));
   if (excludeLocationIds.length > 0) conds.push(notInArray(i.locationId, [...excludeLocationIds]));
-  return tx.select({ bucket: i, location: l, lpNumber: schema.licensePlates.number }).from(i)
+  return await tx.select({ bucket: i, location: l, lpNumber: schema.licensePlates.number }).from(i)
     .innerJoin(l, eq(l.id, i.locationId)).leftJoin(schema.licensePlates, eq(schema.licensePlates.id, i.lpId))
-    .where(and(...conds)).all();
+    .where(and(...conds));
 }
 
 const remainingNeed = (line: OrderLineRow): number => line.quantity - line.cancelledQuantity - line.allocatedQuantity;
@@ -100,17 +102,17 @@ const remainingNeed = (line: OrderLineRow): number => line.quantity - line.cance
 interface PlannedSlice { readonly line: OrderLineRow; readonly inventoryId: string; readonly qty: number }
 interface LinePlan { readonly line: OrderLineRow; readonly need: number; readonly slices: readonly PlannedSlice[]; readonly short: number }
 
-function planLine(tx: Tx, order: OrderRow, line: OrderLineRow, rule: AllocationRule, used: Map<string, number>, exclude: readonly string[] = []): LinePlan {
+async function planLine(tx: Tx, order: OrderRow, line: OrderLineRow, rule: AllocationRule, used: Map<string, number>, exclude: readonly string[] = []): Promise<LinePlan> {
   const need = remainingNeed(line);
   // Pack-type / full-LP preferences are line-dependent, so they are split from the bucket filters (M12).
   const { conditions: filters, prefs } = splitAllocationPreferences(rule.inventoryConditions);
-  const eligible = candidates(tx, order, line, exclude)
+  const eligible = (await candidates(tx, order, line, exclude))
     .filter((c) => evaluateConditions(filters, bucketFacts(c.bucket, c.location, c.lpNumber)));
-  const ranked = rankByPackType(tx, line, sortByClauses(eligible, rule.orderBy, (c) => bucketFacts(c.bucket, c.location, c.lpNumber)), prefs);
+  const ranked = await rankByPackType(tx, line, sortByClauses(eligible, rule.orderBy, (c) => bucketFacts(c.bucket, c.location, c.lpNumber)), prefs);
   const slices: PlannedSlice[] = [];
   if (prefs.onlyAllocateFullLps) {
     let taken = 0;
-    for (const s of planFullLps(tx, line, ranked, need, used)) {
+    for (const s of await planFullLps(tx, line, ranked, need, used)) {
       used.set(s.candidate.bucket.id, (used.get(s.candidate.bucket.id) ?? 0) + s.qty);
       slices.push({ line, inventoryId: s.candidate.bucket.id, qty: s.qty });
       taken += s.qty;
@@ -131,13 +133,13 @@ function planLine(tx: Tx, order: OrderRow, line: OrderLineRow, rule: AllocationR
 }
 
 /** Free undamaged stock of a product in the warehouse, ignoring rule filters. */
-function stockSummary(tx: Tx, order: OrderRow, productId: string): { free: number; damaged: number; onHand: number } {
+async function stockSummary(tx: Tx, order: OrderRow, productId: string): Promise<{ free: number; damaged: number; onHand: number }> {
   const i = schema.inventory;
-  const row = tx.select({
+  const row = (await tx.select({
     onHand: sql<number>`COALESCE(SUM(${i.onHand}), 0)`,
     damaged: sql<number>`COALESCE(SUM(${i.damaged}), 0)`,
     free: sql<number>`COALESCE(SUM(CASE WHEN ${i.status} = 'Stock' AND ${i.damageReason} IS NULL THEN ${i.onHand} - ${i.allocated} ELSE 0 END), 0)`,
-  }).from(i).where(and(eq(i.warehouseId, order.warehouseId), eq(i.clientId, order.clientId), eq(i.productId, productId))).get();
+  }).from(i).where(and(eq(i.warehouseId, order.warehouseId), eq(i.clientId, order.clientId), eq(i.productId, productId))).limit(1))[0];
   return { free: Number(row?.free ?? 0), damaged: Number(row?.damaged ?? 0), onHand: Number(row?.onHand ?? 0) };
 }
 
@@ -162,13 +164,13 @@ export interface AllocateOrdersResult extends BulkResult {
 
 interface RunInfo { readonly input: AllocateOrdersInput; readonly algo: LoadedAlgorithm; readonly runBy: string; readonly waveNo: string }
 
-function writeException(tx: Tx, run: RunInfo, order: OrderRow, explanation: string, rule: string | null, extra: { productId?: string; inventoryQty?: number; lineQty?: number } = {}): void {
-  tx.insert(schema.allocationExceptions).values({
+async function writeException(tx: Tx, run: RunInfo, order: OrderRow, explanation: string, rule: string | null, extra: { productId?: string; inventoryQty?: number; lineQty?: number } = {}): Promise<void> {
+  await tx.insert(schema.allocationExceptions).values({
     orderId: order.id, waveId: run.input.waveId ?? null, waveNo: run.waveNo, waveRuleName: run.input.waveRuleName ?? null,
     algorithmName: run.algo.name, algorithmRuleName: rule, shortageProductId: extra.productId ?? null,
     inventoryUomQty: extra.inventoryQty ?? null, orderLineQty: extra.lineQty ?? null, explanation,
     runBy: run.runBy, warehouseId: order.warehouseId, clientId: order.clientId,
-  }).run();
+  });
 }
 
 export interface RecordExceptionInput {
@@ -188,13 +190,13 @@ export interface RecordExceptionInput {
  * Writes one `allocation_exceptions` row (same shape `allocateOrders` writes), e.g. wave
  * execution's "Eliminated by Job Type '…' Condition(s)" (docs/requests/fulfillment-jobs.md REQ-2).
  */
-export function recordException(tx: Tx, input: RecordExceptionInput): void {
+export async function recordException(tx: Tx, input: RecordExceptionInput): Promise<void> {
   if (!input.clientId) throw new DomainError("VALIDATION", "An allocation exception needs the order's client.");
-  tx.insert(schema.allocationExceptions).values({
+  await tx.insert(schema.allocationExceptions).values({
     orderId: input.orderId, waveId: input.waveId, waveNo: input.waveNo, waveRuleName: input.waveRuleName,
     algorithmName: input.algorithmName ?? null, algorithmRuleName: input.algorithmRuleName ?? null,
     explanation: input.explanation, runBy: input.runBy, warehouseId: input.warehouseId, clientId: input.clientId,
-  }).run();
+  });
 }
 
 export const MANUAL_ALLOCATION_WORK_ORDER = "Manual Allocation - Work Order";
@@ -211,78 +213,78 @@ export interface RecordWorkOrderExceptionInput {
 }
 
 /** Short-component row for work-order allocation (docs/requests/work-orders-kitting.md REQ-2). */
-export function recordWorkOrderException(tx: Tx, ctx: DomainCtx, input: RecordWorkOrderExceptionInput): void {
-  tx.insert(schema.allocationExceptions).values({
+export async function recordWorkOrderException(tx: Tx, ctx: DomainCtx, input: RecordWorkOrderExceptionInput): Promise<void> {
+  await tx.insert(schema.allocationExceptions).values({
     orderId: input.workOrder.id, waveId: null, waveNo: input.waveNo || MANUAL_ALLOCATION_WORK_ORDER, waveRuleName: null,
     algorithmName: WORK_ORDER_ALGORITHM_NAME, algorithmRuleName: null, shortageProductId: input.productId,
     inventoryUomQty: input.inventoryQty, orderLineQty: input.requiredQty, explanation: input.explanation,
     runBy: ctx.source, warehouseId: input.workOrder.warehouseId, clientId: input.workOrder.clientId,
-  }).run();
+  });
 }
 
-function setOrderStatus(tx: Tx, ctx: DomainCtx, order: OrderRow, status: OrderRow["status"]): void {
+async function setOrderStatus(tx: Tx, ctx: DomainCtx, order: OrderRow, status: OrderRow["status"]): Promise<void> {
   if (order.status === status) return;
   const next = stateMachines.shipmentOrder.transition(order.status, status);
-  const after = tx.update(schema.shipmentOrders).set({ status: next, updatedBy: ctx.userId, version: sql`${schema.shipmentOrders.version} + 1` })
-    .where(eq(schema.shipmentOrders.id, order.id)).returning().get();
-  recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { status: order.status }, after: { status: after.status } });
+  const after = (await tx.update(schema.shipmentOrders).set({ status: next, updatedBy: ctx.userId, version: sql`${schema.shipmentOrders.version} + 1` })
+    .where(eq(schema.shipmentOrders.id, order.id)).returning())[0];
+  await recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, before: { status: order.status }, after: { status: after.status } });
 }
 
 /** Logs "SKU -> Allocated Qty is modified. a --> b" on the order (REQ-R4-1, Logiwa AllocatedUOMQuantity). */
-function logLineAllocation(tx: Tx, ctx: DomainCtx, order: OrderRow, lineId: string, before: number, after: number): void {
+async function logLineAllocation(tx: Tx, ctx: DomainCtx, order: OrderRow, lineId: string, before: number, after: number): Promise<void> {
   if (before === after) return;
-  const row = tx.select({ sku: schema.products.sku }).from(schema.orderLines)
-    .innerJoin(schema.products, eq(schema.products.id, schema.orderLines.productId)).where(eq(schema.orderLines.id, lineId)).get();
-  recordLine(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, lineEntityType: "order_line",
+  const row = (await tx.select({ sku: schema.products.sku }).from(schema.orderLines)
+    .innerJoin(schema.products, eq(schema.products.id, schema.orderLines.productId)).where(eq(schema.orderLines.id, lineId)).limit(1))[0];
+  await recordLine(tx, ctx, { entityType: "shipment_order", entityId: order.id, entityCode: order.code, lineEntityType: "order_line",
     lineEntityId: lineId, lineLabel: row?.sku ?? "Line", field: "allocatedQuantity", from: before, to: after });
 }
 
 /** Commits planned slices: allocation rows, ledger Allocation txns, line allocated qty. */
-function commitSlices(tx: Tx, ctx: DomainCtx, order: OrderRow, slices: readonly PlannedSlice[], meta: { algorithmId: string | null; algorithmName: string; ruleName: string; waveId?: string | null; jobId?: string | null }): void {
+async function commitSlices(tx: Tx, ctx: DomainCtx, order: OrderRow, slices: readonly PlannedSlice[], meta: { algorithmId: string | null; algorithmName: string; ruleName: string; waveId?: string | null; jobId?: string | null }): Promise<void> {
   const perLine = new Map<string, number>();
   for (const s of slices) {
-    allocate(tx, ctx, {
+    await allocate(tx, ctx, {
       inventoryId: s.inventoryId, qty: s.qty, orderId: order.id, orderLineId: s.line.id, algorithmId: meta.algorithmId,
       ruleName: meta.ruleName, waveId: meta.waveId, jobId: meta.jobId, refs: { algorithmName: meta.algorithmName, algorithmRuleName: meta.ruleName },
     });
     perLine.set(s.line.id, (perLine.get(s.line.id) ?? 0) + s.qty);
   }
   for (const [lineId, qty] of perLine) {
-    const row = tx.update(schema.orderLines).set({ allocatedQuantity: sql`${schema.orderLines.allocatedQuantity} + ${qty}`, updatedBy: ctx.userId })
-      .where(eq(schema.orderLines.id, lineId)).returning({ q: schema.orderLines.allocatedQuantity }).get();
-    if (row) logLineAllocation(tx, ctx, order, lineId, row.q - qty, row.q);
+    const row = (await tx.update(schema.orderLines).set({ allocatedQuantity: sql`${schema.orderLines.allocatedQuantity} + ${qty}`, updatedBy: ctx.userId })
+      .where(eq(schema.orderLines.id, lineId)).returning({ q: schema.orderLines.allocatedQuantity }))[0];
+    if (row) await logLineAllocation(tx, ctx, order, lineId, row.q - qty, row.q);
   }
 }
 
-function recordShortages(tx: Tx, run: RunInfo, order: OrderRow, plans: readonly LinePlan[], ruleName: string): void {
+async function recordShortages(tx: Tx, run: RunInfo, order: OrderRow, plans: readonly LinePlan[], ruleName: string): Promise<void> {
   const now = nowIso();
-  const summaries = plans.map((p) => ({ plan: p, stock: stockSummary(tx, order, p.line.productId) }));
-  if (summaries.every((s) => s.stock.free <= 0)) writeException(tx, run, order, EXPLANATION_OUT_OF_STOCK, ruleName);
+  const summaries = await mapSeq(plans, async (p) => ({ plan: p, stock: await stockSummary(tx, order, p.line.productId) }));
+  if (summaries.every((s) => s.stock.free <= 0)) await writeException(tx, run, order, EXPLANATION_OUT_OF_STOCK, ruleName);
   for (const { plan, stock } of summaries) {
     if (plan.short <= 0) continue;
     const reason = stock.free < plan.need ? "Insufficient Inventory" : "No Eligible Stock Found";
     // Logiwa's "Missing triggered": a pick-short (missing log) on this order + product led here.
-    const missingTriggered = Boolean(tx.select({ id: schema.missingLog.id }).from(schema.missingLog)
-      .where(and(eq(schema.missingLog.orderId, order.id), eq(schema.missingLog.productId, plan.line.productId))).limit(1).get());
+    const missingTriggered = Boolean((await tx.select({ id: schema.missingLog.id }).from(schema.missingLog)
+      .where(and(eq(schema.missingLog.orderId, order.id), eq(schema.missingLog.productId, plan.line.productId))).limit(1))[0]);
     const values = {
       orderId: order.id, orderLineId: plan.line.id, reason, missingTriggered, shortageQty: plan.short, freeQty: Math.max(0, stock.free),
       damagedQty: stock.damaged, onHandQty: stock.onHand, lastTrialAt: now, resolvedAt: null,
     } as const;
-    tx.insert(schema.orderLineShortages).values(values)
-      .onConflictDoUpdate({ target: schema.orderLineShortages.orderLineId, set: values }).run();
-    writeException(tx, run, order, EXPLANATION_SHORTAGE, ruleName, { productId: plan.line.productId, inventoryQty: Math.max(0, stock.free), lineQty: plan.need });
+    await tx.insert(schema.orderLineShortages).values(values)
+      .onConflictDoUpdate({ target: schema.orderLineShortages.orderLineId, set: values });
+    await writeException(tx, run, order, EXPLANATION_SHORTAGE, ruleName, { productId: plan.line.productId, inventoryQty: Math.max(0, stock.free), lineQty: plan.need });
   }
 }
 
-function resolveShortages(tx: Tx, orderId: string): void {
-  tx.update(schema.orderLineShortages).set({ resolvedAt: nowIso() })
-    .where(and(eq(schema.orderLineShortages.orderId, orderId), isNull(schema.orderLineShortages.resolvedAt))).run();
+async function resolveShortages(tx: Tx, orderId: string): Promise<void> {
+  await tx.update(schema.orderLineShortages).set({ resolvedAt: nowIso() })
+    .where(and(eq(schema.orderLineShortages.orderId, orderId), isNull(schema.orderLineShortages.resolvedAt)));
 }
 
 type OrderOutcome = "allocated" | "shortage";
 
-function allocateOne(tx: Tx, ctx: DomainCtx, run: RunInfo, orderId: string): OrderOutcome {
-  const order = tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).get();
+async function allocateOne(tx: Tx, ctx: DomainCtx, run: RunInfo, orderId: string): Promise<OrderOutcome> {
+  const order = (await tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).limit(1))[0];
   if (!order || order.deletedAt) throw new DomainError("NOT_FOUND", "Shipment order not found");
   checkScope(ctx, order, "Shipment order");
   if (order.warehouseId !== run.input.warehouseId) throw new DomainError("VALIDATION", `Order ${order.code} belongs to another warehouse.`);
@@ -290,54 +292,54 @@ function allocateOne(tx: Tx, ctx: DomainCtx, run: RunInfo, orderId: string): Ord
     throw new DomainError("INVALID_STATE", `Order ${order.code} is ${order.status}; only Open or Shortage orders can be allocated.`);
   }
   if (order.workflowBlocked === "Fully") throw new DomainError("INVALID_STATE", `Order ${order.code} is blocked by a workflow.`);
-  const lines = tx.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, order.id)).all().filter((l) => remainingNeed(l) > 0);
-  const facts = orderFacts(tx, order);
+  const lines = (await tx.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, order.id))).filter((l) => remainingNeed(l) > 0);
+  const facts = await orderFacts(tx, order);
   const rule = run.algo.rules.find((r) => evaluateConditions(r.conditions, facts));
   if (!rule) {
-    writeException(tx, run, order, eliminatedBy(run.algo.rules.map((r) => r.name)), null);
-    if (order.status === "Open") setOrderStatus(tx, ctx, order, "Shortage");
+    await writeException(tx, run, order, eliminatedBy(run.algo.rules.map((r) => r.name)), null);
+    if (order.status === "Open") await setOrderStatus(tx, ctx, order, "Shortage");
     return "shortage";
   }
   const used = new Map<string, number>();
-  const plans = lines.map((line) => planLine(tx, order, line, rule, used));
+  const plans = await mapSeq(lines, async (line) => await planLine(tx, order, line, rule, used));
   const short = plans.some((p) => p.short > 0);
   const meta = { algorithmId: run.algo.id, algorithmName: run.algo.name, ruleName: rule.name, waveId: run.input.waveId };
   // Shipment Order Type: "Allow partial allocation" / "Create back order" keep what is available.
-  const typeFlags = orderTypeFlags(tx, order.orderTypeId);
+  const typeFlags = await orderTypeFlags(tx, order.orderTypeId);
   const keepPartial = run.input.mode === "partial" || typeFlags.has("allowPartialAllocation") || typeFlags.has("createBackOrder");
   const slices = plans.flatMap((p) => p.slices);
-  if (!short || keepPartial) commitSlices(tx, ctx, order, slices, meta);
+  if (!short || keepPartial) await commitSlices(tx, ctx, order, slices, meta);
   if (short) {
-    recordShortages(tx, run, order, plans, rule.name);
-    setOrderStatus(tx, ctx, order, "Shortage");
+    await recordShortages(tx, run, order, plans, rule.name);
+    await setOrderStatus(tx, ctx, order, "Shortage");
     // "Create back order": the short quantity moves to <code>-BO<n>; the order itself is released to picking.
     if (typeFlags.has("createBackOrder") && slices.length > 0) {
-      createBackorder(tx, ctx, { orderId: order.id });
+      await createBackorder(tx, ctx, { orderId: order.id });
       return "allocated";
     }
     return "shortage";
   }
-  resolveShortages(tx, order.id);
-  setOrderStatus(tx, ctx, order, "Ready to Pick");
+  await resolveShortages(tx, order.id);
+  await setOrderStatus(tx, ctx, order, "Ready to Pick");
   return "allocated";
 }
 
-export function allocateOrders(tx: Tx, ctx: DomainCtx, input: AllocateOrdersInput): AllocateOrdersResult {
-  const algo = loadAllocationAlgorithm(tx, input.warehouseId, input.algorithmId);
+export async function allocateOrders(tx: Tx, ctx: DomainCtx, input: AllocateOrdersInput): Promise<AllocateOrdersResult> {
+  const algo = await loadAllocationAlgorithm(tx, input.warehouseId, input.algorithmId);
   const run: RunInfo = { input, algo, runBy: input.runBy ?? ctx.source, waveNo: input.waveNo ?? MANUAL_ALLOCATION };
-  const before = tx.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM allocation_exceptions`)?.n ?? 0;
+  const before = (await dbGet<{ n: number }>(tx, sql`SELECT COUNT(*) AS n FROM allocation_exceptions`))?.n ?? 0;
   const allocated: string[] = [];
   const shortage: string[] = [];
   const failed: { id: string; code: string; message: string }[] = [];
   for (const id of [...new Set(input.orderIds)]) {
     try {
-      const outcome = tx.transaction((inner) => allocateOne(inner, ctx, run, id));
+      const outcome = await withWriteTx(tx, async (inner) => await allocateOne(inner, ctx, run, id));
       (outcome === "allocated" ? allocated : shortage).push(id);
     } catch (error) {
       failed.push({ id, ...describeError(error) });
     }
   }
-  const after = tx.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM allocation_exceptions`)?.n ?? 0;
+  const after = (await dbGet<{ n: number }>(tx, sql`SELECT COUNT(*) AS n FROM allocation_exceptions`))?.n ?? 0;
   return { succeeded: allocated, failed, allocated, shortage, exceptions: after - before };
 }
 
@@ -345,56 +347,56 @@ export function allocateOrders(tx: Tx, ctx: DomainCtx, input: AllocateOrdersInpu
  * Allocates up to `qty` more of a line from stock outside `excludeLocationIds` (pick-short
  * resolution). Returns the allocated quantity.
  */
-export function reallocateLine(tx: Tx, ctx: DomainCtx, input: { orderLineId: string; excludeLocationIds: readonly string[]; jobId?: string | null }): number {
-  const line = tx.select().from(schema.orderLines).where(eq(schema.orderLines.id, input.orderLineId)).get();
+export async function reallocateLine(tx: Tx, ctx: DomainCtx, input: { orderLineId: string; excludeLocationIds: readonly string[]; jobId?: string | null }): Promise<number> {
+  const line = (await tx.select().from(schema.orderLines).where(eq(schema.orderLines.id, input.orderLineId)).limit(1))[0];
   if (!line) throw new DomainError("NOT_FOUND", "Order line not found");
-  const order = tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, line.orderId)).get();
+  const order = (await tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, line.orderId)).limit(1))[0];
   if (!order) throw new DomainError("NOT_FOUND", "Shipment order not found");
-  const algo = loadAllocationAlgorithm(tx, order.warehouseId);
-  const rule = algo.rules.find((r) => evaluateConditions(r.conditions, orderFacts(tx, order))) ?? DEFAULT_ALLOCATION_RULE;
-  const plan = planLine(tx, order, line, rule, new Map(), input.excludeLocationIds);
-  commitSlices(tx, ctx, order, plan.slices, { algorithmId: algo.id, algorithmName: algo.name, ruleName: rule.name, jobId: input.jobId });
+  const algo = await loadAllocationAlgorithm(tx, order.warehouseId);
+  const rule = await findSeq(algo.rules, async (r) => evaluateConditions(r.conditions, await orderFacts(tx, order))) ?? DEFAULT_ALLOCATION_RULE;
+  const plan = await planLine(tx, order, line, rule, new Map(), input.excludeLocationIds);
+  await commitSlices(tx, ctx, order, plan.slices, { algorithmId: algo.id, algorithmName: algo.name, ruleName: rule.name, jobId: input.jobId });
   return plan.slices.reduce((s, x) => s + x.qty, 0);
 }
 
 /** Releases every unpicked allocation of an order. Picked stock stays committed. */
-export function deallocateOrder(tx: Tx, ctx: DomainCtx, order: OrderRow): number {
-  const allocs = tx.select().from(schema.inventoryAllocations)
-    .where(and(eq(schema.inventoryAllocations.orderId, order.id), eq(schema.inventoryAllocations.status, "Allocated"))).all();
+export async function deallocateOrder(tx: Tx, ctx: DomainCtx, order: OrderRow): Promise<number> {
+  const allocs = await tx.select().from(schema.inventoryAllocations)
+    .where(and(eq(schema.inventoryAllocations.orderId, order.id), eq(schema.inventoryAllocations.status, "Allocated")));
   const perLine = new Map<string, number>();
   for (const a of allocs) {
-    releaseAllocation(tx, ctx, { allocationId: a.id });
+    await releaseAllocation(tx, ctx, { allocationId: a.id });
     if (a.orderLineId) perLine.set(a.orderLineId, (perLine.get(a.orderLineId) ?? 0) + a.qty);
   }
   for (const [lineId, qty] of perLine) {
-    const prev = tx.select({ q: schema.orderLines.allocatedQuantity }).from(schema.orderLines).where(eq(schema.orderLines.id, lineId)).get()?.q ?? 0;
-    tx.update(schema.orderLines).set({ allocatedQuantity: sql`MAX(${schema.orderLines.allocatedQuantity} - ${qty}, 0)`, updatedBy: ctx.userId })
-      .where(eq(schema.orderLines.id, lineId)).run();
-    logLineAllocation(tx, ctx, order, lineId, prev, Math.max(prev - qty, 0));
+    const prev = (await tx.select({ q: schema.orderLines.allocatedQuantity }).from(schema.orderLines).where(eq(schema.orderLines.id, lineId)).limit(1))[0]?.q ?? 0;
+    await tx.update(schema.orderLines).set({ allocatedQuantity: sql`GREATEST(${schema.orderLines.allocatedQuantity} - ${qty}, 0)`, updatedBy: ctx.userId })
+      .where(eq(schema.orderLines.id, lineId));
+    await logLineAllocation(tx, ctx, order, lineId, prev, Math.max(prev - qty, 0));
   }
-  resolveShortages(tx, order.id);
-  const stillHeld = tx.select({ id: schema.inventoryAllocations.id }).from(schema.inventoryAllocations)
-    .where(and(eq(schema.inventoryAllocations.orderId, order.id), inArray(schema.inventoryAllocations.status, [...ACTIVE_ALLOCATION_STATUSES]))).get();
+  await resolveShortages(tx, order.id);
+  const stillHeld = (await tx.select({ id: schema.inventoryAllocations.id }).from(schema.inventoryAllocations)
+    .where(and(eq(schema.inventoryAllocations.orderId, order.id), inArray(schema.inventoryAllocations.status, [...ACTIVE_ALLOCATION_STATUSES]))).limit(1))[0];
   if (!stillHeld && (order.status === "Ready to Pick" || order.status === "Shortage")) {
-    setOrderStatus(tx, ctx, order, "Open");
+    await setOrderStatus(tx, ctx, order, "Open");
   }
   return allocs.reduce((s, a) => s + a.qty, 0);
 }
 
-export function deallocate(tx: Tx, ctx: DomainCtx, input: { orderIds: readonly string[] }): BulkResult {
+export async function deallocate(tx: Tx, ctx: DomainCtx, input: { orderIds: readonly string[] }): Promise<BulkResult> {
   const succeeded: string[] = [];
   const failed: { id: string; code: string; message: string }[] = [];
   for (const id of [...new Set(input.orderIds)]) {
     try {
-      tx.transaction((inner) => {
-        const order = inner.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).get();
+      await withWriteTx(tx, async (inner) => {
+        const order = (await inner.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).limit(1))[0];
         if (!order || order.deletedAt) throw new DomainError("NOT_FOUND", "Shipment order not found");
         checkScope(ctx, order, "Shipment order");
         if (order.jobId) throw new DomainError("INVALID_STATE", `Order ${order.code} is in a job. Remove it from the job or cancel the job first.`);
         if (order.status !== "Ready to Pick" && order.status !== "Shortage") {
           throw new DomainError("INVALID_STATE", `Order ${order.code} is ${order.status}; only Ready to Pick or Shortage orders can be deallocated.`);
         }
-        deallocateOrder(inner, ctx, order);
+        await deallocateOrder(inner, ctx, order);
       });
       succeeded.push(id);
     } catch (error) {

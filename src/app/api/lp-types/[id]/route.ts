@@ -8,21 +8,21 @@ import { deleteLpTypes, getLpType, updateLpType } from "@/server/repositories/lp
 export const GET = defineRoute({
   permission: ["settings.lp_types.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getLpType(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await getLpType(db, auth, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: "settings.lp_types.edit",
   params: idParamsSchema,
   body: lpTypeSchema,
-  handler: ({ db, auth, actor, params, body }) => updateLpType(db, auth, actor, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updateLpType(db, auth, actor, params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: "settings.lp_types.delete",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
-    const result = deleteLpTypes(db, auth, actor, [params.id]);
+  handler: async ({ db, auth, actor, params }) => {
+    const result = await deleteLpTypes(db, auth, actor, [params.id]);
     const failure = result.failed[0];
     if (failure) throw new AppError(failure.code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_STATE", failure.message);
     return result;

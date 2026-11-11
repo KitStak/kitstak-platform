@@ -18,6 +18,7 @@ import { sql } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import { hashPassword } from "@/server/auth/password";
 import * as schema from "@/server/db/schema";
+import { dbAll, dbRun } from "@/server/db/sql";
 
 export interface LaborAssociateSpec {
   readonly email: string;
@@ -113,35 +114,35 @@ export interface LaborBackfillReport {
 
 const UNTIMED = sql`(t.started_at IS NULL OR t.started_at >= t.finished_at)`;
 
-export function backfillLaborHistory(db: AppDb, opts: { readonly passwordSeed?: string } = {}): LaborBackfillReport {
-  const whByCode = new Map(db.all<{ id: string; code: string }>(sql`SELECT id, code FROM warehouses`).map((w) => [w.code, w.id]));
-  const clerkRole = db.all<{ id: string }>(sql`SELECT id FROM roles WHERE name = 'Warehouse Clerk' LIMIT 1`)[0]?.id;
+export async function backfillLaborHistory(db: AppDb, opts: { readonly passwordSeed?: string } = {}): Promise<LaborBackfillReport> {
+  const whByCode = new Map((await dbAll<{ id: string; code: string }>(db, sql`SELECT id, code FROM warehouses`)).map((w) => [w.code, w.id]));
+  const clerkRole = (await dbAll<{ id: string }>(db, sql`SELECT id FROM roles WHERE name = 'Warehouse Clerk' LIMIT 1`))[0]?.id;
 
   // 1. The floor team.
   let usersCreated = 0;
   const pace = new Map<string, number>();
   const pool = new Map<string, string[]>(); // warehouse id → associate user ids
   for (const [email, p] of Object.entries(SEED_ASSOCIATE_PACE)) {
-    const u = db.all<{ id: string }>(sql`SELECT id FROM users WHERE email = ${email}`)[0];
+    const u = (await dbAll<{ id: string }>(db, sql`SELECT id FROM users WHERE email = ${email}`))[0];
     if (u) pace.set(u.id, p);
   }
   for (const a of EXTRA_ASSOCIATES) {
     const whId = whByCode.get(a.warehouse);
     if (!whId) continue;
-    let id = db.all<{ id: string }>(sql`SELECT id FROM users WHERE email = ${a.email}`)[0]?.id;
+    let id = (await dbAll<{ id: string }>(db, sql`SELECT id FROM users WHERE email = ${a.email}`))[0]?.id;
     if (!id) {
       // Login is not the point of these users: a random password nobody knows.
       const secret = `${opts.passwordSeed ?? "labor"}-${a.email}-${Math.random().toString(36).slice(2)}${Date.now()}`;
-      id = db.insert(schema.users).values({
+      id = (await db.insert(schema.users).values({
         email: a.email, name: `${a.firstName} ${a.lastName}`, firstName: a.firstName, lastName: a.lastName,
         passwordHash: hashPassword(secret, 4), role: "operator", userType: "Operation", allClients: true,
         preferences: { dateFormat: "M/D/YYYY h:mm:ss A", timeFormat: "12h", numberFormat: "1,025.00", density: "Large", defaultWarehouseId: whId },
-      }).returning({ id: schema.users.id }).get().id;
-      if (clerkRole) db.insert(schema.userRoles).values({ userId: id, roleId: clerkRole }).run();
-      db.insert(schema.userWarehouses).values({ userId: id, warehouseId: whId }).run();
+      }).returning({ id: schema.users.id }))[0].id;
+      if (clerkRole) await db.insert(schema.userRoles).values({ userId: id, roleId: clerkRole });
+      await db.insert(schema.userWarehouses).values({ userId: id, warehouseId: whId });
       usersCreated += 1;
-    } else if (!db.select().from(schema.userWarehouses).where(and(eq(schema.userWarehouses.userId, id), eq(schema.userWarehouses.warehouseId, whId))).get()) {
-      db.insert(schema.userWarehouses).values({ userId: id, warehouseId: whId }).run();
+    } else if (!(await db.select().from(schema.userWarehouses).where(and(eq(schema.userWarehouses.userId, id), eq(schema.userWarehouses.warehouseId, whId))).limit(1))[0]) {
+      await db.insert(schema.userWarehouses).values({ userId: id, warehouseId: whId });
     }
     pace.set(id, a.pace);
     pool.set(whId, [...(pool.get(whId) ?? []), id]);
@@ -151,9 +152,9 @@ export function backfillLaborHistory(db: AppDb, opts: { readonly passwordSeed?: 
   let tasksReassigned = 0;
   let ledgerRowsReassigned = 0;
   for (const email of DONORS) {
-    const donor = db.all<{ id: string }>(sql`SELECT id FROM users WHERE email = ${email}`)[0]?.id;
+    const donor = (await dbAll<{ id: string }>(db, sql`SELECT id FROM users WHERE email = ${email}`))[0]?.id;
     if (!donor) continue;
-    const jobs = db.all<{ job: string; wh: string }>(sql`
+    const jobs = await dbAll<{ job: string; wh: string }>(db, sql`
       SELECT t.job_id AS job, MIN(t.warehouse_id) AS wh FROM tasks t
       WHERE t.executed_by_user_id = ${donor} AND t.status = 'Completed' AND t.job_id IS NOT NULL AND ${UNTIMED}
       GROUP BY t.job_id`);
@@ -161,22 +162,22 @@ export function backfillLaborHistory(db: AppDb, opts: { readonly passwordSeed?: 
       const team = [donor, ...(pool.get(j.wh) ?? [])];
       const to = team[Math.floor(unitHash(`job:${j.job}`) * team.length) % team.length]!;
       if (to === donor) continue;
-      const ids = db.all<{ id: string }>(sql`SELECT t.id FROM tasks t WHERE t.job_id = ${j.job} AND t.executed_by_user_id = ${donor} AND t.status = 'Completed' AND ${UNTIMED}`).map((r) => r.id);
+      const ids = (await dbAll<{ id: string }>(db, sql`SELECT t.id FROM tasks t WHERE t.job_id = ${j.job} AND t.executed_by_user_id = ${donor} AND t.status = 'Completed' AND ${UNTIMED}`)).map((r) => r.id);
       for (const tid of ids) {
-        db.run(sql`UPDATE tasks SET executed_by_user_id = ${to}, assignee_user_id = CASE WHEN assignee_user_id = ${donor} THEN ${to} ELSE assignee_user_id END WHERE id = ${tid}`);
-        const res = db.run(sql`UPDATE inventory_transactions SET user_id = ${to} WHERE task_id = ${tid} AND user_id = ${donor}`) as unknown as { changes?: number };
-        ledgerRowsReassigned += Number(res?.changes ?? 0);
+        await dbRun(db, sql`UPDATE tasks SET executed_by_user_id = ${to}, assignee_user_id = CASE WHEN assignee_user_id = ${donor} THEN ${to} ELSE assignee_user_id END WHERE id = ${tid}`);
+        const res = await dbRun(db, sql`UPDATE inventory_transactions SET user_id = ${to} WHERE task_id = ${tid} AND user_id = ${donor}`);
+        ledgerRowsReassigned += Number(res.rowCount ?? 0);
       }
       tasksReassigned += ids.length;
     }
   }
 
   // 3. Real start scans on every untimed completed task.
-  const rows = db.all<{ id: string; uid: string; type: string; fin: string }>(sql`
+  const rows = await dbAll<{ id: string; uid: string; type: string; fin: string }>(db, sql`
     SELECT t.id AS id, t.executed_by_user_id AS uid, t.task_type AS type, t.finished_at AS fin
     FROM tasks t WHERE t.status = 'Completed' AND t.executed_by_user_id IS NOT NULL AND t.finished_at IS NOT NULL
     ORDER BY t.executed_by_user_id, t.finished_at`);
-  const untimed = new Set(db.all<{ id: string }>(sql`SELECT t.id AS id FROM tasks t WHERE t.status = 'Completed' AND t.finished_at IS NOT NULL AND ${UNTIMED}`).map((r) => r.id));
+  const untimed = new Set((await dbAll<{ id: string }>(db, sql`SELECT t.id AS id FROM tasks t WHERE t.status = 'Completed' AND t.finished_at IS NOT NULL AND ${UNTIMED}`)).map((r) => r.id));
   const byUserDay = new Map<string, { timedBefore: number | null; tasks: TimedTask[]; fixedEnds: number[] }>();
   for (const r of rows) {
     const key = `${r.uid}|${r.fin.slice(0, 10)}`;
@@ -200,7 +201,7 @@ export function backfillLaborHistory(db: AppDb, opts: { readonly passwordSeed?: 
     for (const [before, list] of stretches) {
       const plan = planStarts(list, before >= 0 ? before : null);
       for (const p of plan) {
-        db.run(sql`UPDATE tasks SET started_at = ${new Date(p.startMs).toISOString()}, finished_at = ${new Date(p.finishMs).toISOString()} WHERE id = ${p.id}`);
+        await dbRun(db, sql`UPDATE tasks SET started_at = ${new Date(p.startMs).toISOString()}, finished_at = ${new Date(p.finishMs).toISOString()} WHERE id = ${p.id}`);
       }
       tasksTimed += plan.length;
       tasksLeftInferred += list.length - plan.length;

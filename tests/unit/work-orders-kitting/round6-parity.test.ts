@@ -19,56 +19,56 @@ import { EMPTY_GRID_QUERY } from "@/server/query/grid-query";
 import { createKitWorld, onHandAt, stock, woInput, type KitWorld } from "./kit-world";
 
 let w: KitWorld;
-beforeEach(() => {
-  w = createKitWorld();
-  stock(w, w.productId, 30);
-  stock(w, w.product2Id, 12);
+beforeEach(async () => {
+  w = await createKitWorld();
+  await stock(w, w.productId, 30);
+  await stock(w, w.product2Id, 12);
 });
 afterEach(() => w.close());
 
-const codeOf = (fn: () => unknown): string | undefined => {
-  try { fn(); return undefined; } catch (e) { return (e as { code?: string }).code; }
+const codeOf = async (fn: () => unknown): Promise<string | undefined> => {
+  try { await fn(); return undefined; } catch (e) { return (e as { code?: string }).code; }
 };
 const picking = () => woInput(w, { code: "KS-R6-PICK", type: "Work Order with Picking", components: [], requestedQty: 2 });
 const kitInput = (id: string, extra: Record<string, unknown> = {}) => ({ workOrderId: id, qty: 2, locationId: w.kittingLocId, lpId: null, lotNumber: null, expiryDate: null, productionDate: null, ...extra });
-const pickTasks = (woId: string) => w.db.select().from(schema.tasks).where(and(eq(schema.tasks.workOrderId, woId), eq(schema.tasks.taskType, "Picking"))).all();
+const pickTasks = async (woId: string) => await w.db.select().from(schema.tasks).where(and(eq(schema.tasks.workOrderId, woId), eq(schema.tasks.taskType, "Picking")));
 
 describe("with picking: Create Kit waits for the picks (Logiwa sequence)", () => {
-  it("refuses to build while picking tasks are open, naming the progress", () => {
-    const wo = createWorkOrder(w.db, w.wctx, picking());
-    allocateWorkOrderWith(w.db, w.wctx, wo.id, { jobTypeId: w.woJobTypeId });
+  it("refuses to build while picking tasks are open, naming the progress", async () => {
+    const wo = await createWorkOrder(w.db, w.wctx, picking());
+    await allocateWorkOrderWith(w.db, w.wctx, wo.id, { jobTypeId: w.woJobTypeId });
     let err: unknown;
-    try { createKit(w.db, w.wctx, kitInput(wo.id)); } catch (e) { err = e; }
+    try { await createKit(w.db, w.wctx, kitInput(wo.id)); } catch (e) { err = e; }
     expect((err as { code?: string }).code).toBe("INVALID_STATE");
     expect((err as Error).message).toMatch(/Components not yet picked to kitting area \(0\/2 picked\)/);
     // Nothing moved: no Picking rows, no consumption, still In Process.
-    expect(w.db.select().from(schema.inventoryTransactions).where(eq(schema.inventoryTransactions.type, "Picking")).all()).toHaveLength(0);
-    expect(onHandAt(w, w.productId)).toBe(30);
-    expect(pickTasks(wo.id).every((t) => t.status === "Pending")).toBe(true);
+    expect(await w.db.select().from(schema.inventoryTransactions).where(eq(schema.inventoryTransactions.type, "Picking"))).toHaveLength(0);
+    expect(await onHandAt(w, w.productId)).toBe(30);
+    expect((await pickTasks(wo.id)).every((t) => t.status === "Pending")).toBe(true);
   });
 
-  it("builds once the picks are done, consuming what is in the kitting area", () => {
-    const wo = createWorkOrder(w.db, w.wctx, picking());
-    allocateWorkOrderWith(w.db, w.wctx, wo.id, { jobTypeId: w.woJobTypeId });
-    executeTasks(w.db, w.wctx, { taskIds: pickTasks(wo.id).map((t) => t.id), targetLocationId: w.kittingLocId });
-    const before = getWorkOrderDetail(w.db, w.scope, wo.id);
+  it("builds once the picks are done, consuming what is in the kitting area", async () => {
+    const wo = await createWorkOrder(w.db, w.wctx, picking());
+    await allocateWorkOrderWith(w.db, w.wctx, wo.id, { jobTypeId: w.woJobTypeId });
+    await executeTasks(w.db, w.wctx, { taskIds: (await pickTasks(wo.id)).map((t) => t.id), targetLocationId: w.kittingLocId });
+    const before = await getWorkOrderDetail(w.db, w.scope, wo.id);
     expect(before.components.map((c) => c.inKittingAreaQty).sort()).toEqual([2, 4]);
-    const res = createKit(w.db, w.wctx, kitInput(wo.id));
+    const res = await createKit(w.db, w.wctx, kitInput(wo.id));
     expect(res.status).toBe("Completed");
-    expect(onHandAt(w, w.kitId, w.kittingLocId)).toBe(2);
-    expect(onHandAt(w, w.productId, w.kittingLocId)).toBe(0);
+    expect(await onHandAt(w, w.kitId, w.kittingLocId)).toBe(2);
+    expect(await onHandAt(w, w.productId, w.kittingLocId)).toBe(0);
   });
 
-  it("an explicit 'Complete pending picks and build' posts the picks, logs the tasks and shows them on the WO", () => {
-    const wo = createWorkOrder(w.db, w.wctx, picking());
-    allocateWorkOrderWith(w.db, w.wctx, wo.id, { jobTypeId: w.woJobTypeId });
-    const nos = pickTasks(wo.id).map((t) => t.taskNo);
-    createKit(w.db, w.wctx, kitInput(wo.id, { completePendingPicks: true }));
-    expect(pickTasks(wo.id).every((t) => t.status === "Completed")).toBe(true);
-    const log = w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.entityId, wo.id), eq(schema.changeLog.field, "pickingTasks"))).get();
+  it("an explicit 'Complete pending picks and build' posts the picks, logs the tasks and shows them on the WO", async () => {
+    const wo = await createWorkOrder(w.db, w.wctx, picking());
+    await allocateWorkOrderWith(w.db, w.wctx, wo.id, { jobTypeId: w.woJobTypeId });
+    const nos = (await pickTasks(wo.id)).map((t) => t.taskNo);
+    await createKit(w.db, w.wctx, kitInput(wo.id, { completePendingPicks: true }));
+    expect((await pickTasks(wo.id)).every((t) => t.status === "Completed")).toBe(true);
+    const log = (await w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.entityId, wo.id), eq(schema.changeLog.field, "pickingTasks"))).limit(1))[0];
     expect(log?.message).toMatch(/Pending picks completed on Create Kit/);
     for (const n of nos) expect(log?.message).toContain(`Task #${n}`);
-    const detail = getWorkOrderDetail(w.db, w.scope, wo.id);
+    const detail = await getWorkOrderDetail(w.db, w.scope, wo.id);
     const picks = detail.transactions.filter((t) => t.ledgerType === "Picking");
     expect(picks.length).toBe(2);
     expect(picks.every((t) => t.type === "Picking (to kitting area)")).toBe(true);
@@ -78,10 +78,10 @@ describe("with picking: Create Kit waits for the picks (Logiwa sequence)", () =>
     expect(createKitSchema.safeParse({ workOrderId: "x", qty: 1, locationId: "l", completePendingPicks: true }).success).toBe(true);
   });
 
-  it("exposes pick counts on the row, and the client guard blocks non-supervisors", () => {
-    const wo = createWorkOrder(w.db, w.wctx, picking());
-    allocateWorkOrderWith(w.db, w.wctx, wo.id, { jobTypeId: w.woJobTypeId });
-    const row = listWorkOrders(w.db, w.scope, { ...EMPTY_GRID_QUERY, pageSize: 50 }).rows.find((r) => r.id === wo.id);
+  it("exposes pick counts on the row, and the client guard blocks non-supervisors", async () => {
+    const wo = await createWorkOrder(w.db, w.wctx, picking());
+    await allocateWorkOrderWith(w.db, w.wctx, wo.id, { jobTypeId: w.woJobTypeId });
+    const row = (await listWorkOrders(w.db, w.scope, { ...EMPTY_GRID_QUERY, pageSize: 50 })).rows.find((r) => r.id === wo.id);
     expect(row).toMatchObject({ pickTaskCount: 2, pickDoneCount: 0 });
     if (!row) throw new Error("row");
     expect(createKitReason(row)).toBe("Components not yet picked to kitting area (0/2 picked)");
@@ -114,11 +114,11 @@ describe("transactions labels", () => {
 });
 
 describe("kitting consumption attributes (Disassemble prefill)", () => {
-  it("returns the lots consumed per component, largest first", () => {
-    w.db.update(schema.inventory).set({ lotNumber: "L260804C", expiryDate: "2027-05-01" }).where(eq(schema.inventory.productId, w.productId)).run();
-    const wo = createWorkOrder(w.db, w.wctx, woInput(w, { requestedQty: 2 }));
-    createKit(w.db, w.wctx, kitInput(wo.id));
-    const d = getWorkOrderDetail(w.db, w.scope, wo.id);
+  it("returns the lots consumed per component, largest first", async () => {
+    await w.db.update(schema.inventory).set({ lotNumber: "L260804C", expiryDate: "2027-05-01" }).where(eq(schema.inventory.productId, w.productId));
+    const wo = await createWorkOrder(w.db, w.wctx, woInput(w, { requestedQty: 2 }));
+    await createKit(w.db, w.wctx, kitInput(wo.id));
+    const d = await getWorkOrderDetail(w.db, w.scope, wo.id);
     const a = d.consumedAttributes.find((x) => x.productId === w.productId);
     expect(a).toMatchObject({ lotNumber: "L260804C", expiryDate: "2027-05-01", qty: 4 });
   });
@@ -145,9 +145,9 @@ describe("time-zone policy", () => {
     expect(formatInZone("2026-11-10T05:33:00.000Z", "America/New_York")).toBe("11/10/2026 12:33 AM EST");
     expect(zoneLabel("America/New_York", new Date("2026-11-10T05:33:00Z"))).toBe("EST");
   });
-  it("rows carry the warehouse zone and the export sends zoned text", () => {
-    const wo = createWorkOrder(w.db, w.wctx, woInput(w));
-    const row = listWorkOrders(w.db, w.scope, { ...EMPTY_GRID_QUERY, pageSize: 50 }).rows.find((r) => r.id === wo.id);
+  it("rows carry the warehouse zone and the export sends zoned text", async () => {
+    const wo = await createWorkOrder(w.db, w.wctx, woInput(w));
+    const row = (await listWorkOrders(w.db, w.scope, { ...EMPTY_GRID_QUERY, pageSize: 50 })).rows.find((r) => r.id === wo.id);
     expect(row?.warehouseTimeZone).toBeTruthy();
     const created = WORK_ORDER_EXPORT_COLUMNS.find((c) => c.key === "createdAt");
     expect(created).toMatchObject({ type: "text" });

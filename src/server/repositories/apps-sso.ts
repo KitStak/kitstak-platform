@@ -20,6 +20,7 @@ import { AppError } from "@/server/api/errors";
 import * as s from "@/server/db/schema";
 import { decryptCredentials, encryptCredentials } from "@/server/integrations/crypto";
 import { appSecrets } from "./apps";
+import { dbGet } from "@/server/db/sql";
 
 export const SSO_STATE_COOKIE = "ks_sso";
 export const SSO_STATE_TTL_SECONDS = 600;
@@ -42,8 +43,8 @@ export interface SsoConfig {
 
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 
-export function getSsoConfig(db: AppDb): SsoConfig | null {
-  const row = db.select().from(s.apps).where(eq(s.apps.key, "sso")).get();
+export async function getSsoConfig(db: AppDb): Promise<SsoConfig | null> {
+  const row = (await db.select().from(s.apps).where(eq(s.apps.key, "sso")).limit(1))[0];
   if (!row) return null;
   const st = (row.settings ?? {}) as Record<string, unknown>;
   const provider = str(st.provider) || "your identity provider";
@@ -64,16 +65,16 @@ export function getSsoConfig(db: AppDb): SsoConfig | null {
 }
 
 /** Public, unauthenticated view for the sign-in page. */
-export function ssoPublicStatus(db: AppDb): { readonly enabled: boolean; readonly label: string | null; readonly enforced: boolean } {
-  const c = getSsoConfig(db);
+export async function ssoPublicStatus(db: AppDb): Promise<{ readonly enabled: boolean; readonly label: string | null; readonly enforced: boolean }> {
+  const c = await getSsoConfig(db);
   const enabled = Boolean(c?.active && c.protocol === "OpenID Connect" && c.issuer && c.clientId);
   return { enabled, label: enabled ? c!.buttonLabel : null, enforced: Boolean(enabled && c!.enforce) };
 }
 
 /** Password sign-in is refused for non-admins while SSO is active and enforced. */
-export function passwordLoginBlockedBySso(db: AppDb, userId: string): boolean {
-  if (!ssoPublicStatus(db).enforced) return false;
-  const admin = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ${userId} AND r.key = 'admin'`)?.n ?? 0;
+export async function passwordLoginBlockedBySso(db: AppDb, userId: string): Promise<boolean> {
+  if (!(await ssoPublicStatus(db)).enforced) return false;
+  const admin = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ${userId} AND r.key = 'admin'`))?.n ?? 0;
   return Number(admin) === 0;
 }
 
@@ -118,7 +119,7 @@ export interface SsoStart {
 }
 
 export async function startSso(db: AppDb, origin: string, returnTo: string | null): Promise<SsoStart> {
-  const c = getSsoConfig(db);
+  const c = await getSsoConfig(db);
   if (!c?.active || c.protocol !== "OpenID Connect" || !c.issuer || !c.clientId) throw new AppError("INVALID_STATE", "Single sign-on isn't set up");
   const d = await discover(c.issuer);
   const state = b64url(randomBytes(24));
@@ -142,7 +143,7 @@ export interface SsoIdentity {
 }
 
 export async function completeSso(db: AppDb, origin: string, params: URLSearchParams, cookie: string | undefined): Promise<SsoIdentity> {
-  const c = getSsoConfig(db);
+  const c = await getSsoConfig(db);
   if (!c?.active || c.protocol !== "OpenID Connect") throw new AppError("INVALID_STATE", "Single sign-on isn't active");
   const err = params.get("error");
   if (err) throw new AppError("UNAUTHENTICATED", `${c.provider} returned: ${params.get("error_description") ?? err}`);
@@ -177,10 +178,10 @@ export async function completeSso(db: AppDb, origin: string, params: URLSearchPa
   if (!email.includes("@")) throw new AppError("UNAUTHENTICATED", "The identity provider didn't share an email address (add the email scope)");
   if (payload.email_verified === false) throw new AppError("UNAUTHENTICATED", "Your email isn't verified at the identity provider");
   if (!emailDomainAllowed(email, c.allowedDomains)) throw new AppError("FORBIDDEN", `${email.split("@")[1]} isn't an allowed sign-in domain`);
-  const user = db.select({ id: s.users.id, isActive: s.users.isActive }).from(s.users).where(sql`lower(${s.users.email}) = ${email}`).get();
+  const user = (await db.select({ id: s.users.id, isActive: s.users.isActive }).from(s.users).where(sql`lower(${s.users.email}) = ${email}`).limit(1))[0];
   if (!user) throw new AppError("FORBIDDEN", `No KitStak user has the email ${email}. Ask an administrator to add you.`);
   if (!user.isActive) throw new AppError("FORBIDDEN", "Your KitStak user is inactive");
-  db.update(s.users).set({ lastLoginAt: new Date().toISOString(), failedLoginCount: 0, lockedUntil: null }).where(eq(s.users.id, user.id)).run();
+  await db.update(s.users).set({ lastLoginAt: new Date().toISOString(), failedLoginCount: 0, lockedUntil: null }).where(eq(s.users.id, user.id));
   return { userId: user.id, email, returnTo: saved.returnTo ?? "/", subject: String(payload.sub ?? "") };
 }
 
@@ -204,7 +205,7 @@ export interface SsoTestResult {
 
 /** Gear panel "Test connection": OIDC discovery + JWKS, or the SAML certificate. */
 export async function testSso(db: AppDb): Promise<SsoTestResult> {
-  const c = getSsoConfig(db);
+  const c = await getSsoConfig(db);
   if (!c) return { ok: false, checks: [{ label: "Configuration", ok: false, detail: "Save the settings first" }] };
   const checks: { label: string; ok: boolean; detail: string }[] = [];
   if (c.protocol === "OpenID Connect") {

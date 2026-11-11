@@ -5,8 +5,8 @@ import { backgroundTaskListQuerySchema, listBackgroundTasks } from "@/server/rep
 
 export const GET = defineRoute({
   query: backgroundTaskListQuerySchema,
-  handler: ({ db, auth, query }) => {
-    const { rows, total } = listBackgroundTasks(db, auth.user.id, query);
+  handler: async ({ db, auth, query }) => {
+    const { rows, total } = await listBackgroundTasks(db, auth.user.id, query);
     return listResult(rows, { total, page: query.page, pageSize: query.ps });
   },
 });

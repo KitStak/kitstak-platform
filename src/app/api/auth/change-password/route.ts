@@ -8,6 +8,7 @@ import { hashPassword, verifyPassword } from "@/server/auth/password";
 import { getPasswordPolicy, validatePassword } from "@/server/auth/password-policy";
 import { bumpSessionVersion, issueSession, setSessionCookie } from "@/server/auth/session";
 import { users } from "@/server/db/schema";
+import { withWriteTx } from "@/server/db/sql";
 
 const bodySchema = z
   .object({
@@ -26,23 +27,23 @@ export const POST = defineRoute({
   body: bodySchema,
   transaction: false,
   handler: async ({ db, auth, body, ip, userAgent, audit }) => {
-    const row = db.select({ hash: users.passwordHash, email: users.email }).from(users).where(eq(users.id, auth.user.id)).get();
+    const row = (await db.select({ hash: users.passwordHash, email: users.email }).from(users).where(eq(users.id, auth.user.id)).limit(1))[0];
     if (!row || !verifyPassword(body.currentPassword, row.hash)) {
       throw new AppError("VALIDATION", "Current password is incorrect", { fieldErrors: { currentPassword: ["Current password is incorrect"] } });
     }
     if (body.currentPassword === body.newPassword) {
       throw new AppError("VALIDATION", "Choose a password you have not just used", { fieldErrors: { newPassword: ["Must differ from the current password"] } });
     }
-    const issues = validatePassword(body.newPassword, getPasswordPolicy(db), { email: row.email });
+    const issues = validatePassword(body.newPassword, await getPasswordPolicy(db), { email: row.email });
     if (issues.length > 0) {
       throw new AppError("VALIDATION", issues[0] ?? "Password does not meet the policy", { fieldErrors: { newPassword: issues } });
     }
     const now = new Date();
-    db.transaction((tx) => {
-      tx.update(users).set({ passwordHash: hashPassword(body.newPassword), passwordChangedAt: now.toISOString() }).where(eq(users.id, auth.user.id)).run();
-      bumpSessionVersion(tx, auth.user.id, now);
+    await withWriteTx(db, async (tx) => {
+      await tx.update(users).set({ passwordHash: hashPassword(body.newPassword), passwordChangedAt: now.toISOString() }).where(eq(users.id, auth.user.id));
+      await bumpSessionVersion(tx, auth.user.id, now);
     });
-    audit({ action: "auth.password_change", entity: "user", entityId: auth.user.id });
+    await audit({ action: "auth.password_change", entity: "user", entityId: auth.user.id });
     const issued = await issueSession(db, auth.user.id, { ip, userAgent });
     const response = NextResponse.json(successBody({ changed: true }));
     setSessionCookie(response, issued.token, issued.maxAgeSeconds);

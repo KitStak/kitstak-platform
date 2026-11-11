@@ -6,8 +6,8 @@ import { importBatchDetails, importBatchParamsSchema, importBatchQuerySchema } f
 export const GET = defineRoute({
   params: importBatchParamsSchema,
   query: importBatchQuerySchema,
-  handler: ({ db, auth, params, query }) => {
-    const { batch, rows, total } = importBatchDetails(db, auth, params.id, query);
+  handler: async ({ db, auth, params, query }) => {
+    const { batch, rows, total } = await importBatchDetails(db, auth, params.id, query);
     return listResult(rows, { total, page: query.page, pageSize: query.ps, batch });
   },
 });

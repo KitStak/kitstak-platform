@@ -14,6 +14,7 @@ import type { AppDb } from "@/server/api/db";
 import { AppError } from "@/server/api/errors";
 import { DomainError } from "@/server/domain/errors";
 import type { Tx } from "@/server/domain/types";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 /** Plan statuses during which a plan is "open" (not finished). */
 export const OPEN_PLAN_STATUSES_SQL = "('Pending', 'Ready To Count', 'Count Started', 'Count Completed')";
@@ -54,7 +55,7 @@ const list = (ids: readonly string[]) => sql.join(ids.map((i) => sql`${i}`), sql
 const except = (id: string | null | undefined) => (id ? sql`AND cp.id <> ${id}` : sql``);
 
 /** Open plans (other than `exceptPlanId`) in the warehouse that already cover the given locations, SKUs or LPs. */
-export function openCountConflicts(tx: Tx | AppDb, q: ConflictQuery): CountConflict[] {
+export async function openCountConflicts(tx: Tx | AppDb, q: ConflictQuery): Promise<CountConflict[]> {
   const out: CountConflict[] = [];
   const open = sql.raw(OPEN_PLAN_STATUSES_SQL);
   const released = sql.raw(RELEASED_LINE_STATUSES_SQL);
@@ -62,30 +63,30 @@ export function openCountConflicts(tx: Tx | AppDb, q: ConflictQuery): CountConfl
   const productIds = [...new Set(q.productIds ?? [])];
   const lpIds = [...new Set(q.lpIds ?? [])];
   if (locationIds.length) {
-    out.push(...tx.all<Omit<CountConflict, "kind">>(sql`
-      SELECT lo.id AS id, lo.code AS label, cp.id AS planId, MIN(cp.code) AS planCode
+    out.push(...(await dbAll<Omit<CountConflict, "kind">>(tx, sql`
+      SELECT lo.id AS id, lo.code AS label, (array_agg(cp.id ORDER BY cp.code))[1] AS "planId", MIN(cp.code) AS "planCode"
       FROM count_plan_lines cl JOIN count_plans cp ON cp.id = cl.plan_id JOIN locations lo ON lo.id = cl.location_id
       WHERE cl.location_id IN (${list(locationIds)}) AND cp.warehouse_id = ${q.warehouseId}
         AND cp.status IN ${open} AND cl.status NOT IN ${released} ${except(q.exceptPlanId)}
-      GROUP BY lo.id ORDER BY lo.code`).map((r) => ({ ...r, kind: "location" as const })));
+      GROUP BY lo.id ORDER BY lo.code`)).map((r) => ({ ...r, kind: "location" as const })));
   }
   if (productIds.length) {
-    out.push(...tx.all<Omit<CountConflict, "kind">>(sql`
-      SELECT pr.id AS id, pr.sku AS label, cp.id AS planId, MIN(cp.code) AS planCode
+    out.push(...(await dbAll<Omit<CountConflict, "kind">>(tx, sql`
+      SELECT pr.id AS id, pr.sku AS label, (array_agg(cp.id ORDER BY cp.code))[1] AS "planId", MIN(cp.code) AS "planCode"
       FROM count_plan_lines cl JOIN count_plans cp ON cp.id = cl.plan_id JOIN products pr ON pr.id = cl.product_id
       WHERE cl.product_id IN (${list(productIds)}) AND cp.warehouse_id = ${q.warehouseId}
         AND cp.status IN ${open} AND cl.status NOT IN ${released} ${except(q.exceptPlanId)}
-      GROUP BY pr.id ORDER BY pr.sku`).map((r) => ({ ...r, kind: "product" as const })));
+      GROUP BY pr.id ORDER BY pr.sku`)).map((r) => ({ ...r, kind: "product" as const })));
   }
   if (lpIds.length) {
     // An LP conflicts with a count of the LP itself or of the whole location it sits in.
-    out.push(...tx.all<Omit<CountConflict, "kind">>(sql`
-      SELECT n.id AS id, n.number AS label, cp.id AS planId, MIN(cp.code) AS planCode
+    out.push(...(await dbAll<Omit<CountConflict, "kind">>(tx, sql`
+      SELECT n.id AS id, n.number AS label, (array_agg(cp.id ORDER BY cp.code))[1] AS "planId", MIN(cp.code) AS "planCode"
       FROM license_plates n JOIN count_plan_lines cl ON (cl.lp_id = n.id OR (cl.lp_id IS NULL AND cl.product_id IS NULL AND cl.location_id = n.location_id))
       JOIN count_plans cp ON cp.id = cl.plan_id
       WHERE n.id IN (${list(lpIds)}) AND cp.warehouse_id = ${q.warehouseId}
         AND cp.status IN ${open} AND cl.status NOT IN ${released} ${except(q.exceptPlanId)}
-      GROUP BY n.id ORDER BY n.number`).map((r) => ({ ...r, kind: "lp" as const })));
+      GROUP BY n.id ORDER BY n.number`)).map((r) => ({ ...r, kind: "lp" as const })));
   }
   return out;
 }
@@ -100,8 +101,8 @@ const FIELD = { location: "locationIds", product: "productIds", lp: "lpIds" } as
 const NOUN = { location: ["location", "locations"], product: ["SKU", "SKUs"], lp: ["license plate", "license plates"] } as const;
 
 /** Rejects a plan write when any location / SKU / LP is already in another open count plan. */
-export function assertNoOpenCountConflicts(tx: Tx | AppDb, q: ConflictQuery): void {
-  const conflicts = openCountConflicts(tx, q);
+export async function assertNoOpenCountConflicts(tx: Tx | AppDb, q: ConflictQuery): Promise<void> {
+  const conflicts = await openCountConflicts(tx, q);
   if (conflicts.length === 0) return;
   const kind = conflicts[0]!.kind;
   const [one, many] = NOUN[kind];
@@ -119,10 +120,10 @@ export function assertNoOpenCountConflicts(tx: Tx | AppDb, q: ConflictQuery): vo
  * covering the location wins, so of two overlapping legacy plans only the older one may post.
  * Returns that plan's code, or null when `plan` may post into the location.
  */
-export function foreignCountLock(tx: Tx | AppDb, plan: { readonly id: string; readonly lockLocations: boolean; readonly createdAt: string }, locationId: string): string | null {
-  const row = tx.get<{ code: string }>(sql`
+export async function foreignCountLock(tx: Tx | AppDb, plan: { readonly id: string; readonly lockLocations: boolean; readonly createdAt: string }, locationId: string): Promise<string | null> {
+  const row = await dbGet<{ code: string }>(tx, sql`
     SELECT cp.code AS code FROM count_plan_lines cl JOIN count_plans cp ON cp.id = cl.plan_id
-    WHERE cp.id <> ${plan.id} AND cp.lock_locations = 1
+    WHERE cp.id <> ${plan.id} AND cp.lock_locations = true
       AND cp.status IN ${sql.raw(OPEN_PLAN_STATUSES_SQL)} AND cl.status NOT IN ${sql.raw(RELEASED_LINE_STATUSES_SQL)}
       AND (cl.location_id = ${locationId}
         OR (cl.location_id IS NULL AND cl.product_id IS NOT NULL AND EXISTS (
@@ -137,9 +138,9 @@ export function foreignLockMessage(locationCode: string, holderCode: string): st
 }
 
 /** Throws when another Lock Locations plan holds any of the locations this plan wants to post into. */
-export function assertPostAllowed(tx: Tx | AppDb, plan: { readonly id: string; readonly lockLocations: boolean; readonly createdAt: string }, locations: readonly { readonly id: string; readonly code: string }[]): void {
+export async function assertPostAllowed(tx: Tx | AppDb, plan: { readonly id: string; readonly lockLocations: boolean; readonly createdAt: string }, locations: readonly { readonly id: string; readonly code: string }[]): Promise<void> {
   for (const loc of locations) {
-    const holder = foreignCountLock(tx, plan, loc.id);
+    const holder = await foreignCountLock(tx, plan, loc.id);
     if (holder) throw new DomainError("RULE_VIOLATION", foreignLockMessage(loc.code, holder), { countPlanCode: holder });
   }
 }

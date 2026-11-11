@@ -5,18 +5,18 @@ import { deleteTag, getTag, TAG_MANAGE_PERMISSIONS, tagUpdateSchema, updateTag }
 
 export const GET = defineRoute({
   params: idParamsSchema,
-  handler: ({ db, params }) => getTag(db, params.id),
+  handler: async ({ db, params }) => await getTag(db, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: TAG_MANAGE_PERMISSIONS,
   params: idParamsSchema,
   body: tagUpdateSchema,
-  handler: ({ db, auth, params, body }) => updateTag(db, auth.user.id, params.id, body),
+  handler: async ({ db, auth, params, body }) => await updateTag(db, auth.user.id, params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: TAG_MANAGE_PERMISSIONS,
   params: idParamsSchema,
-  handler: ({ db, params }) => deleteTag(db, params.id),
+  handler: async ({ db, params }) => await deleteTag(db, params.id),
 });

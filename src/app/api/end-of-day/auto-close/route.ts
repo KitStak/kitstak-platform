@@ -8,11 +8,11 @@ import { autoCloseRuleSchema, getAutoCloseSetup, saveAutoCloseRule } from "@/ser
 
 export const GET = defineRoute({
   permission: "fulfillment.end_of_day.view",
-  handler: ({ db, auth }) => getAutoCloseSetup(db, auth),
+  handler: async ({ db, auth }) => await getAutoCloseSetup(db, auth),
 });
 
 export const POST = defineRoute({
   permission: "fulfillment.end_of_day.print_end_of_the_day_report",
   body: autoCloseRuleSchema,
-  handler: ({ db, auth, actor, body }) => saveAutoCloseRule(db, auth, domainCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await saveAutoCloseRule(db, auth, domainCtx(actor, auth), body),
 });

@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: ["settings.printouts_labels.change_log", "settings.printouts_labels.view"],
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, params, query }) => {
-    loadPrintout(db, params.id);
-    return changeLogResult(db, PRINTOUT_ENTITY, params.id, query);
+  handler: async ({ db, params, query }) => {
+    await loadPrintout(db, params.id);
+    return await changeLogResult(db, PRINTOUT_ENTITY, params.id, query);
   },
 });

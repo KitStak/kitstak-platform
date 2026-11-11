@@ -6,5 +6,5 @@ import { shipPlan } from "@/server/repositories/shipment-plans";
 export const POST = defineRoute({
   permission: "fulfillment.shipment_plan.ship_order",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => shipPlan(db, auth, domainCtx(actor, auth), params.id),
+  handler: async ({ db, auth, actor, params }) => await shipPlan(db, auth, domainCtx(actor, auth), params.id),
 });

@@ -2,7 +2,8 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { desc, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
+import { desc } from "@/server/db/order";
 import { getAppDb } from "@/server/api/db";
 import { getSessionUser } from "@/server/auth/session";
 import { can, loadPermissions } from "@/server/auth/permissions";
@@ -23,19 +24,18 @@ async function Hub() {
   const user = await getSessionUser();
   if (!user) redirect("/login?next=%2Fimports");
   const db = await getAppDb();
-  const grant = loadPermissions(db, user);
+  const grant = await loadPermissions(db, user);
   const allowed = IMPORT_DEFINITIONS.filter((d) => isPermissionKey(d.permission) && can(grant, d.permission));
   if (allowed.length === 0) redirect("/forbidden?from=%2Fimports");
   const titleByKey = new Map(allowed.map((d) => [d.key, d.title]));
-  const recent = db
+  const recent = (await db
     .select({ b: importBatches, by: users.name, fileName: files.name })
     .from(importBatches)
     .leftJoin(users, eq(users.id, importBatches.uploadedBy))
     .leftJoin(files, eq(files.id, importBatches.fileId))
     .where(inArray(importBatches.importKey, allowed.map((d) => d.key)))
     .orderBy(desc(importBatches.createdAt))
-    .limit(40)
-    .all()
+    .limit(40))
     // QA harness uploads (ks-crit-*, ks-test-*) are kept in the DB but not shown to buyers.
     .filter((r) => !QA_FILE.test(r.fileName ?? ""))
     .slice(0, 15);

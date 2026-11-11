@@ -19,14 +19,15 @@ import { backfillMissingSnapshots, daysToBackfill, rebuildSnapshotRows, snapshot
 import { busiestHourOfDay } from "@/server/repositories/analytics-operational";
 import { USER_PERFORMANCE_DEF } from "@/lib/grid-defs/reports/receiving";
 import { createWorld, orderInput, type World } from "../foundation/domain/fixtures";
+import { dbAll, dbRun, withWriteTx } from "@/server/db/sql";
 
 let w: World;
 let auth: AuthContext;
 const q = (qs = ""): GridQuery => ({ ...EMPTY_GRID_QUERY, ...parseGridQuery(qs).query, pageSize: 500 });
 const PERMS = ["fulfillment.shipment_orders.view", "reports.inventory_snapshot_report.view", "reports.user_performance_report.view"];
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = {
     scope, viewScope: scope, permissions: new Set<string>(PERMS),
@@ -50,20 +51,20 @@ describe("dashboard business day (warehouse zone, not UTC)", () => {
     expect(dashboardDays("America/New_York", new Date("2026-11-01T12:00:00Z")).start(1)).toBe("2026-11-02T05:00:00.000Z");
   });
 
-  it("counts an order shipped at 20:00 local as shipped today at 21:30, and its drilldown opens it", () => {
-    const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    w.db.update(schema.shipmentOrders).set({ status: "Shipped", shippedAt: "2026-11-11T02:00:00.000Z" }).where(eq(schema.shipmentOrders.id, o.id)).run();
-    const dash = getLiveDashboard(w.db, auth, { warehouseIds: [], clientIds: [] }, evening);
+  it("counts an order shipped at 20:00 local as shipped today at 21:30, and its drilldown opens it", async () => {
+    const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    await w.db.update(schema.shipmentOrders).set({ status: "Shipped", shippedAt: "2026-11-11T02:00:00.000Z" }).where(eq(schema.shipmentOrders.id, o.id));
+    const dash = await getLiveDashboard(w.db, auth, { warehouseIds: [], clientIds: [] }, evening);
     expect(dash.businessDay).toEqual({ date: "2026-11-10", timeZone: "America/Chicago", mixedZones: false, zoneWarehouse: null });
     const shipped = dash.breakdown.flat().find((m) => m.label === "Already Shipped Today");
     expect(shipped?.count).toBe(1);
     expect(decodeURIComponent(shipped?.href ?? "")).toContain("f.shippedAt=date:custom:2026-11-10T06:00:00.000Z..2026-11-11T05:59:59.999Z");
     expect(dash.progress.ordersToday.parts?.[0]).toMatchObject({ label: "shipped today", count: 1 });
     // The Order Line Progress grid uses the same warehouse day, so the part and the grid agree.
-    const lines = listOrderLines(w.db, auth, { ...q(), tzOffsetMinutes: -360 });
+    const lines = await listOrderLines(w.db, auth, { ...q(), tzOffsetMinutes: -360 });
     expect(lines.total).toBe(dash.progress.lines.total);
     // Under the old UTC day the same order would have dropped out at 18:00 local.
-    const utc = getLiveDashboard(w.db, { ...auth } as AuthContext, { warehouseIds: [], clientIds: [] }, new Date("2026-11-11T05:30:00Z"));
+    const utc = await getLiveDashboard(w.db, { ...auth } as AuthContext, { warehouseIds: [], clientIds: [] }, new Date("2026-11-11T05:30:00Z"));
     expect(utc.breakdown.flat().find((m) => m.label === "Already Shipped Today")?.count).toBe(1);
   });
 });
@@ -80,35 +81,35 @@ describe("rank card Others", () => {
 
 describe("User Performance visibility (one policy with Labor Analytics)", () => {
   let taskNo = 0;
-  function completedTask(userId: string, finishedAt: string): void {
+  async function completedTask(userId: string, finishedAt: string): Promise<void> {
     taskNo += 1;
-    const job = w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code: `J-${finishedAt}-${userId.slice(0, 4)}`, warehouseId: w.warehouseId, jobType: "Picking", status: "Completed" }).returning().get();
-    w.db.insert(schema.tasks).values({
+    const job = (await w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code: `J-${finishedAt}-${userId.slice(0, 4)}`, warehouseId: w.warehouseId, jobType: "Picking", status: "Completed" }).returning())[0];
+    await w.db.insert(schema.tasks).values({
       id: crypto.randomUUID(), taskNo: 9000 + taskNo, jobId: job.id, warehouseId: w.warehouseId, clientId: w.clientId, taskType: "Picking", status: "Completed",
       plannedQty: 3, actualQty: 3, executedByUserId: userId, finishedAt,
-    }).run();
+    });
   }
 
-  it("shows a non-supervisor only their own rows; a supervisor sees the team", () => {
-    const other = w.db.insert(schema.users).values({ email: "other@test.io", name: "Other", passwordHash: "x", role: "operator" }).returning().get().id;
-    completedTask(w.userId, "2026-11-09T15:00:00.000Z");
-    completedTask(other, "2026-11-09T16:00:00.000Z");
+  it("shows a non-supervisor only their own rows; a supervisor sees the team", async () => {
+    const other = (await w.db.insert(schema.users).values({ email: "other@test.io", name: "Other", passwordHash: "x", role: "operator" }).returning())[0].id;
+    await completedTask(w.userId, "2026-11-09T15:00:00.000Z");
+    await completedTask(other, "2026-11-09T16:00:00.000Z");
     expect(seesTeamPerformance(auth)).toBe(false);
-    const own = listUserPerformance(w.db, auth, q());
+    const own = await listUserPerformance(w.db, auth, q());
     expect(own.rows.map((r) => r.userId)).toEqual([w.userId]);
     const sup = { ...auth, permissions: new Set([...PERMS, "settings.users.view"]) } as unknown as AuthContext;
     expect(seesTeamPerformance(sup)).toBe(true);
-    expect(listUserPerformance(w.db, sup, q()).rows.map((r) => r.userId).sort()).toEqual([w.userId, other].sort());
+    expect((await listUserPerformance(w.db, sup, q())).rows.map((r) => r.userId).sort()).toEqual([w.userId, other].sort());
   });
 
-  it("buckets work by the warehouse-local day and filters date-only chips by local days", () => {
+  it("buckets work by the warehouse-local day and filters date-only chips by local days", async () => {
     // 23:30 CST on Nov 9 is 05:30Z on Nov 10: it belongs to Nov 9 in Memphis.
-    completedTask(w.userId, "2026-11-10T05:30:00.000Z");
-    const page = listUserPerformance(w.db, auth, q());
+    await completedTask(w.userId, "2026-11-10T05:30:00.000Z");
+    const page = await listUserPerformance(w.db, auth, q());
     expect(page.rows[0]?.activityDate).toBe("2026-11-09");
-    const one = listUserPerformance(w.db, auth, { ...q("f.activityDate=date:custom:2026-11-09..2026-11-09"), tzOffsetMinutes: -360 });
+    const one = await listUserPerformance(w.db, auth, { ...q("f.activityDate=date:custom:2026-11-09..2026-11-09"), tzOffsetMinutes: -360 });
     expect(one.total).toBe(1);
-    const next = listUserPerformance(w.db, auth, { ...q("f.activityDate=date:custom:2026-11-10..2026-11-10"), tzOffsetMinutes: -360 });
+    const next = await listUserPerformance(w.db, auth, { ...q("f.activityDate=date:custom:2026-11-10..2026-11-10"), tzOffsetMinutes: -360 });
     expect(next.total).toBe(0);
   });
 
@@ -133,35 +134,35 @@ describe("User Performance visibility (one policy with Labor Analytics)", () => 
 });
 
 describe("snapshot catch-up from the ledger", () => {
-  it("rebuilds a missed night exactly as the 00:02 run would have taken it", () => {
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 5 });
-    w.db.run(sql`UPDATE inventory_transactions SET at = '2026-11-01T12:00:00.000Z'`);
+  it("rebuilds a missed night exactly as the 00:02 run would have taken it", async () => {
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 5 });
+    await dbRun(w.db, sql`UPDATE inventory_transactions SET at = '2026-11-01T12:00:00.000Z'`);
     const at = snapshotInstant("2026-11-06", "America/Chicago");
     expect(at).toBe("2026-11-06T06:02:00.000Z");
     // A run taken at that instant and a rebuild for the same instant hold the same buckets.
-    const live = w.db.transaction((tx) => { snapshotWarehouse(tx, w.warehouseId, at); return tx.all<{ q: number }>(sql`SELECT SUM(uom_qty) AS q FROM inventory_snapshots WHERE snapshot_at = ${at}`); });
-    const rebuilt = rebuildSnapshotRows(w.db, w.warehouseId, at);
+    const live = await withWriteTx(w.db, async (tx) => { await snapshotWarehouse(tx, w.warehouseId, at); return await dbAll<{ q: number }>(tx, sql`SELECT SUM(uom_qty) AS q FROM inventory_snapshots WHERE snapshot_at = ${at}`); });
+    const rebuilt = await rebuildSnapshotRows(w.db, w.warehouseId, at);
     expect(rebuilt.reduce((s, r) => s + r.uomQty, 0)).toBe(Number(live[0]?.q ?? 0));
     // Movements after the instant are rolled back out of the rebuilt night.
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 7 });
-    expect(rebuildSnapshotRows(w.db, w.warehouseId, at).reduce((s, r) => s + r.uomQty, 0)).toBe(Number(live[0]?.q ?? 0));
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 7 });
+    expect((await rebuildSnapshotRows(w.db, w.warehouseId, at)).reduce((s, r) => s + r.uomQty, 0)).toBe(Number(live[0]?.q ?? 0));
   });
 
-  it("fills interior and trailing gaps once, never touching nights that have a run", () => {
+  it("fills interior and trailing gaps once, never touching nights that have a run", async () => {
     expect(daysToBackfill(["2026-11-05", "2026-11-10"], "2026-11-10", true)).toEqual(["2026-11-06", "2026-11-07", "2026-11-08", "2026-11-09"]);
     expect(daysToBackfill(["2026-11-08"], "2026-11-10", false)).toEqual(["2026-11-09"]);
     expect(daysToBackfill(["2026-11-08"], "2026-11-10", true)).toEqual(["2026-11-09", "2026-11-10"]);
     expect(daysToBackfill(["2026-09-01", "2026-11-10"], "2026-11-10", true, 3)).toEqual(["2026-11-08", "2026-11-09"]);
 
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 5 });
-    w.db.run(sql`UPDATE inventory_transactions SET at = '2026-11-01T12:00:00.000Z'`);
-    snapshotWarehouse(w.db, w.warehouseId, "2026-11-05T06:02:00.000Z");
-    snapshotWarehouse(w.db, w.warehouseId, "2026-11-09T06:02:00.000Z");
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 5 });
+    await dbRun(w.db, sql`UPDATE inventory_transactions SET at = '2026-11-01T12:00:00.000Z'`);
+    await snapshotWarehouse(w.db, w.warehouseId, "2026-11-05T06:02:00.000Z");
+    await snapshotWarehouse(w.db, w.warehouseId, "2026-11-09T06:02:00.000Z");
     const now = new Date("2026-11-09T18:00:00Z");
-    const first = backfillMissingSnapshots(w.db, { now });
+    const first = await backfillMissingSnapshots(w.db, { now });
     expect(first[0]?.days.map((d) => d.businessDate)).toEqual(["2026-11-06", "2026-11-07", "2026-11-08"]);
     expect(first[0]?.days.every((d) => d.rows > 0 && d.snapshotAt.endsWith("06:02:00.000Z"))).toBe(true);
-    expect(backfillMissingSnapshots(w.db, { now })).toEqual([]);
+    expect(await backfillMissingSnapshots(w.db, { now })).toEqual([]);
   });
 });
 

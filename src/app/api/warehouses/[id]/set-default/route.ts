@@ -6,5 +6,5 @@ import { setDefaultWarehouse } from "@/server/repositories/warehouses";
 export const POST = defineRoute({
   permission: "settings.warehouse.edit",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => setDefaultWarehouse(db, auth, actor, params.id),
+  handler: async ({ db, auth, actor, params }) => await setDefaultWarehouse(db, auth, actor, params.id),
 });

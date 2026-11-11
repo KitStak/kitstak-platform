@@ -16,7 +16,7 @@ import { retailerOf } from "@/lib/grid-defs/jobs/forms";
 import type { getJobTypeDetail } from "@/server/repositories/job-types";
 import type { GridRow } from "@/components/jobs/jobs-client";
 
-type Detail = ReturnType<typeof getJobTypeDetail>;
+type Detail = Awaited<ReturnType<typeof getJobTypeDetail>>;
 
 function Row({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
   return (

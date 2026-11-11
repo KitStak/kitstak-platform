@@ -9,5 +9,5 @@ import { domainCtx } from "@/server/repositories/platform-common";
 export const POST = defineRoute({
   permission: [P.locRecount, P.skuRecount],
   body: idsSchema.extend({ assigneeUserId: z.string().min(1).max(64).nullish() }),
-  handler: ({ db, auth, actor, body }) => createRecounts(db, domainCtx(actor, auth), auth, body.ids, body.assigneeUserId ?? null),
+  handler: async ({ db, auth, actor, body }) => await createRecounts(db, domainCtx(actor, auth), auth, body.ids, body.assigneeUserId ?? null),
 });

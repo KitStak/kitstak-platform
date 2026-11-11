@@ -2,8 +2,9 @@
  * Server helpers shared by every M14 admin repository: grid-grammar compilation over a
  * field -> SQL map, guards, change-log wrappers and module change-log endpoints.
  */
-import { and, desc, eq, getTableName, sql, type SQL } from "drizzle-orm";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import { and, eq, getTableName, sql, type SQL } from "drizzle-orm";
+import { desc } from "@/server/db/order";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { listResult } from "@/server/api/envelope";
 import type { AppDb } from "@/server/api/db";
@@ -25,7 +26,7 @@ export interface GridBinding {
   readonly sortable: readonly string[];
   readonly search: readonly string[];
   readonly defaultSort: readonly SortSpec[];
-  readonly tiebreaker: SQLiteColumn;
+  readonly tiebreaker: PgColumn;
 }
 
 export interface CompiledGrid {
@@ -74,17 +75,17 @@ export interface LogRef {
   readonly entityCode: string;
 }
 
-export function logCreate(tx: AppDb, ctx: DomainCtx, ref: LogRef): void {
-  recordCreate(tx, ctx, ref);
+export async function logCreate(tx: AppDb, ctx: DomainCtx, ref: LogRef): Promise<void> {
+  await recordCreate(tx, ctx, ref);
 }
 
-export function logDelete(tx: AppDb, ctx: DomainCtx, ref: LogRef): void {
-  recordDelete(tx, ctx, ref);
+export async function logDelete(tx: AppDb, ctx: DomainCtx, ref: LogRef): Promise<void> {
+  await recordDelete(tx, ctx, ref);
 }
 
 /** Field-level diff of two *display* snapshots (ids already resolved to names). */
-export function logUpdate(tx: AppDb, ctx: DomainCtx, ref: LogRef, before: Readonly<Record<string, unknown>>, after: Readonly<Record<string, unknown>>): number {
-  return recordUpdate(tx, ctx, { ...ref, before, after });
+export async function logUpdate(tx: AppDb, ctx: DomainCtx, ref: LogRef, before: Readonly<Record<string, unknown>>, after: Readonly<Record<string, unknown>>): Promise<number> {
+  return await recordUpdate(tx, ctx, { ...ref, before, after });
 }
 
 export const changeLogPageSchema = z.object({
@@ -93,15 +94,15 @@ export const changeLogPageSchema = z.object({
 });
 
 /** Module change-log endpoint body: paged rows (newest first) with list meta. */
-export function changeLogResult(db: AppDb, entityType: string, entityId: string, query: z.output<typeof changeLogPageSchema>) {
+export async function changeLogResult(db: AppDb, entityType: string, entityId: string, query: z.output<typeof changeLogPageSchema>) {
   const where = and(eq(changeLog.entityType, entityType), eq(changeLog.entityId, entityId));
-  const total = db.select({ n: sql<number>`count(*)` }).from(changeLog).where(where).get()?.n ?? 0;
-  const rows = db.select().from(changeLog).where(where).orderBy(desc(changeLog.at), desc(changeLog.id)).limit(query.ps).offset((query.page - 1) * query.ps).all();
+  const total = (await db.select({ n: sql<number>`count(*)` }).from(changeLog).where(where).limit(1))[0]?.n ?? 0;
+  const rows = await db.select().from(changeLog).where(where).orderBy(desc(changeLog.at), desc(changeLog.id)).limit(query.ps).offset((query.page - 1) * query.ps);
   return listResult(rows, { total, page: query.page, pageSize: query.ps });
 }
 
 /** Fully qualified column (`"table"."col"`) for correlated subqueries. */
-export function qc(column: SQLiteColumn): SQL {
+export function qc(column: PgColumn): SQL {
   return sql.raw(`"${getTableName(column.table)}"."${column.name}"`);
 }
 

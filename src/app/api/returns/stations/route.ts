@@ -8,5 +8,5 @@ import { returnStations } from "@/server/repositories/returns-receive";
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.station,
   query: z.object({ warehouseId: warehouseIdParam }),
-  handler: ({ db, auth, query }) => returnStations(db, auth.scope, query.warehouseId),
+  handler: async ({ db, auth, query }) => await returnStations(db, auth.scope, query.warehouseId),
 });

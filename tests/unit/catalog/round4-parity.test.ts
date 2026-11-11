@@ -29,13 +29,13 @@ describe("headerBarcode", () => {
 describe("test-data purge (REQ-25)", () => {
   let w: World;
   let scope: Scope;
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     scope = { warehouseIds: [w.warehouseId], clientIds: "all" };
   });
   afterEach(() => w.close());
   const ctx = () => ({ ...w.ctx, scope });
-  const make = (sku: string, extra: Partial<ProductInput> = {}) => createProductFromWizard(w.db, ctx(), {
+  const make = async (sku: string, extra: Partial<ProductInput> = {}) => await createProductFromWizard(w.db, ctx(), {
     ...emptyProductForm("Product", w.clientId), sku, name: sku,
     packTypes: [{ ...newPackType("Primary", []), key: "u", packType: "Each", length: 1, width: 1, height: 1, barcodes: [] }],
     ...extra,
@@ -48,42 +48,42 @@ describe("test-data purge (REQ-25)", () => {
     expect(isTestSku("APX-KS-CRIT")).toBe(false);
   });
 
-  it("deletes clean test products and listings, deactivates ones with stock, leaves real SKUs alone", () => {
-    const clean = make("KS-CRIT-CLEAN");
-    const stocked = make("KS-E2E-STOCK");
-    const real = make("APX-REAL-1");
-    w.db.insert(schema.inventory).values({ warehouseId: w.warehouseId, locationId: w.loc.storageA, clientId: w.clientId, productId: stocked.id, onHand: 3, receivedAt: "2026-01-01" }).run();
-    const conn = w.db.insert(schema.channelConnections).values({ provider: "shopify", storeName: "Shop", clientId: w.clientId, settings: {} as never }).returning().get().id;
-    const testListing = w.db.insert(schema.productListings).values({ channelConnectionId: conn, clientId: w.clientId, sellerSku: "KS-E2E-LST-1", channelProductId: "g1", name: "t", productId: clean.id }).returning().get();
-    const realListing = w.db.insert(schema.productListings).values({ channelConnectionId: conn, clientId: w.clientId, sellerSku: "APX-REAL-1", channelProductId: "g2", name: "r", productId: real.id }).returning().get();
+  it("deletes clean test products and listings, deactivates ones with stock, leaves real SKUs alone", async () => {
+    const clean = await make("KS-CRIT-CLEAN");
+    const stocked = await make("KS-E2E-STOCK");
+    const real = await make("APX-REAL-1");
+    await w.db.insert(schema.inventory).values({ warehouseId: w.warehouseId, locationId: w.loc.storageA, clientId: w.clientId, productId: stocked.id, onHand: 3, receivedAt: "2026-01-01" });
+    const conn = (await w.db.insert(schema.channelConnections).values({ provider: "shopify", storeName: "Shop", clientId: w.clientId, settings: {} as never }).returning())[0].id;
+    const testListing = (await w.db.insert(schema.productListings).values({ channelConnectionId: conn, clientId: w.clientId, sellerSku: "KS-E2E-LST-1", channelProductId: "g1", name: "t", productId: clean.id }).returning())[0];
+    const realListing = (await w.db.insert(schema.productListings).values({ channelConnectionId: conn, clientId: w.clientId, sellerSku: "APX-REAL-1", channelProductId: "g2", name: "r", productId: real.id }).returning())[0];
 
-    const plan = planTestDataPurge(w.db);
+    const plan = await planTestDataPurge(w.db);
     expect(plan.deletable.map((r) => r.sku)).toEqual(["KS-CRIT-CLEAN"]);
     expect(plan.deactivate.map((r) => r.sku)).toEqual(["KS-E2E-STOCK"]);
     expect(plan.listingIds).toEqual([testListing.id]);
 
-    purgeTestCatalogData(w.db, ctx());
-    expect(w.db.select().from(schema.products).where(eq(schema.products.id, clean.id)).get()).toBeUndefined();
-    expect(w.db.select().from(schema.products).where(eq(schema.products.id, stocked.id)).get()?.status).toBe("Inactive");
-    expect(w.db.select().from(schema.products).where(eq(schema.products.id, real.id)).get()?.status).toBe("Active");
-    expect(w.db.select().from(schema.productListings).where(eq(schema.productListings.id, testListing.id)).get()).toBeUndefined();
-    expect(w.db.select().from(schema.productListings).where(eq(schema.productListings.id, realListing.id)).get()?.productId).toBe(real.id);
+    await purgeTestCatalogData(w.db, ctx());
+    expect((await w.db.select().from(schema.products).where(eq(schema.products.id, clean.id)).limit(1))[0]).toBeUndefined();
+    expect((await w.db.select().from(schema.products).where(eq(schema.products.id, stocked.id)).limit(1))[0]?.status).toBe("Inactive");
+    expect((await w.db.select().from(schema.products).where(eq(schema.products.id, real.id)).limit(1))[0]?.status).toBe("Active");
+    expect((await w.db.select().from(schema.productListings).where(eq(schema.productListings.id, testListing.id)).limit(1))[0]).toBeUndefined();
+    expect((await w.db.select().from(schema.productListings).where(eq(schema.productListings.id, realListing.id)).limit(1))[0]?.productId).toBe(real.id);
     // Idempotent: a second run has nothing left to do except the already-inactive stocked SKU.
-    const again = planTestDataPurge(w.db);
+    const again = await planTestDataPurge(w.db);
     expect(again.deletable).toEqual([]);
     expect(again.deactivate).toEqual([]);
     expect(again.keptInactive.map((r) => r.sku)).toEqual(["KS-E2E-STOCK"]);
   });
 
-  it("deletes a test kit and then its test component", () => {
-    const comp = make("KS-CRIT-COMP");
-    createProductFromWizard(w.db, ctx(), {
+  it("deletes a test kit and then its test component", async () => {
+    const comp = await make("KS-CRIT-COMP");
+    await createProductFromWizard(w.db, ctx(), {
       ...emptyProductForm("Kit", w.clientId), sku: "KS-CRIT-KIT", name: "kit", kitType: "Kit to Order",
       components: [{ productId: comp.id, sku: comp.sku, name: comp.name, imageUrl: null, quantity: 2 }],
     } as unknown as ProductInput);
-    const plan = planTestDataPurge(w.db);
+    const plan = await planTestDataPurge(w.db);
     expect(plan.deletable.map((r) => r.sku).sort()).toEqual(["KS-CRIT-COMP", "KS-CRIT-KIT"]);
-    purgeTestCatalogData(w.db, ctx());
-    expect(w.db.select().from(schema.products).all().filter((r) => r.sku.startsWith("KS-CRIT-"))).toEqual([]);
+    await purgeTestCatalogData(w.db, ctx());
+    expect((await w.db.select().from(schema.products)).filter((r) => r.sku.startsWith("KS-CRIT-"))).toEqual([]);
   });
 });

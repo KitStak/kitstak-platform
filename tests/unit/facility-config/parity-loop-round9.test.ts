@@ -24,8 +24,8 @@ let w: World;
 let auth: AuthContext;
 const actor = () => ({ userId: w.userId, source: "Web" });
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
@@ -57,23 +57,23 @@ describe("generator limit and collision copy", () => {
 });
 
 describe("generator code prefix is not a location zone", () => {
-  it("stores no zone for a prefix-only run, and the lookup name when a zone is picked", () => {
+  it("stores no zone for a prefix-only run, and the lookup name when a zone is picked", async () => {
     const base = { warehouseId: w.warehouseId, zone: "KSCRITG", separator: "-", aisles: { from: "A", to: "A" }, racks: { from: "01", to: "02" }, levels: { from: "", to: "" }, positions: { from: "", to: "" }, locationType: "Shelves", areaType: "Storage" };
     const spec = generatorSchema.parse(base);
-    expect(runGeneratorNow(w.db, auth, actor(), spec, planGenerator(w.db, auth, spec, false)).created).toBe(2);
-    const row = w.db.select().from(schema.locations).where(eq(schema.locations.code, "KSCRITG-A-01")).get()!;
+    expect((await runGeneratorNow(w.db, auth, actor(), spec, await planGenerator(w.db, auth, spec, false))).created).toBe(2);
+    const row = (await w.db.select().from(schema.locations).where(eq(schema.locations.code, "KSCRITG-A-01")).limit(1))[0]!;
     expect(row.zone).toBe("");
     expect(row.locationZoneId).toBeNull();
-    expect(getLocation(w.db, auth, row.id).locationZone).toBeNull();
-    const listed = listLocations(w.db, auth, { ...EMPTY_GRID_QUERY, q: "KSCRITG" }).rows.find((r) => r.code === "KSCRITG-A-01");
+    expect((await getLocation(w.db, auth, row.id)).locationZone).toBeNull();
+    const listed = (await listLocations(w.db, auth, { ...EMPTY_GRID_QUERY, q: "KSCRITG" })).rows.find((r) => r.code === "KSCRITG-A-01");
     expect(listed?.locationZone ?? null).toBeNull();
 
-    const zone = w.db.insert(schema.lookupValues).values({ type: "location_zone", name: "Bulk", warehouseId: w.warehouseId }).returning().get();
+    const zone = (await w.db.insert(schema.lookupValues).values({ type: "location_zone", name: "Bulk", warehouseId: w.warehouseId }).returning())[0];
     const zoned = generatorSchema.parse({ ...base, zone: "KSZ", locationZoneId: zone.id });
-    runGeneratorNow(w.db, auth, actor(), zoned, planGenerator(w.db, auth, zoned, false));
-    const z = w.db.select().from(schema.locations).where(eq(schema.locations.code, "KSZ-A-01")).get()!;
+    await runGeneratorNow(w.db, auth, actor(), zoned, await planGenerator(w.db, auth, zoned, false));
+    const z = (await w.db.select().from(schema.locations).where(eq(schema.locations.code, "KSZ-A-01")).limit(1))[0]!;
     expect(z).toMatchObject({ zone: "Bulk", locationZoneId: zone.id });
-    expect(getLocation(w.db, auth, z.id).locationZone).toBe("Bulk");
+    expect((await getLocation(w.db, auth, z.id)).locationZone).toBe("Bulk");
   });
 });
 
@@ -94,25 +94,25 @@ describe("M10 change-log copy", () => {
     expect(facilityUpdateMessage("Aisle", "B", " ")).toBe("Aisle is modified. B --> (blank)");
   });
 
-  it("location create and edit write polished rows and one row per capacity line", () => {
+  it("location create and edit write polished rows and one row per capacity line", async () => {
     const cap = { clientId: w.clientId, productId: w.productId, packType: "Each", minQty: 10, maxQty: 50 };
-    const { id } = createLocation(w.db, auth, actor(), save("KS-R9-CAP", {}, { productCapacities: [cap] }));
-    const rows = () => w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id)).all();
-    expect(rows().map((r) => r.message)).toEqual(expect.arrayContaining(["Location KS-R9-CAP is created.", "MLT-WIDGET-01 -> Product capacity is created. Min 10, Max 50"]));
+    const { id } = await createLocation(w.db, auth, actor(), save("KS-R9-CAP", {}, { productCapacities: [cap] }));
+    const rows = async () => await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id));
+    expect((await rows()).map((r) => r.message)).toEqual(expect.arrayContaining(["Location KS-R9-CAP is created.", "MLT-WIDGET-01 -> Product capacity is created. Min 10, Max 50"]));
 
-    const v = getLocation(w.db, auth, id).version;
-    updateLocation(w.db, auth, actor(), id, save("KS-R9-CAP", { walkingPathPriority: 77, isLocked: true }, { version: v, productCapacities: [{ ...cap, maxQty: 60 }] }));
-    const msgs = rows().map((r) => r.message);
+    const v = (await getLocation(w.db, auth, id)).version;
+    await updateLocation(w.db, auth, actor(), id, save("KS-R9-CAP", { walkingPathPriority: 77, isLocked: true }, { version: v, productCapacities: [{ ...cap, maxQty: 60 }] }));
+    const msgs = (await rows()).map((r) => r.message);
     expect(msgs).toContain("MLT-WIDGET-01 -> Product capacity is modified. Min 10, Max 50 --> Min 10, Max 60");
     expect(msgs).toContain("Locked is modified. No --> Yes");
     expect(msgs.some((m) => /^Walking path priority is modified\. \S/.test(m))).toBe(true);
     expect(msgs.some((m) => m.includes("  "))).toBe(false);
-    const capRow = rows().find((r) => r.field === "productCapacity" && r.type === "Update");
+    const capRow = (await rows()).find((r) => r.field === "productCapacity" && r.type === "Update");
     expect(capRow).toMatchObject({ fieldLabel: "MLT-WIDGET-01 · Product capacity", fromValue: "Min 10, Max 50", toValue: "Min 10, Max 60" });
 
-    const v2 = getLocation(w.db, auth, id).version;
-    updateLocation(w.db, auth, actor(), id, save("KS-R9-CAP", { walkingPathPriority: 77, isLocked: true }, { version: v2 }));
-    expect(rows().map((r) => r.message)).toContain("MLT-WIDGET-01 -> Product capacity is deleted. Was Min 10, Max 60");
+    const v2 = (await getLocation(w.db, auth, id)).version;
+    await updateLocation(w.db, auth, actor(), id, save("KS-R9-CAP", { walkingPathPriority: 77, isLocked: true }, { version: v2 }));
+    expect((await rows()).map((r) => r.message)).toContain("MLT-WIDGET-01 -> Product capacity is deleted. Was Min 10, Max 60");
   });
 
   it("rows stored before round 5 display with the new names", () => {
@@ -130,15 +130,15 @@ describe("M10 change-log copy", () => {
 });
 
 describe("LP numbers inherit their type's dimensions", () => {
-  it("an LP with no dimensions shows the type's, and actual volume is L × W × H", () => {
-    const t = w.db.insert(schema.lpTypes).values({ warehouseId: w.warehouseId, code: "TOTE9", numberPrefix: "T9-", numberLength: 5, length: 24, width: 16, height: 12, emptyWeight: 50 }).returning().get();
-    const bare = w.db.insert(schema.licensePlates).values({ warehouseId: w.warehouseId, lpTypeId: t.id, number: "T9-00001" }).returning().get();
-    w.db.insert(schema.licensePlates).values({ warehouseId: w.warehouseId, lpTypeId: t.id, number: "T9-00002", length: 10, width: 10, height: 10, weight: 5, actualVolume: 900 }).run();
-    const rows = listLpNumbers(w.db, auth, EMPTY_GRID_QUERY).rows;
+  it("an LP with no dimensions shows the type's, and actual volume is L × W × H", async () => {
+    const t = (await w.db.insert(schema.lpTypes).values({ warehouseId: w.warehouseId, code: "TOTE9", numberPrefix: "T9-", numberLength: 5, length: 24, width: 16, height: 12, emptyWeight: 50 }).returning())[0];
+    const bare = (await w.db.insert(schema.licensePlates).values({ warehouseId: w.warehouseId, lpTypeId: t.id, number: "T9-00001" }).returning())[0];
+    await w.db.insert(schema.licensePlates).values({ warehouseId: w.warehouseId, lpTypeId: t.id, number: "T9-00002", length: 10, width: 10, height: 10, weight: 5, actualVolume: 900 });
+    const rows = (await listLpNumbers(w.db, auth, EMPTY_GRID_QUERY)).rows;
     expect(rows.find((r) => r.number === "T9-00001")).toMatchObject({ length: 24, width: 16, height: 12, weight: 50, actualVolume: 4608 });
     expect(rows.find((r) => r.number === "T9-00002")).toMatchObject({ length: 10, weight: 5, actualVolume: 900 });
-    expect(getLpNumber(w.db, auth, bare.id)).toMatchObject({ length: 24, actualVolume: 4608 });
-    const stored = w.db.select().from(schema.licensePlates).where(and(eq(schema.licensePlates.id, bare.id))).get()!;
+    expect(await getLpNumber(w.db, auth, bare.id)).toMatchObject({ length: 24, actualVolume: 4608 });
+    const stored = (await w.db.select().from(schema.licensePlates).where(and(eq(schema.licensePlates.id, bare.id))).limit(1))[0]!;
     expect(stored.length).toBe(0);
   });
 });

@@ -28,7 +28,7 @@ export function channelSalesSql(auth: AuthContext): SQL {
              l.product_id AS pid, l.pack_type AS pack,
              SUM(COALESCE(NULLIF(l.shipped_quantity, 0), l.quantity - COALESCE(l.cancelled_quantity, 0)) * COALESCE(l.uom_ratio, 1)) AS sold,
              COUNT(DISTINCT o.id) AS orders,
-             ROUND(SUM(COALESCE(NULLIF(l.shipped_quantity, 0), l.quantity - COALESCE(l.cancelled_quantity, 0)) * COALESCE(l.unit_price, 0)), 2) AS revenue,
+             ROUND((SUM(COALESCE(NULLIF(l.shipped_quantity, 0), l.quantity - COALESCE(l.cancelled_quantity, 0)) * COALESCE(l.unit_price, 0)))::numeric, 2)::float8 AS revenue,
              MAX(o.shipped_at) AS last_at
       FROM shipment_orders o JOIN order_lines l ON l.order_id = o.id
       WHERE o.status IN ${SHIPPED} AND o.deleted_at IS NULL
@@ -64,8 +64,8 @@ export function channelSalesSql(auth: AuthContext): SQL {
     JOIN products p ON p.id = r.pid`;
 }
 
-export function listChannelSales(db: AppDb, auth: AuthContext, query: GridQuery): ReportPage<Row> {
-  const page = runReport<Row>(db, channelSalesSql(auth), CHANNEL_SALES_DEF, query);
+export async function listChannelSales(db: AppDb, auth: AuthContext, query: GridQuery): Promise<ReportPage<Row>> {
+  const page = await runReport<Row>(db, channelSalesSql(auth), CHANNEL_SALES_DEF, query);
   return {
     rows: page.rows.map(({ ordersForHref, ...r }) => ({ ...r, hasSales: Boolean(r.hasSales), ordersHref: Number(ordersForHref) > 0 ? channelSalesOrdersHref(r) : null })),
     total: page.total,
@@ -103,7 +103,7 @@ export function orderInventorySql(auth: AuthContext): SQL {
            p.sku AS "sku", '/products/' || p.id AS "productHref",
            COALESCE(ol.pack_type, i.pack_type) AS "packType", p.uom AS "uomPackType", p.barcode AS "barcode",
            a.qty AS "allocatedUomQty",
-           CAST(a.qty / MAX(COALESCE(ol.uom_ratio, 1), 1) AS INTEGER) AS "allocatedPackQty",
+           trunc(a.qty / GREATEST(COALESCE(ol.uom_ratio, 1), 1))::int AS "allocatedPackQty",
            i.status AS "inventoryStatus",
            loc.code AS "location", '/locations/' || loc.id AS "locationHref",
            lp.number AS "lpNumber", plp.number AS "parentLp",
@@ -130,6 +130,6 @@ export function orderInventorySql(auth: AuthContext): SQL {
       AND ${inList(sql`i.warehouse_id`, auth.viewScope.warehouseIds)} AND ${clientIn(sql`COALESCE(o.client_id, i.client_id)`, auth.viewScope.clientIds)}`;
 }
 
-export function listOrderInventory(db: AppDb, auth: AuthContext, query: GridQuery): ReportPage<Row> {
-  return runReport<Row>(db, orderInventorySql(auth), ORDER_INVENTORY_DEF, query);
+export async function listOrderInventory(db: AppDb, auth: AuthContext, query: GridQuery): Promise<ReportPage<Row>> {
+  return await runReport<Row>(db, orderInventorySql(auth), ORDER_INVENTORY_DEF, query);
 }

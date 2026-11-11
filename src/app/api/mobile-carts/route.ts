@@ -6,9 +6,9 @@ import { createMobileCart, listMobileCarts } from "@/server/repositories/mobile-
 
 export const GET = defineRoute({
   permission: ["settings.mobile_carts.view", "inventory.inventory_by_location.view"],
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listMobileCarts(db, auth, query);
+    const { rows, total } = await listMobileCarts(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -16,5 +16,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.mobile_carts.create",
   body: mobileCartSchema,
-  handler: ({ db, auth, actor, body }) => created(createMobileCart(db, auth, actor, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createMobileCart(db, auth, actor, body)),
 });

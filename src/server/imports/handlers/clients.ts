@@ -36,23 +36,23 @@ function parse(input: ClientInput) {
 export const handler: ImportHandler = {
   configured: true,
   owner: "M11",
-  apply(ctx, row) {
+  async apply(ctx, row) {
     const { db, auth, actor } = ctx;
     const code = (str(row.code) ?? fail("Client Code is required")).toUpperCase();
     const name = str(row.name) ?? fail("Client Name is required");
     const status = str(row.status) === "Inactive" ? "Inactive" : "Active";
-    const existing = db.select({ id: schema.clients.id }).from(schema.clients).where(eq(schema.clients.code, code)).get();
+    const existing = (await db.select({ id: schema.clients.id }).from(schema.clients).where(eq(schema.clients.code, code)).limit(1))[0];
     if (!existing) {
-      const created = createClient(db, auth, actor, parse({
+      const created = await createClient(db, auth, actor, parse({
         ...CLIENT_DEFAULTS, code, name, officialName: name, status, contactName: str(row.contactName) ?? "", contactEmail: str(row.email) ?? "", phone: str(row.phone) ?? "",
         addresses: billingAddress(row),
       }));
       return { entityId: created.id, message: `Client ${code} created` };
     }
-    const d = getClient(db, auth, existing.id);
+    const d = await getClient(db, auth, existing.id);
     const billing = billingAddress(row);
     const kept = detailAddressesToInput(d.addresses).filter((a) => !(billing.length && a.usageType === "Billing" && a.isDefault));
-    const saved = updateClient(db, auth, actor, d.id, parse({
+    const saved = await updateClient(db, auth, actor, d.id, parse({
       name, code: d.code, officialName: d.officialName ?? name, status, contactName: str(row.contactName) ?? d.contactName, contactEmail: str(row.email) ?? d.contactEmail,
       phone: str(row.phone) ?? d.phone, currency: d.currency as ClientInput["currency"], settings: d.settings, taxId: d.taxId ?? "", billingPlan: d.billingPlan as ClientInput["billingPlan"],
       customFields: d.customFields as ClientInput["customFields"], sscc: d.sscc, note: "", addresses: [...kept, ...billing], version: d.version,

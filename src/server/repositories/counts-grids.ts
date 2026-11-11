@@ -41,9 +41,9 @@ const PLAN_COLUMNS: Readonly<Record<string, SQL>> = {
   isAi: raw("p.is_ai"),
   waveRuleId: raw("p.wave_rule_id"),
   waveRuleName: raw("(SELECT wr.name FROM wave_rules wr WHERE wr.id = p.wave_rule_id)"),
-  jobCodes: raw("(SELECT group_concat(jc, ', ') FROM (SELECT DISTINCT j.code AS jc FROM jobs j WHERE j.count_plan_id = p.id ORDER BY j.code))"),
+  jobCodes: raw("(SELECT string_agg(jc, ', ' ORDER BY jc) FROM (SELECT DISTINCT j.code AS jc FROM jobs j WHERE j.count_plan_id = p.id) x)"),
   /** "id|code;id|code" so the grid can link each job (job codes contain neither separator). */
-  jobRefs: raw("(SELECT group_concat(jr, ';') FROM (SELECT j.id || '|' || j.code AS jr FROM jobs j WHERE j.count_plan_id = p.id ORDER BY j.code))"),
+  jobRefs: raw("(SELECT string_agg(jr, ';' ORDER BY jc) FROM (SELECT j.id || '|' || j.code AS jr, j.code AS jc FROM jobs j WHERE j.count_plan_id = p.id) x)"),
   startedAt: raw("p.started_at"),
   completedAt: raw("p.completed_at"),
   skuCount: raw(`(CASE WHEN p.count_type = 'SKU' THEN (SELECT COUNT(DISTINCT l.product_id) FROM count_plan_lines l WHERE l.plan_id = p.id AND l.status <> 'Cancelled')
@@ -60,9 +60,9 @@ const PLAN_COLUMNS: Readonly<Record<string, SQL>> = {
   orphanedLineCount: raw(`(SELECT COUNT(*) FROM count_plan_lines l WHERE l.plan_id = p.id AND ${ORPHANED_LINE})`),
   /** Cancelled lines are excluded from Number of SKU / Location / lines (they are never counted) and reported here. */
   cancelledLineCount: raw("(SELECT COUNT(*) FROM count_plan_lines l WHERE l.plan_id = p.id AND l.status = 'Cancelled')"),
-  countObject: raw(`(SELECT group_concat(c, ', ') FROM (SELECT DISTINCT COALESCE(pr.sku, lo.code) AS c FROM count_plan_lines l
+  countObject: raw(`(SELECT string_agg(c, ', ' ORDER BY c) FROM (SELECT DISTINCT COALESCE(pr.sku, lo.code) AS c FROM count_plan_lines l
     LEFT JOIN products pr ON pr.id = l.product_id LEFT JOIN locations lo ON lo.id = l.location_id
-    WHERE l.plan_id = p.id AND COALESCE(pr.sku, lo.code) IS NOT NULL ORDER BY c LIMIT 3))`),
+    WHERE l.plan_id = p.id AND COALESCE(pr.sku, lo.code) IS NOT NULL ORDER BY c LIMIT 3) x)`),
   countObjectTotal: raw("(SELECT COUNT(DISTINCT COALESCE(l.product_id, l.location_id)) FROM count_plan_lines l WHERE l.plan_id = p.id)"),
   createdAt: raw("p.created_at"),
   createdByName: userName("p.created_by"),
@@ -109,9 +109,9 @@ const LINE_COLUMNS: Readonly<Record<string, SQL>> = {
   productGroup: raw("(SELECT lv.name FROM lookup_values lv WHERE lv.id = pr.product_group_id)"),
   /** SKUs a line covers: its own SKU, else the counted SKUs, else the SKUs on hand in its location / LP. */
   skuList: raw(`(CASE WHEN l.product_id IS NOT NULL THEN pr.sku ELSE COALESCE(
-    (SELECT group_concat(s, ', ') FROM (SELECT DISTINCT p2.sku AS s FROM count_line_entries e JOIN products p2 ON p2.id = e.product_id WHERE e.line_id = l.id ORDER BY p2.sku)),
-    (SELECT group_concat(s, ', ') FROM (SELECT DISTINCT p2.sku AS s FROM inventory i JOIN products p2 ON p2.id = i.product_id
-      WHERE i.location_id = l.location_id AND i.on_hand > 0 AND (l.lp_id IS NULL OR i.lp_id = l.lp_id) ORDER BY p2.sku))) END)`),
+    (SELECT string_agg(s, ', ' ORDER BY s) FROM (SELECT DISTINCT p2.sku AS s FROM count_line_entries e JOIN products p2 ON p2.id = e.product_id WHERE e.line_id = l.id) x),
+    (SELECT string_agg(s, ', ' ORDER BY s) FROM (SELECT DISTINCT p2.sku AS s FROM inventory i JOIN products p2 ON p2.id = i.product_id
+      WHERE i.location_id = l.location_id AND i.on_hand > 0 AND (l.lp_id IS NULL OR i.lp_id = l.lp_id)) x)) END)`),
   lpId: raw("l.lp_id"),
   lpNumber: raw("(SELECT n.number FROM license_plates n WHERE n.id = l.lp_id)"),
   jobId: raw("l.job_id"),
@@ -132,7 +132,7 @@ const LINE_COLUMNS: Readonly<Record<string, SQL>> = {
   ...recountLinkColumns("l.id"),
   orphaned: raw(`(CASE WHEN ${ORPHANED_LINE} THEN 1 ELSE 0 END)`),
   difference: raw(`(CASE WHEN l.counted_qty IS NULL THEN NULL WHEN COALESCE(l.approved_stock_qty, 0) = 0 THEN (CASE WHEN l.counted_qty = 0 THEN 0 ELSE 100 END)
-    ELSE ROUND((l.counted_qty - l.approved_stock_qty) * 100.0 / l.approved_stock_qty, 2) END)`),
+    ELSE ROUND(((l.counted_qty - l.approved_stock_qty) * 100.0::float8 / l.approved_stock_qty)::numeric, 2)::float8 END)`),
   countUserName: userName("l.count_user_id"),
   note: raw("l.note"),
   inventoryUpdatedAt: raw("l.inventory_updated_at"),

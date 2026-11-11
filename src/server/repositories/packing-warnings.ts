@@ -39,10 +39,10 @@ export function toPackingWarning(row: { readonly id: string; readonly name: stri
 }
 
 /** The active warning of an order, or null. */
-export function packingWarningOf(db: AppDb, warningTypeId: string | null | undefined): PackingWarning | null {
+export async function packingWarningOf(db: AppDb, warningTypeId: string | null | undefined): Promise<PackingWarning | null> {
   if (!warningTypeId) return null;
-  const row = db.select({ id: schema.lookupValues.id, name: schema.lookupValues.name, meta: schema.lookupValues.meta, isActive: schema.lookupValues.isActive, type: schema.lookupValues.type })
-    .from(schema.lookupValues).where(and(eq(schema.lookupValues.id, warningTypeId), eq(schema.lookupValues.type, "packing_warning_type"))).get();
+  const row = (await db.select({ id: schema.lookupValues.id, name: schema.lookupValues.name, meta: schema.lookupValues.meta, isActive: schema.lookupValues.isActive, type: schema.lookupValues.type })
+    .from(schema.lookupValues).where(and(eq(schema.lookupValues.id, warningTypeId), eq(schema.lookupValues.type, "packing_warning_type"))).limit(1))[0];
   if (!row || !row.isActive) return null;
   return toPackingWarning(row);
 }
@@ -55,20 +55,20 @@ export const ackWarningSchema = z.object({
 });
 
 /** Records the packer's acknowledgement on the order's change log. */
-export function acknowledgeWarning(tx: AppDb, ctx: DomainCtx & { readonly scope: Scope }, input: z.output<typeof ackWarningSchema>): { readonly orderId: string; readonly acknowledgedAt: string } {
-  const o = tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, input.orderId)).get();
+export async function acknowledgeWarning(tx: AppDb, ctx: DomainCtx & { readonly scope: Scope }, input: z.output<typeof ackWarningSchema>): Promise<{ readonly orderId: string; readonly acknowledgedAt: string }> {
+  const o = (await tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, input.orderId)).limit(1))[0];
   assertInScope(ctx.scope, o, "Shipment order");
   if (!o) throw new DomainError("NOT_FOUND", "Shipment order not found");
   if (o.packingWarningTypeId !== input.warningTypeId) throw new DomainError("INVALID_STATE", `The packing warning of ${o.code} has changed. Reload the order.`);
-  const w = packingWarningOf(tx, input.warningTypeId);
+  const w = await packingWarningOf(tx, input.warningTypeId);
   if (!w) throw new DomainError("NOT_FOUND", "Packing warning not found");
-  const station = input.stationId ? tx.select({ code: schema.locations.code }).from(schema.locations).where(eq(schema.locations.id, input.stationId)).get()?.code : null;
+  const station = input.stationId ? (await tx.select({ code: schema.locations.code }).from(schema.locations).where(eq(schema.locations.id, input.stationId)).limit(1))[0]?.code : null;
   const at = new Date().toISOString();
   const value = `${w.name} · ${packingTriggerLabel(input.trigger) ?? input.trigger}${station ? ` · ${station}` : ""}`;
-  tx.insert(schema.changeLog).values({
+  await tx.insert(schema.changeLog).values({
     entityType: "shipment_order", entityId: o.id, entityCode: o.code, type: "Update", field: "packingWarningAcknowledged", fieldLabel: "Packing Warning Acknowledged",
     fromValue: null, toValue: value, message: `Packing warning "${w.name}" is acknowledged by the packer (${packingTriggerLabel(input.trigger) ?? input.trigger}${station ? ` at ${station}` : ""}).`,
     userId: ctx.userId, source: ctx.source, at,
-  }).run();
+  });
   return { orderId: o.id, acknowledgedAt: at };
 }

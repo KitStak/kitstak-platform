@@ -4,5 +4,5 @@ import { defaultSetupId } from "@/server/repositories/monitoring";
 
 export const GET = defineRoute({
   permission: "integrations.integration_monitoring.view",
-  handler: ({ db, auth }) => ({ id: defaultSetupId(db, auth) }),
+  handler: async ({ db, auth }) => ({ id: await defaultSetupId(db, auth) }),
 });

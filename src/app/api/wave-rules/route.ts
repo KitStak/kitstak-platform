@@ -11,7 +11,7 @@ export const GET = defineRoute({
   permission: "automation.wave_rules.view",
   handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = await withBusyRetry(() => listWaveRules(db, auth, query));
+    const { rows, total } = await withBusyRetry(async () => await listWaveRules(db, auth, query));
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -19,5 +19,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "automation.wave_rules.create",
   body: waveRuleInputSchema,
-  handler: ({ db, auth, actor, body }) => withM03Actor(db, actor, auth, () => created(createWaveRule(db, auth, domainCtx(actor, auth), body))),
+  handler: async ({ db, auth, actor, body }) => await withM03Actor(db, actor, auth, async () => created(await createWaveRule(db, auth, domainCtx(actor, auth), body))),
 });

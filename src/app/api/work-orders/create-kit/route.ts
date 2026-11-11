@@ -11,13 +11,13 @@ import { createKit } from "@/server/repositories/work-orders-commands";
 export const POST = defineRoute({
   permission: WO_PERMISSIONS.createKit,
   body: createKitSchema,
-  handler: ({ db, auth, actor, body }) => {
+  handler: async ({ db, auth, actor, body }) => {
     // "Complete pending picks and build" posts real Picking moves on behalf of the floor:
     // only planners (not operator/viewer-only users) who may run picking operations.
     if (body.completePendingPicks && (!can(auth, WO_PERMISSIONS.picking) || planningDeniedForRoles(auth.roleKeys))) {
       throw forbiddenError("Only a supervisor with Picking/Job Operations permission can complete pending picks from Create Kit");
     }
-    const res = createKit(db, woCtx(actor, auth), body);
-    return { ...res, workOrder: getWorkOrderRow(db, auth.scope, res.workOrderId) };
+    const res = await createKit(db, woCtx(actor, auth), body);
+    return { ...res, workOrder: await getWorkOrderRow(db, auth.scope, res.workOrderId) };
   },
 });

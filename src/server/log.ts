@@ -49,15 +49,20 @@ export interface SerializedError {
   readonly message: string;
   readonly code?: string;
   readonly stack?: string;
+  /** The driver error behind a drizzle "Failed query" wrapper (Postgres message + SQLSTATE). */
+  readonly cause?: { readonly message: string; readonly code?: string };
 }
 
 export function serializeError(error: unknown): SerializedError {
   if (error instanceof Error) {
     const code = (error as { code?: unknown }).code;
+    const cause = (error as { cause?: unknown }).cause;
+    const causeCode = cause instanceof Error ? (cause as { code?: unknown }).code : undefined;
     return {
       name: error.name,
       message: error.message,
       ...(typeof code === "string" ? { code } : {}),
+      ...(cause instanceof Error ? { cause: { message: cause.message, ...(typeof causeCode === "string" ? { code: causeCode } : {}) } } : {}),
       ...(process.env.NODE_ENV !== "production" && error.stack ? { stack: error.stack } : {}),
     };
   }

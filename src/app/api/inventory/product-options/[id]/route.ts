@@ -7,5 +7,5 @@ import { INVENTORY_PERMISSIONS as P } from "@/lib/grid-defs/inventory/permission
 export const GET = defineRoute({
   permission: P.byLocationView,
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => productOptions(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await productOptions(db, auth, params.id),
 });

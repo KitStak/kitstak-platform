@@ -11,12 +11,12 @@ import { contextLabel, type InitialShellContext } from "@/lib/context-label";
 
 export type { InitialShellContext } from "@/lib/context-label";
 
-export function loadInitialShellContext(db: AppDb, auth: AuthContext): InitialShellContext {
+export async function loadInitialShellContext(db: AppDb, auth: AuthContext): Promise<InitialShellContext> {
   const { warehouseId, clientId } = auth.context;
   const warehouse = warehouseId
-    ? db.select({ code: warehouses.code, name: warehouses.name }).from(warehouses).where(eq(warehouses.id, warehouseId)).get() ?? null
+    ? (await db.select({ code: warehouses.code, name: warehouses.name }).from(warehouses).where(eq(warehouses.id, warehouseId)).limit(1))[0] ?? null
     : null;
-  const client = clientId ? db.select({ code: clients.code, name: clients.name }).from(clients).where(eq(clients.id, clientId)).get() ?? null : null;
+  const client = clientId ? (await db.select({ code: clients.code, name: clients.name }).from(clients).where(eq(clients.id, clientId)).limit(1))[0] ?? null : null;
   const manyWarehouses = auth.scope.warehouseIds.length > 1;
   const manyClients = auth.scope.clientIds === "all" || auth.scope.clientIds.length > 1;
   return { ...contextLabel({ warehouse, client }), visible: manyWarehouses || manyClients };

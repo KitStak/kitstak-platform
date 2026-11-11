@@ -13,6 +13,7 @@ import { compileFilters, escapeLike, type FilterFieldDef } from "@/server/query/
 import type { GridQuery } from "@/server/query/grid-query";
 import { compileSort, type SortableMap } from "@/server/query/sort";
 import { CUSTOM_FIELD_FILTERS, PRODUCT_GRID_FIELDS, PRODUCT_SORT_FIELDS } from "@/lib/grid-defs/products/products-grid";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 const p = schema.products;
 
@@ -101,7 +102,7 @@ export function productExpressions(scope: Scope): Readonly<Record<string, SQL>> 
     isInsert: sql`${p.isInsert}`,
     isLiquid: sql`${p.isLiquid}`,
     isNonReturnable: sql`${p.isNonReturnable}`,
-    isReturnable: sql`(CASE WHEN ${p.isNonReturnable} = 1 THEN 0 ELSE 1 END)`,
+    isReturnable: sql`(CASE WHEN ${p.isNonReturnable} = true THEN 0 ELSE 1 END)`,
     isPackagingMaterial: sql`(CASE WHEN ${p.productCategory} = 'Packaging Material' THEN 1 ELSE 0 END)`,
     isPoster: sql`${p.isPoster}`,
     isFoldable: sql`${p.isFoldable}`,
@@ -143,7 +144,7 @@ export function productFilterDefs(scope: Scope): readonly FilterFieldDef[] {
 export function productQuickSearch(q: string | undefined, mode: "eq" | "sw"): SQL | undefined {
   const text = q?.trim();
   if (!text) return undefined;
-  const match = (expr: SQL): SQL => (mode === "eq" ? sql`lower(${expr}) = lower(${text})` : sql`${expr} LIKE ${`${escapeLike(text)}%`} ESCAPE '\\'`);
+  const match = (expr: SQL): SQL => (mode === "eq" ? sql`lower(${expr}) = lower(${text})` : sql`${expr} ILIKE ${`${escapeLike(text)}%`} ESCAPE '\\'`);
   const barcode = match(sql`b.barcode`);
   return sql`(${match(sql`${p.sku}`)} OR ${match(sql`${p.name}`)} OR ${match(sql`${p.barcode}`)} OR ${match(sql`${p.fnsku}`)}
     OR EXISTS (SELECT 1 FROM product_barcodes b WHERE b.product_id = ${p.id} AND ${barcode}))`;
@@ -189,7 +190,7 @@ export function mapListRow(r: RawRow): ProductListRow {
   };
 }
 
-export function listProducts(db: AppDb, scope: Scope, query: GridQuery, idsOnly?: readonly string[]): { rows: ProductListRow[]; total: number } {
+export async function listProducts(db: AppDb, scope: Scope, query: GridQuery, idsOnly?: readonly string[]): Promise<{ rows: ProductListRow[]; total: number }> {
   const e = productExpressions(scope);
   const base = productWhere(scope, query);
   const where = idsOnly ? and(base, sql`${p.id} IN (${sql.join(idsOnly.map((id) => sql`${id}`), sql`, `)})`) : base;
@@ -199,27 +200,27 @@ export function listProducts(db: AppDb, scope: Scope, query: GridQuery, idsOnly?
   // Two phases: SQLite evaluates every result column before sorting, so the correlated columns
   // (stock sums, barcode conflicts) would run for EVERY matching product. Page the ids first
   // (only the sort expressions run), then build the 50 visible rows. 6.5k SKUs: 8 s -> ms.
-  const pageIds = db.all<{ id: string }>(sql`SELECT ${p.id} AS id FROM ${p} ${whereSql} ORDER BY ${sql.join(order, sql`, `)} LIMIT ${query.pageSize} OFFSET ${offset}`).map((r) => r.id);
-  const total = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM ${p} ${whereSql}`)?.n ?? 0;
+  const pageIds = (await dbAll<{ id: string }>(db, sql`SELECT ${p.id} AS id FROM ${p} ${whereSql} ORDER BY ${sql.join(order, sql`, `)} LIMIT ${query.pageSize} OFFSET ${offset}`)).map((r) => r.id);
+  const total = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM ${p} ${whereSql}`))?.n ?? 0;
   if (pageIds.length === 0) return { rows: [], total: Number(total) };
   const position = new Map(pageIds.map((id, i) => [id, i]));
-  const rows = db.all<RawRow>(sql`
-    SELECT ${p.id} AS id, ${p.clientId} AS clientId, ${e.clientName} AS clientName,
-      (SELECT c.code FROM clients c WHERE c.id = ${p.clientId}) AS clientCode,
+  const rows = (await dbAll<RawRow>(db, sql`
+    SELECT ${p.id} AS id, ${p.clientId} AS "clientId", ${e.clientName} AS "clientName",
+      (SELECT c.code FROM clients c WHERE c.id = ${p.clientId}) AS "clientCode",
       ${p.sku} AS sku, ${p.barcode} AS barcode,
-      (SELECT group_concat(b.barcode, ', ') FROM product_barcodes b WHERE b.product_id = ${p.id}) AS barcodes,
-      ${p.name} AS name, ${p.imageUrl} AS imageUrl, ${p.status} AS status, ${p.productCategory} AS productCategory,
-      ${p.kitType} AS kitType, ${p.isKit} AS isKit, ${p.isFragile} AS isFragile, ${p.isOversized} AS isOversized,
-      ${p.isDigital} AS isDigital, ${p.isHazmat} AS isHazmat, ${p.isInsert} AS isInsert, ${p.isLiquid} AS isLiquid,
-      ${p.isNonReturnable} AS isNonReturnable, ${p.isPoster} AS isPoster, ${p.isFoldable} AS isFoldable,
-      ${p.isStackable} AS isStackable, ${p.price} AS salesPrice, ${p.purchasePrice} AS purchasePrice, ${p.currency} AS currency,
-      ${p.uom} AS uom, (SELECT COUNT(*) FROM product_pack_types pt WHERE pt.product_id = ${p.id}) AS packTypeCount,
-      ${p.trackLot} AS trackLot, ${p.trackExpiry} AS trackExpiry, ${p.trackProductionDate} AS trackProductionDate,
-      ${p.trackSerial} AS trackSerial, ${e.productType} AS productType, ${e.productGroup} AS productGroup,
-      ${p.description} AS description, ${p.taxRate} AS taxRate, ${p.fnsku} AS fnsku, ${p.createdAt} AS createdAt,
-      ${e.onHand} AS onHand, ${e.allocated} AS allocated, ${e.available} AS available, ${p.version} AS version,
-      ${barcodeConflictSql(sql`${p.id}`, sql`${p.clientId}`, sql`${p.barcode}`)} AS barcodeConflictCount
-    FROM ${p} WHERE ${p.id} IN (${sql.join(pageIds.map((id) => sql`${id}`), sql`, `)})`)
+      (SELECT string_agg((b.barcode)::text, ', ') FROM product_barcodes b WHERE b.product_id = ${p.id}) AS barcodes,
+      ${p.name} AS name, ${p.imageUrl} AS "imageUrl", ${p.status} AS status, ${p.productCategory} AS "productCategory",
+      ${p.kitType} AS "kitType", ${p.isKit} AS "isKit", ${p.isFragile} AS "isFragile", ${p.isOversized} AS "isOversized",
+      ${p.isDigital} AS "isDigital", ${p.isHazmat} AS "isHazmat", ${p.isInsert} AS "isInsert", ${p.isLiquid} AS "isLiquid",
+      ${p.isNonReturnable} AS "isNonReturnable", ${p.isPoster} AS "isPoster", ${p.isFoldable} AS "isFoldable",
+      ${p.isStackable} AS "isStackable", ${p.price} AS "salesPrice", ${p.purchasePrice} AS "purchasePrice", ${p.currency} AS currency,
+      ${p.uom} AS uom, (SELECT COUNT(*) FROM product_pack_types pt WHERE pt.product_id = ${p.id}) AS "packTypeCount",
+      ${p.trackLot} AS "trackLot", ${p.trackExpiry} AS "trackExpiry", ${p.trackProductionDate} AS "trackProductionDate",
+      ${p.trackSerial} AS "trackSerial", ${e.productType} AS "productType", ${e.productGroup} AS "productGroup",
+      ${p.description} AS description, ${p.taxRate} AS "taxRate", ${p.fnsku} AS fnsku, ${p.createdAt} AS "createdAt",
+      ${e.onHand} AS "onHand", ${e.allocated} AS allocated, ${e.available} AS available, ${p.version} AS version,
+      ${barcodeConflictSql(sql`${p.id}`, sql`${p.clientId}`, sql`${p.barcode}`)} AS "barcodeConflictCount"
+    FROM ${p} WHERE ${p.id} IN (${sql.join(pageIds.map((id) => sql`${id}`), sql`, `)})`))
     .sort((a, b) => (position.get(String(a.id)) ?? 0) - (position.get(String(b.id)) ?? 0));
   return { rows: rows.map(mapListRow), total: Number(total) };
 }

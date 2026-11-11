@@ -8,7 +8,7 @@ import { deleteCarrierConnections, getCarrierConnection, updateCarrierConnection
 export const GET = defineRoute({
   permission: ["integrations.integrations.create_setup", "integrations.integrations.edit_setup", "integrations.integrations.delete_setup", "integrations.carrier_monitoring.view"],
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getCarrierConnection(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await getCarrierConnection(db, auth, params.id),
 });
 
 export const PATCH = defineRoute({
@@ -22,8 +22,8 @@ export const PATCH = defineRoute({
 export const DELETE = defineRoute({
   permission: "integrations.integrations.delete_setup",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
-    const result = deleteCarrierConnections(db, auth, actor, [params.id]);
+  handler: async ({ db, auth, actor, params }) => {
+    const result = await deleteCarrierConnections(db, auth, actor, [params.id]);
     const failure = result.failed[0];
     if (failure) throw new AppError(failure.code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_STATE", failure.message);
     return result;

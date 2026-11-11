@@ -7,12 +7,12 @@ import {
 
 export const GET = defineRoute({
   params: idParamsSchema,
-  handler: ({ db, params }) => getCustomField(db, params.id),
+  handler: async ({ db, params }) => await getCustomField(db, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: ANY_CUSTOM_FIELD_PERMISSION,
   params: idParamsSchema,
   body: customFieldUpdateSchema,
-  handler: ({ db, auth, params, body }) => updateCustomField(db, auth, params.id, body),
+  handler: async ({ db, auth, params, body }) => await updateCustomField(db, auth, params.id, body),
 });

@@ -8,18 +8,18 @@ import { loadUser, userSessions } from "@/server/repositories/users";
 export const GET = defineRoute({
   permission: "settings.users.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => userSessions(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await userSessions(db, auth, params.id),
 });
 
 export const DELETE = defineRoute({
   permission: "settings.users.edit",
   params: idParamsSchema,
-  handler: ({ db, auth, params, audit }) => {
-    loadUser(db, params.id);
+  handler: async ({ db, auth, params, audit }) => {
+    await loadUser(db, params.id);
     if (params.id === auth.user.id) throw new AppError("INVALID_STATE", "Use Log out of all devices to end your own sessions");
-    const before = userSessions(db, auth, params.id).length;
-    bumpSessionVersion(db, params.id);
-    audit({ action: "session.revoke_all", entity: "user", entityId: params.id, detail: { sessions: before } });
+    const before = (await userSessions(db, auth, params.id)).length;
+    await bumpSessionVersion(db, params.id);
+    await audit({ action: "session.revoke_all", entity: "user", entityId: params.id, detail: { sessions: before } });
     return { revoked: before };
   },
 });

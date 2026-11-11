@@ -27,15 +27,15 @@ export function referenceTypeOf(code: string | null): "Shipment Order" | "Purcha
 export const handler: ImportHandler = {
   configured: true,
   owner: "M11",
-  apply(ctx, row) {
+  async apply(ctx, row) {
     const { db, auth, actor } = ctx;
     const whCode = str(row.warehouseCode) ?? fail("Warehouse Code is required");
-    const wh = db.select({ id: schema.warehouses.id }).from(schema.warehouses).where(eq(schema.warehouses.code, whCode)).get() ?? fail(`Warehouse "${whCode}" was not found`);
+    const wh = (await db.select({ id: schema.warehouses.id }).from(schema.warehouses).where(eq(schema.warehouses.code, whCode)).limit(1))[0] ?? fail(`Warehouse "${whCode}" was not found`);
     const clientCode = str(row.clientCode) ?? fail("Client Code is required");
-    const client = db.select({ id: schema.clients.id }).from(schema.clients).where(eq(schema.clients.code, clientCode)).get() ?? fail(`Client "${clientCode}" was not found`);
+    const client = (await db.select({ id: schema.clients.id }).from(schema.clients).where(eq(schema.clients.code, clientCode)).limit(1))[0] ?? fail(`Client "${clientCode}" was not found`);
     const typeName = str(row.vasType) ?? fail("VAS Type is required");
-    const type = db.select({ id: schema.lookupValues.id }).from(schema.lookupValues)
-      .where(and(eq(schema.lookupValues.type, "vas_type"), eq(schema.lookupValues.name, typeName))).get() ?? fail(`VAS type "${typeName}" was not found in Data Setup`);
+    const type = (await db.select({ id: schema.lookupValues.id }).from(schema.lookupValues)
+      .where(and(eq(schema.lookupValues.type, "vas_type"), eq(schema.lookupValues.name, typeName))).limit(1))[0] ?? fail(`VAS type "${typeName}" was not found in Data Setup`);
     const note = str(row.notes);
     if (note && note.length > VAS_NOTE_MAX) fail(`Notes can be at most ${VAS_NOTE_MAX} characters`);
     const reference = str(row.referenceCode);
@@ -44,7 +44,7 @@ export const handler: ImportHandler = {
       referenceNumber: reference, referenceOrderType: referenceTypeOf(reference) ?? (reference ? "Shipment Order" : null),
     });
     if (!parsed.success) fail(parsed.error.issues.map((i) => i.message).join("; "));
-    const created = createVas(db, auth, actor, parsed.data);
+    const created = await createVas(db, auth, actor, parsed.data);
     return { entityId: created.id, message: `${typeName} x ${parsed.data.value} logged for ${clientCode}` };
   },
 };

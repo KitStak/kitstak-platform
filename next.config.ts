@@ -105,6 +105,22 @@ export function buildLegacyRedirects(
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  // Database drivers stay outside the server bundle: PGlite loads its WASM + data files from
+  // its own package directory at runtime (docs/POSTGRES_MIGRATION.md).
+  serverExternalPackages: ["@electric-sql/pglite", "postgres"],
+  // Local runtime state (PGlite database, stored files, Playwright auth states) is written
+  // under .data/ via process.cwd() paths, which the file tracer would otherwise copy into
+  // every server function bundle on a deploy from a working copy. Never ship it.
+  outputFileTracingExcludes: {
+    "/*": [".data/**/*"],
+    "/**": [".data/**/*"],
+  },
+  // The migration SQL is read from disk at runtime (src/server/db/migrate.ts), so ship it with
+  // the routes that migrate: the one-off bootstrap and the health check that reports it.
+  outputFileTracingIncludes: {
+    "/api/admin/bootstrap": ["./drizzle/**/*"],
+    "/api/health": ["./drizzle/**/*"],
+  },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

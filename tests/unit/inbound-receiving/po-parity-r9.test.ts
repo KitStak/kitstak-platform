@@ -20,22 +20,22 @@ import { createWorld, type World } from "../foundation/domain/fixtures";
 
 let w: World;
 let auth: AuthContext;
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
 afterEach(() => w.close());
 
 const address = { name: "Dock", line1: "1 Supply Way", line2: "", postalCode: "38118", city: "Memphis", phone: "", country: "US", state: "TN" };
-function createPo(code: string, qty = 10) {
-  const v = createVendor(w.db, w.ctx, auth.scope, vendorFormSchema.parse({ clientId: w.clientId, displayName: `Acme ${code}`, vendorName: "Acme LLC", useShipAsBilling: true, shipping: address }));
-  return createPurchaseOrder(w.db, w.ctx, auth.scope, poCreateSchema.parse({
+async function createPo(code: string, qty = 10) {
+  const v = await createVendor(w.db, w.ctx, auth.scope, vendorFormSchema.parse({ clientId: w.clientId, displayName: `Acme ${code}`, vendorName: "Acme LLC", useShipAsBilling: true, shipping: address }));
+  return await createPurchaseOrder(w.db, w.ctx, auth.scope, poCreateSchema.parse({
     warehouseId: w.warehouseId, clientId: w.clientId, code, poType: "Purchase Order", poDate: "2026-11-09T15:00:00.000Z", vendorId: v.id,
     lines: [{ productId: w.productId, packType: "Each", orderedQuantity: qty, unitCost: 1 }],
   }));
 }
-const txnOf = (receiptId: string) => w.db.select().from(schema.inventoryTransactions).where(eq(schema.inventoryTransactions.receiptId, receiptId)).get();
+const txnOf = async (receiptId: string) => (await w.db.select().from(schema.inventoryTransactions).where(eq(schema.inventoryTransactions.receiptId, receiptId)).limit(1))[0];
 
 const po = (code: string, status: string, extra: Partial<PoRow> = {}): PoRow =>
   ({ id: code, code, status, totalQuantity: 10, receivedQuantity: 0, activeReceipts: 0, receiveAllBlockedReason: null, ...extra }) as unknown as PoRow;
@@ -70,22 +70,22 @@ describe("receive API contract", () => {
     expect(JSON.stringify(bad.success ? {} : bad.error.issues)).not.toMatch(/Invalid input/);
   });
 
-  it("stamps the algorithm when an API caller posts a suggested location without fromSuggestion", () => {
-    const p = createPo("KS-R9-ALG");
+  it("stamps the algorithm when an API caller posts a suggested location without fromSuggestion", async () => {
+    const p = await createPo("KS-R9-ALG");
     const lineId = p.lines[0]?.id ?? "";
-    const s = suggestForLine(w.db, auth.scope, p.id, lineId, 3, {});
+    const s = await suggestForLine(w.db, auth.scope, p.id, lineId, 3, {});
     const top = s.suggestions[0];
     expect(top).toBeDefined();
-    const r = receivePurchaseOrder(w.db, w.ctx, auth.scope, p.id, receiveBodySchema.parse({ lines: [{ lineId, quantity: 3, locationId: top?.locationId ?? "", suggestBasis: { lot: null } }] }));
-    expect(txnOf(r.receiptIds[0] ?? "")?.algorithmName).toBe(s.algorithm);
+    const r = await receivePurchaseOrder(w.db, w.ctx, auth.scope, p.id, receiveBodySchema.parse({ lines: [{ lineId, quantity: 3, locationId: top?.locationId ?? "", suggestBasis: { lot: null } }] }));
+    expect((await txnOf(r.receiptIds[0] ?? ""))?.algorithmName).toBe(s.algorithm);
   });
 
-  it("still never stamps an explicit override", () => {
-    const p = createPo("KS-R9-ALG2");
+  it("still never stamps an explicit override", async () => {
+    const p = await createPo("KS-R9-ALG2");
     const lineId = p.lines[0]?.id ?? "";
-    const top = suggestForLine(w.db, auth.scope, p.id, lineId, 1, {}).suggestions[0];
-    const r = receivePurchaseOrder(w.db, w.ctx, auth.scope, p.id, receiveBodySchema.parse({ lines: [{ lineId, quantity: 1, locationId: top?.locationId ?? "", fromSuggestion: false }] }));
-    expect(txnOf(r.receiptIds[0] ?? "")?.algorithmName ?? null).toBeNull();
+    const top = (await suggestForLine(w.db, auth.scope, p.id, lineId, 1, {})).suggestions[0];
+    const r = await receivePurchaseOrder(w.db, w.ctx, auth.scope, p.id, receiveBodySchema.parse({ lines: [{ lineId, quantity: 1, locationId: top?.locationId ?? "", fromSuggestion: false }] }));
+    expect((await txnOf(r.receiptIds[0] ?? ""))?.algorithmName ?? null).toBeNull();
   });
 });
 

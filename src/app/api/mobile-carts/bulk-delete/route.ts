@@ -6,5 +6,5 @@ import { deleteMobileCarts } from "@/server/repositories/mobile-carts";
 export const POST = defineRoute({
   permission: "settings.mobile_carts.delete",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => deleteMobileCarts(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await deleteMobileCarts(db, auth, actor, body.ids),
 });

@@ -19,10 +19,10 @@ export const GET = defineRoute({
   permission: PRODUCT_READ_PERMISSIONS,
   params: idParamsSchema,
   query: z.object({ view: z.enum(["detail", "form"]).default("detail") }),
-  handler: ({ db, auth, params, query }) => {
+  handler: async ({ db, auth, params, query }) => {
     // The form payload feeds Edit / Duplicate only.
     if (query.view === "form") requirePermission(auth, ["settings.products.edit", "settings.products.create"]);
-    const data = query.view === "form" ? getProductForm(db, auth.scope, params.id) : getProductDetail(db, auth.scope, auth.viewScope, params.id);
+    const data = query.view === "form" ? await getProductForm(db, auth.scope, params.id) : await getProductDetail(db, auth.scope, auth.viewScope, params.id);
     if (!data) throw notFoundError("Product");
     return data;
   },
@@ -32,10 +32,10 @@ export const PATCH = defineRoute({
   permission: "settings.products.edit",
   params: idParamsSchema,
   body: z.record(z.string(), z.unknown()),
-  handler: ({ db, auth, actor, params, body, request }) => {
+  handler: async ({ db, auth, actor, params, body, request }) => {
     const version = expectedVersion(body.version, request.headers.get("if-match"));
     if (version === null) throw new AppError("CONFLICT", VERSION_REQUIRED_MESSAGE, { fieldErrors: { version: ["Required"] }, details: { reason: "VERSION_REQUIRED" } });
-    const row = updateProductFromWizard(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.id, { ...body, version } as ProductInput);
+    const row = await updateProductFromWizard(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.id, { ...body, version } as ProductInput);
     return { id: row.id, sku: row.sku, version: row.version };
   },
 });

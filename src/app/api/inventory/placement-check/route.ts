@@ -20,5 +20,5 @@ export const GET = defineRoute({
     productIds: idList,
     exclude: idList,
   }),
-  handler: ({ db, auth, query }) => placementCheck(db, auth, { kind: query.kind, id: query.id, productIds: query.productIds, excludeInventoryIds: query.exclude }),
+  handler: async ({ db, auth, query }) => await placementCheck(db, auth, { kind: query.kind, id: query.id, productIds: query.productIds, excludeInventoryIds: query.exclude }),
 });

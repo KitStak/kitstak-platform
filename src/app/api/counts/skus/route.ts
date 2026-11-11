@@ -6,8 +6,8 @@ import { listCountLines } from "@/server/repositories/counts-lines";
 
 export const GET = defineRoute({
   permission: P.skuView,
-  handler: ({ db, auth, grid }) => {
-    const page = listCountLines(db, auth.viewScope, "skus", grid());
+  handler: async ({ db, auth, grid }) => {
+    const page = await listCountLines(db, auth.viewScope, "skus", grid());
     return listResult(page.rows, { total: page.total, page: page.page, pageSize: page.pageSize });
   },
 });

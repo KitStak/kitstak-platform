@@ -19,6 +19,7 @@ import type { AppDb } from "@/server/api/db";
 import { ledger } from "@/server/domain/ledger";
 import { systemCtx, type DomainCtx } from "@/server/domain/types";
 import { isValidIsoDate, pruneEmptyBuckets } from "./inventory-commands";
+import { dbAll, dbGet, withWriteTx } from "@/server/db/sql";
 
 export type HygieneCheck = "untracked-attribute" | "bad-date" | "empty-bucket" | "fixture-stock";
 
@@ -42,8 +43,8 @@ interface BucketFacts {
   readonly bucketKey: string;
 }
 
-function bucketFacts(db: AppDb): BucketFacts[] {
-  return db.all<BucketFacts>(sql`SELECT i.id, p.sku, i.on_hand AS "onHand", i.allocated, i.lot_number AS "lotNumber",
+async function bucketFacts(db: AppDb): Promise<BucketFacts[]> {
+  return await dbAll<BucketFacts>(db, sql`SELECT i.id, p.sku, i.on_hand AS "onHand", i.allocated, i.lot_number AS "lotNumber",
       i.expiry_date AS "expiryDate", i.production_date AS "productionDate", i.bucket_key AS "bucketKey",
       p.track_lot AS "trackLot", p.track_expiry AS "trackExpiry", p.track_production_date AS "trackProductionDate"
     FROM inventory i JOIN products p ON p.id = i.product_id`);
@@ -70,9 +71,9 @@ export function repairDate(v: string): string | null {
   return isValidIsoDate(head) ? head : null;
 }
 
-function isEmptyUnreferenced(db: AppDb, b: BucketFacts): boolean {
+async function isEmptyUnreferenced(db: AppDb, b: BucketFacts): Promise<boolean> {
   if (b.onHand !== 0 || b.allocated !== 0 || b.bucketKey.startsWith("legacy:")) return false;
-  const held = db.get<{ n: number }>(sql`SELECT
+  const held = await dbGet<{ n: number }>(db, sql`SELECT
       (SELECT COUNT(*) FROM inventory_allocations a WHERE a.inventory_id = ${b.id})
     + (SELECT COUNT(*) FROM serial_numbers s WHERE s.inventory_id = ${b.id})
     + (SELECT COUNT(*) FROM receipts r JOIN inventory_transactions t ON t.id = r.inventory_transaction_id
@@ -84,21 +85,21 @@ const LABEL = { lotNumber: "lot", expiryDate: "expiry", productionDate: "product
 const HYGIENE_NOTE = "Data hygiene: cleared untracked / invalid attributes";
 
 /** Active allocations holding stock in a bucket (Allocated / Picked / … — anything the ledger can carry). */
-function activeAllocationsOf(db: AppDb, inventoryId: string): { id: string; qty: number }[] {
-  return db.all<{ id: string; qty: number }>(sql`SELECT id, qty FROM inventory_allocations
+async function activeAllocationsOf(db: AppDb, inventoryId: string): Promise<{ id: string; qty: number }[]> {
+  return await dbAll<{ id: string; qty: number }>(db, sql`SELECT id, qty FROM inventory_allocations
     WHERE inventory_id = ${inventoryId} AND status IN ('Allocated', 'Picked', 'Sorted', 'Packed', 'Loaded') AND qty > 0`);
 }
 
 /** Read-only: every hygiene problem in the inventory table. */
-export function findInventoryHygieneIssues(db: AppDb): HygieneIssue[] {
+export async function findInventoryHygieneIssues(db: AppDb): Promise<HygieneIssue[]> {
   const issues: HygieneIssue[] = [];
-  for (const b of bucketFacts(db)) {
+  for (const b of await bucketFacts(db)) {
     const { untracked, badDates } = attributeProblems(b);
     if (untracked.length > 0) {
       issues.push({ check: "untracked-attribute", id: b.id, message: `${b.sku} doesn't track ${untracked.map((k) => LABEL[k]).join(", ")} but the bucket has ${untracked.map((k) => `${LABEL[k]} ${b[k]}`).join(", ")} (on-hand ${b.onHand})` });
     }
     for (const k of badDates) issues.push({ check: "bad-date", id: b.id, message: `${b.sku} ${LABEL[k]} "${b[k]}" is not a real date` });
-    if (isEmptyUnreferenced(db, b)) issues.push({ check: "empty-bucket", id: b.id, message: `${b.sku} bucket is empty and unreferenced` });
+    if (await isEmptyUnreferenced(db, b)) issues.push({ check: "empty-bucket", id: b.id, message: `${b.sku} bucket is empty and unreferenced` });
   }
   return issues;
 }
@@ -113,11 +114,11 @@ export interface HygieneRepairResult {
  * Fixes what `findInventoryHygieneIssues` reports. Each bucket runs in its own savepoint: one that
  * cannot change (count-locked location, non-Stock status) is reported in `skipped` and the rest go on.
  */
-export function repairInventoryHygiene(db: AppDb, ctx: DomainCtx = systemCtx("Data hygiene")): HygieneRepairResult {
+export async function repairInventoryHygiene(db: AppDb, ctx: DomainCtx = systemCtx("Data hygiene")): Promise<HygieneRepairResult> {
   let repaired = 0;
   const skipped: HygieneIssue[] = [];
   const emptyIds: string[] = [];
-  for (const b of bucketFacts(db)) {
+  for (const b of await bucketFacts(db)) {
     const { untracked, badDates } = attributeProblems(b);
     const patch: { lotNumber?: string | null; expiryDate?: string | null; productionDate?: string | null } = {};
     for (const k of badDates) patch[k] = repairDate(b[k] as string);
@@ -129,14 +130,14 @@ export function repairInventoryHygiene(db: AppDb, ctx: DomainCtx = systemCtx("Da
       } else {
         const free = b.onHand - b.allocated;
         try {
-          db.transaction((inner) => {
+          await withWriteTx(db, async (inner) => {
             // Allocated units move WITH their allocation (ledger.move + allocationId), so the order keeps its
             // reservation on the relabelled bucket. Each move posts its own "Attributes Change" row.
-            for (const alloc of activeAllocationsOf(inner, b.id)) {
-              ledger.move(inner, ctx, { inventoryId: b.id, qty: alloc.qty, allocationId: alloc.id, ...patch, type: "Attributes Change", refs: { note: HYGIENE_NOTE } });
+            for (const alloc of await activeAllocationsOf(inner, b.id)) {
+              await ledger.move(inner, ctx, { inventoryId: b.id, qty: alloc.qty, allocationId: alloc.id, ...patch, type: "Attributes Change", refs: { note: HYGIENE_NOTE } });
             }
-            if (free > 0) ledger.changeAttributes(inner, ctx, { inventoryId: b.id, qty: free, ...patch, refs: { note: HYGIENE_NOTE } });
-            pruneEmptyBuckets(inner, [b.id]);
+            if (free > 0) await ledger.changeAttributes(inner, ctx, { inventoryId: b.id, qty: free, ...patch, refs: { note: HYGIENE_NOTE } });
+            await pruneEmptyBuckets(inner, [b.id]);
           });
           repaired += 1;
         } catch (error) {
@@ -147,7 +148,7 @@ export function repairInventoryHygiene(db: AppDb, ctx: DomainCtx = systemCtx("Da
       emptyIds.push(b.id);
     }
   }
-  const deleted = db.transaction((inner) => pruneEmptyBuckets(inner, emptyIds)).length;
+  const deleted = (await withWriteTx(db, async (inner) => await pruneEmptyBuckets(inner, emptyIds))).length;
   return { repaired, deleted, skipped };
 }
 
@@ -169,12 +170,12 @@ export interface FixtureStock {
  * `idleMinutes`, so a suite that is still running keeps its data. Buyer-facing views (By Location,
  * ATP) otherwise show e.g. "MLT-WIDGET-01 · 5 in KS-CRIT-R4W20005".
  */
-export function findFixtureStock(db: AppDb, now: Date = new Date(), idleMinutes = 60): FixtureStock[] {
+export async function findFixtureStock(db: AppDb, now: Date = new Date(), idleMinutes = 60): Promise<FixtureStock[]> {
   const cutoff = new Date(now.getTime() - idleMinutes * 60_000).toISOString();
-  return db.all<{ id: string; sku: string; location: string; onHand: number; allocated: number; touched: string | null }>(sql`
+  return (await dbAll<{ id: string; sku: string; location: string; onHand: number; allocated: number; touched: string | null }>(db, sql`
       SELECT i.id, p.sku, l.code AS location, i.on_hand AS "onHand", i.allocated, COALESCE(i.updated_at, i.received_at) AS touched
       FROM inventory i JOIN products p ON p.id = i.product_id JOIN locations l ON l.id = i.location_id
-      WHERE i.on_hand > 0 AND (l.code LIKE 'KS-CRIT-%' OR l.code LIKE 'KS-E2E-%')`)
+      WHERE i.on_hand > 0 AND (l.code ILIKE 'KS-CRIT-%' OR l.code ILIKE 'KS-E2E-%')`))
     .filter((r) => FIXTURE_LOCATION_RE.test(r.location) && (r.touched === null || r.touched < cutoff))
     .map((r) => ({ id: r.id, sku: r.sku, location: r.location, free: r.onHand - r.allocated, allocated: r.allocated }));
 }
@@ -191,20 +192,20 @@ export interface FixturePurgeResult {
  * then prunes the emptied buckets. Allocated units are left alone and reported: their order has
  * to be cancelled by its owner first. Safe to run more than once.
  */
-export function purgeFixtureStock(db: AppDb, ctx: DomainCtx = systemCtx("Data hygiene"), now: Date = new Date(), idleMinutes = 60): FixturePurgeResult {
-  const reason = db.all<{ id: string }>(sql`SELECT id FROM lookup_values WHERE type = 'adjustment_reason' AND name = 'Inventory quantity discrepancy' AND is_active = 1 LIMIT 1`)[0]?.id ?? null;
+export async function purgeFixtureStock(db: AppDb, ctx: DomainCtx = systemCtx("Data hygiene"), now: Date = new Date(), idleMinutes = 60): Promise<FixturePurgeResult> {
+  const reason = (await dbAll<{ id: string }>(db, sql`SELECT id FROM lookup_values WHERE type = 'adjustment_reason' AND name = 'Inventory quantity discrepancy' AND is_active = true LIMIT 1`))[0]?.id ?? null;
   let removed = 0;
   let units = 0;
   const skipped: HygieneIssue[] = [];
-  for (const s of findFixtureStock(db, now, idleMinutes)) {
+  for (const s of await findFixtureStock(db, now, idleMinutes)) {
     if (s.free <= 0) {
       skipped.push({ check: "fixture-stock", id: s.id, message: `${s.sku} in ${s.location}: ${s.allocated} allocated unit(s) kept; cancel the order first` });
       continue;
     }
     try {
-      db.transaction((inner) => {
-        ledger.adjustTo(inner, ctx, { inventoryId: s.id, targetQty: s.allocated, adjustmentReasonId: reason, refs: { adjustmentReasonId: reason, note: "Test fixture purge" } });
-        pruneEmptyBuckets(inner, [s.id]);
+      await withWriteTx(db, async (inner) => {
+        await ledger.adjustTo(inner, ctx, { inventoryId: s.id, targetQty: s.allocated, adjustmentReasonId: reason, refs: { adjustmentReasonId: reason, note: "Test fixture purge" } });
+        await pruneEmptyBuckets(inner, [s.id]);
       });
       removed += 1;
       units += s.free;

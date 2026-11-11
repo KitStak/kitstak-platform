@@ -17,6 +17,7 @@ import { derivedVolume, duplicateBarcodesWithin, normalizePackTypes, productInpu
 import { fillDerivedPackWeights } from "@/lib/grid-defs/products/pack-derivation";
 import { getProductForm } from "./products-detail";
 import { productSnapshot } from "./products-snapshot";
+import { dbGet, mapSeq } from "@/server/db/sql";
 
 const { products: p, productPackTypes: ppt, productBarcodes: pb, kitComponents: kc, productReplenishmentLevels: prl, productChannelAllocations: pca } = schema;
 
@@ -30,7 +31,7 @@ function invalid(path: string, message: string): AppError {
 }
 
 /** Parses and cross-checks the payload against the database. */
-function validate(tx: AppDb, ctx: ScopedCtx, raw: ProductInput, existing: ProductRow | null): ProductValue {
+async function validate(tx: AppDb, ctx: ScopedCtx, raw: ProductInput, existing: ProductRow | null): Promise<ProductValue> {
   const parsed = productInputSchema.safeParse(raw);
   if (!parsed.success) {
     const fieldErrors: Record<string, string[]> = {};
@@ -44,22 +45,22 @@ function validate(tx: AppDb, ctx: ScopedCtx, raw: ProductInput, existing: Produc
   if (existing && existing.clientId !== v.clientId) throw invalid("clientId", "The client of a product cannot be changed");
   if (existing && existing.productCategory !== v.productCategory) throw invalid("productCategory", "The product category cannot be changed");
   if (!hasClient(ctx.scope, v.clientId)) throw notFoundError("Client");
-  const client = tx.select({ id: schema.clients.id, code: schema.clients.code }).from(schema.clients).where(eq(schema.clients.id, v.clientId)).get();
+  const client = (await tx.select({ id: schema.clients.id, code: schema.clients.code }).from(schema.clients).where(eq(schema.clients.id, v.clientId)).limit(1))[0];
   if (!client) throw invalid("clientId", "Client not found");
 
-  const dup = tx.select({ id: p.id }).from(p)
-    .where(and(eq(p.clientId, v.clientId), sql`lower(${p.sku}) = lower(${v.sku})`, existing ? sql`${p.id} <> ${existing.id}` : undefined)).get();
+  const dup = (await tx.select({ id: p.id }).from(p)
+    .where(and(eq(p.clientId, v.clientId), sql`lower(${p.sku}) = lower(${v.sku})`, existing ? sql`${p.id} <> ${existing.id}` : undefined)).limit(1))[0];
   if (dup) throw new AppError("DUPLICATE", `SKU ${v.sku} already exists for client ${client.code}`, { fieldErrors: { sku: [`SKU ${v.sku} already exists for this client`] } });
 
-  assertBarcodesUnique(tx, v, existing?.id ?? null);
+  await assertBarcodesUnique(tx, v, existing?.id ?? null);
 
   for (const [key, type] of [["productTypeId", "product_type"], ["productGroupId", "product_group"]] as const) {
     const id = v[key];
     if (!id) continue;
-    const row = tx.select({ clientId: schema.lookupValues.clientId, type: schema.lookupValues.type }).from(schema.lookupValues).where(eq(schema.lookupValues.id, id)).get();
+    const row = (await tx.select({ clientId: schema.lookupValues.clientId, type: schema.lookupValues.type }).from(schema.lookupValues).where(eq(schema.lookupValues.id, id)).limit(1))[0];
     if (!row || row.type !== type || (row.clientId && row.clientId !== v.clientId)) throw invalid(key, "Choose a value for this client");
   }
-  if (v.useShipPackageId && !tx.select({ id: schema.shipmentPackages.id }).from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, v.useShipPackageId)).get()) {
+  if (v.useShipPackageId && !(await tx.select({ id: schema.shipmentPackages.id }).from(schema.shipmentPackages).where(eq(schema.shipmentPackages.id, v.useShipPackageId)).limit(1))[0]) {
     throw invalid("useShipPackageId", "Shipment package not found");
   }
   for (const level of v.replenishmentLevels) {
@@ -67,14 +68,14 @@ function validate(tx: AppDb, ctx: ScopedCtx, raw: ProductInput, existing: Produc
   }
   if (v.channelAllocations.length) {
     const ids = v.channelAllocations.map((a) => a.channelConnectionId);
-    const ok = tx.select({ id: schema.channelConnections.id }).from(schema.channelConnections)
-      .where(and(inArray(schema.channelConnections.id, ids), eq(schema.channelConnections.clientId, v.clientId))).all();
+    const ok = await tx.select({ id: schema.channelConnections.id }).from(schema.channelConnections)
+      .where(and(inArray(schema.channelConnections.id, ids), eq(schema.channelConnections.clientId, v.clientId)));
     if (new Set(ok.map((r) => r.id)).size !== new Set(ids).size) throw invalid("channelAllocations", "A sales channel does not belong to this client");
   }
   if (v.productCategory === "Kit") {
     const ids = v.components.map((c) => c.productId);
     if (existing && ids.includes(existing.id)) throw invalid("components", "A kit cannot contain itself");
-    const rows = ids.length ? tx.select({ id: p.id, clientId: p.clientId, sku: p.sku, category: p.productCategory, kitType: p.kitType }).from(p).where(inArray(p.id, ids)).all() : [];
+    const rows = ids.length ? await tx.select({ id: p.id, clientId: p.clientId, sku: p.sku, category: p.productCategory, kitType: p.kitType }).from(p).where(inArray(p.id, ids)) : [];
     for (const c of v.components) {
       const row = rows.find((r) => r.id === c.productId);
       if (!row || row.clientId !== v.clientId) throw invalid("components", "Components must belong to the kit's client");
@@ -89,7 +90,7 @@ function validate(tx: AppDb, ctx: ScopedCtx, raw: ProductInput, existing: Produc
  * A pack-type barcode has one meaning per client: reject codes already on another product of the
  * same client (409) and codes repeated across this product's own pack types (scans would be ambiguous).
  */
-export function assertBarcodesUnique(tx: AppDb, v: ProductValue, productId: string | null): void {
+export async function assertBarcodesUnique(tx: AppDb, v: ProductValue, productId: string | null): Promise<void> {
   const packs = packsFor(v);
   const within = duplicateBarcodesWithin(packs);
   if (within.length) {
@@ -102,16 +103,16 @@ export function assertBarcodesUnique(tx: AppDb, v: ProductValue, productId: stri
   const codes = own && !packCodes.includes(own) ? [...packCodes, own] : packCodes;
   if (!codes.length) return;
   const field = (code: string) => (packCodes.includes(code) ? "packTypes" : "barcode");
-  const clash = tx.select({ barcode: pb.barcode, sku: p.sku, packType: ppt.packType }).from(pb)
+  const clash = (await tx.select({ barcode: pb.barcode, sku: p.sku, packType: ppt.packType }).from(pb)
     .innerJoin(p, eq(p.id, pb.productId)).innerJoin(ppt, eq(ppt.id, pb.packTypeId))
-    .where(and(inArray(pb.barcode, codes), eq(p.clientId, v.clientId), productId ? sql`${p.id} <> ${productId}` : undefined)).get();
+    .where(and(inArray(pb.barcode, codes), eq(p.clientId, v.clientId), productId ? sql`${p.id} <> ${productId}` : undefined)).limit(1))[0];
   if (clash) {
     const msg = `Barcode ${clash.barcode} is already used by ${clash.sku} (${clash.packType})`;
     throw new AppError("DUPLICATE", msg, { fieldErrors: { [field(clash.barcode)]: [msg] } });
   }
   // Product-level barcode column of other products (kits, packaging, listing-created products).
-  const col = tx.select({ barcode: p.barcode, sku: p.sku }).from(p)
-    .where(and(inArray(p.barcode, codes), eq(p.clientId, v.clientId), sql`${p.barcode} <> ${p.sku}`, productId ? sql`${p.id} <> ${productId}` : undefined)).get();
+  const col = (await tx.select({ barcode: p.barcode, sku: p.sku }).from(p)
+    .where(and(inArray(p.barcode, codes), eq(p.clientId, v.clientId), sql`${p.barcode} <> ${p.sku}`, productId ? sql`${p.id} <> ${productId}` : undefined)).limit(1))[0];
   if (col) {
     const msg = `Barcode ${col.barcode} is already used by ${col.sku}`;
     throw new AppError("DUPLICATE", msg, { fieldErrors: { [field(col.barcode)]: [msg] } });
@@ -236,17 +237,17 @@ function packsFor(v: ProductValue): ProductValue["packTypes"] {
   }];
 }
 
-function inventoryPackTypes(tx: AppDb, productId: string): Set<string> {
-  return new Set(tx.select({ packType: schema.inventory.packType }).from(schema.inventory)
-    .where(and(eq(schema.inventory.productId, productId), sql`${schema.inventory.onHand} > 0`)).all().map((r) => r.packType.toLowerCase()));
+async function inventoryPackTypes(tx: AppDb, productId: string): Promise<Set<string>> {
+  return new Set((await tx.select({ packType: schema.inventory.packType }).from(schema.inventory)
+    .where(and(eq(schema.inventory.productId, productId), sql`${schema.inventory.onHand} > 0`))).map((r) => r.packType.toLowerCase()));
 }
 
 /** Replaces pack types + barcodes, keeping ids of edited packs (inventory references names). */
-function syncPackTypes(tx: AppDb, ctx: ScopedCtx, productId: string, v: ProductValue): void {
+async function syncPackTypes(tx: AppDb, ctx: ScopedCtx, productId: string, v: ProductValue): Promise<void> {
   const packs = packsFor(v);
-  const current = tx.select().from(ppt).where(eq(ppt.productId, productId)).all();
+  const current = await tx.select().from(ppt).where(eq(ppt.productId, productId));
   const keep = new Set(packs.map((x) => x.id).filter((x): x is string => Boolean(x)));
-  const inUse = inventoryPackTypes(tx, productId);
+  const inUse = await inventoryPackTypes(tx, productId);
   for (const old of current) {
     const replacement = packs.find((x) => x.id === old.id);
     const renamed = replacement && replacement.packType.toLowerCase() !== old.packType.toLowerCase();
@@ -255,8 +256,8 @@ function syncPackTypes(tx: AppDb, ctx: ScopedCtx, productId: string, v: ProductV
     }
   }
   const removed = current.filter((c) => !keep.has(c.id)).map((c) => c.id);
-  if (removed.length) tx.delete(ppt).where(inArray(ppt.id, removed)).run();
-  tx.delete(pb).where(eq(pb.productId, productId)).run();
+  if (removed.length) await tx.delete(ppt).where(inArray(ppt.id, removed));
+  await tx.delete(pb).where(eq(pb.productId, productId));
   // Two passes: rows first (ids), then hierarchical parents.
   const idByKey = new Map<string, string>();
   for (const pack of packs) {
@@ -268,10 +269,10 @@ function syncPackTypes(tx: AppDb, ctx: ScopedCtx, productId: string, v: ProductV
       updatedBy: ctx.userId,
     };
     if (pack.id && current.some((c) => c.id === pack.id)) {
-      tx.update(ppt).set({ ...values, version: sql`${ppt.version} + 1` }).where(eq(ppt.id, pack.id)).run();
+      await tx.update(ppt).set({ ...values, version: sql`${ppt.version} + 1` }).where(eq(ppt.id, pack.id));
       idByKey.set(pack.key, pack.id);
     } else {
-      const row = tx.insert(ppt).values({ ...values, createdBy: ctx.userId }).returning({ id: ppt.id }).get();
+      const row = (await tx.insert(ppt).values({ ...values, createdBy: ctx.userId }).returning({ id: ppt.id }))[0];
       idByKey.set(pack.key, row.id);
     }
   }
@@ -280,69 +281,69 @@ function syncPackTypes(tx: AppDb, ctx: ScopedCtx, productId: string, v: ProductV
     const id = idByKey.get(pack.key) as string;
     if (pack.kind === "Hierarchical") {
       const parent = (pack.parentKey && idByKey.get(pack.parentKey)) || (primaryId ? idByKey.get(primaryId) : null) || null;
-      tx.update(ppt).set({ parentPackTypeId: parent }).where(eq(ppt.id, id)).run();
+      await tx.update(ppt).set({ parentPackTypeId: parent }).where(eq(ppt.id, id));
     } else {
-      tx.update(ppt).set({ parentPackTypeId: null }).where(eq(ppt.id, id)).run();
+      await tx.update(ppt).set({ parentPackTypeId: null }).where(eq(ppt.id, id));
     }
     const codes = [...new Set(pack.barcodes.map((b) => b.trim()).filter(Boolean))];
-    if (codes.length) tx.insert(pb).values(codes.map((barcode) => ({ productId, packTypeId: id, barcode }))).run();
+    if (codes.length) await tx.insert(pb).values(codes.map((barcode) => ({ productId, packTypeId: id, barcode })));
   }
 }
 
-function syncChildren(tx: AppDb, productId: string, v: ProductValue): void {
-  tx.delete(kc).where(eq(kc.kitProductId, productId)).run();
+async function syncChildren(tx: AppDb, productId: string, v: ProductValue): Promise<void> {
+  await tx.delete(kc).where(eq(kc.kitProductId, productId));
   if (v.productCategory === "Kit" && v.components.length) {
-    tx.insert(kc).values(v.components.map((c) => ({ kitProductId: productId, componentProductId: c.productId, quantity: c.quantity }))).run();
+    await tx.insert(kc).values(v.components.map((c) => ({ kitProductId: productId, componentProductId: c.productId, quantity: c.quantity })));
   }
-  tx.delete(prl).where(eq(prl.productId, productId)).run();
+  await tx.delete(prl).where(eq(prl.productId, productId));
   if (v.productCategory !== "Kit" && v.replenishmentStrategy === "Per Warehouse" && v.replenishmentLevels.length) {
-    tx.insert(prl).values(v.replenishmentLevels.map((l) => ({ productId, warehouseId: l.warehouseId, minLevel: l.minLevel, maxLevel: l.maxLevel }))).run();
+    await tx.insert(prl).values(v.replenishmentLevels.map((l) => ({ productId, warehouseId: l.warehouseId, minLevel: l.minLevel, maxLevel: l.maxLevel })));
   }
-  tx.delete(pca).where(eq(pca.productId, productId)).run();
+  await tx.delete(pca).where(eq(pca.productId, productId));
   if (v.productCategory !== "Packaging Material" && v.channelAllocations.length) {
-    tx.insert(pca).values(v.channelAllocations.map((a) => ({
+    await tx.insert(pca).values(v.channelAllocations.map((a) => ({
       productId, channelConnectionId: a.channelConnectionId, warehouseId: a.warehouseId, staticQty: a.staticQty, reserveQty: a.reserveQty, allocationPct: a.allocationPct,
-    }))).run();
+    })));
   }
 }
 
-export function createProductFromWizard(tx: AppDb, ctx: ScopedCtx, raw: ProductInput): ProductRow {
-  const v = validate(tx, ctx, raw, null);
-  const row = tx.insert(p).values({ ...productColumns(v), clientId: v.clientId, createdBy: ctx.userId, updatedBy: ctx.userId }).returning().get();
-  syncPackTypes(tx, ctx, row.id, v);
-  syncChildren(tx, row.id, v);
-  recordCreate(tx, ctx, { entityType: ENTITY, entityId: row.id, entityCode: row.sku });
+export async function createProductFromWizard(tx: AppDb, ctx: ScopedCtx, raw: ProductInput): Promise<ProductRow> {
+  const v = await validate(tx, ctx, raw, null);
+  const row = (await tx.insert(p).values({ ...productColumns(v), clientId: v.clientId, createdBy: ctx.userId, updatedBy: ctx.userId }).returning())[0];
+  await syncPackTypes(tx, ctx, row.id, v);
+  await syncChildren(tx, row.id, v);
+  await recordCreate(tx, ctx, { entityType: ENTITY, entityId: row.id, entityCode: row.sku });
   return row;
 }
 
-export function loadProduct(tx: AppDb, ctx: ScopedCtx, id: string): ProductRow {
-  const row = tx.select().from(p).where(eq(p.id, id)).get();
+export async function loadProduct(tx: AppDb, ctx: ScopedCtx, id: string): Promise<ProductRow> {
+  const row = (await tx.select().from(p).where(eq(p.id, id)).limit(1))[0];
   assertInScope(ctx.scope, row ? { clientId: row.clientId } : null, "Product");
   return row as ProductRow;
 }
 
-export function updateProductFromWizard(tx: AppDb, ctx: ScopedCtx, id: string, raw: ProductInput): ProductRow {
-  const existing = loadProduct(tx, ctx, id);
+export async function updateProductFromWizard(tx: AppDb, ctx: ScopedCtx, id: string, raw: ProductInput): Promise<ProductRow> {
+  const existing = await loadProduct(tx, ctx, id);
   if (raw.version !== undefined && raw.version !== existing.version) throw conflictError();
   // Partial PATCH: keys the caller omits keep their stored values (the wizard always sends everything).
-  const stored = getProductForm(tx, ctx.scope, id);
-  const v = validate(tx, ctx, stored ? mergePartial(stored as unknown as Record<string, unknown>, raw as Record<string, unknown>) : raw, existing);
-  const before = productSnapshot(tx, id);
-  tx.update(p).set({ ...productColumns(v), updatedBy: ctx.userId, version: existing.version + 1 }).where(eq(p.id, id)).run();
-  syncPackTypes(tx, ctx, id, v);
-  syncChildren(tx, id, v);
-  const after = productSnapshot(tx, id);
-  recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: v.sku, before, after });
-  return tx.select().from(p).where(eq(p.id, id)).get() as ProductRow;
+  const stored = await getProductForm(tx, ctx.scope, id);
+  const v = await validate(tx, ctx, stored ? mergePartial(stored as unknown as Record<string, unknown>, raw as Record<string, unknown>) : raw, existing);
+  const before = await productSnapshot(tx, id);
+  await tx.update(p).set({ ...productColumns(v), updatedBy: ctx.userId, version: existing.version + 1 }).where(eq(p.id, id));
+  await syncPackTypes(tx, ctx, id, v);
+  await syncChildren(tx, id, v);
+  const after = await productSnapshot(tx, id);
+  await recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: v.sku, before, after });
+  return (await tx.select().from(p).where(eq(p.id, id)).limit(1))[0] as ProductRow;
 }
 
 /** Activates / deactivates one product (bulk callers wrap this in `runBulk`). */
-export function setProductStatus(tx: AppDb, ctx: ScopedCtx, id: string, status: "Active" | "Inactive", version?: number): ProductRow {
-  const existing = loadProduct(tx, ctx, id);
+export async function setProductStatus(tx: AppDb, ctx: ScopedCtx, id: string, status: "Active" | "Inactive", version?: number): Promise<ProductRow> {
+  const existing = await loadProduct(tx, ctx, id);
   if (version !== undefined && version !== existing.version) throw conflictError();
   if (existing.status === status) return existing;
-  tx.update(p).set({ status, updatedBy: ctx.userId, version: existing.version + 1 }).where(eq(p.id, id)).run();
-  recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: existing.sku, before: { status: existing.status }, after: { status } });
+  await tx.update(p).set({ status, updatedBy: ctx.userId, version: existing.version + 1 }).where(eq(p.id, id));
+  await recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: existing.sku, before: { status: existing.status }, after: { status } });
   return { ...existing, status, version: existing.version + 1 };
 }
 
@@ -365,17 +366,17 @@ function poList(): ReturnType<typeof sql> {
 }
 
 /** Why a product cannot be deleted: stock, open orders/POs, kit usage, or history. */
-export function deleteBlockerFor(tx: AppDb, id: string): string | null {
-  const n = (q: ReturnType<typeof sql>): number => Number(tx.get<{ n: number }>(q)?.n ?? 0);
-  const onHand = n(sql`SELECT COALESCE(SUM(on_hand), 0) AS n FROM inventory WHERE product_id = ${id}`);
+export async function deleteBlockerFor(tx: AppDb, id: string): Promise<string | null> {
+  const n = async (q: ReturnType<typeof sql>): Promise<number> => Number((await dbGet<{ n: number }>(tx, q))?.n ?? 0);
+  const onHand = await n(sql`SELECT COALESCE(SUM(on_hand), 0) AS n FROM inventory WHERE product_id = ${id}`);
   if (onHand > 0) return `Has ${plural(onHand, "unit")} on hand`;
-  const openSo = n(sql`SELECT COUNT(DISTINCT o.id) AS n FROM order_lines l JOIN shipment_orders o ON o.id = l.order_id WHERE l.product_id = ${id} AND o.deleted_at IS NULL AND o.status IN (${soList()})`);
+  const openSo = await n(sql`SELECT COUNT(DISTINCT o.id) AS n FROM order_lines l JOIN shipment_orders o ON o.id = l.order_id WHERE l.product_id = ${id} AND o.deleted_at IS NULL AND o.status IN (${soList()})`);
   if (openSo > 0) return `On ${plural(openSo, "open shipment order")}`;
-  const openPo = n(sql`SELECT COUNT(DISTINCT o.id) AS n FROM purchase_order_lines l JOIN purchase_orders o ON o.id = l.purchase_order_id WHERE l.product_id = ${id} AND o.status IN (${poList()})`);
+  const openPo = await n(sql`SELECT COUNT(DISTINCT o.id) AS n FROM purchase_order_lines l JOIN purchase_orders o ON o.id = l.purchase_order_id WHERE l.product_id = ${id} AND o.status IN (${poList()})`);
   if (openPo > 0) return `On ${plural(openPo, "open purchase order")}`;
-  const kit = tx.get<{ sku: string }>(sql`SELECT k.sku AS sku FROM kit_components c JOIN products k ON k.id = c.kit_product_id WHERE c.component_product_id = ${id} LIMIT 1`);
+  const kit = await dbGet<{ sku: string }>(tx, sql`SELECT k.sku AS sku FROM kit_components c JOIN products k ON k.id = c.kit_product_id WHERE c.component_product_id = ${id} LIMIT 1`);
   if (kit) return `Component of kit ${kit.sku}`;
-  const history = n(sql`SELECT
+  const history = await n(sql`SELECT
       (SELECT COUNT(*) FROM inventory WHERE product_id = ${id}) +
       (SELECT COUNT(*) FROM inventory_transactions WHERE product_id = ${id}) +
       (SELECT COUNT(*) FROM order_lines WHERE product_id = ${id}) +
@@ -387,17 +388,17 @@ export function deleteBlockerFor(tx: AppDb, id: string): string | null {
   return null;
 }
 
-export function deleteCheck(tx: AppDb, ctx: ScopedCtx, ids: readonly string[]): DeleteBlocker[] {
-  const rows = tx.select({ id: p.id, sku: p.sku, name: p.name, status: p.status, clientId: p.clientId }).from(p).where(inArray(p.id, [...ids])).all()
+export async function deleteCheck(tx: AppDb, ctx: ScopedCtx, ids: readonly string[]): Promise<DeleteBlocker[]> {
+  const rows = (await tx.select({ id: p.id, sku: p.sku, name: p.name, status: p.status, clientId: p.clientId }).from(p).where(inArray(p.id, [...ids])))
     .filter((r) => hasClient(ctx.scope, r.clientId));
-  return rows.map((r) => ({ id: r.id, sku: r.sku, name: r.name, status: r.status, reason: deleteBlockerFor(tx, r.id) }));
+  return await mapSeq(rows, async (r) => ({ id: r.id, sku: r.sku, name: r.name, status: r.status, reason: await deleteBlockerFor(tx, r.id) }));
 }
 
-export function deleteProduct(tx: AppDb, ctx: ScopedCtx, id: string): void {
-  const existing = loadProduct(tx, ctx, id);
-  const reason = deleteBlockerFor(tx, id);
+export async function deleteProduct(tx: AppDb, ctx: ScopedCtx, id: string): Promise<void> {
+  const existing = await loadProduct(tx, ctx, id);
+  const reason = await deleteBlockerFor(tx, id);
   if (reason) throw new AppError("INVALID_STATE", `${existing.sku}: ${reason}. Deactivate it instead.`);
-  tx.update(schema.productListings).set({ productId: null, linkedAt: null }).where(eq(schema.productListings.productId, id)).run();
-  tx.delete(p).where(eq(p.id, id)).run();
-  recordDelete(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: existing.sku });
+  await tx.update(schema.productListings).set({ productId: null, linkedAt: null }).where(eq(schema.productListings.productId, id));
+  await tx.delete(p).where(eq(p.id, id));
+  await recordDelete(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: existing.sku });
 }

@@ -92,29 +92,29 @@ describe("lookup repository", () => {
   let auth: AuthContext;
   const actor = () => ({ userId: w.userId, source: "Web" });
 
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   });
   afterEach(() => w.close());
 
-  it("creates and updates a custom carrier with services, logging readable diffs", () => {
+  it("creates and updates a custom carrier with services, logging readable diffs", async () => {
     const d = def("custom-carrier");
-    const row = createLookupValue(w.db, auth, actor(), d, parse(d, { name: "KS-TEST Courier", code: "KSC", services: [{ code: "SD", name: "Same day" }] }));
+    const row = await createLookupValue(w.db, auth, actor(), d, parse(d, { name: "KS-TEST Courier", code: "KSC", services: [{ code: "SD", name: "Same day" }] }));
     expect(row.code).toBe("KSC");
     expect((row.meta?.services as unknown[]).length).toBe(1);
-    expect(() => createLookupValue(w.db, auth, actor(), d, parse(d, { name: "KS-TEST Other", code: "ksc" }))).toThrow(/already exists/);
-    updateLookupValue(w.db, auth, actor(), d, row.id, parse(d, { name: "KS-TEST Courier", code: "KSC", services: [{ code: "SD", name: "Same day" }, { code: "ND", name: "Next day" }], version: row.version }));
-    const log = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, row.id)).all();
+    await expect(async () => await createLookupValue(w.db, auth, actor(), d, parse(d, { name: "KS-TEST Other", code: "ksc" }))).rejects.toThrow(/already exists/);
+    await updateLookupValue(w.db, auth, actor(), d, row.id, parse(d, { name: "KS-TEST Courier", code: "KSC", services: [{ code: "SD", name: "Same day" }, { code: "ND", name: "Next day" }], version: row.version }));
+    const log = await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, row.id));
     expect(log.some((e) => (e.toValue ?? "").includes("SD, ND"))).toBe(true);
   });
 
-  it("links a return reason to an existing damage reason only", () => {
-    const dr = createLookupValue(w.db, auth, actor(), def("damaged-reasons"), parse(def("damaged-reasons"), { name: "KS-TEST Crushed" }));
+  it("links a return reason to an existing damage reason only", async () => {
+    const dr = await createLookupValue(w.db, auth, actor(), def("damaged-reasons"), parse(def("damaged-reasons"), { name: "KS-TEST Crushed" }));
     const d = def("return-reason");
-    expect(() => createLookupValue(w.db, auth, actor(), d, parse(d, { name: "KS-TEST Bad", linkDamageReason: true, linkedDamageReasonId: "nope" }))).toThrow(/Damage reason not found/);
-    const rr = createLookupValue(w.db, auth, actor(), d, parse(d, { name: "KS-TEST Bad", linkDamageReason: true, linkedDamageReasonId: dr.id, customerReason: false }));
-    expect(getLookupRow(w.db, auth, "return_reason", rr.id).meta).toMatchObject({ customerReason: false, actualReason: true, linkedDamageReasonId: dr.id });
+    await expect(async () => await createLookupValue(w.db, auth, actor(), d, parse(d, { name: "KS-TEST Bad", linkDamageReason: true, linkedDamageReasonId: "nope" }))).rejects.toThrow(/Damage reason not found/);
+    const rr = await createLookupValue(w.db, auth, actor(), d, parse(d, { name: "KS-TEST Bad", linkDamageReason: true, linkedDamageReasonId: dr.id, customerReason: false }));
+    expect((await getLookupRow(w.db, auth, "return_reason", rr.id)).meta).toMatchObject({ customerReason: false, actualReason: true, linkedDamageReasonId: dr.id });
   });
 });

@@ -5,5 +5,5 @@ import { getBranding } from "@/server/repositories/apps-branding";
 
 export const GET = defineRoute({
   auth: "public",
-  handler: ({ db }) => ({ ...ssoPublicStatus(db), loginMessage: getBranding(db)?.loginMessage ?? null }),
+  handler: async ({ db }) => ({ ...(await ssoPublicStatus(db)), loginMessage: (await getBranding(db))?.loginMessage ?? null }),
 });

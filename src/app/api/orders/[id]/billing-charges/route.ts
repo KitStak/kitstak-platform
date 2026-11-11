@@ -7,5 +7,5 @@ import { domainCtx, idParamsSchema } from "@/server/repositories/platform-common
 export const GET = defineRoute({
   permission: ORDER_PERMISSIONS.billing,
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => orderBillingCharges(db, domainCtx(actor, auth), params.id),
+  handler: async ({ db, auth, actor, params }) => await orderBillingCharges(db, domainCtx(actor, auth), params.id),
 });

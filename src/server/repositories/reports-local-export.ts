@@ -44,7 +44,7 @@ export function isLocalExportKey(gridKey: string): boolean {
 }
 
 /** Validates key, permission and query grammar, then records a queued export task. */
-export function queueLocalExport(db: AppDb, input: { readonly auth: AuthContext; readonly gridKey: string; readonly query: string }): BackgroundTask {
+export async function queueLocalExport(db: AppDb, input: { readonly auth: AuthContext; readonly gridKey: string; readonly query: string }): Promise<BackgroundTask> {
   const entry = LOCAL_EXPORTS.get(input.gridKey);
   if (!entry) throw validationError(`Unknown report "${input.gridKey}"`, { gridKey: ["Unknown report"] });
   if (!can(input.auth, entry.def.permission as Parameters<typeof can>[1])) throw new AppError("FORBIDDEN", "You do not have permission to export this report");
@@ -53,7 +53,7 @@ export function queueLocalExport(db: AppDb, input: { readonly auth: AuthContext;
     const first = parsed.issues[0];
     throw validationError(`Invalid export query: ${first?.param ?? ""} ${first?.message ?? ""}`.trim());
   }
-  return db.insert(backgroundTasks).values({
+  return (await db.insert(backgroundTasks).values({
     kind: "export",
     title: `${entry.def.title} export`,
     gridKey: entry.def.gridKey,
@@ -61,7 +61,7 @@ export function queueLocalExport(db: AppDb, input: { readonly auth: AuthContext;
     status: "queued",
     progress: 0,
     userId: input.auth.user.id,
-  }).returning().get();
+  }).returning())[0];
 }
 
 export interface RunLocalExportDeps {
@@ -75,22 +75,22 @@ export interface RunLocalExportDeps {
 /** Runs a queued local export to completion. Never throws; the task row records the outcome. */
 export async function runLocalExport(db: AppDb, taskId: string, deps: RunLocalExportDeps): Promise<BackgroundTask> {
   const now = deps.now ?? (() => new Date());
-  const set = (patch: Partial<typeof backgroundTasks.$inferInsert>) => db.update(backgroundTasks).set(patch).where(eq(backgroundTasks.id, taskId)).run();
-  const task = db.select().from(backgroundTasks).where(eq(backgroundTasks.id, taskId)).get();
+  const set = async (patch: Partial<typeof backgroundTasks.$inferInsert>) => await db.update(backgroundTasks).set(patch).where(eq(backgroundTasks.id, taskId));
+  const task = (await db.select().from(backgroundTasks).where(eq(backgroundTasks.id, taskId)).limit(1))[0];
   if (!task || task.kind !== "export") throw notFoundError("Export");
   if (task.status !== "queued") return task;
-  set({ status: "started", progress: 1 });
+  await set({ status: "started", progress: 1 });
   try {
     const entry = task.gridKey ? LOCAL_EXPORTS.get(task.gridKey) : undefined;
     if (!entry) throw new AppError("VALIDATION", `Unknown report "${task.gridKey ?? ""}"`);
     const query = parseGridQuery(new URLSearchParams(task.query ?? "")).query;
-    const tzOffsetMinutes = reportZoneOffset(db, deps.auth.viewScope.warehouseIds);
+    const tzOffsetMinutes = await reportZoneOffset(db, deps.auth.viewScope.warehouseIds);
     const rows: ExportRow[] = [];
     for (let page = 1; ; page += 1) {
-      const res = entry.list(db, deps.auth, { ...query, page, pageSize: EXPORT_PAGE_SIZE, tzOffsetMinutes });
+      const res = await entry.list(db, deps.auth, { ...query, page, pageSize: EXPORT_PAGE_SIZE, tzOffsetMinutes });
       rows.push(...(res.rows as readonly ExportRow[]));
       if (rows.length > MAX_EXPORT_ROWS) throw new AppError("VALIDATION", `Exports are limited to ${MAX_EXPORT_ROWS.toLocaleString("en-US")} rows. Narrow the filters and try again.`);
-      if (res.total > 0) set({ progress: Math.min(90, Math.floor((rows.length / res.total) * 90)) });
+      if (res.total > 0) await set({ progress: Math.min(90, Math.floor((rows.length / res.total) * 90)) });
       if (res.rows.length === 0 || rows.length >= res.total) break;
     }
     const sheetColumns = exportColumnsOf(entry.def).filter((c) => c.key !== "action");
@@ -99,7 +99,7 @@ export async function runLocalExport(db: AppDb, taskId: string, deps: RunLocalEx
     const requested = (deps.columns ?? []).filter((c) => known.has(c.key)).map((c) => sheetColumns.find((s) => s.key === c.key) ?? c);
     const columns = requested.length > 0 ? requested : sheetColumns;
     const bytes = await buildXlsx({ name: entry.def.title, columns, rows });
-    const file = (deps.store ?? fileStore()).store(db, {
+    const file = await (deps.store ?? fileStore()).store(db, {
       name: exportFileName(entry.def.title, now(), deps.timeZone),
       bytes,
       purpose: "export",
@@ -107,12 +107,12 @@ export async function runLocalExport(db: AppDb, taskId: string, deps: RunLocalEx
       ownerEntityId: taskId,
       uploadedBy: task.userId,
     });
-    set({ status: "completed", progress: 100, rowCount: rows.length, fileId: file.id, finishedAt: now().toISOString() });
+    await set({ status: "completed", progress: 100, rowCount: rows.length, fileId: file.id, finishedAt: now().toISOString() });
   } catch (error: unknown) {
     const appError = toAppError(error);
     const message = appError.code === "INTERNAL" ? "The export failed. Please try again." : appError.message;
     if (appError.code === "INTERNAL") log.error("report export failed", { taskId, gridKey: task.gridKey, err: error });
-    set({ status: "error", errorMessage: message, finishedAt: now().toISOString() });
+    await set({ status: "error", errorMessage: message, finishedAt: now().toISOString() });
   }
-  return db.select().from(backgroundTasks).where(eq(backgroundTasks.id, taskId)).get() ?? task;
+  return (await db.select().from(backgroundTasks).where(eq(backgroundTasks.id, taskId)).limit(1))[0] ?? task;
 }

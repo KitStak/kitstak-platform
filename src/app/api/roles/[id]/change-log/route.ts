@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: ["settings.roles.change_log", "settings.roles.view"],
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, params, query }) => {
-    loadRole(db, params.id);
-    return changeLogResult(db, ROLE_ENTITY, params.id, query);
+  handler: async ({ db, params, query }) => {
+    await loadRole(db, params.id);
+    return await changeLogResult(db, ROLE_ENTITY, params.id, query);
   },
 });

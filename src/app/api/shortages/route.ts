@@ -8,7 +8,7 @@ export const GET = defineRoute({
   permission: "reports.shortage_report.view",
   handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = await withBusyRetry(() => listShortages(db, auth, query));
+    const { rows, total } = await withBusyRetry(async () => await listShortages(db, auth, query));
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });

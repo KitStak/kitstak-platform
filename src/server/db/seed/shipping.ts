@@ -38,9 +38,9 @@ function packageFor(code: WarehouseCode, b2b: boolean, weightOz: number, coffee:
   return pick("BOX-L-1612");
 }
 
-function packagesFor(w: World, r: OrderRuntime): PackageInput[] {
-  const lines = w.env.db.select({ id: schema.orderLines.id, productId: schema.orderLines.productId, packed: schema.orderLines.packedQuantity })
-    .from(schema.orderLines).where(eq(schema.orderLines.orderId, r.id)).all().filter((l) => l.packed > 0);
+async function packagesFor(w: World, r: OrderRuntime): Promise<PackageInput[]> {
+  const lines = (await w.env.db.select({ id: schema.orderLines.id, productId: schema.orderLines.productId, packed: schema.orderLines.packedQuantity })
+    .from(schema.orderLines).where(eq(schema.orderLines.orderId, r.id))).filter((l) => l.packed > 0);
   const products = new Map(w.catalog.products.map((p) => [p.id, p]));
   const fac = facilityOf(w, r.plan.warehouse);
   const b2b = r.plan.channel === "Wholesale";
@@ -83,13 +83,13 @@ async function createLabelFor(w: World, r: OrderRuntime, atMs: number): Promise<
   const fac = facilityOf(w, r.plan.warehouse);
   const connectionId = w.carriers.sandboxByWarehouse.get(fac.id) as Id;
   const ctx = actor(operatorFor(w, r.plan.warehouse, 1));
-  const packages = packagesFor(w, r);
+  const packages = await packagesFor(w, r);
   if (packages.length === 0) return;
   counters.labels += 1;
   if (counters.errors < MAX_CARRIER_ERRORS && counters.labels % 37 === 9) await provokeCarrierError(w, ctx, r, connectionId, packages);
   const { serviceId, presetId } = await chooseService(w, ctx, r, connectionId, packages);
   const label = await retryBusy(() => shipping.createLabel(w.env.db, ctx, { orderId: r.id, carrierConnectionId: connectionId, carrierServiceId: serviceId, packages, rateShoppingPresetId: presetId, source: r.plan.channel === "Wholesale" ? "ShipmentPlan" : "PackingStation" }, { files: w.env.files }));
-  if (presetId) w.env.db.update(schema.shipments).set({ isRateShopped: true, rateShoppingPresetId: presetId }).where(inArray(schema.shipments.id, label.shipments.map((s) => s.id))).run();
+  if (presetId) await w.env.db.update(schema.shipments).set({ isRateShopped: true, rateShoppingPresetId: presetId }).where(inArray(schema.shipments.id, label.shipments.map((s) => s.id)));
   const domesticSingle = r.plan.shipTo.country === "United States" && r.plan.channel !== "Wholesale";
   if (counters.voids < MAX_VOIDS && domesticSingle && counters.labels % 61 === 17) {
     counters.voids += 1;
@@ -129,38 +129,38 @@ function addBusinessDays(ms: number, days: number): number {
 function scheduleDelivery(w: World, orderId: Id, shippedMs: number, serviceName: string): void {
   const dayStart = Math.floor(shippedMs / DAY_MS) * DAY_MS;
   const at = addBusinessDays(dayStart, transitDaysOf(serviceName)) + (17 + (orderId.charCodeAt(0) % 4)) * HOUR_MS;
-  w.queue.schedule(at, `deliver ${orderId}`, () => txAt(w.env, at, (tx) => {
-    const order = tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).get();
+  w.queue.schedule(at, `deliver ${orderId}`, async () => await txAt(w.env, at, async (tx) => {
+    const order = (await tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).limit(1))[0];
     if (!order || order.status !== "Shipped") return;
     const status = stateMachines.shipmentOrder.transition(order.status, "Delivered");
-    tx.update(schema.shipmentOrders).set({ status, deliveredAt: isoOf(at), updatedBy: null }).where(eq(schema.shipmentOrders.id, orderId)).run();
-    tx.update(schema.shipments).set({ deliveredAt: isoOf(at) }).where(and(eq(schema.shipments.orderId, orderId), eq(schema.shipments.labelStatus, "Active"))).run();
-    changeLog.recordUpdate(tx, { userId: null, source: "Integration" }, { entityType: "shipment_order", entityId: orderId, entityCode: order.code, before: { status: order.status }, after: { status } });
+    await tx.update(schema.shipmentOrders).set({ status, deliveredAt: isoOf(at), updatedBy: null }).where(eq(schema.shipmentOrders.id, orderId));
+    await tx.update(schema.shipments).set({ deliveredAt: isoOf(at) }).where(and(eq(schema.shipments.orderId, orderId), eq(schema.shipments.labelStatus, "Active")));
+    await changeLog.recordUpdate(tx, { userId: null, source: "Integration" }, { entityType: "shipment_order", entityId: orderId, entityCode: order.code, before: { status: order.status }, after: { status } });
   }));
 }
 
-function shipBatch(w: World, code: WarehouseCode, atMs: number): void {
+async function shipBatch(w: World, code: WarehouseCode, atMs: number): Promise<void> {
   const fac = facilityOf(w, code);
   const ctx = actor(operatorFor(w, code, 2));
-  const ready = txAt(w.env, atMs, (tx) => tx.select({ id: schema.shipmentOrders.id }).from(schema.shipmentOrders)
+  const ready = await txAt(w.env, atMs, async (tx) => await tx.select({ id: schema.shipmentOrders.id }).from(schema.shipmentOrders)
     .innerJoin(schema.shipments, and(eq(schema.shipments.orderId, schema.shipmentOrders.id), eq(schema.shipments.labelStatus, "Active"),
       eq(schema.shipments.labelType, "Shipping Label"), isNull(schema.shipments.actualShipmentAt)))
-    .where(and(eq(schema.shipmentOrders.warehouseId, fac.id), eq(schema.shipmentOrders.status, "Ready to Ship"))).all());
+    .where(and(eq(schema.shipmentOrders.warehouseId, fac.id), eq(schema.shipmentOrders.status, "Ready to Ship"))));
   const ids = [...new Set(ready.map((r) => r.id))];
   if (ids.length === 0) return;
-  const result = txAt(w.env, atMs, (tx) => shipping.shipOrders(tx, ctx, { orderIds: ids, shipDate: isoOf(atMs) }));
+  const result = await txAt(w.env, atMs, async (tx) => await shipping.shipOrders(tx, ctx, { orderIds: ids, shipDate: isoOf(atMs) }));
   checkBulk(w, `ship ${code}`, result);
   for (const id of result.succeeded) {
-    const svc = w.env.db.select({ name: schema.shipments.serviceName }).from(schema.shipments).where(and(eq(schema.shipments.orderId, id), eq(schema.shipments.labelStatus, "Active"))).get();
+    const svc = (await w.env.db.select({ name: schema.shipments.serviceName }).from(schema.shipments).where(and(eq(schema.shipments.orderId, id), eq(schema.shipments.labelStatus, "Active"))).limit(1))[0];
     scheduleDelivery(w, id, atMs, svc?.name ?? "Ground");
   }
   const closeAt = atMs + 3 * DAY_MS - 6 * HOUR_MS;
-  w.queue.schedule(closeAt, `close EOD ${code}`, () => txAt(w.env, closeAt, (tx) => {
-    const manifests = tx.select().from(schema.endOfDayManifests).where(and(eq(schema.endOfDayManifests.warehouseId, fac.id), eq(schema.endOfDayManifests.status, "Open"))).all()
+  w.queue.schedule(closeAt, `close EOD ${code}`, async () => await txAt(w.env, closeAt, async (tx) => {
+    const manifests = (await tx.select().from(schema.endOfDayManifests).where(and(eq(schema.endOfDayManifests.warehouseId, fac.id), eq(schema.endOfDayManifests.status, "Open"))))
       .filter((m) => m.shipDate <= isoOf(atMs).slice(0, 10));
     for (const m of manifests) {
-      shipping.closeEndOfDay(tx, ctx, { manifestId: m.id });
-      tx.update(schema.endOfDayManifests).set({ isPrinted: true }).where(eq(schema.endOfDayManifests.id, m.id)).run();
+      await shipping.closeEndOfDay(tx, ctx, { manifestId: m.id });
+      await tx.update(schema.endOfDayManifests).set({ isPrinted: true }).where(eq(schema.endOfDayManifests.id, m.id));
     }
   }));
 }
@@ -172,7 +172,7 @@ export function scheduleCarrierPickups(w: World, days: number): number {
     const at = utcAt(daysAgo, 21, 15);
     if (weekdayOf(at) === 0) continue;
     for (const code of ["MLT1", "KS2"] as const) {
-      if (w.queue.schedule(at, `pickup ${code}`, () => shipBatch(w, code, at))) n += 1;
+      if (w.queue.schedule(at, `pickup ${code}`, async () => await shipBatch(w, code, at))) n += 1;
     }
   }
   return n;

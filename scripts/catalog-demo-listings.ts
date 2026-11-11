@@ -7,31 +7,24 @@
  * unlinked and withdraws "Don't match" dismissals so the demo can be replayed. Without --apply it
  * runs in a rolled-back transaction and prints what would change.
  */
-import path from "node:path";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import * as schema from "../src/server/db/schema";
-import type { AppDb } from "../src/server/api/db";
+import { closeDb, getDb } from "../src/server/db";
 import { systemCtx } from "../src/server/domain/types";
 import { ensureDemoSuggestedListings } from "../src/server/repositories/listings-demo";
+import { withWriteTx } from "../src/server/db/sql";
 
-const DB_PATH = process.env.KITSTAK_DB_PATH ?? path.join(process.cwd(), ".data", "kitstak.db");
 const apply = process.argv.includes("--apply");
 const reset = process.argv.includes("--reset");
 
 class DryRun extends Error {}
 
-function main(): number {
+async function main(): Promise<number> {
   if (process.env.NODE_ENV === "production" && !process.env.ALLOW_PROD_SEED) throw new Error("Refusing to write demo listings in production.");
-  const sqlite = new Database(DB_PATH, { fileMustExist: true });
   try {
-    sqlite.pragma("busy_timeout = 10000");
-    sqlite.pragma("foreign_keys = ON");
-    const db = drizzle(sqlite, { schema }) as unknown as AppDb;
-    let report: ReturnType<typeof ensureDemoSuggestedListings> = { created: [], reset: [], skipped: [] };
+    const db = await getDb();
+    let report: Awaited<ReturnType<typeof ensureDemoSuggestedListings>> = { created: [], reset: [], skipped: [] };
     try {
-      db.transaction((tx) => {
-        report = ensureDemoSuggestedListings(tx, systemCtx("Demo listings"), { reset });
+      await withWriteTx(db, async (tx) => {
+        report = await ensureDemoSuggestedListings(tx, systemCtx("Demo listings"), { reset });
         if (!apply) throw new DryRun();
       });
     } catch (error) {
@@ -43,8 +36,8 @@ function main(): number {
     for (const s of report.skipped) process.stdout.write(`  = ${s}\n`);
     return 0;
   } finally {
-    sqlite.close();
+    await closeDb();
   }
 }
 
-process.exitCode = main();
+void main().then((code) => { process.exitCode = code; }, (error: unknown) => { console.error(error); process.exitCode = 1; });

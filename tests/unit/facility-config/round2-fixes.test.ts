@@ -13,8 +13,8 @@ let w: World;
 let auth: AuthContext;
 const actor = () => ({ userId: w.userId, source: "Web" });
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
@@ -24,17 +24,17 @@ const save = (code: string, extra: Record<string, unknown> = {}) =>
   locationSaveSchema.parse({ info: { ...LOCATION_INFO_DEFAULTS, code, warehouseId: w.warehouseId, ...extra }, productCapacities: [], lpCapacities: [] });
 
 describe("blank level / column / walking path", () => {
-  it("defaults to null in the form and reads back as null, not a fake 0", () => {
+  it("defaults to null in the form and reads back as null, not a fake 0", async () => {
     expect(LOCATION_INFO_DEFAULTS).toMatchObject({ level: null, column: null, walkingPathPriority: null });
-    const { id } = createLocation(w.db, auth, actor(), save("KS-TEST-BLANK"));
-    expect(getLocation(w.db, auth, id)).toMatchObject({ level: null, column: null, walkingPathPriority: null });
-    const row = listLocations(w.db, auth, parseGridQuery(new URLSearchParams("q=KS-TEST-BLANK")).query).rows[0];
+    const { id } = await createLocation(w.db, auth, actor(), save("KS-TEST-BLANK"));
+    expect(await getLocation(w.db, auth, id)).toMatchObject({ level: null, column: null, walkingPathPriority: null });
+    const row = (await listLocations(w.db, auth, parseGridQuery(new URLSearchParams("q=KS-TEST-BLANK")).query)).rows[0];
     expect(row).toMatchObject({ level: null, column: null, walkingPathPriority: null });
   });
 
-  it("keeps real values", () => {
-    const { id } = createLocation(w.db, auth, actor(), save("KS-TEST-SET", { level: 3, column: 2, walkingPathPriority: 140 }));
-    expect(getLocation(w.db, auth, id)).toMatchObject({ level: "3", column: 2, walkingPathPriority: 140 });
+  it("keeps real values", async () => {
+    const { id } = await createLocation(w.db, auth, actor(), save("KS-TEST-SET", { level: 3, column: 2, walkingPathPriority: 140 }));
+    expect(await getLocation(w.db, auth, id)).toMatchObject({ level: "3", column: 2, walkingPathPriority: 140 });
   });
 
   it("unsetAsNull treats 0, '' and '0' as not set", () => {
@@ -43,22 +43,22 @@ describe("blank level / column / walking path", () => {
 });
 
 describe("locations grid sorting", () => {
-  it("accepts volume, ABC code and dedicated client sorts", () => {
+  it("accepts volume, ABC code and dedicated client sorts", async () => {
     expect(LOCATION_SORT_FIELDS).toEqual(expect.arrayContaining(["volume", "abcCode", "dedicatedClient"]));
-    createLocation(w.db, auth, actor(), save("KS-TEST-V1", { volume: 10, abcCode: "A" }));
-    createLocation(w.db, auth, actor(), save("KS-TEST-V2", { volume: 50, abcCode: "C" }));
-    const rows = listLocations(w.db, auth, parseGridQuery(new URLSearchParams("q=KS-TEST-V&sort=-volume")).query).rows;
+    await createLocation(w.db, auth, actor(), save("KS-TEST-V1", { volume: 10, abcCode: "A" }));
+    await createLocation(w.db, auth, actor(), save("KS-TEST-V2", { volume: 50, abcCode: "C" }));
+    const rows = (await listLocations(w.db, auth, parseGridQuery(new URLSearchParams("q=KS-TEST-V&sort=-volume")).query)).rows;
     expect(rows.map((r) => r.code)).toEqual(["KS-TEST-V2", "KS-TEST-V1"]);
     expect(rows[0]).toMatchObject({ volume: 50, abcCode: "C" });
-    expect(() => listLocations(w.db, auth, parseGridQuery(new URLSearchParams("sort=abcCode")).query)).not.toThrow();
-    expect(() => listLocations(w.db, auth, parseGridQuery(new URLSearchParams("sort=-dedicatedClient")).query)).not.toThrow();
+    await listLocations(w.db, auth, parseGridQuery(new URLSearchParams("sort=abcCode")).query);
+    await listLocations(w.db, auth, parseGridQuery(new URLSearchParams("sort=-dedicatedClient")).query);
   });
 });
 
 describe("zone summary", () => {
-  it("carries the warehouse code of each zone card", () => {
-    createLocation(w.db, auth, actor(), save("KS-TEST-Z1"));
-    const zones = getZoneSummary(w.db, auth);
+  it("carries the warehouse code of each zone card", async () => {
+    await createLocation(w.db, auth, actor(), save("KS-TEST-Z1"));
+    const zones = await getZoneSummary(w.db, auth);
     expect(zones.length).toBeGreaterThan(0);
     for (const z of zones) expect(typeof z.warehouseCode === "string" || z.warehouseCode === null).toBe(true);
     expect(zones.some((z) => typeof z.warehouseCode === "string" && z.warehouseCode.length > 0)).toBe(true);

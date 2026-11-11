@@ -5,10 +5,10 @@ import { createSavedView, listSavedViews, savedViewCreateSchema, savedViewListQu
 
 export const GET = defineRoute({
   query: savedViewListQuerySchema,
-  handler: ({ db, auth, query }) => listSavedViews(db, auth.user.id, query.gridKey),
+  handler: async ({ db, auth, query }) => await listSavedViews(db, auth.user.id, query.gridKey),
 });
 
 export const POST = defineRoute({
   body: savedViewCreateSchema,
-  handler: ({ db, auth, body }) => created(createSavedView(db, auth.user.id, body)),
+  handler: async ({ db, auth, body }) => created(await createSavedView(db, auth.user.id, body)),
 });

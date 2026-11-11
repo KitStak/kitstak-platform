@@ -13,9 +13,9 @@ const bodySchema = z.object({
 export const POST = defineRoute({
   name: "POST /api/auth/logout-all",
   body: bodySchema,
-  handler: ({ db, auth, body, audit }) => {
-    const revoked = revokeUserSessions(db, auth.user.id, body.includeCurrent ? {} : { exceptSessionId: auth.user.sessionId });
-    audit({ action: "auth.logout_all", entity: "user", entityId: auth.user.id, detail: { revoked, includeCurrent: body.includeCurrent } });
+  handler: async ({ db, auth, body, audit }) => {
+    const revoked = await revokeUserSessions(db, auth.user.id, body.includeCurrent ? {} : { exceptSessionId: auth.user.sessionId });
+    await audit({ action: "auth.logout_all", entity: "user", entityId: auth.user.id, detail: { revoked, includeCurrent: body.includeCurrent } });
     const response = NextResponse.json(successBody({ revoked }));
     if (body.includeCurrent) clearSessionCookie(response);
     return response;

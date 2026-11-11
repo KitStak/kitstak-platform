@@ -8,22 +8,22 @@ import { domainCtx, idParamsSchema } from "@/server/repositories/platform-common
 export const GET = defineRoute({
   permission: COUNT_ANY_VIEW,
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getCountPlanDetail(db, auth.scope, params.id),
+  handler: async ({ db, auth, params }) => await getCountPlanDetail(db, auth.scope, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: P.edit,
   params: idParamsSchema,
   body: countPlanUpdateSchema,
-  handler: ({ db, auth, actor, params, body }) => updateCountPlan(db, domainCtx(actor, auth), auth, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updateCountPlan(db, domainCtx(actor, auth), auth, params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: P.delete,
   params: idParamsSchema,
   query: z.object({ version: z.coerce.number().int().min(1).optional() }),
-  handler: ({ db, auth, actor, params, query }) => {
-    deleteCountPlan(db, domainCtx(actor, auth), auth, params.id, query.version);
+  handler: async ({ db, auth, actor, params, query }) => {
+    await deleteCountPlan(db, domainCtx(actor, auth), auth, params.id, query.version);
     return { id: params.id };
   },
 });

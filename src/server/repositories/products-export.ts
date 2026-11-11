@@ -11,8 +11,8 @@ import { listProducts } from "./products";
 
 export const productsExport: ExportProvider = {
   columns: [...PRODUCT_EXPORT_COLUMNS, { key: "barcodes", label: "All barcodes" }],
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listProducts(ctx.db, ctx.auth.viewScope, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listProducts(ctx.db, ctx.auth.viewScope, { ...ctx.query, page, pageSize });
     const out: readonly ExportRow[] = rows.map((r) => ({ ...r }));
     return { rows: out, total };
   },
@@ -26,8 +26,8 @@ export function linkStateOf(rawQuery: string): ListingLinkState | undefined {
 
 export const listingsExport: ExportProvider = {
   columns: [...LISTING_EXPORT_COLUMNS, { key: "linked", label: "Linked", type: "boolean" }],
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listListings(ctx.db, ctx.auth.viewScope, { ...ctx.query, page, pageSize }, linkStateOf(ctx.rawQuery));
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listListings(ctx.db, ctx.auth.viewScope, { ...ctx.query, page, pageSize }, linkStateOf(ctx.rawQuery));
     const out: readonly ExportRow[] = rows.map((r) => ({ ...r, tags: undefined, linked: r.productId !== null }));
     return { rows: out, total };
   },

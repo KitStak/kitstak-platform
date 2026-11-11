@@ -19,27 +19,37 @@ export interface ClassifiedImportError {
   readonly retryable: boolean;
 }
 
-const DB_TEXT = /(constraint failed|SQLITE_[A-Z_]+|no such (table|column)|syntax error|database is locked|FOREIGN KEY|NOT NULL constraint|CHECK constraint|SqliteError)/i;
+const DB_TEXT = /(constraint failed|SQLITE_[A-Z_]+|no such (table|column)|syntax error|database is locked|FOREIGN KEY|NOT NULL constraint|CHECK constraint|SqliteError|Failed query|DrizzleQueryError|duplicate key value|violates (unique|foreign key|not-null|check) constraint|current transaction is aborted|(relation|column) "[^"]+" does not exist)/i;
 
 /** True when a message carries database/driver internals that must not reach the UI. */
 export function isInternalDbText(message: string): boolean {
   return DB_TEXT.test(message);
 }
 
-interface ErrorLike { readonly code?: unknown; readonly message?: unknown; readonly name?: unknown }
+interface ErrorLike { readonly code?: unknown; readonly message?: unknown; readonly name?: unknown; readonly cause?: unknown; readonly constraint_name?: unknown; readonly constraint?: unknown }
+
+/** The Postgres driver error behind a drizzle "Failed query" wrapper (or the error itself). */
+function driverErrorOf(e: ErrorLike): ErrorLike {
+  const cause = e.cause && typeof e.cause === "object" ? (e.cause as ErrorLike) : null;
+  return cause && typeof cause.message === "string" ? cause : e;
+}
 
 export function classifyImportError(error: unknown): ClassifiedImportError {
   const e = (error && typeof error === "object" ? error : {}) as ErrorLike;
-  const raw = typeof e.message === "string" ? e.message : typeof error === "string" ? error : "";
+  const driver = driverErrorOf(e);
+  const own = typeof e.message === "string" ? e.message : typeof error === "string" ? error : "";
+  const raw = driver !== e && typeof driver.message === "string" ? `${own}\n${driver.message}` : own;
   const appCode = typeof e.code === "string" ? e.code : "";
-  if (/UNIQUE constraint failed:\s*shipment_orders\.code/i.test(raw) || (appCode === "DUPLICATE" && /order code/i.test(raw))) {
+  const constraint = typeof driver.constraint_name === "string" ? driver.constraint_name : typeof driver.constraint === "string" ? driver.constraint : "";
+  const pgOrderCodeClash = driver.code === "23505" && (constraint === "orders_code_idx" || /"orders_code_idx"/.test(raw));
+  if (pgOrderCodeClash || /UNIQUE constraint failed:\s*shipment_orders\.code/i.test(raw) || (appCode === "DUPLICATE" && /order code/i.test(raw))) {
     return {
       code: ORDER_CODE_CONFLICT,
       message: "KitStak could not assign a free shipment order code to this order. It was retried automatically; if it keeps failing, check Settings → Data Setup → number sequences.",
       retryable: true,
     };
   }
-  if (/database is locked|SQLITE_BUSY/i.test(raw)) {
+  if (/database is locked|SQLITE_BUSY|deadlock detected|could not serialize access|canceling statement due to (lock|statement) timeout/i.test(raw)) {
     return { code: UNEXPECTED, message: "The warehouse database was busy, so the order was not saved. It will be downloaded again on the next run.", retryable: true };
   }
   if (isInternalDbText(raw)) {

@@ -9,9 +9,7 @@
  * Runs against the shared app (E2E_BASE_URL, default http://localhost:3000) on a
  * freshly reset database: `npm run db:reset && npx playwright test --project=e2e tests/e2e/foundation`.
  */
-import path from "node:path";
-import Database from "better-sqlite3";
-import type { APIRequestContext, BrowserContext, Page } from "@playwright/test";
+import { request as playwrightRequest, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
 import { ROUTE_PATTERNS, ROUTE_REGISTRY } from "../../../src/config/route-registry";
 import { LEGACY_TAB_REDIRECTS } from "../../../next.config";
 import { expect, test } from "../fixtures/auth";
@@ -24,7 +22,6 @@ const ERROR_BOUNDARY_TEXT = "Something went wrong";
 const PLACEHOLDER_TEXT = "Module in progress";
 const FORBIDDEN_TEXT = /You don't have access to/;
 const ROUTE_TIMEOUT_MS = 120_000;
-const DB_PATH = process.env.KITSTAK_DB_PATH ?? path.join(process.cwd(), ".data", "kitstak.db");
 
 const baseUrl = e2eBaseUrl();
 const sameOrigin = { Origin: baseUrl, Referer: `${baseUrl}/dashboard` } as const;
@@ -44,14 +41,28 @@ async function errorCode(res: Awaited<ReturnType<APIRequestContext["post"]>>): P
   return body.code;
 }
 
-function setUserActive(email: string, active: boolean): void {
-  const db = new Database(DB_PATH, { fileMustExist: true });
+/**
+ * Flips users.is_active through the admin API (POST /api/users/bulk-status). The dev server owns
+ * the database (local PGlite is single-process), so the spec never opens it directly.
+ */
+async function setUserActive(email: string, active: boolean): Promise<void> {
+  const api = await playwrightRequest.newContext({ baseURL: baseUrl });
   try {
-    db.pragma("busy_timeout = 10000");
-    const result = db.prepare("UPDATE users SET is_active = ? WHERE email = ?").run(active ? 1 : 0, email);
-    if (result.changes !== 1) throw new Error(`Expected one user with email ${email}, updated ${result.changes}`);
+    await loginViaApi(api, "admin");
+    await api.get(`${baseUrl}/api/auth/csrf`);
+    const csrf = (await api.storageState()).cookies.find((c) => c.name === "ks_csrf")?.value;
+    if (!csrf) throw new Error("GET /api/auth/csrf did not set the ks_csrf cookie");
+    const list = await api.get(`${baseUrl}/api/users?q=${encodeURIComponent(email)}&qm=eq`);
+    expect(list.ok()).toBe(true);
+    const rows = ((await list.json()) as { data: { id: string; email: string }[] }).data.filter((u) => u.email === email);
+    if (rows.length !== 1) throw new Error(`Expected one user with email ${email}, found ${rows.length}`);
+    const res = await api.post(`${baseUrl}/api/users/bulk-status`, {
+      data: { ids: [rows[0]?.id], isActive: active },
+      headers: { ...sameOrigin, "x-csrf-token": csrf },
+    });
+    expect(res.ok()).toBe(true);
   } finally {
-    db.close();
+    await api.dispose();
   }
 }
 
@@ -134,7 +145,7 @@ test.describe("F8.3 access control", () => {
     try {
       await loginViaApi(context.request, "operator");
       expect((await context.request.get(`${baseUrl}/api/me`)).status()).toBe(200);
-      setUserActive(email, false);
+      await setUserActive(email, false);
       try {
         const api = await context.request.get(`${baseUrl}/api/me`);
         expect(api.status()).toBe(401);
@@ -142,7 +153,7 @@ test.describe("F8.3 access control", () => {
         await page.goto("/dashboard");
         await expect(page).toHaveURL(/\/login/);
       } finally {
-        setUserActive(email, true);
+        await setUserActive(email, true);
       }
     } finally {
       await context.close();

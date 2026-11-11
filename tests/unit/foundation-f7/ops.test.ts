@@ -21,28 +21,28 @@ const shipRoute = await import("@/app/api/ops/shipping/ship/route");
 const returnRoute = await import("@/app/api/ops/shipping/return-label/route");
 const eodRoute = await import("@/app/api/ops/shipping/close-eod/route");
 
-beforeEach(() => { openWorld(); });
+beforeEach(async () => { await openWorld(); });
 afterEach(() => closeWorld());
 afterAll(() => removeFilesRoot());
 
 const pkg = { weightOz: 20, length: 10, width: 8, height: 4 };
 
-function stockedOrder(qty = 2): string {
+async function stockedOrder(qty = 2): Promise<string> {
   const w = current();
-  ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 3 });
-  return createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }])).id;
+  await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 3 });
+  return (await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]))).id;
 }
 
 const post = async (route: { POST: Parameters<typeof call>[0] }, url: string, body: unknown, userId = current().operatorId) =>
   call(route.POST, req("POST", url, { cookie: await cookieFor(userId), body }));
 
-const tasksOf = (jobId: string, type: string) =>
-  current().db.select().from(schema.tasks).where(eq(schema.tasks.jobId, jobId)).all().filter((t) => t.taskType === type);
+const tasksOf = async (jobId: string, type: string) =>
+  (await current().db.select().from(schema.tasks).where(eq(schema.tasks.jobId, jobId))).filter((t) => t.taskType === type);
 
 describe("/api/ops — allocate, jobs, tasks, shipping (operator)", () => {
   it("runs an order from allocation to shipped through the routes", async () => {
     const w = current();
-    const orderId = stockedOrder();
+    const orderId = await stockedOrder();
 
     const alloc = await post(allocateRoute, "/api/ops/allocate", { orderIds: [orderId], warehouseId: w.warehouseId });
     expect(alloc.status).toBe(200);
@@ -50,7 +50,7 @@ describe("/api/ops — allocate, jobs, tasks, shipping (operator)", () => {
 
     const elig = await post(eligibilityRoute, "/api/ops/jobs/eligibility", { orderIds: [orderId, "nope"], jobTypeId: w.jobTypeId });
     expect(elig.data).toMatchObject({ total: 2, eligible: [orderId], jobCount: 1 });
-    expect(w.db.select().from(schema.jobs).all()).toHaveLength(0);
+    expect(await w.db.select().from(schema.jobs)).toHaveLength(0);
 
     const created = await post(jobsRoute, "/api/ops/jobs", { mode: "create", orderIds: [orderId], jobTypeId: w.jobTypeId });
     expect(created.status).toBe(200);
@@ -58,11 +58,11 @@ describe("/api/ops — allocate, jobs, tasks, shipping (operator)", () => {
     expect(jobIds).toHaveLength(1);
     const jobId = jobIds[0] ?? "";
 
-    const picking = tasksOf(jobId, "Picking").map((t) => t.id);
+    const picking = (await tasksOf(jobId, "Picking")).map((t) => t.id);
     const moved = await post(updateRoute, "/api/ops/tasks/update", { taskId: picking[0], targetLocationId: w.loc.pick });
     expect(moved.status).toBe(200);
     expect((await post(executeRoute, "/api/ops/tasks/execute", { taskIds: picking, targetLocationId: w.loc.pick })).status).toBe(200);
-    const packing = tasksOf(jobId, "Packing").map((t) => t.id);
+    const packing = (await tasksOf(jobId, "Packing")).map((t) => t.id);
     expect((await post(executeRoute, "/api/ops/tasks/execute", { taskIds: packing, targetLocationId: w.loc.pack })).status).toBe(200);
 
     const rates = await post(ratesRoute, "/api/ops/shipping/rates", { orderId, packages: [pkg] });
@@ -86,31 +86,31 @@ describe("/api/ops — allocate, jobs, tasks, shipping (operator)", () => {
     });
     const shipped = await post(shipRoute, "/api/ops/shipping/ship", { ids: [orderId] });
     expect(shipped.data).toMatchObject({ succeeded: [orderId], failed: [] });
-    expect(w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).get()?.status).toBe("Shipped");
+    expect((await w.db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).limit(1))[0]?.status).toBe("Shipped");
 
     const ret = await post(returnRoute, "/api/ops/shipping/return-label", {
       orderId, carrierConnectionId: w.carrierConnectionId, carrierServiceId: w.serviceIds.ground, package: pkg,
     }, w.userId);
     expect(ret.status).toBe(201);
 
-    const manifest = w.db.select().from(schema.endOfDayManifests).get();
+    const manifest = (await w.db.select().from(schema.endOfDayManifests).limit(1))[0];
     const closed = await post(eodRoute, "/api/ops/shipping/close-eod", { manifestId: manifest?.id }, w.userId);
     expect(closed.status).toBe(200);
     expect(closed.data).toMatchObject({ status: "Closed" });
-    expect(ledger.reconcileLedger(w.db)).toEqual([]);
+    expect(await ledger.reconcileLedger(w.db)).toEqual([]);
   });
 
   it("merges, cancels tasks per id and reports missing work orders / count plans per id", async () => {
     const w = current();
-    const first = stockedOrder(1);
-    const second = stockedOrder(1);
+    const first = await stockedOrder(1);
+    const second = await stockedOrder(1);
     await post(allocateRoute, "/api/ops/allocate", { orderIds: [first, second], warehouseId: w.warehouseId });
     const created = await post(jobsRoute, "/api/ops/jobs", { mode: "create", orderIds: [first], jobTypeId: w.jobTypeId });
     const jobId = (created.data as { jobIds: string[] }).jobIds[0] ?? "";
     const merged = await post(jobsRoute, "/api/ops/jobs", { mode: "merge", jobId, orderIds: [second] });
     expect(merged.data).toMatchObject({ succeeded: [second], jobIds: [jobId] });
 
-    const picking = tasksOf(jobId, "Picking").map((t) => t.id);
+    const picking = (await tasksOf(jobId, "Picking")).map((t) => t.id);
     // Task cancel is a supervisor action (operator default no longer holds task_details.cancel_task).
     const cancelled = await post(cancelRoute, "/api/ops/tasks/cancel", { ids: [picking[0], "missing"] }, w.userId);
     expect(cancelled.data).toMatchObject({ succeeded: [picking[0]], failed: [{ id: "missing", code: "NOT_FOUND" }] });

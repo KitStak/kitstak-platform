@@ -8,5 +8,5 @@ export const POST = defineRoute({
   body: varianceQuerySchema,
   transaction: false,
   rateLimit: false,
-  handler: ({ db, auth, body }) => varianceSummary(db, auth, body),
+  handler: async ({ db, auth, body }) => await varianceSummary(db, auth, body),
 });

@@ -8,5 +8,5 @@ export const GET = defineRoute({
   permission: "settings.billing.view",
   params: idParamsSchema,
   query: z.object({ field: z.string().trim().min(1).max(64) }),
-  handler: ({ db, auth, params, query }) => chargeIfValues(db, auth, params.id, query.field),
+  handler: async ({ db, auth, params, query }) => await chargeIfValues(db, auth, params.id, query.field),
 });

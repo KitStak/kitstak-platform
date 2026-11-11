@@ -9,5 +9,5 @@ import { ANY_JOB_OPERATION_PERMISSION, checkEligibility, eligibilitySchema } fro
 export const POST = defineRoute({
   permission: ANY_JOB_OPERATION_PERMISSION,
   body: eligibilitySchema,
-  handler: ({ db, auth, actor, body }) => checkEligibility(db, auth, domainCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await checkEligibility(db, auth, domainCtx(actor, auth), body),
 });

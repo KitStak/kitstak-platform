@@ -7,8 +7,8 @@ import type { ExportProvider, ExportRow } from "@/server/exports/types";
 import { listLpNumbers } from "./lp-numbers";
 
 export const lpNumbersExport: ExportProvider = {
-  fetchPage(ctx, page, pageSize) {
-    const { rows, total } = listLpNumbers(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
+  async fetchPage(ctx, page, pageSize) {
+    const { rows, total } = await listLpNumbers(ctx.db, ctx.auth, { ...ctx.query, page, pageSize });
     const out: readonly ExportRow[] = rows.map((r) => ({ ...r }));
     return { rows: out, total };
   },

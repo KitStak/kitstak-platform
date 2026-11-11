@@ -9,5 +9,5 @@ export const POST = defineRoute({
   permission: ORDER_PERMISSIONS.edit,
   params: idParamsSchema,
   body: z.object({ version: z.number().int().positive() }),
-  handler: ({ db, auth, actor, params, body }) => releaseWorkflowBlock(db, domainCtx(actor, auth), params.id, body.version),
+  handler: async ({ db, auth, actor, params, body }) => await releaseWorkflowBlock(db, domainCtx(actor, auth), params.id, body.version),
 });

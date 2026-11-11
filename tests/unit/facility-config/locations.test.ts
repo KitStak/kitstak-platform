@@ -16,8 +16,8 @@ let w: World;
 let auth: AuthContext;
 const actor = () => ({ userId: w.userId, source: "Web" });
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
@@ -46,60 +46,60 @@ describe("location schema", () => {
 });
 
 describe("location repository", () => {
-  it("creates KS-E2E-LOC-01 with barcode = code, Only 1 SKU and a product capacity, and logs Create", () => {
+  it("creates KS-E2E-LOC-01 with barcode = code, Only 1 SKU and a product capacity, and logs Create", async () => {
     const input = save("KS-E2E-LOC-01", { locationType: "Shelves", areaType: "Picking", onlyOneSku: true }, {
       productCapacities: [{ clientId: w.clientId, productId: w.productId, packType: "Each", minQty: 5, maxQty: 50 }],
     });
-    const { id } = createLocation(w.db, auth, actor(), input);
-    const d = getLocation(w.db, auth, id);
+    const { id } = await createLocation(w.db, auth, actor(), input);
+    const d = await getLocation(w.db, auth, id);
     expect(d).toMatchObject({ code: "KS-E2E-LOC-01", barcode: "KS-E2E-LOC-01", onlyOneSku: true, areaType: "Picking", inventoryStatus: "Available" });
     expect(d.productCapacities).toEqual([expect.objectContaining({ sku: "MLT-WIDGET-01", minQty: 5, maxQty: 50, packType: "Each" })]);
-    const log = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id)).all();
+    const log = await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id));
     expect(log.map((c) => c.type)).toContain("Create");
   });
 
-  it("rejects a duplicate code in the same warehouse", () => {
-    createLocation(w.db, auth, actor(), save("KS-TEST-DUP"));
-    expect(() => createLocation(w.db, auth, actor(), save("ks-test-dup"))).toThrow(/already exists/i);
+  it("rejects a duplicate code in the same warehouse", async () => {
+    await createLocation(w.db, auth, actor(), save("KS-TEST-DUP"));
+    await expect(async () => await createLocation(w.db, auth, actor(), save("ks-test-dup"))).rejects.toThrow(/already exists/i);
   });
 
-  it("edits with optimistic concurrency and writes field-level change log", () => {
-    const { id } = createLocation(w.db, auth, actor(), save("KS-TEST-EDIT"));
-    const v1 = getLocation(w.db, auth, id).version;
-    updateLocation(w.db, auth, actor(), id, save("KS-TEST-EDIT", { aisle: "C" }, { version: v1 }));
-    expect(getLocation(w.db, auth, id).aisle).toBe("C");
-    expect(() => updateLocation(w.db, auth, actor(), id, save("KS-TEST-EDIT", { aisle: "D" }, { version: v1 }))).toThrow(/changed/i);
-    const fields = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id)).all().filter((c) => c.type === "Update");
+  it("edits with optimistic concurrency and writes field-level change log", async () => {
+    const { id } = await createLocation(w.db, auth, actor(), save("KS-TEST-EDIT"));
+    const v1 = (await getLocation(w.db, auth, id)).version;
+    await updateLocation(w.db, auth, actor(), id, save("KS-TEST-EDIT", { aisle: "C" }, { version: v1 }));
+    expect((await getLocation(w.db, auth, id)).aisle).toBe("C");
+    await expect(async () => await updateLocation(w.db, auth, actor(), id, save("KS-TEST-EDIT", { aisle: "D" }, { version: v1 }))).rejects.toThrow(/changed/i);
+    const fields = (await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, id))).filter((c) => c.type === "Update");
     expect(fields.length).toBeGreaterThan(0);
   });
 
-  it("blocks delete when the location holds inventory; deletes an empty one", () => {
-    w.db.insert(schema.inventory).values({ productId: w.productId, clientId: w.clientId, warehouseId: w.warehouseId, locationId: w.loc.storageA, onHand: 4, receivedAt: new Date().toISOString() }).run();
-    expect(deleteBlocker(w.db, w.loc.storageA)).toMatch(/holds 4 units/);
-    const { id } = createLocation(w.db, auth, actor(), save("KS-TEST-DEL"));
-    const result = deleteLocations(w.db, auth, actor(), [w.loc.storageA, id]);
+  it("blocks delete when the location holds inventory; deletes an empty one", async () => {
+    await w.db.insert(schema.inventory).values({ productId: w.productId, clientId: w.clientId, warehouseId: w.warehouseId, locationId: w.loc.storageA, onHand: 4, receivedAt: new Date().toISOString() });
+    expect(await deleteBlocker(w.db, w.loc.storageA)).toMatch(/holds 4 units/);
+    const { id } = await createLocation(w.db, auth, actor(), save("KS-TEST-DEL"));
+    const result = await deleteLocations(w.db, auth, actor(), [w.loc.storageA, id]);
     expect(result.succeeded).toEqual([id]);
     expect(result.failed[0]).toMatchObject({ id: w.loc.storageA, code: "INVALID_STATE" });
   });
 
-  it("locks and unlocks, rejecting a no-op", () => {
-    const { id } = createLocation(w.db, auth, actor(), save("KS-TEST-LOCK"));
-    expect(setLocationsLocked(w.db, auth, actor(), [id], true).succeeded).toEqual([id]);
-    expect(setLocationsLocked(w.db, auth, actor(), [id], true).failed[0]?.message).toMatch(/already locked/);
-    expect(setLocationsLocked(w.db, auth, actor(), [id], false).succeeded).toEqual([id]);
+  it("locks and unlocks, rejecting a no-op", async () => {
+    const { id } = await createLocation(w.db, auth, actor(), save("KS-TEST-LOCK"));
+    expect((await setLocationsLocked(w.db, auth, actor(), [id], true)).succeeded).toEqual([id]);
+    expect((await setLocationsLocked(w.db, auth, actor(), [id], true)).failed[0]?.message).toMatch(/already locked/);
+    expect((await setLocationsLocked(w.db, auth, actor(), [id], false)).succeeded).toEqual([id]);
   });
 
-  it("lists with grid filters and hides out-of-scope warehouses", () => {
-    createLocation(w.db, auth, actor(), save("KS-TEST-ZZ-01", { areaType: "Receiving" }));
+  it("lists with grid filters and hides out-of-scope warehouses", async () => {
+    await createLocation(w.db, auth, actor(), save("KS-TEST-ZZ-01", { areaType: "Receiving" }));
     const q = parseGridQuery(new URLSearchParams("q=KS-TEST-ZZ&qm=sw")).query;
-    expect(listLocations(w.db, auth, q).rows.map((r) => r.code)).toEqual(["KS-TEST-ZZ-01"]);
+    expect((await listLocations(w.db, auth, q)).rows.map((r) => r.code)).toEqual(["KS-TEST-ZZ-01"]);
     const noScope = { ...auth, scope: { warehouseIds: [], clientIds: "all" }, viewScope: { warehouseIds: [], clientIds: "all" } } as unknown as AuthContext;
-    expect(listLocations(w.db, noScope, EMPTY_GRID_QUERY).total).toBe(0);
+    expect((await listLocations(w.db, noScope, EMPTY_GRID_QUERY)).total).toBe(0);
   });
 
-  it("exports the same rows as the list", () => {
-    const page = locationsExport.fetchPage({ db: w.db, auth, gridKey: "locations", query: EMPTY_GRID_QUERY, rawQuery: "" }, 1, 100);
-    expect("rows" in page && page.total).toBe(listLocations(w.db, auth, EMPTY_GRID_QUERY).total);
+  it("exports the same rows as the list", async () => {
+    const page = await locationsExport.fetchPage({ db: w.db, auth, gridKey: "locations", query: EMPTY_GRID_QUERY, rawQuery: "" }, 1, 100);
+    expect("rows" in page && page.total).toBe((await listLocations(w.db, auth, EMPTY_GRID_QUERY)).total);
   });
 });
 
@@ -118,32 +118,32 @@ describe("bulk location generator", () => {
     expect(expandPattern(spec())[0]?.code).toBe("KS-A-01-1");
   });
 
-  it("creates 12 locations; a second run reports 12 collisions and creates 0", () => {
-    const first = runGeneratorNow(w.db, auth, actor(), spec(), planGenerator(w.db, auth, spec(), false));
+  it("creates 12 locations; a second run reports 12 collisions and creates 0", async () => {
+    const first = await runGeneratorNow(w.db, auth, actor(), spec(), await planGenerator(w.db, auth, spec(), false));
     expect(first.created).toBe(12);
-    const plan = planGenerator(w.db, auth, spec(), false);
+    const plan = await planGenerator(w.db, auth, spec(), false);
     expect(plan.collisions).toHaveLength(12);
     expect(plan.rows).toHaveLength(0);
-    expect(runGeneratorNow(w.db, auth, actor(), spec(), plan).created).toBe(0);
+    expect((await runGeneratorNow(w.db, auth, actor(), spec(), plan)).created).toBe(0);
   });
 });
 
 describe("location imports", () => {
-  it("bulk import creates, a repeat is rejected, bulk update overlays non-empty cells", () => {
-    const r = applyLocationImport(importCtx(), { warehouseCode: "MLT1", code: "KS-TEST-IMP-01", locationType: "Shelves", areaType: "Picking" });
+  it("bulk import creates, a repeat is rejected, bulk update overlays non-empty cells", async () => {
+    const r = await applyLocationImport(importCtx(), { warehouseCode: "MLT1", code: "KS-TEST-IMP-01", locationType: "Shelves", areaType: "Picking" });
     expect(r.message).toMatch(/Created location KS-TEST-IMP-01/);
-    expect(() => applyLocationImport(importCtx(), { warehouseCode: "MLT1", code: "KS-TEST-IMP-01" })).toThrow(/already exists/);
-    applyLocationUpdateImport(importCtx(), { warehouseCode: "MLT1", code: "KS-TEST-IMP-01", aisle: "Q" });
-    expect(getLocation(w.db, auth, r.entityId ?? "").aisle).toBe("Q");
-    expect(() => applyLocationImport(importCtx(), { warehouseCode: "NOPE", code: "X" })).toThrow();
+    await expect(async () => await applyLocationImport(importCtx(), { warehouseCode: "MLT1", code: "KS-TEST-IMP-01" })).rejects.toThrow(/already exists/);
+    await applyLocationUpdateImport(importCtx(), { warehouseCode: "MLT1", code: "KS-TEST-IMP-01", aisle: "Q" });
+    expect((await getLocation(w.db, auth, r.entityId ?? "")).aisle).toBe("Q");
+    await expect(async () => await applyLocationImport(importCtx(), { warehouseCode: "NOPE", code: "X" })).rejects.toThrow();
   });
 
-  it("product capacity import adds then update changes; wrong mode is rejected", () => {
+  it("product capacity import adds then update changes; wrong mode is rejected", async () => {
     const row = { warehouseCode: "MLT1", locationCode: "A-01-01", clientCode: "ACME", sku: "MLT-WIDGET-01", minQty: 2, maxQty: 20 };
-    applyProductCapacityImport(importCtx(), row);
-    expect(() => applyProductCapacityImport(importCtx(), row)).toThrow(/already has a capacity/);
-    applyProductCapacityUpdateImport(importCtx(), { ...row, maxQty: 40 });
-    expect(getLocation(w.db, auth, w.loc.storageA).productCapacities[0]).toMatchObject({ minQty: 2, maxQty: 40 });
-    expect(() => applyProductCapacityUpdateImport(importCtx(), { ...row, sku: "MLT-GADGET-02" })).toThrow(/no capacity/);
+    await applyProductCapacityImport(importCtx(), row);
+    await expect(async () => await applyProductCapacityImport(importCtx(), row)).rejects.toThrow(/already has a capacity/);
+    await applyProductCapacityUpdateImport(importCtx(), { ...row, maxQty: 40 });
+    expect((await getLocation(w.db, auth, w.loc.storageA)).productCapacities[0]).toMatchObject({ minQty: 2, maxQty: 40 });
+    await expect(async () => await applyProductCapacityUpdateImport(importCtx(), { ...row, sku: "MLT-GADGET-02" })).rejects.toThrow(/no capacity/);
   });
 });

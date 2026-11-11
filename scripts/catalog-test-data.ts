@@ -8,14 +8,10 @@
  * created more than N minutes ago (default 60) are touched, so a suite that is running now keeps
  * its fixtures. Without --apply it prints the plan and changes nothing.
  */
-import path from "node:path";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import * as schema from "../src/server/db/schema";
-import type { AppDb } from "../src/server/api/db";
+import { closeDb, getDb, schema } from "../src/server/db";
+import { withWriteTx } from "../src/server/db/sql";
 import { TEST_SKU_PREFIXES, planTestDataPurge, purgeTestCatalogData, type TestDataPlan } from "../src/server/repositories/products-test-data";
 
-const DB_PATH = process.env.KITSTAK_DB_PATH ?? path.join(process.cwd(), ".data", "kitstak.db");
 const apply = process.argv.includes("--apply");
 /** Skip deactivations (use while other suites still have open orders on test products). */
 const deleteOnly = process.argv.includes("--delete-only");
@@ -31,28 +27,25 @@ function print(plan: TestDataPlan): void {
   out(`  listings:   ${plan.listingIds.length}`);
 }
 
-function main(): number {
-  const sqlite = new Database(DB_PATH, { readonly: !apply, fileMustExist: true });
+async function main(): Promise<number> {
   try {
-    sqlite.pragma("busy_timeout = 10000");
-    if (apply) sqlite.pragma("foreign_keys = ON");
-    const db = drizzle(sqlite, { schema }) as unknown as AppDb;
+    const db = await getDb();
     const createdBefore = new Date(Date.now() - idleMinutes * 60_000).toISOString();
     process.stdout.write(`Catalog test data (${TEST_SKU_PREFIXES.join(", ")}) created before ${createdBefore}\n`);
     if (!apply) {
-      print(planTestDataPurge(db, TEST_SKU_PREFIXES, { createdBefore }));
+      print(await planTestDataPurge(db, TEST_SKU_PREFIXES, { createdBefore }));
       process.stdout.write("Dry run. Re-run with --apply to change data.\n");
       return 0;
     }
-    const warehouseIds = db.select({ id: schema.warehouses.id }).from(schema.warehouses).all().map((r) => r.id);
+    const warehouseIds = (await db.select({ id: schema.warehouses.id }).from(schema.warehouses)).map((r) => r.id);
     const ctx = { userId: null, source: "Test data cleanup", scope: { warehouseIds, clientIds: "all" as const } };
-    const plan = sqlite.transaction(() => purgeTestCatalogData(db, ctx, TEST_SKU_PREFIXES, { createdBefore, deleteOnly }))();
+    const plan = await withWriteTx(db, async (tx) => await purgeTestCatalogData(tx, ctx, TEST_SKU_PREFIXES, { createdBefore, deleteOnly }));
     print(plan);
     process.stdout.write("Applied.\n");
     return 0;
   } finally {
-    sqlite.close();
+    await closeDb();
   }
 }
 
-process.exitCode = main();
+void main().then((code) => { process.exitCode = code; }, (error: unknown) => { console.error(error); process.exitCode = 1; });

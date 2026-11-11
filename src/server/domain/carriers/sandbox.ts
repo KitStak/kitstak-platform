@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { verifyAddress } from "../address-verification";
 import { CarrierError, registerCarrierAdapter, type CarrierAdapter, type LabelRequest, type PackageSpec, type RateQuote, type RateRequest } from "./adapter";
 import { renderPdfLabel, renderZplLabel } from "./label";
+import { mapSeq } from "../../db/sql";
 
 export const SANDBOX_PROVIDER = "kitstaks-sandbox";
 
@@ -142,7 +143,7 @@ export const sandboxCarrier: CarrierAdapter = {
     const service = serviceFor(req.service.serviceCode);
     const quote = quoteFor(req, service, req.service.id, req.shipDate);
     const zone = Number(quote.zone);
-    const packages = await Promise.all(req.packages.map(async (pkg, i) => {
+    const packages = await Promise.all(await mapSeq(req.packages, async (pkg, i) => {
       const trackingNumber = sandboxTrackingNumber(service, `${req.orderCode}|${req.labelType}|${req.attempt}|${i + 1}`);
       const data = {
         from: req.from, to: req.to, carrierCode: service.carrierCode, serviceName: service.name, trackingNumber,

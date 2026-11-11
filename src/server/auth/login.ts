@@ -4,6 +4,7 @@
  */
 import { eq } from "drizzle-orm";
 import { users } from "@/server/db/schema";
+import { withWriteTx } from "@/server/db/sql";
 import type { AppDb } from "@/server/api/db";
 import { writeAudit } from "./audit";
 import { hashPassword, needsRehash, verifyPassword } from "./password";
@@ -32,56 +33,64 @@ export type LoginOutcome =
 export const INVALID_CREDENTIALS_MESSAGE = "Invalid email or password";
 export const LOCKED_MESSAGE = "This account is temporarily locked after too many failed attempts. Try again later.";
 
-export function authenticate(db: AppDb, attempt: LoginAttempt, now: Date = new Date()): LoginOutcome {
+export async function authenticate(db: AppDb, attempt: LoginAttempt, now: Date = new Date()): Promise<LoginOutcome> {
   const email = attempt.email.trim().toLowerCase();
-  const audit = (action: string, outcome: "success" | "failure", userId: string | null, detail: Record<string, unknown>) =>
-    writeAudit(db, { action, entity: "user", entityId: userId ?? email, userId, outcome, detail: { email, ...detail }, ip: attempt.ip, userAgent: attempt.userAgent }, now);
+  const audit = async (action: string, outcome: "success" | "failure", userId: string | null, detail: Record<string, unknown>) =>
+    await writeAudit(db, { action, entity: "user", entityId: userId ?? email, userId, outcome, detail: { email, ...detail }, ip: attempt.ip, userAgent: attempt.userAgent }, now);
 
-  const ipLimit = hitRateLimit(db, RATE_LIMITS.loginIp, attempt.ip, now);
-  const accountLimit = hitRateLimit(db, RATE_LIMITS.loginAccount, email, now);
+  const ipLimit = await hitRateLimit(db, RATE_LIMITS.loginIp, attempt.ip, now);
+  const accountLimit = await hitRateLimit(db, RATE_LIMITS.loginAccount, email, now);
   if (!ipLimit.allowed || !accountLimit.allowed) {
-    audit("auth.login.rate_limited", "failure", null, {});
+    await audit("auth.login.rate_limited", "failure", null, {});
     return { ok: false, reason: "rate_limited", retryAfterSeconds: Math.max(ipLimit.retryAfterSeconds, accountLimit.retryAfterSeconds) };
   }
 
-  const user = db.select().from(users).where(eq(users.email, email)).get();
+  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
   const passwordOk = verifyPassword(attempt.password, user?.passwordHash ?? timingPad());
   if (!user) {
-    audit("auth.login", "failure", null, { reason: "unknown_email" });
+    await audit("auth.login", "failure", null, { reason: "unknown_email" });
     return { ok: false, reason: "invalid" };
   }
   if (user.lockedUntil && user.lockedUntil > now.toISOString()) {
-    audit("auth.login", "failure", user.id, { reason: "locked" });
+    await audit("auth.login", "failure", user.id, { reason: "locked" });
     return { ok: false, reason: "locked" };
   }
   if (!user.isActive || !passwordOk) {
-    registerFailure(db, user.id, user.failedLoginCount, now);
-    audit("auth.login", "failure", user.id, { reason: user.isActive ? "bad_password" : "inactive" });
+    await registerFailure(db, user.id, now);
+    await audit("auth.login", "failure", user.id, { reason: user.isActive ? "bad_password" : "inactive" });
     return { ok: false, reason: "invalid" };
   }
 
-  db.update(users)
+  await db.update(users)
     .set({
       failedLoginCount: 0,
       lockedUntil: null,
       lastLoginAt: now.toISOString(),
       ...(needsRehash(user.passwordHash) ? { passwordHash: hashPassword(attempt.password) } : {}),
     })
-    .where(eq(users.id, user.id))
-    .run();
-  resetRateLimit(db, RATE_LIMITS.loginAccount, email);
+    .where(eq(users.id, user.id));
+  await resetRateLimit(db, RATE_LIMITS.loginAccount, email);
   // Successful sign-ins give back their per-IP hit, so only failures use up the shared budget.
-  refundRateLimit(db, RATE_LIMITS.loginIp, attempt.ip);
-  audit("auth.login", "success", user.id, {});
+  await refundRateLimit(db, RATE_LIMITS.loginIp, attempt.ip);
+  await audit("auth.login", "success", user.id, {});
   return { ok: true, userId: user.id };
 }
 
-function registerFailure(db: AppDb, userId: string, previousCount: number, now: Date): void {
-  const failedLoginCount = previousCount + 1;
-  const policy = getPasswordPolicy(db);
-  const locked = lockoutUntil(failedLoginCount, policy, now);
-  db.update(users)
-    .set({ failedLoginCount: locked ? 0 : failedLoginCount, lockedUntil: locked })
-    .where(eq(users.id, userId))
-    .run();
+/**
+ * Counts a failed attempt. The count is re-read under the app write lock: authenticate() runs
+ * outside a write transaction, so concurrent failures must not each write the same N+1 (that
+ * would never reach the lockout threshold). An attempt that lost the race to a lockout does
+ * not touch the row (it must not clear lockedUntil).
+ */
+async function registerFailure(db: AppDb, userId: string, now: Date): Promise<void> {
+  const policy = await getPasswordPolicy(db);
+  await withWriteTx(db, async (tx) => {
+    const [row] = await tx.select({ count: users.failedLoginCount, lockedUntil: users.lockedUntil }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!row || (row.lockedUntil && row.lockedUntil > now.toISOString())) return;
+    const failedLoginCount = row.count + 1;
+    const locked = lockoutUntil(failedLoginCount, policy, now);
+    await tx.update(users)
+      .set({ failedLoginCount: locked ? 0 : failedLoginCount, lockedUntil: locked })
+      .where(eq(users.id, userId));
+  });
 }

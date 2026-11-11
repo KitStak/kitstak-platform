@@ -6,7 +6,7 @@
  * does not fit the field type throws VALIDATION. Values are always bound parameters.
  */
 import { and, sql, type SQL } from "drizzle-orm";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import { AppError } from "@/server/api/errors";
 import { resolveDateRange } from "./date-presets";
 import { currentTzOffset } from "./request-tz";
@@ -24,11 +24,11 @@ export interface FilterFieldDef {
   readonly label: string;
   readonly type: FilterFieldType;
   /** Table column, or ... */
-  readonly column?: SQLiteColumn;
+  readonly column?: PgColumn;
   /** ... an arbitrary SQL expression (e.g. a correlated subquery). */
   readonly sql?: SQL;
-  /** Custom-field slot: compiles to json_extract(<column>, '$.<key>'). */
-  readonly customField?: { readonly column: SQLiteColumn; readonly key: string };
+  /** Custom-field slot: compiles to `<column> ->> '<key>'` (jsonb; numbers for type "number"). */
+  readonly customField?: { readonly column: PgColumn; readonly key: string };
   readonly options?: readonly FilterOption[];
   readonly nullable?: boolean;
   /** Date stored as YYYY-MM-DD (compare on the date part only). */
@@ -55,7 +55,11 @@ function expressionOf(def: FilterFieldDef): SQL {
   if (def.column) return sql`${def.column}`;
   if (def.customField) {
     if (!CUSTOM_FIELD_KEY_RE.test(def.customField.key)) throw new Error(`Invalid custom field key ${def.customField.key}`);
-    return sql`json_extract(${def.customField.column}, ${`$.${def.customField.key}`})`;
+    const { column, key } = def.customField;
+    // SQLite json_extract returned typed values; jsonb ->> is text, so number fields read the number.
+    return def.type === "number"
+      ? sql`(CASE WHEN jsonb_typeof(${column} -> ${key}::text) = 'number' THEN (${column} ->> ${key}::text)::float8 END)`
+      : sql`(${column} ->> ${key}::text)`;
   }
   throw new Error(`Filter field "${def.key}" has no column, sql or customField`);
 }
@@ -65,7 +69,11 @@ export function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (m) => `\\${m}`);
 }
 
-const like = (expr: SQL, pattern: string): SQL => sql`${expr} LIKE ${pattern} ESCAPE '\\'`;
+/**
+ * Case-insensitive pattern match. SQLite LIKE was case-insensitive; Postgres LIKE is not, so
+ * grid filters use ILIKE. The ::text cast keeps non-text expressions (numbers, ids) matchable.
+ */
+const like = (expr: SQL, pattern: string): SQL => sql`(${expr})::text ILIKE ${pattern} ESCAPE '\\'`;
 
 function invalid(def: FilterFieldDef, message: string): AppError {
   return new AppError("VALIDATION", `${def.label}: ${message}`, { fieldErrors: { [`f.${def.key}`]: [message] } });
@@ -110,7 +118,7 @@ function compileOne(def: FilterFieldDef, filter: GridFilter, options: CompileOpt
       return filter.op === "in" ? sql`${expr} IN (${list})` : sql`(${expr} IS NULL OR ${expr} NOT IN (${list}))`;
     }
     case "eq":
-      return def.type === "number" ? sql`${expr} = ${toNumber(def, filter.value)}` : sql`lower(${expr}) = lower(${filter.value})`;
+      return def.type === "number" ? sql`${expr} = ${toNumber(def, filter.value)}` : sql`lower((${expr})::text) = lower(${filter.value})`;
     case "ct":
       return like(expr, `%${escapeLike(filter.value)}%`);
     case "sw":
@@ -118,11 +126,16 @@ function compileOne(def: FilterFieldDef, filter: GridFilter, options: CompileOpt
     case "ew":
       return like(expr, `%${escapeLike(filter.value)}`);
     case "ex":
-      return sql`(${expr} IS NOT NULL AND ${expr} <> '')`;
+      return sql`(${expr} IS NOT NULL AND (${expr})::text <> '')`;
     case "empty":
-      return sql`(${expr} IS NULL OR ${expr} = '')`;
+      return sql`(${expr} IS NULL OR (${expr})::text = '')`;
     case "bool":
-      return sql`${expr} = ${filter.value ? 1 : 0}`;
+      // SQLite compared `expr = 1/0`. The expression can be a boolean column ('true'/'false'),
+      // a 0/1 integer expression ('1'/'0') or a jsonb custom-field toggle (`->>` text
+      // 'true'/'false'), so compare the text form; NULL/missing matches neither, as before.
+      return filter.value
+        ? sql`(${expr})::text IN ('true', '1')`
+        : sql`(${expr})::text IN ('false', '0')`;
     case "rng": {
       if (def.type === "date") return rangeSql(expr, filter.min, filter.max);
       return rangeSql(expr, filter.min === undefined ? undefined : toNumber(def, filter.min), filter.max === undefined ? undefined : toNumber(def, filter.max));
@@ -161,12 +174,12 @@ export function compileFilters(
 export function compileQuickSearch(
   q: string | undefined,
   mode: QuickSearchMode,
-  fields: readonly (SQLiteColumn | SQL)[],
+  fields: readonly (PgColumn | SQL)[],
 ): SQL | undefined {
   const text = q?.trim();
   if (!text || fields.length === 0) return undefined;
   const parts = fields.map((field) =>
-    mode === "eq" ? sql`lower(${field}) = lower(${text})` : like(sql`${field}`, `${escapeLike(text)}%`),
+    mode === "eq" ? sql`lower((${field})::text) = lower(${text})` : like(sql`${field}`, `${escapeLike(text)}%`),
   );
   return parts.length === 1 ? parts[0] : sql`(${sql.join(parts, sql` OR `)})`;
 }

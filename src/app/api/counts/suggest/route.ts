@@ -6,5 +6,5 @@ import { countSuggestQuerySchema, suggestCountTargets } from "@/server/repositor
 export const GET = defineRoute({
   permission: [P.create, P.edit],
   query: countSuggestQuerySchema,
-  handler: ({ db, auth, query }) => suggestCountTargets(db, auth.scope, query),
+  handler: async ({ db, auth, query }) => await suggestCountTargets(db, auth.scope, query),
 });

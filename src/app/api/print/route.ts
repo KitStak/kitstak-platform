@@ -22,7 +22,7 @@ export const POST = defineRoute({
   body: bodySchema,
   handler: async ({ db, auth, body }) => {
     const { ownerEntityType, ownerEntityId, ...request } = body;
-    if (ownerEntityType && ownerEntityId) requireEntity(db, auth, ownerEntityType, ownerEntityId, "view");
+    if (ownerEntityType && ownerEntityId) await requireEntity(db, auth, ownerEntityType, ownerEntityId, "view");
     const file = await printToFile(db, { request, userId: auth.user.id, ownerEntityType, ownerEntityId });
     return created({ fileId: file.id, name: file.name, mime: file.mime, size: file.size, url: `/api/files/${file.id}?inline=1` });
   },

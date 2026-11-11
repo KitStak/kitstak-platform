@@ -7,8 +7,8 @@ import { listResult } from "@/server/api/envelope";
 import { listOrderPickerGrid } from "@/server/repositories/platform-order-picker";
 
 export const GET = defineRoute({
-  handler: ({ db, auth, searchParams }) => {
-    const { rows, total, page, pageSize } = listOrderPickerGrid(db, auth.viewScope, searchParams);
+  handler: async ({ db, auth, searchParams }) => {
+    const { rows, total, page, pageSize } = await listOrderPickerGrid(db, auth.viewScope, searchParams);
     return listResult(rows, { total, page, pageSize });
   },
 });

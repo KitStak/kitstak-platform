@@ -3,7 +3,8 @@
  * trigger in sequence (honouring stop-processing), dispatches matched actions to
  * `src/server/workflows/actions` (M12) and writes `workflow_runs`.
  */
-import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import type { WORKFLOW_TRIGGERS } from "@/lib/enums";
 import * as schema from "@/server/db/schema";
 import {
@@ -13,6 +14,7 @@ import { evaluateConditions, type Facts } from "./conditions";
 import { describeError, DomainError } from "./errors";
 import { orderFacts } from "./facts";
 import { nowIso, type DomainCtx, type Tx } from "./types";
+import { withWriteTx } from "@/server/db/sql";
 
 export type WorkflowTrigger = (typeof WORKFLOW_TRIGGERS)[number];
 
@@ -31,18 +33,18 @@ export interface RunWorkflowsOptions {
 }
 
 /** Facts + scope of a workflow entity (also used by the M12 builder test). */
-export function workflowEntityScope(tx: Tx, entity: WorkflowEntityRef): { facts: Facts; warehouseId: string; clientId: string } {
+export async function workflowEntityScope(tx: Tx, entity: WorkflowEntityRef): Promise<{ facts: Facts; warehouseId: string; clientId: string }> {
   if (entity.type === "shipment_order") {
-    const order = tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, entity.id)).get();
+    const order = (await tx.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, entity.id)).limit(1))[0];
     if (!order) throw new DomainError("NOT_FOUND", "Shipment order not found");
-    return { facts: orderFacts(tx, order), warehouseId: order.warehouseId, clientId: order.clientId };
+    return { facts: await orderFacts(tx, order), warehouseId: order.warehouseId, clientId: order.clientId };
   }
-  const po = tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, entity.id)).get();
+  const po = (await tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, entity.id)).limit(1))[0];
   if (!po) throw new DomainError("NOT_FOUND", "Purchase order not found");
   // Purchase-order facts (M12 workflow catalog `purchaseOrder`, rule-fields.ts).
-  const lines = tx.select({ sku: schema.products.sku }).from(schema.purchaseOrderLines)
+  const lines = await tx.select({ sku: schema.products.sku }).from(schema.purchaseOrderLines)
     .innerJoin(schema.products, eq(schema.products.id, schema.purchaseOrderLines.productId))
-    .where(eq(schema.purchaseOrderLines.purchaseOrderId, po.id)).all();
+    .where(eq(schema.purchaseOrderLines.purchaseOrderId, po.id));
   return {
     facts: {
       client: po.clientId, warehouse: po.warehouseId, vendor: po.vendorId, vendorName: po.vendorName, poType: po.poType, orderQuantity: po.totalQuantity,
@@ -53,13 +55,13 @@ export function workflowEntityScope(tx: Tx, entity: WorkflowEntityRef): { facts:
   };
 }
 
-export function runWorkflows(tx: Tx, ctx: DomainCtx, trigger: WorkflowTrigger, entity: WorkflowEntityRef, opts: RunWorkflowsOptions = {}): WorkflowRunSummary[] {
-  const { facts, warehouseId, clientId } = workflowEntityScope(tx, entity);
+export async function runWorkflows(tx: Tx, ctx: DomainCtx, trigger: WorkflowTrigger, entity: WorkflowEntityRef, opts: RunWorkflowsOptions = {}): Promise<WorkflowRunSummary[]> {
+  const { facts, warehouseId, clientId } = await workflowEntityScope(tx, entity);
   const w = schema.workflows;
-  const active = tx.select().from(w).where(and(
+  const active = await tx.select().from(w).where(and(
     eq(w.trigger, trigger), eq(w.isActive, true),
     or(isNull(w.warehouseId), eq(w.warehouseId, warehouseId)), or(isNull(w.clientId), eq(w.clientId, clientId)),
-  )).orderBy(asc(w.sequence), asc(w.createdAt)).all();
+  )).orderBy(asc(w.sequence), asc(w.createdAt));
   const summaries: WorkflowRunSummary[] = [];
   for (const wf of active) {
     const matched = evaluateConditions(wf.conditions, facts, wf.match);
@@ -71,7 +73,7 @@ export function runWorkflows(tx: Tx, ctx: DomainCtx, trigger: WorkflowTrigger, e
         const executor = opts.executors?.[action.action] ?? getWorkflowActionExecutor(action.action);
         if (!executor) { errors.push(`Action '${action.action}' is not configured yet.`); continue; }
         try {
-          const result = tx.transaction((inner) => executor(inner, ctx, { entity, params: action.params, workflowId: wf.id, workflowName: wf.name }));
+          const result = await withWriteTx(tx, async (inner) => executor(inner, ctx, { entity, params: action.params, workflowId: wf.id, workflowName: wf.name }));
           if (result.applied) applied.push(action.action);
           if (result.blockType && blockType !== "Fully") blockType = result.blockType;
           if (result.message && !result.applied) errors.push(result.message);
@@ -79,12 +81,12 @@ export function runWorkflows(tx: Tx, ctx: DomainCtx, trigger: WorkflowTrigger, e
           errors.push(`${action.action}: ${describeError(error).message}`);
         }
       }
-      tx.update(w).set({ runCount: sql`${w.runCount} + 1`, lastRunAt: nowIso() }).where(eq(w.id, wf.id)).run();
+      await tx.update(w).set({ runCount: sql`${w.runCount} + 1`, lastRunAt: nowIso() }).where(eq(w.id, wf.id));
     }
-    tx.insert(schema.workflowRuns).values({
+    await tx.insert(schema.workflowRuns).values({
       workflowId: wf.id, entityType: entity.type, entityId: entity.id, matched, actionsApplied: applied,
       blockType, error: errors.length > 0 ? errors.join(" ") : null,
-    }).run();
+    });
     summaries.push({ workflowId: wf.id, name: wf.name, matched, actionsApplied: applied, blockType, errors });
     if (matched && wf.stopProcessing) break;
   }

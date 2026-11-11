@@ -11,9 +11,9 @@ import { createScreenConfig, listScreenConfigs } from "@/server/repositories/scr
 export const GET = defineRoute({
   permission: "settings.screen_configuration.view",
   query: z.object({ operationType: z.enum(OPERATION_TYPES).default("Receiving") }).passthrough(),
-  handler: ({ db, auth, query, grid }) => {
+  handler: async ({ db, auth, query, grid }) => {
     const gq = grid();
-    const { rows, total } = listScreenConfigs(db, auth, gq, query.operationType);
+    const { rows, total } = await listScreenConfigs(db, auth, gq, query.operationType);
     return listResult(rows, { total, page: gq.page, pageSize: gq.pageSize });
   },
 });
@@ -21,9 +21,9 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.screen_configuration.create",
   body: screenConfigSchema,
-  handler: ({ db, auth, actor, body, audit }) => {
-    const row = createScreenConfig(db, auth, actor, body);
-    audit({ action: "screen_config.create", entity: "screen_config", entityId: row.id, detail: { name: row.name } });
+  handler: async ({ db, auth, actor, body, audit }) => {
+    const row = await createScreenConfig(db, auth, actor, body);
+    await audit({ action: "screen_config.create", entity: "screen_config", entityId: row.id, detail: { name: row.name } });
     return created(row);
   },
 });

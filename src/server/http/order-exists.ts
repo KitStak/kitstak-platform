@@ -1,13 +1,14 @@
 import { eq, or, sql } from "drizzle-orm";
-import { db, schema } from "@/server/db";
+import { getDb, schema } from "@/server/db";
 
 /** True when a shipment order exists with this id (UUID) or code (SO010840, any case). */
-export function orderExists(key: string): boolean {
+export async function orderExists(key: string): Promise<boolean> {
   const { shipmentOrders } = schema;
-  const row = db
+  const db = await getDb();
+  const [row] = await db
     .select({ id: shipmentOrders.id })
     .from(shipmentOrders)
     .where(or(eq(shipmentOrders.id, key.toLowerCase()), eq(sql`upper(${shipmentOrders.code})`, key.toUpperCase())))
-    .get();
+    .limit(1);
   return row !== undefined;
 }

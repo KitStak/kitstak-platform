@@ -20,7 +20,7 @@ export const POST = defineRoute({
   body: z.object({ orderIds: z.array(idSchema).max(200).default([]) }),
   transaction: false,
   handler: async ({ db, auth, params, body }) => {
-    const t = getPrintout(db, params.id);
+    const t = await getPrintout(db, params.id);
     const bytes = await previewPdf(db, auth, t.typeKey, t.layout, body.orderIds);
     return new NextResponse(new Uint8Array(bytes), { headers: { "content-type": "application/pdf", "content-disposition": `inline; filename="${t.name.replace(/[^A-Za-z0-9 _-]/g, "")}.pdf"` } });
   },

@@ -23,4 +23,4 @@ export interface TaskExecution {
   readonly resolutionJobId?: string | null;
 }
 
-export type TaskHandler = (tx: Tx, ctx: DomainCtx, task: TaskRow, input: TaskExecuteInput) => TaskExecution;
+export type TaskHandler = (tx: Tx, ctx: DomainCtx, task: TaskRow, input: TaskExecuteInput) => Promise<TaskExecution>;

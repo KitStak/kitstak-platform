@@ -10,8 +10,8 @@ export const GET = defineRoute({
   params: idParamsSchema,
   query: pagingSchema,
   handler: async ({ db, auth, params, query }) => {
-    loadWaveRule(db, auth, params.id);
-    const { rows, total } = await withBusyRetry(() => listEntityChangeLog(db, WAVE_RULE_ENTITY, params.id, query.page, query.ps));
+    await loadWaveRule(db, auth, params.id);
+    const { rows, total } = await withBusyRetry(async () => await listEntityChangeLog(db, WAVE_RULE_ENTITY, params.id, query.page, query.ps));
     return listResult(rows, { total, page: query.page, pageSize: query.ps });
   },
 });

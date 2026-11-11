@@ -84,8 +84,8 @@ describe("catalog read permissions", () => {
 
 describe("API contract", () => {
   let w: World;
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
   });
   afterEach(() => w.close());
   const scope = () => ({ warehouseIds: [w.warehouseId], clientIds: "all" as const });
@@ -94,13 +94,13 @@ describe("API contract", () => {
   const input = (sku: string, extra: Partial<ProductFormValues> = {}): ProductInput =>
     ({ ...emptyProductForm("Product", w.clientId), sku, name: `${sku} name`, packTypes: [unit()], ...extra }) as ProductInput;
 
-  it("accepts a body without hazmat and customs objects", () => {
+  it("accepts a body without hazmat and customs objects", async () => {
     const { hazmat: _h, customs: _c, ...rest } = input("API-NO-SUB") as Record<string, unknown>;
     void _h;
     void _c;
     expect(productInputSchema.safeParse(rest).success).toBe(true);
-    const row = createProductFromWizard(w.db, ctx(), rest as ProductInput);
-    expect(getProductForm(w.db, scope(), row.id)?.hazmat.type).toBeNull();
+    const row = await createProductFromWizard(w.db, ctx(), rest as ProductInput);
+    expect((await getProductForm(w.db, scope(), row.id))?.hazmat.type).toBeNull();
   });
 
   it("validates tax rate with an inline message instead of clamping", () => {
@@ -111,23 +111,23 @@ describe("API contract", () => {
     expect(neg.error?.issues.find((i) => i.path[0] === "salesPrice")?.message).toBe("Must be 0 or more");
   });
 
-  it("PATCH merges a partial body over the stored product", () => {
-    const row = createProductFromWizard(w.db, ctx(), input("PATCH-1", { description: "keep me", packTypes: [unit(["PB-1"])], customs: { ...emptyProductForm("Product").customs, hsCode: "6109" } }));
-    updateProductFromWizard(w.db, ctx(), row.id, { name: "Renamed", version: row.version, customs: { manufacturer: "ACME" } } as unknown as ProductInput);
-    const form = getProductForm(w.db, scope(), row.id);
+  it("PATCH merges a partial body over the stored product", async () => {
+    const row = await createProductFromWizard(w.db, ctx(), input("PATCH-1", { description: "keep me", packTypes: [unit(["PB-1"])], customs: { ...emptyProductForm("Product").customs, hsCode: "6109" } }));
+    await updateProductFromWizard(w.db, ctx(), row.id, { name: "Renamed", version: row.version, customs: { manufacturer: "ACME" } } as unknown as ProductInput);
+    const form = await getProductForm(w.db, scope(), row.id);
     expect(form?.name).toBe("Renamed");
     expect(form?.description).toBe("keep me");
     expect(form?.packTypes[0]?.barcodes).toEqual(["PB-1"]);
     expect(form?.customs.hsCode).toBe("6109");
     expect(form?.customs.manufacturer).toBe("ACME");
-    expect(() => updateProductFromWizard(w.db, ctx(), row.id, { name: "Stale", version: row.version } as unknown as ProductInput)).toThrow();
+    await expect(async () => await updateProductFromWizard(w.db, ctx(), row.id, { name: "Stale", version: row.version } as unknown as ProductInput)).rejects.toThrow();
   });
 
-  it("rejects a kit barcode already used by another product of the same client", () => {
-    createProductFromWizard(w.db, ctx(), input("BC-P", { packTypes: [unit(["777000111"])] }));
+  it("rejects a kit barcode already used by another product of the same client", async () => {
+    await createProductFromWizard(w.db, ctx(), input("BC-P", { packTypes: [unit(["777000111"])] }));
     const kit = { ...emptyProductForm("Kit", w.clientId), sku: "KIT-BC", name: "kit", kitType: "Kit to Order", barcode: "777000111", components: [{ productId: w.productId, sku: "x", name: "x", imageUrl: null, quantity: 1 }] } as unknown as ProductInput;
-    expect(() => createProductFromWizard(w.db, ctx(), kit)).toThrow(/777000111 is already used by BC-P/);
-    const ok = createProductFromWizard(w.db, ctx(), { ...kit, barcode: "777000222" } as ProductInput);
-    expect(w.db.select().from(schema.products).where(eq(schema.products.id, ok.id)).get()?.barcode).toBe("777000222");
+    await expect(async () => await createProductFromWizard(w.db, ctx(), kit)).rejects.toThrow(/777000111 is already used by BC-P/);
+    const ok = await createProductFromWizard(w.db, ctx(), { ...kit, barcode: "777000222" } as ProductInput);
+    expect((await w.db.select().from(schema.products).where(eq(schema.products.id, ok.id)).limit(1))[0]?.barcode).toBe("777000222");
   });
 });

@@ -7,5 +7,5 @@ import { scopedCtx } from "@/server/repositories/returns";
 export const POST = defineRoute({
   permission: PACKING_PERMISSIONS.reportIssue,
   body: reportIssueSchema,
-  handler: ({ db, auth, actor, body }) => reportIssue(db, scopedCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await reportIssue(db, scopedCtx(actor, auth), body),
 });

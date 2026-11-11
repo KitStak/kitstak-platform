@@ -20,8 +20,8 @@ export const POST = defineRoute({
     if (!isSameOriginRequest(request)) throw new AppError("CSRF", "Cross-site logout is not allowed");
     const session = await getRequestSession(db, request);
     if (session.ok) {
-      revokeSession(db, session.user.sessionId);
-      audit({ action: "auth.logout", entity: "user", entityId: session.user.id });
+      await revokeSession(db, session.user.sessionId);
+      await audit({ action: "auth.logout", entity: "user", entityId: session.user.id });
     }
     const response = NextResponse.json(successBody({ loggedOut: true }));
     clearSessionCookie(response);

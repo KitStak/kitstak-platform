@@ -6,11 +6,11 @@ import { deleteRoles, rolesByIds } from "@/server/repositories/roles";
 export const POST = defineRoute({
   permission: "settings.roles.delete",
   body: bulkIdsSchema,
-  handler: ({ db, auth, actor, body, audit }) => {
+  handler: async ({ db, auth, actor, body, audit }) => {
     // Snapshot names first: after the delete the audit grid can't look them up any more.
-    const names = new Map(rolesByIds(db, body.ids).map((x) => [x.id, x.name]));
-    const result = deleteRoles(db, auth, actor, body.ids);
-    for (const id of result.succeeded) audit({ action: "role.delete", entity: "role", entityId: id, detail: { name: names.get(id) ?? null } });
+    const names = new Map((await rolesByIds(db, body.ids)).map((x) => [x.id, x.name]));
+    const result = await deleteRoles(db, auth, actor, body.ids);
+    for (const id of result.succeeded) await audit({ action: "role.delete", entity: "role", entityId: id, detail: { name: names.get(id) ?? null } });
     return result;
   },
 });

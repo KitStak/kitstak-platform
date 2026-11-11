@@ -7,6 +7,7 @@ import type { AppDb } from "@/server/api/db";
 import type { AnalyticsChart, AnalyticsKpi, AnalyticsRow, OperationalPage, TimingShare } from "./analytics-types";
 import { clIn, dayFilter, daySql, fmtInt, fmtMoney, hourFilter, localDayOf, PALETTE, rangeFilter, round, whIn, type Range } from "./analytics-common";
 import { clientQs, loadTaskFacts, MIN_TASK_MINUTES, RECEIVING_GRID, TASKS_GRID as TASKS, taskGridOf, tasksHref, timingShare, type TaskFact } from "./analytics-labor";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 type Built = { kpis: AnalyticsKpi[]; charts: AnalyticsChart[]; timing?: TimingShare };
 const enc = encodeURIComponent;
@@ -38,8 +39,8 @@ export function agingBucket(receivedAt: string, now: Date = new Date()): (typeof
   return AGING_BUCKETS[3];
 }
 
-function inbound(db: AppDb, r: Range, wh: readonly string[]): Built {
-  const receipts = db.all<{ d: string; kind: string; units: number }>(sql`
+async function inbound(db: AppDb, r: Range, wh: readonly string[]): Promise<Built> {
+  const receipts = await dbAll<{ d: string; kind: string; units: number }>(db, sql`
     SELECT ${daySql("received_at", r)} AS d, CASE WHEN type = 'Return' THEN 'returns' ELSE 'po' END AS kind, SUM(uom_quantity) AS units
     FROM receipts WHERE cancelled_at IS NULL AND type IN ('Purchase Order', 'Return', 'Product Receive', 'Add Inventory')
       AND received_at >= ${r.fromIso} AND received_at < ${r.toIso} AND ${whIn("warehouse_id", wh)} AND ${clIn("client_id", r)} GROUP BY 1, 2`);
@@ -50,7 +51,7 @@ function inbound(db: AppDb, r: Range, wh: readonly string[]): Built {
     href: `${RECEIVING_GRID}?${dayFilter("receivedAt", day, r)}${clientQs(r)}`,
   }));
   // Dock-to-stock: receipt into a Receiving location → first move out of it for that product.
-  const d2s = db.get<{ hrs: number | null; n: number; pending: number }>(sql`
+  const d2s = await dbGet<{ hrs: number | null; n: number; pending: number }>(db, sql`
     WITH rc AS (
       SELECT r.id, r.received_at, (SELECT MIN(t.at) FROM inventory_transactions t
         WHERE t.from_location_id = r.location_id AND t.product_id = r.product_id AND t.at >= r.received_at
@@ -58,9 +59,9 @@ function inbound(db: AppDb, r: Range, wh: readonly string[]): Built {
       FROM receipts r JOIN locations l ON l.id = r.location_id
       WHERE r.cancelled_at IS NULL AND l.type = 'Receiving' AND r.received_at >= ${r.fromIso} AND r.received_at < ${r.toIso} AND ${whIn("r.warehouse_id", wh)} AND ${clIn("r.client_id", r)}
     )
-    SELECT AVG(CASE WHEN moved_at IS NOT NULL THEN (julianday(moved_at) - julianday(received_at)) * 24 END) AS hrs,
-           SUM(moved_at IS NOT NULL) AS n, SUM(moved_at IS NULL) AS pending FROM rc`);
-  const inv = db.all<{ sku: string; pid: string; units: number; value: number; received: string }>(sql`
+    SELECT (AVG(CASE WHEN moved_at IS NOT NULL THEN (EXTRACT(EPOCH FROM ((moved_at)::timestamptz - (received_at)::timestamptz)) / 86400.0::float8) * 24 END))::float8 AS hrs,
+           SUM((moved_at IS NOT NULL)::int) AS n, SUM((moved_at IS NULL)::int) AS pending FROM rc`);
+  const inv = await dbAll<{ sku: string; pid: string; units: number; value: number; received: string }>(db, sql`
     SELECT p.sku AS sku, p.id AS pid, i.on_hand AS units, i.on_hand * COALESCE(p.purchase_price, p.price, 0) AS value, i.received_at AS received
     FROM inventory i JOIN products p ON p.id = i.product_id WHERE i.on_hand > 0 AND ${whIn("i.warehouse_id", wh)} AND ${clIn("i.client_id", r)}`);
   const now = new Date();
@@ -110,11 +111,11 @@ export function onTimePct(shipped: number, onTime: number): number {
   return shipped > 0 ? round((onTime / shipped) * 100, 1) : 0;
 }
 
-function fulfillment(db: AppDb, r: Range, wh: readonly string[]): Built {
-  const created = db.all<{ d: string; n: number }>(sql`SELECT ${daySql("order_date", r)} AS d, COUNT(*) AS n FROM shipment_orders
+async function fulfillment(db: AppDb, r: Range, wh: readonly string[]): Promise<Built> {
+  const created = await dbAll<{ d: string; n: number }>(db, sql`SELECT ${daySql("order_date", r)} AS d, COUNT(*) AS n FROM shipment_orders
     WHERE deleted_at IS NULL AND order_date >= ${r.fromIso} AND order_date < ${r.toIso} AND ${whIn("warehouse_id", wh)} AND ${clIn("client_id", r)} GROUP BY 1`);
-  const shipped = db.all<{ d: string; n: number; ontime: number; dated: number }>(sql`SELECT ${daySql("shipped_at", r)} AS d, COUNT(*) AS n,
-      SUM(expected_ship_date IS NOT NULL AND substr(shipped_at, 1, 10) <= substr(expected_ship_date, 1, 10)) AS ontime, SUM(expected_ship_date IS NOT NULL) AS dated
+  const shipped = await dbAll<{ d: string; n: number; ontime: number; dated: number }>(db, sql`SELECT ${daySql("shipped_at", r)} AS d, COUNT(*) AS n,
+      SUM((expected_ship_date IS NOT NULL AND substr(shipped_at, 1, 10) <= substr(expected_ship_date, 1, 10))::int) AS ontime, SUM((expected_ship_date IS NOT NULL)::int) AS dated
     FROM shipment_orders WHERE deleted_at IS NULL AND status IN ('Shipped', 'Partially Shipped', 'Delivered') AND shipped_at >= ${r.fromIso} AND shipped_at < ${r.toIso}
       AND ${whIn("warehouse_id", wh)} AND ${clIn("client_id", r)} GROUP BY 1`);
   const whQs = `${wh.length ? `&f.warehouseId=in:${wh.join(",")}` : ""}${clientQs(r)}`;
@@ -125,10 +126,10 @@ function fulfillment(db: AppDb, r: Range, wh: readonly string[]): Built {
     // The current day is still in progress: its on-time % is not final, so it is left off the line.
     onTimePct: (() => { const s = shipped.find((x) => x.d === day); return partialDayOnTime(day, today, s ? Number(s.dated) : 0, s ? Number(s.ontime) : 0); })(),
   }));
-  const backlog = db.all<{ status: string; n: number }>(sql`SELECT status, COUNT(*) AS n FROM shipment_orders WHERE deleted_at IS NULL
+  const backlog = await dbAll<{ status: string; n: number }>(db, sql`SELECT status, COUNT(*) AS n FROM shipment_orders WHERE deleted_at IS NULL
     AND status NOT IN ('Shipped', 'Partially Shipped', 'Delivered', 'Cancelled') AND ${whIn("warehouse_id", wh)} AND ${clIn("client_id", r)} GROUP BY 1 ORDER BY n DESC`);
   const backlogRows: AnalyticsRow[] = backlog.map((b) => ({ status: b.status, orders: Number(b.n), href: `/orders?f.status=in:${enc(b.status)}${whQs}` }));
-  const shortages = db.all<{ sku: string; qty: number; lines: number }>(sql`SELECT p.sku AS sku, SUM(s.shortage_qty) AS qty, COUNT(*) AS lines
+  const shortages = await dbAll<{ sku: string; qty: number; lines: number }>(db, sql`SELECT p.sku AS sku, SUM(s.shortage_qty) AS qty, COUNT(*) AS lines
     FROM order_line_shortages s JOIN order_lines l ON l.id = s.order_line_id JOIN shipment_orders o ON o.id = s.order_id JOIN products p ON p.id = l.product_id
     WHERE s.resolved_at IS NULL AND ${whIn("o.warehouse_id", wh)} AND ${clIn("o.client_id", r)} GROUP BY p.sku ORDER BY qty DESC LIMIT 10`);
   const shortRows: AnalyticsRow[] = shortages.map((s) => ({ sku: s.sku, qty: Number(s.qty), lines: Number(s.lines), href: `/jobs/shortage?q=${enc(s.sku)}&qm=eq` }));
@@ -164,18 +165,18 @@ export interface OperationalOptions {
   readonly money: boolean;
 }
 
-function management(db: AppDb, r: Range, wh: readonly string[], opts: OperationalOptions): Built {
-  const rows = db.all<{ cid: string; client: string; orders: number; units: number; revenue: number }>(sql`
+async function management(db: AppDb, r: Range, wh: readonly string[], opts: OperationalOptions): Promise<Built> {
+  const rows = await dbAll<{ cid: string; client: string; orders: number; units: number; revenue: number }>(db, sql`
     SELECT c.id AS cid, c.name AS client, COUNT(o.id) AS orders, COALESCE(SUM(o.total_quantity), 0) AS units, COALESCE(SUM(o.sales_price), 0) AS revenue
     FROM shipment_orders o JOIN clients c ON c.id = o.client_id
     WHERE o.deleted_at IS NULL AND o.status IN ('Shipped', 'Partially Shipped', 'Delivered') AND o.shipped_at >= ${r.fromIso} AND o.shipped_at < ${r.toIso} AND ${whIn("o.warehouse_id", wh)} AND ${clIn("o.client_id", r)}
     GROUP BY c.id`);
-  const rec = db.all<{ cid: string; units: number }>(sql`SELECT client_id AS cid, SUM(uom_quantity) AS units FROM receipts WHERE cancelled_at IS NULL
+  const rec = await dbAll<{ cid: string; units: number }>(db, sql`SELECT client_id AS cid, SUM(uom_quantity) AS units FROM receipts WHERE cancelled_at IS NULL
     AND received_at >= ${r.fromIso} AND received_at < ${r.toIso} AND ${whIn("warehouse_id", wh)} AND ${clIn("client_id", r)} GROUP BY 1`);
   // Billing money is never queried for a viewer without the billing view permission.
-  const bills = opts.money ? db.all<{ cid: string; total: number }>(sql`SELECT client_id AS cid, SUM(total_price) AS total FROM billing_reports
+  const bills = opts.money ? await dbAll<{ cid: string; total: number }>(db, sql`SELECT client_id AS cid, SUM(total_price) AS total FROM billing_reports
     WHERE period_end >= ${r.from} AND period_start <= ${r.to} AND ${whIn("warehouse_id", wh)} AND ${clIn("client_id", r)} GROUP BY 1`) : [];
-  const names = new Map(db.all<{ id: string; name: string }>(sql`SELECT id, name FROM clients`).map((c) => [c.id, c.name]));
+  const names = new Map((await dbAll<{ id: string; name: string }>(db, sql`SELECT id, name FROM clients`)).map((c) => [c.id, c.name]));
   const mgmtWhQs = wh.length ? `&f.warehouseId=in:${wh.join(",")}` : "";
   const shippedHref = `/orders/shipped?${SHIPPED_STATUSES_QS}&${rangeFilter("shippedAt", r)}${mgmtWhQs}`;
   const ids = new Set([...rows.map((x) => x.cid), ...rec.map((x) => x.cid), ...bills.map((x) => x.cid)]);
@@ -334,9 +335,9 @@ export function busiestHourOfDay(cells: readonly { readonly day: string; readonl
   return { hour, avg, days, label: `${hh(hour)}–${hh((hour + 1) % 24)}` };
 }
 
-function productivity(db: AppDb, r: Range, wh: readonly string[]): Built {
-  const facts = loadTaskFacts(db, r, wh);
-  const meta = db.all<{ id: string; fin: string; tz: string; s: string; e: string }>(sql`SELECT t.id AS id, t.finished_at AS fin, w.timezone AS tz, w.day_shift_start AS s, w.day_shift_end AS e
+async function productivity(db: AppDb, r: Range, wh: readonly string[]): Promise<Built> {
+  const facts = await loadTaskFacts(db, r, wh);
+  const meta = await dbAll<{ id: string; fin: string; tz: string; s: string; e: string }>(db, sql`SELECT t.id AS id, t.finished_at AS fin, w.timezone AS tz, w.day_shift_start AS s, w.day_shift_end AS e
     FROM tasks t JOIN warehouses w ON w.id = t.warehouse_id WHERE t.status = 'Completed' AND t.finished_at >= ${r.fromIso} AND t.finished_at < ${r.toIso} AND ${whIn("t.warehouse_id", wh)} AND ${clIn("t.client_id", r)}`);
   const byId = new Map(meta.map((m) => [m.id, m]));
   const areas = new Map<string, AreaAgg>();
@@ -423,9 +424,9 @@ function productivity(db: AppDb, r: Range, wh: readonly string[]): Built {
   };
 }
 
-export function buildOperational(db: AppDb, page: OperationalPage, r: Range, wh: readonly string[], opts: OperationalOptions = { money: false }): Built {
-  if (page === "inbound-inventory") return inbound(db, r, wh);
-  if (page === "fulfillment") return fulfillment(db, r, wh);
-  if (page === "management") return management(db, r, wh, opts);
-  return productivity(db, r, wh);
+export async function buildOperational(db: AppDb, page: OperationalPage, r: Range, wh: readonly string[], opts: OperationalOptions = { money: false }): Promise<Built> {
+  if (page === "inbound-inventory") return await inbound(db, r, wh);
+  if (page === "fulfillment") return await fulfillment(db, r, wh);
+  if (page === "management") return await management(db, r, wh, opts);
+  return await productivity(db, r, wh);
 }

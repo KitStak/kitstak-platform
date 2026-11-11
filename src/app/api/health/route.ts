@@ -5,16 +5,17 @@ import { defineRoute } from "@/server/api/define-route";
 import { successBody } from "@/server/api/envelope";
 import * as scheduler from "@/server/scheduler";
 import { log } from "@/server/log";
+import { dbGet } from "@/server/db/sql";
 
 interface MigrationStatus {
   readonly applied: number;
   readonly latestAppliedAt: string | null;
 }
 
-function checkDb(db: AppDb): { ok: boolean; latencyMs: number } {
+async function checkDb(db: AppDb): Promise<{ ok: boolean; latencyMs: number }> {
   const started = performance.now();
   try {
-    db.get(sql`SELECT 1 AS ok`);
+    await dbGet(db, sql`SELECT 1 AS ok`);
     return { ok: true, latencyMs: Math.round((performance.now() - started) * 100) / 100 };
   } catch (error: unknown) {
     log.error("health: db check failed", { err: error });
@@ -22,11 +23,9 @@ function checkDb(db: AppDb): { ok: boolean; latencyMs: number } {
   }
 }
 
-function migrationStatus(db: AppDb): MigrationStatus | null {
+async function migrationStatus(db: AppDb): Promise<MigrationStatus | null> {
   try {
-    const row = db.get<{ n: number; latest: number | null }>(
-      sql`SELECT COUNT(*) AS n, MAX(created_at) AS latest FROM __drizzle_migrations`,
-    );
+    const row = await dbGet<{ n: number; latest: number | null }>(db, sql`SELECT COUNT(*) AS n, MAX(created_at) AS latest FROM drizzle.__drizzle_migrations`);
     return { applied: row?.n ?? 0, latestAppliedAt: row?.latest ? new Date(Number(row.latest)).toISOString() : null };
   } catch {
     return null;
@@ -54,9 +53,9 @@ function schedulerStatus(): Record<string, unknown> {
 export const GET = defineRoute({
   name: "GET /api/health",
   auth: "public",
-  handler: ({ db }) => {
-    const database = checkDb(db);
-    const migrations = migrationStatus(db);
+  handler: async ({ db }) => {
+    const database = await checkDb(db);
+    const migrations = await migrationStatus(db);
     const healthy = database.ok && migrations !== null && migrations.applied > 0;
     const body = successBody({
       status: healthy ? "ok" : "degraded",

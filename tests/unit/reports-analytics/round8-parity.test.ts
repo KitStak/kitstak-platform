@@ -50,47 +50,47 @@ describe("snapshot report on the DB", () => {
   let w: World;
   let auth: AuthContext;
   const q = (qs = ""): GridQuery => ({ ...EMPTY_GRID_QUERY, ...parseGridQuery(qs).query, pageSize: 500 });
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   });
   afterEach(() => w.close());
 
-  it("never double counts a bucket when a night ran twice, and the latest chip shows one run", () => {
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 7 });
+  it("never double counts a bucket when a night ran twice, and the latest chip shows one run", async () => {
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 7 });
     // Chicago: 11/08 run, then two runs on 11/09 (catch-up + regular), then 11/10.
-    for (const at of ["2026-11-08T06:02:00.000Z", "2026-11-09T07:30:00.000Z", "2026-11-10T03:00:00.000Z", "2026-11-10T06:02:00.000Z"]) snapshotWarehouse(w.db, w.warehouseId, at);
-    const all = listSnapshot(w.db, auth, q());
+    for (const at of ["2026-11-08T06:02:00.000Z", "2026-11-09T07:30:00.000Z", "2026-11-10T03:00:00.000Z", "2026-11-10T06:02:00.000Z"]) await snapshotWarehouse(w.db, w.warehouseId, at);
+    const all = await listSnapshot(w.db, auth, q());
     // 4 runs, but 11/09 has two: 3 business days × 1 bucket.
     expect(all.total).toBe(3);
     expect(new Set(all.rows.map((r) => r.businessDate))).toEqual(new Set(["2026-11-08", "2026-11-09", "2026-11-10"]));
-    const latest = listSnapshot(w.db, auth, q(SNAPSHOT_DEFAULT_FILTER));
+    const latest = await listSnapshot(w.db, auth, q(SNAPSHOT_DEFAULT_FILTER));
     expect(latest.total).toBe(1);
     expect(latest.rows[0]).toMatchObject({ businessDate: "2026-11-10", snapshotAt: "2026-11-10T06:02:00.000Z", uomQty: 7 });
-    expect(listSnapshot(w.db, auth, q("f.businessDate=date:custom:2026-11-09..2026-11-09")).rows.map((r) => r.snapshotAt)).toEqual(["2026-11-10T03:00:00.000Z"]);
-    const cov = snapshotCoverage(w.db, auth);
+    expect((await listSnapshot(w.db, auth, q("f.businessDate=date:custom:2026-11-09..2026-11-09"))).rows.map((r) => r.snapshotAt)).toEqual(["2026-11-10T03:00:00.000Z"]);
+    const cov = await snapshotCoverage(w.db, auth);
     expect(cov).toHaveLength(1);
     expect(cov[0]).toMatchObject({ latestDay: "2026-11-10", days: 3, missingDays: [] });
   });
 
-  it("returns an empty page (not an error) with no snapshots and out of scope", () => {
-    expect(listSnapshot(w.db, auth, q(SNAPSHOT_DEFAULT_FILTER)).total).toBe(0);
-    snapshotWarehouse(w.db, w.warehouseId, "2026-11-10T06:02:00.000Z");
+  it("returns an empty page (not an error) with no snapshots and out of scope", async () => {
+    expect((await listSnapshot(w.db, auth, q(SNAPSHOT_DEFAULT_FILTER))).total).toBe(0);
+    await snapshotWarehouse(w.db, w.warehouseId, "2026-11-10T06:02:00.000Z");
     const other = { warehouseIds: ["nope"], clientIds: "all" as const };
-    expect(listSnapshot(w.db, { ...auth, viewScope: other } as AuthContext, q()).total).toBe(0);
+    expect((await listSnapshot(w.db, { ...auth, viewScope: other } as AuthContext, q())).total).toBe(0);
   });
 
-  it("labels the capacity source, flags estimates and summarises the bands", () => {
-    w.db.update(schema.locations).set({ capacityUnits: 10, maxCapacityQty: 0 }).run();
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 12 });
-    const row = listUtilization(w.db, auth, q()).rows.find((r) => r.rowId === w.loc.storageA);
+  it("labels the capacity source, flags estimates and summarises the bands", async () => {
+    await w.db.update(schema.locations).set({ capacityUnits: 10, maxCapacityQty: 0 });
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 12 });
+    const row = (await listUtilization(w.db, auth, q())).rows.find((r) => r.rowId === w.loc.storageA);
     expect(row).toMatchObject({ capacitySource: "Legacy Capacity Units (estimate)", estimated: 1, band: "Over Capacity" });
-    expect(listUtilization(w.db, auth, q("f.estimated=bool:false")).total).toBe(0);
-    const s = utilizationSummary(w.db, auth);
+    expect((await listUtilization(w.db, auth, q("f.estimated=bool:false"))).total).toBe(0);
+    const s = await utilizationSummary(w.db, auth);
     expect(s.bands.map((b) => b.band)).toEqual([...UTILIZATION_BANDS]);
     expect(s.bands.reduce((a, b) => a + b.count, 0)).toBe(s.total);
-    expect(s.total).toBe(listUtilization(w.db, auth, q()).total);
+    expect(s.total).toBe((await listUtilization(w.db, auth, q())).total);
     expect(s.estimated).toBe(s.total);
   });
 });

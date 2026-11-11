@@ -13,20 +13,21 @@ import { loadTaskFacts, LOW_SAMPLE, quadrantOf, quadrantPoints, speedOf, taskMin
 import { agingBucket, onTimePct } from "@/server/repositories/analytics-operational";
 import { chartToCsv } from "@/components/analytics/analytics-export";
 import { createWorld, orderInput, type World } from "../foundation/domain/fixtures";
+import { forEachSeq, mapSeq } from "@/server/db/sql";
 
 let w: World;
 let auth: AuthContext;
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(["settings.users.view", "settings.billing.view"]), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
 afterEach(() => w.close());
 
-const setApp = (key: string, active: boolean) =>
-  w.db.insert(schema.apps).values({ key, name: key, description: "", category: "Analytics", isActive: active })
-    .onConflictDoUpdate({ target: schema.apps.key, set: { isActive: active } }).run();
+const setApp = async (key: string, active: boolean) =>
+  await w.db.insert(schema.apps).values({ key, name: key, description: "", category: "Analytics", isActive: active })
+    .onConflictDoUpdate({ target: schema.apps.key, set: { isActive: active } });
 
 describe("analytics formulas", () => {
   it("task minutes: explicit start/finish, else gap since previous task (capped), else null", () => {
@@ -66,64 +67,64 @@ describe("analytics formulas", () => {
 });
 
 describe("analytics app gate", () => {
-  it("returns the activation gate while Labor Analytics is inactive, and data once active", () => {
-    setApp("labor-analytics", false);
-    expect(getLaborAnalytics(w.db, auth, "average-task", { wh: [], cl: [] }).gate).toMatchObject({ appKey: "labor-analytics" });
-    setApp("labor-analytics", true);
-    const res = getLaborAnalytics(w.db, auth, "average-task", { wh: [], cl: [] });
+  it("returns the activation gate while Labor Analytics is inactive, and data once active", async () => {
+    await setApp("labor-analytics", false);
+    expect((await getLaborAnalytics(w.db, auth, "average-task", { wh: [], cl: [] })).gate).toMatchObject({ appKey: "labor-analytics" });
+    await setApp("labor-analytics", true);
+    const res = await getLaborAnalytics(w.db, auth, "average-task", { wh: [], cl: [] });
     expect(res.gate).toBeNull();
     expect(res.charts.length).toBeGreaterThan(0);
-    setApp("operational-analytics", false);
-    expect(getOperationalAnalytics(w.db, auth, "fulfillment", { wh: [], cl: [] }).gate?.appName).toBe("Operational Analytics");
+    await setApp("operational-analytics", false);
+    expect((await getOperationalAnalytics(w.db, auth, "fulfillment", { wh: [], cl: [] })).gate?.appName).toBe("Operational Analytics");
   });
 
-  it("Performance Quadrant renders every user with correct medians", () => {
-    setApp("labor-analytics", true);
-    const users = ["A", "B", "C"].map((n) => w.db.insert(schema.users).values({ email: `${n}@t.io`, name: n, passwordHash: "x", role: "admin" }).returning().get().id);
-    const job = w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code: "J1", warehouseId: w.warehouseId, jobType: "Picking", status: "Completed" }).returning().get();
+  it("Performance Quadrant renders every user with correct medians", async () => {
+    await setApp("labor-analytics", true);
+    const users = await mapSeq(["A", "B", "C"], async (n) => (await w.db.insert(schema.users).values({ email: `${n}@t.io`, name: n, passwordHash: "x", role: "admin" }).returning())[0].id);
+    const job = (await w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code: "J1", warehouseId: w.warehouseId, jobType: "Picking", status: "Completed" }).returning())[0];
     let no = 0;
     const base = Date.now() - 3_600_000;
     // A: 2 tasks × 6 min, B: 4 tasks × 3 min, C: 6 tasks × 2 min
-    [[users[0], 2, 6], [users[1], 4, 3], [users[2], 6, 2]].forEach(([uid, n, mins]) => {
+    await forEachSeq([[users[0], 2, 6], [users[1], 4, 3], [users[2], 6, 2]], async ([uid, n, mins]) => {
       for (let i = 0; i < Number(n); i += 1) {
         const start = new Date(base + i * 600_000);
         no += 1;
-        w.db.insert(schema.tasks).values({ taskNo: no, jobId: job.id, warehouseId: w.warehouseId, taskType: "Picking", status: "Completed", executedByUserId: String(uid),
-          startedAt: start.toISOString(), finishedAt: new Date(start.getTime() + Number(mins) * 60_000).toISOString() }).run();
+        await w.db.insert(schema.tasks).values({ taskNo: no, jobId: job.id, warehouseId: w.warehouseId, taskType: "Picking", status: "Completed", executedByUserId: String(uid),
+          startedAt: start.toISOString(), finishedAt: new Date(start.getTime() + Number(mins) * 60_000).toISOString() });
       }
     });
-    const chart = getLaborAnalytics(w.db, auth, "performance-quadrant", { wh: [], cl: [] }).charts[0];
+    const chart = (await getLaborAnalytics(w.db, auth, "performance-quadrant", { wh: [], cl: [] })).charts[0];
     expect(chart?.rows.map((r) => r.user).sort()).toEqual(["A", "B", "C"]);
     // Under MIN_QUADRANT_TASKS every associate is low sample: plotted, not ranked.
     expect(chart?.rows.every((r) => r.quadrant === LOW_SAMPLE)).toBe(true);
-    const { med, points } = quadrantPoints(loadTaskFacts(w.db, parseRange({}), [w.warehouseId]), 1);
+    const { med, points } = quadrantPoints(await loadTaskFacts(w.db, parseRange({}), [w.warehouseId]), 1);
     expect(med).toEqual({ x: 4, y: 20 });
     expect(points.find((r) => r.user === "C")).toMatchObject({ volume: 6, speed: 30, quadrant: QUADRANT_LABELS[0] });
   });
 });
 
 describe("live dashboard", () => {
-  it("every status count equals the /orders grid total for its drilldown query", () => {
-    const a = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 2 }]));
-    createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    w.db.update(schema.shipmentOrders).set({ status: "Ready to Pick" }).where(eq(schema.shipmentOrders.id, a.id)).run();
-    const d = getLiveDashboard(w.db, auth, { warehouseIds: [w.warehouseId], clientIds: [] });
+  it("every status count equals the /orders grid total for its drilldown query", async () => {
+    const a = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 2 }]));
+    await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    await w.db.update(schema.shipmentOrders).set({ status: "Ready to Pick" }).where(eq(schema.shipmentOrders.id, a.id));
+    const d = await getLiveDashboard(w.db, auth, { warehouseIds: [w.warehouseId], clientIds: [] });
     for (const m of [...d.breakdown.flat(), d.unfulfilled.total, d.unfulfilled.open, d.unfulfilled.inProgress]) {
       const [path, qs] = m.href.split("?");
       const view = path === "/orders/shipped" ? "shipped" : "backlog";
-      const total = listOrders(w.db, auth.scope, { view, query: { ...EMPTY_GRID_QUERY, ...parseGridQuery(qs ?? "").query } }).total;
+      const total = (await listOrders(w.db, auth.scope, { view, query: { ...EMPTY_GRID_QUERY, ...parseGridQuery(qs ?? "").query } })).total;
       expect({ label: m.label, count: m.count }).toEqual({ label: m.label, count: total });
     }
     expect(d.breakdown[0]?.find((m) => m.label === "Ready to Pick")?.count).toBe(1);
     expect(d.unfulfilled.total.count).toBe(2);
   });
 
-  it("shift info only for exactly one warehouse; ranks link to pre-filtered orders", () => {
-    createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }], { channel: "Shopify" }));
-    const one = getLiveDashboard(w.db, auth, { warehouseIds: [w.warehouseId], clientIds: [] });
+  it("shift info only for exactly one warehouse; ranks link to pre-filtered orders", async () => {
+    await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }], { channel: "Shopify" }));
+    const one = await getLiveDashboard(w.db, auth, { warehouseIds: [w.warehouseId], clientIds: [] });
     expect(one.shift).toMatchObject({ timeZone: "America/Chicago" });
     expect(one.ranks.channels[0]?.href).toContain("f.channel=in");
-    const two = getLiveDashboard(w.db, { ...auth, scope: { warehouseIds: [w.warehouseId, "w2"], clientIds: "all" }, viewScope: { warehouseIds: [w.warehouseId, "w2"], clientIds: "all" } } as unknown as AuthContext, { warehouseIds: [], clientIds: [] });
+    const two = await getLiveDashboard(w.db, { ...auth, scope: { warehouseIds: [w.warehouseId, "w2"], clientIds: "all" }, viewScope: { warehouseIds: [w.warehouseId, "w2"], clientIds: "all" } } as unknown as AuthContext, { warehouseIds: [], clientIds: [] });
     expect(two.shift).toBeNull();
   });
 });

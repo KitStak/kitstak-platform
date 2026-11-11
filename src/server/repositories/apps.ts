@@ -3,7 +3,8 @@
  * gates read `apps.is_active`, e.g. the wave-rule AI Job card) and per-app settings.
  * Changes write `change_log` (entity "app") and the route writes `audit_log`.
  */
-import { asc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import type { AppDb } from "@/server/api/db";
 import { AppError, fromZodError, notFoundError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
@@ -11,6 +12,7 @@ import * as s from "@/server/db/schema";
 import { appSettingsSchema, defaultAppSettings, getAppDef, type AppDef } from "@/lib/grid-defs/admin/apps";
 import { credentialHints, decryptCredentials, encryptCredentials, mergeCredentials } from "@/server/integrations/crypto";
 import { domainCtxOf, logUpdate, type Actor } from "./users-shared";
+import { mapSeq } from "@/server/db/sql";
 
 export const APP_ENTITY = "app";
 
@@ -44,44 +46,44 @@ function publicSettings(def: AppDef | null, raw: Record<string, unknown> | null)
   return out;
 }
 
-function toRow(db: AppDb, r: typeof s.apps.$inferSelect): AppRow {
+async function toRow(db: AppDb, r: typeof s.apps.$inferSelect): Promise<AppRow> {
   const def = getAppDef(r.key) ?? null;
-  const by = r.activatedBy ? db.select({ name: s.users.name }).from(s.users).where(eq(s.users.id, r.activatedBy)).get()?.name ?? null : null;
+  const by = r.activatedBy ? (await db.select({ name: s.users.name }).from(s.users).where(eq(s.users.id, r.activatedBy)).limit(1))[0]?.name ?? null : null;
   return {
     key: r.key, name: r.name, description: r.description, category: r.category, isActive: Boolean(r.isActive), activatedAt: r.activatedAt,
     activatedByName: by, settings: publicSettings(def, r.settings ?? null), secretHints: credentialHints(decryptCredentials((r.settings as Record<string, unknown> | null)?.[SEALED_KEY] as string | undefined)), def,
   };
 }
 
-export function listApps(db: AppDb): AppRow[] {
-  return db.select().from(s.apps).orderBy(asc(s.apps.name)).all().map((r) => toRow(db, r));
+export async function listApps(db: AppDb): Promise<AppRow[]> {
+  return await mapSeq((await db.select().from(s.apps).orderBy(asc(s.apps.name))), async (r) => await toRow(db, r));
 }
 
-export function loadApp(db: AppDb, key: string): typeof s.apps.$inferSelect {
-  const row = db.select().from(s.apps).where(eq(s.apps.key, key)).get();
+export async function loadApp(db: AppDb, key: string): Promise<typeof s.apps.$inferSelect> {
+  const row = (await db.select().from(s.apps).where(eq(s.apps.key, key)).limit(1))[0];
   if (!row) throw notFoundError("App");
   return row;
 }
 
-export function isAppActive(db: AppDb, key: string): boolean {
-  return Boolean(db.select({ on: s.apps.isActive }).from(s.apps).where(eq(s.apps.key, key)).get()?.on);
+export async function isAppActive(db: AppDb, key: string): Promise<boolean> {
+  return Boolean((await db.select({ on: s.apps.isActive }).from(s.apps).where(eq(s.apps.key, key)).limit(1))[0]?.on);
 }
 
-export function setAppActive(tx: AppDb, auth: AuthContext, actor: Actor, key: string, isActive: boolean): AppRow {
-  const row = loadApp(tx, key);
+export async function setAppActive(tx: AppDb, auth: AuthContext, actor: Actor, key: string, isActive: boolean): Promise<AppRow> {
+  const row = await loadApp(tx, key);
   if (Boolean(row.isActive) === isActive) throw new AppError("INVALID_STATE", `${row.name} is already ${isActive ? "active" : "inactive"}`);
   const def = getAppDef(key);
   if (isActive && def && def.settings.some((f) => f.required) && key === "sso") {
     const parsed = appSettingsSchema(def, { savedSecrets: new Set(Object.keys(appSecrets(row))) }).safeParse(publicSettings(def, row.settings ?? null));
     if (!parsed.success) throw new AppError("INVALID_STATE", "Configure single sign-on (gear) before activating it");
   }
-  tx.update(s.apps).set({ isActive, activatedAt: isActive ? new Date().toISOString() : null, activatedBy: isActive ? actor.userId : null }).where(eq(s.apps.key, key)).run();
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: APP_ENTITY, entityId: key, entityCode: row.name }, { status: row.isActive ? "Activated" : "Not activated" }, { status: isActive ? "Activated" : "Not activated" });
-  return toRow(tx, loadApp(tx, key));
+  await tx.update(s.apps).set({ isActive, activatedAt: isActive ? new Date().toISOString() : null, activatedBy: isActive ? actor.userId : null }).where(eq(s.apps.key, key));
+  await logUpdate(tx, domainCtxOf(actor, auth), { entityType: APP_ENTITY, entityId: key, entityCode: row.name }, { status: row.isActive ? "Activated" : "Not activated" }, { status: isActive ? "Activated" : "Not activated" });
+  return await toRow(tx, await loadApp(tx, key));
 }
 
-export function updateAppSettings(tx: AppDb, auth: AuthContext, actor: Actor, key: string, settings: unknown): AppRow {
-  const row = loadApp(tx, key);
+export async function updateAppSettings(tx: AppDb, auth: AuthContext, actor: Actor, key: string, settings: unknown): Promise<AppRow> {
+  const row = await loadApp(tx, key);
   const def = getAppDef(key);
   if (!def || def.settings.length === 0) throw new AppError("INVALID_STATE", `${row.name} has no settings`);
   const stored = appSecrets(row);
@@ -93,10 +95,10 @@ export function updateAppSettings(tx: AppDb, auth: AuthContext, actor: Actor, ke
   for (const k of secretKeys(def)) { secretEdit[k] = String(values[k] ?? ""); delete values[k]; }
   const sealed = mergeCredentials(stored, secretEdit);
   const next: Record<string, unknown> = { ...values, ...(Object.keys(sealed).length > 0 ? { [SEALED_KEY]: encryptCredentials(sealed) } : {}) };
-  tx.update(s.apps).set({ settings: next }).where(eq(s.apps.key, key)).run();
+  await tx.update(s.apps).set({ settings: next }).where(eq(s.apps.key, key));
   const changedSecrets = new Set(Object.entries(secretEdit).filter(([, v]) => v.trim() !== "").map(([k]) => k));
   const label = (o: Record<string, unknown>, after: boolean) => Object.fromEntries(def.settings.map((f) => [f.label,
     f.type === "secret" ? (after && changedSecrets.has(f.key) ? "(changed)" : stored[f.key] ? "(set)" : "") : f.type === "textarea" && o[f.key] ? "(set)" : o[f.key]]));
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: APP_ENTITY, entityId: key, entityCode: row.name }, label(before, false), label(values, true));
-  return toRow(tx, loadApp(tx, key));
+  await logUpdate(tx, domainCtxOf(actor, auth), { entityType: APP_ENTITY, entityId: key, entityCode: row.name }, label(before, false), label(values, true));
+  return await toRow(tx, await loadApp(tx, key));
 }

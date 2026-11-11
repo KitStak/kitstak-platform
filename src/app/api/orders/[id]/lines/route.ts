@@ -11,5 +11,5 @@ export const POST = defineRoute({
   permission: ORDER_PERMISSIONS.edit,
   params: idParamsSchema,
   body: z.object({ version: z.number().int().positive(), line: orders.orderLineInputSchema }),
-  handler: ({ db, auth, actor, params, body }) => created(changeLine(db, domainCtx(actor, auth), params.id, body.version, { kind: "add", line: body.line })),
+  handler: async ({ db, auth, actor, params, body }) => created(await changeLine(db, domainCtx(actor, auth), params.id, body.version, { kind: "add", line: body.line })),
 });

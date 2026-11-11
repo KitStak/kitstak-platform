@@ -39,11 +39,11 @@ const countLine = (col: string): SQL => sql`(SELECT cl.${sql.raw(col)} FROM coun
  * on the line, else the products on hand at the task's location (limited to its LP), as "A, B, C".
  */
 const countProducts = (col: string): SQL => sql`(CASE WHEN ${qc(t.productId)} IS NULL AND ${qc(t.countLineId)} IS NOT NULL THEN COALESCE(
-  (SELECT group_concat(v, ', ') FROM (SELECT DISTINCT p2.${sql.raw(col)} AS v FROM count_line_entries e JOIN products p2 ON p2.id = e.product_id WHERE e.line_id = ${qc(t.countLineId)} AND p2.${sql.raw(col)} IS NOT NULL ORDER BY p2.sku)),
-  (SELECT group_concat(v, ', ') FROM (SELECT DISTINCT p2.${sql.raw(col)} AS v FROM inventory i JOIN products p2 ON p2.id = i.product_id
-    WHERE i.location_id = ${qc(t.sourceLocationId)} AND i.on_hand > 0 AND (${qc(t.sourceLpId)} IS NULL OR i.lp_id = ${qc(t.sourceLpId)}) AND p2.${sql.raw(col)} IS NOT NULL ORDER BY p2.sku))) END)`;
-const countClient = sql`(SELECT group_concat(v, ', ') FROM (SELECT DISTINCT c2.name AS v FROM inventory i JOIN clients c2 ON c2.id = i.client_id
-  WHERE ${qc(t.countLineId)} IS NOT NULL AND i.location_id = ${qc(t.sourceLocationId)} AND i.on_hand > 0 AND (${qc(t.sourceLpId)} IS NULL OR i.lp_id = ${qc(t.sourceLpId)}) ORDER BY c2.name))`;
+  (SELECT string_agg((v)::text, ', ' ORDER BY s, v) FROM (SELECT p2.${sql.raw(col)} AS v, MIN(p2.sku) AS s FROM count_line_entries e JOIN products p2 ON p2.id = e.product_id WHERE e.line_id = ${qc(t.countLineId)} AND p2.${sql.raw(col)} IS NOT NULL GROUP BY p2.${sql.raw(col)}) x),
+  (SELECT string_agg((v)::text, ', ' ORDER BY s, v) FROM (SELECT p2.${sql.raw(col)} AS v, MIN(p2.sku) AS s FROM inventory i JOIN products p2 ON p2.id = i.product_id
+    WHERE i.location_id = ${qc(t.sourceLocationId)} AND i.on_hand > 0 AND (${qc(t.sourceLpId)} IS NULL OR i.lp_id = ${qc(t.sourceLpId)}) AND p2.${sql.raw(col)} IS NOT NULL GROUP BY p2.${sql.raw(col)}) x)) END)`;
+const countClient = sql`(SELECT string_agg((v)::text, ', ' ORDER BY v) FROM (SELECT DISTINCT c2.name AS v FROM inventory i JOIN clients c2 ON c2.id = i.client_id
+  WHERE ${qc(t.countLineId)} IS NOT NULL AND i.location_id = ${qc(t.sourceLocationId)} AND i.on_hand > 0 AND (${qc(t.sourceLpId)} IS NULL OR i.lp_id = ${qc(t.sourceLpId)}) ) x)`;
 
 
 const SRC_LOC = sql`${qc(t.sourceLocationId)}`;
@@ -65,16 +65,16 @@ export const TASK_SQL: FieldSqlMap = {
   orderCode: order("code"),
   poNumber: sql`(SELECT i.po_number FROM inventory_allocations a JOIN inventory i ON i.id = a.inventory_id WHERE a.id = ${qc(t.allocationId)})`,
   storeOrderNumber: order("store_order_number"),
-  orderType: sql`(SELECT COALESCE(lv.name, (SELECT lx.name FROM lookup_values lx WHERE lx.type = 'so_type' AND (lx.name = so.order_type OR lx.code = so.order_type OR lx.name LIKE so.order_type || ' %') ORDER BY lx.sort_order LIMIT 1), so.order_type) FROM shipment_orders so LEFT JOIN lookup_values lv ON lv.id = so.order_type_id WHERE so.id = ${qc(t.orderId)})`,
+  orderType: sql`(SELECT COALESCE(lv.name, (SELECT lx.name FROM lookup_values lx WHERE lx.type = 'so_type' AND (lx.name = so.order_type OR lx.code = so.order_type OR lx.name ILIKE so.order_type || ' %') ORDER BY lx.sort_order LIMIT 1), so.order_type) FROM shipment_orders so LEFT JOIN lookup_values lv ON lv.id = so.order_type_id WHERE so.id = ${qc(t.orderId)})`,
   taskType: sql`${qc(t.taskType)}`,
   status: sql`${qc(t.status)}`,
   pickShortStatus: sql`${qc(t.pickShortStatus)}`,
   packShortStatus: sql`${qc(t.packShortStatus)}`,
   priority: sql`${qc(t.priority)}`,
   // AI task sequence: the optimized visiting order, shown for AI jobs only.
-  sequence: sql`(CASE WHEN ${job("job_type")} LIKE 'AI-%' THEN ${qc(t.sequence)} END)`,
+  sequence: sql`(CASE WHEN ${job("job_type")} ILIKE 'AI-%' THEN ${qc(t.sequence)} END)`,
   workOrderCode: sql`(SELECT wo.code FROM work_orders wo WHERE wo.id = ${qc(t.workOrderId)})`,
-  workOrderType: sql`(SELECT CASE WHEN wo.operation_type LIKE '%without%' THEN 'Work Order without Picking' ELSE 'Work Order with Picking' END FROM work_orders wo WHERE wo.id = ${qc(t.workOrderId)})`,
+  workOrderType: sql`(SELECT CASE WHEN wo.operation_type ILIKE '%without%' THEN 'Work Order without Picking' ELSE 'Work Order with Picking' END FROM work_orders wo WHERE wo.id = ${qc(t.workOrderId)})`,
   productImage: product("image_url"),
   sku: sql`COALESCE(${product("sku")}, ${countProducts("sku")})`,
   productName: sql`COALESCE(${product("name")}, ${countProducts("name")})`,
@@ -136,9 +136,9 @@ export const TASK_SQL: FieldSqlMap = {
   initialTaskQty: sql`${qc(t.plannedQty)}`,
   // replenishment
   replenishmentPhase: sql`${qc(t.replenishmentPhase)}`,
-  lpSwap: asBool(sql`${qc(t.lpSwap)} = 1`),
-  packTypeConversionApplied: asBool(sql`${qc(t.packTypeConversionApplied)} = 1`),
-  lpAutoRemoved: asBool(sql`${qc(t.lpAutoRemoved)} = 1`),
+  lpSwap: asBool(sql`${qc(t.lpSwap)} = true`),
+  packTypeConversionApplied: asBool(sql`${qc(t.packTypeConversionApplied)} = true`),
+  lpAutoRemoved: asBool(sql`${qc(t.lpAutoRemoved)} = true`),
 };
 
 const FIELD_SQL: FieldSqlMap = { ...TASK_SQL, taskUomQty: TASK_SQL.taskUomQty as SQL };
@@ -203,7 +203,7 @@ function selection(kind: TaskKind): Record<string, SQL> {
   return out;
 }
 
-export function listTasks(db: AppDb, auth: AuthContext, kind: TaskKind, query: GridQuery): { rows: TaskListRow[]; total: number } {
+export async function listTasks(db: AppDb, auth: AuthContext, kind: TaskKind, query: GridQuery): Promise<{ rows: TaskListRow[]; total: number }> {
   const spec = TASK_GRIDS[kind];
   const { where, orderBy } = compileGrid(query, spec, fieldSqlFor(kind), {
     defaultSort: [{ field: "taskNo", dir: "desc" }], tiebreaker: sql`${qc(t.id)}`,
@@ -211,12 +211,12 @@ export function listTasks(db: AppDb, auth: AuthContext, kind: TaskKind, query: G
   });
   const source = kind === "count" ? countSource() : null;
   const rows = (source
-    ? db.select(selection(kind)).from(source).where(where).orderBy(...orderBy).limit(query.pageSize).offset(pageOffset(query)).all()
-    : db.select(selection(kind)).from(t).where(where).orderBy(...orderBy).limit(query.pageSize).offset(pageOffset(query)).all()) as unknown as TaskListRow[];
-  const total = (source ? db.select({ n: count() }).from(source).where(where).get()?.n : db.select({ n: count() }).from(t).where(where).get()?.n) ?? 0;
+    ? await db.select(selection(kind)).from(source).where(where).orderBy(...orderBy).limit(query.pageSize).offset(pageOffset(query))
+    : await db.select(selection(kind)).from(t).where(where).orderBy(...orderBy).limit(query.pageSize).offset(pageOffset(query))) as unknown as TaskListRow[];
+  const total = (source ? (await db.select({ n: count() }).from(source).where(where).limit(1))[0]?.n : (await db.select({ n: count() }).from(t).where(where).limit(1))[0]?.n) ?? 0;
   const jobIds = [...new Set(rows.map((r) => r.jobId))];
-  const jobRows = jobIds.length === 0 ? [] : db.select({ id: schema.jobs.id, jobType: schema.jobs.jobType, orderCount: schema.jobs.orderCount }).from(schema.jobs).where(inArray(schema.jobs.id, jobIds)).all();
-  const ai = aiJobFacts(db, jobRows);
+  const jobRows = jobIds.length === 0 ? [] : await db.select({ id: schema.jobs.id, jobType: schema.jobs.jobType, orderCount: schema.jobs.orderCount }).from(schema.jobs).where(inArray(schema.jobs.id, jobIds));
+  const ai = await aiJobFacts(db, jobRows);
   return {
     rows: rows.map((r) => ({ ...r, aiJobDescription: ai.get(r.jobId)?.description ?? null, lpSwap: Boolean(r.lpSwap), packTypeConversionApplied: Boolean(r.packTypeConversionApplied), lpAutoRemoved: Boolean(r.lpAutoRemoved) })),
     total,
@@ -224,21 +224,21 @@ export function listTasks(db: AppDb, auth: AuthContext, kind: TaskKind, query: G
 }
 
 /** Assigns (or clears) the assignee of pending/started tasks. Same-warehouse guard like jobs. */
-export function assignTasks(db: AppDb, ctx: DomainCtx, input: { ids: readonly string[]; userId: string | null }): BulkResult {
-  const rows = db.select({ wh: t.warehouseId }).from(t).where(inArray(t.id, [...input.ids])).all();
+export async function assignTasks(db: AppDb, ctx: DomainCtx, input: { ids: readonly string[]; userId: string | null }): Promise<BulkResult> {
+  const rows = await db.select({ wh: t.warehouseId }).from(t).where(inArray(t.id, [...input.ids]));
   if (new Set(rows.map((r) => r.wh)).size > 1) {
     throw new AppError("VALIDATION", "Assign and unassign can only be performed for tasks in the same warehouse. Please update your selection and try again.");
   }
-  if (input.userId) assertEligibleAssignee(db, input.userId, rows.map((r) => r.wh));
+  if (input.userId) await assertEligibleAssignee(db, input.userId, rows.map((r) => r.wh));
   const succeeded: string[] = [];
   const failed: { id: string; code: string; message: string }[] = [];
   for (const id of new Set(input.ids)) {
     try {
-      const task = getTask(db, ctx, id);
+      const task = await getTask(db, ctx, id);
       if (task.status === "Completed" || task.status === "Cancelled") throw new AppError("INVALID_STATE", `Task ${task.taskNo} is ${task.status.toLowerCase()}.`);
-      if (input.userId) assertUserInWarehouse(db, input.userId, task.warehouseId);
-      db.update(t).set({ assigneeUserId: input.userId, updatedBy: ctx.userId, version: sql`${qc(t.version)} + 1` }).where(and(eq(t.id, id))).run();
-      recordUpdate(db, ctx, { entityType: "task", entityId: id, entityCode: String(task.taskNo), before: { assigneeUserId: task.assigneeUserId }, after: { assigneeUserId: input.userId } });
+      if (input.userId) await assertUserInWarehouse(db, input.userId, task.warehouseId);
+      await db.update(t).set({ assigneeUserId: input.userId, updatedBy: ctx.userId, version: sql`${qc(t.version)} + 1` }).where(and(eq(t.id, id)));
+      await recordUpdate(db, ctx, { entityType: "task", entityId: id, entityCode: String(task.taskNo), before: { assigneeUserId: task.assigneeUserId }, after: { assigneeUserId: input.userId } });
       succeeded.push(id);
     } catch (e) {
       const err = e instanceof AppError ? e : new AppError("INVALID_STATE", e instanceof Error ? e.message : "Failed");

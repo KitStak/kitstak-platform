@@ -10,13 +10,13 @@ import { deleteNotifications, listNotifications, notificationListQuerySchema } f
 
 export const GET = defineRoute({
   query: notificationListQuerySchema,
-  handler: ({ db, auth, query }) => {
-    const { rows, total, unread, types } = listNotifications(db, auth.user.id, query);
+  handler: async ({ db, auth, query }) => {
+    const { rows, total, unread, types } = await listNotifications(db, auth.user.id, query);
     return listResult(rows, { total, page: query.page, pageSize: query.ps, unread, types });
   },
 });
 
 export const DELETE = defineRoute({
   body: notificationDeleteSchema,
-  handler: ({ db, auth, body }) => deleteNotifications(db, auth.user.id, body),
+  handler: async ({ db, auth, body }) => await deleteNotifications(db, auth.user.id, body),
 });

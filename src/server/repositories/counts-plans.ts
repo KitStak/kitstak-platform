@@ -18,6 +18,7 @@ import { planDeleteReason, planEditReason, planNameLockedReason } from "@/lib/gr
 import { assertNoOpenCountConflicts } from "./counts-conflicts";
 import { gridRowsById, raw, runGrid, type GridPage } from "./counts-grid";
 import { lineGrid, lineRow, planGrid, planRow, type CountLineListRow, type CountPlanListRow } from "./counts-grids";
+import { dbAll, dbGet, mapSeq } from "@/server/db/sql";
 
 export const COUNT_NAME_MAX = 50;
 export const COUNT_DESCRIPTION_MAX = 400;
@@ -48,17 +49,17 @@ export type CountPlanInput = Omit<z.output<typeof countPlanInputSchema>, "lpIds"
 export const countPlanUpdateSchema = z.object({ version: z.number().int().min(1) }).and(countPlanInputSchema);
 
 /* ------------------------------------------------------------------ reads */
-export function listCountPlans(db: AppDb, scope: Scope, query: GridQuery): GridPage<CountPlanListRow> {
-  const page = runGrid<CountPlanListRow>(db, planGrid(scope), query);
+export async function listCountPlans(db: AppDb, scope: Scope, query: GridQuery): Promise<GridPage<CountPlanListRow>> {
+  const page = await runGrid<CountPlanListRow>(db, planGrid(scope), query);
   return { ...page, rows: page.rows.map(planRow) };
 }
 
-export function countPlansById(db: AppDb, scope: Scope, ids: readonly string[]): CountPlanListRow[] {
-  return gridRowsById<CountPlanListRow>(db, planGrid(scope), raw("p.id"), ids).map(planRow);
+export async function countPlansById(db: AppDb, scope: Scope, ids: readonly string[]): Promise<CountPlanListRow[]> {
+  return (await gridRowsById<CountPlanListRow>(db, planGrid(scope), raw("p.id"), ids)).map(planRow);
 }
 
-export function getCountPlanSummary(db: AppDb, scope: Scope, id: string): CountPlanListRow {
-  const row = countPlansById(db, scope, [id])[0];
+export async function getCountPlanSummary(db: AppDb, scope: Scope, id: string): Promise<CountPlanListRow> {
+  const row = (await countPlansById(db, scope, [id]))[0];
   if (!row) throw notFoundError("Count plan");
   return row;
 }
@@ -104,35 +105,35 @@ export interface CountPlanDetail {
 }
 
 /** `:id` accepts the plan id or its code (deep links use the code). */
-export function resolvePlanId(db: AppDb, scope: Scope, idOrCode: string): string {
-  const p = db.select({ id: schema.countPlans.id, warehouseId: schema.countPlans.warehouseId }).from(schema.countPlans)
-    .where(sql`${schema.countPlans.id} = ${idOrCode} OR ${schema.countPlans.code} = ${idOrCode}`).all()
+export async function resolvePlanId(db: AppDb, scope: Scope, idOrCode: string): Promise<string> {
+  const p = (await db.select({ id: schema.countPlans.id, warehouseId: schema.countPlans.warehouseId }).from(schema.countPlans)
+    .where(sql`${schema.countPlans.id} = ${idOrCode} OR ${schema.countPlans.code} = ${idOrCode}`))
     .find((r) => hasWarehouse(scope, r.warehouseId));
   if (!p) throw notFoundError("Count plan");
   return p.id;
 }
 
-export function getCountPlanDetail(db: AppDb, scope: Scope, idOrCode: string): CountPlanDetail {
-  const id = resolvePlanId(db, scope, idOrCode);
-  const plan = getCountPlanSummary(db, scope, id);
-  const lines = linesOfPlan(db, scope, id);
-  const entries = db.all<CountEntryRow>(sql`
-    SELECT e.id, e.line_id AS lineId, pr.sku, pr.name AS productName, lo.code AS locationCode, lp.number AS lpNumber, e.lot_number AS lotNumber,
-      e.expiry_date AS expiryDate, e.pack_type AS packType, e.system_qty AS systemQty, e.counted_qty AS countedQty,
-      COALESCE((SELECT u.name FROM users u WHERE lower(u.email) = lower(e.counted_by)), e.counted_by) AS countedBy, e.counted_at AS countedAt
+export async function getCountPlanDetail(db: AppDb, scope: Scope, idOrCode: string): Promise<CountPlanDetail> {
+  const id = await resolvePlanId(db, scope, idOrCode);
+  const plan = await getCountPlanSummary(db, scope, id);
+  const lines = await linesOfPlan(db, scope, id);
+  const entries = await dbAll<CountEntryRow>(db, sql`
+    SELECT e.id, e.line_id AS "lineId", pr.sku, pr.name AS "productName", lo.code AS "locationCode", lp.number AS "lpNumber", e.lot_number AS "lotNumber",
+      e.expiry_date AS "expiryDate", e.pack_type AS "packType", e.system_qty AS "systemQty", e.counted_qty AS "countedQty",
+      COALESCE((SELECT u.name FROM users u WHERE lower(u.email) = lower(e.counted_by)), e.counted_by) AS "countedBy", e.counted_at AS "countedAt"
     FROM count_line_entries e JOIN count_plan_lines l ON l.id = e.line_id JOIN products pr ON pr.id = e.product_id
     JOIN locations lo ON lo.id = e.location_id LEFT JOIN license_plates lp ON lp.id = e.lp_id
     WHERE l.plan_id = ${id} ORDER BY lo.code, pr.sku, e.lot_number`);
-  const jobs = db.all<CountJobRow>(sql`
-    SELECT j.id, j.code, j.job_type AS jobType, j.status, u.name AS assigneeName,
+  const jobs = await dbAll<CountJobRow>(db, sql`
+    SELECT j.id, j.code, j.job_type AS "jobType", j.status, u.name AS "assigneeName",
       -- Counters come from the task rows (same rule as rollupJob), so a stale jobs.task_count can never show.
-      (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status <> 'Cancelled') AS taskCount,
-      (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status = 'Completed') AS completedTaskCount,
-      (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status = 'Cancelled') AS cancelledTaskCount, j.created_at AS createdAt
+      (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status <> 'Cancelled') AS "taskCount",
+      (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status = 'Completed') AS "completedTaskCount",
+      (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status = 'Cancelled') AS "cancelledTaskCount", j.created_at AS "createdAt"
     FROM jobs j LEFT JOIN users u ON u.id = j.assigned_to_user_id WHERE j.count_plan_id = ${id} ORDER BY j.created_at, j.code`);
-  const wh = db.select({ m: schema.warehouses.mandatoryCountReason }).from(schema.warehouses).where(eq(schema.warehouses.id, plan.warehouseId)).get();
-  const ids = db.select({ locationId: schema.countPlanLines.locationId, productId: schema.countPlanLines.productId }).from(schema.countPlanLines)
-    .where(eq(schema.countPlanLines.planId, id)).all();
+  const wh = (await db.select({ m: schema.warehouses.mandatoryCountReason }).from(schema.warehouses).where(eq(schema.warehouses.id, plan.warehouseId)).limit(1))[0];
+  const ids = await db.select({ locationId: schema.countPlanLines.locationId, productId: schema.countPlanLines.productId }).from(schema.countPlanLines)
+    .where(eq(schema.countPlanLines.planId, id));
   return {
     plan, lines, entries, jobs, mandatoryCountReason: Boolean(wh?.m),
     locationIds: [...new Set(ids.flatMap((r) => (r.locationId ? [r.locationId] : [])))],
@@ -140,21 +141,21 @@ export function getCountPlanDetail(db: AppDb, scope: Scope, idOrCode: string): C
   };
 }
 
-export function linesOfPlan(db: AppDb, scope: Scope, planId: string): CountLineListRow[] {
+export async function linesOfPlan(db: AppDb, scope: Scope, planId: string): Promise<CountLineListRow[]> {
   const spec = lineGrid(scope, "plan", planId);
-  return runGrid<CountLineListRow>(db, spec, { qm: "sw", filters: [], sort: [], page: 1, pageSize: MAX_PLAN_LINES * 2 }).rows.map(lineRow);
+  return (await runGrid<CountLineListRow>(db, spec, { qm: "sw", filters: [], sort: [], page: 1, pageSize: MAX_PLAN_LINES * 2 })).rows.map(lineRow);
 }
 
-export function nextCountCode(db: AppDb): string {
-  return sequences.peek(db, "count");
+export async function nextCountCode(db: AppDb): Promise<string> {
+  return await sequences.peek(db, "count");
 }
 
 /** Wizard default warehouse when no working context is set: the in-scope warehouse holding the most stock. */
-export function busiestWarehouseId(db: AppDb, scope: Scope): string | null {
+export async function busiestWarehouseId(db: AppDb, scope: Scope): Promise<string | null> {
   if (scope.warehouseIds.length === 0) return null;
-  const row = db.select({ id: schema.inventory.warehouseId, n: sql<number>`SUM(${schema.inventory.onHand})` }).from(schema.inventory)
+  const row = (await db.select({ id: schema.inventory.warehouseId, n: sql<number>`SUM(${schema.inventory.onHand})` }).from(schema.inventory)
     .where(and(inArray(schema.inventory.warehouseId, [...scope.warehouseIds]), gt(schema.inventory.onHand, 0)))
-    .groupBy(schema.inventory.warehouseId).orderBy(sql`2 DESC`).limit(1).all()[0];
+    .groupBy(schema.inventory.warehouseId).orderBy(sql`2 DESC`).limit(1))[0];
   return row?.id ?? null;
 }
 
@@ -163,40 +164,40 @@ function assertWarehouse(scope: Scope, warehouseId: string): void {
   if (!hasWarehouse(scope, warehouseId)) throw new AppError("VALIDATION", "Choose a warehouse you have access to", { fieldErrors: { warehouseId: ["Choose a warehouse you have access to"] } });
 }
 
-function assertUniqueCode(tx: Tx, warehouseId: string, code: string, exceptId?: string): void {
-  const dup = tx.select({ id: schema.countPlans.id }).from(schema.countPlans)
-    .where(and(eq(schema.countPlans.warehouseId, warehouseId), sql`lower(${schema.countPlans.code}) = lower(${code})`)).all()
+async function assertUniqueCode(tx: Tx, warehouseId: string, code: string, exceptId?: string): Promise<void> {
+  const dup = (await tx.select({ id: schema.countPlans.id }).from(schema.countPlans)
+    .where(and(eq(schema.countPlans.warehouseId, warehouseId), sql`lower(${schema.countPlans.code}) = lower(${code})`)))
     .find((r) => r.id !== exceptId);
   if (dup) throw new AppError("DUPLICATE", `A count plan named ${code} already exists in this warehouse`, { fieldErrors: { code: ["This name is already used in this warehouse"] } });
 }
 
-function stockAt(tx: Tx, locationId: string): number {
-  return tx.get<{ n: number | null }>(sql`SELECT SUM(on_hand) AS n FROM inventory WHERE location_id = ${locationId} AND on_hand > 0`)?.n ?? 0;
+async function stockAt(tx: Tx, locationId: string): Promise<number> {
+  return (await dbGet<{ n: number | null }>(tx, sql`SELECT SUM(on_hand) AS n FROM inventory WHERE location_id = ${locationId} AND on_hand > 0`))?.n ?? 0;
 }
 
-function stockOf(tx: Tx, productId: string, warehouseId: string): number {
-  return tx.get<{ n: number | null }>(sql`SELECT SUM(on_hand) AS n FROM inventory WHERE product_id = ${productId} AND warehouse_id = ${warehouseId} AND on_hand > 0`)?.n ?? 0;
+async function stockOf(tx: Tx, productId: string, warehouseId: string): Promise<number> {
+  return (await dbGet<{ n: number | null }>(tx, sql`SELECT SUM(on_hand) AS n FROM inventory WHERE product_id = ${productId} AND warehouse_id = ${warehouseId} AND on_hand > 0`))?.n ?? 0;
 }
 
 type LineInsert = typeof schema.countPlanLines.$inferInsert;
 
 /** Validated line rows for a plan's locations / products (warehouse + client scope). */
-export function buildPlanLines(tx: Tx, scope: Scope, planId: string, input: Pick<CountPlanInput, "countType" | "warehouseId" | "locationIds" | "productIds"> & { readonly lpIds?: readonly string[] }, userId: string | null): LineInsert[] {
-  if (input.countType === "LP") return buildLpLines(tx, scope, planId, input.warehouseId, input.lpIds ?? [], userId);
+export async function buildPlanLines(tx: Tx, scope: Scope, planId: string, input: Pick<CountPlanInput, "countType" | "warehouseId" | "locationIds" | "productIds"> & { readonly lpIds?: readonly string[] }, userId: string | null): Promise<LineInsert[]> {
+  if (input.countType === "LP") return await buildLpLines(tx, scope, planId, input.warehouseId, input.lpIds ?? [], userId);
   if (input.countType === "Location") {
     const ids = [...new Set(input.locationIds)];
-    const locs = ids.length ? tx.select().from(schema.locations).where(inArray(schema.locations.id, ids)).all() : [];
+    const locs = ids.length ? await tx.select().from(schema.locations).where(inArray(schema.locations.id, ids)) : [];
     if (locs.length !== ids.length || locs.some((l) => l.warehouseId !== input.warehouseId)) {
       throw new AppError("VALIDATION", "Some locations are not in the selected warehouse", { fieldErrors: { locationIds: ["Some locations are not in the selected warehouse"] } });
     }
-    return ids.map((locationId) => ({ planId, locationId, status: "Pending" as const, initialStockQty: stockAt(tx, locationId), createdBy: userId, updatedBy: userId }));
+    return await mapSeq(ids, async (locationId) => ({ planId, locationId, status: "Pending" as const, initialStockQty: await stockAt(tx, locationId), createdBy: userId, updatedBy: userId }));
   }
   const ids = [...new Set(input.productIds)];
-  const prods = ids.length ? tx.select().from(schema.products).where(inArray(schema.products.id, ids)).all() : [];
+  const prods = ids.length ? await tx.select().from(schema.products).where(inArray(schema.products.id, ids)) : [];
   if (prods.length !== ids.length || prods.some((p) => !hasClient(scope, p.clientId))) {
     throw new AppError("VALIDATION", "Some products are not available to you", { fieldErrors: { productIds: ["Some products are not available to you"] } });
   }
-  return ids.map((productId) => ({ planId, productId, status: "Pending" as const, initialStockQty: stockOf(tx, productId, input.warehouseId), createdBy: userId, updatedBy: userId }));
+  return await mapSeq(ids, async (productId) => ({ planId, productId, status: "Pending" as const, initialStockQty: await stockOf(tx, productId, input.warehouseId), createdBy: userId, updatedBy: userId }));
 }
 
 /**
@@ -205,25 +206,25 @@ export function buildPlanLines(tx: Tx, scope: Scope, planId: string, input: Pick
  * buckets. The LP must be in the plan's warehouse, sit in a location, and belong to a client
  * the viewer can access (or to no client).
  */
-function buildLpLines(tx: Tx, scope: Scope, planId: string, warehouseId: string, lpIds: readonly string[], userId: string | null): LineInsert[] {
+async function buildLpLines(tx: Tx, scope: Scope, planId: string, warehouseId: string, lpIds: readonly string[], userId: string | null): Promise<LineInsert[]> {
   const ids = [...new Set(lpIds)];
-  const lps = ids.length ? tx.select().from(schema.licensePlates).where(inArray(schema.licensePlates.id, ids)).all() : [];
+  const lps = ids.length ? await tx.select().from(schema.licensePlates).where(inArray(schema.licensePlates.id, ids)) : [];
   const bad = (msg: string) => new AppError("VALIDATION", msg, { fieldErrors: { lpIds: [msg] } });
   if (lps.length !== ids.length || lps.some((l) => l.warehouseId !== warehouseId)) throw bad("Some license plates are not in the selected warehouse");
   if (lps.some((l) => l.clientId && !hasClient(scope, l.clientId))) throw bad("Some license plates are not available to you");
   const unplaced = lps.find((l) => !l.locationId);
   if (unplaced) throw bad(`License plate ${unplaced.number} is not in a location, so it can't be counted`);
   const byId = new Map(lps.map((l) => [l.id, l]));
-  return ids.map((lpId) => {
+  return await mapSeq(ids, async (lpId) => {
     const lp = byId.get(lpId)!;
-    const qty = tx.get<{ n: number | null }>(sql`SELECT SUM(on_hand) AS n FROM inventory WHERE lp_id = ${lpId} AND on_hand > 0`)?.n ?? 0;
+    const qty = (await dbGet<{ n: number | null }>(tx, sql`SELECT SUM(on_hand) AS n FROM inventory WHERE lp_id = ${lpId} AND on_hand > 0`))?.n ?? 0;
     return { planId, locationId: lp.locationId, lpId, status: "Pending" as const, initialStockQty: qty, createdBy: userId, updatedBy: userId };
   });
 }
 
 /** A location / SKU / LP may be in only one open count plan (the pickers flag them; this is the server guard). */
-export function assertPlanScopeFree(tx: Tx, input: Pick<CountPlanInput, "countType" | "warehouseId" | "locationIds" | "productIds"> & { readonly lpIds?: readonly string[] }, exceptPlanId: string | null): void {
-  assertNoOpenCountConflicts(tx, {
+export async function assertPlanScopeFree(tx: Tx, input: Pick<CountPlanInput, "countType" | "warehouseId" | "locationIds" | "productIds"> & { readonly lpIds?: readonly string[] }, exceptPlanId: string | null): Promise<void> {
+  await assertNoOpenCountConflicts(tx, {
     warehouseId: input.warehouseId, exceptPlanId,
     locationIds: input.countType === "Location" ? input.locationIds : [],
     productIds: input.countType === "SKU" ? input.productIds : [],
@@ -231,24 +232,24 @@ export function assertPlanScopeFree(tx: Tx, input: Pick<CountPlanInput, "countTy
   });
 }
 
-function consumeCodeIfSuggested(tx: Tx, code: string): void {
-  if (code.toUpperCase() === sequences.peek(tx, "count").toUpperCase()) sequences.next(tx, "count");
+async function consumeCodeIfSuggested(tx: Tx, code: string): Promise<void> {
+  if (code.toUpperCase() === (await sequences.peek(tx, "count")).toUpperCase()) await sequences.next(tx, "count");
 }
 
-export function createCountPlan(tx: Tx, ctx: DomainCtx, auth: AuthContext, input: CountPlanInput): CountPlanListRow {
+export async function createCountPlan(tx: Tx, ctx: DomainCtx, auth: AuthContext, input: CountPlanInput): Promise<CountPlanListRow> {
   assertWarehouse(auth.scope, input.warehouseId);
-  assertUniqueCode(tx, input.warehouseId, input.code);
-  assertPlanScopeFree(tx, input, null);
-  consumeCodeIfSuggested(tx, input.code);
-  const plan = tx.insert(schema.countPlans).values({
+  await assertUniqueCode(tx, input.warehouseId, input.code);
+  await assertPlanScopeFree(tx, input, null);
+  await consumeCodeIfSuggested(tx, input.code);
+  const plan = (await tx.insert(schema.countPlans).values({
     code: input.code, warehouseId: input.warehouseId, description: input.description || null, scheduledAt: new Date(input.scheduledAt).toISOString(),
     lockLocations: input.lockLocations, countType: input.countType, operationType: "Cycle Count", status: "Pending", isAi: input.isAi ?? false,
     createdBy: ctx.userId, updatedBy: ctx.userId,
-  }).returning().get();
-  const lines = buildPlanLines(tx, auth.scope, plan.id, input, ctx.userId);
-  for (const chunk of chunks(lines, 200)) tx.insert(schema.countPlanLines).values(chunk).run();
-  changeLog.recordCreate(tx, ctx, { entityType: "count_plan", entityId: plan.id, entityCode: plan.code });
-  return getCountPlanSummary(tx, auth.scope, plan.id);
+  }).returning())[0];
+  const lines = await buildPlanLines(tx, auth.scope, plan.id, input, ctx.userId);
+  for (const chunk of chunks(lines, 200)) await tx.insert(schema.countPlanLines).values(chunk);
+  await changeLog.recordCreate(tx, ctx, { entityType: "count_plan", entityId: plan.id, entityCode: plan.code });
+  return await getCountPlanSummary(tx, auth.scope, plan.id);
 }
 
 function chunks<T>(rows: readonly T[], size: number): T[][] {
@@ -257,40 +258,40 @@ function chunks<T>(rows: readonly T[], size: number): T[][] {
   return out;
 }
 
-function loadOwnPlan(tx: Tx, scope: Scope, id: string): typeof schema.countPlans.$inferSelect {
-  const plan = tx.select().from(schema.countPlans).where(eq(schema.countPlans.id, id)).get();
+async function loadOwnPlan(tx: Tx, scope: Scope, id: string): Promise<typeof schema.countPlans.$inferSelect> {
+  const plan = (await tx.select().from(schema.countPlans).where(eq(schema.countPlans.id, id)).limit(1))[0];
   if (!plan || !hasWarehouse(scope, plan.warehouseId)) throw notFoundError("Count plan");
   return plan;
 }
 
-export function updateCountPlan(tx: Tx, ctx: DomainCtx, auth: AuthContext, id: string, input: CountPlanInput & { version: number }): CountPlanListRow {
-  const plan = loadOwnPlan(tx, auth.scope, id);
+export async function updateCountPlan(tx: Tx, ctx: DomainCtx, auth: AuthContext, id: string, input: CountPlanInput & { version: number }): Promise<CountPlanListRow> {
+  const plan = await loadOwnPlan(tx, auth.scope, id);
   if (plan.version !== input.version) throw conflictError();
   const reason = planEditReason(plan.status);
   if (reason) throw new DomainError("INVALID_STATE", reason);
   assertWarehouse(auth.scope, input.warehouseId);
-  if (input.code.toLowerCase() !== plan.code.toLowerCase() || input.warehouseId !== plan.warehouseId) assertUniqueCode(tx, input.warehouseId, input.code, plan.id);
-  assertPlanScopeFree(tx, input, id);
-  const before = tx.select().from(schema.countPlanLines).where(eq(schema.countPlanLines.planId, id)).all();
-  const updated = tx.update(schema.countPlans).set({
+  if (input.code.toLowerCase() !== plan.code.toLowerCase() || input.warehouseId !== plan.warehouseId) await assertUniqueCode(tx, input.warehouseId, input.code, plan.id);
+  await assertPlanScopeFree(tx, input, id);
+  const before = await tx.select().from(schema.countPlanLines).where(eq(schema.countPlanLines.planId, id));
+  const updated = (await tx.update(schema.countPlans).set({
     code: input.code, warehouseId: input.warehouseId, description: input.description || null, scheduledAt: new Date(input.scheduledAt).toISOString(),
     lockLocations: input.lockLocations, countType: input.countType, updatedBy: ctx.userId, version: sql`${schema.countPlans.version} + 1`,
-  }).where(and(eq(schema.countPlans.id, id), eq(schema.countPlans.version, input.version))).returning().get();
+  }).where(and(eq(schema.countPlans.id, id), eq(schema.countPlans.version, input.version))).returning())[0];
   if (!updated) throw conflictError();
-  const wanted = buildPlanLines(tx, auth.scope, id, input, ctx.userId);
+  const wanted = await buildPlanLines(tx, auth.scope, id, input, ctx.userId);
   const keyOf = (l: { locationId?: string | null; productId?: string | null; lpId?: string | null }) => `${l.locationId ?? ""}|${l.productId ?? ""}|${l.lpId ?? ""}`;
   const wantedKeys = new Set(wanted.map(keyOf));
   const keep = new Set(before.filter((l) => wantedKeys.has(keyOf(l))).map(keyOf));
   const removed = before.filter((l) => !wantedKeys.has(keyOf(l)));
-  if (removed.length) tx.delete(schema.countPlanLines).where(inArray(schema.countPlanLines.id, removed.map((l) => l.id))).run();
+  if (removed.length) await tx.delete(schema.countPlanLines).where(inArray(schema.countPlanLines.id, removed.map((l) => l.id)));
   const added = wanted.filter((l) => !keep.has(keyOf(l)));
-  for (const chunk of chunks(added, 200)) tx.insert(schema.countPlanLines).values(chunk).run();
-  changeLog.recordUpdate(tx, ctx, {
+  for (const chunk of chunks(added, 200)) await tx.insert(schema.countPlanLines).values(chunk);
+  await changeLog.recordUpdate(tx, ctx, {
     entityType: "count_plan", entityId: id, entityCode: updated.code,
-    before: { code: plan.code, warehouseId: whCode(tx, plan.warehouseId), description: plan.description, scheduledAt: plan.scheduledAt, lockLocations: plan.lockLocations, countType: plan.countType, countLines: before.length },
-    after: { code: updated.code, warehouseId: whCode(tx, updated.warehouseId), description: updated.description, scheduledAt: updated.scheduledAt, lockLocations: updated.lockLocations, countType: updated.countType, countLines: wanted.length },
+    before: { code: plan.code, warehouseId: await whCode(tx, plan.warehouseId), description: plan.description, scheduledAt: plan.scheduledAt, lockLocations: plan.lockLocations, countType: plan.countType, countLines: before.length },
+    after: { code: updated.code, warehouseId: await whCode(tx, updated.warehouseId), description: updated.description, scheduledAt: updated.scheduledAt, lockLocations: updated.lockLocations, countType: updated.countType, countLines: wanted.length },
   });
-  return getCountPlanSummary(tx, auth.scope, id);
+  return await getCountPlanSummary(tx, auth.scope, id);
 }
 
 /** Header-only edit (name + description) - allowed at any status, like Logiwa's Edit Count drawer. Lines, warehouse, date and lock stay as they are. */
@@ -300,52 +301,52 @@ export const countPlanHeaderSchema = z.object({
   description: countPlanInputSchema.shape.description,
 });
 
-export function updateCountPlanHeader(tx: Tx, ctx: DomainCtx, auth: AuthContext, id: string, input: z.infer<typeof countPlanHeaderSchema>): CountPlanListRow {
-  const plan = loadOwnPlan(tx, auth.scope, id);
+export async function updateCountPlanHeader(tx: Tx, ctx: DomainCtx, auth: AuthContext, id: string, input: z.infer<typeof countPlanHeaderSchema>): Promise<CountPlanListRow> {
+  const plan = await loadOwnPlan(tx, auth.scope, id);
   if (plan.version !== input.version) throw conflictError();
   // Inventory Updated: the description stays editable (Logiwa parity); the name is locked.
   const nameLocked = planNameLockedReason(plan.status);
   if (nameLocked && input.code !== plan.code) throw new DomainError("INVALID_STATE", nameLocked);
-  if (input.code.toLowerCase() !== plan.code.toLowerCase()) assertUniqueCode(tx, plan.warehouseId, input.code, plan.id);
+  if (input.code.toLowerCase() !== plan.code.toLowerCase()) await assertUniqueCode(tx, plan.warehouseId, input.code, plan.id);
   const description = input.description || null;
-  if (input.code === plan.code && description === plan.description) return getCountPlanSummary(tx, auth.scope, id);
-  const updated = tx.update(schema.countPlans).set({ code: input.code, description, updatedBy: ctx.userId, version: sql`${schema.countPlans.version} + 1` })
-    .where(and(eq(schema.countPlans.id, id), eq(schema.countPlans.version, input.version))).returning().get();
+  if (input.code === plan.code && description === plan.description) return await getCountPlanSummary(tx, auth.scope, id);
+  const updated = (await tx.update(schema.countPlans).set({ code: input.code, description, updatedBy: ctx.userId, version: sql`${schema.countPlans.version} + 1` })
+    .where(and(eq(schema.countPlans.id, id), eq(schema.countPlans.version, input.version))).returning())[0];
   if (!updated) throw conflictError();
-  changeLog.recordUpdate(tx, ctx, {
+  await changeLog.recordUpdate(tx, ctx, {
     entityType: "count_plan", entityId: id, entityCode: updated.code,
     before: { code: plan.code, description: plan.description },
     after: { code: updated.code, description: updated.description },
   });
-  return getCountPlanSummary(tx, auth.scope, id);
+  return await getCountPlanSummary(tx, auth.scope, id);
 }
 
-function whCode(tx: Tx, id: string): string {
-  return tx.select({ code: schema.warehouses.code }).from(schema.warehouses).where(eq(schema.warehouses.id, id)).get()?.code ?? id;
+async function whCode(tx: Tx, id: string): Promise<string> {
+  return (await tx.select({ code: schema.warehouses.code }).from(schema.warehouses).where(eq(schema.warehouses.id, id)).limit(1))[0]?.code ?? id;
 }
 
-export function deleteCountPlan(tx: Tx, ctx: DomainCtx, auth: AuthContext, id: string, version?: number): void {
-  const plan = loadOwnPlan(tx, auth.scope, id);
+export async function deleteCountPlan(tx: Tx, ctx: DomainCtx, auth: AuthContext, id: string, version?: number): Promise<void> {
+  const plan = await loadOwnPlan(tx, auth.scope, id);
   if (version !== undefined && plan.version !== version) throw conflictError();
   const reason = planDeleteReason(plan.status);
   if (reason) throw new DomainError("INVALID_STATE", reason);
-  const jobs = tx.select({ id: schema.jobs.id }).from(schema.jobs).where(eq(schema.jobs.countPlanId, id)).get();
+  const jobs = (await tx.select({ id: schema.jobs.id }).from(schema.jobs).where(eq(schema.jobs.countPlanId, id)).limit(1))[0];
   if (jobs) throw new DomainError("INVALID_STATE", "This count plan has jobs; cancel it instead");
-  tx.delete(schema.countPlans).where(eq(schema.countPlans.id, id)).run();
-  changeLog.recordDelete(tx, ctx, { entityType: "count_plan", entityId: id, entityCode: plan.code });
+  await tx.delete(schema.countPlans).where(eq(schema.countPlans.id, id));
+  await changeLog.recordDelete(tx, ctx, { entityType: "count_plan", entityId: id, entityCode: plan.code });
 }
 
 /** Live stock per location for the wizard grid (Location Count) or per product in a warehouse (SKU Count). */
-export function stockHints(db: AppDb, warehouseId: string, locationIds: readonly string[], productIds: readonly string[]): { locations: Record<string, number>; products: Record<string, number> } {
+export async function stockHints(db: AppDb, warehouseId: string, locationIds: readonly string[], productIds: readonly string[]): Promise<{ locations: Record<string, number>; products: Record<string, number> }> {
   const locations: Record<string, number> = {};
   const products: Record<string, number> = {};
   if (locationIds.length) {
-    for (const r of db.select({ id: schema.inventory.locationId, n: sql<number>`SUM(${schema.inventory.onHand})` }).from(schema.inventory)
-      .where(and(inArray(schema.inventory.locationId, [...locationIds]), gt(schema.inventory.onHand, 0))).groupBy(schema.inventory.locationId).all()) locations[r.id] = Number(r.n);
+    for (const r of await db.select({ id: schema.inventory.locationId, n: sql<number>`SUM(${schema.inventory.onHand})` }).from(schema.inventory)
+      .where(and(inArray(schema.inventory.locationId, [...locationIds]), gt(schema.inventory.onHand, 0))).groupBy(schema.inventory.locationId)) locations[r.id] = Number(r.n);
   }
   if (productIds.length) {
-    for (const r of db.select({ id: schema.inventory.productId, n: sql<number>`SUM(${schema.inventory.onHand})` }).from(schema.inventory)
-      .where(and(inArray(schema.inventory.productId, [...productIds]), eq(schema.inventory.warehouseId, warehouseId), gt(schema.inventory.onHand, 0))).groupBy(schema.inventory.productId).all()) products[r.id] = Number(r.n);
+    for (const r of await db.select({ id: schema.inventory.productId, n: sql<number>`SUM(${schema.inventory.onHand})` }).from(schema.inventory)
+      .where(and(inArray(schema.inventory.productId, [...productIds]), eq(schema.inventory.warehouseId, warehouseId), gt(schema.inventory.onHand, 0))).groupBy(schema.inventory.productId)) products[r.id] = Number(r.n);
   }
   return { locations, products };
 }

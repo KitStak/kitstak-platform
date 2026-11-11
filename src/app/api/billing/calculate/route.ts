@@ -12,9 +12,9 @@ import { calculateContracts, calculateSchema, previewCalculation } from "@/serve
 export const POST = defineRoute({
   permission: "settings.billing.calculate",
   body: calculateSchema,
-  handler: ({ db, auth, actor, body }) => {
-    if (body.dryRun === true) return previewCalculation(db, auth, body);
-    const result = calculateContracts(db, auth, actor, body);
+  handler: async ({ db, auth, actor, body }) => {
+    if (body.dryRun === true) return await previewCalculation(db, auth, body);
+    const result = await calculateContracts(db, auth, actor, body);
     // Nothing calculated (e.g. a single contract with no fees): a real 409, matching Approve.
     const first = result.failed[0];
     if (result.succeeded.length === 0 && first) throw new AppError(first.code === "DUPLICATE" ? "DUPLICATE" : "INVALID_STATE", first.message);

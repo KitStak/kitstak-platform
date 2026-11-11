@@ -2,7 +2,8 @@
  * Search provider "pos" (Purchase Orders). Matches PO code, reference number and vendor
  * inside the caller's warehouse/client scope (scopedWhere). Owner: M05.
  */
-import { and, desc, eq, or, type SQL } from "drizzle-orm";
+import { and, eq, or, type SQL } from "drizzle-orm";
+import { desc } from "@/server/db/order";
 import { scopedWhere } from "@/server/auth/scope";
 import { clients, purchaseOrders } from "@/server/db/schema";
 import { displayPoStatus } from "@/lib/grid-defs/receiving/purchase-orders";
@@ -23,16 +24,15 @@ export const provider: SearchProvider = {
   configured: true,
   permission: "inventory.purchase_orders.view",
   seeAllHref: (q) => listSearchHref("/receiving", q),
-  count: (ctx) => ctx.db.select({ n: COUNT_ALL }).from(purchaseOrders).where(where(ctx)).get()?.n ?? 0,
-  search: (ctx) =>
-    ctx.db
+  count: async (ctx) => (await ctx.db.select({ n: COUNT_ALL }).from(purchaseOrders).where(where(ctx)).limit(1))[0]?.n ?? 0,
+  search: async (ctx) =>
+    (await ctx.db
       .select({ id: purchaseOrders.id, code: purchaseOrders.code, referenceNumber: purchaseOrders.referenceNumber, status: purchaseOrders.status, vendorName: purchaseOrders.vendorName, clientName: clients.name })
       .from(purchaseOrders)
       .innerJoin(clients, eq(clients.id, purchaseOrders.clientId))
       .where(where(ctx))
       .orderBy(matchRank(purchaseOrders.code, ctx.q), desc(purchaseOrders.code))
-      .limit(ctx.limit)
-      .all()
+      .limit(ctx.limit))
       .map((p) => ({
         id: p.id,
         title: p.code,

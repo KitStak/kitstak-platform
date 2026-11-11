@@ -3,7 +3,8 @@
  * channel history (runs with the per-run item detail), and the two call-log grids.
  * Every read is limited to store connections of clients in scope.
  */
-import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { desc } from "@/server/db/order";
 import type { AppDb } from "@/server/api/db";
 import { AppError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
@@ -59,11 +60,11 @@ export interface MethodRow {
   readonly canSimulateError: boolean;
 }
 
-export function listMethods(db: AppDb, auth: AuthContext, query: GridQuery): { rows: MethodRow[]; total: number } {
+export async function listMethods(db: AppDb, auth: AuthContext, query: GridQuery): Promise<{ rows: MethodRow[]; total: number }> {
   const grid = compileGrid(METHOD_BINDING, query, [connectionScope(auth)]);
   const lastStatus = sql<string | null>`(SELECT x.status FROM channel_runs x WHERE x.method_id = ${m.id} ORDER BY x.started_at DESC LIMIT 1)`;
-  const result = paginate(db.select({ m, c: cc, last: lastStatus }).from(m).innerJoin(cc, eq(cc.id, m.connectionId)).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(m).innerJoin(cc, eq(cc.id, m.connectionId)).where(grid.where).get()?.n ?? 0, { page: query.page, pageSize: query.pageSize });
+  const result = await paginate(db.select({ m, c: cc, last: lastStatus }).from(m).innerJoin(cc, eq(cc.id, m.connectionId)).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(m).innerJoin(cc, eq(cc.id, m.connectionId)).where(grid.where).limit(1))[0]?.n ?? 0, { page: query.page, pageSize: query.pageSize });
   return {
     rows: result.rows.map(({ m: x, c, last }) => ({
       id: x.id, connectionId: c.id, method: x.method, storeName: c.storeName, provider: c.provider, isSandbox: c.distribution === "API", status: x.status, jobStatus: x.jobStatus,
@@ -74,8 +75,8 @@ export function listMethods(db: AppDb, auth: AuthContext, query: GridQuery): { r
   };
 }
 
-export function loadMethod(db: AppDb, auth: AuthContext, id: string) {
-  const row = assertFound(db.select({ m, c: cc }).from(m).innerJoin(cc, eq(cc.id, m.connectionId)).where(eq(m.id, id)).get(), "Channel method");
+export async function loadMethod(db: AppDb, auth: AuthContext, id: string) {
+  const row = assertFound((await db.select({ m, c: cc }).from(m).innerJoin(cc, eq(cc.id, m.connectionId)).where(eq(m.id, id)).limit(1))[0], "Channel method");
   if (!hasClient(auth.scope, row.c.clientId)) throw new AppError("NOT_FOUND", "Channel method not found");
   return row;
 }
@@ -86,7 +87,7 @@ export function loadMethod(db: AppDb, auth: AuthContext, id: string) {
  * on demand; scheduled sandbox runs never fail on purpose.
  */
 export async function runMethodNow(db: AppDb, auth: AuthContext, id: string, opts: { readonly simulateError?: boolean } = {}): Promise<RunSummary> {
-  const row = loadMethod(db, auth, id);
+  const row = await loadMethod(db, auth, id);
   if (opts.simulateError && !canSimulateError(isSimulated(row.c), row.m.method)) {
     throw new AppError("VALIDATION", "Simulate error is available only for Download Orders on a KitStak Sandbox or demo-feed store");
   }
@@ -122,10 +123,10 @@ const toRunRow = ({ r: x, c }: { r: typeof r.$inferSelect; c: typeof cc.$inferSe
   errorCount: x.errorCount, totalCount: x.totalCount, startedAt: x.startedAt, endedAt: x.endedAt,
 });
 
-export function listHistory(db: AppDb, auth: AuthContext, query: GridQuery, connectionId?: string | null): { rows: RunRow[]; total: number } {
+export async function listHistory(db: AppDb, auth: AuthContext, query: GridQuery, connectionId?: string | null): Promise<{ rows: RunRow[]; total: number }> {
   const grid = compileGrid(HISTORY_BINDING, query, [connectionScope(auth), connectionId ? eq(r.connectionId, connectionId) : undefined]);
-  const result = paginate(db.select({ r, c: cc }).from(r).innerJoin(cc, eq(cc.id, r.connectionId)).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(r).innerJoin(cc, eq(cc.id, r.connectionId)).where(grid.where).get()?.n ?? 0, { page: query.page, pageSize: query.pageSize });
+  const result = await paginate(db.select({ r, c: cc }).from(r).innerJoin(cc, eq(cc.id, r.connectionId)).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(r).innerJoin(cc, eq(cc.id, r.connectionId)).where(grid.where).limit(1))[0]?.n ?? 0, { page: query.page, pageSize: query.pageSize });
   return { rows: result.rows.map(toRunRow), total: result.total };
 }
 
@@ -141,13 +142,13 @@ export interface RunItemRow {
   readonly orderId: string | null;
 }
 
-export function getRun(db: AppDb, auth: AuthContext, id: string, page: number, pageSize: number, onlyErrors: boolean): { run: RunRow; items: RunItemRow[]; total: number } {
-  const row = assertFound(db.select({ r, c: cc }).from(r).innerJoin(cc, eq(cc.id, r.connectionId)).where(eq(r.id, id)).get(), "Channel run");
+export async function getRun(db: AppDb, auth: AuthContext, id: string, page: number, pageSize: number, onlyErrors: boolean): Promise<{ run: RunRow; items: RunItemRow[]; total: number }> {
+  const row = assertFound((await db.select({ r, c: cc }).from(r).innerJoin(cc, eq(cc.id, r.connectionId)).where(eq(r.id, id)).limit(1))[0], "Channel run");
   if (!hasClient(auth.scope, row.c.clientId)) throw new AppError("NOT_FOUND", "Channel run not found");
   const where = and(eq(it.runId, id), onlyErrors ? eq(it.success, false) : undefined);
-  const total = db.select({ n: sql<number>`count(*)` }).from(it).where(where).get()?.n ?? 0;
-  const orderIdSql = sql<string | null>`(SELECT o.id FROM shipment_orders o WHERE o.code = json_extract(${it.properties}, '$.orderCode') LIMIT 1)`;
-  const items = db.select({ i: it, orderId: orderIdSql }).from(it).where(where).orderBy(desc(it.success), it.at).limit(pageSize).offset((page - 1) * pageSize).all();
+  const total = (await db.select({ n: sql<number>`count(*)` }).from(it).where(where).limit(1))[0]?.n ?? 0;
+  const orderIdSql = sql<string | null>`(SELECT o.id FROM shipment_orders o WHERE o.code = ((${it.properties})::jsonb ->> 'orderCode') LIMIT 1)`;
+  const items = await db.select({ i: it, orderId: orderIdSql }).from(it).where(where).orderBy(desc(it.success), it.at).limit(pageSize).offset((page - 1) * pageSize);
   return {
     run: toRunRow(row), total: Number(total),
     items: items.map(({ i, orderId }) => ({ id: i.id, success: i.success, properties: i.properties, errorMessage: i.errorMessage, storeOrderNumber: i.storeOrderNumber, sellerSku: i.sellerSku, qty: i.qty, at: i.at, orderId: orderId ?? null })),
@@ -185,11 +186,11 @@ export interface CallLogRow {
   readonly runId: string;
 }
 
-export function listCallLogs(db: AppDb, auth: AuthContext, kind: ItemKind, query: GridQuery): { rows: CallLogRow[]; total: number } {
+export async function listCallLogs(db: AppDb, auth: AuthContext, kind: ItemKind, query: GridQuery): Promise<{ rows: CallLogRow[]; total: number }> {
   const grid = compileGrid(itemBinding(kind), query, [connectionScope(auth), inArray(r.method, [...KIND_METHODS[kind]])]);
   const base = () => db.select({ i: it, r, c: cc }).from(it).innerJoin(r, eq(r.id, it.runId)).innerJoin(cc, eq(cc.id, r.connectionId));
-  const result = paginate(base().where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(it).innerJoin(r, eq(r.id, it.runId)).innerJoin(cc, eq(cc.id, r.connectionId)).where(grid.where).get()?.n ?? 0, { page: query.page, pageSize: query.pageSize });
+  const result = await paginate(base().where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(it).innerJoin(r, eq(r.id, it.runId)).innerJoin(cc, eq(cc.id, r.connectionId)).where(grid.where).limit(1))[0]?.n ?? 0, { page: query.page, pageSize: query.pageSize });
   return {
     rows: result.rows.map(({ i, r: run, c }) => ({
       id: i.id, provider: c.provider, isSandbox: c.distribution === "API", storeName: c.storeName, method: run.method, at: i.at, storeOrderNumber: i.storeOrderNumber,

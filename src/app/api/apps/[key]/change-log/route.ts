@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: ["settings.add_ons.view", "settings.company_settings.view"],
   params: z.object({ key: z.string().trim().min(1).max(60) }),
   query: changeLogPageSchema,
-  handler: ({ db, params, query }) => {
-    loadApp(db, params.key);
-    return changeLogResult(db, APP_ENTITY, params.key, query);
+  handler: async ({ db, params, query }) => {
+    await loadApp(db, params.key);
+    return await changeLogResult(db, APP_ENTITY, params.key, query);
   },
 });

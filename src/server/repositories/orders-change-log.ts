@@ -15,6 +15,7 @@ import { schema } from "@/server/db";
 /** Same glyph as `EMPTY_VALUE` in `@/lib/format` (not imported: that module carries React context for components). */
 const EMPTY_VALUE = "—";
 import { effectiveRank, priorityFromRank } from "@/lib/grid-defs/orders/priority";
+import { dbGet, withWriteTx } from "@/server/db/sql";
 
 const cl = schema.changeLog;
 const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:?\d{2})$/;
@@ -35,8 +36,8 @@ function zoneAbbr(formatted: string, timeZone: string): string {
 }
 
 /** Highest change_log rowid now; pass it to `tidyOrderChangeLog` after the command. */
-export function changeLogMark(db: AppDb): number {
-  return Number(db.get<{ m: number | null }>(sql`SELECT max(rowid) AS m FROM change_log`)?.m ?? 0);
+export async function changeLogMark(db: AppDb): Promise<number> {
+  return Number((await dbGet<{ m: number | null }>(db, sql`SELECT max(rowid) AS m FROM change_log`))?.m ?? 0);
 }
 
 /**
@@ -109,13 +110,12 @@ const ROW_COLUMNS = { rowid: sql<number>`${cl}.rowid`, entityId: cl.entityId, fi
  * Rewrites the Update rows written after `mark` for `orderIds`. Only rows whose message is
  * the default "<label> is modified. <from> --> <to>" are rewritten; custom sentences stay.
  */
-export function tidyOrderChangeLog(db: AppDb, orderIds: readonly string[], mark: number): void {
+export async function tidyOrderChangeLog(db: AppDb, orderIds: readonly string[], mark: number): Promise<void> {
   if (orderIds.length === 0) return;
-  const rows = db.select(ROW_COLUMNS)
+  const rows = await db.select(ROW_COLUMNS)
     .from(cl)
-    .where(and(gt(sql`${cl}.rowid`, mark), eq(cl.entityType, "shipment_order"), eq(cl.type, "Update"), inArray(cl.entityId, [...orderIds])))
-    .all() as Row[];
-  tidyRows(db, rows);
+    .where(and(gt(sql`${cl}.rowid`, mark), eq(cl.entityType, "shipment_order"), eq(cl.type, "Update"), inArray(cl.entityId, [...orderIds]))) as Row[];
+  await tidyRows(db, rows);
 }
 
 /**
@@ -124,26 +124,26 @@ export function tidyOrderChangeLog(db: AppDb, orderIds: readonly string[], mark:
  * change_log is indexed by entity), so the order detail can repair its own history on read and a
  * one-off backfill can repair everything (`repairOrderChangeLog(db)`).
  */
-const NEEDS_REPAIR = sql`(${cl.message} LIKE '%.  -->%' OR ${cl.message} LIKE '% --> ' OR ${cl.fromValue} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*' OR ${cl.toValue} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*' OR ${cl.fromValue} GLOB '*[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M' OR ${cl.toValue} GLOB '*[0-9]:[0-9][0-9]:[0-9][0-9] [AP]M' OR ${cl.fieldLabel} LIKE '% Id' OR ${cl.field} IN (${sql.join(Object.keys(ORDER_LOG_LABELS).map((k) => sql`${k}`), sql`, `)}))`;
+const NEEDS_REPAIR = sql`(${cl.message} ILIKE '%.  -->%' OR ${cl.message} ILIKE '% --> ' OR ${cl.fromValue} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' OR ${cl.toValue} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T' OR ${cl.fromValue} ~ '[0-9]:[0-9]{2}:[0-9]{2} [AP]M$' OR ${cl.toValue} ~ '[0-9]:[0-9]{2}:[0-9]{2} [AP]M$' OR ${cl.fieldLabel} ILIKE '% Id' OR ${cl.field} IN (${sql.join(Object.keys(ORDER_LOG_LABELS).map((k) => sql`${k}`), sql`, `)}))`;
 
 /** Repairs raw Update rows on the given orders, or on every shipment order when `orderIds` is omitted. Returns rows rewritten. */
-export function repairOrderChangeLog(db: AppDb, orderIds?: readonly string[]): number {
+export async function repairOrderChangeLog(db: AppDb, orderIds?: readonly string[]): Promise<number> {
   if (orderIds && orderIds.length === 0) return 0;
   const base = and(eq(cl.entityType, "shipment_order"), eq(cl.type, "Update"), NEEDS_REPAIR);
   const where = orderIds ? and(base, inArray(cl.entityId, [...orderIds])) : base;
-  const rows = db.select(ROW_COLUMNS).from(cl).where(where).all() as Row[];
+  const rows = await db.select(ROW_COLUMNS).from(cl).where(where) as Row[];
   if (rows.length === 0) return 0;
   let changed = 0;
-  db.transaction(() => {
-    changed = tidyRows(db, rows);
+  await withWriteTx(db, async (tx) => {
+    changed = await tidyRows(tx, rows);
   });
   return changed;
 }
 
-function tidyRows(db: AppDb, rows: readonly Row[]): number {
+async function tidyRows(db: AppDb, rows: readonly Row[]): Promise<number> {
   if (rows.length === 0) return 0;
   let changed = 0;
-  const tz = warehouseZones(db, [...new Set(rows.map((r) => r.entityId))]);
+  const tz = await warehouseZones(db, [...new Set(rows.map((r) => r.entityId))]);
   const byOrder = new Map<string, Row[]>();
   for (const r of rows) byOrder.set(r.entityId, [...(byOrder.get(r.entityId) ?? []), r]);
 
@@ -152,13 +152,13 @@ function tidyRows(db: AppDb, rows: readonly Row[]): number {
     const level = list.find((r) => r.field === "priority");
     const rank = list.find((r) => r.field === "priorityRank");
     if (rank) {
-      const current = db.select({ priority: schema.shipmentOrders.priority }).from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).get();
+      const current = (await db.select({ priority: schema.shipmentOrders.priority }).from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, orderId)).limit(1))[0];
       const from = priorityDisplay(rank.fromValue, level ? level.fromValue : current?.priority);
       const to = priorityDisplay(rank.toValue, level ? level.toValue : current?.priority);
       const target = level ?? rank;
-      write(db, target.rowid, "priority", "Priority", from, to);
+      await write(db, target.rowid, "priority", "Priority", from, to);
       changed++;
-      if (level) db.delete(cl).where(sql`${cl}.rowid = ${rank.rowid}`).run();
+      if (level) await db.delete(cl).where(sql`${cl}.rowid = ${rank.rowid}`);
     }
     for (const r of list) {
       if (r === rank || (rank && r === level)) continue;
@@ -167,7 +167,7 @@ function tidyRows(db: AppDb, rows: readonly Row[]): number {
       const to = logSide(r.toValue, zone);
       const label = orderLogLabel(r.field, r.fieldLabel);
       if (from === (r.fromValue ?? "") && to === (r.toValue ?? "") && label === r.fieldLabel) continue;
-      write(db, r.rowid, r.field, label, from, to);
+      await write(db, r.rowid, r.field, label, from, to);
       changed++;
     }
   }
@@ -178,22 +178,22 @@ function isDefaultMessage(r: Row): boolean {
   return r.message === `${r.fieldLabel} is modified. ${r.fromValue ?? ""} --> ${r.toValue ?? ""}`;
 }
 
-function write(db: AppDb, rowid: number, field: string | null, label: string, from: string, to: string): void {
-  db.update(cl).set({ field, fieldLabel: label, fromValue: from, toValue: to, message: `${label} is modified. ${from} --> ${to}` })
-    .where(sql`${cl}.rowid = ${rowid}`).run();
+async function write(db: AppDb, rowid: number, field: string | null, label: string, from: string, to: string): Promise<void> {
+  await db.update(cl).set({ field, fieldLabel: label, fromValue: from, toValue: to, message: `${label} is modified. ${from} --> ${to}` })
+    .where(sql`${cl}.rowid = ${rowid}`);
 }
 
-function warehouseZones(db: AppDb, orderIds: readonly string[]): Map<string, string> {
-  const rows = db.select({ id: schema.shipmentOrders.id, tz: schema.warehouses.timezone }).from(schema.shipmentOrders)
+async function warehouseZones(db: AppDb, orderIds: readonly string[]): Promise<Map<string, string>> {
+  const rows = await db.select({ id: schema.shipmentOrders.id, tz: schema.warehouses.timezone }).from(schema.shipmentOrders)
     .leftJoin(schema.warehouses, eq(schema.warehouses.id, schema.shipmentOrders.warehouseId))
-    .where(inArray(schema.shipmentOrders.id, [...orderIds])).all();
+    .where(inArray(schema.shipmentOrders.id, [...orderIds]));
   return new Map(rows.map((r) => [r.id, r.tz ?? DEFAULT_TZ]));
 }
 
 /** Runs `fn`, then tidies the order change-log rows it wrote. */
-export function withTidyLog<T>(db: AppDb, orderIds: readonly string[], fn: () => T): T {
-  const mark = changeLogMark(db);
+export async function withTidyLog<T>(db: AppDb, orderIds: readonly string[], fn: () => T): Promise<T> {
+  const mark = await changeLogMark(db);
   const out = fn();
-  tidyOrderChangeLog(db, orderIds, mark);
+  await tidyOrderChangeLog(db, orderIds, mark);
   return out;
 }

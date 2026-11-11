@@ -6,5 +6,5 @@ import { getReceipt } from "@/server/repositories/receipts";
 export const GET = defineRoute({
   permission: ["inventory.receiving_history.view", "inventory.purchase_orders.view"],
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getReceipt(db, auth.scope, params.id),
+  handler: async ({ db, auth, params }) => await getReceipt(db, auth.scope, params.id),
 });

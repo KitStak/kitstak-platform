@@ -8,5 +8,5 @@ import { domainCtx, idSchema } from "@/server/repositories/platform-common";
 export const DELETE = defineRoute({
   permission: ORDER_PERMISSIONS.jobs,
   params: z.object({ id: idSchema, jobId: idSchema }),
-  handler: ({ db, auth, actor, params }) => unassignJob(db, domainCtx(actor, auth), params.id, params.jobId),
+  handler: async ({ db, auth, actor, params }) => await unassignJob(db, domainCtx(actor, auth), params.id, params.jobId),
 });

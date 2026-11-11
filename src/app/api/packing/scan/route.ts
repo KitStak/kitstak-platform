@@ -9,5 +9,5 @@ import { PACKING_PERMISSIONS, scanOutcome, scanQuerySchema } from "@/server/repo
 export const GET = defineRoute({
   permission: PACKING_PERMISSIONS.view,
   query: scanQuerySchema,
-  handler: ({ db, auth, query }) => scanOutcome(db, auth.scope, query),
+  handler: async ({ db, auth, query }) => await scanOutcome(db, auth.scope, query),
 });

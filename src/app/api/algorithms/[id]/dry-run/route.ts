@@ -10,9 +10,9 @@ export const POST = defineRoute({
   params: idParamsSchema,
   body: allocationDryRunSchema,
   transaction: false,
-  handler: ({ db, auth, actor, params, body }) => {
-    const a = loadAlgorithm(db, auth, params.id);
+  handler: async ({ db, auth, actor, params, body }) => {
+    const a = await loadAlgorithm(db, auth, params.id);
     if (a.kind !== "Allocation") throw new AppError("VALIDATION", "Dry run is available for allocation algorithms");
-    return allocationDryRun(db, auth, body.draft ? null : a.id, body, actor);
+    return await allocationDryRun(db, auth, body.draft ? null : a.id, body, actor);
   },
 });

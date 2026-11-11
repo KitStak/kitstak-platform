@@ -15,18 +15,18 @@ export const PUT = defineRoute({
   permission: PACKING_PERMISSIONS.execute,
   params: idParamsSchema,
   body: saveDraftSchema,
-  handler: ({ db, auth, actor, params, body }) => {
-    const ctx = packContext(db, auth.scope, params.id);
-    return savePackDraft(db, scopedCtx(actor, auth), params.id, body, { status: ctx.order.status, lines: ctx.lines.filter((l) => l.toPack > 0) });
+  handler: async ({ db, auth, actor, params, body }) => {
+    const ctx = await packContext(db, auth.scope, params.id);
+    return await savePackDraft(db, scopedCtx(actor, auth), params.id, body, { status: ctx.order.status, lines: ctx.lines.filter((l) => l.toPack > 0) });
   },
 });
 
 export const DELETE = defineRoute({
   permission: PACKING_PERMISSIONS.execute,
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => {
-    loadPackOrder(db, auth.scope, params.id);
-    clearPackDraft(db, params.id);
+  handler: async ({ db, auth, params }) => {
+    await loadPackOrder(db, auth.scope, params.id);
+    await clearPackDraft(db, params.id);
     return { cleared: true };
   },
 });

@@ -5,5 +5,5 @@ import { PACKING_PERMISSIONS } from "@/server/repositories/packing-scan";
 
 export const GET = defineRoute({
   permission: PACKING_PERMISSIONS.view,
-  handler: ({ db, auth }) => hospitalWarehouses(db, auth.scope),
+  handler: async ({ db, auth }) => await hospitalWarehouses(db, auth.scope),
 });

@@ -26,16 +26,16 @@ export type AvailabilityResult = { readonly taken: Readonly<Record<string, strin
 
 export type AvailabilityEntity = "location" | "warehouse" | "lp_type" | "lp_number" | "mobile_cart" | "shipment_package";
 
-function firstOther(db: AppDb, table: typeof s.locations | typeof s.lpTypes | typeof s.mobileCarts | typeof s.shipmentPackages | typeof s.warehouses, where: SQL | undefined, excludeId?: string): { id: string; code: string } | undefined {
-  const rows = db.select({ id: table.id, code: table.code }).from(table).where(where).limit(2).all();
+async function firstOther(db: AppDb, table: typeof s.locations | typeof s.lpTypes | typeof s.mobileCarts | typeof s.shipmentPackages | typeof s.warehouses, where: SQL | undefined, excludeId?: string): Promise<{ id: string; code: string } | undefined> {
+  const rows = await db.select({ id: table.id, code: table.code }).from(table).where(where).limit(2);
   return rows.find((r) => r.id !== excludeId);
 }
 
-export function checkAvailability(db: AppDb, auth: AuthContext, entity: AvailabilityEntity, q: AvailabilityQuery): AvailabilityResult {
+export async function checkAvailability(db: AppDb, auth: AuthContext, entity: AvailabilityEntity, q: AvailabilityQuery): Promise<AvailabilityResult> {
   const taken: Record<string, string> = {};
   const code = q.code?.trim();
   if (entity === "warehouse") {
-    if (code && firstOther(db, s.warehouses, sql`lower(${s.warehouses.code}) = lower(${code})`, q.excludeId)) taken.code = `Warehouse ${code} already exists`;
+    if (code && await firstOther(db, s.warehouses, sql`lower(${s.warehouses.code}) = lower(${code})`, q.excludeId)) taken.code = `Warehouse ${code} already exists`;
     return { taken };
   }
   if (!q.warehouseId) return { taken };
@@ -43,15 +43,15 @@ export function checkAvailability(db: AppDb, auth: AuthContext, entity: Availabi
   switch (entity) {
     case "location": {
       const t = s.locations;
-      if (code && firstOther(db, t, and(eq(t.warehouseId, q.warehouseId), sql`lower(${t.code}) = lower(${code})`), q.excludeId)) taken["info.code"] = `Location ${code} already exists in this warehouse`;
+      if (code && await firstOther(db, t, and(eq(t.warehouseId, q.warehouseId), sql`lower(${t.code}) = lower(${code})`), q.excludeId)) taken["info.code"] = `Location ${code} already exists in this warehouse`;
       break;
     }
     case "lp_type": {
       const t = s.lpTypes;
-      if (code && firstOther(db, t, and(eq(t.warehouseId, q.warehouseId), sql`lower(${t.code}) = lower(${code})`), q.excludeId)) taken.code = `LP type ${code} already exists in this warehouse`;
+      if (code && await firstOther(db, t, and(eq(t.warehouseId, q.warehouseId), sql`lower(${t.code}) = lower(${code})`), q.excludeId)) taken.code = `LP type ${code} already exists in this warehouse`;
       const prefix = q.prefix?.trim();
       if (prefix) {
-        const clash = db.select({ id: t.id, code: t.code }).from(t).where(and(eq(t.warehouseId, q.warehouseId), sql`upper(${t.numberPrefix}) = upper(${prefix})`)).limit(2).all().find((r) => r.id !== q.excludeId);
+        const clash = (await db.select({ id: t.id, code: t.code }).from(t).where(and(eq(t.warehouseId, q.warehouseId), sql`upper(${t.numberPrefix}) = upper(${prefix})`)).limit(2)).find((r) => r.id !== q.excludeId);
         if (clash) taken.numberPrefix = `Prefix ${prefix.toUpperCase()} is already used by LP type ${clash.code}`;
       }
       break;
@@ -59,19 +59,19 @@ export function checkAvailability(db: AppDb, auth: AuthContext, entity: Availabi
     case "lp_number": {
       // Same rule as the create path's assertNumberFree: unique per warehouse across every LP type.
       const t = s.licensePlates;
-      if (code && db.select({ id: t.id }).from(t).where(and(eq(t.warehouseId, q.warehouseId), sql`upper(${t.number}) = upper(${code})`)).limit(2).all().some((r) => r.id !== q.excludeId)) taken.number = `LP number ${code.toUpperCase()} already exists in this warehouse`;
+      if (code && (await db.select({ id: t.id }).from(t).where(and(eq(t.warehouseId, q.warehouseId), sql`upper(${t.number}) = upper(${code})`)).limit(2)).some((r) => r.id !== q.excludeId)) taken.number = `LP number ${code.toUpperCase()} already exists in this warehouse`;
       const alt = q.alternateBarcode?.trim();
-      if (alt && db.select({ id: t.id }).from(t).where(and(eq(t.warehouseId, q.warehouseId), eq(t.alternateBarcode, alt))).limit(2).all().some((r) => r.id !== q.excludeId)) taken.alternateBarcode = `Alternate barcode ${alt} is already used`;
+      if (alt && (await db.select({ id: t.id }).from(t).where(and(eq(t.warehouseId, q.warehouseId), eq(t.alternateBarcode, alt))).limit(2)).some((r) => r.id !== q.excludeId)) taken.alternateBarcode = `Alternate barcode ${alt} is already used`;
       break;
     }
     case "mobile_cart": {
       const t = s.mobileCarts;
-      if (code && firstOther(db, t, and(eq(t.warehouseId, q.warehouseId), sql`lower(${t.code}) = lower(${code})`), q.excludeId)) taken.code = `Mobile cart ${code} already exists in this warehouse`;
+      if (code && await firstOther(db, t, and(eq(t.warehouseId, q.warehouseId), sql`lower(${t.code}) = lower(${code})`), q.excludeId)) taken.code = `Mobile cart ${code} already exists in this warehouse`;
       break;
     }
     case "shipment_package": {
       const t = s.shipmentPackages;
-      if (code && firstOther(db, t, and(eq(t.warehouseId, q.warehouseId), sql`lower(${t.code}) = lower(${code})`), q.excludeId)) taken.code = `Shipment package ${code} already exists in this warehouse`;
+      if (code && await firstOther(db, t, and(eq(t.warehouseId, q.warehouseId), sql`lower(${t.code}) = lower(${code})`), q.excludeId)) taken.code = `Shipment package ${code} already exists in this warehouse`;
       break;
     }
   }

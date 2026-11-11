@@ -5,5 +5,5 @@ import { DATA_SETUP_PERMISSION } from "../shared";
 
 export const GET = defineRoute({
   permission: DATA_SETUP_PERMISSION,
-  handler: ({ db, auth }) => lookupCounts(db, auth),
+  handler: async ({ db, auth }) => await lookupCounts(db, auth),
 });

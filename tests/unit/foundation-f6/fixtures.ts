@@ -10,8 +10,8 @@ import { seededDb, type SeededDb } from "../foundation-f3/fixtures";
 
 export { seededDb, type SeededDb };
 
-export function sessionUserFor(db: SeededDb["db"], id: string): SessionUser {
-  const row = db.select().from(users).all().find((u) => u.id === id);
+export async function sessionUserFor(db: SeededDb["db"], id: string): Promise<SessionUser> {
+  const row = (await db.select().from(users)).find((u) => u.id === id);
   if (!row) throw new Error(`no user ${id}`);
   return {
     id: row.id,
@@ -27,8 +27,8 @@ export function sessionUserFor(db: SeededDb["db"], id: string): SessionUser {
   };
 }
 
-export function authFor(testDb: SeededDb, id: string): AuthContext {
-  return buildAuthContext(testDb.db, sessionUserFor(testDb.db, id));
+export async function authFor(testDb: SeededDb, id: string): Promise<AuthContext> {
+  return await buildAuthContext(testDb.db, await sessionUserFor(testDb.db, id));
 }
 
 export interface TempStore {

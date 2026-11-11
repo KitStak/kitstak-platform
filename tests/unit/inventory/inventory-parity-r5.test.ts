@@ -9,29 +9,29 @@ import { createWorld, type World } from "../foundation/domain/fixtures";
 
 describe("hygiene repair of allocated units (REQ-R2-32)", () => {
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
 
-  it("relabels a fully allocated bucket and carries the allocation to the corrected bucket", () => {
-    const b = ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 3, expiryDate: "2026-02-28" }).bucket;
-    const { allocation } = ledger.allocate(w.db, w.ctx, { inventoryId: b.id, qty: 2 });
-    ledger.allocate(w.db, w.ctx, { inventoryId: b.id, qty: 1 });
-    expect(findInventoryHygieneIssues(w.db).map((i) => i.check)).toEqual(["untracked-attribute"]);
+  it("relabels a fully allocated bucket and carries the allocation to the corrected bucket", async () => {
+    const b = (await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 3, expiryDate: "2026-02-28" })).bucket;
+    const { allocation } = await ledger.allocate(w.db, w.ctx, { inventoryId: b.id, qty: 2 });
+    await ledger.allocate(w.db, w.ctx, { inventoryId: b.id, qty: 1 });
+    expect((await findInventoryHygieneIssues(w.db)).map((i) => i.check)).toEqual(["untracked-attribute"]);
 
-    const res = repairInventoryHygiene(w.db, w.ctx);
+    const res = await repairInventoryHygiene(w.db, w.ctx);
     expect(res.skipped).toEqual([]);
     expect(res.repaired).toBe(1);
-    expect(findInventoryHygieneIssues(w.db)).toEqual([]);
+    expect(await findInventoryHygieneIssues(w.db)).toEqual([]);
 
-    const moved = w.db.select().from(schema.inventoryAllocations).where(eq(schema.inventoryAllocations.id, allocation.id)).get();
+    const moved = (await w.db.select().from(schema.inventoryAllocations).where(eq(schema.inventoryAllocations.id, allocation.id)).limit(1))[0];
     expect(moved?.inventoryId).not.toBe(b.id);
     expect(moved?.qty).toBe(2);
     expect(moved?.status).toBe("Allocated");
-    const target = w.db.select().from(schema.inventory).where(eq(schema.inventory.id, moved!.inventoryId)).get();
+    const target = (await w.db.select().from(schema.inventory).where(eq(schema.inventory.id, moved!.inventoryId)).limit(1))[0];
     expect(target).toMatchObject({ onHand: 3, allocated: 3, expiryDate: null });
-    const changes = w.db.select().from(schema.inventoryTransactions).all().filter((t) => t.type === "Attributes Change");
+    const changes = (await w.db.select().from(schema.inventoryTransactions)).filter((t) => t.type === "Attributes Change");
     expect(changes).toHaveLength(2);
-    expect(ledger.reconcileLedger(w.db)).toEqual([]);
+    expect(await ledger.reconcileLedger(w.db)).toEqual([]);
   });
 });
 

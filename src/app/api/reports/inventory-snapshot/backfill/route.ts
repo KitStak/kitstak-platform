@@ -21,16 +21,16 @@ export const POST = defineRoute({
   name: "POST /api/reports/inventory-snapshot/backfill",
   permission: SNAPSHOT_BACKFILL_PERMISSION,
   body: bodySchema,
-  handler: ({ db, auth, body }) => {
+  handler: async ({ db, auth, body }) => {
     if (!can(auth, SNAPSHOT_DEF.permission as Parameters<typeof can>[1])) {
       throw new AppError("FORBIDDEN", "You need the Inventory Snapshot Report permission to rebuild snapshots.");
     }
     const requested = body.warehouseIds ?? auth.scope.warehouseIds;
     const warehouseIds = requested.filter((id) => auth.scope.warehouseIds.includes(id));
     if (warehouseIds.length === 0) throw new AppError("VALIDATION", "Pick at least one warehouse you have access to.", { fieldErrors: { warehouseIds: ["No warehouse in your scope"] } });
-    const rebuilt = backfillMissingSnapshots(db, { warehouseIds });
+    const rebuilt = await backfillMissingSnapshots(db, { warehouseIds });
     const nights = rebuilt.reduce((n, w) => n + w.days.length, 0);
-    writeAudit(db, {
+    await writeAudit(db, {
       action: "reports.inventory_snapshot.backfill", entity: "inventory_snapshots", entityId: warehouseIds.join(","), userId: auth.user.id,
       detail: { nights, warehouses: rebuilt.map((w) => ({ warehouse: w.warehouse, days: w.days.map((d) => d.businessDate), rows: w.days.reduce((n, d) => n + d.rows, 0) })) },
     });

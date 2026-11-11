@@ -8,5 +8,5 @@ export const GET = defineRoute({
   permission: "integrations.integration_monitoring.view",
   params: idParamsSchema,
   query: z.object({ tz: z.string().max(64).optional() }),
-  handler: ({ db, auth, params, query }) => setupDetails(db, auth, params.id, new Date(), query.tz),
+  handler: async ({ db, auth, params, query }) => await setupDetails(db, auth, params.id, new Date(), query.tz),
 });

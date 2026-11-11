@@ -3,7 +3,8 @@
  * Tag rows are global reference data; applying a tag is checked per record through the
  * entity registry (permission + scope, cross-scope → per-id NOT_FOUND).
  */
-import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import { z } from "zod";
 import { TAG_SCOPES } from "@/lib/enums";
 import type { AppDb } from "@/server/api/db";
@@ -15,6 +16,7 @@ import { runBulk } from "@/server/domain/bulk";
 import type { BulkResult } from "@/server/domain/types";
 import { assertVersion, bulkIdsSchema, entityTypeSchema, idSchema, versionSchema } from "./platform-common";
 import { canOnEntity, getEntityDef, requireEntity } from "./platform-entities";
+import { rowCount } from "@/server/db/sql";
 
 export type TagRow = typeof tags.$inferSelect;
 
@@ -63,62 +65,62 @@ export function canManageTags(auth: AuthContext): boolean {
   return canAny(auth, TAG_MANAGE_PERMISSIONS);
 }
 
-export function listTags(db: AppDb, query: z.output<typeof tagListQuerySchema>): TagRow[] {
+export async function listTags(db: AppDb, query: z.output<typeof tagListQuerySchema>): Promise<TagRow[]> {
   const conds = [
     query.scope ? or(eq(tags.scope, query.scope), eq(tags.scope, "any")) : undefined,
-    query.q ? sql`lower(${tags.name}) LIKE ${`%${query.q.toLowerCase().replace(/[%_\\]/g, "")}%`}` : undefined,
+    query.q ? sql`lower(${tags.name}) ILIKE ${`%${query.q.toLowerCase().replace(/[%_\\]/g, "")}%`}` : undefined,
   ].filter((c) => c !== undefined);
-  return db.select().from(tags).where(conds.length ? and(...conds) : undefined).orderBy(asc(tags.name)).all();
+  return await db.select().from(tags).where(conds.length ? and(...conds) : undefined).orderBy(asc(tags.name));
 }
 
-function assertUniqueName(db: AppDb, name: string, scope: TagRow["scope"], exceptId?: string): void {
-  const clash = db.select({ id: tags.id }).from(tags)
-    .where(and(sql`lower(${tags.name}) = ${name.toLowerCase()}`, eq(tags.scope, scope))).get();
+async function assertUniqueName(db: AppDb, name: string, scope: TagRow["scope"], exceptId?: string): Promise<void> {
+  const clash = (await db.select({ id: tags.id }).from(tags)
+    .where(and(sql`lower(${tags.name}) = ${name.toLowerCase()}`, eq(tags.scope, scope))).limit(1))[0];
   if (clash && clash.id !== exceptId) {
     throw new AppError("DUPLICATE", `A tag named "${name}" already exists`, { fieldErrors: { name: ["Already exists"] } });
   }
 }
 
-export function getTag(db: AppDb, id: string): TagRow {
-  const row = db.select().from(tags).where(eq(tags.id, id)).get();
+export async function getTag(db: AppDb, id: string): Promise<TagRow> {
+  const row = (await db.select().from(tags).where(eq(tags.id, id)).limit(1))[0];
   if (!row) throw notFoundError("Tag");
   return row;
 }
 
-export function createTag(db: AppDb, userId: string, input: z.output<typeof tagCreateSchema>): TagRow {
-  assertUniqueName(db, input.name, input.scope);
-  return db.insert(tags).values({ ...input, createdBy: userId, updatedBy: userId }).returning().get();
+export async function createTag(db: AppDb, userId: string, input: z.output<typeof tagCreateSchema>): Promise<TagRow> {
+  await assertUniqueName(db, input.name, input.scope);
+  return (await db.insert(tags).values({ ...input, createdBy: userId, updatedBy: userId }).returning())[0];
 }
 
-export function updateTag(db: AppDb, userId: string, id: string, input: z.output<typeof tagUpdateSchema>): TagRow {
-  const current = getTag(db, id);
+export async function updateTag(db: AppDb, userId: string, id: string, input: z.output<typeof tagUpdateSchema>): Promise<TagRow> {
+  const current = await getTag(db, id);
   assertVersion(current.version, input.version);
-  if (input.name !== undefined) assertUniqueName(db, input.name, current.scope, id);
-  return db.update(tags).set({
+  if (input.name !== undefined) await assertUniqueName(db, input.name, current.scope, id);
+  return (await db.update(tags).set({
     ...(input.name !== undefined ? { name: input.name } : {}),
     ...(input.color !== undefined ? { color: input.color } : {}),
     updatedBy: userId,
     version: current.version + 1,
-  }).where(eq(tags.id, id)).returning().get();
+  }).where(eq(tags.id, id)).returning())[0];
 }
 
-export function deleteTag(db: AppDb, id: string): { id: string; removedFrom: number } {
-  getTag(db, id);
-  const removedFrom = db.delete(entityTags).where(eq(entityTags.tagId, id)).run().changes;
-  db.delete(tags).where(eq(tags.id, id)).run();
+export async function deleteTag(db: AppDb, id: string): Promise<{ id: string; removedFrom: number }> {
+  await getTag(db, id);
+  const removedFrom = rowCount(await db.delete(entityTags).where(eq(entityTags.tagId, id)));
+  await db.delete(tags).where(eq(tags.id, id));
   return { id, removedFrom };
 }
 
 /** Tags currently on a record. */
-export function tagsForEntity(db: AppDb, entityType: string, entityId: string): TagRow[] {
-  return db.select({ tag: tags }).from(entityTags).innerJoin(tags, eq(tags.id, entityTags.tagId))
+export async function tagsForEntity(db: AppDb, entityType: string, entityId: string): Promise<TagRow[]> {
+  return (await db.select({ tag: tags }).from(entityTags).innerJoin(tags, eq(tags.id, entityTags.tagId))
     .where(and(eq(entityTags.entityType, entityType), eq(entityTags.entityId, entityId)))
-    .orderBy(asc(tags.name)).all().map((r) => r.tag);
+    .orderBy(asc(tags.name))).map((r) => r.tag);
 }
 
-function loadApplicableTags(db: AppDb, entityType: string, tagIds: readonly string[]): TagRow[] {
+async function loadApplicableTags(db: AppDb, entityType: string, tagIds: readonly string[]): Promise<TagRow[]> {
   const unique = [...new Set(tagIds)];
-  const rows = db.select().from(tags).where(inArray(tags.id, unique)).all();
+  const rows = await db.select().from(tags).where(inArray(tags.id, unique));
   if (rows.length !== unique.length) throw notFoundError("Tag");
   const wrong = rows.find((t) => t.scope !== "any" && t.scope !== entityType);
   if (wrong) {
@@ -130,21 +132,21 @@ function loadApplicableTags(db: AppDb, entityType: string, tagIds: readonly stri
 }
 
 /** Bulk add/remove: per-id result; each record runs in its own savepoint. */
-export function applyTags(db: AppDb, auth: AuthContext, input: TagApplyInput): BulkResult {
+export async function applyTags(db: AppDb, auth: AuthContext, input: TagApplyInput): Promise<BulkResult> {
   if (!canOnEntity(auth, input.entityType, "tag")) throw forbiddenError();
-  const applicable = input.tagIds.length > 0 ? loadApplicableTags(db, input.entityType, input.tagIds) : [];
-  return runBulk(db, input.ids, (tx, id) => {
-    requireEntity(tx, auth, input.entityType, id, "tag");
+  const applicable = input.tagIds.length > 0 ? await loadApplicableTags(db, input.entityType, input.tagIds) : [];
+  return await runBulk(db, input.ids, async (tx, id) => {
+    await requireEntity(tx, auth, input.entityType, id, "tag");
     if (input.mode === "set") {
-      tx.delete(entityTags).where(and(eq(entityTags.entityType, input.entityType), eq(entityTags.entityId, id))).run();
-      for (const tag of applicable) tx.insert(entityTags).values({ tagId: tag.id, entityType: input.entityType, entityId: id }).onConflictDoNothing().run();
+      await tx.delete(entityTags).where(and(eq(entityTags.entityType, input.entityType), eq(entityTags.entityId, id)));
+      for (const tag of applicable) await tx.insert(entityTags).values({ tagId: tag.id, entityType: input.entityType, entityId: id }).onConflictDoNothing();
       return;
     }
     for (const tag of applicable) {
       if (input.mode === "add") {
-        tx.insert(entityTags).values({ tagId: tag.id, entityType: input.entityType, entityId: id }).onConflictDoNothing().run();
+        await tx.insert(entityTags).values({ tagId: tag.id, entityType: input.entityType, entityId: id }).onConflictDoNothing();
       } else {
-        tx.delete(entityTags).where(and(eq(entityTags.tagId, tag.id), eq(entityTags.entityType, input.entityType), eq(entityTags.entityId, id))).run();
+        await tx.delete(entityTags).where(and(eq(entityTags.tagId, tag.id), eq(entityTags.entityType, input.entityType), eq(entityTags.entityId, id)));
       }
     }
   });

@@ -8,8 +8,8 @@ import { disassembleKit } from "@/server/repositories/work-orders-commands";
 export const POST = defineRoute({
   permission: WO_PERMISSIONS.disassemble,
   body: disassembleSchema,
-  handler: ({ db, auth, actor, body }) => {
-    const res = disassembleKit(db, woCtx(actor, auth), body);
-    return { ...res, workOrder: getWorkOrderRow(db, auth.scope, res.workOrderId) };
+  handler: async ({ db, auth, actor, body }) => {
+    const res = await disassembleKit(db, woCtx(actor, auth), body);
+    return { ...res, workOrder: await getWorkOrderRow(db, auth.scope, res.workOrderId) };
   },
 });

@@ -23,9 +23,9 @@ interface EventRef {
   readonly text: string;
 }
 
-export function recordCountEvent(tx: Tx, ctx: DomainCtx, ref: EventRef): void {
+export async function recordCountEvent(tx: Tx, ctx: DomainCtx, ref: EventRef): Promise<void> {
   const text = ref.text.slice(0, 1000);
-  tx.insert(schema.changeLog).values(ref.line
+  await tx.insert(schema.changeLog).values(ref.line
     ? {
       entityType: "count_line", entityId: ref.line.id, entityCode: ref.planCode, parentEntityType: "count_plan", parentEntityId: ref.planId,
       type: "Update", field: COUNT_EVENT_FIELD, fieldLabel: null, fromValue: null, toValue: text, message: `${ref.line.label} -> ${text}`,
@@ -34,15 +34,15 @@ export function recordCountEvent(tx: Tx, ctx: DomainCtx, ref: EventRef): void {
     : {
       entityType: "count_plan", entityId: ref.planId, entityCode: ref.planCode, type: "Update", field: COUNT_EVENT_FIELD, fieldLabel: null,
       fromValue: null, toValue: text, message: text, userId: ctx.userId, source: ctx.source,
-    }).run();
+    });
 }
 
 const plural = (n: number, one: string, many: string): string => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 const signed = (n: number): string => (n > 0 ? `+${n.toLocaleString("en-US")}` : n < 0 ? `−${Math.abs(n).toLocaleString("en-US")}` : "0");
 
-export function userName(tx: Tx, userId: string | null | undefined): string | null {
+export async function userName(tx: Tx, userId: string | null | undefined): Promise<string | null> {
   if (!userId) return null;
-  const u = tx.select({ name: schema.users.name, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, userId)).get();
+  const u = (await tx.select({ name: schema.users.name, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, userId)).limit(1))[0];
   return u ? (u.name || u.email) : null;
 }
 
@@ -61,13 +61,13 @@ export function jobEventText(input: { readonly kind: JobEventKind; readonly jobC
   return parts.filter(Boolean).join(" · ");
 }
 
-export function recordJobEvent(tx: Tx, ctx: DomainCtx, plan: { readonly id: string; readonly code: string }, jobId: string, kind: JobEventKind, opts: { readonly batchSize?: number | null; readonly recountOf?: readonly string[] } = {}): void {
-  const job = tx.select({ code: schema.jobs.code, assignee: schema.jobs.assignedToUserId }).from(schema.jobs).where(eq(schema.jobs.id, jobId)).get();
+export async function recordJobEvent(tx: Tx, ctx: DomainCtx, plan: { readonly id: string; readonly code: string }, jobId: string, kind: JobEventKind, opts: { readonly batchSize?: number | null; readonly recountOf?: readonly string[] } = {}): Promise<void> {
+  const job = (await tx.select({ code: schema.jobs.code, assignee: schema.jobs.assignedToUserId }).from(schema.jobs).where(eq(schema.jobs.id, jobId)).limit(1))[0];
   if (!job) return;
-  const taskRows = tx.select({ loc: schema.tasks.sourceLocationId }).from(schema.tasks).where(eq(schema.tasks.jobId, jobId)).all();
-  recordCountEvent(tx, ctx, {
+  const taskRows = await tx.select({ loc: schema.tasks.sourceLocationId }).from(schema.tasks).where(eq(schema.tasks.jobId, jobId));
+  await recordCountEvent(tx, ctx, {
     planId: plan.id, planCode: plan.code,
-    text: jobEventText({ kind, jobCode: job.code, tasks: taskRows.length, locations: new Set(taskRows.map((t) => t.loc).filter(Boolean)).size, batchSize: opts.batchSize ?? null, assignee: userName(tx, job.assignee), recountOf: opts.recountOf }),
+    text: jobEventText({ kind, jobCode: job.code, tasks: taskRows.length, locations: new Set(taskRows.map((t) => t.loc).filter(Boolean)).size, batchSize: opts.batchSize ?? null, assignee: await userName(tx, job.assignee), recountOf: opts.recountOf }),
   });
 }
 
@@ -84,12 +84,12 @@ export function entryEventText(input: { readonly counted: number; readonly syste
 }
 
 /** Count entry submission for one line, read back from the stored entries (whatever path recorded them). */
-export function recordEntryEvent(tx: Tx, ctx: DomainCtx, plan: { readonly id: string; readonly code: string }, line: { readonly id: string; readonly label: string }, note?: string | null): void {
-  const entries = tx.select({ countedQty: schema.countLineEntries.countedQty, systemQty: schema.countLineEntries.systemQty, damageReason: schema.countLineEntries.damageReason, locationId: schema.countLineEntries.locationId })
-    .from(schema.countLineEntries).where(eq(schema.countLineEntries.lineId, line.id)).all();
+export async function recordEntryEvent(tx: Tx, ctx: DomainCtx, plan: { readonly id: string; readonly code: string }, line: { readonly id: string; readonly label: string }, note?: string | null): Promise<void> {
+  const entries = await tx.select({ countedQty: schema.countLineEntries.countedQty, systemQty: schema.countLineEntries.systemQty, damageReason: schema.countLineEntries.damageReason, locationId: schema.countLineEntries.locationId })
+    .from(schema.countLineEntries).where(eq(schema.countLineEntries.lineId, line.id));
   const locIds = [...new Set(entries.map((e) => e.locationId).filter((x): x is string => Boolean(x)))];
-  const codes = locIds.length ? tx.select({ code: schema.locations.code }).from(schema.locations).where(inArray(schema.locations.id, locIds)).all().map((l) => l.code) : [];
-  recordCountEvent(tx, ctx, {
+  const codes = locIds.length ? (await tx.select({ code: schema.locations.code }).from(schema.locations).where(inArray(schema.locations.id, locIds))).map((l) => l.code) : [];
+  await recordCountEvent(tx, ctx, {
     planId: plan.id, planCode: plan.code, line,
     text: entryEventText({
       counted: entries.reduce((s, e) => s + e.countedQty, 0), system: entries.reduce((s, e) => s + e.systemQty, 0), buckets: entries.length,
@@ -110,7 +110,7 @@ export function updateInvEventText(input: { readonly lines: number; readonly pos
   ].filter(Boolean).join(" · ");
 }
 
-export function reasonName(tx: Tx, reasonId: string | null | undefined): string | null {
+export async function reasonName(tx: Tx, reasonId: string | null | undefined): Promise<string | null> {
   if (!reasonId) return null;
-  return tx.select({ name: schema.lookupValues.name }).from(schema.lookupValues).where(eq(schema.lookupValues.id, reasonId)).get()?.name ?? null;
+  return (await tx.select({ name: schema.lookupValues.name }).from(schema.lookupValues).where(eq(schema.lookupValues.id, reasonId)).limit(1))[0]?.name ?? null;
 }

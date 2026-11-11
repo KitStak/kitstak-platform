@@ -24,7 +24,7 @@ async function ResetBody({ searchParams }: { readonly searchParams: SearchParams
       </Callout>
     );
   }
-  const policy = getPasswordPolicy(await getAppDb());
+  const policy = await getPasswordPolicy(await getAppDb());
   return (
     <ResetPasswordForm
       token={token}

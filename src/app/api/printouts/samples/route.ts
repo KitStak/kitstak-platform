@@ -4,5 +4,5 @@ import { sampleOrders } from "@/server/repositories/printouts-render";
 
 export const GET = defineRoute({
   permission: "settings.printouts_labels.view",
-  handler: ({ db, auth }) => sampleOrders(db, auth),
+  handler: async ({ db, auth }) => await sampleOrders(db, auth),
 });

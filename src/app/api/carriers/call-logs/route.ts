@@ -7,9 +7,9 @@ import { listCallLogs } from "@/server/repositories/carriers";
 export const GET = defineRoute({
   permission: "integrations.carrier_monitoring.view",
   query: z.object({ step: z.enum(["LabelGeneration", "RateCall", "VoidLabel"]).default("LabelGeneration") }).loose(),
-  handler: ({ db, auth, grid, query }) => {
+  handler: async ({ db, auth, grid, query }) => {
     const q = grid();
-    const { rows, total } = listCallLogs(db, auth, query.step, q);
+    const { rows, total } = await listCallLogs(db, auth, query.step, q);
     return listResult(rows, { total, page: q.page, pageSize: q.pageSize });
   },
 });

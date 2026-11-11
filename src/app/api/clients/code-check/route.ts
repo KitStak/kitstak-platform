@@ -9,5 +9,5 @@ import { clientCodeCheck } from "@/server/repositories/clients";
 export const GET = defineRoute({
   permission: ["settings.clients.create", "settings.clients.edit"],
   query: z.object({ code: z.string().trim().max(20), exceptId: z.string().trim().max(64).optional() }),
-  handler: ({ db, query }) => clientCodeCheck(db, query.code, query.exceptId),
+  handler: async ({ db, query }) => await clientCodeCheck(db, query.code, query.exceptId),
 });

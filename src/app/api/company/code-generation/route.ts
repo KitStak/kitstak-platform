@@ -5,15 +5,15 @@ import { listSequences, updateSequence } from "@/server/repositories/company-seq
 
 export const GET = defineRoute({
   permission: "settings.data_setup.view",
-  handler: ({ db }) => listSequences(db),
+  handler: async ({ db }) => await listSequences(db),
 });
 
 export const PUT = defineRoute({
   permission: "settings.data_setup.view",
   body: sequenceSchema,
-  handler: ({ db, auth, actor, body, audit }) => {
-    const row = updateSequence(db, auth, actor, body);
-    audit({ action: "sequence.update", entity: "sequence", entityId: body.key, detail: { mode: body.autoGenerate ? "auto" : "manual", prefix: row.prefix } });
+  handler: async ({ db, auth, actor, body, audit }) => {
+    const row = await updateSequence(db, auth, actor, body);
+    await audit({ action: "sequence.update", entity: "sequence", entityId: body.key, detail: { mode: body.autoGenerate ? "auto" : "manual", prefix: row.prefix } });
     return row;
   },
 });

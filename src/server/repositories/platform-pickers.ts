@@ -3,8 +3,9 @@
  * sublabel }` lists for the shared entity pickers. Every picker filters by the caller's
  * view scope; `ids=a,b` resolves already-selected values (still scoped).
  */
-import { and, asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
-import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
+import { and, eq, inArray, or, sql, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { AREA_TYPES, JOB_STATUSES, SO_STATUSES } from "@/lib/enums";
 import type { AppDb } from "@/server/api/db";
@@ -40,16 +41,16 @@ export interface PickerOption {
 }
 
 interface PickerConfig {
-  readonly table: SQLiteTable;
-  readonly id: SQLiteColumn;
-  readonly label: SQLiteColumn | SQL;
-  readonly sublabel: SQLiteColumn | SQL | null;
-  readonly search: readonly (SQLiteColumn | SQL)[];
-  readonly order: SQLiteColumn | SQL;
+  readonly table: PgTable;
+  readonly id: PgColumn;
+  readonly label: PgColumn | SQL;
+  readonly sublabel: PgColumn | SQL | null;
+  readonly search: readonly (PgColumn | SQL)[];
+  readonly order: PgColumn | SQL;
   readonly scope?: SQL;
-  readonly active?: SQLiteColumn;
+  readonly active?: PgColumn;
   readonly filters?: readonly (SQL | undefined)[];
-  readonly meta?: Readonly<Record<string, SQLiteColumn | SQL>>;
+  readonly meta?: Readonly<Record<string, PgColumn | SQL>>;
 }
 
 /** Narrows the view scope to an explicit warehouse/client filter (must be inside it). */
@@ -66,10 +67,10 @@ function searchWhere(cfg: PickerConfig, query: PickerQuery): SQL | undefined {
   if (query.ids) return inArray(cfg.id, query.ids.length ? query.ids : [""]);
   if (!query.q) return undefined;
   const pattern = likeEscape(query.q.toLowerCase(), query.mode === "sw" ? "startsWith" : "contains");
-  return or(...cfg.search.map((col) => sql`lower(${col}) LIKE ${pattern} ESCAPE '\\'`));
+  return or(...cfg.search.map((col) => sql`lower(${col}) ILIKE ${pattern} ESCAPE '\\'`));
 }
 
-function runPicker(db: AppDb, cfg: PickerConfig, query: PickerQuery): PickerOption[] {
+async function runPicker(db: AppDb, cfg: PickerConfig, query: PickerQuery): Promise<PickerOption[]> {
   const where = and(
     cfg.scope,
     searchWhere(cfg, query),
@@ -77,9 +78,9 @@ function runPicker(db: AppDb, cfg: PickerConfig, query: PickerQuery): PickerOpti
     ...(cfg.filters ?? []),
   );
   const metaCols = cfg.meta ?? {};
-  const rows = db.select({ id: cfg.id, label: cfg.label, sublabel: cfg.sublabel ?? sql`NULL`, ...metaCols })
+  const rows = await db.select({ id: cfg.id, label: cfg.label, sublabel: cfg.sublabel ?? sql`NULL`, ...metaCols })
     .from(cfg.table).where(where).orderBy(asc(cfg.order))
-    .limit(query.ids ? MAX_IDS : query.limit).all() as Record<string, unknown>[];
+    .limit(query.ids ? MAX_IDS : query.limit) as Record<string, unknown>[];
   const metaKeys = Object.keys(metaCols);
   return rows.map((r) => ({
     id: String(r.id),
@@ -104,12 +105,12 @@ function extra<K extends keyof typeof extraSchemas>(key: K, raw: Readonly<Record
   return parsed.data as z.output<(typeof extraSchemas)[K]>;
 }
 
-type PickerFn = (db: AppDb, scope: Scope, query: PickerQuery, raw: Readonly<Record<string, string>>) => PickerOption[];
+type PickerFn = (db: AppDb, scope: Scope, query: PickerQuery, raw: Readonly<Record<string, string>>) => Promise<PickerOption[]>;
 
-const locations: PickerFn = (db, scope, query, raw) => {
+const locations: PickerFn = async (db, scope, query, raw) => {
   const f = extra("locations", raw);
   const t = s.locations;
-  return runPicker(db, {
+  return await runPicker(db, {
     table: t, id: t.id, label: t.code, sublabel: t.areaType, search: [t.code, t.barcode], order: t.code,
     scope: scopedWhere(t, narrow(scope, query)), active: t.isActive,
     filters: [f.areaType && f.areaType.length > 0 ? inArray(t.areaType, [...f.areaType]) : undefined],
@@ -117,10 +118,10 @@ const locations: PickerFn = (db, scope, query, raw) => {
   }, query);
 };
 
-const lps: PickerFn = (db, scope, query, raw) => {
+const lps: PickerFn = async (db, scope, query, raw) => {
   const f = extra("lps", raw);
   const t = s.licensePlates;
-  return runPicker(db, {
+  return await runPicker(db, {
     table: t, id: t.id, label: t.number, sublabel: t.status, search: [t.number, t.alternateBarcode], order: t.number,
     scope: scopedWhere(t, narrow(scope, query)),
     filters: [f.locationId ? eq(t.locationId, f.locationId) : undefined],
@@ -128,54 +129,54 @@ const lps: PickerFn = (db, scope, query, raw) => {
   }, query);
 };
 
-const users: PickerFn = (db, scope, query) => {
+const users: PickerFn = async (db, scope, query) => {
   const t = s.users;
   const wh = query.warehouseId ? narrow(scope, query).warehouseIds : null;
   const linked = wh
     ? or(eq(t.role, "admin"), inArray(t.id, db.select({ id: s.userWarehouses.userId }).from(s.userWarehouses).where(inArray(s.userWarehouses.warehouseId, [...wh]))))
     : undefined;
-  return runPicker(db, {
+  return await runPicker(db, {
     table: t, id: t.id, label: t.name, sublabel: t.email, search: [t.name, t.email], order: t.name, active: t.isActive,
     filters: [linked, eq(t.isApiUser, false)],
   }, query);
 };
 
-const products: PickerFn = (db, scope, query) => {
+const products: PickerFn = async (db, scope, query) => {
   const t = s.products;
-  return runPicker(db, {
+  return await runPicker(db, {
     table: t, id: t.id, label: t.sku, sublabel: t.name, search: [t.sku, t.name, t.barcode], order: t.sku,
     scope: scopedWhere(t, narrow(scope, query)),
     meta: {
       clientId: t.clientId, name: t.name, uom: t.uom, imageUrl: t.imageUrl, isKit: t.isKit,
       // Available to promise in the picked warehouse (free, undamaged units); null without a warehouse.
       ...(query.warehouseId
-        ? { atp: sql<number>`COALESCE((SELECT SUM(MAX(i.on_hand - i.allocated - i.damaged, 0)) FROM inventory i WHERE i.product_id = ${t.id} AND i.warehouse_id = ${query.warehouseId}), 0)` }
+        ? { atp: sql<number>`COALESCE((SELECT SUM(GREATEST(i.on_hand - i.allocated - i.damaged, 0)) FROM inventory i WHERE i.product_id = ${t.id} AND i.warehouse_id = ${query.warehouseId}), 0)` }
         : {}),
     },
   }, query);
 };
 
-const customers: PickerFn = (db, scope, query) => {
+const customers: PickerFn = async (db, scope, query) => {
   const t = s.customers;
   const name = sql<string>`trim(${t.firstName} || ' ' || ${t.lastName})`;
-  return runPicker(db, {
+  return await runPicker(db, {
     table: t, id: t.id, label: name, sublabel: t.email, search: [t.firstName, t.lastName, t.email], order: name,
     scope: scopedWhere(t, narrow(scope, query)), active: t.isActive, meta: { clientId: t.clientId },
   }, query);
 };
 
-const vendors: PickerFn = (db, scope, query) => {
+const vendors: PickerFn = async (db, scope, query) => {
   const t = s.vendors;
-  return runPicker(db, {
+  return await runPicker(db, {
     table: t, id: t.id, label: t.displayName, sublabel: t.vendorName, search: [t.displayName, t.vendorName], order: t.displayName,
     scope: scopedWhere(t, narrow(scope, query)), active: t.isActive, meta: { clientId: t.clientId },
   }, query);
 };
 
-const orders: PickerFn = (db, scope, query, raw) => {
+const orders: PickerFn = async (db, scope, query, raw) => {
   const f = extra("orders", raw);
   const t = s.shipmentOrders;
-  return runPicker(db, {
+  return await runPicker(db, {
     table: t, id: t.id, label: t.code, sublabel: t.customerName, search: [t.code, t.storeOrderNumber, t.customerName], order: t.code,
     scope: scopedWhere(t, narrow(scope, query)),
     filters: [sql`${t.deletedAt} IS NULL`, f.status?.length ? inArray(t.status, f.status) : undefined],
@@ -183,10 +184,10 @@ const orders: PickerFn = (db, scope, query, raw) => {
   }, query);
 };
 
-const jobs: PickerFn = (db, scope, query, raw) => {
+const jobs: PickerFn = async (db, scope, query, raw) => {
   const f = extra("jobs", raw);
   const t = s.jobs;
-  return runPicker(db, {
+  return await runPicker(db, {
     table: t, id: t.id, label: t.code, sublabel: t.jobType, search: [t.code], order: t.code,
     scope: scopedWhere(t, narrow(scope, query)),
     filters: [f.status?.length ? inArray(t.status, f.status) : undefined, f.jobTypeId ? eq(t.jobTypeId, f.jobTypeId) : undefined],
@@ -194,12 +195,12 @@ const jobs: PickerFn = (db, scope, query, raw) => {
   }, query);
 };
 
-const carrierServices: PickerFn = (db, scope, query, raw) => {
+const carrierServices: PickerFn = async (db, scope, query, raw) => {
   const f = extra("carrierServices", raw);
   const t = s.carrierServices;
   const conns = db.select({ id: s.carrierConnections.id }).from(s.carrierConnections)
     .where(and(scopedWhere(s.carrierConnections, narrow(scope, query)), eq(s.carrierConnections.isActive, true)));
-  return runPicker(db, {
+  return await runPicker(db, {
     table: t, id: t.id, label: t.name, sublabel: t.serviceCode, search: [t.name, t.serviceCode, t.carrierCode], order: t.name,
     scope: inArray(t.connectionId, conns), active: t.isActive,
     filters: [f.connectionId ? eq(t.connectionId, f.connectionId) : undefined],
@@ -207,9 +208,9 @@ const carrierServices: PickerFn = (db, scope, query, raw) => {
   }, query);
 };
 
-const shipmentPackages: PickerFn = (db, scope, query) => {
+const shipmentPackages: PickerFn = async (db, scope, query) => {
   const t = s.shipmentPackages;
-  return runPicker(db, {
+  return await runPicker(db, {
     table: t, id: t.id, label: t.code, sublabel: t.description, search: [t.code, t.description], order: t.code,
     scope: scopedWhere(t, narrow(scope, query)), active: t.isActive,
     meta: { warehouseId: t.warehouseId, length: t.length, width: t.width, height: t.height, emptyWeight: t.emptyWeight },
@@ -224,6 +225,6 @@ export const PICKERS = {
 
 export type PickerKey = keyof typeof PICKERS;
 
-export function runNamedPicker(db: AppDb, key: PickerKey, scope: Scope, query: PickerQuery, raw: Readonly<Record<string, string>>): PickerOption[] {
-  return PICKERS[key](db, scope, query, raw);
+export async function runNamedPicker(db: AppDb, key: PickerKey, scope: Scope, query: PickerQuery, raw: Readonly<Record<string, string>>): Promise<PickerOption[]> {
+  return await PICKERS[key](db, scope, query, raw);
 }

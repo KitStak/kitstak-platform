@@ -5,5 +5,5 @@ import { linkSearchSchema, searchLinkProducts } from "@/server/repositories/prod
 export const GET = defineRoute({
   permission: ["settings.product_listing.search_a_product", "settings.products.view"],
   query: linkSearchSchema,
-  handler: ({ db, auth, query }) => searchLinkProducts(db, auth.scope, query),
+  handler: async ({ db, auth, query }) => await searchLinkProducts(db, auth.scope, query),
 });

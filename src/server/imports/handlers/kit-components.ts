@@ -5,5 +5,5 @@ import type { ImportHandler } from "../types";
 export const handler: ImportHandler = {
   configured: true,
   owner: "M09",
-  apply: (ctx, row) => applyKitComponentImport(ctx, row),
+  apply: async (ctx, row) => await applyKitComponentImport(ctx, row),
 };

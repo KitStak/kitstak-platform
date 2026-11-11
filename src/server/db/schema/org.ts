@@ -1,5 +1,5 @@
 /** Organization: warehouses, clients, addresses, customers, vendors, retailers. */
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import type { ClientSettingsInput } from "../../../lib/domain-types";
 import {
   ACTIVE_STATUSES,
@@ -11,7 +11,7 @@ import {
 } from "../../../lib/enums";
 import { bool, customFields, EMPTY_JSON_OBJECT, json, pk, stamps } from "../columns";
 
-export const warehouses = sqliteTable("warehouses", {
+export const warehouses = pgTable("warehouses", {
   id: pk(),
   code: text("code").notNull(),
   name: text("name").notNull(),
@@ -43,7 +43,7 @@ export const warehouses = sqliteTable("warehouses", {
   ...stamps(),
 }, (t) => [uniqueIndex("warehouses_code_idx").on(t.code)]);
 
-export const clients = sqliteTable("clients", {
+export const clients = pgTable("clients", {
   id: pk(),
   code: text("code").notNull(),
   name: text("name").notNull(),
@@ -60,7 +60,7 @@ export const clients = sqliteTable("clients", {
   ...stamps(),
 }, (t) => [uniqueIndex("clients_code_idx").on(t.code)]);
 
-export const addresses = sqliteTable("addresses", {
+export const addresses = pgTable("addresses", {
   id: pk(),
   ownerType: text("owner_type", { enum: ADDRESS_OWNER_TYPES }).notNull(),
   ownerId: text("owner_id").notNull(),
@@ -83,7 +83,7 @@ export const addresses = sqliteTable("addresses", {
   ...stamps(),
 }, (t) => [index("addresses_owner_idx").on(t.ownerType, t.ownerId)]);
 
-export const customers = sqliteTable("customers", {
+export const customers = pgTable("customers", {
   id: pk(),
   clientId: text("client_id").notNull().references(() => clients.id),
   firstName: text("first_name").notNull(),
@@ -94,7 +94,7 @@ export const customers = sqliteTable("customers", {
   ...stamps(),
 }, (t) => [index("customers_client_idx").on(t.clientId)]);
 
-export const vendors = sqliteTable("vendors", {
+export const vendors = pgTable("vendors", {
   id: pk(),
   clientId: text("client_id").notNull().references(() => clients.id),
   displayName: text("display_name").notNull(),
@@ -104,7 +104,7 @@ export const vendors = sqliteTable("vendors", {
   ...stamps(),
 }, (t) => [uniqueIndex("vendors_client_name_idx").on(t.clientId, t.displayName)]);
 
-export const retailers = sqliteTable("retailers", {
+export const retailers = pgTable("retailers", {
   id: pk(),
   name: text("name").notNull(),
   description: text("description"),

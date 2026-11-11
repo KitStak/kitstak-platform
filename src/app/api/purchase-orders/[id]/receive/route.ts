@@ -12,5 +12,5 @@ export const POST = defineRoute({
   permission: "inventory.purchase_orders.receive_po",
   params: idParamsSchema,
   body: receiveApiBodySchema,
-  handler: ({ db, auth, actor, params, body }) => receiveFromApi(db, domainCtx(actor, auth), auth.scope, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await receiveFromApi(db, domainCtx(actor, auth), auth.scope, params.id, body),
 });

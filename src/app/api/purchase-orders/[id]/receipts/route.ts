@@ -7,8 +7,8 @@ import { receiptsForPurchaseOrder } from "@/server/repositories/receipts";
 export const GET = defineRoute({
   permission: "inventory.purchase_orders.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => {
-    getPurchaseOrder(db, auth.scope, params.id);
-    return receiptsForPurchaseOrder(db, auth.scope, params.id);
+  handler: async ({ db, auth, params }) => {
+    await getPurchaseOrder(db, auth.scope, params.id);
+    return await receiptsForPurchaseOrder(db, auth.scope, params.id);
   },
 });

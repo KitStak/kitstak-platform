@@ -26,115 +26,115 @@ import { createWorld, orderInput, type World } from "../foundation/domain/fixtur
 
 let w: World;
 let ctx: ScopedCtx;
-beforeEach(() => { w = createWorld(); ctx = { ...w.ctx, scope: { warehouseIds: [w.warehouseId], clientIds: "all" } } as ScopedCtx; });
+beforeEach(async () => { w = await createWorld(); ctx = { ...w.ctx, scope: { warehouseIds: [w.warehouseId], clientIds: "all" } } as ScopedCtx; });
 afterEach(() => w.close());
 
-const track = (patch: Partial<typeof schema.products.$inferInsert>) => w.db.update(schema.products).set(patch).where(eq(schema.products.id, w.productId)).run();
+const track = async (patch: Partial<typeof schema.products.$inferInsert>) => await w.db.update(schema.products).set(patch).where(eq(schema.products.id, w.productId));
 
 /** Ships `qty` units from a stock bucket with the given attributes (pick → pack → ship). */
-function shipped(qty: number, stock: { lotNumber?: string; expiryDate?: string; productionDate?: string } = {}): { orderId: string; lineId: string } {
-  ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 2, ...stock });
-  const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]));
-  allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
-  const { jobIds: [jobId] } = createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
+async function shipped(qty: number, stock: { lotNumber?: string; expiryDate?: string; productionDate?: string } = {}): Promise<{ orderId: string; lineId: string }> {
+  await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: qty + 2, ...stock });
+  const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: qty }]));
+  await allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
+  const { jobIds: [jobId] } = await createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
   for (const [type, loc] of [["Picking", w.loc.pick], ["Packing", w.loc.pack]] as const) {
-    const ids = w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId ?? ""), eq(schema.tasks.taskType, type))).all().map((t) => t.id);
-    if (ids.length) execute(w.db, w.ctx, { taskIds: ids, targetLocationId: loc });
+    const ids = (await w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId ?? ""), eq(schema.tasks.taskType, type)))).map((t) => t.id);
+    if (ids.length) await execute(w.db, w.ctx, { taskIds: ids, targetLocationId: loc });
   }
-  expect(shipOrders(w.db, w.ctx, { orderIds: [o.id], requireLabel: false }).failed).toEqual([]);
-  const line = w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, o.id)).get();
+  expect((await shipOrders(w.db, w.ctx, { orderIds: [o.id], requireLabel: false })).failed).toEqual([]);
+  const line = (await w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, o.id)).limit(1))[0];
   return { orderId: o.id, lineId: line?.id ?? "" };
 }
 
-const receive = (returnOrderId: string, item: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
-  receiveRma(w.db, ctx, receiveRmaSchema.parse({ returnOrderId, stationLocationId: w.loc.returns, items: [{ productId: w.productId, quantity: 1, disposition: "Restock", ...item }], ...extra }));
+const receive = async (returnOrderId: string, item: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+  await receiveRma(w.db, ctx, receiveRmaSchema.parse({ returnOrderId, stationLocationId: w.loc.returns, items: [{ productId: w.productId, quantity: 1, disposition: "Restock", ...item }], ...extra }));
 
 describe("Return Process: lot / expiry / production date match against the ledger", () => {
-  it("reads the lot that actually shipped (order line had no requested lot) and rejects one that never shipped", () => {
-    track({ trackLot: true });
-    const { orderId, lineId } = shipped(2, { lotNumber: "LOT-A" });
-    expect(w.db.select().from(schema.orderLines).where(eq(schema.orderLines.id, lineId)).get()?.lotNumber).toBeNull();
-    expect(shippedAttributes(w.db, orderId).get(w.productId)?.lots).toEqual(["LOT-A"]);
-    const rma = insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 2 }] });
-    expect(() => receive(rma.id, { lotNumber: "LOT-NEVER-SHIPPED" })).toThrow(/Lot LOT-NEVER-SHIPPED was not shipped/);
+  it("reads the lot that actually shipped (order line had no requested lot) and rejects one that never shipped", async () => {
+    await track({ trackLot: true });
+    const { orderId, lineId } = await shipped(2, { lotNumber: "LOT-A" });
+    expect((await w.db.select().from(schema.orderLines).where(eq(schema.orderLines.id, lineId)).limit(1))[0]?.lotNumber).toBeNull();
+    expect((await shippedAttributes(w.db, orderId)).get(w.productId)?.lots).toEqual(["LOT-A"]);
+    const rma = await insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 2 }] });
+    await expect(async () => await receive(rma.id, { lotNumber: "LOT-NEVER-SHIPPED" })).rejects.toThrow(/Lot LOT-NEVER-SHIPPED was not shipped/);
     // Blank lot on a tracked SKU: required while the match rule is on.
-    expect(() => receive(rma.id, {})).toThrow(/Enter the lot number/);
-    const ok = receive(rma.id, { lotNumber: "lot-a" }, { complete: false });
+    await expect(async () => await receive(rma.id, {})).rejects.toThrow(/Enter the lot number/);
+    const ok = await receive(rma.id, { lotNumber: "lot-a" }, { complete: false });
     expect(ok.status).toBe("Started");
-    const detail = getReturnDetail(w.db, ctx.scope, rma.id);
+    const detail = await getReturnDetail(w.db, ctx.scope, rma.id);
     expect(detail.lines[0]?.trackLot).toBe(true);
     expect(detail.lines[0]?.shipped?.lots).toEqual(["LOT-A"]);
   });
 
-  it("expiry and production dates must be ones that shipped (date part compared)", () => {
-    track({ trackExpiry: true, trackProductionDate: true });
-    const { orderId, lineId } = shipped(1, { expiryDate: "2027-03-31", productionDate: "2026-01-15" });
-    const rma = insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
-    expect(() => receive(rma.id, { expiryDate: "2030-01-01", productionDate: "2026-01-15" })).toThrow(/Expiry date 2030-01-01 was not shipped/);
-    expect(() => receive(rma.id, { expiryDate: "2027-03-31" })).toThrow(/Enter the production date/);
-    expect(() => receive(rma.id, { expiryDate: "2027-03-31", productionDate: "2025-12-01" })).toThrow(/Production date 2025-12-01 was not shipped/);
-    expect(receive(rma.id, { expiryDate: "2027-03-31T00:00:00.000Z", productionDate: "2026-01-15" }).status).toBe("Completed");
+  it("expiry and production dates must be ones that shipped (date part compared)", async () => {
+    await track({ trackExpiry: true, trackProductionDate: true });
+    const { orderId, lineId } = await shipped(1, { expiryDate: "2027-03-31", productionDate: "2026-01-15" });
+    const rma = await insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
+    await expect(async () => await receive(rma.id, { expiryDate: "2030-01-01", productionDate: "2026-01-15" })).rejects.toThrow(/Expiry date 2030-01-01 was not shipped/);
+    await expect(async () => await receive(rma.id, { expiryDate: "2027-03-31" })).rejects.toThrow(/Enter the production date/);
+    await expect(async () => await receive(rma.id, { expiryDate: "2027-03-31", productionDate: "2025-12-01" })).rejects.toThrow(/Production date 2025-12-01 was not shipped/);
+    expect((await receive(rma.id, { expiryDate: "2027-03-31T00:00:00.000Z", productionDate: "2026-01-15" })).status).toBe("Completed");
   });
 
-  it("switching the rule off accepts any lot", () => {
-    track({ trackLot: true });
-    const { orderId, lineId } = shipped(1, { lotNumber: "LOT-A" });
-    const errs = returnRuleErrors(w.db, { id: orderId, warehouseId: w.warehouseId }, w.warehouseId, [{ productId: w.productId, quantity: 1, lotNumber: "LOT-Z" }]);
+  it("switching the rule off accepts any lot", async () => {
+    await track({ trackLot: true });
+    const { orderId, lineId } = await shipped(1, { lotNumber: "LOT-A" });
+    const errs = await returnRuleErrors(w.db, { id: orderId, warehouseId: w.warehouseId }, w.warehouseId, [{ productId: w.productId, quantity: 1, lotNumber: "LOT-Z" }]);
     expect(errs["items.0.lotNumber"]?.[0]).toMatch(/Lot \/ batch number match/);
-    w.db.update(schema.companySettings).set({ defaults: { returnRules: { ...DEFAULT_RETURN_RULES, lotNumberMatch: false } } as never }).run();
+    await w.db.update(schema.companySettings).set({ defaults: { returnRules: { ...DEFAULT_RETURN_RULES, lotNumberMatch: false } } as never });
     void lineId;
-    expect(returnRuleErrors(w.db, { id: orderId, warehouseId: w.warehouseId }, w.warehouseId, [{ productId: w.productId, quantity: 1, lotNumber: "LOT-Z" }])).toEqual({});
+    expect(await returnRuleErrors(w.db, { id: orderId, warehouseId: w.warehouseId }, w.warehouseId, [{ productId: w.productId, quantity: 1, lotNumber: "LOT-Z" }])).toEqual({});
   });
 });
 
 describe("Return Process: serial and pack type match", () => {
-  it("rejects a serial that never shipped on the order, keyed on the serials field", () => {
-    const { orderId } = shipped(1);
-    w.db.insert(schema.serialNumbers).values({ productId: w.productId, warehouseId: w.warehouseId, clientId: w.clientId, primarySerial: "SN-SHIPPED", status: "Shipped",
-      orderLineId: w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, orderId)).get()?.id ?? null }).run();
-    const errs = returnRuleErrors(w.db, { id: orderId, warehouseId: w.warehouseId }, w.warehouseId, [{ productId: w.productId, quantity: 1, serials: ["SN-NEVER"] }]);
+  it("rejects a serial that never shipped on the order, keyed on the serials field", async () => {
+    const { orderId } = await shipped(1);
+    await w.db.insert(schema.serialNumbers).values({ productId: w.productId, warehouseId: w.warehouseId, clientId: w.clientId, primarySerial: "SN-SHIPPED", status: "Shipped",
+      orderLineId: (await w.db.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, orderId)).limit(1))[0]?.id ?? null });
+    const errs = await returnRuleErrors(w.db, { id: orderId, warehouseId: w.warehouseId }, w.warehouseId, [{ productId: w.productId, quantity: 1, serials: ["SN-NEVER"] }]);
     expect(errs["items.0.serials"]?.[0]).toMatch(/Serial SN-NEVER was not shipped/);
-    expect(returnRuleErrors(w.db, { id: orderId, warehouseId: w.warehouseId }, w.warehouseId, [{ productId: w.productId, quantity: 1, serials: ["sn-shipped"] }])).toEqual({});
+    expect(await returnRuleErrors(w.db, { id: orderId, warehouseId: w.warehouseId }, w.warehouseId, [{ productId: w.productId, quantity: 1, serials: ["sn-shipped"] }])).toEqual({});
   });
 
-  it("rejects a pack type other than the one shipped", () => {
-    const { orderId } = shipped(1);
-    const shippedPack = shippedAttributes(w.db, orderId).get(w.productId)?.packTypes[0] ?? "";
+  it("rejects a pack type other than the one shipped", async () => {
+    const { orderId } = await shipped(1);
+    const shippedPack = (await shippedAttributes(w.db, orderId)).get(w.productId)?.packTypes[0] ?? "";
     expect(shippedPack).not.toBe("");
-    const errs = returnRuleErrors(w.db, { id: orderId, warehouseId: w.warehouseId }, w.warehouseId, [{ productId: w.productId, quantity: 1, packType: "Case-of-12" }]);
+    const errs = await returnRuleErrors(w.db, { id: orderId, warehouseId: w.warehouseId }, w.warehouseId, [{ productId: w.productId, quantity: 1, packType: "Case-of-12" }]);
     expect(errs["items.0.packType"]?.[0]).toMatch(/Pack type Case-of-12 was not shipped/);
-    expect(returnRuleErrors(w.db, { id: orderId, warehouseId: w.warehouseId }, w.warehouseId, [{ productId: w.productId, quantity: 1, packType: shippedPack }])).toEqual({});
+    expect(await returnRuleErrors(w.db, { id: orderId, warehouseId: w.warehouseId }, w.warehouseId, [{ productId: w.productId, quantity: 1, packType: shippedPack }])).toEqual({});
   });
 });
 
 describe("short close is confirmed, logged and reopenable", () => {
-  it("Complete with units outstanding is refused until confirmed; then logged per line and reopenable", () => {
-    const { orderId, lineId } = shipped(3);
-    const rma = insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 3 }] });
-    expect(() => receive(rma.id, {})).toThrow(/2 units not received will be closed as short/);
-    expect(getReturnDetail(w.db, ctx.scope, rma.id).receivedQty).toBe(0);
-    const res = receive(rma.id, {}, { shortClose: true, shortCloseReason: "Customer kept 2" });
+  it("Complete with units outstanding is refused until confirmed; then logged per line and reopenable", async () => {
+    const { orderId, lineId } = await shipped(3);
+    const rma = await insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 3 }] });
+    await expect(async () => await receive(rma.id, {})).rejects.toThrow(/2 units not received will be closed as short/);
+    expect((await getReturnDetail(w.db, ctx.scope, rma.id)).receivedQty).toBe(0);
+    const res = await receive(rma.id, {}, { shortClose: true, shortCloseReason: "Customer kept 2" });
     expect(res.status).toBe("Completed");
-    const d = getReturnDetail(w.db, ctx.scope, rma.id);
+    const d = await getReturnDetail(w.db, ctx.scope, rma.id);
     expect(d.shortQty).toBe(2);
     expect(d.note).toMatch(/Short closed .*2 units not received \(Customer kept 2\)/);
-    const log = w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.parentEntityId, rma.id), eq(schema.changeLog.field, "shortClosedQty"))).all();
+    const log = await w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.parentEntityId, rma.id), eq(schema.changeLog.field, "shortClosedQty")));
     expect(log.map((l) => [l.fromValue, l.toValue])).toEqual([["0", "2"]]);
     // Reopen → Started; the rest can be received.
-    const re = reopenReturn(w.db, ctx, rma.id, { reason: "Second box arrived" });
+    const re = await reopenReturn(w.db, ctx, rma.id, { reason: "Second box arrived" });
     expect(re).toMatchObject({ status: "Started", reopenedUnits: 2 });
-    expect(receive(rma.id, { quantity: 2 }).status).toBe("Completed");
-    expect(getReturnDetail(w.db, ctx.scope, rma.id).shortQty).toBe(0);
-    const all = w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.parentEntityId, rma.id), eq(schema.changeLog.field, "shortClosedQty"))).all();
+    expect((await receive(rma.id, { quantity: 2 })).status).toBe("Completed");
+    expect((await getReturnDetail(w.db, ctx.scope, rma.id)).shortQty).toBe(0);
+    const all = await w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.parentEntityId, rma.id), eq(schema.changeLog.field, "shortClosedQty")));
     expect(all.map((l) => [l.fromValue, l.toValue])).toEqual([["0", "2"], ["2", "0"]]);
-    expect(() => reopenReturn(w.db, ctx, rma.id, { reason: "again" })).toThrow(/nothing to reopen/);
-    expect(ledger.reconcileLedger(w.db)).toEqual([]);
+    await expect(async () => await reopenReturn(w.db, ctx, rma.id, { reason: "again" })).rejects.toThrow(/nothing to reopen/);
+    expect(await ledger.reconcileLedger(w.db)).toEqual([]);
   });
 
-  it("only a Completed RMA can be reopened", () => {
-    const { orderId, lineId } = shipped(1);
-    const rma = insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
-    expect(() => reopenReturn(w.db, ctx, rma.id, { reason: "x" })).toThrow(/Only a completed return can be reopened/);
+  it("only a Completed RMA can be reopened", async () => {
+    const { orderId, lineId } = await shipped(1);
+    const rma = await insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 1 }] });
+    await expect(async () => await reopenReturn(w.db, ctx, rma.id, { reason: "x" })).rejects.toThrow(/Only a completed return can be reopened/);
   });
 
   it("shortfallOf counts what this receive leaves outstanding", () => {
@@ -145,44 +145,44 @@ describe("short close is confirmed, logged and reopenable", () => {
 });
 
 describe("damaged returns never land in a Picking face", () => {
-  it("refuses Damaged into a Picking location, allows Storage and the station", () => {
-    const { orderId, lineId } = shipped(2);
-    const rma = insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 2 }] });
-    const reason = w.db.insert(schema.lookupValues).values({ type: "damage_reason", name: "Crushed" }).returning().get();
-    expect(() => receive(rma.id, { disposition: "Damaged", damageReasonId: reason.id }, { targetLocationId: w.loc.storageB, complete: false })).toThrow(/can't be received into Picking location/);
-    expect(receive(rma.id, { disposition: "Damaged", damageReasonId: reason.id }, { targetLocationId: w.loc.storageA, complete: false }).status).toBe("Started");
+  it("refuses Damaged into a Picking location, allows Storage and the station", async () => {
+    const { orderId, lineId } = await shipped(2);
+    const rma = await insertRma(w.db, ctx, { shipmentOrderId: orderId, lines: [{ orderLineId: lineId, quantity: 2 }] });
+    const reason = (await w.db.insert(schema.lookupValues).values({ type: "damage_reason", name: "Crushed" }).returning())[0];
+    await expect(async () => await receive(rma.id, { disposition: "Damaged", damageReasonId: reason.id }, { targetLocationId: w.loc.storageB, complete: false })).rejects.toThrow(/can't be received into Picking location/);
+    expect((await receive(rma.id, { disposition: "Damaged", damageReasonId: reason.id }, { targetLocationId: w.loc.storageA, complete: false })).status).toBe("Started");
     // Restock into Picking stays allowed.
-    expect(receive(rma.id, {}, { targetLocationId: w.loc.storageB }).status).toBe("Completed");
+    expect((await receive(rma.id, {}, { targetLocationId: w.loc.storageB })).status).toBe("Completed");
     expect(damagedTargetError("Restock", { targetAreaType: "Picking", targetCode: "P" })).toBeNull();
   });
 
-  it("Return Manually applies the same guard", () => {
-    const reason = w.db.insert(schema.lookupValues).values({ type: "damage_reason", name: "Wet" }).returning().get();
-    expect(() => receiveManual(w.db, ctx, receiveManualSchema.parse({ warehouseId: w.warehouseId, clientId: w.clientId, stationLocationId: w.loc.returns, targetLocationId: w.loc.storageB,
-      items: [{ productId: w.productId, quantity: 1, disposition: "Damaged", damageReasonId: reason.id }] }))).toThrow(/Picking location/);
+  it("Return Manually applies the same guard", async () => {
+    const reason = (await w.db.insert(schema.lookupValues).values({ type: "damage_reason", name: "Wet" }).returning())[0];
+    await expect(async () => await receiveManual(w.db, ctx, receiveManualSchema.parse({ warehouseId: w.warehouseId, clientId: w.clientId, stationLocationId: w.loc.returns, targetLocationId: w.loc.storageB,
+      items: [{ productId: w.productId, quantity: 1, disposition: "Damaged", damageReasonId: reason.id }] }))).rejects.toThrow(/Picking location/);
   });
 });
 
 describe("Packing Warnings", () => {
-  it("packContext carries the order's warning; acknowledgement is change-logged on the order", () => {
-    ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 3 });
-    const o = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
-    const { jobIds: [jobId] } = createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
-    const picks = w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId ?? ""), eq(schema.tasks.taskType, "Picking"))).all().map((t) => t.id);
-    execute(w.db, w.ctx, { taskIds: picks, targetLocationId: w.loc.pick });
-    const wt = w.db.insert(schema.lookupValues).values({ type: "packing_warning_type", name: "Fragile", meta: { warningText: "Bubble wrap every unit", showWhen: "close_pack", skipConfirmation: false, mediaLinks: ["https://cdn.example.com/wrap.png", "javascript:alert(1)"] } }).returning().get();
-    w.db.update(schema.shipmentOrders).set({ packingWarningTypeId: wt.id }).where(eq(schema.shipmentOrders.id, o.id)).run();
-    const pw = packContext(w.db, ctx.scope, o.id).packingWarning;
+  it("packContext carries the order's warning; acknowledgement is change-logged on the order", async () => {
+    await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 3 });
+    const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
+    await allocateOrders(w.db, w.ctx, { orderIds: [o.id], warehouseId: w.warehouseId });
+    const { jobIds: [jobId] } = await createJobsFromOrders(w.db, w.ctx, { orderIds: [o.id], jobTypeId: w.jobTypeId });
+    const picks = (await w.db.select().from(schema.tasks).where(and(eq(schema.tasks.jobId, jobId ?? ""), eq(schema.tasks.taskType, "Picking")))).map((t) => t.id);
+    await execute(w.db, w.ctx, { taskIds: picks, targetLocationId: w.loc.pick });
+    const wt = (await w.db.insert(schema.lookupValues).values({ type: "packing_warning_type", name: "Fragile", meta: { warningText: "Bubble wrap every unit", showWhen: "close_pack", skipConfirmation: false, mediaLinks: ["https://cdn.example.com/wrap.png", "javascript:alert(1)"] } }).returning())[0];
+    await w.db.update(schema.shipmentOrders).set({ packingWarningTypeId: wt.id }).where(eq(schema.shipmentOrders.id, o.id));
+    const pw = (await packContext(w.db, ctx.scope, o.id)).packingWarning;
     expect(pw).toMatchObject({ name: "Fragile", text: "Bubble wrap every unit", trigger: "close_pack", triggerLabel: "Close pack is triggered", skipConfirmation: false, mediaLinks: ["https://cdn.example.com/wrap.png"] });
-    acknowledgeWarning(w.db, ctx, { orderId: o.id, warningTypeId: wt.id, trigger: "close_pack", stationId: w.loc.pack });
-    const row = w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.entityId, o.id), eq(schema.changeLog.field, "packingWarningAcknowledged"))).get();
+    await acknowledgeWarning(w.db, ctx, { orderId: o.id, warningTypeId: wt.id, trigger: "close_pack", stationId: w.loc.pack });
+    const row = (await w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.entityId, o.id), eq(schema.changeLog.field, "packingWarningAcknowledged"))).limit(1))[0];
     expect(row?.message).toMatch(/Packing warning "Fragile" is acknowledged by the packer \(Close pack is triggered at PACK-01\)/);
     // A stale warning id is refused.
-    expect(() => acknowledgeWarning(w.db, ctx, { orderId: o.id, warningTypeId: w.productId, trigger: "close_pack" })).toThrow(/has changed/);
+    await expect(async () => await acknowledgeWarning(w.db, ctx, { orderId: o.id, warningTypeId: w.productId, trigger: "close_pack" })).rejects.toThrow(/has changed/);
     // Inactive types are not shown.
-    w.db.update(schema.lookupValues).set({ isActive: false }).where(eq(schema.lookupValues.id, wt.id)).run();
-    expect(packContext(w.db, ctx.scope, o.id).packingWarning).toBeNull();
+    await w.db.update(schema.lookupValues).set({ isActive: false }).where(eq(schema.lookupValues.id, wt.id));
+    expect((await packContext(w.db, ctx.scope, o.id)).packingWarning).toBeNull();
   });
 
   it("toPackingWarning defaults and the client gate", () => {

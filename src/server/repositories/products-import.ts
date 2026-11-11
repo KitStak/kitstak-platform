@@ -29,30 +29,30 @@ function ctxOf(ctx: ImportApplyContext): ScopedCtx {
   return { ...domainCtx(ctx.actor, ctx.auth), scope: ctx.auth.scope };
 }
 
-export function findClient(db: AppDb, auth: AuthContext, code: string): typeof clients.$inferSelect {
-  const row = db.select().from(clients).where(sql`lower(${clients.code}) = lower(${code})`).get();
+export async function findClient(db: AppDb, auth: AuthContext, code: string): Promise<typeof clients.$inferSelect> {
+  const row = (await db.select().from(clients).where(sql`lower(${clients.code}) = lower(${code})`).limit(1))[0];
   if (!row || !hasClient(auth.scope, row.id)) throw new AppError("VALIDATION", `Client "${code}" not found`);
   return row;
 }
 
-export function findWarehouse(db: AppDb, auth: AuthContext, code: string): typeof warehouses.$inferSelect {
-  const row = db.select().from(warehouses).where(sql`lower(${warehouses.code}) = lower(${code})`).get();
+export async function findWarehouse(db: AppDb, auth: AuthContext, code: string): Promise<typeof warehouses.$inferSelect> {
+  const row = (await db.select().from(warehouses).where(sql`lower(${warehouses.code}) = lower(${code})`).limit(1))[0];
   if (!row || !auth.scope.warehouseIds.includes(row.id)) throw new AppError("VALIDATION", `Warehouse "${code}" not found`);
   return row;
 }
 
-export function findProduct(db: AppDb, clientId: string, clientCode: string, sku: string): typeof p.$inferSelect {
-  const row = db.select().from(p).where(and(eq(p.clientId, clientId), sql`lower(${p.sku}) = lower(${sku})`)).get();
+export async function findProduct(db: AppDb, clientId: string, clientCode: string, sku: string): Promise<typeof p.$inferSelect> {
+  const row = (await db.select().from(p).where(and(eq(p.clientId, clientId), sql`lower(${p.sku}) = lower(${sku})`)).limit(1))[0];
   if (!row) throw new AppError("VALIDATION", `SKU "${sku}" not found for client ${clientCode}`);
   return row;
 }
 
 /** Client-scoped lookup id by name; created when missing (same as the wizard's inline "+ Create"). */
-function lookupId(db: AppDb, ctx: ScopedCtx, type: "product_group" | "product_type", clientId: string, name: string): string | null {
+async function lookupId(db: AppDb, ctx: ScopedCtx, type: "product_group" | "product_type", clientId: string, name: string): Promise<string | null> {
   if (!name) return null;
-  const row = db.select({ id: lv.id }).from(lv)
-    .where(and(eq(lv.type, type), sql`lower(${lv.name}) = lower(${name})`, sql`(${lv.clientId} = ${clientId} OR ${lv.clientId} IS NULL)`)).get();
-  return row?.id ?? createLookup(db, ctx, type, { name, clientId, isActive: true, sortOrder: 0 }).id;
+  const row = (await db.select({ id: lv.id }).from(lv)
+    .where(and(eq(lv.type, type), sql`lower(${lv.name}) = lower(${name})`, sql`(${lv.clientId} = ${clientId} OR ${lv.clientId} IS NULL)`)).limit(1))[0];
+  return row?.id ?? (await createLookup(db, ctx, type, { name, clientId, isActive: true, sortOrder: 0 })).id;
 }
 
 /** Template "Product Type": Simple → standard product; kits are created in the wizard (they need components). */
@@ -80,10 +80,10 @@ function withTracking(values: ProductFormValues, row: ImportRowValues): ProductF
 }
 
 /** "products": creates a standard product with its primary pack type. */
-export function applyProductImport(ctx: ImportApplyContext, row: ImportRowValues): ImportApplyResult {
+export async function applyProductImport(ctx: ImportApplyContext, row: ImportRowValues): Promise<ImportApplyResult> {
   const db = ctx.db;
   const dctx = ctxOf(ctx);
-  const client = findClient(db, ctx.auth, str(row.clientCode));
+  const client = await findClient(db, ctx.auth, str(row.clientCode));
   const category = categoryOf(str(row.productType));
   const base = emptyProductForm(category, client.id);
   const pack: PackTypeFormValue = {
@@ -93,36 +93,36 @@ export function applyProductImport(ctx: ImportApplyContext, row: ImportRowValues
   };
   const values = withTracking({
     ...base, sku: str(row.sku), name: str(row.name), description: str(row.description),
-    productGroupId: lookupId(db, dctx, "product_group", client.id, str(row.productGroup)),
+    productGroupId: await lookupId(db, dctx, "product_group", client.id, str(row.productGroup)),
     salesPrice: numOr(row.unitPrice, null), purchasePrice: numOr(row.unitCost, null),
     isActive: str(row.status).toLowerCase() !== "inactive", packTypes: [pack],
   }, row);
-  const created = createProductFromWizard(db, dctx, values as ProductInput);
+  const created = await createProductFromWizard(db, dctx, values as ProductInput);
   return { entityId: created.id, message: `Created ${created.sku}` };
 }
 
-function loadForm(db: AppDb, auth: AuthContext, productId: string): ProductFormValues & { id: string; version: number } {
-  const form = getProductForm(db, auth.scope, productId);
+async function loadForm(db: AppDb, auth: AuthContext, productId: string): Promise<ProductFormValues & { id: string; version: number }> {
+  const form = await getProductForm(db, auth.scope, productId);
   if (!form) throw new AppError("NOT_FOUND", "Product not found");
   return form;
 }
 
-function save(db: AppDb, dctx: ScopedCtx, form: ProductFormValues & { id: string; version: number }, next: ProductFormValues): ImportApplyResult {
-  const updated = updateProductFromWizard(db, dctx, form.id, { ...next, version: form.version } as ProductInput);
+async function save(db: AppDb, dctx: ScopedCtx, form: ProductFormValues & { id: string; version: number }, next: ProductFormValues): Promise<ImportApplyResult> {
+  const updated = await updateProductFromWizard(db, dctx, form.id, { ...next, version: form.version } as ProductInput);
   return { entityId: updated.id, message: `Updated ${updated.sku}` };
 }
 
 /** "products-update": changes only the columns that carry a value. */
-export function applyProductUpdateImport(ctx: ImportApplyContext, row: ImportRowValues): ImportApplyResult {
+export async function applyProductUpdateImport(ctx: ImportApplyContext, row: ImportRowValues): Promise<ImportApplyResult> {
   const db = ctx.db;
   const dctx = ctxOf(ctx);
-  const client = findClient(db, ctx.auth, str(row.clientCode));
-  const product = findProduct(db, client.id, client.code, str(row.sku));
-  const form = loadForm(db, ctx.auth, product.id);
+  const client = await findClient(db, ctx.auth, str(row.clientCode));
+  const product = await findProduct(db, client.id, client.code, str(row.sku));
+  const form = await loadForm(db, ctx.auth, product.id);
   let next: ProductFormValues = { ...form };
   if (has(row.name)) next.name = str(row.name);
   if (has(row.description)) next.description = str(row.description);
-  if (has(row.productGroup)) next.productGroupId = lookupId(db, dctx, "product_group", client.id, str(row.productGroup));
+  if (has(row.productGroup)) next.productGroupId = await lookupId(db, dctx, "product_group", client.id, str(row.productGroup));
   if (has(row.unitPrice)) next.salesPrice = Number(row.unitPrice);
   if (has(row.unitCost)) next.purchasePrice = Number(row.unitCost);
   if (has(row.status)) next.isActive = str(row.status).toLowerCase() !== "inactive";
@@ -141,17 +141,17 @@ export function applyProductUpdateImport(ctx: ImportApplyContext, row: ImportRow
     for (const k of ["length", "width", "height", "weight"] as const) if (has(row[k])) next[k] = Number(row[k]);
   }
   next = withTracking(next, row);
-  return save(db, dctx, form, next);
+  return await save(db, dctx, form, next);
 }
 
 /** "pack-types": adds or updates a pack type (UOM qty > 1 → hierarchical over the primary). */
-export function applyPackTypeImport(ctx: ImportApplyContext, row: ImportRowValues): ImportApplyResult {
+export async function applyPackTypeImport(ctx: ImportApplyContext, row: ImportRowValues): Promise<ImportApplyResult> {
   const db = ctx.db;
   const dctx = ctxOf(ctx);
-  const client = findClient(db, ctx.auth, str(row.clientCode));
-  const product = findProduct(db, client.id, client.code, str(row.sku));
+  const client = await findClient(db, ctx.auth, str(row.clientCode));
+  const product = await findProduct(db, client.id, client.code, str(row.sku));
   if (product.productCategory !== "Product") throw new AppError("VALIDATION", `${product.sku} is a ${product.productCategory.toLowerCase()}; pack types apply to standard products only`);
-  const form = loadForm(db, ctx.auth, product.id);
+  const form = await loadForm(db, ctx.auth, product.id);
   const name = str(row.packType);
   const uomQty = Math.max(1, Math.floor(Number(row.uomQty)));
   const primary = primaryPack(form);
@@ -181,29 +181,29 @@ export function applyPackTypeImport(ctx: ImportApplyContext, row: ImportRowValue
     packs = [...form.packTypes, dims({ ...fresh, key: `imp_${name}`, packType: name, parentKey: primary.key, childQty: uomQty, uomQty, weightUnit: primary.weightUnit, dimensionUnit: primary.dimensionUnit })];
     verb = "Added";
   }
-  const result = save(db, dctx, form, { ...form, packTypes: packs });
+  const result = await save(db, dctx, form, { ...form, packTypes: packs });
   return { ...result, message: `${verb} ${name} on ${product.sku}` };
 }
 
 /** "replenishment-levels": per-warehouse min/max (switches the product to Per Warehouse). */
-export function applyReplenishmentImport(ctx: ImportApplyContext, row: ImportRowValues): ImportApplyResult {
+export async function applyReplenishmentImport(ctx: ImportApplyContext, row: ImportRowValues): Promise<ImportApplyResult> {
   const db = ctx.db;
   const dctx = ctxOf(ctx);
-  const warehouse = findWarehouse(db, ctx.auth, str(row.warehouseCode));
-  const client = findClient(db, ctx.auth, str(row.clientCode));
-  const product = findProduct(db, client.id, client.code, str(row.sku));
+  const warehouse = await findWarehouse(db, ctx.auth, str(row.warehouseCode));
+  const client = await findClient(db, ctx.auth, str(row.clientCode));
+  const product = await findProduct(db, client.id, client.code, str(row.sku));
   if (product.productCategory === "Kit") throw new AppError("VALIDATION", `${product.sku} is a kit; kits have no replenishment levels`);
   const min = Number(row.minQty);
   const max = Number(row.maxQty);
   if (max < min) throw new AppError("VALIDATION", "Max quantity must be at least min quantity");
-  const form = loadForm(db, ctx.auth, product.id);
+  const form = await loadForm(db, ctx.auth, product.id);
   const levels = [...form.replenishmentLevels.filter((l) => l.warehouseId !== warehouse.id), { warehouseId: warehouse.id, minLevel: min, maxLevel: max }];
-  const result = save(db, dctx, form, { ...form, replenishmentStrategy: "Per Warehouse", replenishmentLevels: levels });
+  const result = await save(db, dctx, form, { ...form, replenishmentStrategy: "Per Warehouse", replenishmentLevels: levels });
   return { ...result, message: `${product.sku} @ ${warehouse.code}: ${min}–${max}` };
 }
 
-function findChannel(db: AppDb, clientId: string, channel: string): typeof cc.$inferSelect {
-  const rows = db.select().from(cc).where(eq(cc.clientId, clientId)).all();
+async function findChannel(db: AppDb, clientId: string, channel: string): Promise<typeof cc.$inferSelect> {
+  const rows = await db.select().from(cc).where(eq(cc.clientId, clientId));
   const lc = channel.toLowerCase();
   const row = rows.find((c) => c.storeName.toLowerCase() === lc) ?? rows.find((c) => c.provider.toLowerCase() === lc);
   if (!row) throw new AppError("VALIDATION", `Sales channel "${channel}" not found for this client`);
@@ -211,21 +211,21 @@ function findChannel(db: AppDb, clientId: string, channel: string): typeof cc.$i
 }
 
 /** "sku-allocation": static qty and/or percentage per channel + warehouse. */
-export function applySkuAllocationImport(ctx: ImportApplyContext, row: ImportRowValues): ImportApplyResult {
+export async function applySkuAllocationImport(ctx: ImportApplyContext, row: ImportRowValues): Promise<ImportApplyResult> {
   const db = ctx.db;
   const dctx = ctxOf(ctx);
-  const warehouse = findWarehouse(db, ctx.auth, str(row.warehouseCode));
-  const client = findClient(db, ctx.auth, str(row.clientCode));
-  const product = findProduct(db, client.id, client.code, str(row.sku));
+  const warehouse = await findWarehouse(db, ctx.auth, str(row.warehouseCode));
+  const client = await findClient(db, ctx.auth, str(row.clientCode));
+  const product = await findProduct(db, client.id, client.code, str(row.sku));
   if (product.productCategory === "Packaging Material") throw new AppError("VALIDATION", `${product.sku} is packaging material and is never published to channels`);
-  const channel = findChannel(db, client.id, str(row.channel));
+  const channel = await findChannel(db, client.id, str(row.channel));
   const pct = has(row.allocationPercent) ? Number(row.allocationPercent) : null;
   const qty = has(row.allocationQty) ? Number(row.allocationQty) : null;
   if (pct === null && qty === null) throw new AppError("VALIDATION", "Enter an allocation % or an allocation quantity");
-  const form = loadForm(db, ctx.auth, product.id);
+  const form = await loadForm(db, ctx.auth, product.id);
   const rest = form.channelAllocations.filter((a) => !(a.channelConnectionId === channel.id && a.warehouseId === warehouse.id));
   const allocations = [...rest, { key: `imp_${Math.random().toString(36).slice(2, 12)}`, channelConnectionId: channel.id, warehouseId: warehouse.id, staticQty: qty, reserveQty: null, allocationPct: pct }];
-  const result = save(db, dctx, form, { ...form, channelAllocations: allocations });
+  const result = await save(db, dctx, form, { ...form, channelAllocations: allocations });
   return { ...result, message: `${product.sku} → ${channel.storeName} @ ${warehouse.code}` };
 }
 
@@ -246,49 +246,49 @@ function firstTouch(batchId: string, kitId: string): boolean {
 }
 
 /** "kit-components": rows for the same kit in one file replace its component list. */
-export function applyKitComponentImport(ctx: ImportApplyContext, row: ImportRowValues): ImportApplyResult {
+export async function applyKitComponentImport(ctx: ImportApplyContext, row: ImportRowValues): Promise<ImportApplyResult> {
   const db = ctx.db;
   const dctx = ctxOf(ctx);
-  const client = findClient(db, ctx.auth, str(row.clientCode));
-  const kit = findProduct(db, client.id, client.code, str(row.kitSku));
+  const client = await findClient(db, ctx.auth, str(row.clientCode));
+  const kit = await findProduct(db, client.id, client.code, str(row.kitSku));
   if (kit.productCategory !== "Kit") throw new AppError("VALIDATION", `${kit.sku} is not a kit`);
-  const component = findProduct(db, client.id, client.code, str(row.componentSku));
+  const component = await findProduct(db, client.id, client.code, str(row.componentSku));
   const quantity = Number(row.quantity);
-  const form = loadForm(db, ctx.auth, kit.id);
+  const form = await loadForm(db, ctx.auth, kit.id);
   const base = firstTouch(ctx.batchId, kit.id) ? [] : form.components.filter((c) => c.productId !== component.id);
   const components = [...base, { productId: component.id, sku: component.sku, name: component.name, imageUrl: component.imageUrl, quantity }];
-  const result = save(db, dctx, form, { ...form, components });
+  const result = await save(db, dctx, form, { ...form, components });
   return { ...result, message: `${kit.sku}: ${component.sku} ×${quantity}` };
 }
 
 /** "listings": upserts a listing by store + seller SKU and links it when SKU is given. */
-export function applyListingImport(ctx: ImportApplyContext, row: ImportRowValues): ImportApplyResult {
+export async function applyListingImport(ctx: ImportApplyContext, row: ImportRowValues): Promise<ImportApplyResult> {
   const db = ctx.db;
   const dctx = ctxOf(ctx);
-  const client = findClient(db, ctx.auth, str(row.clientCode));
-  const channel = findChannel(db, client.id, str(row.channel));
+  const client = await findClient(db, ctx.auth, str(row.clientCode));
+  const channel = await findChannel(db, client.id, str(row.channel));
   const sellerSku = str(row.channelSku);
-  const product = has(row.sku) ? findProduct(db, client.id, client.code, str(row.sku)) : null;
-  const existing = db.select().from(pl).where(and(eq(pl.channelConnectionId, channel.id), sql`lower(${pl.sellerSku}) = lower(${sellerSku})`)).get();
+  const product = has(row.sku) ? await findProduct(db, client.id, client.code, str(row.sku)) : null;
+  const existing = (await db.select().from(pl).where(and(eq(pl.channelConnectionId, channel.id), sql`lower(${pl.sellerSku}) = lower(${sellerSku})`)).limit(1))[0];
   const name = str(row.title) || existing?.name || product?.name || sellerSku;
   const neverSync = row.neverSync === null || row.neverSync === undefined ? existing?.neverSync ?? false : Boolean(row.neverSync);
   const now = new Date().toISOString();
   if (existing) {
     const productId = product?.id ?? existing.productId;
     const linkedAt = productId === existing.productId ? existing.linkedAt : productId ? now : null;
-    db.update(pl).set({ name, neverSync, productId, linkedAt, updatedBy: dctx.userId, version: existing.version + 1 }).where(eq(pl.id, existing.id)).run();
-    const skuOf = (id: string | null) => (id ? db.select({ sku: p.sku }).from(p).where(eq(p.id, id)).get()?.sku ?? null : null);
-    recordUpdate(db, dctx, {
+    await db.update(pl).set({ name, neverSync, productId, linkedAt, updatedBy: dctx.userId, version: existing.version + 1 }).where(eq(pl.id, existing.id));
+    const skuOf = async (id: string | null) => (id ? (await db.select({ sku: p.sku }).from(p).where(eq(p.id, id)).limit(1))[0]?.sku ?? null : null);
+    await recordUpdate(db, dctx, {
       entityType: "listing", entityId: existing.id, entityCode: sellerSku,
-      before: { name: existing.name, neverSync: existing.neverSync, linkedProduct: skuOf(existing.productId) },
-      after: { name, neverSync, linkedProduct: skuOf(productId) },
+      before: { name: existing.name, neverSync: existing.neverSync, linkedProduct: await skuOf(existing.productId) },
+      after: { name, neverSync, linkedProduct: await skuOf(productId) },
     });
     return { entityId: existing.id, message: `Updated ${sellerSku}` };
   }
-  const created = db.insert(pl).values({
+  const created = (await db.insert(pl).values({
     channelConnectionId: channel.id, clientId: client.id, productId: product?.id ?? null, sellerSku, channelProductId: sellerSku, name,
     neverSync, linkedAt: product ? now : null, createdBy: dctx.userId, updatedBy: dctx.userId,
-  }).returning({ id: pl.id }).get();
-  recordCreate(db, dctx, { entityType: "listing", entityId: created.id, entityCode: sellerSku });
+  }).returning({ id: pl.id }))[0];
+  await recordCreate(db, dctx, { entityType: "listing", entityId: created.id, entityCode: sellerSku });
   return { entityId: created.id, message: `Created ${sellerSku}${product ? ` → ${product.sku}` : ""}` };
 }

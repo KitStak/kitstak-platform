@@ -15,6 +15,7 @@ import { paginate } from "@/server/query/paginate";
 import type { GridQuery } from "@/server/query/grid-query";
 import { VAS_FIELDS, VAS_SEARCH_FIELDS, VAS_SORT_FIELDS, vasCalculationType, type VasSave } from "@/lib/grid-defs/organization/vas";
 import { assertVersion, compileGrid, domainCtxOf, logCreate, logDelete, logUpdate, namesOf, type Actor, type GridBinding } from "./clients-shared";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 const v = s.vasOperations;
 export const VAS_ENTITY = "vas_operation";
@@ -69,28 +70,28 @@ const ROW = {
 
 const scope = (auth: AuthContext): SQL | undefined => scopedWhere(v, auth.viewScope);
 
-export function listVas(db: AppDb, auth: AuthContext, query: GridQuery): { rows: VasRow[]; total: number } {
+export async function listVas(db: AppDb, auth: AuthContext, query: GridQuery): Promise<{ rows: VasRow[]; total: number }> {
   const grid = compileGrid(BINDING, query, [scope(auth)]);
-  const result = paginate(db.select(ROW).from(v).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(v).where(grid.where).get()?.n ?? 0, { page: query.page, pageSize: query.pageSize });
+  const result = await paginate(db.select(ROW).from(v).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(v).where(grid.where).limit(1))[0]?.n ?? 0, { page: query.page, pageSize: query.pageSize });
   return { rows: result.rows as VasRow[], total: result.total };
 }
 
-export function loadVas(db: AppDb, auth: AuthContext, id: string): typeof v.$inferSelect {
-  const row = db.select().from(v).where(eq(v.id, id)).get();
+export async function loadVas(db: AppDb, auth: AuthContext, id: string): Promise<typeof v.$inferSelect> {
+  const row = (await db.select().from(v).where(eq(v.id, id)).limit(1))[0];
   assertInScope(auth.scope, row, "VAS operation");
   return row!;
 }
 
-export function getVas(db: AppDb, auth: AuthContext, id: string): VasRow {
-  loadVas(db, auth, id);
-  return db.select(ROW).from(v).where(eq(v.id, id)).get() as VasRow;
+export async function getVas(db: AppDb, auth: AuthContext, id: string): Promise<VasRow> {
+  await loadVas(db, auth, id);
+  return (await db.select(ROW).from(v).where(eq(v.id, id)).limit(1))[0] as VasRow;
 }
 
 /** Users who created a VAS operation the caller can see (the Created by filter options). */
-export function vasCreators(db: AppDb, auth: AuthContext): { id: string; name: string }[] {
-  return db.selectDistinct({ id: s.users.id, name: s.users.name }).from(v).innerJoin(s.users, eq(s.users.id, v.createdBy))
-    .where(scope(auth)).orderBy(s.users.name).all();
+export async function vasCreators(db: AppDb, auth: AuthContext): Promise<{ id: string; name: string }[]> {
+  return await db.selectDistinct({ id: s.users.id, name: s.users.name }).from(v).innerJoin(s.users, eq(s.users.id, v.createdBy))
+    .where(scope(auth)).orderBy(s.users.name);
 }
 
 /** Global (NULL warehouse/client) lookups stay visible; scoped ones follow the user's scope. */
@@ -101,10 +102,10 @@ function lookupScope(auth: AuthContext): SQL | undefined {
 }
 
 /** VAS types (Data Setup) with their calculation type, for the drawer and the fee form. */
-export function vasTypes(db: AppDb, auth: AuthContext): { id: string; name: string; calculationType: (typeof v.$inferSelect)["calculationType"]; clientId: string | null; isActive: boolean }[] {
-  return db.select({ id: s.lookupValues.id, name: s.lookupValues.name, meta: s.lookupValues.meta, clientId: s.lookupValues.clientId, isActive: s.lookupValues.isActive })
+export async function vasTypes(db: AppDb, auth: AuthContext): Promise<{ id: string; name: string; calculationType: (typeof v.$inferSelect)["calculationType"]; clientId: string | null; isActive: boolean }[]> {
+  return (await db.select({ id: s.lookupValues.id, name: s.lookupValues.name, meta: s.lookupValues.meta, clientId: s.lookupValues.clientId, isActive: s.lookupValues.isActive })
     .from(s.lookupValues).where(and(eq(s.lookupValues.type, "vas_type"), lookupScope(auth)))
-    .orderBy(s.lookupValues.sortOrder, s.lookupValues.name).all()
+    .orderBy(s.lookupValues.sortOrder, s.lookupValues.name))
     .map((r) => ({ id: r.id, name: r.name, calculationType: vasCalculationType(r.meta), clientId: r.clientId, isActive: Boolean(r.isActive) }));
 }
 
@@ -112,16 +113,16 @@ export function vasTypes(db: AppDb, auth: AuthContext): { id: string; name: stri
  * Validates every field and throws once with all field errors, so the drawer can mark each
  * invalid field in one round trip. Returns the calculation type of the VAS type.
  */
-function validateVas(db: AppDb, auth: AuthContext, input: VasSave): (typeof v.$inferSelect)["calculationType"] {
+async function validateVas(db: AppDb, auth: AuthContext, input: VasSave): Promise<(typeof v.$inferSelect)["calculationType"]> {
   const errors: Record<string, string[]> = {};
   const add = (field: string, msg: string) => { (errors[field] ??= []).push(msg); };
   if (!hasWarehouse(auth.scope, input.warehouseId)) add("warehouseId", "Choose a warehouse you have access to");
   if (!hasClient(auth.scope, input.clientId)) add("clientId", "Choose a client you have access to");
-  else if (!db.select({ id: s.clients.id }).from(s.clients).where(eq(s.clients.id, input.clientId)).get()) add("clientId", "Choose a client");
-  const lv = db.select().from(s.lookupValues).where(and(eq(s.lookupValues.id, input.vasTypeId), eq(s.lookupValues.type, "vas_type"))).get();
+  else if (!(await db.select({ id: s.clients.id }).from(s.clients).where(eq(s.clients.id, input.clientId)).limit(1))[0]) add("clientId", "Choose a client");
+  const lv = (await db.select().from(s.lookupValues).where(and(eq(s.lookupValues.id, input.vasTypeId), eq(s.lookupValues.type, "vas_type"))).limit(1))[0];
   if (!lv) add("vasTypeId", "Choose a VAS type");
   else if (lv.clientId && lv.clientId !== input.clientId) add("vasTypeId", "This VAS type belongs to another client");
-  const ref = referenceError(db, input);
+  const ref = await referenceError(db, input);
   if (ref) add("referenceNumber", ref);
   const fields = Object.keys(errors);
   if (fields.length || !lv) {
@@ -135,23 +136,23 @@ const REFERENCE_TABLES = { "Shipment Order": s.shipmentOrders, "Purchase Order":
 
 type RefInput = Pick<VasSave, "clientId" | "warehouseId" | "referenceOrderType" | "referenceNumber">;
 
-function referenceError(db: AppDb, input: RefInput): string | null {
+async function referenceError(db: AppDb, input: RefInput): Promise<string | null> {
   if (!input.referenceOrderType || !input.referenceNumber) return null;
   const t = REFERENCE_TABLES[input.referenceOrderType];
-  const hit = db.select({ id: t.id }).from(t).where(and(eq(t.code, input.referenceNumber), eq(t.clientId, input.clientId), eq(t.warehouseId, input.warehouseId))).get();
+  const hit = (await db.select({ id: t.id }).from(t).where(and(eq(t.code, input.referenceNumber), eq(t.clientId, input.clientId), eq(t.warehouseId, input.warehouseId))).limit(1))[0];
   return hit ? null : `This ${input.referenceOrderType.toLowerCase()} does not exist for the selected client and warehouse`;
 }
 
 /** Reference order must exist for the same client and warehouse (Logiwa: "This shipment order does not exist"). */
-export function assertReference(db: AppDb, input: RefInput): void {
-  const msg = referenceError(db, input);
+export async function assertReference(db: AppDb, input: RefInput): Promise<void> {
+  const msg = await referenceError(db, input);
   if (msg) throw new AppError("VALIDATION", msg, { fieldErrors: { referenceNumber: [msg] } });
 }
 
 /** Successful Draft bills whose period contains this operation (they go stale when it changes). */
-export function draftBillsFor(db: AppDb, row: { clientId: string; warehouseId: string; operationAt: string }): { id: string; billNumber: string }[] {
+export async function draftBillsFor(db: AppDb, row: { clientId: string; warehouseId: string; operationAt: string }): Promise<{ id: string; billNumber: string }[]> {
   const d = row.operationAt.slice(0, 10);
-  return db.all<{ id: string; billNumber: string }>(sql`SELECT id, bill_number AS billNumber FROM billing_reports WHERE client_id = ${row.clientId} AND warehouse_id = ${row.warehouseId}
+  return await dbAll<{ id: string; billNumber: string }>(db, sql`SELECT id, bill_number AS "billNumber" FROM billing_reports WHERE client_id = ${row.clientId} AND warehouse_id = ${row.warehouseId}
     AND bill_status = 'Draft' AND calc_status = 'Successful' AND ${d} >= substr(period_start, 1, 10) AND ${d} <= substr(period_end, 1, 10)`);
 }
 
@@ -161,34 +162,34 @@ export const OUTDATED_FIELD = "outdated";
  * Marks each Draft bill whose period the change touches as outdated: a change-log entry on the
  * bill, newer than its calculation (the next recalculation clears it). Returns the bill numbers.
  */
-export function markDraftsOutdated(tx: AppDb, ctx: { userId: string | null; source: string }, rows: readonly { clientId: string; warehouseId: string; operationAt: string }[], what: string, at: string = new Date().toISOString()): string[] {
+export async function markDraftsOutdated(tx: AppDb, ctx: { userId: string | null; source: string }, rows: readonly { clientId: string; warehouseId: string; operationAt: string }[], what: string, at: string = new Date().toISOString()): Promise<string[]> {
   const seen = new Map<string, string>();
-  for (const row of rows) for (const b of draftBillsFor(tx, row)) seen.set(b.id, b.billNumber);
+  for (const row of rows) for (const b of await draftBillsFor(tx, row)) seen.set(b.id, b.billNumber);
   for (const [id, billNumber] of seen) {
-    tx.insert(s.changeLog).values({
+    await tx.insert(s.changeLog).values({
       entityType: "billing_report", entityId: id, entityCode: billNumber, type: "Update", field: OUTDATED_FIELD, fieldLabel: "Outdated",
       fromValue: null, toValue: what, message: `Outdated: ${what} after calculation. Recalculate the bill to include it.`, userId: ctx.userId, source: ctx.source, at,
-    }).run();
+    });
   }
   return [...seen.values()];
 }
 
 /** Approved bill whose period contains this operation, if any. */
-export function billedIn(db: AppDb, row: { clientId: string; warehouseId: string; operationAt: string }): string | null {
+export async function billedIn(db: AppDb, row: { clientId: string; warehouseId: string; operationAt: string }): Promise<string | null> {
   const d = row.operationAt.slice(0, 10);
-  return db.get<{ n: string }>(sql`SELECT bill_number AS n FROM billing_reports WHERE client_id = ${row.clientId} AND warehouse_id = ${row.warehouseId}
-    AND bill_status = 'Approved' AND calc_status = 'Successful' AND ${d} >= substr(period_start, 1, 10) AND ${d} <= substr(period_end, 1, 10) LIMIT 1`)?.n ?? null;
+  return (await dbGet<{ n: string }>(db, sql`SELECT bill_number AS n FROM billing_reports WHERE client_id = ${row.clientId} AND warehouse_id = ${row.warehouseId}
+    AND bill_status = 'Approved' AND calc_status = 'Successful' AND ${d} >= substr(period_start, 1, 10) AND ${d} <= substr(period_end, 1, 10) LIMIT 1`))?.n ?? null;
 }
 
-function lockedBy(db: AppDb, row: { clientId: string; warehouseId: string; operationAt: string }): void {
-  const bill = billedIn(db, row);
+async function lockedBy(db: AppDb, row: { clientId: string; warehouseId: string; operationAt: string }): Promise<void> {
+  const bill = await billedIn(db, row);
   if (bill) throw new AppError("INVALID_STATE", `Billed in approved bill ${bill}; cancel its approval first`);
 }
 
-function snapshot(db: AppDb, row: typeof v.$inferSelect): Record<string, unknown> {
+async function snapshot(db: AppDb, row: typeof v.$inferSelect): Promise<Record<string, unknown>> {
   return {
-    vasTypeId: namesOf(db, "lookup_values", [row.vasTypeId]).get(row.vasTypeId) ?? "", clientId: namesOf(db, "clients", [row.clientId]).get(row.clientId) ?? "",
-    warehouseId: namesOf(db, "warehouses", [row.warehouseId]).get(row.warehouseId) ?? "", operationAt: row.operationAt, calculationType: row.calculationType, value: row.value,
+    vasTypeId: (await namesOf(db, "lookup_values", [row.vasTypeId])).get(row.vasTypeId) ?? "", clientId: (await namesOf(db, "clients", [row.clientId])).get(row.clientId) ?? "",
+    warehouseId: (await namesOf(db, "warehouses", [row.warehouseId])).get(row.warehouseId) ?? "", operationAt: row.operationAt, calculationType: row.calculationType, value: row.value,
     note: row.note ?? "", referenceOrderType: row.referenceOrderType ?? "", referenceNumber: row.referenceNumber ?? "",
   };
 }
@@ -196,44 +197,44 @@ function snapshot(db: AppDb, row: typeof v.$inferSelect): Record<string, unknown
 const iso = (value: string): string => new Date(value).toISOString();
 const code = (row: { referenceNumber: string | null; operationAt: string }): string => row.referenceNumber ?? row.operationAt.slice(0, 10);
 
-export function createVas(tx: AppDb, auth: AuthContext, actor: Actor, input: VasSave): { id: string; outdatedBills: string[] } {
-  const calculationType = validateVas(tx, auth, input);
+export async function createVas(tx: AppDb, auth: AuthContext, actor: Actor, input: VasSave): Promise<{ id: string; outdatedBills: string[] }> {
+  const calculationType = await validateVas(tx, auth, input);
   const operationAt = iso(input.operationAt);
-  lockedBy(tx, { clientId: input.clientId, warehouseId: input.warehouseId, operationAt });
-  const row = tx.insert(v).values({
+  await lockedBy(tx, { clientId: input.clientId, warehouseId: input.warehouseId, operationAt });
+  const row = (await tx.insert(v).values({
     clientId: input.clientId, warehouseId: input.warehouseId, vasTypeId: input.vasTypeId, operationAt, calculationType, value: Math.round(input.value * 100) / 100,
     note: input.note, referenceOrderType: input.referenceNumber ? input.referenceOrderType ?? null : input.referenceOrderType ?? null, referenceNumber: input.referenceNumber,
     createdBy: actor.userId, updatedBy: actor.userId,
-  }).returning().get();
+  }).returning())[0];
   const ctx = domainCtxOf(actor, auth);
-  logCreate(tx, ctx, VAS_ENTITY, row.id, code(row));
-  return { id: row.id, outdatedBills: markDraftsOutdated(tx, ctx, [row], `VAS operation ${code(row)} added`) };
+  await logCreate(tx, ctx, VAS_ENTITY, row.id, code(row));
+  return { id: row.id, outdatedBills: await markDraftsOutdated(tx, ctx, [row], `VAS operation ${code(row)} added`) };
 }
 
-export function updateVas(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: VasSave): { id: string; version: number; outdatedBills: string[] } {
-  const before = loadVas(tx, auth, id);
+export async function updateVas(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: VasSave): Promise<{ id: string; version: number; outdatedBills: string[] }> {
+  const before = await loadVas(tx, auth, id);
   assertVersion(before.version, input.version);
-  lockedBy(tx, before);
-  const calculationType = validateVas(tx, auth, input);
+  await lockedBy(tx, before);
+  const calculationType = await validateVas(tx, auth, input);
   const operationAt = iso(input.operationAt);
-  lockedBy(tx, { clientId: input.clientId, warehouseId: input.warehouseId, operationAt });
-  const after = tx.update(v).set({
+  await lockedBy(tx, { clientId: input.clientId, warehouseId: input.warehouseId, operationAt });
+  const after = (await tx.update(v).set({
     clientId: input.clientId, warehouseId: input.warehouseId, vasTypeId: input.vasTypeId, operationAt, calculationType, value: Math.round(input.value * 100) / 100, note: input.note,
     referenceOrderType: input.referenceOrderType ?? null, referenceNumber: input.referenceNumber, updatedBy: actor.userId, version: sql`${v.version} + 1`,
-  }).where(eq(v.id, id)).returning().get();
+  }).where(eq(v.id, id)).returning())[0];
   const ctx = domainCtxOf(actor, auth);
-  logUpdate(tx, ctx, VAS_ENTITY, id, code(after), snapshot(tx, before), snapshot(tx, after));
-  return { id, version: after.version, outdatedBills: markDraftsOutdated(tx, ctx, [before, after], `VAS operation ${code(after)} changed`) };
+  await logUpdate(tx, ctx, VAS_ENTITY, id, code(after), await snapshot(tx, before), await snapshot(tx, after));
+  return { id, version: after.version, outdatedBills: await markDraftsOutdated(tx, ctx, [before, after], `VAS operation ${code(after)} changed`) };
 }
 
-export function deleteVas(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult {
+export async function deleteVas(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const row = loadVas(inner, auth, id);
-    lockedBy(inner, row);
-    inner.delete(v).where(eq(v.id, id)).run();
-    logDelete(inner, ctx, VAS_ENTITY, id, code(row));
-    markDraftsOutdated(inner, ctx, [row], `VAS operation ${code(row)} deleted`);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const row = await loadVas(inner, auth, id);
+    await lockedBy(inner, row);
+    await inner.delete(v).where(eq(v.id, id));
+    await logDelete(inner, ctx, VAS_ENTITY, id, code(row));
+    await markDraftsOutdated(inner, ctx, [row], `VAS operation ${code(row)} deleted`);
   });
 }
 

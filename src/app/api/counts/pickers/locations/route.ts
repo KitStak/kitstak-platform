@@ -8,8 +8,8 @@ import { listPickLocations } from "@/server/repositories/counts-pickers";
 export const GET = defineRoute({
   permission: [P.create, P.edit],
   query: z.object({ warehouseId: z.string().min(1, "Choose a warehouse first").max(64), types: z.enum(["storage", "all"]).optional(), exceptPlanId: z.string().max(64).optional() }).passthrough(),
-  handler: ({ db, auth, grid, query }) => {
-    const page = listPickLocations(db, auth.scope, query.warehouseId, grid(), query.types === "all", query.exceptPlanId || null);
+  handler: async ({ db, auth, grid, query }) => {
+    const page = await listPickLocations(db, auth.scope, query.warehouseId, grid(), query.types === "all", query.exceptPlanId || null);
     return listResult(page.rows, { total: page.total, page: page.page, pageSize: page.pageSize });
   },
 });

@@ -8,8 +8,8 @@ export const POST = defineRoute({
   permission: "automation.algorithms.test",
   body: allocationDryRunSchema,
   transaction: false,
-  handler: ({ db, auth, actor, body }) => {
+  handler: async ({ db, auth, actor, body }) => {
     if (!body.draft) throw new AppError("VALIDATION", "Send the draft rules to dry run");
-    return allocationDryRun(db, auth, null, body, actor);
+    return await allocationDryRun(db, auth, null, body, actor);
   },
 });

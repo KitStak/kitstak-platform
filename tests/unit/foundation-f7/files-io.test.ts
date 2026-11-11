@@ -13,7 +13,7 @@ vi.mock("next/server", async (importOriginal) => ({
 const tick = vi.fn(async () => ({ at: "2026-11-05T00:00:00.000Z", status: "ran", ran: [] }));
 vi.mock("@/server/scheduler", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/server/scheduler")>()),
-  runSchedulerTick: () => tick(),
+  runSchedulerTick: async () => await tick(),
 }));
 
 const filesRoute = await import("@/app/api/files/route");
@@ -28,7 +28,7 @@ const batchRoute = await import("@/app/api/imports/batches/[id]/route");
 const searchRoute = await import("@/app/api/search/route");
 const cronRoute = await import("@/app/api/cron/tick/route");
 
-beforeEach(() => { openWorld(); afterCallbacks.length = 0; });
+beforeEach(async () => { await openWorld(); afterCallbacks.length = 0; });
 afterEach(() => closeWorld());
 afterAll(() => removeFilesRoot());
 
@@ -41,15 +41,15 @@ function pdfForm(fields: Record<string, string> = {}): FormData {
   return form;
 }
 
-function mkOrder(): string {
+async function mkOrder(): Promise<string> {
   const w = current();
-  return createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }])).id;
+  return (await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]))).id;
 }
 
 describe("files, attachments and notes", () => {
   it("uploads, attaches, downloads through the owning record and deletes", async () => {
     const w = current();
-    const orderId = mkOrder();
+    const orderId = await mkOrder();
     const admin = await cookieFor(w.userId);
     const up = await call(filesRoute.POST, req("POST", "/api/files", { cookie: admin, form: pdfForm({ ownerEntityType: "shipment_order", ownerEntityId: orderId }) }));
     expect(up.status).toBe(201);
@@ -79,10 +79,10 @@ describe("files, attachments and notes", () => {
 
   it("hides files of out-of-scope records and rejects bad uploads", async () => {
     const w = current();
-    const other = w.db.insert(schema.products).values({
+    const other = (await w.db.insert(schema.products).values({
       clientId: w.otherClientId, sku: "B-1", barcode: "B-1", name: "B", category: "General", weightOz: 1, lengthIn: 1, widthIn: 1, heightIn: 1, price: 1, status: "Active",
-    }).returning().get().id;
-    const foreign = createOrder(w.db, w.ctx, orderInput(w, [{ productId: other, quantity: 1 }], { clientId: w.otherClientId })).id;
+    }).returning())[0].id;
+    const foreign = (await createOrder(w.db, w.ctx, orderInput(w, [{ productId: other, quantity: 1 }], { clientId: w.otherClientId }))).id;
     const admin = await cookieFor(w.userId);
     const up = await call(filesRoute.POST, req("POST", "/api/files", { cookie: admin, form: pdfForm({ ownerEntityType: "shipment_order", ownerEntityId: foreign }) }));
     const fileId = String((up.data as { id: string }).id);
@@ -93,14 +93,14 @@ describe("files, attachments and notes", () => {
     text.set("file", new Blob(["hello"], { type: "text/plain" }), "a.txt");
     expect((await call(filesRoute.POST, req("POST", "/api/files", { cookie: admin, form: text }))).status).toBe(400);
     expect((await call(filesRoute.POST, req("POST", "/api/files", { cookie: admin, body: { x: 1 } }))).status).toBe(400);
-    const viewerUpload = await call(filesRoute.POST, req("POST", "/api/files", { cookie: viewer, form: pdfForm({ ownerEntityType: "shipment_order", ownerEntityId: mkOrder() }) }));
+    const viewerUpload = await call(filesRoute.POST, req("POST", "/api/files", { cookie: viewer, form: pdfForm({ ownerEntityType: "shipment_order", ownerEntityId: await mkOrder() }) }));
     expect(viewerUpload.status).toBe(403);
     await expectCsrf(filesRoute.POST, "POST", "/api/files", undefined);
   });
 
   it("notes: add, list, author or editor deletes", async () => {
     const w = current();
-    const orderId = mkOrder();
+    const orderId = await mkOrder();
     const operator = await cookieFor(w.operatorId);
     const added = await call(notesRoute.POST, req("POST", "/api/notes", { cookie: operator, body: { entityType: "shipment_order", entityId: orderId, body: "Call customer" } }));
     expect(added.status).toBe(201);
@@ -177,14 +177,14 @@ describe("print, exports, imports", () => {
 
   it("returns batch details with row results", async () => {
     const w = current();
-    const fileId = w.db.insert(schema.files).values({ name: "l.csv", mime: "text/csv", size: 1, sha256: "x", storagePath: "x" }).returning().get().id;
-    const batchId = w.db.insert(schema.importBatches).values({
+    const fileId = (await w.db.insert(schema.files).values({ name: "l.csv", mime: "text/csv", size: 1, sha256: "x", storagePath: "x" }).returning())[0].id;
+    const batchId = (await w.db.insert(schema.importBatches).values({
       importKey: "locations", status: "Partially Successful", masterRowCount: 2, successCount: 1, errorCount: 1, fileId, uploadedBy: w.userId,
-    }).returning().get().id;
-    w.db.insert(schema.importRows).values([
+    }).returning())[0].id;
+    await w.db.insert(schema.importRows).values([
       { batchId, rowNumber: 2, success: true, data: "{}" },
       { batchId, rowNumber: 3, success: false, data: "{}", message: "Bad zone" },
-    ]).run();
+    ]);
     const admin = await cookieFor(w.userId);
     const res = await call(batchRoute.GET, req("GET", `/api/imports/batches/${batchId}?errorsOnly=true`, { cookie: admin }), { id: batchId });
     expect(res.status).toBe(200);

@@ -10,5 +10,5 @@ export const POST = defineRoute({
   permission: WO_PERMISSIONS.view,
   body: pickListBodySchema,
   transaction: false,
-  handler: ({ db, auth, body }) => buildPickLists(db, auth.scope, body.ids, body.consolidated),
+  handler: async ({ db, auth, body }) => await buildPickLists(db, auth.scope, body.ids, body.consolidated),
 });

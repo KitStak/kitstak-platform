@@ -1,11 +1,11 @@
 /** Kitting: work orders, work order components, kit inventory stats. */
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { WORK_ORDER_STATUSES, WORK_ORDER_TYPES } from "../../../lib/enums";
 import { customFields, pk, stamps } from "../columns";
 import { products } from "./catalog";
 import { clients, warehouses } from "./org";
 
-export const workOrders = sqliteTable("work_orders", {
+export const workOrders = pgTable("work_orders", {
   id: pk(),
   code: text("code").notNull(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
@@ -36,7 +36,7 @@ export const workOrders = sqliteTable("work_orders", {
   index("work_orders_status_idx").on(t.warehouseId, t.status),
 ]);
 
-export const workOrderComponents = sqliteTable("work_order_components", {
+export const workOrderComponents = pgTable("work_order_components", {
   id: pk(),
   workOrderId: text("work_order_id").notNull().references(() => workOrders.id, { onDelete: "cascade" }),
   componentProductId: text("component_product_id").notNull(),
@@ -54,7 +54,7 @@ export const workOrderComponents = sqliteTable("work_order_components", {
 }, (t) => [index("wo_components_wo_idx").on(t.workOrderId)]);
 
 /** Recalculated by the scheduler. */
-export const kitInventoryStats = sqliteTable("kit_inventory_stats", {
+export const kitInventoryStats = pgTable("kit_inventory_stats", {
   kitProductId: text("kit_product_id").notNull(),
   warehouseId: text("warehouse_id").notNull(),
   pendingOrderQty: integer("pending_order_qty").notNull(),

@@ -11,6 +11,7 @@ import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/serve
 import type { GridFilter, GridQuery, SortSpec } from "@/server/query/grid-query";
 import { resolveDateRange } from "@/server/query/date-presets";
 import { sortableOf, type ReportDef } from "@/lib/grid-defs/reports/types";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 const ALIAS_RE = /^[A-Za-z][A-Za-z0-9]*$/;
 
@@ -54,10 +55,10 @@ export function zoneOffsetMinutes(timeZone: string, at: Date = new Date()): numb
 }
 
 /** Zone offset of the viewer's first warehouse in scope (the header context). */
-export function reportZoneOffset(db: AppDb, warehouseIds: readonly string[], at: Date = new Date()): number {
+export async function reportZoneOffset(db: AppDb, warehouseIds: readonly string[], at: Date = new Date()): Promise<number> {
   const id = warehouseIds[0];
   if (!id) return 0;
-  const tz = db.get<{ tz: string | null }>(sql`SELECT timezone AS tz FROM warehouses WHERE id = ${id}`)?.tz;
+  const tz = (await dbGet<{ tz: string | null }>(db, sql`SELECT timezone AS tz FROM warehouses WHERE id = ${id}`))?.tz;
   return tz ? zoneOffsetMinutes(tz, at) : 0;
 }
 
@@ -111,10 +112,10 @@ export interface ReportPage<T> {
 }
 
 /** Runs `inner` with the compiled grid; `def.rowKey` keeps paging stable. */
-export function runReport<T>(db: AppDb, inner: SQL, def: ReportDef, query: ReportQuery, skipFilters: readonly string[] = []): ReportPage<T> {
+export async function runReport<T>(db: AppDb, inner: SQL, def: ReportDef, query: ReportQuery, skipFilters: readonly string[] = []): Promise<ReportPage<T>> {
   const c = compileReportGrid(def, query, skipFilters);
-  const rows = db.all<T>(sql`SELECT * FROM (${inner}) t WHERE ${c.where} ORDER BY ${c.orderBy}, ${col(def.rowKey)} LIMIT ${c.limit} OFFSET ${c.offset}`);
-  const count = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM (${inner}) t WHERE ${c.where}`);
+  const rows = await dbAll<T>(db, sql`SELECT * FROM (${inner}) t WHERE ${c.where} ORDER BY ${c.orderBy}, ${col(def.rowKey)} LIMIT ${c.limit} OFFSET ${c.offset}`);
+  const count = await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM (${inner}) t WHERE ${c.where}`);
   return { rows, total: Number(count?.n ?? 0) };
 }
 
@@ -131,5 +132,5 @@ export function clientIn(expr: SQL, clientIds: readonly string[] | "all"): SQL {
 
 /** `CODE - Name` warehouse label (never duplicates the code). */
 export function warehouseLabel(alias: string): SQL {
-  return sql.raw(`CASE WHEN ${alias}.name LIKE ${alias}.code || '%' THEN ${alias}.name ELSE ${alias}.code || ' - ' || ${alias}.name END`);
+  return sql.raw(`CASE WHEN ${alias}.name ILIKE ${alias}.code || '%' THEN ${alias}.name ELSE ${alias}.code || ' - ' || ${alias}.name END`);
 }

@@ -6,8 +6,8 @@ import { PACKING_PERMISSIONS, readyListSchema, readyToPackOrders } from "@/serve
 export const GET = defineRoute({
   permission: PACKING_PERMISSIONS.view,
   query: readyListSchema,
-  handler: ({ db, auth, query }) => {
-    const rows = readyToPackOrders(db, auth.scope, query);
+  handler: async ({ db, auth, query }) => {
+    const rows = await readyToPackOrders(db, auth.scope, query);
     return listResult(rows, { total: rows.length, page: 1, pageSize: rows.length });
   },
 });

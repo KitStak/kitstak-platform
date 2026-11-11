@@ -15,13 +15,13 @@ export type OrderRow = typeof schema.shipmentOrders.$inferSelect;
 export type OrderLineRow = typeof schema.orderLines.$inferSelect;
 
 /** Facts for order conditions (allocation rules, workflows, job types, wave filters). */
-export function orderFacts(tx: Tx, order: OrderRow, lines?: readonly OrderLineRow[]): Facts {
-  const orderLines = lines ?? tx.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, order.id)).all();
+export async function orderFacts(tx: Tx, order: OrderRow, lines?: readonly OrderLineRow[]): Promise<Facts> {
+  const orderLines = lines ?? await tx.select().from(schema.orderLines).where(eq(schema.orderLines.orderId, order.id));
   const productIds = [...new Set(orderLines.map((l) => l.productId))];
-  const products = productIds.length === 0 ? [] : tx.select().from(schema.products).where(inArray(schema.products.id, productIds)).all();
-  const tagNames = tx.select({ name: schema.tags.name }).from(schema.entityTags)
+  const products = productIds.length === 0 ? [] : await tx.select().from(schema.products).where(inArray(schema.products.id, productIds));
+  const tagNames = (await tx.select({ name: schema.tags.name }).from(schema.entityTags)
     .innerJoin(schema.tags, eq(schema.tags.id, schema.entityTags.tagId))
-    .where(and(eq(schema.entityTags.entityType, "shipment_order"), eq(schema.entityTags.entityId, order.id))).all().map((t) => t.name);
+    .where(and(eq(schema.entityTags.entityType, "shipment_order"), eq(schema.entityTags.entityId, order.id)))).map((t) => t.name);
   const active = orderLines.filter((l) => l.quantity - l.cancelledQuantity > 0);
   const units = active.reduce((s, l) => s + l.quantity - l.cancelledQuantity, 0);
   const custom = Object.fromEntries(Object.entries(order.customFields ?? {}).map(([k, v]) => [`customField.${k}`, v ?? null]));
@@ -41,7 +41,7 @@ export function orderFacts(tx: Tx, order: OrderRow, lines?: readonly OrderLineRo
     plannedShipmentDate: order.scheduledShipmentDate, customerName: order.customerName, addressType: order.addressType,
     shipAddress: order.shipAddress, shipAddress2: order.shipAddress2, addressLine1: order.shipAddress, addressLine2: order.shipAddress2,
     customerEmail: order.customerEmail, storeOrderNumber: order.storeOrderNumber,
-    ...cartonFacts(tx, order, active, productIds),
+    ...(await cartonFacts(tx, order, active, productIds)),
   };
 }
 
@@ -53,20 +53,20 @@ export function orderFacts(tx: Tx, order: OrderRow, lines?: readonly OrderLineRo
  * - numberOfBoxes: active shipping labels when the order has any; else the estimate
  *   own-box units + one shared box for the remaining units.
  */
-function cartonFacts(tx: Tx, order: OrderRow, active: readonly OrderLineRow[], productIds: readonly string[]): Facts {
+async function cartonFacts(tx: Tx, order: OrderRow, active: readonly OrderLineRow[], productIds: readonly string[]): Promise<Facts> {
   const open = (l: OrderLineRow) => l.quantity - l.cancelledQuantity;
   const progressed = active.reduce((s, l) => s + Math.max(l.allocatedQuantity, l.shippedQuantity), 0);
   const units = active.reduce((s, l) => s + open(l), 0);
   const isPartial = order.status === "Partially Shipped" || (progressed > 0 && progressed < units);
   const ppt = schema.productPackTypes;
-  const ownBox = new Set(productIds.length === 0 ? [] : tx.select({ productId: ppt.productId, packType: ppt.packType }).from(ppt)
-    .where(and(inArray(ppt.productId, [...productIds]), eq(ppt.useOwnBox, true))).all().map((r) => `${r.productId}|${r.packType}`));
+  const ownBox = new Set(productIds.length === 0 ? [] : (await tx.select({ productId: ppt.productId, packType: ppt.packType }).from(ppt)
+    .where(and(inArray(ppt.productId, [...productIds]), eq(ppt.useOwnBox, true)))).map((r) => `${r.productId}|${r.packType}`));
   const ownUnits = active.filter((l) => ownBox.has(`${l.productId}|${l.packType}`)).reduce((s, l) => s + open(l), 0);
   const precartonizationType = order.shipmentPackageId ? "Shipment Package"
     : ownUnits === 0 ? "None" : ownUnits === units ? "Own Box" : "Mixed";
-  const labels = tx.select({ id: schema.shipments.id }).from(schema.shipments).where(and(
+  const labels = (await tx.select({ id: schema.shipments.id }).from(schema.shipments).where(and(
     eq(schema.shipments.orderId, order.id), eq(schema.shipments.labelType, "Shipping Label"), eq(schema.shipments.labelStatus, "Active"),
-  )).all().length;
+  ))).length;
   const numberOfBoxes = labels > 0 ? labels : units === 0 ? 0 : ownUnits + (units - ownUnits > 0 ? 1 : 0);
   return { isPartial, precartonizationType, numberOfBoxes };
 }

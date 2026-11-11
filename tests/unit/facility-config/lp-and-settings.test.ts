@@ -20,14 +20,14 @@ let w: World;
 let auth: AuthContext;
 const actor = () => ({ userId: w.userId, source: "Web" });
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
 afterEach(() => w.close());
 
-const toteType = () => createLpType(w.db, auth, actor(), lpTypeSchema.parse({ ...LP_TYPE_DEFAULTS, warehouseId: w.warehouseId, code: "KS-E2E-TOTE", numberPrefix: "KSE-", numberLength: 5 }));
+const toteType = async () => await createLpType(w.db, auth, actor(), lpTypeSchema.parse({ ...LP_TYPE_DEFAULTS, warehouseId: w.warehouseId, code: "KS-E2E-TOTE", numberPrefix: "KSE-", numberLength: 5 }));
 
 describe("GS1 / SSCC18", () => {
   it("computes the mod-10 check digit and builds valid 18-digit codes", () => {
@@ -45,63 +45,63 @@ describe("GS1 / SSCC18", () => {
 });
 
 describe("LP types and numbers", () => {
-  it("previews and issues KSE-00001..00003 from sequence, logging each create", () => {
+  it("previews and issues KSE-00001..00003 from sequence, logging each create", async () => {
     expect(lpNumberPreview("KSE-", 5, 1)).toBe("KSE-00001");
-    const type = toteType();
-    const result = createLpNumbers(w.db, auth, actor(), lpCreateSchema.parse({ warehouseId: w.warehouseId, lpTypeId: type.id, method: "sequence", count: 3 }));
+    const type = await toteType();
+    const result = await createLpNumbers(w.db, auth, actor(), lpCreateSchema.parse({ warehouseId: w.warehouseId, lpTypeId: type.id, method: "sequence", count: 3 }));
     expect(result.numbers).toEqual(["KSE-00001", "KSE-00002", "KSE-00003"]);
-    const logs = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, result.ids[0] ?? "")).all();
+    const logs = await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, result.ids[0] ?? ""));
     expect(logs.map((l) => l.type)).toEqual(["Create"]);
-    expect(listLpNumbers(w.db, auth, EMPTY_GRID_QUERY).total).toBe(3);
-    const page = lpNumbersExport.fetchPage({ db: w.db, auth, gridKey: "lp-numbers", query: EMPTY_GRID_QUERY, rawQuery: "" }, 1, 100);
+    expect((await listLpNumbers(w.db, auth, EMPTY_GRID_QUERY)).total).toBe(3);
+    const page = await lpNumbersExport.fetchPage({ db: w.db, auth, gridKey: "lp-numbers", query: EMPTY_GRID_QUERY, rawQuery: "" }, 1, 100);
     expect("total" in page && page.total).toBe(3);
   });
 
-  it("issues SSCC18 numbers for a client", () => {
-    const type = toteType();
-    const r = createLpNumbers(w.db, auth, actor(), lpCreateSchema.parse({ warehouseId: w.warehouseId, lpTypeId: type.id, method: "sequence", count: 2, isSscc18: true, clientId: w.clientId }));
+  it("issues SSCC18 numbers for a client", async () => {
+    const type = await toteType();
+    const r = await createLpNumbers(w.db, auth, actor(), lpCreateSchema.parse({ warehouseId: w.warehouseId, lpTypeId: type.id, method: "sequence", count: 2, isSscc18: true, clientId: w.clientId }));
     expect(r.numbers.every(isValidSscc18)).toBe(true);
   });
 
-  it("rejects a duplicate custom number and blocks deleting a type that has LPs", () => {
-    const type = toteType();
-    createLpNumbers(w.db, auth, actor(), lpCreateSchema.parse({ warehouseId: w.warehouseId, lpTypeId: type.id, method: "custom", number: "KS-TEST-LP1" }));
-    expect(() => createLpNumbers(w.db, auth, actor(), lpCreateSchema.parse({ warehouseId: w.warehouseId, lpTypeId: type.id, method: "custom", number: "ks-test-lp1" }))).toThrow();
-    const del = deleteLpTypes(w.db, auth, actor(), [type.id]);
+  it("rejects a duplicate custom number and blocks deleting a type that has LPs", async () => {
+    const type = await toteType();
+    await createLpNumbers(w.db, auth, actor(), lpCreateSchema.parse({ warehouseId: w.warehouseId, lpTypeId: type.id, method: "custom", number: "KS-TEST-LP1" }));
+    await expect(async () => await createLpNumbers(w.db, auth, actor(), lpCreateSchema.parse({ warehouseId: w.warehouseId, lpTypeId: type.id, method: "custom", number: "ks-test-lp1" }))).rejects.toThrow();
+    const del = await deleteLpTypes(w.db, auth, actor(), [type.id]);
     expect(del.failed).toHaveLength(1);
-    expect(listLpTypes(w.db, auth, EMPTY_GRID_QUERY).rows[0]).toMatchObject({ code: "KS-E2E-TOTE", lpCount: 1 });
+    expect((await listLpTypes(w.db, auth, EMPTY_GRID_QUERY)).rows[0]).toMatchObject({ code: "KS-E2E-TOTE", lpCount: 1 });
   });
 
-  it("imports custom LP numbers and rejects unknown types and SSCC rows", () => {
-    toteType();
+  it("imports custom LP numbers and rejects unknown types and SSCC rows", async () => {
+    await toteType();
     const ctx = { db: w.db, auth, actor: actor(), batchId: "b", rowNumber: 1 };
-    expect(applyLpNumberImport(ctx, { warehouseCode: "MLT1", lpType: "ks-e2e-tote", number: "KS-TEST-IMP1" }).message).toBe("Created LP KS-TEST-IMP1");
-    expect(() => applyLpNumberImport(ctx, { warehouseCode: "MLT1", lpType: "NOPE", number: "X1" })).toThrow(/not found/);
-    expect(() => applyLpNumberImport(ctx, { warehouseCode: "MLT1", lpType: "KS-E2E-TOTE", number: "X2", isSscc18: "yes" })).toThrow(/SSCC-18/);
+    expect((await applyLpNumberImport(ctx, { warehouseCode: "MLT1", lpType: "ks-e2e-tote", number: "KS-TEST-IMP1" })).message).toBe("Created LP KS-TEST-IMP1");
+    await expect(async () => await applyLpNumberImport(ctx, { warehouseCode: "MLT1", lpType: "NOPE", number: "X1" })).rejects.toThrow(/not found/);
+    await expect(async () => await applyLpNumberImport(ctx, { warehouseCode: "MLT1", lpType: "KS-E2E-TOTE", number: "X2", isSscc18: "yes" })).rejects.toThrow(/SSCC-18/);
   });
 });
 
 describe("warehouses", () => {
-  it("sets a new default and blocks deactivating the default", () => {
+  it("sets a new default and blocks deactivating the default", async () => {
     const input = warehouseSchema.parse({ ...WAREHOUSE_DEFAULTS, code: "KST2", name: "KS Test 2", prefix: "K2", addressLine: "1 Test Rd", postalCode: "38118", city: "Memphis", state: "TN", contactName: "Dana Ortiz", contactPhone: "901-555-0142" });
-    expect(() => createWarehouse(w.db, auth, actor(), input)).toThrow(/Only administrators/);
+    await expect(async () => await createWarehouse(w.db, auth, actor(), input)).rejects.toThrow(/Only administrators/);
     const admin = { ...auth, user: { id: w.userId, role: "admin" } } as unknown as AuthContext;
-    const { id } = createWarehouse(w.db, admin, actor(), input);
+    const { id } = await createWarehouse(w.db, admin, actor(), input);
     const scoped = { ...admin, scope: { warehouseIds: [w.warehouseId, id], clientIds: "all" }, viewScope: { warehouseIds: [w.warehouseId, id], clientIds: "all" } } as unknown as AuthContext;
-    setDefaultWarehouse(w.db, scoped, actor(), id);
-    expect(w.db.select().from(schema.warehouses).where(eq(schema.warehouses.id, id)).get()?.isDefault).toBe(true);
-    expect(setWarehousesActive(w.db, scoped, actor(), [id], false).failed[0]?.message).toMatch(/default warehouse/);
-    expect(setWarehousesActive(w.db, scoped, actor(), [w.warehouseId], false).succeeded).toEqual([w.warehouseId]);
+    await setDefaultWarehouse(w.db, scoped, actor(), id);
+    expect((await w.db.select().from(schema.warehouses).where(eq(schema.warehouses.id, id)).limit(1))[0]?.isDefault).toBe(true);
+    expect((await setWarehousesActive(w.db, scoped, actor(), [id], false)).failed[0]?.message).toMatch(/default warehouse/);
+    expect((await setWarehousesActive(w.db, scoped, actor(), [w.warehouseId], false)).succeeded).toEqual([w.warehouseId]);
   });
 });
 
 describe("shipment packages", () => {
-  it("creates an all-clients package and deletes an unused one", () => {
+  it("creates an all-clients package and deletes an unused one", async () => {
     const input = shipmentPackageSchema.parse({ ...SHIPMENT_PACKAGE_DEFAULTS, warehouseId: w.warehouseId, code: "KS-TEST-BOX12", description: "12x10x8 box", length: 12, width: 10, height: 8, emptyWeight: 0.4 });
-    const { id } = createShipmentPackage(w.db, auth, actor(), input);
-    expect(listShipmentPackages(w.db, auth, EMPTY_GRID_QUERY).rows.find((r) => r.id === id)).toMatchObject({ code: "KS-TEST-BOX12" });
-    expect(() => createShipmentPackage(w.db, auth, actor(), input)).toThrow();
-    expect(deleteShipmentPackages(w.db, auth, actor(), [id]).succeeded).toEqual([id]);
+    const { id } = await createShipmentPackage(w.db, auth, actor(), input);
+    expect((await listShipmentPackages(w.db, auth, EMPTY_GRID_QUERY)).rows.find((r) => r.id === id)).toMatchObject({ code: "KS-TEST-BOX12" });
+    await expect(async () => await createShipmentPackage(w.db, auth, actor(), input)).rejects.toThrow();
+    expect((await deleteShipmentPackages(w.db, auth, actor(), [id])).succeeded).toEqual([id]);
   });
 
   it("requires tracking fields when inventory tracking is on", () => {

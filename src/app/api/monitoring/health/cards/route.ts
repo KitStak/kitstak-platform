@@ -6,5 +6,5 @@ import { healthCards } from "@/server/repositories/monitoring";
 export const GET = defineRoute({
   permission: "integrations.integration_monitoring.view",
   query: z.object({ clientId: z.string().max(64).optional() }),
-  handler: ({ db, auth, query }) => healthCards(db, auth, query.clientId ?? null),
+  handler: async ({ db, auth, query }) => await healthCards(db, auth, query.clientId ?? null),
 });

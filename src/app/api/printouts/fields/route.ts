@@ -7,5 +7,5 @@ import { printoutCustomFields } from "@/server/repositories/printouts";
 export const GET = defineRoute({
   permission: "settings.printouts_labels.view",
   query: z.object({ typeKey: z.string().min(1).max(80) }),
-  handler: ({ db, query }) => ({ builtIn: BINDABLE_FIELDS, custom: printoutCustomFields(db, query.typeKey) }),
+  handler: async ({ db, query }) => ({ builtIn: BINDABLE_FIELDS, custom: await printoutCustomFields(db, query.typeKey) }),
 });

@@ -20,16 +20,16 @@ describe("pack-mode URL aliases", () => {
 });
 
 describe("packing station by code (DB)", () => {
-  it("resolves a station code in the user's warehouses and still 404s outside scope", () => {
-    const w = createWorld();
-    const pack = w.db.select().from(schema.locations).where(eq(schema.locations.id, w.loc.pack)).get();
+  it("resolves a station code in the user's warehouses and still 404s outside scope", async () => {
+    const w = await createWorld();
+    const pack = (await w.db.select().from(schema.locations).where(eq(schema.locations.id, w.loc.pack)).limit(1))[0];
     expect(pack).toBeTruthy();
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" } as unknown as Scope;
-    expect(loadStation(w.db, scope, w.loc.pack).id).toBe(w.loc.pack);
-    expect(loadStation(w.db, scope, pack!.code.toLowerCase()).id).toBe(w.loc.pack);
+    expect((await loadStation(w.db, scope, w.loc.pack)).id).toBe(w.loc.pack);
+    expect((await loadStation(w.db, scope, pack!.code.toLowerCase())).id).toBe(w.loc.pack);
     const none = { warehouseIds: [], clientIds: "all" } as unknown as Scope;
-    expect(() => loadStation(w.db, none, pack!.code)).toThrow(/not found/i);
-    expect(() => loadStation(w.db, scope, "NO-SUCH-STATION")).toThrow(/not found/i);
+    await expect(async () => await loadStation(w.db, none, pack!.code)).rejects.toThrow(/not found/i);
+    await expect(async () => await loadStation(w.db, scope, "NO-SUCH-STATION")).rejects.toThrow(/not found/i);
   });
 });
 

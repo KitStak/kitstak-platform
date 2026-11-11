@@ -13,43 +13,43 @@ import { checkScope, systemCtx } from "@/server/domain/types";
 import { createWorld, type World } from "./fixtures";
 
 let w: World;
-beforeEach(() => { w = createWorld(); });
+beforeEach(async () => { w = await createWorld(); });
 afterEach(() => w.close());
 
 describe("sequences", () => {
-  it("formats, peeks without consuming and advances", () => {
+  it("formats, peeks without consuming and advances", async () => {
     expect(formatCode("SO", 12, 6)).toBe("SO000012");
-    expect(peek(w.db, "so")).toBe("SO000001");
-    expect(next(w.db, "so")).toBe("SO000001");
-    expect(next(w.db, "so")).toBe("SO000002");
-    expect(peek(w.db, "so")).toBe("SO000003");
+    expect(await peek(w.db, "so")).toBe("SO000001");
+    expect(await next(w.db, "so")).toBe("SO000001");
+    expect(await next(w.db, "so")).toBe("SO000002");
+    expect(await peek(w.db, "so")).toBe("SO000003");
   });
 
-  it("bootstraps from the highest existing code", () => {
-    w.db.insert(schema.purchaseOrders).values({ code: "PO000041", warehouseId: w.warehouseId, clientId: w.clientId, vendorName: "V", status: "Pending", totalQuantity: 1, purchasePrice: 1 }).run();
-    w.db.insert(schema.purchaseOrders).values({ code: "PO-LEGACY", warehouseId: w.warehouseId, clientId: w.clientId, vendorName: "V", status: "Pending", totalQuantity: 1, purchasePrice: 1 }).run();
-    expect(peek(w.db, "po")).toBe("PO000042");
-    expect(next(w.db, "po")).toBe("PO000042");
+  it("bootstraps from the highest existing code", async () => {
+    await w.db.insert(schema.purchaseOrders).values({ code: "PO000041", warehouseId: w.warehouseId, clientId: w.clientId, vendorName: "V", status: "Pending", totalQuantity: 1, purchasePrice: 1 });
+    await w.db.insert(schema.purchaseOrders).values({ code: "PO-LEGACY", warehouseId: w.warehouseId, clientId: w.clientId, vendorName: "V", status: "Pending", totalQuantity: 1, purchasePrice: 1 });
+    expect(await peek(w.db, "po")).toBe("PO000042");
+    expect(await next(w.db, "po")).toBe("PO000042");
   });
 
-  it("keeps per-warehouse counters and unknown keys", () => {
-    expect(next(w.db, "rma", w.warehouseId)).toBe("RMA000001");
-    expect(next(w.db, "rma")).toBe("RMA000001");
-    expect(next(w.db, "custom")).toBe("CUSTOM000001");
-    expect(nextInteger(w.db, "receipt")).toBe(1);
-    expect(nextInteger(w.db, "receipt")).toBe(2);
+  it("keeps per-warehouse counters and unknown keys", async () => {
+    expect(await next(w.db, "rma", w.warehouseId)).toBe("RMA000001");
+    expect(await next(w.db, "rma")).toBe("RMA000001");
+    expect(await next(w.db, "custom")).toBe("CUSTOM000001");
+    expect(await nextInteger(w.db, "receipt")).toBe(1);
+    expect(await nextInteger(w.db, "receipt")).toBe(2);
   });
 
-  it("builds wave, instant count, bill and LP numbers", () => {
+  it("builds wave, instant count, bill and LP numbers", async () => {
     expect(waveNumber(3, 14)).toBe("3-14");
     expect(instantCountCode(new Date(Date.UTC(2026, 10, 5, 9, 8, 7, 6)))).toBe("IC20261105090807006");
     const at = new Date(Date.UTC(2026, 10, 5));
-    expect(billNumber(w.db, at)).toBe("261105001");
-    expect(billNumber(w.db, at)).toBe("261105002");
-    const lpType = w.db.insert(schema.lpTypes).values({ warehouseId: w.warehouseId, code: "PAL", numberPrefix: "LP", numberLength: 5 }).returning().get();
-    expect(nextLpNumber(w.db, lpType.id)).toBe("LP00001");
-    expect(nextLpNumber(w.db, lpType.id)).toBe("LP00002");
-    expect(() => nextLpNumber(w.db, "missing")).toThrow(/LP type not found/);
+    expect(await billNumber(w.db, at)).toBe("261105001");
+    expect(await billNumber(w.db, at)).toBe("261105002");
+    const lpType = (await w.db.insert(schema.lpTypes).values({ warehouseId: w.warehouseId, code: "PAL", numberPrefix: "LP", numberLength: 5 }).returning())[0];
+    expect(await nextLpNumber(w.db, lpType.id)).toBe("LP00001");
+    expect(await nextLpNumber(w.db, lpType.id)).toBe("LP00002");
+    await expect(async () => await nextLpNumber(w.db, "missing")).rejects.toThrow(/LP type not found/);
   });
 });
 
@@ -63,17 +63,17 @@ describe("change log", () => {
       .toEqual([{ field: "shipCity", label: "City", from: "X", to: "Y" }]);
   });
 
-  it("writes create / update / line / delete rows", () => {
-    recordCreate(w.db, w.ctx, { entityType: "shipment_order", entityId: "o1", entityCode: "SO1" });
-    const n = recordUpdate(w.db, w.ctx, { entityType: "shipment_order", entityId: "o1", entityCode: "SO1", before: { status: "Open", note: null }, after: { status: "On Hold", note: null } });
+  it("writes create / update / line / delete rows", async () => {
+    await recordCreate(w.db, w.ctx, { entityType: "shipment_order", entityId: "o1", entityCode: "SO1" });
+    const n = await recordUpdate(w.db, w.ctx, { entityType: "shipment_order", entityId: "o1", entityCode: "SO1", before: { status: "Open", note: null }, after: { status: "On Hold", note: null } });
     expect(n).toBe(1);
-    recordLine(w.db, w.ctx, { entityType: "purchase_order", entityId: "p", lineEntityType: "purchase_order_line", lineEntityId: "l", lineLabel: "SKU1", field: "receivedQuantity", from: 1, to: 1 });
-    recordDelete(w.db, w.ctx, { entityType: "widget", entityId: "x" });
-    const rows = w.db.select().from(schema.changeLog).all();
+    await recordLine(w.db, w.ctx, { entityType: "purchase_order", entityId: "p", lineEntityType: "purchase_order_line", lineEntityId: "l", lineLabel: "SKU1", field: "receivedQuantity", from: 1, to: 1 });
+    await recordDelete(w.db, w.ctx, { entityType: "widget", entityId: "x" });
+    const rows = await w.db.select().from(schema.changeLog);
     expect(rows.map((r) => r.message)).toEqual(["Shipment Order SO1 is created.", "Status is modified. Open --> On Hold", "Widget is deleted."]);
     expect(rows[1].source).toBe("admin@test.io");
-    expect(lastFromValue(w.db, "shipment_order", "o1", "status", "On Hold")).toBe("Open");
-    expect(lastFromValue(w.db, "shipment_order", "o1", "status", "Cancelled")).toBeNull();
+    expect(await lastFromValue(w.db, "shipment_order", "o1", "status", "On Hold")).toBe("Open");
+    expect(await lastFromValue(w.db, "shipment_order", "o1", "status", "Cancelled")).toBeNull();
   });
 });
 
@@ -172,15 +172,15 @@ describe("conditions", () => {
 });
 
 describe("bulk, errors, scope", () => {
-  it("isolates failures per id", () => {
-    const r = runBulk(w.db, ["a", "b", "a"], (tx, id) => {
-      tx.insert(schema.tags).values({ name: `t-${id}`, color: "red" }).run();
+  it("isolates failures per id", async () => {
+    const r = await runBulk(w.db, ["a", "b", "a"], async (tx, id) => {
+      await tx.insert(schema.tags).values({ name: `t-${id}`, color: "red" });
       if (id === "b") throw new DomainError("INVALID_STATE", "nope");
     });
     expect(r).toEqual({ succeeded: ["a"], failed: [{ id: "b", code: "INVALID_STATE", message: "nope" }] });
-    expect(w.db.select().from(schema.tags).where(eq(schema.tags.name, "t-b")).get()).toBeUndefined();
-    expect(() => runBulk(w.db, [], () => undefined)).toThrow(/at least one/);
-    expect(() => runBulk(w.db, Array.from({ length: 1001 }, (_, i) => String(i)), () => undefined)).toThrow(/At most/);
+    expect((await w.db.select().from(schema.tags).where(eq(schema.tags.name, "t-b")).limit(1))[0]).toBeUndefined();
+    await expect(async () => await runBulk(w.db, [], () => undefined)).rejects.toThrow(/at least one/);
+    await expect(async () => await runBulk(w.db, Array.from({ length: 1001 }, (_, i) => String(i)), () => undefined)).rejects.toThrow(/At most/);
   });
 
   it("describes errors and enforces scope", () => {

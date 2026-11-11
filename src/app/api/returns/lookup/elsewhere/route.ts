@@ -11,5 +11,5 @@ import { rmaWarehousesFor } from "@/server/repositories/returns-receive";
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.station,
   query: z.object({ code: z.string().trim().max(120).default("") }),
-  handler: ({ db, auth, query }) => (query.code ? rmaWarehousesFor(db, auth.scope, query.code) : []),
+  handler: async ({ db, auth, query }) => (query.code ? await rmaWarehousesFor(db, auth.scope, query.code) : []),
 });

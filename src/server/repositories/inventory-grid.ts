@@ -11,6 +11,7 @@ import { AppError } from "@/server/api/errors";
 import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/server/query/filters";
 import type { GridQuery, SortSpec } from "@/server/query/grid-query";
 import type { InventoryGridDef } from "@/lib/grid-defs/inventory/fields";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 const ALIAS_RE = /^[A-Za-z][A-Za-z0-9]*$/;
 
@@ -66,10 +67,10 @@ export interface GridPage<T> {
 }
 
 /** Runs `inner` with the compiled grid; `tiebreak` keeps paging stable. */
-export function runGrid<T>(db: AppDb, inner: SQL, def: InventoryGridDef, query: GridQuery, tiebreak: string): GridPage<T> {
+export async function runGrid<T>(db: AppDb, inner: SQL, def: InventoryGridDef, query: GridQuery, tiebreak: string): Promise<GridPage<T>> {
   const c = compileGrid(def, query);
-  const rows = db.all<T>(sql`SELECT * FROM (${inner}) t WHERE ${c.where} ORDER BY ${c.orderBy}, ${col(tiebreak)} LIMIT ${c.limit} OFFSET ${c.offset}`);
-  const count = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM (${inner}) t WHERE ${c.where}`);
+  const rows = await dbAll<T>(db, sql`SELECT * FROM (${inner}) t WHERE ${c.where} ORDER BY ${c.orderBy}, ${col(tiebreak)} LIMIT ${c.limit} OFFSET ${c.offset}`);
+  const count = await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM (${inner}) t WHERE ${c.where}`);
   return { rows, total: Number(count?.n ?? 0) };
 }
 

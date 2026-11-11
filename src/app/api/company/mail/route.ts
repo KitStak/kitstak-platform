@@ -8,15 +8,15 @@ import { getMailSettings, updateMailSettings } from "@/server/repositories/compa
 
 export const GET = defineRoute({
   permission: "settings.company_settings.view",
-  handler: ({ db }) => getMailSettings(db),
+  handler: async ({ db }) => await getMailSettings(db),
 });
 
 export const PUT = defineRoute({
   permission: "settings.company_settings.update",
   body: mailSettingsSchema,
-  handler: ({ db, auth, actor, body, audit }) => {
-    const result = updateMailSettings(db, auth, actor, body);
-    audit({ action: "company.mail", entity: "company", entityId: "company", detail: { transport: body.transport, host: body.host || null, passwordChanged: Boolean(body.password?.trim()) || Boolean(body.clearPassword) } });
+  handler: async ({ db, auth, actor, body, audit }) => {
+    const result = await updateMailSettings(db, auth, actor, body);
+    await audit({ action: "company.mail", entity: "company", entityId: "company", detail: { transport: body.transport, host: body.host || null, passwordChanged: Boolean(body.password?.trim()) || Boolean(body.clearPassword) } });
     return result;
   },
 });

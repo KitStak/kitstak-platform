@@ -12,5 +12,5 @@ export const POST = defineRoute({
   body: insightIdsSchema,
   transaction: false,
   rateLimit: false,
-  handler: ({ db, auth, body }) => explainShortages(db, auth.scope, body.ids),
+  handler: async ({ db, auth, body }) => await explainShortages(db, auth.scope, body.ids),
 });

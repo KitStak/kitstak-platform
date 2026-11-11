@@ -9,15 +9,16 @@
 import { sql } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import type { Tx } from "@/server/domain/types";
+import { dbGet } from "@/server/db/sql";
 
 export const LOCKING_PLAN_STATUSES = ["Pending", "Ready To Count", "Count Started", "Count Completed"] as const;
 export const RELEASED_LINE_STATUSES = ["Cancelled", "Inventory Updated", "Recount Created"] as const;
 
 /** Code of the open count plan that locks `locationId`, or null. */
-export function countLockFor(tx: Tx | AppDb, locationId: string): string | null {
-  const row = tx.get<{ code: string }>(sql`
+export async function countLockFor(tx: Tx | AppDb, locationId: string): Promise<string | null> {
+  const row = await dbGet<{ code: string }>(tx, sql`
     SELECT p.code AS code FROM count_plan_lines l JOIN count_plans p ON p.id = l.plan_id
-    WHERE p.lock_locations = 1
+    WHERE p.lock_locations = true
       AND p.status IN ('Pending', 'Ready To Count', 'Count Started', 'Count Completed')
       AND l.status NOT IN ('Cancelled', 'Inventory Updated', 'Recount Created')
       AND (

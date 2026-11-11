@@ -10,5 +10,5 @@ export const GET = defineRoute({
   permission: LABOR_APP.permission,
   params: z.object({ page: z.enum(LABOR_PAGES) }),
   query: analyticsQuerySchema,
-  handler: ({ db, auth, params, query }) => getLaborAnalytics(db, auth, params.page, query),
+  handler: async ({ db, auth, params, query }) => await getLaborAnalytics(db, auth, params.page, query),
 });

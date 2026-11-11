@@ -7,5 +7,5 @@ import { scopedCtx } from "@/server/repositories/returns";
 export const POST = defineRoute({
   permission: PACKING_PERMISSIONS.view,
   body: ackWarningSchema,
-  handler: ({ db, auth, actor, body }) => acknowledgeWarning(db, scopedCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await acknowledgeWarning(db, scopedCtx(actor, auth), body),
 });

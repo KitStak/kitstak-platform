@@ -3,8 +3,9 @@
  * scope guards, optimistic concurrency, change-log wrappers and paging. Owned by M12 so the
  * module never depends on another module's internals.
  */
-import { and, desc, eq, sql, type SQL } from "drizzle-orm";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import { and, eq, sql, type SQL } from "drizzle-orm";
+import { desc } from "@/server/db/order";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import type { AppDb } from "@/server/api/db";
 import { listResult } from "@/server/api/envelope";
@@ -18,6 +19,7 @@ import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/serve
 import type { GridQuery, SortSpec } from "@/server/query/grid-query";
 import { compileSort } from "@/server/query/sort";
 import type { IntegrationField } from "@/lib/grid-defs/integrations/common";
+import { dbAll, withWriteTx } from "@/server/db/sql";
 
 export type Actor = { readonly userId: string | null; readonly source: string };
 
@@ -27,7 +29,7 @@ export interface GridBinding {
   readonly sortable: readonly string[];
   readonly search: readonly string[];
   readonly defaultSort: readonly SortSpec[];
-  readonly tiebreaker: SQLiteColumn;
+  readonly tiebreaker: PgColumn;
 }
 
 export interface CompiledGrid {
@@ -54,7 +56,7 @@ export function compileGrid(binding: GridBinding, query: GridQuery, extra: reado
 export const domainCtxOf = (actor: Actor, auth: AuthContext): DomainCtx => ({ userId: actor.userId, source: actor.source, scope: auth.scope });
 
 /** Default list scope: the header context (view scope). */
-export const listScope = (table: object, auth: AuthContext, columns?: { warehouseId?: SQLiteColumn; clientId?: SQLiteColumn }): SQL | undefined =>
+export const listScope = (table: object, auth: AuthContext, columns?: { warehouseId?: PgColumn; clientId?: PgColumn }): SQL | undefined =>
   scopedWhere(table, auth.viewScope, columns);
 
 /** Cross-scope or missing -> 404 (BUILD_PLAN 0.4 #5). */
@@ -89,19 +91,19 @@ export interface LogRef {
   readonly entityCode: string;
 }
 
-export const logCreate = (tx: AppDb, ctx: DomainCtx, ref: LogRef): void => recordCreate(tx, ctx, ref);
-export const logDelete = (tx: AppDb, ctx: DomainCtx, ref: LogRef): void => recordDelete(tx, ctx, ref);
+export const logCreate = async (tx: AppDb, ctx: DomainCtx, ref: LogRef): Promise<void> => await recordCreate(tx, ctx, ref);
+export const logDelete = async (tx: AppDb, ctx: DomainCtx, ref: LogRef): Promise<void> => await recordDelete(tx, ctx, ref);
 /** Field-level diff of two *display* snapshots (ids already resolved to names). */
-export const logUpdate = (tx: AppDb, ctx: DomainCtx, ref: LogRef, before: Readonly<Record<string, unknown>>, after: Readonly<Record<string, unknown>>): number =>
-  recordUpdate(tx, ctx, { ...ref, before, after });
+export const logUpdate = async (tx: AppDb, ctx: DomainCtx, ref: LogRef, before: Readonly<Record<string, unknown>>, after: Readonly<Record<string, unknown>>): Promise<number> =>
+  await recordUpdate(tx, ctx, { ...ref, before, after });
 
 /** id -> human label for FK columns, so the change log never shows UUIDs. */
-export function labelsOf(db: AppDb, table: "warehouses" | "clients" | "carrier_connections" | "carrier_services", ids: readonly (string | null | undefined)[]): Map<string, string> {
+export async function labelsOf(db: AppDb, table: "warehouses" | "clients" | "carrier_connections" | "carrier_services", ids: readonly (string | null | undefined)[]): Promise<Map<string, string>> {
   const list = [...new Set(ids.filter((v): v is string => Boolean(v)))];
   const out = new Map<string, string>();
   if (list.length === 0) return out;
   const column = table === "carrier_connections" ? "setup_name" : table === "carrier_services" ? "name" : "code";
-  const rows = db.all<{ id: string; label: string }>(sql`SELECT id, ${sql.raw(column)} AS label FROM ${sql.raw(table)} WHERE id IN (${sql.join(list.map((id) => sql`${id}`), sql`, `)})`);
+  const rows = await dbAll<{ id: string; label: string }>(db, sql`SELECT id, ${sql.raw(column)} AS label FROM ${sql.raw(table)} WHERE id IN (${sql.join(list.map((id) => sql`${id}`), sql`, `)})`);
   for (const r of rows) out.set(r.id, r.label);
   return out;
 }
@@ -113,11 +115,11 @@ export function labelsOf(db: AppDb, table: "warehouses" | "clients" | "carrier_c
  */
 export interface ClientLabel { readonly code: string; readonly name: string }
 
-export function clientLabelsOf(db: AppDb, ids: readonly (string | null | undefined)[]): Map<string, ClientLabel> {
+export async function clientLabelsOf(db: AppDb, ids: readonly (string | null | undefined)[]): Promise<Map<string, ClientLabel>> {
   const list = [...new Set(ids.filter((v): v is string => Boolean(v)))];
   const out = new Map<string, ClientLabel>();
   if (list.length === 0) return out;
-  const rows = db.all<{ id: string; code: string; name: string }>(sql`SELECT id, code, name FROM clients WHERE id IN (${sql.join(list.map((id) => sql`${id}`), sql`, `)})`);
+  const rows = await dbAll<{ id: string; code: string; name: string }>(db, sql`SELECT id, code, name FROM clients WHERE id IN (${sql.join(list.map((id) => sql`${id}`), sql`, `)})`);
   for (const r of rows) out.set(r.id, { code: r.code, name: r.name || r.code });
   return out;
 }
@@ -127,10 +129,10 @@ export const changeLogPageSchema = z.object({
   ps: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-export function changeLogResult(db: AppDb, entityType: string, entityId: string, query: z.output<typeof changeLogPageSchema>) {
+export async function changeLogResult(db: AppDb, entityType: string, entityId: string, query: z.output<typeof changeLogPageSchema>) {
   const where = and(eq(changeLog.entityType, entityType), eq(changeLog.entityId, entityId));
-  const total = db.select({ n: sql<number>`count(*)` }).from(changeLog).where(where).get()?.n ?? 0;
-  const rows = db.select().from(changeLog).where(where).orderBy(desc(changeLog.at), desc(changeLog.id)).limit(query.ps).offset((query.page - 1) * query.ps).all();
+  const total = (await db.select({ n: sql<number>`count(*)` }).from(changeLog).where(where).limit(1))[0]?.n ?? 0;
+  const rows = await db.select().from(changeLog).where(where).orderBy(desc(changeLog.at), desc(changeLog.id)).limit(query.ps).offset((query.page - 1) * query.ps);
   return listResult(rows, { total, page: query.page, pageSize: query.ps });
 }
 
@@ -143,11 +145,11 @@ export class DryRunRollback extends Error {
 }
 
 /** Runs `fn` in a savepoint that is always rolled back; returns what `fn` produced. */
-export function dryRun<T>(db: AppDb, fn: (tx: AppDb) => T): T {
+export async function dryRun<T>(db: AppDb, fn: (tx: AppDb) => T | Promise<T>): Promise<T> {
   let out: { value: T } | null = null;
   try {
-    db.transaction((tx) => {
-      out = { value: fn(tx) };
+    await withWriteTx(db, async (tx) => {
+      out = { value: await fn(tx) };
       throw new DryRunRollback();
     });
   } catch (error) {

@@ -9,10 +9,11 @@ import { fileStore } from "@/server/files";
 import { readUpload } from "@/server/repositories/platform-files";
 import { readCompanyLogo, removeCompanyLogo, setCompanyLogo } from "@/server/repositories/company";
 import { LOGO_MAX_BYTES } from "@/lib/grid-defs/admin/company";
+import { withWriteTx } from "@/server/db/sql";
 
 export const GET = defineRoute({
-  handler: ({ db }) => {
-    const logo = readCompanyLogo(db, fileStore());
+  handler: async ({ db }) => {
+    const logo = await readCompanyLogo(db, fileStore());
     if (!logo) throw new AppError("NOT_FOUND", "No company logo");
     return new NextResponse(new Uint8Array(logo.bytes), { headers: { "content-type": logo.mime, "cache-control": "private, max-age=300", "x-content-type-options": "nosniff" } });
   },
@@ -23,17 +24,17 @@ export const POST = defineRoute({
   transaction: false,
   handler: async ({ db, auth, actor, request, audit }) => {
     const upload = await readUpload(request, LOGO_MAX_BYTES);
-    const result = db.transaction((tx) => setCompanyLogo(tx, fileStore(), auth, actor, upload));
-    audit({ action: "company.update", entity: "company", entityId: "company", detail: { section: "logo" } });
+    const result = await withWriteTx(db, async (tx) => await setCompanyLogo(tx, fileStore(), auth, actor, upload));
+    await audit({ action: "company.update", entity: "company", entityId: "company", detail: { section: "logo" } });
     return result;
   },
 });
 
 export const DELETE = defineRoute({
   permission: "settings.company_settings.update",
-  handler: ({ db, auth, actor, audit }) => {
-    const result = removeCompanyLogo(db, fileStore(), auth, actor);
-    audit({ action: "company.update", entity: "company", entityId: "company", detail: { section: "logo removed" } });
+  handler: async ({ db, auth, actor, audit }) => {
+    const result = await removeCompanyLogo(db, fileStore(), auth, actor);
+    await audit({ action: "company.update", entity: "company", entityId: "company", detail: { section: "logo removed" } });
     return result;
   },
 });

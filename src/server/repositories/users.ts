@@ -5,7 +5,8 @@
  * `user_warehouses` and `user_clients`; every change writes field-level `change_log`.
  */
 import { randomBytes } from "node:crypto";
-import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import type { AppDb } from "@/server/api/db";
 import { AppError, fromZodError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
@@ -26,10 +27,10 @@ export const USER_ENTITY = "user";
 
 type LegacyRole = (typeof u.$inferSelect)["role"];
 
-const roleNamesSql = sql<string | null>`(SELECT group_concat(r.name, ', ') FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ${qc(u.id)})`;
-const warehouseCodesSql = sql<string | null>`(SELECT group_concat(w.code, ', ') FROM user_warehouses uw JOIN warehouses w ON w.id = uw.warehouse_id WHERE uw.user_id = ${qc(u.id)})`;
-const statusSql = sql<string>`CASE WHEN ${qc(u.isActive)} = 1 THEN 'Active' ELSE 'Inactive' END`;
-const sessionCountSql = sql<number>`(SELECT COUNT(*) FROM user_sessions us WHERE us.user_id = ${qc(u.id)} AND us.revoked_at IS NULL AND us.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now'))`;
+const roleNamesSql = sql<string | null>`(SELECT string_agg((r.name)::text, ', ') FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ${qc(u.id)})`;
+const warehouseCodesSql = sql<string | null>`(SELECT string_agg((w.code)::text, ', ') FROM user_warehouses uw JOIN warehouses w ON w.id = uw.warehouse_id WHERE uw.user_id = ${qc(u.id)})`;
+const statusSql = sql<string>`CASE WHEN ${qc(u.isActive)} = true THEN 'Active' ELSE 'Inactive' END`;
+const sessionCountSql = sql<number>`(SELECT COUNT(*) FROM user_sessions us WHERE us.user_id = ${qc(u.id)} AND us.revoked_at IS NULL AND us.expires_at > to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))`;
 
 const USER_SQL: Readonly<Record<string, SQL>> = {
   name: sql`${qc(u.name)}`,
@@ -101,12 +102,12 @@ function toRow(r: Record<string, unknown>): UserRow {
   return { ...(r as unknown as UserRow), isActive: Boolean(r.isActive), isApiUser: Boolean(r.isApiUser), allClients: Boolean(r.allClients) };
 }
 
-export function listUsers(db: AppDb, _auth: AuthContext, query: GridQuery): { rows: UserRow[]; total: number } {
+export async function listUsers(db: AppDb, _auth: AuthContext, query: GridQuery): Promise<{ rows: UserRow[]; total: number }> {
   const split = membershipFilters(query);
   const grid = compileGrid(BINDING, split.query, split.extra);
-  const result = paginate(
+  const result = await paginate(
     db.select(ROW_COLUMNS).from(u).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(u).where(grid.where).get()?.n ?? 0,
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(u).where(grid.where).limit(1))[0]?.n ?? 0,
     { page: query.page, pageSize: query.pageSize },
   );
   return { rows: (result.rows as Record<string, unknown>[]).map(toRow), total: result.total };
@@ -121,15 +122,15 @@ export interface UserDetail extends UserRow {
   readonly clientIds: readonly string[];
 }
 
-export function loadUser(db: AppDb, id: string): typeof u.$inferSelect {
-  return assertFound(db.select().from(u).where(eq(u.id, id)).get(), "User");
+export async function loadUser(db: AppDb, id: string): Promise<typeof u.$inferSelect> {
+  return assertFound((await db.select().from(u).where(eq(u.id, id)).limit(1))[0], "User");
 }
 
-export function getUser(db: AppDb, id: string): UserDetail {
-  const row = assertFound(db.select(ROW_COLUMNS).from(u).where(eq(u.id, id)).get(), "User");
-  const roles = db.select({ id: s.roles.id, name: s.roles.name, key: s.roles.key, isSystem: s.roles.isSystem }).from(s.userRoles).innerJoin(s.roles, eq(s.roles.id, s.userRoles.roleId)).where(eq(s.userRoles.userId, id)).orderBy(asc(s.roles.name)).all();
-  const warehouses = db.select({ id: s.warehouses.id, code: s.warehouses.code, name: s.warehouses.name }).from(s.userWarehouses).innerJoin(s.warehouses, eq(s.warehouses.id, s.userWarehouses.warehouseId)).where(eq(s.userWarehouses.userId, id)).orderBy(asc(s.warehouses.code)).all();
-  const clients = db.select({ id: s.clients.id, code: s.clients.code, name: s.clients.name }).from(s.userClients).innerJoin(s.clients, eq(s.clients.id, s.userClients.clientId)).where(eq(s.userClients.userId, id)).orderBy(asc(s.clients.name)).all();
+export async function getUser(db: AppDb, id: string): Promise<UserDetail> {
+  const row = assertFound((await db.select(ROW_COLUMNS).from(u).where(eq(u.id, id)).limit(1))[0], "User");
+  const roles = await db.select({ id: s.roles.id, name: s.roles.name, key: s.roles.key, isSystem: s.roles.isSystem }).from(s.userRoles).innerJoin(s.roles, eq(s.roles.id, s.userRoles.roleId)).where(eq(s.userRoles.userId, id)).orderBy(asc(s.roles.name));
+  const warehouses = await db.select({ id: s.warehouses.id, code: s.warehouses.code, name: s.warehouses.name }).from(s.userWarehouses).innerJoin(s.warehouses, eq(s.warehouses.id, s.userWarehouses.warehouseId)).where(eq(s.userWarehouses.userId, id)).orderBy(asc(s.warehouses.code));
+  const clients = await db.select({ id: s.clients.id, code: s.clients.code, name: s.clients.name }).from(s.userClients).innerJoin(s.clients, eq(s.clients.id, s.userClients.clientId)).where(eq(s.userClients.userId, id)).orderBy(asc(s.clients.name));
   return {
     ...toRow(row as Record<string, unknown>),
     roles: roles.map((r) => ({ ...r, isSystem: Boolean(r.isSystem) })), warehouses, clients,
@@ -148,40 +149,40 @@ export function legacyRoleFor(roleKeys: readonly string[]): LegacyRole {
   return "operator";
 }
 
-function resolveRoles(db: AppDb, ids: readonly string[]): { id: string; key: string; name: string; category: string }[] {
+async function resolveRoles(db: AppDb, ids: readonly string[]): Promise<{ id: string; key: string; name: string; category: string }[]> {
   const unique = [...new Set(ids)];
-  const rows = unique.length ? db.select({ id: s.roles.id, key: s.roles.key, name: s.roles.name, category: s.roles.category }).from(s.roles).where(inArray(s.roles.id, unique)).all() : [];
+  const rows = unique.length ? await db.select({ id: s.roles.id, key: s.roles.key, name: s.roles.name, category: s.roles.category }).from(s.roles).where(inArray(s.roles.id, unique)) : [];
   if (rows.length !== unique.length) throw fieldError("roleIds", "One of the selected roles no longer exists");
   return rows;
 }
 
-function resolveWarehouses(db: AppDb, auth: AuthContext, ids: readonly string[]): { id: string; code: string }[] {
+async function resolveWarehouses(db: AppDb, auth: AuthContext, ids: readonly string[]): Promise<{ id: string; code: string }[]> {
   const unique = [...new Set(ids)];
   for (const id of unique) if (!hasWarehouse(auth.scope, id)) throw fieldError("warehouseIds", "You can only give access to warehouses you can access");
-  const rows = unique.length ? db.select({ id: s.warehouses.id, code: s.warehouses.code }).from(s.warehouses).where(inArray(s.warehouses.id, unique)).all() : [];
+  const rows = unique.length ? await db.select({ id: s.warehouses.id, code: s.warehouses.code }).from(s.warehouses).where(inArray(s.warehouses.id, unique)) : [];
   if (rows.length !== unique.length) throw fieldError("warehouseIds", "One of the selected warehouses no longer exists");
   return rows;
 }
 
-function resolveClients(db: AppDb, ids: readonly string[]): { id: string; code: string }[] {
+async function resolveClients(db: AppDb, ids: readonly string[]): Promise<{ id: string; code: string }[]> {
   const unique = [...new Set(ids)];
-  const rows = unique.length ? db.select({ id: s.clients.id, code: s.clients.code }).from(s.clients).where(inArray(s.clients.id, unique)).all() : [];
+  const rows = unique.length ? await db.select({ id: s.clients.id, code: s.clients.code }).from(s.clients).where(inArray(s.clients.id, unique)) : [];
   if (rows.length !== unique.length) throw fieldError("clientIds", "One of the selected clients no longer exists");
   return rows;
 }
 
 /** True when another user (not `exceptId`) already signs in with `email` (case-insensitive). */
-export function isEmailTaken(db: AppDb, email: string, exceptId?: string): boolean {
-  const clash = db.select({ id: u.id }).from(u).where(eq(u.email, email.trim().toLowerCase())).get();
+export async function isEmailTaken(db: AppDb, email: string, exceptId?: string): Promise<boolean> {
+  const clash = (await db.select({ id: u.id }).from(u).where(eq(u.email, email.trim().toLowerCase())).limit(1))[0];
   return Boolean(clash && clash.id !== exceptId);
 }
 
-function assertEmailFree(db: AppDb, email: string, exceptId?: string): void {
-  if (isEmailTaken(db, email, exceptId)) throw duplicateError("email", `A user with ${email} already exists`);
+async function assertEmailFree(db: AppDb, email: string, exceptId?: string): Promise<void> {
+  if (await isEmailTaken(db, email, exceptId)) throw duplicateError("email", `A user with ${email} already exists`);
 }
 
-export function assertPasswordPolicy(db: AppDb, password: string, email: string, field = "password"): void {
-  const issues = validatePassword(password, getPasswordPolicy(db), { email });
+export async function assertPasswordPolicy(db: AppDb, password: string, email: string, field = "password"): Promise<void> {
+  const issues = validatePassword(password, await getPasswordPolicy(db), { email });
   if (issues.length > 0) throw new AppError("VALIDATION", issues[0] ?? "Password does not meet the policy", { fieldErrors: { [field]: issues } });
 }
 
@@ -189,16 +190,16 @@ export function assertPasswordPolicy(db: AppDb, password: string, email: string,
  * Parses a create / edit body against the save schema AND the company password policy in one
  * pass, so the response lists every field error together (no staged validation).
  */
-export function parseUserSave(db: AppDb, mode: "create" | "update", raw: unknown): UserSave {
-  const policy = getPasswordPolicy(db);
+export async function parseUserSave(db: AppDb, mode: "create" | "update", raw: unknown): Promise<UserSave> {
+  const policy = await getPasswordPolicy(db);
   const parsed = userSaveSchemaWithPolicy(mode, (password, email) => validatePassword(password, policy, { email })).safeParse(raw);
   if (!parsed.success) throw fromZodError(parsed.error);
   return parsed.data;
 }
 
 /** Display snapshot for the change log (names, never ids). */
-function snapshot(db: AppDb, id: string): Record<string, unknown> {
-  const d = getUser(db, id);
+async function snapshot(db: AppDb, id: string): Promise<Record<string, unknown>> {
+  const d = await getUser(db, id);
   return {
     name: d.name, firstName: d.firstName, lastName: d.lastName, email: d.email, userType: d.userType,
     status: d.status, roles: d.roles.map((r) => r.name).join(", "), warehouses: d.warehouses.map((w) => w.code).join(", "),
@@ -206,48 +207,48 @@ function snapshot(db: AppDb, id: string): Record<string, unknown> {
   };
 }
 
-function writeLinks(tx: AppDb, userId: string, input: Pick<UserSave, "roleIds" | "warehouseIds" | "allClients" | "clientIds">): void {
-  tx.delete(s.userRoles).where(eq(s.userRoles.userId, userId)).run();
-  tx.delete(s.userWarehouses).where(eq(s.userWarehouses.userId, userId)).run();
-  tx.delete(s.userClients).where(eq(s.userClients.userId, userId)).run();
+async function writeLinks(tx: AppDb, userId: string, input: Pick<UserSave, "roleIds" | "warehouseIds" | "allClients" | "clientIds">): Promise<void> {
+  await tx.delete(s.userRoles).where(eq(s.userRoles.userId, userId));
+  await tx.delete(s.userWarehouses).where(eq(s.userWarehouses.userId, userId));
+  await tx.delete(s.userClients).where(eq(s.userClients.userId, userId));
   const roleIds = [...new Set(input.roleIds)];
   const warehouseIds = [...new Set(input.warehouseIds)];
-  if (roleIds.length) tx.insert(s.userRoles).values(roleIds.map((roleId) => ({ userId, roleId }))).run();
-  if (warehouseIds.length) tx.insert(s.userWarehouses).values(warehouseIds.map((warehouseId) => ({ userId, warehouseId }))).run();
+  if (roleIds.length) await tx.insert(s.userRoles).values(roleIds.map((roleId) => ({ userId, roleId })));
+  if (warehouseIds.length) await tx.insert(s.userWarehouses).values(warehouseIds.map((warehouseId) => ({ userId, warehouseId })));
   const clientIds = input.allClients ? [] : [...new Set(input.clientIds)];
-  if (clientIds.length) tx.insert(s.userClients).values(clientIds.map((clientId) => ({ userId, clientId }))).run();
+  if (clientIds.length) await tx.insert(s.userClients).values(clientIds.map((clientId) => ({ userId, clientId })));
 }
 
 const displayName = (first: string, last: string): string => `${first.trim()} ${last.trim()}`.trim();
 
 /* ---------------- commands ---------------- */
 
-export function createUser(tx: AppDb, auth: AuthContext, actor: Actor, input: UserSave): { id: string; name: string; email: string } {
-  assertEmailFree(tx, input.email);
-  assertPasswordPolicy(tx, input.password, input.email);
-  const roles = resolveRoles(tx, input.roleIds);
-  resolveWarehouses(tx, auth, input.warehouseIds);
-  if (!input.allClients) resolveClients(tx, input.clientIds);
+export async function createUser(tx: AppDb, auth: AuthContext, actor: Actor, input: UserSave): Promise<{ id: string; name: string; email: string }> {
+  await assertEmailFree(tx, input.email);
+  await assertPasswordPolicy(tx, input.password, input.email);
+  const roles = await resolveRoles(tx, input.roleIds);
+  await resolveWarehouses(tx, auth, input.warehouseIds);
+  if (!input.allClients) await resolveClients(tx, input.clientIds);
   if (roles.some((r) => r.key === "admin") && !auth.roleKeys.includes("admin") && auth.user.role !== "admin") {
     throw fieldError("roleIds", "Only an administrator can assign the Admin role");
   }
   const now = new Date().toISOString();
-  const row = tx.insert(u).values({
+  const row = (await tx.insert(u).values({
     email: input.email.toLowerCase(), name: displayName(input.firstName, input.lastName), firstName: input.firstName.trim(), lastName: input.lastName.trim(),
     passwordHash: hashPassword(input.password), role: legacyRoleFor(roles.map((r) => r.key)), userType: input.userType,
     isActive: input.isActive, allClients: input.allClients, passwordChangedAt: now, createdBy: actor.userId, updatedBy: actor.userId,
-  }).returning({ id: u.id, name: u.name, email: u.email }).get();
-  writeLinks(tx, row.id, input);
-  logCreate(tx, domainCtxOf(actor, auth), { entityType: USER_ENTITY, entityId: row.id, entityCode: row.email });
+  }).returning({ id: u.id, name: u.name, email: u.email }))[0];
+  await writeLinks(tx, row.id, input);
+  await logCreate(tx, domainCtxOf(actor, auth), { entityType: USER_ENTITY, entityId: row.id, entityCode: row.email });
   return row;
 }
 
 /** Last active admin can't be removed, deactivated or demoted. */
-function assertNotLastAdmin(db: AppDb, userId: string, willStayAdmin: boolean): void {
+async function assertNotLastAdmin(db: AppDb, userId: string, willStayAdmin: boolean): Promise<void> {
   if (willStayAdmin) return;
-  const target = loadUser(db, userId);
+  const target = await loadUser(db, userId);
   if (target.role !== "admin" || !target.isActive) return;
-  const others = db.select({ n: sql<number>`count(*)` }).from(u).where(and(eq(u.role, "admin"), eq(u.isActive, true), ne(u.id, userId))).get()?.n ?? 0;
+  const others = (await db.select({ n: sql<number>`count(*)` }).from(u).where(and(eq(u.role, "admin"), eq(u.isActive, true), ne(u.id, userId))).limit(1))[0]?.n ?? 0;
   if (others === 0) throw new AppError("INVALID_STATE", "This is the last active administrator. Make another user an admin first.");
 }
 
@@ -257,50 +258,50 @@ export interface UpdateUserResult {
   readonly sessionsRevoked: boolean;
 }
 
-export function updateUser(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: UserSave): UpdateUserResult {
-  const before = loadUser(tx, id);
+export async function updateUser(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: UserSave): Promise<UpdateUserResult> {
+  const before = await loadUser(tx, id);
   assertVersion(before.version, input.version);
-  assertEmailFree(tx, input.email, id);
-  if (input.password) assertPasswordPolicy(tx, input.password, input.email);
-  const roles = resolveRoles(tx, input.roleIds);
-  resolveWarehouses(tx, auth, input.warehouseIds);
-  if (!input.allClients) resolveClients(tx, input.clientIds);
+  await assertEmailFree(tx, input.email, id);
+  if (input.password) await assertPasswordPolicy(tx, input.password, input.email);
+  const roles = await resolveRoles(tx, input.roleIds);
+  await resolveWarehouses(tx, auth, input.warehouseIds);
+  if (!input.allClients) await resolveClients(tx, input.clientIds);
   const role = legacyRoleFor(roles.map((r) => r.key));
   if (role === "admin" && before.role !== "admin" && auth.user.role !== "admin") throw fieldError("roleIds", "Only an administrator can assign the Admin role");
   if (id === auth.user.id && !input.isActive) throw fieldError("isActive", "You can't deactivate your own account");
-  assertNotLastAdmin(tx, id, role === "admin" && input.isActive);
+  await assertNotLastAdmin(tx, id, role === "admin" && input.isActive);
 
-  const prev = snapshot(tx, id);
+  const prev = await snapshot(tx, id);
   const prevAccess = JSON.stringify([prev.roles, prev.warehouses, prev.clients, before.isActive]);
-  tx.update(u).set({
+  await tx.update(u).set({
     email: input.email.toLowerCase(), name: displayName(input.firstName, input.lastName), firstName: input.firstName.trim(), lastName: input.lastName.trim(),
     userType: input.userType, isActive: input.isActive, allClients: input.allClients, role,
     ...(input.password ? { passwordHash: hashPassword(input.password), passwordChangedAt: new Date().toISOString() } : {}),
     updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${u.version} + 1`,
-  }).where(eq(u.id, id)).run();
-  writeLinks(tx, id, input);
-  const next = snapshot(tx, id);
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: USER_ENTITY, entityId: id, entityCode: input.email }, prev, next);
-  if (input.password) logUpdate(tx, domainCtxOf(actor, auth), { entityType: USER_ENTITY, entityId: id, entityCode: input.email }, { password: "••••" }, { password: "Changed" });
+  }).where(eq(u.id, id));
+  await writeLinks(tx, id, input);
+  const next = await snapshot(tx, id);
+  await logUpdate(tx, domainCtxOf(actor, auth), { entityType: USER_ENTITY, entityId: id, entityCode: input.email }, prev, next);
+  if (input.password) await logUpdate(tx, domainCtxOf(actor, auth), { entityType: USER_ENTITY, entityId: id, entityCode: input.email }, { password: "••••" }, { password: "Changed" });
 
   // Access, status or password changes end every session of the user (BUILD_PLAN F3 note).
   const accessChanged = prevAccess !== JSON.stringify([next.roles, next.warehouses, next.clients, input.isActive]) || Boolean(input.password);
-  if (accessChanged && id !== auth.user.id) bumpSessionVersion(tx, id);
-  const version = loadUser(tx, id).version;
+  if (accessChanged && id !== auth.user.id) await bumpSessionVersion(tx, id);
+  const version = (await loadUser(tx, id)).version;
   return { id, version, sessionsRevoked: accessChanged && id !== auth.user.id };
 }
 
 /** Activate / deactivate many users; deactivation bumps the session version (logout next click). */
-export function setUsersActive(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], isActive: boolean): BulkResult {
+export async function setUsersActive(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], isActive: boolean): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const row = loadUser(inner, id);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const row = await loadUser(inner, id);
     if (row.isActive === isActive) throw new AppError("INVALID_STATE", `${row.name} is already ${isActive ? "active" : "inactive"}`);
     if (!isActive && id === auth.user.id) throw new AppError("INVALID_STATE", "You can't deactivate your own account");
-    if (!isActive) assertNotLastAdmin(inner, id, false);
-    inner.update(u).set({ isActive, ...(isActive ? { failedLoginCount: 0, lockedUntil: null } : {}), updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${u.version} + 1` }).where(eq(u.id, id)).run();
-    logUpdate(inner, ctx, { entityType: USER_ENTITY, entityId: id, entityCode: row.email }, { status: row.isActive ? "Active" : "Inactive" }, { status: isActive ? "Active" : "Inactive" });
-    if (!isActive) bumpSessionVersion(inner, id);
+    if (!isActive) await assertNotLastAdmin(inner, id, false);
+    await inner.update(u).set({ isActive, ...(isActive ? { failedLoginCount: 0, lockedUntil: null } : {}), updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${u.version} + 1` }).where(eq(u.id, id));
+    await logUpdate(inner, ctx, { entityType: USER_ENTITY, entityId: id, entityCode: row.email }, { status: row.isActive ? "Active" : "Inactive" }, { status: isActive ? "Active" : "Inactive" });
+    if (!isActive) await bumpSessionVersion(inner, id);
   });
 }
 
@@ -317,13 +318,13 @@ export function generateTemporaryPassword(length = 14): string {
  * Sets a one-time temporary password, revokes every session and marks the password as
  * expired (`password_changed_at = null`) so the user must choose a new one.
  */
-export function resetUserPassword(tx: AppDb, auth: AuthContext, actor: Actor, id: string): { temporaryPassword: string; email: string } {
-  const row = loadUser(tx, id);
+export async function resetUserPassword(tx: AppDb, auth: AuthContext, actor: Actor, id: string): Promise<{ temporaryPassword: string; email: string }> {
+  const row = await loadUser(tx, id);
   if (id === auth.user.id) throw new AppError("INVALID_STATE", "Use Change Password to change your own password");
   const temporaryPassword = generateTemporaryPassword();
-  tx.update(u).set({ passwordHash: hashPassword(temporaryPassword), passwordChangedAt: null, failedLoginCount: 0, lockedUntil: null, updatedBy: actor.userId, updatedAt: new Date().toISOString() }).where(eq(u.id, id)).run();
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: USER_ENTITY, entityId: id, entityCode: row.email }, { password: "Set by user" }, { password: "Reset by administrator (change required)" });
-  bumpSessionVersion(tx, id);
+  await tx.update(u).set({ passwordHash: hashPassword(temporaryPassword), passwordChangedAt: null, failedLoginCount: 0, lockedUntil: null, updatedBy: actor.userId, updatedAt: new Date().toISOString() }).where(eq(u.id, id));
+  await logUpdate(tx, domainCtxOf(actor, auth), { entityType: USER_ENTITY, entityId: id, entityCode: row.email }, { password: "Set by user" }, { password: "Reset by administrator (change required)" });
+  await bumpSessionVersion(tx, id);
   return { temporaryPassword, email: row.email };
 }
 
@@ -331,24 +332,24 @@ export interface UserSession extends SessionSummary {
   readonly isCurrent: boolean;
 }
 
-export function userSessions(db: AppDb, auth: AuthContext, id: string): readonly UserSession[] {
-  loadUser(db, id);
-  return listActiveSessions(db, id).map((sess) => ({ ...sess, isCurrent: sess.id === auth.user.sessionId }));
+export async function userSessions(db: AppDb, auth: AuthContext, id: string): Promise<readonly UserSession[]> {
+  await loadUser(db, id);
+  return (await listActiveSessions(db, id)).map((sess) => ({ ...sess, isCurrent: sess.id === auth.user.sessionId }));
 }
 
-export function revokeUserSession(tx: AppDb, auth: AuthContext, userId: string, sessionId: string): { revoked: boolean } {
-  loadUser(tx, userId);
-  const sess = tx.select({ userId: s.userSessions.userId }).from(s.userSessions).where(eq(s.userSessions.id, sessionId)).get();
+export async function revokeUserSession(tx: AppDb, auth: AuthContext, userId: string, sessionId: string): Promise<{ revoked: boolean }> {
+  await loadUser(tx, userId);
+  const sess = (await tx.select({ userId: s.userSessions.userId }).from(s.userSessions).where(eq(s.userSessions.id, sessionId)).limit(1))[0];
   if (!sess || sess.userId !== userId) throw new AppError("NOT_FOUND", "Session not found");
   if (sessionId === auth.user.sessionId) throw new AppError("INVALID_STATE", "Use Log out to end your current session");
-  return { revoked: revokeSession(tx, sessionId) };
+  return { revoked: await revokeSession(tx, sessionId) };
 }
 
 /** Options for pickers and grid filters. */
-export function userOptions(db: AppDb): { id: string; name: string; email: string }[] {
-  return db.select({ id: u.id, name: u.name, email: u.email }).from(u).orderBy(asc(u.name)).all();
+export async function userOptions(db: AppDb): Promise<{ id: string; name: string; email: string }[]> {
+  return await db.select({ id: u.id, name: u.name, email: u.email }).from(u).orderBy(asc(u.name));
 }
 
-export function findUserByEmail(db: AppDb, email: string): typeof u.$inferSelect | undefined {
-  return db.select().from(u).where(eq(u.email, email.trim().toLowerCase())).get();
+export async function findUserByEmail(db: AppDb, email: string): Promise<typeof u.$inferSelect | undefined> {
+  return (await db.select().from(u).where(eq(u.email, email.trim().toLowerCase())).limit(1))[0];
 }

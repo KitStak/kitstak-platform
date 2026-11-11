@@ -11,11 +11,11 @@ export const POST = defineRoute({
   permission: "inventory.purchase_orders.receive_po",
   rateLimit: RATE_LIMITS.bulkIo,
   body: bulkIdsBodySchema,
-  handler: ({ db, auth, actor, body }) => {
-    const result = runBulk(db, body.ids, (tx, id) => {
-      receiveAll(tx, domainCtx(actor, auth), auth.scope, id);
+  handler: async ({ db, auth, actor, body }) => {
+    const result = await runBulk(db, body.ids, async (tx, id) => {
+      await receiveAll(tx, domainCtx(actor, auth), auth.scope, id);
     });
     // The refreshed rows let the list patch its cache at once (no stale status / actions).
-    return { ...result, rows: result.succeeded.length ? purchaseOrdersByIds(db, auth.scope, result.succeeded) : [] };
+    return { ...result, rows: result.succeeded.length ? await purchaseOrdersByIds(db, auth.scope, result.succeeded) : [] };
   },
 });

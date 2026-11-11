@@ -49,15 +49,15 @@ export function resolvePoType(raw: string): (typeof PO_TYPES)[number] {
 export const handler: ImportHandler = {
   configured: true,
   owner: "M05",
-  apply(ctx, row: ImportRowValues) {
+  async apply(ctx, row: ImportRowValues) {
     const db = ctx.db;
     const dctx = domainCtx(ctx.actor, ctx.auth);
     const code = str(row.poCode);
-    const client = db.select().from(schema.clients).where(sql`lower(${schema.clients.code}) = lower(${str(row.clientCode)})`).get();
+    const client = (await db.select().from(schema.clients).where(sql`lower(${schema.clients.code}) = lower(${str(row.clientCode)})`).limit(1))[0];
     if (!client) throw new AppError("VALIDATION", `Client "${str(row.clientCode)}" not found`);
-    const warehouse = db.select().from(schema.warehouses).where(sql`lower(${schema.warehouses.code}) = lower(${str(row.warehouseCode)})`).get();
+    const warehouse = (await db.select().from(schema.warehouses).where(sql`lower(${schema.warehouses.code}) = lower(${str(row.warehouseCode)})`).limit(1))[0];
     if (!warehouse) throw new AppError("VALIDATION", `Warehouse "${str(row.warehouseCode)}" not found`);
-    const product = db.select().from(schema.products).where(and(eq(schema.products.clientId, client.id), sql`lower(${schema.products.sku}) = lower(${str(row.sku)})`)).get();
+    const product = (await db.select().from(schema.products).where(and(eq(schema.products.clientId, client.id), sql`lower(${schema.products.sku}) = lower(${str(row.sku)})`)).limit(1))[0];
     if (!product) throw new AppError("VALIDATION", `SKU "${str(row.sku)}" not found for client ${client.code}`);
     const quantity = Number(row.quantity);
     const unitCost = row.unitCost === null || row.unitCost === undefined || str(row.unitCost) === "" ? product.purchasePrice : Number(row.unitCost);
@@ -67,10 +67,10 @@ export const handler: ImportHandler = {
       lotNumber: str(row.lotNumber) || null, expiryDate: dayOf(row.expiryDate), productionDate: null, lpTypeId: null, lpNumber: null,
       note: str(row.notes) || null,
     };
-    const existing = db.select().from(schema.purchaseOrders).where(sql`lower(${schema.purchaseOrders.code}) = lower(${code})`).get();
+    const existing = (await db.select().from(schema.purchaseOrders).where(sql`lower(${schema.purchaseOrders.code}) = lower(${code})`).limit(1))[0];
     if (!existing) {
-      const vendor = ensureVendor(db, dctx, ctx.auth.scope, client.id, str(row.vendorName), str(row.vendorCode) || null);
-      const created = createPurchaseOrder(db, dctx, ctx.auth.scope, {
+      const vendor = await ensureVendor(db, dctx, ctx.auth.scope, client.id, str(row.vendorName), str(row.vendorCode) || null);
+      const created = await createPurchaseOrder(db, dctx, ctx.auth.scope, {
         warehouseId: warehouse.id, clientId: client.id, code, poType: resolvePoType(str(row.poType)), poDate: new Date().toISOString(),
         plannedReceivingDate: dateIso(row.expectedDate), receivedAt: null, plannedArrivalDate: null, actualArrivalDate: null,
         referenceNumber: str(row.referenceNumber) || null, note: null, vendorId: vendor.id, lines: [line], customFields: {},
@@ -79,19 +79,19 @@ export const handler: ImportHandler = {
     }
     if (existing.clientId !== client.id || existing.warehouseId !== warehouse.id) throw new AppError("VALIDATION", `${code} belongs to another client or warehouse`);
     if (existing.status !== "Pending") throw new AppError("INVALID_STATE", `${code} is ${existing.status}; lines can only be added to Pending orders`);
-    const ratio = packType === product.uom ? 1 : db.select({ q: schema.productPackTypes.uomQty }).from(schema.productPackTypes)
-      .where(and(eq(schema.productPackTypes.productId, product.id), eq(schema.productPackTypes.packType, packType))).get()?.q;
+    const ratio = packType === product.uom ? 1 : (await db.select({ q: schema.productPackTypes.uomQty }).from(schema.productPackTypes)
+      .where(and(eq(schema.productPackTypes.productId, product.id), eq(schema.productPackTypes.packType, packType))).limit(1))[0]?.q;
     if (!ratio) throw new AppError("VALIDATION", `${product.sku} has no "${packType}" pack type`);
-    const inserted = db.insert(schema.purchaseOrderLines).values({
+    const inserted = (await db.insert(schema.purchaseOrderLines).values({
       ...line, uomQuantity: ratio, purchaseOrderId: existing.id, createdBy: ctx.actor.userId, updatedBy: ctx.actor.userId,
-    }).returning().get();
-    const lines = db.select({ q: schema.purchaseOrderLines.orderedQuantity, c: schema.purchaseOrderLines.unitCost }).from(schema.purchaseOrderLines)
-      .where(eq(schema.purchaseOrderLines.purchaseOrderId, existing.id)).all();
-    db.update(schema.purchaseOrders).set({
+    }).returning())[0];
+    const lines = await db.select({ q: schema.purchaseOrderLines.orderedQuantity, c: schema.purchaseOrderLines.unitCost }).from(schema.purchaseOrderLines)
+      .where(eq(schema.purchaseOrderLines.purchaseOrderId, existing.id));
+    await db.update(schema.purchaseOrders).set({
       totalQuantity: lines.reduce((s, l) => s + l.q, 0), purchasePrice: Math.round(lines.reduce((s, l) => s + l.q * l.c, 0) * 100) / 100,
       version: existing.version + 1, updatedBy: ctx.actor.userId,
-    }).where(eq(schema.purchaseOrders.id, existing.id)).run();
-    changeLog.recordLineCreate(db, dctx, { entityType: "purchase_order", entityId: existing.id, entityCode: existing.code, lineEntityType: "purchase_order_line",
+    }).where(eq(schema.purchaseOrders.id, existing.id));
+    await changeLog.recordLineCreate(db, dctx, { entityType: "purchase_order", entityId: existing.id, entityCode: existing.code, lineEntityType: "purchase_order_line",
       lineEntityId: inserted.id, lineLabel: product.sku });
     return { entityId: existing.id, message: `Added ${product.sku} to ${code}` };
   },

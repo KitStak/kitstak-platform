@@ -23,6 +23,7 @@ import type { BulkResult, DomainCtx } from "@/server/domain/types";
 import type { GridQuery } from "@/server/query/grid-query";
 import { transferLp, transferProduct, type TransferResult } from "./inventory-commands";
 import { compileGrid, type GridSpec } from "./purchase-orders-grid";
+import { mapSeq } from "@/server/db/sql";
 
 export type { PutawayTaskRow } from "@/lib/grid-defs/receiving/putaway";
 
@@ -34,8 +35,8 @@ const RECEIVING_LOCATION_SQL = sql`(${loc.areaType} = 'Receiving' OR ${loc.type}
   OR ${loc.id} IN (SELECT w.default_receiving_location_id FROM warehouses w WHERE w.default_receiving_location_id IS NOT NULL))`;
 
 const sub = (q: SQL): SQL => sql`(${q})`;
-const LOCKED_SQL = sql`(CASE WHEN ${loc.isLocked} = 1 OR NOT ${notCountLocked(inv.locationId)} THEN 1 ELSE 0 END)`;
-const DWELL_SQL = sql`CAST(MAX(0, ROUND((julianday('now') - julianday(${inv.receivedAt})) * 24)) AS INTEGER)`;
+const LOCKED_SQL = sql`(CASE WHEN ${loc.isLocked} = true OR NOT ${notCountLocked(inv.locationId)} THEN 1 ELSE 0 END)`;
+const DWELL_SQL = sql`trunc(GREATEST(0, ROUND((EXTRACT(EPOCH FROM (now() - (${inv.receivedAt})::timestamptz)) / 3600.0::float8)::numeric)))::int`;
 
 const EXPRS: Readonly<Record<string, SQL>> = {
   warehouseId: sql`${inv.warehouseId}`,
@@ -83,24 +84,24 @@ const SELECT = {
 };
 
 /** Why a bucket in `location` can't be moved now (manual lock or an open count plan), or null. */
-export function moveBlockedReason(db: AppDb, location: { readonly id: string; readonly code: string; readonly isLocked: boolean }): string | null {
+export async function moveBlockedReason(db: AppDb, location: { readonly id: string; readonly code: string; readonly isLocked: boolean }): Promise<string | null> {
   if (location.isLocked) return `Location ${location.code} is locked. Unlock it in Locations before putting stock away.`;
-  const plan = countLockFor(db, location.id);
+  const plan = await countLockFor(db, location.id);
   return plan ? countLockMessage(location.code, plan) : null;
 }
 
-export function listPutawayTasks(db: AppDb, auth: AuthContext, query: GridQuery): { rows: PutawayTaskRow[]; total: number; units: number } {
+export async function listPutawayTasks(db: AppDb, auth: AuthContext, query: GridQuery): Promise<{ rows: PutawayTaskRow[]; total: number; units: number }> {
   const base = [scopedWhere(inv, auth.viewScope), sql`${inv.onHand} > 0`, eq(inv.status, "Stock"), RECEIVING_LOCATION_SQL];
   const { where, orderBy } = compileGrid(SPEC, query, base);
-  const agg = db.select({ n: sql<number>`count(*)`, units: sql<number>`COALESCE(SUM(${inv.onHand}), 0)` })
-    .from(inv).innerJoin(loc, eq(loc.id, inv.locationId)).innerJoin(p, eq(p.id, inv.productId)).where(where).get();
-  const raw = db.select(SELECT).from(inv).innerJoin(loc, eq(loc.id, inv.locationId)).innerJoin(p, eq(p.id, inv.productId))
-    .where(where).orderBy(...orderBy).limit(query.pageSize).offset((query.page - 1) * query.pageSize).all();
+  const agg = (await db.select({ n: sql<number>`count(*)`, units: sql<number>`COALESCE(SUM(${inv.onHand}), 0)` })
+    .from(inv).innerJoin(loc, eq(loc.id, inv.locationId)).innerJoin(p, eq(p.id, inv.productId)).where(where).limit(1))[0];
+  const raw = await db.select(SELECT).from(inv).innerJoin(loc, eq(loc.id, inv.locationId)).innerJoin(p, eq(p.id, inv.productId))
+    .where(where).orderBy(...orderBy).limit(query.pageSize).offset((query.page - 1) * query.pageSize);
   // One lock lookup per distinct location (a page usually spans a handful of receiving locations).
   const lockByLocation = new Map<string, string | null>();
-  const rows = raw.map(({ onHand, allocated, damaged, locationLocked, ...r }): PutawayTaskRow => {
+  const rows = await mapSeq(raw, async ({ onHand, allocated, damaged, locationLocked, ...r }): Promise<PutawayTaskRow> => {
     if (!lockByLocation.has(r.fromLocationId)) {
-      lockByLocation.set(r.fromLocationId, moveBlockedReason(db, { id: r.fromLocationId, code: r.fromLocationCode, isLocked: Boolean(locationLocked) }));
+      lockByLocation.set(r.fromLocationId, await moveBlockedReason(db, { id: r.fromLocationId, code: r.fromLocationCode, isLocked: Boolean(locationLocked) }));
     }
     return {
       ...r, qty: onHand, available: Math.max(0, onHand - allocated - damaged), dwellHours: Number(r.dwellHours) || 0,
@@ -110,16 +111,16 @@ export function listPutawayTasks(db: AppDb, auth: AuthContext, query: GridQuery)
   return { rows, total: agg?.n ?? 0, units: agg?.units ?? 0 };
 }
 
-function bucketInScope(db: AppDb, auth: AuthContext, id: string) {
-  const row = db.select().from(inv).where(and(eq(inv.id, id), scopedWhere(inv, auth.scope))).get();
+async function bucketInScope(db: AppDb, auth: AuthContext, id: string) {
+  const row = (await db.select().from(inv).where(and(eq(inv.id, id), scopedWhere(inv, auth.scope))).limit(1))[0];
   if (!row) throw notFoundError("Putaway task");
   return row;
 }
 
-export function suggestPutaway(db: AppDb, auth: AuthContext, inventoryId: string) {
-  const b = bucketInScope(db, auth, inventoryId);
+export async function suggestPutaway(db: AppDb, auth: AuthContext, inventoryId: string) {
+  const b = await bucketInScope(db, auth, inventoryId);
   try {
-    const r = suggestLocations(db, {
+    const r = await suggestLocations(db, {
       warehouseId: b.warehouseId, productId: b.productId, qty: Math.max(1, b.onHand), packType: b.packType, lot: b.lotNumber, expiry: b.expiryDate,
       productionDate: b.productionDate, damageReason: b.damageReason, isReceiving: false, fromLocationId: b.locationId, receivedAt: b.receivedAt, limit: 5,
     });
@@ -142,31 +143,31 @@ export const confirmPutawaySchema = z.object({
   if (!v.wholeLp && v.qty === undefined) ctx.addIssue({ code: "custom", path: ["qty"], message: "Enter a quantity" });
 });
 
-function resolveTarget(db: AppDb, warehouseId: string, code: string, currentLocationId: string): { id: string; code: string } {
+async function resolveTarget(db: AppDb, warehouseId: string, code: string, currentLocationId: string): Promise<{ id: string; code: string }> {
   const needle = code.trim().toLowerCase();
-  const target = db.select({ id: loc.id, code: loc.code }).from(loc).where(and(eq(loc.warehouseId, warehouseId), sql`lower(${loc.code}) = ${needle}`)).get()
-    ?? db.select({ id: loc.id, code: loc.code }).from(loc).where(and(eq(loc.warehouseId, warehouseId), sql`lower(coalesce(${loc.barcode}, '')) = ${needle}`)).get();
+  const target = (await db.select({ id: loc.id, code: loc.code }).from(loc).where(and(eq(loc.warehouseId, warehouseId), sql`lower(${loc.code}) = ${needle}`)).limit(1))[0]
+    ?? (await db.select({ id: loc.id, code: loc.code }).from(loc).where(and(eq(loc.warehouseId, warehouseId), sql`lower(coalesce(${loc.barcode}, '')) = ${needle}`)).limit(1))[0];
   if (!target) throw validationError(`Location "${code.trim()}" doesn't exist in this warehouse.`, { locationCode: ["Unknown location"] });
   if (target.id === currentLocationId) throw validationError("Scan a storage location, not the receiving location the stock is in.", { locationCode: ["Same as the current location"] });
   return target;
 }
 
-function assertMovable(db: AppDb, locationId: string): void {
-  const source = db.select({ id: loc.id, code: loc.code, isLocked: loc.isLocked }).from(loc).where(eq(loc.id, locationId)).get();
-  const reason = source ? moveBlockedReason(db, { ...source, isLocked: Boolean(source.isLocked) }) : null;
+async function assertMovable(db: AppDb, locationId: string): Promise<void> {
+  const source = (await db.select({ id: loc.id, code: loc.code, isLocked: loc.isLocked }).from(loc).where(eq(loc.id, locationId)).limit(1))[0];
+  const reason = source ? await moveBlockedReason(db, { ...source, isLocked: Boolean(source.isLocked) }) : null;
   if (reason) throw validationError(reason, { locationCode: [reason] });
 }
 
-export function confirmPutaway(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: z.infer<typeof confirmPutawaySchema>): TransferResult & { readonly locationCode: string } {
-  const b = bucketInScope(db, auth, input.inventoryId);
-  assertMovable(db, b.locationId);
-  const target = resolveTarget(db, b.warehouseId, input.locationCode, b.locationId);
+export async function confirmPutaway(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: z.infer<typeof confirmPutawaySchema>): Promise<TransferResult & { readonly locationCode: string }> {
+  const b = await bucketInScope(db, auth, input.inventoryId);
+  await assertMovable(db, b.locationId);
+  const target = await resolveTarget(db, b.warehouseId, input.locationCode, b.locationId);
   if (input.wholeLp) {
     if (!b.lpId) throw validationError("This stock is not on an LP. Enter a quantity instead.", { wholeLp: ["Not on an LP"] });
     if (input.version !== undefined && input.version !== b.version) throw validationError("This stock changed since the list loaded. Refresh and try again.", { version: ["Stale"] });
-    return { ...transferLp(db, ctx, { lpId: b.lpId, target: { kind: "location", id: target.id }, note: "Putaway" }), locationCode: target.code };
+    return { ...(await transferLp(db, ctx, { lpId: b.lpId, target: { kind: "location", id: target.id }, note: "Putaway" })), locationCode: target.code };
   }
-  const result = transferProduct(db, ctx, { inventoryId: b.id, qty: input.qty ?? b.onHand, target: { kind: "location", id: target.id }, version: input.version, note: "Putaway" });
+  const result = await transferProduct(db, ctx, { inventoryId: b.id, qty: input.qty ?? b.onHand, target: { kind: "location", id: target.id }, version: input.version, note: "Putaway" });
   return { ...result, locationCode: target.code };
 }
 
@@ -184,21 +185,21 @@ export interface BulkPutawayResult extends BulkResult {
 }
 
 /** Puts every selected bucket away in full: to the scanned location, or to its own top suggestion. Each task runs in its own savepoint. */
-export function bulkPutaway(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: z.infer<typeof bulkPutawaySchema>): BulkPutawayResult {
+export async function bulkPutaway(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: z.infer<typeof bulkPutawaySchema>): Promise<BulkPutawayResult> {
   const versions = new Map(input.items.map((i) => [i.inventoryId, i.version]));
   const moved: { id: string; sku: string; qty: number; from: string; to: string }[] = [];
   const code = input.locationCode?.trim() || null;
-  const result = runBulk(db, input.items.map((i) => i.inventoryId), (tx, id) => {
-    const b = bucketInScope(tx, auth, id);
+  const result = await runBulk(db, input.items.map((i) => i.inventoryId), async (tx, id) => {
+    const b = await bucketInScope(tx, auth, id);
     let target = code;
     if (!target) {
-      const top = suggestPutaway(tx, auth, id).suggestions[0];
+      const top = (await suggestPutaway(tx, auth, id)).suggestions[0];
       if (!top) throw validationError("No location matched the putaway rules. Put it away one by one and scan a location.");
       target = top.code;
     }
-    const from = tx.select({ code: loc.code }).from(loc).where(eq(loc.id, b.locationId)).get()?.code ?? "";
-    const sku = tx.select({ sku: p.sku }).from(p).where(eq(p.id, b.productId)).get()?.sku ?? "";
-    const r = confirmPutaway(tx, auth, ctx, { inventoryId: id, locationCode: target, qty: b.onHand, version: versions.get(id) });
+    const from = (await tx.select({ code: loc.code }).from(loc).where(eq(loc.id, b.locationId)).limit(1))[0]?.code ?? "";
+    const sku = (await tx.select({ sku: p.sku }).from(p).where(eq(p.id, b.productId)).limit(1))[0]?.sku ?? "";
+    const r = await confirmPutaway(tx, auth, ctx, { inventoryId: id, locationCode: target, qty: b.onHand, version: versions.get(id) });
     moved.push({ id, sku, qty: r.totalQty, from, to: r.locationCode });
   });
   return { ...result, moved };

@@ -13,8 +13,8 @@ export const POST = defineRoute({
   body: z.object({ warehouseId: z.string().min(1).max(64), locationIds: ids, productIds: ids }),
   transaction: false,
   rateLimit: false,
-  handler: ({ db, auth, body }) => {
+  handler: async ({ db, auth, body }) => {
     if (!hasWarehouse(auth.scope, body.warehouseId)) throw notFoundError("Warehouse");
-    return stockHints(db, body.warehouseId, body.locationIds, body.productIds);
+    return await stockHints(db, body.warehouseId, body.locationIds, body.productIds);
   },
 });

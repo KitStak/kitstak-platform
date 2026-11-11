@@ -29,6 +29,7 @@ import type { DomainCtx } from "@/server/domain/types";
 import { seedStationFixtures } from "@/server/repositories/packing-fixtures";
 import { ensureDemoSuggestedListings } from "@/server/repositories/listings-demo";
 import { SEED_APPS } from "./platform";
+import { dbGet } from "@/server/db/sql";
 
 export const FIXTURE_WAREHOUSE_CODE = "MLT1";
 export const FIXTURE_CLIENT_CODE = "APX";
@@ -87,72 +88,72 @@ function required<T>(row: T | undefined, what: string): T {
   return row;
 }
 
-function upsertLookups(tx: AppDb, created: string[], skipped: string[]): void {
+async function upsertLookups(tx: AppDb, created: string[], skipped: string[]): Promise<void> {
   for (const l of LOOKUPS) {
     const lv = schema.lookupValues;
-    const found = tx.select({ id: lv.id }).from(lv)
-      .where(and(eq(lv.type, l.type), eq(lv.name, l.name), isNull(lv.clientId), isNull(lv.warehouseId))).get();
+    const found = (await tx.select({ id: lv.id }).from(lv)
+      .where(and(eq(lv.type, l.type), eq(lv.name, l.name), isNull(lv.clientId), isNull(lv.warehouseId))).limit(1))[0];
     if (found) { skipped.push(`lookup ${l.type}/${l.name}`); continue; }
-    const order = tx.get<{ n: number | null }>(sql`SELECT MAX(sort_order) AS n FROM lookup_values WHERE type = ${l.type}`)?.n ?? -1;
-    tx.insert(lv).values({ type: l.type, name: l.name, isActive: true, sortOrder: Number(order) + 1 }).run();
+    const order = (await dbGet<{ n: number | null }>(tx, sql`SELECT MAX(sort_order) AS n FROM lookup_values WHERE type = ${l.type}`))?.n ?? -1;
+    await tx.insert(lv).values({ type: l.type, name: l.name, isActive: true, sortOrder: Number(order) + 1 });
     created.push(`lookup ${l.type}/${l.name}`);
   }
 }
 
-function upsertProducts(tx: AppDb, clientId: string, created: string[], skipped: string[]): Map<string, string> {
+async function upsertProducts(tx: AppDb, clientId: string, created: string[], skipped: string[]): Promise<Map<string, string>> {
   const ids = new Map<string, string>();
   for (const p of PRODUCTS) {
-    const found = tx.select({ id: schema.products.id }).from(schema.products)
-      .where(and(eq(schema.products.clientId, clientId), eq(schema.products.sku, p.sku))).get();
+    const found = (await tx.select({ id: schema.products.id }).from(schema.products)
+      .where(and(eq(schema.products.clientId, clientId), eq(schema.products.sku, p.sku))).limit(1))[0];
     if (found) { ids.set(p.sku, found.id); skipped.push(`product ${p.sku}`); continue; }
-    const row = tx.insert(schema.products).values({
+    const row = (await tx.insert(schema.products).values({
       clientId, sku: p.sku, barcode: p.barcode, name: p.name, category: "General", uom: "Each",
       weightOz: 8, lengthIn: 6, widthIn: 4, heightIn: 2, price: p.price, purchasePrice: Math.round(p.price * 42) / 100,
       isKit: Boolean(p.kit), status: "Active", productCategory: p.kit ? "Kit" : "Product", kitType: p.kit ? "Kit to Stock" : null,
       description: p.kit ? "Acceptance kit: two MLTest kit components." : "Acceptance fixture SKU.",
-    }).returning({ id: schema.products.id }).get();
-    const pack = tx.insert(schema.productPackTypes).values({
+    }).returning({ id: schema.products.id }))[0];
+    const pack = (await tx.insert(schema.productPackTypes).values({
       productId: row.id, packType: "Each", kind: "Primary", uomQty: 1, length: 6, width: 4, height: 2, volume: 48, weight: 0.5,
-    }).returning({ id: schema.productPackTypes.id }).get();
-    tx.insert(schema.productBarcodes).values({ productId: row.id, packTypeId: pack.id, barcode: p.barcode }).run();
+    }).returning({ id: schema.productPackTypes.id }))[0];
+    await tx.insert(schema.productBarcodes).values({ productId: row.id, packTypeId: pack.id, barcode: p.barcode });
     ids.set(p.sku, row.id);
     created.push(`product ${p.sku}`);
   }
   const kitId = required(ids.get("MLT-KIT-2PK"), "kit");
   const compId = required(ids.get("MLT-KIT-COMP"), "kit component");
   const kc = schema.kitComponents;
-  if (!tx.select({ id: kc.id }).from(kc).where(and(eq(kc.kitProductId, kitId), eq(kc.componentProductId, compId))).get()) {
-    tx.insert(kc).values({ kitProductId: kitId, componentProductId: compId, quantity: 2, packType: "Each" }).run();
+  if (!(await tx.select({ id: kc.id }).from(kc).where(and(eq(kc.kitProductId, kitId), eq(kc.componentProductId, compId))).limit(1))[0]) {
+    await tx.insert(kc).values({ kitProductId: kitId, componentProductId: compId, quantity: 2, packType: "Each" });
     created.push("kit component MLT-KIT-2PK → MLT-KIT-COMP × 2");
   }
   return ids;
 }
 
-function upsertLocations(tx: AppDb, warehouseId: string, created: string[], skipped: string[]): Map<string, string> {
+async function upsertLocations(tx: AppDb, warehouseId: string, created: string[], skipped: string[]): Promise<Map<string, string>> {
   const ids = new Map<string, string>();
   for (const l of LOCATIONS) {
-    const found = tx.select({ id: schema.locations.id }).from(schema.locations)
-      .where(and(eq(schema.locations.warehouseId, warehouseId), eq(schema.locations.code, l.code))).get();
+    const found = (await tx.select({ id: schema.locations.id }).from(schema.locations)
+      .where(and(eq(schema.locations.warehouseId, warehouseId), eq(schema.locations.code, l.code))).limit(1))[0];
     if (found) { ids.set(l.code, found.id); skipped.push(`location ${l.code}`); continue; }
-    const row = tx.insert(schema.locations).values({
+    const row = (await tx.insert(schema.locations).values({
       warehouseId, code: l.code, barcode: l.code, zone: "MLT", aisle: "01", bay: l.bay, level: "1", type: l.type,
       capacityUnits: 200, isActive: true, locationType: "Shelves", areaType: l.areaType, onlyOneSku: l.onlyOneSku,
-    }).returning({ id: schema.locations.id }).get();
+    }).returning({ id: schema.locations.id }))[0];
     ids.set(l.code, row.id);
     created.push(`location ${l.code}`);
   }
   return ids;
 }
 
-function addStock(tx: AppDb, ctx: DomainCtx, refs: { warehouseId: string; clientId: string; products: Map<string, string>; locations: Map<string, string> }, created: string[], skipped: string[]): void {
+async function addStock(tx: AppDb, ctx: DomainCtx, refs: { warehouseId: string; clientId: string; products: Map<string, string>; locations: Map<string, string> }, created: string[], skipped: string[]): Promise<void> {
   for (const s of STOCK) {
     const productId = required(refs.products.get(s.sku), s.sku);
     const locationId = required(refs.locations.get(s.location), s.location);
     const i = schema.inventory;
-    const existing = tx.select({ id: i.id }).from(i)
-      .where(and(eq(i.productId, productId), eq(i.locationId, locationId), gt(i.onHand, 0))).get();
+    const existing = (await tx.select({ id: i.id }).from(i)
+      .where(and(eq(i.productId, productId), eq(i.locationId, locationId), gt(i.onHand, 0))).limit(1))[0];
     if (existing) { skipped.push(`stock ${s.sku} @ ${s.location}`); continue; }
-    ledger.add(tx, ctx, {
+    await ledger.add(tx, ctx, {
       warehouseId: refs.warehouseId, clientId: refs.clientId, productId, locationId, qty: s.qty, packType: "Each",
       type: "Inventory Adjustment", refs: { note: "Acceptance fixture stock" },
     });
@@ -160,12 +161,12 @@ function addStock(tx: AppDb, ctx: DomainCtx, refs: { warehouseId: string; client
   }
 }
 
-function ensureOpenOrder(tx: AppDb, ctx: DomainCtx, refs: { warehouseId: string; clientId: string; products: Map<string, string> }, created: string[], skipped: string[]): void {
+async function ensureOpenOrder(tx: AppDb, ctx: DomainCtx, refs: { warehouseId: string; clientId: string; products: Map<string, string> }, created: string[], skipped: string[]): Promise<void> {
   const so = schema.shipmentOrders;
-  const found = tx.select({ id: so.id }).from(so)
-    .where(and(eq(so.clientId, refs.clientId), eq(so.clientReferenceCode, FIXTURE_ORDER_REFERENCE), isNull(so.deletedAt))).get();
+  const found = (await tx.select({ id: so.id }).from(so)
+    .where(and(eq(so.clientId, refs.clientId), eq(so.clientReferenceCode, FIXTURE_ORDER_REFERENCE), isNull(so.deletedAt))).limit(1))[0];
   if (found) { skipped.push(`order ${FIXTURE_ORDER_REFERENCE}`); return; }
-  const order = createOrder(tx, ctx, {
+  const order = await createOrder(tx, ctx, {
     warehouseId: refs.warehouseId, clientId: refs.clientId, clientReferenceCode: FIXTURE_ORDER_REFERENCE,
     customerName: "Dana Whitfield", customerEmail: "dana.whitfield@example.com",
     shipAddress: "418 Larkspur Lane", shipCity: "Columbus", shipState: "OH", shipZip: "43215", shipCountry: "United States",
@@ -185,32 +186,32 @@ function ensureOpenOrder(tx: AppDb, ctx: DomainCtx, refs: { warehouseId: string;
  * and an In Progress plan at gate LOAD-01. Everything goes through the ledger / domain, so
  * `db:verify` stays green.
  */
-function ensurePlanOnLps(tx: AppDb, ctx: DomainCtx, refs: { warehouseId: string; clientId: string; products: Map<string, string>; locations: Map<string, string> }, created: string[], skipped: string[]): void {
+async function ensurePlanOnLps(tx: AppDb, ctx: DomainCtx, refs: { warehouseId: string; clientId: string; products: Map<string, string>; locations: Map<string, string> }, created: string[], skipped: string[]): Promise<void> {
   const productId = required(refs.products.get(PLAN_LP_SKU), PLAN_LP_SKU);
   const locationId = required(refs.locations.get("MLT1-C-01"), "MLT1-C-01");
   const i = schema.inventory;
-  const lpStock = tx.select({ id: i.id }).from(i).where(and(eq(i.productId, productId), isNotNull(i.lpId))).get();
+  const lpStock = (await tx.select({ id: i.id }).from(i).where(and(eq(i.productId, productId), isNotNull(i.lpId))).limit(1))[0];
   if (lpStock) skipped.push(`LP stock ${PLAN_LP_SKU}`);
   else {
-    const lpType = (code: string) => required(tx.select({ id: schema.lpTypes.id }).from(schema.lpTypes)
-      .where(and(eq(schema.lpTypes.warehouseId, refs.warehouseId), eq(schema.lpTypes.code, code))).get(), `LP type ${code}`).id;
-    const pallet = licensePlates.create(tx, ctx, { warehouseId: refs.warehouseId, lpTypeId: lpType("PLT"), locationId, clientId: refs.clientId });
-    const carton = licensePlates.create(tx, ctx, { warehouseId: refs.warehouseId, lpTypeId: lpType("PC"), locationId, clientId: refs.clientId });
-    tx.update(schema.licensePlates).set({ parentLpId: pallet.id, status: "Occupied" }).where(eq(schema.licensePlates.id, carton.id)).run();
-    ledger.add(tx, ctx, {
+    const lpType = async (code: string) => required((await tx.select({ id: schema.lpTypes.id }).from(schema.lpTypes)
+      .where(and(eq(schema.lpTypes.warehouseId, refs.warehouseId), eq(schema.lpTypes.code, code))).limit(1))[0], `LP type ${code}`).id;
+    const pallet = await licensePlates.create(tx, ctx, { warehouseId: refs.warehouseId, lpTypeId: await lpType("PLT"), locationId, clientId: refs.clientId });
+    const carton = await licensePlates.create(tx, ctx, { warehouseId: refs.warehouseId, lpTypeId: await lpType("PC"), locationId, clientId: refs.clientId });
+    await tx.update(schema.licensePlates).set({ parentLpId: pallet.id, status: "Occupied" }).where(eq(schema.licensePlates.id, carton.id));
+    await ledger.add(tx, ctx, {
       warehouseId: refs.warehouseId, clientId: refs.clientId, productId, locationId, lpId: carton.id, qty: 12, packType: "Each",
       type: "Inventory Adjustment", refs: { note: "Acceptance fixture LP stock" },
     });
-    tx.update(schema.licensePlates).set({ status: "Occupied" }).where(eq(schema.licensePlates.id, pallet.id)).run();
+    await tx.update(schema.licensePlates).set({ status: "Occupied" }).where(eq(schema.licensePlates.id, pallet.id));
     created.push(`LPs ${pallet.number} > ${carton.number} with 12 × ${PLAN_LP_SKU} @ MLT1-C-01`);
   }
 
   const so = schema.shipmentOrders;
-  let order = tx.select({ id: so.id, code: so.code, status: so.status }).from(so)
-    .where(and(eq(so.clientId, refs.clientId), eq(so.clientReferenceCode, FIXTURE_PLAN_ORDER_REFERENCE), isNull(so.deletedAt))).get();
+  let order = (await tx.select({ id: so.id, code: so.code, status: so.status }).from(so)
+    .where(and(eq(so.clientId, refs.clientId), eq(so.clientReferenceCode, FIXTURE_PLAN_ORDER_REFERENCE), isNull(so.deletedAt))).limit(1))[0];
   if (order) skipped.push(`order ${FIXTURE_PLAN_ORDER_REFERENCE}`);
   else {
-    const row = createOrder(tx, ctx, {
+    const row = await createOrder(tx, ctx, {
       warehouseId: refs.warehouseId, clientId: refs.clientId, clientReferenceCode: FIXTURE_PLAN_ORDER_REFERENCE,
       customerName: "Harbor Point Outfitters", customerEmail: "receiving@harborpoint.example.com",
       shipAddress: "2200 Commerce Pkwy", shipCity: "Louisville", shipState: "KY", shipZip: "40218", shipCountry: "United States",
@@ -221,24 +222,24 @@ function ensurePlanOnLps(tx: AppDb, ctx: DomainCtx, refs: { warehouseId: string;
     created.push(`order ${row.code} (6 × ${PLAN_LP_SKU})`);
   }
   if (order.status === "Open" || order.status === "Shortage") {
-    const result = allocation.allocateOrders(tx, ctx, { orderIds: [order.id], warehouseId: refs.warehouseId, runBy: "Seed" });
+    const result = await allocation.allocateOrders(tx, ctx, { orderIds: [order.id], warehouseId: refs.warehouseId, runBy: "Seed" });
     if (result.allocated.length !== 1) throw new Error(`Acceptance fixtures: ${FIXTURE_PLAN_ORDER_REFERENCE} did not allocate from LP stock`);
     created.push(`allocation ${order.code} from LP stock`);
   }
 
   const spo = schema.shipmentPlanOrders;
-  if (tx.select({ p: spo.planId }).from(spo).where(eq(spo.orderId, order.id)).get()) { skipped.push(`shipment plan for ${order.code}`); return; }
-  const gate = tx.select({ id: schema.locations.id }).from(schema.locations)
-    .where(and(eq(schema.locations.warehouseId, refs.warehouseId), eq(schema.locations.areaType, "Loading"))).orderBy(schema.locations.code).get();
-  const code = sequences.next(tx, "shipmentPlan");
+  if ((await tx.select({ p: spo.planId }).from(spo).where(eq(spo.orderId, order.id)).limit(1))[0]) { skipped.push(`shipment plan for ${order.code}`); return; }
+  const gate = (await tx.select({ id: schema.locations.id }).from(schema.locations)
+    .where(and(eq(schema.locations.warehouseId, refs.warehouseId), eq(schema.locations.areaType, "Loading"))).orderBy(schema.locations.code).limit(1))[0];
+  const code = await sequences.next(tx, "shipmentPlan");
   const planned = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
-  const plan = tx.insert(schema.shipmentPlans).values({
+  const plan = (await tx.insert(schema.shipmentPlans).values({
     code, warehouseId: refs.warehouseId, clientId: refs.clientId, status: "In Progress", truckPlateNumber: "KY 4318-TR",
     loadingGateLocationId: gate?.id ?? null, plannedShipmentAt: planned, expectedTotalWeight: 4,
     note: "Acceptance fixture: plan order allocated from license plates.", createdBy: ctx.userId, updatedBy: ctx.userId,
-  }).returning({ id: schema.shipmentPlans.id }).get();
-  tx.insert(spo).values({ planId: plan.id, orderId: order.id, status: "In Progress" }).run();
-  changeLog.recordCreate(tx, ctx, { entityType: "shipment_plan", entityId: plan.id, entityCode: code });
+  }).returning({ id: schema.shipmentPlans.id }))[0];
+  await tx.insert(spo).values({ planId: plan.id, orderId: order.id, status: "In Progress" });
+  await changeLog.recordCreate(tx, ctx, { entityType: "shipment_plan", entityId: plan.id, entityCode: code });
   created.push(`shipment plan ${code} (${order.code}, LP-allocated)`);
 }
 
@@ -246,15 +247,15 @@ function ensurePlanOnLps(tx: AppDb, ctx: DomainCtx, refs: { warehouseId: string;
  * Grants catalog keys added after the seed (e.g. `inventory.return_station.receive_return`) to the
  * system roles that get them by default. Only inserts missing grants; never revokes custom changes.
  */
-export function syncSystemRoleGrants(tx: AppDb, created: string[]): void {
-  const roles = tx.select().from(schema.roles).where(eq(schema.roles.isSystem, true)).all();
+export async function syncSystemRoleGrants(tx: AppDb, created: string[]): Promise<void> {
+  const roles = await tx.select().from(schema.roles).where(eq(schema.roles.isSystem, true));
   for (const role of roles) {
     const keys = DEFAULT_ROLE_PERMISSIONS[role.key as DefaultRoleKey];
     if (!keys) continue;
-    const have = new Set(tx.select({ p: schema.rolePermissions.permission }).from(schema.rolePermissions).where(eq(schema.rolePermissions.roleId, role.id)).all().map((r) => r.p));
+    const have = new Set((await tx.select({ p: schema.rolePermissions.permission }).from(schema.rolePermissions).where(eq(schema.rolePermissions.roleId, role.id))).map((r) => r.p));
     const missing = keys.filter((k) => !have.has(k));
     if (missing.length === 0) continue;
-    tx.insert(schema.rolePermissions).values(missing.map((permission) => ({ roleId: role.id, permission }))).onConflictDoNothing().run();
+    await tx.insert(schema.rolePermissions).values(missing.map((permission) => ({ roleId: role.id, permission }))).onConflictDoNothing();
     created.push(`${missing.length} grant(s) for role ${role.key}: ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? ", …" : ""}`);
   }
 }
@@ -264,37 +265,37 @@ export function syncSystemRoleGrants(tx: AppDb, created: string[]): void {
  * (Labor / Operational Analytics active). Existing rows, and so any activation change made in
  * the UI, are never touched.
  */
-export function upsertAppCatalog(tx: AppDb, created: string[]): void {
-  const have = new Set(tx.select({ key: schema.apps.key }).from(schema.apps).all().map((r) => r.key));
+export async function upsertAppCatalog(tx: AppDb, created: string[]): Promise<void> {
+  const have = new Set((await tx.select({ key: schema.apps.key }).from(schema.apps)).map((r) => r.key));
   const now = new Date().toISOString();
   const missing = SEED_APPS.filter(([key]) => !have.has(key));
   if (missing.length === 0) return;
-  tx.insert(schema.apps).values(missing.map(([key, name, description, category, active]) => ({
+  await tx.insert(schema.apps).values(missing.map(([key, name, description, category, active]) => ({
     key, name, description, category, isActive: active, activatedAt: active ? now : null, activatedBy: null,
-  }))).run();
+  })));
   created.push(`${missing.length} app catalog row(s): ${missing.map(([key]) => key).join(", ")}`);
 }
 
 /** Upserts every fixture. Run inside a transaction. */
-export function seedAcceptanceFixtures(tx: AppDb, ctx: DomainCtx): FixtureReport {
+export async function seedAcceptanceFixtures(tx: AppDb, ctx: DomainCtx): Promise<FixtureReport> {
   const created: string[] = [];
   const skipped: string[] = [];
-  const wh = required(tx.select().from(schema.warehouses).where(eq(schema.warehouses.code, FIXTURE_WAREHOUSE_CODE)).get(), `warehouse ${FIXTURE_WAREHOUSE_CODE}`);
-  const client = required(tx.select().from(schema.clients).where(eq(schema.clients.code, FIXTURE_CLIENT_CODE)).get(), `client ${FIXTURE_CLIENT_CODE}`);
-  syncSystemRoleGrants(tx, created);
-  upsertAppCatalog(tx, created);
-  upsertLookups(tx, created, skipped);
-  const products = upsertProducts(tx, client.id, created, skipped);
-  const locations = upsertLocations(tx, wh.id, created, skipped);
-  addStock(tx, ctx, { warehouseId: wh.id, clientId: client.id, products, locations }, created, skipped);
-  ensureOpenOrder(tx, ctx, { warehouseId: wh.id, clientId: client.id, products }, created, skipped);
-  ensurePlanOnLps(tx, ctx, { warehouseId: wh.id, clientId: client.id, products, locations }, created, skipped);
+  const wh = required((await tx.select().from(schema.warehouses).where(eq(schema.warehouses.code, FIXTURE_WAREHOUSE_CODE)).limit(1))[0], `warehouse ${FIXTURE_WAREHOUSE_CODE}`);
+  const client = required((await tx.select().from(schema.clients).where(eq(schema.clients.code, FIXTURE_CLIENT_CODE)).limit(1))[0], `client ${FIXTURE_CLIENT_CODE}`);
+  await syncSystemRoleGrants(tx, created);
+  await upsertAppCatalog(tx, created);
+  await upsertLookups(tx, created, skipped);
+  const products = await upsertProducts(tx, client.id, created, skipped);
+  const locations = await upsertLocations(tx, wh.id, created, skipped);
+  await addStock(tx, ctx, { warehouseId: wh.id, clientId: client.id, products, locations }, created, skipped);
+  await ensureOpenOrder(tx, ctx, { warehouseId: wh.id, clientId: client.id, products }, created, skipped);
+  await ensurePlanOnLps(tx, ctx, { warehouseId: wh.id, clientId: client.id, products, locations }, created, skipped);
   // M04: hospital HOSP-01 (Hospital group) + packable tote / location / cart / pack-short orders.
-  const stations = seedStationFixtures(tx, ctx);
+  const stations = await seedStationFixtures(tx, ctx);
   created.push(...stations.created);
   skipped.push(...stations.skipped);
   // M09: Product Listings "Suggested" demo rows (Bluebird & Main Shopify).
-  const listings = ensureDemoSuggestedListings(tx, ctx);
+  const listings = await ensureDemoSuggestedListings(tx, ctx);
   created.push(...listings.created.map((sku) => `listing ${sku}`));
   skipped.push(...listings.skipped.map((sku) => `listing ${sku}`));
   return { created, skipped };

@@ -11,15 +11,15 @@ import type { GridQuery } from "@/server/query/grid-query";
 import { exportColumnsOf, type ReportDef } from "@/lib/grid-defs/reports/types";
 import { reportZoneOffset, type ReportPage, type ReportQuery } from "./reports-grid";
 
-export type ReportLister = (db: AppDb, auth: AuthContext, query: ReportQuery) => ReportPage<Record<string, unknown>>;
+export type ReportLister = (db: AppDb, auth: AuthContext, query: ReportQuery) => Promise<ReportPage<Record<string, unknown>>>;
 
 export function reportListRoute(def: ReportDef, list: ReportLister) {
   return defineRoute({
     name: `GET ${def.path}`,
     permission: def.permission,
-    handler: ({ db, auth, grid }) => {
-      const query = { ...grid(), tzOffsetMinutes: reportZoneOffset(db, auth.viewScope.warehouseIds) };
-      const { rows, total } = list(db, auth, query);
+    handler: async ({ db, auth, grid }) => {
+      const query = { ...grid(), tzOffsetMinutes: await reportZoneOffset(db, auth.viewScope.warehouseIds) };
+      const { rows, total } = await list(db, auth, query);
       return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
     },
   });
@@ -28,8 +28,8 @@ export function reportListRoute(def: ReportDef, list: ReportLister) {
 export function reportExportProvider(def: ReportDef, list: ReportLister): ExportProvider {
   return {
     columns: exportColumnsOf(def).filter((c) => c.key !== "action"),
-    fetchPage: (ctx, page, pageSize): ExportPage => {
-      const result = list(ctx.db, ctx.auth, { ...ctx.query, page, pageSize, tzOffsetMinutes: reportZoneOffset(ctx.db, ctx.auth.viewScope.warehouseIds) });
+    fetchPage: async (ctx, page, pageSize): Promise<ExportPage> => {
+      const result = await list(ctx.db, ctx.auth, { ...ctx.query, page, pageSize, tzOffsetMinutes: await reportZoneOffset(ctx.db, ctx.auth.viewScope.warehouseIds) });
       return { rows: result.rows, total: result.total };
     },
   };

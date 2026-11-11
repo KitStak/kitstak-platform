@@ -16,9 +16,9 @@ const params = z.object({ id: z.string().trim().min(1).max(64) });
 export const GET = defineRoute({
   permission: WO_PERMISSIONS.view,
   params,
-  handler: ({ db, auth, params: p }) => {
-    const detail = getWorkOrderDetail(db, auth.scope, p.id);
-    return { ...detail, disassembledQty: disassembledQty(db, detail.workOrder.id, detail.workOrder.kitProductId), canReopenInProcess: canReopenInProcess() };
+  handler: async ({ db, auth, params: p }) => {
+    const detail = await getWorkOrderDetail(db, auth.scope, p.id);
+    return { ...detail, disassembledQty: await disassembledQty(db, detail.workOrder.id, detail.workOrder.kitProductId), canReopenInProcess: canReopenInProcess() };
   },
 });
 
@@ -26,19 +26,19 @@ export const PATCH = defineRoute({
   permission: WO_PERMISSIONS.edit,
   params,
   body: z.unknown(),
-  handler: ({ db, auth, actor, params: p, body: raw }) => {
+  handler: async ({ db, auth, actor, params: p, body: raw }) => {
     const body = plannerBody(auth, workOrderUpdateSchema, raw);
-    const record = updateWorkOrder(db, woCtx(actor, auth), p.id, body.version, body.data);
-    return getWorkOrderRow(db, auth.scope, record.id);
+    const record = await updateWorkOrder(db, woCtx(actor, auth), p.id, body.version, body.data);
+    return await getWorkOrderRow(db, auth.scope, record.id);
   },
 });
 
 export const DELETE = defineRoute({
   permission: WO_PERMISSIONS.delete,
   params,
-  handler: ({ db, auth, actor, params: p }) => {
+  handler: async ({ db, auth, actor, params: p }) => {
     assertPlanner(auth);
-    const record = deleteWorkOrder(db, woCtx(actor, auth), p.id);
+    const record = await deleteWorkOrder(db, woCtx(actor, auth), p.id);
     return { id: record.id, code: record.code };
   },
 });

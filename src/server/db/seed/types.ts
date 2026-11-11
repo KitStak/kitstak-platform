@@ -4,6 +4,7 @@ import type { DomainCtx, Tx } from "@/server/domain/types";
 import type { FileStore } from "@/server/files";
 import type { Rng } from "../seed-data";
 import { setClock } from "./runtime";
+import { withWriteTx } from "@/server/db/sql";
 
 export interface SeedEnv {
   readonly db: AppDb;
@@ -28,9 +29,9 @@ export const integrationCtx: DomainCtx = { userId: null, source: "Integration" }
  * write lock up front, so a dev server writing to the same file makes us wait (busy
  * timeout) instead of failing with SQLITE_BUSY on a read-to-write upgrade.
  */
-export function txAt<T>(env: SeedEnv, ms: number, fn: (tx: Tx) => T): T {
+export async function txAt<T>(env: SeedEnv, ms: number, fn: (tx: Tx) => T): Promise<T> {
   setClock(ms);
-  return env.db.transaction((tx) => fn(tx), { behavior: "immediate" });
+  return await withWriteTx(env.db, async (tx) => fn(tx));
 }
 
 export type Id = string;

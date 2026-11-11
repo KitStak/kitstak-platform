@@ -10,10 +10,11 @@ import { AppError } from "@/server/api/errors";
 import type { Scope } from "@/server/auth/scope";
 import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/server/query/filters";
 import { EMPTY_GRID_QUERY, type GridQuery } from "@/server/query/grid-query";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 const raw = (expr: string): SQL => sql.raw(expr);
 
-const TAG_NAMES = "(SELECT group_concat(t.name, ', ') FROM entity_tags et JOIN tags t ON t.id = et.tag_id WHERE et.entity_type = 'return_order' AND et.entity_id = ro.id)";
+const TAG_NAMES = "(SELECT string_agg((t.name)::text, ', ') FROM entity_tags et JOIN tags t ON t.id = et.tag_id WHERE et.entity_type = 'return_order' AND et.entity_id = ro.id)";
 const RETURN_ADDRESS = `COALESCE(
   (SELECT a.line1 || ', ' || a.city || COALESCE(', ' || a.state, '') || ' ' || a.postal_code FROM addresses a WHERE a.id = ro.return_address_id),
   w.address_line || ', ' || w.city || COALESCE(', ' || w.state, '') || COALESCE(' ' || w.postal_code, ''))`;
@@ -150,8 +151,8 @@ export function returnScopeSql(scope: Scope): SQL {
 const TRACKING_TOKENS = "(',' || replace(lower(coalesce(ro.tracking_number, '')), ' ', '') || ',')";
 export function trackingTokenSql(values: readonly string[], mode: "exact" | "prefix" = "exact"): SQL {
   const clean = values.map((v) => v.trim().toLowerCase().replace(/\s+/g, "")).filter(Boolean);
-  if (clean.length === 0) return sql`0`;
-  const parts = clean.map((v) => sql`instr(${raw(TRACKING_TOKENS)}, ${mode === "exact" ? `,${v},` : `,${v}`}) > 0`);
+  if (clean.length === 0) return sql`false`;
+  const parts = clean.map((v) => sql`strpos(${raw(TRACKING_TOKENS)}, ${mode === "exact" ? `,${v},` : `,${v}`}) > 0`);
   return parts.length === 1 ? (parts[0] as SQL) : sql`(${sql.join(parts, sql` OR `)})`;
 }
 
@@ -183,7 +184,8 @@ export function compileReturnOrder(query: GridQuery): SQL {
   const bad = query.sort.find((s) => !sortable.has(s.field));
   if (bad) throw new AppError("VALIDATION", `Cannot sort by "${bad.field}"`, { fieldErrors: { sort: ["Unknown sort field"] } });
   const specs = query.sort.length > 0 ? query.sort : [{ field: "createdAt", dir: "desc" as const }];
-  const parts = specs.map((s) => sql`${exprFor(s.field)} ${raw(s.dir === "asc" ? "ASC" : "DESC")}`);
+  // SQLite NULL placement (first ascending, last descending); Postgres defaults to the opposite.
+  const parts = specs.map((s) => sql`${exprFor(s.field)} ${raw(s.dir === "asc" ? "ASC NULLS FIRST" : "DESC NULLS LAST")}`);
   return sql.join([...parts, sql`rl.id ASC`], sql`, `);
 }
 
@@ -192,11 +194,11 @@ export interface ReturnListResult {
   readonly total: number;
 }
 
-export function listReturnLines(db: AppDb, scope: Scope, query: GridQuery, extra: readonly (SQL | undefined)[] = []): ReturnListResult {
+export async function listReturnLines(db: AppDb, scope: Scope, query: GridQuery, extra: readonly (SQL | undefined)[] = []): Promise<ReturnListResult> {
   const where = compileReturnWhere(query, scope, extra);
   const offset = (Math.max(1, query.page) - 1) * query.pageSize;
-  const rows = db.all<ReturnGridRow>(sql`SELECT ${raw(SELECT_LIST)} ${raw(FROM)} WHERE ${where} ORDER BY ${compileReturnOrder(query)} LIMIT ${query.pageSize} OFFSET ${offset}`);
-  const total = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n ${raw(FROM)} WHERE ${where}`)?.n ?? 0;
+  const rows = await dbAll<ReturnGridRow>(db, sql`SELECT ${raw(SELECT_LIST)} ${raw(FROM)} WHERE ${where} ORDER BY ${compileReturnOrder(query)} LIMIT ${query.pageSize} OFFSET ${offset}`);
+  const total = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n ${raw(FROM)} WHERE ${where}`))?.n ?? 0;
   return { rows, total };
 }
 
@@ -205,8 +207,8 @@ export function listReturnLines(db: AppDb, scope: Scope, query: GridQuery, extra
  * WHERE (search + every filter except status), so "All lines" always equals the unfiltered
  * grid Total and each pill equals the Total after picking it.
  */
-export function returnStatusCounts(db: AppDb, scope: Scope, query: GridQuery = EMPTY_GRID_QUERY): Readonly<Record<string, number>> {
+export async function returnStatusCounts(db: AppDb, scope: Scope, query: GridQuery = EMPTY_GRID_QUERY): Promise<Readonly<Record<string, number>>> {
   const where = compileReturnWhere({ ...query, filters: query.filters.filter((f) => f.field !== "status") }, scope);
-  const rows = db.all<{ status: string; n: number }>(sql`SELECT ro.status AS status, COUNT(*) AS n ${raw(FROM)} WHERE ${where} GROUP BY ro.status`);
+  const rows = await dbAll<{ status: string; n: number }>(db, sql`SELECT ro.status AS status, COUNT(*) AS n ${raw(FROM)} WHERE ${where} GROUP BY ro.status`);
   return Object.fromEntries(rows.map((r) => [r.status, r.n]));
 }

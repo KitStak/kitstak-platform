@@ -10,5 +10,5 @@ import { importReturns, importReturnsSchema } from "@/server/repositories/return
 export const POST = defineRoute({
   permission: RETURN_PERMISSIONS.createRma,
   body: importReturnsSchema,
-  handler: ({ db, auth, actor, body }) => importReturns(db, scopedCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await importReturns(db, scopedCtx(actor, auth), body),
 });

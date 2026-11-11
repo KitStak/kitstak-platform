@@ -23,8 +23,8 @@ export const GET = defineRoute({
     exclude: idList,
     exact: z.enum(["1", "true", "0", "false"]).optional(),
   }),
-  handler: ({ db, auth, query }) =>
-    destinationOptions(db, auth, {
+  handler: async ({ db, auth, query }) =>
+    await destinationOptions(db, auth, {
       kind: query.kind, q: query.q, warehouseId: query.warehouseId ?? null,
       productIds: query.productIds, excludeInventoryIds: query.exclude, exact: query.exact === "1" || query.exact === "true",
     }),

@@ -6,5 +6,5 @@ import { deleteWorkflows } from "@/server/repositories/workflows";
 export const POST = defineRoute({
   permission: "automation.workflows.delete",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => deleteWorkflows(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await deleteWorkflows(db, auth, actor, body.ids),
 });

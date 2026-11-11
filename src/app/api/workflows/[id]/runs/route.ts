@@ -7,9 +7,9 @@ import { listWorkflowRuns } from "@/server/repositories/workflows";
 export const GET = defineRoute({
   permission: "automation.workflows.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params, grid }) => {
+  handler: async ({ db, auth, params, grid }) => {
     const q = grid();
-    const { rows, total } = listWorkflowRuns(db, auth, params.id, q);
+    const { rows, total } = await listWorkflowRuns(db, auth, params.id, q);
     return listResult(rows, { total, page: q.page, pageSize: q.pageSize });
   },
 });

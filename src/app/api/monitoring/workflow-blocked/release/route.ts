@@ -6,5 +6,5 @@ import { releaseBlocked } from "@/server/repositories/monitoring";
 export const POST = defineRoute({
   permission: ["fulfillment.shipment_orders.edit", "automation.workflows.edit"],
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => releaseBlocked(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await releaseBlocked(db, auth, actor, body.ids),
 });

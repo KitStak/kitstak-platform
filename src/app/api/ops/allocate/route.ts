@@ -9,5 +9,5 @@ import { ALLOCATE_PERMISSION, allocateSchema, DEALLOCATE_PERMISSION, runAllocati
 export const POST = defineRoute({
   permission: [ALLOCATE_PERMISSION, DEALLOCATE_PERMISSION],
   body: allocateSchema,
-  handler: ({ db, auth, actor, body }) => runAllocation(db, auth, domainCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await runAllocation(db, auth, domainCtx(actor, auth), body),
 });

@@ -21,8 +21,8 @@ export interface AccountProfile {
 }
 
 /** The signed-in user's own profile (never another user's: keyed by the session). */
-export function loadAccountProfile(db: AppDb, auth: AuthContext): AccountProfile | null {
-  const row = db
+export async function loadAccountProfile(db: AppDb, auth: AuthContext): Promise<AccountProfile | null> {
+  const row = (await db
     .select({
       name: users.name,
       email: users.email,
@@ -35,11 +35,10 @@ export function loadAccountProfile(db: AppDb, auth: AuthContext): AccountProfile
       createdAt: users.createdAt,
     })
     .from(users)
-    .where(eq(users.id, auth.user.id))
-    .get();
+    .where(eq(users.id, auth.user.id)).limit(1))[0];
   if (!row) return null;
   const whRows = auth.scope.warehouseIds.length
-    ? db.select({ code: warehouses.code, name: warehouses.name }).from(warehouses).where(inArray(warehouses.id, [...auth.scope.warehouseIds])).all()
+    ? await db.select({ code: warehouses.code, name: warehouses.name }).from(warehouses).where(inArray(warehouses.id, [...auth.scope.warehouseIds]))
     : [];
   return {
     ...row,
@@ -52,14 +51,14 @@ export function loadAccountProfile(db: AppDb, auth: AuthContext): AccountProfile
 }
 
 /** Stored preferences with defaults filled (invalid JSON falls back to defaults). */
-export function loadAccountPreferences(db: AppDb, userId: string): UserPreferences {
-  const row = db.select({ preferences: users.preferences }).from(users).where(eq(users.id, userId)).get();
+export async function loadAccountPreferences(db: AppDb, userId: string): Promise<UserPreferences> {
+  const row = (await db.select({ preferences: users.preferences }).from(users).where(eq(users.id, userId)).limit(1))[0];
   const parsed = userPreferencesSchema.safeParse(row?.preferences ?? {});
   return parsed.success ? parsed.data : userPreferencesSchema.parse({});
 }
 
 /** Client-side mirror of the company password policy (checklist hints only; the API enforces). */
-export function loadPasswordPolicyHints(db: AppDb): PasswordPolicyHints {
-  const policy = getPasswordPolicy(db);
+export async function loadPasswordPolicyHints(db: AppDb): Promise<PasswordPolicyHints> {
+  const policy = await getPasswordPolicy(db);
   return { minLength: policy.minLength, requireUpper: policy.requireUpper, requireNumber: policy.requireNumber, requireSymbol: policy.requireSymbol };
 }

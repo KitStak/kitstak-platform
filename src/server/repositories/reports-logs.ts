@@ -15,6 +15,7 @@ import {
 } from "@/lib/grid-defs/reports/logs";
 import { GRID_EXPORTS } from "@/server/exports/grid-keys";
 import { clientIn, inList, runReport, warehouseLabel, type ReportPage } from "./reports-grid";
+import { dbAll } from "@/server/db/sql";
 
 type Row = Record<string, unknown>;
 
@@ -179,7 +180,7 @@ export function changeLogSql(auth: AuthContext): SQL {
   return sql`
     SELECT cl.id AS "id", cl.type AS "type", ${moduleExpr()} AS "module", cl.entity_type AS "entityType",
            COALESCE(cl.entity_code, '—') || COALESCE(' / ' || ${lineSkuExpr()}, '') AS "code", ${lineSkuExpr()} AS "lineSku", ${hrefExpr()} AS "href",
-           EXISTS (SELECT 1 FROM change_log d WHERE d.entity_type = cl.entity_type AND d.entity_id = cl.entity_id AND d.type = 'Delete') AS "recordDeleted",
+           (EXISTS (SELECT 1 FROM change_log d WHERE d.entity_type = cl.entity_type AND d.entity_id = cl.entity_id AND d.type = 'Delete'))::int AS "recordDeleted",
            COALESCE(cl.field_label, cl.field) AS "property", cl.field AS "field",
            cl.from_value AS "fromValue", cl.to_value AS "toValue", cl.message AS "message",
            cl.at AS "at", COALESCE(NULLIF(u.name, ''), cl.source, u.email) AS "source", COALESCE(u.email, cl.source) AS "sourceDetail", u.name AS "userName"
@@ -193,11 +194,11 @@ export function changeLogSql(auth: AuthContext): SQL {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Every id-like value → readable code/name (so the grid never shows a raw UUID). */
-export function resolveIds(db: AppDb, ids: readonly string[]): Map<string, string> {
+export async function resolveIds(db: AppDb, ids: readonly string[]): Promise<Map<string, string>> {
   const unique = [...new Set(ids)];
   if (unique.length === 0) return new Map();
   const list = sql.join(unique.map((v) => sql`${v}`), sql`, `);
-  const rows = db.all<{ id: string; label: string }>(sql`
+  const rows = await dbAll<{ id: string; label: string }>(db, sql`
     SELECT id, code AS label FROM shipment_packages WHERE id IN (${list})
     UNION ALL SELECT id, code FROM locations WHERE id IN (${list})
     UNION ALL SELECT id, name FROM users WHERE id IN (${list})
@@ -216,10 +217,10 @@ export function resolveIds(db: AppDb, ids: readonly string[]): Map<string, strin
   return new Map(rows.map((r) => [r.id, r.label]));
 }
 
-export function presentChangeLogRows(db: AppDb, rows: readonly Row[]): Row[] {
+export async function presentChangeLogRows(db: AppDb, rows: readonly Row[]): Promise<Row[]> {
   const inMessages = rows.flatMap((r) => (typeof r.message === "string" ? r.message.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? [] : []));
   const ids = [...rows.flatMap((r) => [r.fromValue, r.toValue]).filter((v): v is string => typeof v === "string" && UUID_RE.test(v)), ...inMessages];
-  const names = resolveIds(db, ids);
+  const names = await resolveIds(db, ids);
   const show = (v: unknown): string | null => {
     if (typeof v !== "string" || v === "") return null;
     return UUID_RE.test(v) ? names.get(v) ?? "Removed record" : v;
@@ -267,9 +268,9 @@ export function presentMessage(message: unknown, names: ReadonlyMap<string, stri
     .trim();
 }
 
-export function listChangeLog(db: AppDb, auth: AuthContext, query: GridQuery): ReportPage<Row> {
-  const page = runReport<Row>(db, changeLogSql(auth), CHANGE_LOG_DEF, query);
-  return { rows: presentChangeLogRows(db, page.rows), total: page.total };
+export async function listChangeLog(db: AppDb, auth: AuthContext, query: GridQuery): Promise<ReportPage<Row>> {
+  const page = await runReport<Row>(db, changeLogSql(auth), CHANGE_LOG_DEF, query);
+  return { rows: await presentChangeLogRows(db, page.rows), total: page.total };
 }
 
 /* ------------------------------------------------------ transaction history */
@@ -355,8 +356,8 @@ export function transactionsSql(auth: AuthContext): SQL {
     WHERE ${inList(sql`t.warehouse_id`, auth.viewScope.warehouseIds)} AND ${clientIn(sql`t.client_id`, auth.viewScope.clientIds)}`;
 }
 
-export const listTransactions = (db: AppDb, auth: AuthContext, q: GridQuery): ReportPage<Row> =>
-  runReport<Row>(db, transactionsSql(auth), TRANSACTION_HISTORY_DEF, q);
+export const listTransactions = async (db: AppDb, auth: AuthContext, q: GridQuery): Promise<ReportPage<Row>> =>
+  await runReport<Row>(db, transactionsSql(auth), TRANSACTION_HISTORY_DEF, q);
 
 export function serialTransactionsSql(auth: AuthContext): SQL {
   return sql`
@@ -392,8 +393,8 @@ export function serialTransactionsSql(auth: AuthContext): SQL {
     WHERE ${inList(sql`t.warehouse_id`, auth.viewScope.warehouseIds)} AND ${clientIn(sql`t.client_id`, auth.viewScope.clientIds)}`;
 }
 
-export const listSerialTransactions = (db: AppDb, auth: AuthContext, q: GridQuery): ReportPage<Row> =>
-  runReport<Row>(db, serialTransactionsSql(auth), SERIAL_TRANSACTIONS_DEF, q);
+export const listSerialTransactions = async (db: AppDb, auth: AuthContext, q: GridQuery): Promise<ReportPage<Row>> =>
+  await runReport<Row>(db, serialTransactionsSql(auth), SERIAL_TRANSACTIONS_DEF, q);
 
 /* -------------------------------------------------------------- missing log */
 
@@ -421,8 +422,8 @@ export function missingLogSql(auth: AuthContext): SQL {
     WHERE ${inList(sql`m.warehouse_id`, auth.viewScope.warehouseIds)} AND ${clientIn(sql`m.client_id`, auth.viewScope.clientIds)}`;
 }
 
-export function listMissingLog(db: AppDb, auth: AuthContext, query: GridQuery): ReportPage<Row> {
-  const page = runReport<Row>(db, missingLogSql(auth), MISSING_LOG_DEF, query);
+export async function listMissingLog(db: AppDb, auth: AuthContext, query: GridQuery): Promise<ReportPage<Row>> {
+  const page = await runReport<Row>(db, missingLogSql(auth), MISSING_LOG_DEF, query);
   return { rows: page.rows.map((r) => ({ ...r, isRetain: Boolean(r.isRetain) })), total: page.total };
 }
 
@@ -470,17 +471,17 @@ export function exportHistorySql(auth: AuthContext): SQL {
     SELECT b.id AS "id", ${exportTypeExpr()} AS "title", b.grid_key AS "gridKey", b.created_at AS "createdAt", b.finished_at AS "finishedAt",
            b.row_count AS "rowCount", b.error_message AS "errorMessage", b.status AS "status", b.progress AS "progress",
            b.file_id AS "fileId", f.name AS "fileName", b.query AS "query", COALESCE(u.name, u.email) AS "exportedBy",
-           CASE WHEN ('&' || COALESCE(b.query, '')) LIKE '%&f.%' OR ('&' || COALESCE(b.query, '')) LIKE '%&q=_%' THEN 1 ELSE 0 END AS "hasFilters",
+           CASE WHEN ('&' || COALESCE(b.query, '')) ILIKE '%&f.%' OR ('&' || COALESCE(b.query, '')) ILIKE '%&q=_%' THEN 1 ELSE 0 END AS "hasFilters",
            CASE WHEN b.file_id IS NOT NULL AND b.status = 'completed' THEN '/api/files/' || b.file_id END AS "downloadHref",
            CASE WHEN b.file_id IS NOT NULL AND b.status = 'completed' THEN 'Download' WHEN b.status = 'error' THEN 'No file' ELSE 'Preparing' END AS "action"
     FROM background_tasks b
     LEFT JOIN files f ON f.id = b.file_id
     LEFT JOIN users u ON u.id = b.user_id
-    WHERE b.kind = 'export' AND b.user_id = ${auth.user.id} AND (b.grid_key IS NULL OR b.grid_key NOT LIKE ${`${DEV_GRID_KEY_PREFIX}%`})`;
+    WHERE b.kind = 'export' AND b.user_id = ${auth.user.id} AND (b.grid_key IS NULL OR b.grid_key NOT ILIKE ${`${DEV_GRID_KEY_PREFIX}%`})`;
 }
 
-export function listExportHistory(db: AppDb, auth: AuthContext, q: GridQuery): ReportPage<Row> {
-  const page = runReport<Row>(db, exportHistorySql(auth), EXPORT_HISTORY_DEF, q);
+export async function listExportHistory(db: AppDb, auth: AuthContext, q: GridQuery): Promise<ReportPage<Row>> {
+  const page = await runReport<Row>(db, exportHistorySql(auth), EXPORT_HISTORY_DEF, q);
   return {
     rows: page.rows.map((r) => {
       const { query, ...rest } = r as Row & { query?: unknown };

@@ -6,5 +6,5 @@ import { getMissing } from "@/server/repositories/monitoring";
 export const GET = defineRoute({
   permission: "integrations.integration_monitoring.view",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getMissing(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await getMissing(db, auth, params.id),
 });

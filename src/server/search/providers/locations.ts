@@ -2,7 +2,8 @@
  * Search provider "locations" (Locations). Matches location code and barcode inside the
  * caller's warehouse scope (scopedWhere); M10 may replace it.
  */
-import { and, asc, eq, or, type SQL } from "drizzle-orm";
+import { and, eq, or, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import { scopedWhere } from "@/server/auth/scope";
 import { locations, warehouses } from "@/server/db/schema";
 import { COUNT_ALL, containsText, matchRank } from "../match";
@@ -22,16 +23,15 @@ export const provider: SearchProvider = {
   configured: true,
   permission: "settings.locations.view",
   seeAllHref: (q) => listSearchHref("/locations", q),
-  count: (ctx) => ctx.db.select({ n: COUNT_ALL }).from(locations).where(where(ctx)).get()?.n ?? 0,
-  search: (ctx) =>
-    ctx.db
+  count: async (ctx) => (await ctx.db.select({ n: COUNT_ALL }).from(locations).where(where(ctx)).limit(1))[0]?.n ?? 0,
+  search: async (ctx) =>
+    (await ctx.db
       .select({ id: locations.id, code: locations.code, barcode: locations.barcode, zone: locations.zone, type: locations.type, locationType: locations.locationType, warehouseCode: warehouses.code })
       .from(locations)
       .innerJoin(warehouses, eq(warehouses.id, locations.warehouseId))
       .where(where(ctx))
       .orderBy(matchRank(locations.code, ctx.q), asc(locations.code))
-      .limit(ctx.limit)
-      .all()
+      .limit(ctx.limit))
       .map((l) => ({
         id: l.id,
         title: l.code,

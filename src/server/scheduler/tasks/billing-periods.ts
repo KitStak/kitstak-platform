@@ -12,8 +12,8 @@ export const task: SchedulerTask = {
   owner: "M11",
   configured: true,
   schedule: { kind: "interval", everyMs: 60 * 60_000 },
-  run: ({ db, now }) => {
-    const result = autoCalculateDue(db, now);
+  run: async ({ db, now }) => {
+    const result = await autoCalculateDue(db, now);
     if (result.calculated === 0 && result.failed === 0) return { status: "skipped", message: `No closed billing periods to calculate (${result.skipped} contracts up to date)` };
     return { status: "ok", message: `${result.calculated} bills calculated${result.failed ? `, ${result.failed} failed` : ""}` };
   },

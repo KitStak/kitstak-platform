@@ -7,9 +7,9 @@ import { duplicateRole } from "@/server/repositories/roles";
 export const POST = defineRoute({
   permission: "settings.roles.create",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params, audit }) => {
-    const role = duplicateRole(db, auth, actor, params.id);
-    audit({ action: "role.duplicate", entity: "role", entityId: role.id, detail: { from: params.id, name: role.name } });
+  handler: async ({ db, auth, actor, params, audit }) => {
+    const role = await duplicateRole(db, auth, actor, params.id);
+    await audit({ action: "role.duplicate", entity: "role", entityId: role.id, detail: { from: params.id, name: role.name } });
     return created(role);
   },
 });

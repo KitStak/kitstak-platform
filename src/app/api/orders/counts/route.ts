@@ -5,5 +5,5 @@ import { orderViewCounts } from "@/server/repositories/orders";
 
 export const GET = defineRoute({
   permission: ORDER_PERMISSIONS.view,
-  handler: ({ db, auth }) => orderViewCounts(db, auth.viewScope),
+  handler: async ({ db, auth }) => await orderViewCounts(db, auth.viewScope),
 });

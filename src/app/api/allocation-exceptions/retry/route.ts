@@ -8,5 +8,5 @@ import { orderIdsOfExceptions, retryAllocation } from "@/server/repositories/wav
 export const POST = defineRoute({
   permission: "fulfillment.shipment_orders.picking_job_operations",
   body: z.object({ ids: bulkIdsSchema }),
-  handler: ({ db, auth, actor, body }) => withM03Actor(db, actor, auth, () => retryAllocation(db, domainCtx(actor, auth), orderIdsOfExceptions(db, body.ids), auth.user.name || auth.user.email)),
+  handler: async ({ db, auth, actor, body }) => await withM03Actor(db, actor, auth, async () => await retryAllocation(db, domainCtx(actor, auth), await orderIdsOfExceptions(db, body.ids), auth.user.name || auth.user.email)),
 });

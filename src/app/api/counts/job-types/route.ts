@@ -10,9 +10,9 @@ import { domainCtx } from "@/server/repositories/platform-common";
 export const GET = defineRoute({
   permission: COUNT_ANY_VIEW,
   query: z.object({ warehouseId: z.string().min(1).max(64) }),
-  handler: ({ db, auth, query }) => {
+  handler: async ({ db, auth, query }) => {
     if (!hasWarehouse(auth.scope, query.warehouseId)) throw notFoundError("Warehouse");
-    return countJobTypes(db, query.warehouseId);
+    return await countJobTypes(db, query.warehouseId);
   },
 });
 
@@ -20,5 +20,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.job_types.create",
   body: z.object({ warehouseId: z.string().min(1).max(64) }),
-  handler: ({ db, auth, actor, body }) => ensureDefaultCountJobType(db, domainCtx(actor, auth), auth, body.warehouseId),
+  handler: async ({ db, auth, actor, body }) => await ensureDefaultCountJobType(db, domainCtx(actor, auth), auth, body.warehouseId),
 });

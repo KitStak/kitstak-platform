@@ -22,12 +22,12 @@ export type PasswordPolicy = z.infer<typeof passwordPolicySchema>;
 export const DEFAULT_PASSWORD_POLICY: PasswordPolicy = passwordPolicySchema.parse({});
 
 /** Reads the company policy; invalid stored JSON falls back to defaults. */
-export function getPasswordPolicy(db: AppDb): PasswordPolicy {
-  const row = db
+export async function getPasswordPolicy(db: AppDb): Promise<PasswordPolicy> {
+  const [row] = await db
     .select({ policy: companySettings.passwordPolicy })
     .from(companySettings)
     .where(eq(companySettings.id, "company"))
-    .get();
+    .limit(1);
   const parsed = passwordPolicySchema.safeParse(row?.policy ?? {});
   return parsed.success ? parsed.data : DEFAULT_PASSWORD_POLICY;
 }

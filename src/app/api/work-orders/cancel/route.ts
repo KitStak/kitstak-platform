@@ -8,11 +8,11 @@ import { cancelWorkOrder } from "@/server/repositories/work-orders-commands";
 export const POST = defineRoute({
   permission: WO_PERMISSIONS.edit,
   body: z.unknown(),
-  handler: ({ db, auth, actor, body: raw }) => {
+  handler: async ({ db, auth, actor, body: raw }) => {
     const body = plannerBody(auth, idsBodySchema, raw);
     const ctx = woCtx(actor, auth);
-    return runBulk(db, body.ids, (tx, id) => {
-      cancelWorkOrder(tx, ctx, id);
+    return await runBulk(db, body.ids, async (tx, id) => {
+      await cancelWorkOrder(tx, ctx, id);
     });
   },
 });

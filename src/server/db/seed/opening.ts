@@ -67,23 +67,23 @@ function slotsFor(w: World, fac: WarehouseFacility, p: ProductRef, cursor: { res
   return out;
 }
 
-function postSlot(w: World, tx: Tx, fac: WarehouseFacility, p: ProductRef, s: Slot, reasonId: Id): void {
+async function postSlot(w: World, tx: Tx, fac: WarehouseFacility, p: ProductRef, s: Slot, reasonId: Id): Promise<void> {
   const ctx = adminCtx(w);
   if (p.trackSerial) {
-    ledger.recordReceipt(tx, ctx, {
+    await ledger.recordReceipt(tx, ctx, {
       type: "Add Inventory", warehouseId: fac.id, clientId: p.clientId, productId: p.id, quantity: s.qty, locationId: s.locationId, lpId: s.lp?.id ?? null,
       note: MIGRATION_NOTE, serials: nextSerials(p.sku, s.qty),
     });
     return;
   }
-  ledger.add(tx, ctx, {
+  await ledger.add(tx, ctx, {
     warehouseId: fac.id, clientId: p.clientId, productId: p.id, locationId: s.locationId, lpId: s.lp?.id ?? null, lotNumber: s.lot, expiryDate: s.expiry,
     packType: p.uom, qty: s.qty, receivedAt: isoOf(s.receivedMs), refs: { adjustmentReasonId: reasonId, note: MIGRATION_NOTE },
   });
 }
 
 /** Posts the opening balance for both warehouses. Returns the number of buckets created. */
-export function postOpeningBalance(w: World, tx: Tx, atMs: number): number {
+export async function postOpeningBalance(w: World, tx: Tx, atMs: number): Promise<number> {
   const reasonId = lookupId(w.lookups, "adjustment_reason", "Opening Balance");
   let buckets = 0;
   for (const fac of [w.facility.MLT1, w.facility.KS2]) {
@@ -91,7 +91,7 @@ export function postOpeningBalance(w: World, tx: Tx, atMs: number): number {
     const scale = fac.code === "MLT1" ? 1 : 0.45;
     for (const p of fac.products) {
       for (const slot of slotsFor(w, fac, p, cursor, scale, atMs)) {
-        postSlot(w, tx, fac, p, slot, reasonId);
+        await postSlot(w, tx, fac, p, slot, reasonId);
         buckets += 1;
       }
     }

@@ -3,7 +3,8 @@
  * any pack-type barcode, FNSKU and name inside the caller's client scope.
  */
 import { PRODUCT_READ_PERMISSIONS } from "@/lib/grid-defs/products/permissions";
-import { and, asc, eq, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, or, sql, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import { scopedWhere } from "@/server/auth/scope";
 import { clients, products } from "@/server/db/schema";
 import { COUNT_ALL, containsText, matchRank } from "../match";
@@ -33,16 +34,15 @@ export const provider: SearchProvider = {
   configured: true,
   permission: PRODUCT_READ_PERMISSIONS,
   seeAllHref: (q) => listSearchHref("/products", q),
-  count: (ctx) => ctx.db.select({ n: COUNT_ALL }).from(products).innerJoin(clients, eq(clients.id, products.clientId)).where(where(ctx)).get()?.n ?? 0,
-  search: (ctx) =>
-    ctx.db
+  count: async (ctx) => (await ctx.db.select({ n: COUNT_ALL }).from(products).innerJoin(clients, eq(clients.id, products.clientId)).where(where(ctx)).limit(1))[0]?.n ?? 0,
+  search: async (ctx) =>
+    (await ctx.db
       .select({ id: products.id, sku: products.sku, barcode: products.barcode, name: products.name, status: products.status, clientName: clients.name })
       .from(products)
       .innerJoin(clients, eq(clients.id, products.clientId))
       .where(where(ctx))
       .orderBy(matchRank(products.sku, ctx.q), asc(products.sku))
-      .limit(ctx.limit)
-      .all()
+      .limit(ctx.limit))
       .map((p) => ({
         id: p.id,
         title: p.sku,

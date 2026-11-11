@@ -9,9 +9,9 @@ import { listReturnLines } from "@/server/repositories/returns-grid";
 
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.view,
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listReturnLines(db, auth.viewScope, query);
+    const { rows, total } = await listReturnLines(db, auth.viewScope, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });

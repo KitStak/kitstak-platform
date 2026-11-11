@@ -60,15 +60,15 @@ describe("permission matrix: actions imply View", () => {
   });
 
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
-  it("the server normalizes a role saved with actions but no View", () => {
+  it("the server normalizes a role saved with actions but no View", async () => {
     const input = roleSchema.parse({ name: "KS-TEST no view", description: "x", category: "Operation", permissions: actions.slice(0, 3) });
-    const { id } = createRole(w.db, authFor(w), actorOf(w), input);
-    expect(getRole(w.db, id).permissions).toContain(view);
-    const before = getRole(w.db, id);
-    updateRole(w.db, authFor(w), actorOf(w), id, { ...input, permissions: [actions[4]!], version: before.version });
-    expect(new Set(getRole(w.db, id).permissions)).toEqual(new Set([actions[4], view]));
+    const { id } = await createRole(w.db, authFor(w), actorOf(w), input);
+    expect((await getRole(w.db, id)).permissions).toContain(view);
+    const before = await getRole(w.db, id);
+    await updateRole(w.db, authFor(w), actorOf(w), id, { ...input, permissions: [actions[4]!], version: before.version });
+    expect(new Set((await getRole(w.db, id)).permissions)).toEqual(new Set([actions[4], view]));
   });
 });
 
@@ -81,11 +81,11 @@ describe("global search: users, roles and zero-insensitive codes", () => {
   });
 
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
   it("finds users by email and roles by name, with deep links", async () => {
-    w.db.insert(schema.users).values({ email: "jordan.reyes@kitstak.io", name: "Jordan Reyes", passwordHash: "x", role: "operator" }).run();
-    const roleId = w.db.insert(schema.roles).values({ key: "po002210_role", name: "PO002210 Receivers", description: "Receivers", category: "Operation" }).returning().get().id;
+    await w.db.insert(schema.users).values({ email: "jordan.reyes@kitstak.io", name: "Jordan Reyes", passwordHash: "x", role: "operator" });
+    const roleId = (await w.db.insert(schema.roles).values({ key: "po002210_role", name: "PO002210 Receivers", description: "Receivers", category: "Operation" }).returning())[0].id;
     const ctx = (q: string) => ({ db: w.db, auth: authFor(w), q, limit: 5 });
     const users = await usersProvider.search(ctx("jordan.reyes@kit"));
     expect(users.map((u) => u.title)).toEqual(["Jordan Reyes"]);
@@ -125,28 +125,28 @@ describe("notification center", () => {
   });
 
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
-  it("filters by type, severity and unread, and deletes only the caller's rows", () => {
-    const other = w.db.insert(schema.users).values({ email: "o@test.io", name: "O", passwordHash: "x", role: "operator" }).returning().get().id;
-    const ins = (userId: string, kind: string, title: string, body: string, read = false) =>
-      w.db.insert(schema.notifications).values({ userId, kind, title, body, severity: "success", readAt: read ? new Date().toISOString() : null }).returning().get().id;
-    const a = ins(w.userId, "wave.completed", "Wave 1 completed", "2 jobs, 19 shortage");
-    ins(w.userId, "wave.completed", "Wave 2 completed", "1 jobs, 0 shortages", true);
-    ins(w.userId, "return.received", "RMA 7 received", "1 units");
-    const theirs = ins(other, "wave.completed", "Theirs", "x", true);
+  it("filters by type, severity and unread, and deletes only the caller's rows", async () => {
+    const other = (await w.db.insert(schema.users).values({ email: "o@test.io", name: "O", passwordHash: "x", role: "operator" }).returning())[0].id;
+    const ins = async (userId: string, kind: string, title: string, body: string, read = false) =>
+      (await w.db.insert(schema.notifications).values({ userId, kind, title, body, severity: "success", readAt: read ? new Date().toISOString() : null }).returning())[0].id;
+    const a = await ins(w.userId, "wave.completed", "Wave 1 completed", "2 jobs, 19 shortage");
+    await ins(w.userId, "wave.completed", "Wave 2 completed", "1 jobs, 0 shortages", true);
+    await ins(w.userId, "return.received", "RMA 7 received", "1 units");
+    const theirs = await ins(other, "wave.completed", "Theirs", "x", true);
     const q = (over: Record<string, string>) => notificationListQuerySchema.parse({ ...over });
-    const all = listNotifications(w.db, w.userId, q({}));
+    const all = await listNotifications(w.db, w.userId, q({}));
     expect(all.total).toBe(3);
     expect(all.types).toEqual(["return", "wave"]);
     expect(all.rows.find((r) => r.id === a)?.severity).toBe("warning");
     expect(all.rows.find((r) => r.id === a)?.body).toBe("2 jobs, 19 shortages");
-    expect(listNotifications(w.db, w.userId, q({ type: "wave" })).total).toBe(2);
-    expect(listNotifications(w.db, w.userId, q({ severity: "attention" })).rows.map((r) => r.id)).toEqual([a]);
-    expect(listNotifications(w.db, w.userId, q({ unread: "true" })).total).toBe(2);
-    expect(deleteNotifications(w.db, w.userId, { read: true }).deleted).toBe(1);
-    expect(deleteNotifications(w.db, w.userId, { ids: [theirs] }).deleted).toBe(0);
-    expect(w.db.select().from(schema.notifications).where(eq(schema.notifications.id, theirs)).get()).toBeTruthy();
+    expect((await listNotifications(w.db, w.userId, q({ type: "wave" }))).total).toBe(2);
+    expect((await listNotifications(w.db, w.userId, q({ severity: "attention" }))).rows.map((r) => r.id)).toEqual([a]);
+    expect((await listNotifications(w.db, w.userId, q({ unread: "true" }))).total).toBe(2);
+    expect((await deleteNotifications(w.db, w.userId, { read: true })).deleted).toBe(1);
+    expect((await deleteNotifications(w.db, w.userId, { ids: [theirs] })).deleted).toBe(0);
+    expect((await w.db.select().from(schema.notifications).where(eq(schema.notifications.id, theirs)).limit(1))[0]).toBeTruthy();
   });
 });
 
@@ -212,22 +212,22 @@ describe("Data Setup: order merge rule and Match With Product Groups", () => {
   });
 
   let w: World;
-  beforeEach(() => { w = createWorld(); });
+  beforeEach(async () => { w = await createWorld(); });
   afterEach(() => w.close());
-  it("saves product groups per zone with a change log and rejects unknown groups", () => {
-    const zone = w.db.insert(schema.lookupValues).values({ type: "location_zone", name: "Zone A", code: "ZA", warehouseId: w.warehouseId, meta: { priority: 1 } }).returning().get().id;
-    const g1 = w.db.insert(schema.lookupValues).values({ type: "product_group", name: "Apparel" }).returning().get().id;
-    const g2 = w.db.insert(schema.lookupValues).values({ type: "product_group", name: "Shoes" }).returning().get().id;
+  it("saves product groups per zone with a change log and rejects unknown groups", async () => {
+    const zone = (await w.db.insert(schema.lookupValues).values({ type: "location_zone", name: "Zone A", code: "ZA", warehouseId: w.warehouseId, meta: { priority: 1 } }).returning())[0].id;
+    const g1 = (await w.db.insert(schema.lookupValues).values({ type: "product_group", name: "Apparel" }).returning())[0].id;
+    const g2 = (await w.db.insert(schema.lookupValues).values({ type: "product_group", name: "Shoes" }).returning())[0].id;
     const auth = authFor(w);
-    expect(setZoneProductGroups(w.db, auth, actorOf(w), { assignments: [{ zoneId: zone, productGroupIds: [g1, g2] }] }).updated).toBe(1);
-    const row = zoneProductGroups(w.db, auth).zones.find((z) => z.id === zone)!;
+    expect((await setZoneProductGroups(w.db, auth, actorOf(w), { assignments: [{ zoneId: zone, productGroupIds: [g1, g2] }] })).updated).toBe(1);
+    const row = (await zoneProductGroups(w.db, auth)).zones.find((z) => z.id === zone)!;
     expect(new Set(row.productGroupIds)).toEqual(new Set([g1, g2]));
-    const meta = w.db.select().from(schema.lookupValues).where(eq(schema.lookupValues.id, zone)).get()!.meta as Record<string, unknown>;
+    const meta = (await w.db.select().from(schema.lookupValues).where(eq(schema.lookupValues.id, zone)).limit(1))[0]!.meta as Record<string, unknown>;
     expect(meta.priority).toBe(1);
     // No-op save changes nothing.
-    expect(setZoneProductGroups(w.db, auth, actorOf(w), { assignments: [{ zoneId: zone, productGroupIds: [g2, g1] }] }).updated).toBe(0);
-    expect(() => setZoneProductGroups(w.db, auth, actorOf(w), { assignments: [{ zoneId: zone, productGroupIds: ["00000000-0000-4000-8000-000000000000"] }] })).toThrow(/no longer exists/);
-    const logs = w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, zone)).all();
+    expect((await setZoneProductGroups(w.db, auth, actorOf(w), { assignments: [{ zoneId: zone, productGroupIds: [g2, g1] }] })).updated).toBe(0);
+    await expect(async () => await setZoneProductGroups(w.db, auth, actorOf(w), { assignments: [{ zoneId: zone, productGroupIds: ["00000000-0000-4000-8000-000000000000"] }] })).rejects.toThrow(/no longer exists/);
+    const logs = await w.db.select().from(schema.changeLog).where(eq(schema.changeLog.entityId, zone));
     expect(logs.length).toBe(1);
   });
 });

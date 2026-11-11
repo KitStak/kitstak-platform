@@ -6,5 +6,5 @@ import { algorithmsFor } from "@/server/repositories/job-types";
 export const GET = defineRoute({
   permission: ["settings.job_types.create", "settings.job_types.edit", "settings.job_types.view"],
   query: z.object({ warehouseId: z.string().min(1).max(64) }),
-  handler: ({ db, auth, query }) => algorithmsFor(db, auth, query.warehouseId),
+  handler: async ({ db, auth, query }) => await algorithmsFor(db, auth, query.warehouseId),
 });

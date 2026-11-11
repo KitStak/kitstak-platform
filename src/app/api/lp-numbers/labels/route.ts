@@ -6,5 +6,5 @@ import { lpLabelRecords } from "@/server/repositories/lp-numbers";
 export const POST = defineRoute({
   permission: "settings.lp_numbers.print_barcode",
   body: bulkIds,
-  handler: ({ db, auth, body }) => lpLabelRecords(db, auth, body.ids),
+  handler: async ({ db, auth, body }) => await lpLabelRecords(db, auth, body.ids),
 });

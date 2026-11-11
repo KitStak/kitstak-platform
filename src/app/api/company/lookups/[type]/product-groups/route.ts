@@ -16,17 +16,17 @@ function assertZone(type: string): void {
 export const GET = defineRoute({
   permission: DATA_SETUP_PERMISSION,
   params: typeParams,
-  handler: ({ db, auth, params }) => { assertZone(params.type); return zoneProductGroups(db, auth); },
+  handler: async ({ db, auth, params }) => { assertZone(params.type); return await zoneProductGroups(db, auth); },
 });
 
 export const PUT = defineRoute({
   permission: DATA_SETUP_PERMISSION,
   params: typeParams,
   body: zoneGroupsSchema,
-  handler: ({ db, auth, actor, params, body, audit }) => {
+  handler: async ({ db, auth, actor, params, body, audit }) => {
     assertZone(params.type);
-    const result = setZoneProductGroups(db, auth, actor, body);
-    audit({ action: "lookup.zone_product_groups", entity: "lookup", entityId: "location_zone", detail: { zones: body.assignments.length, updated: result.updated } });
+    const result = await setZoneProductGroups(db, auth, actor, body);
+    await audit({ action: "lookup.zone_product_groups", entity: "lookup", entityId: "location_zone", detail: { zones: body.assignments.length, updated: result.updated } });
     return result;
   },
 });

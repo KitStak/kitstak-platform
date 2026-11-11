@@ -9,5 +9,5 @@ export const POST = defineRoute({
   permission: DATA_SETUP_PERMISSION,
   params: typeParams,
   body: bulkIdsSchema.extend({ isActive: z.boolean() }),
-  handler: ({ db, auth, actor, params, body }) => setLookupsActive(db, auth, actor, defOf(params.type), body.ids, body.isActive),
+  handler: async ({ db, auth, actor, params, body }) => await setLookupsActive(db, auth, actor, defOf(params.type), body.ids, body.isActive),
 });

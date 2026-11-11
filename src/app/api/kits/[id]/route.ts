@@ -8,5 +8,5 @@ export const GET = defineRoute({
   permission: [WO_PERMISSIONS.view, KIT_PERMISSIONS.inventory],
   params: z.object({ id: z.string().trim().min(1).max(64) }),
   query: z.object({ warehouseId: z.string().trim().max(64).optional() }),
-  handler: ({ db, auth, params, query }) => getKitDetail(db, auth.scope, params.id, query.warehouseId || null),
+  handler: async ({ db, auth, params, query }) => await getKitDetail(db, auth.scope, params.id, query.warehouseId || null),
 });

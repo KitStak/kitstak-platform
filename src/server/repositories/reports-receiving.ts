@@ -56,8 +56,8 @@ export function poReceivingSql(auth: AuthContext): SQL {
     FROM lines x JOIN products p ON p.id = x.pid JOIN clients c ON c.id = x.cid JOIN warehouses w ON w.id = x.wid`;
 }
 
-export function listPoReceiving(db: AppDb, auth: AuthContext, query: GridQuery): ReportPage<Row> {
-  const page = runReport<Row>(db, poReceivingSql(auth), PO_RECEIVING_DEF, query);
+export async function listPoReceiving(db: AppDb, auth: AuthContext, query: GridQuery): Promise<ReportPage<Row>> {
+  const page = await runReport<Row>(db, poReceivingSql(auth), PO_RECEIVING_DEF, query);
   return { rows: page.rows.map((r) => ({ ...r, hasDifference: Boolean(r.hasDifference) })), total: page.total };
 }
 
@@ -76,30 +76,30 @@ export const seesTeamPerformance = (auth: Pick<AuthContext, "permissions">): boo
  * metric comes from the source records: completed tasks (pick/pack/sort/replenish), receipts
  * (PO + return), count entries. Without `db` the day falls back to the UTC date (unit tests).
  */
-export function userPerformanceSql(auth: AuthContext, sinceIso: string | null, db?: AppDb): SQL {
+export async function userPerformanceSql(auth: AuthContext, sinceIso: string | null, db?: AppDb): Promise<SQL> {
   const since = (expr: string): SQL => (sinceIso ? sql`${sql.raw(expr)} >= ${sinceIso}` : sql`1 = 1`);
   const wh = (expr: string): SQL => inList(sql.raw(expr), auth.viewScope.warehouseIds);
   const cl = (expr: string): SQL => clientIn(sql.raw(expr), auth.viewScope.clientIds);
-  const day = (colExpr: string, whExpr: string): SQL => (db ? warehouseDateSql(db, colExpr, whExpr, auth.viewScope.warehouseIds) : sql`substr(${sql.raw(colExpr)}, 1, 10)`);
+  const day = async (colExpr: string, whExpr: string): Promise<SQL> => (db ? await warehouseDateSql(db, colExpr, whExpr, auth.viewScope.warehouseIds) : sql`substr(${sql.raw(colExpr)}, 1, 10)`);
   const self = seesTeamPerformance(auth) ? sql`1 = 1` : sql`ev.uid = ${auth.user.id}`;
   return sql`
     WITH ev AS (
-      SELECT t.warehouse_id AS wid, t.executed_by_user_id AS uid, ${day("t.finished_at", "t.warehouse_id")} AS d, t.task_type AS kind,
+      SELECT t.warehouse_id AS wid, t.executed_by_user_id AS uid, ${await day("t.finished_at", "t.warehouse_id")} AS d, t.task_type AS kind,
              t.order_id AS oid, t.order_line_id AS lid, COALESCE(t.actual_qty, t.planned_qty, 0) AS qty,
              COALESCE(t.target_lp_id, t.source_lp_id) AS lp, NULL AS loc, NULL AS rid,
              CASE WHEN t.started_at IS NOT NULL AND t.started_at < t.finished_at THEN 1 ELSE 0 END AS timed,
              CASE WHEN t.started_at IS NOT NULL AND t.started_at < t.finished_at
-                  THEN MIN((julianday(t.finished_at) - julianday(t.started_at)) * 1440.0, 30) END AS mins
+                  THEN LEAST((EXTRACT(EPOCH FROM ((t.finished_at)::timestamptz - (t.started_at)::timestamptz)) / 86400.0::float8) * 1440.0::float8, 30) END AS mins
       FROM tasks t
       WHERE t.status = 'Completed' AND t.executed_by_user_id IS NOT NULL AND t.finished_at IS NOT NULL
         AND t.task_type IN ('Picking', 'Packing', 'Sorting', 'Replenishment') AND ${since("t.finished_at")} AND ${wh("t.warehouse_id")} AND ${cl("t.client_id")}
       UNION ALL
-      SELECT r.warehouse_id, u.id, ${day("r.received_at", "r.warehouse_id")}, CASE WHEN r.return_order_id IS NOT NULL OR r.type = 'Return' THEN 'Return' ELSE 'Receive' END,
+      SELECT r.warehouse_id, u.id, ${await day("r.received_at", "r.warehouse_id")}, CASE WHEN r.return_order_id IS NOT NULL OR r.type = 'Return' THEN 'Return' ELSE 'Receive' END,
              NULL, NULL, r.uom_quantity, r.lp_id, NULL, r.return_order_id, NULL, NULL
       FROM receipts r JOIN users u ON u.email = r.received_by OR u.id = r.received_by
       WHERE r.cancelled_at IS NULL AND ${since("r.received_at")} AND ${wh("r.warehouse_id")} AND ${cl("r.client_id")}
       UNION ALL
-      SELECT cp.warehouse_id, u.id, ${day("e.counted_at", "cp.warehouse_id")}, 'Count', NULL, NULL, e.counted_qty, NULL, e.location_id, NULL, NULL, NULL
+      SELECT cp.warehouse_id, u.id, ${await day("e.counted_at", "cp.warehouse_id")}, 'Count', NULL, NULL, e.counted_qty, NULL, e.location_id, NULL, NULL, NULL
       FROM count_line_entries e JOIN count_plan_lines cl ON cl.id = e.line_id JOIN count_plans cp ON cp.id = cl.plan_id
       JOIN users u ON u.email = e.counted_by OR u.id = e.counted_by
       WHERE e.counted_at IS NOT NULL AND ${since("e.counted_at")} AND ${wh("cp.warehouse_id")}
@@ -125,11 +125,11 @@ export function userPerformanceSql(auth: AuthContext, sinceIso: string | null, d
            COUNT(DISTINCT CASE WHEN kind = 'Return' THEN rid END) AS "returnedOrderQty",
            SUM(CASE WHEN timed IS NOT NULL THEN 1 ELSE 0 END) AS "taskQty",
            CASE WHEN SUM(CASE WHEN timed IS NOT NULL THEN 1 ELSE 0 END) > 0
-                THEN ROUND(SUM(COALESCE(timed, 0)) * 100.0 / SUM(CASE WHEN timed IS NOT NULL THEN 1 ELSE 0 END), 0) END AS "timedTaskPct",
-           ROUND(COALESCE(SUM(mins), 0), 1) AS "timedMinutes"
+                THEN ROUND((SUM(COALESCE(timed, 0)) * 100.0::float8 / SUM(CASE WHEN timed IS NOT NULL THEN 1 ELSE 0 END))::numeric, 0)::float8 END AS "timedTaskPct",
+           ROUND((COALESCE(SUM(mins), 0))::numeric, 1)::float8 AS "timedMinutes"
     FROM ev JOIN users u ON u.id = ev.uid JOIN warehouses w ON w.id = ev.wid
     WHERE ${self}
-    GROUP BY ev.wid, ev.uid, ev.d`;
+    GROUP BY ev.wid, ev.uid, ev.d, w.id, u.id`;
 }
 
 /**
@@ -147,6 +147,6 @@ export function periodSince(query: ReportQuery, now: Date = new Date()): string 
   return new Date(startLocal - off).toISOString();
 }
 
-export function listUserPerformance(db: AppDb, auth: AuthContext, query: ReportQuery): ReportPage<Row> {
-  return runReport<Row>(db, userPerformanceSql(auth, periodSince(query), db), USER_PERFORMANCE_DEF, query, ["period"]);
+export async function listUserPerformance(db: AppDb, auth: AuthContext, query: ReportQuery): Promise<ReportPage<Row>> {
+  return await runReport<Row>(db, await userPerformanceSql(auth, periodSince(query), db), USER_PERFORMANCE_DEF, query, ["period"]);
 }

@@ -3,7 +3,8 @@
  * `product_listings` (no synthesized rows). Commands: link to a product, unlink,
  * Never Sync, and create-product-from-listing. Every write logs to `change_log`.
  */
-import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import type { AppDb } from "@/server/api/db";
 import { AppError, conflictError, notFoundError } from "@/server/api/errors";
 import { assertInScope, hasClient, scopedWhere, type Scope } from "@/server/auth/scope";
@@ -19,6 +20,7 @@ import { compileSort, type SortableMap } from "@/server/query/sort";
 import {
   LISTING_EXCEPTION_LABELS, LISTING_EXCEPTIONS, LISTING_GRID_FIELDS, LISTING_SORT_FIELDS, type ListingException, type ListingLinkState,
 } from "@/lib/grid-defs/products/listings-grid";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 const l = schema.productListings;
 const ENTITY = "listing";
@@ -85,7 +87,7 @@ function dismissedSkuSql(): SQL {
  */
 export function suggestionSql(col: "id" | "sku" | "name" | "image_url" | "description"): SQL {
   return sql`(CASE WHEN ${l.productId} IS NULL THEN (SELECT ${sql.raw(`p.${col}`)} FROM products p WHERE p.client_id = ${l.clientId} AND lower(p.sku) = lower(${l.sellerSku})
-    AND lower(p.sku) IS NOT lower(COALESCE(${dismissedSkuSql()}, '')) LIMIT 1) ELSE NULL END)`;
+    AND lower(p.sku) IS DISTINCT FROM lower(COALESCE(${dismissedSkuSql()}, '')) LIMIT 1) ELSE NULL END)`;
 }
 
 function asException(value: unknown): ListingException | null {
@@ -137,7 +139,7 @@ function tagFilter(query: GridQuery): { filters: GridQuery["filters"]; extra: SQ
 
 export function listingWhere(scope: Scope, query: GridQuery, link: ListingLinkState | undefined): SQL | undefined {
   const text = query.q?.trim();
-  const match = (expr: SQL): SQL => (query.qm === "eq" ? sql`lower(${expr}) = lower(${text})` : sql`${expr} LIKE ${`${escapeLike(text ?? "")}%`} ESCAPE '\\'`);
+  const match = (expr: SQL): SQL => (query.qm === "eq" ? sql`lower(${expr}) = lower(${text})` : sql`${expr} ILIKE ${`${escapeLike(text ?? "")}%`} ESCAPE '\\'`);
   const search = text ? sql`(${match(sql`${l.sellerSku}`)} OR ${match(sql`${l.name}`)} OR ${match(sql`${l.channelProductId}`)})` : undefined;
   const { filters, extra } = tagFilter(query);
   const parts = [
@@ -152,7 +154,7 @@ export function listingWhere(scope: Scope, query: GridQuery, link: ListingLinkSt
 
 type Raw = Record<string, unknown>;
 
-export function listListings(db: AppDb, scope: Scope, query: GridQuery, link: ListingLinkState | undefined): { rows: ListingRow[]; total: number; counts: { linked: number; unlinked: number } } {
+export async function listListings(db: AppDb, scope: Scope, query: GridQuery, link: ListingLinkState | undefined): Promise<{ rows: ListingRow[]; total: number; counts: { linked: number; unlinked: number } }> {
   const e = expressions();
   const where = listingWhere(scope, query, link);
   const whereSql = where ? sql`WHERE ${where}` : sql``;
@@ -161,29 +163,29 @@ export function listListings(db: AppDb, scope: Scope, query: GridQuery, link: Li
   const offset = (Math.max(1, query.page) - 1) * query.pageSize;
   // Two phases (see listProducts): page the ids with only the sort expressions, then build the
   // visible rows. The suggestion lookup (lower(sku) match) no longer runs for every listing.
-  const pageIds = db.all<{ id: string }>(sql`SELECT ${l.id} AS id FROM ${l} ${whereSql} ORDER BY ${sql.join(order, sql`, `)} LIMIT ${query.pageSize} OFFSET ${offset}`).map((r) => r.id);
+  const pageIds = (await dbAll<{ id: string }>(db, sql`SELECT ${l.id} AS id FROM ${l} ${whereSql} ORDER BY ${sql.join(order, sql`, `)} LIMIT ${query.pageSize} OFFSET ${offset}`)).map((r) => r.id);
   const position = new Map(pageIds.map((id, i) => [id, i]));
-  const raw = pageIds.length === 0 ? [] : db.all<Raw>(sql`
-    SELECT ${l.id} AS id, ${l.name} AS name, ${l.imageUrl} AS imageUrl, ${e.storeName} AS storeName,
+  const raw = pageIds.length === 0 ? [] : (await dbAll<Raw>(db, sql`
+    SELECT ${l.id} AS id, ${l.name} AS name, ${l.imageUrl} AS "imageUrl", ${e.storeName} AS "storeName",
       (SELECT c.provider FROM channel_connections c WHERE c.id = ${l.channelConnectionId}) AS provider,
-      ${l.channelConnectionId} AS channelConnectionId, ${l.clientId} AS clientId, ${e.clientName} AS clientName,
-      ${l.sellerSku} AS sellerSku, ${l.channelProductId} AS channelProductId, ${l.description} AS description,
-      ${l.storePrice} AS storePrice, ${l.productId} AS productId, ${e.productSku} AS productSku,
-      (SELECT p.name FROM products p WHERE p.id = ${l.productId}) AS productName, ${l.neverSync} AS neverSync,
-      ${e.productType} AS productType, ${e.productGroup} AS productGroup, ${l.linkedAt} AS linkedAt,
-      ${e.exception} AS exception, ${l.createdAt} AS createdAt, ${l.version} AS version,
-      ${suggestionSql("id")} AS suggestedProductId,
-      (SELECT p.image_url FROM products p WHERE p.id = ${l.productId}) AS productImageUrl,
-      (SELECT p.description FROM products p WHERE p.id = ${l.productId}) AS productDescription,
-      (SELECT p.status FROM products p WHERE p.id = ${l.productId}) AS productStatus
-    FROM ${l} WHERE ${l.id} IN (${sql.join(pageIds.map((id) => sql`${id}`), sql`, `)})`)
+      ${l.channelConnectionId} AS "channelConnectionId", ${l.clientId} AS "clientId", ${e.clientName} AS "clientName",
+      ${l.sellerSku} AS "sellerSku", ${l.channelProductId} AS "channelProductId", ${l.description} AS description,
+      ${l.storePrice} AS "storePrice", ${l.productId} AS "productId", ${e.productSku} AS "productSku",
+      (SELECT p.name FROM products p WHERE p.id = ${l.productId}) AS "productName", ${l.neverSync} AS "neverSync",
+      ${e.productType} AS "productType", ${e.productGroup} AS "productGroup", ${l.linkedAt} AS "linkedAt",
+      ${e.exception} AS exception, ${l.createdAt} AS "createdAt", ${l.version} AS version,
+      ${suggestionSql("id")} AS "suggestedProductId",
+      (SELECT p.image_url FROM products p WHERE p.id = ${l.productId}) AS "productImageUrl",
+      (SELECT p.description FROM products p WHERE p.id = ${l.productId}) AS "productDescription",
+      (SELECT p.status FROM products p WHERE p.id = ${l.productId}) AS "productStatus"
+    FROM ${l} WHERE ${l.id} IN (${sql.join(pageIds.map((id) => sql`${id}`), sql`, `)})`))
     .sort((a, b) => (position.get(String(a.id)) ?? 0) - (position.get(String(b.id)) ?? 0));
   const ids = raw.map((r) => String(r.id));
   // Suggested product details in one lookup (the SKU match itself runs once per visible row).
   const suggestedIds = [...new Set(raw.map((r) => r.suggestedProductId).filter((v): v is string => typeof v === "string"))];
   const suggested = new Map(suggestedIds.length
-    ? db.select({ id: schema.products.id, sku: schema.products.sku, name: schema.products.name, imageUrl: schema.products.imageUrl, description: schema.products.description })
-      .from(schema.products).where(inArray(schema.products.id, suggestedIds)).all().map((x) => [x.id, x] as const)
+    ? (await db.select({ id: schema.products.id, sku: schema.products.sku, name: schema.products.name, imageUrl: schema.products.imageUrl, description: schema.products.description })
+      .from(schema.products).where(inArray(schema.products.id, suggestedIds))).map((x) => [x.id, x] as const)
     : []);
   for (const r of raw) {
     const sp = typeof r.suggestedProductId === "string" ? suggested.get(r.suggestedProductId) : undefined;
@@ -193,9 +195,9 @@ export function listListings(db: AppDb, scope: Scope, query: GridQuery, link: Li
     r.suggestedProductDescription = sp?.description ?? null;
   }
   const tagRows = ids.length
-    ? db.select({ entityId: schema.entityTags.entityId, id: schema.tags.id, name: schema.tags.name, color: schema.tags.color }).from(schema.entityTags)
+    ? await db.select({ entityId: schema.entityTags.entityId, id: schema.tags.id, name: schema.tags.name, color: schema.tags.color }).from(schema.entityTags)
       .innerJoin(schema.tags, eq(schema.tags.id, schema.entityTags.tagId))
-      .where(and(eq(schema.entityTags.entityType, ENTITY), inArray(schema.entityTags.entityId, ids))).orderBy(asc(schema.tags.name)).all()
+      .where(and(eq(schema.entityTags.entityType, ENTITY), inArray(schema.entityTags.entityId, ids))).orderBy(asc(schema.tags.name))
     : [];
   const rows = raw.map((r): ListingRow => {
     const tags = tagRows.filter((t) => t.entityId === r.id).map((t) => ({ id: t.id, name: t.name, color: t.color }));
@@ -217,10 +219,10 @@ export function listListings(db: AppDb, scope: Scope, query: GridQuery, link: Li
       exception: asException(r.exception), exceptionLabel: asException(r.exception) ? LISTING_EXCEPTION_LABELS[asException(r.exception) as ListingException] : null,
     };
   });
-  const total = Number(db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM ${l} ${whereSql}`)?.n ?? 0);
+  const total = Number((await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM ${l} ${whereSql}`))?.n ?? 0);
   const scopeWhere = scopedWhere(l, scope);
   const countSql = (linked: boolean) => sql`SELECT COUNT(*) AS n FROM ${l} WHERE ${linked ? sql`${l.productId} IS NOT NULL` : sql`${l.productId} IS NULL`}${scopeWhere ? sql` AND ${scopeWhere}` : sql``}`;
-  const counts = { linked: Number(db.get<{ n: number }>(countSql(true))?.n ?? 0), unlinked: Number(db.get<{ n: number }>(countSql(false))?.n ?? 0) };
+  const counts = { linked: Number((await dbGet<{ n: number }>(db, countSql(true)))?.n ?? 0), unlinked: Number((await dbGet<{ n: number }>(db, countSql(false)))?.n ?? 0) };
   return { rows, total, counts };
 }
 
@@ -241,17 +243,17 @@ export interface ListingExceptionRow {
  * Open listing exceptions for M12 monitoring ("Product Listing Exceptions"). Derived,
  * so linking a listing (or fixing its SKU) clears it with no extra bookkeeping.
  */
-export function listListingExceptions(db: AppDb, scope: Scope, kind?: ListingException): { rows: ListingExceptionRow[]; counts: Record<ListingException, number> } {
+export async function listListingExceptions(db: AppDb, scope: Scope, kind?: ListingException): Promise<{ rows: ListingExceptionRow[]; counts: Record<ListingException, number> }> {
   const ex = listingExceptionSql();
   const scopeWhere = scopedWhere(l, scope);
-  const raw = db.all<Raw>(sql`
+  const raw = await dbAll<Raw>(db, sql`
     SELECT * FROM (
-      SELECT ${l.id} AS id, ${ex} AS exception, ${l.sellerSku} AS sellerSku, ${l.name} AS name,
-        (SELECT c.store_name FROM channel_connections c WHERE c.id = ${l.channelConnectionId}) AS storeName,
-        (SELECT c.name FROM clients c WHERE c.id = ${l.clientId}) AS clientName,
-        ${l.productId} AS productId, (SELECT p.sku FROM products p WHERE p.id = ${l.productId}) AS productSku, ${l.createdAt} AS createdAt
+      SELECT ${l.id} AS id, ${ex} AS exception, ${l.sellerSku} AS "sellerSku", ${l.name} AS name,
+        (SELECT c.store_name FROM channel_connections c WHERE c.id = ${l.channelConnectionId}) AS "storeName",
+        (SELECT c.name FROM clients c WHERE c.id = ${l.clientId}) AS "clientName",
+        ${l.productId} AS "productId", (SELECT p.sku FROM products p WHERE p.id = ${l.productId}) AS "productSku", ${l.createdAt} AS "createdAt"
       FROM ${l} ${scopeWhere ? sql`WHERE ${scopeWhere}` : sql``}
-    ) x WHERE x.exception IS NOT NULL ORDER BY x.createdAt DESC, x.id`);
+    ) x WHERE x.exception IS NOT NULL ORDER BY x."createdAt" DESC, x.id`);
   const all = raw.map((r): ListingExceptionRow => {
     const exception = asException(r.exception) as ListingException;
     return {
@@ -270,66 +272,66 @@ export interface ListingOptions {
   readonly tags: readonly { value: string; label: string }[];
 }
 
-export function getListingOptions(db: AppDb, scope: Scope): ListingOptions {
+export async function getListingOptions(db: AppDb, scope: Scope): Promise<ListingOptions> {
   const cc = schema.channelConnections;
-  const stores = db.select({ id: cc.id, store: cc.storeName, provider: cc.provider }).from(cc).where(scopedWhere(cc, scope)).orderBy(asc(cc.storeName)).all()
+  const stores = (await db.select({ id: cc.id, store: cc.storeName, provider: cc.provider }).from(cc).where(scopedWhere(cc, scope)).orderBy(asc(cc.storeName)))
     .map((s) => ({ value: s.id, label: s.store, description: s.provider }));
-  const clients = db.select({ id: schema.clients.id, name: schema.clients.name }).from(schema.clients)
-    .where(scope.clientIds === "all" ? undefined : inArray(schema.clients.id, [...scope.clientIds, "__none__"])).orderBy(asc(schema.clients.name)).all()
+  const clients = (await db.select({ id: schema.clients.id, name: schema.clients.name }).from(schema.clients)
+    .where(scope.clientIds === "all" ? undefined : inArray(schema.clients.id, [...scope.clientIds, "__none__"])).orderBy(asc(schema.clients.name)))
     .map((c) => ({ value: c.id, label: c.name }));
-  const tags = db.select({ id: schema.tags.id, name: schema.tags.name }).from(schema.tags)
-    .where(inArray(schema.tags.scope, ["listing", "any"])).orderBy(asc(schema.tags.name)).all().map((t) => ({ value: t.id, label: t.name }));
+  const tags = (await db.select({ id: schema.tags.id, name: schema.tags.name }).from(schema.tags)
+    .where(inArray(schema.tags.scope, ["listing", "any"])).orderBy(asc(schema.tags.name))).map((t) => ({ value: t.id, label: t.name }));
   return { clients, stores, tags };
 }
 
-function loadListing(tx: AppDb, ctx: ScopedCtx, id: string): typeof l.$inferSelect {
-  const row = tx.select().from(l).where(eq(l.id, id)).get();
+async function loadListing(tx: AppDb, ctx: ScopedCtx, id: string): Promise<typeof l.$inferSelect> {
+  const row = (await tx.select().from(l).where(eq(l.id, id)).limit(1))[0];
   assertInScope(ctx.scope, row ? { clientId: row.clientId } : null, "Listing");
   return row as typeof l.$inferSelect;
 }
 
-function skuOf(tx: AppDb, productId: string | null): string | null {
-  return productId ? tx.select({ sku: schema.products.sku }).from(schema.products).where(eq(schema.products.id, productId)).get()?.sku ?? null : null;
+async function skuOf(tx: AppDb, productId: string | null): Promise<string | null> {
+  return productId ? (await tx.select({ sku: schema.products.sku }).from(schema.products).where(eq(schema.products.id, productId)).limit(1))[0]?.sku ?? null : null;
 }
 
-export function linkListing(tx: AppDb, ctx: ScopedCtx, id: string, productId: string, version?: number): typeof l.$inferSelect {
-  const row = loadListing(tx, ctx, id);
+export async function linkListing(tx: AppDb, ctx: ScopedCtx, id: string, productId: string, version?: number): Promise<typeof l.$inferSelect> {
+  const row = await loadListing(tx, ctx, id);
   if (version !== undefined && version !== row.version) throw conflictError();
-  const product = tx.select({ id: schema.products.id, clientId: schema.products.clientId, sku: schema.products.sku }).from(schema.products).where(eq(schema.products.id, productId)).get();
+  const product = (await tx.select({ id: schema.products.id, clientId: schema.products.clientId, sku: schema.products.sku }).from(schema.products).where(eq(schema.products.id, productId)).limit(1))[0];
   if (!product || !hasClient(ctx.scope, product.clientId)) throw notFoundError("Product");
   if (product.clientId !== row.clientId) {
     throw new AppError("VALIDATION", "The product belongs to a different client than the listing", { fieldErrors: { productId: ["Pick a product of the listing's client"] } });
   }
   if (row.productId === productId) return row;
   const linkedAt = new Date().toISOString();
-  tx.update(l).set({ productId, linkedAt, updatedBy: ctx.userId, version: row.version + 1 }).where(eq(l.id, id)).run();
-  recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { linkedProduct: skuOf(tx, row.productId) }, after: { linkedProduct: product.sku } });
+  await tx.update(l).set({ productId, linkedAt, updatedBy: ctx.userId, version: row.version + 1 }).where(eq(l.id, id));
+  await recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { linkedProduct: await skuOf(tx, row.productId) }, after: { linkedProduct: product.sku } });
   // Linking the product whose suggestion was dismissed earlier withdraws the dismissal.
-  const dismissed = dismissedSku(tx, id);
+  const dismissed = await dismissedSku(tx, id);
   if (dismissed && dismissed.toLowerCase() === product.sku.toLowerCase()) {
-    recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { [DISMISSED_SUGGESTION_FIELD]: dismissed }, after: { [DISMISSED_SUGGESTION_FIELD]: null } });
+    await recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { [DISMISSED_SUGGESTION_FIELD]: dismissed }, after: { [DISMISSED_SUGGESTION_FIELD]: null } });
   }
   return { ...row, productId, linkedAt, version: row.version + 1 };
 }
 
-export function unlinkListing(tx: AppDb, ctx: ScopedCtx, id: string): typeof l.$inferSelect {
-  const row = loadListing(tx, ctx, id);
+export async function unlinkListing(tx: AppDb, ctx: ScopedCtx, id: string): Promise<typeof l.$inferSelect> {
+  const row = await loadListing(tx, ctx, id);
   if (!row.productId) throw new AppError("INVALID_STATE", "This listing is not linked to a product");
-  tx.update(l).set({ productId: null, linkedAt: null, updatedBy: ctx.userId, version: row.version + 1 }).where(eq(l.id, id)).run();
-  recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { linkedProduct: skuOf(tx, row.productId) }, after: { linkedProduct: null } });
+  await tx.update(l).set({ productId: null, linkedAt: null, updatedBy: ctx.userId, version: row.version + 1 }).where(eq(l.id, id));
+  await recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { linkedProduct: await skuOf(tx, row.productId) }, after: { linkedProduct: null } });
   return { ...row, productId: null, linkedAt: null, version: row.version + 1 };
 }
 
-export function setNeverSync(tx: AppDb, ctx: ScopedCtx, id: string, neverSync: boolean): typeof l.$inferSelect {
-  const row = loadListing(tx, ctx, id);
+export async function setNeverSync(tx: AppDb, ctx: ScopedCtx, id: string, neverSync: boolean): Promise<typeof l.$inferSelect> {
+  const row = await loadListing(tx, ctx, id);
   if (row.neverSync === neverSync) return row;
-  tx.update(l).set({ neverSync, updatedBy: ctx.userId, version: row.version + 1 }).where(eq(l.id, id)).run();
-  recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { neverSync: row.neverSync }, after: { neverSync } });
+  await tx.update(l).set({ neverSync, updatedBy: ctx.userId, version: row.version + 1 }).where(eq(l.id, id));
+  await recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { neverSync: row.neverSync }, after: { neverSync } });
   return { ...row, neverSync, version: row.version + 1 };
 }
 
-function dismissedSku(tx: AppDb, id: string): string | null {
-  const row = tx.get<{ v: string | null }>(sql`SELECT cl.to_value AS v FROM change_log cl WHERE cl.entity_type = ${ENTITY} AND cl.entity_id = ${id} AND cl.field = ${DISMISSED_SUGGESTION_FIELD} ORDER BY cl.at DESC, cl.rowid DESC LIMIT 1`);
+async function dismissedSku(tx: AppDb, id: string): Promise<string | null> {
+  const row = await dbGet<{ v: string | null }>(tx, sql`SELECT cl.to_value AS v FROM change_log cl WHERE cl.entity_type = ${ENTITY} AND cl.entity_id = ${id} AND cl.field = ${DISMISSED_SUGGESTION_FIELD} ORDER BY cl.at DESC, cl.rowid DESC LIMIT 1`);
   return row?.v ? row.v : null;
 }
 
@@ -338,13 +340,13 @@ function dismissedSku(tx: AppDb, id: string): string | null {
  * listing so it shows as No match. Audited in the change log; linking that product later
  * withdraws the dismissal.
  */
-export function dismissSuggestion(tx: AppDb, ctx: ScopedCtx, id: string): { listing: typeof l.$inferSelect; dismissedSku: string } {
-  const row = loadListing(tx, ctx, id);
+export async function dismissSuggestion(tx: AppDb, ctx: ScopedCtx, id: string): Promise<{ listing: typeof l.$inferSelect; dismissedSku: string }> {
+  const row = await loadListing(tx, ctx, id);
   if (row.productId) throw new AppError("INVALID_STATE", "This listing is already linked to a product");
-  const suggested = tx.get<{ sku: string | null }>(sql`SELECT ${suggestionSql("sku")} AS sku FROM ${l} WHERE ${l.id} = ${id}`)?.sku ?? null;
+  const suggested = (await dbGet<{ sku: string | null }>(tx, sql`SELECT ${suggestionSql("sku")} AS sku FROM ${l} WHERE ${l.id} = ${id}`))?.sku ?? null;
   if (!suggested) throw new AppError("INVALID_STATE", "This listing has no suggested product");
-  recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { [DISMISSED_SUGGESTION_FIELD]: null }, after: { [DISMISSED_SUGGESTION_FIELD]: suggested } });
-  tx.update(l).set({ updatedBy: ctx.userId, version: row.version + 1 }).where(eq(l.id, id)).run();
+  await recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: row.sellerSku, before: { [DISMISSED_SUGGESTION_FIELD]: null }, after: { [DISMISSED_SUGGESTION_FIELD]: suggested } });
+  await tx.update(l).set({ updatedBy: ctx.userId, version: row.version + 1 }).where(eq(l.id, id));
   return { listing: { ...row, version: row.version + 1 }, dismissedSku: suggested };
 }
 
@@ -353,8 +355,8 @@ export function dismissSuggestion(tx: AppDb, ctx: ScopedCtx, id: string): { list
  * path (validation, SKU uniqueness, pack type, change log), links it and applies Never Sync,
  * all in the caller's transaction.
  */
-export function createQuickProductForListing(tx: AppDb, ctx: ScopedCtx, id: string, raw: ListingQuickProductInput, version?: number): { listing: typeof l.$inferSelect; productId: string; created: true } {
-  const row = loadListing(tx, ctx, id);
+export async function createQuickProductForListing(tx: AppDb, ctx: ScopedCtx, id: string, raw: ListingQuickProductInput, version?: number): Promise<{ listing: typeof l.$inferSelect; productId: string; created: true }> {
+  const row = await loadListing(tx, ctx, id);
   if (version !== undefined && version !== row.version) throw conflictError();
   if (row.productId) throw new AppError("INVALID_STATE", "This listing is already linked to a product");
   const parsed = listingQuickProductSchema.safeParse(raw);
@@ -366,18 +368,18 @@ export function createQuickProductForListing(tx: AppDb, ctx: ScopedCtx, id: stri
     }
     throw new AppError("VALIDATION", parsed.error.issues[0]?.message ?? "Invalid product", { fieldErrors });
   }
-  const product = createProductFromWizard(tx, ctx, quickProductToInput(row.clientId, parsed.data));
-  let listing = linkListing(tx, ctx, id, product.id);
-  if (parsed.data.neverSync !== listing.neverSync) listing = setNeverSync(tx, ctx, id, parsed.data.neverSync);
+  const product = await createProductFromWizard(tx, ctx, quickProductToInput(row.clientId, parsed.data));
+  let listing = await linkListing(tx, ctx, id, product.id);
+  if (parsed.data.neverSync !== listing.neverSync) listing = await setNeverSync(tx, ctx, id, parsed.data.neverSync);
   return { listing, productId: product.id, created: true };
 }
 
 /** Creates (or finds) the client's product with the seller SKU and links it. Beyond Logiwa. */
-export function createProductFromListing(tx: AppDb, ctx: ScopedCtx, id: string): { listing: typeof l.$inferSelect; productId: string; created: boolean } {
-  const row = loadListing(tx, ctx, id);
+export async function createProductFromListing(tx: AppDb, ctx: ScopedCtx, id: string): Promise<{ listing: typeof l.$inferSelect; productId: string; created: boolean }> {
+  const row = await loadListing(tx, ctx, id);
   if (row.productId) throw new AppError("INVALID_STATE", "This listing is already linked to a product");
-  const { product, created } = ensureProductForListing(tx, ctx, { clientId: row.clientId, sellerSku: row.sellerSku, name: row.name, price: row.storePrice ?? 0 });
-  if (row.imageUrl && created) tx.update(schema.products).set({ imageUrl: row.imageUrl, description: row.description }).where(eq(schema.products.id, product.id)).run();
-  const listing = linkListing(tx, ctx, id, product.id);
+  const { product, created } = await ensureProductForListing(tx, ctx, { clientId: row.clientId, sellerSku: row.sellerSku, name: row.name, price: row.storePrice ?? 0 });
+  if (row.imageUrl && created) await tx.update(schema.products).set({ imageUrl: row.imageUrl, description: row.description }).where(eq(schema.products.id, product.id));
+  const listing = await linkListing(tx, ctx, id, product.id);
   return { listing, productId: product.id, created };
 }

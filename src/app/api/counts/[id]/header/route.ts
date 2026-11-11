@@ -8,5 +8,5 @@ export const PATCH = defineRoute({
   permission: P.edit,
   params: idParamsSchema,
   body: countPlanHeaderSchema,
-  handler: ({ db, auth, actor, params, body }) => updateCountPlanHeader(db, domainCtx(actor, auth), auth, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updateCountPlanHeader(db, domainCtx(actor, auth), auth, params.id, body),
 });

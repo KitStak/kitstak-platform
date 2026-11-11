@@ -15,8 +15,8 @@ export function soTypeFlagsOf(meta: unknown): ReadonlySet<string> {
   return new Set();
 }
 
-export function orderTypeFlags(tx: Tx, orderTypeId: string | null | undefined): ReadonlySet<string> {
+export async function orderTypeFlags(tx: Tx, orderTypeId: string | null | undefined): Promise<ReadonlySet<string>> {
   if (!orderTypeId) return new Set();
-  const row = tx.select({ meta: schema.lookupValues.meta, type: schema.lookupValues.type }).from(schema.lookupValues).where(eq(schema.lookupValues.id, orderTypeId)).get();
+  const row = (await tx.select({ meta: schema.lookupValues.meta, type: schema.lookupValues.type }).from(schema.lookupValues).where(eq(schema.lookupValues.id, orderTypeId)).limit(1))[0];
   return row?.type === "so_type" ? soTypeFlagsOf(row.meta) : new Set();
 }

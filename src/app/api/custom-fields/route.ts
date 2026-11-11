@@ -7,11 +7,11 @@ import {
 
 export const GET = defineRoute({
   query: customFieldListQuerySchema,
-  handler: ({ db, query }) => listCustomFields(db, query),
+  handler: async ({ db, query }) => await listCustomFields(db, query),
 });
 
 export const POST = defineRoute({
   permission: ANY_CUSTOM_FIELD_PERMISSION,
   body: customFieldCreateSchema,
-  handler: ({ db, auth, body }) => created(createCustomField(db, auth, body)),
+  handler: async ({ db, auth, body }) => created(await createCustomField(db, auth, body)),
 });

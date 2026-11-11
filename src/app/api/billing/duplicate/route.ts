@@ -6,5 +6,5 @@ import { duplicateContracts } from "@/server/repositories/billing";
 export const POST = defineRoute({
   permission: "settings.billing.copy",
   body: bulkIds,
-  handler: ({ db, auth, actor, body }) => duplicateContracts(db, auth, actor, body.ids),
+  handler: async ({ db, auth, actor, body }) => await duplicateContracts(db, auth, actor, body.ids),
 });

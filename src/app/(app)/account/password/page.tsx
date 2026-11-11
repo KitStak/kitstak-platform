@@ -21,8 +21,8 @@ async function PasswordBody() {
   const auth = await getAuthContext();
   if (!auth) redirect(`/login?next=${encodeURIComponent(ROUTE)}`);
   const db = await getAppDb();
-  const policy = getPasswordPolicy(db);
-  const user = loadUser(db, auth.user.id);
+  const policy = await getPasswordPolicy(db);
+  const user = await loadUser(db, auth.user.id);
   const mustChange = !user.passwordChangedAt || isPasswordExpired(user.passwordChangedAt, policy);
   return (
     <PasswordPolicySeed policy={{ minLength: policy.minLength, requireUpper: policy.requireUpper, requireNumber: policy.requireNumber, requireSymbol: policy.requireSymbol }}>

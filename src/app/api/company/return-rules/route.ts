@@ -8,15 +8,15 @@ import { getReturnRulesState, updateReturnRules } from "@/server/repositories/co
 
 export const GET = defineRoute({
   permission: ["settings.data_setup.view", "settings.company_settings.view"],
-  handler: ({ db }) => getReturnRulesState(db),
+  handler: async ({ db }) => await getReturnRulesState(db),
 });
 
 export const PUT = defineRoute({
   permission: "settings.data_setup.view",
   body: returnRulesSchema,
-  handler: ({ db, auth, actor, body, audit }) => {
-    const state = updateReturnRules(db, auth, actor, body);
-    audit({ action: "return_rules.update", entity: "company", entityId: "company", detail: Object.fromEntries(Object.entries(state.rules).map(([k, v]) => [k, v])) });
+  handler: async ({ db, auth, actor, body, audit }) => {
+    const state = await updateReturnRules(db, auth, actor, body);
+    await audit({ action: "return_rules.update", entity: "company", entityId: "company", detail: Object.fromEntries(Object.entries(state.rules).map(([k, v]) => [k, v])) });
     return state;
   },
 });

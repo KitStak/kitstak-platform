@@ -10,8 +10,8 @@ import type { ImportHandler, ImportRowValues } from "../types";
 export const handler: ImportHandler = {
   configured: true,
   owner: "M05",
-  apply(ctx, row: ImportRowValues) {
-    const result = preAdviseSerial(ctx.db, domainCtx(ctx.actor, ctx.auth), ctx.auth.scope, { poCode: row.poCode, sku: row.sku, serial: row.serialNumber });
+  async apply(ctx, row: ImportRowValues) {
+    const result = await preAdviseSerial(ctx.db, domainCtx(ctx.actor, ctx.auth), ctx.auth.scope, { poCode: row.poCode, sku: row.sku, serial: row.serialNumber });
     return { entityId: result.purchaseOrderId, message: `Serial ${String(row.serialNumber ?? "").trim()} added to ${result.code} (${result.sku})` };
   },
 };

@@ -6,5 +6,5 @@ import { domainCtx, idParamsSchema } from "@/server/repositories/platform-common
 export const POST = defineRoute({
   permission: "settings.product_listing.search_a_product",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => unlinkListing(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.id),
+  handler: async ({ db, auth, actor, params }) => await unlinkListing(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.id),
 });

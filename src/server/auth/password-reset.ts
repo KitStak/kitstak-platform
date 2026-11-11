@@ -12,6 +12,7 @@ import { passwordResetTokens, users } from "@/server/db/schema";
 import type { AppDb } from "@/server/api/db";
 import { AppError } from "@/server/api/errors";
 import { log } from "@/server/log";
+import { withWriteTx } from "@/server/db/sql";
 import { writeAudit } from "./audit";
 import { hashPassword } from "./password";
 import { getPasswordPolicy, validatePassword } from "./password-policy";
@@ -64,26 +65,24 @@ export interface ResetRequest {
 /** Creates a token and mails the link when the user exists and is active. */
 export async function requestPasswordReset(db: AppDb, input: ResetRequest, now: Date = new Date()): Promise<void> {
   const email = input.email.trim().toLowerCase();
-  const user = db.select({ id: users.id, email: users.email, isActive: users.isActive }).from(users).where(eq(users.email, email)).get();
+  const [user] = await db.select({ id: users.id, email: users.email, isActive: users.isActive }).from(users).where(eq(users.email, email)).limit(1);
   if (!user || !user.isActive) {
-    writeAudit(db, { action: "auth.password_reset.request", entity: "user", entityId: email, outcome: "failure", detail: { reason: "unknown_or_inactive" }, ip: input.ip }, now);
+    await writeAudit(db, { action: "auth.password_reset.request", entity: "user", entityId: email, outcome: "failure", detail: { reason: "unknown_or_inactive" }, ip: input.ip }, now);
     return;
   }
   const token = randomBytes(32).toString("base64url");
-  db.transaction((tx) => {
-    tx.update(passwordResetTokens)
+  await withWriteTx(db, async (tx) => {
+    await tx.update(passwordResetTokens)
       .set({ usedAt: now.toISOString() })
-      .where(and(eq(passwordResetTokens.userId, user.id), isNull(passwordResetTokens.usedAt)))
-      .run();
-    tx.insert(passwordResetTokens)
+      .where(and(eq(passwordResetTokens.userId, user.id), isNull(passwordResetTokens.usedAt)));
+    await tx.insert(passwordResetTokens)
       .values({
         userId: user.id,
         tokenHash: hashResetToken(token),
         expiresAt: new Date(now.getTime() + RESET_TOKEN_TTL_MINUTES * 60_000).toISOString(),
-      })
-      .run();
+      });
   });
-  writeAudit(db, { action: "auth.password_reset.request", entity: "user", entityId: user.id, userId: user.id, ip: input.ip }, now);
+  await writeAudit(db, { action: "auth.password_reset.request", entity: "user", entityId: user.id, userId: user.id, ip: input.ip }, now);
   const link = `${input.baseUrl.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(token)}`;
   await adapterFor(db).send({
     to: user.email,
@@ -99,31 +98,40 @@ export interface ResetInput {
 }
 
 /** Consumes a token and sets the new password. Throws VALIDATION on any problem. */
-export function resetPassword(db: AppDb, input: ResetInput, now: Date = new Date()): { userId: string } {
-  const row = db
+export async function resetPassword(db: AppDb, input: ResetInput, now: Date = new Date()): Promise<{ userId: string }> {
+  const [row] = await db
     .select({ token: passwordResetTokens, user: users })
     .from(passwordResetTokens)
     .innerJoin(users, eq(users.id, passwordResetTokens.userId))
     .where(eq(passwordResetTokens.tokenHash, hashResetToken(input.token)))
-    .get();
+    .limit(1);
   if (!row || row.token.usedAt || row.token.expiresAt <= now.toISOString() || !row.user.isActive) {
     throw new AppError("VALIDATION", "This reset link is invalid or has expired. Request a new one.", {
       fieldErrors: { token: ["Invalid or expired link"] },
     });
   }
-  const issues = validatePassword(input.password, getPasswordPolicy(db), { email: row.user.email });
+  const issues = validatePassword(input.password, await getPasswordPolicy(db), { email: row.user.email });
   if (issues.length > 0) {
     throw new AppError("VALIDATION", issues[0] ?? "Password does not meet the policy", { fieldErrors: { password: issues } });
   }
   const userId = row.user.id;
-  db.transaction((tx) => {
-    tx.update(passwordResetTokens).set({ usedAt: now.toISOString() }).where(eq(passwordResetTokens.id, row.token.id)).run();
-    tx.update(users)
-      .set({ passwordHash: hashPassword(input.password), passwordChangedAt: now.toISOString(), failedLoginCount: 0, lockedUntil: null })
-      .where(eq(users.id, userId))
-      .run();
-    bumpSessionVersion(tx, userId, now);
+  const passwordHash = hashPassword(input.password);
+  await withWriteTx(db, async (tx) => {
+    // Single use: the check above ran outside the write lock, so a concurrent redeem of the
+    // same token must lose here (the conditional claim matches no row) and roll back.
+    const claimed = await tx.update(passwordResetTokens).set({ usedAt: now.toISOString() })
+      .where(and(eq(passwordResetTokens.id, row.token.id), isNull(passwordResetTokens.usedAt)))
+      .returning({ id: passwordResetTokens.id });
+    if (claimed.length === 0) {
+      throw new AppError("VALIDATION", "This reset link is invalid or has expired. Request a new one.", {
+        fieldErrors: { token: ["Invalid or expired link"] },
+      });
+    }
+    await tx.update(users)
+      .set({ passwordHash, passwordChangedAt: now.toISOString(), failedLoginCount: 0, lockedUntil: null })
+      .where(eq(users.id, userId));
+    await bumpSessionVersion(tx, userId, now);
   });
-  writeAudit(db, { action: "auth.password_reset.complete", entity: "user", entityId: userId, userId, ip: input.ip }, now);
+  await writeAudit(db, { action: "auth.password_reset.complete", entity: "user", entityId: userId, userId, ip: input.ip }, now);
   return { userId };
 }

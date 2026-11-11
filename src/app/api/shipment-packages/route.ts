@@ -6,9 +6,9 @@ import { createShipmentPackage, listShipmentPackages } from "@/server/repositori
 
 export const GET = defineRoute({
   permission: ["settings.shipment_packages.view", "inventory.inventory_by_location.view"],
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listShipmentPackages(db, auth, query);
+    const { rows, total } = await listShipmentPackages(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -16,5 +16,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.shipment_packages.create",
   body: shipmentPackageSchema,
-  handler: ({ db, auth, actor, body }) => created(createShipmentPackage(db, auth, actor, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createShipmentPackage(db, auth, actor, body)),
 });

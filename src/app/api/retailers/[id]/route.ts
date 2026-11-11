@@ -8,21 +8,21 @@ import { deleteRetailers, getRetailer, updateRetailer } from "@/server/repositor
 export const GET = defineRoute({
   permission: "settings.retailers.view",
   params: idParamsSchema,
-  handler: ({ db, params }) => getRetailer(db, params.id),
+  handler: async ({ db, params }) => await getRetailer(db, params.id),
 });
 
 export const PATCH = defineRoute({
   permission: "settings.retailers.edit",
   params: idParamsSchema,
   body: retailerSchema,
-  handler: ({ db, auth, actor, params, body }) => updateRetailer(db, auth, actor, params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await updateRetailer(db, auth, actor, params.id, body),
 });
 
 export const DELETE = defineRoute({
   permission: "settings.retailers.delete",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => {
-    const result = deleteRetailers(db, auth, actor, [params.id]);
+  handler: async ({ db, auth, actor, params }) => {
+    const result = await deleteRetailers(db, auth, actor, [params.id]);
     const failure = result.failed[0];
     if (failure) throw new AppError(failure.code === "NOT_FOUND" ? "NOT_FOUND" : "INVALID_STATE", failure.message);
     return result;

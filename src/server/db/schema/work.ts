@@ -1,5 +1,5 @@
 /** Work: jobs, job types, tasks, wave rules, waves, allocation exceptions. */
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { FilterCondition, JobTypeSettings, OrderByClause } from "../../../lib/domain-types";
 import {
@@ -23,7 +23,7 @@ import { users } from "./identity";
 import { clients, warehouses } from "./org";
 import { shipmentOrders } from "./outbound";
 
-export const jobTypes = sqliteTable("job_types", {
+export const jobTypes = pgTable("job_types", {
   id: pk(),
   code: text("code").notNull(),
   description: text("description").notNull(),
@@ -47,7 +47,7 @@ export const jobTypes = sqliteTable("job_types", {
 }, (t) => [uniqueIndex("job_types_code_idx").on(t.warehouseId, t.code)]);
 
 /** `jobType` is the job-type code snapshot (plain text); `jobTypeId` is authoritative. */
-export const jobs = sqliteTable("jobs", {
+export const jobs = pgTable("jobs", {
   id: requiredPk(),
   code: text("code").notNull(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
@@ -88,7 +88,7 @@ export const jobs = sqliteTable("jobs", {
   index("jobs_count_plan_idx").on(t.countPlanId),
 ]);
 
-export const jobOrders = sqliteTable("job_orders", {
+export const jobOrders = pgTable("job_orders", {
   jobId: text("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
   orderId: text("order_id").notNull().references(() => shipmentOrders.id),
   toteOrCell: text("tote_or_cell"),
@@ -97,7 +97,7 @@ export const jobOrders = sqliteTable("job_orders", {
   index("job_orders_order_idx").on(t.orderId),
 ]);
 
-export const tasks = sqliteTable("tasks", {
+export const tasks = pgTable("tasks", {
   id: pk(),
   taskNo: integer("task_no").notNull(),
   jobId: text("job_id").notNull().references(() => jobs.id),
@@ -150,7 +150,7 @@ export const tasks = sqliteTable("tasks", {
   index("tasks_target_location_idx").on(t.targetLocationId, t.status),
 ]);
 
-export const waveRules = sqliteTable("wave_rules", {
+export const waveRules = pgTable("wave_rules", {
   id: pk(),
   ruleSeq: integer("rule_seq").notNull(),
   name: text("name").notNull(),
@@ -181,7 +181,7 @@ export const waveRules = sqliteTable("wave_rules", {
   ...stamps(),
 }, (t) => [index("wave_rules_wh_idx").on(t.warehouseId, t.operationType)]);
 
-export const waves = sqliteTable("waves", {
+export const waves = pgTable("waves", {
   id: pk(),
   waveNo: text("wave_no").notNull(),
   waveRuleId: text("wave_rule_id").references(() => waveRules.id),
@@ -201,7 +201,7 @@ export const waves = sqliteTable("waves", {
   index("waves_rule_idx").on(t.waveRuleId),
 ]);
 
-export const allocationExceptions = sqliteTable("allocation_exceptions", {
+export const allocationExceptions = pgTable("allocation_exceptions", {
   id: pk(),
   orderId: text("order_id").notNull(),
   waveId: text("wave_id"),

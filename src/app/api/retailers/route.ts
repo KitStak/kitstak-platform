@@ -6,9 +6,9 @@ import { createRetailer, listRetailers } from "@/server/repositories/retailers";
 
 export const GET = defineRoute({
   permission: "settings.retailers.view",
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listRetailers(db, auth, query);
+    const { rows, total } = await listRetailers(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -16,5 +16,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "settings.retailers.create",
   body: retailerSchema,
-  handler: ({ db, auth, actor, body }) => created(createRetailer(db, auth, actor, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createRetailer(db, auth, actor, body)),
 });

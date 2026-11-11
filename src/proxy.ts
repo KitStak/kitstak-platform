@@ -12,7 +12,8 @@ import { CSRF_COOKIE, CSRF_MAX_AGE_SECONDS, generateCsrfToken, isWellFormedCsrfT
 const SESSION_COOKIE = "kitstak_session";
 
 const PUBLIC_PREFIXES: readonly string[] = ["/login", "/forgot-password", "/reset-password", "/api/auth/", "/api/health", "/api/cron/", "/_next/"];
-const PUBLIC_EXACT: readonly string[] = ["/favicon.ico", "/api/auth", "/robots.txt"];
+// /api/admin/bootstrap guards itself (BOOTSTRAP_ENABLED + Bearer CRON_SECRET); it runs before any user exists.
+const PUBLIC_EXACT: readonly string[] = ["/favicon.ico", "/api/auth", "/robots.txt", "/api/admin/bootstrap"];
 /** Static assets (anything with a file extension). */
 const STATIC_ASSET_RE = /\.[a-zA-Z0-9]+$/;
 

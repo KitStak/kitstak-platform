@@ -7,9 +7,9 @@ import { listCallLogs } from "@/server/repositories/integration-logs";
 export const GET = defineRoute({
   permission: "integrations.integration_logs.view",
   query: z.object({ kind: z.enum(["orders", "products"]).default("orders") }).loose(),
-  handler: ({ db, auth, grid, query }) => {
+  handler: async ({ db, auth, grid, query }) => {
     const q = grid();
-    const { rows, total } = listCallLogs(db, auth, query.kind, q);
+    const { rows, total } = await listCallLogs(db, auth, query.kind, q);
     return listResult(rows, { total, page: q.page, pageSize: q.pageSize });
   },
 });

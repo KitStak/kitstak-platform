@@ -17,10 +17,10 @@ export const POST = defineRoute({
         subject: "KitStaks test email",
         text: `This is a test email sent by ${auth.user.name} from Company Settings › Email delivery.\nIf you can read it, KitStaks can send invites and password reset emails.`,
       });
-      audit({ action: "company.mail_test", entity: "company", entityId: "company", detail: { to: body.to, delivery: result.delivered ? "smtp" : "server log only" } });
+      await audit({ action: "company.mail_test", entity: "company", entityId: "company", detail: { to: body.to, delivery: result.delivered ? "smtp" : "server log only" } });
       return result;
     } catch (error: unknown) {
-      audit({ action: "company.mail_test", entity: "company", entityId: "company", outcome: "failure", detail: { to: body.to, error: error instanceof Error ? error.message : "failed" } });
+      await audit({ action: "company.mail_test", entity: "company", entityId: "company", outcome: "failure", detail: { to: body.to, error: error instanceof Error ? error.message : "failed" } });
       throw error;
     }
   },

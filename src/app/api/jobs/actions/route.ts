@@ -35,23 +35,23 @@ const PERMISSION: Readonly<Record<z.output<typeof body>["action"], string>> = {
 export const POST = defineRoute({
   permission: Object.values(PERMISSION),
   body,
-  handler: ({ db, auth, actor, body: input }) => withM03Actor(db, actor, auth, () => {
+  handler: async ({ db, auth, actor, body: input }) => await withM03Actor(db, actor, auth, async () => {
     // Floor-only roles are denied supervisor-only keys even when the role still holds them (critic R4).
     assertJobAction(auth, PERMISSION[input.action]);
     const ctx = domainCtx(actor, auth);
     switch (input.action) {
       case "priority":
-        return updateJobsPriority(db, ctx, input.ids, input.priority, input.versions);
+        return await updateJobsPriority(db, ctx, input.ids, input.priority, input.versions);
       case "cancel":
-        return cancelJobs(db, ctx, input.ids, input.versions);
+        return await cancelJobs(db, ctx, input.ids, input.versions);
       case "assign":
-        assertSameWarehouse(db, input.ids);
-        return assignJobs(db, ctx, input.ids, input.userId, input.versions);
+        await assertSameWarehouse(db, input.ids);
+        return await assignJobs(db, ctx, input.ids, input.userId, input.versions);
       case "unassign":
-        assertSameWarehouse(db, input.ids);
-        return assignJobs(db, ctx, input.ids, null, input.versions);
+        await assertSameWarehouse(db, input.ids);
+        return await assignJobs(db, ctx, input.ids, null, input.versions);
       case "markPrinted":
-        markPickListPrinted(db, ctx, input.ids);
+        await markPickListPrinted(db, ctx, input.ids);
         return { succeeded: input.ids, failed: [] };
     }
   }),

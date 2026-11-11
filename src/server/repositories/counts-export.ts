@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import type { ExportColumn, ExportContext, ExportPage, ExportProvider } from "@/server/exports/types";
 import { lineGrid, lineRow, planGrid, planRow, type CountLineListRow, type CountPlanListRow, type LineGridKind } from "./counts-grids";
 import { runGrid, whereOf } from "./counts-grid";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 const PLAN_COLUMNS: readonly ExportColumn[] = [
   { key: "code", label: "Count Code" }, { key: "warehouseCode", label: "Warehouse" }, { key: "jobCodes", label: "Job Code" },
@@ -35,31 +36,31 @@ const LINE_COLUMNS = (kind: LineGridKind): readonly ExportColumn[] => [
 
 export const countPlansExport: ExportProvider = {
   columns: PLAN_COLUMNS,
-  fetchPage(ctx: ExportContext, page: number, pageSize: number): ExportPage {
-    const res = runGrid<CountPlanListRow>(ctx.db, planGrid(ctx.auth.viewScope), { ...ctx.query, page, pageSize });
+  async fetchPage(ctx: ExportContext, page: number, pageSize: number): Promise<ExportPage> {
+    const res = await runGrid<CountPlanListRow>(ctx.db, planGrid(ctx.auth.viewScope), { ...ctx.query, page, pageSize });
     return { rows: res.rows.map((r) => ({ ...planRow(r) }) as Record<string, unknown>), total: res.total };
   },
 };
 
-function detailPage(ctx: ExportContext, kind: LineGridKind, page: number, pageSize: number): ExportPage {
+async function detailPage(ctx: ExportContext, kind: LineGridKind, page: number, pageSize: number): Promise<ExportPage> {
   const spec = lineGrid(ctx.auth.viewScope, kind);
   const where = whereOf(spec, ctx.query);
   const from = sql`${spec.from} JOIN count_line_entries e ON e.line_id = ${kind === "skus" ? sql`l.line_id AND e.product_id = l.product_id` : sql`l.id`} JOIN products epr ON epr.id = e.product_id JOIN locations elo ON elo.id = e.location_id LEFT JOIN license_plates elp ON elp.id = e.lp_id`;
-  const total = ctx.db.get<{ n: number }>(sql`SELECT COUNT(*) AS n ${from} WHERE ${where}`)?.n ?? 0;
-  const rows = ctx.db.all<Record<string, unknown>>(sql`
-    SELECT p.code AS planCode, j.code AS jobCode, elo.code AS locationCode, epr.sku AS sku, epr.name AS productName, elp.number AS lpNumber,
-      e.lot_number AS lotNumber, e.expiry_date AS expiryDate, e.pack_type AS packType, e.system_qty AS systemQty, e.counted_qty AS countedQty,
-      e.counted_qty - e.system_qty AS difference, l.status AS lineStatus, l.is_recount_line AS isRecountLine, COALESCE((SELECT u.name FROM users u WHERE lower(u.email) = lower(e.counted_by)), e.counted_by) AS countedBy, e.counted_at AS countedAt
+  const total = (await dbGet<{ n: number }>(ctx.db, sql`SELECT COUNT(*) AS n ${from} WHERE ${where}`))?.n ?? 0;
+  const rows = await dbAll<Record<string, unknown>>(ctx.db, sql`
+    SELECT p.code AS "planCode", j.code AS "jobCode", elo.code AS "locationCode", epr.sku AS sku, epr.name AS "productName", elp.number AS "lpNumber",
+      e.lot_number AS "lotNumber", e.expiry_date AS "expiryDate", e.pack_type AS "packType", e.system_qty AS "systemQty", e.counted_qty AS "countedQty",
+      e.counted_qty - e.system_qty AS difference, l.status AS "lineStatus", l.is_recount_line AS "isRecountLine", COALESCE((SELECT u.name FROM users u WHERE lower(u.email) = lower(e.counted_by)), e.counted_by) AS "countedBy", e.counted_at AS "countedAt"
     ${from} WHERE ${where} ORDER BY p.code, elo.code, epr.sku LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`);
-  return { rows: rows.map((r) => ({ ...r, isRecountLine: r.isRecountLine === 1 })), total };
+  return { rows: rows.map((r) => ({ ...r, isRecountLine: r.isRecountLine === true || r.isRecountLine === 1 })), total };
 }
 
 function lineProvider(kind: LineGridKind): ExportProvider {
   return {
     columns: LINE_COLUMNS(kind),
-    fetchPage(ctx, page, pageSize) {
-      if (new URLSearchParams(ctx.rawQuery).get("detail") === "1") return detailPage(ctx, kind, page, pageSize);
-      const res = runGrid<CountLineListRow>(ctx.db, lineGrid(ctx.auth.viewScope, kind), { ...ctx.query, page, pageSize });
+    async fetchPage(ctx, page, pageSize) {
+      if (new URLSearchParams(ctx.rawQuery).get("detail") === "1") return await detailPage(ctx, kind, page, pageSize);
+      const res = await runGrid<CountLineListRow>(ctx.db, lineGrid(ctx.auth.viewScope, kind), { ...ctx.query, page, pageSize });
       return { rows: res.rows.map((r) => ({ ...lineRow(r) }) as Record<string, unknown>), total: res.total };
     },
   };

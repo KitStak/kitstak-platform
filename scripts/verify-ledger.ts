@@ -1,6 +1,6 @@
 /**
  * `npm run db:verify`: asserts the inventory invariants of BUILD_PLAN 0.4 #6 against
- * `.data/kitstak.db` and exits non-zero when anything does not reconcile:
+ * the database (local PGlite .data/pglite, or DATABASE_URL when set) and exits non-zero when anything does not reconcile:
  *   - ledger sum = bucket on-hand for every bucket (and on-hand >= 0)
  *   - allocated = sum of active inventory_allocations; allocated <= on-hand - damaged
  *   - order line picked <= allocated <= quantity (and shipped <= packed <= picked)
@@ -9,25 +9,18 @@
  *   - return lines, serial-tracked stock and shipped orders' labels are consistent
  * Every module's e2e suite ends by running it.
  */
-import path from "node:path";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import * as schema from "../src/server/db/schema";
+import { closeDb, configuredDatabaseKind, getDb } from "../src/server/db";
 import { verifyDatabase } from "../src/server/db/seed/verify";
-
-const DB_PATH = process.env.KITSTAK_DB_PATH ?? path.join(process.cwd(), ".data", "kitstak.db");
 const MAX_LISTED = 40;
 
 function out(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
-function main(): number {
-  const sqlite = new Database(DB_PATH, { readonly: true, fileMustExist: true });
+async function main(): Promise<number> {
   try {
-    sqlite.pragma("busy_timeout = 10000");
-    const { issues, stats, warnings = [] } = verifyDatabase(drizzle(sqlite, { schema }));
-    out(`db:verify - ${path.relative(process.cwd(), DB_PATH)}`);
+    const { issues, stats, warnings = [] } = await verifyDatabase(await getDb());
+    out(`db:verify - ${configuredDatabaseKind() === "postgres" ? "DATABASE_URL" : "local PGlite (.data/pglite)"}`);
     out(`  ${Object.entries(stats).map(([k, v]) => `${k}=${v}`).join("  ")}`);
     if (warnings.length > 0) out(`  warnings (not failing): ${warnings.length} (${[...new Set(warnings.map((w) => w.check))].join(", ")})`);
     if (issues.length === 0) {
@@ -41,13 +34,15 @@ function main(): number {
     if (issues.length > MAX_LISTED) out(`  ... and ${issues.length - MAX_LISTED} more`);
     return 1;
   } finally {
-    sqlite.close();
+    await closeDb();
   }
 }
 
-try {
-  process.exitCode = main();
-} catch (error: unknown) {
-  process.stderr.write(`db:verify failed: ${error instanceof Error ? error.message : String(error)}\n`);
-  process.exitCode = 2;
-}
+main()
+  .then((code) => {
+    process.exitCode = code;
+  })
+  .catch((error: unknown) => {
+    process.stderr.write(`db:verify failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 2;
+  });

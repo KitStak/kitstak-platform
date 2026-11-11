@@ -6,5 +6,5 @@ import { getReturnDetail, RETURN_PERMISSIONS } from "@/server/repositories/retur
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.view,
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => getReturnDetail(db, auth.scope, params.id),
+  handler: async ({ db, auth, params }) => await getReturnDetail(db, auth.scope, params.id),
 });

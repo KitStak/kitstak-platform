@@ -15,5 +15,5 @@ const idList = z
 export const GET = defineRoute({
   name: "GET /api/dashboard",
   query: z.object({ wh: idList, cl: idList }),
-  handler: ({ db, auth, query }) => getLiveDashboard(db, auth, { warehouseIds: query.wh, clientIds: query.cl }),
+  handler: async ({ db, auth, query }) => await getLiveDashboard(db, auth, { warehouseIds: query.wh, clientIds: query.cl }),
 });

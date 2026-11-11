@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 import type { AppDb } from "@/server/api/db";
 import type { Tx } from "@/server/domain/types";
 import { countLockFor, countLockMessage } from "@/server/repositories/counts-lock";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 export interface CountLockInfo {
   readonly locationId: string;
@@ -21,29 +22,29 @@ export interface CountLockInfo {
 type Reader = AppDb | Tx;
 
 /** Lock of one location (id), with its code and the ledger's wording; null when not locked. */
-export function locationLock(db: Reader, locationId: string | null | undefined): CountLockInfo | null {
+export async function locationLock(db: Reader, locationId: string | null | undefined): Promise<CountLockInfo | null> {
   if (!locationId) return null;
-  const plan = countLockFor(db, locationId);
+  const plan = await countLockFor(db, locationId);
   if (!plan) return null;
-  const code = db.get<{ code: string }>(sql`SELECT code FROM locations WHERE id = ${locationId}`)?.code ?? locationId;
-  const planId = db.get<{ id: string }>(sql`SELECT id FROM count_plans WHERE code = ${plan} LIMIT 1`)?.id ?? null;
+  const code = (await dbGet<{ code: string }>(db, sql`SELECT code FROM locations WHERE id = ${locationId}`))?.code ?? locationId;
+  const planId = (await dbGet<{ id: string }>(db, sql`SELECT id FROM count_plans WHERE code = ${plan} LIMIT 1`))?.id ?? null;
   return { locationId, locationCode: code, planCode: plan, planId, message: countLockMessage(code, plan) };
 }
 
 /** Locations holding the order's picked (unpacked) stock: what Complete Packing moves out of. */
-export function packSourceLocations(db: Reader, orderId: string): string[] {
-  return db.all<{ id: string }>(sql`SELECT DISTINCT i.location_id AS id FROM inventory_allocations a JOIN inventory i ON i.id = a.inventory_id
-    WHERE a.order_id = ${orderId} AND a.status IN ('Picked', 'Sorted') AND a.qty > 0 AND i.location_id IS NOT NULL ORDER BY i.location_id`).map((r) => r.id);
+export async function packSourceLocations(db: Reader, orderId: string): Promise<string[]> {
+  return (await dbAll<{ id: string }>(db, sql`SELECT DISTINCT i.location_id AS id FROM inventory_allocations a JOIN inventory i ON i.id = a.inventory_id
+    WHERE a.order_id = ${orderId} AND a.status IN ('Picked', 'Sorted') AND a.qty > 0 AND i.location_id IS NOT NULL ORDER BY i.location_id`)).map((r) => r.id);
 }
 
 /** First count lock that would stop Complete Packing of `orderId` at `stationId` (station first, then the staged stock). */
-export function packLock(db: Reader, orderId: string, stationId?: string | null): CountLockInfo | null {
-  const ids = [...(stationId ? [stationId] : []), ...packSourceLocations(db, orderId)];
+export async function packLock(db: Reader, orderId: string, stationId?: string | null): Promise<CountLockInfo | null> {
+  const ids = [...(stationId ? [stationId] : []), ...await packSourceLocations(db, orderId)];
   const seen = new Set<string>();
   for (const id of ids) {
     if (seen.has(id)) continue;
     seen.add(id);
-    const lock = locationLock(db, id);
+    const lock = await locationLock(db, id);
     if (lock) return lock;
   }
   return null;

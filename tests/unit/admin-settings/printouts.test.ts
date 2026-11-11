@@ -48,40 +48,40 @@ describe("printout repository", () => {
   const actor = () => ({ userId: w.userId, source: "Web" });
   const save = (over: Record<string, unknown> = {}) => printoutSchema.parse({ ...printoutDefaults("packing-slip"), name: "KS-TEST Retail slip", description: "Gift orders", ...over });
 
-  beforeEach(() => {
-    w = createWorld();
+  beforeEach(async () => {
+    w = await createWorld();
     const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
     auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   });
   afterEach(() => w.close());
 
-  it("creates a template with a moved logo and hidden price column, then edits it with a version check", () => {
+  it("creates a template with a moved logo and hidden price column, then edits it with a version check", async () => {
     const base = printoutDefaults("packing-slip").layout;
     const layout = { ...base, logoPosition: "right" as const, columns: base.columns.map((c) => (c.key === "price" ? { ...c, enabled: false } : c)) };
-    const { id } = createPrintout(w.db, auth, actor(), save({ layout }));
-    const d = getPrintout(w.db, id);
+    const { id } = await createPrintout(w.db, auth, actor(), save({ layout }));
+    const d = await getPrintout(w.db, id);
     expect(d.layout.logoPosition).toBe("right");
     expect(d.layout.columns.find((c) => c.key === "price")?.enabled).toBe(false);
-    expect(listPrintouts(w.db, EMPTY_GRID_QUERY, "packing-slip").rows.some((r) => r.id === id)).toBe(true);
-    expect(printoutTypes(w.db).find((t) => t.key === "packing-slip")?.count).toBeGreaterThan(0);
+    expect((await listPrintouts(w.db, EMPTY_GRID_QUERY, "packing-slip")).rows.some((r) => r.id === id)).toBe(true);
+    expect((await printoutTypes(w.db)).find((t) => t.key === "packing-slip")?.count).toBeGreaterThan(0);
 
-    updatePrintout(w.db, auth, actor(), id, save({ name: "KS-TEST Retail slip v2", layout, version: d.version }));
-    expect(() => updatePrintout(w.db, auth, actor(), id, save({ layout, version: d.version }))).toThrow(/changed since you opened it/);
+    await updatePrintout(w.db, auth, actor(), id, save({ name: "KS-TEST Retail slip v2", layout, version: d.version }));
+    await expect(async () => await updatePrintout(w.db, auth, actor(), id, save({ layout, version: d.version }))).rejects.toThrow(/changed since you opened it/);
   });
 
-  it("restricts client access, duplicates, and lists only usable templates in the print modal", () => {
-    const { id } = createPrintout(w.db, auth, actor(), save({ allClients: false, clientIds: [w.clientId] }));
-    expect(printTemplatesFor(w.db, ["packing-slip"], w.otherClientId).some((t) => t.id === id)).toBe(false);
-    expect(printTemplatesFor(w.db, ["packing-slip"], w.clientId).some((t) => t.id === id)).toBe(true);
-    const copy = duplicatePrintout(w.db, auth, actor(), id);
+  it("restricts client access, duplicates, and lists only usable templates in the print modal", async () => {
+    const { id } = await createPrintout(w.db, auth, actor(), save({ allClients: false, clientIds: [w.clientId] }));
+    expect((await printTemplatesFor(w.db, ["packing-slip"], w.otherClientId)).some((t) => t.id === id)).toBe(false);
+    expect((await printTemplatesFor(w.db, ["packing-slip"], w.clientId)).some((t) => t.id === id)).toBe(true);
+    const copy = await duplicatePrintout(w.db, auth, actor(), id);
     expect(copy.name).toBe("KS-TEST Retail slip (copy)");
-    expect(getPrintout(w.db, copy.id).clientIds).toEqual([w.clientId]);
-    expect(() => createPrintout(w.db, auth, actor(), save({ allClients: false, clientIds: [w.clientId] }))).toThrow(/already exists/);
+    expect((await getPrintout(w.db, copy.id)).clientIds).toEqual([w.clientId]);
+    await expect(async () => await createPrintout(w.db, auth, actor(), save({ allClients: false, clientIds: [w.clientId] }))).rejects.toThrow(/already exists/);
   });
 
-  it("deletes templates in bulk", () => {
-    const { id } = createPrintout(w.db, auth, actor(), save());
-    const res = deletePrintouts(w.db, auth, actor(), [id, "missing"]);
+  it("deletes templates in bulk", async () => {
+    const { id } = await createPrintout(w.db, auth, actor(), save());
+    const res = await deletePrintouts(w.db, auth, actor(), [id, "missing"]);
     expect(res.succeeded).toEqual([id]);
     expect(res.failed).toHaveLength(1);
   });

@@ -1,2 +1,0 @@
-ALTER TABLE `billing_fees` ADD `charge_one_time` integer DEFAULT false NOT NULL;--> statement-breakpoint
-UPDATE `billing_fees` SET `charge_one_time` = 1, `conditions` = (SELECT json_group_array(json(value)) FROM json_each(`billing_fees`.`conditions`) WHERE json_extract(value, '$.field') <> '__chargeOneTime') WHERE EXISTS (SELECT 1 FROM json_each(`billing_fees`.`conditions`) WHERE json_extract(value, '$.field') = '__chargeOneTime');

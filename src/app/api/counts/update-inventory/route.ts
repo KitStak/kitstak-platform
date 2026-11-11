@@ -7,5 +7,5 @@ import { domainCtx } from "@/server/repositories/platform-common";
 export const POST = defineRoute({
   permission: P.updateInv,
   body: updateInvSchema,
-  handler: ({ db, auth, actor, body }) => updateInventoryForPlans(db, domainCtx(actor, auth), auth, body.ids, body.reasonId, body.note, body.closeBlocked ?? false),
+  handler: async ({ db, auth, actor, body }) => await updateInventoryForPlans(db, domainCtx(actor, auth), auth, body.ids, body.reasonId, body.note, body.closeBlocked ?? false),
 });

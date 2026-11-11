@@ -3,7 +3,8 @@
  * create/update with product + LP capacities, guarded bulk delete, lock/unlock, labels.
  * Every read is scoped (warehouse); every write logs field-level change_log rows.
  */
-import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import type { AppDb } from "@/server/api/db";
 import { AppError } from "@/server/api/errors";
 import type { AuthContext } from "@/server/auth/context";
@@ -20,6 +21,7 @@ import {
   resolveIds, type Actor, type GridBinding, qc, flattenCustomFields } from "./locations-shared";
 import { customFieldSql } from "./custom-field-sql";
 import { isReservation, ledgerEffect, RESERVATION_TXN_TYPES, type LedgerDirection, type LedgerKind } from "@/lib/grid-defs/facility/location-ledger";
+import { forEachSeq } from "@/server/db/sql";
 
 const l = s.locations;
 
@@ -145,11 +147,11 @@ function selection() {
   };
 }
 
-export function listLocations(db: AppDb, auth: AuthContext, query: GridQuery): { rows: LocationRow[]; total: number } {
+export async function listLocations(db: AppDb, auth: AuthContext, query: GridQuery): Promise<{ rows: LocationRow[]; total: number }> {
   const grid = compileGrid(BINDING, query, [listScope(l, auth)]);
-  const result = paginate(
+  const result = await paginate(
     db.select(selection()).from(l).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    () => db.select({ n: sql<number>`count(*)` }).from(l).where(grid.where).get()?.n ?? 0,
+    async () => (await db.select({ n: sql<number>`count(*)` }).from(l).where(grid.where).limit(1))[0]?.n ?? 0,
     { page: query.page, pageSize: query.pageSize },
   );
   return { rows: result.rows.map((r) => ({ ...r, ...unsetFields(r), isLocked: Boolean(r.isLocked), preventAllocation: Boolean(r.preventAllocation) })) as LocationRow[], total: result.total };
@@ -176,9 +178,9 @@ export interface ZoneSummaryRow {
   readonly storedUnits: number;
 }
 
-export function getZoneSummary(db: AppDb, auth: AuthContext, warehouseId?: string): ZoneSummaryRow[] {
+export async function getZoneSummary(db: AppDb, auth: AuthContext, warehouseId?: string): Promise<ZoneSummaryRow[]> {
   const where = and(listScope(l, auth), warehouseId ? eq(l.warehouseId, warehouseId) : undefined);
-  const rows = db
+  const rows = await db
     .select({
       zoneId: l.locationZoneId,
       zone: sql<string>`COALESCE((SELECT lv.name FROM lookup_values lv WHERE lv.id = ${qc(l.locationZoneId)}), 'No zone')`,
@@ -190,39 +192,36 @@ export function getZoneSummary(db: AppDb, auth: AuthContext, warehouseId?: strin
     .from(l)
     .innerJoin(s.warehouses, eq(s.warehouses.id, l.warehouseId))
     .where(where)
-    .groupBy(l.locationZoneId)
-    .all();
+    .groupBy(l.locationZoneId);
   return rows.sort((a, b) => (a.zoneId === null ? 1 : b.zoneId === null ? -1 : a.zone.localeCompare(b.zone) || (a.warehouseCode ?? "").localeCompare(b.warehouseCode ?? "")));
 }
 
 /* ---------------- detail ---------------- */
 
-export function loadLocation(db: AppDb, auth: AuthContext, id: string): typeof l.$inferSelect {
-  const row = assertFound(db.select().from(l).where(eq(l.id, id)).get(), "Location");
+export async function loadLocation(db: AppDb, auth: AuthContext, id: string): Promise<typeof l.$inferSelect> {
+  const row = assertFound((await db.select().from(l).where(eq(l.id, id)).limit(1))[0], "Location");
   assertWarehouseInScope(auth, row.warehouseId, "Location");
   return row;
 }
 
-export function getLocation(db: AppDb, auth: AuthContext, id: string) {
-  const row = loadLocation(db, auth, id);
-  const names = resolveIds(db, "lookup_values", [row.locationGroupId, row.locationZoneId]);
-  const wh = db.select({ code: s.warehouses.code, name: s.warehouses.name }).from(s.warehouses).where(eq(s.warehouses.id, row.warehouseId)).get();
-  const client = row.dedicatedClientId ? db.select({ code: s.clients.code, name: s.clients.name }).from(s.clients).where(eq(s.clients.id, row.dedicatedClientId)).get() : undefined;
-  const productCapacities = db
+export async function getLocation(db: AppDb, auth: AuthContext, id: string) {
+  const row = await loadLocation(db, auth, id);
+  const names = await resolveIds(db, "lookup_values", [row.locationGroupId, row.locationZoneId]);
+  const wh = (await db.select({ code: s.warehouses.code, name: s.warehouses.name }).from(s.warehouses).where(eq(s.warehouses.id, row.warehouseId)).limit(1))[0];
+  const client = row.dedicatedClientId ? (await db.select({ code: s.clients.code, name: s.clients.name }).from(s.clients).where(eq(s.clients.id, row.dedicatedClientId)).limit(1))[0] : undefined;
+  const productCapacities = await db
     .select({ id: s.locationProductCapacity.id, clientId: s.locationProductCapacity.clientId, clientName: s.clients.name, productId: s.locationProductCapacity.productId, sku: s.products.sku, productName: s.products.name, packType: s.locationProductCapacity.packType, minQty: s.locationProductCapacity.minQty, maxQty: s.locationProductCapacity.maxQty })
     .from(s.locationProductCapacity)
     .innerJoin(s.products, eq(s.products.id, s.locationProductCapacity.productId))
     .innerJoin(s.clients, eq(s.clients.id, s.locationProductCapacity.clientId))
     .where(eq(s.locationProductCapacity.locationId, id))
-    .orderBy(asc(s.products.sku))
-    .all();
-  const lpCapacities = db
+    .orderBy(asc(s.products.sku));
+  const lpCapacities = await db
     .select({ id: s.locationLpCapacity.id, lpTypeId: s.locationLpCapacity.lpTypeId, lpTypeCode: s.lpTypes.code, minQty: s.locationLpCapacity.minQty, maxQty: s.locationLpCapacity.maxQty, clientId: s.locationLpCapacity.clientId, productId: s.locationLpCapacity.productId, sku: sql<string | null>`(SELECT p.sku FROM products p WHERE p.id = ${s.locationLpCapacity.productId})` })
     .from(s.locationLpCapacity)
     .innerJoin(s.lpTypes, eq(s.lpTypes.id, s.locationLpCapacity.lpTypeId))
-    .where(eq(s.locationLpCapacity.locationId, id))
-    .all();
-  const stats = db.select({ storedUnits: onHandSql, skuCount: skuCountSql, openTaskCount: openTaskSql, cart: cartSql }).from(l).where(eq(l.id, id)).get();
+    .where(eq(s.locationLpCapacity.locationId, id));
+  const stats = (await db.select({ storedUnits: onHandSql, skuCount: skuCountSql, openTaskCount: openTaskSql, cart: cartSql }).from(l).where(eq(l.id, id)).limit(1))[0];
   return {
     ...row,
     ...unsetFields(row),
@@ -242,28 +241,26 @@ export function getLocation(db: AppDb, auth: AuthContext, id: string) {
   };
 }
 
-export type LocationDetail = ReturnType<typeof getLocation>;
+export type LocationDetail = Awaited<ReturnType<typeof getLocation>>;
 
-export function getLocationContents(db: AppDb, auth: AuthContext, id: string) {
-  loadLocation(db, auth, id);
-  const buckets = db
+export async function getLocationContents(db: AppDb, auth: AuthContext, id: string) {
+  await loadLocation(db, auth, id);
+  const buckets = await db
     .select({ id: s.inventory.id, productId: s.products.id, sku: s.products.sku, productName: s.products.name, clientName: s.clients.name, lotNumber: s.inventory.lotNumber, expiryDate: s.inventory.expiryDate, status: s.inventory.status, packType: s.inventory.packType, onHand: s.inventory.onHand, allocated: s.inventory.allocated, damaged: s.inventory.damaged, lpNumber: s.licensePlates.number, receivedAt: s.inventory.receivedAt })
     .from(s.inventory)
     .innerJoin(s.products, eq(s.products.id, s.inventory.productId))
     .leftJoin(s.clients, eq(s.clients.id, s.inventory.clientId))
     .leftJoin(s.licensePlates, eq(s.licensePlates.id, s.inventory.lpId))
     .where(and(eq(s.inventory.locationId, id), sql`${s.inventory.onHand} > 0`))
-    .orderBy(asc(s.products.sku))
-    .all();
-  const tasks = db
+    .orderBy(asc(s.products.sku));
+  const tasks = await db
     .select({ id: s.tasks.id, taskNo: s.tasks.taskNo, taskType: s.tasks.taskType, status: s.tasks.status, jobId: s.tasks.jobId, jobCode: s.jobs.code, productId: s.tasks.productId, sku: sql<string | null>`(SELECT p.sku FROM products p WHERE p.id = ${s.tasks.productId})`, plannedQty: s.tasks.plannedQty, direction: sql<"Source" | "Target">`CASE WHEN ${s.tasks.sourceLocationId} = ${id} THEN 'Source' ELSE 'Target' END` })
     .from(s.tasks)
     .innerJoin(s.jobs, eq(s.jobs.id, s.tasks.jobId))
     .where(and(sql`(${s.tasks.sourceLocationId} = ${id} OR ${s.tasks.targetLocationId} = ${id})`, inArray(s.tasks.status, ["Pending", "Started"])))
     .orderBy(asc(s.tasks.taskNo))
-    .limit(200)
-    .all();
-  const first = ledgerPage(db, id, { page: 1, ps: 25, kind: "movements" });
+    .limit(200);
+  const first = await ledgerPage(db, id, { page: 1, ps: 25, kind: "movements" });
   return { buckets, tasks, ledger: first.rows, ledgerTotal: first.total };
 }
 
@@ -284,22 +281,21 @@ export interface LocationLedgerRow {
   readonly note: string | null;
 }
 
-function ledgerPage(db: AppDb, id: string, q: { readonly page: number; readonly ps: number; readonly kind: LedgerKind }): { rows: LocationLedgerRow[]; total: number } {
+async function ledgerPage(db: AppDb, id: string, q: { readonly page: number; readonly ps: number; readonly kind: LedgerKind }): Promise<{ rows: LocationLedgerRow[]; total: number }> {
   const t = s.inventoryTransactions;
   const here = sql`(${t.fromLocationId} = ${id} OR ${t.toLocationId} = ${id})`;
   const list = sql.join(RESERVATION_TXN_TYPES.map((v) => sql`${v}`), sql`, `);
   const kind = q.kind === "all" ? undefined : q.kind === "reservations" ? sql`${t.type} IN (${list})` : sql`${t.type} NOT IN (${list})`;
   const where = and(here, kind);
-  const total = db.select({ n: sql<number>`count(*)` }).from(t).where(where).get()?.n ?? 0;
-  const raw = db
+  const total = (await db.select({ n: sql<number>`count(*)` }).from(t).where(where).limit(1))[0]?.n ?? 0;
+  const raw = await db
     .select({ id: t.id, type: t.type, productId: s.products.id, sku: s.products.sku, uomQty: t.uomQty, fromLocationId: t.fromLocationId, toLocationId: t.toLocationId, lot: sql<string | null>`COALESCE(${t.toLot}, ${t.fromLot})`, at: t.at, source: t.source, note: t.note })
     .from(t)
     .innerJoin(s.products, eq(s.products.id, t.productId))
     .where(where)
     .orderBy(sql`${t.seq} DESC`)
     .limit(q.ps)
-    .offset((q.page - 1) * q.ps)
-    .all();
+    .offset((q.page - 1) * q.ps);
   const rows = raw.map((r) => {
     const effect = ledgerEffect(r.fromLocationId === id, r.toLocationId === id, r.uomQty);
     return { id: r.id, type: r.type, productId: r.productId, sku: r.sku, ...effect, reservation: isReservation(r.type), lotNumber: r.lot, at: r.at, source: r.source, note: r.note };
@@ -308,9 +304,9 @@ function ledgerPage(db: AppDb, id: string, q: { readonly page: number; readonly 
 }
 
 /** Paged ledger of one location (critic R5: hard-capped at 100 and mixed with reservations). */
-export function listLocationLedger(db: AppDb, auth: AuthContext, id: string, q: { readonly page: number; readonly ps: number; readonly kind: LedgerKind }) {
-  loadLocation(db, auth, id);
-  return ledgerPage(db, id, q);
+export async function listLocationLedger(db: AppDb, auth: AuthContext, id: string, q: { readonly page: number; readonly ps: number; readonly kind: LedgerKind }) {
+  await loadLocation(db, auth, id);
+  return await ledgerPage(db, id, q);
 }
 
 /* ---------------- writes ---------------- */
@@ -370,68 +366,68 @@ function writeColumns(input: LocationSave, zoneName: string | null) {
   return { ...columnsFor(input.info, zoneName), customFields: input.customFields };
 }
 
-function assertLookup(db: AppDb, id: string | null, type: "location_group" | "location_zone", warehouseId: string, field: string): string | null {
+async function assertLookup(db: AppDb, id: string | null, type: "location_group" | "location_zone", warehouseId: string, field: string): Promise<string | null> {
   if (!id) return null;
-  const row = db.select({ name: s.lookupValues.name, warehouseId: s.lookupValues.warehouseId }).from(s.lookupValues).where(and(eq(s.lookupValues.id, id), eq(s.lookupValues.type, type))).get();
+  const row = (await db.select({ name: s.lookupValues.name, warehouseId: s.lookupValues.warehouseId }).from(s.lookupValues).where(and(eq(s.lookupValues.id, id), eq(s.lookupValues.type, type))).limit(1))[0];
   if (!row || (row.warehouseId && row.warehouseId !== warehouseId)) {
     throw new AppError("VALIDATION", "Pick a value from this warehouse", { fieldErrors: { [field]: ["Pick a value from this warehouse"] } });
   }
   return row.name;
 }
 
-function assertCodeFree(db: AppDb, warehouseId: string, code: string, exceptId?: string): void {
-  const clash = db.select({ id: l.id }).from(l).where(and(eq(l.warehouseId, warehouseId), sql`lower(${l.code}) = lower(${code})`)).get();
+async function assertCodeFree(db: AppDb, warehouseId: string, code: string, exceptId?: string): Promise<void> {
+  const clash = (await db.select({ id: l.id }).from(l).where(and(eq(l.warehouseId, warehouseId), sql`lower(${l.code}) = lower(${code})`)).limit(1))[0];
   if (clash && clash.id !== exceptId) throw duplicateError("info.code", `Location ${code} already exists in this warehouse`);
 }
 
 interface CapacityLines { readonly product: readonly CapacityLine[]; readonly lp: readonly CapacityLine[] }
 
 /** Current capacity lines of a location, keyed for the per-line change log. */
-function capacityLines(db: AppDb, locationId: string): CapacityLines {
-  const products = db.select({ productId: s.locationProductCapacity.productId, sku: s.products.sku, pack: s.locationProductCapacity.packType, min: s.locationProductCapacity.minQty, max: s.locationProductCapacity.maxQty })
+async function capacityLines(db: AppDb, locationId: string): Promise<CapacityLines> {
+  const products = await db.select({ productId: s.locationProductCapacity.productId, sku: s.products.sku, pack: s.locationProductCapacity.packType, min: s.locationProductCapacity.minQty, max: s.locationProductCapacity.maxQty })
     .from(s.locationProductCapacity).innerJoin(s.products, eq(s.products.id, s.locationProductCapacity.productId))
-    .where(eq(s.locationProductCapacity.locationId, locationId)).orderBy(asc(s.products.sku)).all();
-  const lps = db.select({ lpTypeId: s.locationLpCapacity.lpTypeId, productId: s.locationLpCapacity.productId, code: s.lpTypes.code, min: s.locationLpCapacity.minQty, max: s.locationLpCapacity.maxQty, sku: sql<string | null>`(SELECT p.sku FROM products p WHERE p.id = ${s.locationLpCapacity.productId})` })
+    .where(eq(s.locationProductCapacity.locationId, locationId)).orderBy(asc(s.products.sku));
+  const lps = await db.select({ lpTypeId: s.locationLpCapacity.lpTypeId, productId: s.locationLpCapacity.productId, code: s.lpTypes.code, min: s.locationLpCapacity.minQty, max: s.locationLpCapacity.maxQty, sku: sql<string | null>`(SELECT p.sku FROM products p WHERE p.id = ${s.locationLpCapacity.productId})` })
     .from(s.locationLpCapacity).innerJoin(s.lpTypes, eq(s.lpTypes.id, s.locationLpCapacity.lpTypeId))
-    .where(eq(s.locationLpCapacity.locationId, locationId)).orderBy(asc(s.lpTypes.code)).all();
+    .where(eq(s.locationLpCapacity.locationId, locationId)).orderBy(asc(s.lpTypes.code));
   return {
     product: products.map((p) => ({ key: `${p.productId}|${p.pack}`, label: p.pack && p.pack !== "Each" ? `${p.sku} (${p.pack})` : p.sku, min: p.min, max: p.max })),
     lp: lps.map((p) => ({ key: `${p.lpTypeId}|${p.productId ?? ""}`, label: p.sku ? `${p.code} · ${p.sku}` : p.code, min: p.min, max: p.max })),
   };
 }
 
-function logCapacities(tx: AppDb, auth: AuthContext, actor: Actor, ref: { entityId: string; entityCode: string }, before: CapacityLines, after: CapacityLines): void {
-  logCapacityChanges(tx, domainCtxOf(actor, auth), { entityType: "location", ...ref }, [
+async function logCapacities(tx: AppDb, auth: AuthContext, actor: Actor, ref: { entityId: string; entityCode: string }, before: CapacityLines, after: CapacityLines): Promise<void> {
+  await logCapacityChanges(tx, domainCtxOf(actor, auth), { entityType: "location", ...ref }, [
     ...capacityLineChanges("productCapacity", before.product, after.product),
     ...capacityLineChanges("lpCapacity", before.lp, after.lp),
   ]);
 }
 
-function writeCapacities(tx: AppDb, auth: AuthContext, locationId: string, input: LocationSave): void {
-  tx.delete(s.locationProductCapacity).where(eq(s.locationProductCapacity.locationId, locationId)).run();
-  tx.delete(s.locationLpCapacity).where(eq(s.locationLpCapacity.locationId, locationId)).run();
-  input.productCapacities.forEach((c, i) => {
-    const product = tx.select({ clientId: s.products.clientId }).from(s.products).where(eq(s.products.id, c.productId)).get();
+async function writeCapacities(tx: AppDb, auth: AuthContext, locationId: string, input: LocationSave): Promise<void> {
+  await tx.delete(s.locationProductCapacity).where(eq(s.locationProductCapacity.locationId, locationId));
+  await tx.delete(s.locationLpCapacity).where(eq(s.locationLpCapacity.locationId, locationId));
+  await forEachSeq(input.productCapacities, async (c, i) => {
+    const product = (await tx.select({ clientId: s.products.clientId }).from(s.products).where(eq(s.products.id, c.productId)).limit(1))[0];
     if (!product || product.clientId !== c.clientId) {
       throw new AppError("VALIDATION", "The product does not belong to the selected client", { fieldErrors: { [`productCapacities.${i}.productId`]: ["Pick a product of this client"] } });
     }
-    tx.insert(s.locationProductCapacity).values({ locationId, clientId: c.clientId, productId: c.productId, packType: c.packType, minQty: c.minQty, maxQty: c.maxQty }).run();
+    await tx.insert(s.locationProductCapacity).values({ locationId, clientId: c.clientId, productId: c.productId, packType: c.packType, minQty: c.minQty, maxQty: c.maxQty });
   });
-  input.lpCapacities.forEach((c, i) => {
-    const type = tx.select({ warehouseId: s.lpTypes.warehouseId }).from(s.lpTypes).where(eq(s.lpTypes.id, c.lpTypeId)).get();
+  await forEachSeq(input.lpCapacities, async (c, i) => {
+    const type = (await tx.select({ warehouseId: s.lpTypes.warehouseId }).from(s.lpTypes).where(eq(s.lpTypes.id, c.lpTypeId)).limit(1))[0];
     if (!type || type.warehouseId !== input.info.warehouseId) {
       throw new AppError("VALIDATION", "Pick an LP type of this warehouse", { fieldErrors: { [`lpCapacities.${i}.lpTypeId`]: ["Pick an LP type of this warehouse"] } });
     }
-    tx.insert(s.locationLpCapacity).values({ locationId, lpTypeId: c.lpTypeId, minQty: c.minQty, maxQty: c.maxQty, clientId: c.assignProduct ? c.clientId : null, productId: c.assignProduct ? c.productId : null }).run();
+    await tx.insert(s.locationLpCapacity).values({ locationId, lpTypeId: c.lpTypeId, minQty: c.minQty, maxQty: c.maxQty, clientId: c.assignProduct ? c.clientId : null, productId: c.assignProduct ? c.productId : null });
   });
   void auth;
 }
 
 /** Display snapshot (ids resolved to names) for change-log diffs. */
-function display(db: AppDb, row: typeof l.$inferSelect): Record<string, unknown> {
-  const names = resolveIds(db, "lookup_values", [row.locationGroupId, row.locationZoneId]);
-  const wh = resolveIds(db, "warehouses", [row.warehouseId]);
-  const cl = resolveIds(db, "clients", [row.dedicatedClientId]);
+async function display(db: AppDb, row: typeof l.$inferSelect): Promise<Record<string, unknown>> {
+  const names = await resolveIds(db, "lookup_values", [row.locationGroupId, row.locationZoneId]);
+  const wh = await resolveIds(db, "warehouses", [row.warehouseId]);
+  const cl = await resolveIds(db, "clients", [row.dedicatedClientId]);
   const { id: _id, warehouseId, locationGroupId, locationZoneId, dedicatedClientId, zone: _zone, bay: _bay, type: _type, capacityUnits: _cu, customFields: _cf, ...rest } = row;
   void _id; void _zone; void _bay; void _type; void _cu;
   return {
@@ -446,82 +442,81 @@ function display(db: AppDb, row: typeof l.$inferSelect): Record<string, unknown>
   };
 }
 
-export function createLocation(tx: AppDb, auth: AuthContext, actor: Actor, input: LocationSave): { id: string; code: string } {
+export async function createLocation(tx: AppDb, auth: AuthContext, actor: Actor, input: LocationSave): Promise<{ id: string; code: string }> {
   assertWarehouseInScope(auth, input.info.warehouseId);
-  assertCodeFree(tx, input.info.warehouseId, input.info.code.trim());
-  assertLookup(tx, input.info.locationGroupId, "location_group", input.info.warehouseId, "info.locationGroupId");
-  const zoneName = assertLookup(tx, input.info.locationZoneId, "location_zone", input.info.warehouseId, "info.locationZoneId");
-  const row = tx.insert(l).values({ ...writeColumns(input, zoneName), createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: l.id, code: l.code }).get();
-  writeCapacities(tx, auth, row.id, input);
-  logCreate(tx, domainCtxOf(actor, auth), { entityType: "location", entityId: row.id, entityCode: row.code });
-  logCapacities(tx, auth, actor, { entityId: row.id, entityCode: row.code }, { product: [], lp: [] }, capacityLines(tx, row.id));
+  await assertCodeFree(tx, input.info.warehouseId, input.info.code.trim());
+  await assertLookup(tx, input.info.locationGroupId, "location_group", input.info.warehouseId, "info.locationGroupId");
+  const zoneName = await assertLookup(tx, input.info.locationZoneId, "location_zone", input.info.warehouseId, "info.locationZoneId");
+  const row = (await tx.insert(l).values({ ...writeColumns(input, zoneName), createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: l.id, code: l.code }))[0];
+  await writeCapacities(tx, auth, row.id, input);
+  await logCreate(tx, domainCtxOf(actor, auth), { entityType: "location", entityId: row.id, entityCode: row.code });
+  await logCapacities(tx, auth, actor, { entityId: row.id, entityCode: row.code }, { product: [], lp: [] }, await capacityLines(tx, row.id));
   return row;
 }
 
-export function updateLocation(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: LocationSave): { id: string; code: string; version: number } {
-  const before = loadLocation(tx, auth, id);
+export async function updateLocation(tx: AppDb, auth: AuthContext, actor: Actor, id: string, input: LocationSave): Promise<{ id: string; code: string; version: number }> {
+  const before = await loadLocation(tx, auth, id);
   assertVersion(before.version, input.version);
   if (input.info.warehouseId !== before.warehouseId) {
     throw new AppError("VALIDATION", "A location can't move to another warehouse", { fieldErrors: { "info.warehouseId": ["A location can't move to another warehouse"] } });
   }
-  assertCodeFree(tx, before.warehouseId, input.info.code.trim(), id);
-  assertLookup(tx, input.info.locationGroupId, "location_group", before.warehouseId, "info.locationGroupId");
-  const zoneName = assertLookup(tx, input.info.locationZoneId, "location_zone", before.warehouseId, "info.locationZoneId");
-  const capsBefore = capacityLines(tx, id);
-  const snapshotBefore = display(tx, before);
-  const after = tx.update(l).set({ ...writeColumns(input, zoneName), updatedBy: actor.userId, version: sql`${l.version} + 1` }).where(eq(l.id, id)).returning().get();
-  writeCapacities(tx, auth, id, input);
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: "location", entityId: id, entityCode: after.code }, snapshotBefore, display(tx, after));
-  logCapacities(tx, auth, actor, { entityId: id, entityCode: after.code }, capsBefore, capacityLines(tx, id));
+  await assertCodeFree(tx, before.warehouseId, input.info.code.trim(), id);
+  await assertLookup(tx, input.info.locationGroupId, "location_group", before.warehouseId, "info.locationGroupId");
+  const zoneName = await assertLookup(tx, input.info.locationZoneId, "location_zone", before.warehouseId, "info.locationZoneId");
+  const capsBefore = await capacityLines(tx, id);
+  const snapshotBefore = await display(tx, before);
+  const after = (await tx.update(l).set({ ...writeColumns(input, zoneName), updatedBy: actor.userId, version: sql`${l.version} + 1` }).where(eq(l.id, id)).returning())[0];
+  await writeCapacities(tx, auth, id, input);
+  await logUpdate(tx, domainCtxOf(actor, auth), { entityType: "location", entityId: id, entityCode: after.code }, snapshotBefore, await display(tx, after));
+  await logCapacities(tx, auth, actor, { entityId: id, entityCode: after.code }, capsBefore, await capacityLines(tx, id));
   return { id, code: after.code, version: after.version };
 }
 
 /** Why a location can't be deleted, or null. */
-export function deleteBlocker(db: AppDb, id: string): string | null {
-  const stock = db.select({ onHand: sql<number>`COALESCE(SUM(${s.inventory.onHand}), 0)`, rows: sql<number>`COUNT(*)` }).from(s.inventory).where(eq(s.inventory.locationId, id)).get();
+export async function deleteBlocker(db: AppDb, id: string): Promise<string | null> {
+  const stock = (await db.select({ onHand: sql<number>`COALESCE(SUM(${s.inventory.onHand}), 0)`, rows: sql<number>`COUNT(*)` }).from(s.inventory).where(eq(s.inventory.locationId, id)).limit(1))[0];
   if ((stock?.onHand ?? 0) > 0) return `holds ${stock?.onHand} units of inventory`;
-  const tasks = db.select({ n: sql<number>`count(*)` }).from(s.tasks).where(and(sql`(${s.tasks.sourceLocationId} = ${id} OR ${s.tasks.targetLocationId} = ${id})`, inArray(s.tasks.status, ["Pending", "Started"]))).get()?.n ?? 0;
+  const tasks = (await db.select({ n: sql<number>`count(*)` }).from(s.tasks).where(and(sql`(${s.tasks.sourceLocationId} = ${id} OR ${s.tasks.targetLocationId} = ${id})`, inArray(s.tasks.status, ["Pending", "Started"]))).limit(1))[0]?.n ?? 0;
   if (tasks > 0) return `has ${tasks} open ${tasks === 1 ? "task" : "tasks"}`;
   if ((stock?.rows ?? 0) > 0) return "has inventory history buckets; lock it instead";
-  const lps = db.select({ n: sql<number>`count(*)` }).from(s.licensePlates).where(eq(s.licensePlates.locationId, id)).get()?.n ?? 0;
+  const lps = (await db.select({ n: sql<number>`count(*)` }).from(s.licensePlates).where(eq(s.licensePlates.locationId, id)).limit(1))[0]?.n ?? 0;
   if (lps > 0) return `has ${lps} license ${lps === 1 ? "plate" : "plates"} assigned`;
-  const asDefault = db.select({ code: s.warehouses.code }).from(s.warehouses).where(sql`${s.warehouses.defaultReceivingLocationId} = ${id} OR ${s.warehouses.defaultShipLocationId} = ${id} OR ${s.warehouses.defaultReturnLocationId} = ${id}`).get();
+  const asDefault = (await db.select({ code: s.warehouses.code }).from(s.warehouses).where(sql`${s.warehouses.defaultReceivingLocationId} = ${id} OR ${s.warehouses.defaultShipLocationId} = ${id} OR ${s.warehouses.defaultReturnLocationId} = ${id}`).limit(1))[0];
   if (asDefault) return `is a default location of warehouse ${asDefault.code}`;
-  const pkg = db.select({ code: s.shipmentPackages.code }).from(s.shipmentPackages).where(eq(s.shipmentPackages.reductionLocationId, id)).get();
+  const pkg = (await db.select({ code: s.shipmentPackages.code }).from(s.shipmentPackages).where(eq(s.shipmentPackages.reductionLocationId, id)).limit(1))[0];
   if (pkg) return `is the reduction location of package ${pkg.code}`;
   return null;
 }
 
-export function deleteLocations(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): BulkResult {
+export async function deleteLocations(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[]): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const row = loadLocation(inner, auth, id);
-    const reason = deleteBlocker(inner, id);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const row = await loadLocation(inner, auth, id);
+    const reason = await deleteBlocker(inner, id);
     if (reason) throw new AppError("INVALID_STATE", `${row.code} ${reason}`);
-    inner.delete(l).where(eq(l.id, id)).run();
-    logDelete(inner, ctx, { entityType: "location", entityId: id, entityCode: row.code, warehouseId: row.warehouseId });
+    await inner.delete(l).where(eq(l.id, id));
+    await logDelete(inner, ctx, { entityType: "location", entityId: id, entityCode: row.code, warehouseId: row.warehouseId });
   });
 }
 
-export function setLocationsLocked(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], locked: boolean): BulkResult {
+export async function setLocationsLocked(tx: AppDb, auth: AuthContext, actor: Actor, ids: readonly string[], locked: boolean): Promise<BulkResult> {
   const ctx = domainCtxOf(actor, auth);
-  return runBulk(tx, ids, (inner, id) => {
-    const row = loadLocation(inner, auth, id);
+  return await runBulk(tx, ids, async (inner, id) => {
+    const row = await loadLocation(inner, auth, id);
     if (row.isLocked === locked) throw new AppError("INVALID_STATE", `${row.code} is already ${locked ? "locked" : "unlocked"}`);
-    inner.update(l).set({ isLocked: locked, updatedBy: actor.userId, version: sql`${l.version} + 1` }).where(eq(l.id, id)).run();
-    logUpdate(inner, ctx, { entityType: "location", entityId: id, entityCode: row.code }, { isLocked: row.isLocked }, { isLocked: locked });
+    await inner.update(l).set({ isLocked: locked, updatedBy: actor.userId, version: sql`${l.version} + 1` }).where(eq(l.id, id));
+    await logUpdate(inner, ctx, { entityType: "location", entityId: id, entityCode: row.code }, { isLocked: row.isLocked }, { isLocked: locked });
   });
 }
 
 /** Label records for the shared print endpoint (`location-label`). */
-export function locationLabelRecords(db: AppDb, auth: AuthContext, ids: readonly string[]) {
+export async function locationLabelRecords(db: AppDb, auth: AuthContext, ids: readonly string[]) {
   if (ids.length === 0) return [];
-  const rows = db
+  const rows = await db
     .select({ id: l.id, code: l.code, barcode: sql<string>`${LOCATION_SQL.barcode}`, warehouseId: l.warehouseId, warehouseCode: sql<string>`${LOCATION_SQL.warehouseCode}`, zone: sql<string | null>`${LOCATION_SQL.locationZone}`, aisle: l.aisle, level: l.level, locationType: l.locationType })
     .from(l)
     .where(and(inArray(l.id, [...ids]), listScope(l, auth)))
-    .orderBy(asc(l.walkingPathPriority), asc(l.code))
-    .all();
+    .orderBy(asc(l.walkingPathPriority), asc(l.code));
   return rows.map((r) => ({
     code: r.code,
     barcode: r.barcode,
@@ -537,13 +532,12 @@ export function locationLabelRecords(db: AppDb, auth: AuthContext, ids: readonly
  * The product's own pack types (Logiwa UOM model) for the capacity modal, smallest first.
  * Falls back to the product's base pack type when it has none defined.
  */
-export function productPackTypesFor(db: AppDb, productId: string): { packType: string; kind: string; uomQty: number }[] {
-  const product = assertFound(db.select({ id: s.products.id }).from(s.products).where(eq(s.products.id, productId)).get(), "Product");
-  const rows = db
+export async function productPackTypesFor(db: AppDb, productId: string): Promise<{ packType: string; kind: string; uomQty: number }[]> {
+  const product = assertFound((await db.select({ id: s.products.id }).from(s.products).where(eq(s.products.id, productId)).limit(1))[0], "Product");
+  const rows = await db
     .select({ packType: s.productPackTypes.packType, kind: s.productPackTypes.kind, uomQty: s.productPackTypes.uomQty })
     .from(s.productPackTypes)
     .where(eq(s.productPackTypes.productId, product.id))
-    .orderBy(asc(s.productPackTypes.uomQty), asc(s.productPackTypes.packType))
-    .all();
+    .orderBy(asc(s.productPackTypes.uomQty), asc(s.productPackTypes.packType));
   return rows.length ? rows : [{ packType: "Each", kind: "Primary", uomQty: 1 }];
 }

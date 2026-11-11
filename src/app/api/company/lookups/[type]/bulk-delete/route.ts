@@ -8,5 +8,5 @@ export const POST = defineRoute({
   permission: DATA_SETUP_PERMISSION,
   params: typeParams,
   body: bulkIdsSchema,
-  handler: ({ db, auth, actor, params, body }) => deleteLookupValues(db, auth, actor, defOf(params.type), body.ids),
+  handler: async ({ db, auth, actor, params, body }) => await deleteLookupValues(db, auth, actor, defOf(params.type), body.ids),
 });

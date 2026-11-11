@@ -7,5 +7,5 @@ import { INVENTORY_PERMISSIONS as P } from "@/lib/grid-defs/inventory/permission
 export const POST = defineRoute({
   permission: P.transferLpLocation,
   body: transferLpSchema,
-  handler: ({ db, auth, actor, body }) => transferLp(db, domainCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await transferLp(db, domainCtx(actor, auth), body),
 });

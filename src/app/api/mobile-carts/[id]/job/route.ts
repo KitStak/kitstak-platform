@@ -15,18 +15,18 @@ const WRITERS = ["settings.mobile_carts.edit", "fulfillment.job_management.assig
 export const GET = defineRoute({
   permission: ["settings.mobile_carts.view", "inventory.inventory_by_location.view"],
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => cartJobCandidates(db, auth, params.id),
+  handler: async ({ db, auth, params }) => await cartJobCandidates(db, auth, params.id),
 });
 
 export const POST = defineRoute({
   permission: WRITERS,
   params: idParamsSchema,
   body: z.object({ jobId: z.string().min(1, "Choose a job").max(64) }),
-  handler: ({ db, auth, actor, params, body }) => assignCartJob(db, auth, actor, params.id, body.jobId),
+  handler: async ({ db, auth, actor, params, body }) => await assignCartJob(db, auth, actor, params.id, body.jobId),
 });
 
 export const DELETE = defineRoute({
   permission: WRITERS,
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => releaseMobileCart(db, auth, actor, params.id),
+  handler: async ({ db, auth, actor, params }) => await releaseMobileCart(db, auth, actor, params.id),
 });

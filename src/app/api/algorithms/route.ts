@@ -10,9 +10,9 @@ const listQuery = z.object({ kind: z.enum(["putaway", "allocation"]).default("pu
 export const GET = defineRoute({
   permission: "automation.algorithms.view",
   query: listQuery,
-  handler: ({ db, auth, grid, query }) => {
+  handler: async ({ db, auth, grid, query }) => {
     const q = grid();
-    const { rows, total } = listAlgorithms(db, auth, ALGORITHM_KIND_SLUG[query.kind], q);
+    const { rows, total } = await listAlgorithms(db, auth, ALGORITHM_KIND_SLUG[query.kind], q);
     return listResult(rows, { total, page: q.page, pageSize: q.pageSize });
   },
 });
@@ -20,5 +20,5 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: "automation.algorithms.create",
   body: algorithmSaveSchema,
-  handler: ({ db, auth, actor, body }) => created(createAlgorithm(db, auth, actor, body)),
+  handler: async ({ db, auth, actor, body }) => created(await createAlgorithm(db, auth, actor, body)),
 });

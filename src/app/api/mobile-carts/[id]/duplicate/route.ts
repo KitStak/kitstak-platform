@@ -9,5 +9,5 @@ export const POST = defineRoute({
   permission: "settings.mobile_carts.duplicate",
   params: idParamsSchema,
   body: duplicateCartSchema,
-  handler: ({ db, auth, actor, params, body }) => created(duplicateMobileCart(db, auth, actor, params.id, body.code)),
+  handler: async ({ db, auth, actor, params, body }) => created(await duplicateMobileCart(db, auth, actor, params.id, body.code)),
 });

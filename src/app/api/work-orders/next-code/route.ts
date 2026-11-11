@@ -5,5 +5,5 @@ import { WO_PERMISSIONS } from "@/server/repositories/work-orders-api";
 
 export const GET = defineRoute({
   permission: [WO_PERMISSIONS.create, WO_PERMISSIONS.edit],
-  handler: ({ db }) => ({ code: nextWorkOrderCode(db) }),
+  handler: async ({ db }) => ({ code: await nextWorkOrderCode(db) }),
 });

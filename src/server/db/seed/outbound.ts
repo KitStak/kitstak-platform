@@ -46,23 +46,23 @@ function createInput(w: World, plan: OrderPlan): Parameters<typeof orders.create
   };
 }
 
-function createPlannedOrder(w: World, tx: Tx, plan: OrderPlan): { id: Id; code: string } {
+async function createPlannedOrder(w: World, tx: Tx, plan: OrderPlan): Promise<{ id: Id; code: string }> {
   const ctx: DomainCtx = plan.channel === "Manual" || plan.channel === "Wholesale" ? managerCtx(w) : integrationCtx;
-  const order = orders.createOrder(tx, ctx, createInput(w, plan), { trigger: plan.channel === "Manual" ? "Shipment Order Created" : "Shipment Order Imported" });
+  const order = await orders.createOrder(tx, ctx, createInput(w, plan), { trigger: plan.channel === "Manual" ? "Shipment Order Created" : "Shipment Order Imported" });
   const connection = plan.viaChannelConnection ? w.channels.byClient.get(plan.clientId) : undefined;
-  tx.update(schema.shipmentOrders).set({
+  await tx.update(schema.shipmentOrders).set({
     customerId: plan.customerId, retailerId: plan.retailerId, isPrime: plan.isPrime, channelConnectionId: connection?.id ?? null,
     channelPaymentStatus: plan.channel === "Manual" || plan.channel === "Wholesale" ? null : "paid",
     requestedShippingOption: plan.serviceCode === "SBX_NEXT_DAY" ? "Overnight" : plan.serviceCode === "SBX_2DAY" ? "2-Day" : "Standard",
     retailerPo: plan.retailerId ? `PO${4_500_000 + plan.key * 13}` : null, dept: plan.retailerId ? String(20 + (plan.key % 60)) : null,
-  }).where(eq(schema.shipmentOrders.id, order.id)).run();
+  }).where(eq(schema.shipmentOrders.id, order.id));
   return { id: order.id, code: order.code };
 }
 
-function blockOrder(tx: Tx, ctx: DomainCtx, id: Id, code: string): void {
-  tx.update(schema.shipmentOrders).set({ workflowBlocked: "Fully", note: "Blocked by workflow 'Block PO box addresses': confirm a street address with the customer." })
-    .where(eq(schema.shipmentOrders.id, id)).run();
-  changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: id, entityCode: code, before: { workflowBlocked: "None" }, after: { workflowBlocked: "Fully" } });
+async function blockOrder(tx: Tx, ctx: DomainCtx, id: Id, code: string): Promise<void> {
+  await tx.update(schema.shipmentOrders).set({ workflowBlocked: "Fully", note: "Blocked by workflow 'Block PO box addresses': confirm a street address with the customer." })
+    .where(eq(schema.shipmentOrders.id, id));
+  await changeLog.recordUpdate(tx, ctx, { entityType: "shipment_order", entityId: id, entityCode: code, before: { workflowBlocked: "None" }, after: { workflowBlocked: "Fully" } });
 }
 
 function scheduleFate(w: World, plan: OrderPlan, id: Id, code: string): void {
@@ -71,26 +71,26 @@ function scheduleFate(w: World, plan: OrderPlan, id: Id, code: string): void {
   if (plan.fate === "cancel") {
     const at = plan.createdMs + rng.int(10, 40) * MINUTE_MS;
     const reasonId = lookupId(w.lookups, "so_cancel_reason", CANCEL_REASONS[plan.key % CANCEL_REASONS.length]);
-    w.queue.schedule(at, `cancel ${code}`, () => checkBulk(w, `cancel ${code}`, txAt(w.env, at, (tx) => {
+    w.queue.schedule(at, `cancel ${code}`, async () => checkBulk(w, `cancel ${code}`, await txAt(w.env, at, async (tx) => {
       // The request came too late when the order is already in a picking job: it ships.
-      const inJob = tx.select({ jobId: schema.shipmentOrders.jobId }).from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).get()?.jobId;
-      return inJob ? { succeeded: [], failed: [] } : orders.cancelOrders(tx, mgr, { ids: [id], reasonId });
+      const inJob = (await tx.select({ jobId: schema.shipmentOrders.jobId }).from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, id)).limit(1))[0]?.jobId;
+      return inJob ? { succeeded: [], failed: [] } : await orders.cancelOrders(tx, mgr, { ids: [id], reasonId });
     })));
   }
   if (plan.fate === "hold" || plan.fate === "holdRelease") {
     const at = plan.createdMs + rng.int(5, 25) * MINUTE_MS;
-    w.queue.schedule(at, `hold ${code}`, () => {
-      checkBulk(w, `hold ${code}`, txAt(w.env, at, (tx) => orders.holdOrders(tx, mgr, { ids: [id] })));
-      txAt(w.env, at, (tx) => tx.update(schema.shipmentOrders).set({ note: "On hold: payment verification requested by the client." }).where(eq(schema.shipmentOrders.id, id)).run());
+    w.queue.schedule(at, `hold ${code}`, async () => {
+      checkBulk(w, `hold ${code}`, await txAt(w.env, at, async (tx) => await orders.holdOrders(tx, mgr, { ids: [id] })));
+      await txAt(w.env, at, async (tx) => await tx.update(schema.shipmentOrders).set({ note: "On hold: payment verification requested by the client." }).where(eq(schema.shipmentOrders.id, id)));
     });
     if (plan.fate === "holdRelease") {
       const rel = at + 20 * HOUR_MS;
-      w.queue.schedule(rel, `release ${code}`, () => checkBulk(w, `release ${code}`, txAt(w.env, rel, (tx) => orders.releaseOrders(tx, mgr, { ids: [id] }))));
+      w.queue.schedule(rel, `release ${code}`, async () => checkBulk(w, `release ${code}`, await txAt(w.env, rel, async (tx) => await orders.releaseOrders(tx, mgr, { ids: [id] }))));
     }
   }
   if (plan.fate === "blocked") {
     const at = plan.createdMs + 1000;
-    w.queue.schedule(at, `block ${code}`, () => txAt(w.env, at, (tx) => blockOrder(tx, integrationCtx, id, code)));
+    w.queue.schedule(at, `block ${code}`, async () => await txAt(w.env, at, async (tx) => await blockOrder(tx, integrationCtx, id, code)));
   }
 }
 
@@ -113,8 +113,8 @@ export function scheduleOrders(w: World): readonly OrderPlan[] {
     customersByClient: w.org.customersByClient, retailers: w.org.retailers, ks2ClientIds,
   });
   for (const plan of plans) {
-    w.queue.schedule(plan.createdMs, `order ${plan.key}`, () => {
-      const created = txAt(w.env, plan.createdMs, (tx) => createPlannedOrder(w, tx, plan));
+    w.queue.schedule(plan.createdMs, `order ${plan.key}`, async () => {
+      const created = await txAt(w.env, plan.createdMs, async (tx) => await createPlannedOrder(w, tx, plan));
       w.orders.set(plan.key, { plan, id: created.id, code: created.code });
       scheduleFate(w, plan, created.id, created.code);
     });

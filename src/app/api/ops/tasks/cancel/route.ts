@@ -6,5 +6,5 @@ import { cancelTasks, TASK_PERMISSIONS, taskCancelSchema } from "@/server/reposi
 export const POST = defineRoute({
   permission: TASK_PERMISSIONS.cancel,
   body: taskCancelSchema,
-  handler: ({ db, auth, actor, body }) => cancelTasks(db, domainCtx(actor, auth), body.ids),
+  handler: async ({ db, auth, actor, body }) => await cancelTasks(db, domainCtx(actor, auth), body.ids),
 });

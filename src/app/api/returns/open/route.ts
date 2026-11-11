@@ -8,5 +8,5 @@ import { openRmas } from "@/server/repositories/returns-receive";
 export const GET = defineRoute({
   permission: RETURN_PERMISSIONS.station,
   query: z.object({ warehouseId: warehouseIdParam, limit: z.coerce.number().int().min(1).max(50).optional() }),
-  handler: ({ db, auth, query }) => openRmas(db, auth.scope, query.warehouseId, query.limit ?? 8),
+  handler: async ({ db, auth, query }) => await openRmas(db, auth.scope, query.warehouseId, query.limit ?? 8),
 });

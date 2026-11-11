@@ -3,5 +3,5 @@ import { defineRoute } from "@/server/api/define-route";
 import { listApps } from "@/server/repositories/apps";
 
 export const GET = defineRoute({
-  handler: ({ db }) => listApps(db),
+  handler: async ({ db }) => await listApps(db),
 });

@@ -7,5 +7,5 @@ import { setWarehousesActive } from "@/server/repositories/warehouses";
 export const POST = defineRoute({
   permission: "settings.warehouse.edit",
   body: bulkIds.extend({ active: z.boolean() }),
-  handler: ({ db, auth, actor, body }) => setWarehousesActive(db, auth, actor, body.ids, body.active),
+  handler: async ({ db, auth, actor, body }) => await setWarehousesActive(db, auth, actor, body.ids, body.active),
 });

@@ -8,8 +8,8 @@ export const GET = defineRoute({
   permission: "settings.screen_configuration.view",
   params: idParamsSchema,
   query: changeLogPageSchema,
-  handler: ({ db, auth, params, query }) => {
-    assertScreenConfigExists(db, auth, params.id);
-    return changeLogResult(db, SCREEN_CONFIG_ENTITY, params.id, query);
+  handler: async ({ db, auth, params, query }) => {
+    await assertScreenConfigExists(db, auth, params.id);
+    return await changeLogResult(db, SCREEN_CONFIG_ENTITY, params.id, query);
   },
 });

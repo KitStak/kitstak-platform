@@ -12,5 +12,5 @@ export const POST = defineRoute({
   permission: "fulfillment.shipment_orders.void_label",
   body: z.object({ ids: bulkIdsSchema }),
   transaction: false,
-  handler: ({ db, auth, body }) => previewVoid(db, auth, body.ids),
+  handler: async ({ db, auth, body }) => await previewVoid(db, auth, body.ids),
 });

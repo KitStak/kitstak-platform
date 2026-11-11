@@ -26,22 +26,22 @@ let auth: AuthContext;
 const actor = () => ({ userId: w.userId, source: "admin@test.io" });
 const page = changeLogPageSchema.parse({});
 
-beforeEach(() => {
-  w = createWorld();
+beforeEach(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId, role: "manager" }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 });
 afterEach(() => w.close());
 
-const lpType = (code = "KS-R6-LPT") => w.db.insert(schema.lpTypes).values({ warehouseId: w.warehouseId, code, numberPrefix: "KR6-", numberLength: 4 }).returning().get().id;
-const issue = (typeId: string, count: number, extra: Record<string, unknown> = {}) =>
-  createLpNumbers(w.db, auth, actor(), { warehouseId: w.warehouseId, lpTypeId: typeId, locationId: null, method: "sequence", count, isSscc18: false, clientId: null, number: null, alternateBarcode: null, ...extra } as never);
+const lpType = async (code = "KS-R6-LPT") => (await w.db.insert(schema.lpTypes).values({ warehouseId: w.warehouseId, code, numberPrefix: "KR6-", numberLength: 4 }).returning())[0].id;
+const issue = async (typeId: string, count: number, extra: Record<string, unknown> = {}) =>
+  await createLpNumbers(w.db, auth, actor(), { warehouseId: w.warehouseId, lpTypeId: typeId, locationId: null, method: "sequence", count, isSscc18: false, clientId: null, number: null, alternateBarcode: null, ...extra } as never);
 
 let seq = 1_000_000;
-const txn = (extra: Partial<typeof schema.inventoryTransactions.$inferInsert>) =>
-  w.db.insert(schema.inventoryTransactions).values({
+const txn = async (extra: Partial<typeof schema.inventoryTransactions.$inferInsert>) =>
+  await w.db.insert(schema.inventoryTransactions).values({
     seq: seq++, type: "Inventory Adjustment", warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, uomQty: 1, packQty: 1, source: "admin@test.io", ...extra,
-  } as typeof schema.inventoryTransactions.$inferInsert).run();
+  } as typeof schema.inventoryTransactions.$inferInsert);
 
 describe("LP removal rule (pure)", () => {
   const base = { status: "Empty" as const, units: 0, parentNumber: null, childCount: 0, history: [] as string[] };
@@ -64,60 +64,60 @@ describe("LP removal rule (pure)", () => {
 });
 
 describe("LP delete / void against the DB", () => {
-  it("critic repro: 3 unused LPs are deleted, a Delete row is logged, and the LP type becomes deletable", () => {
-    const typeId = lpType();
-    const { ids, numbers } = issue(typeId, 3);
+  it("critic repro: 3 unused LPs are deleted, a Delete row is logged, and the LP type becomes deletable", async () => {
+    const typeId = await lpType();
+    const { ids, numbers } = await issue(typeId, 3);
     expect(numbers).toEqual(["KR6-0001", "KR6-0002", "KR6-0003"]);
-    expect(lpTypeDeleteBlocker(w.db, typeId)).toContain("delete the unused ones from LP Numbers first");
-    expect(lpRemovalPreview(w.db, auth, ids).map((p) => p.mode)).toEqual(["delete", "delete", "delete"]);
-    const r = removeLpNumbers(w.db, auth, actor(), ids);
+    expect(await lpTypeDeleteBlocker(w.db, typeId)).toContain("delete the unused ones from LP Numbers first");
+    expect((await lpRemovalPreview(w.db, auth, ids)).map((p) => p.mode)).toEqual(["delete", "delete", "delete"]);
+    const r = await removeLpNumbers(w.db, auth, actor(), ids);
     expect(r.failed).toEqual([]);
     expect(r.deleted).toHaveLength(3);
-    expect(w.db.select().from(schema.licensePlates).where(eq(schema.licensePlates.lpTypeId, typeId)).all()).toHaveLength(0);
-    const del = w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.entityId, ids[0]!), eq(schema.changeLog.type, "Delete"))).get();
+    expect(await w.db.select().from(schema.licensePlates).where(eq(schema.licensePlates.lpTypeId, typeId))).toHaveLength(0);
+    const del = (await w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.entityId, ids[0]!), eq(schema.changeLog.type, "Delete"))).limit(1))[0];
     expect(del).toMatchObject({ message: "LP Number KR6-0001 is deleted.", parentEntityType: "warehouse", parentEntityId: w.warehouseId });
-    expect(lpTypeDeleteBlocker(w.db, typeId)).toBeNull();
-    expect(deleteLpTypes(w.db, auth, actor(), [typeId]).succeeded).toEqual([typeId]);
+    expect(await lpTypeDeleteBlocker(w.db, typeId)).toBeNull();
+    expect((await deleteLpTypes(w.db, auth, actor(), [typeId])).succeeded).toEqual([typeId]);
   });
 
-  it("an Empty LP with stock history is voided (status Removed) and the type explains why it stays", () => {
-    const typeId = lpType();
-    const { ids } = issue(typeId, 1);
-    txn({ type: "Inventory Movement", fromLpId: ids[0], fromLocationId: w.loc.storageA, toLocationId: w.loc.storageB });
-    const r = removeLpNumbers(w.db, auth, actor(), ids);
+  it("an Empty LP with stock history is voided (status Removed) and the type explains why it stays", async () => {
+    const typeId = await lpType();
+    const { ids } = await issue(typeId, 1);
+    await txn({ type: "Inventory Movement", fromLpId: ids[0], fromLocationId: w.loc.storageA, toLocationId: w.loc.storageB });
+    const r = await removeLpNumbers(w.db, auth, actor(), ids);
     expect(r.voided).toEqual(ids);
-    const row = w.db.select().from(schema.licensePlates).where(eq(schema.licensePlates.id, ids[0]!)).get();
+    const row = (await w.db.select().from(schema.licensePlates).where(eq(schema.licensePlates.id, ids[0]!)).limit(1))[0];
     expect(row).toMatchObject({ status: "Removed", locationId: null });
-    const upd = w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.entityId, ids[0]!), eq(schema.changeLog.field, "status"))).get();
+    const upd = (await w.db.select().from(schema.changeLog).where(and(eq(schema.changeLog.entityId, ids[0]!), eq(schema.changeLog.field, "status"))).limit(1))[0];
     expect(upd).toMatchObject({ fromValue: "Empty", toValue: "Removed" });
-    expect(lpTypeDeleteBlocker(w.db, typeId)).toContain("voided but kept for their stock history");
+    expect(await lpTypeDeleteBlocker(w.db, typeId)).toContain("voided but kept for their stock history");
   });
 
-  it("an LP holding stock is refused with the reason", () => {
-    const typeId = lpType();
-    const { ids } = issue(typeId, 1);
-    w.db.insert(schema.inventory).values({ warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, lpId: ids[0], onHand: 5, packType: "Each", status: "Stock", receivedAt: new Date().toISOString() } as typeof schema.inventory.$inferInsert).run();
-    const r = removeLpNumbers(w.db, auth, actor(), ids);
+  it("an LP holding stock is refused with the reason", async () => {
+    const typeId = await lpType();
+    const { ids } = await issue(typeId, 1);
+    await w.db.insert(schema.inventory).values({ warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, lpId: ids[0], onHand: 5, packType: "Each", status: "Stock", receivedAt: new Date().toISOString() } as typeof schema.inventory.$inferInsert);
+    const r = await removeLpNumbers(w.db, auth, actor(), ids);
     expect(r.succeeded).toEqual([]);
     expect(r.failed[0]?.message).toContain("holds 5 units");
   });
 
-  it("the change log of a deleted LP is still readable, authorized by its warehouse", () => {
-    const typeId = lpType();
-    const { ids } = issue(typeId, 1);
-    removeLpNumbers(w.db, auth, actor(), ids);
+  it("the change log of a deleted LP is still readable, authorized by its warehouse", async () => {
+    const typeId = await lpType();
+    const { ids } = await issue(typeId, 1);
+    await removeLpNumbers(w.db, auth, actor(), ids);
     const missing = () => { throw new AppError("NOT_FOUND", "LP number not found"); };
-    const res = changeLogResultOrDeleted(w.db, auth, "license_plate", ids[0]!, page, missing) as unknown as { body?: unknown; data?: unknown };
+    const res = await changeLogResultOrDeleted(w.db, auth, "license_plate", ids[0]!, page, missing) as unknown as { body?: unknown; data?: unknown };
     const rows = (res as { data: { type: string }[] }).data ?? (res.body as { data: { type: string }[] }).data;
     expect(rows.map((x) => x.type)).toEqual(["Delete", "Create"]);
     const outsider = { ...auth, scope: { warehouseIds: ["other"], clientIds: "all" as const } } as AuthContext;
-    expect(() => changeLogResultOrDeleted(w.db, outsider, "license_plate", ids[0]!, page, missing)).toThrow("LP number not found");
+    await expect(async () => await changeLogResultOrDeleted(w.db, outsider, "license_plate", ids[0]!, page, missing)).rejects.toThrow("LP number not found");
   });
 
-  it("From Sequence can pre-assign a client without SSCC18", () => {
-    const typeId = lpType();
-    const { ids } = issue(typeId, 2, { clientId: w.clientId });
-    const rows = w.db.select().from(schema.licensePlates).where(eq(schema.licensePlates.lpTypeId, typeId)).all();
+  it("From Sequence can pre-assign a client without SSCC18", async () => {
+    const typeId = await lpType();
+    const { ids } = await issue(typeId, 2, { clientId: w.clientId });
+    const rows = await w.db.select().from(schema.licensePlates).where(eq(schema.licensePlates.lpTypeId, typeId));
     expect(rows.map((r) => r.clientId)).toEqual([w.clientId, w.clientId]);
     expect(ids).toHaveLength(2);
   });
@@ -136,22 +136,22 @@ describe("location ledger", () => {
     expect(isReservation("Picking")).toBe(false);
   });
 
-  it("critic repro: a −2 adjustment reads Out 2, allocations are reservations, and the list pages", () => {
+  it("critic repro: a −2 adjustment reads Out 2, allocations are reservations, and the list pages", async () => {
     const loc = w.loc.storageA;
-    txn({ type: "Inventory Adjustment", toLocationId: loc, uomQty: -2 });
-    txn({ type: "Receiving", toLocationId: loc, uomQty: 10 });
-    txn({ type: "Allocation", fromLocationId: loc, toLocationId: loc, uomQty: 3 });
-    for (let i = 0; i < 30; i += 1) txn({ type: "Picking", fromLocationId: loc, toLocationId: w.loc.pick, uomQty: 1 });
-    const first = listLocationLedger(w.db, auth, loc, { page: 1, ps: 25, kind: "movements" });
+    await txn({ type: "Inventory Adjustment", toLocationId: loc, uomQty: -2 });
+    await txn({ type: "Receiving", toLocationId: loc, uomQty: 10 });
+    await txn({ type: "Allocation", fromLocationId: loc, toLocationId: loc, uomQty: 3 });
+    for (let i = 0; i < 30; i += 1) await txn({ type: "Picking", fromLocationId: loc, toLocationId: w.loc.pick, uomQty: 1 });
+    const first = await listLocationLedger(w.db, auth, loc, { page: 1, ps: 25, kind: "movements" });
     expect(first.total).toBe(32);
     expect(first.rows).toHaveLength(25);
-    const last = listLocationLedger(w.db, auth, loc, { page: 2, ps: 25, kind: "movements" });
+    const last = await listLocationLedger(w.db, auth, loc, { page: 2, ps: 25, kind: "movements" });
     const adj = last.rows.find((r) => r.type === "Inventory Adjustment");
     expect(adj).toMatchObject({ direction: "Out", qty: 2, delta: -2 });
     expect(last.rows.some((r) => r.type === "Allocation")).toBe(false);
-    const res = listLocationLedger(w.db, auth, loc, { page: 1, ps: 25, kind: "reservations" });
+    const res = await listLocationLedger(w.db, auth, loc, { page: 1, ps: 25, kind: "reservations" });
     expect(res.rows.map((r) => [r.type, r.reservation])).toEqual([["Allocation", true]]);
-    expect(listLocationLedger(w.db, auth, loc, { page: 1, ps: 200, kind: "all" }).total).toBe(33);
+    expect((await listLocationLedger(w.db, auth, loc, { page: 1, ps: 200, kind: "all" })).total).toBe(33);
   });
 });
 
@@ -176,15 +176,15 @@ describe("change-log read normalization and channel", () => {
 });
 
 describe("mobile cart orders per cell", () => {
-  it("lists the job's orders with picked units, and says when no cell is assigned", () => {
-    const cartTypeId = w.db.insert(schema.lookupValues).values({ type: "mobile_cart_type", name: "Std", warehouseId: w.warehouseId, isActive: true, sortOrder: 0 } as never).returning().get() as { id: string };
-    const cart = w.db.insert(schema.mobileCarts).values({ warehouseId: w.warehouseId, code: "MC-R6", levels: 1, columns: 2, cartTypeId: cartTypeId.id } as typeof schema.mobileCarts.$inferInsert).returning().get();
-    w.db.insert(schema.mobileCartCells).values([{ cartId: cart.id, level: 1, column: 1, barcode: "MC-R6-A01" }, { cartId: cart.id, level: 1, column: 2, barcode: "MC-R6-A02" }]).run();
-    const order = createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 4 }]));
-    const job = w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code: "Job-R6", warehouseId: w.warehouseId, jobTypeId: w.jobTypeId, jobType: "MULTI", status: "Started", mobileCartId: cart.id } as never).returning().get() as { id: string };
-    w.db.insert(schema.jobOrders).values({ jobId: job.id, orderId: order.id, toteOrCell: "MC-R6-A02" }).run();
-    w.db.insert(schema.tasks).values({ taskNo: 1, jobId: job.id, warehouseId: w.warehouseId, taskType: "Picking", orderId: order.id, productId: w.productId, plannedQty: 4, actualQty: 1 } as never).run();
-    const d = getMobileCart(w.db, auth, cart.id);
+  it("lists the job's orders with picked units, and says when no cell is assigned", async () => {
+    const cartTypeId = (await w.db.insert(schema.lookupValues).values({ type: "mobile_cart_type", name: "Std", warehouseId: w.warehouseId, isActive: true, sortOrder: 0 } as never).returning())[0] as { id: string };
+    const cart = (await w.db.insert(schema.mobileCarts).values({ warehouseId: w.warehouseId, code: "MC-R6", levels: 1, columns: 2, cartTypeId: cartTypeId.id } as typeof schema.mobileCarts.$inferInsert).returning())[0];
+    await w.db.insert(schema.mobileCartCells).values([{ cartId: cart.id, level: 1, column: 1, barcode: "MC-R6-A01" }, { cartId: cart.id, level: 1, column: 2, barcode: "MC-R6-A02" }]);
+    const order = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 4 }]));
+    const job = (await w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code: "Job-R6", warehouseId: w.warehouseId, jobTypeId: w.jobTypeId, jobType: "MULTI", status: "Started", mobileCartId: cart.id } as never).returning())[0] as { id: string };
+    await w.db.insert(schema.jobOrders).values({ jobId: job.id, orderId: order.id, toteOrCell: "MC-R6-A02" });
+    await w.db.insert(schema.tasks).values({ taskNo: 1, jobId: job.id, warehouseId: w.warehouseId, taskType: "Picking", orderId: order.id, productId: w.productId, plannedQty: 4, actualQty: 1 } as never);
+    const d = await getMobileCart(w.db, auth, cart.id);
     expect(d.orders).toHaveLength(1);
     expect(d.orders[0]).toMatchObject({ orderCode: order.code, jobCode: "Job-R6", cell: "MC-R6-A02", planned: 4, picked: 1, openTasks: 1 });
   });

@@ -21,7 +21,7 @@ export const GET = defineRoute({
   handler: async ({ db, auth, query, grid }) => {
     const parsed = grid();
     const g = query.pageSize !== undefined && query.ps === undefined ? { ...parsed, pageSize: query.pageSize } : parsed;
-    const { rows, total } = await withBusyRetry(() => listTasks(db, auth, query.kind, g));
+    const { rows, total } = await withBusyRetry(async () => await listTasks(db, auth, query.kind, g));
     return listResult(rows, { total, page: g.page, pageSize: g.pageSize });
   },
 });

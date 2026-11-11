@@ -6,5 +6,5 @@ import { suggestPutaway } from "@/server/repositories/putaway-worklist";
 export const GET = defineRoute({
   permission: "inventory.purchase_orders.view",
   query: z.object({ inventoryId: z.string().trim().min(1).max(64) }),
-  handler: ({ db, auth, query }) => suggestPutaway(db, auth, query.inventoryId),
+  handler: async ({ db, auth, query }) => await suggestPutaway(db, auth, query.inventoryId),
 });

@@ -3,7 +3,8 @@
  * and the job / allocation / task commands that wrap the F5 domain engines. Every engine
  * runs with the caller's full scope, so cross-scope ids fail with NOT_FOUND.
  */
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import { z } from "zod";
 import { LABEL_FORMATS, PRIORITIES } from "@/lib/enums";
 import type { AppDb } from "@/server/api/db";
@@ -18,6 +19,7 @@ import { createCountJobs } from "@/server/repositories/counts-jobs";
 import { allocateWorkOrderWith } from "@/server/repositories/work-orders-commands";
 import { runPicking } from "@/server/repositories/work-orders-ops";
 import { bulkIdsSchema, idSchema } from "./platform-common";
+import { withWriteTx } from "@/server/db/sql";
 
 /* ------------------------------------------------------------------- jobs */
 
@@ -116,24 +118,24 @@ function requireOperation(auth: AuthContext, operation: JobOperation): void {
 
 export type OpsJobsResult = BulkResult & { readonly jobIds: readonly string[] };
 
-export function runJobsCommand(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: OpsJobsInput): OpsJobsResult {
+export async function runJobsCommand(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: OpsJobsInput): Promise<OpsJobsResult> {
   requireOperation(auth, operationOf(input));
   switch (input.mode) {
     case "create": {
-      const { succeeded, failed, jobIds } = jobs.createJobsFromOrders(db, ctx, {
+      const { succeeded, failed, jobIds } = await jobs.createJobsFromOrders(db, ctx, {
         orderIds: input.orderIds, jobTypeId: input.jobTypeId, batchSize: input.batchSize,
         assigneeUserId: input.assigneeUserId ?? null, priority: input.priority,
       });
       return { succeeded, failed, jobIds };
     }
     case "merge":
-      return { ...jobs.mergeIntoJob(db, ctx, { jobId: input.jobId, orderIds: input.orderIds }), jobIds: [input.jobId] };
+      return { ...(await jobs.mergeIntoJob(db, ctx, { jobId: input.jobId, orderIds: input.orderIds })), jobIds: [input.jobId] };
     case "work-order": {
       const opts = { jobTypeId: input.jobTypeId ?? null, assigneeUserId: input.assigneeUserId ?? null, priority: input.priority };
-      return { ...runBulk(db, input.workOrderIds, (tx, id) => { allocateWorkOrderWith(tx, ctx, id, opts); }), jobIds: [] };
+      return { ...(await runBulk(db, input.workOrderIds, async (tx, id) => { await allocateWorkOrderWith(tx, ctx, id, opts); })), jobIds: [] };
     }
     case "count":
-      return createCountJobs(db, ctx, auth, {
+      return await createCountJobs(db, ctx, auth, {
         ids: input.countPlanIds, jobTypeId: input.jobTypeId, batchSize: input.batchSize, assigneeUserId: input.assigneeUserId ?? null,
       });
   }
@@ -159,16 +161,16 @@ export interface EligibilityResult {
  * "X of Y orders are eligible": runs the real create/merge inside a savepoint and rolls
  * it back, so the answer always matches what the command would do.
  */
-export function checkEligibility(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: z.output<typeof eligibilitySchema>): EligibilityResult {
+export async function checkEligibility(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: z.output<typeof eligibilitySchema>): Promise<EligibilityResult> {
   requireOperation(auth, input.operation);
-  if (input.operation === "work-order") return workOrderEligibility(db, auth, ctx, input.orderIds);
-  if (!input.jobTypeId && !input.jobId) return orderPreEligibility(db, auth, input.orderIds);
+  if (input.operation === "work-order") return await workOrderEligibility(db, auth, ctx, input.orderIds);
+  if (!input.jobTypeId && !input.jobId) return await orderPreEligibility(db, auth, input.orderIds);
   let outcome: EligibilityResult | null = null;
   try {
-    db.transaction((tx) => {
+    await withWriteTx(db, async (tx) => {
       const res = input.jobId
-        ? { ...jobs.mergeIntoJob(tx, ctx, { jobId: input.jobId, orderIds: input.orderIds }), jobIds: [] as readonly string[] }
-        : jobs.createJobsFromOrders(tx, ctx, { orderIds: input.orderIds, jobTypeId: input.jobTypeId ?? "" });
+        ? { ...(await jobs.mergeIntoJob(tx, ctx, { jobId: input.jobId, orderIds: input.orderIds })), jobIds: [] as readonly string[] }
+        : await jobs.createJobsFromOrders(tx, ctx, { orderIds: input.orderIds, jobTypeId: input.jobTypeId ?? "" });
       outcome = { total: new Set(input.orderIds).size, eligible: res.succeeded, ineligible: res.failed.map(withReason), jobCount: res.jobIds.length };
       throw new DryRunRollback();
     });
@@ -188,11 +190,11 @@ const JOBBABLE_STATUSES = new Set(["Open", "Shortage", "Ready to Pick"]);
  * a job at all, and the active Picking job types of their warehouses. The exact check (conditions,
  * allocation) runs once a job type or job is chosen.
  */
-function orderPreEligibility(db: AppDb, auth: AuthContext, ids: readonly string[]): EligibilityResult {
+async function orderPreEligibility(db: AppDb, auth: AuthContext, ids: readonly string[]): Promise<EligibilityResult> {
   const so = schema.shipmentOrders;
   const unique = [...new Set(ids)];
-  const rows = db.select({ id: so.id, code: so.code, status: so.status, jobId: so.jobId, warehouseId: so.warehouseId, clientId: so.clientId, deletedAt: so.deletedAt })
-    .from(so).where(inArray(so.id, unique)).all()
+  const rows = (await db.select({ id: so.id, code: so.code, status: so.status, jobId: so.jobId, warehouseId: so.warehouseId, clientId: so.clientId, deletedAt: so.deletedAt })
+    .from(so).where(inArray(so.id, unique)))
     .filter((r) => !r.deletedAt && hasWarehouse(auth.viewScope, r.warehouseId));
   const byId = new Map(rows.map((r) => [r.id, r]));
   const eligible: string[] = [];
@@ -207,15 +209,15 @@ function orderPreEligibility(db: AppDb, auth: AuthContext, ids: readonly string[
   }
   const warehouseIds = [...new Set(rows.map((r) => r.warehouseId))];
   const jt = schema.jobTypes;
-  const jobTypes = warehouseIds.length === 0 ? [] : db.select({ id: jt.id, code: jt.code, name: jt.description }).from(jt)
-    .where(and(inArray(jt.warehouseId, warehouseIds), eq(jt.operationType, "Picking"), eq(jt.isActive, true))).orderBy(asc(jt.code)).all()
+  const jobTypes = warehouseIds.length === 0 ? [] : (await db.select({ id: jt.id, code: jt.code, name: jt.description }).from(jt)
+    .where(and(inArray(jt.warehouseId, warehouseIds), eq(jt.operationType, "Picking"), eq(jt.isActive, true))).orderBy(asc(jt.code)))
     .map((t) => ({ id: t.id, code: t.code, name: t.name }));
   return { total: unique.length, eligible, ineligible, jobCount: 0, jobTypes };
 }
 
 /** Work orders: dry run of Picking/Job Operations (M08 `runPicking`); shortages count as ineligible. */
-function workOrderEligibility(db: AppDb, auth: AuthContext, ctx: DomainCtx, ids: readonly string[]): EligibilityResult {
-  const res = runPicking(db, { ...ctx, scope: auth.scope }, { ids, dryRun: true });
+async function workOrderEligibility(db: AppDb, auth: AuthContext, ctx: DomainCtx, ids: readonly string[]): Promise<EligibilityResult> {
+  const res = await runPicking(db, { ...ctx, scope: auth.scope }, { ids, dryRun: true });
   const eligible = res.outcomes.filter((o) => o.outcome === "allocated").map((o) => o.id);
   const ineligible = res.outcomes.filter((o) => o.outcome !== "allocated").map((o): IneligibleRow => {
     const detail = o.shortages.map((x) => `${x.sku} needs ${x.need}, ${x.free} free`).join("; ");
@@ -241,15 +243,15 @@ export const allocateSchema = z.object({
   mode: z.enum(["full", "partial"]).default("full"),
 });
 
-export function runAllocation(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: z.output<typeof allocateSchema>): BulkResult {
+export async function runAllocation(db: AppDb, auth: AuthContext, ctx: DomainCtx, input: z.output<typeof allocateSchema>): Promise<BulkResult> {
   if (input.action === "deallocate") {
     if (!can(auth, DEALLOCATE_PERMISSION)) throw forbiddenError();
-    return allocation.deallocate(db, ctx, { orderIds: input.orderIds });
+    return await allocation.deallocate(db, ctx, { orderIds: input.orderIds });
   }
   if (!can(auth, ALLOCATE_PERMISSION)) throw forbiddenError();
   if (!input.warehouseId) throw validationError("Choose a warehouse", { warehouseId: ["Required"] });
   if (!hasWarehouse(auth.scope, input.warehouseId)) throw validationError("Warehouse not found", { warehouseId: ["Warehouse not found"] });
-  return allocation.allocateOrders(db, ctx, {
+  return await allocation.allocateOrders(db, ctx, {
     orderIds: input.orderIds, warehouseId: input.warehouseId, algorithmId: input.algorithmId ?? null, mode: input.mode,
   });
 }
@@ -282,8 +284,8 @@ export const taskUpdateSchema = z.object({
 export const taskCancelSchema = z.object({ ids: bulkIdsSchema });
 
 /** Per-id cancel (a failing task does not block the others). */
-export function cancelTasks(db: AppDb, ctx: DomainCtx, ids: readonly string[]): BulkResult {
-  return runBulk(db, ids, (tx, id) => { tasks.cancel(tx, ctx, { taskIds: [id] }); });
+export async function cancelTasks(db: AppDb, ctx: DomainCtx, ids: readonly string[]): Promise<BulkResult> {
+  return await runBulk(db, ids, async (tx, id) => { await tasks.cancel(tx, ctx, { taskIds: [id] }); });
 }
 
 /* --------------------------------------------------------------- shipping */

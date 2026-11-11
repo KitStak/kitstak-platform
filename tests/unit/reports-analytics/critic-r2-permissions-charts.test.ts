@@ -14,74 +14,75 @@ import { axisTick, barCap, clampRows, isDayAxis, realKey, shortCategory, withBal
 import { headerLabelWidth } from "@/components/reports/report-cells";
 import type { AnalyticsChart } from "@/server/repositories/analytics-types";
 import { createWorld, type World } from "../foundation/domain/fixtures";
+import { forEachSeq, mapSeq } from "@/server/db/sql";
 
 let w: World;
 const authWith = (permissions: readonly string[], user: { id: string; name: string; email: string }): AuthContext => {
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   return { scope, viewScope: scope, permissions: new Set(permissions), restrictions: [], user, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
 };
-const setApp = (key: string, active: boolean) =>
-  w.db.insert(schema.apps).values({ key, name: key, description: "", category: "Analytics", isActive: active })
-    .onConflictDoUpdate({ target: schema.apps.key, set: { isActive: active } }).run();
+const setApp = async (key: string, active: boolean) =>
+  await w.db.insert(schema.apps).values({ key, name: key, description: "", category: "Analytics", isActive: active })
+    .onConflictDoUpdate({ target: schema.apps.key, set: { isActive: active } });
 
-beforeEach(() => { w = createWorld(); });
+beforeEach(async () => { w = await createWorld(); });
 afterEach(() => w.close());
 
-function seedTasks(): { ids: string[] } {
-  const ids = ["Ann", "Bob", "Cy"].map((n) => w.db.insert(schema.users).values({ email: `${n.toLowerCase()}@t.io`, name: n, passwordHash: "x", role: "operator" }).returning().get().id);
-  const job = w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code: "J9", warehouseId: w.warehouseId, jobType: "Picking", status: "Completed" }).returning().get();
+async function seedTasks(): Promise<{ ids: string[] }> {
+  const ids = await mapSeq(["Ann", "Bob", "Cy"], async (n) => (await w.db.insert(schema.users).values({ email: `${n.toLowerCase()}@t.io`, name: n, passwordHash: "x", role: "operator" }).returning())[0].id);
+  const job = (await w.db.insert(schema.jobs).values({ id: crypto.randomUUID(), code: "J9", warehouseId: w.warehouseId, jobType: "Picking", status: "Completed" }).returning())[0];
   let no = 0;
   const base = Date.now() - 3_600_000;
-  ids.forEach((uid, k) => {
+  await forEachSeq(ids, async (uid, k) => {
     for (let i = 0; i < 20 + k; i += 1) {
       const start = new Date(base + i * 60_000);
       no += 1;
-      w.db.insert(schema.tasks).values({ taskNo: no, jobId: job.id, warehouseId: w.warehouseId, taskType: "Picking", status: "Completed", executedByUserId: uid,
-        startedAt: start.toISOString(), finishedAt: new Date(start.getTime() + 30_000).toISOString(), actualQty: 5 }).run();
+      await w.db.insert(schema.tasks).values({ taskNo: no, jobId: job.id, warehouseId: w.warehouseId, taskType: "Picking", status: "Completed", executedByUserId: uid,
+        startedAt: start.toISOString(), finishedAt: new Date(start.getTime() + 30_000).toISOString(), actualQty: 5 });
     }
   });
   return { ids };
 }
 
 describe("labor analytics: team vs self-only", () => {
-  it("a viewer without the team permission only sees their own row, with team medians for comparison", () => {
-    setApp("labor-analytics", true);
-    const { ids } = seedTasks();
+  it("a viewer without the team permission only sees their own row, with team medians for comparison", async () => {
+    await setApp("labor-analytics", true);
+    const { ids } = await seedTasks();
     const clerk = authWith(["analytics.labor_analytics.view"], { id: ids[0] as string, name: "Ann", email: "ann@t.io" });
     expect(seesTeamLabor(clerk)).toBe(false);
     for (const page of ["associate-task", "performance-quadrant", "associate", "average-task"] as const) {
-      const res = getLaborAnalytics(w.db, clerk, page, { wh: [], cl: [] });
+      const res = await getLaborAnalytics(w.db, clerk, page, { wh: [], cl: [] });
       expect(res.notice?.kind).toBe("self-only");
       const json = JSON.stringify(res);
       expect(json).not.toContain("Bob");
       expect(json).not.toContain("\"Cy\"");
     }
-    const q = getLaborAnalytics(w.db, clerk, "performance-quadrant", { wh: [], cl: [] }).charts[0];
+    const q = (await getLaborAnalytics(w.db, clerk, "performance-quadrant", { wh: [], cl: [] })).charts[0];
     expect(q?.rows).toHaveLength(1);
     expect(q?.rows[0]?.user).toBe("Ann");
     expect(q?.medians?.x).toBe(21); // team volumes 20, 21, 22
-    const card = getLaborAnalytics(w.db, clerk, "associate", { wh: [], cl: [] });
+    const card = await getLaborAnalytics(w.db, clerk, "associate", { wh: [], cl: [] });
     expect(card.kpis[0]?.value).toBe("#3 of 3");
     // Every task drilldown is narrowed to the viewer.
     expect(card.kpis[1]?.href).toContain("f.executedBy=eq:Ann");
   });
 
-  it("a supervisor sees every associate", () => {
-    setApp("labor-analytics", true);
-    seedTasks();
+  it("a supervisor sees every associate", async () => {
+    await setApp("labor-analytics", true);
+    await seedTasks();
     const sup = authWith(["analytics.labor_analytics.view", "settings.users.view"], { id: w.userId, name: "Sup", email: "s@t.io" });
-    const res = getLaborAnalytics(w.db, sup, "associate-task", { wh: [], cl: [] });
+    const res = await getLaborAnalytics(w.db, sup, "associate-task", { wh: [], cl: [] });
     expect(res.notice).toBeNull();
     expect(res.charts[0]?.rows.map((r) => r.user).sort()).toEqual(["Ann", "Bob", "Cy"]);
   });
 });
 
 describe("management dashboard money gate", () => {
-  it("drops revenue and billing for a viewer without billing view", () => {
-    setApp("operational-analytics", true);
+  it("drops revenue and billing for a viewer without billing view", async () => {
+    await setApp("operational-analytics", true);
     const clerk = authWith(["analytics.operational_analytics.view"], { id: w.userId, name: "C", email: "c@t.io" });
     expect(seesBillingMoney(clerk)).toBe(false);
-    const res = getOperationalAnalytics(w.db, clerk, "management", { wh: [], cl: [] });
+    const res = await getOperationalAnalytics(w.db, clerk, "management", { wh: [], cl: [] });
     expect(res.notice?.kind).toBe("no-billing");
     const labels = res.kpis.map((k) => k.label);
     expect(labels).not.toContain("Billed");
@@ -91,10 +92,10 @@ describe("management dashboard money gate", () => {
     expect(cols).not.toContain("revenue");
   });
 
-  it("keeps the money for billing viewers", () => {
-    setApp("operational-analytics", true);
+  it("keeps the money for billing viewers", async () => {
+    await setApp("operational-analytics", true);
     const mgr = authWith(["analytics.operational_analytics.view", "settings.billing_report.view"], { id: w.userId, name: "M", email: "m@t.io" });
-    const res = getOperationalAnalytics(w.db, mgr, "management", { wh: [], cl: [] });
+    const res = await getOperationalAnalytics(w.db, mgr, "management", { wh: [], cl: [] });
     expect(res.notice).toBeNull();
     expect(res.kpis.map((k) => k.label)).toContain("Billed");
   });
@@ -156,9 +157,9 @@ describe("chart helpers", () => {
 });
 
 describe("dashboard progress parts", () => {
-  it("every progress part carries a count and a drilldown; due parts add up to the total", () => {
+  it("every progress part carries a count and a drilldown; due parts add up to the total", async () => {
     const auth = authWith([], { id: w.userId, name: "A", email: "a@t.io" });
-    const d = getLiveDashboard(w.db, auth, { warehouseIds: [], clientIds: [] });
+    const d = await getLiveDashboard(w.db, auth, { warehouseIds: [], clientIds: [] });
     for (const p of [d.progress.tasks, d.progress.ordersToday]) {
       expect(p.parts?.length).toBeGreaterThan(0);
       for (const part of p.parts ?? []) expect(part.href).toMatch(/^\//);

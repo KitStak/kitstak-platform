@@ -7,5 +7,5 @@ import { pickShortPreview } from "@/server/repositories/tasks-pick-short";
 export const GET = defineRoute({
   permission: "fulfillment.task_details.execute_task",
   params: idParamsSchema,
-  handler: ({ db, auth, params }) => withBusyRetry(() => pickShortPreview(db, auth, params.id)),
+  handler: ({ db, auth, params }) => withBusyRetry(async () => await pickShortPreview(db, auth, params.id)),
 });

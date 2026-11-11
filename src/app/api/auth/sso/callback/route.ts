@@ -16,14 +16,14 @@ export const GET = defineRoute({
     try {
       const identity = await completeSso(db, url.origin, url.searchParams, request.cookies.get(SSO_STATE_COOKIE)?.value);
       const issued = await issueSession(db, identity.userId, { ip, userAgent });
-      writeAudit(db, { action: "auth.sso_login", entity: "user", entityId: identity.userId, userId: identity.userId, ip, userAgent, outcome: "success", detail: { provider: getSsoConfig(db)?.provider ?? "SSO", subject: identity.subject } });
+      await writeAudit(db, { action: "auth.sso_login", entity: "user", entityId: identity.userId, userId: identity.userId, ip, userAgent, outcome: "success", detail: { provider: (await getSsoConfig(db))?.provider ?? "SSO", subject: identity.subject } });
       const res = NextResponse.redirect(new URL(identity.returnTo, url.origin), 302);
       setSessionCookie(res, issued.token, issued.maxAgeSeconds);
       setCsrfCookie(res, generateCsrfToken());
       return clearState(res);
     } catch (e) {
       const message = e instanceof AppError ? e.message : "Single sign-on failed";
-      writeAudit(db, { action: "auth.sso_login", entity: "user", entityId: "sso", userId: null, ip, userAgent, outcome: "failure", detail: { reason: message } });
+      await writeAudit(db, { action: "auth.sso_login", entity: "user", entityId: "sso", userId: null, ip, userAgent, outcome: "failure", detail: { reason: message } });
       return clearState(NextResponse.redirect(new URL(`/login?sso_error=${encodeURIComponent(message)}`, url.origin), 302));
     }
   },

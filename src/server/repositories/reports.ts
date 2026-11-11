@@ -1,5 +1,5 @@
 import { eq, gt, isNotNull } from "drizzle-orm";
-import { db, schema } from "@/server/db";
+import { getDb, schema } from "@/server/db";
 import {
   listTotalInventory,
   type InventoryListParams,
@@ -14,10 +14,10 @@ const { shipmentOrders, purchaseOrders, clients } = schema;
 export type InventorySnapshotRow = TotalInventoryRow;
 
 /** Per-product snapshot across all locations (onHand / allocated / available / damaged). */
-export function getInventorySnapshot(
+export async function getInventorySnapshot(
   params: InventoryListParams
-): ListResult<InventorySnapshotRow> {
-  return listTotalInventory(params);
+): Promise<ListResult<InventorySnapshotRow>> {
+  return await listTotalInventory(params);
 }
 
 /* ============ transaction history ============ */
@@ -46,10 +46,11 @@ export interface TransactionHistoryParams {
  * purchase-order receipts (inbound). Small dataset, so the union is
  * merged and paginated in memory.
  */
-export function getTransactionHistory(
+export async function getTransactionHistory(
   params: TransactionHistoryParams
-): ListResult<TransactionRow> {
-  const shipments: TransactionRow[] = db
+): Promise<ListResult<TransactionRow>> {
+  const db = await getDb();
+  const shipments: TransactionRow[] = (await db
     .select({
       id: shipmentOrders.id,
       date: shipmentOrders.shippedAt,
@@ -61,8 +62,7 @@ export function getTransactionHistory(
     })
     .from(shipmentOrders)
     .innerJoin(clients, eq(shipmentOrders.clientId, clients.id))
-    .where(isNotNull(shipmentOrders.shippedAt))
-    .all()
+    .where(isNotNull(shipmentOrders.shippedAt)))
     .map((r) => ({
       id: `txn-ship-${r.id}`,
       date: r.date ?? "",
@@ -73,7 +73,7 @@ export function getTransactionHistory(
       detail: r.service ?? r.carrier ?? "Shipped",
     }));
 
-  const receipts: TransactionRow[] = db
+  const receipts: TransactionRow[] = (await db
     .select({
       id: purchaseOrders.id,
       receivedAt: purchaseOrders.receivedAt,
@@ -86,8 +86,7 @@ export function getTransactionHistory(
     })
     .from(purchaseOrders)
     .innerJoin(clients, eq(purchaseOrders.clientId, clients.id))
-    .where(gt(purchaseOrders.receivedQuantity, 0))
-    .all()
+    .where(gt(purchaseOrders.receivedQuantity, 0)))
     .map((r) => ({
       id: `txn-recv-${r.id}`,
       date: r.receivedAt ?? r.expectedDate ?? r.createdAt,

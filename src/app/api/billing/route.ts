@@ -6,9 +6,9 @@ import { createContract, getContract, listContracts } from "@/server/repositorie
 
 export const GET = defineRoute({
   permission: "settings.billing.view",
-  handler: ({ db, auth, grid }) => {
+  handler: async ({ db, auth, grid }) => {
     const query = grid();
-    const { rows, total } = listContracts(db, auth, query);
+    const { rows, total } = await listContracts(db, auth, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -17,5 +17,5 @@ export const POST = defineRoute({
   permission: "settings.billing.create",
   body: contractSchema,
   // Returns the full detail so /billing/[id] renders instantly from the seeded cache.
-  handler: ({ db, auth, actor, body }) => { const row = createContract(db, auth, actor, body); return created({ ...getContract(db, auth, row.id), id: row.id, name: row.name }); },
+  handler: async ({ db, auth, actor, body }) => { const row = await createContract(db, auth, actor, body); return created({ ...(await getContract(db, auth, row.id)), id: row.id, name: row.name }); },
 });

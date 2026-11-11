@@ -2,7 +2,8 @@
  * Warehouse Ops for work orders: Picking/Job Operations (with a dry-run preview) and the
  * Picking List / Batch Picking List print records.
  */
-import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import type { AppDb } from "@/server/api/db";
 import type { Scope } from "@/server/auth/scope";
 import * as schema from "@/server/db/schema";
@@ -12,6 +13,7 @@ import type { Priority } from "@/lib/enums";
 import { remainingQty } from "@/lib/grid-defs/work-orders/work-order-model";
 import { getWorkOrderRows, loadWorkOrder } from "./work-orders";
 import { allocateWorkOrderWith, candidateBuckets, componentNeed } from "./work-orders-commands";
+import { flatMapSeq, mapSeq, withWriteTx } from "@/server/db/sql";
 
 export interface PickingOutcome {
   readonly id: string;
@@ -31,14 +33,14 @@ export interface PickingResult {
 
 class Rollback extends Error {}
 
-function shortagesOf(db: AppDb, scope: Scope, id: string): PickingOutcome["shortages"] {
-  const wo = loadWorkOrder(db, scope, id);
-  const comps = db.select({ c: schema.workOrderComponents, sku: schema.products.sku }).from(schema.workOrderComponents)
+async function shortagesOf(db: AppDb, scope: Scope, id: string): Promise<PickingOutcome["shortages"]> {
+  const wo = await loadWorkOrder(db, scope, id);
+  const comps = await db.select({ c: schema.workOrderComponents, sku: schema.products.sku }).from(schema.workOrderComponents)
     .innerJoin(schema.products, eq(schema.products.id, schema.workOrderComponents.componentProductId))
-    .where(eq(schema.workOrderComponents.workOrderId, wo.id)).all();
-  return comps.flatMap(({ c, sku }) => {
+    .where(eq(schema.workOrderComponents.workOrderId, wo.id));
+  return await flatMapSeq(comps, async ({ c, sku }) => {
     const need = componentNeed(wo, c);
-    const free = candidateBuckets(db, wo, c).reduce((s, b) => s + b.onHand - b.allocated, 0);
+    const free = (await candidateBuckets(db, wo, c)).reduce((s, b) => s + b.onHand - b.allocated, 0);
     return need > free ? [{ sku, need, free }] : [];
   });
 }
@@ -47,16 +49,16 @@ function shortagesOf(db: AppDb, scope: Scope, id: string): PickingOutcome["short
  * Allocates each work order in its own savepoint. With `dryRun` everything is rolled back
  * and the caller gets the would-be outcome per work order (the modal's preview step).
  */
-export function runPicking(db: AppDb, ctx: DomainCtx & { scope: Scope }, input: { ids: readonly string[]; jobTypeId?: string | null; assigneeUserId?: string | null; priority?: Priority; dryRun?: boolean }): PickingResult {
-  const rows = getWorkOrderRows(db, ctx.scope, input.ids);
+export async function runPicking(db: AppDb, ctx: DomainCtx & { scope: Scope }, input: { ids: readonly string[]; jobTypeId?: string | null; assigneeUserId?: string | null; priority?: Priority; dryRun?: boolean }): Promise<PickingResult> {
+  const rows = await getWorkOrderRows(db, ctx.scope, input.ids);
   const codes = new Map(rows.map((r) => [r.id, r.code]));
   const outcomes: PickingOutcome[] = [];
-  const run = (tx: AppDb) => {
+  const run = async (tx: AppDb) => {
     for (const id of [...new Set(input.ids)]) {
       const code = codes.get(id) ?? id;
       try {
-        const shortages = shortagesOf(tx, ctx.scope, id);
-        const res = tx.transaction((inner) => allocateWorkOrderWith(inner, ctx, id, { jobTypeId: input.jobTypeId, assigneeUserId: input.assigneeUserId, priority: input.priority }));
+        const shortages = await shortagesOf(tx, ctx.scope, id);
+        const res = await withWriteTx(tx, async (inner) => await allocateWorkOrderWith(inner, ctx, id, { jobTypeId: input.jobTypeId, assigneeUserId: input.assigneeUserId, priority: input.priority }));
         outcomes.push(res.status === "In Process"
           ? { id, code, outcome: "allocated", message: "Components allocated; picking job created", shortages: [] }
           : { id, code, outcome: "shortage", message: `${res.shortageQty} component unit${res.shortageQty === 1 ? "" : "s"} short`, shortages });
@@ -67,19 +69,19 @@ export function runPicking(db: AppDb, ctx: DomainCtx & { scope: Scope }, input: 
   };
   if (input.dryRun) {
     try {
-      db.transaction((tx) => {
-        run(tx);
+      await withWriteTx(db, async (tx) => {
+        await run(tx);
         throw new Rollback();
       });
     } catch (error) {
       if (!(error instanceof Rollback)) throw error;
     }
   } else {
-    run(db);
+    await run(db);
   }
   const warehouseIds = [...new Set(rows.map((r) => r.warehouseId))];
   const jobTypes = warehouseIds.length
-    ? db.select().from(schema.jobTypes).where(and(inArray(schema.jobTypes.warehouseId, warehouseIds), eq(schema.jobTypes.operationType, "Work Order"), eq(schema.jobTypes.isActive, true))).orderBy(asc(schema.jobTypes.code)).all()
+    ? (await db.select().from(schema.jobTypes).where(and(inArray(schema.jobTypes.warehouseId, warehouseIds), eq(schema.jobTypes.operationType, "Work Order"), eq(schema.jobTypes.isActive, true))).orderBy(asc(schema.jobTypes.code)))
       .map((j) => ({ id: j.id, code: j.code, name: j.description, warehouseId: j.warehouseId }))
     : [];
   return {
@@ -118,16 +120,16 @@ export interface PickListRecord {
 
 const opt = (v: string | null | undefined): string | undefined => (v ? v : undefined);
 
-function linesFor(db: AppDb, scope: Scope, id: string): { lines: PickListLine[]; warehouseName: string; jobType?: string; assignee?: string; createdAt: string; code: string } {
-  const wo = loadWorkOrder(db, scope, id);
-  const warehouseName = db.select({ name: schema.warehouses.name }).from(schema.warehouses).where(eq(schema.warehouses.id, wo.warehouseId)).get()?.name ?? "";
+async function linesFor(db: AppDb, scope: Scope, id: string): Promise<{ lines: PickListLine[]; warehouseName: string; jobType?: string; assignee?: string; createdAt: string; code: string }> {
+  const wo = await loadWorkOrder(db, scope, id);
+  const warehouseName = (await db.select({ name: schema.warehouses.name }).from(schema.warehouses).where(eq(schema.warehouses.id, wo.warehouseId)).limit(1))[0]?.name ?? "";
   const t = schema.tasks;
-  const tasks = db.select({ t, p: schema.products, loc: schema.locations, lp: schema.licensePlates.number }).from(t)
+  const tasks = await db.select({ t, p: schema.products, loc: schema.locations, lp: schema.licensePlates.number }).from(t)
     .innerJoin(schema.products, eq(schema.products.id, t.productId))
     .innerJoin(schema.locations, eq(schema.locations.id, t.sourceLocationId))
     .leftJoin(schema.licensePlates, eq(schema.licensePlates.id, t.sourceLpId))
-    .where(and(eq(t.workOrderId, wo.id), eq(t.taskType, "Picking"), inArray(t.status, ["Pending", "Started"]))).all();
-  const job = wo.jobId ? db.select({ j: schema.jobs, name: schema.users.name }).from(schema.jobs).leftJoin(schema.users, eq(schema.users.id, schema.jobs.assignedToUserId)).where(eq(schema.jobs.id, wo.jobId)).get() : undefined;
+    .where(and(eq(t.workOrderId, wo.id), eq(t.taskType, "Picking"), inArray(t.status, ["Pending", "Started"])));
+  const job = wo.jobId ? (await db.select({ j: schema.jobs, name: schema.users.name }).from(schema.jobs).leftJoin(schema.users, eq(schema.users.id, schema.jobs.assignedToUserId)).where(eq(schema.jobs.id, wo.jobId)).limit(1))[0] : undefined;
   if (tasks.length > 0) {
     return {
       code: wo.code, warehouseName, jobType: job?.j.jobType, assignee: opt(job?.name), createdAt: wo.createdAt,
@@ -139,11 +141,11 @@ function linesFor(db: AppDb, scope: Scope, id: string): { lines: PickListLine[];
   }
   // Every pick already done (e.g. Completed with picking): reprint what was picked, for audit or
   // rework, instead of planning new picks (Logiwa prints whenever there is a selection).
-  const done = db.select({ t, p: schema.products, loc: schema.locations, lp: schema.licensePlates.number }).from(t)
+  const done = await db.select({ t, p: schema.products, loc: schema.locations, lp: schema.licensePlates.number }).from(t)
     .innerJoin(schema.products, eq(schema.products.id, t.productId))
     .innerJoin(schema.locations, eq(schema.locations.id, t.sourceLocationId))
     .leftJoin(schema.licensePlates, eq(schema.licensePlates.id, t.sourceLpId))
-    .where(and(eq(t.workOrderId, wo.id), eq(t.taskType, "Picking"), eq(t.status, "Completed"))).all();
+    .where(and(eq(t.workOrderId, wo.id), eq(t.taskType, "Picking"), eq(t.status, "Completed")));
   if (done.length > 0) {
     return {
       code: wo.code, warehouseName, jobType: `${job?.j.jobType ?? "Work Order Picking"} (reprint, picked)`, assignee: opt(job?.name), createdAt: wo.createdAt,
@@ -157,11 +159,11 @@ function linesFor(db: AppDb, scope: Scope, id: string): { lines: PickListLine[];
   // component was actually taken from), never a new FEFO plan.
   if (wo.status === "Completed") {
     const x = schema.inventoryTransactions;
-    const used = db.select({ x, p: schema.products, loc: schema.locations, lp: schema.licensePlates.number }).from(x)
+    const used = await db.select({ x, p: schema.products, loc: schema.locations, lp: schema.licensePlates.number }).from(x)
       .innerJoin(schema.products, eq(schema.products.id, x.productId))
       .innerJoin(schema.locations, eq(schema.locations.id, x.fromLocationId))
       .leftJoin(schema.licensePlates, eq(schema.licensePlates.id, x.fromLpId))
-      .where(and(eq(x.workOrderId, wo.id), eq(x.type, "Kitting"), ne(x.productId, wo.kitProductId), isNull(x.toLocationId))).all();
+      .where(and(eq(x.workOrderId, wo.id), eq(x.type, "Kitting"), ne(x.productId, wo.kitProductId), isNull(x.toLocationId)));
     return {
       code: wo.code, warehouseName, jobType: `${job?.j.jobType ?? "Work Order Picking"} (reprint, consumed)`, assignee: opt(job?.name), createdAt: wo.createdAt,
       lines: used.map(({ x: row, p, loc, lp }) => ({
@@ -171,14 +173,14 @@ function linesFor(db: AppDb, scope: Scope, id: string): { lines: PickListLine[];
     };
   }
   // No job yet: plan from the chosen sources, else FEFO candidates (what picking would take).
-  const comps = db.select({ c: schema.workOrderComponents, p: schema.products }).from(schema.workOrderComponents)
+  const comps = await db.select({ c: schema.workOrderComponents, p: schema.products }).from(schema.workOrderComponents)
     .innerJoin(schema.products, eq(schema.products.id, schema.workOrderComponents.componentProductId))
-    .where(eq(schema.workOrderComponents.workOrderId, wo.id)).all();
+    .where(eq(schema.workOrderComponents.workOrderId, wo.id));
   const lines: PickListLine[] = [];
-  const locCode = new Map(db.select({ id: schema.locations.id, code: schema.locations.code, wpp: schema.locations.walkingPathPriority }).from(schema.locations).where(eq(schema.locations.warehouseId, wo.warehouseId)).all().map((l) => [l.id, l]));
+  const locCode = new Map((await db.select({ id: schema.locations.id, code: schema.locations.code, wpp: schema.locations.walkingPathPriority }).from(schema.locations).where(eq(schema.locations.warehouseId, wo.warehouseId))).map((l) => [l.id, l]));
   for (const { c, p } of comps) {
     let left = remainingQty(wo) * c.componentQty;
-    for (const b of candidateBuckets(db, wo, c)) {
+    for (const b of await candidateBuckets(db, wo, c)) {
       if (left <= 0) break;
       const take = Math.min(left, b.onHand - b.allocated);
       const loc = locCode.get(b.locationId);
@@ -190,8 +192,8 @@ function linesFor(db: AppDb, scope: Scope, id: string): { lines: PickListLine[];
   return { code: wo.code, warehouseName, jobType: job?.j.jobType, assignee: opt(job?.name), createdAt: wo.createdAt, lines };
 }
 
-export function buildPickLists(db: AppDb, scope: Scope, ids: readonly string[], consolidated: boolean): PickListRecord[] {
-  const per = ids.map((id) => linesFor(db, scope, id)).filter((r) => r.lines.length > 0);
+export async function buildPickLists(db: AppDb, scope: Scope, ids: readonly string[], consolidated: boolean): Promise<PickListRecord[]> {
+  const per = (await mapSeq(ids, async (id) => await linesFor(db, scope, id))).filter((r) => r.lines.length > 0);
   if (!consolidated) return per.map((r) => ({ code: r.code, warehouseName: r.warehouseName, jobType: r.jobType ?? "Work Order Picking", assignee: r.assignee, createdAt: r.createdAt, orderCount: 1, lines: r.lines }));
   if (per.length === 0) return [];
   const first = per[0];

@@ -4,7 +4,8 @@
  * Reading is open to every signed-in user (forms render the fields); changing a
  * definition needs that entity's "Custom Field Management" permission.
  */
-import { and, asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { asc } from "@/server/db/order";
 import { z } from "zod";
 import { CUSTOM_FIELD_ENTITIES, CUSTOM_FIELD_SLOTS, type CustomFieldEntity, type CustomFieldSlot } from "@/lib/enums";
 import type { AppDb } from "@/server/api/db";
@@ -69,26 +70,26 @@ function assertCanManage(auth: AuthContext, entityType: CustomFieldEntity): void
   if (!can(auth, CUSTOM_FIELD_PERMISSIONS[entityType])) throw forbiddenError();
 }
 
-export function listCustomFields(db: AppDb, query: z.output<typeof customFieldListQuerySchema>): CustomFieldDefRow[] {
+export async function listCustomFields(db: AppDb, query: z.output<typeof customFieldListQuerySchema>): Promise<CustomFieldDefRow[]> {
   const where = and(
     query.entityType ? eq(customFieldDefs.entityType, query.entityType) : undefined,
     query.includeInactive ? undefined : eq(customFieldDefs.isActive, true),
   );
-  return db.select().from(customFieldDefs).where(where).orderBy(asc(customFieldDefs.entityType), asc(customFieldDefs.slot)).all();
+  return await db.select().from(customFieldDefs).where(where).orderBy(asc(customFieldDefs.entityType), asc(customFieldDefs.slot));
 }
 
-export function getCustomField(db: AppDb, id: string): CustomFieldDefRow {
-  const row = db.select().from(customFieldDefs).where(eq(customFieldDefs.id, id)).get();
+export async function getCustomField(db: AppDb, id: string): Promise<CustomFieldDefRow> {
+  const row = (await db.select().from(customFieldDefs).where(eq(customFieldDefs.id, id)).limit(1))[0];
   if (!row) throw notFoundError("Custom field");
   return row;
 }
 
-export function createCustomField(db: AppDb, auth: AuthContext, input: z.output<typeof customFieldCreateSchema>): CustomFieldDefRow {
+export async function createCustomField(db: AppDb, auth: AuthContext, input: z.output<typeof customFieldCreateSchema>): Promise<CustomFieldDefRow> {
   assertCanManage(auth, input.entityType);
-  const clash = db.select({ id: customFieldDefs.id }).from(customFieldDefs)
-    .where(and(eq(customFieldDefs.entityType, input.entityType), eq(customFieldDefs.slot, input.slot))).get();
+  const clash = (await db.select({ id: customFieldDefs.id }).from(customFieldDefs)
+    .where(and(eq(customFieldDefs.entityType, input.entityType), eq(customFieldDefs.slot, input.slot))).limit(1))[0];
   if (clash) throw new AppError("DUPLICATE", `The ${input.slot} slot is already defined`, { fieldErrors: { slot: ["Slot already in use"] } });
-  return db.insert(customFieldDefs).values({
+  return (await db.insert(customFieldDefs).values({
     entityType: input.entityType,
     slot: input.slot,
     name: input.name,
@@ -96,18 +97,18 @@ export function createCustomField(db: AppDb, auth: AuthContext, input: z.output<
     isActive: input.isActive,
     createdBy: auth.user.id,
     updatedBy: auth.user.id,
-  }).returning().get();
+  }).returning())[0];
 }
 
-export function updateCustomField(db: AppDb, auth: AuthContext, id: string, input: z.output<typeof customFieldUpdateSchema>): CustomFieldDefRow {
-  const current = getCustomField(db, id);
+export async function updateCustomField(db: AppDb, auth: AuthContext, id: string, input: z.output<typeof customFieldUpdateSchema>): Promise<CustomFieldDefRow> {
+  const current = await getCustomField(db, id);
   assertCanManage(auth, current.entityType);
   assertVersion(current.version, input.version);
-  return db.update(customFieldDefs).set({
+  return (await db.update(customFieldDefs).set({
     ...(input.name !== undefined ? { name: input.name } : {}),
     ...(input.options !== undefined ? { options: normalizeOptions(current.slot, input.options) } : {}),
     ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
     updatedBy: auth.user.id,
     version: current.version + 1,
-  }).where(eq(customFieldDefs.id, id)).returning().get();
+  }).where(eq(customFieldDefs.id, id)).returning())[0];
 }

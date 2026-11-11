@@ -21,16 +21,16 @@ const sourcesRoute = await import("@/app/api/kits/sources/route");
 let kitId = "";
 let kittingLocId = "";
 
-beforeEach(() => {
-  const w = openWorld();
-  kitId = w.db.insert(schema.products).values({
+beforeEach(async () => {
+  const w = await openWorld();
+  kitId = (await w.db.insert(schema.products).values({
     clientId: w.clientId, sku: "MLT-KIT-2PK", barcode: "MLT-KIT-2PK", name: "MLTest 2 Pack Kit", category: "General",
     weightOz: 16, lengthIn: 6, widthIn: 4, heightIn: 4, price: 25, status: "Active", isKit: true, kitType: "Kit to Stock",
-  }).returning().get().id;
-  w.db.insert(schema.kitComponents).values({ kitProductId: kitId, componentProductId: w.productId, quantity: 2 }).run();
-  kittingLocId = w.db.insert(schema.locations).values(locationRow(w.warehouseId, "KIT-01", { areaType: "Kitting", preventAllocation: true })).returning().get().id;
-  w.db.insert(schema.jobTypes).values({ code: "WO-PICK", description: "Work Order Picking", warehouseId: w.warehouseId, operationType: "Work Order", settings: jobTypeSettingsSchema.parse({}) }).run();
-  ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 22 });
+  }).returning())[0].id;
+  await w.db.insert(schema.kitComponents).values({ kitProductId: kitId, componentProductId: w.productId, quantity: 2 });
+  kittingLocId = (await w.db.insert(schema.locations).values(locationRow(w.warehouseId, "KIT-01", { areaType: "Kitting", preventAllocation: true })).returning())[0].id;
+  await w.db.insert(schema.jobTypes).values({ code: "WO-PICK", description: "Work Order Picking", warehouseId: w.warehouseId, operationType: "Work Order", settings: jobTypeSettingsSchema.parse({}) });
+  await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: w.loc.storageA, qty: 22 });
 });
 afterEach(() => closeWorld());
 afterAll(() => removeFilesRoot());
@@ -106,7 +106,7 @@ describe("/api/work-orders", () => {
     const res = await call(kitRoute.POST, req("POST", "/api/work-orders/create-kit", { cookie: await admin(), body: { workOrderId: id, qty: 5, locationId: kittingLocId } }));
     expect(res.status).toBe(200);
     expect((res.data as Record<string, unknown>).status).toBe("Completed");
-    const kitStock = current().db.select().from(schema.inventory).where(eq(schema.inventory.productId, kitId)).all().reduce((s, b) => s + b.onHand, 0);
+    const kitStock = (await current().db.select().from(schema.inventory).where(eq(schema.inventory.productId, kitId))).reduce((s, b) => s + b.onHand, 0);
     expect(kitStock).toBe(5);
   });
 
@@ -114,7 +114,7 @@ describe("/api/work-orders", () => {
     const w = current();
     const created = await call(listRoute.POST, req("POST", "/api/work-orders", { cookie: await admin(), body: body() }));
     const id = String((created.data as Record<string, unknown>).id);
-    w.db.update(schema.workOrders).set({ warehouseId: w.otherWarehouseId }).where(eq(schema.workOrders.id, id)).run();
+    await w.db.update(schema.workOrders).set({ warehouseId: w.otherWarehouseId }).where(eq(schema.workOrders.id, id));
     const res = await call(oneRoute.GET, req("GET", `/api/work-orders/${id}`, { cookie: await cookieFor(w.viewerId) }), { id });
     expect(res.status).toBe(404);
   });

@@ -12,6 +12,7 @@ import type { AuthContext } from "@/server/auth/context";
 import type { GridQuery } from "@/server/query/grid-query";
 import { compileGrid, scopeSql, whereClause, type GridSpec } from "./shipping-grid";
 import type { ListResult } from "./shipping";
+import { dbAll, dbGet } from "@/server/db/sql";
 
 const raw = (expr: string): SQL => sql.raw(expr);
 
@@ -41,7 +42,7 @@ const FROM = raw(`
 
 const SQL_FOR: Readonly<Record<string, SQL>> = {
   // Remove Inventory rows have no order: expose their ADJ-<seq> reference so API/CSV consumers never see null.
-  orderCode: raw("COALESCE(o.code, 'ADJ-' || printf('%06d', t.seq))"),
+  orderCode: raw("COALESCE(o.code, 'ADJ-' || lpad((t.seq)::text, 6, '0'))"),
   originalOrderCode: raw("COALESCE(ol.original_order_code, mo.code)"),
   storeOrderNumber: raw("o.store_order_number"),
   sku: raw("p.sku"),
@@ -61,7 +62,7 @@ const SQL_FOR: Readonly<Record<string, SQL>> = {
   masterOrderCode: raw("mo.code"),
   isBackOrder: raw("o.is_back_order"),
   shipmentDate: raw("t.at"),
-  reference: raw("(CASE WHEN t.type = 'Shipment' THEN o.code ELSE 'ADJ-' || printf('%06d', t.seq) END)"),
+  reference: raw("(CASE WHEN t.type = 'Shipment' THEN o.code ELSE 'ADJ-' || lpad((t.seq)::text, 6, '0') END)"),
   adjustmentReason: raw("ar.name"),
   shipmentType: raw("(CASE WHEN t.type = 'Shipment' THEN 'Shipment Order' ELSE 'Remove Inventory' END)"),
   note: raw("t.note"),
@@ -87,7 +88,7 @@ export const SHIPMENT_HISTORY_GRID: GridSpec = {
 };
 
 const SELECT = sql.join(
-  [raw("t.id AS id"), raw("t.order_id AS orderId"), raw("t.product_id AS productId"), raw("s.carrier_code AS carrierCode"),
+  [raw("t.id AS id"), raw("t.order_id AS \"orderId\""), raw("t.product_id AS \"productId\""), raw("s.carrier_code AS \"carrierCode\""),
     ...Object.entries(SQL_FOR).map(([alias, expr]) => sql`${expr} AS ${sql.identifier(alias)}`)],
   sql`, `,
 );
@@ -100,12 +101,10 @@ export type ShipmentHistoryRow = Readonly<Record<string, unknown>> & {
   readonly quantity: number;
 };
 
-export function listShipmentHistory(db: AppDb, auth: AuthContext, query: GridQuery): ListResult<ShipmentHistoryRow> {
+export async function listShipmentHistory(db: AppDb, auth: AuthContext, query: GridQuery): Promise<ListResult<ShipmentHistoryRow>> {
   const base = sql`${HISTORY_TXN_WHERE} AND ${scopeSql(raw("t.warehouse_id"), raw("t.client_id"), auth.viewScope)}`;
   const grid = compileGrid(SHIPMENT_HISTORY_GRID, query, base);
-  const rows = db.all<Readonly<Record<string, unknown>> & { id: string; orderId: string | null; productId: string; quantity: number; isBackOrder: number | null }>(
-    sql`SELECT ${SELECT} FROM ${FROM} ${whereClause(grid.where)} ORDER BY ${sql.join(grid.orderBy, sql`, `)} LIMIT ${grid.pageSize} OFFSET ${grid.offset}`,
-  );
-  const total = db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM ${FROM} ${whereClause(grid.where)}`)?.n ?? 0;
+  const rows = await dbAll<Readonly<Record<string, unknown>> & { id: string; orderId: string | null; productId: string; quantity: number; isBackOrder: number | null }>(db, sql`SELECT ${SELECT} FROM ${FROM} ${whereClause(grid.where)} ORDER BY ${sql.join(grid.orderBy, sql`, `)} LIMIT ${grid.pageSize} OFFSET ${grid.offset}`);
+  const total = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM ${FROM} ${whereClause(grid.where)}`))?.n ?? 0;
   return { rows: rows.map((r) => ({ ...r, isBackOrder: Boolean(r.isBackOrder) })), total };
 }

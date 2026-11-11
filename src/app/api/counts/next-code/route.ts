@@ -3,4 +3,4 @@ import { defineRoute } from "@/server/api/define-route";
 import { COUNT_PERMISSIONS as P } from "@/lib/grid-defs/counts/count-grids";
 import { busiestWarehouseId, nextCountCode } from "@/server/repositories/counts-plans";
 
-export const GET = defineRoute({ permission: [P.create, P.edit], handler: ({ db, auth }) => ({ code: nextCountCode(db), defaultWarehouseId: busiestWarehouseId(db, auth.scope) }) });
+export const GET = defineRoute({ permission: [P.create, P.edit], handler: async ({ db, auth }) => ({ code: await nextCountCode(db), defaultWarehouseId: await busiestWarehouseId(db, auth.scope) }) });

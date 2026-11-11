@@ -17,8 +17,8 @@ export const GET = defineRoute({
     expiry: z.string().trim().max(40).optional(),
     damageReason: z.string().trim().max(60).optional(),
   }),
-  handler: ({ db, auth, params, query }) =>
+  handler: async ({ db, auth, params, query }) =>
     query.lineId
-      ? suggestForLine(db, auth.scope, params.id, query.lineId, query.qty, { lot: query.lot, expiry: query.expiry, damageReason: query.damageReason })
-      : { lines: suggestForOpenLines(db, auth.scope, params.id) },
+      ? await suggestForLine(db, auth.scope, params.id, query.lineId, query.qty, { lot: query.lot, expiry: query.expiry, damageReason: query.damageReason })
+      : { lines: await suggestForOpenLines(db, auth.scope, params.id) },
 });

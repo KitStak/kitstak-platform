@@ -12,8 +12,8 @@ export const task: SchedulerTask = {
   owner: "M08",
   configured: true,
   schedule: { kind: "interval", everyMs: KIT_RECALC_EVERY_MS },
-  run: ({ db, now }) => {
-    const result = recalcKitInventory(db, now);
+  run: async ({ db, now }) => {
+    const result = await recalcKitInventory(db, now);
     return { status: "ok", message: `${result.rows} kit rows recalculated` };
   },
 };

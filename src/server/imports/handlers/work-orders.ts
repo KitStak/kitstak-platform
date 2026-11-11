@@ -18,15 +18,15 @@ const str = (v: unknown): string => (v === null || v === undefined ? "" : String
 export const handler: ImportHandler = {
   configured: true,
   owner: "M08",
-  apply({ db, auth, actor }, row) {
+  async apply({ db, auth, actor }, row) {
     if (str(row.type).toLowerCase() === "disassemble") {
       throw new AppError("VALIDATION", "Disassemble rows are not imported; use Disassemble Kit on a completed work order.");
     }
-    const warehouse = db.select().from(schema.warehouses).where(eq(schema.warehouses.code, str(row.warehouseCode))).get();
+    const warehouse = (await db.select().from(schema.warehouses).where(eq(schema.warehouses.code, str(row.warehouseCode))).limit(1))[0];
     if (!warehouse) throw new AppError("VALIDATION", `Warehouse ${str(row.warehouseCode)} was not found.`);
-    const client = db.select().from(schema.clients).where(eq(schema.clients.code, str(row.clientCode))).get();
+    const client = (await db.select().from(schema.clients).where(eq(schema.clients.code, str(row.clientCode))).limit(1))[0];
     if (!client) throw new AppError("VALIDATION", `Client ${str(row.clientCode)} was not found.`);
-    const kit = db.select().from(schema.products).where(and(eq(schema.products.sku, str(row.kitSku)), eq(schema.products.clientId, client.id))).get();
+    const kit = (await db.select().from(schema.products).where(and(eq(schema.products.sku, str(row.kitSku)), eq(schema.products.clientId, client.id))).limit(1))[0];
     if (!kit) throw new AppError("VALIDATION", `Kit ${str(row.kitSku)} was not found for client ${client.code}.`);
     const due = str(row.dueDate);
     const parsed = workOrderInputSchema.safeParse({
@@ -35,7 +35,7 @@ export const handler: ImportHandler = {
       plannedFinishAt: due ? new Date(`${due.slice(0, 10)}T17:00:00`).toISOString() : null, components: [], customFields: {},
     });
     if (!parsed.success) throw new AppError("VALIDATION", parsed.error.issues[0]?.message ?? "Invalid row");
-    const record = createWorkOrder(db, { userId: actor.userId, source: actor.source, scope: auth.scope }, parsed.data);
+    const record = await createWorkOrder(db, { userId: actor.userId, source: actor.source, scope: auth.scope }, parsed.data);
     return { entityId: record.id, message: `Work order ${record.code} created` };
   },
 };

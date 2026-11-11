@@ -9,6 +9,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import * as schema from "@/server/db/schema";
 import { DomainError } from "./errors";
+import { dbGet } from "@/server/db/sql";
 import type { Tx } from "./types";
 
 export const GLOBAL_WAREHOUSE = "*";
@@ -43,54 +44,56 @@ export function formatCode(prefix: string, value: number, padding: number): stri
   return `${prefix}${String(value).padStart(padding, "0")}`;
 }
 
-function maxExistingSuffix(tx: Tx, def: SequenceDefault): number {
+async function maxExistingSuffix(tx: Tx, def: SequenceDefault): Promise<number> {
   if (!def.source || !IDENT_RE.test(def.source.table) || !IDENT_RE.test(def.source.column)) return 0;
   const { table, column } = def.source;
   const prefixLen = def.prefix.length;
-  const row = tx.get<{ maxValue: number | null }>(sql`
-    SELECT MAX(CAST(SUBSTR(${sql.raw(column)}, ${prefixLen + 1}) AS INTEGER)) AS maxValue
+  // SQLite LIKE was case-insensitive (ILIKE); GLOB digits-only became a regex.
+  const start = sql.raw(String(prefixLen + 1));
+  const row = await dbGet<{ maxValue: number | null }>(tx, sql`
+    SELECT MAX(CAST(SUBSTR(${sql.raw(column)}, ${start}) AS BIGINT)) AS "maxValue"
     FROM ${sql.raw(table)}
-    WHERE ${sql.raw(column)} LIKE ${`${def.prefix}%`}
-      AND SUBSTR(${sql.raw(column)}, ${prefixLen + 1}) GLOB '[0-9]*'
-      AND SUBSTR(${sql.raw(column)}, ${prefixLen + 1}) NOT GLOB '*[^0-9]*'`);
-  return row?.maxValue ?? 0;
+    WHERE ${sql.raw(column)} ILIKE ${`${def.prefix}%`}
+      AND SUBSTR(${sql.raw(column)}, ${start}) ~ '^[0-9]+$'`);
+  return Number(row?.maxValue ?? 0);
 }
 
-function ensureRow(tx: Tx, key: string, warehouseId: string): typeof schema.codeSequences.$inferSelect {
-  const existing = tx.select().from(schema.codeSequences)
-    .where(and(eq(schema.codeSequences.key, key), eq(schema.codeSequences.warehouseId, warehouseId))).get();
+async function ensureRow(tx: Tx, key: string, warehouseId: string): Promise<typeof schema.codeSequences.$inferSelect> {
+  const [existing] = await tx.select().from(schema.codeSequences)
+    .where(and(eq(schema.codeSequences.key, key), eq(schema.codeSequences.warehouseId, warehouseId))).limit(1);
   if (existing) return existing;
   const def = defaultsFor(key);
-  const row = { key, warehouseId, prefix: def.prefix, padding: def.padding, nextValue: maxExistingSuffix(tx, def) + 1, autoGenerate: true };
-  tx.insert(schema.codeSequences).values(row).onConflictDoNothing().run();
-  return tx.select().from(schema.codeSequences)
-    .where(and(eq(schema.codeSequences.key, key), eq(schema.codeSequences.warehouseId, warehouseId))).get() ?? row;
+  const row = { key, warehouseId, prefix: def.prefix, padding: def.padding, nextValue: (await maxExistingSuffix(tx, def)) + 1, autoGenerate: true };
+  await tx.insert(schema.codeSequences).values(row).onConflictDoNothing();
+  const [created] = await tx.select().from(schema.codeSequences)
+    .where(and(eq(schema.codeSequences.key, key), eq(schema.codeSequences.warehouseId, warehouseId))).limit(1);
+  return created ?? row;
 }
 
 /** Consumes and returns the next numeric value for `key`. */
-export function nextValue(tx: Tx, key: SequenceKey, warehouseId: string = GLOBAL_WAREHOUSE): number {
-  ensureRow(tx, key, warehouseId);
-  const updated = tx.update(schema.codeSequences)
+export async function nextValue(tx: Tx, key: SequenceKey, warehouseId: string = GLOBAL_WAREHOUSE): Promise<number> {
+  await ensureRow(tx, key, warehouseId);
+  const [updated] = await tx.update(schema.codeSequences)
     .set({ nextValue: sql`${schema.codeSequences.nextValue} + 1` })
     .where(and(eq(schema.codeSequences.key, key), eq(schema.codeSequences.warehouseId, warehouseId)))
-    .returning({ value: schema.codeSequences.nextValue }).get();
+    .returning({ value: schema.codeSequences.nextValue });
   if (!updated) throw new DomainError("CONFLICT", `Sequence ${key} could not be advanced`);
   return updated.value - 1;
 }
 
 /** Consumes and returns the next formatted code, e.g. `SO000124`. */
-export function next(tx: Tx, key: SequenceKey, warehouseId: string = GLOBAL_WAREHOUSE): string {
-  const row = ensureRow(tx, key, warehouseId);
-  return formatCode(row.prefix, nextValue(tx, key, warehouseId), row.padding);
+export async function next(tx: Tx, key: SequenceKey, warehouseId: string = GLOBAL_WAREHOUSE): Promise<string> {
+  const row = await ensureRow(tx, key, warehouseId);
+  return formatCode(row.prefix, await nextValue(tx, key, warehouseId), row.padding);
 }
 
 /** The code `next()` would return, without consuming it (wizard "auto generated" link). */
-export function peek(tx: Tx, key: SequenceKey, warehouseId: string = GLOBAL_WAREHOUSE): string {
-  const row = tx.select().from(schema.codeSequences)
-    .where(and(eq(schema.codeSequences.key, key), eq(schema.codeSequences.warehouseId, warehouseId))).get();
+export async function peek(tx: Tx, key: SequenceKey, warehouseId: string = GLOBAL_WAREHOUSE): Promise<string> {
+  const [row] = await tx.select().from(schema.codeSequences)
+    .where(and(eq(schema.codeSequences.key, key), eq(schema.codeSequences.warehouseId, warehouseId))).limit(1);
   if (row) return formatCode(row.prefix, row.nextValue, row.padding);
   const def = defaultsFor(key);
-  return formatCode(def.prefix, maxExistingSuffix(tx, def) + 1, def.padding);
+  return formatCode(def.prefix, (await maxExistingSuffix(tx, def)) + 1, def.padding);
 }
 
 /** Wave number `<ruleSeq>-<runCount>`. */
@@ -103,24 +106,23 @@ export function instantCountCode(at: Date = new Date()): string {
 }
 
 /** Bill number `YYMMDD<seq>`; the sequence restarts every day. */
-export function billNumber(tx: Tx, at: Date = new Date()): string {
+export async function billNumber(tx: Tx, at: Date = new Date()): Promise<string> {
   const p = (n: number) => String(n).padStart(2, "0");
   const day = `${p(at.getUTCFullYear() % 100)}${p(at.getUTCMonth() + 1)}${p(at.getUTCDate())}`;
-  const value = nextValue(tx, `bill:${day}`);
+  const value = await nextValue(tx, `bill:${day}`);
   return `${day}${String(value).padStart(SEQUENCE_DEFAULTS.bill.padding, "0")}`;
 }
 
 /** Next LP number for an LP type: `<numberPrefix><zero-pad numberLength>`. */
-export function nextLpNumber(tx: Tx, lpTypeId: string): string {
-  const updated = tx.update(schema.lpTypes)
+export async function nextLpNumber(tx: Tx, lpTypeId: string): Promise<string> {
+  const [updated] = await tx.update(schema.lpTypes)
     .set({ nextSequence: sql`${schema.lpTypes.nextSequence} + 1` })
     .where(eq(schema.lpTypes.id, lpTypeId))
-    .returning({ next: schema.lpTypes.nextSequence, prefix: schema.lpTypes.numberPrefix, length: schema.lpTypes.numberLength })
-    .get();
+    .returning({ next: schema.lpTypes.nextSequence, prefix: schema.lpTypes.numberPrefix, length: schema.lpTypes.numberLength });
   if (!updated) throw new DomainError("NOT_FOUND", "LP type not found");
   return formatCode(updated.prefix, updated.next - 1, updated.length);
 }
 
 /** Integer-only sequences (e.g. receipt master ids). */
-export const nextInteger = (tx: Tx, key: string): number => nextValue(tx, key);
+export const nextInteger = async (tx: Tx, key: string): Promise<number> => await nextValue(tx, key);
 

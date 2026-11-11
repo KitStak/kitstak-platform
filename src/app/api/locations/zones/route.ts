@@ -6,5 +6,5 @@ import { getZoneSummary } from "@/server/repositories/locations";
 export const GET = defineRoute({
   permission: ["settings.locations.view", "inventory.inventory_by_location.view"],
   query: z.object({ warehouseId: z.string().trim().max(64).optional() }),
-  handler: ({ db, auth, query }) => getZoneSummary(db, auth, query.warehouseId),
+  handler: async ({ db, auth, query }) => await getZoneSummary(db, auth, query.warehouseId),
 });

@@ -39,13 +39,13 @@ interface StoredMail {
 
 const EMPTY: StoredMail = { transport: "log", host: "", port: 587, security: "starttls", username: "", fromAddress: "", fromName: "", secret: null };
 
-function rowDefaults(db: AppDb): { defaults: Record<string, unknown>; version: number } {
-  const row = db.select({ defaults: c.defaults, version: c.version }).from(c).where(eq(c.id, ID)).get();
+async function rowDefaults(db: AppDb): Promise<{ defaults: Record<string, unknown>; version: number }> {
+  const row = (await db.select({ defaults: c.defaults, version: c.version }).from(c).where(eq(c.id, ID)).limit(1))[0];
   return { defaults: ((row?.defaults ?? {}) as unknown as Record<string, unknown>), version: row?.version ?? 1 };
 }
 
-function readStored(db: AppDb): StoredMail {
-  const raw = rowDefaults(db).defaults.mail;
+async function readStored(db: AppDb): Promise<StoredMail> {
+  const raw = (await rowDefaults(db)).defaults.mail;
   if (!raw || typeof raw !== "object") return EMPTY;
   return { ...EMPTY, ...(raw as Partial<StoredMail>) };
 }
@@ -59,14 +59,14 @@ function view(m: StoredMail, version: number): MailSettingsView {
   };
 }
 
-export function getMailSettings(db: AppDb): MailSettingsView {
-  return view(readStored(db), rowDefaults(db).version);
+export async function getMailSettings(db: AppDb): Promise<MailSettingsView> {
+  return view(await readStored(db), (await rowDefaults(db)).version);
 }
 
-export function updateMailSettings(tx: AppDb, auth: AuthContext, actor: Actor, input: MailSettingsInput): MailSettingsView {
-  const { defaults, version } = rowDefaults(tx);
+export async function updateMailSettings(tx: AppDb, auth: AuthContext, actor: Actor, input: MailSettingsInput): Promise<MailSettingsView> {
+  const { defaults, version } = await rowDefaults(tx);
   assertVersion(version, input.version);
-  const before = readStored(tx);
+  const before = await readStored(tx);
   const oldPassword = decryptCredentials(before.secret)?.password ?? "";
   const password = input.clearPassword ? "" : input.password?.trim() ? input.password : oldPassword;
   const next: StoredMail = {
@@ -76,13 +76,13 @@ export function updateMailSettings(tx: AppDb, auth: AuthContext, actor: Actor, i
   if (next.transport === "smtp" && (!next.host || !next.fromAddress)) {
     throw new AppError("VALIDATION", "SMTP needs a server and a From address", { fieldErrors: { ...(next.host ? {} : { host: ["Required for SMTP"] }), ...(next.fromAddress ? {} : { fromAddress: ["Required for SMTP"] }) } });
   }
-  tx.update(c).set({ defaults: { ...defaults, mail: next } as unknown as typeof c.$inferInsert.defaults, updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${c.version} + 1` }).where(eq(c.id, ID)).run();
+  await tx.update(c).set({ defaults: { ...defaults, mail: next } as unknown as typeof c.$inferInsert.defaults, updatedBy: actor.userId, updatedAt: new Date().toISOString(), version: sql`${c.version} + 1` }).where(eq(c.id, ID));
   const shown = (m: StoredMail, pw: string) => ({
     emailDelivery: m.transport === "smtp" ? "SMTP server" : "Server log only", smtpServer: m.host ? `${m.host}:${m.port}` : "", smtpSecurity: m.security,
     smtpUsername: m.username, fromAddress: m.fromName ? `${m.fromName} <${m.fromAddress}>` : m.fromAddress, smtpPassword: pw ? "Set" : "Not set",
   });
-  logUpdate(tx, domainCtxOf(actor, auth), { entityType: "company", entityId: ID, entityCode: "Company settings" }, shown(before, oldPassword), shown(next, password));
-  return getMailSettings(tx);
+  await logUpdate(tx, domainCtxOf(actor, auth), { entityType: "company", entityId: ID, entityCode: "Company settings" }, shown(before, oldPassword), shown(next, password));
+  return await getMailSettings(tx);
 }
 
 /* ---------------- sending ---------------- */
@@ -202,8 +202,8 @@ async function smtpSend(m: StoredMail, password: string, mail: OutboundMail): Pr
 
 /** Sends one email with the company transport and reports what really happened. */
 export async function sendCompanyMail(db: AppDb, input: OutboundMail): Promise<MailResult> {
-  const m = readStored(db);
-  const footer = getBranding(db)?.emailFooter;
+  const m = await readStored(db);
+  const footer = (await getBranding(db))?.emailFooter;
   const mail: OutboundMail = footer ? { ...input, text: `${input.text.trimEnd()}\n\n--\n${footer}\n` } : input;
   if (m.transport !== "smtp" || !m.host || !m.fromAddress) {
     log.info("mail (server log; email delivery not set up)", { component: "mail", to: mail.to, subject: mail.subject, body: mail.text });

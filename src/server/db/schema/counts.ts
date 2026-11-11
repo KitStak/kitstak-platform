@@ -1,10 +1,10 @@
 /** Counts: count plans, plan lines, per-bucket count entries. */
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { COUNT_LINE_STATUSES, COUNT_OPERATION_TYPES, COUNT_PLAN_STATUSES, COUNT_TYPES } from "../../../lib/enums";
 import { bool, nowIso, pk, stamps } from "../columns";
 import { warehouses } from "./org";
 
-export const countPlans = sqliteTable("count_plans", {
+export const countPlans = pgTable("count_plans", {
   id: pk(),
   code: text("code").notNull(),
   warehouseId: text("warehouse_id").notNull().references(() => warehouses.id),
@@ -23,7 +23,7 @@ export const countPlans = sqliteTable("count_plans", {
   ...stamps(),
 }, (t) => [uniqueIndex("count_plan_code_idx").on(t.warehouseId, t.code)]);
 
-export const countPlanLines = sqliteTable("count_plan_lines", {
+export const countPlanLines = pgTable("count_plan_lines", {
   id: pk(),
   planId: text("plan_id").notNull().references(() => countPlans.id, { onDelete: "cascade" }),
   locationId: text("location_id"),
@@ -52,7 +52,7 @@ export const countPlanLines = sqliteTable("count_plan_lines", {
 ]);
 
 /** One row per bucket counted in a line. */
-export const countLineEntries = sqliteTable("count_line_entries", {
+export const countLineEntries = pgTable("count_line_entries", {
   id: pk(),
   lineId: text("line_id").notNull().references(() => countPlanLines.id, { onDelete: "cascade" }),
   productId: text("product_id").notNull(),

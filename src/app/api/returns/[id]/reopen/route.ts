@@ -11,5 +11,5 @@ export const POST = defineRoute({
   permission: RETURN_PERMISSIONS.changeStatus,
   params: idParamsSchema,
   body: reopenReturnSchema,
-  handler: ({ db, auth, actor, params, body }) => reopenReturn(db, scopedCtx(actor, auth), params.id, body),
+  handler: async ({ db, auth, actor, params, body }) => await reopenReturn(db, scopedCtx(actor, auth), params.id, body),
 });

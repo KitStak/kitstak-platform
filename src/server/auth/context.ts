@@ -22,9 +22,9 @@ export interface ContextSelection {
   readonly clientId?: string | null;
 }
 
-export function buildAuthContext(db: AppDb, user: SessionUser, selection: ContextSelection = {}): AuthContext {
-  const grant = loadPermissions(db, user);
-  const scope = getScope(db, user);
+export async function buildAuthContext(db: AppDb, user: SessionUser, selection: ContextSelection = {}): Promise<AuthContext> {
+  const grant = await loadPermissions(db, user);
+  const scope = await getScope(db, user);
   const viewScope = narrowScope(scope, selection.warehouseId, selection.clientId);
   const warehouseId = viewScope.warehouseIds.length === 1 && selection.warehouseId === viewScope.warehouseIds[0] ? selection.warehouseId : null;
   const clientId = Array.isArray(viewScope.clientIds) && selection.clientId && viewScope.clientIds.length === 1 && viewScope.clientIds[0] === selection.clientId ? selection.clientId : null;
@@ -36,7 +36,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
   const user = await getSessionUser();
   if (!user) return null;
   const store = await cookies();
-  return buildAuthContext(await getAppDb(), user, {
+  return await buildAuthContext(await getAppDb(), user, {
     warehouseId: store.get(CONTEXT_WAREHOUSE_COOKIE)?.value ?? null,
     clientId: store.get(CONTEXT_CLIENT_COOKIE)?.value ?? null,
   });

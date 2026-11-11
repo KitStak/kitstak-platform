@@ -10,8 +10,8 @@ export const POST = defineRoute({
   permission: "inventory.purchase_orders.delete",
   rateLimit: RATE_LIMITS.bulkIo,
   body: bulkIdsBodySchema,
-  handler: ({ db, auth, actor, body }) =>
-    runBulk(db, body.ids, (tx, id) => {
-      deletePurchaseOrder(tx, domainCtx(actor, auth), auth.scope, id);
+  handler: async ({ db, auth, actor, body }) =>
+    await runBulk(db, body.ids, async (tx, id) => {
+      await deletePurchaseOrder(tx, domainCtx(actor, auth), auth.scope, id);
     }),
 });

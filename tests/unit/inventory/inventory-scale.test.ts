@@ -13,6 +13,7 @@ import { listAtp } from "@/server/repositories/inventory-atp";
 import { atpExport, byLocationExport, totalInventoryExport } from "@/server/repositories/inventory-export";
 import type { ExportContext, ExportProvider } from "@/server/exports/types";
 import { createWorld, locationRow, type World } from "../foundation/domain/fixtures";
+import { withWriteTx } from "@/server/db/sql";
 
 const SKUS = 3_000;
 const LOCATIONS = 8_500;
@@ -26,8 +27,8 @@ const chunked = <T>(rows: readonly T[], n: number, fn: (part: T[]) => void) => {
   for (let i = 0; i < rows.length; i += n) fn(rows.slice(i, i + n));
 };
 
-beforeAll(() => {
-  w = createWorld();
+beforeAll(async () => {
+  w = await createWorld();
   const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
   auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
   const products = Array.from({ length: SKUS }, (_, i) => ({
@@ -37,9 +38,9 @@ beforeAll(() => {
   const locations = Array.from({ length: LOCATIONS }, (_, i) => locationRow(w.warehouseId, `S-${String(Math.floor(i / 100)).padStart(3, "0")}-${String(i % 100).padStart(2, "0")}`, { zone: `Z${i % 12}`, areaType: "Storage" }));
   const productIds: { id: string; clientId: string | null }[] = [];
   const locationIds: string[] = [];
-  w.db.transaction((tx) => {
-    chunked(products, 500, (part) => { productIds.push(...tx.insert(schema.products).values(part).returning({ id: schema.products.id, clientId: schema.products.clientId }).all()); });
-    chunked(locations, 500, (part) => { locationIds.push(...tx.insert(schema.locations).values(part).returning({ id: schema.locations.id }).all().map((r) => r.id)); });
+  await withWriteTx(w.db, async (tx) => {
+    chunked(products, 500, async (part) => { productIds.push(...await tx.insert(schema.products).values(part).returning({ id: schema.products.id, clientId: schema.products.clientId })); });
+    chunked(locations, 500, async (part) => { locationIds.push(...(await tx.insert(schema.locations).values(part).returning({ id: schema.locations.id })).map((r) => r.id)); });
   });
   // Every product sits in 3-5 locations; every location holds at least one row.
   const rows: (typeof schema.inventory.$inferInsert)[] = [];
@@ -51,16 +52,16 @@ beforeAll(() => {
       lotNumber: i % 7 === 0 ? `LOT-${i % 40}` : null,
     });
   }
-  w.db.transaction((tx) => chunked(rows, 500, (part) => tx.insert(schema.inventory).values(part).run()));
+  await withWriteTx(w.db, async (tx) => chunked(rows, 500, async (part) => await tx.insert(schema.inventory).values(part)));
   buckets = rows.length;
 }, 120_000);
 afterAll(() => w?.close());
 
 const q = (extra: Partial<GridQuery> = {}): GridQuery => ({ ...EMPTY_GRID_QUERY, pageSize: 100, ...extra });
 
-function timed<T>(fn: () => T): { ms: number; value: T } {
+async function timed<T>(fn: () => Promise<T>): Promise<{ ms: number; value: T }> {
   const t0 = performance.now();
-  const value = fn();
+  const value = await fn();
   return { ms: performance.now() - t0, value };
 }
 
@@ -81,31 +82,31 @@ describe(`inventory at scale (${SKUS} SKUs, ${LOCATIONS} locations)`, () => {
     expect(buckets).toBeGreaterThanOrEqual(12_000);
   });
 
-  const cases: [string, () => { total: number; rows: readonly unknown[] }][] = [
-    ["by-location first page", () => listBuckets(w.db, auth, q())],
-    ["by-location sort by SKU desc", () => listBuckets(w.db, auth, q({ sort: [{ field: "sku", dir: "desc" }] }))],
-    ["by-location sort by Free Quantity", () => listBuckets(w.db, auth, q({ sort: [{ field: "freePackQty", dir: "desc" }] }))],
-    ["by-location filter lot + quantity range", () => listBuckets(w.db, auth, q({ filters: [{ field: "lotNumber", op: "sw", value: "LOT-1" }, { field: "totalQty", op: "rng", min: "10", max: "40" }] }))],
-    ["by-location search SKU starts with", () => listBuckets(w.db, auth, q({ q: "SCL-012", qm: "sw" }))],
-    ["by-location last page", () => listBuckets(w.db, auth, q({ page: 120 }))],
-    ["total first page", () => listTotalInventory(w.db, auth, q())],
-    ["total sort by available desc", () => listTotalInventory(w.db, auth, q({ sort: [{ field: "availableQty", dir: "desc" }] }))],
-    ["ATP first page", () => listAtp(w.db, auth, q())],
-    ["ATP sort by current ATP", () => listAtp(w.db, auth, q({ sort: [{ field: "currentAtp", dir: "asc" }] }))],
+  const cases: [string, () => Promise<{ total: number; rows: readonly unknown[] }>][] = [
+    ["by-location first page", async () => await listBuckets(w.db, auth, q())],
+    ["by-location sort by SKU desc", async () => await listBuckets(w.db, auth, q({ sort: [{ field: "sku", dir: "desc" }] }))],
+    ["by-location sort by Free Quantity", async () => await listBuckets(w.db, auth, q({ sort: [{ field: "freePackQty", dir: "desc" }] }))],
+    ["by-location filter lot + quantity range", async () => await listBuckets(w.db, auth, q({ filters: [{ field: "lotNumber", op: "sw", value: "LOT-1" }, { field: "totalQty", op: "rng", min: "10", max: "40" }] }))],
+    ["by-location search SKU starts with", async () => await listBuckets(w.db, auth, q({ q: "SCL-012", qm: "sw" }))],
+    ["by-location last page", async () => await listBuckets(w.db, auth, q({ page: 120 }))],
+    ["total first page", async () => await listTotalInventory(w.db, auth, q())],
+    ["total sort by available desc", async () => await listTotalInventory(w.db, auth, q({ sort: [{ field: "availableQty", dir: "desc" }] }))],
+    ["ATP first page", async () => await listAtp(w.db, auth, q())],
+    ["ATP sort by current ATP", async () => await listAtp(w.db, auth, q({ sort: [{ field: "currentAtp", dir: "asc" }] }))],
   ];
   for (const [label, run] of cases) {
-    it(`${label} stays under ${BUDGET_MS} ms`, () => {
-      run(); // warm the statement cache once, as the dev server would after the first hit
-      const { ms, value } = timed(run);
+    it(`${label} stays under ${BUDGET_MS} ms`, async () => {
+      await run(); // warm the statement cache once, as the dev server would after the first hit
+      const { ms, value } = await timed(run);
       console.log(`[scale] ${label}: ${ms.toFixed(1)} ms, total ${value.total}, page ${value.rows.length}`);
       expect(value.total).toBeGreaterThan(0);
       expect(ms).toBeLessThan(BUDGET_MS);
     });
   }
 
-  it("by-location totals cover every stock row and Total has a row for every SKU", () => {
-    expect(listBuckets(w.db, auth, q()).total).toBe(buckets);
-    expect(listTotalInventory(w.db, auth, q()).total).toBeGreaterThanOrEqual(SKUS);
+  it("by-location totals cover every stock row and Total has a row for every SKU", async () => {
+    expect((await listBuckets(w.db, auth, q())).total).toBe(buckets);
+    expect((await listTotalInventory(w.db, auth, q())).total).toBeGreaterThanOrEqual(SKUS);
   });
 
   it.each([

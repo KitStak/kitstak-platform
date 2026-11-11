@@ -10,5 +10,5 @@ export const POST = defineRoute({
   permission: "settings.mobile_carts.label",
   transaction: false,
   body,
-  handler: ({ db, auth, body }) => mobileCartLabelRecords(db, auth, body.ids, body.include),
+  handler: async ({ db, auth, body }) => await mobileCartLabelRecords(db, auth, body.ids, body.include),
 });

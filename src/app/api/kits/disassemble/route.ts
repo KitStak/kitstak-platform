@@ -7,5 +7,5 @@ import { disassembleStockKit } from "@/server/repositories/work-orders-commands"
 export const POST = defineRoute({
   permission: WO_PERMISSIONS.disassemble,
   body: disassembleStockSchema,
-  handler: ({ db, auth, actor, body }) => disassembleStockKit(db, woCtx(actor, auth), body),
+  handler: async ({ db, auth, actor, body }) => await disassembleStockKit(db, woCtx(actor, auth), body),
 });

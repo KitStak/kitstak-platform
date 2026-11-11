@@ -56,23 +56,23 @@ export function cleanStatePatch(order: Readonly<Record<string, unknown>>): { bef
 }
 
 /** Tag names per order id (entity "shipment_order"). */
-export function orderTagNames(db: AppDb, orderIds: readonly string[]): Map<string, string[]> {
+export async function orderTagNames(db: AppDb, orderIds: readonly string[]): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>();
   if (orderIds.length === 0) return out;
-  const rows = db.select({ id: schema.entityTags.entityId, name: schema.tags.name }).from(schema.entityTags)
+  const rows = await db.select({ id: schema.entityTags.entityId, name: schema.tags.name }).from(schema.entityTags)
     .innerJoin(schema.tags, eq(schema.tags.id, schema.entityTags.tagId))
-    .where(and(eq(schema.entityTags.entityType, "shipment_order"), inArray(schema.entityTags.entityId, [...orderIds]))).all();
+    .where(and(eq(schema.entityTags.entityType, "shipment_order"), inArray(schema.entityTags.entityId, [...orderIds])));
   for (const r of rows) out.set(r.id, [...(out.get(r.id) ?? []), r.name]);
   return out;
 }
 
 /** Clears the master's metadata after a "Clean state" merge (change-logged). */
-export function applyCleanState(db: AppDb, ctx: DomainCtx, masterId: string): void {
-  const master = db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, masterId)).get();
+export async function applyCleanState(db: AppDb, ctx: DomainCtx, masterId: string): Promise<void> {
+  const master = (await db.select().from(schema.shipmentOrders).where(eq(schema.shipmentOrders.id, masterId)).limit(1))[0];
   if (!master) return;
   const { before, after } = cleanStatePatch(master as unknown as Record<string, unknown>);
   if (Object.keys(after).length === 0) return;
-  db.update(schema.shipmentOrders).set({ ...(after as Partial<typeof schema.shipmentOrders.$inferInsert>), updatedBy: ctx.userId, version: sql`${schema.shipmentOrders.version} + 1` })
-    .where(eq(schema.shipmentOrders.id, masterId)).run();
-  recordUpdate(db, ctx, { entityType: "shipment_order", entityId: master.id, entityCode: master.code, before, after });
+  await db.update(schema.shipmentOrders).set({ ...(after as Partial<typeof schema.shipmentOrders.$inferInsert>), updatedBy: ctx.userId, version: sql`${schema.shipmentOrders.version} + 1` })
+    .where(eq(schema.shipmentOrders.id, masterId));
+  await recordUpdate(db, ctx, { entityType: "shipment_order", entityId: master.id, entityCode: master.code, before, after });
 }

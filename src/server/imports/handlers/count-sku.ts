@@ -8,5 +8,5 @@ import type { ImportHandler } from "../types";
 export const handler: ImportHandler = {
   configured: true,
   owner: "M07",
-  apply: (ctx, row) => importSkuRow(ctx, row),
+  apply: async (ctx, row) => await importSkuRow(ctx, row),
 };

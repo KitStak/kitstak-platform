@@ -8,9 +8,9 @@ import { DATA_SETUP_PERMISSION, defOf, typeParams } from "../shared";
 export const GET = defineRoute({
   permission: DATA_SETUP_PERMISSION,
   params: typeParams,
-  handler: ({ db, auth, params, grid }) => {
+  handler: async ({ db, auth, params, grid }) => {
     const query = grid();
-    const { rows, total } = listLookupGrid(db, auth, params.type, query);
+    const { rows, total } = await listLookupGrid(db, auth, params.type, query);
     return listResult(rows, { total, page: query.page, pageSize: query.pageSize });
   },
 });
@@ -19,9 +19,9 @@ export const POST = defineRoute({
   permission: DATA_SETUP_PERMISSION,
   params: typeParams,
   body: lookupFormSchema,
-  handler: ({ db, auth, actor, params, body, audit }) => {
-    const row = createLookupValue(db, auth, actor, defOf(params.type), body);
-    audit({ action: "lookup.create", entity: "lookup", entityId: row.id, detail: { type: params.type, name: row.name } });
+  handler: async ({ db, auth, actor, params, body, audit }) => {
+    const row = await createLookupValue(db, auth, actor, defOf(params.type), body);
+    await audit({ action: "lookup.create", entity: "lookup", entityId: row.id, detail: { type: params.type, name: row.name } });
     return created(row);
   },
 });

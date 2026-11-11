@@ -7,5 +7,5 @@ import { duplicatePrintout } from "@/server/repositories/printouts";
 export const POST = defineRoute({
   permission: "settings.printouts_labels.duplicate",
   params: idParamsSchema,
-  handler: ({ db, auth, actor, params }) => created(duplicatePrintout(db, auth, actor, params.id)),
+  handler: async ({ db, auth, actor, params }) => created(await duplicatePrintout(db, auth, actor, params.id)),
 });

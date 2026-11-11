@@ -14,15 +14,15 @@ import {
 
 export const GET = defineRoute({
   query: entityRefSchema,
-  handler: ({ db, auth, query }) => listAttachments(db, auth, query),
+  handler: async ({ db, auth, query }) => await listAttachments(db, auth, query),
 });
 
 export const POST = defineRoute({
   body: attachmentCreateSchema,
-  handler: ({ db, auth, body }) => created(createAttachment(db, fileStore(), auth, body)),
+  handler: async ({ db, auth, body }) => created(await createAttachment(db, fileStore(), auth, body)),
 });
 
 export const DELETE = defineRoute({
   query: idQuerySchema,
-  handler: ({ db, auth, query }) => deleteAttachment(db, fileStore(), auth, query.id),
+  handler: async ({ db, auth, query }) => await deleteAttachment(db, fileStore(), auth, query.id),
 });

@@ -8,5 +8,5 @@ export const POST = defineRoute({
   permission: "settings.product_listing.search_a_product",
   params: idParamsSchema,
   body: z.object({ neverSync: z.boolean() }),
-  handler: ({ db, auth, actor, params, body }) => setNeverSync(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.id, body.neverSync),
+  handler: async ({ db, auth, actor, params, body }) => await setNeverSync(db, { ...domainCtx(actor, auth), scope: auth.scope }, params.id, body.neverSync),
 });

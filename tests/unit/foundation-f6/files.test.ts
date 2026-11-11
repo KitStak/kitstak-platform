@@ -55,42 +55,42 @@ describe("file store", () => {
   let testDb: SeededDb;
   let temp: TempStore;
   let clock: Date;
-  beforeEach(() => {
-    testDb = seededDb();
+  beforeEach(async () => {
+    testDb = await seededDb();
     clock = new Date("2026-11-01T00:00:00.000Z");
     temp = tempStore(() => clock);
   });
-  afterEach(() => {
-    testDb.close();
+  afterEach(async () => {
+    await testDb.close();
     temp.cleanup();
   });
 
-  it("stores bytes with sha256 and sniffed mime, then reads them back", () => {
-    const record = temp.store.store(testDb.db, { name: "photo.jpg", bytes: PNG_1X1, purpose: "attachment", uploadedBy: testDb.ids.admin });
+  it("stores bytes with sha256 and sniffed mime, then reads them back", async () => {
+    const record = await temp.store.store(testDb.db, { name: "photo.jpg", bytes: PNG_1X1, purpose: "attachment", uploadedBy: testDb.ids.admin });
     expect(record.mime).toBe(MIME.png);
     expect(record.sha256).toBe(sha256Hex(PNG_1X1));
     expect(record.expiresAt).toBeNull();
     expect(fs.existsSync(path.join(temp.root, record.id))).toBe(true);
-    const { bytes } = temp.store.read(testDb.db, record.id);
+    const { bytes } = await temp.store.read(testDb.db, record.id);
     expect(Buffer.compare(bytes, PNG_1X1)).toBe(0);
   });
 
-  it("rejects unknown and malformed ids as NOT_FOUND", () => {
-    expect(() => temp.store.read(testDb.db, "../../secret")).toThrow(/not found/i);
-    expect(() => temp.store.read(testDb.db, "00000000-0000-4000-8000-000000000000")).toThrow(/not found/i);
+  it("rejects unknown and malformed ids as NOT_FOUND", async () => {
+    await expect(async () => await temp.store.read(testDb.db, "../../secret")).rejects.toThrow(/not found/i);
+    await expect(async () => await temp.store.read(testDb.db, "00000000-0000-4000-8000-000000000000")).rejects.toThrow(/not found/i);
   });
 
-  it("expires export files after 7 days and cleans them up", () => {
+  it("expires export files after 7 days and cleans them up", async () => {
     const xlsx = Buffer.from([0x50, 0x4b, 0x03, 0x04, 9, 9, 9]);
-    const record = temp.store.store(testDb.db, { name: "e.xlsx", bytes: xlsx, purpose: "export", uploadedBy: testDb.ids.admin });
+    const record = await temp.store.store(testDb.db, { name: "e.xlsx", bytes: xlsx, purpose: "export", uploadedBy: testDb.ids.admin });
     expect(record.expiresAt).toBe("2026-11-08T00:00:00.000Z");
-    testDb.db.insert(backgroundTasks).values({ kind: "export", title: "t", userId: testDb.ids.admin, fileId: record.id, status: "completed" }).run();
-    expect(temp.store.deleteExpired(testDb.db)).toBe(0);
+    await testDb.db.insert(backgroundTasks).values({ kind: "export", title: "t", userId: testDb.ids.admin, fileId: record.id, status: "completed" });
+    expect(await temp.store.deleteExpired(testDb.db)).toBe(0);
     clock = new Date("2026-11-08T00:00:01.000Z");
-    expect(() => temp.store.read(testDb.db, record.id)).toThrow(/not found/i);
-    expect(temp.store.deleteExpired(testDb.db)).toBe(1);
-    expect(testDb.db.select().from(files).where(eq(files.id, record.id)).get()).toBeUndefined();
-    expect(testDb.db.select().from(backgroundTasks).get()?.fileId).toBeNull();
+    await expect(async () => await temp.store.read(testDb.db, record.id)).rejects.toThrow(/not found/i);
+    expect(await temp.store.deleteExpired(testDb.db)).toBe(1);
+    expect((await testDb.db.select().from(files).where(eq(files.id, record.id)).limit(1))[0]).toBeUndefined();
+    expect((await testDb.db.select().from(backgroundTasks).limit(1))[0]?.fileId).toBeNull();
     expect(fs.existsSync(path.join(temp.root, record.id))).toBe(false);
   });
 });

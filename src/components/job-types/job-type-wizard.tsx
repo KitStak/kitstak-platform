@@ -31,7 +31,7 @@ import {
 } from "./job-type-steps";
 
 type Op = (typeof OPERATION_TYPES)[number];
-type Detail = ReturnType<typeof getJobTypeDetail>;
+type Detail = Awaited<ReturnType<typeof getJobTypeDetail>>;
 
 const OP_CARDS: readonly { readonly value: Op; readonly title: string; readonly description: string; readonly icon: React.ComponentType<{ className?: string }> }[] = [
   { value: "Picking", title: "Picking", description: "Assign settings for your picking jobs.", icon: PackageSearch },

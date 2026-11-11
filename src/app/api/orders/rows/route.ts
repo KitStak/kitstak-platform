@@ -10,5 +10,5 @@ export const POST = defineRoute({
   body: z.object({ ids: bulkIdsSchema }),
   transaction: false,
   rateLimit: false,
-  handler: ({ db, auth, body }) => ordersByIds(db, auth.scope, body.ids),
+  handler: async ({ db, auth, body }) => await ordersByIds(db, auth.scope, body.ids),
 });

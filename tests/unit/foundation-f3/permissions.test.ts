@@ -72,19 +72,19 @@ describe("permission catalog", () => {
 
 describe("permission resolution", () => {
   let t: SeededDb;
-  afterEach(() => t.close());
+  afterEach(async () => await t.close());
 
-  it("falls back to the legacy role's default set when no roles are assigned", () => {
-    t = seededDb();
-    const grant = loadPermissions(t.db, { id: t.ids.viewer, role: "viewer" });
+  it("falls back to the legacy role's default set when no roles are assigned", async () => {
+    t = await seededDb();
+    const grant = await loadPermissions(t.db, { id: t.ids.viewer, role: "viewer" });
     expect([...grant.permissions].sort()).toEqual([...DEFAULT_ROLE_PERMISSIONS.viewer].sort());
   });
 
-  it("uses role_permissions (+ self service) and unions restrictions", () => {
-    t = seededDb();
-    assignRole(t, t.ids.operator, "clerk", ["inventory.atp.view", "bogus.key.x"], ["carrier_cost"]);
-    assignRole(t, t.ids.operator, "client", ["reports.change_log.view"], ["carrier_cost", "rate_shopping_data"]);
-    const grant = loadPermissions(t.db, { id: t.ids.operator, role: "operator" });
+  it("uses role_permissions (+ self service) and unions restrictions", async () => {
+    t = await seededDb();
+    await assignRole(t, t.ids.operator, "clerk", ["inventory.atp.view", "bogus.key.x"], ["carrier_cost"]);
+    await assignRole(t, t.ids.operator, "client", ["reports.change_log.view"], ["carrier_cost", "rate_shopping_data"]);
+    const grant = await loadPermissions(t.db, { id: t.ids.operator, role: "operator" });
     expect(can(grant, "inventory.atp.view")).toBe(true);
     expect(can(grant, "reports.change_log.view")).toBe(true);
     expect(can(grant, "settings.my_profile.view")).toBe(true);
@@ -94,10 +94,10 @@ describe("permission resolution", () => {
     expect([...grant.roleKeys].sort()).toEqual(["clerk", "client"]);
   });
 
-  it("legacy admin is always a superuser", () => {
-    t = seededDb();
-    assignRole(t, t.ids.admin, "narrow", ["inventory.atp.view"]);
-    expect(loadPermissions(t.db, { id: t.ids.admin, role: "admin" }).permissions.size).toBe(PERMISSION_KEYS.length);
+  it("legacy admin is always a superuser", async () => {
+    t = await seededDb();
+    await assignRole(t, t.ids.admin, "narrow", ["inventory.atp.view"]);
+    expect((await loadPermissions(t.db, { id: t.ids.admin, role: "admin" })).permissions.size).toBe(PERMISSION_KEYS.length);
   });
 
   it("requirePermission throws FORBIDDEN", () => {
