@@ -19,6 +19,7 @@ import {
   cn,
   labelColorVars,
   toLabelColor,
+  pillTextColor,
 } from '@/components/ui';
 import type { MyWorkLabelDto } from '@/server/services/contracts/inbox-mywork';
 import { formatDueDate, parseIsoDay, toIsoDay, type BucketId } from './my-work-model';
@@ -49,7 +50,7 @@ export function StatusPillCell({ label, labels, columnTitle, disabled, onChange 
     >
       {/* Shared status pill: tinted background, label colour as text, solid dot. */}
       <span
-        style={vars ? { background: vars.subtle, color: vars.text } : undefined}
+        style={vars && label ? { background: vars.subtle, color: pillTextColor(toLabelColor(label.color)) } : undefined}
         className={cn(
           'inline-flex h-[22px] max-w-full items-center gap-1.5 rounded-full px-2 text-xs font-medium',
           vars ? '' : 'text-fg-muted ring-1 ring-border-default ring-inset',

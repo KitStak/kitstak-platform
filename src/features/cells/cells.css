@@ -54,7 +54,8 @@
   align-items: center;
   justify-content: center;
   padding: 0 8px;
-  color: var(--lc-text);
+  /* Label text with ink mixed in so it stays AA on its own tint (see --pill-text-mix). */
+  color: color-mix(in srgb, var(--lc-text), var(--text-primary) var(--pill-text-mix));
   transition: background-color var(--duration-instant) var(--ease-out);
   overflow: hidden;
 }

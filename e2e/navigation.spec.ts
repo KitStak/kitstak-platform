@@ -3,7 +3,7 @@
  * shell and logs no console errors. Also covers public legal pages and the phone-width drawer.
  */
 import type { Page } from '@playwright/test';
-import { appShell, authedTest, expect, publicTest, waitForSettled } from './support/fixtures';
+import { appShell, authedTest, expect, publicTest, waitForSettled, openWorkspacesMenu } from './support/fixtures';
 
 async function orgBase(page: Page): Promise<string> {
   await page.goto('/');
@@ -38,9 +38,10 @@ authedTest.describe('shell destinations', () => {
     });
   }
 
-  authedTest('workspace and dashboard links from the sidebar open real pages', async ({ page, diagnostics }) => {
+  authedTest('workspace and dashboard links from the Workspaces menu open real pages', async ({ page, diagnostics }) => {
     await orgBase(page);
-    const dashboardLink = page.locator('a[href*="/dashboards/"]').first();
+    const menu = await openWorkspacesMenu(page);
+    const dashboardLink = menu.locator('a[href*="/dashboards/"]').first();
     await expect(dashboardLink).toBeVisible({ timeout: 20_000 });
     await dashboardLink.click();
     await expect(page).toHaveURL(/\/dashboards\//);

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { X } from 'lucide-react';
 import { cn } from './cn';
-import { labelColorStyle, type LabelColor } from './label-color';
+import { PILL_TEXT_CLASS, labelColorStyle, type LabelColor } from './label-color';
 
 const badgeVariants = cva(
   'inline-flex items-center gap-1 whitespace-nowrap rounded-sm font-medium [&_svg]:size-3 [&_svg]:shrink-0',
@@ -161,7 +161,8 @@ export function StatusPill({ label, color, className }: StatusPillProps) {
     <span
       style={labelColorStyle(color)}
       className={cn(
-        'inline-flex h-[22px] max-w-full items-center gap-1.5 rounded-full bg-[var(--lc-subtle)] px-2 text-xs font-medium text-[var(--lc-text)]',
+        'inline-flex h-[22px] max-w-full items-center gap-1.5 rounded-full bg-[var(--lc-subtle)] px-2 text-xs font-medium',
+        PILL_TEXT_CLASS,
         className,
       )}
     >

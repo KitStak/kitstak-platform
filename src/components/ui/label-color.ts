@@ -63,6 +63,18 @@ export function labelColorVars(color: LabelColor): LabelColorVars {
 }
 
 /**
+ * Text colour for a status pill: the label's text colour with a share of ink mixed in
+ * (`--pill-text-mix`, per theme) so it stays AA on its own `-subtle` tint for every label colour.
+ * Works wherever `labelColorStyle` has set `--lc-text`.
+ */
+export const PILL_TEXT_CLASS = 'text-[color-mix(in_srgb,var(--lc-text),var(--text-primary)_var(--pill-text-mix))]';
+
+/** Same colour as an inline CSS value, for a given palette colour. */
+export function pillTextColor(color: LabelColor): string {
+  return `color-mix(in srgb, var(--label-${color}-text), var(--text-primary) var(--pill-text-mix))`;
+}
+
+/**
  * Inline style exposing a label color as `--lc-bg/--lc-hover/--lc-subtle/--lc-fg/--lc-text` so components
  * can style states with plain classes, e.g. `bg-[var(--lc-bg)] hover:bg-[var(--lc-hover)]`.
  */
