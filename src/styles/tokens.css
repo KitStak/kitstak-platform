@@ -103,7 +103,9 @@
   --mark-bg: var(--label-yellow-light-subtle);
   --mark-fg: var(--text-primary);
   --text-inverse: #ffffff;
-  --text-link: #a50d26;
+  /* Links and record codes are neutral text; hover adds an underline. Crimson is reserved for
+     primary buttons, active navigation and focus rings. */
+  --text-link: var(--text-primary);
   --icon-default: #4f596b;
   --icon-strong: #0a1628;
 
@@ -138,6 +140,18 @@
   --info-hover: #234c7d;
   --info-subtle: #e7edf5;
   --info-text: #244d7f;
+
+  /* ---------------------------------------------------------------- Chart palette
+   * One restrained series palette for both apps. Use in order; series tied to a user-picked
+   * label keep that label colour instead. */
+  --chart-1: #3f5f8a;
+  --chart-2: #2f8f83;
+  --chart-3: #b7791f;
+  --chart-4: #7a5c99;
+  --chart-5: #7b8290;
+  --chart-6: #a8503c;
+  --chart-grid: var(--border-subtle);
+  --chart-axis: var(--text-muted);
 
   /* ---------------------------------------------------------------- Label palette */
   --label-green: #00c875;
@@ -433,7 +447,13 @@
   --mark-bg: #521324;
   --mark-fg: #fbe3e7;
   --text-inverse: #0d0e10;
-  --text-link: #f07a8b;
+  --text-link: var(--text-primary);
+  --chart-1: #7f9fd0;
+  --chart-2: #5cc0b2;
+  --chart-3: #d9a54a;
+  --chart-4: #a98bd0;
+  --chart-5: #8a9099;
+  --chart-6: #d98670;
   --icon-default: #9aa0a9;
   --icon-strong: #ecedef;
 
@@ -658,7 +678,13 @@
     --mark-bg: #521324;
     --mark-fg: #fbe3e7;
     --text-inverse: #0d0e10;
-    --text-link: #f07a8b;
+    --text-link: var(--text-primary);
+    --chart-1: #7f9fd0;
+    --chart-2: #5cc0b2;
+    --chart-3: #d9a54a;
+    --chart-4: #a98bd0;
+    --chart-5: #8a9099;
+    --chart-6: #d98670;
     --icon-default: #9aa0a9;
     --icon-strong: #ecedef;
 

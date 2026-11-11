@@ -39,7 +39,9 @@ function StatusDisplay({ ctx }: { readonly ctx: CellRenderContext }) {
       data-label-id={shown?.id}
       style={labelColorStyle(shown?.color ?? 'gray')}
     >
-      <span className="truncate">{shown ? shown.name || ' ' : (blank?.name ?? '')}</span>
+      <span className="ks-pill-chip">
+        <span className="truncate">{shown ? shown.name || ' ' : (blank?.name ?? '')}</span>
+      </span>
       <span className="sr-only">{shown ? '' : 'No status'}</span>
     </span>
   );

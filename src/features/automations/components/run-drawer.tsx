@@ -73,7 +73,7 @@ function cellDisplay(columnKey: string | undefined, value: unknown, context: Bui
       <StatusPill
         label={found.name}
         color={toLabelColor(found.color)}
-        className="h-6 min-w-0 bg-[var(--lc-subtle)] align-middle text-[var(--lc-text)] ring-1 ring-[var(--lc-bg)]/40 ring-inset"
+        className="min-w-0 align-middle"
       />
     ) : (
       <span className="text-fg-muted">Deleted label</span>

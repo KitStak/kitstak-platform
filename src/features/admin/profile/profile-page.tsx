@@ -79,10 +79,10 @@ export function ProfilePage() {
             <p className="mt-0.5 text-base text-fg-secondary">How you appear to teammates, and how KitStak works for you.</p>
           </div>
         </header>
-        <section className="overflow-hidden rounded-xl border border-border-subtle bg-panel shadow-xs">
+        <section className="overflow-hidden rounded-lg border border-border-subtle bg-panel">
           <div
             aria-hidden
-            className="h-24 bg-[linear-gradient(120deg,var(--primary-subtle),var(--primary-selected)_45%,var(--surface-sunken))] sm:h-28"
+            className="h-24 border-b border-border-subtle bg-sunken sm:h-28"
           />
           <div className="-mt-12 flex flex-col gap-4 px-5 pb-5 sm:-mt-14 sm:flex-row sm:items-start sm:gap-6 sm:px-6">
             <div className="w-fit rounded-full bg-panel p-1 shadow-sm">

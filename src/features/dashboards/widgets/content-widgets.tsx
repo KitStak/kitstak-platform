@@ -4,7 +4,7 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { PencilLine } from 'lucide-react';
 import { Button, Textarea, cn, toLabelColor } from '@/components/ui';
-import { cssColor, cssSubtle } from '../lib/colors';
+import { cssSubtle } from '../lib/colors';
 import { countdownParts, parseRichText, type Inline } from '../lib/rich-text';
 import type { WidgetRenderProps } from './types';
 
@@ -143,9 +143,9 @@ export function CountdownWidget({ settings }: WidgetRenderProps) {
           <div key={unit.key} className="flex min-w-0 flex-1 flex-col items-center gap-1" style={{ maxWidth: 88 }}>
             <span
               // Digits in the body text color on the tint (AA in both themes for every palette
-              // color); the palette color carries the identity as a top accent.
-              className="flex w-full items-center justify-center rounded-lg border-t-2 py-2 font-heading font-medium text-fg tabular-nums"
-              style={{ background: cssSubtle(color), borderTopColor: cssColor(color), fontSize: 'clamp(18px, 7cqw, 34px)' }}
+              // color). No coloured top border: the tint alone carries the identity.
+              className="flex w-full items-center justify-center rounded-lg border border-border-subtle py-2 font-medium text-fg tabular-nums"
+              style={{ background: cssSubtle(color), fontSize: 'clamp(18px, 7cqw, 34px)' }}
             >
               <span key={unit.key === 'seconds' ? unit.value : undefined} className={unit.key === 'seconds' ? 'ks-dash-tick' : undefined}>
                 {String(unit.value).padStart(2, '0')}

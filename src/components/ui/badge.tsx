@@ -152,17 +152,21 @@ export interface StatusPillProps {
   readonly className?: string;
 }
 
-/** Compact label-colored pill (status/priority outside the board grid). */
+/**
+ * The one status pill (shared recipe with KitStak WMS): tinted background, the label colour as
+ * text and a solid dot. Use it for any status or priority outside the board grid.
+ */
 export function StatusPill({ label, color, className }: StatusPillProps) {
   return (
     <span
       style={labelColorStyle(color)}
       className={cn(
-        'inline-flex h-6 min-w-20 items-center justify-center rounded-sm bg-[var(--lc-bg)] px-2.5 text-sm font-semibold text-[var(--lc-fg)]',
+        'inline-flex h-[22px] max-w-full items-center gap-1.5 rounded-full bg-[var(--lc-subtle)] px-2 text-xs font-medium text-[var(--lc-text)]',
         className,
       )}
     >
-      <span className="truncate">{label || ' '}</span>
+      <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-[var(--lc-bg)]" />
+      <span className="truncate">{label || '\u00a0'}</span>
     </span>
   );
 }

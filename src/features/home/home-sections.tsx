@@ -11,17 +11,6 @@ import { routes } from '@/features/shell/routes';
 import { columnsThatFit, formatDueLabel, formatRelativeTime, pluralize, proportions } from './format';
 
 /** Vivid strip color per board kind (decorative; text never sits on it). */
-const KIND_STRIP: Readonly<Record<string, string>> = {
-  leads: 'var(--label-orange)',
-  contacts: 'var(--label-sky)',
-  accounts: 'var(--label-indigo)',
-  deals: 'var(--label-green)',
-  activities: 'var(--label-pink)',
-  projects: 'var(--label-purple)',
-  custom: 'var(--label-blue)',
-  dashboard: 'var(--label-berry)',
-};
-
 export function SectionCard({
   id,
   icon,
@@ -87,7 +76,6 @@ function RecentCard({ recent }: { readonly recent: HomeRecentDto }) {
   const { org } = useOrg();
   const isBoard = recent.entityType === 'board';
   const href = isBoard ? routes.board(org.slug, recent.id) : routes.dashboard(org.slug, recent.id);
-  const strip = KIND_STRIP[isBoard ? (recent.boardKind ?? 'custom') : 'dashboard'];
   const widths = proportions(recent.groups.map((group) => group.count));
   const noun = isBoard ? (recent.itemTerminology ?? 'Item') : 'widget';
   return (
@@ -96,20 +84,19 @@ function RecentCard({ recent }: { readonly recent: HomeRecentDto }) {
         href={href}
         data-testid="home-recent-card"
         className={cn(
-          'group relative flex h-[var(--recent-card-h)] flex-col overflow-hidden rounded-lg border border-border-subtle bg-panel shadow-xs',
-          'transition-[border-color,box-shadow,transform] duration-[var(--duration-fast)] ease-[var(--ease-out)]',
-          'hover:-translate-y-0.5 hover:border-border-default hover:shadow-md active:translate-y-0 active:shadow-sm',
+          'group relative flex h-[var(--recent-card-h)] flex-col overflow-hidden rounded-lg border border-border-subtle bg-panel',
+          'transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)]',
+          'hover:border-border-strong hover:bg-muted',
           'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
         )}
       >
-        <span aria-hidden className="h-1 w-full shrink-0" style={{ background: strip }} />
         <span className="flex flex-1 flex-col gap-3 p-4">
           <span className="flex min-w-0 items-start gap-2.5">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sunken [&_svg]:size-[18px]">
               <EntityIcon type={isBoard ? 'board' : 'dashboard'} boardKind={recent.boardKind} />
             </span>
             <span className="flex min-w-0 flex-col">
-              <span className="truncate font-semibold text-fg group-hover:text-primary-text" title={recent.name}>
+              <span className="truncate font-semibold text-fg underline-offset-2 group-hover:underline" title={recent.name}>
                 {recent.name}
               </span>
               <span className="truncate text-xs text-fg-muted">
@@ -128,7 +115,9 @@ function RecentCard({ recent }: { readonly recent: HomeRecentDto }) {
                 ? recent.groups.map((group, index) => (
                     <span
                       key={`${group.title}-${index}`}
-                      style={{ width: `${widths[index] ?? 0}%`, background: `var(--label-${toLabelColor(group.color)})` }}
+                      // One neutral hue, stepped by opacity: the split is visible without a rainbow.
+                      className="border-r border-panel bg-[var(--text-muted)] last:border-r-0"
+                      style={{ width: `${widths[index] ?? 0}%`, opacity: Math.max(0.3, 0.9 - index * 0.18) }}
                     />
                   ))
                 : null}
@@ -293,13 +282,13 @@ function WorkRow({ item, today }: { readonly item: HomeWorkItemDto; readonly tod
           </span>
           {item.status ? (
             <span className="mt-1 flex sm:hidden" data-testid="home-work-pill-compact">
-              <StatusPill label={item.status.name} color={toLabelColor(item.status.color)} className="h-5 w-[72px] min-w-0 text-xs" />
+              <StatusPill label={item.status.name} color={toLabelColor(item.status.color)} className="min-w-0" />
             </span>
           ) : null}
         </span>
         <span className="hidden sm:flex">
           {item.status ? (
-            <StatusPill label={item.status.name} color={toLabelColor(item.status.color)} className="h-7 w-full min-w-0 text-xs" />
+            <StatusPill label={item.status.name} color={toLabelColor(item.status.color)} className="min-w-0" />
           ) : (
             <span className="flex h-7 w-full items-center justify-center rounded-sm bg-[var(--label-gray)] text-xs text-[var(--label-gray-fg)]">
               No status

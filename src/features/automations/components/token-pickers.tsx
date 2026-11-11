@@ -146,7 +146,7 @@ function LabelPicker({
         <StatusPill
           label={label.name}
           color={toLabelColor(label.color)}
-          className="h-6 w-full max-w-48 justify-center"
+          className="max-w-48"
         />
       ),
     })),

@@ -75,7 +75,8 @@
 
 /* Stale data while a filter change is in flight: a thin moving bar under the widget header. */
 .ks-dash-shimmer {
-  background: linear-gradient(90deg, transparent 0%, var(--primary) 50%, transparent 100%);
+  /* A solid neutral segment sliding along the track (no gradient, no accent colour). */
+  background: linear-gradient(var(--border-strong), var(--border-strong));
   background-size: 40% 100%;
   background-repeat: no-repeat;
   animation: ks-dash-shimmer 1.1s var(--ease-out) infinite;

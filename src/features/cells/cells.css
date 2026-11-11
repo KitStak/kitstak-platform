@@ -43,66 +43,63 @@
   }
 }
 
-/* ------------------------------------------------------------ Status pill (full-bleed) */
+/* ------------------------------------------------------------ Status pill (tinted)
+ * The cell is no longer a full-bleed fill. The status reads as one shared pill: a tinted
+ * background (--lc-subtle), the label colour as text (--lc-text) and a solid dot (--lc-bg).
+ * Same recipe as StatusPill in components/ui and as KitStak WMS. */
 .ks-pill {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 12px;
-  background-color: var(--lc-bg);
-  color: var(--lc-fg);
-  font-size: var(--type-base);
-  font-weight: var(--weight-medium);
-  transition: background-color var(--duration-normal) var(--ease-out);
+  padding: 0 8px;
+  color: var(--lc-text);
+  transition: background-color var(--duration-instant) var(--ease-out);
   overflow: hidden;
+}
+.ks-pill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background-color: var(--lc-subtle);
+  font-size: var(--type-xs);
+  line-height: var(--type-xs-lh);
+  font-weight: var(--weight-medium);
+}
+.ks-pill-chip::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--lc-bg);
 }
 .ks-cell:focus-visible .ks-pill,
 .ks-cell[data-editing='true'] .ks-pill {
-  box-shadow: inset 0 0 0 2px var(--surface-panel), inset 0 0 0 4px var(--focus-ring);
+  box-shadow: inset 0 0 0 2px var(--focus-ring);
 }
 .ks-cell[data-interactive='true']:hover .ks-pill,
 .ks-cell[data-force-hover='true'] .ks-pill,
 .ks-cell[data-editing='true'] .ks-pill {
-  background-color: var(--lc-hover);
+  background-color: var(--surface-hover);
 }
-/* Folded corner: the cell surface "peels" at the top-right, revealing a shaded underside. */
-.ks-pill::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 11px;
-  height: 11px;
-  background: linear-gradient(225deg, var(--surface-panel) 50%, color-mix(in srgb, var(--lc-bg) 55%, black) 50%);
-  box-shadow: -1px 1px 2px rgb(0 0 0 / 0.18);
-  transform: scale(0);
-  transform-origin: top right;
-  transition: transform var(--duration-fast) var(--ease-out);
-}
-.ks-cell[data-interactive='true']:hover .ks-pill::after,
-.ks-cell[data-force-hover='true'] .ks-pill::after,
-.ks-cell[data-editing='true'] .ks-pill::after {
-  transform: scale(1);
-}
+/* Empty status: a quiet dashed slot, no dot. */
 .ks-pill[data-empty='true'] {
-  background-color: var(--label-gray);
+  color: var(--text-muted);
 }
-/* Dark: empty status cells read as a quiet recessed slot, not a bright slab. */
-:root[data-theme='dark'] .ks-pill[data-empty='true'] {
-  outline: 1px dashed var(--border-strong);
-  outline-offset: -5px;
+.ks-pill[data-empty='true'] .ks-pill-chip {
+  min-width: 48px;
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-default);
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .ks-pill[data-empty='true'] {
-    outline: 1px dashed var(--border-strong);
-    outline-offset: -5px;
-  }
-}
-.ks-cell[data-interactive='true']:hover .ks-pill[data-empty='true'],
-.ks-cell[data-force-hover='true'] .ks-pill[data-empty='true'] {
-  background-color: var(--label-gray-hover);
+.ks-pill[data-empty='true'] .ks-pill-chip::before {
+  display: none;
 }
 .ks-pill-pop {
   animation: ks-pill-pop var(--duration-normal) var(--ease-emphasized);

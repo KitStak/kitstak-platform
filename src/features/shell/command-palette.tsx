@@ -475,7 +475,7 @@ export function CommandPalette({ extraGroups }: CommandPaletteProps) {
                 }
                 hint={
                   item.status ? (
-                    <StatusPill label={item.status.name} color={toLabelColor(item.status.color)} className="h-5 min-w-16 max-w-28 text-xs" />
+                    <StatusPill label={item.status.name} color={toLabelColor(item.status.color)} className="max-w-28" />
                   ) : null
                 }
                 external

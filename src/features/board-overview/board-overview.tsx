@@ -25,11 +25,9 @@ function Cell({ display }: { readonly display: CellDisplay }) {
   switch (display.kind) {
     case 'label':
       return (
-        <StatusPill
-          label={display.label}
-          color={toLabelColor(display.color)}
-          className="h-full w-full rounded-none"
-        />
+        <span className="flex min-w-0 justify-center px-2">
+          <StatusPill label={display.label} color={toLabelColor(display.color)} />
+        </span>
       );
     case 'labels':
       return (
@@ -39,7 +37,7 @@ function Cell({ display }: { readonly display: CellDisplay }) {
               key={label.label}
               label={label.label}
               color={toLabelColor(label.color)}
-              className="h-5 min-w-0 text-xs"
+              className="min-w-0"
             />
           ))}
         </span>

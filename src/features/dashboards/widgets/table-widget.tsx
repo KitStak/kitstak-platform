@@ -66,7 +66,7 @@ function Cell({ display }: { readonly display: CellDisplay }) {
     case 'text':
       return <span className={display.align === 'end' ? 'block text-right tabular-nums' : 'block truncate'}>{display.text}</span>;
     case 'label':
-      return <StatusPill label={display.label} color={toLabelColor(display.color)} className="w-full justify-center" />;
+      return <StatusPill label={display.label} color={toLabelColor(display.color)} />;
     case 'labels':
       return <span className="block truncate">{display.labels.map((label) => label.label).join(', ')}</span>;
     case 'people': {

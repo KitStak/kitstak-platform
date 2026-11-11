@@ -45,7 +45,6 @@ export function UsageSection() {
             data-testid="plan-card"
             className="relative overflow-hidden rounded-lg border border-border-subtle bg-panel p-5 shadow-xs"
           >
-            <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(ellipse_at_top_right,var(--primary-subtle),transparent_70%)]" />
             <div className="relative flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-start gap-3">
                 <span className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-fg">

@@ -77,23 +77,11 @@ export function labelColorStyle(color: LabelColor): CSSProperties {
   } as CSSProperties;
 }
 
-/** Deterministic palette color for a string (avatars, workspace tiles). */
-const HASH_COLORS: readonly LabelColor[] = [
-  'blue',
-  'purple',
-  'teal',
-  'pink',
-  'orange',
-  'indigo',
-  'green',
-  'berry',
-  'sky',
-  'peach',
-  'lime',
-  'dark-blue',
-  'brown',
-  'yellow',
-];
+/**
+ * Deterministic palette color for a string (chart series, workspace tiles). A short, calm set:
+ * identity comes from names and initials, so this never needs the whole rainbow.
+ */
+const HASH_COLORS: readonly LabelColor[] = ['dark-blue', 'teal', 'indigo', 'brown', 'sky', 'gray'];
 
 export function colorForString(value: string): LabelColor {
   let hash = 2166136261;
