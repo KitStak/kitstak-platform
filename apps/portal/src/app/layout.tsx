@@ -2,7 +2,14 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import Script from 'next/script';
 import { THEME_INIT_SCRIPT } from '@kitstak/ui/theme';
+import { ThemeHandoff } from '@kitstak/ui/theme-handoff';
 import '@/styles/globals.css';
+
+/** Sibling-app origins for the cross-app theme handoff; dev defaults match the three dev ports. */
+const SIBLING_APP_URLS = [
+  process.env.NEXT_PUBLIC_CRM_URL ?? 'http://localhost:3100',
+  process.env.NEXT_PUBLIC_WMS_URL ?? 'http://localhost:3000',
+];
 
 /* KitStak type: Inter for all UI text and headings (same face as CRM and WMS). */
 const inter = Inter({
@@ -33,6 +40,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <Script id="ks-theme-init" strategy="beforeInteractive">
           {THEME_INIT_SCRIPT}
         </Script>
+        {/* Carries the stored theme on links into CRM/WMS (stores are per origin). */}
+        <ThemeHandoff appUrls={SIBLING_APP_URLS} />
         {children}
       </body>
     </html>

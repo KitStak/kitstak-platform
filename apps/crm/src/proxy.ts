@@ -6,6 +6,7 @@
  *    The cookie is NOT trusted here — layouts and `withApi` validate the session for real.
  */
 import { NextResponse, type NextRequest } from 'next/server';
+import { extractThemeHandoff, THEME_COOKIE, THEME_COOKIE_MAX_AGE_SECONDS } from '@kitstak/ui/theme';
 import { getSessionCookie } from 'better-auth/cookies';
 import { SESSION_COOKIE_PREFIX } from '@/server/auth/options';
 import { trustedOrigins } from '@/server/env';
@@ -36,6 +37,22 @@ function forbidden(reason: string): NextResponse {
 
 export function proxy(request: NextRequest): NextResponse {
   const { pathname, search } = request.nextUrl;
+
+  // Cross-app theme handoff: persist a theme carried by a sibling-app link (`ks-theme`
+  // param) to the cookie and redirect to the clean URL, BEFORE the auth gate so the
+  // param never leaks into `/login?next=` round-trips. SSR then renders the right theme.
+  if (request.method === 'GET' && !pathname.startsWith('/api/')) {
+    const handoff = extractThemeHandoff(request.nextUrl);
+    if (handoff) {
+      const response = NextResponse.redirect(handoff.cleanUrl);
+      response.cookies.set(THEME_COOKIE, handoff.theme, {
+        path: '/',
+        maxAge: THEME_COOKIE_MAX_AGE_SECONDS,
+        sameSite: 'lax',
+      });
+      return response;
+    }
+  }
 
   if (pathname.startsWith('/api/')) {
     const origin = checkRequestOrigin(request.method, request.headers, request.url, trustedOrigins());

@@ -2,8 +2,15 @@
 import { useState, type ReactNode } from 'react';
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiClientError } from '@/lib/api';
+import { ThemeHandoff } from '@kitstak/ui/theme-handoff';
 import { Toaster, TooltipProvider, toast } from '@/components/ui';
 import { ThemeProvider, useTheme } from '@/features/shell/theme';
+
+/** Sibling-app origins for the cross-app theme handoff; dev defaults match the three dev ports. */
+const SIBLING_APP_URLS = [
+  process.env.NEXT_PUBLIC_PORTAL_URL ?? 'http://localhost:3300',
+  process.env.NEXT_PUBLIC_WMS_URL ?? 'http://localhost:3000',
+];
 
 const MAX_RETRIES = 2;
 
@@ -50,6 +57,8 @@ export function Providers({ children }: { readonly children: ReactNode }) {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delayDuration={400} skipDelayDuration={200}>
+          {/* Carries the stored theme on links into Portal/WMS (stores are per origin). */}
+          <ThemeHandoff appUrls={SIBLING_APP_URLS} />
           {children}
           <ThemedToaster />
         </TooltipProvider>

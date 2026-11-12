@@ -7,6 +7,7 @@
  * check for every other mutation.
  */
 import { NextResponse, type NextRequest } from 'next/server';
+import { extractThemeHandoff, THEME_COOKIE, THEME_COOKIE_MAX_AGE_SECONDS } from '@kitstak/ui/theme';
 import { hasKitstakSessionCookie } from '@kitstak/auth/session-cookie';
 import { documentStatusFor, isDocumentRequest } from '@/server/http/status-gates';
 
@@ -33,6 +34,23 @@ export function isPublicPath(pathname: string): boolean {
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname, search } = request.nextUrl;
+
+  // Cross-app theme handoff: persist a theme carried by a sibling-app link (`ks-theme`
+  // param) to the cookie and redirect to the clean URL, BEFORE the auth gate so the
+  // param never leaks into `/login?next=` round-trips.
+  if (request.method === 'GET' && !pathname.startsWith('/api/') && !STATIC_ASSET_RE.test(pathname)) {
+    const handoff = extractThemeHandoff(request.nextUrl);
+    if (handoff) {
+      const response = NextResponse.redirect(handoff.cleanUrl);
+      response.cookies.set(THEME_COOKIE, handoff.theme, {
+        path: '/',
+        maxAge: THEME_COOKIE_MAX_AGE_SECONDS,
+        sameSite: 'lax',
+      });
+      return response;
+    }
+  }
+
   const hasSession = hasKitstakSessionCookie(request);
 
   if (hasSession && isDocumentRequest(request.method, request.headers)) {
