@@ -1,0 +1,342 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+
+/* Dark variant follows the resolved theme attribute (set before paint by the theme script). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ================= Legacy WMS token names =================
+   Design tokens live in src/styles/tokens.css, shared byte-for-byte with KitStak CRM.
+   The names below predate that file. They are aliases only (no literal colours), so
+   existing components keep working and pick up both themes from the shared tokens.
+   New code should use the shared token names directly.
+
+   Not aliased because the shared file already defines the same name:
+   --surface-sunken, --border-strong, --primary, --primary-hover, --success, --warning,
+   --danger, --info, --text-secondary. */
+:root {
+  /* canvas + surfaces */
+  --background: var(--surface-app);
+  --surface: var(--surface-panel);
+  --border: var(--border-subtle);
+
+  /* text */
+  --foreground: var(--text-primary);
+  --text-body: var(--text-secondary);
+  --text-faint: var(--text-muted);
+
+  /* top bar: a panel surface in both themes (light bar in light mode) */
+  --nav: var(--surface-panel);
+  --nav-hover: var(--surface-hover);
+  --nav-active: var(--primary-subtle);
+
+  /* brand + semantic tints */
+  --primary-soft: var(--primary-subtle);
+  --success-soft: var(--success-subtle);
+  --warning-soft: var(--warning-subtle);
+  --danger-soft: var(--danger-subtle);
+  --info-soft: var(--info-subtle);
+  --neutral: var(--text-muted);
+  --neutral-soft: var(--surface-sunken);
+
+  --ring: color-mix(in srgb, var(--focus-ring) 40%, transparent);
+}
+
+@theme inline {
+  /* ---- legacy WMS utility names (bg-surface, text-secondary, border-border, ...) ---- */
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-body: var(--text-body);
+  /* WMS `text-secondary` has always meant the muted tone. */
+  --color-secondary: var(--text-muted);
+  --color-faint: var(--text-faint);
+  --color-nav: var(--nav);
+  --color-nav-hover: var(--nav-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-success-soft: var(--success-soft);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger-soft: var(--danger-soft);
+  --color-info-soft: var(--info-soft);
+  --color-neutral: var(--neutral);
+  --color-neutral-soft: var(--neutral-soft);
+  /* As text, the semantic and brand colours use their AA `-text` step in both themes;
+     as fills (`bg-success`, `border-danger`) they stay the solid colour. */
+  /* `text-primary` is how codes and links were marked. They are neutral ink now (hover adds an
+     underline, see below): crimson is reserved for primary buttons, active nav and focus rings. */
+  --text-color-primary: var(--text-primary);
+  --text-color-success: var(--success-text);
+  --text-color-warning: var(--warning-text);
+  --text-color-danger: var(--danger-text);
+  --text-color-info: var(--info-text);
+
+  /* ---- shared utility names (identical to KitStak CRM) ---- */
+  --color-app: var(--surface-app);
+  --color-panel: var(--surface-panel);
+  --color-raised: var(--surface-raised);
+  --color-sunken: var(--surface-sunken);
+  --color-muted: var(--surface-muted);
+  --color-hover: var(--surface-hover);
+  --color-pressed: var(--surface-pressed);
+  --color-selected: var(--surface-selected);
+  --color-selected-hover: var(--surface-selected-hover);
+  --color-highlight: var(--surface-highlight);
+  --color-inverse: var(--surface-inverse);
+  --color-overlay: var(--surface-overlay);
+  --color-skeleton: var(--surface-skeleton);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-border-input: var(--border-input);
+  --color-border-input-hover: var(--border-input-hover);
+
+  --color-fg: var(--text-primary);
+  --color-fg-secondary: var(--text-secondary);
+  --color-fg-muted: var(--text-muted);
+  --color-fg-disabled: var(--text-disabled);
+  --color-fg-placeholder: var(--text-placeholder);
+  --color-fg-inverse: var(--text-inverse);
+  --color-fg-link: var(--text-link);
+  --color-icon: var(--icon-default);
+  --color-icon-strong: var(--icon-strong);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-selected: var(--primary-selected);
+  --color-primary-selected-hover: var(--primary-selected-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-text: var(--primary-text);
+  --color-focus: var(--focus-ring);
+
+  --color-success: var(--success);
+  --color-success-hover: var(--success-hover);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-hover: var(--warning-hover);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-text: var(--warning-text);
+  --color-warning-accent: var(--warning-accent);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-active: var(--danger-active);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-danger-text: var(--danger-text);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-text: var(--info-text);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  --font-display: var(--font-bebas), "Oswald", "Arial Narrow", sans-serif;
+
+  --shadow-xs: var(--elevation-xs);
+  --shadow-sm: var(--elevation-sm);
+  --shadow-md: var(--elevation-md);
+  --shadow-lg: var(--elevation-lg);
+  --shadow-popover: var(--elevation-popover);
+  --shadow-modal: var(--elevation-modal);
+  --shadow-sticky: var(--elevation-sticky);
+}
+
+/* Static scales, identical to KitStak CRM. Type scale: 11/12/13/14/16/18/24/32.
+   1 spacing unit = 4px regardless of root font size. */
+@theme {
+  --spacing: 4px;
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --text-2xs: 11px;
+  --text-2xs--line-height: 14px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 18px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+  --text-md: 16px;
+  --text-md--line-height: 22px;
+  --text-lg: 18px;
+  --text-lg--line-height: 24px;
+  --text-xl: 24px;
+  --text-xl--line-height: 30px;
+  --text-2xl: 32px;
+  --text-2xl--line-height: 40px;
+}
+
+/* Default border colour. MUST stay inside @layer base: an unlayered rule here
+   would beat every Tailwind v4 `border-*` utility (they live in
+   @layer utilities), killing invalid/focus/hover border states app-wide. */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
+}
+
+html {
+  font-size: 16px;
+  /* Reserve the scrollbar lane so Radix scroll-lock never shifts the shell. */
+  scrollbar-gutter: stable;
+}
+
+/* react-remove-scroll-bar compensates for the scrollbar with a body margin;
+   with a stable gutter that compensation would itself shift the page. */
+html body[data-scroll-locked] {
+  margin-right: 0 !important;
+  padding-right: 0 !important;
+}
+
+body {
+  background: var(--background);
+  color: var(--text-body);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  font-feature-settings: "cv05", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* keyboard focus: layered + zero-specificity so Tailwind `outline-none`,
+   `rounded-*` and `ring-*` utilities on a component always win. */
+@layer base {
+  :where(:focus-visible) {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
+}
+
+/* Record codes and inline links: neutral text, underline on hover or keyboard focus. */
+:where(a, button).text-primary:where(:hover, :focus-visible) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+::selection {
+  background: var(--primary-200);
+  color: var(--text-primary);
+}
+
+/* Thin product scrollbars everywhere (page, popovers, search results, menus, grids), with
+   no native arrow buttons. Chromium/WebKit use the ::-webkit rules. The standard
+   `scrollbar-width`/`scrollbar-color` properties are applied ONLY where ::-webkit-scrollbar
+   is unsupported (Firefox): in Chrome 121+ setting them switches to standard scrollbars,
+   which ignore ::-webkit-scrollbar and bring back the Windows arrow buttons. */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover,
+.ks-scroll:hover::-webkit-scrollbar-thumb {
+  background: var(--text-faint);
+}
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+@supports not selector(::-webkit-scrollbar) {
+  html,
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  /* Grid regions: the thumb darkens on hover so long tables read as scrollable. */
+  .ks-scroll:hover {
+    scrollbar-color: var(--text-faint) transparent;
+  }
+}
+
+.tabular-nums,
+table,
+[role="grid"],
+[role="table"],
+input[type="number"] {
+  /* Data reads in columns: tabular numerals by default. */
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes ks-shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+.ks-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--neutral-soft) 25%,
+    var(--surface-sunken) 37%,
+    var(--neutral-soft) 63%
+  );
+  background-size: 800px 100%;
+  animation: ks-shimmer 1.4s ease infinite;
+  border-radius: 4px;
+}
+
+/* Route transition: after 400ms of a pending navigation the old page dims (route-progress.tsx). */
+#main-content {
+  transition: opacity 160ms ease-out;
+}
+html[data-route-pending] #main-content {
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Grid: indeterminate progress bar while stale rows are shown (DataGrid `refreshing`). */
+.ks-grid-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 30%;
+  background: var(--info);
+  animation: ks-grid-progress 1.1s ease-in-out infinite;
+}
+@keyframes ks-grid-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+/* Grid: a row the page points at (DataGrid `highlightRowId`) flashes once. */
+tr[data-highlight] > td {
+  animation: ks-row-flash 2s ease-out 1;
+}
+@keyframes ks-row-flash {
+  0%,
+  40% {
+    background-color: var(--info-soft);
+  }
+  100% {
+    background-color: transparent;
+  }
+}

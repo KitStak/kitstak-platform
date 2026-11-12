@@ -1,0 +1,290 @@
+/**
+ * Purchase orders — commands (M05, table owner of purchase_orders / purchase_order_lines).
+ * Status changes go through `po-status-rules` (shared machine + the Completed -> Started re-open); every write logs change_log
+ * rows (header fields and SKU-prefixed line entries).
+ */
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { purchasePriceOf, type PoCreateValues, type PoLineValues, type PoUpdateValues } from "@/lib/grid-defs/receiving/po-schemas";
+import type { PoStatus } from "@/lib/enums";
+import type { AppDb } from "@/server/api/db";
+import { AppError, notFoundError } from "@/server/api/errors";
+import { assertInScope, type Scope } from "@/server/auth/scope";
+import * as schema from "@/server/db/schema";
+import { someSeq } from "@/server/db/sql";
+import { changeLog, type DomainCtx } from "@/server/domain";
+import { runWorkflows } from "@/server/domain/workflows";
+import { assertVersion } from "./platform-common";
+import { getPurchaseOrder, poCodeTaken, type PurchaseOrderDetail } from "./purchase-orders";
+import { logSnapshot, logValue, warehouseTimeZone } from "./purchase-orders-log";
+import { assertPoStatusChange } from "./po-status-rules";
+
+const po = schema.purchaseOrders;
+const line = schema.purchaseOrderLines;
+type PoRow = typeof po.$inferSelect;
+
+export const duplicateCodeMessage = (code: string): string => `This purchase order code already exists (${code})`;
+
+async function assertCodeFree(tx: AppDb, code: string, exceptId?: string): Promise<void> {
+  if ((await poCodeTaken(tx, code, exceptId)).taken) {
+    throw new AppError("DUPLICATE", duplicateCodeMessage(code), { fieldErrors: { code: [duplicateCodeMessage(code)] } });
+  }
+}
+
+async function loadPo(tx: AppDb, scope: Scope, id: string): Promise<PoRow> {
+  const row = (await tx.select().from(po).where(eq(po.id, id)).limit(1))[0];
+  if (!row) throw notFoundError("Purchase order");
+  assertInScope(scope, row, "Purchase order");
+  return row;
+}
+
+async function assertWarehouse(tx: AppDb, scope: Scope, warehouseId: string): Promise<void> {
+  assertInScope(scope, { warehouseId }, "Warehouse");
+  if (!(await tx.select({ id: schema.warehouses.id }).from(schema.warehouses).where(eq(schema.warehouses.id, warehouseId)).limit(1))[0]) throw notFoundError("Warehouse");
+}
+
+async function vendorFor(tx: AppDb, clientId: string, vendorId: string): Promise<typeof schema.vendors.$inferSelect> {
+  const vendor = (await tx.select().from(schema.vendors).where(eq(schema.vendors.id, vendorId)).limit(1))[0];
+  if (!vendor || vendor.clientId !== clientId) {
+    throw new AppError("VALIDATION", "Select a vendor of this client.", { fieldErrors: { vendorId: ["Select a vendor of this client."] } });
+  }
+  if (!vendor.isActive) throw new AppError("VALIDATION", "This vendor is inactive.", { fieldErrors: { vendorId: ["This vendor is inactive."] } });
+  return vendor;
+}
+
+async function productsFor(tx: AppDb, clientId: string, lines: readonly PoLineValues[]): Promise<Map<string, typeof schema.products.$inferSelect>> {
+  const ids = [...new Set(lines.map((l) => l.productId))];
+  const rows = await tx.select().from(schema.products).where(inArray(schema.products.id, ids));
+  const map = new Map(rows.map((r) => [r.id, r]));
+  lines.forEach((l, i) => {
+    const p = map.get(l.productId);
+    if (!p) throw new AppError("VALIDATION", "Product not found", { fieldErrors: { [`lines.${i}.productId`]: ["Product not found"] } });
+    if (p.clientId !== clientId) throw new AppError("VALIDATION", `${p.sku} belongs to another client.`, { fieldErrors: { [`lines.${i}.productId`]: [`${p.sku} belongs to another client.`] } });
+  });
+  return map;
+}
+
+async function packRatioOf(tx: AppDb, product: typeof schema.products.$inferSelect, packType: string): Promise<number> {
+  if (packType === product.uom) return 1;
+  const row = (await tx.select({ uomQty: schema.productPackTypes.uomQty }).from(schema.productPackTypes)
+    .where(and(eq(schema.productPackTypes.productId, product.id), eq(schema.productPackTypes.packType, packType))).limit(1))[0];
+  if (!row) throw new AppError("VALIDATION", `${product.sku} has no "${packType}" pack type.`);
+  return row.uomQty;
+}
+
+async function lineValues(tx: AppDb, product: typeof schema.products.$inferSelect, l: PoLineValues, ctx: DomainCtx) {
+  // An API client that omits the pack type gets the product's base pack type (e.g. "Unit").
+  const packType = l.packType || product.uom;
+  return {
+    productId: l.productId, orderedQuantity: l.orderedQuantity, unitCost: Math.round(l.unitCost * 100) / 100, packType,
+    uomQuantity: await packRatioOf(tx, product, packType), receivingLocationId: l.receivingLocationId || null,
+    lotNumber: product.trackLot ? l.lotNumber : null, expiryDate: product.trackExpiry ? l.expiryDate : null,
+    productionDate: product.trackProductionDate ? l.productionDate : null, lpTypeId: l.lpTypeId || null, lpNumber: l.lpNumber,
+    note: l.note, updatedBy: ctx.userId,
+  };
+}
+
+async function totalsOf(tx: AppDb, poId: string): Promise<{ totalQuantity: number; purchasePrice: number }> {
+  const rows = await tx.select({ orderedQuantity: line.orderedQuantity, unitCost: line.unitCost }).from(line).where(eq(line.purchaseOrderId, poId));
+  return { totalQuantity: rows.reduce((s, r) => s + r.orderedQuantity, 0), purchasePrice: purchasePriceOf(rows) };
+}
+
+const headerOf = (r: PoRow) => ({
+  code: r.code, warehouseId: r.warehouseId, poType: r.poType, poDate: r.poDate, plannedReceivingDate: r.plannedReceivingDate,
+  receivedAt: r.receivedAt, plannedArrivalDate: r.plannedArrivalDate, actualArrivalDate: r.actualArrivalDate, referenceNumber: r.referenceNumber,
+  note: r.note, vendorName: r.vendorName, status: r.status, totalQuantity: r.totalQuantity, purchasePrice: r.purchasePrice, completedAt: r.completedAt,
+  cancelledAt: r.cancelledAt, ...Object.fromEntries(Object.entries(r.customFields ?? {}).map(([k, val]) => [`customField.${k}`, val])),
+});
+
+export async function createPurchaseOrder(tx: AppDb, ctx: DomainCtx, scope: Scope, values: PoCreateValues): Promise<PurchaseOrderDetail> {
+  await assertWarehouse(tx, scope, values.warehouseId);
+  assertInScope(scope, { clientId: values.clientId }, "Client");
+  await assertCodeFree(tx, values.code);
+  const vendor = await vendorFor(tx, values.clientId, values.vendorId);
+  const products = await productsFor(tx, values.clientId, values.lines);
+  const created = (await tx.insert(po).values({
+    code: values.code, warehouseId: values.warehouseId, clientId: values.clientId, vendorId: vendor.id, vendorName: vendor.displayName,
+    referenceNumber: values.referenceNumber, status: "Pending", poType: values.poType, totalQuantity: 0, purchasePrice: 0,
+    poDate: values.poDate, plannedReceivingDate: values.plannedReceivingDate, receivedAt: values.receivedAt,
+    plannedArrivalDate: values.plannedArrivalDate, actualArrivalDate: values.actualArrivalDate, expectedDate: values.plannedReceivingDate,
+    note: values.note, customFields: values.customFields, createdBy: ctx.userId, updatedBy: ctx.userId,
+  }).returning())[0];
+  await changeLog.recordCreate(tx, ctx, { entityType: "purchase_order", entityId: created.id, entityCode: created.code });
+  for (const l of values.lines) {
+    const product = products.get(l.productId) as typeof schema.products.$inferSelect;
+    const inserted = (await tx.insert(line).values({ ...(await lineValues(tx, product, l, ctx)), purchaseOrderId: created.id, createdBy: ctx.userId }).returning())[0];
+    await changeLog.recordLineCreate(tx, ctx, { entityType: "purchase_order", entityId: created.id, entityCode: created.code, lineEntityType: "purchase_order_line",
+      lineEntityId: inserted.id, lineLabel: product.sku });
+  }
+  await tx.update(po).set(await totalsOf(tx, created.id)).where(eq(po.id, created.id));
+  // M12 "Purchase Order Created" workflows (conditions on PO facts; Notify Users).
+  await runWorkflows(tx, ctx, "Purchase Order Created", { type: "purchase_order", id: created.id });
+  return await getPurchaseOrder(tx, scope, created.id);
+}
+
+const LINE_FIELDS = ["orderedQuantity", "unitCost", "packType", "receivingLocationId", "lotNumber", "expiryDate", "productionDate", "lpTypeId", "lpNumber", "note"] as const;
+
+export async function updatePurchaseOrder(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string, values: PoUpdateValues): Promise<PurchaseOrderDetail> {
+  const before = await loadPo(tx, scope, id);
+  assertVersion(before.version, values.version);
+  await assertWarehouse(tx, scope, values.warehouseId);
+  if (values.code !== before.code) await assertCodeFree(tx, values.code, id);
+  const vendor = await vendorFor(tx, before.clientId, values.vendorId);
+  const products = await productsFor(tx, before.clientId, values.lines);
+  const existing = await tx.select().from(line).where(eq(line.purchaseOrderId, id));
+  const closed = before.status === "Completed" || before.status === "Cancelled";
+  const received = existing.filter((l) => l.receivedQuantity > 0);
+  if (values.warehouseId !== before.warehouseId && received.length > 0) {
+    throw new AppError("INVALID_STATE", "The warehouse can't change after receiving started.", { fieldErrors: { warehouseId: ["The warehouse can't change after receiving started."] } });
+  }
+  const keep = new Set(values.lines.map((l) => l.id).filter(Boolean));
+  const removed = existing.filter((l) => !keep.has(l.id));
+  const added = values.lines.filter((l) => !l.id);
+  const changed = values.lines.filter((l) => l.id && existing.some((e) => e.id === l.id));
+  const lineDiff = async (l: PoLineValues): Promise<boolean> => {
+    const e = existing.find((x) => x.id === l.id);
+    if (!e) return true;
+    const next = await lineValues(tx, products.get(l.productId) as typeof schema.products.$inferSelect, l, ctx);
+    return e.productId !== l.productId || LINE_FIELDS.some((f) => String(e[f] ?? "") !== String(next[f] ?? ""));
+  };
+  if (closed && (removed.length > 0 || added.length > 0 || (await someSeq(changed, lineDiff)))) {
+    throw new AppError("INVALID_STATE", `Lines of a ${before.status.toLowerCase()} purchase order can't be changed.`);
+  }
+  const blocked = removed.find((l) => l.receivedQuantity > 0);
+  if (blocked) throw new AppError("INVALID_STATE", "A line with received quantity can't be removed. Cancel its receipts first.");
+
+  const skuOf = async (productId: string) => products.get(productId)?.sku ?? (await tx.select({ sku: schema.products.sku }).from(schema.products).where(eq(schema.products.id, productId)).limit(1))[0]?.sku ?? "Line";
+  const ref = { entityType: "purchase_order", entityId: id, entityCode: values.code, lineEntityType: "purchase_order_line" } as const;
+  for (const l of removed) {
+    // Pre-advised serials belong to the line (FK): they go with it.
+    await tx.delete(schema.purchaseOrderSerials).where(eq(schema.purchaseOrderSerials.purchaseOrderLineId, l.id));
+    await tx.delete(line).where(eq(line.id, l.id));
+    await changeLog.recordLineDelete(tx, ctx, { ...ref, lineEntityId: l.id, lineLabel: await skuOf(l.productId) });
+  }
+  for (const l of changed) {
+    const e = existing.find((x) => x.id === l.id) as typeof line.$inferSelect;
+    const product = products.get(l.productId) as typeof schema.products.$inferSelect;
+    if (e.productId !== l.productId && e.receivedQuantity > 0) throw new AppError("INVALID_STATE", `The product of a received line can't change (${product.sku}).`);
+    const next = await lineValues(tx, product, l, ctx);
+    await tx.update(line).set({ ...next, version: e.version + 1 }).where(eq(line.id, e.id));
+    for (const f of LINE_FIELDS) {
+      if (String(e[f] ?? "") === String(next[f] ?? "")) continue;
+      await changeLog.recordLine(tx, ctx, { ...ref, lineEntityId: e.id, lineLabel: product.sku, field: f, from: logValue(f, e[f]), to: logValue(f, next[f]) });
+    }
+  }
+  for (const l of added) {
+    const product = products.get(l.productId) as typeof schema.products.$inferSelect;
+    const inserted = (await tx.insert(line).values({ ...(await lineValues(tx, product, l, ctx)), purchaseOrderId: id, createdBy: ctx.userId }).returning())[0];
+    await changeLog.recordLineCreate(tx, ctx, { ...ref, lineEntityId: inserted.id, lineLabel: product.sku });
+  }
+  await tx.update(po).set({
+    code: values.code, warehouseId: values.warehouseId, poType: values.poType, poDate: values.poDate, plannedReceivingDate: values.plannedReceivingDate,
+    expectedDate: values.plannedReceivingDate, receivedAt: values.receivedAt, plannedArrivalDate: values.plannedArrivalDate,
+    actualArrivalDate: values.actualArrivalDate, referenceNumber: values.referenceNumber, note: values.note, vendorId: vendor.id,
+    vendorName: vendor.displayName, customFields: values.customFields, ...(await totalsOf(tx, id)), updatedBy: ctx.userId, version: before.version + 1,
+  }).where(eq(po.id, id));
+  const after = (await tx.select().from(po).where(eq(po.id, id)).limit(1))[0] as PoRow;
+  const tz = await warehouseTimeZone(tx, after.warehouseId);
+  await changeLog.recordUpdate(tx, ctx, { entityType: "purchase_order", entityId: id, entityCode: after.code, before: logSnapshot(headerOf(before), tz), after: logSnapshot(headerOf(after), tz) });
+  return await getPurchaseOrder(tx, scope, id);
+}
+
+async function activeReceiptCount(tx: AppDb, poId: string): Promise<number> {
+  return (await tx.select({ n: sql<number>`count(*)` }).from(schema.receipts).where(and(eq(schema.receipts.purchaseOrderId, poId), sql`${schema.receipts.cancelledAt} IS NULL`)).limit(1))[0]?.n ?? 0;
+}
+
+const displayStatus = (s: string): string => (s === "Receiving" ? "Started" : s);
+
+/** Persists a status change validated by the state machine, with change_log rows. */
+export async function applyStatus(tx: AppDb, ctx: DomainCtx, before: PoRow, to: PoStatus, extra: Partial<typeof po.$inferInsert> = {}, reason?: string): Promise<PoRow> {
+  const status = assertPoStatusChange(before.status, to, { activeReceipts: await activeReceiptCount(tx, before.id) });
+  await tx.update(po).set({ ...extra, status, updatedBy: ctx.userId, version: before.version + 1 }).where(eq(po.id, before.id));
+  const after = (await tx.select().from(po).where(eq(po.id, before.id)).limit(1))[0] as PoRow;
+  const tz = await warehouseTimeZone(tx, before.warehouseId);
+  await changeLog.recordUpdate(tx, ctx, {
+    entityType: "purchase_order", entityId: before.id, entityCode: before.code,
+    before: logSnapshot({ status: displayStatus(before.status), completedAt: before.completedAt, cancelledAt: before.cancelledAt, receivedAt: before.receivedAt, ...(reason ? { statusChangeReason: "" } : {}) }, tz),
+    after: logSnapshot({ status: displayStatus(after.status), completedAt: after.completedAt, cancelledAt: after.cancelledAt, receivedAt: after.receivedAt, ...(reason ? { statusChangeReason: reason } : {}) }, tz),
+  });
+  return after;
+}
+
+/** Units still expected on a PO (ordered minus received, per line, never negative). */
+export async function openUnits(tx: AppDb, poId: string): Promise<{ units: number; lines: number }> {
+  const rows = await tx.select({ ordered: line.orderedQuantity, received: line.receivedQuantity }).from(line).where(eq(line.purchaseOrderId, poId));
+  const open = rows.map((r) => Math.max(0, r.ordered - r.received)).filter((n) => n > 0);
+  return { units: open.reduce((s, n) => s + n, 0), lines: open.length };
+}
+
+export const shortCloseReason = (units: number, lines: number): string =>
+  `Open balance cancelled: ${units.toLocaleString("en-US")} unit${units === 1 ? "" : "s"} on ${lines} line${lines === 1 ? "" : "s"} will not be received. Received lines and their stock are kept.`;
+
+export interface CancelOutcome {
+  readonly row: PoRow;
+  /** True when the PO had receipts: the open balance was cancelled and the PO closed as Completed. */
+  readonly shortClosed: boolean;
+  readonly cancelledUnits: number;
+}
+
+/**
+ * Cancel Order. A PO without active receipts becomes Cancelled. A Started PO that already has
+ * receipts is short-closed instead (Logiwa enables Cancel Order on a Started PO with open
+ * lines): the open balance stops being expected, received lines and their stock stay
+ * untouched, and the PO closes as Completed with the reason on the change log. Received stock
+ * is never reversed to cancel a PO.
+ */
+export async function cancelPurchaseOrderOutcome(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string, version?: number): Promise<CancelOutcome> {
+  const before = await loadPo(tx, scope, id);
+  assertVersion(before.version, version);
+  if (before.status !== "Pending" && before.status !== "Started" && before.status !== "Receiving") {
+    throw new AppError("INVALID_STATE", `A ${before.status.toLowerCase()} purchase order can't be cancelled. Only Pending or Started orders can.`);
+  }
+  const open = await openUnits(tx, id);
+  if ((await activeReceiptCount(tx, id)) > 0) {
+    const now = new Date().toISOString();
+    const row = await applyStatus(tx, ctx, before, "Completed", { completedAt: now, receivedAt: before.receivedAt ?? now }, shortCloseReason(open.units, open.lines));
+    return { row, shortClosed: true, cancelledUnits: open.units };
+  }
+  return { row: await applyStatus(tx, ctx, before, "Cancelled", { cancelledAt: new Date().toISOString() }), shortClosed: false, cancelledUnits: open.units };
+}
+
+export async function cancelPurchaseOrder(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string, version?: number): Promise<PoRow> {
+  return (await cancelPurchaseOrderOutcome(tx, ctx, scope, id, version)).row;
+}
+
+export const DELETE_PO_RULE = "Only Pending purchase orders without receipts can be deleted.";
+
+export async function deletePurchaseOrder(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string, version?: number): Promise<void> {
+  const before = await loadPo(tx, scope, id);
+  assertVersion(before.version, version);
+  const receipts = (await tx.select({ n: sql<number>`count(*)` }).from(schema.receipts).where(eq(schema.receipts.purchaseOrderId, id)).limit(1))[0]?.n ?? 0;
+  if (before.status !== "Pending" || receipts > 0) throw new AppError("INVALID_STATE", DELETE_PO_RULE);
+  await tx.delete(schema.purchaseOrderSerials).where(inArray(schema.purchaseOrderSerials.purchaseOrderLineId, tx.select({ id: line.id }).from(line).where(eq(line.purchaseOrderId, id))));
+  await tx.delete(line).where(eq(line.purchaseOrderId, id));
+  await tx.delete(po).where(eq(po.id, id));
+  await changeLog.recordDelete(tx, ctx, { entityType: "purchase_order", entityId: id, entityCode: before.code });
+}
+
+/**
+ * Date stamps for a manual status change. Completed stamps Completed / Actual Receiving;
+ * Cancelled stamps Cancelled; re-opening a Completed order (Completed -> Started, Logiwa
+ * parity, needs the state-machine edge from REQ-R2-3) clears Completed / Actual Receiving.
+ */
+export function statusChangeStamps(before: Pick<PoRow, "status" | "receivedAt">, to: PoStatus, now: string): Partial<typeof po.$inferInsert> {
+  if (to === "Completed") return { completedAt: now, receivedAt: now };
+  if (to === "Cancelled") return { cancelledAt: now };
+  if (before.status === "Completed") return { completedAt: null, receivedAt: null };
+  return {};
+}
+
+export async function changePurchaseOrderStatus(tx: AppDb, ctx: DomainCtx, scope: Scope, id: string, input: { status: PoStatus; reason: string; version: number }): Promise<PurchaseOrderDetail> {
+  const before = await loadPo(tx, scope, id);
+  assertVersion(before.version, input.version);
+  if (input.status === "Receiving") throw new AppError("VALIDATION", "Receiving is set by receipts and can't be chosen manually.");
+  if (input.status === before.status || (input.status === "Started" && before.status === "Receiving")) {
+    throw new AppError("VALIDATION", "Choose a different status.", { fieldErrors: { status: ["Choose a different status."] } });
+  }
+  const now = new Date().toISOString();
+  const extra = statusChangeStamps(before, input.status, now);
+  await applyStatus(tx, ctx, before, input.status, extra, input.reason);
+  return await getPurchaseOrder(tx, scope, id);
+}

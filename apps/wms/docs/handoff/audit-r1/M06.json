@@ -1,0 +1,54 @@
+{
+  "scores": {
+    "hierarchy": 8,
+    "density": 7,
+    "color": 7,
+    "craft": 7,
+    "states": 6,
+    "sideBySide": 8,
+    "functionality": 7,
+    "completeness": 8
+  },
+  "verdict": "not_wowed",
+  "blindPick": "A",
+  "blindMapping": "spec-based audit, no live blind comparison",
+  "kitstaksWins": false,
+  "fixes": [
+    "src/components/inventory/quantity-drawer.tsx and add-inventory-drawer.tsx (and change-attributes-drawer.tsx): Save is enabled on a pristine or invalid form and the code validates only on submit (add-inventory-drawer.tsx line 96 comment). Derive canSave = form valid && dirty, pass disabled={!canSave} to the Save Button, and show the field errors on blur. The quantity-drawer.tsx header comment already promises 'Save stays disabled until the form is valid'; make the code do that.",
+    "change-attributes-drawer.tsx: Save is enabled while Damage Reason is still the default 'No damage reason' on a row that has no damage reason, so it saves a no-op. Disable Save until the selected value differs from the current value of every selected row.",
+    "Warehouse option labels in add-inventory-drawer.tsx (WarehouseSelect / combobox-data option builder): options render 'MLT1 · MLT1 - Main Fulfillment' and the selected value renders 'MLT1 - MLT1 - Main Fulfillment'. The warehouse name already contains its code, so render just the name (or code + bare name). Apply the same fix in transfer-container-drawer.tsx.",
+    "add-inventory-drawer.tsx Pack Type: when the product has exactly one pack type (e.g. HRB-FLTR-100 has only 'Unit'), preselect it rather than making the user open a one-item dropdown.",
+    "add-inventory-drawer.tsx Product combobox: options list only the SKU (HRB-BAG-CLD-12 ...). Render SKU on the first line and product name on a muted second line, as Logiwa shows 'MLT-WIDGET-01 - MLTest Widget'.",
+    "bucket-drawer.tsx: after a row click the drawer opens with only the title 'Inventory' and an empty body until /api/inventory/buckets/:id resolves (>10s seen). Render a skeleton (summary card, tab strip, field grid) while loading, and an error state with Retry on failure.",
+    "DataGrid refetch (src/components/grid/data-grid.tsx): after applying the Warehouse filter on /inventory, the old 'All Warehouses' rows stay up with no indicator for about 5s. Show a 2px top progress bar or dim the tbody (opacity 0.6) while isFetching && !isLoading.",
+    "Date formatting: the grid shows '08/23/2026 8:00 AM' while the bucket drawer shows '8/23/2026 8:00:00 AM'. Route both through the shared formatDateTime helper (zero-padded, no seconds).",
+    "bucket-card.tsx: the label 'TRANSFER FROM' is reused in the read-only bucket detail header and in the Adjust/Damage drawers. Use 'LOCATION' everywhere except the Transfer Product drawer.",
+    "Color semantics (inventory-links.ts / link cell style): SKU hyperlinks render in brand red, the same red as negative quantities ('-2' in Available UOM Qty) and the danger chips, so links read as errors in dark mode. Use a neutral link token (e.g. --link: #7FA7FF dark / #1D4ED8 light) with an underline on hover, and keep red for negatives and errors only.",
+    "Walking Path Priority (by-location-columns.tsx): rendered with thousands separators ('2,040', '1,230'). It is an ordinal sequence, not a quantity, so render it as a plain integer with no grouping.",
+    "Open SO Qty hyperlink (inventory-links.ts): the href is a raw '/api/inventory/open-orders?productId=<uuid>' redirect, so the status bar and copy-link expose an API URL and a UUID. Link directly to '/orders?f.sku=eq:<sku>&f.warehouse=in:<id>&f.status=in:open…' as the build plan specifies, or to a pretty /inventory/open-orders route.",
+    "Search comparator (grid-toolbar.tsx): defaults to 'Starts With'. The spec default is 'Equal'. Default to Equal, or persist the user's last choice per grid.",
+    "Enum filter editor (grid filter popover): the Warehouse/Client/Status checklists have no 'in | not in' operator and no search box. Add the operator dropdown and a search input above the checklist, per spec 04 §0.",
+    "quantity-drawer.tsx Remove mode and transfer-container-drawer.tsx Transfer Location (moves an entire location): add a ConfirmDialog summarising what will move or be removed ('Move 3 SKUs / 640 units from C-01-01-3 to …?') before posting to the ledger.",
+    "Seed data hygiene: ATP and the inventory grids show test junk in the demo tenant ('KS-TEST-KIT-34903 KS test UI kit', 'KS-E2E-PROD-1 KS E2E product one v2', clients 'KS-E2E Client' and 'KS-TEST Wizard Brand'), and every seeded receiving time is exactly 8:00 AM. Purge the KS-TEST/KS-E2E records from the demo dataset (or hide them behind a test-tenant flag) and jitter the seed timestamps.",
+    "Product Type column shows category values ('Tops', 'Packaging', 'Cables', 'Outerwear'). Logiwa Product Type is a type (Standard/Kit/Packaging Material). Map the column to the real product type and leave category to Product Group.",
+    "by-location-columns.tsx: Original LP Number, Parent LP Type and Original Parent LP are hidden by default, while Logiwa shows all 37 data columns. Make them visible by default (or document the deviation)."
+  ],
+  "functional_failures": [
+    "Save is not disabled until the form is valid (violates spec 04 §0 and BUILD_PLAN M06 checklist 'Save is disabled until the form is valid'). Repro: /inventory/by-location, open the ⋯ on any Stock row (e.g. APX-TEE-BLK-L @ A-01-02-1), choose Adjust. With Adjustment Reason and New Quantity both empty, Save is enabled (button.disabled=false). Clicking it only then shows 'Enter a quantity'. The same happens in the header Add Inventory drawer (all fields empty, Save enabled).",
+    "Change Damage Reason allows a no-op save. Repro: /inventory/by-location?q=HRB-FLTR-100, check an undamaged row, Change Attributes ▾ > Change Damage Reason. The dropdown defaults to 'No damage reason', which equals the row's current value, yet Save is enabled.",
+    "Warehouse label shows the code twice. Repro: /inventory/by-location > Add Inventory > open the Warehouse dropdown. The options read 'KS2 · KS2 - Overflow' and 'MLT1 · MLT1 - Main Fulfillment'. After selecting, the field shows 'MLT1 - MLT1 - Main Fulfillment'.",
+    "The bucket drawer shows an empty body while loading. Repro: /inventory/by-location, click any row body cell. The drawer opens with only the heading 'Inventory' and a blank panel (no skeleton, no spinner) until GET /api/inventory/buckets/:id returns (over 10s observed).",
+    "Stale grid with no fetching indicator. Repro: /inventory, type APX-TEE in search and press Enter, then Filter > Warehouse > check 'MLT1 - Main Fulfillment' > Apply. The chip appears and the URL updates to f.warehouse=in:<id>, but for about 5s the grid still lists 'All Warehouses' rows with the old quantities and shows no loading cue.",
+    "Grid body collapses on a short viewport. Repro: open /inventory/by-location?q=HRB-FLTR-100 in a 740x403 viewport. Header, toolbar and footer render, but the table area has zero visible rows (not even the header row) while 'Total: 6' shows.",
+    "Very slow round-trips in this run, possibly caused by a heavily loaded shared dev server (node at 4.3GB RSS, Fast Refresh churn). Observed: GET /api/inventory/by-location took 21.9s on first load, product-options 38s, the Adjust Save POST about 12s, Add Inventory Save about 20s, and a reload of /inventory/by-location?q=HRB-FLTR-100 stayed on skeletons for more than 2 minutes before a later reload loaded. Not conclusive as an app defect, but there is no timeout or error state; the skeleton spins indefinitely.",
+    "Not verified because of the server degradation: the Only-1-SKU rule-guard message, the Transfer LP/Transfer Location Find→summary→Transfer happy path, and the per-column sort correctness on /inventory/by-location. A transfer of HRB-FLTR-100 into A-01-02-1 (which holds APX-TEE-BLK-L) succeeded, so that location has no 1-SKU rule; the guard is still untested in the UI."
+  ],
+  "logiwa_wins": [
+    "Per spec 04 §0: Logiwa drawers keep Save disabled until the form is valid. KitStaks enables Save on empty forms and validates on submit.",
+    "Per spec 04 §0: Logiwa enum filters offer an 'in | not in' operator and a search box in the checklist. KitStaks enum filters (Warehouse, Client, Status) offer only a bare checklist.",
+    "Per spec 04 §0: Logiwa's search comparator defaults to Equal. KitStaks defaults to Starts With.",
+    "Per spec 04 §2: Logiwa shows all 37 Inventory by Location data columns by default. KitStaks hides Original LP Number, Parent LP Type and Original Parent LP by default.",
+    "Per spec 04 §2/§2.8: Logiwa's damage/hold reasons include OnHold and Quarantined (holds), plus Leaking, Extra and Bad Packaging. KitStaks' damage list (Damaged in Transit, Crushed Packaging, Water Damage, Expired, Manufacturer Defect, Broken Seal, Warehouse Handling Damage, Customer Return - Damaged, Damaged) has no hold or quarantine status.",
+    "Per spec 04 §2.4: Logiwa shows the product as 'SKU - Name' in the product picker. KitStaks lists bare SKUs only, which makes similar SKUs hard to tell apart."
+  ]
+}

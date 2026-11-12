@@ -1,0 +1,62 @@
+{
+  "scores": {
+    "hierarchy": 7,
+    "density": 7,
+    "color": 6,
+    "craft": 6,
+    "states": 6,
+    "sideBySide": 7,
+    "functionality": 7,
+    "completeness": 7
+  },
+  "verdict": "not_wowed",
+  "blindPick": "A",
+  "blindMapping": "spec-based audit, no live blind comparison",
+  "kitstaksWins": false,
+  "fixes": [
+    "src/components/grid/data-grid.tsx (header cell) + src/components/returns/return-columns.tsx: header labels overflow their fixed widths and collide (FROM COUNTRY NAME 161px of content in a 130px column renders as 'FROM COUNTRY NAMSTATUS'; also SHIPMENT ORDER CODE 168>150, REQUESTED QUANTITY 163>120, RETURNED QUANTITY 156>120, CARRIER SHIPPING OPTION NAME 224>200, RETURN ORDER CREATED DATE 209>172, SHIPMENT ORDER DELIVERY DATE 226>172). Add `min-w-0 overflow-hidden` + `truncate` with a title tooltip on the header label span, or widen these columns in return-columns.tsx to at least the measured label width + 24px.",
+    "src/components/packing/pack-screen.tsx (product scan error state): clear the scan error ('X is already fully packed... Over-packing is blocked.') on the next successful scan, on Close pack (F2), and when the package state changes; today it stays under the input after the package is Closed.",
+    "src/components/returns/return-receive-flow.tsx: clear the line scan error ('X is not on this return.') and the 'Not received / Scan at least one item' banner as soon as a valid scan raises any line above 0; both stay visible after a successful NOVA-HUB-7P scan.",
+    "src/components/returns/return-orders-page.tsx StatusPills: the 'All 20' pill counts RMAs while the grid footer says 'Total: 25' (lines). Either have /api/returns/summary count lines, or label the pills 'RMAs' and the footer 'lines' so the numbers reconcile.",
+    "src/app/api/packing/kpis (Total orders to be packed) vs src/app/api/packing/orders (List & select): the dashboard KPI says 2 while the List & select modal for the same warehouse lists 1 order. Use the same predicate (Ready to Pack + Packing Started with complete picks) in both, or make the KPI link land on exactly the orders the modal shows.",
+    "src/app/api/packing/scan: scanning an order that is already packed (Ready to Ship) returns 'No allocated order found. Please transfer the products to another location.' Return a specific 409 message such as 'KS-E2E-SO-2 is already packed (Ready to Ship).' and echo the scanned code in the error under the input.",
+    "src/components/returns/rma-create-page.tsx Items step: disable the Return qty input until its row checkbox is checked, or auto-check the row when the qty is edited. When a typed qty exceeds the cap (typed 9, shipped 2), show an inline 'Max 2 (shipped minus already returned)' instead of silently clamping.",
+    "src/components/returns/rma-create-page.tsx progress rail: the ring jumps 33% to 67% on step 1 once an order is picked, and drops from 100% back to 67% when 'Create return label' is toggled on. Drive it from completed steps only. Also make the step-2 completed check the same green token as step 1 (it renders lime).",
+    "src/components/returns/rma-detail-page.tsx header: render 'RMA000331' rather than 'RMA RMA000331', and drop the redundant grey 'RMA' badge, or rename the badge to the source (RMA / Manual).",
+    "Timeline writer for return_order status (src/server/repositories/returns*.ts): log the Pending → Started transition when receiving begins. The timeline now shows 'Status is modified. Started --> Completed' with no Started event. Also replace the ASCII ' --> ' format and Title Case field names with sentence-case copy such as 'Status changed from Started to Completed'.",
+    "src/server/repositories/returns*.ts complete: set the return label status to Used/Consumed (not 'Active') once the RMA is Completed.",
+    "src/components/returns/rma-detail-page.tsx Cancel confirm: change the 'No' / 'Yes' buttons to 'Keep RMA' / 'Cancel RMA' (danger variant), and state whether the active return label will be voided.",
+    "src/components/returns/return-station-page.tsx: when opened with ?rma=, look up the RMA's warehouse and preselect it, plus that warehouse's remembered station. Today 'Receive at station' lands on an empty 'Choose a warehouse' and the user must re-pick MLT1.",
+    "src/components/packing/list-select-modal.tsx: replace the native <input type=date> ('mm/dd/yyyy' with the browser calendar icon) with the design-system DatePicker. In rma-create-page.tsx, change the Expected return date placeholder from 'YYYY/MM/DD' to the app-wide MM/DD/YYYY. Standardize the RMA detail and Create RMA dates ('11/4/2026 3:15:00 PM') on the grid format 'MM/DD/YYYY h:mm AM'.",
+    "src/components/packing/pack-screen.tsx job card: in Order mode the copy reads '# of orders in order: 0/1 packed'. Use a mode-aware label: 'Orders in tote' / 'Orders at location' / hide it in Order mode.",
+    "Pack and return item cards (pack-screen.tsx, return-items.tsx): the image fallback renders raw initials 'NO' / 'VL'. Use the product image, or a neutral package glyph.",
+    "src/components/returns/return-receive-flow.tsx (manual): pluralize '1 units' → '1 unit'. Give the two scan inputs distinct accessible names ('RMA, order or tracking scan' / 'Item scan'); both are currently 'Scan or type, then press Enter'. Associate the Create RMA 'Note' label with its textarea via htmlFor/id.",
+    "src/lib/nav (top nav) + PageHeader breadcrumbs for /orders/returns and /return-station: the breadcrumb says Home > Inventory > Return Orders and the Inventory nav lights up, yet the page shows the Orders tab strip (ORDER BACKLOG / SHIPPED & CANCELED / RETURN ORDERS). Put Return Orders under Orders (Home > Orders > Return Orders) as Logiwa does.",
+    "src/components/returns/return-columns.tsx: make Return Address and Tags sortable, or add returnAddress/tagNames to RETURN_SORT_FIELDS (they are currently the only unsortable data columns).",
+    "Grid refetch state (src/components/grid/data-grid.tsx): after a status pill or sort click, the stale rows stay fully opaque for 5–10 s under the new filter (Pending pill active while Completed/Cancelled rows still show). Show a top progress bar and dim the stale rows while isFetching.",
+    "Dark-mode disabled CTAs (return-station-page.tsx BigAction and the pack footer 'Complete packing and create label'): opacity-55 on a dark surface leaves the title and description nearly unreadable. Use a dedicated disabled token (text-faint on surface-sunken) that keeps 4.5:1 contrast for the label text.",
+    "Brand primary is red, so focus rings and selected states (Change status note textarea on open, Create RMA Cancel button border, scan inputs) read as error states. Switch the focus ring to a neutral or blue focus token and reserve red for danger and validation."
+  ],
+  "functional_failures": [
+    "Return Orders grid header collision: open /orders/returns at 1440px wide → the header row shows 'FROM COUNTRY NAMSTATUS'. The FROM COUNTRY NAME label (161px) overflows its 130px column into STATUS. REQUESTED QUANTITY (163/120), RETURNED QUANTITY (156/120), CARRIER SHIPPING OPTION NAME (224/200), RETURN ORDER CREATED DATE (209/172) and SHIPMENT ORDER DELIVERY DATE (226/172) overflow the same way.",
+    "Stale over-pack error on the pack screen: /packing-station → MLT1 / PACK-01 → List and select order → KS-E2E-SO-2 → Start packing → scan NOVA-HUB-7P + serial → scan NOVA-HUB-7P again ('already fully packed... Over-packing is blocked.') → pick BOX-S, set weight, F2 to close the package → the over-pack error is still shown under the product scan input.",
+    "Stale errors at the Return Station: /return-station?rma=RMA000331 → MLT1 / MLT1-RTN → press Complete return with 0 units ('Not received / Scan at least one item') → scan KS-TEST-NOT-ON-RMA (error shown) → scan NOVA-HUB-7P (1/1 units) → both 'KS-TEST-NOT-ON-RMA is not on this return.' and the 'Not received' banner stay on screen.",
+    "Packing KPI mismatch: /packing-station → MLT1 → PACK-01 → right card 'TOTAL ORDERS TO BE PACKED 2' → List and select order → the modal lists only 1 order ('1 order', KS-E2E-SO-2).",
+    "Misleading error for an already-packed order: after packing KS-E2E-SO-2 (Ready to Ship), scan KS-E2E-SO-2 in the Order scan input → GET /api/packing/scan returns 409 and the UI says 'No allocated order found. Please transfer the products to another location.' It should say the order is already packed.",
+    "Return Orders count mismatch: /orders/returns → the 'All' pill reads 20 while the grid footer reads 'Total: 25' for the same unfiltered view, with no labelling that one counts RMAs and the other lines.",
+    "Create RMA quantity behaviour: /orders/returns/new → choose SO010836 → Next → type 5 into NOVA-CBL-LTG-2M Return qty without ticking its row → the field shows 1 and the summary stays '0 units selected'. With a row ticked, typing 9 is silently clamped to 2 with no message.",
+    "RMA timeline is missing a transition: create RMA000331 (Pending) → receive it at /return-station → the RMA detail timeline shows 'Status is modified. Started --> Completed', with no Pending→Started event. The return label still shows LABEL STATUS 'Active' after completion.",
+    "'Receive at station' deep link does not preselect the warehouse: on /orders/returns/{id} for an MLT1 RMA, open /return-station?rma=RMA000331 → Receiving warehouse is 'Choose a warehouse' and both start buttons are disabled until MLT1 and the station are picked again by hand.",
+    "Native browser date control: /packing-station/{station}/order?list=1 → the List and select modal's 'Expected ship date' filter is a native <input type=date> (mm/dd/yyyy plus the browser calendar icon). The Create RMA Expected return date uses YYYY/MM/DD, unlike the app's MM/DD/YYYY.",
+    "Copy and grammar defects: Return manually → scan one VLT-SPK-MINI → the counter reads '1 units'. The pack screen job card in Order mode reads '# of orders in order: 0/1 packed'. The RMA detail title reads 'RMA RMA000331'. The Cancel RMA confirm uses generic 'No' / 'Yes' buttons.",
+    "No loading state on refetch: on /orders/returns click the 'Pending' pill → for 6–10 s the grid shows unfiltered rows (Completed, Cancelled, In Transit) at full opacity under the active Pending filter, with no busy indicator.",
+    "Accessibility: on the Return Station RMA flow both scan inputs share the accessible name 'Scan or type, then press Enter'. The Create RMA Note textarea is named only by its placeholder. The packing dashboard mode buttons are exposed as unnamed 'button' elements inside 'Choose a warehouse first' wrappers."
+  ],
+  "logiwa_wins": [
+    "Per spec, Logiwa's package contents grid shows Image, Product, Pack Type, Label, Weight, Quantity and Attributes, with a Total SKU / Total Quantity footer. KitStaks shows only Product, Label and Qty.",
+    "Per spec, Logiwa keeps the right-pane controls (Package Type, L/W/H, weight, Carrier/Service, Get Rate, Label) visible but disabled until an order loads, so packers learn one fixed layout. KitStaks shows a large empty panel ('Scan order to start') with no controls.",
+    "Per spec, Logiwa files Return Orders under Orders (Shipment Order > Return list, Orders breadcrumb). KitStaks' breadcrumb and top nav put it under Inventory while showing the Orders tab strip, which is inconsistent.",
+    "Per spec, Logiwa's Return Orders toolbar pairs Export as Excel with Excel Export History. In KitStaks, Export As Excel only POSTs /api/exports (202) and showed no confirmation or history entry point on the page.",
+    "Per spec, Logiwa's 25 return columns read cleanly. KitStaks' fixed-width headers overflow and overlap ('FROM COUNTRY NAMSTATUS'), and Return Address and Tags cannot be sorted."
+  ]
+}

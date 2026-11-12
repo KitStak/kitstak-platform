@@ -1,0 +1,63 @@
+{
+  "scores": {
+    "hierarchy": 7,
+    "density": 6,
+    "color": 5,
+    "craft": 6,
+    "states": 7,
+    "sideBySide": 7,
+    "functionality": 7,
+    "completeness": 7
+  },
+  "verdict": "not_wowed",
+  "blindPick": "A",
+  "blindMapping": "spec-based audit, no live blind comparison",
+  "kitstaksWins": false,
+  "fixes": [
+    "src/components/wave-rules/wave-rule-steps.tsx:317 (schedule day chips): replace the hardcoded `border-[#17874D] bg-[#D3F0E3] text-[#17874D]` with tokens (`border-success bg-success-soft text-success`) and define success-soft in the :root and [data-theme=dark] tokens. In dark mode the active 'Monday x' chip currently shows as a pale-mint light-only surface.",
+    "Remove every hardcoded light-palette pill in the module and use StatusPill/token classes instead: jobs-list-page.tsx:25 LabelPill (#D3F0E3/#FFF3D6/#E3E6E8), jobs-list-page.tsx:36 and job-detail-page.tsx:251 'Short'/'Pick short' badge (#F7E9E4/#A13406), grid-columns.tsx:25 ShortPill, job-detail-page.tsx:209 pick-path done marker, job-types-page.tsx:57 usage pill (#D5E5F2/#0D36A3), and job-modals.tsx:52-54 priority card colors. All of them render as light islands on the dark theme.",
+    "report-pages.tsx:139 ReasonCell: replace `text-[#C8102E]` with a danger token that has a dark-mode value of at least #F87171. #C8102E on the dark navy surface is about 3:1, which fails WCAG AA for the 12-13px shortage-reason text.",
+    "wave-rules-page.tsx:69 NextRunCell: replace `text-[#B26A00]` with a warning token that has a dark-mode value; the amber under-2-minute countdown is too dim on dark.",
+    "src/lib/grid-defs/jobs/columns.ts WAVE_LOG_COLUMNS (around line 222): widen '# of orders met rule set criteria' to 250, '# of shortage orders' to 170, '# of jobs created' to 145, '# of allocated orders' to 175 and '# of merged orders created' to 215. Also give the header label span `truncate` (text-overflow: ellipsis) in the shared DataGrid header so long labels never draw into the next column. Today the headers collide, for example 'CRITERIA# OF SHORTAGE ORDERS'.",
+    "src/components/jobs/job-detail-page.tsx setTab (around line 314): keep the active tab in local state, update it immediately, and then router.replace the URL, or use window.history.replaceState. Switching tabs now waits for a full RSC round-trip, so under load clicking 'Tasks' changes nothing for seconds and the click feels dead.",
+    "src/lib/grid-defs/jobs/columns.ts: make the visible task-detail numeric/text columns sortable. Remove `sortable: false` from toPackType, uomPackType, targetCart, damageReason, taskUomQty, initialPackQty, initialApprovedPackQty and approvedPackQty, and add the matching server sort keys in the tasks repository.",
+    "src/lib/grid-defs/jobs/columns.ts:29: make 'Original job type' (Logiwa 'ORIGINAL IO JOB TYPE ?') visible by default with its tooltip, so Job Management shows all 32 columns as Logiwa does.",
+    "Wave run summary copy (server waves-run summary builder) and the task execute partial-pick callout (src/components/tasks/task-actions.tsx): use plural() so the text reads '1 job' and '1 unit short' instead of '1 jobs' and '1 units short'.",
+    "wave-rule-steps.tsx ScheduleStep: hide 'Not scheduled: the rule runs only when you press Run.' as soon as a day is selected, and keep the 'N daily frequency' pill on one line (`whitespace-nowrap`).",
+    "wave-rule-wizard.tsx Body / GeneralStep: delete the duplicate 'General' heading. The step title and the section title both read 'General'.",
+    "wave-rule-steps.tsx GeneralStep: when Next fails validation, give the job-type list container a red border. Logiwa reds Name, Warehouse and the job-type section; KitStaks only shows helper text.",
+    "wave-rule-wizard.tsx AiJobGate: add a footer with Back (to the operation-type cards) and Close. The AI job empty state is currently a dead end that can only be left with the drawer X.",
+    "Wave rules data and scheduler: 'B2B Wholesale Wave' and 'D2C Daily Waves' show Scheduled=Yes with no NEXT RUN, and their last run was days ago. Either recompute nextRunAt for scheduled rules (src/server/scheduler/tasks/wave-rules.ts) or show 'Not scheduled'. Also drop the out-of-domain priority 'Urgent' on 'Rush - Prime & Urgent'; the wizard only offers None/Low/Medium/High.",
+    "Wave rule Assign step (users grid) and the job Assign modal: filter out Client-type users and Viewer roles. Dana Whitfield and Marcus Oyelaran (client users) are offered as pickers, and seed job Job005263 is assigned to a client user.",
+    "Order Operations task grid: replace the literal 'No img' placeholder in the Product image column with a neutral image glyph, and normalize the order type value. 'D2C' and 'D2C Order' both appear in the same grid and on the Shortage report.",
+    "Wave rule Order By options (rule-editors.tsx): add Note, ExtraNote1, ExtraNote2, CustomFieldDateTime3, CustomFieldToggle2, CustomFieldDropDown2 and CustomFieldTextBox2-3, and add 'SO custom field toggle 2' to the Add Filter field list, to match the spec.",
+    "Brand-red overload (globals.css tokens): link cells (Job code, Order code, SKU, Wave rule name), active tabs, the primary CTA, selected segments and error text are all the same red. Move links to a neutral or blue link token so red is reserved for danger/shortage, as Logiwa uses indigo for links.",
+    "Job cancel and wave rule delete ConfirmDialogs (job-actions.tsx:199, wave-rules-page.tsx): change the 'No'/'Yes' buttons to explicit verbs ('Keep jobs' / 'Cancel 1 job', 'Keep rule' / 'Delete rule').",
+    "IA consistency: the jobs tab group sets the breadcrumb and top-nav highlight to Fulfillment on /jobs, Automation on /jobs/wave-rules and Reports on /jobs/shortage and /jobs/wave-log. Pin the whole tab group to Fulfillment > Jobs so the top nav does not jump while you move between tabs.",
+    "Seed data: purge the junk shortage rows with SKU '12341234' / product '12342134', and keep the KS-TEST-* noise out of the default demo dataset so the Shortage report reads as believable."
+  ],
+  "functional_failures": [
+    "Dark mode, light-only schedule chip. Repro: in dark mode go to /jobs/wave-rules, click 'Create a new wave rule', choose Picking, fill Rule set name 'KS-TEST M03 Audit Rule', choose MLT1, check a job type, Next, Next. On Schedule, click 'Monday +'. The active chip renders as a pale mint pill (bg rgb(211,240,227), text rgb(23,135,77)), a light-only surface on the dark drawer. The cause is the hardcoded classes in wave-rule-steps.tsx:317.",
+    "Dark mode, light-only pills and low-contrast text. Repro: in dark mode open /jobs/shortage. The 'Shortage' order-status pill and the 'No' missing-triggered pills are light pastel pills on the dark grid. The shortage reason text 'Insufficient Inventory' is #C8102E on dark navy (about 3:1, fails AA). The Label status pill, the 'Short' badge and the job-type usage pill in jobs-list-page.tsx, grid-columns.tsx and job-types-page.tsx use the same hardcoded light hex colors.",
+    "Wave log headers collide. Repro: open /jobs/wave-log at 1440px wide. '# OF ORDERS MET RULE SET CRITERIA' (scrollWidth 237 in a 220px column) runs into '# OF SHORTAGE ORDERS', which itself overflows (159/150), and the same happens for '# of jobs created' (134/130), '# of allocated orders' (165/160) and '# of merged orders created' (203/190). The headers use text-overflow: clip with no ellipsis.",
+    "Job detail tabs feel dead. Repro: open /jobs/110ce49a-c589-4a45-9461-21909dc9eb88 (Job005279) and click the 'Tasks' tab. The tab gets focus but the Orders table stays on screen; the content only switches after the router.replace server round-trip finishes (more than 5 s observed while the dev server was under load). There is no local optimistic tab state.",
+    "Scheduled rules without a next run. Repro: open /jobs/wave-rules. 'B2B Wholesale Wave' and 'D2C Daily Waves' show Scheduled = Yes, but NEXT RUN is '—' and their last runs are 11/04 and 11/05 while today is 11/09. A scheduled rule never shows a countdown.",
+    "Grid sort race. Repro: on /jobs (default chip Job status Pending, Started), click column headers quickly one after another (about 1 s apart) and end on 'Pending tasks'. In one run the header showed aria-sort=ascending and the URL showed sort=pendingTasks, but the rows rendered as [5,1,4,1,0,1,2,2]. The network log showed earlier sort requests marked '200 OK [FAILED: net::ERR_ABORTED]', so a stale response appears to have won. The API itself sorts correctly.",
+    "Pluralization bugs. Repro 1: run a wave rule that creates one job (POST /api/wave-rules/run for 'KS-TEST M03 Audit Rule'); the toast reads 'Wave 108-1 completed: 20 met · 5 allocated · 1 jobs · 15 shortage'. Repro 2: on /tasks/order-operations select Picking task 1443, choose Task operations > Execute, then lower Quantity from 2 to 1; the callout reads 'Partial execute: 1 units short'.",
+    "Unsortable task columns. Repro: on /tasks/order-operations the visible columns 'To pack type', 'UOM pack type', 'Target cart', 'Damage reason' and 'Task UOM qty' have no sort control. On /tasks/count, 'Initial task pack qty', 'Initial task approved pack qty' and 'Approved pack qty' are unsortable (`sortable: false` in src/lib/grid-defs/jobs/columns.ts).",
+    "Inconsistent schedule copy. Repro: in the Create wave rule wizard on step 3 Schedule, select Monday. The footer still says 'Not scheduled: the rule runs only when you press Run.' while Monday is active, and the '0 daily frequency' pill wraps onto two lines.",
+    "Job-type validation not highlighted. Repro: in the Create wave rule wizard, choose Picking and click Next with every field empty. Rule set name and Warehouse turn red, but the 'Select job types' section gets no red border; the spec requires the job type section to be flagged too.",
+    "AI job dead end. Repro: on /jobs/wave-rules click 'Create a new wave rule' and choose 'AI job'. The 'AI Jobs is not active' empty state has no Back or Cancel footer; the only way out is the drawer X, and you cannot return to the operation-type cards.",
+    "Client users offered as assignees. Repro: in the Create wave rule wizard, step 4 Assign > 'Assign to users' lists Dana Whitfield (role Client) and Marcus Oyelaran (role Client) as assignable pickers. Seed job Job005263 on /jobs shows assignee Marcus Oyelaran, a client user."
+  ],
+  "logiwa_wins": [
+    "Per spec, Logiwa's Job Management shows all 32 columns by default, including 'ORIGINAL IO JOB TYPE ?' with its tooltip. KitStaks hides Original job type by default and shows 31.",
+    "Per spec, Logiwa uses indigo for link cells and keeps red for semantic danger and the High priority pill. KitStaks uses the same red for links (Job code, Order code, SKU, Wave rule name), the CTA, active tabs, selected segments and error text, so status color loses its meaning.",
+    "Per spec, Logiwa's wave rule Order By list includes Note, ExtraNote1, ExtraNote2, CustomFieldDateTime3, Toggle2, DropDown2 and TextBox2-3, and its filter list includes SO Custom Field Toggle 2. KitStaks offers 11 order-by options and leaves out Toggle 2.",
+    "Per spec, Logiwa flags the job-type section with a red border when Next is pressed with nothing selected on General. KitStaks only shows helper text under the list.",
+    "Per spec, Logiwa's status and pill colors are a coherent computed set. KitStaks hardcodes light-theme hex pills (Label status, Short, schedule day chips, job-type usage, shortage reason red) that break in dark mode.",
+    "Per spec, Logiwa's wave log columns read cleanly. KitStaks' wave log headers overflow into each other without ellipsis.",
+    "Per spec, Logiwa keeps the whole Jobs section under one breadcrumb (Home > Orders > Jobs > ...). KitStaks moves the breadcrumb and top-nav highlight between Fulfillment, Automation and Reports as you switch tabs inside the same tab group.",
+    "Per spec, Logiwa's Task Details headers are sortable where shown. KitStaks leaves several visible qty and pack-type columns unsortable on Order Operations and Count."
+  ]
+}

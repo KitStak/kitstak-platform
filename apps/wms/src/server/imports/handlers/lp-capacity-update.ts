@@ -1,0 +1,9 @@
+/** Import handler "lp-capacity-update" (owner M10). Changes an existing LP-type capacity on a location. */
+import { applyLpCapacityUpdateImport } from "@/server/repositories/locations-import";
+import type { ImportHandler } from "../types";
+
+export const handler: ImportHandler = {
+  configured: true,
+  owner: "M10",
+  apply: async (ctx, row) => await applyLpCapacityUpdateImport(ctx, row),
+};

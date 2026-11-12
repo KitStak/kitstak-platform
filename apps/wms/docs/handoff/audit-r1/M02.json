@@ -1,0 +1,53 @@
+{
+  "scores": {
+    "hierarchy": 8,
+    "density": 6,
+    "color": 6,
+    "craft": 7,
+    "states": 7,
+    "sideBySide": 7,
+    "functionality": 6,
+    "completeness": 7
+  },
+  "verdict": "not_wowed",
+  "blindPick": "A",
+  "blindMapping": "spec-based audit, no live blind comparison",
+  "kitstaksWins": false,
+  "fixes": [
+    "src/server/repositories/end-of-day.ts plus the label create/void hooks in src/server/repositories/shipping*.ts: compute EOD totalPackages from live shipments (COUNT of Active labels where manifestId = row.id) instead of a stored counter. Backfill manifestId for the 32 shipments that have manifestId=null; for example the 2026-11-06 MLT1 rows should point at manifest de5950cb. Add a unit test in tests/unit/shipping asserting that the EOD total equals the active label count for every manifest.",
+    "src/lib/status-colors.ts TONES.teal: fg #0F8C7A on #D0F3EE measures 3.51:1, below WCAG AA, even though the comment says it was darkened. Change fg to #0B6E60 or darker (at least 4.5:1). Re-verify every tone with a contrast unit test.",
+    "src/components/ui/status-pill.tsx (lines 30, 63, 79): pills use inline style={{backgroundColor: tone.bg, color: tone.fg}} with light-only hex values, so in dark mode every pill is a pastel chip on the #0F1B2E surface. Add a dark variant per tone in status-colors.ts (e.g. bg rgba(fg,.18), fg a lighter tint) and switch on [data-theme=dark], or move the tones to CSS variables that are redefined under :root[data-theme=dark].",
+    "src/components/shipping/end-of-day-page.tsx Total package link uses text-primary (#e8344f), which is 4.14:1 on the dark grid surface rgb(15,27,46). In dark mode use a lighter primary (e.g. #FF6B7F) for link text, or use a neutral link color in data cells.",
+    "src/components/shipping/end-of-day-page.tsx Ship date cell: formatDate renders '11/9/2026' while Close date renders '11/06/2026 10:33 AM'. Use the same zero-padded MM/DD/YYYY formatter for both columns.",
+    "src/components/shipping/end-of-day-page.tsx Ship from cell renders '{warehouseCode} · {shipFrom}', and shipFrom already contains the code, giving 'MLT1 · MLT1 - Main Fulfillment'. Render shipFrom only, or code plus the warehouse name without the prefix.",
+    "Seed/data (carrier connections): UPS and USPS manifests for MLT1 share the same prefix 'KSB-MLT1', so PREFIX can't tell carrier accounts apart, which is the column's only job. Give each carrier connection a distinct account prefix (e.g. KSB-UPS-MLT1, KSB-USPS-MLT1).",
+    "Seed: closed manifests show a close date 3 days after the ship date (ship 10/27, closed 10/30 10:15 AM). EOD closes the same evening. Set the seeded closeDate to the shipDate at about 17:30 local.",
+    "Seed + src/components/shipping/shipments-columns.tsx: Inventory location is null on 470/470 rows. Insurance type, Scheduled pickup date, Actual pickup date, Inventory parent LPN and External reference are null on every row. Populate realistic values in the seed (packing location, LP parent for multi-package orders, pickup dates on closed manifests), or hide those columns by default.",
+    "Seed for /api/shipment-plans/lps: the Shipment plan LPs tab returns total 0 across all data. Seed LP rows for the shipped and in-progress plans (SP000041-44) so the tab and its 20 columns aren't an empty grid.",
+    "src/components/shipment-plans/plan-order-picker.tsx COLUMNS: add the spec's WAREHOUSE, AGE (days since createdAt) and TAGS columns, and make SKU sortable.",
+    "src/components/shipping/shipments-columns.tsx: Products and Customer address are sortable:false. Logiwa headers are all sortable, so enable server sort on both (sort by the first SKU and by ship_city/state).",
+    "Copy: src/components/layout/page-header tabs and breadcrumb show Title Case ('End Of The Day', 'Carrier Shipment Details') while the H1 is sentence case ('End of the day'). Change tab and breadcrumb labels to sentence case ('End of the day', 'Carrier shipment details').",
+    "src/components/shipping/shipments-columns.tsx: rename 'Is allow Saturday delivery' to 'Saturday delivery'. The label was copied word for word from Logiwa's awkward column name.",
+    "Shipment plan state machine (src/server/state-machines shipmentPlan): Open -> In Progress is one-way, there is no Open edit path back, and Delete is Open-only. A plan moved to In Progress by mistake can only be Cancelled and stays in the list forever. Allow In Progress -> Open while no order has been loaded, or allow deleting In Progress plans with zero loaded orders.",
+    "src/components/shipment-plans/plan-drawer-steps.tsx and createPlan: Expected total weight/volume stay 0 when a plan is created or PATCHed with orders unless the client called /estimate (KS-E2E-SP-1 has 2 orders and weight 0). Compute the estimate server-side in createPlan/updatePlan when the fields are omitted or 0.",
+    "src/app/(app)/loading.tsx + streaming: the pages depend on Suspense reveal and React Query in ways that left /shipments stuck on the skeleton (empty main) in a background tab until $RV was forced. Check that the shipments list renders without depending on requestAnimationFrame-driven reveal, e.g. by rendering the client grid outside the streamed Suspense boundary."
+  ],
+  "functional_failures": [
+    "EOD totals don't reconcile with labels: GET /api/end-of-day returns manifest de5950cb (KSB-MLT1, ship date 2026-11-06, MLT1) with totalPackages=20 and voidedPackages=1. GET /api/shipments?ps=500 has only 2 labels with manifestId=de5950cb, while 23 MLT1 labels were created on 2026-11-06 (22 Active, 1 Voided), 21 of them with manifestId=null. Repro: open /shipments/end-of-day, find the 11/6/2026 KSB-MLT1 row (Total package 20), click the 20. The drilldown to /shipments lists 23 labels, which matches neither 20 nor 19 net. In total 32 of 470 labels have no manifest. This fails the 'Label to manifest' and 'Void' acceptance criteria.",
+    "Dark mode pills are light-only: open /shipments/end-of-day, set user menu > Appearance > Dark. Every Open/Closed pill keeps its light pastel background (Open: rgb(208,243,238) bg, rgb(15,140,122) text) on the dark navy grid. The colors come from inline styles in status-pill.tsx and do not adapt to the theme.",
+    "Contrast failure on the EOD Open pill: the teal tone #0F8C7A on #D0F3EE is 3.51:1 at 11px in both themes (below the 4.5:1 AA minimum). Repro: /shipments/end-of-day, inspect any 'Open' status pill.",
+    "Dark mode Total package links fail contrast: on /shipments/end-of-day in Dark, the Total package numbers render #e8344f on rgb(15,27,46) at 4.14:1.",
+    "Shipment plan LPs tab is empty: GET /api/shipment-plans/lps returns {data:[],total:0} for the whole tenant, so /shipment-plans/lps can only ever show an empty grid. The Plan LPs tab can't be verified.",
+    "Stuck plan: POST /api/shipment-plans {code:'KS-TEST-SP-R1', warehouse MLT1, status Open} -> 201. POST /api/shipment-plans/{id}/status {status:'In Progress'} -> ok. Afterwards nextStatuses is ['Loading Started','Cancelled'] and deleteBlockedReason is 'Only Open shipment plans can be deleted'. A mistaken status change can't be undone, and the record can only be cancelled; it stays in the list forever (KS-TEST-SP-R1 is now Cancelled).",
+    "Expected weight not computed server-side: PATCH /api/shipment-plans/{id} with orderIds=[SO010700 (12.8 oz)] persists orderCount=1 but expectedTotalWeight stays 0. KS-E2E-SP-1 with 2 orders also shows weight 0 and volume 0, against the build plan's 'computed from the orders' requirement.",
+    "Initial render hangs on the skeleton: navigating a fresh tab to /shipments in the built-in browser rendered only the loading skeleton (main textContent empty after more than 10s) until React's streamed Suspense reveal ($RV) was forced manually. Then End of the day showed 'Loading manifests' with zero rows for well over 10s, even though /api/end-of-day answered in 0.23s via curl. This may come from the hidden-pane environment, but the page doesn't recover on its own. Inline edits, the wizard and the void flow could not be exercised in the UI for this reason; they were checked through the API and the code instead."
+  ],
+  "logiwa_wins": [
+    "Per spec, Logiwa's EOD prefix is the carrier account prefix and is unique per carrier account. KitStaks uses 'KSB-MLT1' for both UPS and USPS, so the Prefix column doesn't identify the account.",
+    "Per spec, the Add Order(s) drawer in Logiwa's Shipment Plan shows ORDER TYPE, STORE, WAREHOUSE, CREATED DATE, AGE, SKU, CLIENT, TAGS, CUSTOMER and TOTAL QUANTITY. KitStaks' plan-order-picker lacks WAREHOUSE, AGE and TAGS.",
+    "Per spec, all Logiwa column headers are sortable. KitStaks Carrier shipment details has Products and Customer address unsortable.",
+    "Per spec, Logiwa's Shipment Plan LPs tab carries LP-level data (LP, Parent LPN, LP actual weight/volume). KitStaks has no LP rows at all, so the tab is empty.",
+    "Per spec, Logiwa's Carrier Shipment Details shows Inventory location (e.g. 'Packing') on every row. KitStaks has it null on 470/470 rows, and Insurance, Pickup dates, Parent LPN and External reference are also always empty.",
+    "Per spec, Logiwa's Shipment Plan Create allows any Status* value. KitStaks restricts new plans to Open/In Progress and has no way back to Open or to delete once a plan leaves Open, which is less forgiving for planners."
+  ]
+}
