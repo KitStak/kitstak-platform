@@ -9,8 +9,8 @@
  *   - return lines, serial-tracked stock and shipped orders' labels are consistent
  * Every module's e2e suite ends by running it.
  */
-import { closeDb, configuredDatabaseKind, getDb } from "../src/server/db";
-import { verifyDatabase } from "../src/server/db/seed/verify";
+import { closeDb, configuredDatabaseKind, getDb } from '../src/server/db';
+import { verifyDatabase } from '../src/server/db/seed/verify';
 const MAX_LISTED = 40;
 
 function out(line: string): void {
@@ -20,16 +20,25 @@ function out(line: string): void {
 async function main(): Promise<number> {
   try {
     const { issues, stats, warnings = [] } = await verifyDatabase(await getDb());
-    out(`db:verify - ${configuredDatabaseKind() === "postgres" ? "DATABASE_URL" : "local PGlite (.data/pglite)"}`);
-    out(`  ${Object.entries(stats).map(([k, v]) => `${k}=${v}`).join("  ")}`);
-    if (warnings.length > 0) out(`  warnings (not failing): ${warnings.length} (${[...new Set(warnings.map((w) => w.check))].join(", ")})`);
+    out(
+      `db:verify - ${configuredDatabaseKind() === 'postgres' ? 'DATABASE_URL' : 'local PGlite (.data/pglite)'}`,
+    );
+    out(
+      `  ${Object.entries(stats)
+        .map(([k, v]) => `${k}=${v}`)
+        .join('  ')}`,
+    );
+    if (warnings.length > 0)
+      out(
+        `  warnings (not failing): ${warnings.length} (${[...new Set(warnings.map((w) => w.check))].join(', ')})`,
+      );
     if (issues.length === 0) {
-      out("  OK: every invariant reconciles.");
+      out('  OK: every invariant reconciles.');
       return 0;
     }
     const byCheck = new Map<string, number>();
     for (const i of issues) byCheck.set(i.check, (byCheck.get(i.check) ?? 0) + 1);
-    out(`  FAILED: ${issues.length} issue(s): ${[...byCheck].map(([c, n]) => `${c}=${n}`).join(", ")}`);
+    out(`  FAILED: ${issues.length} issue(s): ${[...byCheck].map(([c, n]) => `${c}=${n}`).join(', ')}`);
     for (const i of issues.slice(0, MAX_LISTED)) out(`  - [${i.check}] ${i.id}: ${i.message}`);
     if (issues.length > MAX_LISTED) out(`  ... and ${issues.length - MAX_LISTED} more`);
     return 1;

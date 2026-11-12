@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import type { InitialShellContext } from "@/lib/context-label";
+import * as React from 'react';
+import type { InitialShellContext } from '@/lib/context-label';
 
 export interface ShellUser {
   readonly id: string;
@@ -26,11 +26,33 @@ export interface ShellContextValue {
   readonly activeApps: ReadonlySet<string> | null;
 }
 
-const ShellContext = React.createContext<ShellContextValue>({ user: null, permissions: null, initialContext: null, activeApps: null });
+const ShellContext = React.createContext<ShellContextValue>({
+  user: null,
+  permissions: null,
+  initialContext: null,
+  activeApps: null,
+});
 
-export function ShellProvider({ user, permissions, initialContext = null, activeApps, children }: { readonly user: ShellUser; readonly permissions: readonly string[]; readonly initialContext?: InitialShellContext | null; readonly activeApps?: readonly string[] | null; readonly children: React.ReactNode }) {
+export function ShellProvider({
+  user,
+  permissions,
+  initialContext = null,
+  activeApps,
+  children,
+}: {
+  readonly user: ShellUser;
+  readonly permissions: readonly string[];
+  readonly initialContext?: InitialShellContext | null;
+  readonly activeApps?: readonly string[] | null;
+  readonly children: React.ReactNode;
+}) {
   const value = React.useMemo<ShellContextValue>(
-    () => ({ user, permissions: new Set(permissions), initialContext, activeApps: activeApps ? new Set(activeApps) : null }),
+    () => ({
+      user,
+      permissions: new Set(permissions),
+      initialContext,
+      activeApps: activeApps ? new Set(activeApps) : null,
+    }),
     [user, permissions, initialContext, activeApps],
   );
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
@@ -44,7 +66,8 @@ export function useShell(): ShellContextValue {
 export function useShellAllows(): (permission: readonly string[]) => boolean {
   const { permissions } = useShell();
   return React.useCallback(
-    (permission: readonly string[]) => permissions === null || permission.length === 0 || permission.some((key) => permissions.has(key)),
+    (permission: readonly string[]) =>
+      permissions === null || permission.length === 0 || permission.some((key) => permissions.has(key)),
     [permissions],
   );
 }

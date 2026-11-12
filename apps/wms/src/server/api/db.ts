@@ -7,9 +7,9 @@
  * `await q` (rows), `(await q.limit(1))[0]` (one row); raw SQL goes through
  * `dbAll / dbGet / dbRun` in `@/server/db/sql` (see docs/POSTGRES_MIGRATION.md).
  */
-import type { PgDatabase, PgQueryResultHKT, PgTransaction } from "drizzle-orm/pg-core";
-import type { ExtractTablesWithRelations } from "drizzle-orm";
-import type * as schema from "@/server/db/schema";
+import type { PgDatabase, PgQueryResultHKT, PgTransaction } from 'drizzle-orm/pg-core';
+import type { ExtractTablesWithRelations } from 'drizzle-orm';
+import type * as schema from '@/server/db/schema';
 
 export type AppSchema = typeof schema;
 
@@ -25,6 +25,6 @@ export type AppTx = PgTransaction<PgQueryResultHKT, AppSchema, ExtractTablesWith
  * migrations to the local PGlite database (never to DATABASE_URL).
  */
 export async function getAppDb(): Promise<AppDb> {
-  const mod = await import("@/server/db");
+  const mod = await import('@/server/db');
   return await mod.getDb();
 }

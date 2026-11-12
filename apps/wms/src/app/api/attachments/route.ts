@@ -4,13 +4,17 @@
  *   POST   { entityType, entityId, documentType, fileId }  attach an uploaded file
  *   DELETE ?id=                                   remove (and delete the file)
  */
-import { defineRoute } from "@/server/api/define-route";
-import { created } from "@/server/api/envelope";
-import { fileStore } from "@/server/files";
-import { entityRefSchema } from "@/server/repositories/platform-common";
+import { defineRoute } from '@/server/api/define-route';
+import { created } from '@/server/api/envelope';
+import { fileStore } from '@/server/files';
+import { entityRefSchema } from '@/server/repositories/platform-common';
 import {
-  attachmentCreateSchema, createAttachment, deleteAttachment, idQuerySchema, listAttachments,
-} from "@/server/repositories/platform-files";
+  attachmentCreateSchema,
+  createAttachment,
+  deleteAttachment,
+  idQuerySchema,
+  listAttachments,
+} from '@/server/repositories/platform-files';
 
 export const GET = defineRoute({
   query: entityRefSchema,

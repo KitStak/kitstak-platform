@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * Lifts the shared toast viewport (bottom-right) above a station's sticky action footer while

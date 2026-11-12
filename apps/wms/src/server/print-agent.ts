@@ -11,9 +11,9 @@
  * Requests are accepted only from the origins passed with --origin (default: the server
  * that served the download), so other web pages can't print through it.
  */
-export const PRINT_AGENT_VERSION = "1.0.0";
+export const PRINT_AGENT_VERSION = '1.0.0';
 export const PRINT_AGENT_PORT = 9101;
-export const PRINT_AGENT_FILENAME = "kitstak-print-agent.mjs";
+export const PRINT_AGENT_FILENAME = 'kitstak-print-agent.mjs';
 
 export function printAgentSource(origin: string): string {
   return `#!/usr/bin/env node

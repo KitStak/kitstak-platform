@@ -3,9 +3,9 @@
  * Sandbox) normalises its API into these shapes; the runtime (`runtime/*`) applies filters,
  * creates orders through the foundation domain and writes channel runs / missing orders.
  */
-import type { ChannelSettings } from "@/lib/domain-types";
-import type * as schema from "@/server/db/schema";
-import type { Credentials } from "./crypto";
+import type { ChannelSettings } from '@/lib/domain-types';
+import type * as schema from '@/server/db/schema';
+import type { Credentials } from './crypto';
 
 export type ChannelConnectionRow = typeof schema.channelConnections.$inferSelect;
 
@@ -102,13 +102,19 @@ export interface ShipmentPush {
 
 export interface ChannelAdapter {
   readonly key: string;
-  validate(ctx: Omit<AdapterContext, "runNumber" | "settings">): Promise<ValidateResult>;
+  validate(ctx: Omit<AdapterContext, 'runNumber' | 'settings'>): Promise<ValidateResult>;
   fetchOrders(ctx: AdapterContext, since: string | null): Promise<readonly ChannelOrder[]>;
   /** Re-fetches specific orders (Retry Download). */
   fetchOrdersById(ctx: AdapterContext, ids: readonly string[]): Promise<readonly ChannelOrder[]>;
   fetchProducts(ctx: AdapterContext): Promise<readonly ChannelProduct[]>;
-  pushInventory(ctx: AdapterContext, items: readonly InventoryPush[]): Promise<readonly { readonly sellerSku: string; readonly ok: boolean; readonly error?: string }[]>;
-  pushShipment(ctx: AdapterContext, shipment: ShipmentPush): Promise<{ readonly ok: boolean; readonly error?: string }>;
+  pushInventory(
+    ctx: AdapterContext,
+    items: readonly InventoryPush[],
+  ): Promise<readonly { readonly sellerSku: string; readonly ok: boolean; readonly error?: string }[]>;
+  pushShipment(
+    ctx: AdapterContext,
+    shipment: ShipmentPush,
+  ): Promise<{ readonly ok: boolean; readonly error?: string }>;
 }
 
 /** HTTP failure from a store API; 401/403 mark the run Unauthorized. */
@@ -116,37 +122,53 @@ export class ChannelApiError extends Error {
   readonly status: number;
   constructor(message: string, status: number) {
     super(message);
-    this.name = "ChannelApiError";
+    this.name = 'ChannelApiError';
     this.status = status;
   }
 }
 
-export async function fetchJson(url: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<unknown> {
+export async function fetchJson(
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? 20_000);
   try {
     const res = await fetch(url, { ...init, signal: controller.signal });
     const text = await res.text();
     let body: unknown = null;
-    try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = text;
+    }
     if (!res.ok) {
-      const detail = typeof body === "object" && body && "errors" in body ? JSON.stringify((body as { errors: unknown }).errors).slice(0, 300) : String(text).slice(0, 300);
-      throw new ChannelApiError(`${res.status} ${res.statusText}${detail ? ` — ${detail}` : ""}`, res.status);
+      const detail =
+        typeof body === 'object' && body && 'errors' in body
+          ? JSON.stringify((body as { errors: unknown }).errors).slice(0, 300)
+          : String(text).slice(0, 300);
+      throw new ChannelApiError(`${res.status} ${res.statusText}${detail ? ` — ${detail}` : ''}`, res.status);
     }
     return body;
   } catch (error) {
     if (error instanceof ChannelApiError) throw error;
-    if (error instanceof Error && error.name === "AbortError") throw new ChannelApiError("The store did not respond within 20 seconds", 504);
-    throw new ChannelApiError(error instanceof Error ? `Couldn't reach the store: ${error.message}` : "Couldn't reach the store", 502);
+    if (error instanceof Error && error.name === 'AbortError')
+      throw new ChannelApiError('The store did not respond within 20 seconds', 504);
+    throw new ChannelApiError(
+      error instanceof Error ? `Couldn't reach the store: ${error.message}` : "Couldn't reach the store",
+      502,
+    );
   } finally {
     clearTimeout(timer);
   }
 }
 
 export const num = (v: unknown, fallback = 0): number => {
-  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
   return Number.isFinite(n) ? n : fallback;
 };
-export const strOrNull = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : typeof v === "number" ? String(v) : null);
-export const rec = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+export const strOrNull = (v: unknown): string | null =>
+  typeof v === 'string' && v.trim() ? v.trim() : typeof v === 'number' ? String(v) : null;
+export const rec = (v: unknown): Record<string, unknown> =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 export const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);

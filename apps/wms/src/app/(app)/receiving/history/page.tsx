@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { PageSkeleton } from "@/components/layout/shell-skeleton";
-import { ReceivingHistoryPage } from "@/components/receiving/receiving-history-page";
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { PageSkeleton } from '@/components/layout/shell-skeleton';
+import { ReceivingHistoryPage } from '@/components/receiving/receiving-history-page';
 
-export const metadata: Metadata = { title: "Receiving history" };
+export const metadata: Metadata = { title: 'Receiving history' };
 
 /** Receiving History. The grid reads its state from the URL (useSearchParams), so it renders inside Suspense. */
 export default function Page() {

@@ -1,21 +1,32 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ChevronRight } from "lucide-react";
-import { breadcrumbsFor, type Crumb } from "@/config/route-registry";
-import { cn } from "@/lib/utils";
+import * as React from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { ChevronRight } from 'lucide-react';
+import { breadcrumbsFor, type Crumb } from '@/config/route-registry';
+import { cn } from '@/lib/utils';
 
 export type { Crumb };
 
 /** `Home › …items`. "Home" and crumbs with `href` link; the rest are plain text. */
-export function Breadcrumbs({ items, className }: { readonly items: readonly Crumb[]; readonly className?: string }) {
+export function Breadcrumbs({
+  items,
+  className,
+}: {
+  readonly items: readonly Crumb[];
+  readonly className?: string;
+}) {
   return (
-    <nav aria-label="Breadcrumb" className={cn("text-xs text-fg-muted", className)}>
+    <nav aria-label="Breadcrumb" className={cn('text-xs text-fg-muted', className)}>
       <ol className="flex flex-wrap items-center gap-1">
         <li>
-          <Link href="/dashboard" className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">Home</Link>
+          <Link
+            href="/dashboard"
+            className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
+          >
+            Home
+          </Link>
         </li>
         {items.map((item, index) => {
           const last = index === items.length - 1;
@@ -23,9 +34,19 @@ export function Breadcrumbs({ items, className }: { readonly items: readonly Cru
             <li key={`${item.label}-${index}`} className="flex items-center gap-1">
               <ChevronRight className="h-3 w-3" aria-hidden />
               {item.href && !last ? (
-                <Link href={item.href} className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">{item.label}</Link>
+                <Link
+                  href={item.href}
+                  className="rounded transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
+                >
+                  {item.label}
+                </Link>
               ) : (
-                <span className={last ? "font-medium text-fg" : undefined} aria-current={last ? "page" : undefined}>{item.label}</span>
+                <span
+                  className={last ? 'font-medium text-fg' : undefined}
+                  aria-current={last ? 'page' : undefined}
+                >
+                  {item.label}
+                </span>
               )}
             </li>
           );
@@ -36,7 +57,13 @@ export function Breadcrumbs({ items, className }: { readonly items: readonly Cru
 }
 
 /** Breadcrumbs derived from the nav config for the current route. */
-export function AutoBreadcrumbs({ currentLabel, className }: { readonly currentLabel?: string; readonly className?: string }) {
+export function AutoBreadcrumbs({
+  currentLabel,
+  className,
+}: {
+  readonly currentLabel?: string;
+  readonly className?: string;
+}) {
   const pathname = usePathname();
   const items = React.useMemo(() => breadcrumbsFor(pathname, currentLabel), [pathname, currentLabel]);
   return <Breadcrumbs items={items} className={className} />;

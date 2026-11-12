@@ -1,10 +1,10 @@
 /** Shared seed types: the environment every seed step receives and transaction helpers. */
-import type { AppDb } from "@/server/api/db";
-import type { DomainCtx, Tx } from "@/server/domain/types";
-import type { FileStore } from "@/server/files";
-import type { Rng } from "../seed-data";
-import { setClock } from "./runtime";
-import { withWriteTx } from "@/server/db/sql";
+import type { AppDb } from '@/server/api/db';
+import type { DomainCtx, Tx } from '@/server/domain/types';
+import type { FileStore } from '@/server/files';
+import type { Rng } from '../seed-data';
+import { setClock } from './runtime';
+import { withWriteTx } from '@/server/db/sql';
 
 export interface SeedEnv {
   readonly db: AppDb;
@@ -22,7 +22,7 @@ export interface SeedUser {
 export const actor = (user: SeedUser): DomainCtx => ({ userId: user.id, source: user.email });
 
 /** Context for work done by the scheduler / integrations. */
-export const integrationCtx: DomainCtx = { userId: null, source: "Integration" };
+export const integrationCtx: DomainCtx = { userId: null, source: 'Integration' };
 
 /**
  * Runs `fn` in one SQLite transaction with the virtual clock at `ms`. IMMEDIATE takes the
@@ -53,7 +53,9 @@ const BUSY_BACKOFF_MS = 60;
 export function isBusyError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const code = (error as Error & { code?: unknown }).code;
-  return (typeof code === "string" && code.startsWith("SQLITE_BUSY")) || /database is locked/i.test(error.message);
+  return (
+    (typeof code === 'string' && code.startsWith('SQLITE_BUSY')) || /database is locked/i.test(error.message)
+  );
 }
 
 /**

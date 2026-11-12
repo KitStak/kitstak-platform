@@ -7,9 +7,9 @@
  * CLI entrypoint: production guard, the report and the exit code. Targets local PGlite
  * (.data/pglite) by default, DATABASE_URL when set.
  */
-import { createFileStore } from "../files";
-import { closeDb, configuredDatabaseKind, getDb } from "./index";
-import { runSeed, type SeedReport } from "./seed/index";
+import { createFileStore } from '../files';
+import { closeDb, configuredDatabaseKind, getDb } from './index';
+import { runSeed, type SeedReport } from './seed/index';
 
 function out(line: string): void {
   process.stdout.write(`${line}\n`);
@@ -17,7 +17,9 @@ function out(line: string): void {
 
 function printReport(report: SeedReport, ms: number): void {
   out(`Seed complete in ${(ms / 1000).toFixed(1)}s (${report.events} replay events).`);
-  const rows = Object.entries(report.counts).filter(([, n]) => n > 0).sort(([a], [b]) => a.localeCompare(b));
+  const rows = Object.entries(report.counts)
+    .filter(([, n]) => n > 0)
+    .sort(([a], [b]) => a.localeCompare(b));
   for (const [table, n] of rows) out(`  ${table.padEnd(34)} ${n}`);
   if (report.failures > 0) {
     out(`${report.failures} replay step(s) were rejected by the domain (kept as realistic exceptions):`);
@@ -25,25 +27,33 @@ function printReport(report: SeedReport, ms: number): void {
   }
   if (report.ledgerIssues.length > 0) {
     out(`Ledger issues: ${report.ledgerIssues.length}`);
-    for (const issue of report.ledgerIssues.slice(0, 20)) out(`  - [${issue.check}] ${issue.id}: ${issue.message}`);
+    for (const issue of report.ledgerIssues.slice(0, 20))
+      out(`  - [${issue.check}] ${issue.id}: ${issue.message}`);
   }
 }
 
 async function main(): Promise<void> {
-  if (process.env.NODE_ENV === "production" && !process.env.ALLOW_PROD_SEED) {
-    throw new Error("Refusing to seed demo data in production. Set ALLOW_PROD_SEED=1 to override.");
+  if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_PROD_SEED) {
+    throw new Error('Refusing to seed demo data in production. Set ALLOW_PROD_SEED=1 to override.');
   }
   const db = await getDb();
-  out(`Seeding ${configuredDatabaseKind() === "postgres" ? "DATABASE_URL" : "local PGlite (.data/pglite)"}...`);
+  out(
+    `Seeding ${configuredDatabaseKind() === 'postgres' ? 'DATABASE_URL' : 'local PGlite (.data/pglite)'}...`,
+  );
   const started = performance.now();
-  const report = await runSeed(db, { files: createFileStore(), password: process.env.SEED_PASSWORD || undefined });
+  const report = await runSeed(db, {
+    files: createFileStore(),
+    password: process.env.SEED_PASSWORD || undefined,
+  });
   printReport(report, performance.now() - started);
   if (report.ledgerIssues.length > 0) process.exitCode = 1;
 }
 
 main()
   .catch((error: unknown) => {
-    process.stderr.write(`Seed failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+    process.stderr.write(
+      `Seed failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
+    );
     process.exitCode = 1;
   })
   .finally(() => closeDb());

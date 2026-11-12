@@ -4,10 +4,10 @@
  * the Work Orders create permission (the role that acts on the report), not just report view.
  * Repeated clicks within RECALC_COOLDOWN_MS return the fresh stamp instead of recomputing.
  */
-import { defineRoute } from "@/server/api/define-route";
-import { KIT_RECALC_EVERY_MS } from "@/lib/grid-defs/work-orders/kits";
-import { lastKitRecalcAt, recalcKitInventory } from "@/server/repositories/kits";
-import { KIT_PERMISSIONS, WO_PERMISSIONS } from "@/server/repositories/work-orders-api";
+import { defineRoute } from '@/server/api/define-route';
+import { KIT_RECALC_EVERY_MS } from '@/lib/grid-defs/work-orders/kits';
+import { lastKitRecalcAt, recalcKitInventory } from '@/server/repositories/kits';
+import { KIT_PERMISSIONS, WO_PERMISSIONS } from '@/server/repositories/work-orders-api';
 
 const RECALC_COOLDOWN_MS = 3_000;
 
@@ -15,7 +15,10 @@ export const GET = defineRoute({
   permission: KIT_PERMISSIONS.inventory,
   // The first read on a fresh install computes the snapshot, so the stamp never reads "never".
   transaction: false,
-  handler: async ({ db }) => ({ updatedAt: await lastKitRecalcAt(db) ?? (await recalcKitInventory(db)).updatedAt, everyMs: KIT_RECALC_EVERY_MS }),
+  handler: async ({ db }) => ({
+    updatedAt: (await lastKitRecalcAt(db)) ?? (await recalcKitInventory(db)).updatedAt,
+    everyMs: KIT_RECALC_EVERY_MS,
+  }),
 });
 
 export const POST = defineRoute({
@@ -28,7 +31,12 @@ export const POST = defineRoute({
       return { rows: null, updatedAt: last, throttled: true };
     }
     const res = await recalcKitInventory(db);
-    await audit({ action: "kit_inventory.recalculate", entity: "kit_inventory_stats", entityId: "all", detail: { rows: res.rows } });
+    await audit({
+      action: 'kit_inventory.recalculate',
+      entity: 'kit_inventory_stats',
+      entityId: 'all',
+      detail: { rows: res.rows },
+    });
     return { ...res, throttled: false };
   },
 });

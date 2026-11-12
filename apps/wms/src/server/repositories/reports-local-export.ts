@@ -6,28 +6,36 @@
  * caller's scope. Once a key is registered, `ReportGridPage` switches back to the shared
  * footer export automatically and this path is no longer used for it.
  */
-import { eq } from "drizzle-orm";
-import type { AppDb } from "@/server/api/db";
-import { AppError, notFoundError, toAppError, validationError } from "@/server/api/errors";
-import type { AuthContext } from "@/server/auth/context";
-import { can } from "@/server/auth/permissions";
-import { backgroundTasks } from "@/server/db/schema";
-import { fileStore, type FileStore } from "@/server/files/files";
-import { log } from "@/server/log";
-import { parseGridQuery } from "@/server/query/grid-query";
-import { buildXlsx } from "@/server/exports/xlsx";
-import { EXPORT_PAGE_SIZE, exportFileName, MAX_EXPORT_ROWS, type BackgroundTask } from "@/server/exports/runner";
-import { isGridKey } from "@/server/exports/grid-keys";
-import type { ExportColumn, ExportRow } from "@/server/exports/types";
-import { AGING_DEF, UTILIZATION_DEF } from "@/lib/grid-defs/reports/analysis";
-import { ORDER_LINES_DEF } from "@/lib/grid-defs/reports/order-lines";
-import { exportColumnsOf, type ReportDef } from "@/lib/grid-defs/reports/types";
-import type { ReportLister } from "./reports-api";
-import { reportZoneOffset } from "./reports-grid";
-import { listAging, listUtilization } from "./reports-analysis";
-import { listOrderLines } from "./reports-order-lines";
+import { eq } from 'drizzle-orm';
+import type { AppDb } from '@/server/api/db';
+import { AppError, notFoundError, toAppError, validationError } from '@/server/api/errors';
+import type { AuthContext } from '@/server/auth/context';
+import { can } from '@/server/auth/permissions';
+import { backgroundTasks } from '@/server/db/schema';
+import { fileStore, type FileStore } from '@/server/files/files';
+import { log } from '@/server/log';
+import { parseGridQuery } from '@/server/query/grid-query';
+import { buildXlsx } from '@/server/exports/xlsx';
+import {
+  EXPORT_PAGE_SIZE,
+  exportFileName,
+  MAX_EXPORT_ROWS,
+  type BackgroundTask,
+} from '@/server/exports/runner';
+import { isGridKey } from '@/server/exports/grid-keys';
+import type { ExportColumn, ExportRow } from '@/server/exports/types';
+import { AGING_DEF, UTILIZATION_DEF } from '@/lib/grid-defs/reports/analysis';
+import { ORDER_LINES_DEF } from '@/lib/grid-defs/reports/order-lines';
+import { exportColumnsOf, type ReportDef } from '@/lib/grid-defs/reports/types';
+import type { ReportLister } from './reports-api';
+import { reportZoneOffset } from './reports-grid';
+import { listAging, listUtilization } from './reports-analysis';
+import { listOrderLines } from './reports-order-lines';
 
-interface LocalExport { readonly def: ReportDef; readonly list: ReportLister }
+interface LocalExport {
+  readonly def: ReportDef;
+  readonly list: ReportLister;
+}
 
 /** M13 grids exported through this path while their key is unregistered. */
 export const LOCAL_EXPORTS: ReadonlyMap<string, LocalExport> = new Map<string, LocalExport>([
@@ -44,24 +52,33 @@ export function isLocalExportKey(gridKey: string): boolean {
 }
 
 /** Validates key, permission and query grammar, then records a queued export task. */
-export async function queueLocalExport(db: AppDb, input: { readonly auth: AuthContext; readonly gridKey: string; readonly query: string }): Promise<BackgroundTask> {
+export async function queueLocalExport(
+  db: AppDb,
+  input: { readonly auth: AuthContext; readonly gridKey: string; readonly query: string },
+): Promise<BackgroundTask> {
   const entry = LOCAL_EXPORTS.get(input.gridKey);
-  if (!entry) throw validationError(`Unknown report "${input.gridKey}"`, { gridKey: ["Unknown report"] });
-  if (!can(input.auth, entry.def.permission as Parameters<typeof can>[1])) throw new AppError("FORBIDDEN", "You do not have permission to export this report");
+  if (!entry) throw validationError(`Unknown report "${input.gridKey}"`, { gridKey: ['Unknown report'] });
+  if (!can(input.auth, entry.def.permission as Parameters<typeof can>[1]))
+    throw new AppError('FORBIDDEN', 'You do not have permission to export this report');
   const parsed = parseGridQuery(new URLSearchParams(input.query));
   if (parsed.issues.length > 0) {
     const first = parsed.issues[0];
-    throw validationError(`Invalid export query: ${first?.param ?? ""} ${first?.message ?? ""}`.trim());
+    throw validationError(`Invalid export query: ${first?.param ?? ''} ${first?.message ?? ''}`.trim());
   }
-  return (await db.insert(backgroundTasks).values({
-    kind: "export",
-    title: `${entry.def.title} export`,
-    gridKey: entry.def.gridKey,
-    query: input.query,
-    status: "queued",
-    progress: 0,
-    userId: input.auth.user.id,
-  }).returning())[0];
+  return (
+    await db
+      .insert(backgroundTasks)
+      .values({
+        kind: 'export',
+        title: `${entry.def.title} export`,
+        gridKey: entry.def.gridKey,
+        query: input.query,
+        status: 'queued',
+        progress: 0,
+        userId: input.auth.user.id,
+      })
+      .returning()
+  )[0];
 }
 
 export interface RunLocalExportDeps {
@@ -73,46 +90,69 @@ export interface RunLocalExportDeps {
 }
 
 /** Runs a queued local export to completion. Never throws; the task row records the outcome. */
-export async function runLocalExport(db: AppDb, taskId: string, deps: RunLocalExportDeps): Promise<BackgroundTask> {
+export async function runLocalExport(
+  db: AppDb,
+  taskId: string,
+  deps: RunLocalExportDeps,
+): Promise<BackgroundTask> {
   const now = deps.now ?? (() => new Date());
-  const set = async (patch: Partial<typeof backgroundTasks.$inferInsert>) => await db.update(backgroundTasks).set(patch).where(eq(backgroundTasks.id, taskId));
+  const set = async (patch: Partial<typeof backgroundTasks.$inferInsert>) =>
+    await db.update(backgroundTasks).set(patch).where(eq(backgroundTasks.id, taskId));
   const task = (await db.select().from(backgroundTasks).where(eq(backgroundTasks.id, taskId)).limit(1))[0];
-  if (!task || task.kind !== "export") throw notFoundError("Export");
-  if (task.status !== "queued") return task;
-  await set({ status: "started", progress: 1 });
+  if (!task || task.kind !== 'export') throw notFoundError('Export');
+  if (task.status !== 'queued') return task;
+  await set({ status: 'started', progress: 1 });
   try {
     const entry = task.gridKey ? LOCAL_EXPORTS.get(task.gridKey) : undefined;
-    if (!entry) throw new AppError("VALIDATION", `Unknown report "${task.gridKey ?? ""}"`);
-    const query = parseGridQuery(new URLSearchParams(task.query ?? "")).query;
+    if (!entry) throw new AppError('VALIDATION', `Unknown report "${task.gridKey ?? ''}"`);
+    const query = parseGridQuery(new URLSearchParams(task.query ?? '')).query;
     const tzOffsetMinutes = await reportZoneOffset(db, deps.auth.viewScope.warehouseIds);
     const rows: ExportRow[] = [];
     for (let page = 1; ; page += 1) {
-      const res = await entry.list(db, deps.auth, { ...query, page, pageSize: EXPORT_PAGE_SIZE, tzOffsetMinutes });
+      const res = await entry.list(db, deps.auth, {
+        ...query,
+        page,
+        pageSize: EXPORT_PAGE_SIZE,
+        tzOffsetMinutes,
+      });
       rows.push(...(res.rows as readonly ExportRow[]));
-      if (rows.length > MAX_EXPORT_ROWS) throw new AppError("VALIDATION", `Exports are limited to ${MAX_EXPORT_ROWS.toLocaleString("en-US")} rows. Narrow the filters and try again.`);
+      if (rows.length > MAX_EXPORT_ROWS)
+        throw new AppError(
+          'VALIDATION',
+          `Exports are limited to ${MAX_EXPORT_ROWS.toLocaleString('en-US')} rows. Narrow the filters and try again.`,
+        );
       if (res.total > 0) await set({ progress: Math.min(90, Math.floor((rows.length / res.total) * 90)) });
       if (res.rows.length === 0 || rows.length >= res.total) break;
     }
-    const sheetColumns = exportColumnsOf(entry.def).filter((c) => c.key !== "action");
+    const sheetColumns = exportColumnsOf(entry.def).filter((c) => c.key !== 'action');
     const known = new Set(sheetColumns.map((c) => c.key));
     // Visible grid columns from the client (order kept), restricted to the report's own columns.
-    const requested = (deps.columns ?? []).filter((c) => known.has(c.key)).map((c) => sheetColumns.find((s) => s.key === c.key) ?? c);
+    const requested = (deps.columns ?? [])
+      .filter((c) => known.has(c.key))
+      .map((c) => sheetColumns.find((s) => s.key === c.key) ?? c);
     const columns = requested.length > 0 ? requested : sheetColumns;
     const bytes = await buildXlsx({ name: entry.def.title, columns, rows });
     const file = await (deps.store ?? fileStore()).store(db, {
       name: exportFileName(entry.def.title, now(), deps.timeZone),
       bytes,
-      purpose: "export",
-      ownerEntityType: "background_task",
+      purpose: 'export',
+      ownerEntityType: 'background_task',
       ownerEntityId: taskId,
       uploadedBy: task.userId,
     });
-    await set({ status: "completed", progress: 100, rowCount: rows.length, fileId: file.id, finishedAt: now().toISOString() });
+    await set({
+      status: 'completed',
+      progress: 100,
+      rowCount: rows.length,
+      fileId: file.id,
+      finishedAt: now().toISOString(),
+    });
   } catch (error: unknown) {
     const appError = toAppError(error);
-    const message = appError.code === "INTERNAL" ? "The export failed. Please try again." : appError.message;
-    if (appError.code === "INTERNAL") log.error("report export failed", { taskId, gridKey: task.gridKey, err: error });
-    await set({ status: "error", errorMessage: message, finishedAt: now().toISOString() });
+    const message = appError.code === 'INTERNAL' ? 'The export failed. Please try again.' : appError.message;
+    if (appError.code === 'INTERNAL')
+      log.error('report export failed', { taskId, gridKey: task.gridKey, err: error });
+    await set({ status: 'error', errorMessage: message, finishedAt: now().toISOString() });
   }
   return (await db.select().from(backgroundTasks).where(eq(backgroundTasks.id, taskId)).limit(1))[0] ?? task;
 }

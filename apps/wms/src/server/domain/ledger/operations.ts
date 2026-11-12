@@ -3,20 +3,29 @@
  * changeAttributes, consume, moveLocation, moveLp. These are the ONLY writers of
  * `inventory` and `inventory_transactions` (0.4 #1).
  */
-import { and, eq, gt, inArray } from "drizzle-orm";
-import { asc } from "@/server/db/order";
-import type { InventoryStatus, TxnType } from "@/lib/enums";
-import * as schema from "@/server/db/schema";
-import { DomainError, insufficientStock, ruleViolation } from "../errors";
-import { checkScope, type DomainCtx, type Tx } from "../types";
-import { carryAllocation, consumeAllocation, getAllocation } from "./allocations";
+import { and, eq, gt, inArray } from 'drizzle-orm';
+import { asc } from '@/server/db/order';
+import type { InventoryStatus, TxnType } from '@/lib/enums';
+import * as schema from '@/server/db/schema';
+import { DomainError, insufficientStock, ruleViolation } from '../errors';
+import { checkScope, type DomainCtx, type Tx } from '../types';
+import { carryAllocation, consumeAllocation, getAllocation } from './allocations';
 import {
-  ACTIVE_ALLOCATION_STATUSES, applyDelta, bucketKey, findOrCreateBucket, freeQty, getBucket, packRatio,
-  refreshLpStatus, specOf, type BucketSpec, type InventoryRow,
-} from "./bucket";
-import { assertPlacement, assertSourceMovable, getLocation, getLp } from "./rules";
-import { carrySerials } from "./serials";
-import { writeTxn, type TxnRefs, type TxnRow } from "./txn";
+  ACTIVE_ALLOCATION_STATUSES,
+  applyDelta,
+  bucketKey,
+  findOrCreateBucket,
+  freeQty,
+  getBucket,
+  packRatio,
+  refreshLpStatus,
+  specOf,
+  type BucketSpec,
+  type InventoryRow,
+} from './bucket';
+import { assertPlacement, assertSourceMovable, getLocation, getLp } from './rules';
+import { carrySerials } from './serials';
+import { writeTxn, type TxnRefs, type TxnRow } from './txn';
 
 export interface LedgerResult {
   readonly bucket: InventoryRow;
@@ -24,11 +33,15 @@ export interface LedgerResult {
 }
 
 function assertQty(qty: number): void {
-  if (!Number.isInteger(qty) || qty <= 0) throw new DomainError("VALIDATION", "Quantity must be a positive whole number");
+  if (!Number.isInteger(qty) || qty <= 0)
+    throw new DomainError('VALIDATION', 'Quantity must be a positive whole number');
 }
 
-const packQtyOf = async (tx: Tx, b: Pick<InventoryRow, "productId" | "packType">, qty: number): Promise<number> =>
-  Math.trunc(qty / (await packRatio(tx, b.productId, b.packType)));
+const packQtyOf = async (
+  tx: Tx,
+  b: Pick<InventoryRow, 'productId' | 'packType'>,
+  qty: number,
+): Promise<number> => Math.trunc(qty / (await packRatio(tx, b.productId, b.packType)));
 
 /* -------------------------------------------------------------------- add */
 export interface AddInput {
@@ -52,28 +65,51 @@ export interface AddInput {
 
 export function toSpec(input: AddInput, defaultPackType: string): BucketSpec {
   return {
-    warehouseId: input.warehouseId, clientId: input.clientId, productId: input.productId, locationId: input.locationId,
-    lpId: input.lpId ?? null, lotNumber: input.lotNumber ?? null, expiryDate: input.expiryDate ?? null,
-    productionDate: input.productionDate ?? null, damageReason: input.damageReason ?? null,
-    packType: input.packType ?? defaultPackType, status: input.status ?? "Stock",
+    warehouseId: input.warehouseId,
+    clientId: input.clientId,
+    productId: input.productId,
+    locationId: input.locationId,
+    lpId: input.lpId ?? null,
+    lotNumber: input.lotNumber ?? null,
+    expiryDate: input.expiryDate ?? null,
+    productionDate: input.productionDate ?? null,
+    damageReason: input.damageReason ?? null,
+    packType: input.packType ?? defaultPackType,
+    status: input.status ?? 'Stock',
   };
 }
 
-async function productFor(tx: Tx, productId: string, clientId: string): Promise<typeof schema.products.$inferSelect> {
+async function productFor(
+  tx: Tx,
+  productId: string,
+  clientId: string,
+): Promise<typeof schema.products.$inferSelect> {
   const [product] = await tx.select().from(schema.products).where(eq(schema.products.id, productId)).limit(1);
-  if (!product) throw new DomainError("NOT_FOUND", "Product not found");
-  if (product.clientId !== clientId) throw new DomainError("VALIDATION", `Product ${product.sku} belongs to another client.`);
+  if (!product) throw new DomainError('NOT_FOUND', 'Product not found');
+  if (product.clientId !== clientId)
+    throw new DomainError('VALIDATION', `Product ${product.sku} belongs to another client.`);
   return product;
 }
 
 export async function add(tx: Tx, ctx: DomainCtx, input: AddInput): Promise<LedgerResult> {
   assertQty(input.qty);
-  checkScope(ctx, input, "Inventory");
+  checkScope(ctx, input, 'Inventory');
   const product = await productFor(tx, input.productId, input.clientId);
   const spec = toSpec(input, product.uom);
   await assertPlacement(tx, spec, input.qty);
-  const bucket = await applyDelta(tx, await findOrCreateBucket(tx, spec, { receivedAt: input.receivedAt, poNumber: input.poNumber }), input.qty);
-  const txn = await writeTxn(tx, ctx, { type: input.type ?? "Inventory Adjustment", from: null, to: bucket, uomQty: input.qty, packQty: await packQtyOf(tx, bucket, input.qty), refs: input.refs });
+  const bucket = await applyDelta(
+    tx,
+    await findOrCreateBucket(tx, spec, { receivedAt: input.receivedAt, poNumber: input.poNumber }),
+    input.qty,
+  );
+  const txn = await writeTxn(tx, ctx, {
+    type: input.type ?? 'Inventory Adjustment',
+    from: null,
+    to: bucket,
+    uomQty: input.qty,
+    packQty: await packQtyOf(tx, bucket, input.qty),
+    refs: input.refs,
+  });
   await refreshLpStatus(tx, bucket.lpId);
   return { bucket, txn };
 }
@@ -89,13 +125,23 @@ export interface RemoveInput {
 export async function remove(tx: Tx, ctx: DomainCtx, input: RemoveInput): Promise<LedgerResult> {
   assertQty(input.qty);
   const source = await getBucket(tx, input.inventoryId);
-  checkScope(ctx, source, "Inventory");
+  checkScope(ctx, source, 'Inventory');
   await assertSourceMovable(tx, source.locationId);
   if (freeQty(source) < input.qty) {
-    throw insufficientStock(`Only ${freeQty(source)} unallocated units are available; ${input.qty} requested.`, { inventoryId: source.id });
+    throw insufficientStock(
+      `Only ${freeQty(source)} unallocated units are available; ${input.qty} requested.`,
+      { inventoryId: source.id },
+    );
   }
   const bucket = await applyDelta(tx, source, -input.qty);
-  const txn = await writeTxn(tx, ctx, { type: input.type ?? "Inventory Adjustment", from: bucket, to: null, uomQty: input.qty, packQty: await packQtyOf(tx, bucket, input.qty), refs: input.refs });
+  const txn = await writeTxn(tx, ctx, {
+    type: input.type ?? 'Inventory Adjustment',
+    from: bucket,
+    to: null,
+    uomQty: input.qty,
+    packQty: await packQtyOf(tx, bucket, input.qty),
+    refs: input.refs,
+  });
   await refreshLpStatus(tx, bucket.lpId);
   return { bucket, txn };
 }
@@ -106,36 +152,54 @@ export interface AdjustToInput {
   readonly inventoryId?: string;
   readonly bucket?: AddInput;
   readonly targetQty: number;
-  readonly type?: Extract<TxnType, "Inventory Adjustment" | "Count">;
+  readonly type?: Extract<TxnType, 'Inventory Adjustment' | 'Count'>;
   readonly adjustmentReasonId?: string | null;
   readonly refs?: TxnRefs;
 }
 
 export async function adjustTo(tx: Tx, ctx: DomainCtx, input: AdjustToInput): Promise<LedgerResult> {
-  if (!Number.isInteger(input.targetQty) || input.targetQty < 0) throw new DomainError("VALIDATION", "Target quantity must be zero or a positive whole number");
-  const type = input.type ?? "Inventory Adjustment";
+  if (!Number.isInteger(input.targetQty) || input.targetQty < 0)
+    throw new DomainError('VALIDATION', 'Target quantity must be zero or a positive whole number');
+  const type = input.type ?? 'Inventory Adjustment';
   let bucket: InventoryRow;
   if (input.inventoryId) {
     bucket = await getBucket(tx, input.inventoryId);
   } else if (input.bucket) {
     const product = await productFor(tx, input.bucket.productId, input.bucket.clientId);
-    bucket = await findOrCreateBucket(tx, toSpec(input.bucket, product.uom), { receivedAt: input.bucket.receivedAt });
+    bucket = await findOrCreateBucket(tx, toSpec(input.bucket, product.uom), {
+      receivedAt: input.bucket.receivedAt,
+    });
   } else {
-    throw new DomainError("VALIDATION", "Either inventoryId or bucket is required");
+    throw new DomainError('VALIDATION', 'Either inventoryId or bucket is required');
   }
-  checkScope(ctx, bucket, "Inventory");
-  const [wh] = await tx.select().from(schema.warehouses).where(eq(schema.warehouses.id, bucket.warehouseId)).limit(1);
-  const reasonRequired = type === "Count" ? wh?.mandatoryCountReason : wh?.mandatoryAdjustmentReason;
-  if (reasonRequired && !input.adjustmentReasonId) throw new DomainError("VALIDATION", "An adjustment reason is required");
+  checkScope(ctx, bucket, 'Inventory');
+  const [wh] = await tx
+    .select()
+    .from(schema.warehouses)
+    .where(eq(schema.warehouses.id, bucket.warehouseId))
+    .limit(1);
+  const reasonRequired = type === 'Count' ? wh?.mandatoryCountReason : wh?.mandatoryAdjustmentReason;
+  if (reasonRequired && !input.adjustmentReasonId)
+    throw new DomainError('VALIDATION', 'An adjustment reason is required');
   const delta = input.targetQty - bucket.onHand;
   if (delta === 0) return { bucket, txn: null };
   if (input.targetQty < bucket.allocated) {
-    throw insufficientStock(`${bucket.allocated} units are allocated; the quantity can't go below that.`, { inventoryId: bucket.id });
+    throw insufficientStock(`${bucket.allocated} units are allocated; the quantity can't go below that.`, {
+      inventoryId: bucket.id,
+    });
   }
-  if (delta > 0) await assertPlacement(tx, specOf(bucket), input.targetQty, { excludeInventoryId: bucket.id, inPlace: true });
+  if (delta > 0)
+    await assertPlacement(tx, specOf(bucket), input.targetQty, {
+      excludeInventoryId: bucket.id,
+      inPlace: true,
+    });
   const updated = await applyDelta(tx, bucket, delta);
   const txn = await writeTxn(tx, ctx, {
-    type, from: null, to: updated, uomQty: delta, packQty: (await packQtyOf(tx, updated, Math.abs(delta))) * Math.sign(delta),
+    type,
+    from: null,
+    to: updated,
+    uomQty: delta,
+    packQty: (await packQtyOf(tx, updated, Math.abs(delta))) * Math.sign(delta),
     refs: { ...input.refs, adjustmentReasonId: input.adjustmentReasonId ?? input.refs?.adjustmentReasonId },
   });
   await refreshLpStatus(tx, updated.lpId);
@@ -179,7 +243,7 @@ const pickDefined = <T>(value: T | undefined, fallback: T): T => (value === unde
 export async function move(tx: Tx, ctx: DomainCtx, input: MoveInput): Promise<MoveResult> {
   assertQty(input.qty);
   const source = await getBucket(tx, input.inventoryId);
-  checkScope(ctx, source, "Inventory");
+  checkScope(ctx, source, 'Inventory');
   const base = specOf(source);
   const spec: BucketSpec = {
     ...base,
@@ -192,36 +256,67 @@ export async function move(tx: Tx, ctx: DomainCtx, input: MoveInput): Promise<Mo
     productionDate: pickDefined(input.productionDate, base.productionDate),
     damageReason: pickDefined(input.damageReason, base.damageReason),
   };
-  if (bucketKey(spec) === source.bucketKey) throw new DomainError("VALIDATION", "Source and target are the same.");
+  if (bucketKey(spec) === source.bucketKey)
+    throw new DomainError('VALIDATION', 'Source and target are the same.');
   const sameLocation = spec.locationId === base.locationId;
   if (!sameLocation) await assertSourceMovable(tx, base.locationId);
 
   const alloc = input.allocationId ? await getAllocation(tx, input.allocationId) : null;
   if (alloc) {
-    if (alloc.inventoryId !== source.id || !(ACTIVE_ALLOCATION_STATUSES as readonly string[]).includes(alloc.status)) {
-      throw new DomainError("INVALID_STATE", "The allocation does not hold stock in this bucket.");
+    if (
+      alloc.inventoryId !== source.id ||
+      !(ACTIVE_ALLOCATION_STATUSES as readonly string[]).includes(alloc.status)
+    ) {
+      throw new DomainError('INVALID_STATE', 'The allocation does not hold stock in this bucket.');
     }
-    if (alloc.qty < input.qty) throw insufficientStock(`Only ${alloc.qty} units are allocated; ${input.qty} requested.`);
+    if (alloc.qty < input.qty)
+      throw insufficientStock(`Only ${alloc.qty} units are allocated; ${input.qty} requested.`);
   } else if (freeQty(source) < input.qty) {
-    throw insufficientStock(`Only ${freeQty(source)} unallocated units are available; ${input.qty} requested.`, { inventoryId: source.id });
+    throw insufficientStock(
+      `Only ${freeQty(source)} unallocated units are available; ${input.qty} requested.`,
+      { inventoryId: source.id },
+    );
   }
   await assertPlacement(tx, spec, input.qty, {
-    excludeInventoryId: source.id, inPlace: sameLocation, orderId: alloc?.orderId, jobId: alloc?.jobId,
+    excludeInventoryId: source.id,
+    inPlace: sameLocation,
+    orderId: alloc?.orderId,
+    jobId: alloc?.jobId,
   });
-  const targetRow = await findOrCreateBucket(tx, spec, { receivedAt: source.receivedAt, poNumber: source.poNumber });
-  const allocationId = alloc ? await carryAllocation(tx, ctx, alloc, input.qty, targetRow.id, spec.status) : null;
+  const targetRow = await findOrCreateBucket(tx, spec, {
+    receivedAt: source.receivedAt,
+    poNumber: source.poNumber,
+  });
+  const allocationId = alloc
+    ? await carryAllocation(tx, ctx, alloc, input.qty, targetRow.id, spec.status)
+    : null;
   const updatedSource = await applyDelta(tx, await getBucket(tx, source.id), -input.qty);
   const target = await applyDelta(tx, await getBucket(tx, targetRow.id), input.qty);
   const txn = await writeTxn(tx, ctx, {
-    type: input.type ?? "Inventory Movement", from: updatedSource, to: target, uomQty: input.qty,
+    type: input.type ?? 'Inventory Movement',
+    from: updatedSource,
+    to: target,
+    uomQty: input.qty,
     packQty: await packQtyOf(tx, target, input.qty),
-    refs: { orderId: alloc?.orderId, orderLineId: alloc?.orderLineId, jobId: alloc?.jobId, taskId: alloc?.taskId, ...input.refs },
+    refs: {
+      orderId: alloc?.orderId,
+      orderLineId: alloc?.orderLineId,
+      jobId: alloc?.jobId,
+      taskId: alloc?.taskId,
+      ...input.refs,
+    },
   });
   if (input.carrySerials !== false) {
     await carrySerials(tx, ctx, {
-      productId: source.productId, fromInventoryId: source.id, toInventoryId: target.id, qty: input.qty,
-      sourceOnHand: updatedSource.onHand, toStatus: spec.status, orderLineId: input.refs?.orderLineId ?? alloc?.orderLineId ?? null,
-      txnId: txn.id, type: txn.type,
+      productId: source.productId,
+      fromInventoryId: source.id,
+      toInventoryId: target.id,
+      qty: input.qty,
+      sourceOnHand: updatedSource.onHand,
+      toStatus: spec.status,
+      orderLineId: input.refs?.orderLineId ?? alloc?.orderLineId ?? null,
+      txnId: txn.id,
+      type: txn.type,
     });
   }
   await refreshLpStatus(tx, updatedSource.lpId);
@@ -230,17 +325,29 @@ export async function move(tx: Tx, ctx: DomainCtx, input: MoveInput): Promise<Mo
 }
 
 export async function setStatus(
-  tx: Tx, ctx: DomainCtx,
-  input: { inventoryId: string; qty: number; toStatus: InventoryStatus; allocationId?: string; type?: TxnType; refs?: TxnRefs },
+  tx: Tx,
+  ctx: DomainCtx,
+  input: {
+    inventoryId: string;
+    qty: number;
+    toStatus: InventoryStatus;
+    allocationId?: string;
+    type?: TxnType;
+    refs?: TxnRefs;
+  },
 ): Promise<MoveResult> {
-  return await move(tx, ctx, { ...input, type: input.type ?? "Inventory Movement" });
+  return await move(tx, ctx, { ...input, type: input.type ?? 'Inventory Movement' });
 }
 
 export async function changeAttributes(
-  tx: Tx, ctx: DomainCtx,
-  input: Pick<MoveInput, "inventoryId" | "qty" | "lotNumber" | "expiryDate" | "productionDate" | "damageReason" | "refs">,
+  tx: Tx,
+  ctx: DomainCtx,
+  input: Pick<
+    MoveInput,
+    'inventoryId' | 'qty' | 'lotNumber' | 'expiryDate' | 'productionDate' | 'damageReason' | 'refs'
+  >,
 ): Promise<MoveResult> {
-  return await move(tx, ctx, { ...input, type: "Attributes Change" });
+  return await move(tx, ctx, { ...input, type: 'Attributes Change' });
 }
 
 /* ---------------------------------------------------------------- consume */
@@ -248,7 +355,10 @@ export interface ConsumeInput {
   readonly inventoryId: string;
   readonly qty: number;
   readonly allocationId?: string;
-  readonly type: Extract<TxnType, "Shipment" | "Kitting" | "Disassemble Kit" | "Inventory Adjustment" | "Cancel Receiving">;
+  readonly type: Extract<
+    TxnType,
+    'Shipment' | 'Kitting' | 'Disassemble Kit' | 'Inventory Adjustment' | 'Cancel Receiving'
+  >;
   readonly refs?: TxnRefs;
 }
 
@@ -256,51 +366,111 @@ export interface ConsumeInput {
 export async function consume(tx: Tx, ctx: DomainCtx, input: ConsumeInput): Promise<LedgerResult> {
   assertQty(input.qty);
   const source = await getBucket(tx, input.inventoryId);
-  checkScope(ctx, source, "Inventory");
-  if (!input.allocationId) return await remove(tx, ctx, { inventoryId: source.id, qty: input.qty, type: input.type, refs: input.refs });
+  checkScope(ctx, source, 'Inventory');
+  if (!input.allocationId)
+    return await remove(tx, ctx, {
+      inventoryId: source.id,
+      qty: input.qty,
+      type: input.type,
+      refs: input.refs,
+    });
   const alloc = await getAllocation(tx, input.allocationId);
-  if (alloc.inventoryId !== source.id || alloc.qty < input.qty) throw insufficientStock("The allocation does not hold enough stock in this bucket.");
-  await consumeAllocation(tx, ctx, alloc, input.qty, input.type === "Shipment");
+  if (alloc.inventoryId !== source.id || alloc.qty < input.qty)
+    throw insufficientStock('The allocation does not hold enough stock in this bucket.');
+  await consumeAllocation(tx, ctx, alloc, input.qty, input.type === 'Shipment');
   const bucket = await applyDelta(tx, await getBucket(tx, source.id), -input.qty);
   const txn = await writeTxn(tx, ctx, {
-    type: input.type, from: bucket, to: null, uomQty: input.qty, packQty: await packQtyOf(tx, bucket, input.qty),
-    refs: { orderId: alloc.orderId, orderLineId: alloc.orderLineId, jobId: alloc.jobId, workOrderId: alloc.workOrderId, ...input.refs },
+    type: input.type,
+    from: bucket,
+    to: null,
+    uomQty: input.qty,
+    packQty: await packQtyOf(tx, bucket, input.qty),
+    refs: {
+      orderId: alloc.orderId,
+      orderLineId: alloc.orderLineId,
+      jobId: alloc.jobId,
+      workOrderId: alloc.workOrderId,
+      ...input.refs,
+    },
   });
   await refreshLpStatus(tx, bucket.lpId);
   return { bucket, txn };
 }
 
 /* -------------------------------------------------------- whole-bucket moves */
-async function moveWholeBucket(tx: Tx, ctx: DomainCtx, bucket: InventoryRow, toLocationId: string, type: TxnType, refs?: TxnRefs): Promise<TxnRow[]> {
+async function moveWholeBucket(
+  tx: Tx,
+  ctx: DomainCtx,
+  bucket: InventoryRow,
+  toLocationId: string,
+  type: TxnType,
+  refs?: TxnRefs,
+): Promise<TxnRow[]> {
   const txns: TxnRow[] = [];
-  const allocs = await tx.select().from(schema.inventoryAllocations)
-    .where(and(eq(schema.inventoryAllocations.inventoryId, bucket.id), inArray(schema.inventoryAllocations.status, [...ACTIVE_ALLOCATION_STATUSES])))
+  const allocs = await tx
+    .select()
+    .from(schema.inventoryAllocations)
+    .where(
+      and(
+        eq(schema.inventoryAllocations.inventoryId, bucket.id),
+        inArray(schema.inventoryAllocations.status, [...ACTIVE_ALLOCATION_STATUSES]),
+      ),
+    )
     .orderBy(asc(schema.inventoryAllocations.createdAt), asc(schema.inventoryAllocations.id));
-  for (const a of allocs) txns.push((await move(tx, ctx, { inventoryId: bucket.id, qty: a.qty, toLocationId, allocationId: a.id, type, refs })).txn);
+  for (const a of allocs)
+    txns.push(
+      (
+        await move(tx, ctx, {
+          inventoryId: bucket.id,
+          qty: a.qty,
+          toLocationId,
+          allocationId: a.id,
+          type,
+          refs,
+        })
+      ).txn,
+    );
   const free = freeQty(await getBucket(tx, bucket.id));
-  if (free > 0) txns.push((await move(tx, ctx, { inventoryId: bucket.id, qty: free, toLocationId, type, refs })).txn);
+  if (free > 0)
+    txns.push((await move(tx, ctx, { inventoryId: bucket.id, qty: free, toLocationId, type, refs })).txn);
   return txns;
 }
 
 /** Moves every bucket in a location (stock on LPs included) to another location. */
-export async function moveLocation(tx: Tx, ctx: DomainCtx, input: { fromLocationId: string; toLocationId: string; refs?: TxnRefs }): Promise<TxnRow[]> {
-  if (input.fromLocationId === input.toLocationId) throw new DomainError("VALIDATION", "Source and target locations are the same.");
+export async function moveLocation(
+  tx: Tx,
+  ctx: DomainCtx,
+  input: { fromLocationId: string; toLocationId: string; refs?: TxnRefs },
+): Promise<TxnRow[]> {
+  if (input.fromLocationId === input.toLocationId)
+    throw new DomainError('VALIDATION', 'Source and target locations are the same.');
   const from = await getLocation(tx, input.fromLocationId);
   const to = await getLocation(tx, input.toLocationId);
-  if (from.warehouseId !== to.warehouseId) throw ruleViolation("Locations must be in the same warehouse.");
-  const buckets = await tx.select().from(schema.inventory).where(and(eq(schema.inventory.locationId, from.id), gt(schema.inventory.onHand, 0)))
+  if (from.warehouseId !== to.warehouseId) throw ruleViolation('Locations must be in the same warehouse.');
+  const buckets = await tx
+    .select()
+    .from(schema.inventory)
+    .where(and(eq(schema.inventory.locationId, from.id), gt(schema.inventory.onHand, 0)))
     .orderBy(asc(schema.inventory.receivedAt), asc(schema.inventory.id));
   const lpIds = [...new Set(buckets.flatMap((b) => (b.lpId ? [b.lpId] : [])))];
-  if (lpIds.length > 0) await tx.update(schema.licensePlates).set({ locationId: to.id }).where(inArray(schema.licensePlates.id, lpIds));
+  if (lpIds.length > 0)
+    await tx
+      .update(schema.licensePlates)
+      .set({ locationId: to.id })
+      .where(inArray(schema.licensePlates.id, lpIds));
   const txns: TxnRow[] = [];
-  for (const b of buckets) txns.push(...(await moveWholeBucket(tx, ctx, b, to.id, "Inventory Movement", input.refs)));
+  for (const b of buckets)
+    txns.push(...(await moveWholeBucket(tx, ctx, b, to.id, 'Inventory Movement', input.refs)));
   return txns;
 }
 
 async function lpTree(tx: Tx, rootId: string): Promise<string[]> {
   const out = [rootId];
   for (let i = 0; i < out.length; i += 1) {
-    const children = await tx.select({ id: schema.licensePlates.id }).from(schema.licensePlates).where(eq(schema.licensePlates.parentLpId, out[i]))
+    const children = await tx
+      .select({ id: schema.licensePlates.id })
+      .from(schema.licensePlates)
+      .where(eq(schema.licensePlates.parentLpId, out[i]))
       .orderBy(asc(schema.licensePlates.id));
     for (const c of children) if (!out.includes(c.id)) out.push(c.id);
   }
@@ -308,17 +478,30 @@ async function lpTree(tx: Tx, rootId: string): Promise<string[]> {
 }
 
 /** Moves an LP and all of its child LPs (with their stock) to another location. */
-export async function moveLp(tx: Tx, ctx: DomainCtx, input: { lpId: string; toLocationId: string; refs?: TxnRefs; type?: TxnType }): Promise<TxnRow[]> {
+export async function moveLp(
+  tx: Tx,
+  ctx: DomainCtx,
+  input: { lpId: string; toLocationId: string; refs?: TxnRefs; type?: TxnType },
+): Promise<TxnRow[]> {
   const lp = await getLp(tx, input.lpId);
   const to = await getLocation(tx, input.toLocationId);
-  if (lp.warehouseId !== to.warehouseId) throw ruleViolation("The LP and location must be in the same warehouse.");
-  if (lp.locationId === to.id) throw new DomainError("VALIDATION", `LP ${lp.number} is already in location ${to.code}.`);
+  if (lp.warehouseId !== to.warehouseId)
+    throw ruleViolation('The LP and location must be in the same warehouse.');
+  if (lp.locationId === to.id)
+    throw new DomainError('VALIDATION', `LP ${lp.number} is already in location ${to.code}.`);
   if (lp.locationId) await assertSourceMovable(tx, lp.locationId);
   const ids = await lpTree(tx, lp.id);
-  await tx.update(schema.licensePlates).set({ locationId: to.id, updatedBy: ctx.userId }).where(inArray(schema.licensePlates.id, ids));
-  const buckets = await tx.select().from(schema.inventory).where(and(inArray(schema.inventory.lpId, ids), gt(schema.inventory.onHand, 0)))
+  await tx
+    .update(schema.licensePlates)
+    .set({ locationId: to.id, updatedBy: ctx.userId })
+    .where(inArray(schema.licensePlates.id, ids));
+  const buckets = await tx
+    .select()
+    .from(schema.inventory)
+    .where(and(inArray(schema.inventory.lpId, ids), gt(schema.inventory.onHand, 0)))
     .orderBy(asc(schema.inventory.receivedAt), asc(schema.inventory.id));
   const txns: TxnRow[] = [];
-  for (const b of buckets) txns.push(...(await moveWholeBucket(tx, ctx, b, to.id, input.type ?? "Inventory Movement", input.refs)));
+  for (const b of buckets)
+    txns.push(...(await moveWholeBucket(tx, ctx, b, to.id, input.type ?? 'Inventory Movement', input.refs)));
   return txns;
 }

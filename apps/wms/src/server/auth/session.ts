@@ -7,12 +7,12 @@
  *
  * Verification rules live in `session-store.ts` (jti + sv + user_sessions revocation).
  */
-import { cache } from "react";
-import { cookies } from "next/headers";
-import { connection, type NextRequest, type NextResponse } from "next/server";
-import { getAppDb, type AppDb } from "@/server/api/db";
-import { log } from "@/server/log";
-import { resolveSession, type SessionResolution, type SessionUser } from "./session-store";
+import { cache } from 'react';
+import { cookies } from 'next/headers';
+import { connection, type NextRequest, type NextResponse } from 'next/server';
+import { getAppDb, type AppDb } from '@/server/api/db';
+import { log } from '@/server/log';
+import { resolveSession, type SessionResolution, type SessionUser } from './session-store';
 
 export {
   bumpSessionVersion,
@@ -23,27 +23,27 @@ export {
   SESSION_TTL_SECONDS,
   type IssuedSession,
   type SessionUser,
-} from "./session-store";
+} from './session-store';
 
-export const SESSION_COOKIE = "kitstak_session";
+export const SESSION_COOKIE = 'kitstak_session';
 
 /** Legacy alias kept for existing imports. */
-export type SessionRole = SessionUser["role"];
+export type SessionRole = SessionUser['role'];
 
 function isProduction(): boolean {
-  return process.env.NODE_ENV === "production";
+  return process.env.NODE_ENV === 'production';
 }
 
 export interface CookieSpec {
   readonly httpOnly: boolean;
-  readonly sameSite: "lax" | "strict";
+  readonly sameSite: 'lax' | 'strict';
   readonly secure: boolean;
   readonly path: string;
   readonly maxAge: number;
 }
 
 export function sessionCookieOptions(maxAgeSeconds: number): CookieSpec {
-  return { httpOnly: true, sameSite: "lax", secure: isProduction(), path: "/", maxAge: maxAgeSeconds };
+  return { httpOnly: true, sameSite: 'lax', secure: isProduction(), path: '/', maxAge: maxAgeSeconds };
 }
 
 export function setSessionCookie(response: NextResponse, token: string, maxAgeSeconds: number): void {
@@ -51,26 +51,29 @@ export function setSessionCookie(response: NextResponse, token: string, maxAgeSe
 }
 
 export function clearSessionCookie(response: NextResponse): void {
-  response.cookies.set(SESSION_COOKIE, "", sessionCookieOptions(0));
+  response.cookies.set(SESSION_COOKIE, '', sessionCookieOptions(0));
 }
 
 /** Verifies the session cookie of a route-handler request. */
-export async function getRequestSession(db: AppDb, request: NextRequest | Request): Promise<SessionResolution> {
+export async function getRequestSession(
+  db: AppDb,
+  request: NextRequest | Request,
+): Promise<SessionResolution> {
   const token = readCookie(request, SESSION_COOKIE);
-  if (!token) return { ok: false, reason: "malformed" };
+  if (!token) return { ok: false, reason: 'malformed' };
   return resolveSession(db, token);
 }
 
 /** Reads a cookie from a `NextRequest` or a plain `Request`. */
 export function readCookie(request: NextRequest | Request, name: string): string | undefined {
   const maybeNext = request as { cookies?: { get(n: string): { value: string } | undefined } };
-  if (maybeNext.cookies && typeof maybeNext.cookies.get === "function") {
+  if (maybeNext.cookies && typeof maybeNext.cookies.get === 'function') {
     return maybeNext.cookies.get(name)?.value || undefined;
   }
-  const header = request.headers.get("cookie") ?? "";
-  for (const part of header.split(";")) {
-    const [rawKey, ...rest] = part.trim().split("=");
-    if (rawKey === name) return decodeURIComponent(rest.join("=")) || undefined;
+  const header = request.headers.get('cookie') ?? '';
+  for (const part of header.split(';')) {
+    const [rawKey, ...rest] = part.trim().split('=');
+    if (rawKey === name) return decodeURIComponent(rest.join('=')) || undefined;
   }
   return undefined;
 }
@@ -92,7 +95,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     const resolution = await resolveSession(db, token);
     return resolution.ok ? resolution.user : null;
   } catch (error: unknown) {
-    log.error("getSessionUser failed", { component: "auth", err: error });
+    log.error('getSessionUser failed', { component: 'auth', err: error });
     return null;
   }
 });

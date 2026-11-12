@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
 /**
  * Generic record picker (BUILD_PLAN F4.4): "Add Location" / "Add Product" modal with
  * the full toolbar (search mode, filter builder, chips) over any list endpoint, and
  * checkbox selection that survives paging. Grid state stays in memory (no URL change).
  */
-import * as React from "react";
-import type { ColumnDef } from "@tanstack/react-table";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
-import { DisabledReason } from "@/components/ui/tooltip";
-import { DataGrid } from "@/components/grid/data-grid";
-import { GridToolbar } from "@/components/grid/grid-toolbar";
-import type { FilterFieldDef } from "@/components/grid/grid-types";
-import { useLocalGrid } from "@/components/grid/use-grid";
+import * as React from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
+import { DisabledReason } from '@/components/ui/tooltip';
+import { DataGrid } from '@/components/grid/data-grid';
+import { GridToolbar } from '@/components/grid/grid-toolbar';
+import type { FilterFieldDef } from '@/components/grid/grid-types';
+import { useLocalGrid } from '@/components/grid/use-grid';
 
 export interface RecordPickerProps<T> {
   readonly open: boolean;
@@ -34,7 +34,22 @@ export interface RecordPickerProps<T> {
   readonly onConfirm: (rows: readonly T[]) => void | Promise<void>;
 }
 
-function PickerBody<T>({ onOpenChange, title, description, gridKey, path, columns, fields = [], getRowId, extraQuery, excludeIds = [], maxSelection, confirmLabel = "Add", searchPlaceholder = "Search", onConfirm }: Omit<RecordPickerProps<T>, "open">) {
+function PickerBody<T>({
+  onOpenChange,
+  title,
+  description,
+  gridKey,
+  path,
+  columns,
+  fields = [],
+  getRowId,
+  extraQuery,
+  excludeIds = [],
+  maxSelection,
+  confirmLabel = 'Add',
+  searchPlaceholder = 'Search',
+  onConfirm,
+}: Omit<RecordPickerProps<T>, 'open'>) {
   const g = useLocalGrid<T>({ gridKey, path, fields, extraQuery });
   const [picked, setPicked] = React.useState<ReadonlyMap<string, T>>(new Map());
   const [pending, setPending] = React.useState(false);
@@ -50,7 +65,13 @@ function PickerBody<T>({ onOpenChange, title, description, gridKey, path, column
     g.gridProps.onSelectionChange({ ...next });
   };
   const count = g.selectedIds.length;
-  const reason = pending ? "Adding…" : count === 0 ? "Select at least one record" : maxSelection && count > maxSelection ? `Select at most ${maxSelection}` : null;
+  const reason = pending
+    ? 'Adding…'
+    : count === 0
+      ? 'Select at least one record'
+      : maxSelection && count > maxSelection
+        ? `Select at most ${maxSelection}`
+        : null;
 
   const confirm = async () => {
     const rows = g.selectedIds.map((id) => picked.get(id)).filter((r): r is T => r !== undefined);
@@ -68,7 +89,17 @@ function PickerBody<T>({ onOpenChange, title, description, gridKey, path, column
       <DialogHeader title={title} description={description} />
       <div className="flex min-h-0 flex-1 flex-col">
         <GridToolbar {...g.toolbarProps} searchPlaceholder={searchPlaceholder} views={undefined} />
-        <DataGrid<T> {...g.gridProps} gridKey={undefined} queryString={undefined} columns={columns} getRowId={getRowId} onSelectionChange={onSelectionChange} canSelectRow={(row) => !excluded.has(getRowId(row))} onAllMatchingSelectedChange={undefined} className="pb-3" />
+        <DataGrid<T>
+          {...g.gridProps}
+          gridKey={undefined}
+          queryString={undefined}
+          columns={columns}
+          getRowId={getRowId}
+          onSelectionChange={onSelectionChange}
+          canSelectRow={(row) => !excluded.has(getRowId(row))}
+          onAllMatchingSelectedChange={undefined}
+          className="pb-3"
+        />
       </div>
       <DialogFooter>
         <span className="mr-auto text-xs text-secondary">
@@ -80,7 +111,7 @@ function PickerBody<T>({ onOpenChange, title, description, gridKey, path, column
         <DisabledReason reason={reason}>
           <Button variant="primary" disabled={Boolean(reason)} onClick={() => void confirm()}>
             {confirmLabel}
-            {count ? ` (${count})` : ""}
+            {count ? ` (${count})` : ''}
           </Button>
         </DisabledReason>
       </DialogFooter>

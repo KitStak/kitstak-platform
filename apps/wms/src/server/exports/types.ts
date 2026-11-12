@@ -7,11 +7,19 @@
  * `null`, the runner uses the generic provider, which exports exactly what the grid's
  * list endpoint returns for the same query.
  */
-import type { AppDb } from "@/server/api/db";
-import type { AuthContext } from "@/server/auth/context";
-import type { GridQuery } from "@/server/query/grid-query";
+import type { AppDb } from '@/server/api/db';
+import type { AuthContext } from '@/server/auth/context';
+import type { GridQuery } from '@/server/query/grid-query';
 
-export const EXPORT_COLUMN_TYPES = ["text", "integer", "number", "money", "date", "datetime", "boolean"] as const;
+export const EXPORT_COLUMN_TYPES = [
+  'text',
+  'integer',
+  'number',
+  'money',
+  'date',
+  'datetime',
+  'boolean',
+] as const;
 export type ExportColumnType = (typeof EXPORT_COLUMN_TYPES)[number];
 
 export interface ExportColumn {

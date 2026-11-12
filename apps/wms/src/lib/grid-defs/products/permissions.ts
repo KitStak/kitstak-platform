@@ -5,5 +5,8 @@
  * Total Inventory view key (held by the default operator and viewer roles). Every mutation
  * stays gated by its own `settings.products.*` / `settings.product_listing.*` key.
  */
-export const PRODUCT_READ_PERMISSIONS = ["settings.products.view", "inventory.total_inventory.view"] as const;
-export const LISTING_READ_PERMISSIONS = ["settings.product_listing.view", "inventory.total_inventory.view"] as const;
+export const PRODUCT_READ_PERMISSIONS = ['settings.products.view', 'inventory.total_inventory.view'] as const;
+export const LISTING_READ_PERMISSIONS = [
+  'settings.product_listing.view',
+  'inventory.total_inventory.view',
+] as const;

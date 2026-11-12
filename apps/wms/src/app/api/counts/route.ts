@@ -1,9 +1,9 @@
 /** `GET /api/counts` — Count Plan grid (grid grammar). `POST` — Create New Count. */
-import { defineRoute } from "@/server/api/define-route";
-import { created, listResult } from "@/server/api/envelope";
-import { COUNT_PERMISSIONS as P } from "@/lib/grid-defs/counts/count-grids";
-import { countPlanInputSchema, createCountPlan, listCountPlans } from "@/server/repositories/counts-plans";
-import { domainCtx } from "@/server/repositories/platform-common";
+import { defineRoute } from '@/server/api/define-route';
+import { created, listResult } from '@/server/api/envelope';
+import { COUNT_PERMISSIONS as P } from '@/lib/grid-defs/counts/count-grids';
+import { countPlanInputSchema, createCountPlan, listCountPlans } from '@/server/repositories/counts-plans';
+import { domainCtx } from '@/server/repositories/platform-common';
 
 export const GET = defineRoute({
   permission: P.view,
@@ -16,5 +16,6 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   permission: P.create,
   body: countPlanInputSchema,
-  handler: async ({ db, auth, actor, body }) => created(await createCountPlan(db, domainCtx(actor, auth), auth, body)),
+  handler: async ({ db, auth, actor, body }) =>
+    created(await createCountPlan(db, domainCtx(actor, auth), auth, body)),
 });

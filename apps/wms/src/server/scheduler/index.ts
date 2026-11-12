@@ -9,12 +9,18 @@
  * - Disabled under vitest, with `SCHEDULER_ENABLED=0`, and on Vercel (`VERCEL` set), where
  *   Vercel Cron drives `/api/cron/tick` every minute instead (vercel.json).
  */
-import { randomUUID } from "node:crypto";
-import os from "node:os";
-import { getAppDb } from "@/server/api/db";
-import { SCHEDULER_TASKS } from "./registry";
-import { createSchedulerRunner, TICK_INTERVAL_MS, type SchedulerHeartbeat, type SchedulerRunner, type TickResult } from "./runner";
-import type { SchedulerTask } from "./types";
+import { randomUUID } from 'node:crypto';
+import os from 'node:os';
+import { getAppDb } from '@/server/api/db';
+import { SCHEDULER_TASKS } from './registry';
+import {
+  createSchedulerRunner,
+  TICK_INTERVAL_MS,
+  type SchedulerHeartbeat,
+  type SchedulerRunner,
+  type TickResult,
+} from './runner';
+import type { SchedulerTask } from './types';
 
 export interface SchedulerStartResult {
   readonly started: boolean;
@@ -61,10 +67,12 @@ function sharedRunner(): SchedulerRunner {
 
 syncRunnerTasks();
 
-export function schedulerDisabledReason(env: Readonly<Record<string, string | undefined>> = process.env): string | null {
-  if (env.VITEST) return "Scheduler disabled under test";
-  if (env.SCHEDULER_ENABLED === "0") return "Scheduler disabled (SCHEDULER_ENABLED=0)";
-  if (env.VERCEL) return "Scheduler disabled on Vercel (Vercel Cron calls /api/cron/tick)";
+export function schedulerDisabledReason(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string | null {
+  if (env.VITEST) return 'Scheduler disabled under test';
+  if (env.SCHEDULER_ENABLED === '0') return 'Scheduler disabled (SCHEDULER_ENABLED=0)';
+  if (env.VERCEL) return 'Scheduler disabled on Vercel (Vercel Cron calls /api/cron/tick)';
   return null;
 }
 
@@ -72,7 +80,7 @@ export async function startScheduler(): Promise<SchedulerStartResult> {
   const disabled = schedulerDisabledReason();
   if (disabled) return { started: false, reason: disabled };
   const runner = sharedRunner();
-  if (runner.heartbeat().running) return { started: true, reason: "Already running" };
+  if (runner.heartbeat().running) return { started: true, reason: 'Already running' };
   runner.start();
   return { started: true };
 }
@@ -88,18 +96,20 @@ export async function runSchedulerTick(): Promise<TickResult> {
 
 export function getSchedulerHeartbeat(): SchedulerHeartbeat {
   syncRunnerTasks();
-  return globalThis.__kitstakScheduler?.heartbeat() ?? {
-    running: false,
-    ownerId: "",
-    startedAt: null,
-    lastTickAt: null,
-    lastTickStatus: null,
-    tickIntervalMs: TICK_INTERVAL_MS,
-    tasks: SCHEDULER_TASKS.map((task) => ({ key: task.key, configured: task.configured })),
-  };
+  return (
+    globalThis.__kitstakScheduler?.heartbeat() ?? {
+      running: false,
+      ownerId: '',
+      startedAt: null,
+      lastTickAt: null,
+      lastTickStatus: null,
+      tickIntervalMs: TICK_INTERVAL_MS,
+      tasks: SCHEDULER_TASKS.map((task) => ({ key: task.key, configured: task.configured })),
+    }
+  );
 }
 
-export { verifyCronAuthorization, type CronAuthResult } from "./cron-auth";
-export { SCHEDULER_TASKS } from "./registry";
-export type { SchedulerHeartbeat, TickResult } from "./runner";
-export type { SchedulerTask, TaskResult } from "./types";
+export { verifyCronAuthorization, type CronAuthResult } from './cron-auth';
+export { SCHEDULER_TASKS } from './registry';
+export type { SchedulerHeartbeat, TickResult } from './runner';
+export type { SchedulerTask, TaskResult } from './types';

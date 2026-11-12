@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { ListFilter, Search, X } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Dropdown } from "@/components/ui/dropdown";
+import * as React from 'react';
+import { ListFilter, Search, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Dropdown } from '@/components/ui/dropdown';
 
 export function GridSearch({
   value,
   onChange,
-  placeholder = "Search by code",
+  placeholder = 'Search by code',
   className,
 }: {
   value: string;
@@ -18,7 +18,7 @@ export function GridSearch({
   className?: string;
 }) {
   return (
-    <div className={cn("relative", className)}>
+    <div className={cn('relative', className)}>
       <Search
         className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint"
         aria-hidden
@@ -34,7 +34,7 @@ export function GridSearch({
         <button
           type="button"
           aria-label="Clear search"
-          onClick={() => onChange("")}
+          onClick={() => onChange('')}
           className="absolute right-2 top-1/2 -translate-y-1/2 text-faint transition-colors hover:text-secondary"
         >
           <X className="h-3.5 w-3.5" aria-hidden />
@@ -64,11 +64,7 @@ export function FilterButton({
     <>
       <Dropdown
         trigger={(open) => (
-          <Button
-            variant="secondary"
-            size="md"
-            className={cn(open && "border-primary text-primary")}
-          >
+          <Button variant="secondary" size="md" className={cn(open && 'border-primary text-primary')}>
             <ListFilter className="h-3.5 w-3.5" aria-hidden />
             Filter
             {appliedCount > 0 ? (
@@ -84,14 +80,10 @@ export function FilterButton({
           <div className="flex flex-col gap-2.5">
             {filters.map((filter) => (
               <label key={filter.key} className="flex flex-col gap-1">
-                <span className="text-2xs font-semibold text-secondary">
-                  {filter.label}
-                </span>
+                <span className="text-2xs font-semibold text-secondary">{filter.label}</span>
                 <select
-                  value={applied[filter.key] ?? ""}
-                  onChange={(e) =>
-                    onApply({ ...applied, [filter.key]: e.target.value })
-                  }
+                  value={applied[filter.key] ?? ''}
+                  onChange={(e) => onApply({ ...applied, [filter.key]: e.target.value })}
                   className="h-8 rounded-md border border-border-strong/70 bg-surface px-2 text-sm text-body focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/25"
                 >
                   <option value="">All</option>
@@ -134,7 +126,7 @@ export function FilterButton({
               <button
                 type="button"
                 aria-label={`Remove ${label} filter`}
-                onClick={() => onApply({ ...applied, [key]: "" })}
+                onClick={() => onApply({ ...applied, [key]: '' })}
                 className="transition-opacity hover:opacity-70"
               >
                 <X className="h-3 w-3" aria-hidden />

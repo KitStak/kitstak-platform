@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "../styles/tokens.css";
+@import 'tailwindcss';
+@import '../styles/tokens.css';
 
 /* Dark variant follows the resolved theme attribute (set before paint by the theme script). */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
@@ -130,9 +130,8 @@
   --color-info-subtle: var(--info-subtle);
   --color-info-text: var(--info-text);
 
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    Roboto, sans-serif;
-  --font-display: var(--font-bebas), "Oswald", "Arial Narrow", sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: var(--font-bebas), 'Oswald', 'Arial Narrow', sans-serif;
 
   --shadow-xs: var(--elevation-xs);
   --shadow-sm: var(--elevation-sm);
@@ -198,9 +197,15 @@ html body[data-scroll-locked] {
 body {
   background: var(--background);
   color: var(--text-body);
-  font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    Roboto, sans-serif;
-  font-feature-settings: "cv05", "cv11";
+  font-family:
+    var(--font-inter),
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-feature-settings: 'cv05', 'cv11';
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -265,9 +270,9 @@ body {
 
 .tabular-nums,
 table,
-[role="grid"],
-[role="table"],
-input[type="number"] {
+[role='grid'],
+[role='table'],
+input[type='number'] {
   /* Data reads in columns: tabular numerals by default. */
   font-variant-numeric: tabular-nums;
 }
@@ -312,7 +317,7 @@ html[data-route-pending] #main-content {
 
 /* Grid: indeterminate progress bar while stale rows are shown (DataGrid `refreshing`). */
 .ks-grid-progress::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: 0 auto 0 0;
   width: 30%;

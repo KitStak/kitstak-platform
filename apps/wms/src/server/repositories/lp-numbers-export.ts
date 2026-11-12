@@ -3,8 +3,8 @@
  * Reads the same repository query as the list endpoint, so "Export As Excel" matches
  * the filtered, sorted grid exactly (scope applied by the repository).
  */
-import type { ExportProvider, ExportRow } from "@/server/exports/types";
-import { listLpNumbers } from "./lp-numbers";
+import type { ExportProvider, ExportRow } from '@/server/exports/types';
+import { listLpNumbers } from './lp-numbers';
 
 export const lpNumbersExport: ExportProvider = {
   async fetchPage(ctx, page, pageSize) {

@@ -2,30 +2,50 @@
  * Shipment Plan read models (M02): the plan grid, Plan Orders, Plan LPs, the plan detail
  * page and the eligible-order picker. Every read is scoped (warehouse + client).
  */
-import { sql, type SQL } from "drizzle-orm";
-import { SHIPMENT_PLAN_STATUSES, type ShipmentPlanStatus } from "@/lib/enums";
+import { sql, type SQL } from 'drizzle-orm';
+import { SHIPMENT_PLAN_STATUSES, type ShipmentPlanStatus } from '@/lib/enums';
 import {
-  LOADED_ORDER_STATUSES, PLAN_ELIGIBLE_ORDER_FIELDS, PLAN_ELIGIBLE_ORDER_STATUSES, PLAN_LP_FIELDS, PLAN_LP_SEARCH_FIELDS, PLAN_LP_SORT_FIELDS,
-  PLAN_ORDER_FIELDS, PLAN_ORDER_SEARCH_FIELDS, PLAN_ORDER_SORT_FIELDS, SHIPMENT_PLAN_FIELDS, SHIPMENT_PLAN_SEARCH_FIELDS,
-  SHIPMENT_PLAN_SORT_FIELDS, ACTIVE_PLAN_STATUSES, deriveFromOrders, in3ToFt3, ozToLb, planDeleteBlockReason, planEditBlockReason, planShipBlockReason, planCarrierFromOrders, planStatusBlocks,
-} from "@/lib/grid-defs/shipping/shipment-plans";
-import type { AppDb } from "@/server/api/db";
-import { notFoundError } from "@/server/api/errors";
-import type { AuthContext } from "@/server/auth/context";
-import { assertInScope, type Scope } from "@/server/auth/scope";
-import { stateMachines } from "@/server/domain/state-machines";
-import type { GridQuery } from "@/server/query/grid-query";
-import { compileGrid, scopeSql, whereClause, type GridSpec } from "./shipping-grid";
-import { formatAddress, type ListResult } from "./shipping";
-import { dbAll, dbGet } from "@/server/db/sql";
+  LOADED_ORDER_STATUSES,
+  PLAN_ELIGIBLE_ORDER_FIELDS,
+  PLAN_ELIGIBLE_ORDER_STATUSES,
+  PLAN_LP_FIELDS,
+  PLAN_LP_SEARCH_FIELDS,
+  PLAN_LP_SORT_FIELDS,
+  PLAN_ORDER_FIELDS,
+  PLAN_ORDER_SEARCH_FIELDS,
+  PLAN_ORDER_SORT_FIELDS,
+  SHIPMENT_PLAN_FIELDS,
+  SHIPMENT_PLAN_SEARCH_FIELDS,
+  SHIPMENT_PLAN_SORT_FIELDS,
+  ACTIVE_PLAN_STATUSES,
+  deriveFromOrders,
+  in3ToFt3,
+  ozToLb,
+  planDeleteBlockReason,
+  planEditBlockReason,
+  planShipBlockReason,
+  planCarrierFromOrders,
+  planStatusBlocks,
+} from '@/lib/grid-defs/shipping/shipment-plans';
+import type { AppDb } from '@/server/api/db';
+import { notFoundError } from '@/server/api/errors';
+import type { AuthContext } from '@/server/auth/context';
+import { assertInScope, type Scope } from '@/server/auth/scope';
+import { stateMachines } from '@/server/domain/state-machines';
+import type { GridQuery } from '@/server/query/grid-query';
+import { compileGrid, scopeSql, whereClause, type GridSpec } from './shipping-grid';
+import { formatAddress, type ListResult } from './shipping';
+import { dbAll, dbGet } from '@/server/db/sql';
 
 const raw = (expr: string): SQL => sql.raw(expr);
-const statusList = (values: readonly string[]): string => values.map((v) => `'${v.replace(/'/g, "''")}'`).join(", ");
+const statusList = (values: readonly string[]): string =>
+  values.map((v) => `'${v.replace(/'/g, "''")}'`).join(', ');
 
 const LOADED_SQL = statusList(LOADED_ORDER_STATUSES);
-const SHIPPED_SQL = statusList(["Shipped", "Partially Shipped", "Delivered"]);
+const SHIPPED_SQL = statusList(['Shipped', 'Partially Shipped', 'Delivered']);
 /** Order `o` has no active shipping label (Ship refuses it; see shipPlan). */
-const UNLABELED_SQL = "NOT EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id AND s.label_type = 'Shipping Label' AND s.label_status = 'Active')";
+const UNLABELED_SQL =
+  "NOT EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id AND s.label_type = 'Shipping Label' AND s.label_status = 'Active')";
 /** Single distinct non-blank value of an order column across the plan's orders (detail page "from orders" rule). */
 const fromOrders = (col: string): string =>
   `(SELECT CASE WHEN COUNT(DISTINCT NULLIF(TRIM(${col}), '')) = 1 THEN MAX(NULLIF(TRIM(${col}), '')) END FROM shipment_plan_orders x JOIN shipment_orders o ON o.id = x.order_id WHERE x.plan_id = p.id)`;
@@ -42,30 +62,38 @@ const PLAN_FROM = raw(`
 `);
 
 const PLAN_SQL: Readonly<Record<string, SQL>> = {
-  code: raw("p.code"),
-  status: raw("p.status"),
-  warehouseCode: raw("w.code"),
-  clientName: raw("c.name"),
-  customerName: raw(`COALESCE(cu.first_name || ' ' || cu.last_name, ${fromOrders("o.customer_name")})`),
-  customerAddress: raw(`COALESCE(ad.line1, ${fromOrders("o.ship_address")})`),
-  createdAt: raw("p.created_at"),
-  plannedShipmentAt: raw("p.planned_shipment_at"),
+  code: raw('p.code'),
+  status: raw('p.status'),
+  warehouseCode: raw('w.code'),
+  clientName: raw('c.name'),
+  customerName: raw(`COALESCE(cu.first_name || ' ' || cu.last_name, ${fromOrders('o.customer_name')})`),
+  customerAddress: raw(`COALESCE(ad.line1, ${fromOrders('o.ship_address')})`),
+  createdAt: raw('p.created_at'),
+  plannedShipmentAt: raw('p.planned_shipment_at'),
   actualShipmentAt: raw(`(CASE WHEN p.status = 'Shipped' THEN p.actual_shipment_at END)`),
-  carrierName: raw("COALESCE(cc.account_prefix, (SELECT string_agg(DISTINCT (COALESCE(occ.account_prefix, NULLIF(o.carrier, '')))::text, ',') FROM shipment_plan_orders x JOIN shipment_orders o ON o.id = x.order_id LEFT JOIN carrier_connections occ ON occ.id = o.carrier_connection_id WHERE x.plan_id = p.id))"),
-  truckPlateNumber: raw("p.truck_plate_number"),
-  loadingGate: raw("g.code"),
-  retailerName: raw("r.name"),
-  loadingStartedAt: raw("p.loading_started_at"),
-  loadingCompletedAt: raw("p.loading_completed_at"),
-  truckDepartedAt: raw("p.truck_departed_at"),
-  orderCount: raw("(SELECT COUNT(*) FROM shipment_plan_orders x WHERE x.plan_id = p.id)"),
-  loadedPercent: raw(`(SELECT CASE WHEN COUNT(*) = 0 THEN 0 ELSE 100.0::float8 * SUM((o.status IN (${LOADED_SQL}))::int) / COUNT(*) END FROM shipment_plan_orders x JOIN shipment_orders o ON o.id = x.order_id WHERE x.plan_id = p.id)`),
-  expectedTotalWeight: raw("p.expected_total_weight"),
+  carrierName: raw(
+    "COALESCE(cc.account_prefix, (SELECT string_agg(DISTINCT (COALESCE(occ.account_prefix, NULLIF(o.carrier, '')))::text, ',') FROM shipment_plan_orders x JOIN shipment_orders o ON o.id = x.order_id LEFT JOIN carrier_connections occ ON occ.id = o.carrier_connection_id WHERE x.plan_id = p.id))",
+  ),
+  truckPlateNumber: raw('p.truck_plate_number'),
+  loadingGate: raw('g.code'),
+  retailerName: raw('r.name'),
+  loadingStartedAt: raw('p.loading_started_at'),
+  loadingCompletedAt: raw('p.loading_completed_at'),
+  truckDepartedAt: raw('p.truck_departed_at'),
+  orderCount: raw('(SELECT COUNT(*) FROM shipment_plan_orders x WHERE x.plan_id = p.id)'),
+  loadedPercent: raw(
+    `(SELECT CASE WHEN COUNT(*) = 0 THEN 0 ELSE 100.0::float8 * SUM((o.status IN (${LOADED_SQL}))::int) / COUNT(*) END FROM shipment_plan_orders x JOIN shipment_orders o ON o.id = x.order_id WHERE x.plan_id = p.id)`,
+  ),
+  expectedTotalWeight: raw('p.expected_total_weight'),
 };
 
 export const PLAN_GRID: GridSpec = {
-  fields: SHIPMENT_PLAN_FIELDS, sqlFor: PLAN_SQL, searchFields: SHIPMENT_PLAN_SEARCH_FIELDS, sortFields: SHIPMENT_PLAN_SORT_FIELDS,
-  defaultSort: [{ field: "createdAt", dir: "desc" }], tiebreaker: raw("p.id"),
+  fields: SHIPMENT_PLAN_FIELDS,
+  sqlFor: PLAN_SQL,
+  searchFields: SHIPMENT_PLAN_SEARCH_FIELDS,
+  sortFields: SHIPMENT_PLAN_SORT_FIELDS,
+  defaultSort: [{ field: 'createdAt', dir: 'desc' }],
+  tiebreaker: raw('p.id'),
 };
 
 const PLAN_SELECT = raw(`
@@ -158,17 +186,17 @@ function parseJson(text: string | null): Record<string, string | boolean | null>
   if (!text) return {};
   try {
     const value = JSON.parse(text) as unknown;
-    return value && typeof value === "object" ? (value as Record<string, string | boolean | null>) : {};
+    return value && typeof value === 'object' ? (value as Record<string, string | boolean | null>) : {};
   } catch {
     return {};
   }
 }
 
 function parseConsignees(text: unknown): (string | null)[][] {
-  if (typeof text !== "string" || !text) return [];
+  if (typeof text !== 'string' || !text) return [];
   try {
     const v = JSON.parse(text) as unknown;
-    return Array.isArray(v) ? v.filter(Array.isArray) as (string | null)[][] : [];
+    return Array.isArray(v) ? (v.filter(Array.isArray) as (string | null)[][]) : [];
   } catch {
     return [];
   }
@@ -178,13 +206,21 @@ export function toPlanRow(r: PlanRaw): PlanRow {
   const { adLine1, adLine2, adCity, adState, adZip, adCountry } = r;
   const consignees = parseConsignees(r.orderConsignees);
   // Same rule as the detail page: the plan's own consignee, else the one its orders share, else "Mixed (n)".
-  const customer = deriveFromOrders(r.customerName as string | null, consignees.map((c) => c[0]));
-  const address = deriveFromOrders(adLine1 ? formatAddress([adLine1, adLine2, adCity, adState, adZip, adCountry]) : null, consignees.map((c) => formatAddress(c.slice(1))));
+  const customer = deriveFromOrders(
+    r.customerName as string | null,
+    consignees.map((c) => c[0]),
+  );
+  const address = deriveFromOrders(
+    adLine1 ? formatAddress([adLine1, adLine2, adCity, adState, adZip, adCountry]) : null,
+    consignees.map((c) => formatAddress(c.slice(1))),
+  );
   const { orderConsignees: _omit, ...rest } = r;
   void _omit;
   return {
     ...rest,
-    carrierName: r.carrierPrefix ? `${r.carrierSetupName ?? ""} - ${r.carrierPrefix}`.replace(/^ - /, "") : planCarrierFromOrders(r.orderCarriers as string | null),
+    carrierName: r.carrierPrefix
+      ? `${r.carrierSetupName ?? ''} - ${r.carrierPrefix}`.replace(/^ - /, '')
+      : planCarrierFromOrders(r.orderCarriers as string | null),
     statusBlocks: planStatusBlocks(r.orderCount, r.loadedCount),
     customerName: customer.value,
     customerNameHint: customer.hint,
@@ -197,24 +233,40 @@ export function toPlanRow(r: PlanRaw): PlanRow {
     nextStatuses: stateMachines.shipmentPlan.nextStatuses(r.status),
     deleteBlockedReason: planDeleteBlockReason(r.status),
     editBlockedReason: planEditBlockReason(r.status),
-    shipBlockedReason: planShipBlockReason(r.status, r.orderCount, r.loadedCount, r.shippedCount, Number(r.unlabeledReadyCount ?? 0), r.unlabeledReadyCodes as string | null),
+    shipBlockedReason: planShipBlockReason(
+      r.status,
+      r.orderCount,
+      r.loadedCount,
+      r.shippedCount,
+      Number(r.unlabeledReadyCount ?? 0),
+      r.unlabeledReadyCodes as string | null,
+    ),
   } as PlanRow;
 }
 
-const planScope = (scope: Scope): SQL => scopeSql(raw("p.warehouse_id"), raw("p.client_id"), scope);
+const planScope = (scope: Scope): SQL => scopeSql(raw('p.warehouse_id'), raw('p.client_id'), scope);
 
-export async function listPlans(db: AppDb, auth: AuthContext, query: GridQuery): Promise<ListResult<PlanRow>> {
+export async function listPlans(
+  db: AppDb,
+  auth: AuthContext,
+  query: GridQuery,
+): Promise<ListResult<PlanRow>> {
   const grid = compileGrid(PLAN_GRID, query, planScope(auth.viewScope));
-  const rows = await dbAll<PlanRaw>(db, sql`SELECT ${PLAN_SELECT} FROM ${PLAN_FROM} ${whereClause(grid.where)} ORDER BY ${sql.join(grid.orderBy, sql`, `)} LIMIT ${grid.pageSize} OFFSET ${grid.offset}`);
-  const total = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM ${PLAN_FROM} ${whereClause(grid.where)}`))?.n ?? 0;
+  const rows = await dbAll<PlanRaw>(
+    db,
+    sql`SELECT ${PLAN_SELECT} FROM ${PLAN_FROM} ${whereClause(grid.where)} ORDER BY ${sql.join(grid.orderBy, sql`, `)} LIMIT ${grid.pageSize} OFFSET ${grid.offset}`,
+  );
+  const total =
+    (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM ${PLAN_FROM} ${whereClause(grid.where)}`))
+      ?.n ?? 0;
   return { rows: rows.map(toPlanRow), total };
 }
 
 /** One plan in the caller's full scope (cross-scope → 404). */
 export async function loadPlanRow(db: AppDb, scope: Scope, id: string): Promise<PlanRow> {
   const r = await dbGet<PlanRaw>(db, sql`SELECT ${PLAN_SELECT} FROM ${PLAN_FROM} WHERE p.id = ${id}`);
-  if (!r) throw notFoundError("Shipment plan");
-  assertInScope(scope, r, "Shipment plan");
+  if (!r) throw notFoundError('Shipment plan');
+  assertInScope(scope, r, 'Shipment plan');
   return toPlanRow(r);
 }
 
@@ -231,27 +283,34 @@ const ORDER_FROM = raw(`
 `);
 
 const ORDER_SQL: Readonly<Record<string, SQL>> = {
-  planCode: raw("p.code"),
-  orderCode: raw("o.code"),
-  orderStatus: raw("o.status"),
-  planStatus: raw("spo.status"),
-  warehouseCode: raw("w.code"),
-  customerName: raw("o.customer_name"),
-  customerAddress: raw("o.ship_address"),
+  planCode: raw('p.code'),
+  orderCode: raw('o.code'),
+  orderStatus: raw('o.status'),
+  planStatus: raw('spo.status'),
+  warehouseCode: raw('w.code'),
+  customerName: raw('o.customer_name'),
+  customerAddress: raw('o.ship_address'),
   carrierName: raw("COALESCE(cc.account_prefix, NULLIF(o.carrier, ''))"),
-  lpShippingOption: raw("o.requested_shipping_option"),
-  clientName: raw("c.name"),
-  truckPlateNumber: raw("p.truck_plate_number"),
-  orderCarrier: raw("o.carrier"),
-  shippingService: raw("o.shipping_service"),
-  loadingGate: raw("g.code"),
-  plannedShipmentAt: raw("p.planned_shipment_at"),
-  truckDepartedAt: raw("p.truck_departed_at"),
+  lpShippingOption: raw('o.requested_shipping_option'),
+  clientName: raw('c.name'),
+  truckPlateNumber: raw('p.truck_plate_number'),
+  orderCarrier: raw('o.carrier'),
+  shippingService: raw('o.shipping_service'),
+  loadingGate: raw('g.code'),
+  plannedShipmentAt: raw('p.planned_shipment_at'),
+  truckDepartedAt: raw('p.truck_departed_at'),
 };
 
 export const PLAN_ORDER_GRID: GridSpec = {
-  fields: PLAN_ORDER_FIELDS, sqlFor: ORDER_SQL, searchFields: PLAN_ORDER_SEARCH_FIELDS, sortFields: PLAN_ORDER_SORT_FIELDS,
-  defaultSort: [{ field: "planCode", dir: "desc" }, { field: "orderCode", dir: "asc" }], tiebreaker: raw("spo.order_id"),
+  fields: PLAN_ORDER_FIELDS,
+  sqlFor: ORDER_SQL,
+  searchFields: PLAN_ORDER_SEARCH_FIELDS,
+  sortFields: PLAN_ORDER_SORT_FIELDS,
+  defaultSort: [
+    { field: 'planCode', dir: 'desc' },
+    { field: 'orderCode', dir: 'asc' },
+  ],
+  tiebreaker: raw('spo.order_id'),
 };
 
 export type PlanOrderRow = Readonly<Record<string, unknown>> & {
@@ -261,22 +320,53 @@ export type PlanOrderRow = Readonly<Record<string, unknown>> & {
 };
 
 const ORDER_SELECT = sql.join(
-  [raw("(spo.plan_id || ':' || spo.order_id) AS id"), raw("spo.plan_id AS \"planId\""), raw("spo.order_id AS \"orderId\""),
-    raw("o.ship_address2 AS \"shipAddress2\""), raw("o.ship_city AS \"shipCity\""), raw("o.ship_state AS \"shipState\""), raw("o.ship_zip AS \"shipZip\""),
-    raw("o.ship_country AS \"shipCountry\""), raw("o.total_quantity AS \"totalQuantity\""), raw("cc.setup_name AS \"carrierSetupName\""),
-    ...Object.entries(ORDER_SQL).map(([alias, expr]) => sql`${expr} AS ${sql.identifier(alias)}`)],
+  [
+    raw("(spo.plan_id || ':' || spo.order_id) AS id"),
+    raw('spo.plan_id AS "planId"'),
+    raw('spo.order_id AS "orderId"'),
+    raw('o.ship_address2 AS "shipAddress2"'),
+    raw('o.ship_city AS "shipCity"'),
+    raw('o.ship_state AS "shipState"'),
+    raw('o.ship_zip AS "shipZip"'),
+    raw('o.ship_country AS "shipCountry"'),
+    raw('o.total_quantity AS "totalQuantity"'),
+    raw('cc.setup_name AS "carrierSetupName"'),
+    ...Object.entries(ORDER_SQL).map(([alias, expr]) => sql`${expr} AS ${sql.identifier(alias)}`),
+  ],
   sql`, `,
 );
 
 function withOrderAddress<T extends Record<string, unknown>>(r: T): T {
-  return { ...r, customerAddress: formatAddress([r.customerAddress as string, r.shipAddress2 as string, r.shipCity as string, r.shipState as string, r.shipZip as string, r.shipCountry as string]) };
+  return {
+    ...r,
+    customerAddress: formatAddress([
+      r.customerAddress as string,
+      r.shipAddress2 as string,
+      r.shipCity as string,
+      r.shipState as string,
+      r.shipZip as string,
+      r.shipCountry as string,
+    ]),
+  };
 }
 
-export async function listPlanOrders(db: AppDb, auth: AuthContext, query: GridQuery, planId?: string): Promise<ListResult<PlanOrderRow>> {
-  const base = planId ? sql`${planScope(auth.viewScope)} AND spo.plan_id = ${planId}` : planScope(auth.viewScope);
+export async function listPlanOrders(
+  db: AppDb,
+  auth: AuthContext,
+  query: GridQuery,
+  planId?: string,
+): Promise<ListResult<PlanOrderRow>> {
+  const base = planId
+    ? sql`${planScope(auth.viewScope)} AND spo.plan_id = ${planId}`
+    : planScope(auth.viewScope);
   const grid = compileGrid(PLAN_ORDER_GRID, query, base);
-  const rows = await dbAll<PlanOrderRow>(db, sql`SELECT ${ORDER_SELECT} FROM ${ORDER_FROM} ${whereClause(grid.where)} ORDER BY ${sql.join(grid.orderBy, sql`, `)} LIMIT ${grid.pageSize} OFFSET ${grid.offset}`);
-  const total = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM ${ORDER_FROM} ${whereClause(grid.where)}`))?.n ?? 0;
+  const rows = await dbAll<PlanOrderRow>(
+    db,
+    sql`SELECT ${ORDER_SELECT} FROM ${ORDER_FROM} ${whereClause(grid.where)} ORDER BY ${sql.join(grid.orderBy, sql`, `)} LIMIT ${grid.pageSize} OFFSET ${grid.offset}`,
+  );
+  const total =
+    (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM ${ORDER_FROM} ${whereClause(grid.where)}`))
+      ?.n ?? 0;
   return { rows: rows.map(withOrderAddress), total };
 }
 
@@ -308,24 +398,24 @@ const LP_FROM = raw(`
 `);
 
 const LP_SQL: Readonly<Record<string, SQL>> = {
-  planCode: raw("p.code"),
-  orderCode: raw("o.code"),
-  orderStatus: raw("o.status"),
-  lpNumber: raw("lp.number"),
-  parentLpNumber: raw("plp.number"),
-  planStatus: raw("p.status"),
-  warehouseCode: raw("w.code"),
-  customerName: raw("o.customer_name"),
-  customerAddress: raw("o.ship_address"),
+  planCode: raw('p.code'),
+  orderCode: raw('o.code'),
+  orderStatus: raw('o.status'),
+  lpNumber: raw('lp.number'),
+  parentLpNumber: raw('plp.number'),
+  planStatus: raw('p.status'),
+  warehouseCode: raw('w.code'),
+  customerName: raw('o.customer_name'),
+  customerAddress: raw('o.ship_address'),
   carrierName: raw("COALESCE(cc.account_prefix, NULLIF(o.carrier, ''))"),
-  shippingService: raw("o.shipping_service"),
-  clientName: raw("c.name"),
-  truckPlateNumber: raw("p.truck_plate_number"),
-  lpCarrier: raw("o.carrier"),
-  originalLpNumber: raw("lp.original_number"),
-  loadingGate: raw("g.code"),
-  plannedShipmentAt: raw("p.planned_shipment_at"),
-  truckDepartedAt: raw("p.truck_departed_at"),
+  shippingService: raw('o.shipping_service'),
+  clientName: raw('c.name'),
+  truckPlateNumber: raw('p.truck_plate_number'),
+  lpCarrier: raw('o.carrier'),
+  originalLpNumber: raw('lp.original_number'),
+  loadingGate: raw('g.code'),
+  plannedShipmentAt: raw('p.planned_shipment_at'),
+  truckDepartedAt: raw('p.truck_departed_at'),
   // The LP's own weight when it was weighed; else its contents (units still on it, or the units this order
   // shipped or packed from it) × product weight. NULL (shown as "—") when neither is known, never a fake 0.
   weight: raw(`COALESCE(NULLIF(lp.weight, 0),
@@ -334,26 +424,54 @@ const LP_SQL: Readonly<Record<string, SQL>> = {
       WHERE t.order_id = o.id AND t.type = 'Shipment' AND (t.from_lp_id = lp.id OR t.from_parent_lp_id = lp.id OR t.to_parent_lp_id = lp.id)) / 16.0::float8)::numeric, 2)::float8, 0),
     NULLIF(ROUND(((SELECT SUM(si.quantity * COALESCE(pr.weight_oz, 0)) FROM shipments s JOIN shipment_items si ON si.shipment_id = s.id JOIN products pr ON pr.id = si.product_id
       WHERE s.order_id = o.id AND s.parent_lp_id = lp.id AND s.label_status = 'Active') / 16.0::float8)::numeric, 2)::float8, 0))`),
-  volume: raw("lp.actual_volume"),
+  volume: raw('lp.actual_volume'),
 };
 
 export const PLAN_LP_GRID: GridSpec = {
-  fields: PLAN_LP_FIELDS, sqlFor: LP_SQL, searchFields: PLAN_LP_SEARCH_FIELDS, sortFields: PLAN_LP_SORT_FIELDS,
-  defaultSort: [{ field: "planCode", dir: "desc" }, { field: "lpNumber", dir: "asc" }], tiebreaker: raw("lp.id"),
+  fields: PLAN_LP_FIELDS,
+  sqlFor: LP_SQL,
+  searchFields: PLAN_LP_SEARCH_FIELDS,
+  sortFields: PLAN_LP_SORT_FIELDS,
+  defaultSort: [
+    { field: 'planCode', dir: 'desc' },
+    { field: 'lpNumber', dir: 'asc' },
+  ],
+  tiebreaker: raw('lp.id'),
 };
 
 const LP_SELECT = sql.join(
-  [raw("(spo.plan_id || ':' || lp.id || ':' || o.id) AS id"), raw("spo.plan_id AS \"planId\""), raw("o.id AS \"orderId\""), raw("lp.id AS \"lpId\""),
-    raw("o.ship_address2 AS \"shipAddress2\""), raw("o.ship_city AS \"shipCity\""), raw("o.ship_state AS \"shipState\""), raw("o.ship_zip AS \"shipZip\""), raw("o.ship_country AS \"shipCountry\""),
-    ...Object.entries(LP_SQL).map(([alias, expr]) => sql`${expr} AS ${sql.identifier(alias)}`)],
+  [
+    raw("(spo.plan_id || ':' || lp.id || ':' || o.id) AS id"),
+    raw('spo.plan_id AS "planId"'),
+    raw('o.id AS "orderId"'),
+    raw('lp.id AS "lpId"'),
+    raw('o.ship_address2 AS "shipAddress2"'),
+    raw('o.ship_city AS "shipCity"'),
+    raw('o.ship_state AS "shipState"'),
+    raw('o.ship_zip AS "shipZip"'),
+    raw('o.ship_country AS "shipCountry"'),
+    ...Object.entries(LP_SQL).map(([alias, expr]) => sql`${expr} AS ${sql.identifier(alias)}`),
+  ],
   sql`, `,
 );
 
-export async function listPlanLps(db: AppDb, auth: AuthContext, query: GridQuery, planId?: string): Promise<ListResult<PlanOrderRow>> {
-  const base = planId ? sql`${planScope(auth.viewScope)} AND spo.plan_id = ${planId}` : planScope(auth.viewScope);
+export async function listPlanLps(
+  db: AppDb,
+  auth: AuthContext,
+  query: GridQuery,
+  planId?: string,
+): Promise<ListResult<PlanOrderRow>> {
+  const base = planId
+    ? sql`${planScope(auth.viewScope)} AND spo.plan_id = ${planId}`
+    : planScope(auth.viewScope);
   const grid = compileGrid(PLAN_LP_GRID, query, base);
-  const rows = await dbAll<PlanOrderRow>(db, sql`SELECT ${LP_SELECT} FROM ${LP_FROM} ${whereClause(grid.where)} ORDER BY ${sql.join(grid.orderBy, sql`, `)} LIMIT ${grid.pageSize} OFFSET ${grid.offset}`);
-  const total = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM ${LP_FROM} ${whereClause(grid.where)}`))?.n ?? 0;
+  const rows = await dbAll<PlanOrderRow>(
+    db,
+    sql`SELECT ${LP_SELECT} FROM ${LP_FROM} ${whereClause(grid.where)} ORDER BY ${sql.join(grid.orderBy, sql`, `)} LIMIT ${grid.pageSize} OFFSET ${grid.offset}`,
+  );
+  const total =
+    (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM ${LP_FROM} ${whereClause(grid.where)}`))
+      ?.n ?? 0;
   return { rows: rows.map(withOrderAddress), total };
 }
 
@@ -362,26 +480,44 @@ export async function listPlanLps(db: AppDb, auth: AuthContext, query: GridQuery
 const ELIGIBLE_FIELDS = PLAN_ELIGIBLE_ORDER_FIELDS;
 
 const ELIGIBLE_SQL: Readonly<Record<string, SQL>> = {
-  code: raw("o.code"),
-  status: raw("o.status"),
-  orderType: raw("COALESCE(lv.name, o.order_type)"),
-  storeName: raw("COALESCE(o.store_name, o.channel)"),
-  warehouseCode: raw("w.code"),
-  createdAt: raw("o.created_at"),
-  clientName: raw("c.name"),
-  customerName: raw("o.customer_name"),
-  totalQuantity: raw("o.total_quantity"),
-  sku: raw("(SELECT string_agg((pp.sku)::text, ', ') FROM order_lines ol JOIN products pp ON pp.id = ol.product_id WHERE ol.order_id = o.id)"),
-  storeOrderNumber: raw("o.store_order_number"),
+  code: raw('o.code'),
+  status: raw('o.status'),
+  orderType: raw('COALESCE(lv.name, o.order_type)'),
+  storeName: raw('COALESCE(o.store_name, o.channel)'),
+  warehouseCode: raw('w.code'),
+  createdAt: raw('o.created_at'),
+  clientName: raw('c.name'),
+  customerName: raw('o.customer_name'),
+  totalQuantity: raw('o.total_quantity'),
+  sku: raw(
+    "(SELECT string_agg((pp.sku)::text, ', ') FROM order_lines ol JOIN products pp ON pp.id = ol.product_id WHERE ol.order_id = o.id)",
+  ),
+  storeOrderNumber: raw('o.store_order_number'),
   /** Logiwa AGE: whole days since the order was created. */
-  ageDays: raw("trunc(EXTRACT(EPOCH FROM (now() - (o.created_at)::timestamptz)) / 86400.0::float8)::int"),
-  tags: raw("(SELECT string_agg((tg.name)::text, ', ') FROM entity_tags et JOIN tags tg ON tg.id = et.tag_id WHERE et.entity_type = 'shipment_order' AND et.entity_id = o.id)"),
+  ageDays: raw('trunc(EXTRACT(EPOCH FROM (now() - (o.created_at)::timestamptz)) / 86400.0::float8)::int'),
+  tags: raw(
+    "(SELECT string_agg((tg.name)::text, ', ') FROM entity_tags et JOIN tags tg ON tg.id = et.tag_id WHERE et.entity_type = 'shipment_order' AND et.entity_id = o.id)",
+  ),
 };
 
 export const ELIGIBLE_GRID: GridSpec = {
-  fields: ELIGIBLE_FIELDS, sqlFor: ELIGIBLE_SQL, searchFields: ["code", "storeOrderNumber", "customerName"],
-  sortFields: ["code", "status", "orderType", "storeName", "warehouseCode", "createdAt", "ageDays", "clientName", "customerName", "totalQuantity"],
-  defaultSort: [{ field: "createdAt", dir: "asc" }], tiebreaker: raw("o.id"),
+  fields: ELIGIBLE_FIELDS,
+  sqlFor: ELIGIBLE_SQL,
+  searchFields: ['code', 'storeOrderNumber', 'customerName'],
+  sortFields: [
+    'code',
+    'status',
+    'orderType',
+    'storeName',
+    'warehouseCode',
+    'createdAt',
+    'ageDays',
+    'clientName',
+    'customerName',
+    'totalQuantity',
+  ],
+  defaultSort: [{ field: 'createdAt', dir: 'asc' }],
+  tiebreaker: raw('o.id'),
 };
 
 export { ELIGIBLE_FIELDS };
@@ -400,17 +536,38 @@ export type EligibleOrderRow = Readonly<Record<string, unknown>> & {
 };
 
 /** Orders that may join a plan in `warehouseId` (optionally one client), excluding those in another active plan. */
-export async function listEligibleOrders(db: AppDb, auth: AuthContext, query: GridQuery, input: { warehouseId: string; clientId?: string | null; planId?: string | null }): Promise<ListResult<EligibleOrderRow>> {
+export async function listEligibleOrders(
+  db: AppDb,
+  auth: AuthContext,
+  query: GridQuery,
+  input: { warehouseId: string; clientId?: string | null; planId?: string | null },
+): Promise<ListResult<EligibleOrderRow>> {
   const active = statusList(ACTIVE_PLAN_STATUSES);
-  const base = sql`${scopeSql(raw("o.warehouse_id"), raw("o.client_id"), auth.scope)} AND o.deleted_at IS NULL
+  const base = sql`${scopeSql(raw('o.warehouse_id'), raw('o.client_id'), auth.scope)} AND o.deleted_at IS NULL
     AND o.warehouse_id = ${input.warehouseId} ${input.clientId ? sql`AND o.client_id = ${input.clientId}` : sql``}
     AND o.status IN (${raw(statusList(PLAN_ELIGIBLE_ORDER_STATUSES))})
     AND NOT EXISTS (SELECT 1 FROM shipment_plan_orders x JOIN shipment_plans xp ON xp.id = x.plan_id
       WHERE x.order_id = o.id AND xp.status IN (${raw(active)}) ${input.planId ? sql`AND xp.id <> ${input.planId}` : sql``})`;
   const grid = compileGrid(ELIGIBLE_GRID, query, base);
-  const select = sql.join([raw("o.id AS id"), raw("o.total_weight_oz AS \"totalWeightOz\""), ...Object.entries(ELIGIBLE_SQL).map(([alias, expr]) => sql`${expr} AS ${sql.identifier(alias)}`)], sql`, `);
-  const rows = await dbAll<EligibleOrderRow>(db, sql`SELECT ${select} FROM ${ELIGIBLE_FROM} ${whereClause(grid.where)} ORDER BY ${sql.join(grid.orderBy, sql`, `)} LIMIT ${grid.pageSize} OFFSET ${grid.offset}`);
-  const total = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM ${ELIGIBLE_FROM} ${whereClause(grid.where)}`))?.n ?? 0;
+  const select = sql.join(
+    [
+      raw('o.id AS id'),
+      raw('o.total_weight_oz AS "totalWeightOz"'),
+      ...Object.entries(ELIGIBLE_SQL).map(([alias, expr]) => sql`${expr} AS ${sql.identifier(alias)}`),
+    ],
+    sql`, `,
+  );
+  const rows = await dbAll<EligibleOrderRow>(
+    db,
+    sql`SELECT ${select} FROM ${ELIGIBLE_FROM} ${whereClause(grid.where)} ORDER BY ${sql.join(grid.orderBy, sql`, `)} LIMIT ${grid.pageSize} OFFSET ${grid.offset}`,
+  );
+  const total =
+    (
+      await dbGet<{ n: number }>(
+        db,
+        sql`SELECT COUNT(*) AS n FROM ${ELIGIBLE_FROM} ${whereClause(grid.where)}`,
+      )
+    )?.n ?? 0;
   return { rows, total };
 }
 
@@ -419,7 +576,12 @@ export async function listEligibleOrders(db: AppDb, auth: AuthContext, query: Gr
 export type PlanDetail = PlanRow & {
   readonly orders: readonly PlanOrderRow[];
   readonly lps: readonly PlanOrderRow[];
-  readonly timeline: readonly { readonly at: string; readonly message: string; readonly source: string | null; readonly type: string }[];
+  readonly timeline: readonly {
+    readonly at: string;
+    readonly message: string;
+    readonly source: string | null;
+    readonly type: string;
+  }[];
   readonly statuses: readonly ShipmentPlanStatus[];
 };
 
@@ -436,14 +598,26 @@ export interface OrderLineTotals {
  * Weight, volume and units of the orders' open lines (quantity − cancelled), in scope. The single
  * source for the create/edit estimate, the automatic expected load and the detail page's card.
  */
-export async function sumOrderLines(db: AppDb, scope: Scope, orderIds: readonly string[]): Promise<OrderLineTotals> {
+export async function sumOrderLines(
+  db: AppDb,
+  scope: Scope,
+  orderIds: readonly string[],
+): Promise<OrderLineTotals> {
   const ids = [...new Set(orderIds)];
   if (ids.length === 0) return { weightLb: 0, volumeFt3: 0, units: 0, orders: 0, missingDimsProducts: 0 };
-  const rows = await dbAll<{ productId: string; qty: number; weightOz: number | null; in3: number | null }>(db, sql`
+  const rows = await dbAll<{ productId: string; qty: number; weightOz: number | null; in3: number | null }>(
+    db,
+    sql`
     SELECT ol.product_id AS "productId", (ol.quantity - ol.cancelled_quantity) AS qty, p.weight_oz AS "weightOz", (p.length_in * p.width_in * p.height_in) AS in3
     FROM order_lines ol JOIN shipment_orders o ON o.id = ol.order_id JOIN products p ON p.id = ol.product_id
-    WHERE ol.order_id IN (${sql.join(ids.map((o) => sql`${o}`), sql`, `)}) AND ${scopeSql(raw("o.warehouse_id"), raw("o.client_id"), scope)}`);
-  const missing = new Set(rows.filter((r) => !(Number(r.weightOz) > 0) || !(Number(r.in3) > 0)).map((r) => r.productId));
+    WHERE ol.order_id IN (${sql.join(
+      ids.map((o) => sql`${o}`),
+      sql`, `,
+    )}) AND ${scopeSql(raw('o.warehouse_id'), raw('o.client_id'), scope)}`,
+  );
+  const missing = new Set(
+    rows.filter((r) => !(Number(r.weightOz) > 0) || !(Number(r.in3) > 0)).map((r) => r.productId),
+  );
   return {
     weightLb: ozToLb(rows.reduce((s, r) => s + Number(r.qty) * Number(r.weightOz ?? 0), 0)),
     volumeFt3: in3ToFt3(rows.reduce((s, r) => s + Number(r.qty) * Number(r.in3 ?? 0), 0)),
@@ -457,7 +631,10 @@ export async function sumOrderLines(db: AppDb, scope: Scope, orderIds: readonly 
 export async function resolvePlanId(db: AppDb, idOrCode: string): Promise<string> {
   const byId = await dbGet<{ id: string }>(db, sql`SELECT id FROM shipment_plans WHERE id = ${idOrCode}`);
   if (byId) return byId.id;
-  const byCode = await dbGet<{ id: string }>(db, sql`SELECT id FROM shipment_plans WHERE lower(code) = lower(${idOrCode}) ORDER BY created_at DESC LIMIT 1`);
+  const byCode = await dbGet<{ id: string }>(
+    db,
+    sql`SELECT id FROM shipment_plans WHERE lower(code) = lower(${idOrCode}) ORDER BY created_at DESC LIMIT 1`,
+  );
   return byCode?.id ?? idOrCode;
 }
 
@@ -465,14 +642,27 @@ export async function getPlanDetail(db: AppDb, auth: AuthContext, idOrCode: stri
   const id = await resolvePlanId(db, idOrCode);
   const plan = await loadPlanRow(db, auth.scope, id);
   const fullScope = { ...auth, viewScope: auth.scope };
-  const page = { q: undefined, qm: "sw" as const, filters: [], sort: [], page: 1, pageSize: 1000 };
+  const page = { q: undefined, qm: 'sw' as const, filters: [], sort: [], page: 1, pageSize: 1000 };
   const orders = (await listPlanOrders(db, fullScope, page, id)).rows;
   const lps = (await listPlanLps(db, fullScope, page, id)).rows;
-  const timeline = await dbAll<{ at: string; message: string; source: string | null; type: string }>(db, sql`
-    SELECT at, message, source, type FROM change_log WHERE entity_type = 'shipment_plan' AND entity_id = ${id} ORDER BY at DESC, rowid DESC LIMIT 100`);
-  const lines = await sumOrderLines(db, auth.scope, orders.map((o) => String(o.orderId)));
+  const timeline = await dbAll<{ at: string; message: string; source: string | null; type: string }>(
+    db,
+    sql`
+    SELECT at, message, source, type FROM change_log WHERE entity_type = 'shipment_plan' AND entity_id = ${id} ORDER BY at DESC, rowid DESC LIMIT 100`,
+  );
+  const lines = await sumOrderLines(
+    db,
+    auth.scope,
+    orders.map((o) => String(o.orderId)),
+  );
   return {
-    ...plan, orderWeightLb: lines.weightLb, orderVolumeFt3: lines.volumeFt3, missingDimsProducts: lines.missingDimsProducts,
-    orders, lps, timeline, statuses: SHIPMENT_PLAN_STATUSES,
+    ...plan,
+    orderWeightLb: lines.weightLb,
+    orderVolumeFt3: lines.volumeFt3,
+    missingDimsProducts: lines.missingDimsProducts,
+    orders,
+    lps,
+    timeline,
+    statuses: SHIPMENT_PLAN_STATUSES,
   };
 }

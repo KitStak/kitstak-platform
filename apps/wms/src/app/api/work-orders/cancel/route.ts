@@ -1,9 +1,9 @@
 /** `POST /api/work-orders/cancel { ids }`: cancel work orders (releases allocations, tasks, job). Per-id BulkResult. */
-import { defineRoute } from "@/server/api/define-route";
-import { runBulk } from "@/server/domain";
-import { z } from "zod";
-import { idsBodySchema, plannerBody, WO_PERMISSIONS, woCtx } from "@/server/repositories/work-orders-api";
-import { cancelWorkOrder } from "@/server/repositories/work-orders-commands";
+import { defineRoute } from '@/server/api/define-route';
+import { runBulk } from '@/server/domain';
+import { z } from 'zod';
+import { idsBodySchema, plannerBody, WO_PERMISSIONS, woCtx } from '@/server/repositories/work-orders-api';
+import { cancelWorkOrder } from '@/server/repositories/work-orders-commands';
 
 export const POST = defineRoute({
   permission: WO_PERMISSIONS.edit,

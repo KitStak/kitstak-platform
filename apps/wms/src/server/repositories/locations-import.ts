@@ -5,47 +5,83 @@
  * validation (zod `locationSaveSchema`), code-uniqueness, capacity checks and field-level
  * change_log rows. Template cells are mapped to the wizard's enums by `normalize*` (PURE).
  */
-import { and, eq, sql } from "drizzle-orm";
-import { asc } from "@/server/db/order";
-import type { AppDb } from "@/server/api/db";
-import { AppError } from "@/server/api/errors";
-import type { AuthContext } from "@/server/auth/context";
-import { hasClient } from "@/server/auth/scope";
-import * as s from "@/server/db/schema";
-import type { ImportApplyContext, ImportApplyResult, ImportRowValues } from "@/server/imports/types";
-import { AREA_TYPES, LOCATION_TYPES } from "@/lib/enums";
-import { LOCATION_INFO_DEFAULTS, locationSaveSchema, type LocationInfoInput, type LocationSaveInput } from "@/lib/grid-defs/facility/locations";
-import { createLocation, getLocation, updateLocation, type LocationDetail } from "./locations";
-import { type Actor } from "./locations-shared";
+import { and, eq, sql } from 'drizzle-orm';
+import { asc } from '@/server/db/order';
+import type { AppDb } from '@/server/api/db';
+import { AppError } from '@/server/api/errors';
+import type { AuthContext } from '@/server/auth/context';
+import { hasClient } from '@/server/auth/scope';
+import * as s from '@/server/db/schema';
+import type { ImportApplyContext, ImportApplyResult, ImportRowValues } from '@/server/imports/types';
+import { AREA_TYPES, LOCATION_TYPES } from '@/lib/enums';
+import {
+  LOCATION_INFO_DEFAULTS,
+  locationSaveSchema,
+  type LocationInfoInput,
+  type LocationSaveInput,
+} from '@/lib/grid-defs/facility/locations';
+import { createLocation, getLocation, updateLocation, type LocationDetail } from './locations';
+import { type Actor } from './locations-shared';
 
 /* ---------------- pure cell helpers ---------------- */
 
-export const cell = (v: unknown): string => (v === null || v === undefined ? "" : String(v).trim());
-const has = (v: unknown): boolean => cell(v) !== "";
-const squash = (v: string): string => v.toLowerCase().replace(/[^a-z0-9]/g, "");
+export const cell = (v: unknown): string => (v === null || v === undefined ? '' : String(v).trim());
+const has = (v: unknown): boolean => cell(v) !== '';
+const squash = (v: string): string => v.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const LOCATION_TYPE_ALIASES: Readonly<Record<string, (typeof LOCATION_TYPES)[number]>> = {
-  rack: "Racks", racks: "Racks", shelf: "Shelves", shelves: "Shelves", shelving: "Shelves", bin: "Bins", bins: "Bins",
-  virtual: "Virtual", businessstation: "BusinessStation", station: "BusinessStation", ramp: "Ramps", ramps: "Ramps",
+  rack: 'Racks',
+  racks: 'Racks',
+  shelf: 'Shelves',
+  shelves: 'Shelves',
+  shelving: 'Shelves',
+  bin: 'Bins',
+  bins: 'Bins',
+  virtual: 'Virtual',
+  businessstation: 'BusinessStation',
+  station: 'BusinessStation',
+  ramp: 'Ramps',
+  ramps: 'Ramps',
 };
 
 const AREA_TYPE_ALIASES: Readonly<Record<string, (typeof AREA_TYPES)[number]>> = {
-  pick: "Picking", picking: "Picking", storage: "Storage", reserve: "Storage", bulk: "Storage", receiving: "Receiving", receive: "Receiving",
-  dock: "Receiving", returns: "Returns", return: "Returns", packing: "Packing", pack: "Packing", shipment: "Shipment", shipping: "Shipment",
-  ship: "Shipment", kitting: "Kitting", kit: "Kitting", loading: "Loading", load: "Loading",
+  pick: 'Picking',
+  picking: 'Picking',
+  storage: 'Storage',
+  reserve: 'Storage',
+  bulk: 'Storage',
+  receiving: 'Receiving',
+  receive: 'Receiving',
+  dock: 'Receiving',
+  returns: 'Returns',
+  return: 'Returns',
+  packing: 'Packing',
+  pack: 'Packing',
+  shipment: 'Shipment',
+  shipping: 'Shipment',
+  ship: 'Shipment',
+  kitting: 'Kitting',
+  kit: 'Kitting',
+  loading: 'Loading',
+  load: 'Loading',
 };
 
 /** Maps a template "Location Type" cell to the wizard enum; throws a row error when unknown. */
 export function normalizeLocationType(raw: string): (typeof LOCATION_TYPES)[number] {
   const hit = LOCATION_TYPE_ALIASES[squash(raw)];
-  if (!hit) throw new AppError("VALIDATION", `Location type "${raw}" is not valid. Use one of: ${LOCATION_TYPES.join(", ")}`);
+  if (!hit)
+    throw new AppError(
+      'VALIDATION',
+      `Location type "${raw}" is not valid. Use one of: ${LOCATION_TYPES.join(', ')}`,
+    );
   return hit;
 }
 
 /** Maps a template "Area Type" cell to the wizard enum; throws a row error when unknown. */
 export function normalizeAreaType(raw: string): (typeof AREA_TYPES)[number] {
   const hit = AREA_TYPE_ALIASES[squash(raw)];
-  if (!hit) throw new AppError("VALIDATION", `Area type "${raw}" is not valid. Use one of: ${AREA_TYPES.join(", ")}`);
+  if (!hit)
+    throw new AppError('VALIDATION', `Area type "${raw}" is not valid. Use one of: ${AREA_TYPES.join(', ')}`);
   return hit;
 }
 
@@ -54,56 +90,123 @@ export function wholeNumber(raw: unknown, label: string): number {
   const text = cell(raw);
   if (!text) return 0;
   const n = Number(text);
-  if (!Number.isInteger(n) || n < 0) throw new AppError("VALIDATION", `${label} must be a whole number (got "${text}")`);
+  if (!Number.isInteger(n) || n < 0)
+    throw new AppError('VALIDATION', `${label} must be a whole number (got "${text}")`);
   return n;
 }
 
-const truthy = (v: unknown): boolean => v === true || ["yes", "true", "1", "y"].includes(cell(v).toLowerCase());
+const truthy = (v: unknown): boolean =>
+  v === true || ['yes', 'true', '1', 'y'].includes(cell(v).toLowerCase());
 
 /** First zod issue of a failed save as a row error ("info.code: message"). */
 function parseSave(input: LocationSaveInput) {
   const parsed = locationSaveSchema.safeParse(input);
   if (parsed.success) return parsed.data;
   const issue = parsed.error.issues[0];
-  const field = issue?.path.filter((p) => p !== "info").join(".") ?? "";
-  throw new AppError("VALIDATION", field ? `${field}: ${issue?.message}` : issue?.message ?? "Invalid row");
+  const field = issue?.path.filter((p) => p !== 'info').join('.') ?? '';
+  throw new AppError('VALIDATION', field ? `${field}: ${issue?.message}` : (issue?.message ?? 'Invalid row'));
 }
 
 /* ---------------- lookups ---------------- */
 
 /** Import rows record their channel ("Import · <email>") so the change log can show Logiwa's SOURCE column. */
-const actorOf = (ctx: ImportApplyContext): Actor => ({ userId: ctx.actor.userId, source: ctx.actor.source.startsWith("Import · ") ? ctx.actor.source : `Import · ${ctx.actor.source}` });
+const actorOf = (ctx: ImportApplyContext): Actor => ({
+  userId: ctx.actor.userId,
+  source: ctx.actor.source.startsWith('Import · ') ? ctx.actor.source : `Import · ${ctx.actor.source}`,
+});
 
-export async function findWarehouseByCode(db: AppDb, auth: AuthContext, code: string): Promise<{ id: string; code: string }> {
-  const row = (await db.select({ id: s.warehouses.id, code: s.warehouses.code }).from(s.warehouses).where(sql`lower(${s.warehouses.code}) = lower(${code})`).limit(1))[0];
-  if (!row || !auth.scope.warehouseIds.includes(row.id)) throw new AppError("VALIDATION", `Warehouse "${code}" not found`);
+export async function findWarehouseByCode(
+  db: AppDb,
+  auth: AuthContext,
+  code: string,
+): Promise<{ id: string; code: string }> {
+  const row = (
+    await db
+      .select({ id: s.warehouses.id, code: s.warehouses.code })
+      .from(s.warehouses)
+      .where(sql`lower(${s.warehouses.code}) = lower(${code})`)
+      .limit(1)
+  )[0];
+  if (!row || !auth.scope.warehouseIds.includes(row.id))
+    throw new AppError('VALIDATION', `Warehouse "${code}" not found`);
   return row;
 }
 
 async function findLocationId(db: AppDb, warehouseId: string, code: string): Promise<string | null> {
-  return (await db.select({ id: s.locations.id }).from(s.locations).where(and(eq(s.locations.warehouseId, warehouseId), sql`lower(${s.locations.code}) = lower(${code})`)).limit(1))[0]?.id ?? null;
+  return (
+    (
+      await db
+        .select({ id: s.locations.id })
+        .from(s.locations)
+        .where(
+          and(eq(s.locations.warehouseId, warehouseId), sql`lower(${s.locations.code}) = lower(${code})`),
+        )
+        .limit(1)
+    )[0]?.id ?? null
+  );
 }
 
-async function requireLocationId(db: AppDb, warehouseId: string, warehouseCode: string, code: string): Promise<string> {
+async function requireLocationId(
+  db: AppDb,
+  warehouseId: string,
+  warehouseCode: string,
+  code: string,
+): Promise<string> {
   const id = await findLocationId(db, warehouseId, code);
-  if (!id) throw new AppError("VALIDATION", `Location "${code}" not found in ${warehouseCode}`);
+  if (!id) throw new AppError('VALIDATION', `Location "${code}" not found in ${warehouseCode}`);
   return id;
 }
 
 async function findClientId(db: AppDb, auth: AuthContext, code: string): Promise<string> {
-  const row = (await db.select({ id: s.clients.id }).from(s.clients).where(sql`lower(${s.clients.code}) = lower(${code})`).limit(1))[0];
-  if (!row || !hasClient(auth.scope, row.id)) throw new AppError("VALIDATION", `Client "${code}" not found`);
+  const row = (
+    await db
+      .select({ id: s.clients.id })
+      .from(s.clients)
+      .where(sql`lower(${s.clients.code}) = lower(${code})`)
+      .limit(1)
+  )[0];
+  if (!row || !hasClient(auth.scope, row.id)) throw new AppError('VALIDATION', `Client "${code}" not found`);
   return row.id;
 }
 
 /** Warehouse-scoped location group / zone lookup by name; created when missing (same as the wizard's "+ Create"). */
-async function lookupId(db: AppDb, actor: Actor, type: "location_group" | "location_zone", warehouseId: string, name: string): Promise<string | null> {
+async function lookupId(
+  db: AppDb,
+  actor: Actor,
+  type: 'location_group' | 'location_zone',
+  warehouseId: string,
+  name: string,
+): Promise<string | null> {
   if (!name) return null;
   const lv = s.lookupValues;
-  const row = (await db.select({ id: lv.id }).from(lv)
-    .where(and(eq(lv.type, type), sql`lower(${lv.name}) = lower(${name})`, sql`(${lv.warehouseId} = ${warehouseId} OR ${lv.warehouseId} IS NULL)`)).limit(1))[0];
+  const row = (
+    await db
+      .select({ id: lv.id })
+      .from(lv)
+      .where(
+        and(
+          eq(lv.type, type),
+          sql`lower(${lv.name}) = lower(${name})`,
+          sql`(${lv.warehouseId} = ${warehouseId} OR ${lv.warehouseId} IS NULL)`,
+        ),
+      )
+      .limit(1)
+  )[0];
   if (row) return row.id;
-  return (await db.insert(lv).values({ type, name, warehouseId, isActive: true, sortOrder: 0, createdBy: actor.userId, updatedBy: actor.userId }).returning({ id: lv.id }))[0].id;
+  return (
+    await db
+      .insert(lv)
+      .values({
+        type,
+        name,
+        warehouseId,
+        isActive: true,
+        sortOrder: 0,
+        createdBy: actor.userId,
+        updatedBy: actor.userId,
+      })
+      .returning({ id: lv.id })
+  )[0].id;
 }
 
 /* ---------------- detail → save input ---------------- */
@@ -112,33 +215,84 @@ async function lookupId(db: AppDb, actor: Actor, type: "location_group" | "locat
 export function saveInputOf(d: LocationDetail): LocationSaveInput {
   return {
     info: {
-      code: d.code, warehouseId: d.warehouseId, locationGroupId: d.locationGroupId, locationZoneId: d.locationZoneId,
-      locationType: d.locationType ?? "Shelves", areaType: d.areaType ?? "Storage", replenishmentType: d.replenishmentType,
-      walkingPathPriority: d.walkingPathPriority, capacityType: d.capacityType, maxCapacityQty: d.maxCapacityQty, maxSkuQty: d.maxSkuQty,
-      mezzanine: d.mezzanine ?? "", aisle: d.aisle ?? "", rack: d.rack ?? d.bay ?? "", column: d.column, level: Number(d.level) || null, position: d.position ?? "",
-      dimensionUnit: (d.dimensionUnit as LocationInfoInput["dimensionUnit"]) ?? "Inch", height: d.height, width: d.width, length: d.length,
-      volumeUnit: (d.volumeUnit as LocationInfoInput["volumeUnit"]) ?? "Cubic Inch", volume: d.volume,
-      displayMember: d.displayMember ?? "", barcode: d.barcode ?? "", abcCode: d.abcCode, singleClient: d.singleClient, isLocked: d.isLocked,
-      dedicatedClientId: d.dedicatedClientId, printApplyOnPacking: d.printApplyOnPacking, colorCode: d.colorCode ?? "",
-      preventAllocation: d.preventAllocation, preventInventorySync: d.preventInventorySync, onlyOneLot: d.onlyOneLot, onlyDamaged: d.onlyDamaged,
-      onlyOneExpiry: d.onlyOneExpiry, onlyOneSku: d.onlyOneSku, onlyOneLp: d.onlyOneLp, onlyOneProductionDate: d.onlyOneProductionDate,
-      autoRemoveLpAfterReplenishment: d.autoRemoveLpAfterReplenishment, autoRemoveLpAfterTransfer: d.autoRemoveLpAfterTransfer,
+      code: d.code,
+      warehouseId: d.warehouseId,
+      locationGroupId: d.locationGroupId,
+      locationZoneId: d.locationZoneId,
+      locationType: d.locationType ?? 'Shelves',
+      areaType: d.areaType ?? 'Storage',
+      replenishmentType: d.replenishmentType,
+      walkingPathPriority: d.walkingPathPriority,
+      capacityType: d.capacityType,
+      maxCapacityQty: d.maxCapacityQty,
+      maxSkuQty: d.maxSkuQty,
+      mezzanine: d.mezzanine ?? '',
+      aisle: d.aisle ?? '',
+      rack: d.rack ?? d.bay ?? '',
+      column: d.column,
+      level: Number(d.level) || null,
+      position: d.position ?? '',
+      dimensionUnit: (d.dimensionUnit as LocationInfoInput['dimensionUnit']) ?? 'Inch',
+      height: d.height,
+      width: d.width,
+      length: d.length,
+      volumeUnit: (d.volumeUnit as LocationInfoInput['volumeUnit']) ?? 'Cubic Inch',
+      volume: d.volume,
+      displayMember: d.displayMember ?? '',
+      barcode: d.barcode ?? '',
+      abcCode: d.abcCode,
+      singleClient: d.singleClient,
+      isLocked: d.isLocked,
+      dedicatedClientId: d.dedicatedClientId,
+      printApplyOnPacking: d.printApplyOnPacking,
+      colorCode: d.colorCode ?? '',
+      preventAllocation: d.preventAllocation,
+      preventInventorySync: d.preventInventorySync,
+      onlyOneLot: d.onlyOneLot,
+      onlyDamaged: d.onlyDamaged,
+      onlyOneExpiry: d.onlyOneExpiry,
+      onlyOneSku: d.onlyOneSku,
+      onlyOneLp: d.onlyOneLp,
+      onlyOneProductionDate: d.onlyOneProductionDate,
+      autoRemoveLpAfterReplenishment: d.autoRemoveLpAfterReplenishment,
+      autoRemoveLpAfterTransfer: d.autoRemoveLpAfterTransfer,
     },
-    productCapacities: d.productCapacities.map((c) => ({ clientId: c.clientId, productId: c.productId, packType: c.packType, minQty: c.minQty, maxQty: c.maxQty })),
-    lpCapacities: d.lpCapacities.map((c) => ({ lpTypeId: c.lpTypeId, minQty: c.minQty, maxQty: c.maxQty, assignProduct: Boolean(c.productId), clientId: c.clientId, productId: c.productId })),
+    productCapacities: d.productCapacities.map((c) => ({
+      clientId: c.clientId,
+      productId: c.productId,
+      packType: c.packType,
+      minQty: c.minQty,
+      maxQty: c.maxQty,
+    })),
+    lpCapacities: d.lpCapacities.map((c) => ({
+      lpTypeId: c.lpTypeId,
+      minQty: c.minQty,
+      maxQty: c.maxQty,
+      assignProduct: Boolean(c.productId),
+      clientId: c.clientId,
+      productId: c.productId,
+    })),
     version: d.version,
   };
 }
 
 /** Overlays the non-empty template cells of a location row onto `info`. */
-async function overlayInfo(db: AppDb, ctx: ImportApplyContext, warehouseId: string, info: LocationInfoInput, row: ImportRowValues): Promise<LocationInfoInput> {
+async function overlayInfo(
+  db: AppDb,
+  ctx: ImportApplyContext,
+  warehouseId: string,
+  info: LocationInfoInput,
+  row: ImportRowValues,
+): Promise<LocationInfoInput> {
   const actor = actorOf(ctx);
   const next: Record<string, unknown> = { ...info };
-  if (has(row.zone)) next.locationZoneId = await lookupId(db, actor, "location_zone", warehouseId, cell(row.zone));
-  if (has(row.locationGroup)) next.locationGroupId = await lookupId(db, actor, "location_group", warehouseId, cell(row.locationGroup));
+  if (has(row.zone))
+    next.locationZoneId = await lookupId(db, actor, 'location_zone', warehouseId, cell(row.zone));
+  if (has(row.locationGroup))
+    next.locationGroupId = await lookupId(db, actor, 'location_group', warehouseId, cell(row.locationGroup));
   if (has(row.aisle)) next.aisle = cell(row.aisle);
-  if (has(row.column)) next.column = wholeNumber(row.column, "Column");
-  if (has(row.level)) next.level = wholeNumber(row.level, "Level");
+  if (has(row.column)) next.column = wholeNumber(row.column, 'Column');
+  if (has(row.level)) next.level = wholeNumber(row.level, 'Level');
   if (has(row.position)) next.position = cell(row.position);
   if (has(row.locationType)) next.locationType = normalizeLocationType(cell(row.locationType));
   if (has(row.areaType)) next.areaType = normalizeAreaType(cell(row.areaType));
@@ -148,23 +302,44 @@ async function overlayInfo(db: AppDb, ctx: ImportApplyContext, warehouseId: stri
     next.dedicatedClientId = await findClientId(db, ctx.auth, cell(row.clientCode));
   }
   if (has(row.isPickable)) next.preventAllocation = !truthy(row.isPickable);
-  if (has(row.status)) next.isLocked = cell(row.status).toLowerCase() === "inactive";
+  if (has(row.status)) next.isLocked = cell(row.status).toLowerCase() === 'inactive';
   return next as LocationInfoInput;
 }
 
 /* ---------------- location rows ---------------- */
 
-export async function applyLocationImport(ctx: ImportApplyContext, row: ImportRowValues): Promise<ImportApplyResult> {
+export async function applyLocationImport(
+  ctx: ImportApplyContext,
+  row: ImportRowValues,
+): Promise<ImportApplyResult> {
   const { db, auth } = ctx;
   const wh = await findWarehouseByCode(db, auth, cell(row.warehouseCode));
   const code = cell(row.code);
-  if (await findLocationId(db, wh.id, code)) throw new AppError("VALIDATION", `Location ${code} already exists in ${wh.code}; use Bulk Update to change it`);
-  const info = await overlayInfo(db, ctx, wh.id, { ...LOCATION_INFO_DEFAULTS, code, warehouseId: wh.id, areaType: "Storage" }, row);
-  const created = await createLocation(db, auth, actorOf(ctx), parseSave({ info, productCapacities: [], lpCapacities: [] }));
+  if (await findLocationId(db, wh.id, code))
+    throw new AppError(
+      'VALIDATION',
+      `Location ${code} already exists in ${wh.code}; use Bulk Update to change it`,
+    );
+  const info = await overlayInfo(
+    db,
+    ctx,
+    wh.id,
+    { ...LOCATION_INFO_DEFAULTS, code, warehouseId: wh.id, areaType: 'Storage' },
+    row,
+  );
+  const created = await createLocation(
+    db,
+    auth,
+    actorOf(ctx),
+    parseSave({ info, productCapacities: [], lpCapacities: [] }),
+  );
   return { entityId: created.id, message: `Created location ${created.code}` };
 }
 
-export async function applyLocationUpdateImport(ctx: ImportApplyContext, row: ImportRowValues): Promise<ImportApplyResult> {
+export async function applyLocationUpdateImport(
+  ctx: ImportApplyContext,
+  row: ImportRowValues,
+): Promise<ImportApplyResult> {
   const { db, auth } = ctx;
   const wh = await findWarehouseByCode(db, auth, cell(row.warehouseCode));
   const id = await requireLocationId(db, wh.id, wh.code, cell(row.code));
@@ -178,56 +353,124 @@ export async function applyLocationUpdateImport(ctx: ImportApplyContext, row: Im
 
 async function primaryPackType(db: AppDb, productId: string): Promise<string> {
   const pt = s.productPackTypes;
-  return (await db.select({ packType: pt.packType }).from(pt).where(eq(pt.productId, productId)).orderBy(sql`CASE WHEN ${pt.kind} = 'Primary' THEN 0 ELSE 1 END`, asc(pt.uomQty)).limit(1))[0]?.packType ?? "Each";
+  return (
+    (
+      await db
+        .select({ packType: pt.packType })
+        .from(pt)
+        .where(eq(pt.productId, productId))
+        .orderBy(sql`CASE WHEN ${pt.kind} = 'Primary' THEN 0 ELSE 1 END`, asc(pt.uomQty))
+        .limit(1)
+    )[0]?.packType ?? 'Each'
+  );
 }
 
-async function productCapacityRow(ctx: ImportApplyContext, row: ImportRowValues, mode: "add" | "update"): Promise<ImportApplyResult> {
+async function productCapacityRow(
+  ctx: ImportApplyContext,
+  row: ImportRowValues,
+  mode: 'add' | 'update',
+): Promise<ImportApplyResult> {
   const { db, auth } = ctx;
   const wh = await findWarehouseByCode(db, auth, cell(row.warehouseCode));
   const id = await requireLocationId(db, wh.id, wh.code, cell(row.locationCode));
   const clientCode = cell(row.clientCode);
   const clientId = await findClientId(db, auth, clientCode);
   const sku = cell(row.sku);
-  const product = (await db.select({ id: s.products.id }).from(s.products).where(and(eq(s.products.clientId, clientId), sql`lower(${s.products.sku}) = lower(${sku})`)).limit(1))[0];
-  if (!product) throw new AppError("VALIDATION", `SKU "${sku}" not found for client ${clientCode}`);
+  const product = (
+    await db
+      .select({ id: s.products.id })
+      .from(s.products)
+      .where(and(eq(s.products.clientId, clientId), sql`lower(${s.products.sku}) = lower(${sku})`))
+      .limit(1)
+  )[0];
+  if (!product) throw new AppError('VALIDATION', `SKU "${sku}" not found for client ${clientCode}`);
   const current = saveInputOf(await getLocation(db, auth, id));
   const caps = current.productCapacities ?? [];
   const index = caps.findIndex((c) => c.productId === product.id);
   const maxQty = Number(row.maxQty);
-  if (mode === "add" && index >= 0) throw new AppError("VALIDATION", `${sku} already has a capacity in ${cell(row.locationCode)}; use Bulk Update Product Capacity`);
-  if (mode === "update" && index < 0) throw new AppError("VALIDATION", `${sku} has no capacity in ${cell(row.locationCode)} yet; use Bulk Import Product Capacity`);
+  if (mode === 'add' && index >= 0)
+    throw new AppError(
+      'VALIDATION',
+      `${sku} already has a capacity in ${cell(row.locationCode)}; use Bulk Update Product Capacity`,
+    );
+  if (mode === 'update' && index < 0)
+    throw new AppError(
+      'VALIDATION',
+      `${sku} has no capacity in ${cell(row.locationCode)} yet; use Bulk Import Product Capacity`,
+    );
   const existing = index >= 0 ? caps[index] : undefined;
-  const minQty = has(row.minQty) ? Number(row.minQty) : existing?.minQty ?? 0;
-  const entry = { clientId, productId: product.id, packType: existing?.packType ?? await primaryPackType(db, product.id), minQty, maxQty };
+  const minQty = has(row.minQty) ? Number(row.minQty) : (existing?.minQty ?? 0);
+  const entry = {
+    clientId,
+    productId: product.id,
+    packType: existing?.packType ?? (await primaryPackType(db, product.id)),
+    minQty,
+    maxQty,
+  };
   const productCapacities = index >= 0 ? caps.map((c, i) => (i === index ? entry : c)) : [...caps, entry];
   await updateLocation(db, auth, actorOf(ctx), id, parseSave({ ...current, productCapacities }));
-  return { entityId: id, message: `${mode === "add" ? "Added" : "Updated"} ${sku} capacity ${minQty}-${maxQty}` };
+  return {
+    entityId: id,
+    message: `${mode === 'add' ? 'Added' : 'Updated'} ${sku} capacity ${minQty}-${maxQty}`,
+  };
 }
 
-export const applyProductCapacityImport = async (ctx: ImportApplyContext, row: ImportRowValues) => await productCapacityRow(ctx, row, "add");
-export const applyProductCapacityUpdateImport = async (ctx: ImportApplyContext, row: ImportRowValues) => await productCapacityRow(ctx, row, "update");
+export const applyProductCapacityImport = async (ctx: ImportApplyContext, row: ImportRowValues) =>
+  await productCapacityRow(ctx, row, 'add');
+export const applyProductCapacityUpdateImport = async (ctx: ImportApplyContext, row: ImportRowValues) =>
+  await productCapacityRow(ctx, row, 'update');
 
 /* ---------------- LP capacity rows ---------------- */
 
-async function lpCapacityRow(ctx: ImportApplyContext, row: ImportRowValues, mode: "add" | "update"): Promise<ImportApplyResult> {
+async function lpCapacityRow(
+  ctx: ImportApplyContext,
+  row: ImportRowValues,
+  mode: 'add' | 'update',
+): Promise<ImportApplyResult> {
   const { db, auth } = ctx;
   const wh = await findWarehouseByCode(db, auth, cell(row.warehouseCode));
   const id = await requireLocationId(db, wh.id, wh.code, cell(row.locationCode));
   const typeCode = cell(row.lpType);
-  const type = (await db.select({ id: s.lpTypes.id, code: s.lpTypes.code }).from(s.lpTypes).where(and(eq(s.lpTypes.warehouseId, wh.id), sql`lower(${s.lpTypes.code}) = lower(${typeCode})`)).limit(1))[0];
-  if (!type) throw new AppError("VALIDATION", `LP type "${typeCode}" not found in ${wh.code}`);
+  const type = (
+    await db
+      .select({ id: s.lpTypes.id, code: s.lpTypes.code })
+      .from(s.lpTypes)
+      .where(and(eq(s.lpTypes.warehouseId, wh.id), sql`lower(${s.lpTypes.code}) = lower(${typeCode})`))
+      .limit(1)
+  )[0];
+  if (!type) throw new AppError('VALIDATION', `LP type "${typeCode}" not found in ${wh.code}`);
   const current = saveInputOf(await getLocation(db, auth, id));
   const caps = current.lpCapacities ?? [];
   const index = caps.findIndex((c) => c.lpTypeId === type.id);
-  if (mode === "add" && index >= 0) throw new AppError("VALIDATION", `${type.code} already has a capacity in ${cell(row.locationCode)}; use Bulk Update LP Capacity`);
-  if (mode === "update" && index < 0) throw new AppError("VALIDATION", `${type.code} has no capacity in ${cell(row.locationCode)} yet; use Bulk Import LP Capacity`);
+  if (mode === 'add' && index >= 0)
+    throw new AppError(
+      'VALIDATION',
+      `${type.code} already has a capacity in ${cell(row.locationCode)}; use Bulk Update LP Capacity`,
+    );
+  if (mode === 'update' && index < 0)
+    throw new AppError(
+      'VALIDATION',
+      `${type.code} has no capacity in ${cell(row.locationCode)} yet; use Bulk Import LP Capacity`,
+    );
   const maxQty = Number(row.maxLps);
   const existing = index >= 0 ? caps[index] : undefined;
-  const entry = { lpTypeId: type.id, minQty: Math.min(existing?.minQty ?? 0, maxQty), maxQty, assignProduct: existing?.assignProduct ?? false, clientId: existing?.clientId ?? null, productId: existing?.productId ?? null };
+  const entry = {
+    lpTypeId: type.id,
+    minQty: Math.min(existing?.minQty ?? 0, maxQty),
+    maxQty,
+    assignProduct: existing?.assignProduct ?? false,
+    clientId: existing?.clientId ?? null,
+    productId: existing?.productId ?? null,
+  };
   const lpCapacities = index >= 0 ? caps.map((c, i) => (i === index ? entry : c)) : [...caps, entry];
   await updateLocation(db, auth, actorOf(ctx), id, parseSave({ ...current, lpCapacities }));
-  return { entityId: id, message: `${mode === "add" ? "Added" : "Updated"} ${type.code} capacity (max ${maxQty})` };
+  return {
+    entityId: id,
+    message: `${mode === 'add' ? 'Added' : 'Updated'} ${type.code} capacity (max ${maxQty})`,
+  };
 }
 
-export const applyLpCapacityImport = async (ctx: ImportApplyContext, row: ImportRowValues) => await lpCapacityRow(ctx, row, "add");
-export const applyLpCapacityUpdateImport = async (ctx: ImportApplyContext, row: ImportRowValues) => await lpCapacityRow(ctx, row, "update");
+export const applyLpCapacityImport = async (ctx: ImportApplyContext, row: ImportRowValues) =>
+  await lpCapacityRow(ctx, row, 'add');
+export const applyLpCapacityUpdateImport = async (ctx: ImportApplyContext, row: ImportRowValues) =>
+  await lpCapacityRow(ctx, row, 'update');

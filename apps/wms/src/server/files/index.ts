@@ -1,2 +1,2 @@
-export * from "./files";
-export * from "./mime";
+export * from './files';
+export * from './mime';

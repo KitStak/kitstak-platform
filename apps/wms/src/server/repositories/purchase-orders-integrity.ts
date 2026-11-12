@@ -5,34 +5,53 @@
  * `poStatusDrift` lists violations (for `db:verify`); `repairPoStatusDrift` settles them
  * through the same path receiving uses, with change-log rows.
  */
-import { eq, sql } from "drizzle-orm";
-import { dayInZone } from "@/lib/grid-defs/receiving/po-schemas";
-import type { AppDb } from "@/server/api/db";
-import * as schema from "@/server/db/schema";
-import type { DomainCtx } from "@/server/domain";
-import { settleStatus } from "./purchase-orders-receive";
-import { dbAll, dbRun } from "@/server/db/sql";
+import { eq, sql } from 'drizzle-orm';
+import { dayInZone } from '@/lib/grid-defs/receiving/po-schemas';
+import type { AppDb } from '@/server/api/db';
+import * as schema from '@/server/db/schema';
+import type { DomainCtx } from '@/server/domain';
+import { settleStatus } from './purchase-orders-receive';
+import { dbAll, dbRun } from '@/server/db/sql';
 
 export interface PoStatusDrift {
   readonly id: string;
   readonly code: string;
   readonly status: string;
-  readonly expected: "Completed" | "Started";
+  readonly expected: 'Completed' | 'Started';
   readonly ordered: number;
   readonly received: number;
 }
 
 export async function poStatusDrift(db: AppDb): Promise<PoStatusDrift[]> {
-  const rows = await dbAll<{ id: string; code: string; status: string; ordered: number; received: number; lineCount: number; openLines: number }>(db, sql`
+  const rows = await dbAll<{
+    id: string;
+    code: string;
+    status: string;
+    ordered: number;
+    received: number;
+    lineCount: number;
+    openLines: number;
+  }>(
+    db,
+    sql`
     SELECT po.id, po.code, po.status, SUM(l.ordered_quantity) AS ordered, SUM(l.received_quantity) AS received, COUNT(l.id) AS "lineCount",
            SUM(CASE WHEN l.received_quantity < l.ordered_quantity THEN 1 ELSE 0 END) AS "openLines"
     FROM purchase_orders po JOIN purchase_order_lines l ON l.purchase_order_id = po.id
     WHERE po.status IN ('Pending', 'Started', 'Receiving')
-    GROUP BY po.id`);
+    GROUP BY po.id`,
+  );
   const out: PoStatusDrift[] = [];
   for (const r of rows) {
-    const expected = r.openLines === 0 ? "Completed" : r.status === "Receiving" ? "Started" : null;
-    if (expected) out.push({ id: r.id, code: r.code, status: r.status, expected, ordered: r.ordered, received: r.received });
+    const expected = r.openLines === 0 ? 'Completed' : r.status === 'Receiving' ? 'Started' : null;
+    if (expected)
+      out.push({
+        id: r.id,
+        code: r.code,
+        status: r.status,
+        expected,
+        ordered: r.ordered,
+        received: r.received,
+      });
   }
   return out;
 }
@@ -41,10 +60,18 @@ export async function poStatusDrift(db: AppDb): Promise<PoStatusDrift[]> {
 export async function repairPoStatusDrift(tx: AppDb, ctx: DomainCtx): Promise<string[]> {
   const fixed: string[] = [];
   for (const d of await poStatusDrift(tx)) {
-    const row = (await tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, d.id)).limit(1))[0];
+    const row = (
+      await tx.select().from(schema.purchaseOrders).where(eq(schema.purchaseOrders.id, d.id)).limit(1)
+    )[0];
     if (!row) continue;
-    const lastReceipt = (await tx.select({ at: sql<string | null>`MAX(${schema.receipts.receivedAt})` }).from(schema.receipts)
-      .where(sql`${schema.receipts.purchaseOrderId} = ${d.id} AND ${schema.receipts.cancelledAt} IS NULL`).limit(1))[0]?.at ?? undefined;
+    const lastReceipt =
+      (
+        await tx
+          .select({ at: sql<string | null>`MAX(${schema.receipts.receivedAt})` })
+          .from(schema.receipts)
+          .where(sql`${schema.receipts.purchaseOrderId} = ${d.id} AND ${schema.receipts.cancelledAt} IS NULL`)
+          .limit(1)
+      )[0]?.at ?? undefined;
     await settleStatus(tx, ctx, d.id, row.status, lastReceipt);
     fixed.push(d.code);
   }
@@ -54,9 +81,9 @@ export async function repairPoStatusDrift(tx: AppDb, ctx: DomainCtx): Promise<st
 /* ---------------- calendar-date normalisation ---------------- */
 
 export interface CalendarDateFix {
-  readonly table: "receipts" | "purchase_order_lines";
+  readonly table: 'receipts' | 'purchase_order_lines';
   readonly id: string;
-  readonly field: "expiry_date" | "production_date";
+  readonly field: 'expiry_date' | 'production_date';
   readonly from: string;
   readonly to: string;
 }
@@ -67,24 +94,46 @@ export interface CalendarDateFix {
  * time zone. Current writes store YYYY-MM-DD (`dateOnly` / `toDay`).
  */
 export async function calendarDateDrift(db: AppDb): Promise<CalendarDateFix[]> {
-  const tz = new Map((await db.select({ id: schema.warehouses.id, tz: schema.warehouses.timezone }).from(schema.warehouses)).map((w) => [w.id, w.tz || "UTC"]));
+  const tz = new Map(
+    (
+      await db.select({ id: schema.warehouses.id, tz: schema.warehouses.timezone }).from(schema.warehouses)
+    ).map((w) => [w.id, w.tz || 'UTC']),
+  );
   const out: CalendarDateFix[] = [];
-  const scan = (table: CalendarDateFix["table"], rows: readonly { id: string; warehouseId: string; expiry: string | null; production: string | null }[]) => {
+  const scan = (
+    table: CalendarDateFix['table'],
+    rows: readonly { id: string; warehouseId: string; expiry: string | null; production: string | null }[],
+  ) => {
     for (const r of rows) {
-      for (const [field, value] of [["expiry_date", r.expiry], ["production_date", r.production]] as const) {
+      for (const [field, value] of [
+        ['expiry_date', r.expiry],
+        ['production_date', r.production],
+      ] as const) {
         if (!value || /^\d{4}-\d{2}-\d{2}$/.test(value)) continue;
-        const to = dayInZone(value, tz.get(r.warehouseId) ?? "UTC");
+        const to = dayInZone(value, tz.get(r.warehouseId) ?? 'UTC');
         if (to && to !== value) out.push({ table, id: r.id, field, from: value, to });
       }
     }
   };
-  scan("receipts", await dbAll<{ id: string; warehouseId: string; expiry: string | null; production: string | null }>(db, sql`
+  scan(
+    'receipts',
+    await dbAll<{ id: string; warehouseId: string; expiry: string | null; production: string | null }>(
+      db,
+      sql`
     SELECT id, warehouse_id AS "warehouseId", expiry_date AS expiry, production_date AS production FROM receipts
-    WHERE expiry_date ILIKE '%T%' OR production_date ILIKE '%T%'`));
-  scan("purchase_order_lines", await dbAll<{ id: string; warehouseId: string; expiry: string | null; production: string | null }>(db, sql`
+    WHERE expiry_date ILIKE '%T%' OR production_date ILIKE '%T%'`,
+    ),
+  );
+  scan(
+    'purchase_order_lines',
+    await dbAll<{ id: string; warehouseId: string; expiry: string | null; production: string | null }>(
+      db,
+      sql`
     SELECT l.id, po.warehouse_id AS "warehouseId", l.expiry_date AS expiry, l.production_date AS production
     FROM purchase_order_lines l JOIN purchase_orders po ON po.id = l.purchase_order_id
-    WHERE l.expiry_date ILIKE '%T%' OR l.production_date ILIKE '%T%'`));
+    WHERE l.expiry_date ILIKE '%T%' OR l.production_date ILIKE '%T%'`,
+    ),
+  );
   return out;
 }
 
@@ -92,8 +141,10 @@ export async function calendarDateDrift(db: AppDb): Promise<CalendarDateFix[]> {
 export async function repairCalendarDates(tx: AppDb): Promise<CalendarDateFix[]> {
   const fixes = await calendarDateDrift(tx);
   for (const f of fixes) {
-    if (f.table === "receipts") await dbRun(tx, sql`UPDATE receipts SET ${sql.raw(f.field)} = ${f.to} WHERE id = ${f.id}`);
-    else await dbRun(tx, sql`UPDATE purchase_order_lines SET ${sql.raw(f.field)} = ${f.to} WHERE id = ${f.id}`);
+    if (f.table === 'receipts')
+      await dbRun(tx, sql`UPDATE receipts SET ${sql.raw(f.field)} = ${f.to} WHERE id = ${f.id}`);
+    else
+      await dbRun(tx, sql`UPDATE purchase_order_lines SET ${sql.raw(f.field)} = ${f.to} WHERE id = ${f.id}`);
   }
   return fixes;
 }

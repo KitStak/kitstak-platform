@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * Typed search-param state (BUILD_PLAN F4.1).
@@ -12,8 +12,8 @@
  * `router.replace` and refetches the RSC payload.
  * Components using these hooks read `useSearchParams`, so render them inside <Suspense>.
  */
-import * as React from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import * as React from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   EMPTY_GRID_QUERY,
   parseGridQuery,
@@ -22,7 +22,7 @@ import {
   type GridQuery,
   type QuickSearchMode,
   type SortSpec,
-} from "@/server/query/grid-query";
+} from '@/server/query/grid-query';
 
 export const URL_WRITE_DEBOUNCE_MS = 250;
 
@@ -32,7 +32,11 @@ export interface UrlParamDef<T> {
   serialize(value: T): string | null;
 }
 
-function withDefault<T>(fallback: T, parse: (raw: string) => T | undefined, serialize: (value: T) => string): UrlParamDef<T> {
+function withDefault<T>(
+  fallback: T,
+  parse: (raw: string) => T | undefined,
+  serialize: (value: T) => string,
+): UrlParamDef<T> {
   return {
     parse: (raw) => (raw === null ? fallback : (parse(raw) ?? fallback)),
     serialize: (value) => (Object.is(value, fallback) ? null : serialize(value)),
@@ -40,21 +44,36 @@ function withDefault<T>(fallback: T, parse: (raw: string) => T | undefined, seri
 }
 
 export const urlParam = {
-  string: (fallback = ""): UrlParamDef<string> => withDefault(fallback, (raw) => raw, (v) => (v === "" ? "" : v)),
+  string: (fallback = ''): UrlParamDef<string> =>
+    withDefault(
+      fallback,
+      (raw) => raw,
+      (v) => (v === '' ? '' : v),
+    ),
   int: (fallback: number): UrlParamDef<number> =>
     withDefault(fallback, (raw) => (/^-?\d+$/.test(raw) ? Number(raw) : undefined), String),
   bool: (fallback = false): UrlParamDef<boolean> =>
-    withDefault(fallback, (raw) => (raw === "1" || raw === "true" ? true : raw === "0" || raw === "false" ? false : undefined), (v) => (v ? "1" : "0")),
+    withDefault(
+      fallback,
+      (raw) => (raw === '1' || raw === 'true' ? true : raw === '0' || raw === 'false' ? false : undefined),
+      (v) => (v ? '1' : '0'),
+    ),
   enum: <const V extends string>(values: readonly V[], fallback: V): UrlParamDef<V> =>
-    withDefault(fallback, (raw) => (values as readonly string[]).includes(raw) ? (raw as V) : undefined, (v) => v),
+    withDefault(
+      fallback,
+      (raw) => ((values as readonly string[]).includes(raw) ? (raw as V) : undefined),
+      (v) => v,
+    ),
   list: (): UrlParamDef<readonly string[]> => ({
-    parse: (raw) => (raw ? raw.split(",").filter(Boolean) : []),
-    serialize: (value) => (value.length ? value.join(",") : null),
+    parse: (raw) => (raw ? raw.split(',').filter(Boolean) : []),
+    serialize: (value) => (value.length ? value.join(',') : null),
   }),
 } as const;
 
 export type UrlStateDefs = Readonly<Record<string, UrlParamDef<unknown>>>;
-export type UrlStateValues<D extends UrlStateDefs> = { readonly [K in keyof D]: D[K] extends UrlParamDef<infer T> ? T : never };
+export type UrlStateValues<D extends UrlStateDefs> = {
+  readonly [K in keyof D]: D[K] extends UrlParamDef<infer T> ? T : never;
+};
 
 export function readUrlState<D extends UrlStateDefs>(defs: D, params: URLSearchParams): UrlStateValues<D> {
   const out: Record<string, unknown> = {};
@@ -63,13 +82,17 @@ export function readUrlState<D extends UrlStateDefs>(defs: D, params: URLSearchP
 }
 
 /** New URLSearchParams with `values` applied (other params preserved). */
-export function writeUrlState<D extends UrlStateDefs>(defs: D, params: URLSearchParams, values: Partial<UrlStateValues<D>>): URLSearchParams {
+export function writeUrlState<D extends UrlStateDefs>(
+  defs: D,
+  params: URLSearchParams,
+  values: Partial<UrlStateValues<D>>,
+): URLSearchParams {
   const next = new URLSearchParams(params);
   for (const [key, value] of Object.entries(values)) {
     const def = defs[key];
     if (!def) continue;
     const serialized = def.serialize(value);
-    if (serialized === null || serialized === "") next.delete(key);
+    if (serialized === null || serialized === '') next.delete(key);
     else next.set(key, serialized);
   }
   return next;
@@ -88,7 +111,7 @@ export interface UrlWriteOptions {
 /** Builds `pathname?query#hash`, keeping the current location hash. */
 export function buildUrl(pathname: string, params: URLSearchParams, hash: string): string {
   const qs = params.toString();
-  return `${pathname}${qs ? `?${qs}` : ""}${hash}`;
+  return `${pathname}${qs ? `?${qs}` : ''}${hash}`;
 }
 
 /** Debounced URL writer, flushing the latest params; flushes on unmount. */
@@ -107,7 +130,7 @@ function useDebouncedReplace(options: UrlWriteOptions): (params: URLSearchParams
     if (!params) return;
     const url = buildUrl(pathname, params, window.location.hash);
     if (serverParams) router.replace(url, { scroll: false });
-    else window.history.replaceState(window.history.state, "", url);
+    else window.history.replaceState(window.history.state, '', url);
   }, [router, pathname, serverParams]);
 
   React.useEffect(() => flush, [flush]);
@@ -118,14 +141,16 @@ function useDebouncedReplace(options: UrlWriteOptions): (params: URLSearchParams
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(flush, URL_WRITE_DEBOUNCE_MS);
     },
-    [flush]
+    [flush],
   );
 }
 
 /**
  * Shared core: holds an optimistic copy of the params until the URL catches up.
  */
-function useOptimisticParams(options: UrlWriteOptions = {}): readonly [URLSearchParams, (update: (current: URLSearchParams) => URLSearchParams) => void] {
+function useOptimisticParams(
+  options: UrlWriteOptions = {},
+): readonly [URLSearchParams, (update: (current: URLSearchParams) => URLSearchParams) => void] {
   const searchParams = useSearchParams();
   const urlString = searchParams.toString();
   const [local, setLocal] = React.useState<{ readonly base: string; readonly value: string } | null>(null);
@@ -145,7 +170,7 @@ function useOptimisticParams(options: UrlWriteOptions = {}): readonly [URLSearch
       setLocal({ base: urlString, value });
       replace(next);
     },
-    [replace, urlString]
+    [replace, urlString],
   );
 
   const params = React.useMemo(() => new URLSearchParams(effective), [effective]);
@@ -154,31 +179,32 @@ function useOptimisticParams(options: UrlWriteOptions = {}): readonly [URLSearch
 
 export function useUrlState<D extends UrlStateDefs>(
   defs: D,
-  options: UrlWriteOptions = {}
+  options: UrlWriteOptions = {},
 ): readonly [UrlStateValues<D>, (patch: Partial<UrlStateValues<D>>) => void] {
   const [params, update] = useOptimisticParams(options);
   // Define `defs` at module level (or memoise it) so `state` keeps a stable identity.
   const state = React.useMemo(() => readUrlState(defs, params), [defs, params]);
   const setState = React.useCallback(
     (patch: Partial<UrlStateValues<D>>) => update((current) => writeUrlState(defs, current, patch)),
-    [update, defs]
+    [update, defs],
   );
   return [state, setState] as const;
 }
 
 /* ---------------- grid grammar ---------------- */
 
-const GRID_KEYS = new Set(["q", "qm", "sort", "page", "ps"]);
+const GRID_KEYS = new Set(['q', 'qm', 'sort', 'page', 'ps']);
 
 function isGridParam(key: string): boolean {
-  return GRID_KEYS.has(key) || key.startsWith("f.");
+  return GRID_KEYS.has(key) || key.startsWith('f.');
 }
 
 /** Replaces every grid param in `params` with the canonical form of `query`. */
 export function applyGridQuery(params: URLSearchParams, query: GridQuery): URLSearchParams {
   const next = new URLSearchParams();
   for (const [key, value] of params.entries()) if (!isGridParam(key)) next.append(key, value);
-  for (const [key, value] of new URLSearchParams(serializeGridQuery(query)).entries()) next.append(key, value);
+  for (const [key, value] of new URLSearchParams(serializeGridQuery(query)).entries())
+    next.append(key, value);
   return next;
 }
 
@@ -200,7 +226,7 @@ export interface GridUrlState {
 
 /** Pure reducer used by the hook (exported for tests). Non-page changes reset to page 1. */
 export function patchGridQuery(current: GridQuery, patch: Partial<GridQuery>): GridQuery {
-  const resetsPage = Object.keys(patch).some((key) => key !== "page");
+  const resetsPage = Object.keys(patch).some((key) => key !== 'page');
   return { ...current, ...(resetsPage ? { page: 1 } : {}), ...patch };
 }
 
@@ -211,7 +237,7 @@ export function useGridUrlState(gridKey: string, options: UrlWriteOptions = {}):
   const setQuery = React.useCallback(
     (patch: Partial<GridQuery>) =>
       update((current) => applyGridQuery(current, patchGridQuery(parseGridQuery(current).query, patch))),
-    [update]
+    [update],
   );
 
   return React.useMemo<GridUrlState>(
@@ -222,13 +248,14 @@ export function useGridUrlState(gridKey: string, options: UrlWriteOptions = {}):
       setQuery,
       setSearch: (q, qm) => setQuery({ q: q.trim() || undefined, ...(qm ? { qm } : {}) }),
       setFilters: (filters) => setQuery({ filters }),
-      upsertFilter: (filter) => setQuery({ filters: [...query.filters.filter((f) => f.field !== filter.field), filter] }),
+      upsertFilter: (filter) =>
+        setQuery({ filters: [...query.filters.filter((f) => f.field !== filter.field), filter] }),
       removeFilter: (field) => setQuery({ filters: query.filters.filter((f) => f.field !== field) }),
       setSort: (sort) => setQuery({ sort }),
       setPage: (page) => setQuery({ page }),
       setPageSize: (pageSize) => setQuery({ pageSize }),
       reset: () => update((current) => applyGridQuery(current, EMPTY_GRID_QUERY)),
     }),
-    [gridKey, query, setQuery, update]
+    [gridKey, query, setQuery, update],
   );
 }

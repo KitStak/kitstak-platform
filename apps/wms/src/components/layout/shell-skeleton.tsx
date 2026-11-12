@@ -1,5 +1,5 @@
-import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
-import { StaticSlowNotice } from "./static-slow-notice";
+import { Skeleton, SkeletonTable } from '@/components/ui/skeleton';
+import { StaticSlowNotice } from './static-slow-notice';
 
 /** Streaming fallback for the authenticated shell (header bar + page skeleton). */
 export function ShellSkeleton() {

@@ -3,9 +3,9 @@
  * registered by default; real adapters (UPS, FedEx, EasyPost, Shippo) are registered by
  * M12 through `registerCarrierAdapter()`.
  */
-import type { LABEL_FORMATS, LABEL_TYPES } from "@/lib/enums";
-import type * as schema from "@/server/db/schema";
-import type { AddressCheck, AddressInput } from "../address-verification";
+import type { LABEL_FORMATS, LABEL_TYPES } from '@/lib/enums';
+import type * as schema from '@/server/db/schema';
+import type { AddressCheck, AddressInput } from '../address-verification';
 
 export type CarrierConnectionRow = typeof schema.carrierConnections.$inferSelect;
 export type CarrierServiceRow = typeof schema.carrierServices.$inferSelect;
@@ -101,7 +101,7 @@ export class CarrierError extends Error {
 
   constructor(message: string, httpCode = 400) {
     super(message);
-    this.name = "CarrierError";
+    this.name = 'CarrierError';
     this.httpCode = httpCode;
   }
 }

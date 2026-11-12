@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * Right sheet (BUILD_PLAN F4.2) at 35 / 45 / 60 % width with a sticky footer.
@@ -7,20 +7,20 @@
  * On open, focus lands on the first form field in the body (`[data-autofocus]` wins) so
  * the user can type immediately; with no field it falls back to Radix's default.
  */
-import * as React from "react";
-import { Dialog as DialogPrimitive } from "radix-ui";
-import { X } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useBeforeUnload, useNavigationGuard } from "@/lib/use-unsaved-changes";
-import { overlayClass } from "./dialog";
-import { UnsavedChangesDialog } from "./unsaved-changes";
+import * as React from 'react';
+import { Dialog as DialogPrimitive } from 'radix-ui';
+import { X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useBeforeUnload, useNavigationGuard } from '@/lib/use-unsaved-changes';
+import { overlayClass } from './dialog';
+import { UnsavedChangesDialog } from './unsaved-changes';
 
 export type DrawerWidth = 35 | 45 | 60;
 
 const WIDTH_CLASS: Readonly<Record<DrawerWidth, string>> = {
-  35: "w-full sm:w-[35vw] sm:min-w-[440px]",
-  45: "w-full sm:w-[45vw] sm:min-w-[520px]",
-  60: "w-full sm:w-[60vw] sm:min-w-[640px]",
+  35: 'w-full sm:w-[35vw] sm:min-w-[440px]',
+  45: 'w-full sm:w-[45vw] sm:min-w-[520px]',
+  60: 'w-full sm:w-[60vw] sm:min-w-[640px]',
 };
 
 export interface DrawerProps {
@@ -39,21 +39,35 @@ export interface DrawerProps {
   readonly bodyClassName?: string;
 }
 
-const AUTOFOCUS_SELECTOR = "[data-autofocus]";
+const AUTOFOCUS_SELECTOR = '[data-autofocus]';
 const FIELD_SELECTOR = [
-  "input:not([type=hidden]):not([disabled]):not([readonly])",
-  "select:not([disabled])",
-  "textarea:not([disabled]):not([readonly])",
-  "[role=combobox]:not([disabled])",
-].join(",");
+  'input:not([type=hidden]):not([disabled]):not([readonly])',
+  'select:not([disabled])',
+  'textarea:not([disabled]):not([readonly])',
+  '[role=combobox]:not([disabled])',
+].join(',');
 
 /** First field a user would type into, or null. Exported for tests. */
 export function firstFormField(root: ParentNode | null): HTMLElement | null {
   if (!root) return null;
-  return root.querySelector<HTMLElement>(AUTOFOCUS_SELECTOR) ?? root.querySelector<HTMLElement>(FIELD_SELECTOR);
+  return (
+    root.querySelector<HTMLElement>(AUTOFOCUS_SELECTOR) ?? root.querySelector<HTMLElement>(FIELD_SELECTOR)
+  );
 }
 
-export function Drawer({ open, onOpenChange, title, description, headerExtra, footer, width = 45, dirty = false, children, className, bodyClassName }: DrawerProps) {
+export function Drawer({
+  open,
+  onOpenChange,
+  title,
+  description,
+  headerExtra,
+  footer,
+  width = 45,
+  dirty = false,
+  children,
+  className,
+  bodyClassName,
+}: DrawerProps) {
   const [confirmClose, setConfirmClose] = React.useState(false);
   const bodyRef = React.useRef<HTMLDivElement>(null);
   const guarded = open && dirty;
@@ -90,12 +104,12 @@ export function Drawer({ open, onOpenChange, title, description, headerExtra, fo
           <DialogPrimitive.Overlay className={overlayClass} />
           <DialogPrimitive.Content
             className={cn(
-              "fixed inset-y-0 right-0 z-50 flex max-w-full flex-col border-l border-border bg-surface shadow-lg outline-none",
-              "transition-transform duration-200 ease-out data-[state=closed]:translate-x-full",
+              'fixed inset-y-0 right-0 z-50 flex max-w-full flex-col border-l border-border bg-surface shadow-lg outline-none',
+              'transition-transform duration-200 ease-out data-[state=closed]:translate-x-full',
               WIDTH_CLASS[width],
-              className
+              className,
             )}
-            {...(description ? {} : { "aria-describedby": undefined })}
+            {...(description ? {} : { 'aria-describedby': undefined })}
             onOpenAutoFocus={(event) => {
               const field = firstFormField(bodyRef.current);
               event.preventDefault();
@@ -106,8 +120,14 @@ export function Drawer({ open, onOpenChange, title, description, headerExtra, fo
           >
             <div className="flex shrink-0 items-start gap-3 border-b border-border px-5 py-4">
               <div className="min-w-0 flex-1">
-                <DialogPrimitive.Title className="text-md font-semibold leading-6 text-foreground">{title}</DialogPrimitive.Title>
-                {description ? <DialogPrimitive.Description className="mt-0.5 text-xs leading-4 text-secondary">{description}</DialogPrimitive.Description> : null}
+                <DialogPrimitive.Title className="text-md font-semibold leading-6 text-foreground">
+                  {title}
+                </DialogPrimitive.Title>
+                {description ? (
+                  <DialogPrimitive.Description className="mt-0.5 text-xs leading-4 text-secondary">
+                    {description}
+                  </DialogPrimitive.Description>
+                ) : null}
                 {headerExtra ? <div className="mt-3">{headerExtra}</div> : null}
               </div>
               <DialogPrimitive.Close
@@ -118,7 +138,15 @@ export function Drawer({ open, onOpenChange, title, description, headerExtra, fo
               </DialogPrimitive.Close>
             </div>
             {/* A sticky footer inside the body (wizard footer, SubmitBar sticky) sits flush: no bottom padding shows under it. */}
-            <div ref={bodyRef} className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4 ks-scroll has-[[data-sticky-footer]]:pb-0", bodyClassName)}>{children}</div>
+            <div
+              ref={bodyRef}
+              className={cn(
+                'min-h-0 flex-1 overflow-y-auto px-5 py-4 ks-scroll has-[[data-sticky-footer]]:pb-0',
+                bodyClassName,
+              )}
+            >
+              {children}
+            </div>
             {footer ? (
               <div className="sticky bottom-0 flex shrink-0 items-center justify-end gap-2 border-t border-border bg-surface px-5 py-3 shadow-[0_-1px_2px_rgba(16,24,40,0.04)]">
                 {footer}

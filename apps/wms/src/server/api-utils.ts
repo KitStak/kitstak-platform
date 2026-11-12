@@ -5,16 +5,16 @@
  * `requireSession` / `requireRole` now verify against `user_sessions` (revocation + sv),
  * and error bodies carry the foundation `code` alongside the legacy `error` string.
  */
-import { NextResponse } from "next/server";
-import { z } from "zod";
-import { getSessionUser } from "@/server/auth/session";
-import { AppError, type ErrorCode } from "@/server/api/errors";
-import { failureBody, type ApiFailure } from "@/server/api/envelope";
-import { log } from "@/server/log";
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { getSessionUser } from '@/server/auth/session';
+import { AppError, type ErrorCode } from '@/server/api/errors';
+import { failureBody, type ApiFailure } from '@/server/api/envelope';
+import { log } from '@/server/log';
 
-export { defineRoute } from "@/server/api/define-route";
-export { AppError } from "@/server/api/errors";
-export type { ApiEnvelope, ApiMeta } from "@/server/api/envelope";
+export { defineRoute } from '@/server/api/define-route';
+export { AppError } from '@/server/api/errors';
+export type { ApiEnvelope, ApiMeta } from '@/server/api/envelope';
 
 interface LegacyMeta {
   total: number;
@@ -22,7 +22,10 @@ interface LegacyMeta {
   pageSize: number;
 }
 
-export function ok<T>(data: T, meta?: LegacyMeta): NextResponse<{ success: true; data: T; meta?: LegacyMeta }> {
+export function ok<T>(
+  data: T,
+  meta?: LegacyMeta,
+): NextResponse<{ success: true; data: T; meta?: LegacyMeta }> {
   return NextResponse.json(meta ? { success: true as const, data, meta } : { success: true as const, data });
 }
 
@@ -31,10 +34,12 @@ function fail(code: ErrorCode, message: string): NextResponse<ApiFailure> {
   return NextResponse.json(failureBody(error), { status: error.status });
 }
 
-export const badRequest = (error: string): NextResponse<ApiFailure> => fail("VALIDATION", error);
-export const notFound = (error = "Not found"): NextResponse<ApiFailure> => fail("NOT_FOUND", error);
-export const unauthorized = (error = "Authentication required"): NextResponse<ApiFailure> => fail("UNAUTHENTICATED", error);
-export const forbidden = (error = "Insufficient permissions"): NextResponse<ApiFailure> => fail("FORBIDDEN", error);
+export const badRequest = (error: string): NextResponse<ApiFailure> => fail('VALIDATION', error);
+export const notFound = (error = 'Not found'): NextResponse<ApiFailure> => fail('NOT_FOUND', error);
+export const unauthorized = (error = 'Authentication required'): NextResponse<ApiFailure> =>
+  fail('UNAUTHENTICATED', error);
+export const forbidden = (error = 'Insufficient permissions'): NextResponse<ApiFailure> =>
+  fail('FORBIDDEN', error);
 
 /** Verifies the session (DB-backed). Returns a 401 response, or null when authenticated. */
 export async function requireSession(): Promise<NextResponse<ApiFailure> | null> {
@@ -50,8 +55,8 @@ export async function requireRole(roles: readonly string[]): Promise<NextRespons
 }
 
 export function serverError(context: string, error: unknown): NextResponse<ApiFailure> {
-  log.error("legacy route failed", { route: context, err: error });
-  return fail("INTERNAL", "Internal server error");
+  log.error('legacy route failed', { route: context, err: error });
+  return fail('INTERNAL', 'Internal server error');
 }
 
 /** Base pagination/search query schema shared across legacy list endpoints. */
@@ -64,7 +69,7 @@ export const listQuerySchema = z.object({
     .trim()
     .max(200)
     .optional()
-    .transform((v) => (v === "" ? undefined : v)),
+    .transform((v) => (v === '' ? undefined : v)),
 });
 
 export function queryOf(request: Request): Record<string, string> {
@@ -73,7 +78,7 @@ export function queryOf(request: Request): Record<string, string> {
 
 export function zodMessage(error: z.ZodError): string {
   const first = error.issues[0];
-  if (!first) return "Invalid query";
-  const path = first.path.join(".");
+  if (!first) return 'Invalid query';
+  const path = first.path.join('.');
   return path ? `Invalid query: ${path} — ${first.message}` : `Invalid query: ${first.message}`;
 }

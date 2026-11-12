@@ -6,12 +6,12 @@
  * owns its handler file under `handlers/` (0.6); until replaced a handler is a stub with
  * `configured: false`, and the import page shows "Not configured yet".
  */
-import type { z } from "zod";
-import type { AppDb } from "@/server/api/db";
-import { AppError } from "@/server/api/errors";
-import type { AuthContext } from "@/server/auth/context";
+import type { z } from 'zod';
+import type { AppDb } from '@/server/api/db';
+import { AppError } from '@/server/api/errors';
+import type { AuthContext } from '@/server/auth/context';
 
-export const IMPORT_COLUMN_TYPES = ["text", "integer", "number", "boolean", "date", "enum"] as const;
+export const IMPORT_COLUMN_TYPES = ['text', 'integer', 'number', 'boolean', 'date', 'enum'] as const;
 export type ImportColumnType = (typeof IMPORT_COLUMN_TYPES)[number];
 
 export interface ImportColumn {
@@ -75,8 +75,8 @@ export interface ImportDefinition {
 /** Thrown by stub handlers (BUILD_PLAN 0.6). Maps to INVALID_STATE in the envelope. */
 export class NotImplementedError extends AppError {
   constructor(what: string) {
-    super("INVALID_STATE", `${what} is not configured yet`);
-    this.name = "NotImplementedError";
+    super('INVALID_STATE', `${what} is not configured yet`);
+    this.name = 'NotImplementedError';
   }
 }
 

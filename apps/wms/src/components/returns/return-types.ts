@@ -1,5 +1,5 @@
 /** Client-side shapes for the returns APIs (mirror `src/server/repositories/returns*.ts`). PURE. */
-import type { ReturnStatus } from "@/lib/enums";
+import type { ReturnStatus } from '@/lib/enums';
 
 /** What shipped for a SKU on the order (ledger): offered as lot / date / serial choices at the station. */
 export interface ShippedAttributes {
@@ -61,7 +61,13 @@ export interface TransitionOption {
 }
 
 export interface SelectionTransitions {
-  readonly returns: readonly { readonly id: string; readonly rmaCode: string; readonly status: ReturnStatus; readonly lineCount?: number; readonly selectedLines?: number | null }[];
+  readonly returns: readonly {
+    readonly id: string;
+    readonly rmaCode: string;
+    readonly status: ReturnStatus;
+    readonly lineCount?: number;
+    readonly selectedLines?: number | null;
+  }[];
   readonly options: readonly TransitionOption[];
 }
 
@@ -92,20 +98,62 @@ export interface ReturnDetail {
   readonly trackingNumbers?: readonly string[];
   readonly returnShippingCost?: number | null;
   readonly returnAddressId?: string | null;
-  readonly order: { readonly id: string; readonly code: string; readonly storeOrderNumber: string | null; readonly channel: string; readonly status: string; readonly orderDate: string; readonly shippedAt: string | null; readonly deliveredAt: string | null; readonly shipTo: string } | null;
-  readonly label: { readonly shipmentId: string; readonly trackingNumber: string; readonly labelFileId: string | null; readonly labelStatus: string; readonly serviceName: string | null; readonly carrierCode: string | null; readonly shippingCost: number; readonly createdAt: string } | null;
+  readonly order: {
+    readonly id: string;
+    readonly code: string;
+    readonly storeOrderNumber: string | null;
+    readonly channel: string;
+    readonly status: string;
+    readonly orderDate: string;
+    readonly shippedAt: string | null;
+    readonly deliveredAt: string | null;
+    readonly shipTo: string;
+  } | null;
+  readonly label: {
+    readonly shipmentId: string;
+    readonly trackingNumber: string;
+    readonly labelFileId: string | null;
+    readonly labelStatus: string;
+    readonly serviceName: string | null;
+    readonly carrierCode: string | null;
+    readonly shippingCost: number;
+    readonly createdAt: string;
+  } | null;
   readonly lines: readonly {
-    readonly id: string; readonly productId: string; readonly sku: string; readonly name: string; readonly imageUrl: string | null; readonly packType: string;
-    readonly requestedQty: number; readonly returnedQty: number; readonly lineStatus: ReturnStatus; readonly disposition: string | null;
-    readonly customerReturnReason: string | null; readonly actualReturnReason: string | null; readonly shippedQty: number | null;
-    readonly trackLot?: boolean; readonly trackExpiry?: boolean; readonly trackProductionDate?: boolean; readonly trackSerial?: boolean;
+    readonly id: string;
+    readonly productId: string;
+    readonly sku: string;
+    readonly name: string;
+    readonly imageUrl: string | null;
+    readonly packType: string;
+    readonly requestedQty: number;
+    readonly returnedQty: number;
+    readonly lineStatus: ReturnStatus;
+    readonly disposition: string | null;
+    readonly customerReturnReason: string | null;
+    readonly actualReturnReason: string | null;
+    readonly shippedQty: number | null;
+    readonly trackLot?: boolean;
+    readonly trackExpiry?: boolean;
+    readonly trackProductionDate?: boolean;
+    readonly trackSerial?: boolean;
     readonly shipped?: ShippedAttributes | null;
   }[];
   /** Units requested but not received (> 0 on Completed = short closed). */
   readonly shortQty?: number;
   readonly receipts: readonly {
-    readonly id: string; readonly receiptNo: number; readonly sku: string; readonly quantity: number; readonly locationCode: string; readonly lpNumber: string | null;
-    readonly damageReason: string | null; readonly actualReturnReason: string | null; readonly note: string | null; readonly receivedBy: string; readonly receivedAt: string; readonly cancelledAt: string | null;
+    readonly id: string;
+    readonly receiptNo: number;
+    readonly sku: string;
+    readonly quantity: number;
+    readonly locationCode: string;
+    readonly lpNumber: string | null;
+    readonly damageReason: string | null;
+    readonly actualReturnReason: string | null;
+    readonly note: string | null;
+    readonly receivedBy: string;
+    readonly receivedAt: string;
+    readonly cancelledAt: string | null;
   }[];
   readonly receivedQty: number;
   readonly requestedQty: number;
@@ -165,16 +213,26 @@ export interface ReturnAddressOption {
   readonly id: string;
   readonly label: string;
   readonly description: string;
-  readonly owner: "warehouse" | "client";
+  readonly owner: 'warehouse' | 'client';
 }
 
 /**
  * RMAs where only some lines were selected in the grid: an RMA-level action (status, label,
  * return info) still applies to the whole RMA, so say so ("applies to RMA RMA000322 (2 lines)").
  */
-export function partialRmaNotes(returns: SelectionTransitions["returns"]): readonly string[] {
-  return returns.filter((r) => r.selectedLines !== null && r.selectedLines !== undefined && r.lineCount !== undefined && r.selectedLines < r.lineCount)
-    .map((r) => `Applies to RMA ${r.rmaCode} (${r.lineCount} line${r.lineCount === 1 ? "" : "s"}), not only the selected line${r.selectedLines === 1 ? "" : "s"}.`);
+export function partialRmaNotes(returns: SelectionTransitions['returns']): readonly string[] {
+  return returns
+    .filter(
+      (r) =>
+        r.selectedLines !== null &&
+        r.selectedLines !== undefined &&
+        r.lineCount !== undefined &&
+        r.selectedLines < r.lineCount,
+    )
+    .map(
+      (r) =>
+        `Applies to RMA ${r.rmaCode} (${r.lineCount} line${r.lineCount === 1 ? '' : 's'}), not only the selected line${r.selectedLines === 1 ? '' : 's'}.`,
+    );
 }
 
 export interface BulkOutcome {
@@ -185,7 +243,9 @@ export interface BulkOutcome {
 /** "3 of 4 returns updated · 1 failed". */
 export function bulkMessage(result: BulkOutcome, verb: string): string {
   const total = result.succeeded.length + result.failed.length;
-  const noun = total === 1 ? "return" : "returns";
+  const noun = total === 1 ? 'return' : 'returns';
   const base = `${result.succeeded.length} of ${total} ${noun} ${verb}`;
-  return result.failed.length > 0 ? `${base} · ${result.failed.length} failed: ${result.failed[0]?.message ?? ""}` : base;
+  return result.failed.length > 0
+    ? `${base} · ${result.failed.length} failed: ${result.failed[0]?.message ?? ''}`
+    : base;
 }

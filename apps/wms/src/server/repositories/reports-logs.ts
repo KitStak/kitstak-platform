@@ -5,162 +5,194 @@
  * Beats Logiwa: the Change Log shows human labels (never `Logiwa.NameKey.*`), resolves
  * raw ids to codes/names, and deep-links every code to its record.
  */
-import { sql, type SQL } from "drizzle-orm";
-import type { AppDb } from "@/server/api/db";
-import type { AuthContext } from "@/server/auth/context";
-import { can } from "@/server/auth/permissions";
-import type { GridQuery } from "@/server/query/grid-query";
+import { sql, type SQL } from 'drizzle-orm';
+import type { AppDb } from '@/server/api/db';
+import type { AuthContext } from '@/server/auth/context';
+import { can } from '@/server/auth/permissions';
+import type { GridQuery } from '@/server/query/grid-query';
 import {
-  CHANGE_LOG_DEF, CHANGE_LOG_MODULES, EXPORT_HISTORY_DEF, MISSING_LOG_DEF, SERIAL_TRANSACTIONS_DEF, TRANSACTION_HISTORY_DEF,
-} from "@/lib/grid-defs/reports/logs";
-import { GRID_EXPORTS } from "@/server/exports/grid-keys";
-import { clientIn, inList, runReport, warehouseLabel, type ReportPage } from "./reports-grid";
-import { dbAll } from "@/server/db/sql";
+  CHANGE_LOG_DEF,
+  CHANGE_LOG_MODULES,
+  EXPORT_HISTORY_DEF,
+  MISSING_LOG_DEF,
+  SERIAL_TRANSACTIONS_DEF,
+  TRANSACTION_HISTORY_DEF,
+} from '@/lib/grid-defs/reports/logs';
+import { GRID_EXPORTS } from '@/server/exports/grid-keys';
+import { clientIn, inList, runReport, warehouseLabel, type ReportPage } from './reports-grid';
+import { dbAll } from '@/server/db/sql';
 
 type Row = Record<string, unknown>;
 
 /* --------------------------------------------------------------- change log */
 
 /** entity_type → [owning table holding warehouse_id, key column ("id" | "parent")]. */
-const WAREHOUSE_OF: Readonly<Record<string, readonly [table: string, key: "id" | "parent"]>> = {
-  shipment_order: ["shipment_orders", "id"],
-  order_line: ["shipment_orders", "parent"],
-  job: ["jobs", "id"],
-  purchase_order: ["purchase_orders", "id"],
-  purchase_order_line: ["purchase_orders", "parent"],
-  work_order: ["work_orders", "id"],
-  work_order_component: ["work_orders", "parent"],
-  count_plan: ["count_plans", "id"],
-  count_line: ["count_plans", "parent"],
-  return_order: ["return_orders", "id"],
-  return_order_line: ["return_orders", "parent"],
-  end_of_day_manifest: ["end_of_day_manifests", "id"],
-  location: ["locations", "id"],
-  inventory: ["locations", "parent"],
-  shipment_plan: ["shipment_plans", "id"],
-  wave_rule: ["wave_rules", "id"],
-  license_plate: ["license_plates", "id"],
-  lp_type: ["lp_types", "id"],
-  job_type: ["job_types", "id"],
+const WAREHOUSE_OF: Readonly<Record<string, readonly [table: string, key: 'id' | 'parent']>> = {
+  shipment_order: ['shipment_orders', 'id'],
+  order_line: ['shipment_orders', 'parent'],
+  job: ['jobs', 'id'],
+  purchase_order: ['purchase_orders', 'id'],
+  purchase_order_line: ['purchase_orders', 'parent'],
+  work_order: ['work_orders', 'id'],
+  work_order_component: ['work_orders', 'parent'],
+  count_plan: ['count_plans', 'id'],
+  count_line: ['count_plans', 'parent'],
+  return_order: ['return_orders', 'id'],
+  return_order_line: ['return_orders', 'parent'],
+  end_of_day_manifest: ['end_of_day_manifests', 'id'],
+  location: ['locations', 'id'],
+  inventory: ['locations', 'parent'],
+  shipment_plan: ['shipment_plans', 'id'],
+  wave_rule: ['wave_rules', 'id'],
+  license_plate: ['license_plates', 'id'],
+  lp_type: ['lp_types', 'id'],
+  job_type: ['job_types', 'id'],
 };
 
 /** entity_type → [route prefix, key column]. */
-const HREF_OF: Readonly<Record<string, readonly [prefix: string, key: "id" | "parent"]>> = {
-  shipment_order: ["/orders/", "id"],
-  order_line: ["/orders/", "parent"],
-  job: ["/jobs/", "id"],
-  purchase_order: ["/receiving/", "id"],
-  purchase_order_line: ["/receiving/", "parent"],
-  product: ["/products/", "id"],
-  work_order: ["/work-orders/", "id"],
-  work_order_component: ["/work-orders/", "parent"],
-  count_plan: ["/counts/", "id"],
-  count_line: ["/counts/", "parent"],
-  return_order: ["/orders/returns/", "id"],
-  return_order_line: ["/orders/returns/", "parent"],
-  location: ["/locations/", "id"],
-  inventory: ["/locations/", "parent"],
-  shipment_plan: ["/shipment-plans/", "id"],
-  client: ["/clients/", "id"],
-  billing_contract: ["/billing/", "id"],
-  workflow: ["/automation/workflows/", "id"],
+const HREF_OF: Readonly<Record<string, readonly [prefix: string, key: 'id' | 'parent']>> = {
+  shipment_order: ['/orders/', 'id'],
+  order_line: ['/orders/', 'parent'],
+  job: ['/jobs/', 'id'],
+  purchase_order: ['/receiving/', 'id'],
+  purchase_order_line: ['/receiving/', 'parent'],
+  product: ['/products/', 'id'],
+  work_order: ['/work-orders/', 'id'],
+  work_order_component: ['/work-orders/', 'parent'],
+  count_plan: ['/counts/', 'id'],
+  count_line: ['/counts/', 'parent'],
+  return_order: ['/orders/returns/', 'id'],
+  return_order_line: ['/orders/returns/', 'parent'],
+  location: ['/locations/', 'id'],
+  inventory: ['/locations/', 'parent'],
+  shipment_plan: ['/shipment-plans/', 'id'],
+  client: ['/clients/', 'id'],
+  billing_contract: ['/billing/', 'id'],
+  workflow: ['/automation/workflows/', 'id'],
 };
 
-const keyCol = (k: "id" | "parent"): string => (k === "id" ? "cl.entity_id" : "cl.parent_entity_id");
+const keyCol = (k: 'id' | 'parent'): string => (k === 'id' ? 'cl.entity_id' : 'cl.parent_entity_id');
 const quote = (s: string): string => `'${s.replace(/'/g, "''")}'`;
 
 function warehouseExpr(): SQL {
   const whens = Object.entries(WAREHOUSE_OF)
-    .map(([type, [table, k]]) => `WHEN ${quote(type)} THEN (SELECT x.warehouse_id FROM ${table} x WHERE x.id = ${keyCol(k)})`)
-    .join(" ");
+    .map(
+      ([type, [table, k]]) =>
+        `WHEN ${quote(type)} THEN (SELECT x.warehouse_id FROM ${table} x WHERE x.id = ${keyCol(k)})`,
+    )
+    .join(' ');
   return sql.raw(`CASE cl.entity_type ${whens} END`);
 }
 
 /** entity_type → table holding client_id (client-restricted viewers only see these). */
-const CLIENT_OF: Readonly<Record<string, readonly [table: string, key: "id" | "parent"]>> = {
-  shipment_order: ["shipment_orders", "id"],
-  order_line: ["shipment_orders", "parent"],
-  job: ["jobs", "id"],
-  purchase_order: ["purchase_orders", "id"],
-  purchase_order_line: ["purchase_orders", "parent"],
-  work_order: ["work_orders", "id"],
-  work_order_component: ["work_orders", "parent"],
-  return_order: ["return_orders", "id"],
-  return_order_line: ["return_orders", "parent"],
-  shipment_plan: ["shipment_plans", "id"],
-  product: ["products", "id"],
-  vendor: ["vendors", "id"],
-  listing: ["product_listings", "id"],
-  license_plate: ["license_plates", "id"],
-  client: ["clients", "id"],
+const CLIENT_OF: Readonly<Record<string, readonly [table: string, key: 'id' | 'parent']>> = {
+  shipment_order: ['shipment_orders', 'id'],
+  order_line: ['shipment_orders', 'parent'],
+  job: ['jobs', 'id'],
+  purchase_order: ['purchase_orders', 'id'],
+  purchase_order_line: ['purchase_orders', 'parent'],
+  work_order: ['work_orders', 'id'],
+  work_order_component: ['work_orders', 'parent'],
+  return_order: ['return_orders', 'id'],
+  return_order_line: ['return_orders', 'parent'],
+  shipment_plan: ['shipment_plans', 'id'],
+  product: ['products', 'id'],
+  vendor: ['vendors', 'id'],
+  listing: ['product_listings', 'id'],
+  license_plate: ['license_plates', 'id'],
+  client: ['clients', 'id'],
 };
 
 function clientExpr(): SQL {
   const whens = Object.entries(CLIENT_OF)
-    .map(([type, [table, k]]) => `WHEN ${quote(type)} THEN (SELECT ${table === "clients" ? "x.id" : "x.client_id"} FROM ${table} x WHERE x.id = ${keyCol(k)})`)
-    .join(" ");
+    .map(
+      ([type, [table, k]]) =>
+        `WHEN ${quote(type)} THEN (SELECT ${table === 'clients' ? 'x.id' : 'x.client_id'} FROM ${table} x WHERE x.id = ${keyCol(k)})`,
+    )
+    .join(' ');
   return sql.raw(`CASE cl.entity_type ${whens} END`);
 }
 
 /** Detail routes that need a lookup (algorithm kind, channel provider). */
 const HREF_SQL: Readonly<Record<string, string>> = {
-  algorithm: "(SELECT '/automation/algorithms/' || lower(x.kind) || '/' || x.id FROM algorithms x WHERE x.id = cl.entity_id)",
-  channel_connection: "(SELECT '/integrations/channels/' || x.provider FROM channel_connections x WHERE x.id = cl.entity_id)",
+  algorithm:
+    "(SELECT '/automation/algorithms/' || lower(x.kind) || '/' || x.id FROM algorithms x WHERE x.id = cl.entity_id)",
+  channel_connection:
+    "(SELECT '/integrations/channels/' || x.provider FROM channel_connections x WHERE x.id = cl.entity_id)",
   billing_report: "'/billing/reports/' || cl.entity_id",
 };
 
 /** Entities without a detail page: their list, quick-searched by the code (Equal). */
 export const CHANGE_LOG_LIST_HREF: Readonly<Record<string, string>> = {
-  retailer: "/organization/retailers",
-  customer: "/organization/customers",
-  vendor: "/organization/vendors",
-  vas_operation: "/billing/vas",
-  listing: "/products/listings",
-  wave_rule: "/jobs/wave-rules",
-  end_of_day_manifest: "/shipments/end-of-day",
-  license_plate: "/settings/lp-numbers",
-  lp_type: "/settings/lp-types",
-  job_type: "/settings/job-types",
-  user: "/settings/users",
-  role: "/settings/roles",
-  warehouse: "/settings/warehouses",
-  lookup_value: "/settings/data-setup",
+  retailer: '/organization/retailers',
+  customer: '/organization/customers',
+  vendor: '/organization/vendors',
+  vas_operation: '/billing/vas',
+  listing: '/products/listings',
+  wave_rule: '/jobs/wave-rules',
+  end_of_day_manifest: '/shipments/end-of-day',
+  license_plate: '/settings/lp-numbers',
+  lp_type: '/settings/lp-types',
+  job_type: '/settings/job-types',
+  user: '/settings/users',
+  role: '/settings/roles',
+  warehouse: '/settings/warehouses',
+  lookup_value: '/settings/data-setup',
 };
 
 /** Deep link for one change-log row: detail route from SQL, else the searched list. */
-export function changeLogHref(entityType: string, code: string | null, sqlHref: string | null): string | null {
+export function changeLogHref(
+  entityType: string,
+  code: string | null,
+  sqlHref: string | null,
+): string | null {
   if (sqlHref) return sqlHref;
   const list = CHANGE_LOG_LIST_HREF[entityType];
   if (!list) return null;
-  return code && code !== "—" ? `${list}?q=${encodeURIComponent(code)}&qm=eq` : list;
+  return code && code !== '—' ? `${list}?q=${encodeURIComponent(code)}&qm=eq` : list;
 }
 
 function hrefExpr(): SQL {
-  const detail = Object.entries(HREF_OF).map(([type, [prefix, k]]) => `WHEN ${quote(type)} THEN ${quote(prefix)} || ${keyCol(k)}`);
+  const detail = Object.entries(HREF_OF).map(
+    ([type, [prefix, k]]) => `WHEN ${quote(type)} THEN ${quote(prefix)} || ${keyCol(k)}`,
+  );
   const looked = Object.entries(HREF_SQL).map(([type, expr]) => `WHEN ${quote(type)} THEN ${expr}`);
-  return sql.raw(`CASE cl.entity_type ${[...detail, ...looked].join(" ")} END`);
+  return sql.raw(`CASE cl.entity_type ${[...detail, ...looked].join(' ')} END`);
 }
 
 function moduleExpr(): SQL {
-  const whens = Object.entries(CHANGE_LOG_MODULES).map(([type, label]) => `WHEN ${quote(type)} THEN ${quote(label)}`).join(" ");
+  const whens = Object.entries(CHANGE_LOG_MODULES)
+    .map(([type, label]) => `WHEN ${quote(type)} THEN ${quote(label)}`)
+    .join(' ');
   return sql.raw(`CASE cl.entity_type ${whens} ELSE replace(cl.entity_type, '_', ' ') END`);
 }
 
 /** Humanizes a camelCase / snake / i18n key ("Logiwa.NameKey.RemainingVolume" → "Remaining Volume"). */
 export function humanizeProperty(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const tail = raw.includes(".") ? raw.slice(raw.lastIndexOf(".") + 1) : raw;
-  const spaced = tail.replace(/_/g, " ").replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/\s+/g, " ").trim();
+  const tail = raw.includes('.') ? raw.slice(raw.lastIndexOf('.') + 1) : raw;
+  const spaced = tail
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 /** Line-level change rows → the SKU of the changed line (order / PO / return / count lines). */
 export const LINE_TABLES: Readonly<Record<string, string>> = {
-  order_line: "order_lines", purchase_order_line: "purchase_order_lines", return_order_line: "return_order_lines", count_line: "count_plan_lines",
+  order_line: 'order_lines',
+  purchase_order_line: 'purchase_order_lines',
+  return_order_line: 'return_order_lines',
+  count_line: 'count_plan_lines',
 };
 function lineSkuExpr(): SQL {
   const whens = Object.entries(LINE_TABLES)
-    .map(([type, table]) => `WHEN ${quote(type)} THEN (SELECT p.sku FROM ${table} x JOIN products p ON p.id = x.product_id WHERE x.id = cl.entity_id)`).join(" ");
+    .map(
+      ([type, table]) =>
+        `WHEN ${quote(type)} THEN (SELECT p.sku FROM ${table} x JOIN products p ON p.id = x.product_id WHERE x.id = cl.entity_id)`,
+    )
+    .join(' ');
   return sql.raw(`CASE cl.entity_type ${whens} END`);
 }
 
@@ -168,7 +200,7 @@ function lineSkuExpr(): SQL {
  * Change Log audience (RA-R4): the full audit trail (every user's edits) is for roles that
  * manage users (admin / supervisor). Everyone else sees only the changes they made.
  */
-export const CHANGE_LOG_ALL_USERS_PERMISSION = "settings.users.view";
+export const CHANGE_LOG_ALL_USERS_PERMISSION = 'settings.users.view';
 export function seesAllChangeLog(auth: AuthContext): boolean {
   return can(auth, CHANGE_LOG_ALL_USERS_PERMISSION);
 }
@@ -176,7 +208,7 @@ export function seesAllChangeLog(auth: AuthContext): boolean {
 export function changeLogSql(auth: AuthContext): SQL {
   const wh = warehouseExpr();
   const ownOnly = seesAllChangeLog(auth) ? sql`1 = 1` : sql`cl.user_id = ${auth.user.id}`;
-  const allClients = auth.viewScope.clientIds === "all";
+  const allClients = auth.viewScope.clientIds === 'all';
   return sql`
     SELECT cl.id AS "id", cl.type AS "type", ${moduleExpr()} AS "module", cl.entity_type AS "entityType",
            COALESCE(cl.entity_code, '—') || COALESCE(' / ' || ${lineSkuExpr()}, '') AS "code", ${lineSkuExpr()} AS "lineSku", ${hrefExpr()} AS "href",
@@ -197,8 +229,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function resolveIds(db: AppDb, ids: readonly string[]): Promise<Map<string, string>> {
   const unique = [...new Set(ids)];
   if (unique.length === 0) return new Map();
-  const list = sql.join(unique.map((v) => sql`${v}`), sql`, `);
-  const rows = await dbAll<{ id: string; label: string }>(db, sql`
+  const list = sql.join(
+    unique.map((v) => sql`${v}`),
+    sql`, `,
+  );
+  const rows = await dbAll<{ id: string; label: string }>(
+    db,
+    sql`
     SELECT id, code AS label FROM shipment_packages WHERE id IN (${list})
     UNION ALL SELECT id, code FROM locations WHERE id IN (${list})
     UNION ALL SELECT id, name FROM users WHERE id IN (${list})
@@ -213,24 +250,34 @@ export async function resolveIds(db: AppDb, ids: readonly string[]): Promise<Map
     UNION ALL SELECT id, setup_name FROM carrier_connections WHERE id IN (${list})
     UNION ALL SELECT id, name FROM retailers WHERE id IN (${list})
     UNION ALL SELECT id, code FROM jobs WHERE id IN (${list})
-    UNION ALL SELECT id, code FROM shipment_orders WHERE id IN (${list})`);
+    UNION ALL SELECT id, code FROM shipment_orders WHERE id IN (${list})`,
+  );
   return new Map(rows.map((r) => [r.id, r.label]));
 }
 
 export async function presentChangeLogRows(db: AppDb, rows: readonly Row[]): Promise<Row[]> {
-  const inMessages = rows.flatMap((r) => (typeof r.message === "string" ? r.message.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? [] : []));
-  const ids = [...rows.flatMap((r) => [r.fromValue, r.toValue]).filter((v): v is string => typeof v === "string" && UUID_RE.test(v)), ...inMessages];
+  const inMessages = rows.flatMap((r) =>
+    typeof r.message === 'string'
+      ? (r.message.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? [])
+      : [],
+  );
+  const ids = [
+    ...rows
+      .flatMap((r) => [r.fromValue, r.toValue])
+      .filter((v): v is string => typeof v === 'string' && UUID_RE.test(v)),
+    ...inMessages,
+  ];
   const names = await resolveIds(db, ids);
   const show = (v: unknown): string | null => {
-    if (typeof v !== "string" || v === "") return null;
-    return UUID_RE.test(v) ? names.get(v) ?? "Removed record" : v;
+    if (typeof v !== 'string' || v === '') return null;
+    return UUID_RE.test(v) ? (names.get(v) ?? 'Removed record') : v;
   };
   return rows.map((r) => {
-    const field = typeof r.field === "string" ? r.field : "";
-    const label = humanizeProperty(typeof r.property === "string" ? r.property : field);
+    const field = typeof r.field === 'string' ? r.field : '';
+    const label = humanizeProperty(typeof r.property === 'string' ? r.property : field);
     const isIdField = /Id$/.test(field) && field.length > 2;
-    const base = isIdField && label ? label.replace(/\s+Id$/i, "") : label;
-    const sku = typeof r.lineSku === "string" ? r.lineSku : null;
+    const base = isIdField && label ? label.replace(/\s+Id$/i, '') : label;
+    const sku = typeof r.lineSku === 'string' ? r.lineSku : null;
     const raw = lineSubject(r.message);
     // The SKU is already in Code ("SO010847 / APX-TEE-BLK-L"); keep other subjects (e.g. a count location).
     const subject = raw && raw !== sku ? raw : null;
@@ -238,7 +285,13 @@ export async function presentChangeLogRows(db: AppDb, rows: readonly Row[]): Pro
       ...r,
       // A deleted record has no page to open: its rows render as plain text (every Delete row, and
       // the earlier history of that record), never a link to a missing record.
-      href: Number(r.recordDeleted) ? null : changeLogHref(String(r.entityType ?? ""), typeof r.code === "string" ? r.code.split(" / ")[0] ?? r.code : null, typeof r.href === "string" ? r.href : null),
+      href: Number(r.recordDeleted)
+        ? null
+        : changeLogHref(
+            String(r.entityType ?? ''),
+            typeof r.code === 'string' ? (r.code.split(' / ')[0] ?? r.code) : null,
+            typeof r.href === 'string' ? r.href : null,
+          ),
       // Line-level rows (order / PO / return lines, inventory buckets) name the SKU they changed,
       // so four "Quantity" rows on one order are told apart without opening the message.
       property: base && subject ? `${base} · ${subject}` : base,
@@ -251,24 +304,31 @@ export async function presentChangeLogRows(db: AppDb, rows: readonly Row[]): Pro
 
 /** "APX-TEE-NVY-M -> Quantity is modified. 0 --> 1" → "APX-TEE-NVY-M". */
 export function lineSubject(message: unknown): string | null {
-  if (typeof message !== "string") return null;
+  if (typeof message !== 'string') return null;
   const m = /^(.{1,80}?) -> /.exec(message);
   return m?.[1]?.trim() || null;
 }
 
 /** Readable message: raw ids replaced by codes / names, i18n keys humanized, `-->` as an arrow. */
 export function presentMessage(message: unknown, names: ReadonlyMap<string, string>): string | null {
-  if (typeof message !== "string" || message.trim() === "") return null;
+  if (typeof message !== 'string' || message.trim() === '') return null;
   return message
-    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, (id) => names.get(id) ?? "removed record")
+    .replace(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+      (id) => names.get(id) ?? 'removed record',
+    )
     .replace(/\b[A-Za-z]+\.NameKey\.([A-Za-z0-9_]+)/g, (_, k: string) => humanizeProperty(k) ?? k)
-    .replace(/\s+-->\s+/g, " → ")
-    .replace(/\.\s+→/g, ". (empty) →")
-    .replace(/\s{2,}/g, " ")
+    .replace(/\s+-->\s+/g, ' → ')
+    .replace(/\.\s+→/g, '. (empty) →')
+    .replace(/\s{2,}/g, ' ')
     .trim();
 }
 
-export async function listChangeLog(db: AppDb, auth: AuthContext, query: GridQuery): Promise<ReportPage<Row>> {
+export async function listChangeLog(
+  db: AppDb,
+  auth: AuthContext,
+  query: GridQuery,
+): Promise<ReportPage<Row>> {
   const page = await runReport<Row>(db, changeLogSql(auth), CHANGE_LOG_DEF, query);
   return { rows: await presentChangeLogRows(db, page.rows), total: page.total };
 }
@@ -293,20 +353,34 @@ export function onHandDelta(uomQty: number, hasFrom: boolean, hasTo: boolean): n
 }
 
 /** Running on-hand (client + warehouse + product) after each row; before = after - delta. */
-export function runningBalances(rows: readonly { readonly delta: number }[]): { before: number; after: number }[] {
+export function runningBalances(
+  rows: readonly { readonly delta: number }[],
+): { before: number; after: number }[] {
   let bal = 0;
-  return rows.map((r) => { const before = bal; bal += r.delta; return { before, after: bal }; });
+  return rows.map((r) => {
+    const before = bal;
+    bal += r.delta;
+    return { before, after: bal };
+  });
 }
 
-const SIGNED_QTY = sql.raw(`CASE WHEN t.from_location_id IS NOT NULL AND t.to_location_id IS NULL THEN -ABS(t.uom_qty) ELSE t.uom_qty END`);
-const SIGNED_PACK_QTY = sql.raw(`CASE WHEN t.from_location_id IS NOT NULL AND t.to_location_id IS NULL THEN -ABS(t.pack_qty) ELSE t.pack_qty END`);
-const ON_HAND_DELTA = sql.raw(`CASE WHEN t.from_location_id IS NOT NULL AND t.to_location_id IS NOT NULL THEN 0 WHEN t.from_location_id IS NOT NULL THEN -ABS(t.uom_qty) ELSE t.uom_qty END`);
-const ON_HAND_AFTER = sql.raw(`SUM(CASE WHEN t.from_location_id IS NOT NULL AND t.to_location_id IS NOT NULL THEN 0 WHEN t.from_location_id IS NOT NULL THEN -ABS(t.uom_qty) ELSE t.uom_qty END) OVER (PARTITION BY t.warehouse_id, t.client_id, t.product_id ORDER BY t.seq ROWS UNBOUNDED PRECEDING)`);
+const SIGNED_QTY = sql.raw(
+  `CASE WHEN t.from_location_id IS NOT NULL AND t.to_location_id IS NULL THEN -ABS(t.uom_qty) ELSE t.uom_qty END`,
+);
+const SIGNED_PACK_QTY = sql.raw(
+  `CASE WHEN t.from_location_id IS NOT NULL AND t.to_location_id IS NULL THEN -ABS(t.pack_qty) ELSE t.pack_qty END`,
+);
+const ON_HAND_DELTA = sql.raw(
+  `CASE WHEN t.from_location_id IS NOT NULL AND t.to_location_id IS NOT NULL THEN 0 WHEN t.from_location_id IS NOT NULL THEN -ABS(t.uom_qty) ELSE t.uom_qty END`,
+);
+const ON_HAND_AFTER = sql.raw(
+  `SUM(CASE WHEN t.from_location_id IS NOT NULL AND t.to_location_id IS NOT NULL THEN 0 WHEN t.from_location_id IS NOT NULL THEN -ABS(t.uom_qty) ELSE t.uom_qty END) OVER (PARTITION BY t.warehouse_id, t.client_id, t.product_id ORDER BY t.seq ROWS UNBOUNDED PRECEDING)`,
+);
 
 export function transactionsSql(auth: AuthContext): SQL {
   return sql`
     SELECT t.id AS "id", t.seq AS "seq", t.type AS "type",
-           t.warehouse_id AS "warehouseId", ${warehouseLabel("w")} AS "warehouse", t.client_id AS "clientId", c.name AS "client",
+           t.warehouse_id AS "warehouseId", ${warehouseLabel('w')} AS "warehouse", t.client_id AS "clientId", c.name AS "client",
            o.code AS "orderCode", CASE WHEN o.id IS NOT NULL THEN '/orders/' || o.id END AS "orderHref",
            ol.original_order_code AS "originalOrderCode", COALESCE(ot.name, o.order_type) AS "orderType",
            po.code AS "poCode", CASE WHEN po.id IS NOT NULL THEN '/receiving/' || po.id END AS "poHref", po.reference_number AS "poNumber",
@@ -356,14 +430,17 @@ export function transactionsSql(auth: AuthContext): SQL {
     WHERE ${inList(sql`t.warehouse_id`, auth.viewScope.warehouseIds)} AND ${clientIn(sql`t.client_id`, auth.viewScope.clientIds)}`;
 }
 
-export const listTransactions = async (db: AppDb, auth: AuthContext, q: GridQuery): Promise<ReportPage<Row>> =>
-  await runReport<Row>(db, transactionsSql(auth), TRANSACTION_HISTORY_DEF, q);
+export const listTransactions = async (
+  db: AppDb,
+  auth: AuthContext,
+  q: GridQuery,
+): Promise<ReportPage<Row>> => await runReport<Row>(db, transactionsSql(auth), TRANSACTION_HISTORY_DEF, q);
 
 export function serialTransactionsSql(auth: AuthContext): SQL {
   return sql`
     SELECT st.id AS "id", t.type AS "type", p.sku AS "sku", p.name AS "productName", '/products/' || p.id AS "productHref",
            s.primary_serial AS "primarySerial", s.secondary_serial AS "secondarySerial", st.status AS "serialStatus",
-           t.warehouse_id AS "warehouseId", ${warehouseLabel("w")} AS "warehouse", t.client_id AS "clientId", c.name AS "client",
+           t.warehouse_id AS "warehouseId", ${warehouseLabel('w')} AS "warehouse", t.client_id AS "clientId", c.name AS "client",
            o.code AS "orderCode", CASE WHEN o.id IS NOT NULL THEN '/orders/' || o.id END AS "orderHref",
            ol.original_order_code AS "originalOrderCode",
            po.code AS "poCode", CASE WHEN po.id IS NOT NULL THEN '/receiving/' || po.id END AS "poHref",
@@ -393,7 +470,11 @@ export function serialTransactionsSql(auth: AuthContext): SQL {
     WHERE ${inList(sql`t.warehouse_id`, auth.viewScope.warehouseIds)} AND ${clientIn(sql`t.client_id`, auth.viewScope.clientIds)}`;
 }
 
-export const listSerialTransactions = async (db: AppDb, auth: AuthContext, q: GridQuery): Promise<ReportPage<Row>> =>
+export const listSerialTransactions = async (
+  db: AppDb,
+  auth: AuthContext,
+  q: GridQuery,
+): Promise<ReportPage<Row>> =>
   await runReport<Row>(db, serialTransactionsSql(auth), SERIAL_TRANSACTIONS_DEF, q);
 
 /* -------------------------------------------------------------- missing log */
@@ -407,7 +488,7 @@ export function missingLogSql(auth: AuthContext): SQL {
            m.missing_qty AS "missingQty", loc.code AS "location", '/locations/' || loc.id AS "locationHref",
            m.inventory_qty AS "inventoryQty", m.is_retain AS "isRetain", m.entered_at AS "enteredAt",
            COALESCE(u.name, m.entered_by) AS "enteredBy", m.notes AS "notes",
-           m.warehouse_id AS "warehouseId", ${warehouseLabel("w")} AS "warehouse", m.client_id AS "clientId", c.name AS "client"
+           m.warehouse_id AS "warehouseId", ${warehouseLabel('w')} AS "warehouse", m.client_id AS "clientId", c.name AS "client"
     FROM missing_log m
     JOIN products p ON p.id = m.product_id
     JOIN clients c ON c.id = m.client_id
@@ -422,7 +503,11 @@ export function missingLogSql(auth: AuthContext): SQL {
     WHERE ${inList(sql`m.warehouse_id`, auth.viewScope.warehouseIds)} AND ${clientIn(sql`m.client_id`, auth.viewScope.clientIds)}`;
 }
 
-export async function listMissingLog(db: AppDb, auth: AuthContext, query: GridQuery): Promise<ReportPage<Row>> {
+export async function listMissingLog(
+  db: AppDb,
+  auth: AuthContext,
+  query: GridQuery,
+): Promise<ReportPage<Row>> {
   const page = await runReport<Row>(db, missingLogSql(auth), MISSING_LOG_DEF, query);
   return { rows: page.rows.map((r) => ({ ...r, isRetain: Boolean(r.isRetain) })), total: page.total };
 }
@@ -430,39 +515,123 @@ export async function listMissingLog(db: AppDb, auth: AuthContext, query: GridQu
 /* ----------------------------------------------------------- export history */
 
 /** Grids that exist only for developer tooling; their exports never show in the history. */
-export const DEV_GRID_KEY_PREFIX = "dev-";
+export const DEV_GRID_KEY_PREFIX = 'dev-';
 
 /** gridKey → human Export Type ("Shipped & Canceled Orders export"); unknown keys keep their stored title. */
 export function exportTypeExpr(): SQL {
   const whens = GRID_EXPORTS.filter((d) => !d.gridKey.startsWith(DEV_GRID_KEY_PREFIX))
-    .map((d) => `WHEN ${quote(d.gridKey)} THEN ${quote(`${d.title} export`)}`).join(" ");
+    .map((d) => `WHEN ${quote(d.gridKey)} THEN ${quote(`${d.title} export`)}`)
+    .join(' ');
   return sql.raw(`CASE b.grid_key ${whens} ELSE b.title END`);
 }
 
 /** gridKey → the page the export was started from (checked against src/app routes). */
-export const EXPORT_SOURCE_PAGES: Readonly<Record<string, string>> = { "orders-backlog": "/orders", "orders-shipped": "/orders", "shipments": "/shipments", "shipment-history": "/shipments/history", "shipment-plans": "/shipment-plans", "shipment-plan-orders": "/shipment-plans/orders", "shipment-plan-lps": "/shipment-plans/lps", "jobs": "/jobs", "wave-rules": "/jobs/wave-rules", "allocation-exceptions": "/jobs/allocation-exceptions", "tasks-order-operations": "/tasks/order-operations", "tasks-count": "/tasks/count", "tasks-replenishment": "/tasks/replenishment", "job-types": "/settings/job-types", "return-orders": "/orders/returns", "vendors": "/organization/vendors", "inventory-total": "/inventory", "inventory-by-location": "/inventory/by-location", "inventory-atp": "/inventory/atp", "count-plans": "/counts", "count-locations": "/counts/locations", "count-skus": "/counts/skus", "work-orders": "/work-orders", "kit-inventory": "/inventory/kits", "products": "/products", "locations": "/locations", "warehouses": "/settings/warehouses", "mobile-carts": "/settings/mobile-carts", "lp-types": "/settings/lp-types", "lp-numbers": "/settings/lp-numbers", "shipment-packages": "/settings/shipment-packages", "clients": "/clients", "billing-contracts": "/billing", "integration-monitoring": "/integrations/monitoring/missing-orders", "algorithms-putaway": "/automation/algorithms", "algorithms-allocation": "/automation/algorithms", "workflows": "/automation/workflows", "monitoring-recent-errors": "/integrations/monitoring/recent-errors", "monitoring-workflow-blocked": "/integrations/monitoring/workflow-blocked", "monitoring-listing-exceptions": "/integrations/monitoring/listing-exceptions", "end-of-day": "/shipments/end-of-day", "wave-log": "/jobs/wave-log", "shortages": "/jobs/shortage", "purchase-orders": "/receiving", "receiving-history": "/receiving/history", "kit-components": "/inventory/kit-components", "product-listings": "/products/listings", "customers": "/organization/customers", "retailers": "/organization/retailers", "billing-reports": "/billing/reports", "vas-operations": "/billing/vas", "integration-logs": "/integrations/logs/history", "integration-orders": "/integrations/logs/orders", "integration-products": "/integrations/logs/products", "channel-methods": "/integrations/logs/methods", "monitoring-health": "/integrations/monitoring", "carrier-errors": "/integrations/carrier-errors/label-generation", "carrier-errors-rate-call": "/integrations/carrier-errors/rate-call", "carrier-errors-void-label": "/integrations/carrier-errors/void-label", "rate-shopping-presets": "/automation/rate-shopping", "screen-configs": "/settings/screen-configuration", "report-inventory-aging": "/reports/inventory-aging", "report-location-utilization": "/reports/location-utilization", "report-order-lines": "/reports/order-lines","report-export-history": "/reports/export-history", "report-channel-sales": "/reports/channel-sales", "report-serial-numbers": "/reports/serial-numbers", "report-serial-shipments": "/reports/serial-numbers/shipment-history", "report-serial-receipts": "/reports/serial-numbers/receiving-history", "report-order-inventory": "/reports/order-inventory", "report-replenishment": "/reports/replenishment", "report-inventory-snapshot": "/reports/inventory-snapshot", "report-change-log": "/reports/change-log", "report-transaction-history": "/reports/transaction-history", "report-serial-transactions": "/reports/transaction-history/serial", "report-missing-log": "/reports/missing-log", "report-po-receiving": "/reports/po-receiving", "report-user-performance": "/reports/user-performance", "users": "/settings/users", "roles": "/settings/roles", "audit-log": "/settings/audit", "printouts": "/settings/printouts" };
+export const EXPORT_SOURCE_PAGES: Readonly<Record<string, string>> = {
+  'orders-backlog': '/orders',
+  'orders-shipped': '/orders',
+  shipments: '/shipments',
+  'shipment-history': '/shipments/history',
+  'shipment-plans': '/shipment-plans',
+  'shipment-plan-orders': '/shipment-plans/orders',
+  'shipment-plan-lps': '/shipment-plans/lps',
+  jobs: '/jobs',
+  'wave-rules': '/jobs/wave-rules',
+  'allocation-exceptions': '/jobs/allocation-exceptions',
+  'tasks-order-operations': '/tasks/order-operations',
+  'tasks-count': '/tasks/count',
+  'tasks-replenishment': '/tasks/replenishment',
+  'job-types': '/settings/job-types',
+  'return-orders': '/orders/returns',
+  vendors: '/organization/vendors',
+  'inventory-total': '/inventory',
+  'inventory-by-location': '/inventory/by-location',
+  'inventory-atp': '/inventory/atp',
+  'count-plans': '/counts',
+  'count-locations': '/counts/locations',
+  'count-skus': '/counts/skus',
+  'work-orders': '/work-orders',
+  'kit-inventory': '/inventory/kits',
+  products: '/products',
+  locations: '/locations',
+  warehouses: '/settings/warehouses',
+  'mobile-carts': '/settings/mobile-carts',
+  'lp-types': '/settings/lp-types',
+  'lp-numbers': '/settings/lp-numbers',
+  'shipment-packages': '/settings/shipment-packages',
+  clients: '/clients',
+  'billing-contracts': '/billing',
+  'integration-monitoring': '/integrations/monitoring/missing-orders',
+  'algorithms-putaway': '/automation/algorithms',
+  'algorithms-allocation': '/automation/algorithms',
+  workflows: '/automation/workflows',
+  'monitoring-recent-errors': '/integrations/monitoring/recent-errors',
+  'monitoring-workflow-blocked': '/integrations/monitoring/workflow-blocked',
+  'monitoring-listing-exceptions': '/integrations/monitoring/listing-exceptions',
+  'end-of-day': '/shipments/end-of-day',
+  'wave-log': '/jobs/wave-log',
+  shortages: '/jobs/shortage',
+  'purchase-orders': '/receiving',
+  'receiving-history': '/receiving/history',
+  'kit-components': '/inventory/kit-components',
+  'product-listings': '/products/listings',
+  customers: '/organization/customers',
+  retailers: '/organization/retailers',
+  'billing-reports': '/billing/reports',
+  'vas-operations': '/billing/vas',
+  'integration-logs': '/integrations/logs/history',
+  'integration-orders': '/integrations/logs/orders',
+  'integration-products': '/integrations/logs/products',
+  'channel-methods': '/integrations/logs/methods',
+  'monitoring-health': '/integrations/monitoring',
+  'carrier-errors': '/integrations/carrier-errors/label-generation',
+  'carrier-errors-rate-call': '/integrations/carrier-errors/rate-call',
+  'carrier-errors-void-label': '/integrations/carrier-errors/void-label',
+  'rate-shopping-presets': '/automation/rate-shopping',
+  'screen-configs': '/settings/screen-configuration',
+  'report-inventory-aging': '/reports/inventory-aging',
+  'report-location-utilization': '/reports/location-utilization',
+  'report-order-lines': '/reports/order-lines',
+  'report-export-history': '/reports/export-history',
+  'report-channel-sales': '/reports/channel-sales',
+  'report-serial-numbers': '/reports/serial-numbers',
+  'report-serial-shipments': '/reports/serial-numbers/shipment-history',
+  'report-serial-receipts': '/reports/serial-numbers/receiving-history',
+  'report-order-inventory': '/reports/order-inventory',
+  'report-replenishment': '/reports/replenishment',
+  'report-inventory-snapshot': '/reports/inventory-snapshot',
+  'report-change-log': '/reports/change-log',
+  'report-transaction-history': '/reports/transaction-history',
+  'report-serial-transactions': '/reports/transaction-history/serial',
+  'report-missing-log': '/reports/missing-log',
+  'report-po-receiving': '/reports/po-receiving',
+  'report-user-performance': '/reports/user-performance',
+  users: '/settings/users',
+  roles: '/settings/roles',
+  'audit-log': '/settings/audit',
+  printouts: '/settings/printouts',
+};
 
 /** Link back to the originating grid with the exact filter set that was exported. */
 export function exportSourceHref(gridKey: unknown, query: unknown): string | null {
-  if (typeof gridKey !== "string") return null;
+  if (typeof gridKey !== 'string') return null;
   const page = EXPORT_SOURCE_PAGES[gridKey];
   if (!page) return null;
-  const params = new URLSearchParams(typeof query === "string" ? query : "");
-  params.delete("page");
+  const params = new URLSearchParams(typeof query === 'string' ? query : '');
+  params.delete('page');
   const qs = params.toString();
   return qs ? `${page}?${qs}` : page;
 }
 
 /** Plain-language summary of the exported filter set ("2 filters · search \"ABC\""). */
 export function exportFilterSummary(query: unknown): string | null {
-  if (typeof query !== "string" || query.trim() === "") return null;
+  if (typeof query !== 'string' || query.trim() === '') return null;
   const params = new URLSearchParams(query);
-  const filters = [...params.keys()].filter((k) => k.startsWith("f.")).length;
+  const filters = [...params.keys()].filter((k) => k.startsWith('f.')).length;
   const parts: string[] = [];
-  if (filters) parts.push(`${filters} filter${filters === 1 ? "" : "s"}`);
-  const q = params.get("q");
+  if (filters) parts.push(`${filters} filter${filters === 1 ? '' : 's'}`);
+  const q = params.get('q');
   if (q) parts.push(`search "${q}"`);
-  return parts.length ? parts.join(" · ") : null;
+  return parts.length ? parts.join(' · ') : null;
 }
 
 /** The viewer's own exports (the tray and this page show the same rows). */
@@ -480,12 +649,20 @@ export function exportHistorySql(auth: AuthContext): SQL {
     WHERE b.kind = 'export' AND b.user_id = ${auth.user.id} AND (b.grid_key IS NULL OR b.grid_key NOT ILIKE ${`${DEV_GRID_KEY_PREFIX}%`})`;
 }
 
-export async function listExportHistory(db: AppDb, auth: AuthContext, q: GridQuery): Promise<ReportPage<Row>> {
+export async function listExportHistory(
+  db: AppDb,
+  auth: AuthContext,
+  q: GridQuery,
+): Promise<ReportPage<Row>> {
   const page = await runReport<Row>(db, exportHistorySql(auth), EXPORT_HISTORY_DEF, q);
   return {
     rows: page.rows.map((r) => {
       const { query, ...rest } = r as Row & { query?: unknown };
-      return { ...rest, sourceHref: exportSourceHref(r.gridKey, query), filterSummary: exportFilterSummary(query) ?? "No filters" };
+      return {
+        ...rest,
+        sourceHref: exportSourceHref(r.gridKey, query),
+        filterSummary: exportFilterSummary(query) ?? 'No filters',
+      };
     }),
     total: page.total,
   };

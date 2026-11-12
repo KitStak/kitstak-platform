@@ -2,13 +2,13 @@
  * Read-only address card: name, formatted lines, contact, type and tax badges, with an
  * optional Edit action.
  */
-import * as React from "react";
-import { Mail, MapPin, Pencil, Phone } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { countryName } from "@/lib/countries";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { formatAddressLines, type Address } from "./address-model";
+import * as React from 'react';
+import { Mail, MapPin, Pencil, Phone } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { countryName } from '@/lib/countries';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { formatAddressLines, type Address } from './address-model';
 
 export interface AddressCardProps {
   readonly title?: string;
@@ -17,9 +17,12 @@ export interface AddressCardProps {
   readonly className?: string;
 }
 
-export function AddressCard({ title = "Address", address, onEdit, className }: AddressCardProps) {
+export function AddressCard({ title = 'Address', address, onEdit, className }: AddressCardProps) {
   return (
-    <section aria-label={title} className={cn("flex flex-col gap-2 rounded-lg border border-border bg-surface p-4", className)}>
+    <section
+      aria-label={title}
+      className={cn('flex flex-col gap-2 rounded-lg border border-border bg-surface p-4', className)}
+    >
       <div className="flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-1.5 text-xs font-semibold text-faint">
           <MapPin className="h-3.5 w-3.5" aria-hidden />
@@ -37,7 +40,10 @@ export function AddressCard({ title = "Address", address, onEdit, className }: A
         <>
           <p className="text-base font-semibold text-foreground">{address.name}</p>
           <address className="flex flex-col text-sm not-italic leading-5 text-body">
-            {formatAddressLines({ ...address, country: address.country ? countryName(address.country) : undefined }).map((line) => (
+            {formatAddressLines({
+              ...address,
+              country: address.country ? countryName(address.country) : undefined,
+            }).map((line) => (
               <span key={line}>{line}</span>
             ))}
           </address>
@@ -58,7 +64,11 @@ export function AddressCard({ title = "Address", address, onEdit, className }: A
             </div>
           ) : null}
           <div className="flex flex-wrap gap-1.5">
-            {address.addressType ? <Badge tone="neutral" size="sm">{address.addressType}</Badge> : null}
+            {address.addressType ? (
+              <Badge tone="neutral" size="sm">
+                {address.addressType}
+              </Badge>
+            ) : null}
             {address.taxType && address.taxId ? (
               <Badge tone="info" size="sm">
                 {address.taxType}: {address.taxId}

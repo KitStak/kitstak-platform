@@ -59,19 +59,28 @@ export function scatterYTicks(values: readonly number[]): number[] {
  * (`__labelLeft`), so names never run off the plot; a point whose label would land on a
  * neighbour's (within 8 % of X and 6 % of Y) puts its label below the dot (`__labelBelow`).
  */
-export function scatterLabelPlacement<R extends Readonly<Record<string, unknown>>>(rows: readonly R[], xKey: string, yKey: string): (R & { __labelLeft?: boolean; __labelBelow?: boolean })[] {
+export function scatterLabelPlacement<R extends Readonly<Record<string, unknown>>>(
+  rows: readonly R[],
+  xKey: string,
+  yKey: string,
+): (R & { __labelLeft?: boolean; __labelBelow?: boolean })[] {
   const xs = rows.map((r) => Number(r[xKey] ?? 0));
   const ys = rows.map((r) => Number(r[yKey] ?? 0));
   const xMax = Math.max(1, ...xs);
   const yMax = Math.max(1, ...ys);
-  const order = rows.map((_, i) => i).sort((a, b) => (ys[b] ?? 0) - (ys[a] ?? 0) || (xs[a] ?? 0) - (xs[b] ?? 0));
+  const order = rows
+    .map((_, i) => i)
+    .sort((a, b) => (ys[b] ?? 0) - (ys[a] ?? 0) || (xs[a] ?? 0) - (xs[b] ?? 0));
   const placed: { x: number; y: number; below: boolean; left: boolean }[] = [];
   const out: (R & { __labelLeft?: boolean; __labelBelow?: boolean })[] = rows.map((r) => ({ ...r }));
   for (const i of order) {
     const x = xs[i] ?? 0;
     const y = ys[i] ?? 0;
     const left = x > xMax * 0.85;
-    const clash = placed.some((p) => !p.below && p.left === left && Math.abs(p.x - x) < xMax * 0.08 && Math.abs(p.y - y) < yMax * 0.06);
+    const clash = placed.some(
+      (p) =>
+        !p.below && p.left === left && Math.abs(p.x - x) < xMax * 0.08 && Math.abs(p.y - y) < yMax * 0.06,
+    );
     placed.push({ x, y, below: clash, left });
     out[i] = { ...out[i]!, ...(left ? { __labelLeft: true } : {}), ...(clash ? { __labelBelow: true } : {}) };
   }

@@ -3,25 +3,29 @@
  * (BUILD_PLAN F5 ledger "Enforces"). Violations throw RULE_VIOLATION with a message
  * naming the rule and the location / LP.
  */
-import { and, eq, gt, inArray, ne } from "drizzle-orm";
-import * as schema from "@/server/db/schema";
-import { DomainError, ruleViolation } from "../errors";
-import type { Tx } from "../types";
-import { ACTIVE_ALLOCATION_STATUSES, packRatio, type BucketSpec } from "./bucket";
-import { assertNotCountLocked } from "./count-locks";
+import { and, eq, gt, inArray, ne } from 'drizzle-orm';
+import * as schema from '@/server/db/schema';
+import { DomainError, ruleViolation } from '../errors';
+import type { Tx } from '../types';
+import { ACTIVE_ALLOCATION_STATUSES, packRatio, type BucketSpec } from './bucket';
+import { assertNotCountLocked } from './count-locks';
 
 export type LocationRow = typeof schema.locations.$inferSelect;
 export type LpRow = typeof schema.licensePlates.$inferSelect;
 
 export async function getLocation(tx: Tx, locationId: string): Promise<LocationRow> {
   const [row] = await tx.select().from(schema.locations).where(eq(schema.locations.id, locationId)).limit(1);
-  if (!row) throw new DomainError("NOT_FOUND", "Location not found");
+  if (!row) throw new DomainError('NOT_FOUND', 'Location not found');
   return row;
 }
 
 export async function getLp(tx: Tx, lpId: string): Promise<LpRow> {
-  const [row] = await tx.select().from(schema.licensePlates).where(eq(schema.licensePlates.id, lpId)).limit(1);
-  if (!row) throw new DomainError("NOT_FOUND", "LP not found");
+  const [row] = await tx
+    .select()
+    .from(schema.licensePlates)
+    .where(eq(schema.licensePlates.id, lpId))
+    .limit(1);
+  if (!row) throw new DomainError('NOT_FOUND', 'LP not found');
   return row;
 }
 
@@ -35,17 +39,37 @@ export interface PlacementOptions {
   readonly jobId?: string | null;
 }
 
-type Occupant = Pick<typeof schema.inventory.$inferSelect,
-  "id" | "productId" | "clientId" | "lotNumber" | "expiryDate" | "productionDate" | "lpId" | "onHand" | "packType">;
+type Occupant = Pick<
+  typeof schema.inventory.$inferSelect,
+  | 'id'
+  | 'productId'
+  | 'clientId'
+  | 'lotNumber'
+  | 'expiryDate'
+  | 'productionDate'
+  | 'lpId'
+  | 'onHand'
+  | 'packType'
+>;
 
 async function occupants(tx: Tx, where: ReturnType<typeof eq>, excludeId?: string): Promise<Occupant[]> {
   const i = schema.inventory;
   const conds = [where, gt(i.onHand, 0)];
   if (excludeId) conds.push(ne(i.id, excludeId));
-  return tx.select({
-    id: i.id, productId: i.productId, clientId: i.clientId, lotNumber: i.lotNumber, expiryDate: i.expiryDate,
-    productionDate: i.productionDate, lpId: i.lpId, onHand: i.onHand, packType: i.packType,
-  }).from(i).where(and(...conds));
+  return tx
+    .select({
+      id: i.id,
+      productId: i.productId,
+      clientId: i.clientId,
+      lotNumber: i.lotNumber,
+      expiryDate: i.expiryDate,
+      productionDate: i.productionDate,
+      lpId: i.lpId,
+      onHand: i.onHand,
+      packType: i.packType,
+    })
+    .from(i)
+    .where(and(...conds));
 }
 
 function singleValueRule(
@@ -58,7 +82,12 @@ function singleValueRule(
   if (enabled && others.some((o) => pick(o) !== incoming)) throw ruleViolation(message);
 }
 
-export async function assertLocationAccepts(tx: Tx, spec: BucketSpec, qty: number, opts: PlacementOptions = {}): Promise<LocationRow> {
+export async function assertLocationAccepts(
+  tx: Tx,
+  spec: BucketSpec,
+  qty: number,
+  opts: PlacementOptions = {},
+): Promise<LocationRow> {
   const loc = await getLocation(tx, spec.locationId);
   const label = `Location ${loc.code}`;
   if (loc.warehouseId !== spec.warehouseId) throw ruleViolation(`${label} belongs to another warehouse.`);
@@ -66,16 +95,53 @@ export async function assertLocationAccepts(tx: Tx, spec: BucketSpec, qty: numbe
   if (loc.isLocked && !opts.inPlace) throw ruleViolation(`${label} is locked.`);
   if (!opts.inPlace) await assertNotCountLocked(tx, loc);
   if (loc.onlyDamaged && !spec.damageReason) throw ruleViolation(`${label} only accepts damaged inventory.`);
-  if (loc.dedicatedClientId && loc.dedicatedClientId !== spec.clientId) throw ruleViolation(`${label} is dedicated to another client.`);
+  if (loc.dedicatedClientId && loc.dedicatedClientId !== spec.clientId)
+    throw ruleViolation(`${label} is dedicated to another client.`);
   if (qty <= 0) return loc;
 
   const others = await occupants(tx, eq(schema.inventory.locationId, loc.id), opts.excludeInventoryId);
-  singleValueRule(others, loc.singleClient, (o) => o.clientId, spec.clientId, `${label} only allows a single client.`);
-  singleValueRule(others, loc.onlyOneSku, (o) => o.productId, spec.productId, `${label} only allows one SKU.`);
-  singleValueRule(others, loc.onlyOneLot, (o) => o.lotNumber, spec.lotNumber, `${label} only allows one lot/batch number.`);
-  singleValueRule(others, loc.onlyOneExpiry, (o) => o.expiryDate, spec.expiryDate, `${label} only allows one expiry date.`);
-  singleValueRule(others, loc.onlyOneProductionDate, (o) => o.productionDate, spec.productionDate, `${label} only allows one production date.`);
-  singleValueRule(others.filter((o) => o.lpId !== null), loc.onlyOneLp && spec.lpId !== null, (o) => o.lpId, spec.lpId, `${label} only allows one LP.`);
+  singleValueRule(
+    others,
+    loc.singleClient,
+    (o) => o.clientId,
+    spec.clientId,
+    `${label} only allows a single client.`,
+  );
+  singleValueRule(
+    others,
+    loc.onlyOneSku,
+    (o) => o.productId,
+    spec.productId,
+    `${label} only allows one SKU.`,
+  );
+  singleValueRule(
+    others,
+    loc.onlyOneLot,
+    (o) => o.lotNumber,
+    spec.lotNumber,
+    `${label} only allows one lot/batch number.`,
+  );
+  singleValueRule(
+    others,
+    loc.onlyOneExpiry,
+    (o) => o.expiryDate,
+    spec.expiryDate,
+    `${label} only allows one expiry date.`,
+  );
+  singleValueRule(
+    others,
+    loc.onlyOneProductionDate,
+    (o) => o.productionDate,
+    spec.productionDate,
+    `${label} only allows one production date.`,
+  );
+  singleValueRule(
+    others.filter((o) => o.lpId !== null),
+    loc.onlyOneLp && spec.lpId !== null,
+    (o) => o.lpId,
+    spec.lpId,
+    `${label} only allows one LP.`,
+  );
   if (loc.maxSkuQty && loc.maxSkuQty > 0) {
     const skus = new Set([...others.map((o) => o.productId), spec.productId]);
     if (skus.size > loc.maxSkuQty) throw ruleViolation(`${label} allows at most ${loc.maxSkuQty} SKUs.`);
@@ -84,12 +150,20 @@ export async function assertLocationAccepts(tx: Tx, spec: BucketSpec, qty: numbe
   return loc;
 }
 
-async function assertCapacity(tx: Tx, loc: LocationRow, others: readonly Occupant[], spec: BucketSpec, qty: number): Promise<void> {
-  if (loc.capacityType === "None" || loc.maxCapacityQty <= 0) return;
-  if (loc.capacityType === "Maximum Unit Quantity") {
+async function assertCapacity(
+  tx: Tx,
+  loc: LocationRow,
+  others: readonly Occupant[],
+  spec: BucketSpec,
+  qty: number,
+): Promise<void> {
+  if (loc.capacityType === 'None' || loc.maxCapacityQty <= 0) return;
+  if (loc.capacityType === 'Maximum Unit Quantity') {
     const used = others.reduce((sum, o) => sum + o.onHand, 0);
     if (used + qty > loc.maxCapacityQty) {
-      throw ruleViolation(`Location ${loc.code} capacity exceeded: ${used} + ${qty} > ${loc.maxCapacityQty} units.`);
+      throw ruleViolation(
+        `Location ${loc.code} capacity exceeded: ${used} + ${qty} > ${loc.maxCapacityQty} units.`,
+      );
     }
     return;
   }
@@ -97,41 +171,87 @@ async function assertCapacity(tx: Tx, loc: LocationRow, others: readonly Occupan
   for (const o of others) packs += Math.ceil(o.onHand / (await packRatio(tx, o.productId, o.packType)));
   const incoming = Math.ceil(qty / (await packRatio(tx, spec.productId, spec.packType)));
   if (packs + incoming > loc.maxCapacityQty) {
-    throw ruleViolation(`Location ${loc.code} capacity exceeded: ${packs} + ${incoming} > ${loc.maxCapacityQty} packs.`);
+    throw ruleViolation(
+      `Location ${loc.code} capacity exceeded: ${packs} + ${incoming} > ${loc.maxCapacityQty} packs.`,
+    );
   }
 }
 
 /** Committed order/job ids of the stock on an LP. */
-async function lpCommitments(tx: Tx, lpId: string, excludeId?: string): Promise<{ orderIds: Set<string>; jobIds: Set<string> }> {
+async function lpCommitments(
+  tx: Tx,
+  lpId: string,
+  excludeId?: string,
+): Promise<{ orderIds: Set<string>; jobIds: Set<string> }> {
   const ids = (await occupants(tx, eq(schema.inventory.lpId, lpId), excludeId)).map((o) => o.id);
   if (ids.length === 0) return { orderIds: new Set(), jobIds: new Set() };
-  const rows = await tx.select({ orderId: schema.inventoryAllocations.orderId, jobId: schema.inventoryAllocations.jobId })
+  const rows = await tx
+    .select({ orderId: schema.inventoryAllocations.orderId, jobId: schema.inventoryAllocations.jobId })
     .from(schema.inventoryAllocations)
-    .where(and(inArray(schema.inventoryAllocations.inventoryId, ids),
-      inArray(schema.inventoryAllocations.status, [...ACTIVE_ALLOCATION_STATUSES])));
+    .where(
+      and(
+        inArray(schema.inventoryAllocations.inventoryId, ids),
+        inArray(schema.inventoryAllocations.status, [...ACTIVE_ALLOCATION_STATUSES]),
+      ),
+    );
   return {
     orderIds: new Set(rows.flatMap((r) => (r.orderId ? [r.orderId] : []))),
     jobIds: new Set(rows.flatMap((r) => (r.jobId ? [r.jobId] : []))),
   };
 }
 
-export async function assertLpAccepts(tx: Tx, spec: BucketSpec, opts: PlacementOptions = {}): Promise<LpRow | null> {
+export async function assertLpAccepts(
+  tx: Tx,
+  spec: BucketSpec,
+  opts: PlacementOptions = {},
+): Promise<LpRow | null> {
   if (!spec.lpId) return null;
   const lp = await getLp(tx, spec.lpId);
   const label = `LP ${lp.number}`;
   if (lp.warehouseId !== spec.warehouseId) throw ruleViolation(`${label} belongs to another warehouse.`);
-  if (lp.status === "Shipped" || lp.status === "Removed") throw ruleViolation(`${label} is ${lp.status.toLowerCase()}.`);
+  if (lp.status === 'Shipped' || lp.status === 'Removed')
+    throw ruleViolation(`${label} is ${lp.status.toLowerCase()}.`);
   if (lp.locationId && lp.locationId !== spec.locationId) {
     throw ruleViolation(`${label} is in another location. Move the LP or scan a different LP.`);
   }
   const [type] = await tx.select().from(schema.lpTypes).where(eq(schema.lpTypes.id, lp.lpTypeId)).limit(1);
   if (!type) return lp;
   const others = await occupants(tx, eq(schema.inventory.lpId, lp.id), opts.excludeInventoryId);
-  singleValueRule(others, type.onlyOneSku, (o) => o.productId, spec.productId, `${label} (${type.code}) only allows one SKU.`);
-  singleValueRule(others, type.onlyOneLot, (o) => o.lotNumber, spec.lotNumber, `${label} (${type.code}) only allows one lot/batch number.`);
-  singleValueRule(others, type.onlyOneExpiry, (o) => o.expiryDate, spec.expiryDate, `${label} (${type.code}) only allows one expiry date.`);
-  singleValueRule(others, type.onlyOneProductionDate, (o) => o.productionDate, spec.productionDate, `${label} (${type.code}) only allows one production date.`);
-  singleValueRule(others, type.onlyOneClient, (o) => o.clientId, spec.clientId, `${label} (${type.code}) only allows one client.`);
+  singleValueRule(
+    others,
+    type.onlyOneSku,
+    (o) => o.productId,
+    spec.productId,
+    `${label} (${type.code}) only allows one SKU.`,
+  );
+  singleValueRule(
+    others,
+    type.onlyOneLot,
+    (o) => o.lotNumber,
+    spec.lotNumber,
+    `${label} (${type.code}) only allows one lot/batch number.`,
+  );
+  singleValueRule(
+    others,
+    type.onlyOneExpiry,
+    (o) => o.expiryDate,
+    spec.expiryDate,
+    `${label} (${type.code}) only allows one expiry date.`,
+  );
+  singleValueRule(
+    others,
+    type.onlyOneProductionDate,
+    (o) => o.productionDate,
+    spec.productionDate,
+    `${label} (${type.code}) only allows one production date.`,
+  );
+  singleValueRule(
+    others,
+    type.onlyOneClient,
+    (o) => o.clientId,
+    spec.clientId,
+    `${label} (${type.code}) only allows one client.`,
+  );
   if (type.onlyOneOrder || type.onlyOneJob) {
     const c = await lpCommitments(tx, lp.id, opts.excludeInventoryId);
     if (type.onlyOneOrder && opts.orderId && [...c.orderIds].some((id) => id !== opts.orderId)) {
@@ -145,11 +265,19 @@ export async function assertLpAccepts(tx: Tx, spec: BucketSpec, opts: PlacementO
 }
 
 /** Full placement check (location rules, then LP mixing rules); places the LP if it has no location. */
-export async function assertPlacement(tx: Tx, spec: BucketSpec, qty: number, opts: PlacementOptions = {}): Promise<void> {
+export async function assertPlacement(
+  tx: Tx,
+  spec: BucketSpec,
+  qty: number,
+  opts: PlacementOptions = {},
+): Promise<void> {
   await assertLocationAccepts(tx, spec, qty, opts);
   const lp = await assertLpAccepts(tx, spec, opts);
   if (lp && !lp.locationId) {
-    await tx.update(schema.licensePlates).set({ locationId: spec.locationId }).where(eq(schema.licensePlates.id, lp.id));
+    await tx
+      .update(schema.licensePlates)
+      .set({ locationId: spec.locationId })
+      .where(eq(schema.licensePlates.id, lp.id));
   }
 }
 

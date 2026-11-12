@@ -1,10 +1,16 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { usePathname } from "next/navigation";
-import { useForm, type DefaultValues, type FieldValues, type Path, type UseFormReturn } from "react-hook-form";
-import { focusFirstError } from "../form/form";
-import type { ServerFieldErrors, StepMeta, WizardMode, WizardStep } from "./wizard-types";
+import * as React from 'react';
+import { usePathname } from 'next/navigation';
+import {
+  useForm,
+  type DefaultValues,
+  type FieldValues,
+  type Path,
+  type UseFormReturn,
+} from 'react-hook-form';
+import { focusFirstError } from '../form/form';
+import type { ServerFieldErrors, StepMeta, WizardMode, WizardStep } from './wizard-types';
 import {
   canSelectStep,
   clearDraft,
@@ -20,7 +26,7 @@ import {
   writeDraft,
   type StepIssue,
   type WizardNavState,
-} from "./wizard-state";
+} from './wizard-state';
 
 const DRAFT_DEBOUNCE_MS = 300;
 
@@ -43,17 +49,20 @@ export interface UseWizardOptions<T extends FieldValues> {
 /** Top-level keys a step schema validates (object schemas only). */
 function schemaKeys(schema: unknown): readonly string[] {
   const shape = (schema as { shape?: unknown } | undefined)?.shape;
-  return shape && typeof shape === "object" ? Object.keys(shape as Record<string, unknown>) : [];
+  return shape && typeof shape === 'object' ? Object.keys(shape as Record<string, unknown>) : [];
 }
 
 /** Index of the step that owns a field path (by its schema's top-level keys), or -1. */
-export function stepIndexForPath<T extends FieldValues>(steps: readonly WizardStep<T>[], path: string): number {
-  const head = path.split(".")[0] ?? path;
+export function stepIndexForPath<T extends FieldValues>(
+  steps: readonly WizardStep<T>[],
+  path: string,
+): number {
+  const head = path.split('.')[0] ?? path;
   return steps.findIndex((s) => schemaKeys(s.schema).includes(head));
 }
 
 function omitKeys<V>(values: V, keys: readonly string[] | undefined): V {
-  if (!keys?.length || !values || typeof values !== "object") return values;
+  if (!keys?.length || !values || typeof values !== 'object') return values;
   const copy = { ...(values as Record<string, unknown>) };
   for (const k of keys) delete copy[k];
   return copy as V;
@@ -88,10 +97,18 @@ export interface WizardController<T extends FieldValues> {
   readonly applyServerErrors: (fieldErrors: ServerFieldErrors) => boolean;
 }
 
-export function useWizard<T extends FieldValues>({ steps, mode, defaultValues, draftScope, onComplete, rootRef, transientFields }: UseWizardOptions<T>): WizardController<T> {
+export function useWizard<T extends FieldValues>({
+  steps,
+  mode,
+  defaultValues,
+  draftScope,
+  onComplete,
+  rootRef,
+  transientFields,
+}: UseWizardOptions<T>): WizardController<T> {
   const pathname = usePathname();
   const scope = draftScope === false ? null : (draftScope ?? pathname);
-  const form = useForm<T>({ defaultValues, mode: "onTouched" });
+  const form = useForm<T>({ defaultValues, mode: 'onTouched' });
   const [nav, setNav] = React.useState<WizardNavState>(() => initialNavState(mode, steps.length));
   const [submitting, setSubmitting] = React.useState(false);
   const [completed, setCompleted] = React.useState(false);
@@ -107,7 +124,10 @@ export function useWizard<T extends FieldValues>({ steps, mode, defaultValues, d
     if (!scope) return;
     const draft = readDraft<T>(sessionStorageOrNull(), scope);
     if (!draft) return;
-    const restored = { ...(defaultValues as Record<string, unknown>), ...(omitKeys(draft.values, transientFields) as Record<string, unknown>) } as T;
+    const restored = {
+      ...(defaultValues as Record<string, unknown>),
+      ...(omitKeys(draft.values, transientFields) as Record<string, unknown>),
+    } as T;
     form.reset(restored, { keepDefaultValues: true });
     setNav({ ...draft.nav, current: Math.min(draft.nav.current, steps.length - 1) });
     setRestoredDraft(true);
@@ -119,7 +139,11 @@ export function useWizard<T extends FieldValues>({ steps, mode, defaultValues, d
   React.useEffect(() => {
     if (!scope || completed) return undefined;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const save = () => writeDraft(sessionStorageOrNull(), scope, { values: omitKeys(form.getValues(), transientFields), nav: navRef.current });
+    const save = () =>
+      writeDraft(sessionStorageOrNull(), scope, {
+        values: omitKeys(form.getValues(), transientFields),
+        nav: navRef.current,
+      });
     const schedule = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(save, DRAFT_DEBOUNCE_MS);
@@ -144,11 +168,11 @@ export function useWizard<T extends FieldValues>({ steps, mode, defaultValues, d
       for (const issue of issues) {
         if (seen.has(issue.path)) continue;
         seen.add(issue.path);
-        form.setError(issue.path as Path<T>, { type: "step", message: issue.message });
+        form.setError(issue.path as Path<T>, { type: 'step', message: issue.message });
       }
       errorPaths.current.set(step.key, nextPaths);
     },
-    [form]
+    [form],
   );
 
   const check = React.useCallback(
@@ -160,7 +184,7 @@ export function useWizard<T extends FieldValues>({ steps, mode, defaultValues, d
       setNav((s) => markValidation(s, step.key, issues.length === 0));
       return issues.length === 0;
     },
-    [steps, form, applyIssues]
+    [steps, form, applyIssues],
   );
 
   /* Live re-validation of a step that is flagged, so errors clear as the user fixes them. */
@@ -180,10 +204,10 @@ export function useWizard<T extends FieldValues>({ steps, mode, defaultValues, d
     (key: string) => {
       const index = steps.findIndex((s) => s.key === key);
       if (!canSelectStep(navRef.current, index, mode, steps.length)) return;
-      if (mode === "free" || index < navRef.current.current) check(navRef.current.current);
+      if (mode === 'free' || index < navRef.current.current) check(navRef.current.current);
       setNav((s) => moveTo(s, index));
     },
-    [steps, mode, check]
+    [steps, mode, check],
   );
 
   const next = React.useCallback(async () => {
@@ -217,14 +241,14 @@ export function useWizard<T extends FieldValues>({ steps, mode, defaultValues, d
     (fieldErrors: ServerFieldErrors): boolean => {
       const entries = Object.entries(fieldErrors)
         .map(([path, msg]) => [path, Array.isArray(msg) ? msg[0] : msg] as const)
-        .filter((e): e is readonly [string, string] => typeof e[1] === "string" && e[1].length > 0);
+        .filter((e): e is readonly [string, string] => typeof e[1] === 'string' && e[1].length > 0);
       if (entries.length === 0) return false;
       const flagged = new Set<number>();
       for (const [path, message] of entries) {
         const owner = stepIndexForPath(steps, path);
         const index = owner >= 0 ? owner : navRef.current.current;
         flagged.add(index);
-        form.setError(path as Path<T>, { type: "server", message });
+        form.setError(path as Path<T>, { type: 'server', message });
       }
       for (const index of flagged) {
         const step = steps[index];
@@ -235,7 +259,7 @@ export function useWizard<T extends FieldValues>({ steps, mode, defaultValues, d
       focusError();
       return true;
     },
-    [steps, form, focusError]
+    [steps, form, focusError],
   );
 
   const submit = React.useCallback(async () => {
@@ -255,7 +279,12 @@ export function useWizard<T extends FieldValues>({ steps, mode, defaultValues, d
     } catch (error) {
       // The caller surfaces the failure (toast). Server field errors go to their owning steps.
       const fieldErrors = (error as { fieldErrors?: unknown } | null)?.fieldErrors;
-      if (!(fieldErrors && typeof fieldErrors === "object" && applyServerErrors(fieldErrors as ServerFieldErrors))) focusError();
+      if (!(
+        fieldErrors &&
+        typeof fieldErrors === 'object' &&
+        applyServerErrors(fieldErrors as ServerFieldErrors)
+      ))
+        focusError();
       return false;
     } finally {
       setSubmitting(false);

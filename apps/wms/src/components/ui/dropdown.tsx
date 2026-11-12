@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { cn } from "@/lib/utils";
+import * as React from 'react';
+import { cn } from '@/lib/utils';
 
 /**
  * Lightweight dropdown/popover. Closes on outside click and Escape.
@@ -10,14 +10,14 @@ import { cn } from "@/lib/utils";
 export function Dropdown({
   trigger,
   children,
-  align = "start",
+  align = 'start',
   className,
   panelClassName,
   onOpenChange,
 }: {
   trigger: (open: boolean) => React.ReactNode;
   children: React.ReactNode | ((close: () => void) => React.ReactNode);
-  align?: "start" | "end";
+  align?: 'start' | 'end';
   className?: string;
   panelClassName?: string;
   onOpenChange?: (open: boolean) => void;
@@ -30,7 +30,7 @@ export function Dropdown({
       setOpen(next);
       onOpenChange?.(next);
     },
-    [onOpenChange]
+    [onOpenChange],
   );
 
   React.useEffect(() => {
@@ -41,37 +41,32 @@ export function Dropdown({
       }
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpenNotify(false);
+      if (e.key === 'Escape') setOpenNotify(false);
     }
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKey);
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
     };
   }, [open, setOpenNotify]);
 
   const close = React.useCallback(() => setOpenNotify(false), [setOpenNotify]);
 
   return (
-    <div ref={rootRef} className={cn("relative inline-block", className)}>
-      <div
-        role="button"
-        tabIndex={-1}
-        onClick={() => setOpenNotify(!open)}
-        className="inline-flex"
-      >
+    <div ref={rootRef} className={cn('relative inline-block', className)}>
+      <div role="button" tabIndex={-1} onClick={() => setOpenNotify(!open)} className="inline-flex">
         {trigger(open)}
       </div>
       {open ? (
         <div
           className={cn(
-            "absolute z-50 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lg",
-            align === "end" ? "right-0" : "left-0",
-            panelClassName
+            'absolute z-50 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lg',
+            align === 'end' ? 'right-0' : 'left-0',
+            panelClassName,
           )}
         >
-          {typeof children === "function" ? children(close) : children}
+          {typeof children === 'function' ? children(close) : children}
         </div>
       ) : null}
     </div>
@@ -87,9 +82,9 @@ export function DropdownItem({
     <button
       type="button"
       className={cn(
-        "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-body transition-colors hover:bg-surface-sunken",
-        destructive && "text-danger hover:bg-danger-soft",
-        className
+        'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-body transition-colors hover:bg-surface-sunken',
+        destructive && 'text-danger hover:bg-danger-soft',
+        className,
       )}
       {...props}
     />

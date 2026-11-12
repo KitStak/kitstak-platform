@@ -15,9 +15,9 @@
  * The proxy issues the cookie on page navigations when it is absent.
  */
 
-export const CSRF_COOKIE = "ks_csrf";
-export const CSRF_HEADER = "x-csrf-token";
-export const CSRF_SAFE_METHODS: readonly string[] = ["GET", "HEAD", "OPTIONS"];
+export const CSRF_COOKIE = 'ks_csrf';
+export const CSRF_HEADER = 'x-csrf-token';
+export const CSRF_SAFE_METHODS: readonly string[] = ['GET', 'HEAD', 'OPTIONS'];
 /** 32 random bytes, base64url-encoded => 43 chars. */
 export const CSRF_TOKEN_BYTES = 32;
 export const CSRF_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
@@ -29,9 +29,9 @@ export function isSafeMethod(method: string): boolean {
 }
 
 function toBase64Url(bytes: Uint8Array): string {
-  let binary = "";
+  let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /** New random token (Web Crypto: works in Node, the proxy and the browser). */
@@ -42,13 +42,13 @@ export function generateCsrfToken(): string {
 }
 
 export function isWellFormedCsrfToken(value: string | null | undefined): value is string {
-  return typeof value === "string" && CSRF_TOKEN_RE.test(value);
+  return typeof value === 'string' && CSRF_TOKEN_RE.test(value);
 }
 
 /** Extracts the `ks_csrf` value from a `document.cookie`-style string. */
 export function readCsrfTokenFromCookie(cookieString: string): string | null {
-  for (const part of cookieString.split(";")) {
-    const index = part.indexOf("=");
+  for (const part of cookieString.split(';')) {
+    const index = part.indexOf('=');
     if (index < 0) continue;
     if (part.slice(0, index).trim() === CSRF_COOKIE) {
       const value = decodeURIComponent(part.slice(index + 1).trim());

@@ -28,13 +28,13 @@ import {
   Activity,
   Briefcase,
   TrendingUp,
-} from "lucide-react";
-import type { NavIconName } from "@/config/nav-config";
+} from 'lucide-react';
+import type { NavIconName } from '@/config/nav-config';
 
 export const NAV_ICONS: Readonly<Record<NavIconName, LucideIcon>> = {
   dashboard: LayoutDashboard,
   outbound: ArrowUpFromLine,
-  "task-management": ListChecks,
+  'task-management': ListChecks,
   shipment: Truck,
   inbound: ArrowDownToLine,
   inventory: Boxes,
@@ -49,9 +49,9 @@ export const NAV_ICONS: Readonly<Record<NavIconName, LucideIcon>> = {
   efficiency: Gauge,
   labor: Users,
   operational: TrendingUp,
-  "master-data": Database,
+  'master-data': Database,
   configs: Cog,
-  "client-setup": Briefcase,
+  'client-setup': Briefcase,
   users: Users,
   reports: BarChart3,
   settings: Settings,

@@ -1,17 +1,26 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { Toast as ToastPrimitive } from "radix-ui";
-import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { dismissToast, useToasts, type ToastItem, type ToastVariant } from "./toast";
+import * as React from 'react';
+import { Toast as ToastPrimitive } from 'radix-ui';
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { dismissToast, useToasts, type ToastItem, type ToastVariant } from './toast';
 
-const VARIANT_STYLES: Readonly<Record<ToastVariant, { readonly bar: string; readonly icon: string; readonly Icon: React.ComponentType<{ className?: string }> }>> = {
-  success: { bar: "bg-success", icon: "text-success", Icon: CheckCircle2 },
-  error: { bar: "bg-danger", icon: "text-danger", Icon: XCircle },
-  warning: { bar: "bg-warning", icon: "text-warning", Icon: AlertTriangle },
+const VARIANT_STYLES: Readonly<
+  Record<
+    ToastVariant,
+    {
+      readonly bar: string;
+      readonly icon: string;
+      readonly Icon: React.ComponentType<{ className?: string }>;
+    }
+  >
+> = {
+  success: { bar: 'bg-success', icon: 'text-success', Icon: CheckCircle2 },
+  error: { bar: 'bg-danger', icon: 'text-danger', Icon: XCircle },
+  warning: { bar: 'bg-warning', icon: 'text-warning', Icon: AlertTriangle },
   // Info is blue: brand red reads as an error.
-  info: { bar: "bg-info", icon: "text-info", Icon: Info },
+  info: { bar: 'bg-info', icon: 'text-info', Icon: Info },
 };
 
 function ToastCard({ item }: { readonly item: ToastItem }) {
@@ -20,22 +29,24 @@ function ToastCard({ item }: { readonly item: ToastItem }) {
   return (
     <ToastPrimitive.Root
       duration={Number.isFinite(item.duration) ? item.duration : 2_147_483_647}
-      type={item.variant === "error" ? "foreground" : "background"}
+      type={item.variant === 'error' ? 'foreground' : 'background'}
       onOpenChange={(open) => {
         if (!open) dismissToast(item.id);
       }}
       className={cn(
-        "group relative flex w-[360px] max-w-[calc(100vw-32px)] items-start gap-2.5 overflow-hidden rounded-lg border border-border bg-surface py-3 pl-4 pr-9 shadow-lg",
-        "data-[swipe=move]:translate-y-[var(--radix-toast-swipe-move-y)] data-[swipe=end]:-translate-y-full transition-transform"
+        'group relative flex w-[360px] max-w-[calc(100vw-32px)] items-start gap-2.5 overflow-hidden rounded-lg border border-border bg-surface py-3 pl-4 pr-9 shadow-lg',
+        'data-[swipe=move]:translate-y-[var(--radix-toast-swipe-move-y)] data-[swipe=end]:-translate-y-full transition-transform',
       )}
       data-variant={item.variant}
       data-toast=""
       role="status"
     >
-      <span className={cn("absolute inset-y-0 left-0 w-1", style.bar)} aria-hidden />
-      <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", style.icon)} aria-hidden />
+      <span className={cn('absolute inset-y-0 left-0 w-1', style.bar)} aria-hidden />
+      <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', style.icon)} aria-hidden />
       <div className="min-w-0 flex-1">
-        <ToastPrimitive.Title className="text-sm font-semibold text-foreground">{item.title}</ToastPrimitive.Title>
+        <ToastPrimitive.Title className="text-sm font-semibold text-foreground">
+          {item.title}
+        </ToastPrimitive.Title>
         {item.message ? (
           <ToastPrimitive.Description className="mt-0.5 text-xs leading-4 text-secondary break-words">
             {item.message}

@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * Inventory date rendering (M06). Two kinds of value reach the inventory screens:
@@ -13,8 +13,14 @@
  * Every inventory grid, drawer, card and sub-label goes through these helpers so one row shows
  * one date, whatever the surface.
  */
-import * as React from "react";
-import { EMPTY_VALUE, formatPattern, gridDateTimePattern, useFormat, type FormatPreferences } from "@/lib/format";
+import * as React from 'react';
+import {
+  EMPTY_VALUE,
+  formatPattern,
+  gridDateTimePattern,
+  useFormat,
+  type FormatPreferences,
+} from '@/lib/format';
 
 const CALENDAR_RE = /^(\d{4})-(\d{2})-(\d{2})(?:$|T00:00:00(?:\.000)?Z?$)/;
 
@@ -29,21 +35,27 @@ export function parseCalendarDate(value: string | null | undefined): Date | null
 }
 
 /** The date part of the user's pattern, zero-padded like the grid ("MM/DD/YYYY"). */
-export function gridDatePattern(prefs: Pick<FormatPreferences, "dateFormat">): string {
+export function gridDatePattern(prefs: Pick<FormatPreferences, 'dateFormat'>): string {
   const pattern = gridDateTimePattern(prefs.dateFormat);
   const idx = pattern.search(/\s+[Hh]/);
   return idx > 0 ? pattern.slice(0, idx) : pattern;
 }
 
 /** Calendar date ("2026-02-28") in the grid date pattern ("02/28/2026"). Invalid input → the raw string. */
-export function formatCalendarDate(value: string | null | undefined, prefs: Pick<FormatPreferences, "dateFormat">): string {
+export function formatCalendarDate(
+  value: string | null | undefined,
+  prefs: Pick<FormatPreferences, 'dateFormat'>,
+): string {
   if (!value) return EMPTY_VALUE;
   const d = parseCalendarDate(value);
   return d ? formatPattern(d, gridDatePattern(prefs)) : value;
 }
 
 /** Local calendar day of an instant, in the grid date pattern. */
-export function formatInstantDate(value: string | null | undefined, prefs: Pick<FormatPreferences, "dateFormat">): string {
+export function formatInstantDate(
+  value: string | null | undefined,
+  prefs: Pick<FormatPreferences, 'dateFormat'>,
+): string {
   if (!value) return EMPTY_VALUE;
   return formatPattern(value, gridDatePattern(prefs));
 }
@@ -53,13 +65,28 @@ export function formatInstantDate(value: string | null | undefined, prefs: Pick<
  * the attribute) a leftover value is not shown as if it were real: the cell reads "-" and the
  * tooltip names the stored value, which the hygiene repair clears once the units are free.
  */
-export function CalendarDateCell({ value, tracked = true }: { readonly value: string | null | undefined; readonly tracked?: boolean }) {
+export function CalendarDateCell({
+  value,
+  tracked = true,
+}: {
+  readonly value: string | null | undefined;
+  readonly tracked?: boolean;
+}) {
   const fmt = useFormat();
   if (!value) return <span className="text-faint">{EMPTY_VALUE}</span>;
   if (!tracked) {
-    return <span className="text-faint" title={`Not tracked for this SKU (stored value ${formatCalendarDate(value, fmt.prefs)} is cleared when these units are free)`}>{EMPTY_VALUE}</span>;
+    return (
+      <span
+        className="text-faint"
+        title={`Not tracked for this SKU (stored value ${formatCalendarDate(value, fmt.prefs)} is cleared when these units are free)`}
+      >
+        {EMPTY_VALUE}
+      </span>
+    );
   }
-  return <span className="whitespace-nowrap tabular-nums text-body">{formatCalendarDate(value, fmt.prefs)}</span>;
+  return (
+    <span className="whitespace-nowrap tabular-nums text-body">{formatCalendarDate(value, fmt.prefs)}</span>
+  );
 }
 
 /** Hook form for non-cell surfaces (cards, drawers, sub-labels). */

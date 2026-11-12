@@ -1,16 +1,16 @@
-import { BRAND_NAME } from "@/config/brand";
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { PackageCheck, Radio, ScanBarcode } from "lucide-react";
-import { BRAND_COLORS, BrandLogo } from "@/components/layout/brand-logo";
-import { demoCredentialsEnabled } from "./demo-credentials";
-import { LoginForm } from "./login-form";
-import { SsoNotices } from "./sso-sign-in";
+import { BRAND_NAME } from '@/config/brand';
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { PackageCheck, Radio, ScanBarcode } from 'lucide-react';
+import { BRAND_COLORS, BrandLogo } from '@/components/layout/brand-logo';
+import { demoCredentialsEnabled } from './demo-credentials';
+import { LoginForm } from './login-form';
+import { SsoNotices } from './sso-sign-in';
 
 const COPYRIGHT_YEAR = 2026;
 
 export const metadata: Metadata = {
-  title: "Sign in",
+  title: 'Sign in',
 };
 
 /**
@@ -20,20 +20,20 @@ export const metadata: Metadata = {
 const CAPABILITIES: ReadonlyArray<{ icon: React.ReactNode; label: string }> = [
   {
     icon: <ScanBarcode className="h-3.5 w-3.5" aria-hidden />,
-    label: "Scan-verified pick & pack",
+    label: 'Scan-verified pick & pack',
   },
   {
     icon: <PackageCheck className="h-3.5 w-3.5" aria-hidden />,
-    label: "Ledger-backed inventory",
+    label: 'Ledger-backed inventory',
   },
   {
     icon: <Radio className="h-3.5 w-3.5" aria-hidden />,
-    label: "Multi-channel order sync",
+    label: 'Multi-channel order sync',
   },
 ];
 
 function BrandMark({ inverted = false }: { inverted?: boolean }) {
-  return <BrandLogo tone={inverted ? "dark" : "light"} height={24} showProduct />;
+  return <BrandLogo tone={inverted ? 'dark' : 'light'} height={24} showProduct />;
 }
 
 /** Demo credentials: non-production builds with DEMO_MODE set only (see demo-credentials.ts). */
@@ -47,7 +47,7 @@ export default function LoginPage() {
       {/* Brand panel */}
       <aside
         className="relative hidden flex-col justify-between overflow-hidden p-12 lg:flex lg:w-[55%]"
-        style={{ background: "var(--surface-brand)" }}
+        style={{ background: 'var(--surface-brand)' }}
         aria-hidden
       >
         {/* dot grid */}
@@ -55,7 +55,7 @@ export default function LoginPage() {
           className="pointer-events-none absolute inset-0 opacity-[0.08]"
           style={{
             backgroundImage: `radial-gradient(circle, ${BRAND_COLORS.cream} 1px, transparent 1px)`,
-            backgroundSize: "26px 26px",
+            backgroundSize: '26px 26px',
           }}
         />
         {/* oversized brand bars, bleeding off the right edge */}
@@ -69,15 +69,17 @@ export default function LoginPage() {
         </div>
 
         <div className="relative max-w-[520px]">
-          <h2 className="text-[40px] font-semibold leading-[1.1] tracking-[-0.02em]" style={{ color: BRAND_COLORS.cream }}>
+          <h2
+            className="text-[40px] font-semibold leading-[1.1] tracking-[-0.02em]"
+            style={{ color: BRAND_COLORS.cream }}
+          >
             Fulfillment,
             <br />
             <span style={{ color: BRAND_COLORS.crimson }}>running on rails.</span>
           </h2>
           <p className="mt-5 text-base leading-relaxed text-white/70">
-            Orders, inventory, receiving and labor — one operations platform built for
-            high-volume 3PL warehouses. Synchronized across every channel, from order
-            creation to the loading dock.
+            Orders, inventory, receiving and labor — one operations platform built for high-volume 3PL
+            warehouses. Synchronized across every channel, from order creation to the loading dock.
           </p>
 
           <ul className="mt-8 flex flex-wrap gap-2.5">

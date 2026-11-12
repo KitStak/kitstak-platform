@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { PageSkeleton } from "@/components/layout/shell-skeleton";
-import { CarrierConnectionsPage } from "@/components/integrations/carriers/carrier-connections-page";
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { PageSkeleton } from '@/components/layout/shell-skeleton';
+import { CarrierConnectionsPage } from '@/components/integrations/carriers/carrier-connections-page';
 
-export const metadata: Metadata = { title: "Carrier Integration" };
+export const metadata: Metadata = { title: 'Carrier Integration' };
 
 async function Content({ params }: { readonly params: Promise<{ provider: string }> }) {
   const p = await params;

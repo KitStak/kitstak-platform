@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { Warehouse } from "lucide-react";
-import { contextLabel, OPEN_CONTEXT_SWITCHER_EVENT } from "@/lib/context-label";
-import { useMe } from "@/lib/permissions-client";
-import { useShell } from "./shell-context";
+import * as React from 'react';
+import { Warehouse } from 'lucide-react';
+import { contextLabel, OPEN_CONTEXT_SWITCHER_EVENT } from '@/lib/context-label';
+import { useMe } from '@/lib/permissions-client';
+import { useShell } from './shell-context';
 
 /** Asks the header context switcher to open (it listens for this event). */
 export function openContextSwitcher(): void {
@@ -28,7 +28,9 @@ export function ContextChip() {
     : initialContext;
   if (!label) return null;
   // The switcher only exists when there is something to switch; otherwise no "Change".
-  const switchable = data ? data.contextOptions.warehouses.length > 1 || data.contextOptions.clients.length > 1 : (initialContext?.visible ?? false);
+  const switchable = data
+    ? data.contextOptions.warehouses.length > 1 || data.contextOptions.clients.length > 1
+    : (initialContext?.visible ?? false);
   return (
     <div className="flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs shadow-xs">
       <Warehouse className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />

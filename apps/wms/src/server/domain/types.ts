@@ -3,9 +3,9 @@
  * `(tx, ctx, input)`. `tx` is the open transaction (or the database for reads);
  * `ctx` identifies the actor and, when present, the data scope to enforce.
  */
-import type { AppDb } from "@/server/api/db";
-import type { Scope } from "@/server/auth/scope";
-import { assertInScope } from "@/server/auth/scope";
+import type { AppDb } from '@/server/api/db';
+import type { Scope } from '@/server/auth/scope';
+import { assertInScope } from '@/server/auth/scope';
 
 export type Tx = AppDb;
 
@@ -18,7 +18,7 @@ export interface DomainCtx {
 }
 
 /** Context used by background work (scheduler, integrations). */
-export const systemCtx = (source = "Scheduler"): DomainCtx => ({ userId: null, source });
+export const systemCtx = (source = 'Scheduler'): DomainCtx => ({ userId: null, source });
 
 export interface BulkResult {
   readonly succeeded: readonly string[];

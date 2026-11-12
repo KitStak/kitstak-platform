@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
 /**
  * Small per-viewer string list in localStorage (e.g. pinned filter fields). Storage
  * can be unavailable (private mode, blocked site data): every access is guarded and
  * the hook degrades to in-memory state.
  */
-import * as React from "react";
-import { z } from "zod";
+import * as React from 'react';
+import { z } from 'zod';
 
 const listSchema = z.array(z.string().max(200)).max(200);
 
@@ -41,7 +41,7 @@ export function useLocalList(key: string): readonly [readonly string[], (next: r
       setValue(next);
       write(key, next);
     },
-    [key]
+    [key],
   );
   return [value, set] as const;
 }

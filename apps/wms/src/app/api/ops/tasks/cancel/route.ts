@@ -1,7 +1,7 @@
 /** `POST /api/ops/tasks/cancel` `{ ids }` — cancels pending tasks; per-id bulk result. */
-import { defineRoute } from "@/server/api/define-route";
-import { domainCtx } from "@/server/repositories/platform-common";
-import { cancelTasks, TASK_PERMISSIONS, taskCancelSchema } from "@/server/repositories/platform-ops";
+import { defineRoute } from '@/server/api/define-route';
+import { domainCtx } from '@/server/repositories/platform-common';
+import { cancelTasks, TASK_PERMISSIONS, taskCancelSchema } from '@/server/repositories/platform-ops';
 
 export const POST = defineRoute({
   permission: TASK_PERMISSIONS.cancel,

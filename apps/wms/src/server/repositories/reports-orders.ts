@@ -2,12 +2,12 @@
  * Orders-group reports (spec 07): Channel Sales and Order Inventory. Both are scoped to
  * the viewer's warehouse/client view scope (header context narrows it).
  */
-import { sql, type SQL } from "drizzle-orm";
-import type { AppDb } from "@/server/api/db";
-import type { AuthContext } from "@/server/auth/context";
-import { serializeGridQuery, type GridFilter, type GridQuery } from "@/server/query/grid-query";
-import { CHANNEL_SALES_DEF, ORDER_INVENTORY_DEF } from "@/lib/grid-defs/reports/orders";
-import { clientIn, inList, runReport, warehouseLabel, type ReportPage } from "./reports-grid";
+import { sql, type SQL } from 'drizzle-orm';
+import type { AppDb } from '@/server/api/db';
+import type { AuthContext } from '@/server/auth/context';
+import { serializeGridQuery, type GridFilter, type GridQuery } from '@/server/query/grid-query';
+import { CHANNEL_SALES_DEF, ORDER_INVENTORY_DEF } from '@/lib/grid-defs/reports/orders';
+import { clientIn, inList, runReport, warehouseLabel, type ReportPage } from './reports-grid';
 
 type Row = Record<string, unknown>;
 
@@ -50,7 +50,7 @@ export function channelSalesSql(auth: AuthContext): SQL {
     ),
     rowsx AS (SELECT * FROM sales UNION ALL SELECT * FROM unsold)
     SELECT COALESCE(r.wid, '-') || ':' || r.cid || ':' || COALESCE(r.channel, '') || ':' || r.store || ':' || r.pid || ':' || r.pack AS "rowId",
-           r.wid AS "warehouseId", CASE WHEN r.wid IS NULL THEN 'Not sold yet' ELSE ${warehouseLabel("w")} END AS "warehouse",
+           r.wid AS "warehouseId", CASE WHEN r.wid IS NULL THEN 'Not sold yet' ELSE ${warehouseLabel('w')} END AS "warehouse",
            CASE WHEN r.orders > 0 THEN 1 ELSE 0 END AS "hasSales",
            r.cid AS "clientId", c.name AS "client",
            NULLIF(r.channel, '') AS "channel", NULLIF(r.store, '') AS "storeName",
@@ -64,10 +64,18 @@ export function channelSalesSql(auth: AuthContext): SQL {
     JOIN products p ON p.id = r.pid`;
 }
 
-export async function listChannelSales(db: AppDb, auth: AuthContext, query: GridQuery): Promise<ReportPage<Row>> {
+export async function listChannelSales(
+  db: AppDb,
+  auth: AuthContext,
+  query: GridQuery,
+): Promise<ReportPage<Row>> {
   const page = await runReport<Row>(db, channelSalesSql(auth), CHANNEL_SALES_DEF, query);
   return {
-    rows: page.rows.map(({ ordersForHref, ...r }) => ({ ...r, hasSales: Boolean(r.hasSales), ordersHref: Number(ordersForHref) > 0 ? channelSalesOrdersHref(r) : null })),
+    rows: page.rows.map(({ ordersForHref, ...r }) => ({
+      ...r,
+      hasSales: Boolean(r.hasSales),
+      ordersHref: Number(ordersForHref) > 0 ? channelSalesOrdersHref(r) : null,
+    })),
     total: page.total,
   };
 }
@@ -78,14 +86,18 @@ export async function listChannelSales(db: AppDb, auth: AuthContext, query: Grid
  * runs two stores on one channel. Values are escaped by the grid grammar (spaces, commas, &).
  */
 export function channelSalesOrdersHref(r: Readonly<Record<string, unknown>>): string {
-  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const str = (v: unknown) => (typeof v === 'string' ? v : '');
   const filters: GridFilter[] = [
-    { field: "warehouseId", op: "in", values: [str(r.warehouseId)] },
-    { field: "clientId", op: "in", values: [str(r.clientId)] },
-    { field: "sku", op: "eq", value: str(r.sku) },
+    { field: 'warehouseId', op: 'in', values: [str(r.warehouseId)] },
+    { field: 'clientId', op: 'in', values: [str(r.clientId)] },
+    { field: 'sku', op: 'eq', value: str(r.sku) },
   ];
-  if (str(r.channel)) filters.push({ field: "channel", op: "in", values: [str(r.channel)] });
-  filters.push(str(r.storeName) ? { field: "storeName", op: "eq", value: str(r.storeName) } : { field: "storeName", op: "empty" });
+  if (str(r.channel)) filters.push({ field: 'channel', op: 'in', values: [str(r.channel)] });
+  filters.push(
+    str(r.storeName)
+      ? { field: 'storeName', op: 'eq', value: str(r.storeName) }
+      : { field: 'storeName', op: 'empty' },
+  );
   return `/orders/shipped?${serializeGridQuery({ filters })}`;
 }
 
@@ -94,7 +106,7 @@ export function orderInventorySql(auth: AuthContext): SQL {
   return sql`
     SELECT a.id AS "rowId",
            o.code AS "orderCode", '/orders/' || o.id AS "orderHref",
-           i.warehouse_id AS "warehouseId", ${warehouseLabel("w")} AS "warehouse",
+           i.warehouse_id AS "warehouseId", ${warehouseLabel('w')} AS "warehouse",
            o.client_id AS "clientId", c.name AS "client",
            o.store_order_number AS "storeOrderNumber",
            j.code AS "jobCode", CASE WHEN j.id IS NOT NULL THEN '/jobs/' || j.id END AS "jobHref",
@@ -130,6 +142,10 @@ export function orderInventorySql(auth: AuthContext): SQL {
       AND ${inList(sql`i.warehouse_id`, auth.viewScope.warehouseIds)} AND ${clientIn(sql`COALESCE(o.client_id, i.client_id)`, auth.viewScope.clientIds)}`;
 }
 
-export async function listOrderInventory(db: AppDb, auth: AuthContext, query: GridQuery): Promise<ReportPage<Row>> {
+export async function listOrderInventory(
+  db: AppDb,
+  auth: AuthContext,
+  query: GridQuery,
+): Promise<ReportPage<Row>> {
   return await runReport<Row>(db, orderInventorySql(auth), ORDER_INVENTORY_DEF, query);
 }

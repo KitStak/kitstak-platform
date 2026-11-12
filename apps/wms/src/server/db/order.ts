@@ -11,7 +11,16 @@
  * A NOT NULL column keeps the plain drizzle clause (so it still matches its btree index);
  * a nullable column or an arbitrary SQL expression gets `NULLS FIRST` (asc) / `NULLS LAST` (desc).
  */
-import { asc as pgAsc, Column, desc as pgDesc, is, sql, type AnyColumn, type SQL, type SQLWrapper } from "drizzle-orm";
+import {
+  asc as pgAsc,
+  Column,
+  desc as pgDesc,
+  is,
+  sql,
+  type AnyColumn,
+  type SQL,
+  type SQLWrapper,
+} from 'drizzle-orm';
 
 const notNull = (target: AnyColumn | SQLWrapper): boolean => is(target, Column) && (target as Column).notNull;
 

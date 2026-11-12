@@ -1,15 +1,15 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { PageSkeleton } from "@/components/layout/shell-skeleton";
-import { VendorsPage } from "@/components/vendors/vendors-page";
-import { requirePagePermission } from "@/server/auth/permissions";
-import { VENDOR_VIEW_PERMISSIONS } from "@/lib/grid-defs/receiving/vendors";
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { PageSkeleton } from '@/components/layout/shell-skeleton';
+import { VendorsPage } from '@/components/vendors/vendors-page';
+import { requirePagePermission } from '@/server/auth/permissions';
+import { VENDOR_VIEW_PERMISSIONS } from '@/lib/grid-defs/receiving/vendors';
 
-export const metadata: Metadata = { title: "Vendors" };
+export const metadata: Metadata = { title: 'Vendors' };
 
 /** Server-side gate (same any-of set as `GET /api/vendors`): roles without vendor access land on /forbidden, not on a grid error. */
 async function Gated() {
-  await requirePagePermission(VENDOR_VIEW_PERMISSIONS, "/organization/vendors");
+  await requirePagePermission(VENDOR_VIEW_PERMISSIONS, '/organization/vendors');
   return <VendorsPage tabs="organization" />;
 }
 

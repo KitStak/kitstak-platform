@@ -1,4 +1,4 @@
-import { ProductDetailSkeleton } from "@/components/products/product-detail";
+import { ProductDetailSkeleton } from '@/components/products/product-detail';
 
 /**
  * Route-level loading state: shows shimmer tiles and an 8-row inventory table

@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * Client-side permission checks (BUILD_PLAN F4.1). Reads `permissions` from GET /api/me
@@ -8,12 +8,12 @@
  *   const { allowed } = useCan("shipment_orders.create");
  *   <Can permission={["receipts.edit", "receipts.create"]} mode="any" fallback={<DisabledButton …/>}>…</Can>
  */
-import * as React from "react";
-import type { UseQueryResult } from "@tanstack/react-query";
-import type { ApiError } from "./api-client";
-import { useApiQuery, type ApiQueryData } from "./query-client";
+import * as React from 'react';
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { ApiError } from './api-client';
+import { useApiQuery, type ApiQueryData } from './query-client';
 
-export const ME_QUERY_KEY = ["me"] as const;
+export const ME_QUERY_KEY = ['me'] as const;
 const ME_STALE_MS = 5 * 60_000;
 
 export interface ContextOption {
@@ -35,27 +35,34 @@ export interface MeResponse {
   readonly permissions: readonly string[];
   readonly roles: readonly string[];
   readonly restrictions: readonly string[];
-  readonly scope: { readonly warehouseIds: readonly string[]; readonly clientIds: readonly string[] | "all" };
+  readonly scope: { readonly warehouseIds: readonly string[]; readonly clientIds: readonly string[] | 'all' };
   readonly context: { readonly warehouseId: string | null; readonly clientId: string | null };
-  readonly contextOptions: { readonly warehouses: readonly ContextOption[]; readonly clients: readonly ContextOption[] };
+  readonly contextOptions: {
+    readonly warehouses: readonly ContextOption[];
+    readonly clients: readonly ContextOption[];
+  };
   readonly preferences: Readonly<Record<string, unknown>>;
   /** Active add-on app keys (Settings → Apps); absent on older responses. */
   readonly activeApps?: readonly string[];
 }
 
-export type PermissionMode = "all" | "any";
+export type PermissionMode = 'all' | 'any';
 export type PermissionInput = string | readonly string[];
 
 /** Pure check used by the hook and in tests. */
-export function hasPermission(granted: ReadonlySet<string> | readonly string[], required: PermissionInput, mode: PermissionMode = "all"): boolean {
+export function hasPermission(
+  granted: ReadonlySet<string> | readonly string[],
+  required: PermissionInput,
+  mode: PermissionMode = 'all',
+): boolean {
   const set = granted instanceof Set ? granted : new Set(granted as readonly string[]);
-  const keys = typeof required === "string" ? [required] : required;
+  const keys = typeof required === 'string' ? [required] : required;
   if (keys.length === 0) return true;
-  return mode === "all" ? keys.every((k) => set.has(k)) : keys.some((k) => set.has(k));
+  return mode === 'all' ? keys.every((k) => set.has(k)) : keys.some((k) => set.has(k));
 }
 
 export function useMe(): UseQueryResult<ApiQueryData<MeResponse>, ApiError> {
-  return useApiQuery<MeResponse>(ME_QUERY_KEY, "/api/me", { staleTime: ME_STALE_MS });
+  return useApiQuery<MeResponse>(ME_QUERY_KEY, '/api/me', { staleTime: ME_STALE_MS });
 }
 
 const subscribeNoop = (): (() => void) => () => undefined;
@@ -66,10 +73,17 @@ const subscribeNoop = (): (() => void) => () => undefined;
  * the server HTML even when /api/me is already in the React Query cache (no hydration mismatch).
  */
 export function useHydrated(): boolean {
-  return React.useSyncExternalStore(subscribeNoop, () => true, () => false);
+  return React.useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
 }
 
-export function usePermissionSet(): { readonly permissions: ReadonlySet<string>; readonly isLoading: boolean } {
+export function usePermissionSet(): {
+  readonly permissions: ReadonlySet<string>;
+  readonly isLoading: boolean;
+} {
   const { data, isLoading } = useMe();
   const hydrated = useHydrated();
   const list = data?.data.permissions;
@@ -77,7 +91,10 @@ export function usePermissionSet(): { readonly permissions: ReadonlySet<string>;
   return { permissions, isLoading: !hydrated || isLoading };
 }
 
-export function useCan(required: PermissionInput, mode: PermissionMode = "all"): { readonly allowed: boolean; readonly isLoading: boolean } {
+export function useCan(
+  required: PermissionInput,
+  mode: PermissionMode = 'all',
+): { readonly allowed: boolean; readonly isLoading: boolean } {
   const { permissions, isLoading } = usePermissionSet();
   return { allowed: !isLoading && hasPermission(permissions, required, mode), isLoading };
 }
@@ -97,7 +114,7 @@ export interface CanProps {
   readonly children: React.ReactNode;
 }
 
-export function Can({ permission, mode = "all", fallback = null, loading = null, children }: CanProps) {
+export function Can({ permission, mode = 'all', fallback = null, loading = null, children }: CanProps) {
   const { allowed, isLoading } = useCan(permission, mode);
   if (isLoading) return <>{loading}</>;
   return <>{allowed ? children : fallback}</>;

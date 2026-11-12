@@ -1,6 +1,11 @@
 /** `/api/grid-prefs/[gridKey]` — the caller's column chooser state (null until saved). */
-import { defineRoute } from "@/server/api/define-route";
-import { getGridPrefs, gridPrefsParamsSchema, gridPrefsSchema, putGridPrefs } from "@/server/repositories/platform-user-prefs";
+import { defineRoute } from '@/server/api/define-route';
+import {
+  getGridPrefs,
+  gridPrefsParamsSchema,
+  gridPrefsSchema,
+  putGridPrefs,
+} from '@/server/repositories/platform-user-prefs';
 
 export const GET = defineRoute({
   params: gridPrefsParamsSchema,

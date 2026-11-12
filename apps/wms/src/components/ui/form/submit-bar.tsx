@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { useFormContext, useFormState } from "react-hook-form";
-import { cn } from "@/lib/utils";
-import { Button } from "../button";
-import { Spinner } from "../spinner";
-import { DisabledReason } from "../tooltip";
+import * as React from 'react';
+import { useFormContext, useFormState } from 'react-hook-form';
+import { cn } from '@/lib/utils';
+import { Button } from '../button';
+import { Spinner } from '../spinner';
+import { DisabledReason } from '../tooltip';
 
 export interface SubmitBarProps {
   readonly submitLabel?: string;
@@ -21,10 +21,22 @@ export interface SubmitBarProps {
   readonly className?: string;
 }
 
-export function submitDisabledReason({ isSubmitting, pending, hasErrors, requireDirty, isDirty }: { readonly isSubmitting: boolean; readonly pending: boolean; readonly hasErrors: boolean; readonly requireDirty: boolean; readonly isDirty: boolean }): string | null {
-  if (isSubmitting || pending) return "Saving…";
-  if (hasErrors) return "Fix the highlighted fields first";
-  if (requireDirty && !isDirty) return "No changes to save";
+export function submitDisabledReason({
+  isSubmitting,
+  pending,
+  hasErrors,
+  requireDirty,
+  isDirty,
+}: {
+  readonly isSubmitting: boolean;
+  readonly pending: boolean;
+  readonly hasErrors: boolean;
+  readonly requireDirty: boolean;
+  readonly isDirty: boolean;
+}): string | null {
+  if (isSubmitting || pending) return 'Saving…';
+  if (hasErrors) return 'Fix the highlighted fields first';
+  if (requireDirty && !isDirty) return 'No changes to save';
   return null;
 }
 
@@ -34,7 +46,16 @@ export function submitDisabledReason({ isSubmitting, pending, hasErrors, require
  * on the first submit attempt, so an untouched create form can still be submitted to
  * reveal everything that is required.)
  */
-export function SubmitBar({ submitLabel = "Save", cancelLabel = "Cancel", onCancel, secondary, requireDirty = false, pending = false, sticky, className }: SubmitBarProps) {
+export function SubmitBar({
+  submitLabel = 'Save',
+  cancelLabel = 'Cancel',
+  onCancel,
+  secondary,
+  requireDirty = false,
+  pending = false,
+  sticky,
+  className,
+}: SubmitBarProps) {
   const { control } = useFormContext();
   const { isSubmitting, isDirty, errors } = useFormState({ control });
   const hasErrors = Object.keys(errors).length > 0;
@@ -42,7 +63,15 @@ export function SubmitBar({ submitLabel = "Save", cancelLabel = "Cancel", onCanc
   const busy = isSubmitting || pending;
 
   return (
-    <div data-sticky-footer={sticky ? "" : undefined} className={cn("flex items-center justify-between gap-2", sticky && "sticky bottom-0 z-10 -mx-5 border-t border-border bg-surface px-5 py-3 shadow-[0_-4px_8px_-6px_rgba(16,24,40,0.15)]", className)}>
+    <div
+      data-sticky-footer={sticky ? '' : undefined}
+      className={cn(
+        'flex items-center justify-between gap-2',
+        sticky &&
+          'sticky bottom-0 z-10 -mx-5 border-t border-border bg-surface px-5 py-3 shadow-[0_-4px_8px_-6px_rgba(16,24,40,0.15)]',
+        className,
+      )}
+    >
       <div className="flex items-center gap-2">{secondary}</div>
       <div className="flex items-center gap-2">
         {onCancel ? (

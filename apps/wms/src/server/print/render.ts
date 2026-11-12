@@ -5,18 +5,30 @@
  *
  * Types without a renderer yet throw INVALID_STATE ("not configured yet"); no fake output.
  */
-import type { z } from "zod";
-import type { AppDb } from "@/server/api/db";
-import { AppError, fromZodError, notFoundError } from "@/server/api/errors";
-import { fileStore, type FileRecord, type FileStore } from "@/server/files/files";
-import { getPrintType, type PrintTypeDef } from "./catalog";
-import { locationLabelTemplate, retailerLabelTemplate, lpLabelTemplate, mobileCartLabelTemplate, productLabelTemplate } from "./templates/barcode-label";
-import { manifestBolTemplate } from "./templates/manifest-bol";
-import { packingSlipTemplate } from "./templates/packing-slip";
-import { pickListTemplate } from "./templates/pick-list";
-import { poBillingChargesTemplate, purchaseOrderTemplate } from "./templates/purchase-order";
-import { shippingLabelTemplate } from "./templates/shipping-label";
-import { printRequestSchema, type PrintOutput, type PrintRequest, type PrintTemplate, type RenderContext } from "./types";
+import type { z } from 'zod';
+import type { AppDb } from '@/server/api/db';
+import { AppError, fromZodError, notFoundError } from '@/server/api/errors';
+import { fileStore, type FileRecord, type FileStore } from '@/server/files/files';
+import { getPrintType, type PrintTypeDef } from './catalog';
+import {
+  locationLabelTemplate,
+  retailerLabelTemplate,
+  lpLabelTemplate,
+  mobileCartLabelTemplate,
+  productLabelTemplate,
+} from './templates/barcode-label';
+import { manifestBolTemplate } from './templates/manifest-bol';
+import { packingSlipTemplate } from './templates/packing-slip';
+import { pickListTemplate } from './templates/pick-list';
+import { poBillingChargesTemplate, purchaseOrderTemplate } from './templates/purchase-order';
+import { shippingLabelTemplate } from './templates/shipping-label';
+import {
+  printRequestSchema,
+  type PrintOutput,
+  type PrintRequest,
+  type PrintTemplate,
+  type RenderContext,
+} from './types';
 
 interface AnyTemplate {
   readonly recordSchema: z.ZodType;
@@ -30,22 +42,22 @@ const erase = <R>(template: PrintTemplate<R>): AnyTemplate => ({
 });
 
 const TEMPLATES: ReadonlyMap<string, AnyTemplate> = new Map<string, AnyTemplate>([
-  ["packing-list", erase(packingSlipTemplate)],
-  ["packing-slip", erase(packingSlipTemplate)],
-  ["picking-list", erase(pickListTemplate)],
-  ["consolidated-picking-list", erase(pickListTemplate)],
-  ["work-order-picking-list", erase(pickListTemplate)],
-  ["work-order-consolidated-picking-list", erase(pickListTemplate)],
-  ["manifest-bol", erase(manifestBolTemplate)],
-  ["lp-label", erase(lpLabelTemplate)],
-  ["location-label", erase(locationLabelTemplate)],
-  ["product-label", erase(productLabelTemplate)],
-  ["mobile-cart-label", erase(mobileCartLabelTemplate)],
-  ["retailer-case-label", erase(retailerLabelTemplate)],
-  ["retailer-parent-lp-label", erase(retailerLabelTemplate)],
-  ["shipping-label", erase(shippingLabelTemplate)],
-  ["purchase-order-list", erase(purchaseOrderTemplate)],
-  ["po-billing-charges", erase(poBillingChargesTemplate)],
+  ['packing-list', erase(packingSlipTemplate)],
+  ['packing-slip', erase(packingSlipTemplate)],
+  ['picking-list', erase(pickListTemplate)],
+  ['consolidated-picking-list', erase(pickListTemplate)],
+  ['work-order-picking-list', erase(pickListTemplate)],
+  ['work-order-consolidated-picking-list', erase(pickListTemplate)],
+  ['manifest-bol', erase(manifestBolTemplate)],
+  ['lp-label', erase(lpLabelTemplate)],
+  ['location-label', erase(locationLabelTemplate)],
+  ['product-label', erase(productLabelTemplate)],
+  ['mobile-cart-label', erase(mobileCartLabelTemplate)],
+  ['retailer-case-label', erase(retailerLabelTemplate)],
+  ['retailer-parent-lp-label', erase(retailerLabelTemplate)],
+  ['shipping-label', erase(shippingLabelTemplate)],
+  ['purchase-order-list', erase(purchaseOrderTemplate)],
+  ['po-billing-charges', erase(poBillingChargesTemplate)],
 ]);
 
 export function hasRenderer(typeKey: string): boolean {
@@ -54,20 +66,26 @@ export function hasRenderer(typeKey: string): boolean {
 
 function resolve(typeKey: string): { readonly def: PrintTypeDef; readonly template: AnyTemplate } {
   const def = getPrintType(typeKey);
-  if (!def) throw new AppError("VALIDATION", `Unknown printout type "${typeKey}"`, { fieldErrors: { typeKey: ["Unknown printout type"] } });
+  if (!def)
+    throw new AppError('VALIDATION', `Unknown printout type "${typeKey}"`, {
+      fieldErrors: { typeKey: ['Unknown printout type'] },
+    });
   const template = TEMPLATES.get(typeKey);
-  if (!template || !def.renderer) throw new AppError("INVALID_STATE", `The ${def.name} printout is not configured yet`);
+  if (!template || !def.renderer)
+    throw new AppError('INVALID_STATE', `The ${def.name} printout is not configured yet`);
   return { def, template };
 }
 
 export async function renderPrint(request: PrintRequest, now: Date = new Date()): Promise<PrintOutput> {
   const parsed = printRequestSchema.safeParse(request);
-  if (!parsed.success) throw fromZodError(parsed.error, "Invalid print request");
+  if (!parsed.success) throw fromZodError(parsed.error, 'Invalid print request');
   const { typeKey, records, options } = parsed.data;
   const { def, template } = resolve(typeKey);
-  const format = options.format ?? def.formats[0] ?? "pdf";
+  const format = options.format ?? def.formats[0] ?? 'pdf';
   if (!def.formats.includes(format)) {
-    throw new AppError("VALIDATION", `${def.name} cannot be printed as ${format.toUpperCase()}`, { fieldErrors: { "options.format": [`Use ${def.formats.join(" or ")}`] } });
+    throw new AppError('VALIDATION', `${def.name} cannot be printed as ${format.toUpperCase()}`, {
+      fieldErrors: { 'options.format': [`Use ${def.formats.join(' or ')}`] },
+    });
   }
   const validated = records.map((record, index) => {
     const result = template.recordSchema.safeParse(record);
@@ -87,7 +105,7 @@ export interface PrintToFileInput {
 }
 
 export function printFileName(typeName: string, now: Date, extension: string): string {
-  return `${typeName} ${now.toISOString().slice(0, 16).replace("T", " ").replace(":", "")}.${extension}`;
+  return `${typeName} ${now.toISOString().slice(0, 16).replace('T', ' ').replace(':', '')}.${extension}`;
 }
 
 /** Renders and stores a printout (expires after 7 days). */
@@ -95,11 +113,11 @@ export async function printToFile(db: AppDb, input: PrintToFileInput): Promise<F
   const now = input.now ?? new Date();
   const output = await renderPrint(input.request, now);
   const def = getPrintType(input.request.typeKey);
-  if (!def) throw notFoundError("Printout type");
+  if (!def) throw notFoundError('Printout type');
   return await (input.store ?? fileStore()).store(db, {
     name: printFileName(def.name, now, output.extension),
     bytes: output.bytes,
-    purpose: "print",
+    purpose: 'print',
     uploadedBy: input.userId,
     ownerEntityType: input.ownerEntityType ?? null,
     ownerEntityId: input.ownerEntityId ?? null,

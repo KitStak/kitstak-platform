@@ -7,22 +7,22 @@
  *     for the remainder of the trip. Put / Direct Put: → target pick face. Supports LP swap
  *     (put the whole source LP) and pack-type conversion. Every move writes ledger `Replenishment`.
  */
-import { and, eq, gt, inArray, ne, sql } from "drizzle-orm";
-import { jobTypeSettingsSchema, parseSettings } from "@/lib/domain-types";
-import type { Priority } from "@/lib/enums";
-import * as schema from "@/server/db/schema";
-import { recordCreate } from "../change-log";
-import { DomainError } from "../errors";
-import { freeQty, type InventoryRow } from "../ledger/bucket";
-import { move, moveLp } from "../ledger/operations";
-import { getLocation } from "../ledger/rules";
-import { rollupJob } from "../progress";
-import { dynamicReplenishmentTargets } from "../putaway";
-import { next } from "../sequences";
-import type { DomainCtx, Tx } from "../types";
-import { assertExecutable, assertQty, completeTask } from "./shared";
-import type { TaskExecution, TaskHandler, TaskRow } from "./types";
-import { dbGet, forEachSeq } from "@/server/db/sql";
+import { and, eq, gt, inArray, ne, sql } from 'drizzle-orm';
+import { jobTypeSettingsSchema, parseSettings } from '@/lib/domain-types';
+import type { Priority } from '@/lib/enums';
+import * as schema from '@/server/db/schema';
+import { recordCreate } from '../change-log';
+import { DomainError } from '../errors';
+import { freeQty, type InventoryRow } from '../ledger/bucket';
+import { move, moveLp } from '../ledger/operations';
+import { getLocation } from '../ledger/rules';
+import { rollupJob } from '../progress';
+import { dynamicReplenishmentTargets } from '../putaway';
+import { next } from '../sequences';
+import type { DomainCtx, Tx } from '../types';
+import { assertExecutable, assertQty, completeTask } from './shared';
+import type { TaskExecution, TaskHandler, TaskRow } from './types';
+import { dbGet, forEachSeq } from '@/server/db/sql';
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
@@ -32,37 +32,82 @@ async function nextTaskNo(tx: Tx): Promise<number> {
 }
 
 /** Stock that can feed a pick face: free Stock outside pick faces, in algorithm order. */
-export async function replenishmentSources(tx: Tx, warehouseId: string, productId: string, method: "FEFO" | "FIFO" | "LIFO"): Promise<InventoryRow[]> {
-  const rows = (await tx.select({ inv: schema.inventory, loc: schema.locations }).from(schema.inventory)
-    .innerJoin(schema.locations, eq(schema.locations.id, schema.inventory.locationId))
-    .where(and(
-      eq(schema.inventory.warehouseId, warehouseId), eq(schema.inventory.productId, productId), eq(schema.inventory.status, "Stock"),
-      gt(schema.inventory.onHand, 0), sql`${schema.inventory.damageReason} IS NULL`,
-      sql`COALESCE(${schema.locations.replenishmentType}, '') <> 'Target'`, sql`COALESCE(${schema.locations.areaType}, '') NOT IN ('Picking','Packing','Shipment','Receiving','Returns')`,
-      eq(schema.locations.preventAllocation, false),
-    ))).map((r) => r.inv).filter((b) => freeQty(b) > 0);
-  const key = (b: InventoryRow): string => (method === "FEFO" ? b.expiryDate ?? "9999" : b.receivedAt ?? "9999");
-  return rows.sort((a, b) => (method === "LIFO" ? key(b).localeCompare(key(a)) : key(a).localeCompare(key(b))));
+export async function replenishmentSources(
+  tx: Tx,
+  warehouseId: string,
+  productId: string,
+  method: 'FEFO' | 'FIFO' | 'LIFO',
+): Promise<InventoryRow[]> {
+  const rows = (
+    await tx
+      .select({ inv: schema.inventory, loc: schema.locations })
+      .from(schema.inventory)
+      .innerJoin(schema.locations, eq(schema.locations.id, schema.inventory.locationId))
+      .where(
+        and(
+          eq(schema.inventory.warehouseId, warehouseId),
+          eq(schema.inventory.productId, productId),
+          eq(schema.inventory.status, 'Stock'),
+          gt(schema.inventory.onHand, 0),
+          sql`${schema.inventory.damageReason} IS NULL`,
+          sql`COALESCE(${schema.locations.replenishmentType}, '') <> 'Target'`,
+          sql`COALESCE(${schema.locations.areaType}, '') NOT IN ('Picking','Packing','Shipment','Receiving','Returns')`,
+          eq(schema.locations.preventAllocation, false),
+        ),
+      )
+  )
+    .map((r) => r.inv)
+    .filter((b) => freeQty(b) > 0);
+  const key = (b: InventoryRow): string =>
+    method === 'FEFO' ? (b.expiryDate ?? '9999') : (b.receivedAt ?? '9999');
+  return rows.sort((a, b) =>
+    method === 'LIFO' ? key(b).localeCompare(key(a)) : key(a).localeCompare(key(b)),
+  );
 }
 
 /** The product's pick face: a Target / Picking location already holding it, else any Target location. */
 export async function pickFaceFor(tx: Tx, warehouseId: string, productId: string): Promise<string | null> {
-  const holding = await dbGet<{ id: string }>(tx, sql`SELECT l.id FROM inventory i JOIN locations l ON l.id = i.location_id
+  const holding = await dbGet<{ id: string }>(
+    tx,
+    sql`SELECT l.id FROM inventory i JOIN locations l ON l.id = i.location_id
     WHERE i.product_id = ${productId} AND i.warehouse_id = ${warehouseId} AND (l.replenishment_type = 'Target' OR l.area_type = 'Picking')
-    ORDER BY l.walking_path_priority NULLS FIRST, l.id LIMIT 1`);
+    ORDER BY l.walking_path_priority NULLS FIRST, l.id LIMIT 1`,
+  );
   if (holding) return holding.id;
-  return (await dbGet<{ id: string }>(tx, sql`SELECT id FROM locations WHERE warehouse_id = ${warehouseId} AND replenishment_type = 'Target' AND is_active ORDER BY walking_path_priority NULLS FIRST, id LIMIT 1`))?.id ?? null;
+  return (
+    (
+      await dbGet<{ id: string }>(
+        tx,
+        sql`SELECT id FROM locations WHERE warehouse_id = ${warehouseId} AND replenishment_type = 'Target' AND is_active ORDER BY walking_path_priority NULLS FIRST, id LIMIT 1`,
+      )
+    )?.id ?? null
+  );
 }
 
 /** The product's largest pack type above one unit (e.g. Case of 24), if any. */
-export async function higherPackOf(tx: Tx, productId: string): Promise<{ packType: string; uomQty: number } | null> {
-  return await dbGet<{ packType: string; uomQty: number }>(tx, sql`SELECT pack_type AS "packType", uom_qty AS "uomQty" FROM product_pack_types
-    WHERE product_id = ${productId} AND uom_qty > 1 ORDER BY uom_qty DESC LIMIT 1`) ?? null;
+export async function higherPackOf(
+  tx: Tx,
+  productId: string,
+): Promise<{ packType: string; uomQty: number } | null> {
+  return (
+    (await dbGet<{ packType: string; uomQty: number }>(
+      tx,
+      sql`SELECT pack_type AS "packType", uom_qty AS "uomQty" FROM product_pack_types
+    WHERE product_id = ${productId} AND uom_qty > 1 ORDER BY uom_qty DESC LIMIT 1`,
+    )) ?? null
+  );
 }
 
 /** Units in one `packType` of the product (1 for the primary or an unknown pack type). */
 export async function unitsPerPack(tx: Tx, productId: string, packType: string): Promise<number> {
-  return (await dbGet<{ n: number }>(tx, sql`SELECT uom_qty AS n FROM product_pack_types WHERE product_id = ${productId} AND pack_type = ${packType} LIMIT 1`))?.n ?? 1;
+  return (
+    (
+      await dbGet<{ n: number }>(
+        tx,
+        sql`SELECT uom_qty AS n FROM product_pack_types WHERE product_id = ${productId} AND pack_type = ${packType} LIMIT 1`,
+      )
+    )?.n ?? 1
+  );
 }
 
 interface ReplenPlan {
@@ -94,25 +139,51 @@ export interface CreateReplenishmentJobResult {
   readonly skipped: readonly { readonly sku: string; readonly reason: string }[];
 }
 
-export async function createReplenishmentJob(tx: Tx, ctx: DomainCtx, input: CreateReplenishmentJobInput): Promise<CreateReplenishmentJobResult> {
-  const jobType = (await tx.select().from(schema.jobTypes).where(eq(schema.jobTypes.id, input.jobTypeId)).limit(1))[0];
-  if (!jobType || jobType.operationType !== "Replenishment") throw new DomainError("VALIDATION", "Choose a replenishment job type.");
+export async function createReplenishmentJob(
+  tx: Tx,
+  ctx: DomainCtx,
+  input: CreateReplenishmentJobInput,
+): Promise<CreateReplenishmentJobResult> {
+  const jobType = (
+    await tx.select().from(schema.jobTypes).where(eq(schema.jobTypes.id, input.jobTypeId)).limit(1)
+  )[0];
+  if (!jobType || jobType.operationType !== 'Replenishment')
+    throw new DomainError('VALIDATION', 'Choose a replenishment job type.');
   const settings = parseSettings(jobTypeSettingsSchema, jobType.settings).replenishment;
   const targets = await dynamicReplenishmentTargets(tx, input.warehouseId, { onlyNeeded: true });
   const plans: ReplenPlan[] = [];
   const skipped: { sku: string; reason: string }[] = [];
   for (const target of targets) {
     const face = await pickFaceFor(tx, input.warehouseId, target.productId);
-    if (!face) { skipped.push({ sku: target.sku, reason: "No pick face location" }); continue; }
+    if (!face) {
+      skipped.push({ sku: target.sku, reason: 'No pick face location' });
+      continue;
+    }
     const higher = settings.allowHigherPackTypeConversion ? await higherPackOf(tx, target.productId) : null;
     let need = target.toReplenish;
-    for (const source of await replenishmentSources(tx, input.warehouseId, target.productId, settings.algorithmMethod)) {
+    for (const source of await replenishmentSources(
+      tx,
+      input.warehouseId,
+      target.productId,
+      settings.algorithmMethod,
+    )) {
       if (need <= 0) break;
       if (source.locationId === face) continue;
       const free = freeQty(source);
       // LP swap: the whole reserve LP is needed (or only full LPs may be picked), so the LP moves as is.
-      if (source.lpId && (settings.onlyPickFullLp || (settings.enableLpSwap && free <= need && free === source.onHand))) {
-        plans.push({ productId: target.productId, source, qty: free, target: face, packType: source.packType, toPackType: null, lpSwap: settings.enableLpSwap });
+      if (
+        source.lpId &&
+        (settings.onlyPickFullLp || (settings.enableLpSwap && free <= need && free === source.onHand))
+      ) {
+        plans.push({
+          productId: target.productId,
+          source,
+          qty: free,
+          target: face,
+          packType: source.packType,
+          toPackType: null,
+          lpSwap: settings.enableLpSwap,
+        });
         need -= free;
         continue;
       }
@@ -120,35 +191,91 @@ export async function createReplenishmentJob(tx: Tx, ctx: DomainCtx, input: Crea
       // Pack-type conversion: pick full higher packs from reserve, break them down at the face.
       if (higher && higher.packType !== source.packType && take >= higher.uomQty) {
         const packs = Math.floor(take / higher.uomQty);
-        plans.push({ productId: target.productId, source, qty: packs, target: face, packType: higher.packType, toPackType: source.packType, lpSwap: false });
+        plans.push({
+          productId: target.productId,
+          source,
+          qty: packs,
+          target: face,
+          packType: higher.packType,
+          toPackType: source.packType,
+          lpSwap: false,
+        });
         need -= packs * higher.uomQty;
         take -= packs * higher.uomQty;
         if (settings.pickFullPack || take <= 0) continue;
       }
-      plans.push({ productId: target.productId, source, qty: take, target: face, packType: source.packType, toPackType: null, lpSwap: false });
+      plans.push({
+        productId: target.productId,
+        source,
+        qty: take,
+        target: face,
+        packType: source.packType,
+        toPackType: null,
+        lpSwap: false,
+      });
       need -= take;
     }
-    if (need === target.toReplenish) skipped.push({ sku: target.sku, reason: "No reserve stock to replenish from" });
+    if (need === target.toReplenish)
+      skipped.push({ sku: target.sku, reason: 'No reserve stock to replenish from' });
   }
   if (plans.length === 0) return { jobId: null, taskCount: 0, skipped };
   const start = (input.now ?? new Date()).getTime() + HOUR_MS;
-  const job = (await tx.insert(schema.jobs).values({
-    id: crypto.randomUUID(), code: await next(tx, "job"), warehouseId: input.warehouseId, clientId: null, jobType: jobType.code, jobTypeId: jobType.id,
-    operationType: "Replenishment", status: "Pending", priority: input.priority ?? "None", assignedToUserId: input.assigneeUserId ?? null,
-    waveId: input.waveId ?? null, waveNumber: input.waveNo ?? null, ruleName: input.ruleName ?? null, waveRuleId: input.waveRuleId ?? null,
-    plannedStartAt: new Date(start).toISOString(), plannedEndAt: new Date(start + HOUR_MS).toISOString(), createdBy: ctx.userId, updatedBy: ctx.userId,
-  }).returning())[0];
-  await recordCreate(tx, ctx, { entityType: "job", entityId: job.id, entityCode: job.code });
+  const job = (
+    await tx
+      .insert(schema.jobs)
+      .values({
+        id: crypto.randomUUID(),
+        code: await next(tx, 'job'),
+        warehouseId: input.warehouseId,
+        clientId: null,
+        jobType: jobType.code,
+        jobTypeId: jobType.id,
+        operationType: 'Replenishment',
+        status: 'Pending',
+        priority: input.priority ?? 'None',
+        assignedToUserId: input.assigneeUserId ?? null,
+        waveId: input.waveId ?? null,
+        waveNumber: input.waveNo ?? null,
+        ruleName: input.ruleName ?? null,
+        waveRuleId: input.waveRuleId ?? null,
+        plannedStartAt: new Date(start).toISOString(),
+        plannedEndAt: new Date(start + HOUR_MS).toISOString(),
+        createdBy: ctx.userId,
+        updatedBy: ctx.userId,
+      })
+      .returning()
+  )[0];
+  await recordCreate(tx, ctx, { entityType: 'job', entityId: job.id, entityCode: job.code });
   let taskNo = await nextTaskNo(tx);
-  const phase = settings.flow === "Direct Put" ? "Direct Put" : "Replenishment Pick Phase";
+  const phase = settings.flow === 'Direct Put' ? 'Direct Put' : 'Replenishment Pick Phase';
   await forEachSeq(plans, async (p, i) => {
     await tx.insert(schema.tasks).values({
-      taskNo: taskNo++, jobId: job.id, warehouseId: input.warehouseId, clientId: p.source.clientId, taskType: "Replenishment", status: "Pending",
-      priority: input.priority ?? "None", sequence: i + 1, productId: p.productId, packType: p.packType, toPackType: p.toPackType, plannedQty: p.qty,
-      lpSwap: p.lpSwap, packTypeConversionApplied: p.toPackType !== null,
-      sourceLocationId: p.source.locationId, sourceLpId: p.source.lpId, targetLocationId: p.target, lotNumber: p.source.lotNumber,
-      expiryDate: p.source.expiryDate, productionDate: p.source.productionDate, replenishmentPhase: phase, assigneeUserId: input.assigneeUserId ?? null,
-      plannedStartAt: new Date(start).toISOString(), plannedFinishAt: new Date(start + (i + 1) * MINUTE_MS).toISOString(), createdBy: ctx.userId, updatedBy: ctx.userId,
+      taskNo: taskNo++,
+      jobId: job.id,
+      warehouseId: input.warehouseId,
+      clientId: p.source.clientId,
+      taskType: 'Replenishment',
+      status: 'Pending',
+      priority: input.priority ?? 'None',
+      sequence: i + 1,
+      productId: p.productId,
+      packType: p.packType,
+      toPackType: p.toPackType,
+      plannedQty: p.qty,
+      lpSwap: p.lpSwap,
+      packTypeConversionApplied: p.toPackType !== null,
+      sourceLocationId: p.source.locationId,
+      sourceLpId: p.source.lpId,
+      targetLocationId: p.target,
+      lotNumber: p.source.lotNumber,
+      expiryDate: p.source.expiryDate,
+      productionDate: p.source.productionDate,
+      replenishmentPhase: phase,
+      assigneeUserId: input.assigneeUserId ?? null,
+      plannedStartAt: new Date(start).toISOString(),
+      plannedFinishAt: new Date(start + (i + 1) * MINUTE_MS).toISOString(),
+      createdBy: ctx.userId,
+      updatedBy: ctx.userId,
     });
   });
   await rollupJob(tx, ctx, job.id);
@@ -157,24 +284,48 @@ export async function createReplenishmentJob(tx: Tx, ctx: DomainCtx, input: Crea
 
 async function lpSwapEnabled(tx: Tx, jobId: string | null): Promise<boolean> {
   if (!jobId) return false;
-  const row = await dbGet<{ settings: string | null }>(tx, sql`SELECT jt.settings AS settings FROM jobs j JOIN job_types jt ON jt.id = j.job_type_id WHERE j.id = ${jobId}`);
+  const row = await dbGet<{ settings: string | null }>(
+    tx,
+    sql`SELECT jt.settings AS settings FROM jobs j JOIN job_types jt ON jt.id = j.job_type_id WHERE j.id = ${jobId}`,
+  );
   if (!row?.settings) return false;
   try {
-    return parseSettings(jobTypeSettingsSchema, typeof row.settings === "string" ? JSON.parse(row.settings) : row.settings).replenishment.enableLpSwap;
+    return parseSettings(
+      jobTypeSettingsSchema,
+      typeof row.settings === 'string' ? JSON.parse(row.settings) : row.settings,
+    ).replenishment.enableLpSwap;
   } catch {
     return false;
   }
 }
 
 async function sourceBucket(tx: Tx, task: TaskRow): Promise<InventoryRow> {
-  if (!task.productId || !task.sourceLocationId) throw new DomainError("INVALID_STATE", `Replenishment task ${task.taskNo} has no source.`);
-  const rows = (await tx.select().from(schema.inventory).where(and(
-    eq(schema.inventory.productId, task.productId), eq(schema.inventory.locationId, task.sourceLocationId), eq(schema.inventory.status, "Stock"),
-    task.sourceLpId ? eq(schema.inventory.lpId, task.sourceLpId) : sql`${schema.inventory.lpId} IS NULL`,
-    task.lotNumber ? eq(schema.inventory.lotNumber, task.lotNumber) : sql`1 = 1`,
-  ))).filter((b) => freeQty(b) > 0).sort((a, b) => freeQty(b) - freeQty(a));
+  if (!task.productId || !task.sourceLocationId)
+    throw new DomainError('INVALID_STATE', `Replenishment task ${task.taskNo} has no source.`);
+  const rows = (
+    await tx
+      .select()
+      .from(schema.inventory)
+      .where(
+        and(
+          eq(schema.inventory.productId, task.productId),
+          eq(schema.inventory.locationId, task.sourceLocationId),
+          eq(schema.inventory.status, 'Stock'),
+          task.sourceLpId
+            ? eq(schema.inventory.lpId, task.sourceLpId)
+            : sql`${schema.inventory.lpId} IS NULL`,
+          task.lotNumber ? eq(schema.inventory.lotNumber, task.lotNumber) : sql`1 = 1`,
+        ),
+      )
+  )
+    .filter((b) => freeQty(b) > 0)
+    .sort((a, b) => freeQty(b) - freeQty(a));
   const bucket = rows[0];
-  if (!bucket) throw new DomainError("INSUFFICIENT_STOCK", `No free stock left at the source of replenishment task ${task.taskNo}.`);
+  if (!bucket)
+    throw new DomainError(
+      'INSUFFICIENT_STOCK',
+      `No free stock left at the source of replenishment task ${task.taskNo}.`,
+    );
   return bucket;
 }
 
@@ -183,42 +334,94 @@ export const executeReplenishment: TaskHandler = async (tx, ctx, task, input): P
   const remaining = task.plannedQty - task.actualQty;
   const bucket = await sourceBucket(tx, task);
   // A pack-converted task counts in its higher pack (e.g. Case of 24); the ledger moves units.
-  const per = task.productId && task.packType && task.packType !== bucket.packType ? await unitsPerPack(tx, task.productId, task.packType) : 1;
+  const per =
+    task.productId && task.packType && task.packType !== bucket.packType
+      ? await unitsPerPack(tx, task.productId, task.packType)
+      : 1;
   const freePacks = Math.floor(freeQty(bucket) / per);
   const qty = input.qty ?? Math.min(remaining, freePacks);
-  assertQty(qty, Math.min(remaining, freePacks), "Replenished");
+  assertQty(qty, Math.min(remaining, freePacks), 'Replenished');
   const units = qty * per;
   const target = await getLocation(tx, input.targetLocationId);
   // The API sends targetLpId null when none is chosen.
-  const lpSwap = Boolean(task.sourceLpId && !input.targetLpId && units === bucket.onHand
-    && (task.lpSwap || task.replenishmentPhase !== "Replenishment Pick Phase"));
-  const converted = Boolean(task.packTypeConversionApplied || (task.toPackType && task.toPackType !== task.packType));
+  const lpSwap = Boolean(
+    task.sourceLpId &&
+    !input.targetLpId &&
+    units === bucket.onHand &&
+    (task.lpSwap || task.replenishmentPhase !== 'Replenishment Pick Phase'),
+  );
+  const converted = Boolean(
+    task.packTypeConversionApplied || (task.toPackType && task.toPackType !== task.packType),
+  );
   const toPackType = task.toPackType && task.toPackType !== bucket.packType ? task.toPackType : undefined;
-  const toLpId = lpSwap ? bucket.lpId : input.targetLpId ?? null;
-  const lpHoldsOnlyThis = lpSwap && bucket.lpId
-    ? ((await dbGet<{ n: number }>(tx, sql`SELECT COUNT(*) AS n FROM inventory WHERE lp_id = ${bucket.lpId} AND on_hand > 0 AND id <> ${bucket.id}`))?.n ?? 0) === 0
-    : false;
+  const toLpId = lpSwap ? bucket.lpId : (input.targetLpId ?? null);
+  const lpHoldsOnlyThis =
+    lpSwap && bucket.lpId
+      ? ((
+          await dbGet<{ n: number }>(
+            tx,
+            sql`SELECT COUNT(*) AS n FROM inventory WHERE lp_id = ${bucket.lpId} AND on_hand > 0 AND id <> ${bucket.id}`,
+          )
+        )?.n ?? 0) === 0
+      : false;
   if (units > 0 && lpSwap && bucket.lpId && lpHoldsOnlyThis && !toPackType) {
     // LP swap: the whole LP moves into the target location.
-    await moveLp(tx, ctx, { lpId: bucket.lpId, toLocationId: target.id, type: "Replenishment", refs: { jobId: task.jobId, taskId: task.id } });
+    await moveLp(tx, ctx, {
+      lpId: bucket.lpId,
+      toLocationId: target.id,
+      type: 'Replenishment',
+      refs: { jobId: task.jobId, taskId: task.id },
+    });
   } else if (units > 0) {
     await move(tx, ctx, {
-      inventoryId: bucket.id, qty: units, toLocationId: target.id, toLpId: lpSwap && !lpHoldsOnlyThis ? null : toLpId, toPackType,
-      type: "Replenishment", refs: { jobId: task.jobId, taskId: task.id },
+      inventoryId: bucket.id,
+      qty: units,
+      toLocationId: target.id,
+      toLpId: lpSwap && !lpHoldsOnlyThis ? null : toLpId,
+      toPackType,
+      type: 'Replenishment',
+      refs: { jobId: task.jobId, taskId: task.id },
     });
   }
   await completeTask(tx, ctx, task, { doneQty: qty, targetLocationId: target.id, targetLpId: toLpId });
-  await tx.update(schema.tasks).set({ lpSwap, packTypeConversionApplied: converted }).where(eq(schema.tasks.id, task.id));
-  if (task.replenishmentPhase === "Replenishment Pick Phase" && units > 0 && task.targetLocationId && task.targetLocationId !== target.id) {
+  await tx
+    .update(schema.tasks)
+    .set({ lpSwap, packTypeConversionApplied: converted })
+    .where(eq(schema.tasks.id, task.id));
+  if (
+    task.replenishmentPhase === 'Replenishment Pick Phase' &&
+    units > 0 &&
+    task.targetLocationId &&
+    task.targetLocationId !== target.id
+  ) {
     // LP swap (job-type setting): units carried on an LP / tote are put away as the whole LP.
-    const putLpSwap = lpSwap || Boolean(toLpId && await lpSwapEnabled(tx, task.jobId));
+    const putLpSwap = lpSwap || Boolean(toLpId && (await lpSwapEnabled(tx, task.jobId)));
     await tx.insert(schema.tasks).values({
-      taskNo: await nextTaskNo(tx), jobId: task.jobId, warehouseId: task.warehouseId, clientId: task.clientId, taskType: "Replenishment", status: "Pending",
-      priority: task.priority, sequence: task.sequence, productId: task.productId, packType: task.toPackType ?? bucket.packType, plannedQty: units,
-      sourceLocationId: target.id, sourceLpId: toLpId, targetLocationId: task.targetLocationId, lotNumber: task.lotNumber,
-      expiryDate: task.expiryDate, productionDate: task.productionDate, replenishmentPhase: "Replenishment Put Phase", assigneeUserId: task.assigneeUserId,
-      lpSwap: putLpSwap, packTypeConversionApplied: converted,
-      plannedStartAt: task.plannedStartAt, plannedFinishAt: task.plannedFinishAt, createdBy: ctx.userId, updatedBy: ctx.userId,
+      taskNo: await nextTaskNo(tx),
+      jobId: task.jobId,
+      warehouseId: task.warehouseId,
+      clientId: task.clientId,
+      taskType: 'Replenishment',
+      status: 'Pending',
+      priority: task.priority,
+      sequence: task.sequence,
+      productId: task.productId,
+      packType: task.toPackType ?? bucket.packType,
+      plannedQty: units,
+      sourceLocationId: target.id,
+      sourceLpId: toLpId,
+      targetLocationId: task.targetLocationId,
+      lotNumber: task.lotNumber,
+      expiryDate: task.expiryDate,
+      productionDate: task.productionDate,
+      replenishmentPhase: 'Replenishment Put Phase',
+      assigneeUserId: task.assigneeUserId,
+      lpSwap: putLpSwap,
+      packTypeConversionApplied: converted,
+      plannedStartAt: task.plannedStartAt,
+      plannedFinishAt: task.plannedFinishAt,
+      createdBy: ctx.userId,
+      updatedBy: ctx.userId,
     });
   }
   return { taskId: task.id, doneQty: qty, shortQty: Math.max(0, remaining - qty), resolutionJobId: null };
@@ -227,6 +430,16 @@ export const executeReplenishment: TaskHandler = async (tx, ctx, task, input): P
 /** Cancels the open replenishment tasks of a job set (used by Delete-if-not-started). */
 export async function openReplenishmentTaskIds(tx: Tx, jobIds: readonly string[]): Promise<string[]> {
   if (jobIds.length === 0) return [];
-  return (await tx.select({ id: schema.tasks.id }).from(schema.tasks)
-    .where(and(inArray(schema.tasks.jobId, [...jobIds]), eq(schema.tasks.taskType, "Replenishment"), ne(schema.tasks.status, "Completed")))).map((r) => r.id);
+  return (
+    await tx
+      .select({ id: schema.tasks.id })
+      .from(schema.tasks)
+      .where(
+        and(
+          inArray(schema.tasks.jobId, [...jobIds]),
+          eq(schema.tasks.taskType, 'Replenishment'),
+          ne(schema.tasks.status, 'Completed'),
+        ),
+      )
+  ).map((r) => r.id);
 }

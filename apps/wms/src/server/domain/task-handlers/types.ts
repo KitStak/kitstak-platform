@@ -1,6 +1,6 @@
 /** Task handler contract: `tasks.execute()` dispatches each task to `task-handlers/<type>.ts`. */
-import type * as schema from "@/server/db/schema";
-import type { DomainCtx, Tx } from "../types";
+import type * as schema from '@/server/db/schema';
+import type { DomainCtx, Tx } from '../types';
 
 export type TaskRow = typeof schema.tasks.$inferSelect;
 
@@ -23,4 +23,9 @@ export interface TaskExecution {
   readonly resolutionJobId?: string | null;
 }
 
-export type TaskHandler = (tx: Tx, ctx: DomainCtx, task: TaskRow, input: TaskExecuteInput) => Promise<TaskExecution>;
+export type TaskHandler = (
+  tx: Tx,
+  ctx: DomainCtx,
+  task: TaskRow,
+  input: TaskExecuteInput,
+) => Promise<TaskExecution>;

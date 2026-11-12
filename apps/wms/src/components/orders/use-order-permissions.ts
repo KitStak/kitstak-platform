@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * Permission gate for order screens that treats "still loading /api/me" as its own state:
@@ -6,11 +6,11 @@
  * While loading, `can()` is optimistic (labels and layout don't flip) and `reason()` returns a
  * neutral "Checking permissions…" so the control stays disabled without denial copy.
  */
-import * as React from "react";
-import { usePermissionSet } from "@/lib/permissions-client";
+import * as React from 'react';
+import { usePermissionSet } from '@/lib/permissions-client';
 
 export const NO_PERMISSION = "You don't have permission for this action";
-export const CHECKING_PERMISSIONS = "Checking permissions…";
+export const CHECKING_PERMISSIONS = 'Checking permissions…';
 
 export interface OrderPermissions {
   readonly ready: boolean;
@@ -24,7 +24,8 @@ export function permissionGate(permissions: ReadonlySet<string>, ready: boolean)
   return {
     ready,
     can: (p) => !ready || permissions.has(p),
-    reason: (p, denied = NO_PERMISSION) => (!ready ? CHECKING_PERMISSIONS : permissions.has(p) ? null : denied),
+    reason: (p, denied = NO_PERMISSION) =>
+      !ready ? CHECKING_PERMISSIONS : permissions.has(p) ? null : denied,
   };
 }
 

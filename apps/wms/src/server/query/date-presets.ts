@@ -13,19 +13,19 @@
  * "today" is the warehouse's local day. PURE: safe for client import.
  */
 
-export const FIXED_DATE_PRESETS = ["today", "last3d", "last7d", "last30d", "last90d", "last12m"] as const;
-export const WEEKDAY_PRESETS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-export const RELATIVE_DATE_PRESETS = ["ahead", "before", "withinPast", "withinNext"] as const;
+export const FIXED_DATE_PRESETS = ['today', 'last3d', 'last7d', 'last30d', 'last90d', 'last12m'] as const;
+export const WEEKDAY_PRESETS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+export const RELATIVE_DATE_PRESETS = ['ahead', 'before', 'withinPast', 'withinNext'] as const;
 
 export type FixedDatePreset = (typeof FIXED_DATE_PRESETS)[number];
 export type WeekdayPreset = (typeof WEEKDAY_PRESETS)[number];
 export type RelativeDatePreset = (typeof RELATIVE_DATE_PRESETS)[number];
 
 export type DateSpec =
-  | { readonly kind: "fixed"; readonly preset: FixedDatePreset }
-  | { readonly kind: "weekday"; readonly preset: WeekdayPreset }
-  | { readonly kind: "relative"; readonly preset: RelativeDatePreset; readonly days: number }
-  | { readonly kind: "custom"; readonly from?: string; readonly to?: string };
+  | { readonly kind: 'fixed'; readonly preset: FixedDatePreset }
+  | { readonly kind: 'weekday'; readonly preset: WeekdayPreset }
+  | { readonly kind: 'relative'; readonly preset: RelativeDatePreset; readonly days: number }
+  | { readonly kind: 'custom'; readonly from?: string; readonly to?: string };
 
 export interface DateRange {
   readonly from: string | null;
@@ -45,35 +45,35 @@ function isOneOf<T extends string>(list: readonly T[], value: string): value is 
 /** Parses a date filter value; returns null when it is not valid grammar. */
 export function parseDateSpec(raw: string): DateSpec | null {
   const value = raw.trim();
-  if (isOneOf(FIXED_DATE_PRESETS, value)) return { kind: "fixed", preset: value };
-  if (isOneOf(WEEKDAY_PRESETS, value)) return { kind: "weekday", preset: value };
+  if (isOneOf(FIXED_DATE_PRESETS, value)) return { kind: 'fixed', preset: value };
+  if (isOneOf(WEEKDAY_PRESETS, value)) return { kind: 'weekday', preset: value };
   const relative = RELATIVE_RE.exec(value);
   if (relative) {
     const days = Number(relative[2]);
     const preset = relative[1] as RelativeDatePreset;
-    return days <= MAX_RELATIVE_DAYS ? { kind: "relative", preset, days } : null;
+    return days <= MAX_RELATIVE_DAYS ? { kind: 'relative', preset, days } : null;
   }
-  if (value.startsWith("custom:")) {
-    const body = value.slice("custom:".length);
-    const sep = body.indexOf("..");
+  if (value.startsWith('custom:')) {
+    const body = value.slice('custom:'.length);
+    const sep = body.indexOf('..');
     if (sep < 0) return null;
     const from = body.slice(0, sep).trim();
     const to = body.slice(sep + 2).trim();
     if ((from && !isValidDateText(from)) || (to && !isValidDateText(to)) || (!from && !to)) return null;
-    return { kind: "custom", ...(from ? { from } : {}), ...(to ? { to } : {}) };
+    return { kind: 'custom', ...(from ? { from } : {}), ...(to ? { to } : {}) };
   }
   return null;
 }
 
 export function serializeDateSpec(spec: DateSpec): string {
   switch (spec.kind) {
-    case "fixed":
-    case "weekday":
+    case 'fixed':
+    case 'weekday':
       return spec.preset;
-    case "relative":
+    case 'relative':
       return `${spec.preset}${spec.days}d`;
-    case "custom":
-      return `custom:${spec.from ?? ""}..${spec.to ?? ""}`;
+    case 'custom':
+      return `custom:${spec.from ?? ''}..${spec.to ?? ''}`;
   }
 }
 
@@ -83,7 +83,7 @@ function isValidDateText(text: string): boolean {
 
 /** Accepts `YYYY/MM/DD HH:mm` (picker format) as well as ISO. */
 function normalizeDateText(text: string): string {
-  return text.replace(/\//g, "-").replace(" ", "T");
+  return text.replace(/\//g, '-').replace(' ', 'T');
 }
 
 /** Local-midnight (as a UTC instant) of the day containing `instant`, shifted by `dayDelta`. */
@@ -115,9 +115,9 @@ export function resolveDateRange(spec: DateSpec, now: Date = new Date(), tzOffse
   const dayEnd = (delta: number): number => dayStart(delta + 1) - 1;
 
   switch (spec.kind) {
-    case "fixed": {
-      if (spec.preset === "today") return { from: iso(dayStart(0)), to: iso(dayEnd(0)) };
-      if (spec.preset === "last12m") {
+    case 'fixed': {
+      if (spec.preset === 'today') return { from: iso(dayStart(0)), to: iso(dayEnd(0)) };
+      if (spec.preset === 'last12m') {
         const local = new Date(dayStart(0) + tzOffsetMinutes * 60_000);
         local.setUTCFullYear(local.getUTCFullYear() - 1);
         return { from: iso(local.getTime() - tzOffsetMinutes * 60_000), to: iso(dayEnd(0)) };
@@ -125,20 +125,20 @@ export function resolveDateRange(spec: DateSpec, now: Date = new Date(), tzOffse
       const days = Number(spec.preset.slice(4, -1));
       return { from: iso(dayStart(-(days - 1))), to: iso(dayEnd(0)) };
     }
-    case "weekday": {
+    case 'weekday': {
       const localDow = new Date(dayStart(0) + tzOffsetMinutes * 60_000).getUTCDay();
       const target = WEEKDAY_PRESETS.indexOf(spec.preset);
       const back = (localDow - target + 7) % 7;
       return { from: iso(dayStart(-back)), to: iso(dayEnd(-back)) };
     }
-    case "relative": {
+    case 'relative': {
       const n = spec.days;
-      if (spec.preset === "ahead") return { from: iso(dayStart(n)), to: null };
-      if (spec.preset === "before") return { from: null, to: iso(dayEnd(-n)) };
-      if (spec.preset === "withinPast") return { from: iso(dayStart(-n)), to: iso(t) };
+      if (spec.preset === 'ahead') return { from: iso(dayStart(n)), to: null };
+      if (spec.preset === 'before') return { from: null, to: iso(dayEnd(-n)) };
+      if (spec.preset === 'withinPast') return { from: iso(dayStart(-n)), to: iso(t) };
       return { from: iso(t), to: iso(dayEnd(n)) };
     }
-    case "custom":
+    case 'custom':
       return {
         from: spec.from ? customBoundary(spec.from, false, tzOffsetMinutes) : null,
         to: spec.to ? customBoundary(spec.to, true, tzOffsetMinutes) : null,

@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { PageSkeleton } from "@/components/layout/shell-skeleton";
-import { WorkOrderDetailPage } from "@/components/work-orders/work-order-detail-page";
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { PageSkeleton } from '@/components/layout/shell-skeleton';
+import { WorkOrderDetailPage } from '@/components/work-orders/work-order-detail-page';
 
-export const metadata: Metadata = { title: "Work Order Details" };
+export const metadata: Metadata = { title: 'Work Order Details' };
 
 async function Detail({ params }: { readonly params: Promise<{ id: string }> }) {
   const { id } = await params;

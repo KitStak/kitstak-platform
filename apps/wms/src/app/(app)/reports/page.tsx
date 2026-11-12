@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { ReportsHub } from "@/components/reports/reports-hub";
-import { getAuthContext } from "@/server/auth/context";
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { ReportsHub } from '@/components/reports/reports-hub';
+import { getAuthContext } from '@/server/auth/context';
 
-export const metadata: Metadata = { title: "Report Hub" };
+export const metadata: Metadata = { title: 'Report Hub' };
 
 /**
  * The catalog is static nav config; only the permission filter needs the session. Resolving the

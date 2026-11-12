@@ -3,10 +3,14 @@
  * (meta.unread = badge, meta.types = type groups for the filter chips).
  * `DELETE /api/notifications` `{ ids }` or `{ read: true }` — removes the caller's own rows.
  */
-import { defineRoute } from "@/server/api/define-route";
-import { listResult } from "@/server/api/envelope";
-import { notificationDeleteSchema } from "@/lib/grid-defs/admin/notifications";
-import { deleteNotifications, listNotifications, notificationListQuerySchema } from "@/server/repositories/platform-activity";
+import { defineRoute } from '@/server/api/define-route';
+import { listResult } from '@/server/api/envelope';
+import { notificationDeleteSchema } from '@/lib/grid-defs/admin/notifications';
+import {
+  deleteNotifications,
+  listNotifications,
+  notificationListQuerySchema,
+} from '@/server/repositories/platform-activity';
 
 export const GET = defineRoute({
   query: notificationListQuerySchema,

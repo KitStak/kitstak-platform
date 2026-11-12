@@ -21,5 +21,5 @@ export function offsetOf(page: number, pageSize: number): number {
  * doubled to keep matching it literally.
  */
 export function likePattern(search: string): string {
-  return `%${search.replace(/[%_]/g, "").replace(/\\/g, "\\\\")}%`;
+  return `%${search.replace(/[%_]/g, '').replace(/\\/g, '\\\\')}%`;
 }

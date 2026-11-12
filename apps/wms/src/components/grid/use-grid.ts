@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * `useGrid` ties a list page together (BUILD_PLAN F4.3): URL state (grid grammar) →
@@ -9,14 +9,14 @@
  *   <GridToolbar {...g.toolbarProps} bulkActions={…} />
  *   <DataGrid {...g.gridProps} columns={columns} getRowId={(o) => o.id} />
  */
-import * as React from "react";
-import type { RowSelectionState } from "@tanstack/react-table";
-import { useApiQuery } from "@/lib/query-client";
-import { useGridUrlState, type GridUrlState } from "@/lib/use-url-state";
-import { parseGridQuery, type GridQuery, type SortSpec } from "@/server/query/grid-query";
-import type { FilterFieldDef } from "./grid-types";
-import { useLocalGridState } from "./use-local-grid-state";
-import { useSavedViews, type SavedView } from "./use-saved-views";
+import * as React from 'react';
+import type { RowSelectionState } from '@tanstack/react-table';
+import { useApiQuery } from '@/lib/query-client';
+import { useGridUrlState, type GridUrlState } from '@/lib/use-url-state';
+import { parseGridQuery, type GridQuery, type SortSpec } from '@/server/query/grid-query';
+import type { FilterFieldDef } from './grid-types';
+import { useLocalGridState } from './use-local-grid-state';
+import { useSavedViews, type SavedView } from './use-saved-views';
 
 export interface UseGridOptions {
   readonly gridKey: string;
@@ -34,8 +34,8 @@ export interface UseGridOptions {
 /** Grid query string without paging — the identity of "the same view". */
 export function viewIdentity(queryString: string): string {
   const params = new URLSearchParams(queryString);
-  params.delete("page");
-  params.delete("ps");
+  params.delete('page');
+  params.delete('ps');
   params.sort();
   return params.toString();
 }
@@ -112,15 +112,34 @@ export function useGrid<T>(options: UseGridOptions): UseGridResult<T> {
 }
 
 /** In-memory grid (pickers inside modals/drawers); default views are not applied. */
-export function useLocalGrid<T>(options: UseGridOptions & { readonly initial?: Partial<GridQuery> }): UseGridResult<T> {
-  return useGridCore<T>(useLocalGridState(options.gridKey, options.initial), { ...options, applyDefaultView: false });
+export function useLocalGrid<T>(
+  options: UseGridOptions & { readonly initial?: Partial<GridQuery> },
+): UseGridResult<T> {
+  return useGridCore<T>(useLocalGridState(options.gridKey, options.initial), {
+    ...options,
+    applyDefaultView: false,
+  });
 }
 
-function useGridCore<T>(grid: GridUrlState, { gridKey, path, fields = [], extraQuery, applyDefaultView = true, timeoutMs = GRID_TIMEOUT_MS }: UseGridOptions): UseGridResult<T> {
+function useGridCore<T>(
+  grid: GridUrlState,
+  {
+    gridKey,
+    path,
+    fields = [],
+    extraQuery,
+    applyDefaultView = true,
+    timeoutMs = GRID_TIMEOUT_MS,
+  }: UseGridOptions,
+): UseGridResult<T> {
   const views = useSavedViews(gridKey);
   const extra = React.useMemo(() => new URLSearchParams(extraQuery ?? {}).toString(), [extraQuery]);
-  const requestQuery = extra ? `${grid.queryString}${grid.queryString ? "&" : ""}${extra}` : grid.queryString;
-  const list = useApiQuery<T[]>(["grid", gridKey, path ?? ""], path, { query: requestQuery, placeholderData: (prev) => prev, timeoutMs });
+  const requestQuery = extra ? `${grid.queryString}${grid.queryString ? '&' : ''}${extra}` : grid.queryString;
+  const list = useApiQuery<T[]>(['grid', gridKey, path ?? ''], path, {
+    query: requestQuery,
+    placeholderData: (prev) => prev,
+    timeoutMs,
+  });
 
   // Default view: once, only when the page opened without grid state.
   const defaultApplied = React.useRef(false);
@@ -137,7 +156,10 @@ function useGridCore<T>(grid: GridUrlState, { gridKey, path, fields = [], extraQ
   const current = selection.base === base ? selection : { base, rows: {}, allMatching: false };
   const selectedIds = Object.keys(current.rows).filter((id) => current.rows[id]);
 
-  const applyView = React.useCallback((view: SavedView) => grid.setQuery({ ...parseGridQuery(view.query).query, page: 1 }), [grid]);
+  const applyView = React.useCallback(
+    (view: SavedView) => grid.setQuery({ ...parseGridQuery(view.query).query, page: 1 }),
+    [grid],
+  );
   const activeView = findActiveView(views.views, grid.queryString);
   const refetch = () => {
     void list.refetch();

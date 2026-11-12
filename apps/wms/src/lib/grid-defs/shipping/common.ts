@@ -4,7 +4,7 @@
  * Structurally compatible with `FilterFieldDef` from `@/components/grid/grid-types`.
  */
 
-export type ShippingFieldType = "enum" | "text" | "number" | "boolean" | "date";
+export type ShippingFieldType = 'enum' | 'text' | 'number' | 'boolean' | 'date';
 
 export interface ShippingFieldOption {
   readonly value: string;
@@ -25,23 +25,35 @@ export interface ShippingField {
   readonly facet?: ShippingFacetKey;
 }
 
-export const SHIPPING_FACET_KEYS = ["warehouses", "clients", "carriers", "carrierAccounts", "services"] as const;
+export const SHIPPING_FACET_KEYS = [
+  'warehouses',
+  'clients',
+  'carriers',
+  'carrierAccounts',
+  'services',
+] as const;
 export type ShippingFacetKey = (typeof SHIPPING_FACET_KEYS)[number];
 
 export type ShippingFacets = Readonly<Record<ShippingFacetKey, readonly ShippingFieldOption[]>>;
 
-export const optionsOf = (values: readonly string[]): readonly ShippingFieldOption[] => values.map((value) => ({ value, label: value }));
+export const optionsOf = (values: readonly string[]): readonly ShippingFieldOption[] =>
+  values.map((value) => ({ value, label: value }));
 
 /** Fills facet-driven enum options; fields whose facet is still loading fall back to text search. */
-export function withFacets(fields: readonly ShippingField[], facets: ShippingFacets | null | undefined): readonly ShippingField[] {
+export function withFacets(
+  fields: readonly ShippingField[],
+  facets: ShippingFacets | null | undefined,
+): readonly ShippingField[] {
   return fields.map((f) => {
     if (!f.facet) return f;
     const options = facets?.[f.facet];
-    return options && options.length > 0 ? { ...f, type: "enum" as const, options } : { ...f, type: "text" as const };
+    return options && options.length > 0
+      ? { ...f, type: 'enum' as const, options }
+      : { ...f, type: 'text' as const };
   });
 }
 
 export const YES_NO_OPTIONS: readonly ShippingFieldOption[] = [
-  { value: "true", label: "Yes" },
-  { value: "false", label: "No" },
+  { value: 'true', label: 'Yes' },
+  { value: 'false', label: 'No' },
 ];

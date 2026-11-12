@@ -9,13 +9,13 @@
  */
 
 export function shouldStartScheduler(env: Readonly<Record<string, string | undefined>>): boolean {
-  return env.NEXT_RUNTIME === "nodejs" && env.SCHEDULER_ENABLED !== "0" && !env.VERCEL;
+  return env.NEXT_RUNTIME === 'nodejs' && env.SCHEDULER_ENABLED !== '0' && !env.VERCEL;
 }
 
 export async function register(): Promise<void> {
-  if (process.env.NEXT_RUNTIME !== "nodejs" || !shouldStartScheduler(process.env)) {
+  if (process.env.NEXT_RUNTIME !== 'nodejs' || !shouldStartScheduler(process.env)) {
     return;
   }
-  const { startNodeScheduler } = await import("./instrumentation-node");
+  const { startNodeScheduler } = await import('./instrumentation-node');
   await startNodeScheduler();
 }

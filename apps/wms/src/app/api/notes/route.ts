@@ -4,10 +4,16 @@
  *   POST   { entityType, entityId, body }   add
  *   DELETE ?id=                            author, or anyone who may edit the record
  */
-import { defineRoute } from "@/server/api/define-route";
-import { created } from "@/server/api/envelope";
-import { entityRefSchema } from "@/server/repositories/platform-common";
-import { createNote, deleteNote, idQuerySchema, listNotes, noteCreateSchema } from "@/server/repositories/platform-files";
+import { defineRoute } from '@/server/api/define-route';
+import { created } from '@/server/api/envelope';
+import { entityRefSchema } from '@/server/repositories/platform-common';
+import {
+  createNote,
+  deleteNote,
+  idQuerySchema,
+  listNotes,
+  noteCreateSchema,
+} from '@/server/repositories/platform-files';
 
 export const GET = defineRoute({
   query: entityRefSchema,

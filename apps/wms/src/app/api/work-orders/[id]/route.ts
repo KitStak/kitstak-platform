@@ -3,13 +3,18 @@
  * tasks, receipts, transactions, allocation exceptions and timeline.
  * `PATCH { version, data }`: edit (409 CONFLICT on a stale version). `DELETE`: Open only.
  */
-import { z } from "zod";
-import { defineRoute } from "@/server/api/define-route";
-import { workOrderUpdateSchema } from "@/lib/grid-defs/work-orders/work-order-model";
-import { deleteWorkOrder, getWorkOrderDetail, getWorkOrderRow, updateWorkOrder } from "@/server/repositories/work-orders";
-import { canReopenInProcess } from "@/server/repositories/work-orders-adapters";
-import { assertPlanner, plannerBody, WO_PERMISSIONS, woCtx } from "@/server/repositories/work-orders-api";
-import { disassembledQty } from "@/server/repositories/work-orders-commands";
+import { z } from 'zod';
+import { defineRoute } from '@/server/api/define-route';
+import { workOrderUpdateSchema } from '@/lib/grid-defs/work-orders/work-order-model';
+import {
+  deleteWorkOrder,
+  getWorkOrderDetail,
+  getWorkOrderRow,
+  updateWorkOrder,
+} from '@/server/repositories/work-orders';
+import { canReopenInProcess } from '@/server/repositories/work-orders-adapters';
+import { assertPlanner, plannerBody, WO_PERMISSIONS, woCtx } from '@/server/repositories/work-orders-api';
+import { disassembledQty } from '@/server/repositories/work-orders-commands';
 
 const params = z.object({ id: z.string().trim().min(1).max(64) });
 
@@ -18,7 +23,11 @@ export const GET = defineRoute({
   params,
   handler: async ({ db, auth, params: p }) => {
     const detail = await getWorkOrderDetail(db, auth.scope, p.id);
-    return { ...detail, disassembledQty: await disassembledQty(db, detail.workOrder.id, detail.workOrder.kitProductId), canReopenInProcess: canReopenInProcess() };
+    return {
+      ...detail,
+      disassembledQty: await disassembledQty(db, detail.workOrder.id, detail.workOrder.kitProductId),
+      canReopenInProcess: canReopenInProcess(),
+    };
   },
 });
 

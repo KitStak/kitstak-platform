@@ -4,36 +4,42 @@
  * login second step and Company Settings › Security "Require MFA") is requested in
  * docs/requests/admin-settings.md REQ-R5-3; this module is the verified core it plugs into.
  */
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
-const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 export const TOTP_STEP_SECONDS = 30;
 export const TOTP_DIGITS = 6;
 
 export function base32Encode(bytes: Uint8Array): string {
   let bits = 0;
   let value = 0;
-  let out = "";
+  let out = '';
   for (const byte of bytes) {
     value = (value << 8) | byte;
     bits += 8;
-    while (bits >= 5) { out += B32[(value >>> (bits - 5)) & 31]; bits -= 5; }
+    while (bits >= 5) {
+      out += B32[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
   }
   if (bits > 0) out += B32[(value << (5 - bits)) & 31];
   return out;
 }
 
 export function base32Decode(text: string): Uint8Array {
-  const clean = text.toUpperCase().replace(/[\s=-]/g, "");
+  const clean = text.toUpperCase().replace(/[\s=-]/g, '');
   let bits = 0;
   let value = 0;
   const out: number[] = [];
   for (const ch of clean) {
     const idx = B32.indexOf(ch);
-    if (idx < 0) throw new Error("Invalid base32 secret");
+    if (idx < 0) throw new Error('Invalid base32 secret');
     value = (value << 5) | idx;
     bits += 5;
-    if (bits >= 8) { out.push((value >>> (bits - 8)) & 255); bits -= 8; }
+    if (bits >= 8) {
+      out.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
   }
   return Uint8Array.from(out);
 }
@@ -47,10 +53,14 @@ export function generateTotpSecret(): string {
 export function hotp(secret: Uint8Array, counter: number, digits = TOTP_DIGITS): string {
   const msg = Buffer.alloc(8);
   msg.writeBigUInt64BE(BigInt(counter));
-  const mac = createHmac("sha1", secret).update(msg).digest();
+  const mac = createHmac('sha1', secret).update(msg).digest();
   const offset = (mac[mac.length - 1] ?? 0) & 0x0f;
-  const code = (((mac[offset] ?? 0) & 0x7f) << 24) | ((mac[offset + 1] ?? 0) << 16) | ((mac[offset + 2] ?? 0) << 8) | (mac[offset + 3] ?? 0);
-  return String(code % 10 ** digits).padStart(digits, "0");
+  const code =
+    (((mac[offset] ?? 0) & 0x7f) << 24) |
+    ((mac[offset + 1] ?? 0) << 16) |
+    ((mac[offset + 2] ?? 0) << 8) |
+    (mac[offset + 3] ?? 0);
+  return String(code % 10 ** digits).padStart(digits, '0');
 }
 
 export function totp(secretBase32: string, at: Date = new Date(), digits = TOTP_DIGITS): string {
@@ -61,8 +71,13 @@ export function totp(secretBase32: string, at: Date = new Date(), digits = TOTP_
  * Constant-time check of a 6-digit code within ±`window` steps (clock drift). Returns the
  * matched counter so callers can reject replay of the same step, or null.
  */
-export function verifyTotp(secretBase32: string, code: string, at: Date = new Date(), window = 1): number | null {
-  const normalized = code.replace(/\s/g, "");
+export function verifyTotp(
+  secretBase32: string,
+  code: string,
+  at: Date = new Date(),
+  window = 1,
+): number | null {
+  const normalized = code.replace(/\s/g, '');
   if (!/^\d{6}$/.test(normalized)) return null;
   const secret = base32Decode(secretBase32);
   const counter = Math.floor(at.getTime() / 1000 / TOTP_STEP_SECONDS);

@@ -2,10 +2,10 @@
  * SQL helpers for record search providers: case-insensitive contains / starts-with
  * matching with LIKE wildcards in the user's text escaped.
  */
-import { sql, type SQL } from "drizzle-orm";
-import type { PgColumn } from "drizzle-orm/pg-core";
+import { sql, type SQL } from 'drizzle-orm';
+import type { PgColumn } from 'drizzle-orm/pg-core';
 
-const LIKE_ESCAPE = "\\";
+const LIKE_ESCAPE = '\\';
 
 /** Escapes `\`, `%` and `_` so user text matches literally inside a LIKE pattern. */
 export function escapeLike(text: string): string {

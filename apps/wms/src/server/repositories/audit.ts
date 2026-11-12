@@ -3,16 +3,23 @@
  * permission denials, user / role changes, session revocations) with the grid grammar.
  * Targets are resolved to emails / role names so the grid never shows raw ids.
  */
-import { sql, type SQL } from "drizzle-orm";
-import type { AppDb } from "@/server/api/db";
-import * as s from "@/server/db/schema";
-import { paginate } from "@/server/query/paginate";
-import type { GridQuery } from "@/server/query/grid-query";
-import { AUDIT_FIELDS, AUDIT_SEARCH_FIELDS, AUDIT_SORT_FIELDS, auditActionLabel, auditCategory, type AuditCategory } from "@/lib/grid-defs/admin/audit";
-import { lookupByType } from "@/lib/grid-defs/admin/lookups";
-import { getPrintType } from "@/server/print/catalog";
-import { compileGrid, qc, type GridBinding } from "./users-shared";
-import { dbGet } from "@/server/db/sql";
+import { sql, type SQL } from 'drizzle-orm';
+import type { AppDb } from '@/server/api/db';
+import * as s from '@/server/db/schema';
+import { paginate } from '@/server/query/paginate';
+import type { GridQuery } from '@/server/query/grid-query';
+import {
+  AUDIT_FIELDS,
+  AUDIT_SEARCH_FIELDS,
+  AUDIT_SORT_FIELDS,
+  auditActionLabel,
+  auditCategory,
+  type AuditCategory,
+} from '@/lib/grid-defs/admin/audit';
+import { lookupByType } from '@/lib/grid-defs/admin/lookups';
+import { getPrintType } from '@/server/print/catalog';
+import { compileGrid, qc, type GridBinding } from './users-shared';
+import { dbGet } from '@/server/db/sql';
 
 const a = s.auditLog;
 
@@ -28,7 +35,9 @@ const categorySql = sql<string>`CASE
   ELSE 'Other' END`;
 
 const userNameSql = sql<string | null>`(SELECT x.name FROM users x WHERE x.id = ${qc(a.userId)})`;
-const userEmailSql = sql<string | null>`COALESCE((SELECT x.email FROM users x WHERE x.id = ${qc(a.userId)}), ((${qc(a.detail)})::jsonb ->> 'email'))`;
+const userEmailSql = sql<
+  string | null
+>`COALESCE((SELECT x.email FROM users x WHERE x.id = ${qc(a.userId)}), ((${qc(a.detail)})::jsonb ->> 'email'))`;
 const entityLabelSql = sql<string | null>`CASE
   WHEN ${qc(a.entity)} = 'user' THEN COALESCE((SELECT x.email FROM users x WHERE x.id = ${qc(a.entityId)}), ${qc(a.entityId)})
   WHEN ${qc(a.entity)} = 'role' THEN COALESCE((SELECT x.name FROM roles x WHERE x.id = ${qc(a.entityId)}), ((${qc(a.detail)})::jsonb ->> 'name'), 'Deleted role')
@@ -50,8 +59,12 @@ const AUDIT_SQL: Readonly<Record<string, SQL>> = {
 };
 
 const BINDING: GridBinding = {
-  exprs: AUDIT_SQL, fields: AUDIT_FIELDS, sortable: AUDIT_SORT_FIELDS, search: AUDIT_SEARCH_FIELDS,
-  defaultSort: [{ field: "at", dir: "desc" }], tiebreaker: a.id,
+  exprs: AUDIT_SQL,
+  fields: AUDIT_FIELDS,
+  sortable: AUDIT_SORT_FIELDS,
+  search: AUDIT_SEARCH_FIELDS,
+  defaultSort: [{ field: 'at', dir: 'desc' }],
+  tiebreaker: a.id,
 };
 
 export interface AuditRow {
@@ -60,7 +73,7 @@ export interface AuditRow {
   readonly action: string;
   readonly actionLabel: string;
   readonly category: AuditCategory;
-  readonly outcome: "success" | "failure";
+  readonly outcome: 'success' | 'failure';
   readonly userName: string | null;
   readonly userEmail: string | null;
   readonly entity: string;
@@ -74,30 +87,34 @@ export interface AuditRow {
   readonly repeatCount: number;
 }
 
-const SKIP_DETAIL = new Set(["email", "name"]);
+const SKIP_DETAIL = new Set(['email', 'name']);
 
 /** Detail values shown with their human label (a lookup type key reads as its Data Setup noun). */
 function detailValue(key: string, v: unknown): unknown {
-  if (key === "type" && typeof v === "string") return lookupByType(v)?.noun ?? getPrintType(v)?.name ?? v;
+  if (key === 'type' && typeof v === 'string') return lookupByType(v)?.noun ?? getPrintType(v)?.name ?? v;
   return v;
 }
 
 export function summarizeDetail(detail: string | null): string {
-  if (!detail) return "";
+  if (!detail) return '';
   try {
     const raw = JSON.parse(detail) as Record<string, unknown>;
     const parsed = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, detailValue(k, v)]));
     return Object.entries(parsed)
-      .filter(([k, v]) => !SKIP_DETAIL.has(k) && v !== null && v !== undefined && v !== "" && !/Id$/.test(k))
-      .map(([k, v]) => `${k.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()}: ${Array.isArray(v) ? v.join(", ") || "none" : typeof v === "object" ? JSON.stringify(v) : String(v).replace(/_/g, " ")}`)
-      .join(" · ");
+      .filter(([k, v]) => !SKIP_DETAIL.has(k) && v !== null && v !== undefined && v !== '' && !/Id$/.test(k))
+      .map(
+        ([k, v]) =>
+          `${k.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()}: ${Array.isArray(v) ? v.join(', ') || 'none' : typeof v === 'object' ? JSON.stringify(v) : String(v).replace(/_/g, ' ')}`,
+      )
+      .join(' · ');
   } catch {
     return detail.slice(0, 200);
   }
 }
 
 /** Repeat group: same action, user, IP, outcome and detail within one calendar day (UTC). */
-const REPEAT_PARTITION = "x.action, COALESCE(x.user_id, ''), COALESCE(x.ip, ''), x.outcome, COALESCE(x.detail, ''), substr(x.at, 1, 10)";
+const REPEAT_PARTITION =
+  "x.action, COALESCE(x.user_id, ''), COALESCE(x.ip, ''), x.outcome, COALESCE(x.detail, ''), substr(x.at, 1, 10)";
 /** Keeps only the newest event of each repeat group ("Group repeats", on by default). */
 const latestOfGroupSql = sql`${qc(a.id)} IN (SELECT id FROM (SELECT x.id AS id, ROW_NUMBER() OVER (PARTITION BY ${sql.raw(REPEAT_PARTITION)} ORDER BY x.at DESC, x.id DESC) AS rn FROM audit_log x) WHERE rn = 1)`;
 const repeatCountSql = sql<number>`(SELECT COUNT(*) FROM audit_log x WHERE x.action = ${qc(a.action)} AND COALESCE(x.user_id, '') = COALESCE(${qc(a.userId)}, '') AND COALESCE(x.ip, '') = COALESCE(${qc(a.ip)}, '') AND x.outcome = ${qc(a.outcome)} AND COALESCE(x.detail, '') = COALESCE(${qc(a.detail)}, '') AND substr(x.at, 1, 10) = substr(${qc(a.at)}, 1, 10))`;
@@ -109,19 +126,45 @@ export interface AuditListOptions {
   readonly entity?: string | null;
 }
 
-export async function listAuditLog(db: AppDb, query: GridQuery, opts: AuditListOptions = {}): Promise<{ rows: AuditRow[]; total: number }> {
+export async function listAuditLog(
+  db: AppDb,
+  query: GridQuery,
+  opts: AuditListOptions = {},
+): Promise<{ rows: AuditRow[]; total: number }> {
   const grid = compileGrid(BINDING, query, [
     opts.groupRepeats ? latestOfGroupSql : undefined,
     opts.entityId ? sql`${a.entityId} = ${opts.entityId}` : undefined,
     opts.entity ? sql`${a.entity} = ${opts.entity}` : undefined,
   ]);
   const result = await paginate(
-    db.select({
-      id: a.id, at: a.at, action: a.action, outcome: a.outcome, entity: a.entity, ip: a.ip, userAgent: a.userAgent, detail: a.detail,
-      category: categorySql, userName: userNameSql, userEmail: userEmailSql, entityLabel: entityLabelSql,
-      repeatCount: opts.groupRepeats ? repeatCountSql : sql<number>`1`,
-    }).from(a).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    async () => (await db.select({ n: sql<number>`count(*)` }).from(a).where(grid.where).limit(1))[0]?.n ?? 0,
+    db
+      .select({
+        id: a.id,
+        at: a.at,
+        action: a.action,
+        outcome: a.outcome,
+        entity: a.entity,
+        ip: a.ip,
+        userAgent: a.userAgent,
+        detail: a.detail,
+        category: categorySql,
+        userName: userNameSql,
+        userEmail: userEmailSql,
+        entityLabel: entityLabelSql,
+        repeatCount: opts.groupRepeats ? repeatCountSql : sql<number>`1`,
+      })
+      .from(a)
+      .where(grid.where)
+      .orderBy(...grid.orderBy)
+      .$dynamic(),
+    async () =>
+      (
+        await db
+          .select({ n: sql<number>`count(*)` })
+          .from(a)
+          .where(grid.where)
+          .limit(1)
+      )[0]?.n ?? 0,
     { page: query.page, pageSize: query.pageSize },
   );
   const rows = result.rows.map((r) => ({
@@ -134,13 +177,24 @@ export async function listAuditLog(db: AppDb, query: GridQuery, opts: AuditListO
 }
 
 /** Counters for the page header strip (last 24 hours). */
-export async function auditStats(db: AppDb, now: Date = new Date()): Promise<{ signIns: number; failedSignIns: number; denied: number; csrf: number }> {
+export async function auditStats(
+  db: AppDb,
+  now: Date = new Date(),
+): Promise<{ signIns: number; failedSignIns: number; denied: number; csrf: number }> {
   const since = new Date(now.getTime() - 86_400_000).toISOString();
-  const row = await dbGet<{ signIns: number; failedSignIns: number; denied: number; csrf: number }>(db, sql`SELECT
+  const row = await dbGet<{ signIns: number; failedSignIns: number; denied: number; csrf: number }>(
+    db,
+    sql`SELECT
     SUM(CASE WHEN action = 'auth.login' AND outcome = 'success' THEN 1 ELSE 0 END) AS "signIns",
     SUM(CASE WHEN action ILIKE 'auth.login%' AND outcome = 'failure' THEN 1 ELSE 0 END) AS "failedSignIns",
     SUM(CASE WHEN action ILIKE 'security.permission%' THEN 1 ELSE 0 END) AS denied,
     SUM(CASE WHEN action ILIKE 'security.csrf%' THEN 1 ELSE 0 END) AS csrf
-    FROM audit_log WHERE at >= ${since}`);
-  return { signIns: row?.signIns ?? 0, failedSignIns: row?.failedSignIns ?? 0, denied: row?.denied ?? 0, csrf: row?.csrf ?? 0 };
+    FROM audit_log WHERE at >= ${since}`,
+  );
+  return {
+    signIns: row?.signIns ?? 0,
+    failedSignIns: row?.failedSignIns ?? 0,
+    denied: row?.denied ?? 0,
+    csrf: row?.csrf ?? 0,
+  };
 }

@@ -1,14 +1,21 @@
 /** `GET /api/shipment-packages/[id]/change-log` — field-level history (no catalog change-log key for packages; view gates it). */
-import { defineRoute } from "@/server/api/define-route";
-import { idParamsSchema } from "@/server/repositories/platform-common";
-import { changeLogPageSchema, changeLogResultOrDeleted } from "@/server/repositories/locations-shared";
-import { loadShipmentPackage } from "@/server/repositories/shipment-packages";
+import { defineRoute } from '@/server/api/define-route';
+import { idParamsSchema } from '@/server/repositories/platform-common';
+import { changeLogPageSchema, changeLogResultOrDeleted } from '@/server/repositories/locations-shared';
+import { loadShipmentPackage } from '@/server/repositories/shipment-packages';
 
 export const GET = defineRoute({
-  permission: ["settings.shipment_packages.view", "inventory.inventory_by_location.view"],
+  permission: ['settings.shipment_packages.view', 'inventory.inventory_by_location.view'],
   params: idParamsSchema,
   query: changeLogPageSchema,
   handler: async ({ db, auth, params, query }) => {
-    return await changeLogResultOrDeleted(db, auth, "shipment_package", params.id, query, async () => await loadShipmentPackage(db, auth, params.id));
+    return await changeLogResultOrDeleted(
+      db,
+      auth,
+      'shipment_package',
+      params.id,
+      query,
+      async () => await loadShipmentPackage(db, auth, params.id),
+    );
   },
 });

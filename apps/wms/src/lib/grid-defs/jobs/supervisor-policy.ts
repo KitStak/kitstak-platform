@@ -11,26 +11,34 @@
  */
 
 export const SUPERVISOR_ONLY_KEYS: ReadonlySet<string> = new Set([
-  "fulfillment.job_management.update_priority",
-  "fulfillment.job_management.cancel",
-  "fulfillment.job_management.assign",
-  "fulfillment.job_management.unassign",
-  "fulfillment.job_management.override_job_cancel_warning",
-  "fulfillment.task_details.cancel_task",
+  'fulfillment.job_management.update_priority',
+  'fulfillment.job_management.cancel',
+  'fulfillment.job_management.assign',
+  'fulfillment.job_management.unassign',
+  'fulfillment.job_management.override_job_cancel_warning',
+  'fulfillment.task_details.cancel_task',
 ]);
 
 /** System role keys that are floor (execution-only) roles. */
-const FLOOR_ROLE_KEYS: ReadonlySet<string> = new Set(["operator"]);
+const FLOOR_ROLE_KEYS: ReadonlySet<string> = new Set(['operator']);
 
 /** True when every role the user holds is a floor role (legacy role used when no role is assigned). */
-export function isFloorOnly(roleKeys: readonly string[] | null | undefined, legacyRole: string | null | undefined): boolean {
+export function isFloorOnly(
+  roleKeys: readonly string[] | null | undefined,
+  legacyRole: string | null | undefined,
+): boolean {
   const keys = roleKeys ?? [];
   if (keys.length > 0) return keys.every((k) => FLOOR_ROLE_KEYS.has(k));
   return legacyRole ? FLOOR_ROLE_KEYS.has(legacyRole) : false;
 }
 
 /** `granted` is the plain permission check; floor-only users never get supervisor-only keys. */
-export function allowsJobAction(key: string, granted: boolean, roleKeys: readonly string[] | null | undefined, legacyRole: string | null | undefined): boolean {
+export function allowsJobAction(
+  key: string,
+  granted: boolean,
+  roleKeys: readonly string[] | null | undefined,
+  legacyRole: string | null | undefined,
+): boolean {
   if (!granted) return false;
   return !(SUPERVISOR_ONLY_KEYS.has(key) && isFloorOnly(roleKeys, legacyRole));
 }

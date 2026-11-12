@@ -1,13 +1,14 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { AlertOctagon, RotateCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { HomeLink, StatusScreen } from "./status-screen";
+import * as React from 'react';
+import { AlertOctagon, RotateCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { HomeLink, StatusScreen } from './status-screen';
 
 /** Digest of a server error (matches server logs); never the raw message in production. */
 export function errorDigest(error: unknown): string | null {
-  if (error && typeof error === "object" && "digest" in error && typeof error.digest === "string") return error.digest;
+  if (error && typeof error === 'object' && 'digest' in error && typeof error.digest === 'string')
+    return error.digest;
   return null;
 }
 
@@ -21,8 +22,14 @@ export function ErrorView({ error, retry }: { readonly error: unknown; readonly 
       title="Something went wrong"
       description={
         <>
-          <p>This page hit an unexpected error. Your data is safe — try again, or head back to the dashboard.</p>
-          {digest ? <p className="mt-2 text-2xs text-faint">Reference: <code className="font-mono">{digest}</code></p> : null}
+          <p>
+            This page hit an unexpected error. Your data is safe — try again, or head back to the dashboard.
+          </p>
+          {digest ? (
+            <p className="mt-2 text-2xs text-faint">
+              Reference: <code className="font-mono">{digest}</code>
+            </p>
+          ) : null}
         </>
       }
       actions={

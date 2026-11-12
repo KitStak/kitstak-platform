@@ -4,14 +4,18 @@
  * expression over `shipment_orders` (correlated subqueries, so the same expressions work
  * in the page query and the bare count query).
  */
-import { getTableColumns, sql, type SQL } from "drizzle-orm";
-import { asc, desc } from "@/server/db/order";
-import { schema } from "@/server/db";
-import { AppError } from "@/server/api/errors";
-import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/server/query/filters";
-import { parseGridQuery, type GridQuery } from "@/server/query/grid-query";
-import { ORDER_FILTER_FIELDS, ORDER_SEARCH_FIELDS, ORDER_SORT_FIELDS } from "@/lib/grid-defs/orders/shipment-orders";
-import { effectiveRankSql } from "@/lib/grid-defs/orders/priority";
+import { getTableColumns, sql, type SQL } from 'drizzle-orm';
+import { asc, desc } from '@/server/db/order';
+import { schema } from '@/server/db';
+import { AppError } from '@/server/api/errors';
+import { compileFilters, compileQuickSearch, type FilterFieldDef } from '@/server/query/filters';
+import { parseGridQuery, type GridQuery } from '@/server/query/grid-query';
+import {
+  ORDER_FILTER_FIELDS,
+  ORDER_SEARCH_FIELDS,
+  ORDER_SORT_FIELDS,
+} from '@/lib/grid-defs/orders/shipment-orders';
+import { effectiveRankSql } from '@/lib/grid-defs/orders/priority';
 
 const so = schema.shipmentOrders;
 
@@ -24,9 +28,12 @@ export const q = Object.fromEntries(
   Object.entries(getTableColumns(so)).map(([key, col]) => [key, sql.raw(`"shipment_orders"."${col.name}"`)]),
 ) as { readonly [K in keyof typeof so.$inferSelect]: SQL };
 
-const days = (from: SQL): SQL => sql`trunc(EXTRACT(EPOCH FROM (COALESCE((${q.shippedAt})::timestamptz, (${q.cancelledAt})::timestamptz, now()) - (${from})::timestamptz)) / 86400.0::float8)::int`;
+const days = (from: SQL): SQL =>
+  sql`trunc(EXTRACT(EPOCH FROM (COALESCE((${q.shippedAt})::timestamptz, (${q.cancelledAt})::timestamptz, now()) - (${from})::timestamptz)) / 86400.0::float8)::int`;
 /** The single integer priority (column, sort, numeric filter, export); see grid-defs/orders/priority. */
-const priorityRank = sql.raw(effectiveRankSql(`"shipment_orders"."priority"`, `"shipment_orders"."priority_rank"`));
+const priorityRank = sql.raw(
+  effectiveRankSql(`"shipment_orders"."priority"`, `"shipment_orders"."priority_rank"`),
+);
 const cf = (key: string): SQL => sql`(${q.customFields} ->> ${key}::text)`;
 
 /** SQL per column id / filter field. */
@@ -116,10 +123,16 @@ export const ORDER_SQL: Readonly<Record<string, SQL>> = {
   isPartial: sql`(${q.status} = 'Partially Shipped')`,
   singleItemOrder: sql`(${q.totalQuantity} = 1)`,
   tag: sql`(SELECT et.tag_id FROM entity_tags et WHERE et.entity_type = 'shipment_order' AND et.entity_id = ${q.id})`,
-  cfDate1: cf("date1"), cfDate2: cf("date2"), cfDate3: cf("date3"),
-  cfDropDown1: cf("dropDown1"), cfDropDown2: cf("dropDown2"),
-  cfTextBox1: cf("textBox1"), cfTextBox2: cf("textBox2"), cfTextBox3: cf("textBox3"),
-  cfToggle1: cf("toggle1"), cfToggle2: cf("toggle2"),
+  cfDate1: cf('date1'),
+  cfDate2: cf('date2'),
+  cfDate3: cf('date3'),
+  cfDropDown1: cf('dropDown1'),
+  cfDropDown2: cf('dropDown2'),
+  cfTextBox1: cf('textBox1'),
+  cfTextBox2: cf('textBox2'),
+  cfTextBox3: cf('textBox3'),
+  cfToggle1: cf('toggle1'),
+  cfToggle2: cf('toggle2'),
 };
 
 const warned = new Set<string>();
@@ -133,7 +146,7 @@ function warnUnmapped(field: string, where: string): void {
 }
 
 /** SQL for a column / filter field, or undefined (logged) when the field is not mapped. */
-export function tryOrderExpr(field: string, where = "column"): SQL | undefined {
+export function tryOrderExpr(field: string, where = 'column'): SQL | undefined {
   const expr = ORDER_SQL[field];
   if (!expr) warnUnmapped(field, where);
   return expr;
@@ -147,7 +160,7 @@ export function orderExpr(field: string): SQL {
 
 /** Tag filter: an order matches `in` when ANY of its tags is selected. */
 function tagFilterDef(): FilterFieldDef {
-  return { key: "tag", label: "Tag", type: "enum", sql: sql`${q.id}`, nullable: true };
+  return { key: 'tag', label: 'Tag', type: 'enum', sql: sql`${q.id}`, nullable: true };
 }
 
 /**
@@ -162,28 +175,38 @@ const FILTER_SQL: Readonly<Record<string, SQL>> = {
 };
 
 /** Sort SQL that differs from the column SQL: shipped / cancelled orders sort together by their close date. */
-const SORT_SQL: Readonly<Record<string, SQL>> = { shippedAt: sql`COALESCE(${q.shippedAt}, ${q.cancelledAt})` };
+const SORT_SQL: Readonly<Record<string, SQL>> = {
+  shippedAt: sql`COALESCE(${q.shippedAt}, ${q.cancelledAt})`,
+};
 
 /** Server filter defs derived from the shared field list; an unmapped field is skipped (logged), never fatal. */
-export const ORDER_FILTER_DEFS: readonly FilterFieldDef[] = ORDER_FILTER_FIELDS.flatMap((f): FilterFieldDef[] => {
-  if (f.field === "tag") return [tagFilterDef()];
-  const expr = FILTER_SQL[f.field] ?? tryOrderExpr(f.field, "filter");
-  return expr ? [{ key: f.field, label: f.label, type: f.type, sql: expr, nullable: true }] : [];
-});
+export const ORDER_FILTER_DEFS: readonly FilterFieldDef[] = ORDER_FILTER_FIELDS.flatMap(
+  (f): FilterFieldDef[] => {
+    if (f.field === 'tag') return [tagFilterDef()];
+    const expr = FILTER_SQL[f.field] ?? tryOrderExpr(f.field, 'filter');
+    return expr ? [{ key: f.field, label: f.label, type: f.type, sql: expr, nullable: true }] : [];
+  },
+);
 
 /** `f.tag=in:a,b` is rewritten to an EXISTS over entity_tags (multi-valued field). */
-function compileTagFilters(query: GridQuery): { readonly rest: GridQuery["filters"]; readonly sql: SQL[] } {
+function compileTagFilters(query: GridQuery): { readonly rest: GridQuery['filters']; readonly sql: SQL[] } {
   const parts: SQL[] = [];
   const rest = query.filters.filter((f) => {
-    if (f.field !== "tag") return true;
+    if (f.field !== 'tag') return true;
     const exists = (ids: readonly string[]) =>
-      sql`EXISTS (SELECT 1 FROM entity_tags et WHERE et.entity_type = 'shipment_order' AND et.entity_id = ${q.id} AND et.tag_id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}))`;
+      sql`EXISTS (SELECT 1 FROM entity_tags et WHERE et.entity_type = 'shipment_order' AND et.entity_id = ${q.id} AND et.tag_id IN (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )}))`;
     const any = sql`EXISTS (SELECT 1 FROM entity_tags et WHERE et.entity_type = 'shipment_order' AND et.entity_id = ${q.id})`;
-    if (f.op === "in" && f.values.length) parts.push(exists(f.values));
-    else if (f.op === "nin" && f.values.length) parts.push(sql`NOT ${exists(f.values)}`);
-    else if (f.op === "ex") parts.push(any);
-    else if (f.op === "empty") parts.push(sql`NOT ${any}`);
-    else throw new AppError("VALIDATION", "Tag: operator not supported", { fieldErrors: { "f.tag": ["Unsupported operator"] } });
+    if (f.op === 'in' && f.values.length) parts.push(exists(f.values));
+    else if (f.op === 'nin' && f.values.length) parts.push(sql`NOT ${exists(f.values)}`);
+    else if (f.op === 'ex') parts.push(any);
+    else if (f.op === 'empty') parts.push(sql`NOT ${any}`);
+    else
+      throw new AppError('VALIDATION', 'Tag: operator not supported', {
+        fieldErrors: { 'f.tag': ['Unsupported operator'] },
+      });
     return false;
   });
   return { rest, sql: parts };
@@ -193,16 +216,28 @@ function compileTagFilters(query: GridQuery): { readonly rest: GridQuery["filter
  * `f.sku=<op>:…` is line-wise: an order matches when ANY of its lines' SKU matches (so a
  * multi-line order is found by each of its SKUs). `nin` / `empty` mean NO line matches / no lines.
  */
-function compileSkuFilters(filters: GridQuery["filters"]): { readonly rest: GridQuery["filters"]; readonly sql: SQL[] } {
+function compileSkuFilters(filters: GridQuery['filters']): {
+  readonly rest: GridQuery['filters'];
+  readonly sql: SQL[];
+} {
   const parts: SQL[] = [];
-  const lineSkuDef: FilterFieldDef = { key: "sku", label: "SKU", type: "text", sql: sql`p.sku`, nullable: true };
+  const lineSkuDef: FilterFieldDef = {
+    key: 'sku',
+    label: 'SKU',
+    type: 'text',
+    sql: sql`p.sku`,
+    nullable: true,
+  };
   const lineExists = (pred: SQL | undefined) =>
     sql`EXISTS (SELECT 1 FROM order_lines l JOIN products p ON p.id = l.product_id WHERE l.order_id = ${q.id}${pred ? sql` AND ${pred}` : sql``})`;
   const rest = filters.filter((f) => {
-    if (f.field !== "sku") return true;
-    if (f.op === "empty") parts.push(sql`NOT ${lineExists(undefined)}`);
-    else if (f.op === "ex") parts.push(lineExists(undefined));
-    else if (f.op === "nin") parts.push(sql`NOT ${lineExists(compileFilters([lineSkuDef], [{ field: "sku", op: "in", values: f.values }]))}`);
+    if (f.field !== 'sku') return true;
+    if (f.op === 'empty') parts.push(sql`NOT ${lineExists(undefined)}`);
+    else if (f.op === 'ex') parts.push(lineExists(undefined));
+    else if (f.op === 'nin')
+      parts.push(
+        sql`NOT ${lineExists(compileFilters([lineSkuDef], [{ field: 'sku', op: 'in', values: f.values }]))}`,
+      );
     else parts.push(lineExists(compileFilters([lineSkuDef], [f])));
     return false;
   });
@@ -220,7 +255,7 @@ export function orderGridParams(params: URLSearchParams): OrderGridParams {
   const { query, issues } = parseGridQuery(params);
   if (issues.length > 0) {
     const fieldErrors = Object.fromEntries(issues.map((i) => [i.param, [i.message]]));
-    throw new AppError("VALIDATION", issues[0]?.message ?? "Invalid grid query", { fieldErrors });
+    throw new AppError('VALIDATION', issues[0]?.message ?? 'Invalid grid query', { fieldErrors });
   }
   return compileOrderGrid(query);
 }
@@ -229,24 +264,29 @@ export function compileOrderGrid(query: GridQuery): OrderGridParams {
   const sortable = new Set<string>(ORDER_SORT_FIELDS);
   const unknownSort = query.sort.find((s) => !sortable.has(s.field));
   if (unknownSort) {
-    throw new AppError("VALIDATION", `Cannot sort by "${unknownSort.field}"`, { fieldErrors: { sort: ["Unknown sort field"] } });
+    throw new AppError('VALIDATION', `Cannot sort by "${unknownSort.field}"`, {
+      fieldErrors: { sort: ['Unknown sort field'] },
+    });
   }
   const tags = compileTagFilters(query);
   const skus = compileSkuFilters(tags.rest);
-  const searchExprs = ORDER_SEARCH_FIELDS.map((f) => tryOrderExpr(f, "search")).filter((e): e is SQL => e !== undefined);
+  const searchExprs = ORDER_SEARCH_FIELDS.map((f) => tryOrderExpr(f, 'search')).filter(
+    (e): e is SQL => e !== undefined,
+  );
   const search = compileQuickSearch(query.q, query.qm, searchExprs);
   const known = new Set(ORDER_FILTER_DEFS.map((d) => d.key));
   const mapped = skus.rest.filter((f) => {
     if (known.has(f.field)) return true;
-    warnUnmapped(f.field, "filter");
+    warnUnmapped(f.field, 'filter');
     return false;
   });
   const filters = compileFilters(ORDER_FILTER_DEFS, mapped);
   const parts = [search, filters, ...tags.sql, ...skus.sql].filter((p): p is SQL => p !== undefined);
-  const where = parts.length === 0 ? undefined : parts.length === 1 ? parts[0] : sql`(${sql.join(parts, sql` AND `)})`;
+  const where =
+    parts.length === 0 ? undefined : parts.length === 1 ? parts[0] : sql`(${sql.join(parts, sql` AND `)})`;
   const orderBy = query.sort.flatMap((s) => {
-    const expr = SORT_SQL[s.field] ?? tryOrderExpr(s.field, "sort");
-    return expr ? [s.dir === "asc" ? asc(expr) : desc(expr)] : [];
+    const expr = SORT_SQL[s.field] ?? tryOrderExpr(s.field, 'sort');
+    return expr ? [s.dir === 'asc' ? asc(expr) : desc(expr)] : [];
   });
   return { query, where, orderBy };
 }
@@ -254,7 +294,7 @@ export function compileOrderGrid(query: GridQuery): OrderGridParams {
 /** True when the request speaks the grid grammar. */
 export function isGridRequest(params: URLSearchParams): boolean {
   for (const key of params.keys()) {
-    if (key === "q" || key === "qm" || key === "sort" || key === "ps" || key.startsWith("f.")) return true;
+    if (key === 'q' || key === 'qm' || key === 'sort' || key === 'ps' || key.startsWith('f.')) return true;
   }
   return false;
 }

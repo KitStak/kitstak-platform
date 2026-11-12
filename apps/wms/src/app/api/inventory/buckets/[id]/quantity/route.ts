@@ -6,13 +6,13 @@
  * record (Logiwa: "Setting the quantity to 0 will delete this inventory record"), so the
  * response carries `bucket: null` and `deleted: true`.
  */
-import { defineRoute } from "@/server/api/define-route";
-import { forbiddenError } from "@/server/api/errors";
-import { can } from "@/server/auth/permissions";
-import { changeQuantity, quantityChangeSchema } from "@/server/repositories/inventory-commands";
-import { findBucketRow } from "@/server/repositories/inventory-by-location";
-import { domainCtx, idParamsSchema } from "@/server/repositories/platform-common";
-import { INVENTORY_PERMISSIONS as P } from "@/lib/grid-defs/inventory/permissions";
+import { defineRoute } from '@/server/api/define-route';
+import { forbiddenError } from '@/server/api/errors';
+import { can } from '@/server/auth/permissions';
+import { changeQuantity, quantityChangeSchema } from '@/server/repositories/inventory-commands';
+import { findBucketRow } from '@/server/repositories/inventory-by-location';
+import { domainCtx, idParamsSchema } from '@/server/repositories/platform-common';
+import { INVENTORY_PERMISSIONS as P } from '@/lib/grid-defs/inventory/permissions';
 
 const BY_MODE = { add: P.addLine, adjust: P.adjustLine, remove: P.removeLine } as const;
 

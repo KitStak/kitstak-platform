@@ -1,20 +1,29 @@
-"use client";
+'use client';
 
 /**
  * Quick-search mode picker (Logiwa parity): Equal / Starts With, chosen in a popover and
  * confirmed with Apply. Rendered as the left addon of the grid search box.
  */
-import * as React from "react";
-import { ChevronDown } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { QuickSearchMode } from "@/server/query/grid-query";
-import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import * as React from 'react';
+import { ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { QuickSearchMode } from '@/server/query/grid-query';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-export const SEARCH_MODE_LABELS: Readonly<Record<QuickSearchMode, string>> = { eq: "Equal", sw: "Starts With" };
-const MODES: readonly QuickSearchMode[] = ["eq", "sw"];
+export const SEARCH_MODE_LABELS: Readonly<Record<QuickSearchMode, string>> = {
+  eq: 'Equal',
+  sw: 'Starts With',
+};
+const MODES: readonly QuickSearchMode[] = ['eq', 'sw'];
 
-export function SearchMode({ value, onChange }: { readonly value: QuickSearchMode; readonly onChange: (mode: QuickSearchMode) => void }) {
+export function SearchMode({
+  value,
+  onChange,
+}: {
+  readonly value: QuickSearchMode;
+  readonly onChange: (mode: QuickSearchMode) => void;
+}) {
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState<QuickSearchMode>(value);
   return (
@@ -38,8 +47,20 @@ export function SearchMode({ value, onChange }: { readonly value: QuickSearchMod
       <PopoverContent align="start" className="w-52 p-2">
         <div role="radiogroup" aria-label="Search mode" className="flex flex-col gap-0.5">
           {MODES.map((mode) => (
-            <label key={mode} className={cn("flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface-sunken", draft === mode ? "text-primary" : "text-body")}>
-              <input type="radio" name="grid-search-mode" className="accent-[var(--color-primary)]" checked={draft === mode} onChange={() => setDraft(mode)} />
+            <label
+              key={mode}
+              className={cn(
+                'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface-sunken',
+                draft === mode ? 'text-primary' : 'text-body',
+              )}
+            >
+              <input
+                type="radio"
+                name="grid-search-mode"
+                className="accent-[var(--color-primary)]"
+                checked={draft === mode}
+                onChange={() => setDraft(mode)}
+              />
               {SEARCH_MODE_LABELS[mode]}
             </label>
           ))}

@@ -1,10 +1,15 @@
 /** `/api/lookups/[type]` — Data Setup values: list (global + scoped) and create. */
-import { defineRoute } from "@/server/api/define-route";
-import { created } from "@/server/api/envelope";
-import { domainCtx } from "@/server/repositories/platform-common";
+import { defineRoute } from '@/server/api/define-route';
+import { created } from '@/server/api/envelope';
+import { domainCtx } from '@/server/repositories/platform-common';
 import {
-  createLookup, listLookups, LOOKUP_MANAGE_PERMISSION, lookupCreateSchema, lookupListQuerySchema, lookupTypeParamsSchema,
-} from "@/server/repositories/platform-lookups";
+  createLookup,
+  listLookups,
+  LOOKUP_MANAGE_PERMISSION,
+  lookupCreateSchema,
+  lookupListQuerySchema,
+  lookupTypeParamsSchema,
+} from '@/server/repositories/platform-lookups';
 
 export const GET = defineRoute({
   params: lookupTypeParamsSchema,

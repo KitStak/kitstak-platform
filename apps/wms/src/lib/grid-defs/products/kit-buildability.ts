@@ -11,7 +11,7 @@ export interface KitComponentStock {
 }
 
 /** Whole kits one component line covers (negative stock counts as zero; qty < 1 counts as 1). */
-export function buildableFromComponent(c: Pick<KitComponentStock, "quantity" | "available">): number {
+export function buildableFromComponent(c: Pick<KitComponentStock, 'quantity' | 'available'>): number {
   return Math.floor(Math.max(0, c.available) / Math.max(1, c.quantity));
 }
 
@@ -30,6 +30,8 @@ export function kitBuildability(components: readonly KitComponentStock[]): KitBu
   const buildable = Math.min(...per.map((p) => p.kits));
   const limiting = per.filter((p) => p.kits === buildable).map((p) => p.c);
   const first = limiting[0];
-  const shortForNext = first ? Math.max(0, (buildable + 1) * Math.max(1, first.quantity) - Math.max(0, first.available)) : 0;
+  const shortForNext = first
+    ? Math.max(0, (buildable + 1) * Math.max(1, first.quantity) - Math.max(0, first.available))
+    : 0;
   return { buildable, limiting, shortForNext };
 }

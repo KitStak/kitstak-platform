@@ -6,9 +6,13 @@
  *   { mode: "count", countPlanIds }        (M07, not configured yet)
  * Returns `{ succeeded, failed, jobIds }`.
  */
-import { defineRoute } from "@/server/api/define-route";
-import { domainCtx } from "@/server/repositories/platform-common";
-import { ANY_JOB_OPERATION_PERMISSION, opsJobsSchema, runJobsCommand } from "@/server/repositories/platform-ops";
+import { defineRoute } from '@/server/api/define-route';
+import { domainCtx } from '@/server/repositories/platform-common';
+import {
+  ANY_JOB_OPERATION_PERMISSION,
+  opsJobsSchema,
+  runJobsCommand,
+} from '@/server/repositories/platform-ops';
 
 export const POST = defineRoute({
   permission: ANY_JOB_OPERATION_PERMISSION,

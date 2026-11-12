@@ -1,20 +1,26 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { Tooltip as TooltipPrimitive } from "radix-ui";
-import { cn } from "@/lib/utils";
+import * as React from 'react';
+import { Tooltip as TooltipPrimitive } from 'radix-ui';
+import { cn } from '@/lib/utils';
 
 const DEFAULT_DELAY_MS = 300;
 
-export function TooltipProvider({ children, delayDuration = DEFAULT_DELAY_MS }: { readonly children: React.ReactNode; readonly delayDuration?: number }) {
+export function TooltipProvider({
+  children,
+  delayDuration = DEFAULT_DELAY_MS,
+}: {
+  readonly children: React.ReactNode;
+  readonly delayDuration?: number;
+}) {
   return <TooltipPrimitive.Provider delayDuration={delayDuration}>{children}</TooltipPrimitive.Provider>;
 }
 
 export interface TooltipProps {
   readonly content: React.ReactNode;
   readonly children: React.ReactElement;
-  readonly side?: "top" | "right" | "bottom" | "left";
-  readonly align?: "start" | "center" | "end";
+  readonly side?: 'top' | 'right' | 'bottom' | 'left';
+  readonly align?: 'start' | 'center' | 'end';
   /** No tooltip when false/empty — callers can pass a conditional reason. */
   readonly disabled?: boolean;
   readonly delayDuration?: number;
@@ -31,7 +37,7 @@ export interface TooltipProps {
  * programmatically — e.g. when a popover closes after a click — must not re-show the
  * tooltip; preventDefault makes Radix skip its own focus handler.
  */
-const TOOLTIP_SUPPRESS_KEY = "tooltipSuppress";
+const TOOLTIP_SUPPRESS_KEY = 'tooltipSuppress';
 
 /**
  * Call right before focus is returned to a tooltip trigger programmatically (e.g. a
@@ -40,7 +46,7 @@ const TOOLTIP_SUPPRESS_KEY = "tooltipSuppress";
  */
 export function suppressNextTooltipFocus(trigger: HTMLElement | null): void {
   if (!trigger) return;
-  trigger.dataset[TOOLTIP_SUPPRESS_KEY] = "1";
+  trigger.dataset[TOOLTIP_SUPPRESS_KEY] = '1';
   // If focus goes elsewhere, drop the flag so a later real keyboard focus still shows it.
   setTimeout(() => {
     if (trigger.ownerDocument.activeElement !== trigger) delete trigger.dataset[TOOLTIP_SUPPRESS_KEY];
@@ -56,19 +62,29 @@ export function suppressProgrammaticFocus(event: React.FocusEvent<HTMLElement>):
   }
   let keyboard = true;
   try {
-    keyboard = target.matches(":focus-visible");
+    keyboard = target.matches(':focus-visible');
   } catch {
     keyboard = true; // engines without :focus-visible keep the default behaviour
   }
   if (!keyboard) event.preventDefault();
 }
 
-export function Tooltip({ content, children, side = "top", align = "center", disabled, delayDuration, className }: TooltipProps) {
-  if (disabled || content === null || content === undefined || content === "") return children;
+export function Tooltip({
+  content,
+  children,
+  side = 'top',
+  align = 'center',
+  disabled,
+  delayDuration,
+  className,
+}: TooltipProps) {
+  if (disabled || content === null || content === undefined || content === '') return children;
   return (
     <TooltipPrimitive.Provider delayDuration={delayDuration ?? DEFAULT_DELAY_MS} disableHoverableContent>
       <TooltipPrimitive.Root>
-        <TooltipPrimitive.Trigger asChild onFocus={suppressProgrammaticFocus}>{children}</TooltipPrimitive.Trigger>
+        <TooltipPrimitive.Trigger asChild onFocus={suppressProgrammaticFocus}>
+          {children}
+        </TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
             side={side}
@@ -76,8 +92,8 @@ export function Tooltip({ content, children, side = "top", align = "center", dis
             sideOffset={6}
             collisionPadding={8}
             className={cn(
-              "z-[60] max-w-[280px] rounded-md bg-foreground px-2.5 py-1.5 text-xs leading-4 font-medium text-surface shadow-md",
-              className
+              'z-[60] max-w-[280px] rounded-md bg-foreground px-2.5 py-1.5 text-xs leading-4 font-medium text-surface shadow-md',
+              className,
             )}
           >
             {content}
@@ -93,11 +109,23 @@ export function Tooltip({ content, children, side = "top", align = "center", dis
  * Wraps a (possibly disabled) control so its "why" reason is reachable by hover and
  * keyboard: "Select at least one order". When `reason` is empty the child is returned as-is.
  */
-export function DisabledReason({ reason, children, side }: { readonly reason?: string | null; readonly children: React.ReactElement; readonly side?: TooltipProps["side"] }) {
+export function DisabledReason({
+  reason,
+  children,
+  side,
+}: {
+  readonly reason?: string | null;
+  readonly children: React.ReactElement;
+  readonly side?: TooltipProps['side'];
+}) {
   if (!reason) return children;
   return (
     <Tooltip content={reason} side={side}>
-      <span tabIndex={0} className="inline-flex cursor-not-allowed rounded-md [&>*]:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30" aria-label={reason}>
+      <span
+        tabIndex={0}
+        className="inline-flex cursor-not-allowed rounded-md [&>*]:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
+        aria-label={reason}
+      >
         {children}
       </span>
     </Tooltip>

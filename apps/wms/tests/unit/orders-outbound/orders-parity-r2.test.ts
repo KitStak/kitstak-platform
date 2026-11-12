@@ -1,14 +1,18 @@
 /** Parity loop round 2: stale auto codes, wizard double-create, human API messages, permission gate, ATP tone, reprint pick list. */
-import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import * as schema from "@/server/db/schema";
-import { createOrder, createOrderBodySchema, peekOrderCode } from "@/server/repositories/orders-commands";
-import { parseOrderBody } from "@/server/repositories/orders-validation";
-import { createBody, defaultOrderValues } from "@/components/orders/wizard/order-form-model";
-import { CHECKING_PERMISSIONS, NO_PERMISSION, permissionGate } from "@/components/orders/use-order-permissions";
-import { atpTone } from "@/components/orders/wizard/order-product-search";
-import { orderLocks } from "@/components/orders/detail/order-detail-page";
-import { createWorld, orderInput, type World } from "../foundation/domain/fixtures";
+import { eq } from 'drizzle-orm';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import * as schema from '@/server/db/schema';
+import { createOrder, createOrderBodySchema, peekOrderCode } from '@/server/repositories/orders-commands';
+import { parseOrderBody } from '@/server/repositories/orders-validation';
+import { createBody, defaultOrderValues } from '@/components/orders/wizard/order-form-model';
+import {
+  CHECKING_PERMISSIONS,
+  NO_PERMISSION,
+  permissionGate,
+} from '@/components/orders/use-order-permissions';
+import { atpTone } from '@/components/orders/wizard/order-product-search';
+import { orderLocks } from '@/components/orders/detail/order-detail-page';
+import { createWorld, orderInput, type World } from '../foundation/domain/fixtures';
 
 let w: World;
 beforeEach(async () => {
@@ -16,15 +20,24 @@ beforeEach(async () => {
 });
 afterEach(() => w.close());
 
-const nextValue = async () => (await w.db.select().from(schema.codeSequences).where(eq(schema.codeSequences.key, "so")).limit(1))[0]?.nextValue ?? 0;
+const nextValue = async () =>
+  (await w.db.select().from(schema.codeSequences).where(eq(schema.codeSequences.key, 'so')).limit(1))[0]
+    ?.nextValue ?? 0;
 
 /** What the wizard posts: the peeked code plus `autoCode` while the user kept the suggestion. */
 async function wizardCreate(suggested: string) {
-  return await createOrder(w.db, w.ctx, createOrderBodySchema.parse({ ...orderInput(w, [{ productId: w.productId, quantity: 1 }], { code: suggested }), autoCode: true }));
+  return await createOrder(
+    w.db,
+    w.ctx,
+    createOrderBodySchema.parse({
+      ...orderInput(w, [{ productId: w.productId, quantity: 1 }], { code: suggested }),
+      autoCode: true,
+    }),
+  );
 }
 
-describe("auto order code (blocker regression)", () => {
-  it("two wizard creates in a row with auto codes both succeed and advance the sequence", async () => {
+describe('auto order code (blocker regression)', () => {
+  it('two wizard creates in a row with auto codes both succeed and advance the sequence', async () => {
     const suffix = (c: string) => Number(/([0-9]+)$/.exec(c)?.[1]);
     const s1 = await peekOrderCode(w.db);
     const a = await wizardCreate(s1);
@@ -37,7 +50,7 @@ describe("auto order code (blocker regression)", () => {
     expect(await nextValue()).toBe(suffix(s2) + 1);
   });
 
-  it("a stale auto code (another user saved it first) gets the next free code instead of a DUPLICATE error", async () => {
+  it('a stale auto code (another user saved it first) gets the next free code instead of a DUPLICATE error', async () => {
     const stale = await peekOrderCode(w.db);
     await wizardCreate(stale); // user A
     const b = await wizardCreate(stale); // user B still holds the same suggestion
@@ -45,17 +58,24 @@ describe("auto order code (blocker regression)", () => {
     expect(b.code).toBe(await peekOrderCodeMinusOne());
   });
 
-  it("a hand-typed taken code still fails with DUPLICATE", async () => {
+  it('a hand-typed taken code still fails with DUPLICATE', async () => {
     const code = await peekOrderCode(w.db);
     await wizardCreate(code);
-    await expect(async () => await createOrder(w.db, w.ctx, createOrderBodySchema.parse(orderInput(w, [{ productId: w.productId, quantity: 1 }], { code })))).rejects.toThrow(/already exists/);
+    await expect(
+      async () =>
+        await createOrder(
+          w.db,
+          w.ctx,
+          createOrderBodySchema.parse(orderInput(w, [{ productId: w.productId, quantity: 1 }], { code })),
+        ),
+    ).rejects.toThrow(/already exists/);
   });
 
-  it("createBody sends autoCode only while the code equals the suggestion", () => {
-    const v = { ...defaultOrderValues(), code: "SO000123", codeSuggested: "SO000123" };
+  it('createBody sends autoCode only while the code equals the suggestion', () => {
+    const v = { ...defaultOrderValues(), code: 'SO000123', codeSuggested: 'SO000123' };
     expect(createBody(v).autoCode).toBe(true);
-    expect(createBody({ ...v, code: "MY-CODE" }).autoCode).toBe(false);
-    expect(createBody({ ...v, codeSuggested: "" }).autoCode).toBe(false);
+    expect(createBody({ ...v, code: 'MY-CODE' }).autoCode).toBe(false);
+    expect(createBody({ ...v, codeSuggested: '' }).autoCode).toBe(false);
   });
 });
 
@@ -63,49 +83,53 @@ async function peekOrderCodeMinusOne(): Promise<string> {
   // The code assigned to B is the one just consumed: one below the current peek.
   const peek = await peekOrderCode(w.db);
   const m = /^(\D*)(\d+)$/.exec(peek) as RegExpExecArray;
-  return `${m[1]}${String(Number(m[2]) - 1).padStart((m[2] as string).length, "0")}`;
+  return `${m[1]}${String(Number(m[2]) - 1).padStart((m[2] as string).length, '0')}`;
 }
 
-describe("human API validation messages", () => {
-  it("never leaks raw zod text for missing fields", () => {
+describe('human API validation messages', () => {
+  it('never leaks raw zod text for missing fields', () => {
     let fieldErrors: Record<string, string[]> = {};
     try {
-      parseOrderBody(createOrderBodySchema, { warehouseId: "x" });
+      parseOrderBody(createOrderBodySchema, { warehouseId: 'x' });
     } catch (error) {
       fieldErrors = (error as { fieldErrors: Record<string, string[]> }).fieldErrors;
     }
     const all = Object.values(fieldErrors).flat();
     expect(all.length).toBeGreaterThan(0);
     expect(all.some((m) => /Invalid input|expected .* received/.test(m))).toBe(false);
-    expect(fieldErrors.shipAddress).toEqual(["Enter address line 1"]);
-    expect(fieldErrors.clientId).toEqual(["Choose a client"]);
+    expect(fieldErrors.shipAddress).toEqual(['Enter address line 1']);
+    expect(fieldErrors.clientId).toEqual(['Choose a client']);
     expect(fieldErrors.lines?.[0]).toMatch(/product|line/i);
   });
 });
 
-describe("permission gate", () => {
-  it("never shows denial copy while permissions load", () => {
+describe('permission gate', () => {
+  it('never shows denial copy while permissions load', () => {
     const loading = permissionGate(new Set(), false);
-    expect(loading.can("x")).toBe(true);
-    expect(loading.reason("x")).toBe(CHECKING_PERMISSIONS);
-    const ready = permissionGate(new Set(["x"]), true);
-    expect(ready.reason("x")).toBeNull();
-    expect(ready.reason("y")).toBe(NO_PERMISSION);
+    expect(loading.can('x')).toBe(true);
+    expect(loading.reason('x')).toBe(CHECKING_PERMISSIONS);
+    const ready = permissionGate(new Set(['x']), true);
+    expect(ready.reason('x')).toBeNull();
+    expect(ready.reason('y')).toBe(NO_PERMISSION);
   });
 
-  it("orderLocks uses a neutral lock while loading", () => {
-    const detail = { order: { status: "Open" }, lines: [], actions: { editLines: null } } as unknown as Parameters<typeof orderLocks>[0];
+  it('orderLocks uses a neutral lock while loading', () => {
+    const detail = {
+      order: { status: 'Open' },
+      lines: [],
+      actions: { editLines: null },
+    } as unknown as Parameters<typeof orderLocks>[0];
     expect(orderLocks(detail, true, false).header).toBe(CHECKING_PERMISSIONS);
     expect(orderLocks(detail, false, true).header).toMatch(/permission/);
     expect(orderLocks(detail, true, true)).toEqual({ header: null, lines: null });
   });
 });
 
-describe("search ATP tone", () => {
-  it("green / amber / red / none", () => {
-    expect(atpTone(null, 1)).toBe("none");
-    expect(atpTone(0, 1)).toBe("out");
-    expect(atpTone(5, 6)).toBe("over");
-    expect(atpTone(5, 5)).toBe("ok");
+describe('search ATP tone', () => {
+  it('green / amber / red / none', () => {
+    expect(atpTone(null, 1)).toBe('none');
+    expect(atpTone(0, 1)).toBe('out');
+    expect(atpTone(5, 6)).toBe('over');
+    expect(atpTone(5, 5)).toBe('ok');
   });
 });

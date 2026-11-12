@@ -10,14 +10,17 @@
  *
  * which always renders `"shipment_orders"."id"`.
  */
-import { getTableColumns, getTableName, sql, type SQL } from "drizzle-orm";
-import type { PgTable } from "drizzle-orm/pg-core";
+import { getTableColumns, getTableName, sql, type SQL } from 'drizzle-orm';
+import type { PgTable } from 'drizzle-orm/pg-core';
 
-export type Qualified<T extends PgTable> = { readonly [K in keyof T["$inferSelect"]]: SQL };
+export type Qualified<T extends PgTable> = { readonly [K in keyof T['$inferSelect']]: SQL };
 
 export function qualified<T extends PgTable>(table: T): Qualified<T> {
   const name = getTableName(table).replaceAll('"', '""');
   return Object.fromEntries(
-    Object.entries(getTableColumns(table)).map(([key, col]) => [key, sql.raw(`"${name}"."${col.name.replaceAll('"', '""')}"`)]),
+    Object.entries(getTableColumns(table)).map(([key, col]) => [
+      key,
+      sql.raw(`"${name}"."${col.name.replaceAll('"', '""')}"`),
+    ]),
   ) as Qualified<T>;
 }

@@ -26,6 +26,9 @@ export function slaWindow(createdIso: string): PlannedWindow {
 }
 
 /** Task planned start/finish derived from the job's window. */
-export function taskWindow(job: PlannedWindow): { readonly plannedStartAt: string; readonly plannedFinishAt: string } {
+export function taskWindow(job: PlannedWindow): {
+  readonly plannedStartAt: string;
+  readonly plannedFinishAt: string;
+} {
   return { plannedStartAt: job.plannedStartAt, plannedFinishAt: job.plannedEndAt };
 }

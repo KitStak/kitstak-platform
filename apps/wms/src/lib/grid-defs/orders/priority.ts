@@ -9,20 +9,20 @@
  * menu) and the stored rank no longer maps to it, the level wins and the rank is the
  * level's index, so the column, the filter and the form always agree.
  */
-import { PRIORITIES } from "@/lib/enums";
+import { PRIORITIES } from '@/lib/enums';
 
 export type PriorityLevel = (typeof PRIORITIES)[number];
 
 export function priorityFromRank(rank: number): PriorityLevel {
-  if (!Number.isFinite(rank) || rank <= 0) return "None";
-  if (rank >= 4) return "Urgent";
-  return (["None", "Low", "Medium", "High"] as const)[Math.floor(rank)] ?? "None";
+  if (!Number.isFinite(rank) || rank <= 0) return 'None';
+  if (rank >= 4) return 'Urgent';
+  return (['None', 'Low', 'Medium', 'High'] as const)[Math.floor(rank)] ?? 'None';
 }
 
 /** The integer the user sees: the stored rank when it matches the level, else the level's index. */
 export function effectiveRank(priority: string | null | undefined, rank: number | null | undefined): number {
   const r = Number(rank) || 0;
-  const level = (priority ?? "None") as PriorityLevel;
+  const level = (priority ?? 'None') as PriorityLevel;
   if (r > 0 && priorityFromRank(r) === level) return r;
   const i = (PRIORITIES as readonly string[]).indexOf(level);
   return i > 0 ? i : 0;

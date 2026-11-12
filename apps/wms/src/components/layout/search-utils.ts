@@ -2,8 +2,8 @@
  * Pure helpers for global search: the client-side Pages group (instant, permission-aware)
  * and match highlighting, plus recent-search persistence.
  */
-import { z } from "zod";
-import type { NavItem, NavMenu } from "@/config/nav-config";
+import { z } from 'zod';
+import type { NavItem, NavMenu } from '@/config/nav-config';
 
 export interface PageHit {
   readonly label: string;
@@ -20,10 +20,13 @@ export interface HighlightPart {
 export const MIN_RECORD_QUERY = 2;
 export const MAX_PAGE_HITS = 12;
 export const RECENT_SEARCH_LIMIT = 6;
-export const RECENT_SEARCH_KEY = "ks:recent-searches";
+export const RECENT_SEARCH_KEY = 'ks:recent-searches';
 
 /** Flattens dashboard + menus + extra items into unique page entries (first href wins). */
-export function flattenPages(menus: readonly NavMenu[], extra: readonly NavItem[]): readonly (PageHit & { readonly aliases: readonly string[] })[] {
+export function flattenPages(
+  menus: readonly NavMenu[],
+  extra: readonly NavItem[],
+): readonly (PageHit & { readonly aliases: readonly string[] })[] {
   const seen = new Set<string>();
   const out: (PageHit & { aliases: readonly string[] })[] = [];
   const push = (navItem: NavItem, trail: string): void => {
@@ -32,10 +35,11 @@ export function flattenPages(menus: readonly NavMenu[], extra: readonly NavItem[
     out.push({ label: navItem.label, href: navItem.href, trail, aliases: navItem.aliases ?? [] });
   };
   for (const menu of menus) {
-    for (const column of menu.columns) column.items.forEach((navItem) => push(navItem, `${menu.label} › ${column.heading}`));
+    for (const column of menu.columns)
+      column.items.forEach((navItem) => push(navItem, `${menu.label} › ${column.heading}`));
     if (menu.footer) push(menu.footer, menu.label);
   }
-  extra.forEach((navItem) => push(navItem, "Account"));
+  extra.forEach((navItem) => push(navItem, 'Account'));
   return out;
 }
 
@@ -51,7 +55,11 @@ function pageScore(page: PageHit & { readonly aliases: readonly string[] }, need
  * Case-insensitive substring match on titles (Logiwa parity) plus aliases. Prefix matches
  * rank first; ties keep nav-config order (the order users see in the menus).
  */
-export function matchPages(pages: readonly (PageHit & { readonly aliases: readonly string[] })[], query: string, limit = MAX_PAGE_HITS): readonly PageHit[] {
+export function matchPages(
+  pages: readonly (PageHit & { readonly aliases: readonly string[] })[],
+  query: string,
+  limit = MAX_PAGE_HITS,
+): readonly PageHit[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
   return pages
@@ -96,7 +104,10 @@ export function parseRecentSearches(raw: string | null): readonly string[] {
 export function pushRecentSearch(list: readonly string[], term: string): readonly string[] {
   const clean = term.trim();
   if (clean.length < MIN_RECORD_QUERY) return list;
-  return [clean, ...list.filter((t) => t.toLowerCase() !== clean.toLowerCase())].slice(0, RECENT_SEARCH_LIMIT);
+  return [clean, ...list.filter((t) => t.toLowerCase() !== clean.toLowerCase())].slice(
+    0,
+    RECENT_SEARCH_LIMIT,
+  );
 }
 
 export function readRecentSearches(): readonly string[] {
@@ -142,9 +153,12 @@ export interface RankedGroup {
  * Orders the Pages section and the record groups by best match, exact first; ties keep
  * Pages first, then the server's order. `pagesRank` null = no page hits.
  */
-export function orderSearchSections<G extends RankedGroup>(pagesRank: number | null, groups: readonly G[]): readonly ("pages" | G)[] {
-  const entries: { readonly item: "pages" | G; readonly rank: number; readonly order: number }[] = [
-    ...(pagesRank === null ? [] : [{ item: "pages" as const, rank: pagesRank, order: -1 }]),
+export function orderSearchSections<G extends RankedGroup>(
+  pagesRank: number | null,
+  groups: readonly G[],
+): readonly ('pages' | G)[] {
+  const entries: { readonly item: 'pages' | G; readonly rank: number; readonly order: number }[] = [
+    ...(pagesRank === null ? [] : [{ item: 'pages' as const, rank: pagesRank, order: -1 }]),
     ...groups.map((group, order) => ({ item: group, rank: group.bestRank ?? RANK_OTHER, order })),
   ];
   return [...entries].sort((a, b) => a.rank - b.rank || a.order - b.order).map((entry) => entry.item);
@@ -154,7 +168,7 @@ export function orderSearchSections<G extends RankedGroup>(pagesRank: number | n
 export function seeAllLabel(total: number, label: string): string {
   // "See all 1 clients" reads wrong; a single match links to the list instead.
   if (total <= 1) return `View in ${label}`;
-  return `See all ${total.toLocaleString("en-US")} ${label.toLowerCase()}`;
+  return `See all ${total.toLocaleString('en-US')} ${label.toLowerCase()}`;
 }
 
 /** Record search gives up after this long and offers Retry instead of an endless skeleton. */
@@ -166,13 +180,16 @@ export const RECORD_SEARCH_TIMEOUT_MS = 10_000;
  * `AbortSignal.any`/`AbortSignal.timeout` are missing.
  */
 export function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
-  if (typeof AbortSignal.any === "function" && typeof AbortSignal.timeout === "function") {
+  if (typeof AbortSignal.any === 'function' && typeof AbortSignal.timeout === 'function') {
     return signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms);
   }
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new DOMException("Record search timed out", "TimeoutError")), ms);
+  const timer = setTimeout(
+    () => controller.abort(new DOMException('Record search timed out', 'TimeoutError')),
+    ms,
+  );
   const stop = (): void => clearTimeout(timer);
-  controller.signal.addEventListener("abort", stop, { once: true });
-  signal?.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
+  controller.signal.addEventListener('abort', stop, { once: true });
+  signal?.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
   return controller.signal;
 }

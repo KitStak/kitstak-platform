@@ -1,9 +1,9 @@
-import type * as React from "react";
-import type { FieldValues, UseFormReturn } from "react-hook-form";
-import type { z } from "zod";
+import type * as React from 'react';
+import type { FieldValues, UseFormReturn } from 'react-hook-form';
+import type { z } from 'zod';
 
-export type WizardMode = "linear" | "free";
-export type StepStatus = "upcoming" | "active" | "complete" | "attention";
+export type WizardMode = 'linear' | 'free';
+export type StepStatus = 'upcoming' | 'active' | 'complete' | 'attention';
 
 export interface WizardStepContext<T extends FieldValues> {
   readonly form: UseFormReturn<T>;
@@ -40,7 +40,7 @@ export interface WizardStep<T extends FieldValues> {
 export function proceedReason<T extends FieldValues>(step: WizardStep<T>, values: T): string | null {
   const verdict = step.canProceed?.(values);
   if (verdict === undefined || verdict === true) return null;
-  return typeof verdict === "string" && verdict.trim() ? verdict : "Complete this step to continue";
+  return typeof verdict === 'string' && verdict.trim() ? verdict : 'Complete this step to continue';
 }
 
 /** What the stepper / pills need to draw a step. */

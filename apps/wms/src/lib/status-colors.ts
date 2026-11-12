@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties } from 'react';
 
 /**
  * Status pill color maps (BUILD_PLAN 0.5). Status semantics on the shared label palette.
@@ -34,22 +34,22 @@ function label(name: string): StatusTone {
  * themes without per-theme overrides and match the CRM status pill exactly.
  */
 export const TONES = {
-  green: label("green"),
-  blue: label("blue"),
+  green: label('green'),
+  blue: label('blue'),
   /** "Ready …" queue states (Ready To Pick / Pack / Sort). */
-  readyBlue: label("sky"),
+  readyBlue: label('sky'),
   /** "… Started" in-progress states (Picking / Packing / Sorting Started). */
-  indigo: label("indigo"),
-  purple: label("purple"),
-  shortage: label("brown"),
-  hold: label("gray"),
-  red: label("red"),
-  grey: label("gray"),
-  amber: label("orange"),
-  teal: label("teal"),
-  priorityHigh: label("peach"),
-  exportDone: label("green"),
-  negativeDiff: label("red"),
+  indigo: label('indigo'),
+  purple: label('purple'),
+  shortage: label('brown'),
+  hold: label('gray'),
+  red: label('red'),
+  grey: label('gray'),
+  amber: label('orange'),
+  teal: label('teal'),
+  priorityHigh: label('peach'),
+  exportDone: label('green'),
+  negativeDiff: label('red'),
 } as const satisfies Readonly<Record<string, StatusTone>>;
 
 export type ToneName = keyof typeof TONES;
@@ -68,78 +68,115 @@ type StatusMap = Readonly<Record<string, ToneName>>;
 // Logiwa shipment-order palette: Open green, every in-process status blue (#0D36A3 on
 // #D5E5F2), Ready to Ship purple, Shortage rust, On Hold slate, Cancelled red.
 const SHIPMENT_ORDER: StatusMap = {
-  open: "green",
-  "ready to pick": "blue",
-  "picking started": "blue",
-  "ready to pack": "blue",
-  "packing started": "blue",
-  "ready to sort": "blue",
-  "sorting started": "blue",
-  "ready to load": "blue",
-  "loading started": "blue",
-  "ready to ship": "purple",
-  shipped: "green",
-  "partially shipped": "green",
-  delivered: "green",
-  shortage: "shortage",
-  "on hold": "hold",
-  cancelled: "red",
+  open: 'green',
+  'ready to pick': 'blue',
+  'picking started': 'blue',
+  'ready to pack': 'blue',
+  'packing started': 'blue',
+  'ready to sort': 'blue',
+  'sorting started': 'blue',
+  'ready to load': 'blue',
+  'loading started': 'blue',
+  'ready to ship': 'purple',
+  shipped: 'green',
+  'partially shipped': 'green',
+  delivered: 'green',
+  shortage: 'shortage',
+  'on hold': 'hold',
+  cancelled: 'red',
 };
 
-const PURCHASE_ORDER: StatusMap = { pending: "grey", started: "blue", receiving: "blue", completed: "green", cancelled: "red" };
-const JOB: StatusMap = { pending: "grey", started: "blue", "in progress": "blue", completed: "green", cancelled: "red" };
+const PURCHASE_ORDER: StatusMap = {
+  pending: 'grey',
+  started: 'blue',
+  receiving: 'blue',
+  completed: 'green',
+  cancelled: 'red',
+};
+const JOB: StatusMap = {
+  pending: 'grey',
+  started: 'blue',
+  'in progress': 'blue',
+  completed: 'green',
+  cancelled: 'red',
+};
 const COUNT: StatusMap = {
-  pending: "grey",
-  "ready to count": "blue",
-  "count started": "blue",
+  pending: 'grey',
+  'ready to count': 'blue',
+  'count started': 'blue',
   // Counted-but-not-posted, posted and superseded must read differently.
-  "count completed": "teal",
-  "inventory updated": "green",
-  "recount created": "purple",
-  cancelled: "red",
+  'count completed': 'teal',
+  'inventory updated': 'green',
+  'recount created': 'purple',
+  cancelled: 'red',
 };
 // "Started" is blue everywhere (PO, job, wave, return) so one word means one colour.
-const RETURN: StatusMap = { pending: "grey", started: "blue", "in transit": "blue", completed: "green", cancelled: "red" };
-const SHIPMENT_PLAN: StatusMap = {
-  open: "teal",
-  "in progress": "blue",
-  "loading started": "blue",
-  "loading completed": "green",
-  shipped: "green",
-  cancelled: "red",
+const RETURN: StatusMap = {
+  pending: 'grey',
+  started: 'blue',
+  'in transit': 'blue',
+  completed: 'green',
+  cancelled: 'red',
 };
-const EOD: StatusMap = { open: "teal", closed: "green" };
-const LABEL_TYPE: StatusMap = { shipping: "blue", return: "purple" };
-const EXPORT: StatusMap = { queued: "grey", started: "blue", processing: "blue", completed: "exportDone", error: "red", failed: "red" };
-const WORK_ORDER: StatusMap = { open: "teal", "in process": "blue", completed: "green", shortage: "shortage", cancelled: "red" };
+const SHIPMENT_PLAN: StatusMap = {
+  open: 'teal',
+  'in progress': 'blue',
+  'loading started': 'blue',
+  'loading completed': 'green',
+  shipped: 'green',
+  cancelled: 'red',
+};
+const EOD: StatusMap = { open: 'teal', closed: 'green' };
+const LABEL_TYPE: StatusMap = { shipping: 'blue', return: 'purple' };
+const EXPORT: StatusMap = {
+  queued: 'grey',
+  started: 'blue',
+  processing: 'blue',
+  completed: 'exportDone',
+  error: 'red',
+  failed: 'red',
+};
+const WORK_ORDER: StatusMap = {
+  open: 'teal',
+  'in process': 'blue',
+  completed: 'green',
+  shortage: 'shortage',
+  cancelled: 'red',
+};
 const WAVE: StatusMap = {
-  pending: "grey",
-  "preparing for optimization": "blue",
-  optimizing: "blue",
-  "optimization completed": "blue",
-  started: "blue",
-  "in progress": "blue",
-  completed: "green",
-  failed: "red",
+  pending: 'grey',
+  'preparing for optimization': 'blue',
+  optimizing: 'blue',
+  'optimization completed': 'blue',
+  started: 'blue',
+  'in progress': 'blue',
+  completed: 'green',
+  failed: 'red',
 };
 const INTEGRATION: StatusMap = {
-  successful: "green",
+  successful: 'green',
   // A run that found nothing to download is not a failure.
-  "no data": "grey",
-  unauthorized: "red",
-  "already processing": "blue",
-  error: "red",
-  "partially successful": "amber",
-  failed: "red",
-  processing: "blue",
-  test: "purple",
-  active: "green",
-  passive: "grey",
-  inactive: "grey",
+  'no data': 'grey',
+  unauthorized: 'red',
+  'already processing': 'blue',
+  error: 'red',
+  'partially successful': 'amber',
+  failed: 'red',
+  processing: 'blue',
+  test: 'purple',
+  active: 'green',
+  passive: 'grey',
+  inactive: 'grey',
 };
-const YES_NO: StatusMap = { yes: "green", no: "grey", true: "green", false: "grey" };
-const PRIORITY: StatusMap = { urgent: "priorityHigh", high: "priorityHigh", medium: "amber", low: "grey", none: "grey" };
-const ACTIVE: StatusMap = { active: "green", passive: "grey", inactive: "grey" };
+const YES_NO: StatusMap = { yes: 'green', no: 'grey', true: 'green', false: 'grey' };
+const PRIORITY: StatusMap = {
+  urgent: 'priorityHigh',
+  high: 'priorityHigh',
+  medium: 'amber',
+  low: 'grey',
+  none: 'grey',
+};
+const ACTIVE: StatusMap = { active: 'green', passive: 'grey', inactive: 'grey' };
 
 /** Fallback used when no domain is given or the domain has no entry for the status. */
 const GENERIC: StatusMap = {
@@ -148,14 +185,14 @@ const GENERIC: StatusMap = {
   ...COUNT,
   ...SHIPMENT_ORDER,
   ...ACTIVE,
-  draft: "grey",
-  closed: "grey",
-  received: "green",
-  allocated: "blue",
-  backorder: "shortage",
-  error: "red",
-  successful: "green",
-  "partially successful": "amber",
+  draft: 'grey',
+  closed: 'grey',
+  received: 'green',
+  allocated: 'blue',
+  backorder: 'shortage',
+  error: 'red',
+  successful: 'green',
+  'partially successful': 'amber',
 };
 
 export const STATUS_DOMAINS = {
@@ -180,14 +217,17 @@ export const STATUS_DOMAINS = {
 
 export type StatusDomain = keyof typeof STATUS_DOMAINS;
 
-export function statusToneName(status: string | null | undefined, domain: StatusDomain = "generic"): ToneName {
+export function statusToneName(
+  status: string | null | undefined,
+  domain: StatusDomain = 'generic',
+): ToneName {
   // Tolerates a missing status (renders grey) instead of crashing the page.
-  const key = (status ?? "").trim().toLowerCase();
+  const key = (status ?? '').trim().toLowerCase();
   const map: StatusMap = STATUS_DOMAINS[domain];
-  return map[key] ?? GENERIC[key] ?? "grey";
+  return map[key] ?? GENERIC[key] ?? 'grey';
 }
 
-export function statusTone(status: string | null | undefined, domain: StatusDomain = "generic"): StatusTone {
+export function statusTone(status: string | null | undefined, domain: StatusDomain = 'generic'): StatusTone {
   return TONES[statusToneName(status, domain)];
 }
 
@@ -200,8 +240,8 @@ export function pillStyle(tone: StatusTone): CSSProperties {
  * The one status pill shape, shared with KitStak CRM: tinted background, text colour and a
  * solid 6px dot, 22px tall (18px at `sm`), 12px medium text.
  */
-export function pillClass(size: "sm" | "md" = "md"): string {
-  return `inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full font-medium ${size === "sm" ? "h-[18px] px-1.5 text-2xs" : "h-[22px] px-2 text-xs"}`;
+export function pillClass(size: 'sm' | 'md' = 'md'): string {
+  return `inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full font-medium ${size === 'sm' ? 'h-[18px] px-1.5 text-2xs' : 'h-[22px] px-2 text-xs'}`;
 }
 
 /** Receiving difference pill: negative red-orange, positive green, zero grey. */
@@ -213,11 +253,25 @@ export function differenceTone(diff: number): StatusTone {
 
 /** Statuses that get the small "P" mini-pill (partial). */
 export function isPartialStatus(status: string | null | undefined): boolean {
-  return (status ?? "").trim().toLowerCase().startsWith("partially");
+  return (status ?? '').trim().toLowerCase().startsWith('partially');
 }
 
 /** Short words kept lowercase inside a status label ("Ready to Pick", "Count of Lines"). */
-const MINOR_WORDS: ReadonlySet<string> = new Set(["a", "an", "and", "as", "at", "by", "for", "in", "of", "or", "the", "to", "via"]);
+const MINOR_WORDS: ReadonlySet<string> = new Set([
+  'a',
+  'an',
+  'and',
+  'as',
+  'at',
+  'by',
+  'for',
+  'in',
+  'of',
+  'or',
+  'the',
+  'to',
+  'via',
+]);
 
 /**
  * The ONE display casing for every status label (pills, rails, mini-tables, filters):
@@ -233,5 +287,5 @@ export function statusLabel(status: string): string {
       if (index > 0 && MINOR_WORDS.has(lower)) return lower;
       return word.charAt(0).toUpperCase() + word.slice(1);
     })
-    .join(" ");
+    .join(' ');
 }

@@ -1,13 +1,13 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { PageSkeleton } from "@/components/layout/shell-skeleton";
-import { PrintoutTypesPage } from "@/components/admin/printouts/types-page";
-import { requirePagePermission } from "@/server/auth/permissions";
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { PageSkeleton } from '@/components/layout/shell-skeleton';
+import { PrintoutTypesPage } from '@/components/admin/printouts/types-page';
+import { requirePagePermission } from '@/server/auth/permissions';
 
-export const metadata: Metadata = { title: "Printouts & Labels" };
+export const metadata: Metadata = { title: 'Printouts & Labels' };
 
 async function Guard() {
-  await requirePagePermission("settings.printouts_labels.view", "/settings/printouts");
+  await requirePagePermission('settings.printouts_labels.view', '/settings/printouts');
   return <PrintoutTypesPage />;
 }
 

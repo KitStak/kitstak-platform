@@ -12,14 +12,14 @@
  * Postgres folds unquoted identifiers to lower case: camelCase aliases MUST be quoted
  * (`AS "billNumber"`), or the row key comes back as `billnumber`.
  */
-import { sql, type SQL } from "drizzle-orm";
-import type { AppDb } from "@/server/api/db";
-import { AppError } from "@/server/api/errors";
+import { sql, type SQL } from 'drizzle-orm';
+import type { AppDb } from '@/server/api/db';
+import { AppError } from '@/server/api/errors';
 
 /** Rows of a raw `db.execute()` / query-builder result, whichever driver produced it. */
 export function rowsOf<T>(result: unknown): T[] {
   if (Array.isArray(result)) return result as T[];
-  if (result !== null && typeof result === "object") {
+  if (result !== null && typeof result === 'object') {
     const rows = (result as { rows?: unknown }).rows;
     if (Array.isArray(rows)) return rows as T[];
   }
@@ -34,11 +34,11 @@ export function rowsOf<T>(result: unknown): T[] {
 export function rowCount(result: unknown): number {
   if (Array.isArray(result)) {
     const count = (result as { count?: unknown }).count;
-    return typeof count === "number" ? count : result.length;
+    return typeof count === 'number' ? count : result.length;
   }
-  if (result !== null && typeof result === "object") {
+  if (result !== null && typeof result === 'object') {
     const affected = (result as { affectedRows?: unknown }).affectedRows;
-    if (typeof affected === "number") return affected;
+    if (typeof affected === 'number') return affected;
     const rows = (result as { rows?: unknown }).rows;
     if (Array.isArray(rows)) return rows.length;
   }
@@ -72,7 +72,9 @@ export const WRITE_LOCK_WAIT_MS = 20_000;
 const WRITE_LOCK_POLL_MS = 50;
 
 function busyError(): AppError {
-  return new AppError("BUSY", "The system is busy finishing another change. Please try again in a moment.", { headers: { "Retry-After": "5" } });
+  return new AppError('BUSY', 'The system is busy finishing another change. Please try again in a moment.', {
+    headers: { 'Retry-After': '5' },
+  });
 }
 
 /**
@@ -83,7 +85,10 @@ function busyError(): AppError {
 export async function takeWriteLock(tx: AppDb, waitMs: number = WRITE_LOCK_WAIT_MS): Promise<void> {
   const deadline = Date.now() + waitMs;
   for (;;) {
-    const row = await dbGet<{ locked: boolean }>(tx, sql`SELECT pg_try_advisory_xact_lock(${sql.raw(String(WRITE_LOCK_KEY))}) AS locked`);
+    const row = await dbGet<{ locked: boolean }>(
+      tx,
+      sql`SELECT pg_try_advisory_xact_lock(${sql.raw(String(WRITE_LOCK_KEY))}) AS locked`,
+    );
     if (row?.locked) return;
     if (Date.now() >= deadline) throw busyError();
     await new Promise((resolve) => setTimeout(resolve, WRITE_LOCK_POLL_MS));
@@ -96,7 +101,7 @@ export async function takeWriteLock(tx: AppDb, waitMs: number = WRITE_LOCK_WAIT_
  * each pin a connection, the small pool (3 on Vercel) runs dry and every READ stalls too:
  * pages sit on "Still loading" while one long write runs.
  */
-const GATE_KEY = Symbol.for("kitstak.writeGate");
+const GATE_KEY = Symbol.for('kitstak.writeGate');
 type GateHolder = { tail: Promise<void> };
 function gate(): GateHolder {
   const g = globalThis as unknown as Record<symbol, GateHolder | undefined>;
@@ -107,12 +112,16 @@ async function enterWriteGate(waitMs: number): Promise<() => void> {
   const holder = gate();
   const previous = holder.tail;
   let release: () => void = () => {};
-  holder.tail = new Promise<void>((resolve) => { release = resolve; });
+  holder.tail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timedOut = new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), waitMs); });
-  const outcome = await Promise.race([previous.then(() => "ready" as const), timedOut]);
+  const timedOut = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), waitMs);
+  });
+  const outcome = await Promise.race([previous.then(() => 'ready' as const), timedOut]);
   clearTimeout(timer);
-  if (outcome === "timeout") {
+  if (outcome === 'timeout') {
     // Give up our place: pass the turn on as soon as the writer ahead of us finishes.
     void previous.then(release);
     throw busyError();
@@ -122,7 +131,7 @@ async function enterWriteGate(waitMs: number): Promise<() => void> {
 
 /** True for a drizzle transaction/savepoint handle (as opposed to the root database). */
 function isTransaction(db: AppDb): boolean {
-  return typeof (db as { rollback?: unknown }).rollback === "function";
+  return typeof (db as { rollback?: unknown }).rollback === 'function';
 }
 
 /**
@@ -147,7 +156,8 @@ export async function withWriteTx<T>(db: AppDb, fn: (tx: AppDb) => Promise<T>): 
   }
 }
 
-export type BestEffortResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: unknown };
+export type BestEffortResult<T> =
+  { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: unknown };
 
 /**
  * Runs `fn` in a savepoint (or its own transaction when `db` is not a transaction) and
@@ -177,12 +187,12 @@ export async function inSavepoint<T>(db: AppDb, fn: (sp: AppDb) => Promise<T>): 
 // postgres-js / PGlite error as `cause`. SQLite codes (SQLITE_CONSTRAINT_UNIQUE, "UNIQUE
 // constraint failed") never occur any more: match SQLSTATE codes through these helpers.
 
-export const PG_UNIQUE_VIOLATION = "23505";
-export const PG_FOREIGN_KEY_VIOLATION = "23503";
-export const PG_NOT_NULL_VIOLATION = "23502";
-export const PG_CHECK_VIOLATION = "23514";
+export const PG_UNIQUE_VIOLATION = '23505';
+export const PG_FOREIGN_KEY_VIOLATION = '23503';
+export const PG_NOT_NULL_VIOLATION = '23502';
+export const PG_CHECK_VIOLATION = '23514';
 /** RAISE EXCEPTION in a trigger / function. */
-export const PG_RAISE_EXCEPTION = "P0001";
+export const PG_RAISE_EXCEPTION = 'P0001';
 
 interface PgErrorLike {
   readonly code?: string;
@@ -197,9 +207,9 @@ interface PgErrorLike {
 /** The innermost driver error (follows `.cause`), or undefined when `error` is not a DB error. */
 export function pgErrorOf(error: unknown): PgErrorLike | undefined {
   let e: unknown = error;
-  for (let i = 0; i < 5 && e && typeof e === "object"; i++) {
+  for (let i = 0; i < 5 && e && typeof e === 'object'; i++) {
     const code = (e as { code?: unknown }).code;
-    if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)) return e as PgErrorLike;
+    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return e as PgErrorLike;
     e = (e as { cause?: unknown }).cause;
   }
   return undefined;
@@ -211,7 +221,8 @@ export function pgErrorCode(error: unknown): string | undefined {
 }
 
 export const isUniqueViolation = (error: unknown): boolean => pgErrorCode(error) === PG_UNIQUE_VIOLATION;
-export const isForeignKeyViolation = (error: unknown): boolean => pgErrorCode(error) === PG_FOREIGN_KEY_VIOLATION;
+export const isForeignKeyViolation = (error: unknown): boolean =>
+  pgErrorCode(error) === PG_FOREIGN_KEY_VIOLATION;
 
 /** Driver message of a DB error (without drizzle's "Failed query: <sql>" wrapper), else the error message. */
 export function dbErrorMessage(error: unknown): string {
@@ -229,14 +240,20 @@ export function pgConstraintOf(error: unknown): string | undefined {
 // in order, exactly like the old synchronous loop. Never use Promise.all over writes in a
 // transaction: interleaved callbacks would reorder writes (sequence / ledger seq races).
 
-export async function mapSeq<T, R>(items: Iterable<T>, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+export async function mapSeq<T, R>(
+  items: Iterable<T>,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
   const out: R[] = [];
   let i = 0;
   for (const item of items) out.push(await fn(item, i++));
   return out;
 }
 
-export async function flatMapSeq<T, R>(items: Iterable<T>, fn: (item: T, index: number) => Promise<R | readonly R[]>): Promise<R[]> {
+export async function flatMapSeq<T, R>(
+  items: Iterable<T>,
+  fn: (item: T, index: number) => Promise<R | readonly R[]>,
+): Promise<R[]> {
   const out: R[] = [];
   let i = 0;
   for (const item of items) {
@@ -247,31 +264,46 @@ export async function flatMapSeq<T, R>(items: Iterable<T>, fn: (item: T, index: 
   return out;
 }
 
-export async function filterSeq<T>(items: Iterable<T>, fn: (item: T, index: number) => Promise<unknown>): Promise<T[]> {
+export async function filterSeq<T>(
+  items: Iterable<T>,
+  fn: (item: T, index: number) => Promise<unknown>,
+): Promise<T[]> {
   const out: T[] = [];
   let i = 0;
   for (const item of items) if (await fn(item, i++)) out.push(item);
   return out;
 }
 
-export async function forEachSeq<T>(items: Iterable<T>, fn: (item: T, index: number) => Promise<unknown>): Promise<void> {
+export async function forEachSeq<T>(
+  items: Iterable<T>,
+  fn: (item: T, index: number) => Promise<unknown>,
+): Promise<void> {
   let i = 0;
   for (const item of items) await fn(item, i++);
 }
 
-export async function someSeq<T>(items: Iterable<T>, fn: (item: T, index: number) => Promise<unknown>): Promise<boolean> {
+export async function someSeq<T>(
+  items: Iterable<T>,
+  fn: (item: T, index: number) => Promise<unknown>,
+): Promise<boolean> {
   let i = 0;
   for (const item of items) if (await fn(item, i++)) return true;
   return false;
 }
 
-export async function everySeq<T>(items: Iterable<T>, fn: (item: T, index: number) => Promise<unknown>): Promise<boolean> {
+export async function everySeq<T>(
+  items: Iterable<T>,
+  fn: (item: T, index: number) => Promise<unknown>,
+): Promise<boolean> {
   let i = 0;
   for (const item of items) if (!(await fn(item, i++))) return false;
   return true;
 }
 
-export async function findSeq<T>(items: Iterable<T>, fn: (item: T, index: number) => Promise<unknown>): Promise<T | undefined> {
+export async function findSeq<T>(
+  items: Iterable<T>,
+  fn: (item: T, index: number) => Promise<unknown>,
+): Promise<T | undefined> {
   let i = 0;
   for (const item of items) if (await fn(item, i++)) return item;
   return undefined;

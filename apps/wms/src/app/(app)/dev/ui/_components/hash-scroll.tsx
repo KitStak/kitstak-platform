@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import * as React from "react";
+import * as React from 'react';
 
 /** How long late layout (fonts, grid rows, charts) may still move the target. */
 const SETTLE_MS = 2500;
-const USER_SCROLL_EVENTS = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+const USER_SCROLL_EVENTS = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
 
 /**
  * The showcase streams in after the browser resolved `#grid`, so a hard load of
@@ -18,7 +18,7 @@ export function HashScroll() {
     if (!id) return;
     let active = true;
     const apply = (): void => {
-      if (active) document.getElementById(id)?.scrollIntoView({ block: "start" });
+      if (active) document.getElementById(id)?.scrollIntoView({ block: 'start' });
     };
     const stop = (): void => {
       active = false;

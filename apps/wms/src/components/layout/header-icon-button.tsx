@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { Tooltip } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import * as React from 'react';
+import { Tooltip } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 const MAX_BADGE = 99;
 
@@ -21,8 +21,8 @@ export const HeaderIconButton = React.forwardRef<HTMLButtonElement, HeaderIconBu
         ref={ref}
         type="button"
         className={cn(
-          "relative flex h-8 w-8 items-center justify-center rounded-full text-fg-secondary outline-none transition-colors",
-          "hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-focus data-[state=open]:bg-pressed data-[state=open]:text-fg",
+          'relative flex h-8 w-8 items-center justify-center rounded-full text-fg-secondary outline-none transition-colors',
+          'hover:bg-hover hover:text-fg focus-visible:ring-2 focus-visible:ring-focus data-[state=open]:bg-pressed data-[state=open]:text-fg',
           className,
         )}
         {...props}
@@ -35,9 +35,14 @@ export const HeaderIconButton = React.forwardRef<HTMLButtonElement, HeaderIconBu
             {badge > MAX_BADGE ? `${MAX_BADGE}+` : badge}
           </span>
         ) : null}
-        {pulse && !badge ? <span className="absolute right-1 top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-success" aria-hidden /> : null}
+        {pulse && !badge ? (
+          <span
+            className="absolute right-1 top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-success"
+            aria-hidden
+          />
+        ) : null}
       </button>
     </Tooltip>
   ),
 );
-HeaderIconButton.displayName = "HeaderIconButton";
+HeaderIconButton.displayName = 'HeaderIconButton';

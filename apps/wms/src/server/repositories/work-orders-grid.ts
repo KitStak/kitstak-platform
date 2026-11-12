@@ -2,13 +2,17 @@
  * Grid-grammar compilation for `GET /api/work-orders` (BUILD_PLAN 0.2): quick search,
  * `f.<field>` filters (whitelisted by `@/lib/grid-defs/work-orders`), multi-sort.
  */
-import { sql, type SQL } from "drizzle-orm";
-import { asc, desc } from "@/server/db/order";
-import { AppError } from "@/server/api/errors";
-import * as schema from "@/server/db/schema";
-import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/server/query/filters";
-import type { GridQuery } from "@/server/query/grid-query";
-import { WORK_ORDER_GRID_FIELDS, WORK_ORDER_SEARCH_FIELDS, WORK_ORDER_SORT_FIELDS } from "@/lib/grid-defs/work-orders/work-orders";
+import { sql, type SQL } from 'drizzle-orm';
+import { asc, desc } from '@/server/db/order';
+import { AppError } from '@/server/api/errors';
+import * as schema from '@/server/db/schema';
+import { compileFilters, compileQuickSearch, type FilterFieldDef } from '@/server/query/filters';
+import type { GridQuery } from '@/server/query/grid-query';
+import {
+  WORK_ORDER_GRID_FIELDS,
+  WORK_ORDER_SEARCH_FIELDS,
+  WORK_ORDER_SORT_FIELDS,
+} from '@/lib/grid-defs/work-orders/work-orders';
 
 const wo = schema.workOrders;
 
@@ -56,13 +60,23 @@ export const WO_FILTER_DEFS: readonly FilterFieldDef[] = WORK_ORDER_GRID_FIELDS.
 }));
 
 /** Whitelists filter and sort fields of a locally evaluated grid. */
-export function assertGridFields(query: GridQuery, filterFields: readonly string[], sortFields: readonly string[]): void {
+export function assertGridFields(
+  query: GridQuery,
+  filterFields: readonly string[],
+  sortFields: readonly string[],
+): void {
   const filters = new Set(filterFields);
   const unknownFilter = query.filters.find((f) => !filters.has(f.field));
-  if (unknownFilter) throw new AppError("VALIDATION", `Unknown filter field "${unknownFilter.field}"`, { fieldErrors: { [`f.${unknownFilter.field}`]: ["Unknown field"] } });
+  if (unknownFilter)
+    throw new AppError('VALIDATION', `Unknown filter field "${unknownFilter.field}"`, {
+      fieldErrors: { [`f.${unknownFilter.field}`]: ['Unknown field'] },
+    });
   const sorts = new Set(sortFields);
   const unknownSort = query.sort.find((s) => !sorts.has(s.field));
-  if (unknownSort) throw new AppError("VALIDATION", `Cannot sort by "${unknownSort.field}"`, { fieldErrors: { sort: ["Unknown sort field"] } });
+  if (unknownSort)
+    throw new AppError('VALIDATION', `Cannot sort by "${unknownSort.field}"`, {
+      fieldErrors: { sort: ['Unknown sort field'] },
+    });
 }
 
 export interface CompiledWoQuery {
@@ -71,12 +85,20 @@ export interface CompiledWoQuery {
 }
 
 export function compileWorkOrderQuery(query: GridQuery): CompiledWoQuery {
-  assertGridFields(query, WORK_ORDER_GRID_FIELDS.map((f) => f.field), WORK_ORDER_SORT_FIELDS);
+  assertGridFields(
+    query,
+    WORK_ORDER_GRID_FIELDS.map((f) => f.field),
+    WORK_ORDER_SORT_FIELDS,
+  );
   const search = compileQuickSearch(query.q, query.qm, WORK_ORDER_SEARCH_FIELDS.map(exprFor));
   const filters = compileFilters(WO_FILTER_DEFS, query.filters);
   const parts = [search, filters].filter((p): p is SQL => p !== undefined);
-  const where = parts.length === 0 ? undefined : parts.length === 1 ? parts[0] : sql`(${sql.join(parts, sql` AND `)})`;
-  const sort = query.sort.length ? query.sort : [{ field: "createdAt", dir: "desc" as const }];
-  const orderBy = [...sort.map((s) => (s.dir === "asc" ? asc(exprFor(s.field)) : desc(exprFor(s.field)))), desc(wo.code)];
+  const where =
+    parts.length === 0 ? undefined : parts.length === 1 ? parts[0] : sql`(${sql.join(parts, sql` AND `)})`;
+  const sort = query.sort.length ? query.sort : [{ field: 'createdAt', dir: 'desc' as const }];
+  const orderBy = [
+    ...sort.map((s) => (s.dir === 'asc' ? asc(exprFor(s.field)) : desc(exprFor(s.field)))),
+    desc(wo.code),
+  ];
   return { where, orderBy };
 }

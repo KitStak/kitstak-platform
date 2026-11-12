@@ -11,7 +11,7 @@
  *
  * Only the seed process (and the seed unit test, which uninstalls it again) installs this.
  */
-import { mulberry32 } from "../seed-data";
+import { mulberry32 } from '../seed-data';
 
 /** "Now" for the seeded tenant: 2026-11-05 16:00 UTC (11:00 in Louisville). */
 export const ANCHOR_MS = Date.UTC(2026, 10, 5, 16, 0, 0);
@@ -53,13 +53,13 @@ class VirtualDate extends RealDate {
 }
 
 function hex(n: number, width: number): string {
-  return Math.floor(n).toString(16).padStart(width, "0").slice(-width);
+  return Math.floor(n).toString(16).padStart(width, '0').slice(-width);
 }
 
 /** RFC 4122 v4-shaped UUID from a seeded PRNG. */
 export function seededUuid(next: () => number): UuidString {
   const words = Array.from({ length: 4 }, () => next() * 0x1_0000_0000);
-  const h = words.map((w) => hex(w, 8)).join("");
+  const h = words.map((w) => hex(w, 8)).join('');
   const variant = ((Number.parseInt(h[16], 16) & 0x3) | 0x8).toString(16);
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${variant}${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
@@ -70,27 +70,36 @@ export function isRuntimeInstalled(): boolean {
 
 /** Installs the virtual clock and seeded UUIDs. Throws when already installed. */
 export function installRuntime(seed: number, startMs: number): void {
-  if (state) throw new Error("Seed runtime is already installed");
+  if (state) throw new Error('Seed runtime is already installed');
   const cryptoObj = globalThis.crypto;
   const uuid = mulberry32(seed ^ 0x5eed);
-  state = { baseMs: startMs, tick: 0, uuid, originalRandomUuid: Object.getOwnPropertyDescriptor(cryptoObj, "randomUUID") };
+  state = {
+    baseMs: startMs,
+    tick: 0,
+    uuid,
+    originalRandomUuid: Object.getOwnPropertyDescriptor(cryptoObj, 'randomUUID'),
+  };
   globalThis.Date = VirtualDate as DateConstructor;
-  Object.defineProperty(cryptoObj, "randomUUID", { value: () => seededUuid(uuid), configurable: true, writable: true });
+  Object.defineProperty(cryptoObj, 'randomUUID', {
+    value: () => seededUuid(uuid),
+    configurable: true,
+    writable: true,
+  });
 }
 
 /** Restores the real `Date` and `crypto.randomUUID`. Safe to call when not installed. */
 export function uninstallRuntime(): void {
   if (!state) return;
   const cryptoObj = globalThis.crypto;
-  if (state.originalRandomUuid) Object.defineProperty(cryptoObj, "randomUUID", state.originalRandomUuid);
-  else Reflect.deleteProperty(cryptoObj, "randomUUID");
+  if (state.originalRandomUuid) Object.defineProperty(cryptoObj, 'randomUUID', state.originalRandomUuid);
+  else Reflect.deleteProperty(cryptoObj, 'randomUUID');
   globalThis.Date = RealDate;
   state = null;
 }
 
 /** Moves the virtual clock to `ms` (it may move backwards between independent events). */
 export function setClock(ms: number): void {
-  if (!state) throw new Error("Seed runtime is not installed");
+  if (!state) throw new Error('Seed runtime is not installed');
   state.baseMs = ms;
   state.tick = 0;
 }
@@ -106,7 +115,14 @@ export function clockMs(): number {
 /** Epoch ms of `daysAgo` days before the anchor day, at `hour:minute` UTC. */
 export function utcAt(daysAgo: number, hour: number, minute = 0): number {
   const anchor = new RealDate(ANCHOR_MS);
-  return RealDate.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate() - daysAgo, hour, minute, 0);
+  return RealDate.UTC(
+    anchor.getUTCFullYear(),
+    anchor.getUTCMonth(),
+    anchor.getUTCDate() - daysAgo,
+    hour,
+    minute,
+    0,
+  );
 }
 
 export const isoOf = (ms: number): string => new RealDate(ms).toISOString();

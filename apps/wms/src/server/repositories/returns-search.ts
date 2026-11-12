@@ -2,13 +2,13 @@
  * Shipped-order search for Create RMA and Return Manually ("Choose a shipped order").
  * Most recently shipped first, with the units still returnable (shipped − on other returns).
  */
-import { sql, type SQL } from "drizzle-orm";
-import { z } from "zod";
-import type { AppDb } from "@/server/api/db";
-import type { Scope } from "@/server/auth/scope";
-import { idSchema } from "./platform-common";
-import { RETURNABLE_ORDER_STATUSES } from "./returns";
-import { dbAll } from "@/server/db/sql";
+import { sql, type SQL } from 'drizzle-orm';
+import { z } from 'zod';
+import type { AppDb } from '@/server/api/db';
+import type { Scope } from '@/server/auth/scope';
+import { idSchema } from './platform-common';
+import { RETURNABLE_ORDER_STATUSES } from './returns';
+import { dbAll } from '@/server/db/sql';
 
 export const SHIPPED_SEARCH_LIMIT = 50;
 
@@ -34,26 +34,37 @@ export interface ShippedOrderHit {
 
 function inList(column: string, values: readonly string[]): SQL {
   if (values.length === 0) return sql`0 = 1`;
-  return sql`${sql.raw(column)} IN (${sql.join(values.map((v) => sql`${v}`), sql`, `)})`;
+  return sql`${sql.raw(column)} IN (${sql.join(
+    values.map((v) => sql`${v}`),
+    sql`, `,
+  )})`;
 }
 
 /** Scoped search over code, store order # and customer (case-insensitive contains; `instr`, so % and _ are literal). */
-export async function searchShippedOrders(db: AppDb, scope: Scope, input: z.output<typeof shippedSearchSchema>): Promise<ShippedOrderHit[]> {
+export async function searchShippedOrders(
+  db: AppDb,
+  scope: Scope,
+  input: z.output<typeof shippedSearchSchema>,
+): Promise<ShippedOrderHit[]> {
   const parts: SQL[] = [
-    inList("o.status", RETURNABLE_ORDER_STATUSES),
+    inList('o.status', RETURNABLE_ORDER_STATUSES),
     sql`o.deleted_at IS NULL`,
-    inList("o.warehouse_id", scope.warehouseIds),
-    scope.clientIds === "all" ? sql`1 = 1` : inList("o.client_id", scope.clientIds),
+    inList('o.warehouse_id', scope.warehouseIds),
+    scope.clientIds === 'all' ? sql`1 = 1` : inList('o.client_id', scope.clientIds),
   ];
   if (input.clientId) parts.push(sql`o.client_id = ${input.clientId}`);
   if (input.warehouseId) parts.push(sql`o.warehouse_id = ${input.warehouseId}`);
   if (input.q) {
     const needle = input.q.toLowerCase();
-    parts.push(sql`(strpos(lower(o.code), ${needle}) > 0 OR strpos(lower(COALESCE(o.store_order_number, '')), ${needle}) > 0 OR strpos(lower(o.customer_name), ${needle}) > 0)`);
+    parts.push(
+      sql`(strpos(lower(o.code), ${needle}) > 0 OR strpos(lower(COALESCE(o.store_order_number, '')), ${needle}) > 0 OR strpos(lower(o.customer_name), ${needle}) > 0)`,
+    );
   }
   // Pick the page of ids first, then compute the unit sums for those rows only (SQLite would
   // otherwise evaluate the correlated sums for every candidate order before sorting).
-  return await dbAll<ShippedOrderHit>(db, sql`
+  return await dbAll<ShippedOrderHit>(
+    db,
+    sql`
     WITH hits AS (
       SELECT o.id, COALESCE(o.shipped_at, o.updated_at) AS "sortAt" FROM shipment_orders o
       WHERE ${sql.join(parts, sql` AND `)}
@@ -69,5 +80,6 @@ export async function searchShippedOrders(db: AppDb, scope: Scope, input: z.outp
       (EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id AND s.label_type = 'Shipping Label' AND s.label_status = 'Voided')
         AND NOT EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.id AND s.label_type = 'Shipping Label' AND s.label_status = 'Active'))::int AS "outboundLabelVoided"
     FROM hits h JOIN shipment_orders o ON o.id = h.id JOIN clients c ON c.id = o.client_id
-    ORDER BY h."sortAt" DESC, o.code DESC`);
+    ORDER BY h."sortAt" DESC, o.code DESC`,
+  );
 }

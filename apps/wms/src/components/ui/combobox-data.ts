@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
 /**
  * Option sourcing for `Combobox`: static filtering or debounced async search with a
  * minimum-characters gate, plus a label cache so chips keep their text after the
  * result list changes.
  */
-import * as React from "react";
+import * as React from 'react';
 
 export interface ComboboxOption {
   readonly value: string;
@@ -32,7 +32,7 @@ export function filterOptions(options: readonly ComboboxOption[], query: string)
   const scored: { option: ComboboxOption; score: number }[] = [];
   for (const option of options) {
     const label = option.label.toLowerCase();
-    const haystack = `${label} ${option.value.toLowerCase()} ${(option.description ?? "").toLowerCase()}`;
+    const haystack = `${label} ${option.value.toLowerCase()} ${(option.description ?? '').toLowerCase()}`;
     if (label.startsWith(q)) scored.push({ option, score: 0 });
     else if (haystack.includes(q)) scored.push({ option, score: 1 });
   }
@@ -60,7 +60,11 @@ export function useOptionSource({
   readonly minChars: number;
   readonly open: boolean;
 }): OptionSourceState {
-  const [asyncState, setAsyncState] = React.useState<{ readonly query: string; readonly items: readonly ComboboxOption[]; readonly error: string | null } | null>(null);
+  const [asyncState, setAsyncState] = React.useState<{
+    readonly query: string;
+    readonly items: readonly ComboboxOption[];
+    readonly error: string | null;
+  } | null>(null);
   const trimmed = query.trim();
   const belowMin = trimmed.length < minChars;
   const loadRef = React.useRef(loadOptions);
@@ -80,7 +84,7 @@ export function useOptionSource({
           if (controller.signal.aborted) return;
           // Never show raw server / validation text in the list; the request id is in the console.
           setAsyncState({ query: trimmed, items: [], error: COMBOBOX_LOAD_ERROR });
-        }
+        },
       );
     }, SEARCH_DEBOUNCE_MS);
     return () => {
@@ -89,10 +93,22 @@ export function useOptionSource({
     };
   }, [trimmed, belowMin, open]);
 
-  if (belowMin) return { items: loadOptions ? [] : filterOptions(options ?? [], query), loading: false, error: null, hint: minChars > 0 ? minCharsMessage(minChars) : null };
-  if (!loadOptions) return { items: filterOptions(options ?? [], query), loading: false, error: null, hint: null };
+  if (belowMin)
+    return {
+      items: loadOptions ? [] : filterOptions(options ?? [], query),
+      loading: false,
+      error: null,
+      hint: minChars > 0 ? minCharsMessage(minChars) : null,
+    };
+  if (!loadOptions)
+    return { items: filterOptions(options ?? [], query), loading: false, error: null, hint: null };
   const fresh = asyncState?.query === trimmed;
-  return { items: fresh ? asyncState.items : (asyncState?.items ?? []), loading: !fresh, error: fresh ? asyncState.error : null, hint: null };
+  return {
+    items: fresh ? asyncState.items : (asyncState?.items ?? []),
+    loading: !fresh,
+    error: fresh ? asyncState.error : null,
+    hint: null,
+  };
 }
 
 /** Remembers every option ever seen so selected values always render a label. */
@@ -111,6 +127,6 @@ export function useLabelCache(...sources: readonly (readonly ComboboxOption[] | 
         cache.set(option.value, option);
       },
     }),
-    [cache]
+    [cache],
   );
 }

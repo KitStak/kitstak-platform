@@ -6,10 +6,10 @@
  * inner select, so client, URL and SQL always agree on a name. `filterAlias` lets a
  * display column filter on a different alias (Warehouse shows the name, filters by id).
  */
-export type InventoryFieldType = "enum" | "text" | "number" | "date";
+export type InventoryFieldType = 'enum' | 'text' | 'number' | 'date';
 
 /** Enum fields whose options come from the viewer's scope / lookups at runtime. */
-export type DynamicOptions = "warehouse" | "client" | "damageReason";
+export type DynamicOptions = 'warehouse' | 'client' | 'damageReason';
 
 export interface InventoryGridField {
   readonly field: string;
@@ -39,5 +39,5 @@ export interface InventoryGridDef {
 export interface InventoryExportColumn {
   readonly key: string;
   readonly label: string;
-  readonly type?: "text" | "integer" | "number" | "date" | "datetime";
+  readonly type?: 'text' | 'integer' | 'number' | 'date' | 'datetime';
 }

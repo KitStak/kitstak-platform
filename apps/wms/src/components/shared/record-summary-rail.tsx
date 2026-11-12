@@ -1,22 +1,27 @@
-"use client";
+'use client';
 
 /**
  * Record summary rail (BUILD_PLAN F4.4): Save + Other Actions; summary card with code,
  * status pill, Last Update, Show Change Log and totals; slots for Assigned Jobs,
  * Billing Charges and Printouts.
  */
-import * as React from "react";
-import { ChevronDown, History } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useFormat } from "@/lib/format";
-import type { StatusDomain } from "@/lib/status-colors";
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { StatusPill } from "@/components/ui/status-pill";
-import { DisabledReason } from "@/components/ui/tooltip";
-import type { RowAction } from "@/components/grid/grid-types";
-import { ChangeLogDrawer } from "./change-log-drawer";
-import { KvList, type KvItem } from "./kv-list";
+import * as React from 'react';
+import { ChevronDown, History } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useFormat } from '@/lib/format';
+import type { StatusDomain } from '@/lib/status-colors';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { StatusPill } from '@/components/ui/status-pill';
+import { DisabledReason } from '@/components/ui/tooltip';
+import type { RowAction } from '@/components/grid/grid-types';
+import { ChangeLogDrawer } from './change-log-drawer';
+import { KvList, type KvItem } from './kv-list';
 
 export interface RecordSummaryRailProps {
   readonly entityType: string;
@@ -47,12 +52,33 @@ function RailCard({ title, children }: { readonly title: string; readonly childr
   );
 }
 
-export function RecordSummaryRail({ entityType, entityId, code, status, statusDomain, updatedAt, updatedBy, totals = [], onSave, saveLabel = "Save", saveDisabledReason, saving, otherActions = [], assignedJobs, billingCharges, printouts, className }: RecordSummaryRailProps) {
+export function RecordSummaryRail({
+  entityType,
+  entityId,
+  code,
+  status,
+  statusDomain,
+  updatedAt,
+  updatedBy,
+  totals = [],
+  onSave,
+  saveLabel = 'Save',
+  saveDisabledReason,
+  saving,
+  otherActions = [],
+  assignedJobs,
+  billingCharges,
+  printouts,
+  className,
+}: RecordSummaryRailProps) {
   const fmt = useFormat();
   const [logOpen, setLogOpen] = React.useState(false);
-  const saveReason = saving ? "Saving…" : (saveDisabledReason ?? null);
+  const saveReason = saving ? 'Saving…' : (saveDisabledReason ?? null);
   return (
-    <aside className={cn("flex w-full flex-col gap-3 lg:sticky lg:top-4 lg:w-[300px]", className)} aria-label="Record summary">
+    <aside
+      className={cn('flex w-full flex-col gap-3 lg:sticky lg:top-4 lg:w-[300px]', className)}
+      aria-label="Record summary"
+    >
       {onSave || otherActions.length ? (
         <div className="flex gap-2">
           {onSave ? (
@@ -65,14 +91,20 @@ export function RecordSummaryRail({ entityType, entityId, code, status, statusDo
           {otherActions.length ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="secondary" className={cn(!onSave && "flex-1")}>
+                <Button variant="secondary" className={cn(!onSave && 'flex-1')}>
                   Other Actions
                   <ChevronDown className="h-3.5 w-3.5" aria-hidden />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-[220px]">
                 {otherActions.map((a) => (
-                  <DropdownMenuItem key={a.key} icon={a.icon} destructive={a.destructive} disabledReason={a.disabledReason} onSelect={() => a.onSelect?.()}>
+                  <DropdownMenuItem
+                    key={a.key}
+                    icon={a.icon}
+                    destructive={a.destructive}
+                    disabledReason={a.disabledReason}
+                    onSelect={() => a.onSelect?.()}
+                  >
                     {a.label}
                   </DropdownMenuItem>
                 ))}
@@ -90,7 +122,11 @@ export function RecordSummaryRail({ entityType, entityId, code, status, statusDo
           columns={1}
           layout="inline"
           items={[
-            { key: "updated", label: "Last update", value: updatedAt ? `${fmt.dateTime(updatedAt)}${updatedBy ? ` · ${updatedBy}` : ""}` : null },
+            {
+              key: 'updated',
+              label: 'Last update',
+              value: updatedAt ? `${fmt.dateTime(updatedAt)}${updatedBy ? ` · ${updatedBy}` : ''}` : null,
+            },
             ...totals,
           ]}
         />
@@ -102,7 +138,13 @@ export function RecordSummaryRail({ entityType, entityId, code, status, statusDo
       {assignedJobs ? <RailCard title="Assigned jobs">{assignedJobs}</RailCard> : null}
       {billingCharges ? <RailCard title="Billing charges">{billingCharges}</RailCard> : null}
       {printouts ? <RailCard title="Printouts">{printouts}</RailCard> : null}
-      <ChangeLogDrawer open={logOpen} onOpenChange={setLogOpen} entityType={entityType} entityId={entityId} entityCode={code} />
+      <ChangeLogDrawer
+        open={logOpen}
+        onOpenChange={setLogOpen}
+        entityType={entityType}
+        entityId={entityId}
+        entityCode={code}
+      />
     </aside>
   );
 }

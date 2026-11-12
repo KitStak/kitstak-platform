@@ -1,8 +1,8 @@
 /** `GET /api/kits`: Kit Inventory report (grid grammar); `meta.updatedAt` is the last recalculation. */
-import { defineRoute } from "@/server/api/define-route";
-import { result } from "@/server/api/envelope";
-import { listKitInventory } from "@/server/repositories/kits";
-import { KIT_PERMISSIONS } from "@/server/repositories/work-orders-api";
+import { defineRoute } from '@/server/api/define-route';
+import { result } from '@/server/api/envelope';
+import { listKitInventory } from '@/server/repositories/kits';
+import { KIT_PERMISSIONS } from '@/server/repositories/work-orders-api';
 
 export const GET = defineRoute({
   permission: KIT_PERMISSIONS.inventory,

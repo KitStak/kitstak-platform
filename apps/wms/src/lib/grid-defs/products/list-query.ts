@@ -5,10 +5,10 @@
  */
 export function aliasProductListParams(source: URLSearchParams): URLSearchParams {
   const params = new URLSearchParams(source);
-  const text = params.get("search") ?? params.get("sku");
-  if (!params.has("q") && text !== null) params.set("q", text);
-  const mode = params.get("skuqt");
-  if (!params.has("qm") && mode !== null) params.set("qm", mode === "eq" ? "eq" : "sw");
-  for (const k of ["search", "sku", "skuqt"]) params.delete(k);
+  const text = params.get('search') ?? params.get('sku');
+  if (!params.has('q') && text !== null) params.set('q', text);
+  const mode = params.get('skuqt');
+  if (!params.has('qm') && mode !== null) params.set('qm', mode === 'eq' ? 'eq' : 'sw');
+  for (const k of ['search', 'sku', 'skuqt']) params.delete(k);
   return params;
 }

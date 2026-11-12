@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * Page wizard layout for shipment orders, composed from the shared wizard primitives
@@ -6,15 +6,28 @@
  * (docs/requests/orders-outbound.md REQ-4). Adds an external "attention" state per step
  * (Step 2 while the ship-to address is unverified).
  */
-import * as React from "react";
-import { FormProvider, useFormState, type DefaultValues, type FieldErrors, type FieldValues } from "react-hook-form";
-import { Button } from "@/components/ui/button";
-import { Callout } from "@/components/ui/callout";
-import { UnsavedChangesGuard } from "@/components/ui/unsaved-changes";
-import { useWizard, WizardStepper, type StepMeta, type WizardController, type WizardMode, type WizardStep } from "@/components/ui/wizard";
-import { stepFocusTarget } from "@/components/ui/wizard/wizard";
-import { WizardModeContext } from "@/components/ui/wizard/wizard-success";
-import { sessionStorageOrNull, writeDraft } from "@/components/ui/wizard/wizard-state";
+import * as React from 'react';
+import {
+  FormProvider,
+  useFormState,
+  type DefaultValues,
+  type FieldErrors,
+  type FieldValues,
+} from 'react-hook-form';
+import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
+import { UnsavedChangesGuard } from '@/components/ui/unsaved-changes';
+import {
+  useWizard,
+  WizardStepper,
+  type StepMeta,
+  type WizardController,
+  type WizardMode,
+  type WizardStep,
+} from '@/components/ui/wizard';
+import { stepFocusTarget } from '@/components/ui/wizard/wizard';
+import { WizardModeContext } from '@/components/ui/wizard/wizard-success';
+import { sessionStorageOrNull, writeDraft } from '@/components/ui/wizard/wizard-state';
 
 export interface OrderWizardShellProps<T extends FieldValues> {
   readonly steps: readonly WizardStep<T>[];
@@ -42,7 +55,7 @@ export interface OrderWizardShellProps<T extends FieldValues> {
 /** True when at least one field carries a user edit (nested objects / arrays included). */
 export function hasDirtyFields(dirtyFields: unknown): boolean {
   if (dirtyFields === true) return true;
-  if (!dirtyFields || typeof dirtyFields !== "object") return false;
+  if (!dirtyFields || typeof dirtyFields !== 'object') return false;
   return Object.values(dirtyFields as Record<string, unknown>).some(hasDirtyFields);
 }
 
@@ -50,7 +63,13 @@ export function hasDirtyFields(dirtyFields: unknown): boolean {
  * The guard keys off `dirtyFields`, not `isDirty`: defaults written after mount (auto order code,
  * sole warehouse, default order type) never mark a field dirty, and an edit the user reverts clears.
  */
-function DirtyWatch<T extends FieldValues>({ wizard, onDirtyChange }: { readonly wizard: WizardController<T>; readonly onDirtyChange?: (dirty: boolean) => void }) {
+function DirtyWatch<T extends FieldValues>({
+  wizard,
+  onDirtyChange,
+}: {
+  readonly wizard: WizardController<T>;
+  readonly onDirtyChange?: (dirty: boolean) => void;
+}) {
   const { dirtyFields } = useFormState({ control: wizard.form.control });
   const dirty = hasDirtyFields(dirtyFields) && !wizard.completed && !wizard.submitting;
   React.useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
@@ -62,13 +81,23 @@ function DirtyWatch<T extends FieldValues>({ wizard, onDirtyChange }: { readonly
  * (dev HMR full reload, a crash-reload, the user pressing F5) used to lose the last edits, so the
  * draft is also written synchronously when the page is hidden or unloaded.
  */
-export function flushDraftNow<T extends FieldValues>(storage: Pick<Storage, "setItem"> | null, scope: string, wizard: Pick<WizardController<T>, "form" | "nav" | "completed">): boolean {
+export function flushDraftNow<T extends FieldValues>(
+  storage: Pick<Storage, 'setItem'> | null,
+  scope: string,
+  wizard: Pick<WizardController<T>, 'form' | 'nav' | 'completed'>,
+): boolean {
   if (wizard.completed || !hasDirtyFields(wizard.form.formState.dirtyFields)) return false;
   writeDraft(storage, scope, { values: wizard.form.getValues(), nav: wizard.nav });
   return true;
 }
 
-function DraftFlush<T extends FieldValues>({ wizard, scope }: { readonly wizard: WizardController<T>; readonly scope: string }) {
+function DraftFlush<T extends FieldValues>({
+  wizard,
+  scope,
+}: {
+  readonly wizard: WizardController<T>;
+  readonly scope: string;
+}) {
   const ref = React.useRef(wizard);
   React.useEffect(() => {
     ref.current = wizard;
@@ -76,15 +105,15 @@ function DraftFlush<T extends FieldValues>({ wizard, scope }: { readonly wizard:
   React.useEffect(() => {
     const flush = () => void flushDraftNow(sessionStorageOrNull(), scope, ref.current);
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") flush();
+      if (document.visibilityState === 'hidden') flush();
     };
-    window.addEventListener("pagehide", flush);
-    window.addEventListener("beforeunload", flush);
-    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      window.removeEventListener("pagehide", flush);
-      window.removeEventListener("beforeunload", flush);
-      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('beforeunload', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [scope]);
   return null;
@@ -96,26 +125,30 @@ export interface StepIssueSummary {
 }
 
 /** Flattens react-hook-form errors into `{ path, message }` rows (nested + array fields). */
-export function summarizeErrors(errors: FieldErrors, prefix = ""): StepIssueSummary[] {
+export function summarizeErrors(errors: FieldErrors, prefix = ''): StepIssueSummary[] {
   const out: StepIssueSummary[] = [];
   for (const [key, value] of Object.entries(errors ?? {})) {
-    if (!value || typeof value !== "object" || key === "ref") continue;
+    if (!value || typeof value !== 'object' || key === 'ref') continue;
     const path = prefix ? `${prefix}.${key}` : key;
     const msg = (value as { message?: unknown }).message;
-    if (typeof msg === "string" && msg) out.push({ path, message: msg });
+    if (typeof msg === 'string' && msg) out.push({ path, message: msg });
     else out.push(...summarizeErrors(value as FieldErrors, path));
   }
   return out;
 }
 
 function focusField(root: HTMLElement | null, path: string): void {
-  const esc = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(path) : path;
+  const esc = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(path) : path;
   const target =
     root?.querySelector<HTMLElement>(`[name="${esc}"]:not([disabled])`) ??
-    root?.querySelector<HTMLElement>(`[data-field="${esc}"] input:not([disabled]), [data-field="${esc}"] button:not([disabled])`) ??
-    root?.querySelector<HTMLElement>('[aria-invalid="true"]:not([disabled]), [data-invalid="true"] input:not([disabled]), [data-invalid="true"] button:not([disabled])');
+    root?.querySelector<HTMLElement>(
+      `[data-field="${esc}"] input:not([disabled]), [data-field="${esc}"] button:not([disabled])`,
+    ) ??
+    root?.querySelector<HTMLElement>(
+      '[aria-invalid="true"]:not([disabled]), [data-invalid="true"] input:not([disabled]), [data-invalid="true"] button:not([disabled])',
+    );
   target?.focus();
-  target?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  target?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
 }
 
 /**
@@ -124,20 +157,45 @@ function focusField(root: HTMLElement | null, path: string): void {
  * whose schema passes on the live values shows as complete once it has been reached; external
  * attention (address verification) is applied after this and still wins.
  */
-export function reconcileStepStatus(metas: readonly StepMeta[], valid: readonly boolean[], current: number, reached: number): readonly StepMeta[] {
+export function reconcileStepStatus(
+  metas: readonly StepMeta[],
+  valid: readonly boolean[],
+  current: number,
+  reached: number,
+): readonly StepMeta[] {
   return metas.map((m, i) => {
     if (i === current) return m;
-    if (valid[i] && i <= reached && (m.status === "attention" || m.status === "upcoming")) return { ...m, status: "complete" as const };
+    if (valid[i] && i <= reached && (m.status === 'attention' || m.status === 'upcoming'))
+      return { ...m, status: 'complete' as const };
     return m;
   });
 }
 
 export function withAttention(metas: readonly StepMeta[], keys: readonly string[]): readonly StepMeta[] {
   if (keys.length === 0) return metas;
-  return metas.map((m) => (keys.includes(m.key) && m.status !== "active" && m.status !== "upcoming" ? { ...m, status: "attention" as const } : m));
+  return metas.map((m) =>
+    keys.includes(m.key) && m.status !== 'active' && m.status !== 'upcoming'
+      ? { ...m, status: 'attention' as const }
+      : m,
+  );
 }
 
-export function OrderWizardShell<T extends FieldValues>({ steps, mode, defaultValues, onComplete, draftScope, rail, attention, success, below, onController, onDirtyChange, stickyRail = true, header, main }: OrderWizardShellProps<T>) {
+export function OrderWizardShell<T extends FieldValues>({
+  steps,
+  mode,
+  defaultValues,
+  onComplete,
+  draftScope,
+  rail,
+  attention,
+  success,
+  below,
+  onController,
+  onDirtyChange,
+  stickyRail = true,
+  header,
+  main,
+}: OrderWizardShellProps<T>) {
   const rootRef = React.useRef<HTMLDivElement>(null);
   const sectionRef = React.useRef<HTMLElement>(null);
   const wizard = useWizard<T>({ steps, mode, defaultValues, draftScope, onComplete, rootRef });
@@ -165,10 +223,11 @@ export function OrderWizardShell<T extends FieldValues>({ steps, mode, defaultVa
     previous.current = wizard.nav.current;
     setShowSummary(false);
     stepFocusTarget(sectionRef.current)?.focus({ preventScroll: false });
-    rootRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    rootRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }, [wizard.nav.current]);
 
-  if (wizard.completed && success) return <WizardModeContext.Provider value={mode}>{success}</WizardModeContext.Provider>;
+  if (wizard.completed && success)
+    return <WizardModeContext.Provider value={mode}>{success}</WizardModeContext.Provider>;
 
   const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -180,39 +239,66 @@ export function OrderWizardShell<T extends FieldValues>({ steps, mode, defaultVa
   const step = wizard.current;
   const issues = showSummary ? summarizeErrors(errors) : [];
   const liveValid = steps.map((s) => !s.schema || s.schema.safeParse(values).success);
-  const metas = withAttention(reconcileStepStatus(wizard.metas, liveValid, wizard.nav.current, wizard.nav.reached), attention?.(values) ?? []);
+  const metas = withAttention(
+    reconcileStepStatus(wizard.metas, liveValid, wizard.nav.current, wizard.nav.reached),
+    attention?.(values) ?? [],
+  );
 
   return (
     <FormProvider {...wizard.form}>
       <div ref={rootRef} className="flex scroll-mt-4 flex-col gap-5">
         {header}
-        <div className={main ? "hidden" : undefined}>
+        <div className={main ? 'hidden' : undefined}>
           <WizardStepper steps={metas} onSelect={wizard.goTo} />
         </div>
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="flex min-w-0 flex-col gap-5">
             {main}
-            <div className={main ? "hidden" : "rounded-lg border border-border bg-surface p-5 shadow-xs"}>
+            <div className={main ? 'hidden' : 'rounded-lg border border-border bg-surface p-5 shadow-xs'}>
               <form noValidate onSubmit={onSubmit} className="flex min-w-0 flex-col gap-4">
                 {wizard.restoredDraft ? (
-                  <Callout variant="info" title="Draft restored" action={<Button size="sm" variant="ghost" onClick={wizard.restart}>Start over</Button>}>
+                  <Callout
+                    variant="info"
+                    title="Draft restored"
+                    action={
+                      <Button size="sm" variant="ghost" onClick={wizard.restart}>
+                        Start over
+                      </Button>
+                    }
+                  >
                     We kept the details you entered earlier in this session.
                   </Callout>
                 ) : null}
-                <section ref={sectionRef} aria-labelledby={`order-step-${step.key}`} className="flex flex-col gap-4">
+                <section
+                  ref={sectionRef}
+                  aria-labelledby={`order-step-${step.key}`}
+                  className="flex flex-col gap-4"
+                >
                   <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                    <h2 id={`order-step-${step.key}`} tabIndex={-1} data-step-heading className="text-base font-semibold text-foreground outline-none">
+                    <h2
+                      id={`order-step-${step.key}`}
+                      tabIndex={-1}
+                      data-step-heading
+                      className="text-base font-semibold text-foreground outline-none"
+                    >
                       <span className="mr-1.5 text-faint">Step {wizard.nav.current + 1} /</span>
                       {step.label}
                     </h2>
                     {step.description ? <p className="text-xs text-secondary">{step.description}</p> : null}
                   </header>
                   {issues.length > 0 ? (
-                    <Callout variant="error" title={`Fix ${issues.length} ${issues.length === 1 ? "field" : "fields"} to continue`}>
+                    <Callout
+                      variant="error"
+                      title={`Fix ${issues.length} ${issues.length === 1 ? 'field' : 'fields'} to continue`}
+                    >
                       <ul role="list" className="mt-1 flex flex-col gap-0.5" data-testid="order-step-issues">
                         {issues.map((i) => (
                           <li key={i.path}>
-                            <button type="button" className="text-left underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30" onClick={() => focusField(sectionRef.current, i.path)}>
+                            <button
+                              type="button"
+                              className="text-left underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                              onClick={() => focusField(sectionRef.current, i.path)}
+                            >
                               {i.message}
                             </button>
                           </li>
@@ -229,7 +315,11 @@ export function OrderWizardShell<T extends FieldValues>({ steps, mode, defaultVa
                     </Button>
                   ) : null}
                   {!wizard.isLast ? (
-                    <Button type="submit" variant={mode === "free" ? "secondary" : "primary"} disabled={wizard.submitting}>
+                    <Button
+                      type="submit"
+                      variant={mode === 'free' ? 'secondary' : 'primary'}
+                      disabled={wizard.submitting}
+                    >
                       Next step
                     </Button>
                   ) : null}
@@ -238,7 +328,9 @@ export function OrderWizardShell<T extends FieldValues>({ steps, mode, defaultVa
             </div>
             {main ? null : below}
           </div>
-          <div className={stickyRail ? "flex flex-col gap-4 lg:sticky lg:top-4" : "flex flex-col gap-4"}>{rail(values, wizard)}</div>
+          <div className={stickyRail ? 'flex flex-col gap-4 lg:sticky lg:top-4' : 'flex flex-col gap-4'}>
+            {rail(values, wizard)}
+          </div>
         </div>
       </div>
       <DirtyWatch wizard={wizard} onDirtyChange={onDirtyChange} />

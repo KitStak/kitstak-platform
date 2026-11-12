@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * Shared list-page shell for the M03 grids: page header + route tabs, the shared grid toolbar
@@ -6,16 +6,16 @@
  * (column chooser, density, page sizes, async Excel export) and a default filter chip.
  * Grid state lives in the URL, so render inside <Suspense>.
  */
-import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import type { ColumnDef } from "@tanstack/react-table";
-import { DataGrid, GridToolbar, useGrid, type FilterFieldDef, type RowAction } from "@/components/grid";
-import { PageHeader, type Crumb } from "@/components/layout/page-header";
-import type { PageTabGroupKey } from "@/config/page-tabs";
-import type { GridFilter } from "@/server/query/grid-query";
-import type { GridRow } from "./jobs-client";
-import { useApiQuery } from "@/lib/query-client";
-import { cn } from "@/lib/utils";
+import * as React from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import type { ColumnDef } from '@tanstack/react-table';
+import { DataGrid, GridToolbar, useGrid, type FilterFieldDef, type RowAction } from '@/components/grid';
+import { PageHeader, type Crumb } from '@/components/layout/page-header';
+import type { PageTabGroupKey } from '@/config/page-tabs';
+import type { GridFilter } from '@/server/query/grid-query';
+import type { GridRow } from './jobs-client';
+import { useApiQuery } from '@/lib/query-client';
+import { cn } from '@/lib/utils';
 
 /** One-click toggle filter shown above the grid, with a live count (critic R5: "Overdue"). */
 export interface QuickFilter {
@@ -24,7 +24,7 @@ export interface QuickFilter {
   readonly filter: GridFilter;
   /** Query string used for the live count badge (pageSize=1). */
   readonly countQuery?: string;
-  readonly tone?: "danger" | "neutral";
+  readonly tone?: 'danger' | 'neutral';
 }
 
 export interface ListShellContext<T> {
@@ -63,10 +63,24 @@ export interface ListShellProps<T extends GridRow> {
   readonly quickFilters?: readonly QuickFilter[];
 }
 
-function QuickFilterButton({ qf, path, active, onToggle }: { readonly qf: QuickFilter; readonly path: string; readonly active: boolean; readonly onToggle: () => void }) {
-  const countQ = useApiQuery<unknown[]>(["grid", "quick", path, qf.key], qf.countQuery ? `${path}?${qf.countQuery}&pageSize=1` : null, { timeoutMs: 30_000, retry: false });
+function QuickFilterButton({
+  qf,
+  path,
+  active,
+  onToggle,
+}: {
+  readonly qf: QuickFilter;
+  readonly path: string;
+  readonly active: boolean;
+  readonly onToggle: () => void;
+}) {
+  const countQ = useApiQuery<unknown[]>(
+    ['grid', 'quick', path, qf.key],
+    qf.countQuery ? `${path}?${qf.countQuery}&pageSize=1` : null,
+    { timeoutMs: 30_000, retry: false },
+  );
   const n = countQ.data?.meta?.total;
-  const danger = qf.tone === "danger" && typeof n === "number" && n > 0;
+  const danger = qf.tone === 'danger' && typeof n === 'number' && n > 0;
   return (
     <button
       type="button"
@@ -74,12 +88,25 @@ function QuickFilterButton({ qf, path, active, onToggle }: { readonly qf: QuickF
       onClick={onToggle}
       data-testid={`quick-filter-${qf.key}`}
       className={cn(
-        "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
-        active ? "border-primary bg-primary text-white" : danger ? "border-[#F2B8AE] bg-[#FDF1EE] text-[var(--danger-text)] hover:bg-[#FBE3DD] dark:border-[#6B2A20] dark:bg-[#2B1612] dark:text-[var(--label-red-light)]" : "border-border bg-surface text-body hover:bg-surface-sunken",
+        'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+        active
+          ? 'border-primary bg-primary text-white'
+          : danger
+            ? 'border-[#F2B8AE] bg-[#FDF1EE] text-[var(--danger-text)] hover:bg-[#FBE3DD] dark:border-[#6B2A20] dark:bg-[#2B1612] dark:text-[var(--label-red-light)]'
+            : 'border-border bg-surface text-body hover:bg-surface-sunken',
       )}
     >
       {qf.label}
-      {typeof n === "number" ? <span className={cn("rounded-full px-1.5 text-2xs tabular-nums", active ? "bg-white/20" : "bg-black/5 dark:bg-white/10")}>{n.toLocaleString("en-US")}</span> : null}
+      {typeof n === 'number' ? (
+        <span
+          className={cn(
+            'rounded-full px-1.5 text-2xs tabular-nums',
+            active ? 'bg-white/20' : 'bg-black/5 dark:bg-white/10',
+          )}
+        >
+          {n.toLocaleString('en-US')}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -102,10 +129,13 @@ const JOBS_SHELL_CSS = `
 
 /** One breadcrumb root for every page in the Jobs tab group (critic R1: roots jumped between Fulfillment / Automation / Reports). */
 export function jobsGroupCrumbs(title: string): readonly Crumb[] {
-  return [{ label: "Fulfillment" }, { label: "Jobs", href: "/jobs" }, { label: title }];
+  return [{ label: 'Fulfillment' }, { label: 'Jobs', href: '/jobs' }, { label: title }];
 }
 
-function useDefaultFilters<T>(defaults: readonly GridFilter[] | undefined, g: ReturnType<typeof useGrid<T>>): void {
+function useDefaultFilters<T>(
+  defaults: readonly GridFilter[] | undefined,
+  g: ReturnType<typeof useGrid<T>>,
+): void {
   const params = useSearchParams();
   const applied = React.useRef(false);
   // Critic R4: the chip must be there on every first load for every role. It is applied at once
@@ -114,7 +144,7 @@ function useDefaultFilters<T>(defaults: readonly GridFilter[] | undefined, g: Re
   React.useEffect(() => {
     if (applied.current || !defaults || defaults.length === 0) return;
     applied.current = true;
-    const hasGridState = [...params.keys()].some((k) => k === "q" || k === "sort" || k.startsWith("f."));
+    const hasGridState = [...params.keys()].some((k) => k === 'q' || k === 'sort' || k.startsWith('f.'));
     const defaultView = !g.views.isLoading && g.views.views.some((v) => v.isDefault);
     if (!hasGridState && !defaultView) g.grid.setQuery({ filters: defaults });
   }, [defaults, g.views.isLoading, g.views.views, g.grid, params]);
@@ -122,7 +152,12 @@ function useDefaultFilters<T>(defaults: readonly GridFilter[] | undefined, g: Re
 
 export function ListShell<T extends GridRow>(props: ListShellProps<T>) {
   const router = useRouter();
-  const g = useGrid<T>({ gridKey: props.gridKey, path: props.path, fields: props.fields, extraQuery: props.extraQuery });
+  const g = useGrid<T>({
+    gridKey: props.gridKey,
+    path: props.path,
+    fields: props.fields,
+    extraQuery: props.extraQuery,
+  });
   useDefaultFilters(props.defaultFilters, g);
 
   // Selection survives paging: remember every row seen so bulk menus know their facts.
@@ -131,20 +166,37 @@ export function ListShell<T extends GridRow>(props: ListShellProps<T>) {
     if (g.rows.length > 0) setSeen((prev) => new Map([...prev, ...g.rows.map((r) => [r.id, r] as const)]));
   }, [g.rows]);
   const current = new Map(g.rows.map((r) => [r.id, r] as const));
-  const selected = g.selectedIds.map((id) => current.get(id) ?? seen.get(id)).filter((r): r is T => Boolean(r));
-  const refresh = React.useCallback((opts?: { readonly keepSelection?: boolean }) => {
-    g.refetch();
-    if (!opts?.keepSelection) g.clearSelection();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [g.refetch, g.clearSelection]);
+  const selected = g.selectedIds
+    .map((id) => current.get(id) ?? seen.get(id))
+    .filter((r): r is T => Boolean(r));
+  const refresh = React.useCallback(
+    (opts?: { readonly keepSelection?: boolean }) => {
+      g.refetch();
+      if (!opts?.keepSelection) g.clearSelection();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    },
+    [g.refetch, g.clearSelection],
+  );
   const ctx: ListShellContext<T> = { selected, refresh, rows: g.rows };
   const hasState = g.grid.query.filters.length > 0 || Boolean(g.grid.query.q);
-  const extra = props.extraQuery ? new URLSearchParams(props.extraQuery).toString() : "";
+  const extra = props.extraQuery ? new URLSearchParams(props.extraQuery).toString() : '';
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4" data-ks-jobs-shell={props.trailing ? "actions" : "plain"} data-ks-jobs-loading={g.gridProps.loading ? "" : undefined}>
-      <style href="ks-jobs-shell" precedence="default">{JOBS_SHELL_CSS}</style>
-      <PageHeader breadcrumbs={props.breadcrumbs ?? (props.tabs === "jobs" ? jobsGroupCrumbs(props.title) : undefined)} title={props.title} helper={props.helper} tabs={props.tabs} actions={props.actions ?? (props.tabs ? <span aria-hidden className="block h-8" /> : undefined)} />
+    <div
+      className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4"
+      data-ks-jobs-shell={props.trailing ? 'actions' : 'plain'}
+      data-ks-jobs-loading={g.gridProps.loading ? '' : undefined}
+    >
+      <style href="ks-jobs-shell" precedence="default">
+        {JOBS_SHELL_CSS}
+      </style>
+      <PageHeader
+        breadcrumbs={props.breadcrumbs ?? (props.tabs === 'jobs' ? jobsGroupCrumbs(props.title) : undefined)}
+        title={props.title}
+        helper={props.helper}
+        tabs={props.tabs}
+        actions={props.actions ?? (props.tabs ? <span aria-hidden className="block h-8" /> : undefined)}
+      />
       {props.banner}
       {props.quickFilters && props.quickFilters.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 px-6 pb-2" role="group" aria-label="Quick filters">
@@ -157,34 +209,55 @@ export function ListShell<T extends GridRow>(props: ListShellProps<T>) {
                 qf={qf}
                 path={props.path}
                 active={active}
-                onToggle={() => g.grid.setQuery({ filters: active ? g.grid.query.filters.filter((f) => f.field !== qf.filter.field) : [...g.grid.query.filters, qf.filter] })}
+                onToggle={() =>
+                  g.grid.setQuery({
+                    filters: active
+                      ? g.grid.query.filters.filter((f) => f.field !== qf.filter.field)
+                      : [...g.grid.query.filters, qf.filter],
+                  })
+                }
               />
             );
           })}
         </div>
       ) : null}
-      <GridToolbar {...g.toolbarProps} searchPlaceholder={props.searchPlaceholder} onRefresh={() => refresh()} trailing={props.trailing ? props.trailing(ctx) : null} />
+      <GridToolbar
+        {...g.toolbarProps}
+        searchPlaceholder={props.searchPlaceholder}
+        onRefresh={() => refresh()}
+        trailing={props.trailing ? props.trailing(ctx) : null}
+      />
       <div className="flex min-h-0 flex-1 flex-col">
         <DataGrid<T>
           {...g.gridProps}
           selectable={props.selectable !== false}
-          queryString={extra ? `${g.gridProps.queryString}${g.gridProps.queryString ? "&" : ""}${extra}` : g.gridProps.queryString}
+          queryString={
+            extra
+              ? `${g.gridProps.queryString}${g.gridProps.queryString ? '&' : ''}${extra}`
+              : g.gridProps.queryString
+          }
           exportColumns={props.exportColumns}
           exportName={props.title}
           columns={props.columns}
           getRowId={(row) => row.id}
           rowActions={props.rowActions ? (row: T) => props.rowActions?.(row, ctx) ?? [] : undefined}
-          onRowClick={props.rowHref ? (row) => {
-            const href = props.rowHref?.(row);
-            if (href) router.push(href);
-          } : undefined}
+          onRowClick={
+            props.rowHref
+              ? (row) => {
+                  const href = props.rowHref?.(row);
+                  if (href) router.push(href);
+                }
+              : undefined
+          }
           emptyTitle={hasState ? `Could not find any ${props.noun}` : props.emptyTitle}
-          emptyDescription={hasState ? "Try changing the filters or search term." : props.emptyDescription}
+          emptyDescription={hasState ? 'Try changing the filters or search term.' : props.emptyDescription}
           emptyAction={hasState ? undefined : props.emptyAction}
         />
       </div>
       {props.children?.(ctx)}
-      <span className="sr-only" aria-live="polite">{g.isFetching ? `Loading ${props.noun}s` : `${g.total} ${props.noun}s`}</span>
+      <span className="sr-only" aria-live="polite">
+        {g.isFetching ? `Loading ${props.noun}s` : `${g.total} ${props.noun}s`}
+      </span>
     </div>
   );
 }

@@ -19,8 +19,8 @@ import type {
   TaskStatus,
   WaveStatus,
   WorkOrderStatus,
-} from "@/lib/enums";
-import { DomainError } from "./errors";
+} from '@/lib/enums';
+import { DomainError } from './errors';
 
 export type TransitionCheck = { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
@@ -82,7 +82,7 @@ function defineMachine<S extends string>(
     canTransition,
     transition(from, to, ctx) {
       const result = canTransition(from, to, ctx);
-      if (!result.ok) throw new DomainError("INVALID_STATE", result.reason, { machine: name, from, to });
+      if (!result.ok) throw new DomainError('INVALID_STATE', result.reason, { machine: name, from, to });
       return to;
     },
     nextStatuses: (from) => edges[from] ?? [],
@@ -100,7 +100,10 @@ function defineMachine<S extends string>(
           if (nxt === to) {
             const out: S[] = [to];
             let p = cur;
-            while (p !== from) { out.unshift(p); p = prev.get(p) as S; }
+            while (p !== from) {
+              out.unshift(p);
+              p = prev.get(p) as S;
+            }
             return out;
           }
           queue.push(nxt);
@@ -112,170 +115,242 @@ function defineMachine<S extends string>(
 }
 
 /* ------------------------------------------------------------ shipment order */
-const SO_HOLDABLE: readonly SoStatus[] = ["Open", "Shortage", "Ready to Pick", "Ready to Sort", "Ready to Pack", "Ready to Load", "Ready to Ship"];
-const SO_CANCELLABLE: readonly SoStatus[] = ["Open", "Shortage", "Ready to Pick", "On Hold"];
+const SO_HOLDABLE: readonly SoStatus[] = [
+  'Open',
+  'Shortage',
+  'Ready to Pick',
+  'Ready to Sort',
+  'Ready to Pack',
+  'Ready to Load',
+  'Ready to Ship',
+];
+const SO_CANCELLABLE: readonly SoStatus[] = ['Open', 'Shortage', 'Ready to Pick', 'On Hold'];
 
 const soEdges: Record<SoStatus, readonly SoStatus[]> = {
-  "Open": ["Ready to Pick", "Shortage", "On Hold", "Cancelled"],
-  "Shortage": ["Ready to Pick", "Open", "On Hold", "Cancelled"],
-  "Ready to Pick": ["Picking Started", "Open", "Shortage", "On Hold", "Cancelled"],
-  "Picking Started": ["Ready to Sort", "Ready to Pack", "Ready to Load", "Ready to Ship"],
-  "Ready to Sort": ["Sorting Started", "On Hold"],
-  "Sorting Started": ["Ready to Pack", "Ready to Ship"],
-  "Ready to Pack": ["Packing Started", "On Hold"],
-  "Packing Started": ["Ready to Load", "Ready to Ship"],
-  "Ready to Load": ["Loading Started", "On Hold"],
-  "Loading Started": ["Ready to Ship"],
-  "Ready to Ship": ["Shipped", "Partially Shipped", "On Hold"],
-  "Partially Shipped": ["Shipped"],
-  "Shipped": ["Delivered"],
-  "Delivered": [],
-  "Cancelled": [],
-  "On Hold": [...SO_HOLDABLE, "Cancelled"],
+  Open: ['Ready to Pick', 'Shortage', 'On Hold', 'Cancelled'],
+  Shortage: ['Ready to Pick', 'Open', 'On Hold', 'Cancelled'],
+  'Ready to Pick': ['Picking Started', 'Open', 'Shortage', 'On Hold', 'Cancelled'],
+  'Picking Started': ['Ready to Sort', 'Ready to Pack', 'Ready to Load', 'Ready to Ship'],
+  'Ready to Sort': ['Sorting Started', 'On Hold'],
+  'Sorting Started': ['Ready to Pack', 'Ready to Ship'],
+  'Ready to Pack': ['Packing Started', 'On Hold'],
+  'Packing Started': ['Ready to Load', 'Ready to Ship'],
+  'Ready to Load': ['Loading Started', 'On Hold'],
+  'Loading Started': ['Ready to Ship'],
+  'Ready to Ship': ['Shipped', 'Partially Shipped', 'On Hold'],
+  'Partially Shipped': ['Shipped'],
+  Shipped: ['Delivered'],
+  Delivered: [],
+  Cancelled: [],
+  'On Hold': [...SO_HOLDABLE, 'Cancelled'],
 };
 
-const shipmentOrder = defineMachine<SoStatus>("shipment order", soEdges, {
-  "Cancelled": "Cancelled orders can't be changed.",
-  "Delivered": "Delivered orders can't be changed.",
-  "Picking Started": "Picking has started for this order. Complete or cancel its job first.",
-  "Sorting Started": "Sorting has started for this order.",
-  "Packing Started": "Packing has started for this order.",
-  "Loading Started": "Loading has started for this order.",
-}, [
+const shipmentOrder = defineMachine<SoStatus>(
+  'shipment order',
+  soEdges,
   {
-    to: ["Cancelled"],
-    check: (from, _to, ctx) => {
-      if (!SO_CANCELLABLE.includes(from)) return "Only orders that have not started picking can be cancelled.";
-      return ctx.reason ? null : "A cancel reason is required.";
+    Cancelled: "Cancelled orders can't be changed.",
+    Delivered: "Delivered orders can't be changed.",
+    'Picking Started': 'Picking has started for this order. Complete or cancel its job first.',
+    'Sorting Started': 'Sorting has started for this order.',
+    'Packing Started': 'Packing has started for this order.',
+    'Loading Started': 'Loading has started for this order.',
+  },
+  [
+    {
+      to: ['Cancelled'],
+      check: (from, _to, ctx) => {
+        if (!SO_CANCELLABLE.includes(from))
+          return 'Only orders that have not started picking can be cancelled.';
+        return ctx.reason ? null : 'A cancel reason is required.';
+      },
     },
-  },
-  {
-    from: ["On Hold"],
-    to: SO_HOLDABLE,
-    check: (_from, to, ctx) =>
-      ctx.previousStatus === undefined || ctx.previousStatus === to ? null : `An order on hold returns to its previous status (${ctx.previousStatus}).`,
-  },
-]);
+    {
+      from: ['On Hold'],
+      to: SO_HOLDABLE,
+      check: (_from, to, ctx) =>
+        ctx.previousStatus === undefined || ctx.previousStatus === to
+          ? null
+          : `An order on hold returns to its previous status (${ctx.previousStatus}).`,
+    },
+  ],
+);
 
 /* ---------------------------------------------------------------------- PO */
-const purchaseOrder = defineMachine<PoStatus>("purchase order", {
-  Pending: ["Started", "Receiving", "Completed", "Cancelled"],
-  Started: ["Receiving", "Completed", "Cancelled"],
-  // Receiving -> Started: a partial receive settles as Started (M05 §4; the ledger marks Receiving in-transaction).
-  Receiving: ["Started", "Completed", "Cancelled"],
-  // Re-open (Logiwa "Change Purchase Order Status"): Completed -> Started clears the completion stamps.
-  Completed: ["Started"],
-  Cancelled: [],
-}, {
-  Completed: "A purchase order in completed status can't be changed.",
-  Cancelled: "Cancelled purchase orders can't be changed.",
-}, [{
-  to: ["Cancelled"],
-  check: (_f, _t, ctx) => ((ctx.activeReceipts ?? 0) > 0 ? "Cancel the received lines before cancelling the purchase order." : null),
-}]);
+const purchaseOrder = defineMachine<PoStatus>(
+  'purchase order',
+  {
+    Pending: ['Started', 'Receiving', 'Completed', 'Cancelled'],
+    Started: ['Receiving', 'Completed', 'Cancelled'],
+    // Receiving -> Started: a partial receive settles as Started (M05 §4; the ledger marks Receiving in-transaction).
+    Receiving: ['Started', 'Completed', 'Cancelled'],
+    // Re-open (Logiwa "Change Purchase Order Status"): Completed -> Started clears the completion stamps.
+    Completed: ['Started'],
+    Cancelled: [],
+  },
+  {
+    Completed: "A purchase order in completed status can't be changed.",
+    Cancelled: "Cancelled purchase orders can't be changed.",
+  },
+  [
+    {
+      to: ['Cancelled'],
+      check: (_f, _t, ctx) =>
+        (ctx.activeReceipts ?? 0) > 0
+          ? 'Cancel the received lines before cancelling the purchase order.'
+          : null,
+    },
+  ],
+);
 
 /* ------------------------------------------------------------- job / task */
-const job = defineMachine<JobStatus>("job", {
-  "Pending": ["Started", "In Progress", "Completed", "Cancelled"],
-  "Started": ["In Progress", "Completed", "Cancelled"],
-  "In Progress": ["Started", "Completed", "Cancelled"],
-  "Completed": [],
-  "Cancelled": [],
-}, { Completed: "Completed jobs can't be changed.", Cancelled: "Cancelled jobs can't be changed." });
+const job = defineMachine<JobStatus>(
+  'job',
+  {
+    Pending: ['Started', 'In Progress', 'Completed', 'Cancelled'],
+    Started: ['In Progress', 'Completed', 'Cancelled'],
+    'In Progress': ['Started', 'Completed', 'Cancelled'],
+    Completed: [],
+    Cancelled: [],
+  },
+  { Completed: "Completed jobs can't be changed.", Cancelled: "Cancelled jobs can't be changed." },
+);
 
-const task = defineMachine<TaskStatus>("task", {
-  Pending: ["Started", "Completed", "Cancelled"],
-  Started: ["Completed", "Cancelled"],
-  Completed: [],
-  Cancelled: [],
-}, { Completed: "Completed tasks can't be changed.", Cancelled: "Cancelled tasks can't be changed." });
+const task = defineMachine<TaskStatus>(
+  'task',
+  {
+    Pending: ['Started', 'Completed', 'Cancelled'],
+    Started: ['Completed', 'Cancelled'],
+    Completed: [],
+    Cancelled: [],
+  },
+  { Completed: "Completed tasks can't be changed.", Cancelled: "Cancelled tasks can't be changed." },
+);
 
 /* -------------------------------------------------------------- counting */
-const countPlan = defineMachine<CountPlanStatus>("count plan", {
-  "Pending": ["Ready To Count", "Count Started", "Cancelled"],
-  "Ready To Count": ["Count Started", "Cancelled"],
-  "Count Started": ["Count Completed", "Cancelled"],
-  "Count Completed": ["Inventory Updated", "Count Started"],
-  "Inventory Updated": [],
-  "Cancelled": [],
-}, { "Inventory Updated": "Inventory has already been updated for this count." });
+const countPlan = defineMachine<CountPlanStatus>(
+  'count plan',
+  {
+    Pending: ['Ready To Count', 'Count Started', 'Cancelled'],
+    'Ready To Count': ['Count Started', 'Cancelled'],
+    'Count Started': ['Count Completed', 'Cancelled'],
+    'Count Completed': ['Inventory Updated', 'Count Started'],
+    'Inventory Updated': [],
+    Cancelled: [],
+  },
+  { 'Inventory Updated': 'Inventory has already been updated for this count.' },
+);
 
 type CountLineStatus = (typeof COUNT_LINE_STATUSES)[number];
-const countLine = defineMachine<CountLineStatus>("count line", {
-  "Pending": ["Ready To Count", "Count Started", "Cancelled"],
-  "Ready To Count": ["Count Started", "Cancelled"],
-  "Count Started": ["Count Completed", "Cancelled"],
-  "Count Completed": ["Inventory Updated", "Recount Created", "Count Started"],
-  "Inventory Updated": [],
-  // REQ-16: a cancelled recount reopens the original line so its count result can still be posted.
-  "Recount Created": ["Count Completed"],
-  "Cancelled": [],
-}, {});
+const countLine = defineMachine<CountLineStatus>(
+  'count line',
+  {
+    Pending: ['Ready To Count', 'Count Started', 'Cancelled'],
+    'Ready To Count': ['Count Started', 'Cancelled'],
+    'Count Started': ['Count Completed', 'Cancelled'],
+    'Count Completed': ['Inventory Updated', 'Recount Created', 'Count Started'],
+    'Inventory Updated': [],
+    // REQ-16: a cancelled recount reopens the original line so its count result can still be posted.
+    'Recount Created': ['Count Completed'],
+    Cancelled: [],
+  },
+  {},
+);
 
 /* ------------------------------------------------- kitting / returns / plans */
-const workOrder = defineMachine<WorkOrderStatus>("work order", {
-  "Open": ["In Process", "Shortage", "Cancelled"],
-  "Shortage": ["Open", "In Process", "Cancelled"],
-  // In Process -> Open: Cancel Picking (components released, picking job cancelled) before any kit is built.
-  "In Process": ["Completed", "Cancelled", "Open"],
-  "Completed": [],
-  "Cancelled": [],
-}, {}, [
+const workOrder = defineMachine<WorkOrderStatus>(
+  'work order',
   {
-    from: ["In Process"], to: ["Open"],
-    check: (_from, _to, ctx) => (typeof ctx.processedQty === "number" && ctx.processedQty > 0
-      ? "Kits have already been built for this work order; picking can't be cancelled."
-      : null),
+    Open: ['In Process', 'Shortage', 'Cancelled'],
+    Shortage: ['Open', 'In Process', 'Cancelled'],
+    // In Process -> Open: Cancel Picking (components released, picking job cancelled) before any kit is built.
+    'In Process': ['Completed', 'Cancelled', 'Open'],
+    Completed: [],
+    Cancelled: [],
   },
-]);
+  {},
+  [
+    {
+      from: ['In Process'],
+      to: ['Open'],
+      check: (_from, _to, ctx) =>
+        typeof ctx.processedQty === 'number' && ctx.processedQty > 0
+          ? "Kits have already been built for this work order; picking can't be cancelled."
+          : null,
+    },
+  ],
+);
 
-const returnOrder = defineMachine<ReturnStatus>("return", {
-  "Pending": ["Started", "In Transit", "Cancelled"],
-  "In Transit": ["Started", "Completed", "Cancelled"],
-  "Started": ["Completed", "Cancelled"],
-  // Reopen a short-closed return only (guarded below).
-  "Completed": ["Started"],
-  "Cancelled": [],
-}, { Completed: "Completed returns can't be changed." }, [
+const returnOrder = defineMachine<ReturnStatus>(
+  'return',
   {
-    from: ["Completed"], to: ["Started"],
-    check: (_from, _to, ctx) => (typeof ctx.shortQty === "number" && ctx.shortQty > 0
-      ? null
-      : "Only a short-closed return (units still outstanding) can be reopened."),
+    Pending: ['Started', 'In Transit', 'Cancelled'],
+    'In Transit': ['Started', 'Completed', 'Cancelled'],
+    Started: ['Completed', 'Cancelled'],
+    // Reopen a short-closed return only (guarded below).
+    Completed: ['Started'],
+    Cancelled: [],
   },
-]);
+  { Completed: "Completed returns can't be changed." },
+  [
+    {
+      from: ['Completed'],
+      to: ['Started'],
+      check: (_from, _to, ctx) =>
+        typeof ctx.shortQty === 'number' && ctx.shortQty > 0
+          ? null
+          : 'Only a short-closed return (units still outstanding) can be reopened.',
+    },
+  ],
+);
 
-const shipmentPlan = defineMachine<ShipmentPlanStatus>("shipment plan", {
-  "Open": ["In Progress", "Loading Started", "Cancelled"],
-  "In Progress": ["Loading Started", "Cancelled"],
-  "Loading Started": ["Loading Completed"],
-  "Loading Completed": ["Shipped"],
-  "Shipped": [],
-  "Cancelled": [],
-}, {});
+const shipmentPlan = defineMachine<ShipmentPlanStatus>(
+  'shipment plan',
+  {
+    Open: ['In Progress', 'Loading Started', 'Cancelled'],
+    'In Progress': ['Loading Started', 'Cancelled'],
+    'Loading Started': ['Loading Completed'],
+    'Loading Completed': ['Shipped'],
+    Shipped: [],
+    Cancelled: [],
+  },
+  {},
+);
 
 type EodStatus = (typeof EOD_STATUSES)[number];
-const endOfDay = defineMachine<EodStatus>("end of day manifest", { Open: ["Closed"], Closed: [] }, {
-  Closed: "This end of day manifest is already closed.",
-});
+const endOfDay = defineMachine<EodStatus>(
+  'end of day manifest',
+  { Open: ['Closed'], Closed: [] },
+  {
+    Closed: 'This end of day manifest is already closed.',
+  },
+);
 
 type BillStatus = (typeof BILL_STATUSES)[number];
-const billingReport = defineMachine<BillStatus>("billing report", {
-  Draft: ["Approved", "Canceled"],
-  Approved: ["Canceled"],
-  Canceled: [],
-}, {});
+const billingReport = defineMachine<BillStatus>(
+  'billing report',
+  {
+    Draft: ['Approved', 'Canceled'],
+    Approved: ['Canceled'],
+    Canceled: [],
+  },
+  {},
+);
 
-const wave = defineMachine<WaveStatus>("wave", {
-  "Pending": ["Preparing For Optimization", "Started", "Completed", "Failed"],
-  "Preparing For Optimization": ["Optimizing", "Failed"],
-  "Optimizing": ["Optimization Completed", "Failed"],
-  "Optimization Completed": ["Started", "Completed", "Failed"],
-  "Started": ["In Progress", "Completed", "Failed"],
-  "In Progress": ["Completed", "Failed"],
-  "Completed": [],
-  "Failed": [],
-}, {});
+const wave = defineMachine<WaveStatus>(
+  'wave',
+  {
+    Pending: ['Preparing For Optimization', 'Started', 'Completed', 'Failed'],
+    'Preparing For Optimization': ['Optimizing', 'Failed'],
+    Optimizing: ['Optimization Completed', 'Failed'],
+    'Optimization Completed': ['Started', 'Completed', 'Failed'],
+    Started: ['In Progress', 'Completed', 'Failed'],
+    'In Progress': ['Completed', 'Failed'],
+    Completed: [],
+    Failed: [],
+  },
+  {},
+);
 
 export const stateMachines = {
   shipmentOrder,

@@ -16,16 +16,16 @@
  *
  * Relative imports only: tsx scripts and drizzle-kit load this without the `@/` alias.
  */
-import fs from "node:fs";
-import path from "node:path";
-import * as schema from "./schema";
-import type { AppDb } from "../api/db";
-import { applyMigrations, MIGRATIONS_FOLDER, sanitizeDatabaseUrl } from "./migrate";
+import fs from 'node:fs';
+import path from 'node:path';
+import * as schema from './schema';
+import type { AppDb } from '../api/db';
+import { applyMigrations, MIGRATIONS_FOLDER, sanitizeDatabaseUrl } from './migrate';
 
-export const DATA_DIR = path.join(/* turbopackIgnore: true */ process.cwd(), ".data");
-export const PGLITE_DIR = path.join(/* turbopackIgnore: true */ DATA_DIR, "pglite");
+export const DATA_DIR = path.join(/* turbopackIgnore: true */ process.cwd(), '.data');
+export const PGLITE_DIR = path.join(/* turbopackIgnore: true */ DATA_DIR, 'pglite');
 
-export type DatabaseKind = "postgres" | "pglite";
+export type DatabaseKind = 'postgres' | 'pglite';
 
 export interface OpenDatabase {
   readonly db: AppDb;
@@ -63,9 +63,12 @@ export function parseInt8(value: string): number | bigint {
   return Number.isSafeInteger(n) ? n : BigInt(value);
 }
 
-export async function openPostgres(url: string, options: { readonly max?: number } = {}): Promise<OpenDatabase> {
-  const { default: postgres } = await import("postgres");
-  const { drizzle } = await import("drizzle-orm/postgres-js");
+export async function openPostgres(
+  url: string,
+  options: { readonly max?: number } = {},
+): Promise<OpenDatabase> {
+  const { default: postgres } = await import('postgres');
+  const { drizzle } = await import('drizzle-orm/postgres-js');
   const client = postgres(url, {
     // Supabase transaction-mode pooler: no server-side prepared statements.
     prepare: false,
@@ -73,14 +76,14 @@ export async function openPostgres(url: string, options: { readonly max?: number
     idle_timeout: 20,
     connect_timeout: 15,
     onnotice: () => {},
-    connection: { application_name: "kitstak-wms" },
+    connection: { application_name: 'kitstak-wms' },
   });
   const db = drizzle(client, { schema });
   // After drizzle(): it installs its own (transparent) date parsers on the same table.
-  (client.options.parsers as Record<string, (value: string) => unknown>)["20"] = parseInt8;
+  (client.options.parsers as Record<string, (value: string) => unknown>)['20'] = parseInt8;
   return {
     db: db as unknown as AppDb,
-    kind: "postgres",
+    kind: 'postgres',
     close: () => client.end({ timeout: 5 }),
   };
 }
@@ -92,7 +95,7 @@ function pidAlive(pid: number): boolean {
     process.kill(pid, 0);
     return true;
   } catch (error: unknown) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 
@@ -101,27 +104,28 @@ function acquireDirLock(dataDir: string): () => void {
   fs.mkdirSync(/* turbopackIgnore: true */ path.dirname(lockPath), { recursive: true });
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      fs.writeFileSync(/* turbopackIgnore: true */ lockPath, String(process.pid), { flag: "wx" });
+      fs.writeFileSync(/* turbopackIgnore: true */ lockPath, String(process.pid), { flag: 'wx' });
       let released = false;
       const release = (): void => {
         if (released) return;
         released = true;
         try {
-          if (fs.readFileSync(lockPath, "utf8").trim() === String(process.pid)) fs.rmSync(lockPath, { force: true });
+          if (fs.readFileSync(lockPath, 'utf8').trim() === String(process.pid))
+            fs.rmSync(lockPath, { force: true });
         } catch {
           // already gone
         }
       };
-      process.once("exit", release);
+      process.once('exit', release);
       return release;
     } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const owner = Number(fs.readFileSync(lockPath, "utf8").trim());
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      const owner = Number(fs.readFileSync(lockPath, 'utf8').trim());
       if (owner === process.pid) return () => {};
       if (Number.isInteger(owner) && owner > 0 && pidAlive(owner)) {
         throw new Error(
           `The local PGlite database ${path.relative(process.cwd(), dataDir)} is in use by process ${owner} ` +
-            `(PGlite is single-process). Stop that process (usually "next dev") first, or set DATABASE_URL to use a Postgres server.`
+            `(PGlite is single-process). Stop that process (usually "next dev") first, or set DATABASE_URL to use a Postgres server.`,
         );
       }
       fs.rmSync(lockPath, { force: true }); // stale lock from a crashed process
@@ -136,10 +140,10 @@ function acquireDirLock(dataDir: string): () => void {
  */
 export async function openPglite(
   dataDir: string | null = PGLITE_DIR,
-  options: { readonly migrate?: boolean; readonly migrationsFolder?: string } = {}
+  options: { readonly migrate?: boolean; readonly migrationsFolder?: string } = {},
 ): Promise<OpenDatabase> {
-  const { PGlite } = await import("@electric-sql/pglite");
-  const { drizzle } = await import("drizzle-orm/pglite");
+  const { PGlite } = await import('@electric-sql/pglite');
+  const { drizzle } = await import('drizzle-orm/pglite');
   let release: () => void = () => {};
   if (dataDir) {
     fs.mkdirSync(/* turbopackIgnore: true */ dataDir, { recursive: true });
@@ -153,7 +157,7 @@ export async function openPglite(
     if (options.migrate !== false) await applyMigrations(db, options.migrationsFolder ?? MIGRATIONS_FOLDER);
     return {
       db,
-      kind: "pglite",
+      kind: 'pglite',
       close: async () => {
         try {
           if (!client.closed) await client.close();
@@ -175,7 +179,9 @@ export async function openDatabase(env: Env = process.env): Promise<OpenDatabase
   // Vercel's file system is read-only: falling back to local PGlite would fail every request
   // with an opaque EROFS (e.g. a Preview deployment without DATABASE_URL). Fail clearly.
   if (env.VERCEL) {
-    throw new Error("DATABASE_URL is not set for this Vercel environment. Set it to the Supabase pooler URL (transaction mode, port 6543).");
+    throw new Error(
+      'DATABASE_URL is not set for this Vercel environment. Set it to the Supabase pooler URL (transaction mode, port 6543).',
+    );
   }
   return await openPglite(PGLITE_DIR);
 }
@@ -205,7 +211,7 @@ export async function closeDb(): Promise<void> {
 
 /** Which driver the singleton uses (for /api/health and scripts' log lines). */
 export function configuredDatabaseKind(env: Env = process.env): DatabaseKind {
-  return databaseUrl(env) ? "postgres" : "pglite";
+  return databaseUrl(env) ? 'postgres' : 'pglite';
 }
 
 export { schema };

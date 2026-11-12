@@ -1,13 +1,16 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { PageSkeleton } from "@/components/layout/shell-skeleton";
-import { ScreenConfigEditorPage } from "@/components/admin/screen-configs/editor-page";
-import { requirePagePermission } from "@/server/auth/permissions";
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { PageSkeleton } from '@/components/layout/shell-skeleton';
+import { ScreenConfigEditorPage } from '@/components/admin/screen-configs/editor-page';
+import { requirePagePermission } from '@/server/auth/permissions';
 
-export const metadata: Metadata = { title: "Create receiving configuration" };
+export const metadata: Metadata = { title: 'Create receiving configuration' };
 
 async function Guard() {
-  await requirePagePermission("settings.screen_configuration.create", "/settings/screen-configuration/receiving/new");
+  await requirePagePermission(
+    'settings.screen_configuration.create',
+    '/settings/screen-configuration/receiving/new',
+  );
   return <ScreenConfigEditorPage editId={null} />;
 }
 

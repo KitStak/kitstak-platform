@@ -5,12 +5,12 @@
  */
 
 /** Transaction types that reserve or release stock without moving it. */
-export const RESERVATION_TXN_TYPES: readonly string[] = ["Allocation", "Allocation Cancel"];
+export const RESERVATION_TXN_TYPES: readonly string[] = ['Allocation', 'Allocation Cancel'];
 
-export const LEDGER_KINDS = ["movements", "reservations", "all"] as const;
+export const LEDGER_KINDS = ['movements', 'reservations', 'all'] as const;
 export type LedgerKind = (typeof LEDGER_KINDS)[number];
 
-export type LedgerDirection = "In" | "Out" | "Within";
+export type LedgerDirection = 'In' | 'Out' | 'Within';
 
 export interface LedgerEffect {
   readonly direction: LedgerDirection;
@@ -25,16 +25,23 @@ export interface LedgerEffect {
  * the from/to pair: an adjustment of −2 recorded "into" the location is Out 2, never "In −2".
  */
 export function ledgerEffect(fromHere: boolean, toHere: boolean, uomQty: number): LedgerEffect {
-  if (fromHere && toHere) return { direction: "Within", qty: Math.abs(uomQty), delta: 0 };
+  if (fromHere && toHere) return { direction: 'Within', qty: Math.abs(uomQty), delta: 0 };
   const delta = toHere ? uomQty : -uomQty;
-  if (delta === 0) return { direction: "Within", qty: 0, delta: 0 };
-  return { direction: delta > 0 ? "In" : "Out", qty: Math.abs(delta), delta };
+  if (delta === 0) return { direction: 'Within', qty: 0, delta: 0 };
+  return { direction: delta > 0 ? 'In' : 'Out', qty: Math.abs(delta), delta };
 }
 
 export const isReservation = (type: string): boolean => RESERVATION_TXN_TYPES.includes(type);
 
 /** Empty-state copy per ledger filter. */
 export function ledgerEmptyCopy(kind: LedgerKind): { readonly title: string; readonly description: string } {
-  if (kind === "reservations") return { title: "No reservations", description: "Allocations that reserve stock in this location without moving it are listed here." };
-  return { title: "No stock movements yet", description: "Every receipt, transfer, pick and adjustment touching this location is listed here." };
+  if (kind === 'reservations')
+    return {
+      title: 'No reservations',
+      description: 'Allocations that reserve stock in this location without moving it are listed here.',
+    };
+  return {
+    title: 'No stock movements yet',
+    description: 'Every receipt, transfer, pick and adjustment touching this location is listed here.',
+  };
 }

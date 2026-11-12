@@ -6,13 +6,15 @@
  *
  * When the shared machine gains the edge this wrapper stays correct (the union is idempotent).
  */
-import type { PoStatus } from "@/lib/enums";
-import { stateMachines } from "@/server/domain";
-import type { GuardContext, TransitionCheck } from "@/server/domain/state-machines";
-import { AppError } from "@/server/api/errors";
+import type { PoStatus } from '@/lib/enums';
+import { stateMachines } from '@/server/domain';
+import type { GuardContext, TransitionCheck } from '@/server/domain/state-machines';
+import { AppError } from '@/server/api/errors';
 
 /** Manual-only edges M05 adds on top of the shared machine. */
-export const PO_REOPEN_EDGES: Readonly<Partial<Record<PoStatus, readonly PoStatus[]>>> = { Completed: ["Started"] };
+export const PO_REOPEN_EDGES: Readonly<Partial<Record<PoStatus, readonly PoStatus[]>>> = {
+  Completed: ['Started'],
+};
 
 const isReopen = (from: PoStatus, to: PoStatus): boolean => (PO_REOPEN_EDGES[from] ?? []).includes(to);
 
@@ -30,6 +32,6 @@ export function nextPoStatuses(from: PoStatus): readonly PoStatus[] {
 /** Asserts a manual status change and returns `to` (INVALID_STATE with the machine's reason otherwise). */
 export function assertPoStatusChange(from: PoStatus, to: PoStatus, ctx: GuardContext = {}): PoStatus {
   const check = canChangePoStatus(from, to, ctx);
-  if (!check.ok) throw new AppError("INVALID_STATE", check.reason);
+  if (!check.ok) throw new AppError('INVALID_STATE', check.reason);
   return to;
 }

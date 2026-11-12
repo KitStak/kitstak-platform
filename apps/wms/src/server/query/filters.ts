@@ -5,14 +5,14 @@
  * Only declared fields are filterable (whitelist); an unknown field or an operator that
  * does not fit the field type throws VALIDATION. Values are always bound parameters.
  */
-import { and, sql, type SQL } from "drizzle-orm";
-import type { PgColumn } from "drizzle-orm/pg-core";
-import { AppError } from "@/server/api/errors";
-import { resolveDateRange } from "./date-presets";
-import { currentTzOffset } from "./request-tz";
-import type { GridFilter, QuickSearchMode } from "./grid-query";
+import { and, sql, type SQL } from 'drizzle-orm';
+import type { PgColumn } from 'drizzle-orm/pg-core';
+import { AppError } from '@/server/api/errors';
+import { resolveDateRange } from './date-presets';
+import { currentTzOffset } from './request-tz';
+import type { GridFilter, QuickSearchMode } from './grid-query';
 
-export type FilterFieldType = "enum" | "text" | "number" | "date" | "boolean";
+export type FilterFieldType = 'enum' | 'text' | 'number' | 'date' | 'boolean';
 
 export interface FilterOption {
   readonly value: string;
@@ -40,12 +40,12 @@ export interface CompileOptions {
   readonly tzOffsetMinutes?: number;
 }
 
-export const ALLOWED_OPS: Readonly<Record<FilterFieldType, readonly GridFilter["op"][]>> = {
-  enum: ["in", "nin", "eq", "ex", "empty"],
-  text: ["eq", "ct", "sw", "ew", "in", "nin", "ex", "empty"],
-  number: ["eq", "rng", "in", "nin", "ex", "empty"],
-  date: ["date", "rng", "ex", "empty"],
-  boolean: ["bool", "ex", "empty"],
+export const ALLOWED_OPS: Readonly<Record<FilterFieldType, readonly GridFilter['op'][]>> = {
+  enum: ['in', 'nin', 'eq', 'ex', 'empty'],
+  text: ['eq', 'ct', 'sw', 'ew', 'in', 'nin', 'ex', 'empty'],
+  number: ['eq', 'rng', 'in', 'nin', 'ex', 'empty'],
+  date: ['date', 'rng', 'ex', 'empty'],
+  boolean: ['bool', 'ex', 'empty'],
 };
 
 const CUSTOM_FIELD_KEY_RE = /^[A-Za-z0-9_]+$/;
@@ -54,10 +54,11 @@ function expressionOf(def: FilterFieldDef): SQL {
   if (def.sql) return def.sql;
   if (def.column) return sql`${def.column}`;
   if (def.customField) {
-    if (!CUSTOM_FIELD_KEY_RE.test(def.customField.key)) throw new Error(`Invalid custom field key ${def.customField.key}`);
+    if (!CUSTOM_FIELD_KEY_RE.test(def.customField.key))
+      throw new Error(`Invalid custom field key ${def.customField.key}`);
     const { column, key } = def.customField;
     // SQLite json_extract returned typed values; jsonb ->> is text, so number fields read the number.
-    return def.type === "number"
+    return def.type === 'number'
       ? sql`(CASE WHEN jsonb_typeof(${column} -> ${key}::text) = 'number' THEN (${column} ->> ${key}::text)::float8 END)`
       : sql`(${column} ->> ${key}::text)`;
   }
@@ -76,17 +77,19 @@ export function escapeLike(value: string): string {
 const like = (expr: SQL, pattern: string): SQL => sql`(${expr})::text ILIKE ${pattern} ESCAPE '\\'`;
 
 function invalid(def: FilterFieldDef, message: string): AppError {
-  return new AppError("VALIDATION", `${def.label}: ${message}`, { fieldErrors: { [`f.${def.key}`]: [message] } });
+  return new AppError('VALIDATION', `${def.label}: ${message}`, {
+    fieldErrors: { [`f.${def.key}`]: [message] },
+  });
 }
 
 function toNumber(def: FilterFieldDef, raw: string): number {
   const n = Number(raw);
-  if (raw.trim() === "" || !Number.isFinite(n)) throw invalid(def, `"${raw}" is not a number`);
+  if (raw.trim() === '' || !Number.isFinite(n)) throw invalid(def, `"${raw}" is not a number`);
   return n;
 }
 
 function coerce(def: FilterFieldDef, raw: string): string | number {
-  return def.type === "number" ? toNumber(def, raw) : raw;
+  return def.type === 'number' ? toNumber(def, raw) : raw;
 }
 
 /**
@@ -97,7 +100,9 @@ function coerce(def: FilterFieldDef, raw: string): string | number {
 function dateBound(def: FilterFieldDef, iso: string, tzOffsetMinutes = 0): string {
   if (!def.dateOnly) return iso;
   const t = Date.parse(iso);
-  return Number.isNaN(t) ? iso.slice(0, 10) : new Date(t + tzOffsetMinutes * 60_000).toISOString().slice(0, 10);
+  return Number.isNaN(t)
+    ? iso.slice(0, 10)
+    : new Date(t + tzOffsetMinutes * 60_000).toISOString().slice(0, 10);
 }
 
 function rangeSql(expr: SQL, min: string | number | undefined, max: string | number | undefined): SQL {
@@ -108,43 +113,57 @@ function rangeSql(expr: SQL, min: string | number | undefined, max: string | num
 }
 
 function compileOne(def: FilterFieldDef, filter: GridFilter, options: CompileOptions): SQL {
-  if (!ALLOWED_OPS[def.type].includes(filter.op)) throw invalid(def, `operator "${filter.op}" is not supported`);
+  if (!ALLOWED_OPS[def.type].includes(filter.op))
+    throw invalid(def, `operator "${filter.op}" is not supported`);
   const expr = expressionOf(def);
   switch (filter.op) {
-    case "in":
-    case "nin": {
+    case 'in':
+    case 'nin': {
       const values = filter.values.map((v) => coerce(def, v));
-      const list = sql.join(values.map((v) => sql`${v}`), sql`, `);
-      return filter.op === "in" ? sql`${expr} IN (${list})` : sql`(${expr} IS NULL OR ${expr} NOT IN (${list}))`;
+      const list = sql.join(
+        values.map((v) => sql`${v}`),
+        sql`, `,
+      );
+      return filter.op === 'in'
+        ? sql`${expr} IN (${list})`
+        : sql`(${expr} IS NULL OR ${expr} NOT IN (${list}))`;
     }
-    case "eq":
-      return def.type === "number" ? sql`${expr} = ${toNumber(def, filter.value)}` : sql`lower((${expr})::text) = lower(${filter.value})`;
-    case "ct":
+    case 'eq':
+      return def.type === 'number'
+        ? sql`${expr} = ${toNumber(def, filter.value)}`
+        : sql`lower((${expr})::text) = lower(${filter.value})`;
+    case 'ct':
       return like(expr, `%${escapeLike(filter.value)}%`);
-    case "sw":
+    case 'sw':
       return like(expr, `${escapeLike(filter.value)}%`);
-    case "ew":
+    case 'ew':
       return like(expr, `%${escapeLike(filter.value)}`);
-    case "ex":
+    case 'ex':
       return sql`(${expr} IS NOT NULL AND (${expr})::text <> '')`;
-    case "empty":
+    case 'empty':
       return sql`(${expr} IS NULL OR (${expr})::text = '')`;
-    case "bool":
+    case 'bool':
       // SQLite compared `expr = 1/0`. The expression can be a boolean column ('true'/'false'),
       // a 0/1 integer expression ('1'/'0') or a jsonb custom-field toggle (`->>` text
       // 'true'/'false'), so compare the text form; NULL/missing matches neither, as before.
-      return filter.value
-        ? sql`(${expr})::text IN ('true', '1')`
-        : sql`(${expr})::text IN ('false', '0')`;
-    case "rng": {
-      if (def.type === "date") return rangeSql(expr, filter.min, filter.max);
-      return rangeSql(expr, filter.min === undefined ? undefined : toNumber(def, filter.min), filter.max === undefined ? undefined : toNumber(def, filter.max));
+      return filter.value ? sql`(${expr})::text IN ('true', '1')` : sql`(${expr})::text IN ('false', '0')`;
+    case 'rng': {
+      if (def.type === 'date') return rangeSql(expr, filter.min, filter.max);
+      return rangeSql(
+        expr,
+        filter.min === undefined ? undefined : toNumber(def, filter.min),
+        filter.max === undefined ? undefined : toNumber(def, filter.max),
+      );
     }
-    case "date": {
+    case 'date': {
       // Explicit offset (e.g. a warehouse zone) wins; else the viewer's offset from the request.
       const tz = options.tzOffsetMinutes ?? currentTzOffset() ?? 0;
       const range = resolveDateRange(filter.date, options.now ?? new Date(), tz);
-      return rangeSql(expr, range.from ? dateBound(def, range.from, tz) : undefined, range.to ? dateBound(def, range.to, tz) : undefined);
+      return rangeSql(
+        expr,
+        range.from ? dateBound(def, range.from, tz) : undefined,
+        range.to ? dateBound(def, range.to, tz) : undefined,
+      );
     }
   }
 }
@@ -160,7 +179,9 @@ export function compileFilters(
   const parts = filters.map((filter) => {
     const def = byKey.get(filter.field);
     if (!def) {
-      throw new AppError("VALIDATION", `Unknown filter field "${filter.field}"`, { fieldErrors: { [`f.${filter.field}`]: ["Unknown field"] } });
+      throw new AppError('VALIDATION', `Unknown filter field "${filter.field}"`, {
+        fieldErrors: { [`f.${filter.field}`]: ['Unknown field'] },
+      });
     }
     return compileOne(def, filter, options);
   });
@@ -179,7 +200,9 @@ export function compileQuickSearch(
   const text = q?.trim();
   if (!text || fields.length === 0) return undefined;
   const parts = fields.map((field) =>
-    mode === "eq" ? sql`lower((${field})::text) = lower(${text})` : like(sql`${field}`, `${escapeLike(text)}%`),
+    mode === 'eq'
+      ? sql`lower((${field})::text) = lower(${text})`
+      : like(sql`${field}`, `${escapeLike(text)}%`),
   );
   return parts.length === 1 ? parts[0] : sql`(${sql.join(parts, sql` OR `)})`;
 }

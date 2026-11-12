@@ -1,10 +1,19 @@
 /** zod input schemas for shipment-order commands (validated at the domain boundary). */
-import { z } from "zod";
-import { addressValueSchema } from "@/lib/domain-types";
-import { ADDRESS_TYPES, BILLING_PARTY_TYPES, CUSTOM_FIELD_SLOTS, EXPORT_REASONS, ORDER_CHANNELS, ORDER_TYPES, PRIORITIES, TAX_TYPES } from "@/lib/enums";
+import { z } from 'zod';
+import { addressValueSchema } from '@/lib/domain-types';
+import {
+  ADDRESS_TYPES,
+  BILLING_PARTY_TYPES,
+  CUSTOM_FIELD_SLOTS,
+  EXPORT_REASONS,
+  ORDER_CHANNELS,
+  ORDER_TYPES,
+  PRIORITIES,
+  TAX_TYPES,
+} from '@/lib/enums';
 
 const optText = (max = 500) => z.string().trim().max(max).nullish();
-const isoDate = z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Invalid date");
+const isoDate = z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date');
 
 export const orderLineInputSchema = z.object({
   productId: z.string().min(1),
@@ -17,18 +26,27 @@ export const orderLineInputSchema = z.object({
   damageReason: optText(100),
   pinnedLocationId: z.string().nullish(),
   pinnedLpId: z.string().nullish(),
-  lineNote1: optText(), lineNote2: optText(), lineNote3: optText(),
+  lineNote1: optText(),
+  lineNote2: optText(),
+  lineNote3: optText(),
 });
 export type OrderLineInput = z.input<typeof orderLineInputSchema>;
 
 /** Billing address: blank / null parts are dropped; an all-blank address becomes null; otherwise line1, city, zip and country are required. */
 const billingAddressSchema = z.preprocess((raw: unknown) => {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return raw;
-  const kept = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== null && v !== undefined && !(typeof v === "string" && v.trim() === "")));
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw;
+  const kept = Object.fromEntries(
+    Object.entries(raw).filter(
+      ([, v]) => v !== null && v !== undefined && !(typeof v === 'string' && v.trim() === ''),
+    ),
+  );
   return Object.keys(kept).length === 0 ? null : kept;
 }, addressValueSchema.nullable());
 
-const customFieldsSchema = z.partialRecord(z.enum(CUSTOM_FIELD_SLOTS), z.union([z.string(), z.boolean(), z.null()]));
+const customFieldsSchema = z.partialRecord(
+  z.enum(CUSTOM_FIELD_SLOTS),
+  z.union([z.string(), z.boolean(), z.null()]),
+);
 
 /**
  * Header fields editable through `updateOrder` (status / warehouse / client have their own
@@ -39,7 +57,7 @@ export const orderHeaderSchema = z.object({
   storeName: optText(200),
   storeOrderNumber: optText(100),
   customerName: z.string().trim().min(1).max(200),
-  customerEmail: z.union([z.literal(""), z.email()]),
+  customerEmail: z.union([z.literal(''), z.email()]),
   customerPhone: optText(50),
   customerFirstName: optText(100),
   customerLastName: optText(100),
@@ -68,7 +86,11 @@ export const orderHeaderSchema = z.object({
   isGift: z.boolean(),
   giftNote: optText(1000),
   clientReferenceCode: optText(100),
-  extraNote1: optText(), extraNote2: optText(), extraNote3: optText(), extraNote4: optText(), extraNote5: optText(),
+  extraNote1: optText(),
+  extraNote2: optText(),
+  extraNote3: optText(),
+  extraNote4: optText(),
+  extraNote5: optText(),
   customFields: customFieldsSchema.optional(),
   // Wizard extras (docs/requests/orders-outbound.md REQ-1); all optional, columns already exist.
   taxType: z.enum(TAX_TYPES).nullish(),
@@ -94,7 +116,11 @@ export const orderHeaderSchema = z.object({
   fraud: optText(500),
   packingWarningTypeId: z.string().max(64).nullish(),
   retailerId: z.string().max(64).nullish(),
-  bol: optText(100), pro: optText(100), retailerPo: optText(100), dept: optText(100), markFor: optText(200),
+  bol: optText(100),
+  pro: optText(100),
+  retailerPo: optText(100),
+  dept: optText(100),
+  markFor: optText(200),
   retailerCustomerAccount: optText(100),
   customerId: z.string().max(64).nullish(),
   priorityRank: z.number().int().min(0).max(9999).optional(),
@@ -104,18 +130,18 @@ export const orderHeaderSchema = z.object({
 });
 
 export const createOrderSchema = orderHeaderSchema.extend({
-  channel: orderHeaderSchema.shape.channel.default("Manual"),
-  customerEmail: orderHeaderSchema.shape.customerEmail.default(""),
-  shipState: orderHeaderSchema.shape.shipState.default(""),
-  shipCountry: orderHeaderSchema.shape.shipCountry.default("United States"),
-  orderType: orderHeaderSchema.shape.orderType.default("D2C"),
-  priority: orderHeaderSchema.shape.priority.default("None"),
+  channel: orderHeaderSchema.shape.channel.default('Manual'),
+  customerEmail: orderHeaderSchema.shape.customerEmail.default(''),
+  shipState: orderHeaderSchema.shape.shipState.default(''),
+  shipCountry: orderHeaderSchema.shape.shipCountry.default('United States'),
+  orderType: orderHeaderSchema.shape.orderType.default('D2C'),
+  priority: orderHeaderSchema.shape.priority.default('None'),
   skipAddressVerification: orderHeaderSchema.shape.skipAddressVerification.default(false),
   isGift: orderHeaderSchema.shape.isGift.default(false),
   code: z.string().trim().min(1).max(50).optional(),
   warehouseId: z.string().min(1),
   clientId: z.string().min(1),
-  lines: z.array(orderLineInputSchema).min(1, "At least one line is required").max(1000),
+  lines: z.array(orderLineInputSchema).min(1, 'At least one line is required').max(1000),
 });
 export type CreateOrderInput = z.input<typeof createOrderSchema>;
 
@@ -124,8 +150,19 @@ export const updateOrderSchema = z.object({
   version: z.number().int().positive(),
   patch: orderHeaderSchema.partial().default({}),
   /** Replaces all lines (only while the order is Open / Shortage / On Hold and unallocated). */
-  lines: z.array(orderLineInputSchema.extend({ id: z.string().optional() })).min(1).max(1000).optional(),
+  lines: z
+    .array(orderLineInputSchema.extend({ id: z.string().optional() }))
+    .min(1)
+    .max(1000)
+    .optional(),
 });
 export type UpdateOrderInput = z.input<typeof updateOrderSchema>;
 
-export const ADDRESS_FIELDS = ["shipAddress", "shipAddress2", "shipCity", "shipState", "shipZip", "shipCountry"] as const;
+export const ADDRESS_FIELDS = [
+  'shipAddress',
+  'shipAddress2',
+  'shipCity',
+  'shipState',
+  'shipZip',
+  'shipCountry',
+] as const;

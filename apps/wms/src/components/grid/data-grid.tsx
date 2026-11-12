@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * DataGrid (BUILD_PLAN F4.3) — rewritten; legacy props stay backward-compatible.
@@ -12,7 +12,7 @@
  *   - Export As Excel (async, Transactions tray) when `gridKey` + `queryString` are set;
  *     legacy callers without a gridKey keep the client-side CSV export
  */
-import * as React from "react";
+import * as React from 'react';
 import {
   getCoreRowModel,
   getExpandedRowModel,
@@ -24,27 +24,37 @@ import {
   type ExpandedState,
   type RowSelectionState,
   type SortingState,
-} from "@tanstack/react-table";
-import { Download, RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { SortSpec } from "@/server/query/grid-query";
-import { Button } from "@/components/ui/button";
-import { Tooltip } from "@/components/ui/tooltip";
-import { ColumnChooser, type ChooserColumn } from "./column-chooser";
-import { DataGridBody } from "./data-grid-body";
-import { DataGridHeader, HeaderDndContext } from "./data-grid-header";
-import { actionsColumn, columnLabel, expandColumn, EXPAND_COLUMN_ID, gutterColumn, isSystemColumn, SELECT_COLUMN_ID, selectColumn, stickyRightOffsetFor } from "./data-grid-columns";
-import { ExportButton, type ExportColumnSpec } from "./export-button";
-import { GridFooter } from "./grid-footer";
-import { clampWidth, moveColumn, visibilityMap, type PrefColumn } from "./grid-prefs";
-import { nextSort } from "./grid-sort";
-import { exportCsv } from "./legacy-csv";
-import { SelectionBanner } from "./selection-banner";
-import type { GridColumnMeta, GridDensity, RowAction } from "./grid-types";
-import { useGridPrefs } from "./use-grid-prefs";
+} from '@tanstack/react-table';
+import { Download, RefreshCw } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { SortSpec } from '@/server/query/grid-query';
+import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
+import { ColumnChooser, type ChooserColumn } from './column-chooser';
+import { DataGridBody } from './data-grid-body';
+import { DataGridHeader, HeaderDndContext } from './data-grid-header';
+import {
+  actionsColumn,
+  columnLabel,
+  expandColumn,
+  EXPAND_COLUMN_ID,
+  gutterColumn,
+  isSystemColumn,
+  SELECT_COLUMN_ID,
+  selectColumn,
+  stickyRightOffsetFor,
+} from './data-grid-columns';
+import { ExportButton, type ExportColumnSpec } from './export-button';
+import { GridFooter } from './grid-footer';
+import { clampWidth, moveColumn, visibilityMap, type PrefColumn } from './grid-prefs';
+import { nextSort } from './grid-sort';
+import { exportCsv } from './legacy-csv';
+import { SelectionBanner } from './selection-banner';
+import type { GridColumnMeta, GridDensity, RowAction } from './grid-types';
+import { useGridPrefs } from './use-grid-prefs';
 
 /** Legacy density names (pre-F4). `"comfortable"` = Large, `"compact"` = Small. */
-export type Density = "comfortable" | "compact";
+export type Density = 'comfortable' | 'compact';
 export type { GridColumnMeta };
 
 export interface DataGridProps<T> {
@@ -101,14 +111,18 @@ export interface DataGridProps<T> {
   /** Scroll this row into view and flash it for 2 s (e.g. the record just created or saved). */
   readonly highlightRowId?: string | null;
   /** Footer export: "auto" (default: Excel when gridKey + queryString, else CSV), "csv", or "none" (the page renders its own). */
-  readonly exportMode?: "auto" | "csv" | "none";
+  readonly exportMode?: 'auto' | 'csv' | 'none';
   /** Excel export key/query when they differ from the prefs `gridKey` / `queryString` (e.g. a detail page lines grid). */
   readonly exportGridKey?: string;
   readonly exportQuery?: string;
 }
 
 /** Scroll a row into view and flash it once when `rowId` appears in the rendered page. */
-function useHighlightRow(scrollRef: React.RefObject<HTMLDivElement | null>, rowId: string | null, rowCount: number) {
+function useHighlightRow(
+  scrollRef: React.RefObject<HTMLDivElement | null>,
+  rowId: string | null,
+  rowCount: number,
+) {
   const done = React.useRef<string | null>(null);
   React.useEffect(() => {
     if (!rowId || done.current === rowId) return;
@@ -116,9 +130,9 @@ function useHighlightRow(scrollRef: React.RefObject<HTMLDivElement | null>, rowI
     const el = root?.querySelector<HTMLElement>(`tr[data-row-id="${CSS.escape(rowId)}"]`);
     if (!el) return;
     done.current = rowId;
-    el.scrollIntoView({ block: "nearest" });
-    el.setAttribute("data-highlight", "");
-    const t = window.setTimeout(() => el.removeAttribute("data-highlight"), 2000);
+    el.scrollIntoView({ block: 'nearest' });
+    el.setAttribute('data-highlight', '');
+    const t = window.setTimeout(() => el.removeAttribute('data-highlight'), 2000);
     return () => window.clearTimeout(t);
   }, [scrollRef, rowId, rowCount]);
 }
@@ -127,8 +141,8 @@ function useHighlightRow(scrollRef: React.RefObject<HTMLDivElement | null>, rowI
 function useVisibleWidthVar(scrollRef: React.RefObject<HTMLDivElement | null>) {
   React.useEffect(() => {
     const el = scrollRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const apply = () => el.style.setProperty("--grid-visible-width", `${el.clientWidth}px`);
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const apply = () => el.style.setProperty('--grid-visible-width', `${el.clientWidth}px`);
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(el);
@@ -147,12 +161,15 @@ function prefColumnsOf<T>(columns: readonly ColumnDef<T, unknown>[]): readonly P
 
 function columnIdOf<T>(c: ColumnDef<T, unknown>, index: number): string {
   if (c.id) return c.id;
-  if ("accessorKey" in c && typeof c.accessorKey === "string") return c.accessorKey.replaceAll(".", "_");
-  return typeof c.header === "string" ? c.header : `col_${index}`;
+  if ('accessorKey' in c && typeof c.accessorKey === 'string') return c.accessorKey.replaceAll('.', '_');
+  return typeof c.header === 'string' ? c.header : `col_${index}`;
 }
 
 function hasAccessor<T>(c: ColumnDef<T, unknown>): boolean {
-  return ("accessorKey" in c && c.accessorKey !== undefined) || ("accessorFn" in c && typeof c.accessorFn === "function");
+  return (
+    ('accessorKey' in c && c.accessorKey !== undefined) ||
+    ('accessorFn' in c && typeof c.accessorFn === 'function')
+  );
 }
 
 /**
@@ -163,13 +180,41 @@ function hasAccessor<T>(c: ColumnDef<T, unknown>): boolean {
 export function withDefaultSort<T>(c: ColumnDef<T, unknown>, id: string): ColumnDef<T, unknown> {
   if (c.enableSorting === false || hasAccessor(c)) return { ...c, id } as ColumnDef<T, unknown>;
   const key = c.meta?.sortKey ?? id;
-  return { ...c, id, accessorFn: (row: T) => (row as Record<string, unknown> | null)?.[key] } as ColumnDef<T, unknown>;
+  return { ...c, id, accessorFn: (row: T) => (row as Record<string, unknown> | null)?.[key] } as ColumnDef<
+    T,
+    unknown
+  >;
 }
 
 export function DataGrid<T>(props: DataGridProps<T>) {
-  const { columns, data, total, page, pageSize, onPageChange, onPageSizeChange, loading = false, error = null, onRetry, getRowId, onRowClick, onRefresh, toolbarLeft, toolbarRight, gridKey, sort: sortProp, onSortChange, rowActions, renderExpanded, selectable = true } = props;
+  const {
+    columns,
+    data,
+    total,
+    page,
+    pageSize,
+    onPageChange,
+    onPageSizeChange,
+    loading = false,
+    error = null,
+    onRetry,
+    getRowId,
+    onRowClick,
+    onRefresh,
+    toolbarLeft,
+    toolbarRight,
+    gridKey,
+    sort: sortProp,
+    onSortChange,
+    rowActions,
+    renderExpanded,
+    selectable = true,
+  } = props;
 
-  const idColumns = React.useMemo(() => columns.map((c, i) => withDefaultSort(c, columnIdOf(c, i))), [columns]);
+  const idColumns = React.useMemo(
+    () => columns.map((c, i) => withDefaultSort(c, columnIdOf(c, i))),
+    [columns],
+  );
   const prefColumns = React.useMemo(() => prefColumnsOf(idColumns), [idColumns]);
   const prefs = useGridPrefs(gridKey, prefColumns);
 
@@ -183,11 +228,19 @@ export function DataGrid<T>(props: DataGridProps<T>) {
   const setRowSelection = props.onSelectionChange ?? setInternalSelection;
   const [expanded, setExpanded] = React.useState<ExpandedState>({});
   const [sizing, setSizing] = React.useState<ColumnSizingState | null>(null);
-  const [sizingInfo, setSizingInfo] = React.useState<ColumnSizingInfoState>({ startOffset: null, startSize: null, deltaOffset: null, deltaPercentage: null, isResizingColumn: false, columnSizingStart: [] });
+  const [sizingInfo, setSizingInfo] = React.useState<ColumnSizingInfoState>({
+    startOffset: null,
+    startSize: null,
+    deltaOffset: null,
+    deltaPercentage: null,
+    isResizingColumn: false,
+    columnSizingStart: [],
+  });
   const sizingRef = React.useRef<ColumnSizingState>({});
 
   const density: GridDensity = props.density ?? prefs.prefs.density;
-  const setDensity = (d: GridDensity) => (props.onDensityChange ? props.onDensityChange(d) : prefs.update({ density: d }));
+  const setDensity = (d: GridDensity) =>
+    props.onDensityChange ? props.onDensityChange(d) : prefs.update({ density: d });
 
   const allColumns = React.useMemo(() => {
     const list: ColumnDef<T, unknown>[] = [];
@@ -201,12 +254,16 @@ export function DataGrid<T>(props: DataGridProps<T>) {
   }, [idColumns, selectable, renderExpanded, rowActions, props.hideToolbar]);
 
   const sortingState: SortingState = React.useMemo(() => {
-    const byField = new Map(idColumns.map((c) => [c.meta?.sortKey ?? c.id ?? "", c.id ?? ""]));
-    return sort.map((s) => ({ id: byField.get(s.field) ?? s.field, desc: s.dir === "desc" })).filter((s) => idColumns.some((c) => c.id === s.id));
+    const byField = new Map(idColumns.map((c) => [c.meta?.sortKey ?? c.id ?? '', c.id ?? '']));
+    return sort
+      .map((s) => ({ id: byField.get(s.field) ?? s.field, desc: s.dir === 'desc' }))
+      .filter((s) => idColumns.some((c) => c.id === s.id));
   }, [sort, idColumns]);
 
   const columnSizing = sizing ?? prefs.prefs.widths;
-  const systemLeft = [selectable ? SELECT_COLUMN_ID : null, renderExpanded ? EXPAND_COLUMN_ID : null].filter((x): x is string => x !== null);
+  const systemLeft = [selectable ? SELECT_COLUMN_ID : null, renderExpanded ? EXPAND_COLUMN_ID : null].filter(
+    (x): x is string => x !== null,
+  );
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table returns non-memoisable functions by design
   const table = useReactTable({
@@ -216,7 +273,15 @@ export function DataGrid<T>(props: DataGridProps<T>) {
       sorting: sortingState,
       columnVisibility: visibilityMap(prefs.prefs),
       columnOrder: [...systemLeft, ...prefs.prefs.order],
-      columnPinning: { left: [...new Set([...systemLeft, ...allColumns.flatMap((c) => (c.meta?.pinLeft && c.id ? [c.id] : [])), ...(prefs.prefs.pinned ?? [])])] },
+      columnPinning: {
+        left: [
+          ...new Set([
+            ...systemLeft,
+            ...allColumns.flatMap((c) => (c.meta?.pinLeft && c.id ? [c.id] : [])),
+            ...(prefs.prefs.pinned ?? []),
+          ]),
+        ],
+      },
       columnSizing,
       columnSizingInfo: sizingInfo,
       rowSelection,
@@ -225,22 +290,27 @@ export function DataGrid<T>(props: DataGridProps<T>) {
     manualSorting,
     manualPagination: true,
     enableColumnResizing: true,
-    columnResizeMode: "onChange",
+    columnResizeMode: 'onChange',
     enableMultiSort: true,
     getRowId,
     enableRowSelection: props.canSelectRow ? (row) => props.canSelectRow?.(row.original) ?? true : true,
     getRowCanExpand: () => Boolean(renderExpanded),
-    onRowSelectionChange: (updater) => setRowSelection(typeof updater === "function" ? updater(rowSelection) : updater),
+    onRowSelectionChange: (updater) =>
+      setRowSelection(typeof updater === 'function' ? updater(rowSelection) : updater),
     onExpandedChange: setExpanded,
     onColumnSizingChange: (updater) => {
-      const next = typeof updater === "function" ? updater(columnSizing) : updater;
+      const next = typeof updater === 'function' ? updater(columnSizing) : updater;
       sizingRef.current = next;
       setSizing(next);
     },
     onColumnSizingInfoChange: (updater) => {
-      const next = typeof updater === "function" ? updater(sizingInfo) : updater;
+      const next = typeof updater === 'function' ? updater(sizingInfo) : updater;
       if (sizingInfo.isResizingColumn && !next.isResizingColumn) {
-        const widths = Object.fromEntries(Object.entries(sizingRef.current).filter(([id]) => !isSystemColumn(id)).map(([id, w]) => [id, clampWidth(w)]));
+        const widths = Object.fromEntries(
+          Object.entries(sizingRef.current)
+            .filter(([id]) => !isSystemColumn(id))
+            .map(([id, w]) => [id, clampWidth(w)]),
+        );
         prefs.update({ widths });
         setSizing(null);
       }
@@ -256,16 +326,21 @@ export function DataGrid<T>(props: DataGridProps<T>) {
   const pageIds = table.getRowModel().rows.map((r) => r.id);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const stickyRightOffset = stickyRightOffsetFor(table);
-  const chooserColumns: readonly ChooserColumn[] = idColumns.map((c) => ({ id: c.id ?? "", label: columnLabel(c, c.id ?? ""), alwaysVisible: c.meta?.alwaysVisible === true || c.enableHiding === false }));
+  const chooserColumns: readonly ChooserColumn[] = idColumns.map((c) => ({
+    id: c.id ?? '',
+    label: columnLabel(c, c.id ?? ''),
+    alwaysVisible: c.meta?.alwaysVisible === true || c.enableHiding === false,
+  }));
 
   useHighlightRow(scrollRef, props.highlightRowId ?? null, data.length);
   useVisibleWidthVar(scrollRef);
   const refreshing = Boolean(props.refreshing) && !loading;
-  const exportMode = props.exportMode ?? "auto";
+  const exportMode = props.exportMode ?? 'auto';
   const excelKey = props.exportGridKey ?? gridKey;
   const excelQuery = props.exportQuery ?? props.queryString;
 
-  const reorder = (id: string, before: string | null) => prefs.update({ order: moveColumn(prefs.prefs.order, id, before) });
+  const reorder = (id: string, before: string | null) =>
+    prefs.update({ order: moveColumn(prefs.prefs.order, id, before) });
 
   const changePageSize = onPageSizeChange
     ? (size: number) => {
@@ -275,17 +350,22 @@ export function DataGrid<T>(props: DataGridProps<T>) {
     : undefined;
 
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col", props.className)}>
+    <div className={cn('flex min-h-0 flex-1 flex-col', props.className)}>
       {props.hideToolbar ? null : (
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3">
           <div className="flex flex-wrap items-center gap-2">{toolbarLeft}</div>
           <div className="flex items-center gap-2">
             {toolbarRight?.(selectedCount)}
-            <ColumnChooser columns={chooserColumns} prefs={prefs.prefs} onApply={(patch) => prefs.update(patch)} onReset={prefs.reset} />
+            <ColumnChooser
+              columns={chooserColumns}
+              prefs={prefs.prefs}
+              onApply={(patch) => prefs.update(patch)}
+              onReset={prefs.reset}
+            />
             {onRefresh ? (
               <Tooltip content="Refresh">
                 <Button variant="ghost" size="icon" aria-label="Refresh" onClick={onRefresh}>
-                  <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} aria-hidden />
+                  <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} aria-hidden />
                 </Button>
               </Tooltip>
             ) : null}
@@ -300,44 +380,79 @@ export function DataGrid<T>(props: DataGridProps<T>) {
           total={total}
           selectedCount={selectedCount}
           allMatching={props.allMatchingSelected ?? false}
-          onSelectAllMatching={props.onAllMatchingSelectedChange ? () => props.onAllMatchingSelectedChange?.(true) : undefined}
+          onSelectAllMatching={
+            props.onAllMatchingSelectedChange ? () => props.onAllMatchingSelectedChange?.(true) : undefined
+          }
           onClear={() => {
             setRowSelection({});
             props.onAllMatchingSelectedChange?.(false);
           }}
         />
         <HeaderDndContext table={table} onReorder={reorder}>
-        <div className="relative flex min-h-0 flex-1 flex-col">
-        {props.hideToolbar ? (
-          // External toolbar (useGrid + GridToolbar): pin the chooser to the header row's right end (Logiwa parity).
-          <div className="absolute right-1 top-1 z-30 rounded-md bg-surface shadow-[-8px_0_8px_-4px_var(--surface)]">
-            <ColumnChooser columns={chooserColumns} prefs={prefs.prefs} onApply={(patch) => prefs.update(patch)} onReset={prefs.reset} size="sm" />
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            {props.hideToolbar ? (
+              // External toolbar (useGrid + GridToolbar): pin the chooser to the header row's right end (Logiwa parity).
+              <div className="absolute right-1 top-1 z-30 rounded-md bg-surface shadow-[-8px_0_8px_-4px_var(--surface)]">
+                <ColumnChooser
+                  columns={chooserColumns}
+                  prefs={prefs.prefs}
+                  onApply={(patch) => prefs.update(patch)}
+                  onReset={prefs.reset}
+                  size="sm"
+                />
+              </div>
+            ) : null}
+            {/* Capped at the viewport so long grids scroll inside the frame and the sticky header stays visible. */}
+            {refreshing ? (
+              <div
+                role="progressbar"
+                aria-label="Updating rows"
+                className="ks-grid-progress pointer-events-none absolute inset-x-0 top-0 z-40 h-0.5 overflow-hidden bg-info/15"
+              />
+            ) : null}
+            <div
+              ref={scrollRef}
+              aria-busy={refreshing || undefined}
+              data-refreshing={refreshing || undefined}
+              className="ks-scroll max-h-[calc(100dvh-8rem)] min-h-0 flex-1 overflow-auto"
+            >
+              <table
+                aria-rowcount={total + 1}
+                aria-colcount={table.getVisibleLeafColumns().length}
+                className={cn(
+                  'w-full min-w-max border-collapse text-sm transition-opacity',
+                  sizingInfo.isResizingColumn && 'select-none',
+                  refreshing && '[&>tbody]:opacity-60',
+                )}
+              >
+                <DataGridHeader
+                  table={table}
+                  sort={sort}
+                  onSort={(field, additive) => setSort(nextSort(sort, field, additive))}
+                  onReorder={reorder}
+                  stickyRightOffset={stickyRightOffset}
+                />
+                <DataGridBody
+                  table={table}
+                  density={density}
+                  loading={loading}
+                  error={error}
+                  onRetry={onRetry}
+                  emptyTitle={props.emptyTitle ?? 'Nothing here yet'}
+                  emptyDescription={
+                    props.emptyDescription ?? 'Adjust your filters or create a new record to get started.'
+                  }
+                  emptyAction={props.emptyAction}
+                  onRowClick={onRowClick}
+                  renderExpanded={renderExpanded}
+                  stickyRightOffset={stickyRightOffset}
+                  scrollRef={scrollRef}
+                  rowOffset={(Math.max(1, page) - 1) * pageSize}
+                  highlightRowId={props.highlightRowId ?? null}
+                />
+              </table>
+            </div>
           </div>
-        ) : null}
-        {/* Capped at the viewport so long grids scroll inside the frame and the sticky header stays visible. */}
-        {refreshing ? <div role="progressbar" aria-label="Updating rows" className="ks-grid-progress pointer-events-none absolute inset-x-0 top-0 z-40 h-0.5 overflow-hidden bg-info/15" /> : null}
-        <div ref={scrollRef} aria-busy={refreshing || undefined} data-refreshing={refreshing || undefined} className="ks-scroll max-h-[calc(100dvh-8rem)] min-h-0 flex-1 overflow-auto">
-          <table aria-rowcount={total + 1} aria-colcount={table.getVisibleLeafColumns().length} className={cn("w-full min-w-max border-collapse text-sm transition-opacity", sizingInfo.isResizingColumn && "select-none", refreshing && "[&>tbody]:opacity-60")}>
-            <DataGridHeader table={table} sort={sort} onSort={(field, additive) => setSort(nextSort(sort, field, additive))} onReorder={reorder} stickyRightOffset={stickyRightOffset} />
-            <DataGridBody
-              table={table}
-              density={density}
-              loading={loading}
-              error={error}
-              onRetry={onRetry}
-              emptyTitle={props.emptyTitle ?? "Nothing here yet"}
-              emptyDescription={props.emptyDescription ?? "Adjust your filters or create a new record to get started."}
-              emptyAction={props.emptyAction}
-              onRowClick={onRowClick}
-              renderExpanded={renderExpanded}
-              stickyRightOffset={stickyRightOffset}
-              scrollRef={scrollRef}
-              rowOffset={(Math.max(1, page) - 1) * pageSize}
-              highlightRowId={props.highlightRowId ?? null}
-            />
-          </table>
-        </div>
-        </div>
         </HeaderDndContext>
         <GridFooter
           loading={(loading || Boolean(error)) && data.length === 0}
@@ -351,10 +466,21 @@ export function DataGrid<T>(props: DataGridProps<T>) {
           onPageChange={onPageChange}
           onPageSizeChange={changePageSize}
           trailing={
-            exportMode === "none" ? null : exportMode === "auto" && excelKey && excelQuery !== undefined ? (
-              <ExportButton gridKey={excelKey} queryString={excelQuery} columns={props.exportColumns} total={total} disabledReason={loading && data.length === 0 ? "Wait for the rows to load" : null} />
+            exportMode === 'none' ? null : exportMode === 'auto' && excelKey && excelQuery !== undefined ? (
+              <ExportButton
+                gridKey={excelKey}
+                queryString={excelQuery}
+                columns={props.exportColumns}
+                total={total}
+                disabledReason={loading && data.length === 0 ? 'Wait for the rows to load' : null}
+              />
             ) : (
-              <Button variant="success-outline" size="sm" disabled={data.length === 0} onClick={() => exportCsv(data, columns, props.exportName ?? "export")}>
+              <Button
+                variant="success-outline"
+                size="sm"
+                disabled={data.length === 0}
+                onClick={() => exportCsv(data, columns, props.exportName ?? 'export')}
+              >
                 <Download className="h-3.5 w-3.5" aria-hidden />
                 Export CSV
               </Button>

@@ -1,11 +1,11 @@
 /** Task-type -> handler registry used by `tasks.execute()`. */
-import type { TaskType } from "@/lib/enums";
-import { executeCount } from "./count";
-import { executeLoading, executePacking, executeSorting } from "./fulfilment";
-import { executeKitting } from "./kitting";
-import { executePicking } from "./picking";
-import { executeReplenishment } from "./replenishment";
-import type { TaskHandler } from "./types";
+import type { TaskType } from '@/lib/enums';
+import { executeCount } from './count';
+import { executeLoading, executePacking, executeSorting } from './fulfilment';
+import { executeKitting } from './kitting';
+import { executePicking } from './picking';
+import { executeReplenishment } from './replenishment';
+import type { TaskHandler } from './types';
 
 export const TASK_HANDLERS: Readonly<Record<TaskType, TaskHandler>> = {
   Picking: executePicking,
@@ -17,4 +17,4 @@ export const TASK_HANDLERS: Readonly<Record<TaskType, TaskHandler>> = {
   Kitting: executeKitting,
 };
 
-export type { TaskExecuteInput, TaskExecution, TaskHandler, TaskRow } from "./types";
+export type { TaskExecuteInput, TaskExecution, TaskHandler, TaskRow } from './types';

@@ -1,12 +1,12 @@
 /**
  * Record detail header: back link, code as H1, status pill, meta line and actions.
  */
-import * as React from "react";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { StatusDomain } from "@/lib/status-colors";
-import { StatusPill } from "@/components/ui/status-pill";
+import * as React from 'react';
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { StatusDomain } from '@/lib/status-colors';
+import { StatusPill } from '@/components/ui/status-pill';
 
 export interface DetailHeaderProps {
   readonly title: React.ReactNode;
@@ -21,11 +21,24 @@ export interface DetailHeaderProps {
   readonly className?: string;
 }
 
-export function DetailHeader({ title, backHref, backLabel = "Back", status, statusDomain, meta, badges, actions, className }: DetailHeaderProps) {
+export function DetailHeader({
+  title,
+  backHref,
+  backLabel = 'Back',
+  status,
+  statusDomain,
+  meta,
+  badges,
+  actions,
+  className,
+}: DetailHeaderProps) {
   return (
-    <header className={cn("flex flex-col gap-2 px-6 pt-5 pb-4", className)}>
+    <header className={cn('flex flex-col gap-2 px-6 pt-5 pb-4', className)}>
       {backHref ? (
-        <Link href={backHref} className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-secondary transition-colors hover:text-primary focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
+        <Link
+          href={backHref}
+          className="inline-flex w-fit items-center gap-1 text-xs font-semibold text-secondary transition-colors hover:text-primary focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
+        >
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
           {backLabel}
         </Link>
@@ -37,7 +50,9 @@ export function DetailHeader({ title, backHref, backLabel = "Back", status, stat
             {status ? <StatusPill status={status} domain={statusDomain} /> : null}
             {badges}
           </div>
-          {meta ? <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-secondary">{meta}</div> : null}
+          {meta ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-secondary">{meta}</div>
+          ) : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>

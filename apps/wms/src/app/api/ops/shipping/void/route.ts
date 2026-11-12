@@ -1,8 +1,8 @@
 /** `POST /api/ops/shipping/void` `{ shipmentId }` — voids an unshipped label with the carrier. */
-import { defineRoute } from "@/server/api/define-route";
-import { shipping } from "@/server/domain";
-import { domainCtx } from "@/server/repositories/platform-common";
-import { SHIPPING_PERMISSIONS, voidLabelSchema } from "@/server/repositories/platform-ops";
+import { defineRoute } from '@/server/api/define-route';
+import { shipping } from '@/server/domain';
+import { domainCtx } from '@/server/repositories/platform-common';
+import { SHIPPING_PERMISSIONS, voidLabelSchema } from '@/server/repositories/platform-ops';
 
 export const POST = defineRoute({
   permission: SHIPPING_PERMISSIONS.void,

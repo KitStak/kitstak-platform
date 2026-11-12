@@ -1,6 +1,6 @@
 /** Pure optimistic-update helpers for the notifications cache (bell + /notifications). */
-import type { ApiQueryData } from "@/lib/query-client";
-import type { NotificationView } from "./notification-item";
+import type { ApiQueryData } from '@/lib/query-client';
+import type { NotificationView } from './notification-item';
 
 export interface MarkReadInput {
   readonly ids?: readonly string[];
@@ -22,7 +22,11 @@ export function markReadInCache(
     return { ...n, readAt: nowIso };
   });
   if (!entry.meta) return { ...entry, data };
-  const unread = typeof entry.meta.unread === "number" ? entry.meta.unread : null;
+  const unread = typeof entry.meta.unread === 'number' ? entry.meta.unread : null;
   const nextUnread = unread === null ? undefined : input.all ? 0 : Math.max(0, unread - changed);
-  return { ...entry, data, meta: nextUnread === undefined ? entry.meta : { ...entry.meta, unread: nextUnread } };
+  return {
+    ...entry,
+    data,
+    meta: nextUnread === undefined ? entry.meta : { ...entry.meta, unread: nextUnread },
+  };
 }

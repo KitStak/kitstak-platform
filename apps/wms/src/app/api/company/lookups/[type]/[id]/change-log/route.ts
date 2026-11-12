@@ -1,8 +1,8 @@
 /** `GET /api/company/lookups/[type]/[id]/change-log` — history of one lookup value. */
-import { defineRoute } from "@/server/api/define-route";
-import { getLookupRow, LOOKUP_ENTITY } from "@/server/repositories/company-lookups";
-import { changeLogPageSchema, changeLogResult } from "@/server/repositories/users-shared";
-import { DATA_SETUP_PERMISSION, itemParams } from "../../../shared";
+import { defineRoute } from '@/server/api/define-route';
+import { getLookupRow, LOOKUP_ENTITY } from '@/server/repositories/company-lookups';
+import { changeLogPageSchema, changeLogResult } from '@/server/repositories/users-shared';
+import { DATA_SETUP_PERMISSION, itemParams } from '../../../shared';
 
 export const GET = defineRoute({
   permission: DATA_SETUP_PERMISSION,

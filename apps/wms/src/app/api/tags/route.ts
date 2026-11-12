@@ -1,7 +1,13 @@
 /** `/api/tags` — list (GET) and create (POST) tag definitions (BUILD_PLAN F7). */
-import { defineRoute } from "@/server/api/define-route";
-import { created } from "@/server/api/envelope";
-import { createTag, listTags, TAG_MANAGE_PERMISSIONS, tagCreateSchema, tagListQuerySchema } from "@/server/repositories/platform-tags";
+import { defineRoute } from '@/server/api/define-route';
+import { created } from '@/server/api/envelope';
+import {
+  createTag,
+  listTags,
+  TAG_MANAGE_PERMISSIONS,
+  tagCreateSchema,
+  tagListQuerySchema,
+} from '@/server/repositories/platform-tags';
 
 export const GET = defineRoute({
   query: tagListQuerySchema,

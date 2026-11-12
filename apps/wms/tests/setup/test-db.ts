@@ -13,15 +13,15 @@
  * `createTestDb()` usually reuses it (~40 ms). A database whose schema a test changed (extra or
  * dropped tables) is closed instead of pooled.
  */
-import fs from "node:fs";
-import path from "node:path";
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle } from "drizzle-orm/pglite";
-import { migrate } from "drizzle-orm/pglite/migrator";
-import type { AppDb } from "@/server/api/db";
-import * as schema from "@/server/db/schema";
+import fs from 'node:fs';
+import path from 'node:path';
+import { PGlite } from '@electric-sql/pglite';
+import { drizzle } from 'drizzle-orm/pglite';
+import { migrate } from 'drizzle-orm/pglite/migrator';
+import type { AppDb } from '@/server/api/db';
+import * as schema from '@/server/db/schema';
 
-export const MIGRATIONS_DIR = path.join(process.cwd(), "drizzle");
+export const MIGRATIONS_DIR = path.join(process.cwd(), 'drizzle');
 
 export type TestDatabase = AppDb;
 
@@ -34,7 +34,7 @@ export interface TestDb {
 }
 
 export function hasMigrations(dir: string = MIGRATIONS_DIR): boolean {
-  return fs.existsSync(path.join(dir, "meta", "_journal.json"));
+  return fs.existsSync(path.join(dir, 'meta', '_journal.json'));
 }
 
 interface Template {
@@ -62,7 +62,7 @@ function template(migrationsFolder: string): Promise<Template> {
       try {
         await migrate(drizzle(pg, { schema }), { migrationsFolder });
         const tables = await publicTables(pg);
-        const dump = await pg.dumpDataDir("none");
+        const dump = await pg.dumpDataDir('none');
         return { dump, tables };
       } finally {
         await pg.close();
@@ -77,7 +77,7 @@ function template(migrationsFolder: string): Promise<Template> {
 async function reset(pg: PGlite, tables: readonly string[]): Promise<boolean> {
   const now = await publicTables(pg);
   if (now.length !== tables.length || now.some((t, i) => t !== tables[i])) return false;
-  await pg.exec(`TRUNCATE ${tables.join(", ")} RESTART IDENTITY CASCADE`);
+  await pg.exec(`TRUNCATE ${tables.join(', ')} RESTART IDENTITY CASCADE`);
   return true;
 }
 

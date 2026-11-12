@@ -4,13 +4,13 @@
  * columns repeat `computeAtp()` in SQL so they can be filtered and sorted server-side.
  * Defaults to the header warehouse context (viewScope) instead of an empty grid.
  */
-import { sql, type SQL } from "drizzle-orm";
-import type { AppDb } from "@/server/api/db";
-import type { AuthContext } from "@/server/auth/context";
-import { atpComponentsSql } from "@/server/domain/atp";
-import type { GridQuery } from "@/server/query/grid-query";
-import { ATP_DEF } from "@/lib/grid-defs/inventory/atp";
-import { runGrid, type GridPage } from "./inventory-grid";
+import { sql, type SQL } from 'drizzle-orm';
+import type { AppDb } from '@/server/api/db';
+import type { AuthContext } from '@/server/auth/context';
+import { atpComponentsSql } from '@/server/domain/atp';
+import type { GridQuery } from '@/server/query/grid-query';
+import { ATP_DEF } from '@/lib/grid-defs/inventory/atp';
+import { runGrid, type GridPage } from './inventory-grid';
 
 export interface AtpGridRow {
   readonly rowId: string;
@@ -37,8 +37,11 @@ export interface AtpGridRow {
   readonly unallocatedSoQty: number;
 }
 
-export function atpGridSql(warehouseIds: readonly string[], clientIds: readonly string[] | "all"): SQL {
-  const components = atpComponentsSql({ warehouseIds, clientIds: clientIds === "all" ? undefined : clientIds });
+export function atpGridSql(warehouseIds: readonly string[], clientIds: readonly string[] | 'all'): SQL {
+  const components = atpComponentsSql({
+    warehouseIds,
+    clientIds: clientIds === 'all' ? undefined : clientIds,
+  });
   return sql`
     SELECT
       a."productId" || ':' || a."warehouseId" AS "rowId",
@@ -60,5 +63,11 @@ export function atpGridSql(warehouseIds: readonly string[], clientIds: readonly 
 }
 
 export async function listAtp(db: AppDb, auth: AuthContext, query: GridQuery): Promise<GridPage<AtpGridRow>> {
-  return await runGrid<AtpGridRow>(db, atpGridSql(auth.viewScope.warehouseIds, auth.viewScope.clientIds), ATP_DEF, query, "rowId");
+  return await runGrid<AtpGridRow>(
+    db,
+    atpGridSql(auth.viewScope.warehouseIds, auth.viewScope.clientIds),
+    ATP_DEF,
+    query,
+    'rowId',
+  );
 }

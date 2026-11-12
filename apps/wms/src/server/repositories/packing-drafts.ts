@@ -8,27 +8,30 @@
  * `CREATE TABLE IF NOT EXISTS`, so a database without the foundation migration still works.
  * The draft is cleared when packing completes or an issue is reported.
  */
-import { sql } from "drizzle-orm";
-import { z } from "zod";
-import type { AppDb } from "@/server/api/db";
-import type { Scope } from "@/server/auth/scope";
-import { DomainError } from "@/server/domain/errors";
-import type { DomainCtx } from "@/server/domain/types";
-import { idSchema } from "./platform-common";
-import { dbGet, dbRun } from "@/server/db/sql";
+import { sql } from 'drizzle-orm';
+import { z } from 'zod';
+import type { AppDb } from '@/server/api/db';
+import type { Scope } from '@/server/auth/scope';
+import { DomainError } from '@/server/domain/errors';
+import type { DomainCtx } from '@/server/domain/types';
+import { idSchema } from './platform-common';
+import { dbGet, dbRun } from '@/server/db/sql';
 
 const ensured = new WeakSet<object>();
 
 /** Creates `pack_drafts` when the database does not have it yet (idempotent, cheap). */
 export async function ensurePackDraftTable(db: AppDb): Promise<void> {
   if (ensured.has(db)) return;
-  await dbRun(db, sql`CREATE TABLE IF NOT EXISTS pack_drafts (
+  await dbRun(
+    db,
+    sql`CREATE TABLE IF NOT EXISTS pack_drafts (
     order_id TEXT PRIMARY KEY NOT NULL,
     station_id TEXT,
     state TEXT NOT NULL,
     updated_by TEXT,
     updated_at TEXT NOT NULL
-  )`);
+  )`,
+  );
   ensured.add(db);
 }
 
@@ -58,12 +61,17 @@ const quoteSchema = z.object({
 export const packDraftStateSchema = z.object({
   boxes: z.array(boxSchema).min(1).max(50),
   active: z.number().int().min(0).max(49),
-  captures: z.record(z.string().max(64), z.object({
-    serials: z.array(z.string().max(120)).max(10_000),
-    lotNumber: z.string().max(120),
-    expiryDate: z.string().max(40),
-  })),
-  choice: z.object({ carrierKey: z.string().max(200).nullable(), carrierServiceId: z.string().max(64).nullable() }).nullable(),
+  captures: z.record(
+    z.string().max(64),
+    z.object({
+      serials: z.array(z.string().max(120)).max(10_000),
+      lotNumber: z.string().max(120),
+      expiryDate: z.string().max(40),
+    }),
+  ),
+  choice: z
+    .object({ carrierKey: z.string().max(200).nullable(), carrierServiceId: z.string().max(64).nullable() })
+    .nullable(),
   /** Last quote and the package/service signature it was fetched for. */
   rate: z.object({ sig: z.string().max(4000), quote: quoteSchema }).nullable(),
 });
@@ -79,27 +87,48 @@ export interface PackDraft {
   readonly updatedByName: string | null;
 }
 
-interface DraftRow { readonly state: string; readonly stationId: string | null; readonly updatedAt: string; readonly updatedBy: string | null; readonly updatedByName: string | null }
+interface DraftRow {
+  readonly state: string;
+  readonly stationId: string | null;
+  readonly updatedAt: string;
+  readonly updatedBy: string | null;
+  readonly updatedByName: string | null;
+}
 
 /** The saved draft of an order, or null (missing, or unreadable JSON). */
 export async function readPackDraft(db: AppDb, orderId: string): Promise<PackDraft | null> {
   await ensurePackDraftTable(db);
-  const row = await dbGet<DraftRow>(db, sql`SELECT d.state, d.station_id AS "stationId", d.updated_at AS "updatedAt", d.updated_by AS "updatedBy", u.name AS "updatedByName"
-    FROM pack_drafts d LEFT JOIN users u ON u.id = d.updated_by WHERE d.order_id = ${orderId}`);
+  const row = await dbGet<DraftRow>(
+    db,
+    sql`SELECT d.state, d.station_id AS "stationId", d.updated_at AS "updatedAt", d.updated_by AS "updatedBy", u.name AS "updatedByName"
+    FROM pack_drafts d LEFT JOIN users u ON u.id = d.updated_by WHERE d.order_id = ${orderId}`,
+  );
   if (!row) return null;
   try {
     const parsed = packDraftStateSchema.safeParse(JSON.parse(row.state));
-    return parsed.success ? { state: parsed.data, stationId: row.stationId, updatedAt: row.updatedAt, updatedBy: row.updatedBy, updatedByName: row.updatedByName ?? null } : null;
+    return parsed.success
+      ? {
+          state: parsed.data,
+          stationId: row.stationId,
+          updatedAt: row.updatedAt,
+          updatedBy: row.updatedBy,
+          updatedByName: row.updatedByName ?? null,
+        }
+      : null;
   } catch {
     return null;
   }
 }
 
 /** Pure: drop a draft that no longer fits the order (a line vanished or more is packed than is left to pack). */
-export function draftFits(state: PackDraftState, lines: readonly { readonly orderLineId: string; readonly toPack: number }[]): boolean {
+export function draftFits(
+  state: PackDraftState,
+  lines: readonly { readonly orderLineId: string; readonly toPack: number }[],
+): boolean {
   const toPack = new Map(lines.map((l) => [l.orderLineId, l.toPack]));
   const packed = new Map<string, number>();
-  for (const b of state.boxes) for (const [id, q] of Object.entries(b.items)) packed.set(id, (packed.get(id) ?? 0) + q);
+  for (const b of state.boxes)
+    for (const [id, q] of Object.entries(b.items)) packed.set(id, (packed.get(id) ?? 0) + q);
   for (const [id, q] of packed) {
     if (q === 0) continue;
     const max = toPack.get(id);
@@ -108,15 +137,35 @@ export function draftFits(state: PackDraftState, lines: readonly { readonly orde
   return state.active < state.boxes.length;
 }
 
-export async function savePackDraft(db: AppDb, ctx: DomainCtx & { readonly scope: Scope }, orderId: string, input: z.output<typeof saveDraftSchema>, packable: { readonly status: string; readonly lines: readonly { readonly orderLineId: string; readonly toPack: number }[] }): Promise<{ readonly savedAt: string }> {
-  if (!["Ready to Pack", "Packing Started"].includes(packable.status)) throw new DomainError("INVALID_STATE", `The order is ${packable.status}; its packing progress is no longer kept.`);
-  if (!draftFits(input.state, packable.lines)) throw new DomainError("VALIDATION", "The packed quantities do not match the order any more. Reload the order.");
+export async function savePackDraft(
+  db: AppDb,
+  ctx: DomainCtx & { readonly scope: Scope },
+  orderId: string,
+  input: z.output<typeof saveDraftSchema>,
+  packable: {
+    readonly status: string;
+    readonly lines: readonly { readonly orderLineId: string; readonly toPack: number }[];
+  },
+): Promise<{ readonly savedAt: string }> {
+  if (!['Ready to Pack', 'Packing Started'].includes(packable.status))
+    throw new DomainError(
+      'INVALID_STATE',
+      `The order is ${packable.status}; its packing progress is no longer kept.`,
+    );
+  if (!draftFits(input.state, packable.lines))
+    throw new DomainError(
+      'VALIDATION',
+      'The packed quantities do not match the order any more. Reload the order.',
+    );
   await ensurePackDraftTable(db);
   const now = new Date().toISOString();
   const json = JSON.stringify(input.state);
-  if (json.length > 400_000) throw new DomainError("VALIDATION", "Packing progress is too large to save.");
-  await dbRun(db, sql`INSERT INTO pack_drafts (order_id, station_id, state, updated_by, updated_at) VALUES (${orderId}, ${input.stationId ?? null}, ${json}, ${ctx.userId}, ${now})
-    ON CONFLICT(order_id) DO UPDATE SET station_id = excluded.station_id, state = excluded.state, updated_by = excluded.updated_by, updated_at = excluded.updated_at`);
+  if (json.length > 400_000) throw new DomainError('VALIDATION', 'Packing progress is too large to save.');
+  await dbRun(
+    db,
+    sql`INSERT INTO pack_drafts (order_id, station_id, state, updated_by, updated_at) VALUES (${orderId}, ${input.stationId ?? null}, ${json}, ${ctx.userId}, ${now})
+    ON CONFLICT(order_id) DO UPDATE SET station_id = excluded.station_id, state = excluded.state, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+  );
   return { savedAt: now };
 }
 

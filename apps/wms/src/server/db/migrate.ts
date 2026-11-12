@@ -10,12 +10,12 @@
  * Idempotent: already-applied migrations are skipped via `drizzle.__drizzle_migrations`.
  * Relative imports only (tsx script entry).
  */
-import fs from "node:fs";
-import path from "node:path";
-import { is, sql } from "drizzle-orm";
-import type { AppDb } from "../api/db";
+import fs from 'node:fs';
+import path from 'node:path';
+import { is, sql } from 'drizzle-orm';
+import type { AppDb } from '../api/db';
 
-export const MIGRATIONS_FOLDER = path.join(process.cwd(), "drizzle");
+export const MIGRATIONS_FOLDER = path.join(process.cwd(), 'drizzle');
 /** Session lock key for concurrent `db:migrate` runs (distinct from the app write lock). */
 const MIGRATE_LOCK_KEY = 7_202_611_502;
 
@@ -29,11 +29,11 @@ interface JournalFile {
 }
 
 export function readJournalSize(migrationsFolder: string = MIGRATIONS_FOLDER): number {
-  const journalPath = path.join(migrationsFolder, "meta", "_journal.json");
+  const journalPath = path.join(migrationsFolder, 'meta', '_journal.json');
   if (!fs.existsSync(journalPath)) {
     throw new Error(`No migration journal at ${journalPath}. Run "npm run db:generate" first.`);
   }
-  const parsed = JSON.parse(fs.readFileSync(journalPath, "utf8")) as JournalFile;
+  const parsed = JSON.parse(fs.readFileSync(journalPath, 'utf8')) as JournalFile;
   if (!Array.isArray(parsed.entries)) {
     throw new Error(`Malformed migration journal at ${journalPath}.`);
   }
@@ -47,22 +47,27 @@ function firstRow(result: unknown): Record<string, unknown> | undefined {
 }
 
 export async function countAppliedMigrations(db: AppDb): Promise<number> {
-  const exists = firstRow(await db.execute(sql`SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS "exists"`));
+  const exists = firstRow(
+    await db.execute(sql`SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS "exists"`),
+  );
   if (!exists?.exists) return 0;
   const row = firstRow(await db.execute(sql`SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations`));
   return Number(row?.n ?? 0);
 }
 
 /** Applies pending migrations to an open database (either driver); returns how many were applied. */
-export async function applyMigrations(db: AppDb, migrationsFolder: string = MIGRATIONS_FOLDER): Promise<MigrationResult> {
+export async function applyMigrations(
+  db: AppDb,
+  migrationsFolder: string = MIGRATIONS_FOLDER,
+): Promise<MigrationResult> {
   const total = readJournalSize(migrationsFolder);
   const before = await countAppliedMigrations(db);
-  const { PgliteDatabase } = await import("drizzle-orm/pglite");
+  const { PgliteDatabase } = await import('drizzle-orm/pglite');
   if (is(db, PgliteDatabase)) {
-    const { migrate } = await import("drizzle-orm/pglite/migrator");
+    const { migrate } = await import('drizzle-orm/pglite/migrator');
     await migrate(db as unknown as Parameters<typeof migrate>[0], { migrationsFolder });
   } else {
-    const { migrate } = await import("drizzle-orm/postgres-js/migrator");
+    const { migrate } = await import('drizzle-orm/postgres-js/migrator');
     await migrate(db as unknown as Parameters<typeof migrate>[0], { migrationsFolder });
   }
   const after = await countAppliedMigrations(db);
@@ -78,7 +83,7 @@ export async function applyMigrations(db: AppDb, migrationsFolder: string = MIGR
 export function isTransactionPoolerUrl(url: string): boolean {
   try {
     const u = new URL(url);
-    return u.port === "6543" || u.searchParams.get("pgbouncer") === "true";
+    return u.port === '6543' || u.searchParams.get('pgbouncer') === 'true';
   } catch {
     return false;
   }
@@ -90,14 +95,17 @@ export function isTransactionPoolerUrl(url: string): boolean {
  * skipped (see isTransactionPoolerUrl) and the migrations still apply in drizzle's single
  * transaction, which the pooler keeps on one backend. Prefer DIRECT_URL for migrations.
  */
-export async function migrateUrl(url: string, migrationsFolder: string = MIGRATIONS_FOLDER): Promise<MigrationResult> {
-  const { openPostgres } = await import("./index");
+export async function migrateUrl(
+  url: string,
+  migrationsFolder: string = MIGRATIONS_FOLDER,
+): Promise<MigrationResult> {
+  const { openPostgres } = await import('./index');
   const handle = await openPostgres(url, { max: 1 });
   try {
     if (isTransactionPoolerUrl(url)) {
       process.stderr.write(
-        "db:migrate: the target is a transaction-mode pooler (port 6543); running without the concurrency lock. " +
-          "Set DIRECT_URL to the direct or session connection to guard concurrent runs.\n"
+        'db:migrate: the target is a transaction-mode pooler (port 6543); running without the concurrency lock. ' +
+          'Set DIRECT_URL to the direct or session connection to guard concurrent runs.\n',
       );
       return await applyMigrations(handle.db, migrationsFolder);
     }
@@ -113,8 +121,11 @@ export async function migrateUrl(url: string, migrationsFolder: string = MIGRATI
 }
 
 /** Migrates the local PGlite directory (default `.data/pglite`). */
-export async function migratePglite(dataDir?: string, migrationsFolder: string = MIGRATIONS_FOLDER): Promise<MigrationResult> {
-  const { openPglite, PGLITE_DIR } = await import("./index");
+export async function migratePglite(
+  dataDir?: string,
+  migrationsFolder: string = MIGRATIONS_FOLDER,
+): Promise<MigrationResult> {
+  const { openPglite, PGLITE_DIR } = await import('./index');
   const handle = await openPglite(dataDir ?? PGLITE_DIR, { migrate: false });
   try {
     return await applyMigrations(handle.db, migrationsFolder);
@@ -131,7 +142,7 @@ export async function migratePglite(dataDir?: string, migrationsFolder: string =
 export function sanitizeDatabaseUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    parsed.searchParams.delete("supa");
+    parsed.searchParams.delete('supa');
     return parsed.toString();
   } catch {
     return url;
@@ -143,25 +154,29 @@ export function sanitizeDatabaseUrl(url: string): string {
  * Supabase ↔ Vercel integration sets), then the runtime URL; null = local PGlite.
  */
 export function migrationUrl(env: Readonly<Record<string, string | undefined>> = process.env): string | null {
-  const url = env.DIRECT_URL?.trim() || env.POSTGRES_URL_NON_POOLING?.trim() || env.DATABASE_URL?.trim() || env.POSTGRES_URL?.trim();
+  const url =
+    env.DIRECT_URL?.trim() ||
+    env.POSTGRES_URL_NON_POOLING?.trim() ||
+    env.DATABASE_URL?.trim() ||
+    env.POSTGRES_URL?.trim();
   return url ? sanitizeDatabaseUrl(url) : null;
 }
 
 /** True when executed as a script (`tsx src/server/db/migrate.ts`), false when imported. */
 function isDirectRun(): boolean {
   const entry = process.argv[1];
-  if (entry === undefined || typeof __filename === "undefined") return false;
-  const strip = (p: string): string => path.resolve(p).replace(/\.[cm]?[jt]s$/, "");
+  if (entry === undefined || typeof __filename === 'undefined') return false;
+  const strip = (p: string): string => path.resolve(p).replace(/\.[cm]?[jt]s$/, '');
   return strip(entry) === strip(__filename);
 }
 
 if (isDirectRun()) {
   const url = migrationUrl();
-  const target = url ? "Postgres (DIRECT_URL/DATABASE_URL)" : "local PGlite (.data/pglite)";
+  const target = url ? 'Postgres (DIRECT_URL/DATABASE_URL)' : 'local PGlite (.data/pglite)';
   (url ? migrateUrl(url) : migratePglite())
     .then(({ applied, total }) => {
       process.stdout.write(
-        `db:migrate - ${target}: applied ${applied} migration(s); ${total} total in ${path.relative(process.cwd(), MIGRATIONS_FOLDER)}\n`
+        `db:migrate - ${target}: applied ${applied} migration(s); ${total} total in ${path.relative(process.cwd(), MIGRATIONS_FOLDER)}\n`,
       );
     })
     .catch((error: unknown) => {

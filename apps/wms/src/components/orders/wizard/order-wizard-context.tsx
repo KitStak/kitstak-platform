@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
 /** Shared state for the order wizard steps: mode, option lists, field locks, saved detail. */
-import * as React from "react";
-import type { OrderDetail, OrderFormOptions } from "../orders-client";
+import * as React from 'react';
+import type { OrderDetail, OrderFormOptions } from '../orders-client';
 
 export interface OrderLocks {
   /** Everything except notes / return info is read-only (shipped / cancelled orders). */
@@ -12,7 +12,7 @@ export interface OrderLocks {
 }
 
 export interface OrderWizardContextValue {
-  readonly mode: "create" | "edit";
+  readonly mode: 'create' | 'edit';
   readonly options: OrderFormOptions | undefined;
   readonly optionsLoading: boolean;
   /** A warehouse/client-scoped refetch is running; the lists shown are the previous scope's. */
@@ -25,13 +25,19 @@ export interface OrderWizardContextValue {
 
 const Ctx = React.createContext<OrderWizardContextValue | null>(null);
 
-export function OrderWizardProvider({ value, children }: { readonly value: OrderWizardContextValue; readonly children: React.ReactNode }) {
+export function OrderWizardProvider({
+  value,
+  children,
+}: {
+  readonly value: OrderWizardContextValue;
+  readonly children: React.ReactNode;
+}) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useOrderWizard(): OrderWizardContextValue {
   const v = React.useContext(Ctx);
-  if (!v) throw new Error("useOrderWizard must be used inside OrderWizardProvider");
+  if (!v) throw new Error('useOrderWizard must be used inside OrderWizardProvider');
   return v;
 }
 

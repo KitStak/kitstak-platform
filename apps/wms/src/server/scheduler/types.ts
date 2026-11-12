@@ -1,6 +1,6 @@
 /** Scheduler contracts (BUILD_PLAN F6 `scheduler/`). */
-import type { AppDb } from "@/server/api/db";
-import type { Logger } from "@/server/log";
+import type { AppDb } from '@/server/api/db';
+import type { Logger } from '@/server/log';
 
 export interface SchedulerTaskContext {
   readonly db: AppDb;
@@ -9,13 +9,13 @@ export interface SchedulerTaskContext {
 }
 
 export interface TaskResult {
-  readonly status: "ok" | "skipped";
+  readonly status: 'ok' | 'skipped';
   readonly message?: string;
 }
 
 /** Runs at most once per `everyMs` (checked on every 30 s tick). */
 export interface IntervalSchedule {
-  readonly kind: "interval";
+  readonly kind: 'interval';
   readonly everyMs: number;
 }
 
@@ -36,7 +36,7 @@ export interface TaskRunState {
   readonly taskKey: string;
   readonly lastStartedAt: string | null;
   readonly lastFinishedAt: string | null;
-  readonly lastStatus: "ok" | "skipped" | "error" | null;
+  readonly lastStatus: 'ok' | 'skipped' | 'error' | null;
   readonly lastMessage: string | null;
   readonly runCount: number;
 }
@@ -48,7 +48,7 @@ export function createStubTask(key: string, title: string, owner: string, everyM
     title,
     owner,
     configured: false,
-    schedule: { kind: "interval", everyMs },
-    run: () => ({ status: "skipped", message: `${title} is not configured yet` }),
+    schedule: { kind: 'interval', everyMs },
+    run: () => ({ status: 'skipped', message: `${title} is not configured yet` }),
   };
 }

@@ -3,12 +3,12 @@
  * vendors): whitelisted filters (`f.<field>`), Equal / Starts With quick search and
  * multi-sort, all as bound SQL. Field definitions live in `@/lib/grid-defs/receiving`.
  */
-import { sql, type SQL } from "drizzle-orm";
-import { asc, desc } from "@/server/db/order";
-import { AppError } from "@/server/api/errors";
-import { compileFilters, compileQuickSearch, type FilterFieldDef } from "@/server/query/filters";
-import type { GridFilter, GridQuery } from "@/server/query/grid-query";
-import type { ReceivingGridField } from "@/lib/grid-defs/receiving/purchase-orders";
+import { sql, type SQL } from 'drizzle-orm';
+import { asc, desc } from '@/server/db/order';
+import { AppError } from '@/server/api/errors';
+import { compileFilters, compileQuickSearch, type FilterFieldDef } from '@/server/query/filters';
+import type { GridFilter, GridQuery } from '@/server/query/grid-query';
+import type { ReceivingGridField } from '@/lib/grid-defs/receiving/purchase-orders';
 
 export interface GridSpec {
   readonly fields: readonly ReceivingGridField[];
@@ -38,7 +38,9 @@ export function filterDefsOf(spec: GridSpec): FilterFieldDef[] {
       sql: exprOf(spec, f.field),
       nullable: true,
       // Dynamic enums (ids) accept any value; they are bound parameters either way.
-      ...(f.options && !f.dynamicOptions ? { options: f.options.map((value) => ({ value, label: value })) } : {}),
+      ...(f.options && !f.dynamicOptions
+        ? { options: f.options.map((value) => ({ value, label: value })) }
+        : {}),
     }));
 }
 
@@ -53,22 +55,39 @@ export interface CompiledGrid {
   readonly orderBy: readonly SQL[];
 }
 
-export function compileGrid(spec: GridSpec, query: GridQuery, extra: readonly (SQL | undefined)[] = []): CompiledGrid {
+export function compileGrid(
+  spec: GridSpec,
+  query: GridQuery,
+  extra: readonly (SQL | undefined)[] = [],
+): CompiledGrid {
   const sortable = new Set(spec.sortFields);
   const badSort = query.sort.find((s) => !sortable.has(s.field));
-  if (badSort) throw new AppError("VALIDATION", `Cannot sort by "${badSort.field}"`, { fieldErrors: { sort: ["Unknown sort field"] } });
+  if (badSort)
+    throw new AppError('VALIDATION', `Cannot sort by "${badSort.field}"`, {
+      fieldErrors: { sort: ['Unknown sort field'] },
+    });
   const known = new Set(spec.fields.map((f) => f.field));
   const unknown = query.filters.find((f) => !known.has(f.field));
-  if (unknown) throw new AppError("VALIDATION", `Unknown filter "${unknown.field}"`, { fieldErrors: { [`f.${unknown.field}`]: ["Unknown filter field"] } });
+  if (unknown)
+    throw new AppError('VALIDATION', `Unknown filter "${unknown.field}"`, {
+      fieldErrors: { [`f.${unknown.field}`]: ['Unknown filter field'] },
+    });
 
-  const customParts = query.filters.filter((f) => spec.custom?.[f.field]).map((f) => spec.custom?.[f.field]?.(f));
+  const customParts = query.filters
+    .filter((f) => spec.custom?.[f.field])
+    .map((f) => spec.custom?.[f.field]?.(f));
   const plain = query.filters.filter((f) => !spec.custom?.[f.field]);
-  const search = compileQuickSearch(query.q, query.qm, spec.searchFields.map((f) => exprOf(spec, f)));
+  const search = compileQuickSearch(
+    query.q,
+    query.qm,
+    spec.searchFields.map((f) => exprOf(spec, f)),
+  );
   const filters = compileFilters(filterDefsOf(spec), plain);
   const where = and([search, filters, ...customParts, ...extra]);
-  const orderBy = query.sort.length > 0
-    ? query.sort.map((s) => (s.dir === "asc" ? asc(exprOf(spec, s.field)) : desc(exprOf(spec, s.field))))
-    : [...spec.defaultOrder];
+  const orderBy =
+    query.sort.length > 0
+      ? query.sort.map((s) => (s.dir === 'asc' ? asc(exprOf(spec, s.field)) : desc(exprOf(spec, s.field))))
+      : [...spec.defaultOrder];
   return { where, orderBy };
 }
 
@@ -77,19 +96,24 @@ export function tagFilter(entityType: string, idColumn: SQL): (filter: GridFilte
   return (filter) => {
     const has = (ids?: readonly string[]) =>
       ids && ids.length > 0
-        ? sql`EXISTS (SELECT 1 FROM entity_tags et WHERE et.entity_type = ${entityType} AND et.entity_id = ${idColumn} AND et.tag_id IN (${sql.join(ids.map((v) => sql`${v}`), sql`, `)}))`
+        ? sql`EXISTS (SELECT 1 FROM entity_tags et WHERE et.entity_type = ${entityType} AND et.entity_id = ${idColumn} AND et.tag_id IN (${sql.join(
+            ids.map((v) => sql`${v}`),
+            sql`, `,
+          )}))`
         : sql`EXISTS (SELECT 1 FROM entity_tags et WHERE et.entity_type = ${entityType} AND et.entity_id = ${idColumn})`;
     switch (filter.op) {
-      case "in":
+      case 'in':
         return has(filter.values);
-      case "nin":
+      case 'nin':
         return sql`NOT ${has(filter.values)}`;
-      case "empty":
+      case 'empty':
         return sql`NOT ${has()}`;
-      case "ex":
+      case 'ex':
         return has();
       default:
-        throw new AppError("VALIDATION", "Tag: unsupported operator", { fieldErrors: { "f.tag": ["Unsupported operator"] } });
+        throw new AppError('VALIDATION', 'Tag: unsupported operator', {
+          fieldErrors: { 'f.tag': ['Unsupported operator'] },
+        });
     }
   };
 }

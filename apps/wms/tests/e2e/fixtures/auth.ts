@@ -12,10 +12,10 @@
  * the auth-setup project saved, so roles never share cookies. The default
  * `page` fixture is the admin unless a project overrides `storageState`.
  */
-import fs from "node:fs";
-import { test as base, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { loginViaApi } from "./login";
-import { storageStatePath, type Role } from "./roles";
+import fs from 'node:fs';
+import { test as base, expect, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { loginViaApi } from './login';
+import { storageStatePath, type Role } from './roles';
 
 export interface RoleFixtures {
   adminPage: Page;
@@ -38,10 +38,7 @@ async function newRoleContext(browser: Browser, role: Role): Promise<BrowserCont
 }
 
 function rolePageFixture(role: Role) {
-  return async (
-    { browser }: { browser: Browser },
-    provide: (page: Page) => Promise<void>
-  ): Promise<void> => {
+  return async ({ browser }: { browser: Browser }, provide: (page: Page) => Promise<void>): Promise<void> => {
     const context = await newRoleContext(browser, role);
     try {
       await provide(await context.newPage());
@@ -52,10 +49,10 @@ function rolePageFixture(role: Role) {
 }
 
 export const test = base.extend<RoleFixtures>({
-  adminPage: rolePageFixture("admin"),
-  managerPage: rolePageFixture("manager"),
-  operatorPage: rolePageFixture("operator"),
-  viewerPage: rolePageFixture("viewer"),
+  adminPage: rolePageFixture('admin'),
+  managerPage: rolePageFixture('manager'),
+  operatorPage: rolePageFixture('operator'),
+  viewerPage: rolePageFixture('viewer'),
   asRole: async ({ browser }, provide) => {
     const contexts: BrowserContext[] = [];
     try {

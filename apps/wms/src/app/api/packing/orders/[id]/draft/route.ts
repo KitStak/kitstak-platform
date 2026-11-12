@@ -4,12 +4,12 @@
  * `DELETE /api/packing/orders/[id]/draft` — discard it (start the order over).
  * Complete Packing and Report Issue clear the draft themselves.
  */
-import { defineRoute } from "@/server/api/define-route";
-import { idParamsSchema } from "@/server/repositories/platform-common";
-import { loadPackOrder, packContext } from "@/server/repositories/packing";
-import { clearPackDraft, saveDraftSchema, savePackDraft } from "@/server/repositories/packing-drafts";
-import { PACKING_PERMISSIONS } from "@/server/repositories/packing-scan";
-import { scopedCtx } from "@/server/repositories/returns";
+import { defineRoute } from '@/server/api/define-route';
+import { idParamsSchema } from '@/server/repositories/platform-common';
+import { loadPackOrder, packContext } from '@/server/repositories/packing';
+import { clearPackDraft, saveDraftSchema, savePackDraft } from '@/server/repositories/packing-drafts';
+import { PACKING_PERMISSIONS } from '@/server/repositories/packing-scan';
+import { scopedCtx } from '@/server/repositories/returns';
 
 export const PUT = defineRoute({
   permission: PACKING_PERMISSIONS.execute,
@@ -17,7 +17,10 @@ export const PUT = defineRoute({
   body: saveDraftSchema,
   handler: async ({ db, auth, actor, params, body }) => {
     const ctx = await packContext(db, auth.scope, params.id);
-    return await savePackDraft(db, scopedCtx(actor, auth), params.id, body, { status: ctx.order.status, lines: ctx.lines.filter((l) => l.toPack > 0) });
+    return await savePackDraft(db, scopedCtx(actor, auth), params.id, body, {
+      status: ctx.order.status,
+      lines: ctx.lines.filter((l) => l.toPack > 0),
+    });
   },
 });
 

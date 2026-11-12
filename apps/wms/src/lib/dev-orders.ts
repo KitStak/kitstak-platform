@@ -2,7 +2,7 @@
  * /dev/ui showcase grid contract, shared by the client grid and the server export
  * provider so both evaluate the same query over the same rows. PURE (no db imports).
  */
-import type { FieldValue } from "@/lib/local-grid-query";
+import type { FieldValue } from '@/lib/local-grid-query';
 
 export interface DevOrderRow {
   readonly id: string;
@@ -33,9 +33,9 @@ export interface DevOrderLine {
 /** Lines keyed by order id. */
 export type DevOrderLines = Readonly<Record<string, readonly DevOrderLine[]>>;
 
-export const DEV_GRID_KEY = "dev-ui-orders";
+export const DEV_GRID_KEY = 'dev-ui-orders';
 export const DEV_GRID_ROW_LIMIT = 500;
-export const DEV_SEARCH_FIELDS = ["code", "storeOrderNumber", "customerName", "trackingNumber"] as const;
+export const DEV_SEARCH_FIELDS = ['code', 'storeOrderNumber', 'customerName', 'trackingNumber'] as const;
 
 function isRowKey(row: DevOrderRow, field: string): field is keyof DevOrderRow {
   return Object.prototype.hasOwnProperty.call(row, field);

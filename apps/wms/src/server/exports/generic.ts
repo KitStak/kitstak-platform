@@ -6,11 +6,11 @@
  * (`createHttpListFetcher` forwards the original request's cookie in memory only; it is
  * never persisted), so scope and permissions are enforced by the endpoint itself.
  */
-import { z } from "zod";
-import { AppError } from "@/server/api/errors";
-import type { ExportPage, ExportProvider, ExportRow, GridExportDef, ListFetcher } from "./types";
+import { z } from 'zod';
+import { AppError } from '@/server/api/errors';
+import type { ExportPage, ExportProvider, ExportRow, GridExportDef, ListFetcher } from './types';
 
-const PAGING_PARAMS = ["page", "ps"] as const;
+const PAGING_PARAMS = ['page', 'ps'] as const;
 
 const successEnvelope = z.object({
   success: z.literal(true),
@@ -18,20 +18,24 @@ const successEnvelope = z.object({
   meta: z.object({ total: z.number().int().nonnegative().optional() }).loose().optional(),
 });
 
-const failureEnvelope = z.object({ success: z.literal(false), error: z.string(), code: z.string().optional() });
+const failureEnvelope = z.object({
+  success: z.literal(false),
+  error: z.string(),
+  code: z.string().optional(),
+});
 
 /** Builds the list query: the grid's params without paging, plus fixed params and the page. */
 export function buildListSearch(
-  def: Pick<GridExportDef, "fixedParams">,
+  def: Pick<GridExportDef, 'fixedParams'>,
   rawQuery: string,
   page: number,
   pageSize: number,
 ): URLSearchParams {
-  const search = new URLSearchParams(rawQuery.startsWith("?") ? rawQuery.slice(1) : rawQuery);
+  const search = new URLSearchParams(rawQuery.startsWith('?') ? rawQuery.slice(1) : rawQuery);
   for (const name of PAGING_PARAMS) search.delete(name);
   for (const [name, value] of Object.entries(def.fixedParams ?? {})) search.set(name, value);
-  search.set("page", String(page));
-  search.set("ps", String(pageSize));
+  search.set('page', String(page));
+  search.set('ps', String(pageSize));
   return search;
 }
 
@@ -44,9 +48,9 @@ export function parseListResponse(body: unknown, listPath: string): ExportPage {
   }
   const failed = failureEnvelope.safeParse(body);
   if (failed.success) {
-    throw new AppError("INVALID_STATE", `Export source ${listPath} failed: ${failed.data.error}`);
+    throw new AppError('INVALID_STATE', `Export source ${listPath} failed: ${failed.data.error}`);
   }
-  throw new AppError("INVALID_STATE", `Export source ${listPath} did not return a list`);
+  throw new AppError('INVALID_STATE', `Export source ${listPath} did not return a list`);
 }
 
 const PATH_PARAM = /\{([A-Za-z][A-Za-z0-9]*)\}/g;
@@ -58,8 +62,8 @@ const SAFE_SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
  */
 export function resolveListPath(listPath: string, search: URLSearchParams): string {
   return listPath.replace(PATH_PARAM, (_m, name: string) => {
-    const value = search.get(name) ?? "";
-    if (!SAFE_SEGMENT.test(value)) throw new AppError("VALIDATION", `Export needs a valid "${name}"`);
+    const value = search.get(name) ?? '';
+    if (!SAFE_SEGMENT.test(value)) throw new AppError('VALIDATION', `Export needs a valid "${name}"`);
     search.delete(name);
     return encodeURIComponent(value);
   });
@@ -69,7 +73,7 @@ export function createGenericProvider(def: GridExportDef): ExportProvider {
   return {
     async fetchPage(ctx, page, pageSize) {
       if (!ctx.listFetcher) {
-        throw new AppError("INVALID_STATE", `Export for "${def.title}" is not configured yet`);
+        throw new AppError('INVALID_STATE', `Export for "${def.title}" is not configured yet`);
       }
       const search = buildListSearch(def, ctx.rawQuery, page, pageSize);
       const listPath = resolveListPath(def.listPath, search);
@@ -94,18 +98,20 @@ const DEFAULT_TIMEOUT_MS = 60_000;
 export function createHttpListFetcher(options: HttpListFetcherOptions): ListFetcher {
   const fetchImpl = options.fetchImpl ?? fetch;
   return async (listPath, search) => {
-    if (!listPath.startsWith("/api/")) throw new AppError("VALIDATION", "Export source must be an /api path");
+    if (!listPath.startsWith('/api/')) throw new AppError('VALIDATION', 'Export source must be an /api path');
     const url = new URL(`${listPath}?${search.toString()}`, options.origin);
     const response = await fetchImpl(url, {
-      method: "GET",
-      headers: { accept: "application/json", ...(options.cookie ? { cookie: options.cookie } : {}) },
-      cache: "no-store",
+      method: 'GET',
+      headers: { accept: 'application/json', ...(options.cookie ? { cookie: options.cookie } : {}) },
+      cache: 'no-store',
       signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     });
     try {
       return (await response.json()) as unknown;
     } catch (error: unknown) {
-      throw new AppError("INVALID_STATE", `Export source ${listPath} returned ${response.status}`, { cause: error });
+      throw new AppError('INVALID_STATE', `Export source ${listPath} returned ${response.status}`, {
+        cause: error,
+      });
     }
   };
 }

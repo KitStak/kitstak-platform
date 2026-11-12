@@ -2,58 +2,82 @@
  * Round 3 (parity loop): AI Job waves end to end, the AI optimizer, SLA planned windows and
  * role-scoped assignees.
  */
-import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { waveRuleInputSchema } from "@/lib/grid-defs/jobs/forms";
-import { formatWaveCountdown } from "@/lib/grid-defs/jobs/schedule";
-import type { AuthContext } from "@/server/auth/context";
-import * as schema from "@/server/db/schema";
-import { ledger } from "@/server/domain/ledger";
-import { createOrder } from "@/server/domain/orders";
-import { groupForAi, locationPoint, optimizeRoute, routeLength, type AiOrder, type PickLocation } from "@/server/repositories/jobs-ai-optimizer";
-import { listJobs } from "@/server/repositories/jobs";
-import { listTasks } from "@/server/repositories/tasks";
-import { createWaveRule } from "@/server/repositories/wave-rules";
-import { assignableForWarehouse } from "@/server/repositories/wave-rules-options";
-import { assertRuleRunnable, completeAiWave, runWave } from "@/server/repositories/waves-run";
-import { EMPTY_GRID_QUERY } from "@/server/query/grid-query";
-import { createWorld, locationRow, orderInput, type World } from "../foundation/domain/fixtures";
+import { eq } from 'drizzle-orm';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { waveRuleInputSchema } from '@/lib/grid-defs/jobs/forms';
+import { formatWaveCountdown } from '@/lib/grid-defs/jobs/schedule';
+import type { AuthContext } from '@/server/auth/context';
+import * as schema from '@/server/db/schema';
+import { ledger } from '@/server/domain/ledger';
+import { createOrder } from '@/server/domain/orders';
+import {
+  groupForAi,
+  locationPoint,
+  optimizeRoute,
+  routeLength,
+  type AiOrder,
+  type PickLocation,
+} from '@/server/repositories/jobs-ai-optimizer';
+import { listJobs } from '@/server/repositories/jobs';
+import { listTasks } from '@/server/repositories/tasks';
+import { createWaveRule } from '@/server/repositories/wave-rules';
+import { assignableForWarehouse } from '@/server/repositories/wave-rules-options';
+import { assertRuleRunnable, completeAiWave, runWave } from '@/server/repositories/waves-run';
+import { EMPTY_GRID_QUERY } from '@/server/query/grid-query';
+import { createWorld, locationRow, orderInput, type World } from '../foundation/domain/fixtures';
 
-const loc = (id: string, aisle: string, rack: string, bay: string, walk: number): PickLocation => ({ id, code: `${aisle}-${rack}-${bay}`, aisle, rack, bay, walkingPathPriority: walk });
+const loc = (id: string, aisle: string, rack: string, bay: string, walk: number): PickLocation => ({
+  id,
+  code: `${aisle}-${rack}-${bay}`,
+  aisle,
+  rack,
+  bay,
+  walkingPathPriority: walk,
+});
 
-describe("AI optimizer (pure)", () => {
-  it("never returns a route longer than the walking-path baseline", () => {
-    const stops = [loc("1", "A", "04", "05", 1), loc("2", "D", "01", "01", 2), loc("3", "A", "01", "01", 3), loc("4", "D", "04", "05", 4), loc("5", "B", "02", "03", 5)].map(locationPoint);
+describe('AI optimizer (pure)', () => {
+  it('never returns a route longer than the walking-path baseline', () => {
+    const stops = [
+      loc('1', 'A', '04', '05', 1),
+      loc('2', 'D', '01', '01', 2),
+      loc('3', 'A', '01', '01', 3),
+      loc('4', 'D', '04', '05', 4),
+      loc('5', 'B', '02', '03', 5),
+    ].map(locationPoint);
     const baseline = [0, 1, 2, 3, 4];
     const order = optimizeRoute(stops, baseline);
     expect([...order].sort()).toEqual(baseline);
-    expect(routeLength(order.map((i) => stops[i]!))).toBeLessThanOrEqual(routeLength(baseline.map((i) => stops[i]!)) + 1e-9);
-    expect(routeLength(order.map((i) => stops[i]!))).toBeLessThan(routeLength(baseline.map((i) => stops[i]!)));
+    expect(routeLength(order.map((i) => stops[i]!))).toBeLessThanOrEqual(
+      routeLength(baseline.map((i) => stops[i]!)) + 1e-9,
+    );
+    expect(routeLength(order.map((i) => stops[i]!))).toBeLessThan(
+      routeLength(baseline.map((i) => stops[i]!)),
+    );
   });
 
-  it("groups singles, identical orders and the rest into the three AI job types", () => {
-    const p = locationPoint(loc("x", "A", "01", "01", 1));
+  it('groups singles, identical orders and the rest into the three AI job types', () => {
+    const p = locationPoint(loc('x', 'A', '01', '01', 1));
     const orders: AiOrder[] = [
-      { id: "s1", units: 1, signature: "p1×1", points: [p] },
-      { id: "s2", units: 1, signature: "p2×1", points: [p] },
-      { id: "i1", units: 2, signature: "p1×2", points: [p] },
-      { id: "i2", units: 2, signature: "p1×2", points: [p] },
-      { id: "m1", units: 3, signature: "p1×1,p2×2", points: [p] },
+      { id: 's1', units: 1, signature: 'p1×1', points: [p] },
+      { id: 's2', units: 1, signature: 'p2×1', points: [p] },
+      { id: 'i1', units: 2, signature: 'p1×2', points: [p] },
+      { id: 'i2', units: 2, signature: 'p1×2', points: [p] },
+      { id: 'm1', units: 3, signature: 'p1×1,p2×2', points: [p] },
     ];
     const groups = groupForAi(orders, 20);
     expect(groups).toEqual([
-      { aiType: "AI-SingleItemBatchPick", orderIds: ["s1", "s2"] },
-      { aiType: "AI-IdenticalOrderBatchPick", orderIds: ["i1", "i2"] },
-      { aiType: "AI-OrderBasedPickPack", orderIds: ["m1"] },
+      { aiType: 'AI-SingleItemBatchPick', orderIds: ['s1', 's2'] },
+      { aiType: 'AI-IdenticalOrderBatchPick', orderIds: ['i1', 'i2'] },
+      { aiType: 'AI-OrderBasedPickPack', orderIds: ['m1'] },
     ]);
-    expect(groupForAi(orders, 1).filter((g) => g.aiType === "AI-SingleItemBatchPick")).toHaveLength(2);
+    expect(groupForAi(orders, 1).filter((g) => g.aiType === 'AI-SingleItemBatchPick')).toHaveLength(2);
   });
 });
 
-describe("wave countdown", () => {
-  it("reads 1d 10:46:40 instead of the zero-padded day format", () => {
-    expect(formatWaveCountdown(((24 + 10) * 3600 + 46 * 60 + 40) * 1000)).toBe("1d 10:46:40");
-    expect(formatWaveCountdown((2 * 3600 + 5) * 1000)).toBe("02:00:05");
+describe('wave countdown', () => {
+  it('reads 1d 10:46:40 instead of the zero-padded day format', () => {
+    expect(formatWaveCountdown(((24 + 10) * 3600 + 46 * 60 + 40) * 1000)).toBe('1d 10:46:40');
+    expect(formatWaveCountdown((2 * 3600 + 5) * 1000)).toBe('02:00:05');
   });
 });
 
@@ -62,42 +86,125 @@ let auth: AuthContext;
 
 beforeEach(async () => {
   w = await createWorld();
-  const scope = { warehouseIds: [w.warehouseId], clientIds: "all" as const };
-  auth = { scope, viewScope: scope, permissions: new Set<string>(), restrictions: [], user: { id: w.userId, name: "Admin" }, context: { warehouseId: null, clientId: null } } as unknown as AuthContext;
-  await w.db.insert(schema.apps).values({ key: "ai-jobs", name: "AI Jobs", description: "AI", category: "Operations", isActive: true, settings: { maxOrdersPerJob: 10 } });
+  const scope = { warehouseIds: [w.warehouseId], clientIds: 'all' as const };
+  auth = {
+    scope,
+    viewScope: scope,
+    permissions: new Set<string>(),
+    restrictions: [],
+    user: { id: w.userId, name: 'Admin' },
+    context: { warehouseId: null, clientId: null },
+  } as unknown as AuthContext;
+  await w.db
+    .insert(schema.apps)
+    .values({
+      key: 'ai-jobs',
+      name: 'AI Jobs',
+      description: 'AI',
+      category: 'Operations',
+      isActive: true,
+      settings: { maxOrdersPerJob: 10 },
+    });
 });
 afterEach(() => w.close());
 
-const aiRule = async () => await createWaveRule(w.db, auth, w.ctx, waveRuleInputSchema.parse({ name: "AI wave", warehouseId: w.warehouseId, operationType: "AI Job", jobTypeIds: [w.jobTypeId] }));
+const aiRule = async () =>
+  await createWaveRule(
+    w.db,
+    auth,
+    w.ctx,
+    waveRuleInputSchema.parse({
+      name: 'AI wave',
+      warehouseId: w.warehouseId,
+      operationType: 'AI Job',
+      jobTypeIds: [w.jobTypeId],
+    }),
+  );
 
 async function stock() {
-  const far = (await w.db.insert(schema.locations).values(locationRow(w.warehouseId, "D-04-05-1", { aisle: "D", rack: "04", bay: "05", areaType: "Storage", walkingPathPriority: 1 })).returning())[0].id;
-  const near = (await w.db.insert(schema.locations).values(locationRow(w.warehouseId, "A-01-01-1", { aisle: "A", rack: "01", bay: "01", areaType: "Storage", walkingPathPriority: 2 })).returning())[0].id;
-  await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.productId, locationId: far, qty: 50 });
-  await ledger.add(w.db, w.ctx, { warehouseId: w.warehouseId, clientId: w.clientId, productId: w.product2Id, locationId: near, qty: 50 });
+  const far = (
+    await w.db
+      .insert(schema.locations)
+      .values(
+        locationRow(w.warehouseId, 'D-04-05-1', {
+          aisle: 'D',
+          rack: '04',
+          bay: '05',
+          areaType: 'Storage',
+          walkingPathPriority: 1,
+        }),
+      )
+      .returning()
+  )[0].id;
+  const near = (
+    await w.db
+      .insert(schema.locations)
+      .values(
+        locationRow(w.warehouseId, 'A-01-01-1', {
+          aisle: 'A',
+          rack: '01',
+          bay: '01',
+          areaType: 'Storage',
+          walkingPathPriority: 2,
+        }),
+      )
+      .returning()
+  )[0].id;
+  await ledger.add(w.db, w.ctx, {
+    warehouseId: w.warehouseId,
+    clientId: w.clientId,
+    productId: w.productId,
+    locationId: far,
+    qty: 50,
+  });
+  await ledger.add(w.db, w.ctx, {
+    warehouseId: w.warehouseId,
+    clientId: w.clientId,
+    productId: w.product2Id,
+    locationId: near,
+    qty: 50,
+  });
 }
 
-describe("AI Job wave", () => {
-  it("walks Pending → Preparing → Optimizing (deferred) and completes with AI jobs, sequence and SLA", async () => {
+describe('AI Job wave', () => {
+  it('walks Pending → Preparing → Optimizing (deferred) and completes with AI jobs, sequence and SLA', async () => {
     await stock();
     await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
     await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
-    await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 2 }, { productId: w.product2Id, quantity: 1 }]));
+    await createOrder(
+      w.db,
+      w.ctx,
+      orderInput(w, [
+        { productId: w.productId, quantity: 2 },
+        { productId: w.product2Id, quantity: 1 },
+      ]),
+    );
     const r = await aiRule();
     let deferred: string | null = null;
-    const first = await runWave(w.db, w.ctx, r.id, { runBy: "Admin", now: new Date("2026-11-09T10:00:00.000Z"), deferOptimization: (id) => { deferred = id; } });
-    expect(first.wave.status).toBe("Optimizing");
+    const first = await runWave(w.db, w.ctx, r.id, {
+      runBy: 'Admin',
+      now: new Date('2026-11-09T10:00:00.000Z'),
+      deferOptimization: (id) => {
+        deferred = id;
+      },
+    });
+    expect(first.wave.status).toBe('Optimizing');
     expect(first.summary).toMatch(/is optimizing: 3 met · 3 allocated/);
-    await expect(async () => await assertRuleRunnable(w.db, r.id, new Date("2026-11-09T11:00:00.000Z"))).rejects.toThrow(/being optimized/);
+    await expect(
+      async () => await assertRuleRunnable(w.db, r.id, new Date('2026-11-09T11:00:00.000Z')),
+    ).rejects.toThrow(/being optimized/);
     expect(deferred).toBe(first.wave.id);
 
-    const done = await completeAiWave(w.db, w.ctx, first.wave.id, { runBy: "Admin", now: new Date("2026-11-09T10:00:00.000Z") });
-    expect(done?.wave.status).toBe("Completed");
+    const done = await completeAiWave(w.db, w.ctx, first.wave.id, {
+      runBy: 'Admin',
+      now: new Date('2026-11-09T10:00:00.000Z'),
+    });
+    expect(done?.wave.status).toBe('Completed');
     expect(done?.wave.jobsCreated).toBe(2);
     expect(done?.summary).toMatch(/AI optimized 2 jobs/);
     const jobs = await w.db.select().from(schema.jobs).where(eq(schema.jobs.waveId, first.wave.id));
-    expect(jobs.map((j) => j.jobType).sort()).toEqual(["AI-OrderBasedPickPack", "AI-SingleItemBatchPick"]);
-    expect(await completeAiWave(w.db, w.ctx, first.wave.id, { runBy: "Admin" })).toBeNull(); // idempotent
+    expect(jobs.map((j) => j.jobType).sort()).toEqual(['AI-OrderBasedPickPack', 'AI-SingleItemBatchPick']);
+    expect(await completeAiWave(w.db, w.ctx, first.wave.id, { runBy: 'Admin' })).toBeNull(); // idempotent
 
     // SLA: job = created + 1h / + 2h; every task inside the job window.
     for (const job of jobs) {
@@ -113,50 +220,94 @@ describe("AI Job wave", () => {
     const ai = list.rows.filter((row) => row.aiJob);
     expect(ai).toHaveLength(2);
     for (const row of ai) {
-      expect(row.originalJobType).toBe("MULTI");
+      expect(row.originalJobType).toBe('MULTI');
       expect(String(row.aiJobDescription)).toMatch(/^AI-\w+ · \d+ orders? · \d+ stops? · \d+ m walk/);
     }
-    const tasks = await listTasks(w.db, auth, "order", { ...EMPTY_GRID_QUERY, pageSize: 50 });
-    expect(tasks.rows.filter((t) => t.taskType === "Picking").every((t) => typeof t.sequence === "number" && t.aiJobDescription)).toBe(true);
+    const tasks = await listTasks(w.db, auth, 'order', { ...EMPTY_GRID_QUERY, pageSize: 50 });
+    expect(
+      tasks.rows
+        .filter((t) => t.taskType === 'Picking')
+        .every((t) => typeof t.sequence === 'number' && t.aiJobDescription),
+    ).toBe(true);
   });
 
-  it("runs with the default AI settings when the AI Jobs app is inactive (built in, not gated)", async () => {
-    await w.db.update(schema.apps).set({ isActive: false }).where(eq(schema.apps.key, "ai-jobs"));
-    const res = await runWave(w.db, w.ctx, (await aiRule()).id, { runBy: "Admin" });
-    expect(res.wave.status).not.toBe("Failed");
+  it('runs with the default AI settings when the AI Jobs app is inactive (built in, not gated)', async () => {
+    await w.db.update(schema.apps).set({ isActive: false }).where(eq(schema.apps.key, 'ai-jobs'));
+    const res = await runWave(w.db, w.ctx, (await aiRule()).id, { runBy: 'Admin' });
+    expect(res.wave.status).not.toBe('Failed');
     expect(res.summary).not.toMatch(/AI Jobs is not active/);
   });
 });
 
-describe("assignable users and roles", () => {
-  it("lists only operational users who can execute tasks", async () => {
-    const exec = (await w.db.insert(schema.roles).values({ key: "clerk", name: "Clerk", category: "Operation" }).returning())[0].id;
-    const view = (await w.db.insert(schema.roles).values({ key: "viewer", name: "Viewer", category: "Operation" }).returning())[0].id;
-    const client = (await w.db.insert(schema.roles).values({ key: "client", name: "Client", category: "Client" }).returning())[0].id;
-    await w.db.insert(schema.rolePermissions).values([{ roleId: exec, permission: "fulfillment.task_details.execute_task" }, { roleId: client, permission: "fulfillment.task_details.execute_task" }]);
-    const user = async (email: string, roleId: string, extra: Partial<typeof schema.users.$inferInsert> = {}) => {
-      const id = (await w.db.insert(schema.users).values({ email, name: email, passwordHash: "x", role: "operator", ...extra }).returning())[0].id;
+describe('assignable users and roles', () => {
+  it('lists only operational users who can execute tasks', async () => {
+    const exec = (
+      await w.db
+        .insert(schema.roles)
+        .values({ key: 'clerk', name: 'Clerk', category: 'Operation' })
+        .returning()
+    )[0].id;
+    const view = (
+      await w.db
+        .insert(schema.roles)
+        .values({ key: 'viewer', name: 'Viewer', category: 'Operation' })
+        .returning()
+    )[0].id;
+    const client = (
+      await w.db
+        .insert(schema.roles)
+        .values({ key: 'client', name: 'Client', category: 'Client' })
+        .returning()
+    )[0].id;
+    await w.db.insert(schema.rolePermissions).values([
+      { roleId: exec, permission: 'fulfillment.task_details.execute_task' },
+      { roleId: client, permission: 'fulfillment.task_details.execute_task' },
+    ]);
+    const user = async (
+      email: string,
+      roleId: string,
+      extra: Partial<typeof schema.users.$inferInsert> = {},
+    ) => {
+      const id = (
+        await w.db
+          .insert(schema.users)
+          .values({ email, name: email, passwordHash: 'x', role: 'operator', ...extra })
+          .returning()
+      )[0].id;
       await w.db.insert(schema.userRoles).values({ userId: id, roleId });
       await w.db.insert(schema.userWarehouses).values({ userId: id, warehouseId: w.warehouseId });
       return id;
     };
-    const clerk = await user("clerk@x.io", exec);
-    await user("viewer@x.io", view, { role: "viewer" });
-    await user("client@x.io", client, { userType: "Client" });
-    await user("api@x.io", exec, { isApiUser: true });
+    const clerk = await user('clerk@x.io', exec);
+    await user('viewer@x.io', view, { role: 'viewer' });
+    await user('client@x.io', client, { userType: 'Client' });
+    await user('api@x.io', exec, { isApiUser: true });
     const res = await assignableForWarehouse(w.db, w.warehouseId);
     expect(res.users.map((u) => u.id)).toContain(clerk);
-    expect(res.users.map((u) => u.email)).not.toEqual(expect.arrayContaining(["viewer@x.io"]));
-    expect(res.users.some((u) => ["viewer@x.io", "client@x.io", "api@x.io"].includes(u.email))).toBe(false);
-    expect(res.roles.map((r) => r.name)).toEqual(["Clerk"]);
-    await expect(async () => await createWaveRule(w.db, auth, w.ctx, waveRuleInputSchema.parse({
-      name: "Bad", warehouseId: w.warehouseId, operationType: "Picking", jobTypeIds: [w.jobTypeId], assignMode: "Roles", assigneeRoleIds: [view],
-    }))).rejects.toThrow(/can't execute tasks/);
+    expect(res.users.map((u) => u.email)).not.toEqual(expect.arrayContaining(['viewer@x.io']));
+    expect(res.users.some((u) => ['viewer@x.io', 'client@x.io', 'api@x.io'].includes(u.email))).toBe(false);
+    expect(res.roles.map((r) => r.name)).toEqual(['Clerk']);
+    await expect(
+      async () =>
+        await createWaveRule(
+          w.db,
+          auth,
+          w.ctx,
+          waveRuleInputSchema.parse({
+            name: 'Bad',
+            warehouseId: w.warehouseId,
+            operationType: 'Picking',
+            jobTypeIds: [w.jobTypeId],
+            assignMode: 'Roles',
+            assigneeRoleIds: [view],
+          }),
+        ),
+    ).rejects.toThrow(/can't execute tasks/);
   });
 
-  it("explains a missing warehouse in human words", () => {
-    const parsed = waveRuleInputSchema.safeParse({ name: "X", operationType: "Picking", jobTypeIds: ["a"] });
+  it('explains a missing warehouse in human words', () => {
+    const parsed = waveRuleInputSchema.safeParse({ name: 'X', operationType: 'Picking', jobTypeIds: ['a'] });
     expect(parsed.success).toBe(false);
-    expect(parsed.error?.issues.find((i) => i.path[0] === "warehouseId")?.message).toBe("Choose a warehouse");
+    expect(parsed.error?.issues.find((i) => i.path[0] === 'warehouseId')?.message).toBe('Choose a warehouse');
   });
 });

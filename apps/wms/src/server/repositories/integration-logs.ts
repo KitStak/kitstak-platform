@@ -3,20 +3,33 @@
  * channel history (runs with the per-run item detail), and the two call-log grids.
  * Every read is limited to store connections of clients in scope.
  */
-import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
-import { desc } from "@/server/db/order";
-import type { AppDb } from "@/server/api/db";
-import { AppError } from "@/server/api/errors";
-import type { AuthContext } from "@/server/auth/context";
-import { hasClient } from "@/server/auth/scope";
-import * as s from "@/server/db/schema";
-import { paginate } from "@/server/query/paginate";
-import type { GridQuery } from "@/server/query/grid-query";
-import { isDemoFeed, isSimulated, pauseReason, runChannelMethod, type RunSummary } from "@/server/integrations/runtime/channel-runtime";
+import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { desc } from '@/server/db/order';
+import type { AppDb } from '@/server/api/db';
+import { AppError } from '@/server/api/errors';
+import type { AuthContext } from '@/server/auth/context';
+import { hasClient } from '@/server/auth/scope';
+import * as s from '@/server/db/schema';
+import { paginate } from '@/server/query/paginate';
+import type { GridQuery } from '@/server/query/grid-query';
 import {
-  canSimulateError, HISTORY_FIELDS, HISTORY_SORT_FIELDS, ITEM_SORT_FIELDS, METHOD_FIELDS, METHOD_SORT_FIELDS, ORDER_ITEM_FIELDS, PRODUCT_ITEM_FIELDS,
-} from "@/lib/grid-defs/integrations/logs";
-import { assertFound, compileGrid, type GridBinding } from "./integration-logs-kit";
+  isDemoFeed,
+  isSimulated,
+  pauseReason,
+  runChannelMethod,
+  type RunSummary,
+} from '@/server/integrations/runtime/channel-runtime';
+import {
+  canSimulateError,
+  HISTORY_FIELDS,
+  HISTORY_SORT_FIELDS,
+  ITEM_SORT_FIELDS,
+  METHOD_FIELDS,
+  METHOD_SORT_FIELDS,
+  ORDER_ITEM_FIELDS,
+  PRODUCT_ITEM_FIELDS,
+} from '@/lib/grid-defs/integrations/logs';
+import { assertFound, compileGrid, type GridBinding } from './integration-logs-kit';
 
 const cc = s.channelConnections;
 const m = s.channelMethods;
@@ -25,18 +38,36 @@ const it = s.channelRunItems;
 
 export function connectionScope(auth: AuthContext, column: SQL = sql`${cc.clientId}`): SQL | undefined {
   const cl = auth.viewScope.clientIds;
-  if (cl === "all") return undefined;
-  return cl.length === 0 ? sql`0 = 1` : sql`${column} IN (${sql.join(cl.map((x) => sql`${x}`), sql`, `)})`;
+  if (cl === 'all') return undefined;
+  return cl.length === 0
+    ? sql`0 = 1`
+    : sql`${column} IN (${sql.join(
+        cl.map((x) => sql`${x}`),
+        sql`, `,
+      )})`;
 }
 
 /* ---------------- methods ---------------- */
 
 const METHOD_BINDING: GridBinding = {
   exprs: {
-    provider: sql`${cc.provider}`, method: sql`${m.method}`, jobStatus: sql`${m.jobStatus}`, status: sql`${m.status}`, storeName: sql`${cc.storeName}`,
-    nextRunAt: sql`${m.nextRunAt}`, lastRunAt: sql`${m.lastRunAt}`, intervalMinutes: sql`${m.intervalMinutes}`,
+    provider: sql`${cc.provider}`,
+    method: sql`${m.method}`,
+    jobStatus: sql`${m.jobStatus}`,
+    status: sql`${m.status}`,
+    storeName: sql`${cc.storeName}`,
+    nextRunAt: sql`${m.nextRunAt}`,
+    lastRunAt: sql`${m.lastRunAt}`,
+    intervalMinutes: sql`${m.intervalMinutes}`,
   },
-  fields: METHOD_FIELDS, sortable: METHOD_SORT_FIELDS, search: ["storeName"], defaultSort: [{ field: "storeName", dir: "asc" }, { field: "method", dir: "asc" }], tiebreaker: m.id,
+  fields: METHOD_FIELDS,
+  sortable: METHOD_SORT_FIELDS,
+  search: ['storeName'],
+  defaultSort: [
+    { field: 'storeName', dir: 'asc' },
+    { field: 'method', dir: 'asc' },
+  ],
+  tiebreaker: m.id,
 };
 
 export interface MethodRow {
@@ -46,7 +77,7 @@ export interface MethodRow {
   readonly storeName: string;
   readonly provider: string;
   readonly isSandbox: boolean;
-  readonly status: "Active" | "Passive";
+  readonly status: 'Active' | 'Passive';
   readonly jobStatus: string;
   readonly intervalMinutes: number;
   readonly nextRunAt: string | null;
@@ -60,24 +91,70 @@ export interface MethodRow {
   readonly canSimulateError: boolean;
 }
 
-export async function listMethods(db: AppDb, auth: AuthContext, query: GridQuery): Promise<{ rows: MethodRow[]; total: number }> {
+export async function listMethods(
+  db: AppDb,
+  auth: AuthContext,
+  query: GridQuery,
+): Promise<{ rows: MethodRow[]; total: number }> {
   const grid = compileGrid(METHOD_BINDING, query, [connectionScope(auth)]);
-  const lastStatus = sql<string | null>`(SELECT x.status FROM channel_runs x WHERE x.method_id = ${m.id} ORDER BY x.started_at DESC LIMIT 1)`;
-  const result = await paginate(db.select({ m, c: cc, last: lastStatus }).from(m).innerJoin(cc, eq(cc.id, m.connectionId)).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    async () => (await db.select({ n: sql<number>`count(*)` }).from(m).innerJoin(cc, eq(cc.id, m.connectionId)).where(grid.where).limit(1))[0]?.n ?? 0, { page: query.page, pageSize: query.pageSize });
+  const lastStatus = sql<
+    string | null
+  >`(SELECT x.status FROM channel_runs x WHERE x.method_id = ${m.id} ORDER BY x.started_at DESC LIMIT 1)`;
+  const result = await paginate(
+    db
+      .select({ m, c: cc, last: lastStatus })
+      .from(m)
+      .innerJoin(cc, eq(cc.id, m.connectionId))
+      .where(grid.where)
+      .orderBy(...grid.orderBy)
+      .$dynamic(),
+    async () =>
+      (
+        await db
+          .select({ n: sql<number>`count(*)` })
+          .from(m)
+          .innerJoin(cc, eq(cc.id, m.connectionId))
+          .where(grid.where)
+          .limit(1)
+      )[0]?.n ?? 0,
+    { page: query.page, pageSize: query.pageSize },
+  );
   return {
     rows: result.rows.map(({ m: x, c, last }) => ({
-      id: x.id, connectionId: c.id, method: x.method, storeName: c.storeName, provider: c.provider, isSandbox: c.distribution === "API", status: x.status, jobStatus: x.jobStatus,
-      intervalMinutes: x.intervalMinutes, nextRunAt: x.status === "Active" ? x.nextRunAt : null, lastRunAt: x.lastRunAt, lastSuccessAt: x.lastSuccessAt, pauseReason: pauseReason(c), lastRunStatus: last ?? null,
-      demoFeed: isDemoFeed(c), canSimulateError: canSimulateError(isSimulated(c), x.method),
+      id: x.id,
+      connectionId: c.id,
+      method: x.method,
+      storeName: c.storeName,
+      provider: c.provider,
+      isSandbox: c.distribution === 'API',
+      status: x.status,
+      jobStatus: x.jobStatus,
+      intervalMinutes: x.intervalMinutes,
+      nextRunAt: x.status === 'Active' ? x.nextRunAt : null,
+      lastRunAt: x.lastRunAt,
+      lastSuccessAt: x.lastSuccessAt,
+      pauseReason: pauseReason(c),
+      lastRunStatus: last ?? null,
+      demoFeed: isDemoFeed(c),
+      canSimulateError: canSimulateError(isSimulated(c), x.method),
     })),
     total: result.total,
   };
 }
 
 export async function loadMethod(db: AppDb, auth: AuthContext, id: string) {
-  const row = assertFound((await db.select({ m, c: cc }).from(m).innerJoin(cc, eq(cc.id, m.connectionId)).where(eq(m.id, id)).limit(1))[0], "Channel method");
-  if (!hasClient(auth.scope, row.c.clientId)) throw new AppError("NOT_FOUND", "Channel method not found");
+  const row = assertFound(
+    (
+      await db
+        .select({ m, c: cc })
+        .from(m)
+        .innerJoin(cc, eq(cc.id, m.connectionId))
+        .where(eq(m.id, id))
+        .limit(1)
+    )[0],
+    'Channel method',
+  );
+  if (!hasClient(auth.scope, row.c.clientId)) throw new AppError('NOT_FOUND', 'Channel method not found');
   return row;
 }
 
@@ -86,10 +163,18 @@ export async function loadMethod(db: AppDb, auth: AuthContext, id: string) {
  * include an order with an unknown SKU, so Missing Orders and Retry Download can be demonstrated
  * on demand; scheduled sandbox runs never fail on purpose.
  */
-export async function runMethodNow(db: AppDb, auth: AuthContext, id: string, opts: { readonly simulateError?: boolean } = {}): Promise<RunSummary> {
+export async function runMethodNow(
+  db: AppDb,
+  auth: AuthContext,
+  id: string,
+  opts: { readonly simulateError?: boolean } = {},
+): Promise<RunSummary> {
   const row = await loadMethod(db, auth, id);
   if (opts.simulateError && !canSimulateError(isSimulated(row.c), row.m.method)) {
-    throw new AppError("VALIDATION", "Simulate error is available only for Download Orders on a KitStak Sandbox or demo-feed store");
+    throw new AppError(
+      'VALIDATION',
+      'Simulate error is available only for Download Orders on a KitStak Sandbox or demo-feed store',
+    );
   }
   return runChannelMethod(db, id, { manual: true, simulateError: opts.simulateError === true });
 }
@@ -98,10 +183,20 @@ export async function runMethodNow(db: AppDb, auth: AuthContext, id: string, opt
 
 const HISTORY_BINDING: GridBinding = {
   exprs: {
-    provider: sql`${cc.provider}`, method: sql`${r.method}`, startedAt: sql`${r.startedAt}`, storeName: sql`${cc.storeName}`, status: sql`${r.status}`,
-    successCount: sql`${r.successCount}`, errorCount: sql`${r.errorCount}`, totalCount: sql`${r.totalCount}`,
+    provider: sql`${cc.provider}`,
+    method: sql`${r.method}`,
+    startedAt: sql`${r.startedAt}`,
+    storeName: sql`${cc.storeName}`,
+    status: sql`${r.status}`,
+    successCount: sql`${r.successCount}`,
+    errorCount: sql`${r.errorCount}`,
+    totalCount: sql`${r.totalCount}`,
   },
-  fields: HISTORY_FIELDS, sortable: HISTORY_SORT_FIELDS, search: ["storeName"], defaultSort: [{ field: "startedAt", dir: "desc" }], tiebreaker: r.id,
+  fields: HISTORY_FIELDS,
+  sortable: HISTORY_SORT_FIELDS,
+  search: ['storeName'],
+  defaultSort: [{ field: 'startedAt', dir: 'desc' }],
+  tiebreaker: r.id,
 };
 
 export interface RunRow {
@@ -119,14 +214,48 @@ export interface RunRow {
 }
 
 const toRunRow = ({ r: x, c }: { r: typeof r.$inferSelect; c: typeof cc.$inferSelect }): RunRow => ({
-  id: x.id, storeName: c.storeName, provider: c.provider, isSandbox: c.distribution === "API", method: x.method, status: x.status, successCount: x.successCount,
-  errorCount: x.errorCount, totalCount: x.totalCount, startedAt: x.startedAt, endedAt: x.endedAt,
+  id: x.id,
+  storeName: c.storeName,
+  provider: c.provider,
+  isSandbox: c.distribution === 'API',
+  method: x.method,
+  status: x.status,
+  successCount: x.successCount,
+  errorCount: x.errorCount,
+  totalCount: x.totalCount,
+  startedAt: x.startedAt,
+  endedAt: x.endedAt,
 });
 
-export async function listHistory(db: AppDb, auth: AuthContext, query: GridQuery, connectionId?: string | null): Promise<{ rows: RunRow[]; total: number }> {
-  const grid = compileGrid(HISTORY_BINDING, query, [connectionScope(auth), connectionId ? eq(r.connectionId, connectionId) : undefined]);
-  const result = await paginate(db.select({ r, c: cc }).from(r).innerJoin(cc, eq(cc.id, r.connectionId)).where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    async () => (await db.select({ n: sql<number>`count(*)` }).from(r).innerJoin(cc, eq(cc.id, r.connectionId)).where(grid.where).limit(1))[0]?.n ?? 0, { page: query.page, pageSize: query.pageSize });
+export async function listHistory(
+  db: AppDb,
+  auth: AuthContext,
+  query: GridQuery,
+  connectionId?: string | null,
+): Promise<{ rows: RunRow[]; total: number }> {
+  const grid = compileGrid(HISTORY_BINDING, query, [
+    connectionScope(auth),
+    connectionId ? eq(r.connectionId, connectionId) : undefined,
+  ]);
+  const result = await paginate(
+    db
+      .select({ r, c: cc })
+      .from(r)
+      .innerJoin(cc, eq(cc.id, r.connectionId))
+      .where(grid.where)
+      .orderBy(...grid.orderBy)
+      .$dynamic(),
+    async () =>
+      (
+        await db
+          .select({ n: sql<number>`count(*)` })
+          .from(r)
+          .innerJoin(cc, eq(cc.id, r.connectionId))
+          .where(grid.where)
+          .limit(1)
+      )[0]?.n ?? 0,
+    { page: query.page, pageSize: query.pageSize },
+  );
   return { rows: result.rows.map(toRunRow), total: result.total };
 }
 
@@ -142,32 +271,87 @@ export interface RunItemRow {
   readonly orderId: string | null;
 }
 
-export async function getRun(db: AppDb, auth: AuthContext, id: string, page: number, pageSize: number, onlyErrors: boolean): Promise<{ run: RunRow; items: RunItemRow[]; total: number }> {
-  const row = assertFound((await db.select({ r, c: cc }).from(r).innerJoin(cc, eq(cc.id, r.connectionId)).where(eq(r.id, id)).limit(1))[0], "Channel run");
-  if (!hasClient(auth.scope, row.c.clientId)) throw new AppError("NOT_FOUND", "Channel run not found");
+export async function getRun(
+  db: AppDb,
+  auth: AuthContext,
+  id: string,
+  page: number,
+  pageSize: number,
+  onlyErrors: boolean,
+): Promise<{ run: RunRow; items: RunItemRow[]; total: number }> {
+  const row = assertFound(
+    (
+      await db
+        .select({ r, c: cc })
+        .from(r)
+        .innerJoin(cc, eq(cc.id, r.connectionId))
+        .where(eq(r.id, id))
+        .limit(1)
+    )[0],
+    'Channel run',
+  );
+  if (!hasClient(auth.scope, row.c.clientId)) throw new AppError('NOT_FOUND', 'Channel run not found');
   const where = and(eq(it.runId, id), onlyErrors ? eq(it.success, false) : undefined);
-  const total = (await db.select({ n: sql<number>`count(*)` }).from(it).where(where).limit(1))[0]?.n ?? 0;
-  const orderIdSql = sql<string | null>`(SELECT o.id FROM shipment_orders o WHERE o.code = ((${it.properties})::jsonb ->> 'orderCode') LIMIT 1)`;
-  const items = await db.select({ i: it, orderId: orderIdSql }).from(it).where(where).orderBy(desc(it.success), it.at).limit(pageSize).offset((page - 1) * pageSize);
+  const total =
+    (
+      await db
+        .select({ n: sql<number>`count(*)` })
+        .from(it)
+        .where(where)
+        .limit(1)
+    )[0]?.n ?? 0;
+  const orderIdSql = sql<
+    string | null
+  >`(SELECT o.id FROM shipment_orders o WHERE o.code = ((${it.properties})::jsonb ->> 'orderCode') LIMIT 1)`;
+  const items = await db
+    .select({ i: it, orderId: orderIdSql })
+    .from(it)
+    .where(where)
+    .orderBy(desc(it.success), it.at)
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
   return {
-    run: toRunRow(row), total: Number(total),
-    items: items.map(({ i, orderId }) => ({ id: i.id, success: i.success, properties: i.properties, errorMessage: i.errorMessage, storeOrderNumber: i.storeOrderNumber, sellerSku: i.sellerSku, qty: i.qty, at: i.at, orderId: orderId ?? null })),
+    run: toRunRow(row),
+    total: Number(total),
+    items: items.map(({ i, orderId }) => ({
+      id: i.id,
+      success: i.success,
+      properties: i.properties,
+      errorMessage: i.errorMessage,
+      storeOrderNumber: i.storeOrderNumber,
+      sellerSku: i.sellerSku,
+      qty: i.qty,
+      at: i.at,
+      orderId: orderId ?? null,
+    })),
   };
 }
 
 /* ---------------- call logs ---------------- */
 
-export type ItemKind = "orders" | "products";
-const KIND_METHODS: Readonly<Record<ItemKind, readonly string[]>> = { orders: ["Download Orders", "Send Shipment Info"], products: ["Download Products", "Sync Inventory"] };
+export type ItemKind = 'orders' | 'products';
+const KIND_METHODS: Readonly<Record<ItemKind, readonly string[]>> = {
+  orders: ['Download Orders', 'Send Shipment Info'],
+  products: ['Download Products', 'Sync Inventory'],
+};
 
 function itemBinding(kind: ItemKind): GridBinding {
   return {
     exprs: {
-      at: sql`${it.at}`, provider: sql`${cc.provider}`, storeName: sql`${cc.storeName}`, success: sql`${it.success}`, method: sql`${r.method}`,
-      storeOrderNumber: sql`${it.storeOrderNumber}`, sellerSku: sql`${it.sellerSku}`, qty: sql`${it.qty}`,
+      at: sql`${it.at}`,
+      provider: sql`${cc.provider}`,
+      storeName: sql`${cc.storeName}`,
+      success: sql`${it.success}`,
+      method: sql`${r.method}`,
+      storeOrderNumber: sql`${it.storeOrderNumber}`,
+      sellerSku: sql`${it.sellerSku}`,
+      qty: sql`${it.qty}`,
     },
-    fields: kind === "orders" ? ORDER_ITEM_FIELDS : PRODUCT_ITEM_FIELDS, sortable: ITEM_SORT_FIELDS,
-    search: kind === "orders" ? ["storeOrderNumber", "storeName"] : ["sellerSku", "storeName"], defaultSort: [{ field: "at", dir: "desc" }], tiebreaker: it.id,
+    fields: kind === 'orders' ? ORDER_ITEM_FIELDS : PRODUCT_ITEM_FIELDS,
+    sortable: ITEM_SORT_FIELDS,
+    search: kind === 'orders' ? ['storeOrderNumber', 'storeName'] : ['sellerSku', 'storeName'],
+    defaultSort: [{ field: 'at', dir: 'desc' }],
+    tiebreaker: it.id,
   };
 }
 
@@ -186,15 +370,53 @@ export interface CallLogRow {
   readonly runId: string;
 }
 
-export async function listCallLogs(db: AppDb, auth: AuthContext, kind: ItemKind, query: GridQuery): Promise<{ rows: CallLogRow[]; total: number }> {
-  const grid = compileGrid(itemBinding(kind), query, [connectionScope(auth), inArray(r.method, [...KIND_METHODS[kind]])]);
-  const base = () => db.select({ i: it, r, c: cc }).from(it).innerJoin(r, eq(r.id, it.runId)).innerJoin(cc, eq(cc.id, r.connectionId));
-  const result = await paginate(base().where(grid.where).orderBy(...grid.orderBy).$dynamic(),
-    async () => (await db.select({ n: sql<number>`count(*)` }).from(it).innerJoin(r, eq(r.id, it.runId)).innerJoin(cc, eq(cc.id, r.connectionId)).where(grid.where).limit(1))[0]?.n ?? 0, { page: query.page, pageSize: query.pageSize });
+export async function listCallLogs(
+  db: AppDb,
+  auth: AuthContext,
+  kind: ItemKind,
+  query: GridQuery,
+): Promise<{ rows: CallLogRow[]; total: number }> {
+  const grid = compileGrid(itemBinding(kind), query, [
+    connectionScope(auth),
+    inArray(r.method, [...KIND_METHODS[kind]]),
+  ]);
+  const base = () =>
+    db
+      .select({ i: it, r, c: cc })
+      .from(it)
+      .innerJoin(r, eq(r.id, it.runId))
+      .innerJoin(cc, eq(cc.id, r.connectionId));
+  const result = await paginate(
+    base()
+      .where(grid.where)
+      .orderBy(...grid.orderBy)
+      .$dynamic(),
+    async () =>
+      (
+        await db
+          .select({ n: sql<number>`count(*)` })
+          .from(it)
+          .innerJoin(r, eq(r.id, it.runId))
+          .innerJoin(cc, eq(cc.id, r.connectionId))
+          .where(grid.where)
+          .limit(1)
+      )[0]?.n ?? 0,
+    { page: query.page, pageSize: query.pageSize },
+  );
   return {
     rows: result.rows.map(({ i, r: run, c }) => ({
-      id: i.id, provider: c.provider, isSandbox: c.distribution === "API", storeName: c.storeName, method: run.method, at: i.at, storeOrderNumber: i.storeOrderNumber,
-      sellerSku: i.sellerSku, qty: i.qty, errorMessage: i.errorMessage, success: i.success, runId: run.id,
+      id: i.id,
+      provider: c.provider,
+      isSandbox: c.distribution === 'API',
+      storeName: c.storeName,
+      method: run.method,
+      at: i.at,
+      storeOrderNumber: i.storeOrderNumber,
+      sellerSku: i.sellerSku,
+      qty: i.qty,
+      errorMessage: i.errorMessage,
+      success: i.success,
+      runId: run.id,
     })),
     total: result.total,
   };

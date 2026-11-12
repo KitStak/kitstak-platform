@@ -290,8 +290,8 @@
   --elevation-sm: 0 1px 3px rgb(10 22 40 / 0.08), 0 1px 2px rgb(10 22 40 / 0.05);
   --elevation-md: 0 4px 10px -2px rgb(10 22 40 / 0.1), 0 2px 4px -2px rgb(10 22 40 / 0.06);
   --elevation-lg: 0 12px 28px -6px rgb(10 22 40 / 0.16), 0 4px 8px -4px rgb(10 22 40 / 0.08);
-  --elevation-popover: 0 10px 30px -4px rgb(10 22 40 / 0.18), 0 2px 8px rgb(10 22 40 / 0.08),
-    0 0 0 1px rgb(10 22 40 / 0.04);
+  --elevation-popover:
+    0 10px 30px -4px rgb(10 22 40 / 0.18), 0 2px 8px rgb(10 22 40 / 0.08), 0 0 0 1px rgb(10 22 40 / 0.04);
   --elevation-modal: 0 24px 64px -12px rgb(10 22 40 / 0.32), 0 8px 20px -8px rgb(10 22 40 / 0.16);
   --elevation-sticky: 0 4px 6px -4px rgb(10 22 40 / 0.12);
   /* Legacy alias kept for early consumers. */
@@ -502,8 +502,8 @@
   --elevation-sm: 0 1px 3px rgb(0 0 0 / 0.45), 0 1px 2px rgb(0 0 0 / 0.3);
   --elevation-md: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.35);
   --elevation-lg: 0 14px 32px -6px rgb(0 0 0 / 0.6), 0 4px 10px -4px rgb(0 0 0 / 0.4);
-  --elevation-popover: 0 12px 32px -4px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.4),
-    0 0 0 1px rgb(255 255 255 / 0.06);
+  --elevation-popover:
+    0 12px 32px -4px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.06);
   --elevation-modal: 0 28px 72px -12px rgb(0 0 0 / 0.75), 0 0 0 1px rgb(255 255 255 / 0.06);
   --elevation-sticky: 0 4px 6px -4px rgb(0 0 0 / 0.5);
 
@@ -734,8 +734,8 @@
     --elevation-sm: 0 1px 3px rgb(0 0 0 / 0.45), 0 1px 2px rgb(0 0 0 / 0.3);
     --elevation-md: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.35);
     --elevation-lg: 0 14px 32px -6px rgb(0 0 0 / 0.6), 0 4px 10px -4px rgb(0 0 0 / 0.4);
-    --elevation-popover: 0 12px 32px -4px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.4),
-      0 0 0 1px rgb(255 255 255 / 0.06);
+    --elevation-popover:
+      0 12px 32px -4px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.06);
     --elevation-modal: 0 28px 72px -12px rgb(0 0 0 / 0.75), 0 0 0 1px rgb(255 255 255 / 0.06);
     --elevation-sticky: 0 4px 6px -4px rgb(0 0 0 / 0.5);
 

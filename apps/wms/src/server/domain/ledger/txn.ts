@@ -9,12 +9,12 @@
  * - adjustment / count: to = bucket, qty = signed delta
  * - allocation / allocation cancel: from = to = bucket (net 0)
  */
-import { sql } from "drizzle-orm";
-import type { TxnType } from "@/lib/enums";
-import * as schema from "@/server/db/schema";
-import type { DomainCtx, Tx } from "../types";
-import type { InventoryRow } from "./bucket";
-import { dbGet } from "@/server/db/sql";
+import { sql } from 'drizzle-orm';
+import type { TxnType } from '@/lib/enums';
+import * as schema from '@/server/db/schema';
+import type { DomainCtx, Tx } from '../types';
+import type { InventoryRow } from './bucket';
+import { dbGet } from '@/server/db/sql';
 
 export type TxnRow = typeof schema.inventoryTransactions.$inferSelect;
 
@@ -47,58 +47,64 @@ export interface TxnInput {
 
 /** Safe without a lock of its own: every writer holds the app write lock (`takeWriteLock`). */
 async function nextSeq(tx: Tx): Promise<number> {
-  const row = await dbGet<{ seq: number | null }>(tx, sql`SELECT MAX(seq) AS seq FROM inventory_transactions`);
+  const row = await dbGet<{ seq: number | null }>(
+    tx,
+    sql`SELECT MAX(seq) AS seq FROM inventory_transactions`,
+  );
   return Number(row?.seq ?? 0) + 1;
 }
 
 export async function writeTxn(tx: Tx, ctx: DomainCtx, input: TxnInput): Promise<TxnRow> {
   const base = input.to ?? input.from;
-  if (!base) throw new Error("writeTxn requires a source or target bucket");
+  if (!base) throw new Error('writeTxn requires a source or target bucket');
   const { from, to } = input;
   const refs = input.refs ?? {};
-  const [row] = await tx.insert(schema.inventoryTransactions).values({
-    seq: await nextSeq(tx),
-    type: input.type,
-    warehouseId: base.warehouseId,
-    clientId: base.clientId ?? "",
-    productId: base.productId,
-    fromInventoryId: from?.id ?? null,
-    toInventoryId: to?.id ?? null,
-    fromLocationId: from?.locationId ?? null,
-    toLocationId: to?.locationId ?? null,
-    fromLpId: from?.lpId ?? null,
-    toLpId: to?.lpId ?? null,
-    fromStatus: from?.status ?? null,
-    toStatus: to?.status ?? null,
-    fromPackType: from?.packType ?? null,
-    toPackType: to?.packType ?? null,
-    fromLot: from?.lotNumber ?? null,
-    toLot: to?.lotNumber ?? null,
-    fromExpiry: from?.expiryDate ?? null,
-    toExpiry: to?.expiryDate ?? null,
-    fromProductionDate: from?.productionDate ?? null,
-    toProductionDate: to?.productionDate ?? null,
-    fromDamageReason: from?.damageReason ?? null,
-    toDamageReason: to?.damageReason ?? null,
-    uomQty: input.uomQty,
-    packQty: input.packQty,
-    adjustmentReasonId: refs.adjustmentReasonId ?? null,
-    orderId: refs.orderId ?? null,
-    orderLineId: refs.orderLineId ?? null,
-    purchaseOrderId: refs.purchaseOrderId ?? null,
-    receiptId: refs.receiptId ?? null,
-    workOrderId: refs.workOrderId ?? null,
-    countPlanId: refs.countPlanId ?? null,
-    returnOrderId: refs.returnOrderId ?? null,
-    jobId: refs.jobId ?? null,
-    taskId: refs.taskId ?? null,
-    shipmentId: refs.shipmentId ?? null,
-    algorithmName: refs.algorithmName ?? null,
-    algorithmRuleName: refs.algorithmRuleName ?? null,
-    note: refs.note ?? null,
-    userId: ctx.userId,
-    source: ctx.source,
-  }).returning();
-  if (!row) throw new Error("inventory_transactions insert returned no row");
+  const [row] = await tx
+    .insert(schema.inventoryTransactions)
+    .values({
+      seq: await nextSeq(tx),
+      type: input.type,
+      warehouseId: base.warehouseId,
+      clientId: base.clientId ?? '',
+      productId: base.productId,
+      fromInventoryId: from?.id ?? null,
+      toInventoryId: to?.id ?? null,
+      fromLocationId: from?.locationId ?? null,
+      toLocationId: to?.locationId ?? null,
+      fromLpId: from?.lpId ?? null,
+      toLpId: to?.lpId ?? null,
+      fromStatus: from?.status ?? null,
+      toStatus: to?.status ?? null,
+      fromPackType: from?.packType ?? null,
+      toPackType: to?.packType ?? null,
+      fromLot: from?.lotNumber ?? null,
+      toLot: to?.lotNumber ?? null,
+      fromExpiry: from?.expiryDate ?? null,
+      toExpiry: to?.expiryDate ?? null,
+      fromProductionDate: from?.productionDate ?? null,
+      toProductionDate: to?.productionDate ?? null,
+      fromDamageReason: from?.damageReason ?? null,
+      toDamageReason: to?.damageReason ?? null,
+      uomQty: input.uomQty,
+      packQty: input.packQty,
+      adjustmentReasonId: refs.adjustmentReasonId ?? null,
+      orderId: refs.orderId ?? null,
+      orderLineId: refs.orderLineId ?? null,
+      purchaseOrderId: refs.purchaseOrderId ?? null,
+      receiptId: refs.receiptId ?? null,
+      workOrderId: refs.workOrderId ?? null,
+      countPlanId: refs.countPlanId ?? null,
+      returnOrderId: refs.returnOrderId ?? null,
+      jobId: refs.jobId ?? null,
+      taskId: refs.taskId ?? null,
+      shipmentId: refs.shipmentId ?? null,
+      algorithmName: refs.algorithmName ?? null,
+      algorithmRuleName: refs.algorithmRuleName ?? null,
+      note: refs.note ?? null,
+      userId: ctx.userId,
+      source: ctx.source,
+    })
+    .returning();
+  if (!row) throw new Error('inventory_transactions insert returned no row');
   return row;
 }

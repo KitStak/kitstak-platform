@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * ConfirmDialog (BUILD_PLAN 0.3 / F4.2): coloured header band holding the question,
@@ -8,15 +8,15 @@
  * The safe choice (Cancel / No / Stay) receives focus when the dialog opens, except in
  * the type-to-confirm variant, where the confirm input does (Enter submits once it matches).
  */
-import * as React from "react";
-import { AlertDialog } from "radix-ui";
-import { AlertTriangle, Info, Trash2 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Button } from "./button";
-import { overlayClass } from "./dialog";
-import { Spinner } from "./spinner";
+import * as React from 'react';
+import { AlertDialog } from 'radix-ui';
+import { AlertTriangle, Info, Trash2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from './button';
+import { overlayClass } from './dialog';
+import { Spinner } from './spinner';
 
-export type ConfirmVariant = "danger" | "attention" | "info";
+export type ConfirmVariant = 'danger' | 'attention' | 'info';
 
 export interface ConfirmColumn {
   readonly key: string;
@@ -47,10 +47,19 @@ export interface ConfirmDialogProps {
   readonly children?: React.ReactNode;
 }
 
-const VARIANTS: Readonly<Record<ConfirmVariant, { readonly band: string; readonly Icon: React.ComponentType<{ className?: string }>; readonly button: "danger" | "primary" }>> = {
-  danger: { band: "bg-danger text-white", Icon: Trash2, button: "danger" },
-  attention: { band: "bg-warning text-white", Icon: AlertTriangle, button: "primary" },
-  info: { band: "bg-primary text-white", Icon: Info, button: "primary" },
+const VARIANTS: Readonly<
+  Record<
+    ConfirmVariant,
+    {
+      readonly band: string;
+      readonly Icon: React.ComponentType<{ className?: string }>;
+      readonly button: 'danger' | 'primary';
+    }
+  >
+> = {
+  danger: { band: 'bg-danger text-white', Icon: Trash2, button: 'danger' },
+  attention: { band: 'bg-warning text-white', Icon: AlertTriangle, button: 'primary' },
+  info: { band: 'bg-primary text-white', Icon: Info, button: 'primary' },
 };
 
 const DEFAULT_MAX_ROWS = 50;
@@ -65,7 +74,11 @@ function RecordsTable({ records }: { readonly records: ConfirmRecords }) {
         <thead className="sticky top-0 bg-surface-sunken">
           <tr>
             {records.columns.map((c) => (
-              <th key={c.key} scope="col" className="border-b border-border px-2.5 py-1.5 text-2xs font-semibold text-faint">
+              <th
+                key={c.key}
+                scope="col"
+                className="border-b border-border px-2.5 py-1.5 text-2xs font-semibold text-faint"
+              >
                 {c.label}
               </th>
             ))}
@@ -76,14 +89,18 @@ function RecordsTable({ records }: { readonly records: ConfirmRecords }) {
             <tr key={i} className="border-b border-border last:border-b-0">
               {records.columns.map((c) => (
                 <td key={c.key} className="px-2.5 py-1.5 text-body tabular-nums">
-                  {row[c.key] ?? "—"}
+                  {row[c.key] ?? '—'}
                 </td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
-      {hidden > 0 ? <p className="border-t border-border bg-surface-sunken px-2.5 py-1.5 text-2xs text-secondary">+{hidden} more</p> : null}
+      {hidden > 0 ? (
+        <p className="border-t border-border bg-surface-sunken px-2.5 py-1.5 text-2xs text-secondary">
+          +{hidden} more
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -93,10 +110,10 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  variant = "danger",
+  variant = 'danger',
   records,
-  confirmLabel = "Yes",
-  cancelLabel = "No",
+  confirmLabel = 'Yes',
+  cancelLabel = 'No',
   onConfirm,
   typeToConfirm,
   icon,
@@ -104,7 +121,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [typed, setTyped] = React.useState("");
+  const [typed, setTyped] = React.useState('');
   const style = VARIANTS[variant];
   const Icon = icon ?? style.Icon;
   const typedOk = !typeToConfirm || typed.trim() === typeToConfirm;
@@ -114,7 +131,7 @@ export function ConfirmDialog({
   const handleOpenChange = (next: boolean) => {
     if (pending) return;
     if (!next) {
-      setTyped("");
+      setTyped('');
       setError(null);
     }
     onOpenChange(next);
@@ -127,10 +144,10 @@ export function ConfirmDialog({
     setError(null);
     try {
       await onConfirm();
-      setTyped("");
+      setTyped('');
       onOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "The action failed. Try again.");
+      setError(e instanceof Error ? e.message : 'The action failed. Try again.');
     } finally {
       setPending(false);
     }
@@ -149,13 +166,15 @@ export function ConfirmDialog({
             inputRef.current?.focus();
           }}
         >
-          <div className={cn("flex items-start gap-2.5 px-5 py-3.5", style.band)}>
+          <div className={cn('flex items-start gap-2.5 px-5 py-3.5', style.band)}>
             <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <AlertDialog.Title className="text-base font-semibold leading-5">{title}</AlertDialog.Title>
           </div>
           <div className="px-5 py-4">
             {description ? (
-              <AlertDialog.Description className="text-sm leading-5 text-body">{description}</AlertDialog.Description>
+              <AlertDialog.Description className="text-sm leading-5 text-body">
+                {description}
+              </AlertDialog.Description>
             ) : (
               <AlertDialog.Description className="sr-only">Confirm this action</AlertDialog.Description>
             )}
@@ -164,7 +183,8 @@ export function ConfirmDialog({
             {typeToConfirm ? (
               <div className="mt-3 flex flex-col gap-1.5">
                 <label htmlFor={inputId} className="text-xs text-body">
-                  Type <span className="font-mono font-semibold text-foreground">{typeToConfirm}</span> to confirm
+                  Type <span className="font-mono font-semibold text-foreground">{typeToConfirm}</span> to
+                  confirm
                 </label>
                 <input
                   ref={inputRef}
@@ -172,7 +192,7 @@ export function ConfirmDialog({
                   value={typed}
                   onChange={(e) => setTyped(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
+                    if (e.key !== 'Enter') return;
                     e.preventDefault();
                     void confirm();
                   }}
@@ -195,7 +215,12 @@ export function ConfirmDialog({
               </Button>
             </AlertDialog.Cancel>
             <AlertDialog.Action asChild>
-              <Button variant={style.button} onClick={confirm} disabled={!typedOk || pending} aria-busy={pending}>
+              <Button
+                variant={style.button}
+                onClick={confirm}
+                disabled={!typedOk || pending}
+                aria-busy={pending}
+              >
                 {pending ? <Spinner className="h-3.5 w-3.5" label="Working" /> : null}
                 {confirmLabel}
               </Button>

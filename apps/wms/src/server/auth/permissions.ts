@@ -8,20 +8,20 @@
  * Restrictions (carrier cost, carrier account data, rate shopping data) are the union of the
  * assigned roles' `restrictions`, applied by serializers through `redactFor`.
  */
-import { eq, inArray } from "drizzle-orm";
-import { redirect } from "next/navigation";
-import { rolePermissions, roles, userRoles } from "@/server/db/schema";
-import type { ROLE_RESTRICTIONS } from "@/lib/enums";
-import { getAppDb, type AppDb } from "@/server/api/db";
-import { forbiddenError } from "@/server/api/errors";
+import { eq, inArray } from 'drizzle-orm';
+import { redirect } from 'next/navigation';
+import { rolePermissions, roles, userRoles } from '@/server/db/schema';
+import type { ROLE_RESTRICTIONS } from '@/lib/enums';
+import { getAppDb, type AppDb } from '@/server/api/db';
+import { forbiddenError } from '@/server/api/errors';
 import {
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSION_KEYS,
   SELF_SERVICE_PERMISSIONS,
   isPermissionKey,
   type PermissionKey,
-} from "./permission-catalog";
-import { getSessionUser, type SessionUser } from "./session";
+} from './permission-catalog';
+import { getSessionUser, type SessionUser } from './session';
 
 export type Restriction = (typeof ROLE_RESTRICTIONS)[number];
 
@@ -36,7 +36,10 @@ export interface HasPermissions {
   readonly permissions: ReadonlySet<PermissionKey>;
 }
 
-export async function loadPermissions(db: AppDb, user: Pick<SessionUser, "id" | "role">): Promise<PermissionGrant> {
+export async function loadPermissions(
+  db: AppDb,
+  user: Pick<SessionUser, 'id' | 'role'>,
+): Promise<PermissionGrant> {
   const assigned = await db
     .select({ id: roles.id, key: roles.key, restrictions: roles.restrictions })
     .from(userRoles)
@@ -46,16 +49,23 @@ export async function loadPermissions(db: AppDb, user: Pick<SessionUser, "id" | 
   const restrictions = [...new Set(assigned.flatMap((r) => r.restrictions ?? []))];
   const roleKeys = assigned.map((r) => r.key);
 
-  if (user.role === "admin") {
+  if (user.role === 'admin') {
     return { permissions: new Set(PERMISSION_KEYS), restrictions, roleKeys };
   }
   if (assigned.length === 0) {
     return { permissions: new Set(DEFAULT_ROLE_PERMISSIONS[user.role]), restrictions, roleKeys };
   }
-  const granted = (await db
-    .select({ permission: rolePermissions.permission })
-    .from(rolePermissions)
-    .where(inArray(rolePermissions.roleId, assigned.map((r) => r.id))))
+  const granted = (
+    await db
+      .select({ permission: rolePermissions.permission })
+      .from(rolePermissions)
+      .where(
+        inArray(
+          rolePermissions.roleId,
+          assigned.map((r) => r.id),
+        ),
+      )
+  )
     .map((r) => r.permission)
     .filter(isPermissionKey);
   return { permissions: new Set([...granted, ...SELF_SERVICE_PERMISSIONS]), restrictions, roleKeys };
@@ -70,12 +80,15 @@ export function canAny(subject: HasPermissions, keys: readonly PermissionKey[]):
 }
 
 /** Throws FORBIDDEN unless the subject holds `key` (or any of `key[]`). */
-export function requirePermission(subject: HasPermissions, key: PermissionKey | readonly PermissionKey[]): void {
-  const keys = typeof key === "string" ? [key] : key;
+export function requirePermission(
+  subject: HasPermissions,
+  key: PermissionKey | readonly PermissionKey[],
+): void {
+  const keys = typeof key === 'string' ? [key] : key;
   if (!canAny(subject, keys)) throw forbiddenError();
 }
 
-export const FORBIDDEN_PATH = "/forbidden";
+export const FORBIDDEN_PATH = '/forbidden';
 
 export interface PageAuth extends PermissionGrant {
   readonly user: SessionUser;
@@ -85,12 +98,16 @@ export interface PageAuth extends PermissionGrant {
  * For server components: ensures a session (else redirect to /login) and the permission
  * (else redirect to the shared 403 page `/forbidden`, owned by F4). Returns the grant.
  */
-export async function requirePagePermission(key: PermissionKey | readonly PermissionKey[], from?: string): Promise<PageAuth> {
+export async function requirePagePermission(
+  key: PermissionKey | readonly PermissionKey[],
+  from?: string,
+): Promise<PageAuth> {
   const user = await getSessionUser();
-  if (!user) redirect(from ? `/login?next=${encodeURIComponent(from)}` : "/login");
+  if (!user) redirect(from ? `/login?next=${encodeURIComponent(from)}` : '/login');
   const grant = await loadPermissions(await getAppDb(), user);
-  const keys = typeof key === "string" ? [key] : key;
-  if (!canAny(grant, keys)) redirect(from ? `${FORBIDDEN_PATH}?from=${encodeURIComponent(from)}` : FORBIDDEN_PATH);
+  const keys = typeof key === 'string' ? [key] : key;
+  if (!canAny(grant, keys))
+    redirect(from ? `${FORBIDDEN_PATH}?from=${encodeURIComponent(from)}` : FORBIDDEN_PATH);
   return { user, ...grant };
 }
 
@@ -98,9 +115,30 @@ export async function requirePagePermission(key: PermissionKey | readonly Permis
 
 /** Default field names hidden per restriction (serializers may pass their own map). */
 export const RESTRICTED_FIELDS: Readonly<Record<Restriction, readonly string[]>> = {
-  carrier_cost: ["shippingCost", "carrierCost", "carrierFee", "rate", "rateAmount", "totalCharge", "labelCost", "insuranceCost"],
-  carrier_account_data: ["accountNumber", "carrierAccountNumber", "billingAccount", "billingZip", "meterNumber"],
-  rate_shopping_data: ["rateShoppingResult", "rateQuotes", "rateShopRuleId", "selectedRate", "rateShoppingLog"],
+  carrier_cost: [
+    'shippingCost',
+    'carrierCost',
+    'carrierFee',
+    'rate',
+    'rateAmount',
+    'totalCharge',
+    'labelCost',
+    'insuranceCost',
+  ],
+  carrier_account_data: [
+    'accountNumber',
+    'carrierAccountNumber',
+    'billingAccount',
+    'billingZip',
+    'meterNumber',
+  ],
+  rate_shopping_data: [
+    'rateShoppingResult',
+    'rateQuotes',
+    'rateShopRuleId',
+    'selectedRate',
+    'rateShoppingLog',
+  ],
 };
 
 /**

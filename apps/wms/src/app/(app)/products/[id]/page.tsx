@@ -1,8 +1,8 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { ProductDetailPage, ProductDetailSkeleton } from "@/components/products/product-detail";
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { ProductDetailPage, ProductDetailSkeleton } from '@/components/products/product-detail';
 
-export const metadata: Metadata = { title: "Product Detail" };
+export const metadata: Metadata = { title: 'Product Detail' };
 
 interface PageProps {
   readonly params: Promise<{ id: string }>;

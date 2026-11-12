@@ -9,7 +9,7 @@
  * Pure and allocation-light: values without a restricted key are returned as-is (same
  * reference), so unrestricted users and payloads pay nothing.
  */
-import type { Restriction } from "@/server/auth/permissions";
+import type { Restriction } from '@/server/auth/permissions';
 
 /**
  * Field names hidden per restriction, matched case-insensitively against object keys. Covers
@@ -18,29 +18,71 @@ import type { Restriction } from "@/server/auth/permissions";
  */
 export const DEEP_RESTRICTED_FIELDS: Readonly<Record<Restriction, readonly string[]>> = {
   carrier_cost: [
-    "shippingCost", "totalShippingCost", "returnShippingCost", "carrierCost", "carrierFee", "rate", "rateAmount", "totalCharge",
-    "labelCost", "insuranceCost", "shippingCharge", "shippingCharges", "freightCost", "postage", "postageCost", "surcharge", "surcharges",
-    "baseRate", "netCharge", "listRate", "negotiatedRate", "fuelSurcharge", "carrierCharge",
+    'shippingCost',
+    'totalShippingCost',
+    'returnShippingCost',
+    'carrierCost',
+    'carrierFee',
+    'rate',
+    'rateAmount',
+    'totalCharge',
+    'labelCost',
+    'insuranceCost',
+    'shippingCharge',
+    'shippingCharges',
+    'freightCost',
+    'postage',
+    'postageCost',
+    'surcharge',
+    'surcharges',
+    'baseRate',
+    'netCharge',
+    'listRate',
+    'negotiatedRate',
+    'fuelSurcharge',
+    'carrierCharge',
   ],
   carrier_account_data: [
-    "accountNumber", "carrierAccountNumber", "shippingAccountNumber", "taxDutiesAccountNumber", "billingAccount", "billingAccountNumber",
-    "billingZip", "billingPostalCode", "meterNumber", "thirdPartyAccount", "thirdPartyAccountNumber", "carrierAccountId", "apiKey", "apiSecret",
+    'accountNumber',
+    'carrierAccountNumber',
+    'shippingAccountNumber',
+    'taxDutiesAccountNumber',
+    'billingAccount',
+    'billingAccountNumber',
+    'billingZip',
+    'billingPostalCode',
+    'meterNumber',
+    'thirdPartyAccount',
+    'thirdPartyAccountNumber',
+    'carrierAccountId',
+    'apiKey',
+    'apiSecret',
   ],
   rate_shopping_data: [
-    "rateShoppingResult", "rateShoppingResults", "rateQuotes", "rateShopRuleId", "rateShoppingPresetId", "rateShoppingPresetName",
-    "selectedRate", "rateShoppingLog", "rateShopQuotes",
+    'rateShoppingResult',
+    'rateShoppingResults',
+    'rateQuotes',
+    'rateShopRuleId',
+    'rateShoppingPresetId',
+    'rateShoppingPresetName',
+    'selectedRate',
+    'rateShoppingLog',
+    'rateShopQuotes',
   ],
 };
 
 /** Lower-cased key set for the given restrictions (empty when none apply). */
-export function restrictedKeySet(restrictions: readonly Restriction[], fields: Readonly<Record<Restriction, readonly string[]>> = DEEP_RESTRICTED_FIELDS): ReadonlySet<string> {
+export function restrictedKeySet(
+  restrictions: readonly Restriction[],
+  fields: Readonly<Record<Restriction, readonly string[]>> = DEEP_RESTRICTED_FIELDS,
+): ReadonlySet<string> {
   return new Set(restrictions.flatMap((r) => fields[r] ?? []).map((k) => k.toLowerCase()));
 }
 
 const MAX_DEPTH = 12;
 
 function walk(value: unknown, hidden: ReadonlySet<string>, depth: number): unknown {
-  if (depth > MAX_DEPTH || value === null || typeof value !== "object") return value;
+  if (depth > MAX_DEPTH || value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) {
     let changed = false;
     const out = value.map((item) => {
@@ -72,7 +114,10 @@ function walk(value: unknown, hidden: ReadonlySet<string>, depth: number): unkno
  * Returns `value` with every restricted field (at any depth) set to null. Never mutates the
  * input; returns the same reference when nothing is restricted.
  */
-export function deepRedactFor<T>(subject: { readonly restrictions: readonly Restriction[] } | null | undefined, value: T): T {
+export function deepRedactFor<T>(
+  subject: { readonly restrictions: readonly Restriction[] } | null | undefined,
+  value: T,
+): T {
   if (!subject || subject.restrictions.length === 0) return value;
   const hidden = restrictedKeySet(subject.restrictions);
   if (hidden.size === 0) return value;
@@ -80,7 +125,10 @@ export function deepRedactFor<T>(subject: { readonly restrictions: readonly Rest
 }
 
 /** Export columns a restricted subject must not receive (drop them from the sheet entirely). */
-export function restrictedExportColumns<C extends { readonly key: string }>(subject: { readonly restrictions: readonly Restriction[] } | null | undefined, columns: readonly C[]): readonly C[] {
+export function restrictedExportColumns<C extends { readonly key: string }>(
+  subject: { readonly restrictions: readonly Restriction[] } | null | undefined,
+  columns: readonly C[],
+): readonly C[] {
   if (!subject || subject.restrictions.length === 0) return columns;
   const hidden = restrictedKeySet(subject.restrictions);
   return columns.filter((c) => !hidden.has(c.key.toLowerCase()));

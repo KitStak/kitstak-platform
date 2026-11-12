@@ -6,10 +6,10 @@
  * only streamed HTML on screen). Retry/Reload are plain links to the current URL, so they
  * work without JavaScript.
  */
-import { AlertTriangle, Clock } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
-import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { AlertTriangle, Clock } from 'lucide-react';
+import { buttonVariants } from '@/components/ui/button';
+import { Skeleton, SkeletonTable } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 /** Seconds before the "taking longer than usual" notice, and before the "not responding" notice. */
 export const SLOW_NOTICE_S = 8;
@@ -27,7 +27,8 @@ const STAGE_CSS = `
 `;
 
 export function StagedNotices({ title }: { readonly title: string }) {
-  const link = (primary: boolean) => cn(buttonVariants({ variant: primary ? "primary" : "secondary", size: "sm" }));
+  const link = (primary: boolean) =>
+    cn(buttonVariants({ variant: primary ? 'primary' : 'secondary', size: 'sm' }));
   return (
     <>
       <style>{STAGE_CSS}</style>
@@ -42,9 +43,13 @@ export function StagedNotices({ title }: { readonly title: string }) {
               <Clock className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-body">This is taking longer than usual</p>
-                <p className="mt-0.5 text-xs text-secondary">Still loading {title}. You can keep waiting or retry.</p>
+                <p className="mt-0.5 text-xs text-secondary">
+                  Still loading {title}. You can keep waiting or retry.
+                </p>
               </div>
-              <a href="" className={link(true)}>Retry</a>
+              <a href="" className={link(true)}>
+                Retry
+              </a>
             </div>
           </div>
           <div
@@ -57,12 +62,17 @@ export function StagedNotices({ title }: { readonly title: string }) {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-body">{title} isn&apos;t responding</p>
                 <p className="mt-0.5 text-xs text-secondary">
-                  The server hasn&apos;t answered in {STALLED_NOTICE_S} seconds. Your data is safe; nothing was saved or changed.
-                  Reload to try again. If it keeps happening, contact your administrator.
+                  The server hasn&apos;t answered in {STALLED_NOTICE_S} seconds. Your data is safe; nothing
+                  was saved or changed. Reload to try again. If it keeps happening, contact your
+                  administrator.
                 </p>
                 <div className="mt-3 flex gap-2">
-                  <a href="" className={link(true)}>Reload page</a>
-                  <a href="/dashboard" className={link(false)}>Go to dashboard</a>
+                  <a href="" className={link(true)}>
+                    Reload page
+                  </a>
+                  <a href="/dashboard" className={link(false)}>
+                    Go to dashboard
+                  </a>
                 </div>
               </div>
             </div>
@@ -79,7 +89,10 @@ export function ListPageSkeleton({ title }: { readonly title: string }) {
       <Skeleton className="h-3 w-40" />
       <div className="flex items-center justify-between">
         <Skeleton className="h-7 w-48" />
-        <div className="flex gap-2"><Skeleton className="h-8 w-40" /><Skeleton className="h-8 w-40" /></div>
+        <div className="flex gap-2">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-8 w-40" />
+        </div>
       </div>
       <Skeleton className="h-8 w-full" />
       <div className="relative">

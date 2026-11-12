@@ -1,8 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildDropStatements, dropAllObjects, listUserObjects, quoteIdent } from "../../../scripts/lib/drop-all";
-import { openPglite, type OpenDatabase } from "@/server/db";
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  buildDropStatements,
+  dropAllObjects,
+  listUserObjects,
+  quoteIdent,
+} from '../../../scripts/lib/drop-all';
+import { openPglite, type OpenDatabase } from '@/server/db';
 
-describe("drop-all (db:reset step 1)", () => {
+describe('drop-all (db:reset step 1)', () => {
   let handle: OpenDatabase;
 
   beforeEach(async () => {
@@ -21,23 +26,27 @@ describe("drop-all (db:reset step 1)", () => {
 
   afterEach(() => handle.close());
 
-  it("quotes identifiers safely", () => {
+  it('quotes identifiers safely', () => {
     expect(quoteIdent('a"b')).toBe('"a""b"');
   });
 
-  it("lists app objects: tables, views, trigger functions and the migration journal", async () => {
+  it('lists app objects: tables, views, trigger functions and the migration journal', async () => {
     const objects = await listUserObjects(handle.db);
     const names = objects.map((o) => o.name);
-    expect(names).toEqual(expect.arrayContaining(["parents", "children", "parent_names", 'odd"name', "users", "drizzle"]));
-    expect(objects.some((o) => o.type === "function" && o.name.startsWith("billing_reports_period_guard("))).toBe(true);
+    expect(names).toEqual(
+      expect.arrayContaining(['parents', 'children', 'parent_names', 'odd"name', 'users', 'drizzle']),
+    );
+    expect(
+      objects.some((o) => o.type === 'function' && o.name.startsWith('billing_reports_period_guard(')),
+    ).toBe(true);
   });
 
-  it("orders drops views -> tables -> functions -> journal schema", () => {
+  it('orders drops views -> tables -> functions -> journal schema', () => {
     const statements = buildDropStatements([
-      { type: "schema", name: "drizzle" },
-      { type: "function", name: "f(integer)" },
-      { type: "table", name: "t" },
-      { type: "view", name: "v" },
+      { type: 'schema', name: 'drizzle' },
+      { type: 'function', name: 'f(integer)' },
+      { type: 'table', name: 't' },
+      { type: 'view', name: 'v' },
     ]);
     expect(statements).toEqual([
       'DROP VIEW IF EXISTS "public"."v" CASCADE',
@@ -47,13 +56,13 @@ describe("drop-all (db:reset step 1)", () => {
     ]);
   });
 
-  it("drops every object even with foreign keys between tables", async () => {
+  it('drops every object even with foreign keys between tables', async () => {
     const dropped = await dropAllObjects(handle.db);
     expect(dropped).toBeGreaterThanOrEqual(115);
     expect(await listUserObjects(handle.db)).toEqual([]);
   });
 
-  it("is a no-op on an empty database", async () => {
+  it('is a no-op on an empty database', async () => {
     await dropAllObjects(handle.db);
     expect(await dropAllObjects(handle.db)).toBe(0);
   });

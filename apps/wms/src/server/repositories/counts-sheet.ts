@@ -2,24 +2,34 @@
  * Web Count Sheet and Quick Count / Instant Count (M07). Both execute Count tasks through
  * `tasks.execute`, so the count task handler records the entries and rolls the plan up.
  */
-import { and, eq, gt, inArray, sql } from "drizzle-orm";
-import { z } from "zod";
-import * as schema from "@/server/db/schema";
-import type { AppDb } from "@/server/api/db";
-import { notFoundError } from "@/server/api/errors";
-import type { AuthContext } from "@/server/auth/context";
-import { hasWarehouse, type Scope } from "@/server/auth/scope";
-import * as changeLog from "@/server/domain/change-log";
-import * as sequences from "@/server/domain/sequences";
-import * as tasks from "@/server/domain/tasks";
-import { DomainError } from "@/server/domain/errors";
-import { expectedBuckets, getCountLine, isBlindCountJob, getCountPlanRow, lineLabel, movePlan, moveLine, rollupCountPlan, type CountTaskInput } from "@/server/domain/task-handlers/count";
-import { nowIso, type DomainCtx, type Tx } from "@/server/domain/types";
-import { defaultCountJobType, insertCountJob } from "./counts-jobs";
-import { postCountLine } from "./counts-ops";
-import { countLockFor } from "./counts-lock";
-import { recordEntryEvent, recordJobEvent } from "./counts-events";
-import { dbAll, dbGet, mapSeq } from "@/server/db/sql";
+import { and, eq, gt, inArray, sql } from 'drizzle-orm';
+import { z } from 'zod';
+import * as schema from '@/server/db/schema';
+import type { AppDb } from '@/server/api/db';
+import { notFoundError } from '@/server/api/errors';
+import type { AuthContext } from '@/server/auth/context';
+import { hasWarehouse, type Scope } from '@/server/auth/scope';
+import * as changeLog from '@/server/domain/change-log';
+import * as sequences from '@/server/domain/sequences';
+import * as tasks from '@/server/domain/tasks';
+import { DomainError } from '@/server/domain/errors';
+import {
+  expectedBuckets,
+  getCountLine,
+  isBlindCountJob,
+  getCountPlanRow,
+  lineLabel,
+  movePlan,
+  moveLine,
+  rollupCountPlan,
+  type CountTaskInput,
+} from '@/server/domain/task-handlers/count';
+import { nowIso, type DomainCtx, type Tx } from '@/server/domain/types';
+import { defaultCountJobType, insertCountJob } from './counts-jobs';
+import { postCountLine } from './counts-ops';
+import { countLockFor } from './counts-lock';
+import { recordEntryEvent, recordJobEvent } from './counts-events';
+import { dbAll, dbGet, mapSeq } from '@/server/db/sql';
 
 const entrySchema = z.object({
   inventoryId: z.string().min(1).max(64).nullish(),
@@ -30,7 +40,11 @@ const entrySchema = z.object({
   packType: z.string().trim().max(60).nullish(),
   /** "Mark damaged": the counted units go to a damaged bucket with this reason (found / split rows only). */
   damageReason: z.string().trim().max(120).nullish(),
-  countedQty: z.number({ error: "Enter the counted quantity" }).int("Whole numbers only").min(0, "Can't be negative").max(10_000_000),
+  countedQty: z
+    .number({ error: 'Enter the counted quantity' })
+    .int('Whole numbers only')
+    .min(0, "Can't be negative")
+    .max(10_000_000),
 });
 
 export const sheetSubmitSchema = z.object({
@@ -41,8 +55,8 @@ export const sheetSubmitSchema = z.object({
 });
 
 export const instantCountSchema = z.object({
-  warehouseId: z.string().min(1, "Choose a warehouse").max(64),
-  locationId: z.string().min(1, "Scan a location").max(64),
+  warehouseId: z.string().min(1, 'Choose a warehouse').max(64),
+  locationId: z.string().min(1, 'Scan a location').max(64),
   entries: z.array(entrySchema).max(500),
   note: z.string().trim().max(400).nullish(),
   updateInventory: z.boolean().default(true),
@@ -81,32 +95,77 @@ export interface SheetLine {
   readonly buckets: readonly SheetBucket[];
 }
 
-async function bucketsFor(db: AppDb, line: { productId: string | null; lpId: string | null }, locationId: string | null): Promise<SheetBucket[]> {
+async function bucketsFor(
+  db: AppDb,
+  line: { productId: string | null; lpId: string | null },
+  locationId: string | null,
+): Promise<SheetBucket[]> {
   const rows = await expectedBuckets(db, line, locationId);
   if (rows.length === 0) return [];
-  const products = new Map((await db.select().from(schema.products).where(inArray(schema.products.id, [...new Set(rows.map((r) => r.productId))]))).map((p) => [p.id, p]));
+  const products = new Map(
+    (
+      await db
+        .select()
+        .from(schema.products)
+        .where(inArray(schema.products.id, [...new Set(rows.map((r) => r.productId))]))
+    ).map((p) => [p.id, p]),
+  );
   const lpIds = rows.flatMap((r) => (r.lpId ? [r.lpId] : []));
-  const lps = new Map(lpIds.length ? (await db.select().from(schema.licensePlates).where(inArray(schema.licensePlates.id, lpIds))).map((l) => [l.id, l.number]) : []);
+  const lps = new Map(
+    lpIds.length
+      ? (await db.select().from(schema.licensePlates).where(inArray(schema.licensePlates.id, lpIds))).map(
+          (l) => [l.id, l.number],
+        )
+      : [],
+  );
   return rows.map((r) => ({
-    inventoryId: r.id, productId: r.productId, sku: products.get(r.productId)?.sku ?? "—", productName: products.get(r.productId)?.name ?? "",
-    lotNumber: r.lotNumber, expiryDate: r.expiryDate, lpNumber: r.lpId ? (lps.get(r.lpId) ?? null) : null, lpId: r.lpId, damageReason: r.damageReason, packType: r.packType, systemQty: r.onHand, allocated: r.allocated,
+    inventoryId: r.id,
+    productId: r.productId,
+    sku: products.get(r.productId)?.sku ?? '—',
+    productName: products.get(r.productId)?.name ?? '',
+    lotNumber: r.lotNumber,
+    expiryDate: r.expiryDate,
+    lpNumber: r.lpId ? (lps.get(r.lpId) ?? null) : null,
+    lpId: r.lpId,
+    damageReason: r.damageReason,
+    packType: r.packType,
+    systemQty: r.onHand,
+    allocated: r.allocated,
   }));
 }
 
 /** Blind payload: the counter gets the buckets to count but never their quantities. */
-const blindBuckets = (buckets: readonly SheetBucket[]): SheetBucket[] => buckets.map((b) => ({ ...b, systemQty: 0, allocated: 0 }));
+const blindBuckets = (buckets: readonly SheetBucket[]): SheetBucket[] =>
+  buckets.map((b) => ({ ...b, systemQty: 0, allocated: 0 }));
 
 /** Countable lines of a plan (Ready To Count / Count Started) with their expected stock. */
 export async function countSheet(db: AppDb, scope: Scope, planId: string): Promise<SheetLine[]> {
   const plan = await getCountPlanRow(db, planId);
-  if (!hasWarehouse(scope, plan.warehouseId)) throw notFoundError("Count plan");
-  const rows = await dbAll<{ lineId: string; status: string; locationId: string | null; productId: string | null; lpId: string | null; isRecountLine: boolean | number; locationCode: string | null; locationBarcode: string | null; sku: string | null; taskId: string | null; taskNo: number | null; jobCode: string | null; jobId: string | null }>(db, sql`
+  if (!hasWarehouse(scope, plan.warehouseId)) throw notFoundError('Count plan');
+  const rows = await dbAll<{
+    lineId: string;
+    status: string;
+    locationId: string | null;
+    productId: string | null;
+    lpId: string | null;
+    isRecountLine: boolean | number;
+    locationCode: string | null;
+    locationBarcode: string | null;
+    sku: string | null;
+    taskId: string | null;
+    taskNo: number | null;
+    jobCode: string | null;
+    jobId: string | null;
+  }>(
+    db,
+    sql`
     SELECT l.id AS "lineId", l.status, l.location_id AS "locationId", l.product_id AS "productId", l.lp_id AS "lpId", l.is_recount_line AS "isRecountLine",
       lo.code AS "locationCode", lo.barcode AS "locationBarcode", pr.sku, t.id AS "taskId", t.task_no AS "taskNo", j.code AS "jobCode", j.id AS "jobId"
     FROM count_plan_lines l LEFT JOIN locations lo ON lo.id = l.location_id LEFT JOIN products pr ON pr.id = l.product_id
     LEFT JOIN tasks t ON t.count_line_id = l.id AND t.status = 'Pending' LEFT JOIN jobs j ON j.id = t.job_id
     WHERE l.plan_id = ${planId} AND l.status IN ('Ready To Count', 'Count Started')
-    ORDER BY lo.walking_path_priority, lo.code, pr.sku`);
+    ORDER BY lo.walking_path_priority, lo.code, pr.sku`,
+  );
   const blindJobs = new Map<string, boolean>();
   const blindOf = async (jobId: string | null): Promise<boolean> => {
     if (!jobId) return false;
@@ -117,28 +176,60 @@ export async function countSheet(db: AppDb, scope: Scope, planId: string): Promi
     const blind = await blindOf(r.jobId);
     const buckets = await bucketsFor(db, r, r.locationId);
     return {
-      lineId: r.lineId, taskId: r.taskId, taskNo: r.taskNo, jobCode: r.jobCode, status: r.status, locationId: r.locationId, locationCode: r.locationCode,
-      locationBarcode: r.locationBarcode, productId: r.productId, sku: r.sku, isRecountLine: r.isRecountLine === true || r.isRecountLine === 1,
-      blind, buckets: blind ? blindBuckets(buckets) : buckets,
+      lineId: r.lineId,
+      taskId: r.taskId,
+      taskNo: r.taskNo,
+      jobCode: r.jobCode,
+      status: r.status,
+      locationId: r.locationId,
+      locationCode: r.locationCode,
+      locationBarcode: r.locationBarcode,
+      productId: r.productId,
+      sku: r.sku,
+      isRecountLine: r.isRecountLine === true || r.isRecountLine === 1,
+      blind,
+      buckets: blind ? blindBuckets(buckets) : buckets,
     };
   });
 }
 
 /** Submits one line of the Count Sheet: executes its Count task with the per-bucket counts. */
-export async function submitSheetLine(tx: Tx, ctx: DomainCtx, auth: AuthContext, planId: string, input: z.output<typeof sheetSubmitSchema>): Promise<{ lineId: string; status: string }> {
+export async function submitSheetLine(
+  tx: Tx,
+  ctx: DomainCtx,
+  auth: AuthContext,
+  planId: string,
+  input: z.output<typeof sheetSubmitSchema>,
+): Promise<{ lineId: string; status: string }> {
   const plan = await getCountPlanRow(tx, planId);
-  if (!hasWarehouse(auth.scope, plan.warehouseId)) throw notFoundError("Count plan");
+  if (!hasWarehouse(auth.scope, plan.warehouseId)) throw notFoundError('Count plan');
   const line = await getCountLine(tx, input.lineId);
-  if (line.planId !== plan.id) throw notFoundError("Count line");
-  const task = (await tx.select().from(schema.tasks).where(and(eq(schema.tasks.countLineId, line.id), eq(schema.tasks.status, "Pending"))).limit(1))[0];
+  if (line.planId !== plan.id) throw notFoundError('Count line');
+  const task = (
+    await tx
+      .select()
+      .from(schema.tasks)
+      .where(and(eq(schema.tasks.countLineId, line.id), eq(schema.tasks.status, 'Pending')))
+      .limit(1)
+  )[0];
   if (!task) {
-    throw new DomainError("INVALID_STATE", line.status === "Pending" ? "Create a job for this count plan before counting"
-      : line.status === "Ready To Count" || line.status === "Count Started" ? "This line's count job was cancelled. Use Create Job to re-issue it, then count it."
-      : `This line is ${line.status.toLowerCase()}`);
+    throw new DomainError(
+      'INVALID_STATE',
+      line.status === 'Pending'
+        ? 'Create a job for this count plan before counting'
+        : line.status === 'Ready To Count' || line.status === 'Count Started'
+          ? "This line's count job was cancelled. Use Create Job to re-issue it, then count it."
+          : `This line is ${line.status.toLowerCase()}`,
+    );
   }
   const locationId = line.locationId ?? input.locationId;
-  if (!locationId) throw new DomainError("VALIDATION", "Scan the location you counted");
-  const execInput: CountTaskInput & { taskIds: string[] } = { taskIds: [task.id], targetLocationId: locationId, countEntries: input.entries, note: input.note ?? null };
+  if (!locationId) throw new DomainError('VALIDATION', 'Scan the location you counted');
+  const execInput: CountTaskInput & { taskIds: string[] } = {
+    taskIds: [task.id],
+    targetLocationId: locationId,
+    countEntries: input.entries,
+    note: input.note ?? null,
+  };
   await tasks.execute(tx, ctx, execInput);
   const after = await getCountLine(tx, line.id);
   await recordEntryEvent(tx, ctx, plan, { id: after.id, label: await lineLabel(tx, after) }, input.note);
@@ -159,21 +250,51 @@ export interface InstantLocation {
 }
 
 /** Resolves a scanned location code / barcode for Quick Count. */
-export async function instantLocation(db: AppDb, scope: Scope, warehouseId: string, code: string): Promise<InstantLocation> {
-  if (!hasWarehouse(scope, warehouseId)) throw notFoundError("Warehouse");
-  const loc = (await db.select().from(schema.locations)
-    .where(and(eq(schema.locations.warehouseId, warehouseId), sql`(lower(${schema.locations.code}) = lower(${code}) OR lower(${schema.locations.barcode}) = lower(${code}))`)).limit(1))[0];
-  if (!loc) throw new DomainError("NOT_FOUND", `Location ${code} was not found in this warehouse`);
-  const open = await dbGet<{ code: string }>(db, sql`
+export async function instantLocation(
+  db: AppDb,
+  scope: Scope,
+  warehouseId: string,
+  code: string,
+): Promise<InstantLocation> {
+  if (!hasWarehouse(scope, warehouseId)) throw notFoundError('Warehouse');
+  const loc = (
+    await db
+      .select()
+      .from(schema.locations)
+      .where(
+        and(
+          eq(schema.locations.warehouseId, warehouseId),
+          sql`(lower(${schema.locations.code}) = lower(${code}) OR lower(${schema.locations.barcode}) = lower(${code}))`,
+        ),
+      )
+      .limit(1)
+  )[0];
+  if (!loc) throw new DomainError('NOT_FOUND', `Location ${code} was not found in this warehouse`);
+  const open = await dbGet<{ code: string }>(
+    db,
+    sql`
     SELECT p.code FROM count_plan_lines l JOIN count_plans p ON p.id = l.plan_id
-    WHERE l.location_id = ${loc.id} AND l.status IN ('Ready To Count', 'Count Started') AND p.status IN ('Ready To Count', 'Count Started') LIMIT 1`);
+    WHERE l.location_id = ${loc.id} AND l.status IN ('Ready To Count', 'Count Started') AND p.status IN ('Ready To Count', 'Count Started') LIMIT 1`,
+  );
   let blind = false;
   try {
-    const settings = (await defaultCountJobType(db, warehouseId, true)).settings as { count?: { blindCount?: unknown } } | null;
+    const settings = (await defaultCountJobType(db, warehouseId, true)).settings as {
+      count?: { blindCount?: unknown };
+    } | null;
     blind = settings?.count?.blindCount === true;
-  } catch { /* no instant job type yet: createInstantCount reports it on submit */ }
+  } catch {
+    /* no instant job type yet: createInstantCount reports it on submit */
+  }
   const buckets = await bucketsFor(db, { productId: null, lpId: null }, loc.id);
-  return { locationId: loc.id, code: loc.code, warehouseId, buckets: blind ? blindBuckets(buckets) : buckets, openCount: open?.code ?? null, lockedBy: await countLockFor(db, loc.id), blind };
+  return {
+    locationId: loc.id,
+    code: loc.code,
+    warehouseId,
+    buckets: blind ? blindBuckets(buckets) : buckets,
+    openCount: open?.code ?? null,
+    lockedBy: await countLockFor(db, loc.id),
+    blind,
+  };
 }
 
 export interface InstantResult {
@@ -185,46 +306,133 @@ export interface InstantResult {
   readonly awaitingApproval: boolean;
 }
 
-export async function createInstantCount(tx: Tx, ctx: DomainCtx, auth: AuthContext, input: z.output<typeof instantCountSchema>, canUpdateInventory: boolean, selfApprove = true): Promise<InstantResult> {
-  if (!hasWarehouse(auth.scope, input.warehouseId)) throw notFoundError("Warehouse");
-  const loc = (await tx.select().from(schema.locations).where(eq(schema.locations.id, input.locationId)).limit(1))[0];
-  if (!loc || loc.warehouseId !== input.warehouseId) throw new DomainError("VALIDATION", "Scan a location in the selected warehouse");
-  if (input.updateInventory && !canUpdateInventory) throw new DomainError("FORBIDDEN", "You can't update inventory from a count");
+export async function createInstantCount(
+  tx: Tx,
+  ctx: DomainCtx,
+  auth: AuthContext,
+  input: z.output<typeof instantCountSchema>,
+  canUpdateInventory: boolean,
+  selfApprove = true,
+): Promise<InstantResult> {
+  if (!hasWarehouse(auth.scope, input.warehouseId)) throw notFoundError('Warehouse');
+  const loc = (
+    await tx.select().from(schema.locations).where(eq(schema.locations.id, input.locationId)).limit(1)
+  )[0];
+  if (!loc || loc.warehouseId !== input.warehouseId)
+    throw new DomainError('VALIDATION', 'Scan a location in the selected warehouse');
+  if (input.updateInventory && !canUpdateInventory)
+    throw new DomainError('FORBIDDEN', "You can't update inventory from a count");
   const lockedBy = await countLockFor(tx, loc.id);
-  if (lockedBy) throw new DomainError("RULE_VIOLATION", `${loc.code} is locked by count plan ${lockedBy}. Count it on that plan's count sheet, or finish or cancel ${lockedBy} first.`, { countPlanCode: lockedBy });
+  if (lockedBy)
+    throw new DomainError(
+      'RULE_VIOLATION',
+      `${loc.code} is locked by count plan ${lockedBy}. Count it on that plan's count sheet, or finish or cancel ${lockedBy} first.`,
+      { countPlanCode: lockedBy },
+    );
   const jobType = await defaultCountJobType(tx, input.warehouseId, true);
-  const stock = (await dbGet<{ n: number | null }>(tx, sql`SELECT SUM(on_hand) AS n FROM inventory WHERE location_id = ${loc.id} AND on_hand > 0`))?.n ?? 0;
-  const plan = (await tx.insert(schema.countPlans).values({
-    code: sequences.instantCountCode(), warehouseId: input.warehouseId, description: input.note?.trim() || `Instant count of ${loc.code}`,
-    scheduledAt: nowIso(), lockLocations: false, countType: "Location", operationType: "Instant Count", status: "Pending", createdBy: ctx.userId, updatedBy: ctx.userId,
-  }).returning())[0];
-  await changeLog.recordCreate(tx, ctx, { entityType: "count_plan", entityId: plan.id, entityCode: plan.code });
-  const line = (await tx.insert(schema.countPlanLines).values({ planId: plan.id, locationId: loc.id, status: "Pending", initialStockQty: stock, createdBy: ctx.userId, updatedBy: ctx.userId }).returning())[0];
+  const stock =
+    (
+      await dbGet<{ n: number | null }>(
+        tx,
+        sql`SELECT SUM(on_hand) AS n FROM inventory WHERE location_id = ${loc.id} AND on_hand > 0`,
+      )
+    )?.n ?? 0;
+  const plan = (
+    await tx
+      .insert(schema.countPlans)
+      .values({
+        code: sequences.instantCountCode(),
+        warehouseId: input.warehouseId,
+        description: input.note?.trim() || `Instant count of ${loc.code}`,
+        scheduledAt: nowIso(),
+        lockLocations: false,
+        countType: 'Location',
+        operationType: 'Instant Count',
+        status: 'Pending',
+        createdBy: ctx.userId,
+        updatedBy: ctx.userId,
+      })
+      .returning()
+  )[0];
+  await changeLog.recordCreate(tx, ctx, {
+    entityType: 'count_plan',
+    entityId: plan.id,
+    entityCode: plan.code,
+  });
+  const line = (
+    await tx
+      .insert(schema.countPlanLines)
+      .values({
+        planId: plan.id,
+        locationId: loc.id,
+        status: 'Pending',
+        initialStockQty: stock,
+        createdBy: ctx.userId,
+        updatedBy: ctx.userId,
+      })
+      .returning()
+  )[0];
   const jobId = await insertCountJob(tx, ctx, jobType, plan, [line], ctx.userId);
-  await moveLine(tx, ctx, line, "Ready To Count", { jobId });
-  await recordJobEvent(tx, ctx, plan, jobId, "created");
-  await movePlan(tx, ctx, await getCountPlanRow(tx, plan.id), "Ready To Count");
-  const task = (await tx.select().from(schema.tasks).where(eq(schema.tasks.countLineId, line.id)).limit(1))[0];
-  if (!task) throw new DomainError("INVALID_STATE", "The count task could not be created");
-  const execInput: CountTaskInput & { taskIds: string[] } = { taskIds: [task.id], targetLocationId: loc.id, countEntries: input.entries, note: input.note ?? null };
+  await moveLine(tx, ctx, line, 'Ready To Count', { jobId });
+  await recordJobEvent(tx, ctx, plan, jobId, 'created');
+  await movePlan(tx, ctx, await getCountPlanRow(tx, plan.id), 'Ready To Count');
+  const task = (
+    await tx.select().from(schema.tasks).where(eq(schema.tasks.countLineId, line.id)).limit(1)
+  )[0];
+  if (!task) throw new DomainError('INVALID_STATE', 'The count task could not be created');
+  const execInput: CountTaskInput & { taskIds: string[] } = {
+    taskIds: [task.id],
+    targetLocationId: loc.id,
+    countEntries: input.entries,
+    note: input.note ?? null,
+  };
   await tasks.execute(tx, ctx, execInput);
 
   let counted = await getCountLine(tx, line.id);
   await recordEntryEvent(tx, ctx, plan, { id: counted.id, label: await lineLabel(tx, counted) }, input.note);
-  const entries = await tx.select().from(schema.countLineEntries).where(eq(schema.countLineEntries.lineId, line.id));
+  const entries = await tx
+    .select()
+    .from(schema.countLineEntries)
+    .where(eq(schema.countLineEntries.lineId, line.id));
   const hasVariance = entries.some((e) => e.countedQty !== e.systemQty);
   // Four-eyes: a counter without supervisor rights records the variance; another user posts it.
   const awaitingApproval = hasVariance && input.updateInventory && !selfApprove;
-  if (counted.status === "Count Completed" && (!hasVariance || (input.updateInventory && !awaitingApproval))) {
-    if (hasVariance) await postCountLine(tx, ctx, counted, await getCountPlanRow(tx, plan.id), input.reasonId ?? null, input.note);
-    else counted = await moveLine(tx, ctx, counted, "Inventory Updated", { inventoryUpdatedAt: nowIso(), inventoryUpdatedBy: ctx.userId });
+  if (
+    counted.status === 'Count Completed' &&
+    (!hasVariance || (input.updateInventory && !awaitingApproval))
+  ) {
+    if (hasVariance)
+      await postCountLine(
+        tx,
+        ctx,
+        counted,
+        await getCountPlanRow(tx, plan.id),
+        input.reasonId ?? null,
+        input.note,
+      );
+    else
+      counted = await moveLine(tx, ctx, counted, 'Inventory Updated', {
+        inventoryUpdatedAt: nowIso(),
+        inventoryUpdatedBy: ctx.userId,
+      });
     await rollupCountPlan(tx, ctx, plan.id);
   }
   const final = await getCountPlanRow(tx, plan.id);
-  return { planId: final.id, code: final.code, status: final.status, varianceLines: hasVariance ? 1 : 0, awaitingApproval };
+  return {
+    planId: final.id,
+    code: final.code,
+    status: final.status,
+    varianceLines: hasVariance ? 1 : 0,
+    awaitingApproval,
+  };
 }
 
 /** Product search for "Add found stock" (products of the warehouse's clients in scope). */
 export async function stockedProducts(db: AppDb, locationId: string): Promise<string[]> {
-  return (await db.select({ id: schema.inventory.productId }).from(schema.inventory).where(and(eq(schema.inventory.locationId, locationId), gt(schema.inventory.onHand, 0)))).map((r) => r.id);
+  return (
+    await db
+      .select({ id: schema.inventory.productId })
+      .from(schema.inventory)
+      .where(and(eq(schema.inventory.locationId, locationId), gt(schema.inventory.onHand, 0)))
+  ).map((r) => r.id);
 }

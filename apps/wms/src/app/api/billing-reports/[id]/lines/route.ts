@@ -1,11 +1,11 @@
 /** `GET /api/billing-reports/[id]/lines` — Detailed lines grid (search, filter, sort, export). */
-import { defineRoute } from "@/server/api/define-route";
-import { listResult } from "@/server/api/envelope";
-import { idParamsSchema } from "@/server/repositories/platform-common";
-import { listReportLines } from "@/server/repositories/billing-reports";
+import { defineRoute } from '@/server/api/define-route';
+import { listResult } from '@/server/api/envelope';
+import { idParamsSchema } from '@/server/repositories/platform-common';
+import { listReportLines } from '@/server/repositories/billing-reports';
 
 export const GET = defineRoute({
-  permission: ["settings.billing_report.view", "settings.billing.view"],
+  permission: ['settings.billing_report.view', 'settings.billing.view'],
   params: idParamsSchema,
   handler: async ({ db, auth, params, grid }) => {
     const q = grid();

@@ -2,7 +2,7 @@
  * Server-side CSRF enforcement (double-submit cookie + same-origin check).
  * See `csrf-shared.ts` for the client contract consumed by F4's `apiFetch`.
  */
-import type { NextResponse } from "next/server";
+import type { NextResponse } from 'next/server';
 import {
   CSRF_COOKIE,
   CSRF_HEADER,
@@ -11,23 +11,23 @@ import {
   isSafeMethod,
   isWellFormedCsrfToken,
   timingSafeEqualStrings,
-} from "./csrf-shared";
-import { readCookie } from "./session";
+} from './csrf-shared';
+import { readCookie } from './session';
 
-export * from "./csrf-shared";
+export * from './csrf-shared';
 
-export type CsrfFailureReason = "missing_cookie" | "missing_header" | "mismatch" | "cross_origin";
+export type CsrfFailureReason = 'missing_cookie' | 'missing_header' | 'mismatch' | 'cross_origin';
 
 export type CsrfCheck = { readonly ok: true } | { readonly ok: false; readonly reason: CsrfFailureReason };
 
 function trustProxy(): boolean {
-  return process.env.TRUST_PROXY === "1";
+  return process.env.TRUST_PROXY === '1';
 }
 
 /** The host the client addressed (honours x-forwarded-host only when TRUST_PROXY=1). */
 export function requestHost(request: Request): string | null {
-  const forwarded = trustProxy() ? request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() : undefined;
-  return forwarded || request.headers.get("host") || safeUrlHost(request.url);
+  const forwarded = trustProxy() ? request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() : undefined;
+  return forwarded || request.headers.get('host') || safeUrlHost(request.url);
 }
 
 function safeUrlHost(url: string): string | null {
@@ -43,10 +43,10 @@ function safeUrlHost(url: string): string | null {
  * (curl, server-to-server) pass this check and still need the token where required.
  */
 export function isSameOriginRequest(request: Request): boolean {
-  const fetchSite = request.headers.get("sec-fetch-site");
-  if (fetchSite === "cross-site") return false;
-  const origin = request.headers.get("origin");
-  if (!origin || origin === "null") return origin !== "null";
+  const fetchSite = request.headers.get('sec-fetch-site');
+  if (fetchSite === 'cross-site') return false;
+  const origin = request.headers.get('origin');
+  if (!origin || origin === 'null') return origin !== 'null';
   const host = requestHost(request);
   return host !== null && safeUrlHost(origin) === host;
 }
@@ -54,26 +54,26 @@ export function isSameOriginRequest(request: Request): boolean {
 /** Full check for state-changing requests. Safe methods always pass. */
 export function verifyCsrf(request: Request): CsrfCheck {
   if (isSafeMethod(request.method)) return { ok: true };
-  if (!isSameOriginRequest(request)) return { ok: false, reason: "cross_origin" };
+  if (!isSameOriginRequest(request)) return { ok: false, reason: 'cross_origin' };
   const cookie = readCookie(request, CSRF_COOKIE);
-  if (!isWellFormedCsrfToken(cookie)) return { ok: false, reason: "missing_cookie" };
+  if (!isWellFormedCsrfToken(cookie)) return { ok: false, reason: 'missing_cookie' };
   const header = request.headers.get(CSRF_HEADER);
-  if (!header) return { ok: false, reason: "missing_header" };
-  return timingSafeEqualStrings(cookie, header) ? { ok: true } : { ok: false, reason: "mismatch" };
+  if (!header) return { ok: false, reason: 'missing_header' };
+  return timingSafeEqualStrings(cookie, header) ? { ok: true } : { ok: false, reason: 'mismatch' };
 }
 
 export function csrfCookieOptions(): {
   httpOnly: false;
-  sameSite: "strict";
+  sameSite: 'strict';
   secure: boolean;
   path: string;
   maxAge: number;
 } {
   return {
     httpOnly: false,
-    sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
     maxAge: CSRF_MAX_AGE_SECONDS,
   };
 }

@@ -10,10 +10,10 @@
  * router treats a non-OK RSC response as a hard navigation.
  */
 
-export const FORBIDDEN_PATH = "/forbidden";
+export const FORBIDDEN_PATH = '/forbidden';
 
 /** Path segments under a record route that are pages, not record ids. */
-const RESERVED_SEGMENTS: ReadonlySet<string> = new Set(["new", "shipped", "returns"]);
+const RESERVED_SEGMENTS: ReadonlySet<string> = new Set(['new', 'shipped', 'returns']);
 
 /** A record detail route and how to check that its record exists. */
 export interface RecordGate {
@@ -25,7 +25,7 @@ export interface RecordGate {
 const ORDER_GATE: RecordGate = {
   pattern: /^\/orders\/([^/]+)\/?$/,
   exists: async (key) => {
-    const { orderExists } = await import("./order-exists");
+    const { orderExists } = await import('./order-exists');
     return orderExists(key);
   },
 };
@@ -33,16 +33,19 @@ const ORDER_GATE: RecordGate = {
 export const RECORD_GATES: readonly RecordGate[] = [ORDER_GATE];
 
 /** Header names Next sets on client-router (RSC) fetches. */
-const RSC_HEADERS: readonly string[] = ["rsc", "next-router-prefetch", "next-router-state-tree"];
+const RSC_HEADERS: readonly string[] = ['rsc', 'next-router-prefetch', 'next-router-state-tree'];
 
 /** True for a browser document load (GET, not an RSC/prefetch fetch). */
 export function isDocumentRequest(method: string, headers: Headers): boolean {
-  if (method !== "GET") return false;
+  if (method !== 'GET') return false;
   return !RSC_HEADERS.some((name) => headers.has(name));
 }
 
 /** Pure: the record key a pathname addresses, or null when no gate applies. */
-export function matchRecordGate(pathname: string, gates: readonly RecordGate[] = RECORD_GATES): { readonly gate: RecordGate; readonly key: string } | null {
+export function matchRecordGate(
+  pathname: string,
+  gates: readonly RecordGate[] = RECORD_GATES,
+): { readonly gate: RecordGate; readonly key: string } | null {
   for (const gate of gates) {
     const match = gate.pattern.exec(pathname);
     const raw = match?.[1];
@@ -63,7 +66,10 @@ export function matchRecordGate(pathname: string, gates: readonly RecordGate[] =
  * The status a signed-in document request should carry, or null for the default 200.
  * A failing lookup never blocks the page: the page itself still decides what to render.
  */
-export async function documentStatusFor(pathname: string, gates: readonly RecordGate[] = RECORD_GATES): Promise<403 | 404 | null> {
+export async function documentStatusFor(
+  pathname: string,
+  gates: readonly RecordGate[] = RECORD_GATES,
+): Promise<403 | 404 | null> {
   if (pathname === FORBIDDEN_PATH) return 403;
   const hit = matchRecordGate(pathname, gates);
   if (!hit) return null;

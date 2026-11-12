@@ -1,16 +1,16 @@
-"use client";
+'use client';
 
 /**
  * Status pill + clickable status icon (Logiwa parity). The popover lists only the legal
  * next statuses from the state machine; "Shipped" routes to Ship, "Cancelled" confirms.
  */
-import * as React from "react";
-import { ArrowRight, ChevronDown } from "lucide-react";
-import type { ShipmentPlanStatus } from "@/lib/enums";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { StatusPill } from "@/components/ui/status-pill";
-import { Tooltip } from "@/components/ui/tooltip";
-import { STATUS_HINT } from "./plans-client";
+import * as React from 'react';
+import { ArrowRight, ChevronDown } from 'lucide-react';
+import type { ShipmentPlanStatus } from '@/lib/enums';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { StatusPill } from '@/components/ui/status-pill';
+import { Tooltip } from '@/components/ui/tooltip';
+import { STATUS_HINT } from './plans-client';
 
 /** A non-status step offered under the statuses (e.g. "Truck departed" on a loaded plan). */
 export interface PlanStatusExtra {
@@ -33,7 +33,15 @@ export interface PlanStatusPopoverProps {
   readonly extras?: readonly PlanStatusExtra[];
 }
 
-export function PlanStatusPopover({ status, nextStatuses, disabledReason, onPick, canChange = true, blocked, extras = [] }: PlanStatusPopoverProps) {
+export function PlanStatusPopover({
+  status,
+  nextStatuses,
+  disabledReason,
+  onPick,
+  canChange = true,
+  blocked,
+  extras = [],
+}: PlanStatusPopoverProps) {
   const [open, setOpen] = React.useState(false);
   const reason = disabledReason ?? (nextStatuses.length === 0 ? `${status} is a final status` : null);
   // The pill itself opens the popover (Logiwa parity): a chevron marks it as a control. A blocked or final
@@ -54,8 +62,14 @@ export function PlanStatusPopover({ status, nextStatuses, disabledReason, onPick
   );
   return (
     <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-      {nextStatuses.length === 0 || !canChange ? <StatusPill status={status} domain="shipmentPlan" /> : reason ? (
-        <Tooltip content={reason}><span className="inline-flex"><StatusPill status={status} domain="shipmentPlan" /></span></Tooltip>
+      {nextStatuses.length === 0 || !canChange ? (
+        <StatusPill status={status} domain="shipmentPlan" />
+      ) : reason ? (
+        <Tooltip content={reason}>
+          <span className="inline-flex">
+            <StatusPill status={status} domain="shipmentPlan" />
+          </span>
+        </Tooltip>
       ) : (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>{trigger}</PopoverTrigger>
@@ -79,17 +93,35 @@ export function PlanStatusPopover({ status, nextStatuses, disabledReason, onPick
                     <ArrowRight className="h-3 w-3 shrink-0 text-faint" aria-hidden />
                     <span className="flex min-w-0 flex-col">
                       <StatusPill status={s} domain="shipmentPlan" size="sm" className="self-start" />
-                      <span className={blocked?.[s] ? "mt-0.5 text-2xs font-medium text-warning" : "mt-0.5 text-2xs text-secondary"}>{blocked?.[s] ?? STATUS_HINT[s]}</span>
+                      <span
+                        className={
+                          blocked?.[s]
+                            ? 'mt-0.5 text-2xs font-medium text-warning'
+                            : 'mt-0.5 text-2xs text-secondary'
+                        }
+                      >
+                        {blocked?.[s] ?? STATUS_HINT[s]}
+                      </span>
                     </span>
                   </button>
                 </li>
               ))}
               {extras.map((x) => (
                 <li key={x.key} role="none" className="mt-1 border-t border-border pt-1">
-                  <button type="button" role="menuitem" onClick={() => { setOpen(false); x.onSelect(); }}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-surface-sunken focus-visible:bg-surface-sunken focus-visible:outline-none">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOpen(false);
+                      x.onSelect();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-surface-sunken focus-visible:bg-surface-sunken focus-visible:outline-none"
+                  >
                     <ArrowRight className="h-3 w-3 shrink-0 text-faint" aria-hidden />
-                    <span className="flex min-w-0 flex-col"><span className="text-xs font-semibold text-foreground">{x.label}</span><span className="mt-0.5 text-2xs text-secondary">{x.hint}</span></span>
+                    <span className="flex min-w-0 flex-col">
+                      <span className="text-xs font-semibold text-foreground">{x.label}</span>
+                      <span className="mt-0.5 text-2xs text-secondary">{x.hint}</span>
+                    </span>
                   </button>
                 </li>
               ))}

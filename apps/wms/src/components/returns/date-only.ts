@@ -18,7 +18,7 @@ export function localDateFromIso(value: string | null | undefined): Date | null 
 /** Local calendar date → "YYYY-MM-DD" (no timezone shift). */
 export function isoFromLocalDate(d: Date | null | undefined): string | null {
   if (!d || Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** True for a real "YYYY-MM-DD" calendar date (rejects 2026-02-30). */

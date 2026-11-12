@@ -12,7 +12,7 @@
  *   included outside production. Logs never reach the client.
  */
 
-export const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
+export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
 export type LogFields = Readonly<Record<string, unknown>>;
@@ -27,7 +27,7 @@ export interface LogRecord {
 export type LogSink = (level: LogLevel, line: string) => void;
 
 const SENSITIVE_KEY_RE = /pass(word)?|secret|token|cookie|authorization|session|hash|csrf/i;
-const REDACTED = "[redacted]";
+const REDACTED = '[redacted]';
 const MAX_DEPTH = 6;
 
 function levelRank(level: LogLevel): number {
@@ -35,13 +35,13 @@ function levelRank(level: LogLevel): number {
 }
 
 function isLogLevel(value: unknown): value is LogLevel {
-  return typeof value === "string" && (LOG_LEVELS as readonly string[]).includes(value);
+  return typeof value === 'string' && (LOG_LEVELS as readonly string[]).includes(value);
 }
 
 function defaultMinLevel(): LogLevel {
   const configured = process.env.LOG_LEVEL;
   if (isLogLevel(configured)) return configured;
-  return process.env.VITEST ? "warn" : "info";
+  return process.env.VITEST ? 'warn' : 'info';
 }
 
 export interface SerializedError {
@@ -61,29 +61,31 @@ export function serializeError(error: unknown): SerializedError {
     return {
       name: error.name,
       message: error.message,
-      ...(typeof code === "string" ? { code } : {}),
-      ...(cause instanceof Error ? { cause: { message: cause.message, ...(typeof causeCode === "string" ? { code: causeCode } : {}) } } : {}),
-      ...(process.env.NODE_ENV !== "production" && error.stack ? { stack: error.stack } : {}),
+      ...(typeof code === 'string' ? { code } : {}),
+      ...(cause instanceof Error
+        ? { cause: { message: cause.message, ...(typeof causeCode === 'string' ? { code: causeCode } : {}) } }
+        : {}),
+      ...(process.env.NODE_ENV !== 'production' && error.stack ? { stack: error.stack } : {}),
     };
   }
-  return { name: "NonError", message: String(error) };
+  return { name: 'NonError', message: String(error) };
 }
 
 /** Deep-copies `value`, redacting sensitive keys and serialising errors. */
 export function sanitize(value: unknown, depth = 0): unknown {
   if (value instanceof Error) return serializeError(value);
-  if (value === null || typeof value !== "object") return value;
-  if (depth >= MAX_DEPTH) return "[truncated]";
+  if (value === null || typeof value !== 'object') return value;
+  if (depth >= MAX_DEPTH) return '[truncated]';
   if (Array.isArray(value)) return value.map((item) => sanitize(item, depth + 1));
   const entries = Object.entries(value as Record<string, unknown>).map(([key, inner]) => {
-    if (key === "err" || key === "error") return [key, sanitize(inner, depth + 1)] as const;
+    if (key === 'err' || key === 'error') return [key, sanitize(inner, depth + 1)] as const;
     return [key, SENSITIVE_KEY_RE.test(key) ? REDACTED : sanitize(inner, depth + 1)] as const;
   });
   return Object.fromEntries(entries);
 }
 
 const defaultSink: LogSink = (level, line) => {
-  const stream = level === "error" || level === "warn" ? process.stderr : process.stdout;
+  const stream = level === 'error' || level === 'warn' ? process.stderr : process.stdout;
   stream.write(`${line}\n`);
 };
 
@@ -121,10 +123,10 @@ export function createLogger(options: LoggerOptions = {}): Logger {
   };
 
   return {
-    debug: (msg, fields) => write("debug", msg, fields),
-    info: (msg, fields) => write("info", msg, fields),
-    warn: (msg, fields) => write("warn", msg, fields),
-    error: (msg, fields) => write("error", msg, fields),
+    debug: (msg, fields) => write('debug', msg, fields),
+    info: (msg, fields) => write('info', msg, fields),
+    warn: (msg, fields) => write('warn', msg, fields),
+    error: (msg, fields) => write('error', msg, fields),
     child: (more) => createLogger({ ...options, bound: { ...bound, ...more } }),
   };
 }

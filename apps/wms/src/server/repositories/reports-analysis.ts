@@ -2,12 +2,24 @@
  * Analysis reports (M13 round 6): Inventory Aging and Location Utilization. Scoped to
  * the viewer's warehouses and clients (quantities from out-of-scope clients never count).
  */
-import { sql, type SQL } from "drizzle-orm";
-import type { AppDb } from "@/server/api/db";
-import type { AuthContext } from "@/server/auth/context";
-import { AGING_BUCKETS, AGING_DEF, UTILIZATION_BANDS, UTILIZATION_DEF } from "@/lib/grid-defs/reports/analysis";
-import { clientIn, inList, runReport, warehouseLabel, type ReportPage, type ReportQuery } from "./reports-grid";
-import { dbAll } from "@/server/db/sql";
+import { sql, type SQL } from 'drizzle-orm';
+import type { AppDb } from '@/server/api/db';
+import type { AuthContext } from '@/server/auth/context';
+import {
+  AGING_BUCKETS,
+  AGING_DEF,
+  UTILIZATION_BANDS,
+  UTILIZATION_DEF,
+} from '@/lib/grid-defs/reports/analysis';
+import {
+  clientIn,
+  inList,
+  runReport,
+  warehouseLabel,
+  type ReportPage,
+  type ReportQuery,
+} from './reports-grid';
+import { dbAll } from '@/server/db/sql';
 
 type Row = Record<string, unknown>;
 
@@ -15,9 +27,11 @@ const lit = (s: string): string => `'${s.replace(/'/g, "''")}'`;
 
 /** CASE expression mapping an age (days) to the bucket label; mirrors `agingBucketOf`. */
 export function agingBucketCase(ageExpr: string): SQL {
-  const whens = AGING_BUCKETS.filter((b) => Number.isFinite(b.max)).map((b) => `WHEN ${ageExpr} <= ${b.max} THEN ${lit(b.label)}`);
+  const whens = AGING_BUCKETS.filter((b) => Number.isFinite(b.max)).map(
+    (b) => `WHEN ${ageExpr} <= ${b.max} THEN ${lit(b.label)}`,
+  );
   const last = AGING_BUCKETS[AGING_BUCKETS.length - 1]!.label;
-  return sql.raw(`CASE ${whens.join(" ")} ELSE ${lit(last)} END`);
+  return sql.raw(`CASE ${whens.join(' ')} ELSE ${lit(last)} END`);
 }
 
 /** Age in whole days, shifted into the warehouse calendar by `offsetMinutes`. */
@@ -28,7 +42,7 @@ export function agingSql(auth: AuthContext, offsetMinutes = 0): SQL {
   const off = Math.trunc(offsetMinutes);
   const age = ageExpr(off);
   return sql`
-    SELECT i.id AS "rowId", i.warehouse_id AS "warehouseId", ${warehouseLabel("w")} AS "warehouse",
+    SELECT i.id AS "rowId", i.warehouse_id AS "warehouseId", ${warehouseLabel('w')} AS "warehouse",
            i.client_id AS "clientId", c.name AS "client",
            p.sku AS "sku", p.name AS "productName", '/products/' || p.id AS "productHref",
            loc.code AS "location", '/locations/' || loc.id AS "locationHref", lp.number AS "lpNumber",
@@ -46,7 +60,9 @@ export function agingSql(auth: AuthContext, offsetMinutes = 0): SQL {
 }
 
 /** One unit's cube in cubic inches, from the product master dimensions (0 when unknown). */
-const UNIT_CUBE_SQL = sql.raw("(COALESCE(p.length_in, 0) * COALESCE(p.width_in, 0) * COALESCE(p.height_in, 0))");
+const UNIT_CUBE_SQL = sql.raw(
+  '(COALESCE(p.length_in, 0) * COALESCE(p.width_in, 0) * COALESCE(p.height_in, 0))',
+);
 
 /**
  * Capacity resolution, most exact first: the location's Max Capacity Qty, its Location Product
@@ -99,7 +115,7 @@ export function utilizationSql(auth: AuthContext): SQL {
              END AS pct
       FROM src s
     )
-    SELECT b.lid AS "rowId", b.wid AS "warehouseId", ${warehouseLabel("w")} AS "warehouse",
+    SELECT b.lid AS "rowId", b.wid AS "warehouseId", ${warehouseLabel('w')} AS "warehouse",
            b.code AS "location", '/locations/' || b.lid AS "locationHref", b.zone AS "zone",
            b.area_type AS "areaType", b.location_type AS "locationType", b.capacity_type AS "capacityType",
            b.cap_source AS "capacitySource", CASE WHEN b.cap_source = 'Legacy Capacity Units (estimate)' THEN 1 ELSE 0 END AS "estimated",
@@ -123,8 +139,11 @@ export function utilizationSql(auth: AuthContext): SQL {
 export const listAging = async (db: AppDb, auth: AuthContext, q: ReportQuery): Promise<ReportPage<Row>> =>
   await runReport<Row>(db, agingSql(auth, q.tzOffsetMinutes ?? 0), AGING_DEF, q);
 
-export const listUtilization = async (db: AppDb, auth: AuthContext, q: ReportQuery): Promise<ReportPage<Row>> =>
-  await runReport<Row>(db, utilizationSql(auth), UTILIZATION_DEF, q);
+export const listUtilization = async (
+  db: AppDb,
+  auth: AuthContext,
+  q: ReportQuery,
+): Promise<ReportPage<Row>> => await runReport<Row>(db, utilizationSql(auth), UTILIZATION_DEF, q);
 
 export interface UtilizationSummary {
   readonly total: number;
@@ -134,8 +153,11 @@ export interface UtilizationSummary {
 
 /** Location count per utilization band, plus how many rows rest on estimated capacity. */
 export async function utilizationSummary(db: AppDb, auth: AuthContext): Promise<UtilizationSummary> {
-  const rows = await dbAll<{ band: string; n: number; est: number }>(db, sql`
-    SELECT t.band AS "band", COUNT(*) AS "n", SUM(t.estimated) AS "est" FROM (${utilizationSql(auth)}) t GROUP BY t.band`);
+  const rows = await dbAll<{ band: string; n: number; est: number }>(
+    db,
+    sql`
+    SELECT t.band AS "band", COUNT(*) AS "n", SUM(t.estimated) AS "est" FROM (${utilizationSql(auth)}) t GROUP BY t.band`,
+  );
   const by = new Map(rows.map((r) => [r.band, Number(r.n)]));
   return {
     total: rows.reduce((s, r) => s + Number(r.n), 0),

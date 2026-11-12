@@ -1,10 +1,10 @@
 /** `GET /api/company/change-log` — field-level history of Company Settings. */
-import { defineRoute } from "@/server/api/define-route";
-import { COMPANY_ENTITY } from "@/server/repositories/company";
-import { changeLogPageSchema, changeLogResult } from "@/server/repositories/users-shared";
+import { defineRoute } from '@/server/api/define-route';
+import { COMPANY_ENTITY } from '@/server/repositories/company';
+import { changeLogPageSchema, changeLogResult } from '@/server/repositories/users-shared';
 
 export const GET = defineRoute({
-  permission: "settings.company_settings.view",
+  permission: 'settings.company_settings.view',
   query: changeLogPageSchema,
-  handler: async ({ db, query }) => await changeLogResult(db, COMPANY_ENTITY, "company", query),
+  handler: async ({ db, query }) => await changeLogResult(db, COMPANY_ENTITY, 'company', query),
 });

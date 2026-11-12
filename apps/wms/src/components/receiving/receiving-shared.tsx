@@ -1,24 +1,34 @@
-"use client";
+'use client';
 
 /**
  * Client helpers shared by the M05 screens: filter fields with runtime options
  * (clients, warehouses, tags, custom-field names), row types mirrored from the
  * repositories, bulk-result toasts and small presentational bits.
  */
-import * as React from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { BarChart3, ChevronDown, ClipboardList, MoveRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import type { FilterFieldDef } from "@/components/grid";
-import { customFieldDefSchema, parseList, tagSchema } from "@/components/shared/contracts";
-import { toast } from "@/components/ui/toast";
-import { apiRequest, isApiError } from "@/lib/api-client";
-import { useCan as useCanRaw, useMe, type PermissionInput, type PermissionMode } from "@/lib/permissions-client";
-import { useApiQuery } from "@/lib/query-client";
-import type { ReceivingGridField } from "@/lib/grid-defs/receiving/purchase-orders";
-import { formatZoned } from "@/lib/grid-defs/receiving/zoned-time";
+import * as React from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
+import { BarChart3, ChevronDown, ClipboardList, MoveRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import type { FilterFieldDef } from '@/components/grid';
+import { customFieldDefSchema, parseList, tagSchema } from '@/components/shared/contracts';
+import { toast } from '@/components/ui/toast';
+import { apiRequest, isApiError } from '@/lib/api-client';
+import {
+  useCan as useCanRaw,
+  useMe,
+  type PermissionInput,
+  type PermissionMode,
+} from '@/lib/permissions-client';
+import { useApiQuery } from '@/lib/query-client';
+import type { ReceivingGridField } from '@/lib/grid-defs/receiving/purchase-orders';
+import { formatZoned } from '@/lib/grid-defs/receiving/zoned-time';
 
 /* ---------------- row types (mirrors of the server repositories) ---------------- */
 
@@ -169,18 +179,22 @@ export interface BulkResult {
 /* ---------------- query keys ---------------- */
 
 export const PO_KEYS = {
-  grid: ["grid", "purchase-orders"] as const,
-  detail: (id: string) => ["purchase-order", id] as const,
-  receipts: (id: string) => ["purchase-order-receipts", id] as const,
-  receiptsGrid: ["grid", "receiving-history"] as const,
-  vendorsGrid: ["grid", "vendors"] as const,
+  grid: ['grid', 'purchase-orders'] as const,
+  detail: (id: string) => ['purchase-order', id] as const,
+  receipts: (id: string) => ['purchase-order-receipts', id] as const,
+  receiptsGrid: ['grid', 'receiving-history'] as const,
+  vendorsGrid: ['grid', 'vendors'] as const,
 };
 
 /** Invalidates every M05 list + detail after a mutation. */
 const noopSubscribe = () => () => {};
 /** False on the server render and during hydration, true afterwards. */
 export function useHydrated(): boolean {
-  return React.useSyncExternalStore(noopSubscribe, () => true, () => false);
+  return React.useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
 }
 
 /**
@@ -188,7 +202,10 @@ export function useHydrated(): boolean {
  * /api/me before these Suspense boundaries hydrate, so a plain `useCan` renders permission-gated
  * controls on the first client pass that the server never rendered (hydration mismatch).
  */
-export function useCan(required: PermissionInput, mode: PermissionMode = "all"): { readonly allowed: boolean; readonly isLoading: boolean } {
+export function useCan(
+  required: PermissionInput,
+  mode: PermissionMode = 'all',
+): { readonly allowed: boolean; readonly isLoading: boolean } {
   const hydrated = useHydrated();
   const can = useCanRaw(required, mode);
   return hydrated ? can : { allowed: false, isLoading: true };
@@ -198,23 +215,32 @@ export function useInvalidateReceiving(): () => Promise<void> {
   const qc = useQueryClient();
   return React.useCallback(async () => {
     await Promise.all([
-      qc.invalidateQueries({ queryKey: ["grid"] }),
-      qc.invalidateQueries({ queryKey: ["purchase-order"] }),
-      qc.invalidateQueries({ queryKey: ["purchase-order-receipts"] }),
-      qc.invalidateQueries({ queryKey: ["vendor-list"] }),
-      qc.invalidateQueries({ queryKey: ["change-log"] }),
+      qc.invalidateQueries({ queryKey: ['grid'] }),
+      qc.invalidateQueries({ queryKey: ['purchase-order'] }),
+      qc.invalidateQueries({ queryKey: ['purchase-order-receipts'] }),
+      qc.invalidateQueries({ queryKey: ['vendor-list'] }),
+      qc.invalidateQueries({ queryKey: ['change-log'] }),
     ]);
   }, [qc]);
 }
 
 /* ---------------- filter fields with runtime options ---------------- */
 
-const CF_SLOT = (field: string): string | null => (field.startsWith("cf_") ? field.slice(3) : null);
+const CF_SLOT = (field: string): string | null => (field.startsWith('cf_') ? field.slice(3) : null);
 
-export function useFilterFields(fields: readonly ReceivingGridField[], options: { readonly customFieldEntity?: string; readonly tagScope?: string } = {}): readonly FilterFieldDef[] {
+export function useFilterFields(
+  fields: readonly ReceivingGridField[],
+  options: { readonly customFieldEntity?: string; readonly tagScope?: string } = {},
+): readonly FilterFieldDef[] {
   const me = useMe();
-  const tags = useApiQuery<unknown>(["tags", options.tagScope ?? ""], options.tagScope ? "/api/tags" : null, { query: { scope: options.tagScope } });
-  const defs = useApiQuery<unknown>(["custom-fields", options.customFieldEntity ?? ""], options.customFieldEntity ? "/api/custom-fields" : null, { query: { entityType: options.customFieldEntity } });
+  const tags = useApiQuery<unknown>(['tags', options.tagScope ?? ''], options.tagScope ? '/api/tags' : null, {
+    query: { scope: options.tagScope },
+  });
+  const defs = useApiQuery<unknown>(
+    ['custom-fields', options.customFieldEntity ?? ''],
+    options.customFieldEntity ? '/api/custom-fields' : null,
+    { query: { entityType: options.customFieldEntity } },
+  );
   const warehouses = me.data?.data.contextOptions.warehouses;
   const clients = me.data?.data.contextOptions.clients;
   const tagData = tags.data?.data;
@@ -227,14 +253,31 @@ export function useFilterFields(fields: readonly ReceivingGridField[], options: 
       const slot = CF_SLOT(f.field);
       const def = slot ? defBySlot.get(slot) : undefined;
       const label = def ? def.name : f.label;
-      let opts: { value: string; label: string }[] | undefined = f.options?.map((v) => ({ value: v, label: f.optionLabel ? f.optionLabel(v) : v }));
-      if (f.dynamicOptions === "clients") opts = (clients ?? []).map((c) => ({ value: c.id, label: c.code ? `${c.code} · ${c.name}` : c.name }));
-      if (f.dynamicOptions === "warehouses") opts = (warehouses ?? []).map((w) => ({ value: w.id, label: w.code ? `${w.code} · ${w.name}` : w.name }));
-      if (f.dynamicOptions === "tags") opts = tagRows.map((t) => ({ value: t.id, label: t.name }));
-      if (f.dynamicOptions === "customFieldOptions") opts = (def?.options ?? []).map((v) => ({ value: v, label: v }));
+      let opts: { value: string; label: string }[] | undefined = f.options?.map((v) => ({
+        value: v,
+        label: f.optionLabel ? f.optionLabel(v) : v,
+      }));
+      if (f.dynamicOptions === 'clients')
+        opts = (clients ?? []).map((c) => ({
+          value: c.id,
+          label: c.code ? `${c.code} · ${c.name}` : c.name,
+        }));
+      if (f.dynamicOptions === 'warehouses')
+        opts = (warehouses ?? []).map((w) => ({
+          value: w.id,
+          label: w.code ? `${w.code} · ${w.name}` : w.name,
+        }));
+      if (f.dynamicOptions === 'tags') opts = tagRows.map((t) => ({ value: t.id, label: t.name }));
+      if (f.dynamicOptions === 'customFieldOptions')
+        opts = (def?.options ?? []).map((v) => ({ value: v, label: v }));
       return {
-        field: f.field, label, type: f.type, ...(f.group ? { group: f.group } : {}), ...(f.allowEmpty ? { allowEmpty: true } : {}),
-        ...(f.decimals !== undefined ? { decimals: f.decimals } : {}), ...(opts ? { options: opts } : {}),
+        field: f.field,
+        label,
+        type: f.type,
+        ...(f.group ? { group: f.group } : {}),
+        ...(f.allowEmpty ? { allowEmpty: true } : {}),
+        ...(f.decimals !== undefined ? { decimals: f.decimals } : {}),
+        ...(opts ? { options: opts } : {}),
       };
     });
   }, [fields, clients, warehouses, tagData, defData]);
@@ -242,38 +285,76 @@ export function useFilterFields(fields: readonly ReceivingGridField[], options: 
 
 /* ---------------- bulk toasts ---------------- */
 
-export function bulkToast(result: BulkResult, labelFor: (id: string) => string, verbs: { readonly done: string; readonly noun: string; readonly successMessage?: string }): void {
+export function bulkToast(
+  result: BulkResult,
+  labelFor: (id: string) => string,
+  verbs: { readonly done: string; readonly noun: string; readonly successMessage?: string },
+): void {
   const ok = result.succeeded.length;
   const all = ok + result.failed.length;
   if (result.failed.length === 0) {
-    toast.success("Success", verbs.successMessage ?? `${ok} ${verbs.noun}${ok === 1 ? "" : "s"} ${verbs.done}.`);
+    toast.success(
+      'Success',
+      verbs.successMessage ?? `${ok} ${verbs.noun}${ok === 1 ? '' : 's'} ${verbs.done}.`,
+    );
     return;
   }
-  const detail = result.failed.slice(0, 3).map((f) => `${labelFor(f.id)}: ${f.message}`).join(" · ");
-  const more = result.failed.length > 3 ? ` · +${result.failed.length - 3} more` : "";
-  const variant = ok === 0 ? "error" : "warning";
-  toast.show({ variant, title: ok === 0 ? "Error" : "Partly done", message: `${ok} of ${all} ${verbs.noun}s ${verbs.done} · ${result.failed.length} failed. ${detail}${more}`, duration: 9000 });
+  const detail = result.failed
+    .slice(0, 3)
+    .map((f) => `${labelFor(f.id)}: ${f.message}`)
+    .join(' · ');
+  const more = result.failed.length > 3 ? ` · +${result.failed.length - 3} more` : '';
+  const variant = ok === 0 ? 'error' : 'warning';
+  toast.show({
+    variant,
+    title: ok === 0 ? 'Error' : 'Partly done',
+    message: `${ok} of ${all} ${verbs.noun}s ${verbs.done} · ${result.failed.length} failed. ${detail}${more}`,
+    duration: 9000,
+  });
 }
 
 export function errorMessage(error: unknown): string {
-  if (isApiError(error)) return error.code === "CONFLICT" ? "This record changed since you opened it — Reload" : error.message;
-  return error instanceof Error ? error.message : "Something went wrong";
+  if (isApiError(error))
+    return error.code === 'CONFLICT' ? 'This record changed since you opened it — Reload' : error.message;
+  return error instanceof Error ? error.message : 'Something went wrong';
 }
 
 export async function postBulk(path: string, ids: readonly string[]): Promise<BulkResult> {
-  const { data } = await apiRequest<BulkResult>(path, { method: "POST", body: { ids } });
+  const { data } = await apiRequest<BulkResult>(path, { method: 'POST', body: { ids } });
   return data;
 }
 
 /* ---------------- presentational ---------------- */
 
-export function ProductThumb({ url, size = 32, label }: { readonly url: string | null; readonly size?: number; readonly label: string }) {
-  const initials = label.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "—";
+export function ProductThumb({
+  url,
+  size = 32,
+  label,
+}: {
+  readonly url: string | null;
+  readonly size?: number;
+  readonly label: string;
+}) {
+  const initials =
+    label
+      .replace(/[^A-Za-z0-9]/g, '')
+      .slice(0, 2)
+      .toUpperCase() || '—';
   return (
-    <span className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-surface-sunken text-2xs font-semibold text-faint" style={{ width: size, height: size }}>
+    <span
+      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-surface-sunken text-2xs font-semibold text-faint"
+      style={{ width: size, height: size }}
+    >
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element -- product images come from arbitrary CDNs
-        <img src={url} alt="" width={size} height={size} loading="lazy" className="h-full w-full object-cover" />
+        <img
+          src={url}
+          alt=""
+          width={size}
+          height={size}
+          loading="lazy"
+          className="h-full w-full object-cover"
+        />
       ) : (
         <span aria-hidden>{initials}</span>
       )}
@@ -283,18 +364,34 @@ export function ProductThumb({ url, size = 32, label }: { readonly url: string |
 
 /** Code-like cell for confirm mini tables: never breaks inside a token (the table scrolls). */
 /** An instant in the warehouse zone, labelled (`2026/11/10 1:02 AM EST`): the module's one date-time rule. */
-export function ZonedTime({ value, timeZone }: { readonly value: string | null | undefined; readonly timeZone: string | null | undefined }) {
+export function ZonedTime({
+  value,
+  timeZone,
+}: {
+  readonly value: string | null | undefined;
+  readonly timeZone: string | null | undefined;
+}) {
   if (!value) return <span className="text-faint">—</span>;
   const text = formatZoned(value, timeZone);
-  return <span className="whitespace-nowrap tabular-nums text-body" title={`${text} (warehouse time)`}>{text}</span>;
+  return (
+    <span className="whitespace-nowrap tabular-nums text-body" title={`${text} (warehouse time)`}>
+      {text}
+    </span>
+  );
 }
 
-export function Nowrap({ children, mono = false }: { readonly children: React.ReactNode; readonly mono?: boolean }) {
-  return <span className={`whitespace-nowrap${mono ? " font-medium" : ""}`}>{children}</span>;
+export function Nowrap({
+  children,
+  mono = false,
+}: {
+  readonly children: React.ReactNode;
+  readonly mono?: boolean;
+}) {
+  return <span className={`whitespace-nowrap${mono ? ' font-medium' : ''}`}>{children}</span>;
 }
 
 export function openFile(href: string): void {
-  window.open(href, "_blank", "noopener,noreferrer");
+  window.open(href, '_blank', 'noopener,noreferrer');
 }
 
 /** Milliseconds a list may stay in its first load before the grid shows a retryable "slow" state. */
@@ -306,31 +403,63 @@ export function useSlowLoad(loading: boolean, ms: number = SLOW_LOAD_MS): boolea
   React.useEffect(() => {
     if (!loading) return;
     const t = setTimeout(() => setSlow(true), ms);
-    return () => { clearTimeout(t); setSlow(false); };
+    return () => {
+      clearTimeout(t);
+      setSlow(false);
+    };
   }, [loading, ms]);
   return loading && slow;
 }
 
 /** Grid `error` override: the real error, else a retryable message once the first load is slow. */
 export function slowLoadError(error: string | null, slow: boolean): string | null {
-  return error ?? (slow ? "Loading is taking longer than usual. The server may still be starting; retry to load the list again." : null);
+  return (
+    error ??
+    (slow
+      ? 'Loading is taking longer than usual. The server may still be starting; retry to load the list again.'
+      : null)
+  );
 }
 
 /** "Putaway & reports" menu on the PO list and Receiving History headers. */
 export function ReceivingReportLinks() {
   const router = useRouter();
-  const putaway = useCan("inventory.purchase_orders.view").allowed;
-  const poReport = useCan("reports.po_receiving_report.view").allowed;
-  const perf = useCan("analytics.labor_analytics.view").allowed;
+  const putaway = useCan('inventory.purchase_orders.view').allowed;
+  const poReport = useCan('reports.po_receiving_report.view').allowed;
+  const perf = useCan('analytics.labor_analytics.view').allowed;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="secondary">Putaway &amp; reports<ChevronDown className="h-3.5 w-3.5" aria-hidden /></Button>
+        <Button variant="secondary">
+          Putaway &amp; reports
+          <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[280px]">
-        <DropdownMenuItem icon={MoveRight} description="Received stock still in a receiving location" disabledReason={putaway ? null : "You don't have permission to view purchase orders"} onSelect={() => router.push("/receiving/putaway")}>Putaway worklist</DropdownMenuItem>
-        <DropdownMenuItem icon={ClipboardList} description="Ordered vs received per PO line (partial receipts)" disabledReason={poReport ? null : "You don't have permission to view the PO receiving report"} onSelect={() => router.push("/reports/po-receiving")}>PO receiving report</DropdownMenuItem>
-        <DropdownMenuItem icon={BarChart3} description="Units and lines received per user and hour" disabledReason={perf ? null : "You don't have permission to view labor analytics"} onSelect={() => router.push("/analytics/labor/receiving-performance")}>Receiving performance</DropdownMenuItem>
+        <DropdownMenuItem
+          icon={MoveRight}
+          description="Received stock still in a receiving location"
+          disabledReason={putaway ? null : "You don't have permission to view purchase orders"}
+          onSelect={() => router.push('/receiving/putaway')}
+        >
+          Putaway worklist
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          icon={ClipboardList}
+          description="Ordered vs received per PO line (partial receipts)"
+          disabledReason={poReport ? null : "You don't have permission to view the PO receiving report"}
+          onSelect={() => router.push('/reports/po-receiving')}
+        >
+          PO receiving report
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          icon={BarChart3}
+          description="Units and lines received per user and hour"
+          disabledReason={perf ? null : "You don't have permission to view labor analytics"}
+          onSelect={() => router.push('/analytics/labor/receiving-performance')}
+        >
+          Receiving performance
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

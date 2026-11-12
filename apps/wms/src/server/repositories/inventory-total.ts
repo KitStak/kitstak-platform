@@ -3,13 +3,13 @@
  * Warehouse = "All Warehouses" when neither a Warehouse filter nor the header warehouse
  * context is set. Includes zero-stock products (Logiwa parity). Read-only.
  */
-import { sql, type SQL } from "drizzle-orm";
-import type { AppDb } from "@/server/api/db";
-import type { AuthContext } from "@/server/auth/context";
-import { OPEN_SO_STATUSES } from "@/server/domain/atp";
-import type { GridQuery } from "@/server/query/grid-query";
-import { ALL_WAREHOUSES_LABEL, TOTAL_INVENTORY_DEF } from "@/lib/grid-defs/inventory/total-inventory";
-import { clientIn, inList, runGrid, type GridPage } from "./inventory-grid";
+import { sql, type SQL } from 'drizzle-orm';
+import type { AppDb } from '@/server/api/db';
+import type { AuthContext } from '@/server/auth/context';
+import { OPEN_SO_STATUSES } from '@/server/domain/atp';
+import type { GridQuery } from '@/server/query/grid-query';
+import { ALL_WAREHOUSES_LABEL, TOTAL_INVENTORY_DEF } from '@/lib/grid-defs/inventory/total-inventory';
+import { clientIn, inList, runGrid, type GridPage } from './inventory-grid';
 
 export interface TotalInventoryRow {
   readonly rowId: string;
@@ -39,14 +39,21 @@ export interface TotalInventoryRow {
   readonly warehouseCount: number;
 }
 
-const OPEN_SO_LIST: SQL = sql.join(OPEN_SO_STATUSES.map((s) => sql`${s}`), sql`, `);
+const OPEN_SO_LIST: SQL = sql.join(
+  OPEN_SO_STATUSES.map((s) => sql`${s}`),
+  sql`, `,
+);
 
 /** True when the grid should show one row per warehouse. */
-export function perWarehouse(query: GridQuery, auth: Pick<AuthContext, "context">): boolean {
-  return Boolean(auth.context.warehouseId) || query.filters.some((f) => f.field === "warehouse");
+export function perWarehouse(query: GridQuery, auth: Pick<AuthContext, 'context'>): boolean {
+  return Boolean(auth.context.warehouseId) || query.filters.some((f) => f.field === 'warehouse');
 }
 
-export function totalInventorySql(warehouseIds: readonly string[], clientIds: readonly string[] | "all", split: boolean): SQL {
+export function totalInventorySql(
+  warehouseIds: readonly string[],
+  clientIds: readonly string[] | 'all',
+  split: boolean,
+): SQL {
   const whInv = inList(sql`i.warehouse_id`, warehouseIds);
   const whSo = inList(sql`o.warehouse_id`, warehouseIds);
   const prodClients = clientIn(sql`p.client_id`, clientIds);
@@ -55,7 +62,10 @@ export function totalInventorySql(warehouseIds: readonly string[], clientIds: re
     : sql`SELECT p.id AS product_id, NULL AS warehouse_id FROM products p WHERE ${prodClients}`;
   const invGroup = split ? sql`i.product_id, i.warehouse_id` : sql`i.product_id`;
   const soGroup = split ? sql`l.product_id, o.warehouse_id` : sql`l.product_id`;
-  const join = (alias: string) => (split ? sql.raw(`${alias}.product_id = k.product_id AND ${alias}.warehouse_id = k.warehouse_id`) : sql.raw(`${alias}.product_id = k.product_id`));
+  const join = (alias: string) =>
+    split
+      ? sql.raw(`${alias}.product_id = k.product_id AND ${alias}.warehouse_id = k.warehouse_id`)
+      : sql.raw(`${alias}.product_id = k.product_id`);
   return sql`
     WITH keys AS (${keys}),
     inv AS (
@@ -93,14 +103,18 @@ export function totalInventorySql(warehouseIds: readonly string[], clientIds: re
     JOIN products p ON p.id = k.product_id
     JOIN clients c ON c.id = p.client_id
     ${split ? sql`JOIN warehouses w ON w.id = k.warehouse_id` : sql``}
-    LEFT JOIN inv ON ${join("inv")}
-    LEFT JOIN so ON ${join("so")}
+    LEFT JOIN inv ON ${join('inv')}
+    LEFT JOIN so ON ${join('so')}
     LEFT JOIN lookup_values pt ON pt.id = p.product_type_id
     LEFT JOIN lookup_values pg ON pg.id = p.product_group_id`;
 }
 
-export async function listTotalInventory(db: AppDb, auth: AuthContext, query: GridQuery): Promise<GridPage<TotalInventoryRow>> {
+export async function listTotalInventory(
+  db: AppDb,
+  auth: AuthContext,
+  query: GridQuery,
+): Promise<GridPage<TotalInventoryRow>> {
   const split = perWarehouse(query, auth);
   const inner = totalInventorySql(auth.viewScope.warehouseIds, auth.viewScope.clientIds, split);
-  return await runGrid<TotalInventoryRow>(db, inner, TOTAL_INVENTORY_DEF, query, "rowId");
+  return await runGrid<TotalInventoryRow>(db, inner, TOTAL_INVENTORY_DEF, query, 'rowId');
 }

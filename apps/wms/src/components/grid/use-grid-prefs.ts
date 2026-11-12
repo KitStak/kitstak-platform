@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * Grid preferences persisted per user through `GET/PUT /api/grid-prefs/[gridKey]`
@@ -10,11 +10,11 @@
  * Deliberately independent of the React Query provider so legacy pages that render
  * `DataGrid` outside `<QueryProvider>` keep working.
  */
-import * as React from "react";
-import { ApiError, apiRequest } from "@/lib/api-client";
-import { toast } from "@/components/ui/toast";
-import { defaultGridPrefs, prefsEqual, reconcileGridPrefs, type PrefColumn } from "./grid-prefs";
-import type { GridPrefs } from "./grid-types";
+import * as React from 'react';
+import { ApiError, apiRequest } from '@/lib/api-client';
+import { toast } from '@/components/ui/toast';
+import { defaultGridPrefs, prefsEqual, reconcileGridPrefs, type PrefColumn } from './grid-prefs';
+import type { GridPrefs } from './grid-types';
 
 export const PREFS_SAVE_DEBOUNCE_MS = 600;
 /** A slow prefs read never holds the grid: after this the defaults apply (stations-returns R4-3). */
@@ -25,7 +25,7 @@ export function gridPrefsPath(gridKey: string): string {
 }
 
 function extractPrefs(data: unknown): unknown {
-  if (data && typeof data === "object" && "prefs" in data) return (data as { prefs: unknown }).prefs;
+  if (data && typeof data === 'object' && 'prefs' in data) return (data as { prefs: unknown }).prefs;
   return data;
 }
 
@@ -43,11 +43,18 @@ export function gridPrefsPutBody(prefs: GridPrefs): GridPrefs {
 
 function reportPrefsSaveError(error: unknown): void {
   // Keep validation detail out of the UI; it is diagnostic only.
-  const details = error instanceof ApiError
-    ? { code: error.code, status: error.status, message: error.message, fieldErrors: error.fieldErrors, requestId: error.requestId }
-    : error;
-  console.error("[grid-prefs] save failed", details);
-  toast.error("Could not save column settings", "Your layout is kept for this session. Try again later.");
+  const details =
+    error instanceof ApiError
+      ? {
+          code: error.code,
+          status: error.status,
+          message: error.message,
+          fieldErrors: error.fieldErrors,
+          requestId: error.requestId,
+        }
+      : error;
+  console.error('[grid-prefs] save failed', details);
+  toast.error('Could not save column settings', 'Your layout is kept for this session. Try again later.');
 }
 
 /** Remote payload per gridKey for this page session (avoids refetching per mount). */
@@ -95,11 +102,18 @@ function useRemotePrefs(gridKey: string | undefined): { readonly raw: unknown; r
 
 export function useGridPrefs(gridKey: string | undefined, columns: readonly PrefColumn[]): GridPrefsState {
   const remote = useRemotePrefs(gridKey);
-  const columnsKey = columns.map((c) => `${c.id}:${c.defaultVisible ? 1 : 0}:${c.alwaysVisible ? 1 : 0}:${c.defaultPinned ? 1 : 0}`).join("|");
+  const columnsKey = columns
+    .map((c) => `${c.id}:${c.defaultVisible ? 1 : 0}:${c.alwaysVisible ? 1 : 0}:${c.defaultPinned ? 1 : 0}`)
+    .join('|');
   // eslint-disable-next-line react-hooks/exhaustive-deps -- columnsKey captures the column identity
   const stableColumns = React.useMemo(() => columns, [columnsKey]);
-  const base = React.useMemo(() => reconcileGridPrefs(remote.raw, stableColumns), [remote.raw, stableColumns]);
-  const [local, setLocal] = React.useState<{ readonly base: GridPrefs; readonly value: GridPrefs } | null>(null);
+  const base = React.useMemo(
+    () => reconcileGridPrefs(remote.raw, stableColumns),
+    [remote.raw, stableColumns],
+  );
+  const [local, setLocal] = React.useState<{ readonly base: GridPrefs; readonly value: GridPrefs } | null>(
+    null,
+  );
   const prefs = local && local.base === base ? local.value : base;
 
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,7 +121,7 @@ export function useGridPrefs(gridKey: string | undefined, columns: readonly Pref
     () => () => {
       if (timer.current) clearTimeout(timer.current);
     },
-    []
+    [],
   );
 
   const persist = React.useCallback(
@@ -116,12 +130,14 @@ export function useGridPrefs(gridKey: string | undefined, columns: readonly Pref
       remoteCache.set(gridKey, next);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => {
-        apiRequest(gridPrefsPath(gridKey), { method: "PUT", body: gridPrefsPutBody(next) }).catch((error: unknown) => {
-          reportPrefsSaveError(error);
-        });
+        apiRequest(gridPrefsPath(gridKey), { method: 'PUT', body: gridPrefsPutBody(next) }).catch(
+          (error: unknown) => {
+            reportPrefsSaveError(error);
+          },
+        );
       }, PREFS_SAVE_DEBOUNCE_MS);
     },
-    [gridKey]
+    [gridKey],
   );
 
   const update = React.useCallback(
@@ -131,7 +147,7 @@ export function useGridPrefs(gridKey: string | undefined, columns: readonly Pref
       setLocal({ base, value: next });
       persist(next);
     },
-    [base, prefs, persist]
+    [base, prefs, persist],
   );
 
   const reset = React.useCallback(() => {

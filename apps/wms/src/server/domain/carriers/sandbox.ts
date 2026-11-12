@@ -5,18 +5,26 @@
  *   `9400…` (USPS-like IMpb, 22 digits).
  * - Labels are real 4x6 PDF or ZPL files with Code 128 barcodes.
  */
-import { createHash } from "node:crypto";
-import { verifyAddress } from "../address-verification";
-import { CarrierError, registerCarrierAdapter, type CarrierAdapter, type LabelRequest, type PackageSpec, type RateQuote, type RateRequest } from "./adapter";
-import { renderPdfLabel, renderZplLabel } from "./label";
-import { mapSeq } from "../../db/sql";
+import { createHash } from 'node:crypto';
+import { verifyAddress } from '../address-verification';
+import {
+  CarrierError,
+  registerCarrierAdapter,
+  type CarrierAdapter,
+  type LabelRequest,
+  type PackageSpec,
+  type RateQuote,
+  type RateRequest,
+} from './adapter';
+import { renderPdfLabel, renderZplLabel } from './label';
+import { mapSeq } from '../../db/sql';
 
-export const SANDBOX_PROVIDER = "kitstaks-sandbox";
+export const SANDBOX_PROVIDER = 'kitstaks-sandbox';
 
 export interface SandboxService {
   readonly code: string;
   readonly name: string;
-  readonly carrierCode: "UPS" | "USPS";
+  readonly carrierCode: 'UPS' | 'USPS';
   readonly transitDays: number;
   readonly base: number;
   readonly perLb: number;
@@ -26,12 +34,59 @@ export interface SandboxService {
 }
 
 export const SANDBOX_SERVICES: readonly SandboxService[] = [
-  { code: "SBX_GROUND", name: "Ground", carrierCode: "UPS", transitDays: 5, base: 8.45, perLb: 0.62, upsService: "03" },
-  { code: "SBX_2DAY", name: "2nd Day Air", carrierCode: "UPS", transitDays: 2, base: 16.2, perLb: 1.35, upsService: "02" },
-  { code: "SBX_NEXT_DAY", name: "Next Day Air", carrierCode: "UPS", transitDays: 1, base: 29.9, perLb: 2.4, upsService: "01" },
-  { code: "SBX_PRIORITY", name: "Priority Mail", carrierCode: "USPS", transitDays: 3, base: 7.95, perLb: 0.55 },
-  { code: "SBX_GROUND_ADVANTAGE", name: "Ground Advantage", carrierCode: "USPS", transitDays: 5, base: 4.85, perLb: 0.42 },
-  { code: "SBX_INTL", name: "Worldwide Expedited", carrierCode: "UPS", transitDays: 6, base: 42.5, perLb: 4.1, upsService: "08", international: true },
+  {
+    code: 'SBX_GROUND',
+    name: 'Ground',
+    carrierCode: 'UPS',
+    transitDays: 5,
+    base: 8.45,
+    perLb: 0.62,
+    upsService: '03',
+  },
+  {
+    code: 'SBX_2DAY',
+    name: '2nd Day Air',
+    carrierCode: 'UPS',
+    transitDays: 2,
+    base: 16.2,
+    perLb: 1.35,
+    upsService: '02',
+  },
+  {
+    code: 'SBX_NEXT_DAY',
+    name: 'Next Day Air',
+    carrierCode: 'UPS',
+    transitDays: 1,
+    base: 29.9,
+    perLb: 2.4,
+    upsService: '01',
+  },
+  {
+    code: 'SBX_PRIORITY',
+    name: 'Priority Mail',
+    carrierCode: 'USPS',
+    transitDays: 3,
+    base: 7.95,
+    perLb: 0.55,
+  },
+  {
+    code: 'SBX_GROUND_ADVANTAGE',
+    name: 'Ground Advantage',
+    carrierCode: 'USPS',
+    transitDays: 5,
+    base: 4.85,
+    perLb: 0.42,
+  },
+  {
+    code: 'SBX_INTL',
+    name: 'Worldwide Expedited',
+    carrierCode: 'UPS',
+    transitDays: 6,
+    base: 42.5,
+    perLb: 4.1,
+    upsService: '08',
+    international: true,
+  },
 ];
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -51,8 +106,8 @@ export function sandboxRate(service: SandboxService, zone: number, pkg: PackageS
 }
 
 const hashDigits = (seed: string, count: number): string => {
-  const hex = createHash("sha1").update(seed).digest("hex");
-  let out = "";
+  const hex = createHash('sha1').update(seed).digest('hex');
+  let out = '';
   for (let i = 0; out.length < count; i += 1) out += String(Number.parseInt(hex[i % hex.length], 16) % 10);
   return out;
 };
@@ -76,11 +131,11 @@ export function uspsCheckDigit(digits: string): number {
 }
 
 export function sandboxTrackingNumber(service: SandboxService, seed: string): string {
-  if (service.carrierCode === "USPS") {
+  if (service.carrierCode === 'USPS') {
     const body = `9400111${hashDigits(seed, 14)}`;
     return `${body}${uspsCheckDigit(body)}`;
   }
-  const body = `KS${hashDigits(`${seed}:shipper`, 4)}${service.upsService ?? "03"}${hashDigits(seed, 7)}`;
+  const body = `KS${hashDigits(`${seed}:shipper`, 4)}${service.upsService ?? '03'}${hashDigits(seed, 7)}`;
   return `1Z${body}${upsCheckDigit(body)}`;
 }
 
@@ -90,7 +145,8 @@ function serviceFor(code: string): SandboxService {
   return s;
 }
 
-const isInternational = (country: string): boolean => !["united states", "us", "usa"].includes(country.trim().toLowerCase());
+const isInternational = (country: string): boolean =>
+  !['united states', 'us', 'usa'].includes(country.trim().toLowerCase());
 
 function deliveryDate(shipDate: string, transitDays: number): string {
   const d = new Date(`${shipDate.slice(0, 10)}T17:00:00.000Z`);
@@ -103,23 +159,40 @@ function deliveryDate(shipDate: string, transitDays: number): string {
   return d.toISOString();
 }
 
-function quoteFor(req: Pick<RateRequest, "from" | "to" | "packages">, service: SandboxService, carrierServiceId: string, shipDate: string): RateQuote {
+function quoteFor(
+  req: Pick<RateRequest, 'from' | 'to' | 'packages'>,
+  service: SandboxService,
+  carrierServiceId: string,
+  shipDate: string,
+): RateQuote {
   const intl = isInternational(req.to.country);
-  if (intl !== Boolean(service.international)) throw new CarrierError(`${service.name} is ${service.international ? "international only" : "domestic only"}.`, 400);
+  if (intl !== Boolean(service.international))
+    throw new CarrierError(
+      `${service.name} is ${service.international ? 'international only' : 'domestic only'}.`,
+      400,
+    );
   const zone = sandboxZone(req.from.postalCode, req.to.postalCode, intl);
   const amount = round2(req.packages.reduce((s, p) => s + sandboxRate(service, zone, p), 0));
   return {
-    carrierServiceId, serviceCode: service.code, serviceName: service.name, carrierCode: service.carrierCode, amount, currency: "USD",
-    transitDays: service.transitDays, zone: String(zone), estimatedDeliveryAt: deliveryDate(shipDate, service.transitDays),
+    carrierServiceId,
+    serviceCode: service.code,
+    serviceName: service.name,
+    carrierCode: service.carrierCode,
+    amount,
+    currency: 'USD',
+    transitDays: service.transitDays,
+    zone: String(zone),
+    estimatedDeliveryAt: deliveryDate(shipDate, service.transitDays),
   };
 }
 
 function assertPackages(packages: readonly PackageSpec[]): void {
-  if (packages.length === 0) throw new CarrierError("At least one package is required.", 400);
+  if (packages.length === 0) throw new CarrierError('At least one package is required.', 400);
   for (const p of packages) {
-    if (!(p.weightOz > 0)) throw new CarrierError("Package weight must be greater than 0.", 400);
-    if (!(p.length > 0 && p.width > 0 && p.height > 0)) throw new CarrierError("Package dimensions must be greater than 0.", 400);
-    if (p.weightOz > 150 * 16) throw new CarrierError("Package exceeds the 150 lb limit.", 400);
+    if (!(p.weightOz > 0)) throw new CarrierError('Package weight must be greater than 0.', 400);
+    if (!(p.length > 0 && p.width > 0 && p.height > 0))
+      throw new CarrierError('Package dimensions must be greater than 0.', 400);
+    if (p.weightOz > 150 * 16) throw new CarrierError('Package exceeds the 150 lb limit.', 400);
   }
 }
 
@@ -139,27 +212,48 @@ export const sandboxCarrier: CarrierAdapter = {
   async createLabel(req: LabelRequest) {
     assertPackages(req.packages);
     const check = verifyAddress(req.to);
-    if (check.status === "Failed") throw new CarrierError(`Address validation failed: ${check.notes.join(" ")}`, 422);
+    if (check.status === 'Failed')
+      throw new CarrierError(`Address validation failed: ${check.notes.join(' ')}`, 422);
     const service = serviceFor(req.service.serviceCode);
     const quote = quoteFor(req, service, req.service.id, req.shipDate);
     const zone = Number(quote.zone);
-    const packages = await Promise.all(await mapSeq(req.packages, async (pkg, i) => {
-      const trackingNumber = sandboxTrackingNumber(service, `${req.orderCode}|${req.labelType}|${req.attempt}|${i + 1}`);
-      const data = {
-        from: req.from, to: req.to, carrierCode: service.carrierCode, serviceName: service.name, trackingNumber,
-        orderCode: req.orderCode, weightOz: pkg.weightOz, packageSeq: i + 1, packageCount: req.packages.length,
-        shipDate: req.shipDate.slice(0, 10), labelType: req.labelType,
-      };
-      const label = req.format === "PDF" ? await renderPdfLabel(data) : new TextEncoder().encode(renderZplLabel(data));
-      return { trackingNumber, amount: sandboxRate(service, zone, pkg), label };
-    }));
+    const packages = await Promise.all(
+      await mapSeq(req.packages, async (pkg, i) => {
+        const trackingNumber = sandboxTrackingNumber(
+          service,
+          `${req.orderCode}|${req.labelType}|${req.attempt}|${i + 1}`,
+        );
+        const data = {
+          from: req.from,
+          to: req.to,
+          carrierCode: service.carrierCode,
+          serviceName: service.name,
+          trackingNumber,
+          orderCode: req.orderCode,
+          weightOz: pkg.weightOz,
+          packageSeq: i + 1,
+          packageCount: req.packages.length,
+          shipDate: req.shipDate.slice(0, 10),
+          labelType: req.labelType,
+        };
+        const label =
+          req.format === 'PDF' ? await renderPdfLabel(data) : new TextEncoder().encode(renderZplLabel(data));
+        return { trackingNumber, amount: sandboxRate(service, zone, pkg), label };
+      }),
+    );
     return {
-      masterTrackingNumber: packages[0].trackingNumber, packages, totalAmount: round2(packages.reduce((s, p) => s + p.amount, 0)),
-      currency: "USD", zone: quote.zone, estimatedDeliveryAt: quote.estimatedDeliveryAt, format: req.format === "PDF" ? "PDF" : "ZPL",
+      masterTrackingNumber: packages[0].trackingNumber,
+      packages,
+      totalAmount: round2(packages.reduce((s, p) => s + p.amount, 0)),
+      currency: 'USD',
+      zone: quote.zone,
+      estimatedDeliveryAt: quote.estimatedDeliveryAt,
+      format: req.format === 'PDF' ? 'PDF' : 'ZPL',
     };
   },
   async voidLabel(req) {
-    if (!/^(1Z[0-9A-Z]{16}|9400\d{18})$/.test(req.trackingNumber)) throw new CarrierError(`Unknown tracking number ${req.trackingNumber}.`, 404);
+    if (!/^(1Z[0-9A-Z]{16}|9400\d{18})$/.test(req.trackingNumber))
+      throw new CarrierError(`Unknown tracking number ${req.trackingNumber}.`, 404);
     return { voided: true };
   },
   async validateAddress(address) {

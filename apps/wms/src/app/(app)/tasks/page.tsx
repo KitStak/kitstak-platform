@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect } from 'next/navigation';
 
 /**
  * `/tasks` → the first Task Details tab. The segment only redirects, so there is nothing to
@@ -7,5 +7,5 @@ import { redirect } from "next/navigation";
 export const instant = false;
 
 export default function Page() {
-  redirect("/tasks/order-operations");
+  redirect('/tasks/order-operations');
 }

@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * Remembers a user's station choices (warehouse, station, target) per user so the station
@@ -6,16 +6,21 @@
  * (`preferences.stations[kind]`, REQ-3, follows the user across devices); local storage is
  * the instant / offline fallback. Writes go to both (the PATCH is fire-and-forget).
  */
-import * as React from "react";
-import { apiRequest } from "@/lib/api-client";
-import { useMe } from "@/lib/permissions-client";
+import * as React from 'react';
+import { apiRequest } from '@/lib/api-client';
+import { useMe } from '@/lib/permissions-client';
 
-type Kind = "packing" | "returns";
+type Kind = 'packing' | 'returns';
 
-export function useStationMemory<T extends object>(kind: Kind, initial: T): readonly [T, (patch: Partial<T>) => void, boolean] {
+export function useStationMemory<T extends object>(
+  kind: Kind,
+  initial: T,
+): readonly [T, (patch: Partial<T>) => void, boolean] {
   const me = useMe();
   const userId = me.data?.data.user.id ?? null;
-  const server = (me.data?.data.preferences as { readonly stations?: Partial<Record<Kind, Partial<T>>> } | undefined)?.stations?.[kind];
+  const server = (
+    me.data?.data.preferences as { readonly stations?: Partial<Record<Kind, Partial<T>>> } | undefined
+  )?.stations?.[kind];
   const key = userId ? `kitstaks.station.${kind}.${userId}` : null;
   const [value, setValue] = React.useState<T>(initial);
   const [ready, setReady] = React.useState(false);
@@ -34,22 +39,28 @@ export function useStationMemory<T extends object>(kind: Kind, initial: T): read
     setReady(true);
   }, [key, ready, server]);
 
-  const update = React.useCallback((patch: Partial<T>) => {
-    setValue((v) => {
-      const next = { ...v, ...patch };
-      if (key) {
-        try {
-          window.localStorage.setItem(key, JSON.stringify(next));
-        } catch {
-          /* storage full or blocked: the choice still applies for this visit */
+  const update = React.useCallback(
+    (patch: Partial<T>) => {
+      setValue((v) => {
+        const next = { ...v, ...patch };
+        if (key) {
+          try {
+            window.localStorage.setItem(key, JSON.stringify(next));
+          } catch {
+            /* storage full or blocked: the choice still applies for this visit */
+          }
+          void apiRequest('/api/me', {
+            method: 'PATCH',
+            body: { preferences: { stations: { [kind]: next } } },
+          }).catch(() => {
+            /* offline / rejected: local storage still remembers it on this device */
+          });
         }
-        void apiRequest("/api/me", { method: "PATCH", body: { preferences: { stations: { [kind]: next } } } }).catch(() => {
-          /* offline / rejected: local storage still remembers it on this device */
-        });
-      }
-      return next;
-    });
-  }, [key, kind]);
+        return next;
+      });
+    },
+    [key, kind],
+  );
 
   return [value, update, ready] as const;
 }

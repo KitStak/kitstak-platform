@@ -2,7 +2,7 @@
  * Node.js-only half of the instrumentation hook. Kept in its own module so the
  * Edge bundle never sees the scheduler, SQLite or `process.stderr`.
  */
-import { startScheduler } from "./server/scheduler";
+import { startScheduler } from './server/scheduler';
 
 export async function startNodeScheduler(): Promise<void> {
   try {

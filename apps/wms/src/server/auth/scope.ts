@@ -14,35 +14,42 @@
  *   - clients: `users.all_clients` → "all"; otherwise `user_clients` rows (possibly none).
  *   - context cookies (`ks_ctx_wh`, `ks_ctx_client`) only ever NARROW the scope.
  */
-import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
-import type { PgColumn } from "drizzle-orm/pg-core";
-import { userClients, userWarehouses, warehouses } from "@/server/db/schema";
-import type { AppDb } from "@/server/api/db";
-import { notFoundError } from "@/server/api/errors";
-import type { SessionUser } from "./session-store";
+import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import type { PgColumn } from 'drizzle-orm/pg-core';
+import { userClients, userWarehouses, warehouses } from '@/server/db/schema';
+import type { AppDb } from '@/server/api/db';
+import { notFoundError } from '@/server/api/errors';
+import type { SessionUser } from './session-store';
 
-export const CONTEXT_WAREHOUSE_COOKIE = "ks_ctx_wh";
-export const CONTEXT_CLIENT_COOKIE = "ks_ctx_client";
+export const CONTEXT_WAREHOUSE_COOKIE = 'ks_ctx_wh';
+export const CONTEXT_CLIENT_COOKIE = 'ks_ctx_client';
 
-export type ClientScope = readonly string[] | "all";
+export type ClientScope = readonly string[] | 'all';
 
 export interface Scope {
   readonly warehouseIds: readonly string[];
   readonly clientIds: ClientScope;
 }
 
-export async function getScope(db: AppDb, user: Pick<SessionUser, "id" | "role" | "allClients">): Promise<Scope> {
-  const allWarehouseIds = async (): Promise<string[]> => (await db.select({ id: warehouses.id }).from(warehouses)).map((r) => r.id);
-  const linked = (await db
-    .select({ id: userWarehouses.warehouseId })
-    .from(userWarehouses)
-    .where(eq(userWarehouses.userId, user.id)))
-    .map((r) => r.id);
-  const warehouseIds = user.role === "admin" || linked.length === 0 ? await allWarehouseIds() : linked;
+export async function getScope(
+  db: AppDb,
+  user: Pick<SessionUser, 'id' | 'role' | 'allClients'>,
+): Promise<Scope> {
+  const allWarehouseIds = async (): Promise<string[]> =>
+    (await db.select({ id: warehouses.id }).from(warehouses)).map((r) => r.id);
+  const linked = (
+    await db
+      .select({ id: userWarehouses.warehouseId })
+      .from(userWarehouses)
+      .where(eq(userWarehouses.userId, user.id))
+  ).map((r) => r.id);
+  const warehouseIds = user.role === 'admin' || linked.length === 0 ? await allWarehouseIds() : linked;
 
   const clientIds: ClientScope = user.allClients
-    ? "all"
-    : (await db.select({ id: userClients.clientId }).from(userClients).where(eq(userClients.userId, user.id))).map((r) => r.id);
+    ? 'all'
+    : (
+        await db.select({ id: userClients.clientId }).from(userClients).where(eq(userClients.userId, user.id))
+      ).map((r) => r.id);
 
   return { warehouseIds, clientIds };
 }
@@ -52,7 +59,7 @@ export function hasWarehouse(scope: Scope, warehouseId: string): boolean {
 }
 
 export function hasClient(scope: Scope, clientId: string): boolean {
-  return scope.clientIds === "all" || scope.clientIds.includes(clientId);
+  return scope.clientIds === 'all' || scope.clientIds.includes(clientId);
 }
 
 /** Applies the header context (cookies) — only values inside the scope take effect. */
@@ -85,9 +92,11 @@ export function scopedWhere(table: object, scope: Scope, columns?: ScopeColumns)
   const cols = columnsOf(table, columns);
   const parts: SQL[] = [];
   if (cols.warehouseId) {
-    parts.push(scope.warehouseIds.length === 0 ? FALSE_SQL : inArray(cols.warehouseId, [...scope.warehouseIds]));
+    parts.push(
+      scope.warehouseIds.length === 0 ? FALSE_SQL : inArray(cols.warehouseId, [...scope.warehouseIds]),
+    );
   }
-  if (cols.clientId && scope.clientIds !== "all") {
+  if (cols.clientId && scope.clientIds !== 'all') {
     parts.push(
       scope.clientIds.length === 0
         ? sql`${cols.clientId} IS NULL`
@@ -102,7 +111,7 @@ export function scopedWhere(table: object, scope: Scope, columns?: ScopeColumns)
 export function assertInScope(
   scope: Scope,
   record: { readonly warehouseId?: string | null; readonly clientId?: string | null } | null | undefined,
-  what = "Record",
+  what = 'Record',
 ): void {
   if (!record) throw notFoundError(what);
   if (record.warehouseId && !hasWarehouse(scope, record.warehouseId)) throw notFoundError(what);

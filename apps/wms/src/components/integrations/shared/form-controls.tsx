@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
 /**
  * Terse, typed form controls for the M12 drawers and wizards. Each one wraps the shared
  * `FormField` (label, required *, inline error, focus-first-error) around a ui primitive.
  */
-import * as React from "react";
-import type { FieldPath, FieldValues } from "react-hook-form";
-import { FormField } from "@/components/ui/form";
-import { NumberInput } from "@/components/ui/number-input";
-import { Select, type SelectOption } from "@/components/ui/select";
-import { TextField } from "@/components/ui/text-field";
-import { YesNoToggle, type YesNoToggleProps } from "@/components/ui/yes-no-toggle";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
-import { splitCamel } from "@/lib/grid-defs/integrations/common";
+import * as React from 'react';
+import type { FieldPath, FieldValues } from 'react-hook-form';
+import { FormField } from '@/components/ui/form';
+import { NumberInput } from '@/components/ui/number-input';
+import { Select, type SelectOption } from '@/components/ui/select';
+import { TextField } from '@/components/ui/text-field';
+import { YesNoToggle, type YesNoToggleProps } from '@/components/ui/yes-no-toggle';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
+import { splitCamel } from '@/lib/grid-defs/integrations/common';
 
 interface Base<T extends FieldValues> {
   readonly name: FieldPath<T>;
@@ -25,7 +25,18 @@ interface Base<T extends FieldValues> {
   readonly className?: string;
 }
 
-export function TextInput<T extends FieldValues>({ placeholder, maxLength, showCount, transform, ...p }: Base<T> & { readonly placeholder?: string; readonly maxLength?: number; readonly showCount?: boolean; readonly transform?: (v: string) => string }) {
+export function TextInput<T extends FieldValues>({
+  placeholder,
+  maxLength,
+  showCount,
+  transform,
+  ...p
+}: Base<T> & {
+  readonly placeholder?: string;
+  readonly maxLength?: number;
+  readonly showCount?: boolean;
+  readonly transform?: (v: string) => string;
+}) {
   return (
     <FormField<T> {...p}>
       {(c) => (
@@ -33,14 +44,14 @@ export function TextInput<T extends FieldValues>({ placeholder, maxLength, showC
           id={c.id}
           name={c.name}
           ref={c.ref as React.Ref<HTMLInputElement>}
-          value={(c.value as string | null) ?? ""}
+          value={(c.value as string | null) ?? ''}
           onChange={(e) => c.onChange(transform ? transform(e.target.value) : e.target.value)}
           onBlur={c.onBlur}
           disabled={c.disabled}
           invalid={c.invalid}
-          aria-invalid={c["aria-invalid"]}
-          aria-describedby={c["aria-describedby"]}
-          aria-required={c["aria-required"]}
+          aria-invalid={c['aria-invalid']}
+          aria-describedby={c['aria-describedby']}
+          aria-required={c['aria-required']}
           placeholder={placeholder}
           maxLength={maxLength}
           showCount={showCount && Boolean(maxLength)}
@@ -50,7 +61,20 @@ export function TextInput<T extends FieldValues>({ placeholder, maxLength, showC
   );
 }
 
-export function NumberField<T extends FieldValues>({ min = 0, max, decimals = 0, suffix, nullable, ...p }: Base<T> & { readonly min?: number; readonly max?: number; readonly decimals?: number; readonly suffix?: React.ReactNode; readonly nullable?: boolean }) {
+export function NumberField<T extends FieldValues>({
+  min = 0,
+  max,
+  decimals = 0,
+  suffix,
+  nullable,
+  ...p
+}: Base<T> & {
+  readonly min?: number;
+  readonly max?: number;
+  readonly decimals?: number;
+  readonly suffix?: React.ReactNode;
+  readonly nullable?: boolean;
+}) {
   return (
     <FormField<T> {...p}>
       {(c) => (
@@ -63,8 +87,8 @@ export function NumberField<T extends FieldValues>({ min = 0, max, decimals = 0,
           onBlur={c.onBlur}
           disabled={c.disabled}
           invalid={c.invalid}
-          aria-invalid={c["aria-invalid"]}
-          aria-describedby={c["aria-describedby"]}
+          aria-invalid={c['aria-invalid']}
+          aria-describedby={c['aria-describedby']}
           min={min}
           max={max}
           decimals={decimals}
@@ -80,7 +104,18 @@ export function enumSelectOptions(values: readonly string[]): readonly SelectOpt
   return values.map((value) => ({ value, label: splitCamel(value) }));
 }
 
-export function SelectField<T extends FieldValues>({ options, placeholder, clearable, onValueChange, ...p }: Base<T> & { readonly options: readonly SelectOption[]; readonly placeholder?: string; readonly clearable?: boolean; readonly onValueChange?: (v: string | null) => void }) {
+export function SelectField<T extends FieldValues>({
+  options,
+  placeholder,
+  clearable,
+  onValueChange,
+  ...p
+}: Base<T> & {
+  readonly options: readonly SelectOption[];
+  readonly placeholder?: string;
+  readonly clearable?: boolean;
+  readonly onValueChange?: (v: string | null) => void;
+}) {
   return (
     <FormField<T> {...p}>
       {(c) => (
@@ -95,9 +130,9 @@ export function SelectField<T extends FieldValues>({ options, placeholder, clear
           onBlur={c.onBlur}
           disabled={c.disabled}
           invalid={c.invalid}
-          aria-describedby={c["aria-describedby"]}
+          aria-describedby={c['aria-describedby']}
           options={options}
-          placeholder={placeholder ?? "Select"}
+          placeholder={placeholder ?? 'Select'}
           clearable={clearable}
         />
       )}
@@ -105,7 +140,18 @@ export function SelectField<T extends FieldValues>({ options, placeholder, clear
   );
 }
 
-export function ComboField<T extends FieldValues>({ options, placeholder, onValueChange, emptyText, ...p }: Base<T> & { readonly options: readonly ComboboxOption[]; readonly placeholder?: string; readonly onValueChange?: (v: string | null) => void; readonly emptyText?: string }) {
+export function ComboField<T extends FieldValues>({
+  options,
+  placeholder,
+  onValueChange,
+  emptyText,
+  ...p
+}: Base<T> & {
+  readonly options: readonly ComboboxOption[];
+  readonly placeholder?: string;
+  readonly onValueChange?: (v: string | null) => void;
+  readonly emptyText?: string;
+}) {
   return (
     <FormField<T> {...p}>
       {(c) => (
@@ -120,7 +166,7 @@ export function ComboField<T extends FieldValues>({ options, placeholder, onValu
           onBlur={c.onBlur}
           disabled={c.disabled}
           invalid={c.invalid}
-          placeholder={placeholder ?? "Select"}
+          placeholder={placeholder ?? 'Select'}
           clearable
           emptyText={emptyText}
         />
@@ -133,24 +179,46 @@ export function ComboField<T extends FieldValues>({ options, placeholder, onValu
  * Settings Yes / No: green Yes, NEUTRAL No. "No" on a configuration toggle is a choice, not an
  * error, so it must not render in danger red (the shared toggle reserves red for destructive use).
  */
-const NEUTRAL_NO = "self-start [&>button:last-child[data-state=on]]:bg-neutral-soft [&>button:last-child[data-state=on]]:text-body";
+const NEUTRAL_NO =
+  'self-start [&>button:last-child[data-state=on]]:bg-neutral-soft [&>button:last-child[data-state=on]]:text-body';
 export const SettingYesNo = React.forwardRef<HTMLDivElement, YesNoToggleProps>(({ className, ...p }, ref) => (
-  <YesNoToggle ref={ref} {...p} className={[NEUTRAL_NO, className].filter(Boolean).join(" ")} />
+  <YesNoToggle ref={ref} {...p} className={[NEUTRAL_NO, className].filter(Boolean).join(' ')} />
 ));
-SettingYesNo.displayName = "SettingYesNo";
+SettingYesNo.displayName = 'SettingYesNo';
 
 export function YesNoField<T extends FieldValues>(p: Base<T>) {
   return (
     <FormField<T> {...p}>
-      {(c) => <SettingYesNo id={c.id} value={(c.value as boolean | null) ?? false} onChange={c.onChange} disabled={c.disabled} ariaLabel={typeof p.label === "string" ? p.label : undefined} aria-invalid={c["aria-invalid"]} />}
+      {(c) => (
+        <SettingYesNo
+          id={c.id}
+          value={(c.value as boolean | null) ?? false}
+          onChange={c.onChange}
+          disabled={c.disabled}
+          ariaLabel={typeof p.label === 'string' ? p.label : undefined}
+          aria-invalid={c['aria-invalid']}
+        />
+      )}
     </FormField>
   );
 }
 
-export function CheckboxField<T extends FieldValues>({ hint, ...p }: Base<T> & { readonly hint?: React.ReactNode }) {
+export function CheckboxField<T extends FieldValues>({
+  hint,
+  ...p
+}: Base<T> & { readonly hint?: React.ReactNode }) {
   return (
     <FormField<T> name={p.name} disabled={p.disabled} className={p.className}>
-      {(c) => <Checkbox id={c.id} checked={Boolean(c.value)} onCheckedChange={(v) => c.onChange(v === true)} disabled={c.disabled} label={p.label} description={hint} />}
+      {(c) => (
+        <Checkbox
+          id={c.id}
+          checked={Boolean(c.value)}
+          onCheckedChange={(v) => c.onChange(v === true)}
+          disabled={c.disabled}
+          label={p.label}
+          description={hint}
+        />
+      )}
     </FormField>
   );
 }

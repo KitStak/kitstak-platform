@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
 /**
  * Body for `DataGrid`: loading skeleton, error (Retry), empty state, rows with pinned /
  * sticky cells, optional expanded detail rows, and windowed rendering once a page holds
  * more than `VIRTUALIZE_ABOVE` rows.
  */
-import * as React from "react";
-import { flexRender, type Row, type Table } from "@tanstack/react-table";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { AlertTriangle, Inbox } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { VIRTUALIZE_ABOVE, type GridDensity } from "./grid-types";
-import { cellPlacement } from "./data-grid-columns";
+import * as React from 'react';
+import { flexRender, type Row, type Table } from '@tanstack/react-table';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { AlertTriangle, Inbox } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { VIRTUALIZE_ABOVE, type GridDensity } from './grid-types';
+import { cellPlacement } from './data-grid-columns';
 
 export const ROW_HEIGHT: Readonly<Record<GridDensity, number>> = { Large: 48, Small: 40 };
 const SKELETON_ROWS = 12;
@@ -41,7 +41,9 @@ function FullRow({ colSpan, children }: { readonly colSpan: number; readonly chi
   return (
     <tr>
       <td colSpan={colSpan}>
-        <div className="sticky left-0 flex w-full max-w-[100vw] flex-col items-center gap-2 py-16 text-center">{children}</div>
+        <div className="sticky left-0 flex w-full max-w-[100vw] flex-col items-center gap-2 py-16 text-center">
+          {children}
+        </div>
       </td>
     </tr>
   );
@@ -59,7 +61,17 @@ interface BodyRowProps<T> {
   readonly rowOffset?: number;
 }
 
-function BodyRow<T>({ row, table, height, onRowClick, renderExpanded, stickyRightOffset, measureRef, index, rowOffset = 0 }: BodyRowProps<T>) {
+function BodyRow<T>({
+  row,
+  table,
+  height,
+  onRowClick,
+  renderExpanded,
+  stickyRightOffset,
+  measureRef,
+  index,
+  rowOffset = 0,
+}: BodyRowProps<T>) {
   const selected = row.getIsSelected();
   const cells = row.getVisibleCells();
   return (
@@ -73,7 +85,11 @@ function BodyRow<T>({ row, table, height, onRowClick, renderExpanded, stickyRigh
         aria-selected={selected || undefined}
         onClick={onRowClick ? () => onRowClick(row.original) : undefined}
         style={{ height }}
-        className={cn("group border-t border-border transition-colors", onRowClick && "cursor-pointer", selected ? "bg-primary-soft/60" : "hover:bg-surface-sunken")}
+        className={cn(
+          'group border-t border-border transition-colors',
+          onRowClick && 'cursor-pointer',
+          selected ? 'bg-primary-soft/60' : 'hover:bg-surface-sunken',
+        )}
       >
         {cells.map((cell) => {
           const placement = cellPlacement(cell.column, table, stickyRightOffset);
@@ -85,13 +101,14 @@ function BodyRow<T>({ row, table, height, onRowClick, renderExpanded, stickyRigh
               role="cell"
               style={placement.style}
               className={cn(
-                "whitespace-nowrap align-middle",
-                meta?.clip === false ? "overflow-visible" : "overflow-hidden text-ellipsis",
-                meta?.cellPadding ?? "px-3",
-                align === "right" && "text-right",
-                meta?.justify === "center" && "text-center [&>*]:mx-auto",
+                'whitespace-nowrap align-middle',
+                meta?.clip === false ? 'overflow-visible' : 'overflow-hidden text-ellipsis',
+                meta?.cellPadding ?? 'px-3',
+                align === 'right' && 'text-right',
+                meta?.justify === 'center' && 'text-center [&>*]:mx-auto',
                 placement.className,
-                placement.sticky && (selected ? "bg-primary-soft" : "bg-surface group-hover:bg-surface-sunken")
+                placement.sticky &&
+                  (selected ? 'bg-primary-soft' : 'bg-surface group-hover:bg-surface-sunken'),
               )}
             >
               {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -103,7 +120,9 @@ function BodyRow<T>({ row, table, height, onRowClick, renderExpanded, stickyRigh
         <tr className="border-t border-border bg-surface-sunken/60">
           <td colSpan={cells.length} className="px-0 py-2">
             {/* Pinned to the visible width so the panel does not scroll away with wide grids. */}
-            <div className="sticky left-0 w-[var(--grid-visible-width,100%)] max-w-full px-4">{renderExpanded(row.original)}</div>
+            <div className="sticky left-0 w-[var(--grid-visible-width,100%)] max-w-full px-4">
+              {renderExpanded(row.original)}
+            </div>
           </td>
         </tr>
       ) : null}
@@ -111,7 +130,15 @@ function BodyRow<T>({ row, table, height, onRowClick, renderExpanded, stickyRigh
   );
 }
 
-function VirtualRows<T>({ rows, scrollRef, height, ...rest }: Omit<BodyRowProps<T>, "row" | "measureRef" | "index"> & { readonly rows: readonly Row<T>[]; readonly scrollRef: React.RefObject<HTMLDivElement | null> }) {
+function VirtualRows<T>({
+  rows,
+  scrollRef,
+  height,
+  ...rest
+}: Omit<BodyRowProps<T>, 'row' | 'measureRef' | 'index'> & {
+  readonly rows: readonly Row<T>[];
+  readonly scrollRef: React.RefObject<HTMLDivElement | null>;
+}) {
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual returns non-memoisable functions by design
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -133,7 +160,16 @@ function VirtualRows<T>({ rows, scrollRef, height, ...rest }: Omit<BodyRowProps<
       ) : null}
       {items.map((item) => {
         const row = rows[item.index];
-        return row ? <BodyRow key={row.id} row={row} height={height} index={item.index} measureRef={virtualizer.measureElement} {...rest} /> : null;
+        return row ? (
+          <BodyRow
+            key={row.id}
+            row={row}
+            height={height}
+            index={item.index}
+            measureRef={virtualizer.measureElement}
+            {...rest}
+          />
+        ) : null;
       })}
       {bottom > 0 ? (
         <tr aria-hidden style={{ height: bottom }}>
@@ -157,14 +193,32 @@ function SlowLoadNotice({ colSpan, onRetry }: { readonly colSpan: number; readon
       <td colSpan={Math.max(1, colSpan)} className="px-3 py-2">
         <div role="status" className="flex items-center gap-3 text-xs text-secondary">
           <span>This is taking longer than usual. The server may be busy.</span>
-          {onRetry ? <Button variant="secondary" size="sm" onClick={onRetry}>Retry</Button> : null}
+          {onRetry ? (
+            <Button variant="secondary" size="sm" onClick={onRetry}>
+              Retry
+            </Button>
+          ) : null}
         </div>
       </td>
     </tr>
   );
 }
 
-export function DataGridBody<T>({ table, density, loading, error, onRetry, emptyTitle, emptyDescription, emptyAction, onRowClick, renderExpanded, stickyRightOffset, scrollRef, rowOffset = 0 }: DataGridBodyProps<T>) {
+export function DataGridBody<T>({
+  table,
+  density,
+  loading,
+  error,
+  onRetry,
+  emptyTitle,
+  emptyDescription,
+  emptyAction,
+  onRowClick,
+  renderExpanded,
+  stickyRightOffset,
+  scrollRef,
+  rowOffset = 0,
+}: DataGridBodyProps<T>) {
   const columns = table.getVisibleLeafColumns();
   const height = ROW_HEIGHT[density];
   const rows = table.getRowModel().rows;

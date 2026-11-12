@@ -3,25 +3,30 @@
  * `GET` does the same for Vercel Cron (vercel.json), which sends GET with that bearer header.
  * 503 when CRON_SECRET is not configured, 401 on a wrong token; otherwise runs one tick.
  */
-import { NextResponse } from "next/server";
-import { defineRoute } from "@/server/api/define-route";
-import { unauthenticatedError } from "@/server/api/errors";
-import { runSchedulerTick, verifyCronAuthorization } from "@/server/scheduler";
+import { NextResponse } from 'next/server';
+import { defineRoute } from '@/server/api/define-route';
+import { unauthenticatedError } from '@/server/api/errors';
+import { runSchedulerTick, verifyCronAuthorization } from '@/server/scheduler';
 
 const tickRoute = defineRoute({
-  auth: "public",
+  auth: 'public',
   csrf: false,
   rateLimit: false,
   transaction: false,
   handler: async ({ request, requestId }) => {
-    const check = verifyCronAuthorization(request.headers.get("authorization"));
-    if (check === "not_configured") {
+    const check = verifyCronAuthorization(request.headers.get('authorization'));
+    if (check === 'not_configured') {
       return NextResponse.json(
-        { success: false, error: "The cron endpoint is not configured (set CRON_SECRET).", code: "INVALID_STATE", requestId },
-        { status: 503, headers: { "x-request-id": requestId } },
+        {
+          success: false,
+          error: 'The cron endpoint is not configured (set CRON_SECRET).',
+          code: 'INVALID_STATE',
+          requestId,
+        },
+        { status: 503, headers: { 'x-request-id': requestId } },
       );
     }
-    if (check !== "ok") throw unauthenticatedError("Invalid cron token");
+    if (check !== 'ok') throw unauthenticatedError('Invalid cron token');
     return runSchedulerTick();
   },
 });

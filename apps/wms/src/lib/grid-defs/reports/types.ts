@@ -6,12 +6,12 @@
  * `field` / column `id` is the `f.<field>` / `sort=<field>` key AND the SQL alias of the
  * report's inner SELECT, so client, URL and SQL always agree on one name.
  */
-import type { StatusDomain } from "@/lib/status-colors";
+import type { StatusDomain } from '@/lib/status-colors';
 
-export type ReportFieldType = "enum" | "text" | "number" | "date" | "boolean";
+export type ReportFieldType = 'enum' | 'text' | 'number' | 'date' | 'boolean';
 
 /** Enum fields whose options come from the viewer's scope at runtime. */
-export type ReportDynamicOptions = "warehouse" | "client";
+export type ReportDynamicOptions = 'warehouse' | 'client';
 
 export interface ReportField {
   readonly field: string;
@@ -28,8 +28,18 @@ export interface ReportField {
 }
 
 export type ReportCellKind =
-  | "text" | "strong" | "mono" | "number" | "decimal" | "money" | "datetime" | "date"
-  | "pill" | "diff" | "yesNo" | "user";
+  | 'text'
+  | 'strong'
+  | 'mono'
+  | 'number'
+  | 'decimal'
+  | 'money'
+  | 'datetime'
+  | 'date'
+  | 'pill'
+  | 'diff'
+  | 'yesNo'
+  | 'user';
 
 export interface ReportColumn {
   readonly id: string;
@@ -48,7 +58,7 @@ export interface ReportColumn {
   /** Hidden until enabled in the column chooser. */
   readonly defaultHidden?: boolean;
   /** Export column type. */
-  readonly exportType?: "text" | "integer" | "number" | "money" | "date" | "datetime" | "boolean";
+  readonly exportType?: 'text' | 'integer' | 'number' | 'money' | 'date' | 'datetime' | 'boolean';
 }
 
 export interface ReportDef {
@@ -74,17 +84,19 @@ export function sortableOf(def: ReportDef): readonly string[] {
   return def.columns.filter((c) => c.sortable !== false).map((c) => c.id);
 }
 
-const EXPORT_TYPE: Partial<Record<ReportCellKind, NonNullable<ReportColumn["exportType"]>>> = {
-  number: "integer",
-  decimal: "number",
-  diff: "integer",
-  money: "money",
-  datetime: "datetime",
-  date: "date",
+const EXPORT_TYPE: Partial<Record<ReportCellKind, NonNullable<ReportColumn['exportType']>>> = {
+  number: 'integer',
+  decimal: 'number',
+  diff: 'integer',
+  money: 'money',
+  datetime: 'datetime',
+  date: 'date',
 };
 
 /** Sheet columns for Export As Excel, in grid order. */
-export function exportColumnsOf(def: ReportDef): readonly { key: string; label: string; type?: NonNullable<ReportColumn["exportType"]> }[] {
+export function exportColumnsOf(
+  def: ReportDef,
+): readonly { key: string; label: string; type?: NonNullable<ReportColumn['exportType']> }[] {
   return def.columns.map((c) => {
     const type = c.exportType ?? (c.kind ? EXPORT_TYPE[c.kind] : undefined);
     return { key: c.id, label: c.label, ...(type ? { type } : {}) };
@@ -92,12 +104,51 @@ export function exportColumnsOf(def: ReportDef): readonly { key: string; label: 
 }
 
 /** Shorthand builders keep the 14 defs readable. */
-export const text = (field: string, label: string, extra: Partial<ReportField> = {}): ReportField => ({ field, label, type: "text", ...extra });
-export const num = (field: string, label: string, extra: Partial<ReportField> = {}): ReportField => ({ field, label, type: "number", ...extra });
-export const date = (field: string, label: string, extra: Partial<ReportField> = {}): ReportField => ({ field, label, type: "date", ...extra });
-export const bool = (field: string, label: string, extra: Partial<ReportField> = {}): ReportField => ({ field, label, type: "boolean", ...extra });
-export const enumOf = (field: string, label: string, options: readonly string[], extra: Partial<ReportField> = {}): ReportField => ({ field, label, type: "enum", options, ...extra });
-export const WAREHOUSE_FIELD: ReportField = { field: "warehouseId", label: "Warehouse", type: "enum", dynamicOptions: "warehouse" };
-export const CLIENT_FIELD: ReportField = { field: "clientId", label: "Client", type: "enum", dynamicOptions: "client" };
+export const text = (field: string, label: string, extra: Partial<ReportField> = {}): ReportField => ({
+  field,
+  label,
+  type: 'text',
+  ...extra,
+});
+export const num = (field: string, label: string, extra: Partial<ReportField> = {}): ReportField => ({
+  field,
+  label,
+  type: 'number',
+  ...extra,
+});
+export const date = (field: string, label: string, extra: Partial<ReportField> = {}): ReportField => ({
+  field,
+  label,
+  type: 'date',
+  ...extra,
+});
+export const bool = (field: string, label: string, extra: Partial<ReportField> = {}): ReportField => ({
+  field,
+  label,
+  type: 'boolean',
+  ...extra,
+});
+export const enumOf = (
+  field: string,
+  label: string,
+  options: readonly string[],
+  extra: Partial<ReportField> = {},
+): ReportField => ({ field, label, type: 'enum', options, ...extra });
+export const WAREHOUSE_FIELD: ReportField = {
+  field: 'warehouseId',
+  label: 'Warehouse',
+  type: 'enum',
+  dynamicOptions: 'warehouse',
+};
+export const CLIENT_FIELD: ReportField = {
+  field: 'clientId',
+  label: 'Client',
+  type: 'enum',
+  dynamicOptions: 'client',
+};
 
-export const col = (id: string, label: string, extra: Partial<ReportColumn> = {}): ReportColumn => ({ id, label, ...extra });
+export const col = (id: string, label: string, extra: Partial<ReportColumn> = {}): ReportColumn => ({
+  id,
+  label,
+  ...extra,
+});

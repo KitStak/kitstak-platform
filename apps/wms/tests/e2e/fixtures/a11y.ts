@@ -4,10 +4,10 @@
  *   await expectNoA11yViolations(page);                       // serious + critical
  *   await expectNoA11yViolations(page, { include: "main", minImpact: "moderate" });
  */
-import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page } from "@playwright/test";
+import AxeBuilder from '@axe-core/playwright';
+import { expect, type Page } from '@playwright/test';
 
-export type Impact = "minor" | "moderate" | "serious" | "critical";
+export type Impact = 'minor' | 'moderate' | 'serious' | 'critical';
 
 const IMPACT_RANK: Readonly<Record<Impact, number>> = {
   minor: 0,
@@ -16,7 +16,7 @@ const IMPACT_RANK: Readonly<Record<Impact, number>> = {
   critical: 3,
 };
 
-export const DEFAULT_TAGS: readonly string[] = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
+export const DEFAULT_TAGS: readonly string[] = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 export interface A11yOptions {
   /** CSS selector(s) to scope the scan to. */
@@ -39,7 +39,7 @@ export interface A11yViolation {
 }
 
 const asList = (value: string | readonly string[] | undefined): readonly string[] =>
-  value === undefined ? [] : typeof value === "string" ? [value] : value;
+  value === undefined ? [] : typeof value === 'string' ? [value] : value;
 
 export function meetsImpact(impact: Impact | null | undefined, min: Impact): boolean {
   // Unknown impact is treated as serious so it is never silently dropped.
@@ -50,11 +50,11 @@ export function meetsImpact(impact: Impact | null | undefined, min: Impact): boo
 export function formatViolations(violations: readonly A11yViolation[]): string {
   return violations
     .map((v) => {
-      const targets = v.targets.slice(0, 5).join(", ");
-      const more = v.targets.length > 5 ? ` (+${v.targets.length - 5} more)` : "";
-      return `[${v.impact ?? "unknown"}] ${v.id}: ${v.help}\n    at ${targets}${more}\n    ${v.helpUrl}`;
+      const targets = v.targets.slice(0, 5).join(', ');
+      const more = v.targets.length > 5 ? ` (+${v.targets.length - 5} more)` : '';
+      return `[${v.impact ?? 'unknown'}] ${v.id}: ${v.help}\n    at ${targets}${more}\n    ${v.helpUrl}`;
     })
-    .join("\n");
+    .join('\n');
 }
 
 export async function scanA11y(page: Page, options: A11yOptions = {}): Promise<readonly A11yViolation[]> {
@@ -65,7 +65,7 @@ export async function scanA11y(page: Page, options: A11yOptions = {}): Promise<r
     builder = builder.disableRules([...options.disableRules]);
   }
   const results = await builder.analyze();
-  const minImpact = options.minImpact ?? "serious";
+  const minImpact = options.minImpact ?? 'serious';
   return results.violations
     .filter((v) => meetsImpact(v.impact as Impact | null | undefined, minImpact))
     .map((v) => ({
@@ -73,11 +73,13 @@ export async function scanA11y(page: Page, options: A11yOptions = {}): Promise<r
       impact: (v.impact ?? null) as Impact | null,
       help: v.help,
       helpUrl: v.helpUrl,
-      targets: v.nodes.map((n) => n.target.join(" ")),
+      targets: v.nodes.map((n) => n.target.join(' ')),
     }));
 }
 
 export async function expectNoA11yViolations(page: Page, options: A11yOptions = {}): Promise<void> {
   const violations = await scanA11y(page, options);
-  expect(violations, `Accessibility violations on ${page.url()}:\n${formatViolations(violations)}`).toEqual([]);
+  expect(violations, `Accessibility violations on ${page.url()}:\n${formatViolations(violations)}`).toEqual(
+    [],
+  );
 }

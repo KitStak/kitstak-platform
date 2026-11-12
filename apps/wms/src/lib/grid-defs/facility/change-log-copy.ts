@@ -6,42 +6,51 @@
 
 /** Display name per M10 entity type ("LP Type KS-TOTE is created."). */
 export const FACILITY_ENTITY_LABELS: Readonly<Record<string, string>> = {
-  location: "Location",
-  warehouse: "Warehouse",
-  lp_type: "LP Type",
-  license_plate: "LP Number",
-  mobile_cart: "Mobile Cart",
-  shipment_package: "Shipment Package",
+  location: 'Location',
+  warehouse: 'Warehouse',
+  lp_type: 'LP Type',
+  license_plate: 'LP Number',
+  mobile_cart: 'Mobile Cart',
+  shipment_package: 'Shipment Package',
 };
 
 /** Fields whose generated label reads wrong; everything else is split camel case, sentence case. */
 const FIELD_LABELS: Readonly<Record<string, string>> = {
-  isLocked: "Locked",
-  isActive: "Active",
-  isDefault: "Default",
-  maxSkuQty: "Max SKU qty",
-  maxCapacityQty: "Max capacity qty",
-  abcCode: "ABC code",
-  lpTypeId: "LP type",
-  lpType: "LP type",
-  parentLpId: "Parent LP",
-  sscc: "SSCC",
-  numberPrefix: "Number prefix",
-  onlyOneSku: "Only 1 SKU",
-  onlyOneLot: "Only 1 lot batch number",
-  onlyOneExpiry: "Only 1 expiry date",
-  onlyOneProductionDate: "Only 1 production date",
-  onlyOneClient: "Only 1 client",
-  onlyOneOrder: "Only 1 order",
-  onlyOneJob: "Only 1 job",
-  useForAiJob: "Use for AI job",
-  suitableForParentLp: "Suitable for parent LP",
-  useLpDimsForPutaway: "Use LP dimensions for putaway",
-  mobileAutoLogout: "Mobile auto logout",
-  dedicatedClient: "Dedicated client",
+  isLocked: 'Locked',
+  isActive: 'Active',
+  isDefault: 'Default',
+  maxSkuQty: 'Max SKU qty',
+  maxCapacityQty: 'Max capacity qty',
+  abcCode: 'ABC code',
+  lpTypeId: 'LP type',
+  lpType: 'LP type',
+  parentLpId: 'Parent LP',
+  sscc: 'SSCC',
+  numberPrefix: 'Number prefix',
+  onlyOneSku: 'Only 1 SKU',
+  onlyOneLot: 'Only 1 lot batch number',
+  onlyOneExpiry: 'Only 1 expiry date',
+  onlyOneProductionDate: 'Only 1 production date',
+  onlyOneClient: 'Only 1 client',
+  onlyOneOrder: 'Only 1 order',
+  onlyOneJob: 'Only 1 job',
+  useForAiJob: 'Use for AI job',
+  suitableForParentLp: 'Suitable for parent LP',
+  useLpDimsForPutaway: 'Use LP dimensions for putaway',
+  mobileAutoLogout: 'Mobile auto logout',
+  dedicatedClient: 'Dedicated client',
 };
 
-const ACRONYMS: Readonly<Record<string, string>> = { sku: "SKU", lp: "LP", abc: "ABC", ai: "AI", id: "ID", sscc: "SSCC", ups: "UPS", qty: "qty" };
+const ACRONYMS: Readonly<Record<string, string>> = {
+  sku: 'SKU',
+  lp: 'LP',
+  abc: 'ABC',
+  ai: 'AI',
+  id: 'ID',
+  sscc: 'SSCC',
+  ups: 'UPS',
+  qty: 'qty',
+};
 
 /** "walkingPathPriority" → "Walking path priority", "isLocked" → "Locked", "maxSkuQty" → "Max SKU qty". */
 export function facilityFieldLabel(field: string): string {
@@ -49,14 +58,18 @@ export function facilityFieldLabel(field: string): string {
   if (known) return known;
   const custom = /^customFields\.(.+)$/.exec(field);
   if (custom?.[1]) return custom[1];
-  const words = field.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_.]+/g, " ").trim().split(/\s+/);
-  if (words.length > 1 && /^is$/i.test(words[0] ?? "")) words.shift();
+  const words = field
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_.]+/g, ' ')
+    .trim()
+    .split(/\s+/);
+  if (words.length > 1 && /^is$/i.test(words[0] ?? '')) words.shift();
   const out = words.map((w, i) => {
     const acronym = ACRONYMS[w.toLowerCase()];
     if (acronym) return acronym;
     return i === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase();
   });
-  return out.join(" ");
+  return out.join(' ');
 }
 
 /** "LP Type KS-TOTE" (or just "LP Type" without a code). */
@@ -67,7 +80,7 @@ export function facilityEntityName(entityType: string, code: string | null | und
 
 /** A stored side of a change: empty reads "(blank)", so the sentence never has a double space. */
 export function blankAware(value: string): string {
-  return value.trim() === "" ? "(blank)" : value;
+  return value.trim() === '' ? '(blank)' : value;
 }
 
 /** "Walking path priority is modified. (blank) --> 77" */
@@ -87,22 +100,30 @@ export interface CapacityLine {
 }
 
 export interface CapacityChange {
-  readonly type: "Create" | "Update" | "Delete";
-  readonly field: "productCapacity" | "lpCapacity";
+  readonly type: 'Create' | 'Update' | 'Delete';
+  readonly field: 'productCapacity' | 'lpCapacity';
   readonly fieldLabel: string;
   readonly from: string;
   readonly to: string;
   readonly message: string;
 }
 
-const KIND: Readonly<Record<CapacityChange["field"], string>> = { productCapacity: "Product capacity", lpCapacity: "LP capacity" };
-const minMax = (c: CapacityLine) => `Min ${c.min.toLocaleString("en-US")}, Max ${c.max.toLocaleString("en-US")}`;
+const KIND: Readonly<Record<CapacityChange['field'], string>> = {
+  productCapacity: 'Product capacity',
+  lpCapacity: 'LP capacity',
+};
+const minMax = (c: CapacityLine) =>
+  `Min ${c.min.toLocaleString('en-US')}, Max ${c.max.toLocaleString('en-US')}`;
 
 /**
  * One change per added, edited or removed capacity line, e.g.
  * "APX-KIT-TEE3 (Each) -> Product capacity is created. Min 10, Max 50". Ordered by label.
  */
-export function capacityLineChanges(field: CapacityChange["field"], before: readonly CapacityLine[], after: readonly CapacityLine[]): CapacityChange[] {
+export function capacityLineChanges(
+  field: CapacityChange['field'],
+  before: readonly CapacityLine[],
+  after: readonly CapacityLine[],
+): CapacityChange[] {
   const kind = KIND[field];
   const was = new Map(before.map((c) => [c.key, c]));
   const now = new Map(after.map((c) => [c.key, c]));
@@ -110,13 +131,44 @@ export function capacityLineChanges(field: CapacityChange["field"], before: read
   for (const c of after) {
     const old = was.get(c.key);
     if (!old) {
-      out.push({ label: c.label, change: { type: "Create", field, fieldLabel: `${c.label} · ${kind}`, from: "", to: minMax(c), message: `${c.label} -> ${kind} is created. ${minMax(c)}` } });
+      out.push({
+        label: c.label,
+        change: {
+          type: 'Create',
+          field,
+          fieldLabel: `${c.label} · ${kind}`,
+          from: '',
+          to: minMax(c),
+          message: `${c.label} -> ${kind} is created. ${minMax(c)}`,
+        },
+      });
     } else if (old.min !== c.min || old.max !== c.max) {
-      out.push({ label: c.label, change: { type: "Update", field, fieldLabel: `${c.label} · ${kind}`, from: minMax(old), to: minMax(c), message: `${c.label} -> ${kind} is modified. ${minMax(old)} --> ${minMax(c)}` } });
+      out.push({
+        label: c.label,
+        change: {
+          type: 'Update',
+          field,
+          fieldLabel: `${c.label} · ${kind}`,
+          from: minMax(old),
+          to: minMax(c),
+          message: `${c.label} -> ${kind} is modified. ${minMax(old)} --> ${minMax(c)}`,
+        },
+      });
     }
   }
   for (const c of before) {
-    if (!now.has(c.key)) out.push({ label: c.label, change: { type: "Delete", field, fieldLabel: `${c.label} · ${kind}`, from: minMax(c), to: "", message: `${c.label} -> ${kind} is deleted. Was ${minMax(c)}` } });
+    if (!now.has(c.key))
+      out.push({
+        label: c.label,
+        change: {
+          type: 'Delete',
+          field,
+          fieldLabel: `${c.label} · ${kind}`,
+          from: minMax(c),
+          to: '',
+          message: `${c.label} -> ${kind} is deleted. Was ${minMax(c)}`,
+        },
+      });
   }
   return out.sort((a, b) => a.label.localeCompare(b.label)).map((o) => o.change);
 }
@@ -125,7 +177,7 @@ export function capacityLineChanges(field: CapacityChange["field"], before: read
 
 /** Fields whose label is derived from the field key (capacity lines carry their own label). */
 const DERIVED_LABEL_FIELD = /^(?:[a-z][A-Za-z0-9]*|customFields\.[^.]+)$/;
-const CAPACITY_FIELDS: ReadonlySet<string> = new Set(["productCapacity", "lpCapacity"]);
+const CAPACITY_FIELDS: ReadonlySet<string> = new Set(['productCapacity', 'lpCapacity']);
 
 export interface StoredChangeRow {
   readonly type: string;
@@ -142,12 +194,22 @@ export interface StoredChangeRow {
  * label from the field key and its sentence is rebuilt, so one history never mixes two names.
  */
 export function normalizeChangeRow<T extends StoredChangeRow>(row: T): T {
-  if (row.type !== "Update" || !row.field || CAPACITY_FIELDS.has(row.field) || !DERIVED_LABEL_FIELD.test(row.field)) return row;
+  if (
+    row.type !== 'Update' ||
+    !row.field ||
+    CAPACITY_FIELDS.has(row.field) ||
+    !DERIVED_LABEL_FIELD.test(row.field)
+  )
+    return row;
   const label = facilityFieldLabel(row.field);
-  return { ...row, fieldLabel: label, message: facilityUpdateMessage(label, row.fromValue ?? "", row.toValue ?? "") };
+  return {
+    ...row,
+    fieldLabel: label,
+    message: facilityUpdateMessage(label, row.fromValue ?? '', row.toValue ?? ''),
+  };
 }
 
-export type ChangeChannel = "UI" | "Import" | "Integration" | "Workflow" | "System";
+export type ChangeChannel = 'UI' | 'Import' | 'Integration' | 'Workflow' | 'System';
 
 /**
  * Logiwa's SOURCE column: which channel made the change. Rows written by a signed-in user store
@@ -155,16 +217,16 @@ export type ChangeChannel = "UI" | "Import" | "Integration" | "Workflow" | "Syst
  * background jobs store their own name.
  */
 export function changeChannel(source: string | null | undefined): ChangeChannel {
-  const s = (source ?? "").trim();
-  if (/^import\b/i.test(s)) return "Import";
-  if (/integration|webhook|\bapi\b|shopify|amazon|edi/i.test(s)) return "Integration";
-  if (/^workflow\b/i.test(s)) return "Workflow";
-  if (s.includes("@") || /^(web|ui)$/i.test(s)) return "UI";
-  return "System";
+  const s = (source ?? '').trim();
+  if (/^import\b/i.test(s)) return 'Import';
+  if (/integration|webhook|\bapi\b|shopify|amazon|edi/i.test(s)) return 'Integration';
+  if (/^workflow\b/i.test(s)) return 'Workflow';
+  if (s.includes('@') || /^(web|ui)$/i.test(s)) return 'UI';
+  return 'System';
 }
 
 /** The user an import / UI source names ("Import · a@b.io" → "a@b.io"), or null. */
 export function changeSourceUser(source: string | null | undefined): string | null {
-  const m = /([^\s·]+@[^\s·]+)/.exec(source ?? "");
+  const m = /([^\s·]+@[^\s·]+)/.exec(source ?? '');
   return m?.[1] ?? null;
 }

@@ -1,26 +1,26 @@
-"use client";
+'use client';
 
 /**
  * Filter ▾ popover (BUILD_PLAN F4.3): "New" tab (field search, pinned favourites, typed
  * editor, Apply) and "Saved" tab (apply a saved view). Applying a field filter replaces
  * any existing filter on the same field.
  */
-import * as React from "react";
-import { ArrowLeft, Bookmark, ChevronRight, ListFilter, Plus, Search, Star } from "lucide-react";
-import { cn } from "@/lib/utils";
-import type { GridFilter } from "@/server/query/grid-query";
-import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { TextField } from "@/components/ui/text-field";
-import { DisabledReason } from "@/components/ui/tooltip";
-import { SegmentedTabs } from "@/components/ui/tabs";
-import type { FilterFieldDef } from "../grid-types";
-import type { SavedView } from "../use-saved-views";
-import { useLocalList } from "../use-local-list";
-import { FieldEditor } from "./field-editors";
-import { draftToFilter, filterToDraft, orderByPinned, searchFields, type FilterDraft } from "./filter-model";
+import * as React from 'react';
+import { ArrowLeft, Bookmark, ChevronRight, ListFilter, Plus, Search, Star } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { GridFilter } from '@/server/query/grid-query';
+import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { TextField } from '@/components/ui/text-field';
+import { DisabledReason } from '@/components/ui/tooltip';
+import { SegmentedTabs } from '@/components/ui/tabs';
+import type { FilterFieldDef } from '../grid-types';
+import type { SavedView } from '../use-saved-views';
+import { useLocalList } from '../use-local-list';
+import { FieldEditor } from './field-editors';
+import { draftToFilter, filterToDraft, orderByPinned, searchFields, type FilterDraft } from './filter-model';
 
-type Tab = "new" | "saved";
+type Tab = 'new' | 'saved';
 
 export interface FilterPopoverProps {
   readonly gridKey: string;
@@ -35,33 +35,72 @@ export interface FilterPopoverProps {
   readonly trigger?: React.ReactNode;
 }
 
-function FieldList({ fields, pinned, onPin, onPick }: { readonly fields: readonly FilterFieldDef[]; readonly pinned: readonly string[]; readonly onPin: (field: string) => void; readonly onPick: (def: FilterFieldDef) => void }) {
-  const [query, setQuery] = React.useState("");
+function FieldList({
+  fields,
+  pinned,
+  onPin,
+  onPick,
+}: {
+  readonly fields: readonly FilterFieldDef[];
+  readonly pinned: readonly string[];
+  readonly onPin: (field: string) => void;
+  readonly onPick: (def: FilterFieldDef) => void;
+}) {
+  const [query, setQuery] = React.useState('');
   const shown = orderByPinned(searchFields(fields, query), pinned);
   return (
     <div className="flex flex-col gap-2">
-      <TextField size="sm" autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search fields" aria-label="Search filter fields" leading={<Search className="h-3.5 w-3.5" aria-hidden />} />
+      <TextField
+        size="sm"
+        autoFocus
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search fields"
+        aria-label="Search filter fields"
+        leading={<Search className="h-3.5 w-3.5" aria-hidden />}
+      />
       <ul className="ks-scroll flex max-h-72 flex-col overflow-auto" aria-label="Filter fields">
-        {shown.length === 0 ? <li className="py-4 text-center text-xs text-faint">No fields match &ldquo;{query}&rdquo;</li> : null}
+        {shown.length === 0 ? (
+          <li className="py-4 text-center text-xs text-faint">No fields match &ldquo;{query}&rdquo;</li>
+        ) : null}
         {shown.map((def) => {
           const isPinned = pinned.includes(def.field);
           return (
             // Stable hooks per field row: the row is labelled by the field, the pick button's
             // accessible name is exactly the label (the description is its description).
-            <li key={def.field} aria-label={def.label} data-filter-field={def.field} className="group flex items-center gap-1 rounded-md hover:bg-surface-sunken">
+            <li
+              key={def.field}
+              aria-label={def.label}
+              data-filter-field={def.field}
+              className="group flex items-center gap-1 rounded-md hover:bg-surface-sunken"
+            >
               <button
                 type="button"
                 aria-label={isPinned ? `Unpin ${def.label}` : `Pin ${def.label}`}
                 aria-pressed={isPinned}
                 onClick={() => onPin(def.field)}
-                className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30", isPinned ? "text-warning" : "text-faint opacity-60 group-hover:opacity-100")}
+                className={cn(
+                  'flex h-7 w-7 shrink-0 items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30',
+                  isPinned ? 'text-warning' : 'text-faint opacity-60 group-hover:opacity-100',
+                )}
               >
-                <Star className={cn("h-3.5 w-3.5", isPinned && "fill-current")} aria-hidden />
+                <Star className={cn('h-3.5 w-3.5', isPinned && 'fill-current')} aria-hidden />
               </button>
-              <button type="button" aria-label={def.label} aria-describedby={def.description ? `ff-desc-${def.field}` : undefined} data-filter-pick={def.field} onClick={() => onPick(def)} className="flex min-w-0 flex-1 items-center justify-between gap-2 py-1.5 pr-2 text-left text-sm text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
+              <button
+                type="button"
+                aria-label={def.label}
+                aria-describedby={def.description ? `ff-desc-${def.field}` : undefined}
+                data-filter-pick={def.field}
+                onClick={() => onPick(def)}
+                className="flex min-w-0 flex-1 items-center justify-between gap-2 py-1.5 pr-2 text-left text-sm text-body focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
+              >
                 <span className="min-w-0">
                   <span className="block truncate">{def.label}</span>
-                  {def.description ? <span id={`ff-desc-${def.field}`} className="block truncate text-2xs text-faint">{def.description}</span> : null}
+                  {def.description ? (
+                    <span id={`ff-desc-${def.field}`} className="block truncate text-2xs text-faint">
+                      {def.description}
+                    </span>
+                  ) : null}
                 </span>
                 <ChevronRight className="h-3.5 w-3.5 shrink-0 text-faint" aria-hidden />
               </button>
@@ -73,7 +112,17 @@ function FieldList({ fields, pinned, onPin, onPick }: { readonly fields: readonl
   );
 }
 
-function EditorPanel({ def, existing, onBack, onApply }: { readonly def: FilterFieldDef; readonly existing: GridFilter | undefined; readonly onBack: () => void; readonly onApply: (filter: GridFilter) => void }) {
+function EditorPanel({
+  def,
+  existing,
+  onBack,
+  onApply,
+}: {
+  readonly def: FilterFieldDef;
+  readonly existing: GridFilter | undefined;
+  readonly onBack: () => void;
+  readonly onApply: (filter: GridFilter) => void;
+}) {
   const [draft, setDraft] = React.useState<FilterDraft>(() => filterToDraft(def, existing));
   const result = draftToFilter(def, draft);
   return (
@@ -107,7 +156,13 @@ function EditorPanel({ def, existing, onBack, onApply }: { readonly def: FilterF
   );
 }
 
-function SavedList({ views, onApply }: { readonly views: readonly SavedView[]; readonly onApply: (view: SavedView) => void }) {
+function SavedList({
+  views,
+  onApply,
+}: {
+  readonly views: readonly SavedView[];
+  readonly onApply: (view: SavedView) => void;
+}) {
   if (views.length === 0) {
     return (
       <div className="flex flex-col items-center gap-1 py-6 text-center">
@@ -121,7 +176,11 @@ function SavedList({ views, onApply }: { readonly views: readonly SavedView[]; r
     <ul className="ks-scroll flex max-h-72 flex-col overflow-auto" aria-label="Saved views">
       {views.map((v) => (
         <li key={v.id}>
-          <button type="button" onClick={() => onApply(v)} className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30">
+          <button
+            type="button"
+            onClick={() => onApply(v)}
+            className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm text-body hover:bg-surface-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30"
+          >
             <span className="truncate">{v.name}</span>
             <span className="flex shrink-0 gap-1 text-2xs font-semibold text-faint">
               {v.isDefault ? <span className="text-primary">Default</span> : null}
@@ -134,9 +193,18 @@ function SavedList({ views, onApply }: { readonly views: readonly SavedView[]; r
   );
 }
 
-export function FilterPopover({ gridKey, fields, filters, onApply, savedViews = [], onApplyView, initialField, trigger }: FilterPopoverProps) {
+export function FilterPopover({
+  gridKey,
+  fields,
+  filters,
+  onApply,
+  savedViews = [],
+  onApplyView,
+  initialField,
+  trigger,
+}: FilterPopoverProps) {
   const [open, setOpenState] = React.useState(false);
-  const [tab, setTab] = React.useState<Tab>("new");
+  const [tab, setTab] = React.useState<Tab>('new');
   const [activeField, setActiveField] = React.useState<string | null>(null);
   const [storedPins, setPinned] = useLocalList(`ks:filter-pins:${gridKey}`);
   // Until the viewer pins their own fields, the grid's preset fields (FilterFieldDef.preset) are pinned.
@@ -146,7 +214,7 @@ export function FilterPopover({ gridKey, fields, filters, onApply, savedViews = 
   const setOpen = (next: boolean) => {
     if (next) {
       setActiveField(initialField ?? null);
-      setTab("new");
+      setTab('new');
     }
     setOpenState(next);
   };
@@ -158,18 +226,34 @@ export function FilterPopover({ gridKey, fields, filters, onApply, savedViews = 
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         {trigger ?? (
-          <Button variant="secondary" className={cn("shrink-0", open && "border-primary text-primary")} disabled={fields.length === 0} aria-label={count ? `Filter, ${count} applied` : "Filter"}>
+          <Button
+            variant="secondary"
+            className={cn('shrink-0', open && 'border-primary text-primary')}
+            disabled={fields.length === 0}
+            aria-label={count ? `Filter, ${count} applied` : 'Filter'}
+          >
             <ListFilter className="h-3.5 w-3.5" aria-hidden />
             Filter
-            {count > 0 ? <span className="rounded-full bg-primary px-1.5 text-2xs font-bold text-white">{count}</span> : null}
+            {count > 0 ? (
+              <span className="rounded-full bg-primary px-1.5 text-2xs font-bold text-white">{count}</span>
+            ) : null}
           </Button>
         )}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[320px] p-3">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <SegmentedTabs size="sm" ariaLabel="Filter mode" tabs={[{ key: "new", label: "New", icon: Plus }, { key: "saved", label: "Saved", count: savedViews.length }]} active={tab} onChange={(k) => setTab(k as Tab)} />
+          <SegmentedTabs
+            size="sm"
+            ariaLabel="Filter mode"
+            tabs={[
+              { key: 'new', label: 'New', icon: Plus },
+              { key: 'saved', label: 'Saved', count: savedViews.length },
+            ]}
+            active={tab}
+            onChange={(k) => setTab(k as Tab)}
+          />
         </div>
-        {tab === "saved" ? (
+        {tab === 'saved' ? (
           <SavedList
             views={savedViews}
             onApply={(v) => {
@@ -189,7 +273,12 @@ export function FilterPopover({ gridKey, fields, filters, onApply, savedViews = 
             }}
           />
         ) : (
-          <FieldList fields={fields} pinned={pinned} onPin={(f) => setPinned(pinned.includes(f) ? pinned.filter((x) => x !== f) : [...pinned, f])} onPick={(def) => setActiveField(def.field)} />
+          <FieldList
+            fields={fields}
+            pinned={pinned}
+            onPin={(f) => setPinned(pinned.includes(f) ? pinned.filter((x) => x !== f) : [...pinned, f])}
+            onPick={(def) => setActiveField(def.field)}
+          />
         )}
       </PopoverContent>
     </Popover>

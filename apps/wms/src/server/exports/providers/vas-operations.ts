@@ -5,6 +5,6 @@
  * uses the generic provider (exports exactly what the list endpoint returns). The owner
  * replaces it with a re-export of `src/server/repositories/vas-operations-export.ts`.
  */
-import type { ExportProvider } from "../types";
+import type { ExportProvider } from '../types';
 
 export const exportProvider: ExportProvider | null = null;

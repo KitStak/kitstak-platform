@@ -6,7 +6,7 @@
  * Retry is a plain link that reloads the current URL. The page's default filter chip is drawn
  * statically, so it is visible before the first page of rows arrives.
  */
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from '@/components/ui/skeleton';
 
 const CSS = `
 @keyframes ks-jobs-reveal { to { visibility: visible; height: auto; opacity: 1; } }
@@ -21,7 +21,7 @@ export interface JobsPageSkeletonProps {
   /** Default filter chip, e.g. { label: "Job status", value: "Pending, Started" }. */
   readonly chip?: { readonly label: string; readonly value: string };
   /** "detail" draws the record header + tabs layout instead of a grid. */
-  readonly variant?: "grid" | "detail";
+  readonly variant?: 'grid' | 'detail';
 }
 
 /**
@@ -32,30 +32,62 @@ export function StaticSlowNotice({ what }: { readonly what: string }) {
   const title = what;
   return (
     <>
-      <style href="ks-jobs-skel" precedence="default">{CSS}</style>
-      <div data-ks-jobs-skel-slow="" role="status" data-testid="slow-load-notice" className="flex max-w-[760px] items-center justify-between gap-3 rounded-md border border-[#E7C46A] bg-[var(--warning-subtle)] px-3 py-2 text-sm text-[#6B4E00] dark:border-[#7A5D12] dark:bg-[#2B2410] dark:text-[#F3D98B]">
+      <style href="ks-jobs-skel" precedence="default">
+        {CSS}
+      </style>
+      <div
+        data-ks-jobs-skel-slow=""
+        role="status"
+        data-testid="slow-load-notice"
+        className="flex max-w-[760px] items-center justify-between gap-3 rounded-md border border-[#E7C46A] bg-[var(--warning-subtle)] px-3 py-2 text-sm text-[#6B4E00] dark:border-[#7A5D12] dark:bg-[#2B2410] dark:text-[#F3D98B]"
+      >
         <span>Still loading {title}. This is taking longer than usual; the server may be busy.</span>
-        <a href="" className="shrink-0 rounded border border-current px-2 py-0.5 text-xs font-semibold hover:bg-black/5">Retry</a>
+        <a
+          href=""
+          className="shrink-0 rounded border border-current px-2 py-0.5 text-xs font-semibold hover:bg-black/5"
+        >
+          Retry
+        </a>
       </div>
-      <div data-ks-jobs-skel-failed="" role="alert" className="flex max-w-[760px] items-center justify-between gap-3 rounded-md border border-[#E8A99A] bg-[#FDECE8] px-3 py-2 text-sm text-[#8A2A12] dark:border-[#7A2A18] dark:bg-[#2B1410] dark:text-[#F5B7A6]">
-        <span>{title} has not loaded after 30 seconds. The server may be busy or unreachable; retry to send the request again.</span>
-        <a href="" className="shrink-0 rounded border border-current px-2 py-0.5 text-xs font-semibold hover:bg-black/5">Retry</a>
+      <div
+        data-ks-jobs-skel-failed=""
+        role="alert"
+        className="flex max-w-[760px] items-center justify-between gap-3 rounded-md border border-[#E8A99A] bg-[#FDECE8] px-3 py-2 text-sm text-[#8A2A12] dark:border-[#7A2A18] dark:bg-[#2B1410] dark:text-[#F5B7A6]"
+      >
+        <span>
+          {title} has not loaded after 30 seconds. The server may be busy or unreachable; retry to send the
+          request again.
+        </span>
+        <a
+          href=""
+          className="shrink-0 rounded border border-current px-2 py-0.5 text-xs font-semibold hover:bg-black/5"
+        >
+          Retry
+        </a>
       </div>
     </>
   );
 }
 
-export function JobsPageSkeleton({ title, chip, variant = "grid" }: JobsPageSkeletonProps) {
+export function JobsPageSkeleton({ title, chip, variant = 'grid' }: JobsPageSkeletonProps) {
   return (
     <div className="space-y-3 px-6 pt-4" aria-busy="true" data-testid="jobs-page-skeleton">
       <StaticSlowNotice what={title} />
       <Skeleton className="h-3 w-48" />
       <h1 className="text-lg font-semibold leading-7 text-body">{title}</h1>
-      {variant === "detail" ? (
+      {variant === 'detail' ? (
         <>
           <Skeleton className="h-2 w-full max-w-[520px] rounded-full" />
-          <div className="flex gap-4">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-7 w-24" />)}</div>
-          <div className="grid gap-4 lg:grid-cols-3">{Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-36 w-full rounded-lg" />)}</div>
+          <div className="flex gap-4">
+            {Array.from({ length: 5 }, (_, i) => (
+              <Skeleton key={i} className="h-7 w-24" />
+            ))}
+          </div>
+          <div className="grid gap-4 lg:grid-cols-3">
+            {Array.from({ length: 3 }, (_, i) => (
+              <Skeleton key={i} className="h-36 w-full rounded-lg" />
+            ))}
+          </div>
           <Skeleton className="h-64 w-full rounded-lg" />
         </>
       ) : (
@@ -63,18 +95,35 @@ export function JobsPageSkeleton({ title, chip, variant = "grid" }: JobsPageSkel
           <div className="flex flex-wrap items-center gap-2">
             <Skeleton className="h-8 w-72" />
             {chip ? (
-              <span className="inline-flex h-9 min-w-[150px] flex-col justify-center rounded-lg border border-primary/30 bg-primary-soft px-2.5 leading-tight" data-testid="default-filter-chip" title={`${chip.label}: ${chip.value}`}>
+              <span
+                className="inline-flex h-9 min-w-[150px] flex-col justify-center rounded-lg border border-primary/30 bg-primary-soft px-2.5 leading-tight"
+                data-testid="default-filter-chip"
+                title={`${chip.label}: ${chip.value}`}
+              >
                 <span className="text-2xs font-semibold text-primary/80">{chip.label}</span>
                 <span className="text-xs font-semibold text-primary">{chip.value}</span>
               </span>
             ) : null}
             <Skeleton className="h-8 w-24" />
           </div>
-          <div role="status" aria-label={`Loading ${title}`} className="overflow-hidden rounded-lg border border-border bg-surface">
-            <div className="flex gap-4 border-b border-border bg-surface-sunken px-4 py-3">{Array.from({ length: 7 }, (_, i) => <Skeleton key={i} className="h-2.5 flex-1" />)}</div>
+          <div
+            role="status"
+            aria-label={`Loading ${title}`}
+            className="overflow-hidden rounded-lg border border-border bg-surface"
+          >
+            <div className="flex gap-4 border-b border-border bg-surface-sunken px-4 py-3">
+              {Array.from({ length: 7 }, (_, i) => (
+                <Skeleton key={i} className="h-2.5 flex-1" />
+              ))}
+            </div>
             {Array.from({ length: 10 }, (_, r) => (
-              <div key={r} className="flex h-10 items-center gap-4 border-b border-border px-4 last:border-b-0">
-                {Array.from({ length: 7 }, (_, c) => <Skeleton key={c} className={c === 0 ? "h-3 max-w-[120px] flex-1" : "h-3 flex-1"} />)}
+              <div
+                key={r}
+                className="flex h-10 items-center gap-4 border-b border-border px-4 last:border-b-0"
+              >
+                {Array.from({ length: 7 }, (_, c) => (
+                  <Skeleton key={c} className={c === 0 ? 'h-3 max-w-[120px] flex-1' : 'h-3 flex-1'} />
+                ))}
               </div>
             ))}
           </div>

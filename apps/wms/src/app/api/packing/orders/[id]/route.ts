@@ -4,12 +4,12 @@
  * `POST /api/packing/orders/[id]?stationId=` — start packing (Ready to Pack → Packing Started), then the pack context.
  * A count-locked order is not started: the context comes back with `countLock` so the screen blocks before any scan.
  */
-import { z } from "zod";
-import { defineRoute } from "@/server/api/define-route";
-import { idParamsSchema, idSchema } from "@/server/repositories/platform-common";
-import { packContext, startPacking } from "@/server/repositories/packing";
-import { PACKING_PERMISSIONS } from "@/server/repositories/packing-scan";
-import { scopedCtx } from "@/server/repositories/returns";
+import { z } from 'zod';
+import { defineRoute } from '@/server/api/define-route';
+import { idParamsSchema, idSchema } from '@/server/repositories/platform-common';
+import { packContext, startPacking } from '@/server/repositories/packing';
+import { PACKING_PERMISSIONS } from '@/server/repositories/packing-scan';
+import { scopedCtx } from '@/server/repositories/returns';
 
 const query = z.object({ stationId: idSchema.optional() });
 
@@ -17,7 +17,8 @@ export const GET = defineRoute({
   permission: PACKING_PERMISSIONS.view,
   params: idParamsSchema,
   query,
-  handler: async ({ db, auth, params, query: q }) => await packContext(db, auth.scope, params.id, q.stationId ?? null),
+  handler: async ({ db, auth, params, query: q }) =>
+    await packContext(db, auth.scope, params.id, q.stationId ?? null),
 });
 
 export const POST = defineRoute({

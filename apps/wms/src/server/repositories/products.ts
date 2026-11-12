@@ -4,16 +4,20 @@
  * Products are client-scoped (not warehouse-scoped); stock columns sum the viewer's
  * warehouses only.
  */
-import { and, sql, type SQL } from "drizzle-orm";
-import type { AppDb } from "@/server/api/db";
-import { AppError } from "@/server/api/errors";
-import { scopedWhere, type Scope } from "@/server/auth/scope";
-import { schema } from "@/server/db";
-import { compileFilters, escapeLike, type FilterFieldDef } from "@/server/query/filters";
-import type { GridQuery } from "@/server/query/grid-query";
-import { compileSort, type SortableMap } from "@/server/query/sort";
-import { CUSTOM_FIELD_FILTERS, PRODUCT_GRID_FIELDS, PRODUCT_SORT_FIELDS } from "@/lib/grid-defs/products/products-grid";
-import { dbAll, dbGet } from "@/server/db/sql";
+import { and, sql, type SQL } from 'drizzle-orm';
+import type { AppDb } from '@/server/api/db';
+import { AppError } from '@/server/api/errors';
+import { scopedWhere, type Scope } from '@/server/auth/scope';
+import { schema } from '@/server/db';
+import { compileFilters, escapeLike, type FilterFieldDef } from '@/server/query/filters';
+import type { GridQuery } from '@/server/query/grid-query';
+import { compileSort, type SortableMap } from '@/server/query/sort';
+import {
+  CUSTOM_FIELD_FILTERS,
+  PRODUCT_GRID_FIELDS,
+  PRODUCT_SORT_FIELDS,
+} from '@/lib/grid-defs/products/products-grid';
+import { dbAll, dbGet } from '@/server/db/sql';
 
 const p = schema.products;
 
@@ -27,7 +31,7 @@ export interface ProductListRow {
   readonly barcodes: string;
   readonly name: string;
   readonly imageUrl: string | null;
-  readonly status: "Active" | "Inactive";
+  readonly status: 'Active' | 'Inactive';
   readonly productCategory: string;
   readonly kitType: string | null;
   readonly isKit: boolean;
@@ -67,7 +71,10 @@ export interface ProductListRow {
 
 function warehouseList(scope: Scope): SQL {
   if (scope.warehouseIds.length === 0) return sql`(NULL)`;
-  return sql`(${sql.join(scope.warehouseIds.map((w) => sql`${w}`), sql`, `)})`;
+  return sql`(${sql.join(
+    scope.warehouseIds.map((w) => sql`${w}`),
+    sql`, `,
+  )})`;
 }
 
 /**
@@ -136,75 +143,143 @@ export function productFilterDefs(scope: Scope): readonly FilterFieldDef[] {
     if (slot) return { ...base, customField: { column: p.customFields, key: slot } };
     const expr = exprs[f.field];
     if (!expr) throw new Error(`products grid: no SQL for "${f.field}"`);
-    return { ...base, sql: expr, ...(f.options ? { options: f.options.map((v) => ({ value: v, label: v })) } : {}) };
+    return {
+      ...base,
+      sql: expr,
+      ...(f.options ? { options: f.options.map((v) => ({ value: v, label: v })) } : {}),
+    };
   });
 }
 
 /** Quick search: SKU / name, or any pack-type barcode (Equal / Starts With). */
-export function productQuickSearch(q: string | undefined, mode: "eq" | "sw"): SQL | undefined {
+export function productQuickSearch(q: string | undefined, mode: 'eq' | 'sw'): SQL | undefined {
   const text = q?.trim();
   if (!text) return undefined;
-  const match = (expr: SQL): SQL => (mode === "eq" ? sql`lower(${expr}) = lower(${text})` : sql`${expr} ILIKE ${`${escapeLike(text)}%`} ESCAPE '\\'`);
+  const match = (expr: SQL): SQL =>
+    mode === 'eq'
+      ? sql`lower(${expr}) = lower(${text})`
+      : sql`${expr} ILIKE ${`${escapeLike(text)}%`} ESCAPE '\\'`;
   const barcode = match(sql`b.barcode`);
   return sql`(${match(sql`${p.sku}`)} OR ${match(sql`${p.name}`)} OR ${match(sql`${p.barcode}`)} OR ${match(sql`${p.fnsku}`)}
     OR EXISTS (SELECT 1 FROM product_barcodes b WHERE b.product_id = ${p.id} AND ${barcode}))`;
 }
 
 export function productWhere(scope: Scope, query: GridQuery): SQL | undefined {
-  const parts = [scopedWhere(p, scope), productQuickSearch(query.q, query.qm), compileFilters(productFilterDefs(scope), query.filters)]
-    .filter((x): x is SQL => x !== undefined);
+  const parts = [
+    scopedWhere(p, scope),
+    productQuickSearch(query.q, query.qm),
+    compileFilters(productFilterDefs(scope), query.filters),
+  ].filter((x): x is SQL => x !== undefined);
   return parts.length ? and(...parts) : undefined;
 }
 
 export function productOrderBy(scope: Scope, query: GridQuery): SQL[] {
   const exprs = productExpressions(scope);
-  const sortable: SortableMap = Object.fromEntries(PRODUCT_SORT_FIELDS.map((f) => {
-    const e = exprs[f];
-    if (!e) throw new AppError("VALIDATION", `Cannot sort by "${f}"`);
-    return [f, e];
-  }));
+  const sortable: SortableMap = Object.fromEntries(
+    PRODUCT_SORT_FIELDS.map((f) => {
+      const e = exprs[f];
+      if (!e) throw new AppError('VALIDATION', `Cannot sort by "${f}"`);
+      return [f, e];
+    }),
+  );
   // Newest first by default (Logiwa: a created product appears first).
-  return compileSort(sortable, query.sort, { defaultSort: [{ field: "createdAt", dir: "desc" }], tiebreaker: p.id, nullsLast: true });
+  return compileSort(sortable, query.sort, {
+    defaultSort: [{ field: 'createdAt', dir: 'desc' }],
+    tiebreaker: p.id,
+    nullsLast: true,
+  });
 }
 
 type RawRow = Record<string, unknown>;
 
-const bool = (v: unknown): boolean => v === 1 || v === true || v === "1";
-const numOf = (v: unknown): number => (typeof v === "number" ? v : Number(v ?? 0) || 0);
+const bool = (v: unknown): boolean => v === 1 || v === true || v === '1';
+const numOf = (v: unknown): number => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 
 export function mapListRow(r: RawRow): ProductListRow {
   return {
-    id: String(r.id), clientId: String(r.clientId), clientName: String(r.clientName ?? ""), clientCode: String(r.clientCode ?? ""),
-    sku: String(r.sku), barcode: String(r.barcode ?? ""), barcodes: String(r.barcodes ?? ""), name: String(r.name),
-    imageUrl: (r.imageUrl as string | null) ?? null, status: r.status === "Inactive" ? "Inactive" : "Active",
-    productCategory: String(r.productCategory), kitType: (r.kitType as string | null) ?? null, isKit: bool(r.isKit),
-    isFragile: bool(r.isFragile), isOversized: bool(r.isOversized), isDigital: bool(r.isDigital), isHazmat: bool(r.isHazmat),
-    isInsert: bool(r.isInsert), isLiquid: bool(r.isLiquid), isNonReturnable: bool(r.isNonReturnable),
-    isPackagingMaterial: r.productCategory === "Packaging Material", isPoster: bool(r.isPoster), isFoldable: bool(r.isFoldable),
-    isStackable: bool(r.isStackable), salesPrice: numOf(r.salesPrice), purchasePrice: numOf(r.purchasePrice), currency: String(r.currency ?? "USD"),
-    uom: String(r.uom ?? ""), packTypeCount: numOf(r.packTypeCount), trackLot: bool(r.trackLot), trackExpiry: bool(r.trackExpiry),
-    trackProductionDate: bool(r.trackProductionDate), trackSerial: bool(r.trackSerial),
-    productType: (r.productType as string | null) ?? null, productGroup: (r.productGroup as string | null) ?? null,
-    description: (r.description as string | null) ?? null, taxRate: numOf(r.taxRate), fnsku: (r.fnsku as string | null) ?? null,
-    createdAt: String(r.createdAt), onHand: numOf(r.onHand), allocated: numOf(r.allocated), available: numOf(r.available), version: numOf(r.version), barcodeConflictCount: numOf(r.barcodeConflictCount),
+    id: String(r.id),
+    clientId: String(r.clientId),
+    clientName: String(r.clientName ?? ''),
+    clientCode: String(r.clientCode ?? ''),
+    sku: String(r.sku),
+    barcode: String(r.barcode ?? ''),
+    barcodes: String(r.barcodes ?? ''),
+    name: String(r.name),
+    imageUrl: (r.imageUrl as string | null) ?? null,
+    status: r.status === 'Inactive' ? 'Inactive' : 'Active',
+    productCategory: String(r.productCategory),
+    kitType: (r.kitType as string | null) ?? null,
+    isKit: bool(r.isKit),
+    isFragile: bool(r.isFragile),
+    isOversized: bool(r.isOversized),
+    isDigital: bool(r.isDigital),
+    isHazmat: bool(r.isHazmat),
+    isInsert: bool(r.isInsert),
+    isLiquid: bool(r.isLiquid),
+    isNonReturnable: bool(r.isNonReturnable),
+    isPackagingMaterial: r.productCategory === 'Packaging Material',
+    isPoster: bool(r.isPoster),
+    isFoldable: bool(r.isFoldable),
+    isStackable: bool(r.isStackable),
+    salesPrice: numOf(r.salesPrice),
+    purchasePrice: numOf(r.purchasePrice),
+    currency: String(r.currency ?? 'USD'),
+    uom: String(r.uom ?? ''),
+    packTypeCount: numOf(r.packTypeCount),
+    trackLot: bool(r.trackLot),
+    trackExpiry: bool(r.trackExpiry),
+    trackProductionDate: bool(r.trackProductionDate),
+    trackSerial: bool(r.trackSerial),
+    productType: (r.productType as string | null) ?? null,
+    productGroup: (r.productGroup as string | null) ?? null,
+    description: (r.description as string | null) ?? null,
+    taxRate: numOf(r.taxRate),
+    fnsku: (r.fnsku as string | null) ?? null,
+    createdAt: String(r.createdAt),
+    onHand: numOf(r.onHand),
+    allocated: numOf(r.allocated),
+    available: numOf(r.available),
+    version: numOf(r.version),
+    barcodeConflictCount: numOf(r.barcodeConflictCount),
   };
 }
 
-export async function listProducts(db: AppDb, scope: Scope, query: GridQuery, idsOnly?: readonly string[]): Promise<{ rows: ProductListRow[]; total: number }> {
+export async function listProducts(
+  db: AppDb,
+  scope: Scope,
+  query: GridQuery,
+  idsOnly?: readonly string[],
+): Promise<{ rows: ProductListRow[]; total: number }> {
   const e = productExpressions(scope);
   const base = productWhere(scope, query);
-  const where = idsOnly ? and(base, sql`${p.id} IN (${sql.join(idsOnly.map((id) => sql`${id}`), sql`, `)})`) : base;
+  const where = idsOnly
+    ? and(
+        base,
+        sql`${p.id} IN (${sql.join(
+          idsOnly.map((id) => sql`${id}`),
+          sql`, `,
+        )})`,
+      )
+    : base;
   const whereSql = where ? sql`WHERE ${where}` : sql``;
   const order = productOrderBy(scope, query);
   const offset = (Math.max(1, query.page) - 1) * query.pageSize;
   // Two phases: SQLite evaluates every result column before sorting, so the correlated columns
   // (stock sums, barcode conflicts) would run for EVERY matching product. Page the ids first
   // (only the sort expressions run), then build the 50 visible rows. 6.5k SKUs: 8 s -> ms.
-  const pageIds = (await dbAll<{ id: string }>(db, sql`SELECT ${p.id} AS id FROM ${p} ${whereSql} ORDER BY ${sql.join(order, sql`, `)} LIMIT ${query.pageSize} OFFSET ${offset}`)).map((r) => r.id);
+  const pageIds = (
+    await dbAll<{ id: string }>(
+      db,
+      sql`SELECT ${p.id} AS id FROM ${p} ${whereSql} ORDER BY ${sql.join(order, sql`, `)} LIMIT ${query.pageSize} OFFSET ${offset}`,
+    )
+  ).map((r) => r.id);
   const total = (await dbGet<{ n: number }>(db, sql`SELECT COUNT(*) AS n FROM ${p} ${whereSql}`))?.n ?? 0;
   if (pageIds.length === 0) return { rows: [], total: Number(total) };
   const position = new Map(pageIds.map((id, i) => [id, i]));
-  const rows = (await dbAll<RawRow>(db, sql`
+  const rows = (
+    await dbAll<RawRow>(
+      db,
+      sql`
     SELECT ${p.id} AS id, ${p.clientId} AS "clientId", ${e.clientName} AS "clientName",
       (SELECT c.code FROM clients c WHERE c.id = ${p.clientId}) AS "clientCode",
       ${p.sku} AS sku, ${p.barcode} AS barcode,
@@ -220,7 +295,11 @@ export async function listProducts(db: AppDb, scope: Scope, query: GridQuery, id
       ${p.description} AS description, ${p.taxRate} AS "taxRate", ${p.fnsku} AS fnsku, ${p.createdAt} AS "createdAt",
       ${e.onHand} AS "onHand", ${e.allocated} AS allocated, ${e.available} AS available, ${p.version} AS version,
       ${barcodeConflictSql(sql`${p.id}`, sql`${p.clientId}`, sql`${p.barcode}`)} AS "barcodeConflictCount"
-    FROM ${p} WHERE ${p.id} IN (${sql.join(pageIds.map((id) => sql`${id}`), sql`, `)})`))
-    .sort((a, b) => (position.get(String(a.id)) ?? 0) - (position.get(String(b.id)) ?? 0));
+    FROM ${p} WHERE ${p.id} IN (${sql.join(
+      pageIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})`,
+    )
+  ).sort((a, b) => (position.get(String(a.id)) ?? 0) - (position.get(String(b.id)) ?? 0));
   return { rows: rows.map(mapListRow), total: Number(total) };
 }

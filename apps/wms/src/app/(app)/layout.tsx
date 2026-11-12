@@ -1,8 +1,8 @@
-import { Suspense } from "react";
-import { redirect } from "next/navigation";
-import { AppShell } from "@/components/layout/app-shell";
-import { ShellSkeleton } from "@/components/layout/shell-skeleton";
-import { loadShellProps } from "@/server/shell/shell-props";
+import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
+import { AppShell } from '@/components/layout/app-shell';
+import { ShellSkeleton } from '@/components/layout/shell-skeleton';
+import { loadShellProps } from '@/server/shell/shell-props';
 
 /**
  * Reads the session cookie (runtime data), so it lives inside a Suspense boundary for
@@ -11,13 +11,20 @@ import { loadShellProps } from "@/server/shell/shell-props";
  */
 async function AuthedShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const shell = await loadShellProps();
-  if (!shell) redirect("/login");
+  if (!shell) redirect('/login');
   return (
     <>
-    {shell.brandCss ? <style data-brand="custom-branding">{shell.brandCss}</style> : null}
-    <AppShell user={shell.user} permissions={shell.permissions} initialContext={shell.initialContext} activeApps={shell.activeApps} passwordChange={shell.passwordChange} idleMinutes={shell.idleMinutes}>
-      {children}
-    </AppShell>
+      {shell.brandCss ? <style data-brand="custom-branding">{shell.brandCss}</style> : null}
+      <AppShell
+        user={shell.user}
+        permissions={shell.permissions}
+        initialContext={shell.initialContext}
+        activeApps={shell.activeApps}
+        passwordChange={shell.passwordChange}
+        idleMinutes={shell.idleMinutes}
+      >
+        {children}
+      </AppShell>
     </>
   );
 }

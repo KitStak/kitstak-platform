@@ -6,8 +6,8 @@
  * `error` stays a plain string so pre-foundation clients that read `body.error` keep working;
  * `code` lets F4's `apiFetch` build `ApiError { code, message, fieldErrors, status }`.
  */
-import { NextResponse } from "next/server";
-import type { AppError, ErrorCode, FieldErrors } from "./errors";
+import { NextResponse } from 'next/server';
+import type { AppError, ErrorCode, FieldErrors } from './errors';
 
 export interface ApiMeta {
   readonly total: number;
@@ -54,19 +54,25 @@ export function failureBody(error: AppError, requestId?: string): ApiFailure {
   };
 }
 
-export function jsonOk<T>(data: T, init?: { status?: number; meta?: ApiMeta; headers?: HeadersInit }): NextResponse<ApiSuccess<T>> {
-  return NextResponse.json(successBody(data, init?.meta), { status: init?.status ?? 200, headers: init?.headers });
+export function jsonOk<T>(
+  data: T,
+  init?: { status?: number; meta?: ApiMeta; headers?: HeadersInit },
+): NextResponse<ApiSuccess<T>> {
+  return NextResponse.json(successBody(data, init?.meta), {
+    status: init?.status ?? 200,
+    headers: init?.headers,
+  });
 }
 
 export function jsonError(error: AppError, requestId?: string): NextResponse<ApiFailure> {
   const headers = new Headers(error.headers ?? {});
-  if (requestId) headers.set("x-request-id", requestId);
+  if (requestId) headers.set('x-request-id', requestId);
   return NextResponse.json(failureBody(error, requestId), { status: error.status, headers });
 }
 
 /* ---------- Handler result helpers (returned from a defineRoute handler) ---------- */
 
-const RESULT_BRAND = Symbol.for("kitstak.routeResult");
+const RESULT_BRAND = Symbol.for('kitstak.routeResult');
 
 export interface RouteResult<T> {
   readonly [RESULT_BRAND]: true;
@@ -76,7 +82,10 @@ export interface RouteResult<T> {
   readonly headers?: Readonly<Record<string, string>>;
 }
 
-export function result<T>(data: T, init: { status?: number; meta?: ApiMeta; headers?: Record<string, string> } = {}): RouteResult<T> {
+export function result<T>(
+  data: T,
+  init: { status?: number; meta?: ApiMeta; headers?: Record<string, string> } = {},
+): RouteResult<T> {
   return { [RESULT_BRAND]: true, data, status: init.status ?? 200, meta: init.meta, headers: init.headers };
 }
 
@@ -90,5 +99,5 @@ export function created<T>(data: T): RouteResult<T> {
 }
 
 export function isRouteResult(value: unknown): value is RouteResult<unknown> {
-  return typeof value === "object" && value !== null && RESULT_BRAND in value;
+  return typeof value === 'object' && value !== null && RESULT_BRAND in value;
 }

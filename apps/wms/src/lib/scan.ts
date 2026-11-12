@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * Keyboard-wedge barcode detection (BUILD_PLAN F4.1). Hand scanners "type" the code
@@ -8,8 +8,8 @@
  *
  *   useBarcodeScanner((code) => receive(code), { enabled: drawerOpen });
  */
-import * as React from "react";
-import { isEditableTarget } from "./keyboard";
+import * as React from 'react';
+import { isEditableTarget } from './keyboard';
 
 export interface ScanOptions {
   /** Minimum characters for a burst to count as a scan. Default 4. */
@@ -35,7 +35,7 @@ export interface ScanKeyEvent {
 export const SCAN_DEFAULTS = {
   minLength: 4,
   maxIntervalMs: 35,
-  endKeys: ["Enter", "Tab"],
+  endKeys: ['Enter', 'Tab'],
 } as const;
 
 export interface ScanDetector {
@@ -49,11 +49,11 @@ export function createScanDetector(options: ScanOptions = {}): ScanDetector {
   const minLength = options.minLength ?? SCAN_DEFAULTS.minLength;
   const maxInterval = options.maxIntervalMs ?? SCAN_DEFAULTS.maxIntervalMs;
   const endKeys = options.endKeys ?? SCAN_DEFAULTS.endKeys;
-  let buffer = "";
+  let buffer = '';
   let lastTime = -Infinity;
 
   const reset = (): void => {
-    buffer = "";
+    buffer = '';
     lastTime = -Infinity;
   };
 
@@ -77,17 +77,27 @@ export function createScanDetector(options: ScanOptions = {}): ScanDetector {
   return { feed, reset };
 }
 
-export function useBarcodeScanner(onScan: (code: string) => void, options: ScanOptions & { readonly enabled?: boolean } = {}): void {
+export function useBarcodeScanner(
+  onScan: (code: string) => void,
+  options: ScanOptions & { readonly enabled?: boolean } = {},
+): void {
   const onScanRef = React.useRef(onScan);
   React.useEffect(() => {
     onScanRef.current = onScan;
   }, [onScan]);
-  const { enabled = true, minLength, maxIntervalMs, endKeys, allowInInputs = false, preventEndKeyDefault = true } = options;
-  const endKeysKey = endKeys?.join("\u0000");
+  const {
+    enabled = true,
+    minLength,
+    maxIntervalMs,
+    endKeys,
+    allowInInputs = false,
+    preventEndKeyDefault = true,
+  } = options;
+  const endKeysKey = endKeys?.join('\u0000');
 
   React.useEffect(() => {
-    if (!enabled || typeof window === "undefined") return undefined;
-    const detector = createScanDetector({ minLength, maxIntervalMs, endKeys: endKeysKey?.split("\u0000") });
+    if (!enabled || typeof window === 'undefined') return undefined;
+    const detector = createScanDetector({ minLength, maxIntervalMs, endKeys: endKeysKey?.split('\u0000') });
     const handler = (event: KeyboardEvent): void => {
       if (!allowInInputs && isEditableTarget(event.target)) {
         detector.reset();
@@ -98,7 +108,7 @@ export function useBarcodeScanner(onScan: (code: string) => void, options: ScanO
       if (preventEndKeyDefault) event.preventDefault();
       onScanRef.current(code);
     };
-    window.addEventListener("keydown", handler, true);
-    return () => window.removeEventListener("keydown", handler, true);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
   }, [enabled, minLength, maxIntervalMs, endKeysKey, allowInInputs, preventEndKeyDefault]);
 }

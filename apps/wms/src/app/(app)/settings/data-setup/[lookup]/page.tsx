@@ -1,10 +1,10 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { notFound, redirect } from "next/navigation";
-import { PageSkeleton } from "@/components/layout/shell-skeleton";
-import { LookupPage } from "@/components/admin/data-setup/lookup-page";
-import { EMBEDDED_LOOKUPS, lookupBySlug } from "@/lib/grid-defs/admin/lookups";
-import { requirePagePermission } from "@/server/auth/permissions";
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { notFound, redirect } from 'next/navigation';
+import { PageSkeleton } from '@/components/layout/shell-skeleton';
+import { LookupPage } from '@/components/admin/data-setup/lookup-page';
+import { EMBEDDED_LOOKUPS, lookupBySlug } from '@/lib/grid-defs/admin/lookups';
+import { requirePagePermission } from '@/server/auth/permissions';
 
 interface Props {
   readonly params: Promise<{ lookup: string }>;
@@ -12,7 +12,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { lookup } = await params;
-  return { title: lookupBySlug(lookup)?.title ?? "Data Setup" };
+  return { title: lookupBySlug(lookup)?.title ?? 'Data Setup' };
 }
 
 async function Body({ params }: Props) {
@@ -22,7 +22,7 @@ async function Body({ params }: Props) {
   if (host) redirect(`/settings/data-setup/${host}`);
   const def = lookupBySlug(lookup);
   if (!def) notFound();
-  await requirePagePermission("settings.data_setup.view", `/settings/data-setup/${lookup}`);
+  await requirePagePermission('settings.data_setup.view', `/settings/data-setup/${lookup}`);
   return <LookupPage def={def} />;
 }
 

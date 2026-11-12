@@ -6,10 +6,10 @@
  * The insert runs in a savepoint (`bestEffort`), so a failure cannot abort an enclosing
  * Postgres transaction.
  */
-import { auditLog } from "@/server/db/schema";
-import type { AppDb } from "@/server/api/db";
-import { bestEffort } from "@/server/db/sql";
-import { log } from "@/server/log";
+import { auditLog } from '@/server/db/schema';
+import type { AppDb } from '@/server/api/db';
+import { bestEffort } from '@/server/db/sql';
+import { log } from '@/server/log';
 
 export interface AuditEntry {
   readonly action: string;
@@ -17,7 +17,7 @@ export interface AuditEntry {
   readonly entityId: string;
   readonly userId?: string | null;
   readonly detail?: Readonly<Record<string, unknown>>;
-  readonly outcome?: "success" | "failure";
+  readonly outcome?: 'success' | 'failure';
   readonly ip?: string | null;
   readonly userAgent?: string | null;
 }
@@ -33,8 +33,9 @@ export async function writeAudit(db: AppDb, entry: AuditEntry, now: Date = new D
       at: now.toISOString(),
       ip: entry.ip ?? null,
       userAgent: entry.userAgent ? entry.userAgent.slice(0, 400) : null,
-      outcome: entry.outcome ?? "success",
+      outcome: entry.outcome ?? 'success',
     });
   });
-  if (!result.ok) log.error("audit write failed", { component: "audit", action: entry.action, err: result.error });
+  if (!result.ok)
+    log.error('audit write failed', { component: 'audit', action: entry.action, err: result.error });
 }

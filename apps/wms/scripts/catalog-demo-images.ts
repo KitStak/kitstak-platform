@@ -7,24 +7,37 @@
  * (KS-CRIT-/KS-E2E-) are left alone. Each update bumps the product version and writes the
  * change log. Without --apply it prints the plan and changes nothing.
  */
-import { closeDb, getDb } from "../src/server/db";
-import { withWriteTx } from "../src/server/db/sql";
-import { applyDemoImages, planDemoImages } from "../src/server/repositories/products-demo-images";
+import { closeDb, getDb } from '../src/server/db';
+import { withWriteTx } from '../src/server/db/sql';
+import { applyDemoImages, planDemoImages } from '../src/server/repositories/products-demo-images';
 
-const apply = process.argv.includes("--apply");
+const apply = process.argv.includes('--apply');
 
 async function main(): Promise<number> {
   try {
     const db = await getDb();
     const rows = apply
-      ? await withWriteTx(db, async (tx) => await applyDemoImages(tx, { userId: null, source: "Demo catalog images" }))
+      ? await withWriteTx(
+          db,
+          async (tx) => await applyDemoImages(tx, { userId: null, source: 'Demo catalog images' }),
+        )
       : await planDemoImages(db);
     for (const r of rows) process.stdout.write(`  ${r.sku.padEnd(22)} ${r.imageUrl}\n`);
-    process.stdout.write(`${apply ? "Applied" : "Dry run"}: ${rows.length} product(s).${apply ? "" : " Re-run with --apply to change data."}\n`);
+    process.stdout.write(
+      `${apply ? 'Applied' : 'Dry run'}: ${rows.length} product(s).${apply ? '' : ' Re-run with --apply to change data.'}\n`,
+    );
     return 0;
   } finally {
     await closeDb();
   }
 }
 
-void main().then((code) => { process.exitCode = code; }, (error: unknown) => { console.error(error); process.exitCode = 1; });
+void main().then(
+  (code) => {
+    process.exitCode = code;
+  },
+  (error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  },
+);

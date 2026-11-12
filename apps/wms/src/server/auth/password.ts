@@ -2,7 +2,7 @@
  * Password hashing (bcrypt). Dependency-free beyond bcryptjs so the seed (run via tsx with
  * a relative import) can use it.
  */
-import bcrypt from "bcryptjs";
+import bcrypt from 'bcryptjs';
 
 /** Cost factor for new hashes. Existing lower-cost hashes still verify (see `needsRehash`). */
 export const BCRYPT_ROUNDS = 12;

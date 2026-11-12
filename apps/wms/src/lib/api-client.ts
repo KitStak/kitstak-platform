@@ -8,9 +8,9 @@
  * `GET /api/auth/csrf`; a 403 `CSRF` failure refreshes the token and retries once.
  * A 401 sends the browser to `/login?next=<current path>`.
  */
-import { CSRF_HEADER, isSafeMethod, readCsrfTokenFromCookie } from "@/server/auth/csrf-shared";
+import { CSRF_HEADER, isSafeMethod, readCsrfTokenFromCookie } from '@/server/auth/csrf-shared';
 
-export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export type FieldErrors = Readonly<Record<string, readonly string[]>>;
 
@@ -37,7 +37,7 @@ export class ApiError extends Error {
 
   constructor(init: ApiErrorInit) {
     super(init.message);
-    this.name = "ApiError";
+    this.name = 'ApiError';
     this.code = init.code;
     this.status = init.status;
     this.fieldErrors = init.fieldErrors ?? {};
@@ -74,27 +74,32 @@ export interface ApiResponse<T> {
 }
 
 /** Mirrors `TZ_OFFSET_HEADER` in server/query/request-tz (not imported: that module is server-only). */
-const TZ_HEADER = "x-tz-offset";
-const CSRF_ENDPOINT = "/api/auth/csrf";
-const LOGIN_PATH = "/login";
-const NETWORK_ERROR_MESSAGE = "Could not reach the server. Check your connection and try again.";
-const UNEXPECTED_ERROR_MESSAGE = "The server returned an unexpected response.";
+const TZ_HEADER = 'x-tz-offset';
+const CSRF_ENDPOINT = '/api/auth/csrf';
+const LOGIN_PATH = '/login';
+const NETWORK_ERROR_MESSAGE = 'Could not reach the server. Check your connection and try again.';
+const UNEXPECTED_ERROR_MESSAGE = 'The server returned an unexpected response.';
 
 /* ---------------- CSRF token ---------------- */
 
 let pendingCsrf: Promise<string> | null = null;
 
 function readCookieToken(): string | null {
-  if (typeof document === "undefined") return null;
+  if (typeof document === 'undefined') return null;
   return readCsrfTokenFromCookie(document.cookie);
 }
 
 async function fetchCsrfToken(): Promise<string> {
-  const res = await fetch(CSRF_ENDPOINT, { method: "GET", credentials: "same-origin", cache: "no-store" });
+  const res = await fetch(CSRF_ENDPOINT, { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
   const body: unknown = await res.json().catch(() => null);
-  const token = isRecord(body) && isRecord(body.data) && typeof body.data.token === "string" ? body.data.token : null;
+  const token =
+    isRecord(body) && isRecord(body.data) && typeof body.data.token === 'string' ? body.data.token : null;
   if (!res.ok || !token) {
-    throw new ApiError({ code: "CSRF", message: "Could not establish a secure session. Reload the page.", status: res.status || 403 });
+    throw new ApiError({
+      code: 'CSRF',
+      message: 'Could not establish a secure session. Reload the page.',
+      status: res.status || 403,
+    });
   }
   return token;
 }
@@ -116,16 +121,16 @@ export async function getCsrfToken(forceRefresh = false): Promise<string> {
 /* ---------------- request building ---------------- */
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function buildQueryString(query: ApiRequestOptions["query"]): string {
-  if (query === undefined) return "";
-  if (typeof query === "string") return query.replace(/^\?/, "");
+export function buildQueryString(query: ApiRequestOptions['query']): string {
+  if (query === undefined) return '';
+  if (typeof query === 'string') return query.replace(/^\?/, '');
   if (query instanceof URLSearchParams) return query.toString();
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
-    if (value === undefined || value === null || value === "") continue;
+    if (value === undefined || value === null || value === '') continue;
     if (Array.isArray(value)) {
       for (const item of value) params.append(key, String(item));
     } else {
@@ -135,24 +140,24 @@ export function buildQueryString(query: ApiRequestOptions["query"]): string {
   return params.toString();
 }
 
-export function buildUrl(path: string, query?: ApiRequestOptions["query"]): string {
+export function buildUrl(path: string, query?: ApiRequestOptions['query']): string {
   const qs = buildQueryString(query);
   if (!qs) return path;
-  return `${path}${path.includes("?") ? "&" : "?"}${qs}`;
+  return `${path}${path.includes('?') ? '&' : '?'}${qs}`;
 }
 
 function encodeBody(body: unknown): { body?: BodyInit; contentType?: string } {
   if (body === undefined) return {};
-  if (typeof FormData !== "undefined" && body instanceof FormData) return { body };
-  if (typeof Blob !== "undefined" && body instanceof Blob) return { body };
-  return { body: JSON.stringify(body), contentType: "application/json" };
+  if (typeof FormData !== 'undefined' && body instanceof FormData) return { body };
+  if (typeof Blob !== 'undefined' && body instanceof Blob) return { body };
+  return { body: JSON.stringify(body), contentType: 'application/json' };
 }
 
 async function send(path: string, options: ApiRequestOptions, csrfToken: string | null): Promise<Response> {
-  const method = options.method ?? "GET";
+  const method = options.method ?? 'GET';
   const encoded = encodeBody(options.body);
-  const headers: Record<string, string> = { accept: "application/json", ...options.headers };
-  if (encoded.contentType) headers["content-type"] = encoded.contentType;
+  const headers: Record<string, string> = { accept: 'application/json', ...options.headers };
+  if (encoded.contentType) headers['content-type'] = encoded.contentType;
   if (csrfToken) headers[CSRF_HEADER] = csrfToken;
   // Viewer's UTC offset (minutes east), so server date chips cut at local midnight.
   if (!(TZ_HEADER in headers)) headers[TZ_HEADER] = String(-new Date().getTimezoneOffset());
@@ -162,12 +167,12 @@ async function send(path: string, options: ApiRequestOptions, csrfToken: string 
       headers,
       body: encoded.body,
       signal: options.signal,
-      credentials: "same-origin",
-      cache: "no-store",
+      credentials: 'same-origin',
+      cache: 'no-store',
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new ApiError({ code: "NETWORK", message: NETWORK_ERROR_MESSAGE, status: 0 });
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    throw new ApiError({ code: 'NETWORK', message: NETWORK_ERROR_MESSAGE, status: 0 });
   }
 }
 
@@ -177,8 +182,8 @@ function toFieldErrors(value: unknown): FieldErrors | undefined {
   if (!isRecord(value)) return undefined;
   const out: Record<string, readonly string[]> = {};
   for (const [key, messages] of Object.entries(value)) {
-    if (Array.isArray(messages)) out[key] = messages.filter((m): m is string => typeof m === "string");
-    else if (typeof messages === "string") out[key] = [messages];
+    if (Array.isArray(messages)) out[key] = messages.filter((m): m is string => typeof m === 'string');
+    else if (typeof messages === 'string') out[key] = [messages];
   }
   return out;
 }
@@ -186,14 +191,18 @@ function toFieldErrors(value: unknown): FieldErrors | undefined {
 function errorFromBody(status: number, body: unknown): ApiError {
   if (isRecord(body) && body.success === false) {
     return new ApiError({
-      code: typeof body.code === "string" ? body.code : "INTERNAL",
-      message: typeof body.error === "string" && body.error ? body.error : UNEXPECTED_ERROR_MESSAGE,
+      code: typeof body.code === 'string' ? body.code : 'INTERNAL',
+      message: typeof body.error === 'string' && body.error ? body.error : UNEXPECTED_ERROR_MESSAGE,
       status,
       fieldErrors: toFieldErrors(body.fieldErrors),
-      requestId: typeof body.requestId === "string" ? body.requestId : undefined,
+      requestId: typeof body.requestId === 'string' ? body.requestId : undefined,
     });
   }
-  return new ApiError({ code: status === 401 ? "UNAUTHENTICATED" : "INTERNAL", message: UNEXPECTED_ERROR_MESSAGE, status });
+  return new ApiError({
+    code: status === 401 ? 'UNAUTHENTICATED' : 'INTERNAL',
+    message: UNEXPECTED_ERROR_MESSAGE,
+    status,
+  });
 }
 
 async function readBody(res: Response): Promise<unknown> {
@@ -209,7 +218,7 @@ async function readBody(res: Response): Promise<unknown> {
 
 /** Sends the browser to the login page, preserving where the user was. */
 export function redirectToLogin(): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === 'undefined') return;
   const { pathname, search } = window.location;
   if (pathname.startsWith(LOGIN_PATH)) return;
   const next = encodeURIComponent(`${pathname}${search}`);
@@ -228,10 +237,14 @@ let sessionRecheck: Promise<boolean> | null = null;
 export function sessionReallyEnded(): Promise<boolean> {
   if (sessionRecheck) return sessionRecheck;
   sessionRecheck = (async () => {
-    const controller = typeof AbortController === "undefined" ? null : new AbortController();
+    const controller = typeof AbortController === 'undefined' ? null : new AbortController();
     const timer = controller ? setTimeout(() => controller.abort(), SESSION_RECHECK_MS) : null;
     try {
-      const res = await fetch("/api/me", { headers: { accept: "application/json" }, signal: controller?.signal, credentials: "same-origin" });
+      const res = await fetch('/api/me', {
+        headers: { accept: 'application/json' },
+        signal: controller?.signal,
+        credentials: 'same-origin',
+      });
       return res.status === 401;
     } catch {
       return false;
@@ -250,20 +263,25 @@ export function sessionReallyEnded(): Promise<boolean> {
  * (network failures use code `NETWORK`, status 0).
  */
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<ApiResponse<T>> {
-  const method = options.method ?? "GET";
+  const method = options.method ?? 'GET';
   const needsCsrf = !isSafeMethod(method);
   let token = needsCsrf ? await getCsrfToken() : null;
   let res = await send(path, options, token);
   let body = await readBody(res);
 
-  if (needsCsrf && res.status === 403 && isRecord(body) && body.code === "CSRF") {
+  if (needsCsrf && res.status === 403 && isRecord(body) && body.code === 'CSRF') {
     token = await getCsrfToken(true);
     res = await send(path, options, token);
     body = await readBody(res);
   }
 
   // Confirm with /api/me before leaving: redirect only when the session is really gone.
-  if (res.status === 401 && !options.skipAuthRedirect && (path.startsWith("/api/me") || (await sessionReallyEnded()))) redirectToLogin();
+  if (
+    res.status === 401 &&
+    !options.skipAuthRedirect &&
+    (path.startsWith('/api/me') || (await sessionReallyEnded()))
+  )
+    redirectToLogin();
 
   if (!res.ok || !isRecord(body) || body.success !== true) {
     if (res.ok && body === null) return { data: undefined as T };

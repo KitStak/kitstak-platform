@@ -5,18 +5,18 @@
  * validation for enum and Yes/No columns) and a "Notes" sheet describing every column.
  * Error file: the failed rows as uploaded plus a trailing "Error" column.
  */
-import type ExcelJS from "exceljs";
-import { addSheet, createWorkbook, styleHeader, workbookToBuffer } from "@/server/exports/xlsx";
-import type { ImportColumn, ImportDefinition } from "./types";
+import type ExcelJS from 'exceljs';
+import { addSheet, createWorkbook, styleHeader, workbookToBuffer } from '@/server/exports/xlsx';
+import type { ImportColumn, ImportDefinition } from './types';
 
 const VALIDATION_ROWS = 2000;
-const TYPE_LABEL: Readonly<Record<ImportColumn["type"], string>> = {
-  text: "Text",
-  integer: "Whole number",
-  number: "Number",
-  boolean: "Yes / No",
-  date: "Date (YYYY-MM-DD)",
-  enum: "List",
+const TYPE_LABEL: Readonly<Record<ImportColumn['type'], string>> = {
+  text: 'Text',
+  integer: 'Whole number',
+  number: 'Number',
+  boolean: 'Yes / No',
+  date: 'Date (YYYY-MM-DD)',
+  enum: 'List',
 };
 
 export function templateHeader(column: ImportColumn): string {
@@ -25,7 +25,7 @@ export function templateHeader(column: ImportColumn): string {
 
 function columnLetter(index: number): string {
   let n = index;
-  let letters = "";
+  let letters = '';
   while (n > 0) {
     const rem = (n - 1) % 26;
     letters = String.fromCharCode(65 + rem) + letters;
@@ -35,33 +35,33 @@ function columnLetter(index: number): string {
 }
 
 function addListValidation(sheet: ExcelJS.Worksheet, colIndex: number, values: readonly string[]): void {
-  const list = values.join(",");
+  const list = values.join(',');
   if (list.length === 0 || list.length > 255) return; // Excel limit for inline lists
   const letter = columnLetter(colIndex);
   for (let row = 2; row <= VALIDATION_ROWS; row += 1) {
     sheet.getCell(`${letter}${row}`).dataValidation = {
-      type: "list",
+      type: 'list',
       allowBlank: true,
       formulae: [`"${list}"`],
       showErrorMessage: true,
-      errorTitle: "Invalid value",
-      error: `Choose one of: ${values.join(", ")}`,
+      errorTitle: 'Invalid value',
+      error: `Choose one of: ${values.join(', ')}`,
     };
   }
 }
 
 function notesRow(column: ImportColumn): Record<string, string> {
   const rules: string[] = [];
-  if (column.options) rules.push(`One of: ${column.options.join(", ")}`);
+  if (column.options) rules.push(`One of: ${column.options.join(', ')}`);
   if (column.min !== undefined) rules.push(`Min ${column.min}`);
   if (column.max !== undefined) rules.push(`Max ${column.max}`);
-  if (column.type === "text" && column.maxLength) rules.push(`Up to ${column.maxLength} characters`);
+  if (column.type === 'text' && column.maxLength) rules.push(`Up to ${column.maxLength} characters`);
   return {
     column: column.header,
-    required: column.required ? "Yes" : "No",
+    required: column.required ? 'Yes' : 'No',
     type: TYPE_LABEL[column.type],
-    rules: rules.join("; "),
-    description: column.description ?? "",
+    rules: rules.join('; '),
+    description: column.description ?? '',
     example: column.example,
   };
 }
@@ -69,34 +69,42 @@ function notesRow(column: ImportColumn): Record<string, string> {
 export async function buildImportTemplate(def: ImportDefinition): Promise<Buffer> {
   const workbook = createWorkbook();
   const columns = def.templateColumns;
-  const sheet = workbook.addWorksheet("Template", { views: [{ state: "frozen", ySplit: 1 }] });
+  const sheet = workbook.addWorksheet('Template', { views: [{ state: 'frozen', ySplit: 1 }] });
   sheet.columns = columns.map((column) => ({
     header: templateHeader(column),
     key: column.key,
     width: Math.min(40, Math.max(12, templateHeader(column).length + 4, column.example.length + 2)),
-    style: { numFmt: "@" }, // keep codes such as 0012 as text
+    style: { numFmt: '@' }, // keep codes such as 0012 as text
   }));
   sheet.addRow(columns.map((column) => column.example));
   styleHeader(sheet, columns.length);
   columns.forEach((column, index) => {
-    if (column.type === "enum" && column.options) addListValidation(sheet, index + 1, column.options);
-    if (column.type === "boolean") addListValidation(sheet, index + 1, ["Yes", "No"]);
+    if (column.type === 'enum' && column.options) addListValidation(sheet, index + 1, column.options);
+    if (column.type === 'boolean') addListValidation(sheet, index + 1, ['Yes', 'No']);
   });
 
   addSheet(workbook, {
-    name: "Notes",
+    name: 'Notes',
     columns: [
-      { key: "column", label: "Column", type: "text" },
-      { key: "required", label: "Required", type: "text" },
-      { key: "type", label: "Type", type: "text" },
-      { key: "rules", label: "Rules", type: "text" },
-      { key: "description", label: "Description", type: "text" },
-      { key: "example", label: "Example", type: "text" },
+      { key: 'column', label: 'Column', type: 'text' },
+      { key: 'required', label: 'Required', type: 'text' },
+      { key: 'type', label: 'Type', type: 'text' },
+      { key: 'rules', label: 'Rules', type: 'text' },
+      { key: 'description', label: 'Description', type: 'text' },
+      { key: 'example', label: 'Example', type: 'text' },
     ],
     rows: [
       ...columns.map(notesRow),
-      { column: "", required: "", type: "", rules: "", description: "", example: "" },
-      { column: "How to use", required: "", type: "", rules: "", description: "Fill one record per row on the Template sheet. Delete the example row before uploading. Columns marked * are required.", example: "" },
+      { column: '', required: '', type: '', rules: '', description: '', example: '' },
+      {
+        column: 'How to use',
+        required: '',
+        type: '',
+        rules: '',
+        description:
+          'Fill one record per row on the Template sheet. Delete the example row before uploading. Columns marked * are required.',
+        example: '',
+      },
     ],
   });
   return workbookToBuffer(workbook);
@@ -112,18 +120,22 @@ export interface FailedRow {
   readonly message: string;
 }
 
-export async function buildErrorFile(def: ImportDefinition, headers: readonly string[], failed: readonly FailedRow[]): Promise<Buffer> {
+export async function buildErrorFile(
+  def: ImportDefinition,
+  headers: readonly string[],
+  failed: readonly FailedRow[],
+): Promise<Buffer> {
   const workbook = createWorkbook();
   addSheet(workbook, {
-    name: "Errors",
+    name: 'Errors',
     columns: [
-      { key: "__row", label: "Row", type: "integer" },
-      ...headers.map((header, index) => ({ key: `c${index}`, label: header, type: "text" as const })),
-      { key: "__error", label: "Error", type: "text" },
+      { key: '__row', label: 'Row', type: 'integer' },
+      ...headers.map((header, index) => ({ key: `c${index}`, label: header, type: 'text' as const })),
+      { key: '__error', label: 'Error', type: 'text' },
     ],
     rows: failed.map((row) => ({
       __row: row.rowNumber,
-      ...Object.fromEntries(headers.map((header, index) => [`c${index}`, row.raw[header] ?? ""])),
+      ...Object.fromEntries(headers.map((header, index) => [`c${index}`, row.raw[header] ?? ''])),
       __error: row.message,
     })),
   });

@@ -27,6 +27,9 @@ export function partialShipNote(lines: readonly ShipLineFacts[]): string | null 
   const parts = lines
     .map((l) => ({ l, left: unshippedAfterShip(l), ordered: Math.max(0, l.quantity - l.cancelledQuantity) }))
     .filter((x) => x.left > 0)
-    .map((x) => `${x.left} of ${x.ordered} unit${x.ordered === 1 ? "" : "s"} of ${x.l.sku} remain${x.left === 1 ? "s" : ""}`);
-  return parts.length ? `Partially shipped: ${parts.join("; ")}` : null;
+    .map(
+      (x) =>
+        `${x.left} of ${x.ordered} unit${x.ordered === 1 ? '' : 's'} of ${x.l.sku} remain${x.left === 1 ? 's' : ''}`,
+    );
+  return parts.length ? `Partially shipped: ${parts.join('; ')}` : null;
 }

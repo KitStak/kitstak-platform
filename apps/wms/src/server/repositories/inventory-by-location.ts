@@ -2,15 +2,15 @@
  * Inventory by Location (spec 04 §2): one row per ledger bucket with on-hand > 0,
  * plus the bucket drawer read model (attributes, allocations, last 50 transactions).
  */
-import { sql, type SQL } from "drizzle-orm";
-import type { AppDb } from "@/server/api/db";
-import { notFoundError } from "@/server/api/errors";
-import type { AuthContext } from "@/server/auth/context";
-import { assertInScope } from "@/server/auth/scope";
-import type { GridQuery } from "@/server/query/grid-query";
-import { BY_LOCATION_DEF } from "@/lib/grid-defs/inventory/by-location";
-import { clientIn, inList, runGrid, type GridPage } from "./inventory-grid";
-import { dbAll, dbGet } from "@/server/db/sql";
+import { sql, type SQL } from 'drizzle-orm';
+import type { AppDb } from '@/server/api/db';
+import { notFoundError } from '@/server/api/errors';
+import type { AuthContext } from '@/server/auth/context';
+import { assertInScope } from '@/server/auth/scope';
+import type { GridQuery } from '@/server/query/grid-query';
+import { BY_LOCATION_DEF } from '@/lib/grid-defs/inventory/by-location';
+import { clientIn, inList, runGrid, type GridPage } from './inventory-grid';
+import { dbAll, dbGet } from '@/server/db/sql';
 
 export interface BucketRow {
   readonly id: string;
@@ -69,7 +69,7 @@ export interface BucketRow {
 
 export interface BucketFilter {
   readonly warehouseIds: readonly string[];
-  readonly clientIds: readonly string[] | "all";
+  readonly clientIds: readonly string[] | 'all';
   readonly ids?: readonly string[];
 }
 
@@ -131,15 +131,19 @@ export function bucketSql(filter: BucketFilter): SQL {
       AND (i.client_id IS NULL OR ${clientIn(sql`i.client_id`, filter.clientIds)})${ids}`;
 }
 
-export async function listBuckets(db: AppDb, auth: AuthContext, query: GridQuery): Promise<GridPage<BucketRow>> {
+export async function listBuckets(
+  db: AppDb,
+  auth: AuthContext,
+  query: GridQuery,
+): Promise<GridPage<BucketRow>> {
   const inner = bucketSql({ warehouseIds: auth.viewScope.warehouseIds, clientIds: auth.viewScope.clientIds });
-  return await runGrid<BucketRow>(db, inner, BY_LOCATION_DEF, query, "id");
+  return await runGrid<BucketRow>(db, inner, BY_LOCATION_DEF, query, 'id');
 }
 
 /** One bucket in the user's full scope (cross-scope → 404). */
 export async function getBucketRow(db: AppDb, auth: AuthContext, id: string): Promise<BucketRow> {
   const row = await findBucketRow(db, auth, id);
-  if (!row) throw notFoundError("Inventory");
+  if (!row) throw notFoundError('Inventory');
   return row;
 }
 
@@ -148,9 +152,12 @@ export async function getBucketRow(db: AppDb, auth: AuthContext, id: string): Pr
  * Adjust to 0 / a transfer: the row leaves the grid, as in Logiwa) or does not exist.
  */
 export async function findBucketRow(db: AppDb, auth: AuthContext, id: string): Promise<BucketRow | null> {
-  const row = await dbGet<BucketRow>(db, sql`SELECT * FROM (${bucketSql({ warehouseIds: auth.scope.warehouseIds, clientIds: auth.scope.clientIds, ids: [id] })}) t`);
+  const row = await dbGet<BucketRow>(
+    db,
+    sql`SELECT * FROM (${bucketSql({ warehouseIds: auth.scope.warehouseIds, clientIds: auth.scope.clientIds, ids: [id] })}) t`,
+  );
   if (!row) return null;
-  assertInScope(auth.scope, row, "Inventory");
+  assertInScope(auth.scope, row, 'Inventory');
   return row;
 }
 
@@ -172,7 +179,7 @@ export interface BucketTransaction {
   readonly seq: number;
   readonly type: string;
   readonly qty: number;
-  readonly direction: "in" | "out" | "adjust" | "neutral";
+  readonly direction: 'in' | 'out' | 'adjust' | 'neutral';
   readonly fromLocation: string | null;
   readonly toLocation: string | null;
   readonly fromStatus: string | null;
@@ -194,24 +201,26 @@ export interface BucketDetail {
 
 const TXN_LIMIT = 50;
 
-interface RawTxn extends Omit<BucketTransaction, "direction"> {
+interface RawTxn extends Omit<BucketTransaction, 'direction'> {
   readonly fromInventoryId: string | null;
   readonly toInventoryId: string | null;
 }
 
-function directionOf(t: RawTxn, bucketId: string): BucketTransaction["direction"] {
-  if (t.fromInventoryId === bucketId && t.toInventoryId === bucketId) return "neutral";
+function directionOf(t: RawTxn, bucketId: string): BucketTransaction['direction'] {
+  if (t.fromInventoryId === bucketId && t.toInventoryId === bucketId) return 'neutral';
   // Single-sided entries (adjustments, counts, receipts) carry a signed qty: + is in, − is out.
-  if (t.toInventoryId === bucketId && t.fromInventoryId === null) return t.qty < 0 ? "out" : "in";
-  if (t.toInventoryId === bucketId) return "in";
-  return "out";
+  if (t.toInventoryId === bucketId && t.fromInventoryId === null) return t.qty < 0 ? 'out' : 'in';
+  if (t.toInventoryId === bucketId) return 'in';
+  return 'out';
 }
 
 export { directionOf as bucketTxnDirection };
 
 export async function getBucketDetail(db: AppDb, auth: AuthContext, id: string): Promise<BucketDetail> {
   const bucket = await getBucketRow(db, auth, id);
-  const allocations = await dbAll<BucketAllocation>(db, sql`
+  const allocations = await dbAll<BucketAllocation>(
+    db,
+    sql`
     SELECT a.id AS "id", a.qty AS "qty", a.status AS "status", a.order_id AS "orderId", o.code AS "orderCode",
       a.job_id AS "jobId", j.code AS "jobCode", a.work_order_id AS "workOrderId", wo.code AS "workOrderCode", a.created_at AS "createdAt"
     FROM inventory_allocations a
@@ -219,8 +228,11 @@ export async function getBucketDetail(db: AppDb, auth: AuthContext, id: string):
     LEFT JOIN jobs j ON j.id = a.job_id
     LEFT JOIN work_orders wo ON wo.id = a.work_order_id
     WHERE a.inventory_id = ${id} AND a.status NOT IN ('Shipped', 'Cancelled')
-    ORDER BY a.created_at DESC`);
-  const raw = await dbAll<RawTxn>(db, sql`
+    ORDER BY a.created_at DESC`,
+  );
+  const raw = await dbAll<RawTxn>(
+    db,
+    sql`
     SELECT t.id AS "id", t.seq AS "seq", t.type AS "type", t.uom_qty AS "qty",
       t.from_inventory_id AS "fromInventoryId", t.to_inventory_id AS "toInventoryId",
       fl.code AS "fromLocation", tl.code AS "toLocation", t.from_status AS "fromStatus", t.to_status AS "toStatus",
@@ -234,7 +246,8 @@ export async function getBucketDetail(db: AppDb, auth: AuthContext, id: string):
     LEFT JOIN jobs j ON j.id = t.job_id
     LEFT JOIN users u ON u.id = t.user_id
     WHERE t.from_inventory_id = ${id} OR t.to_inventory_id = ${id}
-    ORDER BY t.seq DESC LIMIT ${TXN_LIMIT}`);
+    ORDER BY t.seq DESC LIMIT ${TXN_LIMIT}`,
+  );
   const transactions = raw.map(({ fromInventoryId, toInventoryId, ...t }) => ({
     ...t,
     direction: directionOf({ ...t, fromInventoryId, toInventoryId }, id),

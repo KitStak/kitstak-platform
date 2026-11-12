@@ -7,7 +7,7 @@
  *     { page, pageSize },
  *   );
  */
-import { MAX_PAGE_SIZE } from "./grid-query";
+import { MAX_PAGE_SIZE } from './grid-query';
 
 export interface PageRequest {
   readonly page: number;
@@ -41,7 +41,11 @@ export interface PageableQuery<T> {
   limit(n: number): { offset(n: number): PromiseLike<T[]> };
 }
 
-export async function paginate<T>(query: PageableQuery<T>, countTotal: () => number | Promise<number>, request: PageRequest): Promise<PageResult<T>> {
+export async function paginate<T>(
+  query: PageableQuery<T>,
+  countTotal: () => number | Promise<number>,
+  request: PageRequest,
+): Promise<PageResult<T>> {
   const normalized = normalizePage(request);
   const rows = await query.limit(normalized.pageSize).offset(pageOffset(normalized));
   return { rows, total: Number(await countTotal()) };

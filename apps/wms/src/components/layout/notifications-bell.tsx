@@ -1,20 +1,20 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Bell, CheckCheck } from "lucide-react";
-import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { apiRequest, type ApiError } from "@/lib/api-client";
-import { useApiQuery, type ApiQueryData } from "@/lib/query-client";
-import { toast } from "@/components/ui/toast";
-import { markReadInCache, type MarkReadInput } from "./notifications-cache";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Skeleton } from "@/components/ui/skeleton";
-import { HeaderIconButton } from "./header-icon-button";
-import { NotificationItem, type NotificationView } from "./notification-item";
+import * as React from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Bell, CheckCheck } from 'lucide-react';
+import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { apiRequest, type ApiError } from '@/lib/api-client';
+import { useApiQuery, type ApiQueryData } from '@/lib/query-client';
+import { toast } from '@/components/ui/toast';
+import { markReadInCache, type MarkReadInput } from './notifications-cache';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Skeleton } from '@/components/ui/skeleton';
+import { HeaderIconButton } from './header-icon-button';
+import { NotificationItem, type NotificationView } from './notification-item';
 
-export const NOTIFICATIONS_QUERY_KEY = ["notifications"] as const;
+export const NOTIFICATIONS_QUERY_KEY = ['notifications'] as const;
 const BELL_PAGE_SIZE = 10;
 const BELL_POLL_MS = 60_000;
 
@@ -25,18 +25,27 @@ type NotificationsEntry = ApiQueryData<readonly NotificationView[]>;
 /** Marks notifications read optimistically (badge + list update at once), rolls back on error. */
 export function useMarkNotificationsRead() {
   const queryClient = useQueryClient();
-  return useMutation<{ updated: number }, ApiError, MarkReadInput, { readonly snapshot: readonly [QueryKey, NotificationsEntry | undefined][] }>({
-    mutationFn: async (input) => (await apiRequest<{ updated: number }>("/api/notifications/read", { method: "POST", body: input })).data,
+  return useMutation<
+    { updated: number },
+    ApiError,
+    MarkReadInput,
+    { readonly snapshot: readonly [QueryKey, NotificationsEntry | undefined][] }
+  >({
+    mutationFn: async (input) =>
+      (await apiRequest<{ updated: number }>('/api/notifications/read', { method: 'POST', body: input }))
+        .data,
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: NOTIFICATIONS_QUERY_KEY });
       const snapshot = queryClient.getQueriesData<NotificationsEntry>({ queryKey: NOTIFICATIONS_QUERY_KEY });
       const now = new Date().toISOString();
-      queryClient.setQueriesData<NotificationsEntry>({ queryKey: NOTIFICATIONS_QUERY_KEY }, (entry) => markReadInCache(entry, input, now));
+      queryClient.setQueriesData<NotificationsEntry>({ queryKey: NOTIFICATIONS_QUERY_KEY }, (entry) =>
+        markReadInCache(entry, input, now),
+      );
       return { snapshot };
     },
     onError: (error, _input, context) => {
       for (const [key, entry] of context?.snapshot ?? []) queryClient.setQueryData(key, entry);
-      toast.error("Could not mark as read", error.message);
+      toast.error('Could not mark as read', error.message);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_QUERY_KEY }),
   });
@@ -46,12 +55,12 @@ export function useMarkNotificationsRead() {
 export function NotificationsBell() {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
-  const list = useApiQuery<readonly NotificationView[]>(NOTIFICATIONS_QUERY_KEY, "/api/notifications", {
+  const list = useApiQuery<readonly NotificationView[]>(NOTIFICATIONS_QUERY_KEY, '/api/notifications', {
     query: { ps: BELL_PAGE_SIZE },
     refetchInterval: BELL_POLL_MS,
   });
   const markRead = useMarkNotificationsRead();
-  const unread = typeof list.data?.meta?.unread === "number" ? list.data.meta.unread : 0;
+  const unread = typeof list.data?.meta?.unread === 'number' ? list.data.meta.unread : 0;
   const rows = list.data?.data ?? [];
 
   const openNotification = (n: NotificationView): void => {
@@ -72,7 +81,11 @@ export function NotificationsBell() {
       <PopoverContent align="end" className="flex w-[380px] flex-col overflow-hidden p-0">
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
           <h2 className="text-base font-semibold text-foreground">Notifications</h2>
-          {unread > 0 ? <span className="rounded-full bg-primary-soft px-1.5 text-2xs font-semibold text-primary">{unread} unread</span> : null}
+          {unread > 0 ? (
+            <span className="rounded-full bg-primary-soft px-1.5 text-2xs font-semibold text-primary">
+              {unread} unread
+            </span>
+          ) : null}
           <button
             type="button"
             disabled={unread === 0 || markRead.isPending}
@@ -84,23 +97,40 @@ export function NotificationsBell() {
           </button>
         </div>
         {list.isLoading ? (
-          <div className="space-y-2 p-3"><Skeleton className="h-12" /><Skeleton className="h-12" /></div>
+          <div className="space-y-2 p-3">
+            <Skeleton className="h-12" />
+            <Skeleton className="h-12" />
+          </div>
         ) : list.isError ? (
           <p className="px-3 py-6 text-center text-xs text-danger">
-            Could not load notifications.{" "}
-            <button type="button" className="font-semibold underline" onClick={() => void list.refetch()}>Retry</button>
+            Could not load notifications.{' '}
+            <button type="button" className="font-semibold underline" onClick={() => void list.refetch()}>
+              Retry
+            </button>
           </p>
         ) : rows.length === 0 ? (
           <p className="px-3 py-8 text-center text-sm text-secondary">You&apos;re all caught up.</p>
         ) : (
           <ul className="ks-scroll max-h-[420px] min-h-0 flex-1 divide-y divide-border overflow-y-auto overscroll-contain">
             {rows.map((n) => (
-              <NotificationItem key={n.id} notification={n} onOpen={() => openNotification(n)} onMarkRead={() => markRead.mutate({ ids: [n.id] })} compact />
+              <NotificationItem
+                key={n.id}
+                notification={n}
+                onOpen={() => openNotification(n)}
+                onMarkRead={() => markRead.mutate({ ids: [n.id] })}
+                compact
+              />
             ))}
           </ul>
         )}
         <div className="shrink-0 border-t border-border bg-surface-sunken px-3 py-2">
-          <Link href="/notifications" onClick={() => setOpen(false)} className="text-xs font-semibold text-primary hover:underline">View all notifications</Link>
+          <Link
+            href="/notifications"
+            onClick={() => setOpen(false)}
+            className="text-xs font-semibold text-primary hover:underline"
+          >
+            View all notifications
+          </Link>
         </div>
       </PopoverContent>
     </Popover>

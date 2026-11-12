@@ -1,5 +1,5 @@
-import { clsx, type ClassValue } from "clsx";
-import { extendTailwindMerge } from "tailwind-merge";
+import { clsx, type ClassValue } from 'clsx';
+import { extendTailwindMerge } from 'tailwind-merge';
 
 /**
  * tailwind-merge aware of the shared font-size scale (same as KitStak CRM). Without this,
@@ -9,7 +9,7 @@ import { extendTailwindMerge } from "tailwind-merge";
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
-      "font-size": [{ text: ["2xs", "xs", "sm", "base", "md", "lg", "xl", "2xl"] }],
+      'font-size': [{ text: ['2xs', 'xs', 'sm', 'base', 'md', 'lg', 'xl', '2xl'] }],
     },
   },
 });
@@ -19,47 +19,47 @@ export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
-const USD = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
+const USD = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
 });
 
 export function formatMoney(value: number): string {
   return USD.format(value);
 }
 
-const NUM = new Intl.NumberFormat("en-US");
+const NUM = new Intl.NumberFormat('en-US');
 
 export function formatNumber(value: number): string {
   return NUM.format(value);
 }
 
 export function formatDate(iso: string | Date | null | undefined): string {
-  if (!iso) return "—";
-  const d = typeof iso === "string" ? new Date(iso) : iso;
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
+  if (!iso) return '—';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
   });
 }
 
 export function formatDateTime(iso: string | Date | null | undefined): string {
-  if (!iso) return "—";
-  const d = typeof iso === "string" ? new Date(iso) : iso;
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
+  if (!iso) return '—';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
   });
 }
 
 function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -69,6 +69,6 @@ function escapeRegExp(text: string): string {
  */
 export function codeNameLabel(code: string | null | undefined, name: string): string {
   if (!code) return name;
-  const pattern = new RegExp(`^${escapeRegExp(code.trim())}(?![\\p{L}\\p{N}])`, "iu");
+  const pattern = new RegExp(`^${escapeRegExp(code.trim())}(?![\\p{L}\\p{N}])`, 'iu');
   return pattern.test(name.trim()) ? name : `${code} - ${name}`;
 }

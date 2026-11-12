@@ -6,10 +6,10 @@
  * transitions, and the SQL picks the segment's offset with a CASE over the transition
  * instants: exact across DST changes for every row in [MIN_YEAR, MAX_YEAR].
  */
-import { sql, type SQL } from "drizzle-orm";
-import type { AppDb } from "@/server/api/db";
-import { isValidTimeZone, zoneOffsetMs } from "@/server/scheduler/timezone";
-import { dbAll } from "@/server/db/sql";
+import { sql, type SQL } from 'drizzle-orm';
+import type { AppDb } from '@/server/api/db';
+import { isValidTimeZone, zoneOffsetMs } from '@/server/scheduler/timezone';
+import { dbAll } from '@/server/db/sql';
 
 const MIN_YEAR = 2018;
 const MAX_YEAR = 2036;
@@ -28,7 +28,7 @@ const offsetMin = (t: number, tz: string): number => Math.round(zoneOffsetMs(new
 
 /** Offset segments of `tz` (cached). A zone without DST yields one segment. */
 export function offsetSegments(tzIn: string): readonly OffsetSegment[] {
-  const tz = isValidTimeZone(tzIn) ? tzIn : "UTC";
+  const tz = isValidTimeZone(tzIn) ? tzIn : 'UTC';
   const hit = cache.get(tz);
   if (hit) return hit;
   const start = Date.UTC(MIN_YEAR, 0, 1);
@@ -43,7 +43,8 @@ export function offsetSegments(tzIn: string): readonly OffsetSegment[] {
     let hi = t;
     while (hi - lo > 60_000) {
       const mid = lo + Math.floor((hi - lo) / 120_000) * 60_000;
-      if (offsetMin(mid, tz) === prev) lo = mid; else hi = mid;
+      if (offsetMin(mid, tz) === prev) lo = mid;
+      else hi = mid;
     }
     out.push({ from: new Date(hi).toISOString(), offsetMinutes: cur });
     prev = cur;
@@ -52,10 +53,11 @@ export function offsetSegments(tzIn: string): readonly OffsetSegment[] {
   return out;
 }
 
-const modifier = (m: number): string => `${m >= 0 ? "+" : ""}${m} minutes`;
+const modifier = (m: number): string => `${m >= 0 ? '+' : ''}${m} minutes`;
 
 /** YYYY-MM-DD of an ISO timestamp shifted by an interval expression (was SQLite `date(col, '+N minutes')`). */
-const shiftedDay = (col: SQL, shift: SQL): SQL => sql`to_char(((${col})::timestamptz + (${shift})::interval) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
+const shiftedDay = (col: SQL, shift: SQL): SQL =>
+  sql`to_char(((${col})::timestamptz + (${shift})::interval) AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
 
 /** `date(<col> shifted into tz)`: the local YYYY-MM-DD of an ISO timestamp column. */
 export function zoneDateSql(colExpr: string, tz: string): SQL {
@@ -63,7 +65,8 @@ export function zoneDateSql(colExpr: string, tz: string): SQL {
   const segs = offsetSegments(tz);
   if (segs.length === 1) return shiftedDay(col, sql`${modifier(segs[0]!.offsetMinutes)}::text`);
   const parts: SQL[] = [sql`CASE`];
-  for (let i = 1; i < segs.length; i += 1) parts.push(sql` WHEN ${col} < ${segs[i]!.from} THEN ${modifier(segs[i - 1]!.offsetMinutes)}::text`);
+  for (let i = 1; i < segs.length; i += 1)
+    parts.push(sql` WHEN ${col} < ${segs[i]!.from} THEN ${modifier(segs[i - 1]!.offsetMinutes)}::text`);
   parts.push(sql` ELSE ${modifier(segs[segs.length - 1]!.offsetMinutes)}::text END`);
   return shiftedDay(col, sql.join(parts, sql``));
 }
@@ -72,20 +75,37 @@ export function zoneDateSql(colExpr: string, tz: string): SQL {
  * Local day of `colExpr` in the zone of the row's warehouse (`whExpr`). Warehouses are grouped
  * by zone, so two Eastern warehouses share one CASE. Unknown warehouses fall back to UTC.
  */
-export async function warehouseDateSql(db: AppDb, colExpr: string, whExpr: string, warehouseIds: readonly string[]): Promise<SQL> {
+export async function warehouseDateSql(
+  db: AppDb,
+  colExpr: string,
+  whExpr: string,
+  warehouseIds: readonly string[],
+): Promise<SQL> {
   if (warehouseIds.length === 0) return sql`substr(${sql.raw(colExpr)}, 1, 10)`;
-  const rows = await dbAll<{ id: string; tz: string | null }>(db, sql`SELECT id, timezone AS tz FROM warehouses
-    WHERE id IN (${sql.join(warehouseIds.map((id) => sql`${id}`), sql`, `)})`);
+  const rows = await dbAll<{ id: string; tz: string | null }>(
+    db,
+    sql`SELECT id, timezone AS tz FROM warehouses
+    WHERE id IN (${sql.join(
+      warehouseIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})`,
+  );
   const byZone = new Map<string, string[]>();
   for (const r of rows) {
-    const tz = r.tz && isValidTimeZone(r.tz) ? r.tz : "UTC";
+    const tz = r.tz && isValidTimeZone(r.tz) ? r.tz : 'UTC';
     byZone.set(tz, [...(byZone.get(tz) ?? []), r.id]);
   }
   const zones = [...byZone.entries()];
   if (zones.length === 1) return zoneDateSql(colExpr, zones[0]![0]);
   const wh = sql.raw(whExpr);
   const parts: SQL[] = [sql`CASE`];
-  for (const [tz, ids] of zones) parts.push(sql` WHEN ${wh} IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) THEN ${zoneDateSql(colExpr, tz)}`);
+  for (const [tz, ids] of zones)
+    parts.push(
+      sql` WHEN ${wh} IN (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )}) THEN ${zoneDateSql(colExpr, tz)}`,
+    );
   parts.push(sql` ELSE substr(${sql.raw(colExpr)}, 1, 10) END`);
   return sql.join(parts, sql``);
 }

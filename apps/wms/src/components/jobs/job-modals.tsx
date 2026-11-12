@@ -1,28 +1,44 @@
-"use client";
+'use client';
 
 /**
  * Modals behind the Job Management / Task Details bulk menus (Logiwa 02 §1, §7):
  * Update Priority (attention modal with cards), Assign User (3-character user search) and
  * the "Different Warehouses Selected" guard.
  */
-import * as React from "react";
-import { AlertTriangle, ArrowUp, Check, Minus } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
-import { DisabledReason } from "@/components/ui/tooltip";
-import { toOption } from "@/components/shared";
-import { parseList, pickerItemSchema } from "@/components/shared/contracts";
-import { Combobox } from "@/components/ui/combobox";
-import { apiFetch } from "@/lib/api-client";
-import { labelClass } from "@/components/ui/control-styles";
-import { JOB_PRIORITY_CHOICES } from "@/lib/grid-defs/jobs/jobs";
+import * as React from 'react';
+import { AlertTriangle, ArrowUp, Check, Minus } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
+import { Spinner } from '@/components/ui/spinner';
+import { DisabledReason } from '@/components/ui/tooltip';
+import { toOption } from '@/components/shared';
+import { parseList, pickerItemSchema } from '@/components/shared/contracts';
+import { Combobox } from '@/components/ui/combobox';
+import { apiFetch } from '@/lib/api-client';
+import { labelClass } from '@/components/ui/control-styles';
+import { JOB_PRIORITY_CHOICES } from '@/lib/grid-defs/jobs/jobs';
 
-export function AttentionBand({ title, tone = "warning" }: { readonly title: string; readonly tone?: "warning" | "danger" }) {
+export function AttentionBand({
+  title,
+  tone = 'warning',
+}: {
+  readonly title: string;
+  readonly tone?: 'warning' | 'danger';
+}) {
   return (
-    <div className={cn("flex items-center gap-3 rounded-t-lg px-5 py-4", tone === "warning" ? "bg-warning-soft" : "bg-danger-soft")}>
-      <span className={cn("flex h-9 w-9 items-center justify-center rounded-full text-white", tone === "warning" ? "bg-warning" : "bg-danger")}>
+    <div
+      className={cn(
+        'flex items-center gap-3 rounded-t-lg px-5 py-4',
+        tone === 'warning' ? 'bg-warning-soft' : 'bg-danger-soft',
+      )}
+    >
+      <span
+        className={cn(
+          'flex h-9 w-9 items-center justify-center rounded-full text-white',
+          tone === 'warning' ? 'bg-warning' : 'bg-danger',
+        )}
+      >
         <AlertTriangle className="h-4 w-4" aria-hidden />
       </span>
       <DialogHeader title={title} className="p-0" />
@@ -31,7 +47,15 @@ export function AttentionBand({ title, tone = "warning" }: { readonly title: str
 }
 
 /** "Attention — Different Warehouses Selected" with an OK button. */
-export function DifferentWarehousesDialog({ open, onClose, noun = "jobs" }: { readonly open: boolean; readonly onClose: () => void; readonly noun?: string }) {
+export function DifferentWarehousesDialog({
+  open,
+  onClose,
+  noun = 'jobs',
+}: {
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly noun?: string;
+}) {
   return (
     <Dialog open={open} onOpenChange={(o) => (o ? undefined : onClose())}>
       <DialogContent size="sm">
@@ -39,26 +63,41 @@ export function DifferentWarehousesDialog({ open, onClose, noun = "jobs" }: { re
         <DialogBody className="flex flex-col gap-2">
           <p className="text-base font-semibold text-foreground">Different warehouses selected</p>
           <p className="text-sm leading-5 text-body">
-            Assign and unassign can only be performed for {noun} in the same warehouse. Please update your selection and try again.
+            Assign and unassign can only be performed for {noun} in the same warehouse. Please update your
+            selection and try again.
           </p>
         </DialogBody>
         <DialogFooter>
-          <Button variant="primary" onClick={onClose} autoFocus>OK</Button>
+          <Button variant="primary" onClick={onClose} autoFocus>
+            OK
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-const PRIORITY_COPY: Readonly<Record<(typeof JOB_PRIORITY_CHOICES)[number], { readonly hint: string; readonly tone: string }>> = {
-  None: { hint: "Default order, no tag", tone: "text-secondary" },
-  Low: { hint: "Picked after everything else", tone: "text-[#2E7D32]" },
-  Medium: { hint: "Ahead of low and untagged jobs", tone: "text-[#B26A00]" },
-  High: { hint: "Pickers see these first", tone: "text-[var(--danger-text)]" },
-  Urgent: { hint: "Ahead of every other job", tone: "text-[var(--label-brown-text)]" },
+const PRIORITY_COPY: Readonly<
+  Record<(typeof JOB_PRIORITY_CHOICES)[number], { readonly hint: string; readonly tone: string }>
+> = {
+  None: { hint: 'Default order, no tag', tone: 'text-secondary' },
+  Low: { hint: 'Picked after everything else', tone: 'text-[#2E7D32]' },
+  Medium: { hint: 'Ahead of low and untagged jobs', tone: 'text-[#B26A00]' },
+  High: { hint: 'Pickers see these first', tone: 'text-[var(--danger-text)]' },
+  Urgent: { hint: 'Ahead of every other job', tone: 'text-[var(--label-brown-text)]' },
 };
 
-export function UpdatePriorityModal({ open, count, onClose, onSave }: { readonly open: boolean; readonly count: number; readonly onClose: () => void; readonly onSave: (priority: string) => Promise<void> }) {
+export function UpdatePriorityModal({
+  open,
+  count,
+  onClose,
+  onSave,
+}: {
+  readonly open: boolean;
+  readonly count: number;
+  readonly onClose: () => void;
+  readonly onSave: (priority: string) => Promise<void>;
+}) {
   const [choice, setChoice] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   React.useEffect(() => {
@@ -79,12 +118,16 @@ export function UpdatePriorityModal({ open, count, onClose, onSave }: { readonly
       <DialogContent size="lg">
         <AttentionBand title="Attention" />
         <DialogBody className="flex flex-col gap-3">
-          <p className="text-sm leading-5 text-body">Previously assigned/selected priorities will change after your new priority selection.</p>
-          <p className="text-sm font-semibold text-foreground">Set priority for {count === 1 ? "the selected job" : `${count} selected jobs`}.</p>
+          <p className="text-sm leading-5 text-body">
+            Previously assigned/selected priorities will change after your new priority selection.
+          </p>
+          <p className="text-sm font-semibold text-foreground">
+            Set priority for {count === 1 ? 'the selected job' : `${count} selected jobs`}.
+          </p>
           <div role="radiogroup" aria-label="Priority" className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {JOB_PRIORITY_CHOICES.map((p) => {
               const active = choice === p;
-              const Icon = p === "High" ? ArrowUp : p === "None" ? Minus : null;
+              const Icon = p === 'High' ? ArrowUp : p === 'None' ? Minus : null;
               return (
                 <button
                   key={p}
@@ -93,25 +136,38 @@ export function UpdatePriorityModal({ open, count, onClose, onSave }: { readonly
                   aria-checked={active}
                   onClick={() => setChoice(p)}
                   className={cn(
-                    "relative flex flex-col items-start gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
-                    active ? "border-primary bg-primary-soft shadow-sm" : "border-border hover:border-border-strong hover:bg-surface-sunken",
+                    'relative flex flex-col items-start gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+                    active
+                      ? 'border-primary bg-primary-soft shadow-sm'
+                      : 'border-border hover:border-border-strong hover:bg-surface-sunken',
                   )}
                 >
-                  <span className={cn("flex items-center gap-1 text-sm font-semibold", PRIORITY_COPY[p].tone)}>
+                  <span
+                    className={cn('flex items-center gap-1 text-sm font-semibold', PRIORITY_COPY[p].tone)}
+                  >
                     {Icon ? <Icon className="h-3.5 w-3.5" aria-hidden /> : null}
                     {p}
                   </span>
                   <span className="text-2xs leading-4 text-faint">{PRIORITY_COPY[p].hint}</span>
-                  {active ? <Check className="absolute right-2 top-2 h-3.5 w-3.5 text-primary" aria-hidden /> : null}
+                  {active ? (
+                    <Check className="absolute right-2 top-2 h-3.5 w-3.5 text-primary" aria-hidden />
+                  ) : null}
                 </button>
               );
             })}
           </div>
         </DialogBody>
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
-          <DisabledReason reason={choice ? null : "Choose a priority"}>
-            <Button variant="primary" onClick={() => void save()} disabled={!choice || saving} aria-busy={saving}>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <DisabledReason reason={choice ? null : 'Choose a priority'}>
+            <Button
+              variant="primary"
+              onClick={() => void save()}
+              disabled={!choice || saving}
+              aria-busy={saving}
+            >
               {saving ? <Spinner className="h-3.5 w-3.5" label="Saving" /> : null}
               Save
             </Button>
@@ -122,7 +178,19 @@ export function UpdatePriorityModal({ open, count, onClose, onSave }: { readonly
   );
 }
 
-export function AssignUserModal({ open, warehouseId, noun, onClose, onAssign }: { readonly open: boolean; readonly warehouseId: string | null; readonly noun: string; readonly onClose: () => void; readonly onAssign: (userId: string) => Promise<void> }) {
+export function AssignUserModal({
+  open,
+  warehouseId,
+  noun,
+  onClose,
+  onAssign,
+}: {
+  readonly open: boolean;
+  readonly warehouseId: string | null;
+  readonly noun: string;
+  readonly onClose: () => void;
+  readonly onAssign: (userId: string) => Promise<void>;
+}) {
   const [userId, setUserId] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   React.useEffect(() => {
@@ -131,7 +199,10 @@ export function AssignUserModal({ open, warehouseId, noun, onClose, onAssign }: 
   const loadOptions = React.useCallback(
     async (q: string, signal: AbortSignal) => {
       if (!warehouseId) return [];
-      const data = await apiFetch<unknown>("/api/jobs/assignees", { query: { warehouseId, q, limit: 50 }, signal });
+      const data = await apiFetch<unknown>('/api/jobs/assignees', {
+        query: { warehouseId, q, limit: 50 },
+        signal,
+      });
       return parseList(pickerItemSchema, data).map(toOption);
     },
     [warehouseId],
@@ -151,7 +222,9 @@ export function AssignUserModal({ open, warehouseId, noun, onClose, onAssign }: 
       <DialogContent size="sm">
         <DialogHeader title="Assign user" description={`Assign a user to the selected ${noun}.`} />
         <DialogBody className="flex flex-col gap-1.5">
-          <label className={labelClass} htmlFor="assign-user">User <span className="text-danger">*</span></label>
+          <label className={labelClass} htmlFor="assign-user">
+            User <span className="text-danger">*</span>
+          </label>
           <Combobox
             id="assign-user"
             aria-label="User"
@@ -164,12 +237,21 @@ export function AssignUserModal({ open, warehouseId, noun, onClose, onAssign }: 
             disabled={!warehouseId}
             clearable
           />
-          <p className="text-2xs text-faint">Only active users of this warehouse who can execute tasks are listed.</p>
+          <p className="text-2xs text-faint">
+            Only active users of this warehouse who can execute tasks are listed.
+          </p>
         </DialogBody>
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
-          <DisabledReason reason={userId ? null : "Choose a user"}>
-            <Button variant="primary" onClick={() => void assign()} disabled={!userId || saving} aria-busy={saving}>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <DisabledReason reason={userId ? null : 'Choose a user'}>
+            <Button
+              variant="primary"
+              onClick={() => void assign()}
+              disabled={!userId || saving}
+              aria-busy={saving}
+            >
               {saving ? <Spinner className="h-3.5 w-3.5" label="Assigning" /> : null}
               Assign
             </Button>

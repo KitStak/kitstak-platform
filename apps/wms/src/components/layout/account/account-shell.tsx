@@ -1,14 +1,19 @@
-import * as React from "react";
-import Link from "next/link";
-import { KeyRound, SlidersHorizontal, UserRound } from "lucide-react";
-import { cn } from "@/lib/utils";
+import * as React from 'react';
+import Link from 'next/link';
+import { KeyRound, SlidersHorizontal, UserRound } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-export type AccountSection = "profile" | "password" | "preferences";
+export type AccountSection = 'profile' | 'password' | 'preferences';
 
-const SECTIONS: readonly { readonly key: AccountSection; readonly label: string; readonly href: string; readonly icon: React.ComponentType<{ className?: string }> }[] = [
-  { key: "profile", label: "My Profile", href: "/account/profile", icon: UserRound },
-  { key: "password", label: "Change Password", href: "/account/password", icon: KeyRound },
-  { key: "preferences", label: "Preferences", href: "/account/preferences", icon: SlidersHorizontal },
+const SECTIONS: readonly {
+  readonly key: AccountSection;
+  readonly label: string;
+  readonly href: string;
+  readonly icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { key: 'profile', label: 'My Profile', href: '/account/profile', icon: UserRound },
+  { key: 'password', label: 'Change Password', href: '/account/password', icon: KeyRound },
+  { key: 'preferences', label: 'Preferences', href: '/account/preferences', icon: SlidersHorizontal },
 ];
 
 interface AccountShellProps {
@@ -31,10 +36,10 @@ export function AccountShell({ active, title, description, children }: AccountSh
               <li key={s.key}>
                 <Link
                   href={s.href}
-                  aria-current={isActive ? "page" : undefined}
+                  aria-current={isActive ? 'page' : undefined}
                   className={cn(
-                    "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-neutral-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40",
-                    isActive ? "bg-primary-soft font-semibold text-primary" : "text-body"
+                    'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-neutral-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40',
+                    isActive ? 'bg-primary-soft font-semibold text-primary' : 'text-body',
                   )}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -45,8 +50,13 @@ export function AccountShell({ active, title, description, children }: AccountSh
           })}
         </ul>
       </nav>
-      <section aria-labelledby="account-section-title" className="rounded-xl border border-border bg-surface p-5 shadow-xs">
-        <h2 id="account-section-title" className="text-md font-semibold text-foreground">{title}</h2>
+      <section
+        aria-labelledby="account-section-title"
+        className="rounded-xl border border-border bg-surface p-5 shadow-xs"
+      >
+        <h2 id="account-section-title" className="text-md font-semibold text-foreground">
+          {title}
+        </h2>
         <p className="mt-0.5 text-xs text-secondary">{description}</p>
         <div className="mt-4">{children}</div>
       </section>

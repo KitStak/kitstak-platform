@@ -26,7 +26,7 @@ export function groupImports(items: readonly HubImport[]): HubGroup[] {
   return [...map.values()];
 }
 
-const pad = (n: number) => String(n).padStart(2, "0");
+const pad = (n: number) => String(n).padStart(2, '0');
 
 /** Compact grid-style timestamp: "11/09/2026 11:46 PM". Invalid input passes through. */
 export function formatBatchWhen(iso: string): string {
@@ -34,11 +34,21 @@ export function formatBatchWhen(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso;
   const h = d.getHours();
   const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()} ${h12}:${pad(d.getMinutes())} ${h < 12 ? "AM" : "PM"}`;
+  return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()} ${h12}:${pad(d.getMinutes())} ${h < 12 ? 'AM' : 'PM'}`;
 }
 
 /** Acronyms the registry titles spell in title case ("Bulk Import Vas Operations" → "VAS"). */
-const ACRONYMS: Readonly<Record<string, string>> = { vas: "VAS", po: "PO", so: "SO", lp: "LP", lps: "LPs", sku: "SKU", skus: "SKUs", abc: "ABC", upc: "UPC" };
+const ACRONYMS: Readonly<Record<string, string>> = {
+  vas: 'VAS',
+  po: 'PO',
+  so: 'SO',
+  lp: 'LP',
+  lps: 'LPs',
+  sku: 'SKU',
+  skus: 'SKUs',
+  abc: 'ABC',
+  upc: 'UPC',
+};
 
 /** Display title with acronyms upper-cased; everything else as registered. */
 export function importTitle(title: string): string {
@@ -46,6 +56,8 @@ export function importTitle(title: string): string {
 }
 
 /** Why an import cannot be opened yet (stub handler), or null when it can. */
-export function unavailableReason(item: Pick<HubImport, "configured" | "title">): string | null {
-  return item.configured ? null : `${importTitle(item.title)} isn't available yet: its import handler hasn't shipped, so uploads would be refused.`;
+export function unavailableReason(item: Pick<HubImport, 'configured' | 'title'>): string | null {
+  return item.configured
+    ? null
+    : `${importTitle(item.title)} isn't available yet: its import handler hasn't shipped, so uploads would be refused.`;
 }

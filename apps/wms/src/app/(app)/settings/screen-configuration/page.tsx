@@ -1,13 +1,13 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
-import { PageSkeleton } from "@/components/layout/shell-skeleton";
-import { ScreenConfigSplashPage } from "@/components/admin/screen-configs/splash-page";
-import { requirePagePermission } from "@/server/auth/permissions";
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
+import { PageSkeleton } from '@/components/layout/shell-skeleton';
+import { ScreenConfigSplashPage } from '@/components/admin/screen-configs/splash-page';
+import { requirePagePermission } from '@/server/auth/permissions';
 
-export const metadata: Metadata = { title: "Screen Configuration" };
+export const metadata: Metadata = { title: 'Screen Configuration' };
 
 async function Guard() {
-  await requirePagePermission("settings.screen_configuration.view", "/settings/screen-configuration");
+  await requirePagePermission('settings.screen_configuration.view', '/settings/screen-configuration');
   return <ScreenConfigSplashPage />;
 }
 

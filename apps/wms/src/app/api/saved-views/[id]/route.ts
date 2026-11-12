@@ -1,7 +1,12 @@
 /** `/api/saved-views/[id]` — read (own or shared), update and delete (owner only). */
-import { defineRoute } from "@/server/api/define-route";
-import { idParamsSchema } from "@/server/repositories/platform-common";
-import { deleteSavedView, getSavedView, savedViewUpdateSchema, updateSavedView } from "@/server/repositories/platform-user-prefs";
+import { defineRoute } from '@/server/api/define-route';
+import { idParamsSchema } from '@/server/repositories/platform-common';
+import {
+  deleteSavedView,
+  getSavedView,
+  savedViewUpdateSchema,
+  updateSavedView,
+} from '@/server/repositories/platform-user-prefs';
 
 export const GET = defineRoute({
   params: idParamsSchema,

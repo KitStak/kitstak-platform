@@ -1,7 +1,7 @@
 /** `GET /api/packing/orders?warehouseId=&q=&clientId=&jobCode=&note=&expectedShipDate=` — List & Select (ready to pack). */
-import { defineRoute } from "@/server/api/define-route";
-import { listResult } from "@/server/api/envelope";
-import { PACKING_PERMISSIONS, readyListSchema, readyToPackOrders } from "@/server/repositories/packing-scan";
+import { defineRoute } from '@/server/api/define-route';
+import { listResult } from '@/server/api/envelope';
+import { PACKING_PERMISSIONS, readyListSchema, readyToPackOrders } from '@/server/repositories/packing-scan';
 
 export const GET = defineRoute({
   permission: PACKING_PERMISSIONS.view,

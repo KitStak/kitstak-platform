@@ -1,24 +1,29 @@
-"use client";
+'use client';
 
 /**
  * Shared pieces of the inventory pages: filter fields with runtime options (scope +
  * damage reasons), the reasons query, the inventory status pill, product thumbnails
  * and quantity cells.
  */
-import * as React from "react";
-import { ExternalLink, Package } from "lucide-react";
-import { byLocationFilters, openOrdersHref, openPurchaseOrdersLinkHref, productFilters } from "./inventory-links";
-import { filteredListHref } from "@/components/grid/cells";
-import { useQueryClient } from "@tanstack/react-query";
-import { useApiQuery } from "@/lib/query-client";
-import { useMe } from "@/lib/permissions-client";
-import { cn } from "@/lib/utils";
-import { PillDot } from "@/components/ui/status-pill";
-import { pillClass, pillStyle, TONES, type StatusTone } from "@/lib/status-colors";
-import { Tooltip } from "@/components/ui/tooltip";
-import type { FilterFieldDef } from "@/components/grid";
-import type { InventoryGridField } from "@/lib/grid-defs/inventory/fields";
-import type { ReasonDirection } from "@/lib/grid-defs/inventory/reason-direction";
+import * as React from 'react';
+import { ExternalLink, Package } from 'lucide-react';
+import {
+  byLocationFilters,
+  openOrdersHref,
+  openPurchaseOrdersLinkHref,
+  productFilters,
+} from './inventory-links';
+import { filteredListHref } from '@/components/grid/cells';
+import { useQueryClient } from '@tanstack/react-query';
+import { useApiQuery } from '@/lib/query-client';
+import { useMe } from '@/lib/permissions-client';
+import { cn } from '@/lib/utils';
+import { PillDot } from '@/components/ui/status-pill';
+import { pillClass, pillStyle, TONES, type StatusTone } from '@/lib/status-colors';
+import { Tooltip } from '@/components/ui/tooltip';
+import type { FilterFieldDef } from '@/components/grid';
+import type { InventoryGridField } from '@/lib/grid-defs/inventory/fields';
+import type { ReasonDirection } from '@/lib/grid-defs/inventory/reason-direction';
 
 export interface ReasonOption {
   readonly id: string;
@@ -41,38 +46,50 @@ export interface InventoryReasons {
 export function useInventoryRefresh(): () => void {
   const qc = useQueryClient();
   return React.useCallback(() => {
-    void qc.invalidateQueries({ queryKey: ["grid"] });
-    void qc.invalidateQueries({ queryKey: ["inventory"] });
+    void qc.invalidateQueries({ queryKey: ['grid'] });
+    void qc.invalidateQueries({ queryKey: ['inventory'] });
   }, [qc]);
 }
 
-export const REASONS_KEY = ["inventory", "reasons"] as const;
+export const REASONS_KEY = ['inventory', 'reasons'] as const;
 
 export function useInventoryReasons(enabled = true): InventoryReasons | null {
-  const q = useApiQuery<InventoryReasons>(REASONS_KEY, enabled ? "/api/inventory/reasons" : null, { staleTime: 5 * 60_000 });
+  const q = useApiQuery<InventoryReasons>(REASONS_KEY, enabled ? '/api/inventory/reasons' : null, {
+    staleTime: 5 * 60_000,
+  });
   return q.data?.data ?? null;
 }
 
 /** Grid-def fields → filter-builder fields, filling Warehouse / Client / Damage Reason choices. */
 export function useInventoryFilterFields(fields: readonly InventoryGridField[]): readonly FilterFieldDef[] {
   const me = useMe();
-  const needsReasons = fields.some((f) => f.dynamicOptions === "damageReason");
+  const needsReasons = fields.some((f) => f.dynamicOptions === 'damageReason');
   const reasons = useInventoryReasons(needsReasons);
   const options = me.data?.data.contextOptions;
-  return React.useMemo(() => fields.map((f): FilterFieldDef => {
-    let choices: readonly { value: string; label: string }[] | undefined;
-    if (f.dynamicOptions === "warehouse") choices = (options?.warehouses ?? []).map((w) => ({ value: w.id, label: w.code && !w.name.startsWith(w.code) ? `${w.code} - ${w.name}` : w.name }));
-    else if (f.dynamicOptions === "client") choices = (options?.clients ?? []).map((c) => ({ value: c.id, label: c.name }));
-    else if (f.dynamicOptions === "damageReason") choices = (reasons?.damageReasons ?? []).map((r) => ({ value: r.name, label: r.name }));
-    else if (f.options) choices = f.options.map((v) => ({ value: v, label: v }));
-    return {
-      field: f.field,
-      label: f.label,
-      type: f.type,
-      ...(choices ? { options: choices } : {}),
-      ...(f.allowEmpty ? { allowEmpty: true } : {}),
-    };
-  }), [fields, options, reasons]);
+  return React.useMemo(
+    () =>
+      fields.map((f): FilterFieldDef => {
+        let choices: readonly { value: string; label: string }[] | undefined;
+        if (f.dynamicOptions === 'warehouse')
+          choices = (options?.warehouses ?? []).map((w) => ({
+            value: w.id,
+            label: w.code && !w.name.startsWith(w.code) ? `${w.code} - ${w.name}` : w.name,
+          }));
+        else if (f.dynamicOptions === 'client')
+          choices = (options?.clients ?? []).map((c) => ({ value: c.id, label: c.name }));
+        else if (f.dynamicOptions === 'damageReason')
+          choices = (reasons?.damageReasons ?? []).map((r) => ({ value: r.name, label: r.name }));
+        else if (f.options) choices = f.options.map((v) => ({ value: v, label: v }));
+        return {
+          field: f.field,
+          label: f.label,
+          type: f.type,
+          ...(choices ? { options: choices } : {}),
+          ...(f.allowEmpty ? { allowEmpty: true } : {}),
+        };
+      }),
+    [fields, options, reasons],
+  );
 }
 
 /* ---------------- status pill ---------------- */
@@ -86,7 +103,13 @@ const STATUS_TONE: Readonly<Record<string, StatusTone>> = {
   Loaded: TONES.purple,
 };
 
-export function InventoryStatusPill({ status, className }: { readonly status: string; readonly className?: string }) {
+export function InventoryStatusPill({
+  status,
+  className,
+}: {
+  readonly status: string;
+  readonly className?: string;
+}) {
   const tone = STATUS_TONE[status] ?? TONES.grey;
   return (
     <span data-status={status} style={pillStyle(tone)} className={cn(pillClass(), className)}>
@@ -98,35 +121,79 @@ export function InventoryStatusPill({ status, className }: { readonly status: st
 
 export function DamagePill({ reason }: { readonly reason: string | null }) {
   if (!reason) return <span className="text-faint">—</span>;
-  return <span className="inline-flex items-center rounded-full bg-[var(--label-brown-subtle)] px-2 py-0.5 text-2xs font-semibold leading-4 whitespace-nowrap text-[var(--label-brown-text)]">{reason}</span>;
+  return (
+    <span className="inline-flex items-center rounded-full bg-[var(--label-brown-subtle)] px-2 py-0.5 text-2xs font-semibold leading-4 whitespace-nowrap text-[var(--label-brown-text)]">
+      {reason}
+    </span>
+  );
 }
 
 /* ---------------- product thumb ---------------- */
 
-export function ProductThumb({ src, alt, size = 28 }: { readonly src: string | null | undefined; readonly alt: string; readonly size?: number }) {
+export function ProductThumb({
+  src,
+  alt,
+  size = 28,
+}: {
+  readonly src: string | null | undefined;
+  readonly alt: string;
+  readonly size?: number;
+}) {
   const [failed, setFailed] = React.useState(false);
   const box = { width: size, height: size };
   if (!src || failed) {
     return (
-      <span style={box} className="inline-flex shrink-0 items-center justify-center rounded-md border border-border bg-surface-sunken text-faint" aria-hidden>
+      <span
+        style={box}
+        className="inline-flex shrink-0 items-center justify-center rounded-md border border-border bg-surface-sunken text-faint"
+        aria-hidden
+      >
         <Package className="h-3.5 w-3.5" />
       </span>
     );
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element -- remote catalog thumbnails of unknown origin
-    <img src={src} alt={alt} width={size} height={size} loading="lazy" onError={() => setFailed(true)} style={box} className="shrink-0 rounded-md border border-border object-cover" />
+    <img
+      src={src}
+      alt={alt}
+      width={size}
+      height={size}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      style={box}
+      className="shrink-0 rounded-md border border-border object-cover"
+    />
   );
 }
 
 /* ---------------- quantities ---------------- */
 
-const nf = new Intl.NumberFormat("en-US");
+const nf = new Intl.NumberFormat('en-US');
 
-export function Qty({ value, tone = "default", muteZero = true }: { readonly value: number | null | undefined; readonly tone?: "default" | "danger" | "warning" | "success"; readonly muteZero?: boolean }) {
+export function Qty({
+  value,
+  tone = 'default',
+  muteZero = true,
+}: {
+  readonly value: number | null | undefined;
+  readonly tone?: 'default' | 'danger' | 'warning' | 'success';
+  readonly muteZero?: boolean;
+}) {
   if (value === null || value === undefined) return <span className="text-faint">—</span>;
-  const color = value < 0 ? "text-danger" : value === 0 && muteZero ? "text-faint" : tone === "danger" ? "text-danger" : tone === "warning" ? "text-[var(--label-brown-text)]" : tone === "success" ? "text-success" : "text-body";
-  return <span className={cn("block text-right tabular-nums", color)}>{nf.format(value)}</span>;
+  const color =
+    value < 0
+      ? 'text-danger'
+      : value === 0 && muteZero
+        ? 'text-faint'
+        : tone === 'danger'
+          ? 'text-danger'
+          : tone === 'warning'
+            ? 'text-[var(--label-brown-text)]'
+            : tone === 'success'
+              ? 'text-success'
+              : 'text-body';
+  return <span className={cn('block text-right tabular-nums', color)}>{nf.format(value)}</span>;
 }
 
 export const formatQty = (value: number): string => nf.format(value);
@@ -136,7 +203,9 @@ export function TipHeader({ label, tip }: { readonly label: string; readonly tip
   if (!tip) return <>{label}</>;
   return (
     <Tooltip content={tip}>
-      <span className="cursor-help underline decoration-dotted decoration-faint underline-offset-4">{label}</span>
+      <span className="cursor-help underline decoration-dotted decoration-faint underline-offset-4">
+        {label}
+      </span>
     </Tooltip>
   );
 }
@@ -148,7 +217,7 @@ export function TipHeader({ label, tip }: { readonly label: string; readonly tip
 export function SkuLink({ sku, clientId }: { readonly sku: string; readonly clientId: string | null }) {
   return (
     <a
-      href={filteredListHref("/products", productFilters(sku, clientId))}
+      href={filteredListHref('/products', productFilters(sku, clientId))}
       target="_blank"
       rel="noopener noreferrer"
       title={sku}
@@ -163,7 +232,17 @@ export function SkuLink({ sku, clientId }: { readonly sku: string; readonly clie
 }
 
 /** Open SO Qty cell: opens Orders filtered to exactly the open orders (new tab). */
-export function OpenSoLink({ productId, warehouseId, sku, qty }: { readonly productId: string; readonly warehouseId: string | null; readonly sku: string; readonly qty: number }) {
+export function OpenSoLink({
+  productId,
+  warehouseId,
+  sku,
+  qty,
+}: {
+  readonly productId: string;
+  readonly warehouseId: string | null;
+  readonly sku: string;
+  readonly qty: number;
+}) {
   if (qty <= 0) return <Qty value={0} />;
   return (
     <span className="flex justify-end">
@@ -183,7 +262,17 @@ export function OpenSoLink({ productId, warehouseId, sku, qty }: { readonly prod
 }
 
 /** Open PO Qty cell: opens Purchase Orders filtered to exactly the open POs (new tab). */
-export function OpenPoLink({ productId, warehouseId, sku, qty }: { readonly productId: string; readonly warehouseId: string | null; readonly sku: string; readonly qty: number }) {
+export function OpenPoLink({
+  productId,
+  warehouseId,
+  sku,
+  qty,
+}: {
+  readonly productId: string;
+  readonly warehouseId: string | null;
+  readonly sku: string;
+  readonly qty: number;
+}) {
   if (qty <= 0) return <Qty value={0} />;
   return (
     <span className="flex justify-end">
@@ -217,17 +306,30 @@ export function headerWidth(label: string, min = 110, hasTip = false): number {
  * content, which put the (i) tip on the label's left, visually attached to the previous column;
  * `flex-row` keeps it right after the label ("CURRENT ATP (i)").
  */
-export function rightMeta(label: string, headerTip?: string): { label: string; align: "right"; headerTip?: string; headerClassName?: string } {
-  return headerTip ? { label, align: "right", headerTip, headerClassName: "flex-row" } : { label, align: "right" };
+export function rightMeta(
+  label: string,
+  headerTip?: string,
+): { label: string; align: 'right'; headerTip?: string; headerClassName?: string } {
+  return headerTip
+    ? { label, align: 'right', headerTip, headerClassName: 'flex-row' }
+    : { label, align: 'right' };
 }
 
 /** Total Inventory drilldown: By Location filtered to this SKU (same tab, like Logiwa's SKU link). */
-export function ByLocationLink({ sku, warehouseId, count }: { readonly sku: string; readonly warehouseId: string | null; readonly count?: number }) {
+export function ByLocationLink({
+  sku,
+  warehouseId,
+  count,
+}: {
+  readonly sku: string;
+  readonly warehouseId: string | null;
+  readonly count?: number;
+}) {
   if (count === 0) return <span className="text-xs text-faint">No stock</span>;
-  const label = count === undefined ? "Locations" : `${count} location${count === 1 ? "" : "s"}`;
+  const label = count === undefined ? 'Locations' : `${count} location${count === 1 ? '' : 's'}`;
   return (
     <a
-      href={filteredListHref("/inventory/by-location", byLocationFilters(sku, warehouseId))}
+      href={filteredListHref('/inventory/by-location', byLocationFilters(sku, warehouseId))}
       onClick={(e) => e.stopPropagation()}
       aria-label={`${label} for ${sku} by location`}
       className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
@@ -239,30 +341,48 @@ export function ByLocationLink({ sku, warehouseId, count }: { readonly sku: stri
 
 /** Neutral (info-blue) focus ring for free-text notes, so a focused Note never reads as an error; red stays for validation. */
 export const NOTE_FOCUS =
-  "focus-visible:border-focus focus-visible:ring-focus/25 focus-within:border-focus focus-within:ring-focus/25 aria-[invalid=true]:focus-visible:border-danger";
+  'focus-visible:border-focus focus-visible:ring-focus/25 focus-within:border-focus focus-within:ring-focus/25 aria-[invalid=true]:focus-visible:border-danger';
 
 /**
  * "Shortage" quick filter: toggles `field ≤ -1` (open demand exceeds stock). It writes an ordinary
  * range filter, so the chip, Clear, saved views and export all treat it like any other filter.
  */
-export function ShortageToggle({ grid, field, label = "Shortage" }: {
-  readonly grid: { readonly query: { readonly filters: readonly { readonly field: string; readonly op: string; readonly max?: string }[] }; readonly upsertFilter: (f: { field: string; op: "rng"; max: string }) => void; readonly removeFilter: (field: string) => void };
+export function ShortageToggle({
+  grid,
+  field,
+  label = 'Shortage',
+}: {
+  readonly grid: {
+    readonly query: {
+      readonly filters: readonly { readonly field: string; readonly op: string; readonly max?: string }[];
+    };
+    readonly upsertFilter: (f: { field: string; op: 'rng'; max: string }) => void;
+    readonly removeFilter: (field: string) => void;
+  };
   readonly field: string;
   readonly label?: string;
 }) {
-  const active = grid.query.filters.some((f) => f.field === field && f.op === "rng" && f.max === "-1");
+  const active = grid.query.filters.some((f) => f.field === field && f.op === 'rng' && f.max === '-1');
   return (
-    <Tooltip content={active ? "Show every row" : `Only rows where ${label === "Shortage" ? "the value" : label} is below 0`}>
+    <Tooltip
+      content={
+        active ? 'Show every row' : `Only rows where ${label === 'Shortage' ? 'the value' : label} is below 0`
+      }
+    >
       <button
         type="button"
         aria-pressed={active}
-        onClick={() => (active ? grid.removeFilter(field) : grid.upsertFilter({ field, op: "rng", max: "-1" }))}
+        onClick={() =>
+          active ? grid.removeFilter(field) : grid.upsertFilter({ field, op: 'rng', max: '-1' })
+        }
         className={cn(
-          "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
-          active ? "border-danger/40 bg-danger/10 text-danger" : "border-border bg-surface text-body hover:bg-muted",
+          'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+          active
+            ? 'border-danger/40 bg-danger/10 text-danger'
+            : 'border-border bg-surface text-body hover:bg-muted',
         )}
       >
-        <span className={cn("h-2 w-2 rounded-full", active ? "bg-danger" : "bg-danger/50")} aria-hidden />
+        <span className={cn('h-2 w-2 rounded-full', active ? 'bg-danger' : 'bg-danger/50')} aria-hidden />
         Shortage
       </button>
     </Tooltip>
@@ -277,13 +397,14 @@ export const GRID_SLOW_MS = 12_000;
 export const GRID_STALL_MS = 30_000;
 
 /** "slow" from GRID_SLOW_MS, "stalled" from GRID_STALL_MS while the grid is still loading. */
-export function gridStallPhase(loading: boolean, elapsedMs: number): "ok" | "slow" | "stalled" {
-  if (!loading) return "ok";
-  if (elapsedMs >= GRID_STALL_MS) return "stalled";
-  return elapsedMs >= GRID_SLOW_MS ? "slow" : "ok";
+export function gridStallPhase(loading: boolean, elapsedMs: number): 'ok' | 'slow' | 'stalled' {
+  if (!loading) return 'ok';
+  if (elapsedMs >= GRID_STALL_MS) return 'stalled';
+  return elapsedMs >= GRID_SLOW_MS ? 'slow' : 'ok';
 }
 
-const STALL_KEYFRAMES = "@keyframes ks-inv-stall-reveal{from{opacity:0;visibility:hidden}to{opacity:1;visibility:visible}}";
+const STALL_KEYFRAMES =
+  '@keyframes ks-inv-stall-reveal{from{opacity:0;visibility:hidden}to{opacity:1;visibility:visible}}';
 
 /**
  * Shown above an inventory grid while its first page is loading. Two layers, so no stage can
@@ -295,7 +416,15 @@ const STALL_KEYFRAMES = "@keyframes ks-inv-stall-reveal{from{opacity:0;visibilit
  *     and Reload, whether /api/me, the scope context or the list itself is the stage that hung.
  * The list request also has its own 30 s timeout (useGrid), which shows the grid's error state.
  */
-export function GridStallNotice({ loading, onRetry, noun = "inventory" }: { readonly loading: boolean; readonly onRetry: () => void; readonly noun?: string }) {
+export function GridStallNotice({
+  loading,
+  onRetry,
+  noun = 'inventory',
+}: {
+  readonly loading: boolean;
+  readonly onRetry: () => void;
+  readonly noun?: string;
+}) {
   const [started, setStarted] = React.useState(() => Date.now());
   const [now, setNow] = React.useState<number | null>(null);
   React.useEffect(() => {
@@ -309,18 +438,29 @@ export function GridStallNotice({ loading, onRetry, noun = "inventory" }: { read
     };
   }, [loading]);
   if (!loading) return null;
-  const phase = now === null ? "ok" : gridStallPhase(loading, now - started);
-  const stalled = phase === "stalled";
-  const linkCls = "shrink-0 rounded border border-current px-2 py-0.5 text-xs font-medium hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40";
+  const phase = now === null ? 'ok' : gridStallPhase(loading, now - started);
+  const stalled = phase === 'stalled';
+  const linkCls =
+    'shrink-0 rounded border border-current px-2 py-0.5 text-xs font-medium hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40';
   return (
     <div className="px-4 pb-2" data-testid="grid-stall-notice" data-phase={phase}>
       <style>{STALL_KEYFRAMES}</style>
       <div
-        role={stalled ? "alert" : "status"}
-        style={phase === "ok" ? { opacity: 0, visibility: "hidden", animation: `ks-inv-stall-reveal 200ms ease-out ${GRID_SLOW_MS}ms forwards` } : undefined}
+        role={stalled ? 'alert' : 'status'}
+        style={
+          phase === 'ok'
+            ? {
+                opacity: 0,
+                visibility: 'hidden',
+                animation: `ks-inv-stall-reveal 200ms ease-out ${GRID_SLOW_MS}ms forwards`,
+              }
+            : undefined
+        }
         className={cn(
-          "flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm",
-          stalled ? "border-danger/30 bg-danger-soft text-danger" : "border-warning/30 bg-warning-soft text-foreground",
+          'flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm',
+          stalled
+            ? 'border-danger/30 bg-danger-soft text-danger'
+            : 'border-warning/30 bg-warning-soft text-foreground',
         )}
       >
         <span>
@@ -329,9 +469,22 @@ export function GridStallNotice({ loading, onRetry, noun = "inventory" }: { read
             : `Still loading ${noun}. This is taking longer than usual.`}
         </span>
         <span className="flex shrink-0 items-center gap-2">
-          {stalled ? <button type="button" onClick={() => { setStarted(Date.now()); onRetry(); }} className={linkCls}>Retry</button> : null}
+          {stalled ? (
+            <button
+              type="button"
+              onClick={() => {
+                setStarted(Date.now());
+                onRetry();
+              }}
+              className={linkCls}
+            >
+              Retry
+            </button>
+          ) : null}
           {/* A plain link: reloads the same URL (filters included) even before the page hydrates. */}
-          <a href="" className={linkCls}>Reload page</a>
+          <a href="" className={linkCls}>
+            Reload page
+          </a>
         </span>
       </div>
     </div>

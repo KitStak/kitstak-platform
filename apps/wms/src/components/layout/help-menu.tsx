@@ -1,16 +1,15 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { CircleHelp, MessageSquarePlus } from "lucide-react";
-import { useShortcut, useShortcutList } from "@/lib/keyboard";
-import { Dialog, DialogBody, DialogContent, DialogHeader } from "@/components/ui/dialog";
-import { Kbd, KeyCombo } from "@/components/ui/kbd";
-import { useGotoShortcuts } from "./goto-shortcuts";
-import { HeaderIconButton } from "./header-icon-button";
-import { mergeShortcutRows, STATIC_SHORTCUTS } from "./help-content";
-import { HelpPanel, type HelpView } from "./help-panel";
-import { HELP_EVENT, type HelpEventDetail } from "./help-events";
-
+import * as React from 'react';
+import { CircleHelp, MessageSquarePlus } from 'lucide-react';
+import { useShortcut, useShortcutList } from '@/lib/keyboard';
+import { Dialog, DialogBody, DialogContent, DialogHeader } from '@/components/ui/dialog';
+import { Kbd, KeyCombo } from '@/components/ui/kbd';
+import { useGotoShortcuts } from './goto-shortcuts';
+import { HeaderIconButton } from './header-icon-button';
+import { mergeShortcutRows, STATIC_SHORTCUTS } from './help-content';
+import { HelpPanel, type HelpView } from './help-panel';
+import { HELP_EVENT, type HelpEventDetail } from './help-events';
 
 function Alternatives({ items }: { readonly items: readonly React.ReactNode[] }) {
   return (
@@ -34,25 +33,39 @@ function ShortcutsSheet() {
         <section key={group}>
           <h3 className="mb-1.5 text-2xs font-bold text-faint">{group}</h3>
           <ul className="divide-y divide-border rounded-lg border border-border">
-            {rows.filter((r) => r.group === group).map((r) => (
-              <li key={r.description} className="flex items-center justify-between px-3 py-2 text-sm text-body">
-                {r.description}
-                <Alternatives items={r.combos.map((combo) => <KeyCombo key={combo} combo={combo} />)} />
-              </li>
-            ))}
-            {STATIC_SHORTCUTS.filter((s) => s.group === group).map((s) => (
-              <li key={s.description} className="flex items-center justify-between px-3 py-2 text-sm text-body">
-                {s.description}
-                <Alternatives items={s.keys.map((seq) => (
-                  <span key={seq.join(" ")} className="inline-flex items-center gap-1">
-                    {seq.map((k, i) => (
-                      <React.Fragment key={`${k}-${i}`}>
-                        {i > 0 ? <span className="text-2xs text-faint">then</span> : null}
-                        <Kbd>{k}</Kbd>
-                      </React.Fragment>
+            {rows
+              .filter((r) => r.group === group)
+              .map((r) => (
+                <li
+                  key={r.description}
+                  className="flex items-center justify-between px-3 py-2 text-sm text-body"
+                >
+                  {r.description}
+                  <Alternatives
+                    items={r.combos.map((combo) => (
+                      <KeyCombo key={combo} combo={combo} />
                     ))}
-                  </span>
-                ))} />
+                  />
+                </li>
+              ))}
+            {STATIC_SHORTCUTS.filter((s) => s.group === group).map((s) => (
+              <li
+                key={s.description}
+                className="flex items-center justify-between px-3 py-2 text-sm text-body"
+              >
+                {s.description}
+                <Alternatives
+                  items={s.keys.map((seq) => (
+                    <span key={seq.join(' ')} className="inline-flex items-center gap-1">
+                      {seq.map((k, i) => (
+                        <React.Fragment key={`${k}-${i}`}>
+                          {i > 0 ? <span className="text-2xs text-faint">then</span> : null}
+                          <Kbd>{k}</Kbd>
+                        </React.Fragment>
+                      ))}
+                    </span>
+                  ))}
+                />
               </li>
             ))}
           </ul>
@@ -70,30 +83,52 @@ function ShortcutsSheet() {
 export function HelpMenu() {
   const [view, setView] = React.useState<HelpView | null>(null);
   const [shortcuts, setShortcuts] = React.useState(false);
-  useShortcut("?", () => setShortcuts(true), { description: "Show keyboard shortcuts", group: "Navigation" });
+  useShortcut('?', () => setShortcuts(true), { description: 'Show keyboard shortcuts', group: 'Navigation' });
   useGotoShortcuts();
   // Other shell pieces (Printers popover…) open a specific article through a window event.
   React.useEffect(() => {
-    const onOpen = (e: Event) => { const d = (e as CustomEvent<HelpEventDetail>).detail; setView(d?.articleId ? { kind: "article", id: d.articleId } : { kind: "home" }); };
+    const onOpen = (e: Event) => {
+      const d = (e as CustomEvent<HelpEventDetail>).detail;
+      setView(d?.articleId ? { kind: 'article', id: d.articleId } : { kind: 'home' });
+    };
     window.addEventListener(HELP_EVENT, onOpen);
     return () => window.removeEventListener(HELP_EVENT, onOpen);
   }, []);
   return (
     <>
-      <HeaderIconButton label="Help center" onClick={() => setView({ kind: "home" })} aria-haspopup="dialog" aria-expanded={view !== null}>
+      <HeaderIconButton
+        label="Help center"
+        onClick={() => setView({ kind: 'home' })}
+        aria-haspopup="dialog"
+        aria-expanded={view !== null}
+      >
         <CircleHelp className="h-4 w-4" aria-hidden />
       </HeaderIconButton>
       {/* Logiwa-style "Feedback & Updates" side tab; hidden on small screens and in print. */}
-      <button type="button" onClick={() => setView({ kind: "feedback" })} aria-label="Feedback and updates"
-        className="fixed right-0 top-1/2 z-30 hidden w-7 -translate-y-1/2 items-center justify-center gap-1.5 rounded-l-md bg-inverse px-0 py-3 text-2xs font-semibold leading-none text-fg-inverse shadow-md transition-colors [writing-mode:vertical-rl] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60 print:hidden lg:flex">
+      <button
+        type="button"
+        onClick={() => setView({ kind: 'feedback' })}
+        aria-label="Feedback and updates"
+        className="fixed right-0 top-1/2 z-30 hidden w-7 -translate-y-1/2 items-center justify-center gap-1.5 rounded-l-md bg-inverse px-0 py-3 text-2xs font-semibold leading-none text-fg-inverse shadow-md transition-colors [writing-mode:vertical-rl] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60 print:hidden lg:flex"
+      >
         <MessageSquarePlus className="h-3.5 w-3.5 rotate-90" aria-hidden />
         Feedback &amp; Updates
       </button>
-      <HelpPanel view={view} onViewChange={setView} onClose={() => setView(null)} onShortcuts={() => { setView(null); setShortcuts(true); }} />
+      <HelpPanel
+        view={view}
+        onViewChange={setView}
+        onClose={() => setView(null)}
+        onShortcuts={() => {
+          setView(null);
+          setShortcuts(true);
+        }}
+      />
       <Dialog open={shortcuts} onOpenChange={setShortcuts}>
         <DialogContent size="md">
           <DialogHeader title="Keyboard shortcuts" />
-          <DialogBody><ShortcutsSheet /></DialogBody>
+          <DialogBody>
+            <ShortcutsSheet />
+          </DialogBody>
         </DialogContent>
       </Dialog>
     </>

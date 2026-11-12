@@ -1,4 +1,4 @@
-import { Card, Skeleton } from "@/components/ui/card";
+import { Card, Skeleton } from '@/components/ui/card';
 
 function CardShell({ children, className }: { children: React.ReactNode; className?: string }) {
   return <Card className={className}>{children}</Card>;

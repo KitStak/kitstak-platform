@@ -1,8 +1,8 @@
 /** `GET /api/inventory` — Total Inventory grid (grid grammar; spec 04 §1). */
-import { defineRoute } from "@/server/api/define-route";
-import { listResult } from "@/server/api/envelope";
-import { listTotalInventory } from "@/server/repositories/inventory-total";
-import { INVENTORY_PERMISSIONS as P } from "@/lib/grid-defs/inventory/permissions";
+import { defineRoute } from '@/server/api/define-route';
+import { listResult } from '@/server/api/envelope';
+import { listTotalInventory } from '@/server/repositories/inventory-total';
+import { INVENTORY_PERMISSIONS as P } from '@/lib/grid-defs/inventory/permissions';
 
 export const GET = defineRoute({
   permission: P.totalView,

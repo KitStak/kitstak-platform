@@ -15,7 +15,11 @@ const norm = (v: string): string => v.trim().toUpperCase();
  * area (the output location). Without picking, each component's chosen location or LP.
  * Empty when every source is FEFO-picked, in which case the operator confirms explicitly.
  */
-export function sourceScanCodes(components: readonly ScanComponent[], withPicking: boolean, outputLocationCode: string | null): string[] {
+export function sourceScanCodes(
+  components: readonly ScanComponent[],
+  withPicking: boolean,
+  outputLocationCode: string | null,
+): string[] {
   const codes = new Set<string>();
   if (withPicking) {
     if (outputLocationCode) codes.add(norm(outputLocationCode));
@@ -33,7 +37,19 @@ export function sourceScanCodes(components: readonly ScanComponent[], withPickin
  * Source Location / LP on Create Kit step 1 even when every component is FEFO; KitStaks accepts any
  * bin or LP that holds usable free stock (free > 0, not count-locked) of one of the components.
  */
-export function fefoScanCodes(buckets: Readonly<Record<string, readonly { readonly locationCode: string; readonly lpNumber: string | null; readonly freeQty: number; readonly lockedBy: string | null }[]>>): string[] {
+export function fefoScanCodes(
+  buckets: Readonly<
+    Record<
+      string,
+      readonly {
+        readonly locationCode: string;
+        readonly lpNumber: string | null;
+        readonly freeQty: number;
+        readonly lockedBy: string | null;
+      }[]
+    >
+  >,
+): string[] {
   const codes = new Set<string>();
   for (const list of Object.values(buckets)) {
     for (const b of list) {
@@ -60,9 +76,21 @@ export interface ScanGroup {
  * location (its LP also confirms it). FEFO components (no chosen source) need no group of their own;
  * an all-FEFO work order returns [] and one scan of any usable bin is required instead.
  */
-export function sourceScanGroups(components: readonly (ScanComponent & { readonly id: string })[], withPicking: boolean, outputLocationCode: string | null): ScanGroup[] {
+export function sourceScanGroups(
+  components: readonly (ScanComponent & { readonly id: string })[],
+  withPicking: boolean,
+  outputLocationCode: string | null,
+): ScanGroup[] {
   if (withPicking) {
-    return outputLocationCode ? [{ label: norm(outputLocationCode), codes: [norm(outputLocationCode)], componentIds: components.map((c) => c.id) }] : [];
+    return outputLocationCode
+      ? [
+          {
+            label: norm(outputLocationCode),
+            codes: [norm(outputLocationCode)],
+            componentIds: components.map((c) => c.id),
+          },
+        ]
+      : [];
   }
   const groups = new Map<string, { label: string; codes: Set<string>; componentIds: string[] }>();
   for (const c of components) {
@@ -73,7 +101,11 @@ export function sourceScanGroups(components: readonly (ScanComponent & { readonl
     g.componentIds.push(c.id);
     groups.set(key, g);
   }
-  return [...groups.values()].map((g) => ({ label: g.label, codes: [...g.codes], componentIds: g.componentIds }));
+  return [...groups.values()].map((g) => ({
+    label: g.label,
+    codes: [...g.codes],
+    componentIds: g.componentIds,
+  }));
 }
 
 /** The group a scanned code confirms, or null. */
@@ -83,20 +115,28 @@ export function groupOfScan(groups: readonly ScanGroup[], input: string): ScanGr
 }
 
 /** "Components are allocated but not picked" when a with-picking job holds no Picking tasks. */
-export const NO_PICK_TASKS_REASON = "Components are allocated but no picking tasks exist yet (0 picked)";
+export const NO_PICK_TASKS_REASON = 'Components are allocated but no picking tasks exist yet (0 picked)';
 
 /** "A, B, C or 4 more" for long code lists in messages. */
 export function codeList(codes: readonly string[], max = 4): string {
-  return codes.length > max ? `${codes.slice(0, max).join(", ")} or ${codes.length - max} more` : codes.join(" or ");
+  return codes.length > max
+    ? `${codes.slice(0, max).join(', ')} or ${codes.length - max} more`
+    : codes.join(' or ');
 }
 
-export type ScanResult = { readonly ok: true; readonly code: string } | { readonly ok: false; readonly message: string };
+export type ScanResult =
+  { readonly ok: true; readonly code: string } | { readonly ok: false; readonly message: string };
 
 export function matchSourceScan(codes: readonly string[], input: string): ScanResult {
   const value = norm(input);
-  if (!value) return { ok: false, message: "Scan or enter the source location or LP" };
+  if (!value) return { ok: false, message: 'Scan or enter the source location or LP' };
   if (codes.length === 0) return { ok: true, code: value };
-  return codes.includes(value) ? { ok: true, code: value } : { ok: false, message: `${input.trim()} is not a source of this work order (expected ${codeList(codes)})` };
+  return codes.includes(value)
+    ? { ok: true, code: value }
+    : {
+        ok: false,
+        message: `${input.trim()} is not a source of this work order (expected ${codeList(codes)})`,
+      };
 }
 
 export interface DeltaLine {
@@ -111,30 +151,54 @@ export interface DeltaLine {
 export function signed(n: number): string {
   if (n > 0) return `+${n}`;
   if (n < 0) return `−${Math.abs(n)}`;
-  return "0";
+  return '0';
 }
 
 /** Create kit: kit +qty at the target; each component −(perKit × qty) at its source. */
 export function createKitDeltas(
   kit: { readonly sku: string; readonly location: string; readonly current: number | null },
-  components: readonly { readonly id: string; readonly sku: string; readonly location: string; readonly current: number | null; readonly perKit: number }[],
+  components: readonly {
+    readonly id: string;
+    readonly sku: string;
+    readonly location: string;
+    readonly current: number | null;
+    readonly perKit: number;
+  }[],
   qty: number,
 ): DeltaLine[] {
   return [
-    { key: "kit", sku: kit.sku, location: kit.location, current: kit.current, change: qty },
-    ...components.map((c) => ({ key: c.id, sku: c.sku, location: c.location, current: c.current, change: -c.perKit * qty })),
+    { key: 'kit', sku: kit.sku, location: kit.location, current: kit.current, change: qty },
+    ...components.map((c) => ({
+      key: c.id,
+      sku: c.sku,
+      location: c.location,
+      current: c.current,
+      change: -c.perKit * qty,
+    })),
   ];
 }
 
 /** Disassemble: kit −qty at its source; each component +(perKit × qty) at the target. */
 export function disassembleDeltas(
   kit: { readonly sku: string; readonly location: string; readonly current: number | null },
-  components: readonly { readonly id: string; readonly sku: string; readonly location: string; readonly current: number | null; readonly perKit: number }[],
+  components: readonly {
+    readonly id: string;
+    readonly sku: string;
+    readonly location: string;
+    readonly current: number | null;
+    readonly perKit: number;
+  }[],
   qty: number,
 ): DeltaLine[] {
   return [
-    { key: "kit", sku: kit.sku, location: kit.location, current: kit.current, change: -qty },
-    ...components.map((c) => ({ key: c.id, sku: c.sku, location: c.location, current: c.current, change: c.perKit * qty })),
+    { key: 'kit', sku: kit.sku, location: kit.location, current: kit.current, change: -qty },
+    ...components.map((c) => ({
+      key: c.id,
+      sku: c.sku,
+      location: c.location,
+      current: c.current,
+      change: c.perKit * qty,
+    })),
   ];
 }
 
@@ -157,9 +221,12 @@ export interface PickProgress {
 
 /** Picking progress of a "Work Order with Picking" (Logiwa: pick to the kitting area, then kit). */
 export function pickProgress(tasks: readonly PickTaskLike[]): PickProgress {
-  const picks = tasks.filter((t) => t.taskType === "Picking" && t.status !== "Cancelled");
-  const done = picks.filter((t) => t.status === "Completed").length;
-  const pendingTaskNos = picks.filter((t) => t.status !== "Completed").map((t) => t.taskNo ?? 0).filter((n) => n > 0);
+  const picks = tasks.filter((t) => t.taskType === 'Picking' && t.status !== 'Cancelled');
+  const done = picks.filter((t) => t.status === 'Completed').length;
+  const pendingTaskNos = picks
+    .filter((t) => t.status !== 'Completed')
+    .map((t) => t.taskNo ?? 0)
+    .filter((n) => n > 0);
   return { total: picks.length, done, pendingTaskNos };
 }
 
@@ -179,6 +246,9 @@ export function kittingAreaQty(c: { readonly pickedQty: number; readonly consume
 
 /** Idempotency key for a Create Kit submit (matches `createKitSchema.idempotencyKey`). */
 export function newIdempotencyKey(): string {
-  const uuid = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  const uuid =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
   return `ck-${uuid}`;
 }

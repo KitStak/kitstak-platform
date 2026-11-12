@@ -2,7 +2,7 @@
  * RMA photos grouping (PURE, unit tested). Return Station photos are named "<SKU> · <file>";
  * they are grouped under their RMA line, in line order, and everything else under "General".
  */
-import type { Attachment } from "@/components/shared/contracts";
+import type { Attachment } from '@/components/shared/contracts';
 
 export interface PhotoItem {
   readonly attachment: Attachment;
@@ -26,7 +26,7 @@ export function photoGroups(docs: readonly Attachment[], skus: readonly string[]
   const ordered = [...skus].sort((a, b) => b.length - a.length);
   for (const a of docs) {
     const name = a.fileName ?? a.documentType;
-    const isImage = Boolean(a.mime?.startsWith("image/")) || IMAGE_EXT.test(name);
+    const isImage = Boolean(a.mime?.startsWith('image/')) || IMAGE_EXT.test(name);
     const sku = ordered.find((s) => name.startsWith(`${s} · `));
     if (sku) {
       const list = bySku.get(sku) ?? [];
@@ -36,7 +36,9 @@ export function photoGroups(docs: readonly Attachment[], skus: readonly string[]
       general.push({ attachment: a, displayName: name, isImage });
     }
   }
-  const out: PhotoGroup[] = skus.filter((s) => bySku.has(s)).map((s) => ({ key: `line-${s}`, label: `Line ${s}`, items: bySku.get(s) ?? [] }));
-  if (general.length) out.push({ key: "general", label: "General", items: general });
+  const out: PhotoGroup[] = skus
+    .filter((s) => bySku.has(s))
+    .map((s) => ({ key: `line-${s}`, label: `Line ${s}`, items: bySku.get(s) ?? [] }));
+  if (general.length) out.push({ key: 'general', label: 'General', items: general });
   return out;
 }

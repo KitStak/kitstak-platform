@@ -9,14 +9,27 @@
  *
  * `atpComponentsSql()` is the SQL builder reused by M06 (ATP grid) and M13 (reports).
  */
-import { sql, type SQL } from "drizzle-orm";
-import type { Tx } from "./types";
-import { dbAll } from "../db/sql";
+import { sql, type SQL } from 'drizzle-orm';
+import type { Tx } from './types';
+import { dbAll } from '../db/sql';
 
 /** SO statuses whose remaining quantity is demand. */
-export const OPEN_SO_STATUSES = ["Open", "Shortage", "On Hold", "Ready to Pick", "Picking Started", "Ready to Sort",
-  "Sorting Started", "Ready to Pack", "Packing Started", "Ready to Load", "Loading Started", "Ready to Ship", "Partially Shipped"] as const;
-export const OPEN_PO_STATUSES = ["Pending", "Started", "Receiving"] as const;
+export const OPEN_SO_STATUSES = [
+  'Open',
+  'Shortage',
+  'On Hold',
+  'Ready to Pick',
+  'Picking Started',
+  'Ready to Sort',
+  'Sorting Started',
+  'Ready to Pack',
+  'Packing Started',
+  'Ready to Load',
+  'Loading Started',
+  'Ready to Ship',
+  'Partially Shipped',
+] as const;
+export const OPEN_PO_STATUSES = ['Pending', 'Started', 'Receiving'] as const;
 
 export interface AtpComponents {
   readonly productId: string;
@@ -52,7 +65,8 @@ export function computeAtp(c: AtpComponents): AtpRow {
   };
 }
 
-const list = (values: readonly string[]): SQL => sql.raw(values.map((v) => `'${v.replace(/'/g, "''")}'`).join(","));
+const list = (values: readonly string[]): SQL =>
+  sql.raw(values.map((v) => `'${v.replace(/'/g, "''")}'`).join(','));
 
 export interface AtpFilter {
   readonly warehouseIds?: readonly string[];
@@ -63,7 +77,10 @@ export interface AtpFilter {
 function inFilter(column: string, values: readonly string[] | undefined): SQL {
   if (!values) return sql``;
   if (values.length === 0) return sql` AND false`;
-  return sql` AND ${sql.raw(column)} IN (${sql.join(values.map((v) => sql`${v}`), sql`, `)})`;
+  return sql` AND ${sql.raw(column)} IN (${sql.join(
+    values.map((v) => sql`${v}`),
+    sql`, `,
+  )})`;
 }
 
 /**
@@ -97,13 +114,21 @@ export function atpComponentsSql(filter: AtpFilter = {}): SQL {
         WHERE i.product_id = k.product_id AND i.warehouse_id = k.warehouse_id AND i.status = 'Stock' AND i.damage_reason IS NULL
           AND NOT loc.prevent_allocation AND NOT loc.is_locked AND loc.is_active), 0) AS pickable
     FROM keys k JOIN products pr ON pr.id = k.product_id
-    WHERE true${inFilter("k.warehouse_id", filter.warehouseIds)}${inFilter("pr.client_id", filter.clientIds)}${inFilter("k.product_id", filter.productIds)}
+    WHERE true${inFilter('k.warehouse_id', filter.warehouseIds)}${inFilter('pr.client_id', filter.clientIds)}${inFilter('k.product_id', filter.productIds)}
     ORDER BY k.product_id, k.warehouse_id`;
 }
 
 export async function getAtp(tx: Tx, filter: AtpFilter = {}): Promise<AtpRow[]> {
-  return (await dbAll<AtpComponents>(tx, atpComponentsSql(filter))).map((r) => computeAtp({
-    ...r, total: Number(r.total), damaged: Number(r.damaged), allocatedSo: Number(r.allocatedSo), openSo: Number(r.openSo),
-    openPo: Number(r.openPo), onHand: Number(r.onHand), pickable: Number(r.pickable),
-  }));
+  return (await dbAll<AtpComponents>(tx, atpComponentsSql(filter))).map((r) =>
+    computeAtp({
+      ...r,
+      total: Number(r.total),
+      damaged: Number(r.damaged),
+      allocatedSo: Number(r.allocatedSo),
+      openSo: Number(r.openSo),
+      openPo: Number(r.openPo),
+      onHand: Number(r.onHand),
+      pickable: Number(r.pickable),
+    }),
+  );
 }

@@ -12,7 +12,7 @@
  *   AUDIT_START=/dashboard           page whose links seed the crawl
  * Opt a control out with `data-audit-skip` (use sparingly, explain in code).
  */
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from '@playwright/test';
 import {
   applyRouteFilter,
   clickEffects,
@@ -26,7 +26,7 @@ import {
   type ClickSignals,
   type ControlDescriptor,
   type Offender,
-} from "./dead-click-core";
+} from './dead-click-core';
 import {
   AUDIT_ATTR,
   collectHrefs,
@@ -35,15 +35,15 @@ import {
   startMutationProbe,
   stopMutationProbe,
   tagControls,
-} from "./dead-click-page";
-import { loadNavConfigHrefs } from "./nav-routes";
-import { storageStatePath } from "./roles";
+} from './dead-click-page';
+import { loadNavConfigHrefs } from './nav-routes';
+import { storageStatePath } from './roles';
 
 const CLICK_TIMEOUT_MS = 3_000;
 const EFFECT_WAIT_MS = 600;
 const HOVER_SETTLE_MS = 150;
 
-test.use({ storageState: storageStatePath("admin") });
+test.use({ storageState: storageStatePath('admin') });
 
 interface ClickOutcome {
   readonly signals: ClickSignals | null;
@@ -87,22 +87,22 @@ async function clickAndObserve(page: Page, control: ControlDescriptor): Promise<
 
   const overlaysBefore = await countOverlays(page);
   await startMutationProbe(page);
-  page.on("request", onRequest);
-  page.on("framenavigated", onNavigated);
-  page.on("download", onDownload);
-  page.on("popup", onPopup);
-  page.on("filechooser", onFileChooser);
+  page.on('request', onRequest);
+  page.on('framenavigated', onNavigated);
+  page.on('download', onDownload);
+  page.on('popup', onPopup);
+  page.on('filechooser', onFileChooser);
   try {
     await locator.click({ timeout: CLICK_TIMEOUT_MS, noWaitAfter: true });
     await page.waitForTimeout(EFFECT_WAIT_MS);
   } catch (error: unknown) {
     return { signals: null, needsReload: true, error: errorMessage(error) };
   } finally {
-    page.off("request", onRequest);
-    page.off("framenavigated", onNavigated);
-    page.off("download", onDownload);
-    page.off("popup", onPopup);
-    page.off("filechooser", onFileChooser);
+    page.off('request', onRequest);
+    page.off('framenavigated', onNavigated);
+    page.off('download', onDownload);
+    page.off('popup', onPopup);
+    page.off('filechooser', onFileChooser);
   }
 
   const mutations = await stopMutationProbe(page);
@@ -125,24 +125,24 @@ async function needsReload(
   page: Page,
   startUrl: string,
   overlaysBefore: number,
-  signals: ClickSignals
+  signals: ClickSignals,
 ): Promise<boolean> {
   if (page.url() !== startUrl) return true;
   if (clickEffects(signals).length === 0) return false;
-  await page.keyboard.press("Escape").catch(() => undefined);
+  await page.keyboard.press('Escape').catch(() => undefined);
   await page.waitForTimeout(HOVER_SETTLE_MS);
   return page.url() !== startUrl || (await countOverlays(page).catch(() => -1)) !== overlaysBefore;
 }
 
 function errorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  return message.split("\n")[0] ?? message;
+  return message.split('\n')[0] ?? message;
 }
 
 async function auditRoute(
   page: Page,
   route: string,
-  seenShellControls: Set<string>
+  seenShellControls: Set<string>,
 ): Promise<{ offenders: readonly Offender[]; unclickable: readonly string[] }> {
   const offenders: Offender[] = [];
   const unclickable: string[] = [];
@@ -163,7 +163,7 @@ async function auditRoute(
     const outcome = await clickAndObserve(page, control);
     stale = outcome.needsReload;
     if (outcome.signals === null) {
-      unclickable.push(`${route}: ${describeControl(control)} (${outcome.error ?? "not clickable"})`);
+      unclickable.push(`${route}: ${describeControl(control)} (${outcome.error ?? 'not clickable'})`);
     } else if (clickEffects(outcome.signals).length === 0) {
       offenders.push({ route, control });
     }
@@ -171,21 +171,21 @@ async function auditRoute(
   return { offenders, unclickable };
 }
 
-test("every enabled control on every nav route does something observable", async ({ page, baseURL }) => {
+test('every enabled control on every nav route does something observable', async ({ page, baseURL }) => {
   test.setTimeout(0);
   const origin = new URL(baseURL ?? page.url()).origin;
-  const start = process.env.AUDIT_START ?? "/dashboard";
+  const start = process.env.AUDIT_START ?? '/dashboard';
 
   await page.goto(start);
   await settle(page);
-  expect(new URL(page.url()).pathname, "audit must run logged in").not.toBe("/login");
+  expect(new URL(page.url()).pathname, 'audit must run logged in').not.toBe('/login');
 
   const routes = applyRouteFilter(
     uniqueRoutes([start, ...loadNavConfigHrefs(), ...(await collectHrefs(page))], origin),
-    parseRouteFilter(process.env.AUDIT_ROUTES)
+    parseRouteFilter(process.env.AUDIT_ROUTES),
   );
-  expect(routes.length, "no nav routes matched; check AUDIT_ROUTES / AUDIT_START").toBeGreaterThan(0);
-  test.info().annotations.push({ type: "routes", description: routes.join(", ") });
+  expect(routes.length, 'no nav routes matched; check AUDIT_ROUTES / AUDIT_START').toBeGreaterThan(0);
+  test.info().annotations.push({ type: 'routes', description: routes.join(', ') });
 
   const seenShellControls = new Set<string>();
   const offenders: Offender[] = [];
@@ -199,7 +199,7 @@ test("every enabled control on every nav route does something observable", async
   }
 
   if (unclickable.length > 0) {
-    test.info().annotations.push({ type: "unclickable", description: unclickable.join("\n") });
+    test.info().annotations.push({ type: 'unclickable', description: unclickable.join('\n') });
   }
   expect(formatOffenders(offenders)).toBe(formatOffenders([]));
 });

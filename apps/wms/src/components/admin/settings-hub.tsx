@@ -1,21 +1,29 @@
-import Link from "next/link";
-import { ChevronRight } from "lucide-react";
-import { PageHeader } from "@/components/layout/page-header";
-import { NAV_ICONS, DEFAULT_NAV_ICON } from "@/components/layout/nav-icons";
-import type { SettingsHubSection } from "./settings-hub-data";
+import Link from 'next/link';
+import { ChevronRight } from 'lucide-react';
+import { PageHeader } from '@/components/layout/page-header';
+import { NAV_ICONS, DEFAULT_NAV_ICON } from '@/components/layout/nav-icons';
+import type { SettingsHubSection } from './settings-hub-data';
 
 /** Settings overview: every section the user can open, grouped like the mega-menu. */
 export function SettingsHub({ sections }: { readonly sections: readonly SettingsHubSection[] }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader breadcrumbs={[{ label: "Settings" }]} title="Settings" helper="Master data, configuration, client setup and user access in one place." />
+      <PageHeader
+        breadcrumbs={[{ label: 'Settings' }]}
+        title="Settings"
+        helper="Master data, configuration, client setup and user access in one place."
+      />
       <div className="grid gap-6 px-6 pb-8 pt-2">
         {sections.map((section) => {
           const Icon = NAV_ICONS[section.icon] ?? DEFAULT_NAV_ICON;
           return (
             <section key={section.heading} aria-labelledby={`hub-${section.heading}`}>
-              <h2 id={`hub-${section.heading}`} className="mb-2 flex items-center gap-2 text-xs font-bold text-secondary">
-                <Icon className="h-4 w-4" aria-hidden />{section.heading}
+              <h2
+                id={`hub-${section.heading}`}
+                className="mb-2 flex items-center gap-2 text-xs font-bold text-secondary"
+              >
+                <Icon className="h-4 w-4" aria-hidden />
+                {section.heading}
               </h2>
               <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {section.items.map((item) => (
@@ -26,9 +34,14 @@ export function SettingsHub({ sections }: { readonly sections: readonly Settings
                     >
                       <span className="min-w-0">
                         <span className="block text-sm font-semibold text-foreground">{item.label}</span>
-                        {item.description ? <span className="mt-0.5 block text-xs text-secondary">{item.description}</span> : null}
+                        {item.description ? (
+                          <span className="mt-0.5 block text-xs text-secondary">{item.description}</span>
+                        ) : null}
                       </span>
-                      <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-faint transition-transform group-hover:translate-x-0.5" aria-hidden />
+                      <ChevronRight
+                        className="mt-0.5 h-4 w-4 shrink-0 text-faint transition-transform group-hover:translate-x-0.5"
+                        aria-hidden
+                      />
                     </Link>
                   </li>
                 ))}

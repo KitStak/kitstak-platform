@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 /**
  * Server-error routing for the M10 drawer wizards (critic R1: a 409 on Save left the user on
@@ -12,23 +12,35 @@
  * - `useAvailabilityCheck` checks uniqueness while the user types (debounced, also on blur),
  *   so a taken code shows inline on step 1 and Next is blocked there, as Logiwa does.
  */
-import * as React from "react";
-import { z } from "zod";
-import type { FieldValues, Path, UseFormReturn } from "react-hook-form";
-import { apiRequest, isApiError } from "@/lib/api-client";
-import { apiErrorMessage } from "./facility-shared";
+import * as React from 'react';
+import { z } from 'zod';
+import type { FieldValues, Path, UseFormReturn } from 'react-hook-form';
+import { apiRequest, isApiError } from '@/lib/api-client';
+import { apiErrorMessage } from './facility-shared';
 
 type Owns = (path: string) => boolean;
-interface Taken { readonly value: string; readonly message: string }
+interface Taken {
+  readonly value: string;
+  readonly message: string;
+}
 
-const norm = (v: unknown): string => (v === null || v === undefined ? "" : String(v)).trim().toLowerCase();
+const norm = (v: unknown): string => (v === null || v === undefined ? '' : String(v)).trim().toLowerCase();
 
 function valueAt(values: unknown, path: string): unknown {
-  return path.split(".").reduce<unknown>((acc, key) => (acc && typeof acc === "object" ? (acc as Record<string, unknown>)[key] : undefined), values);
+  return path
+    .split('.')
+    .reduce<unknown>(
+      (acc, key) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[key] : undefined),
+      values,
+    );
 }
 
 /** Issues the wrapped schema reports for values the server already rejected. Pure; exported for tests. */
-export function takenIssues(taken: ReadonlyMap<string, Taken>, owns: Owns, values: unknown): readonly { path: string; message: string }[] {
+export function takenIssues(
+  taken: ReadonlyMap<string, Taken>,
+  owns: Owns,
+  values: unknown,
+): readonly { path: string; message: string }[] {
   const out: { path: string; message: string }[] = [];
   for (const [path, t] of taken) {
     if (!owns(path)) continue;
@@ -53,7 +65,7 @@ export interface WizardGuard {
 /** Clicks the wizard's Save (the only footer button with aria-busy) once it is enabled again. */
 function clickSaveWhenEnabled(root: HTMLElement | null, tries = 30): void {
   if (!root || tries <= 0) return;
-  const save = root.querySelector<HTMLButtonElement>("button[aria-busy]");
+  const save = root.querySelector<HTMLButtonElement>('button[aria-busy]');
   if (save && !save.disabled) {
     save.click();
     return;
@@ -72,9 +84,12 @@ export function useWizardGuard(): WizardGuard {
     return z.unknown().superRefine((values, ctx) => {
       if (schema) {
         const result = schema.safeParse(values);
-        if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: "custom", path: issue.path as (string | number)[], message: issue.message });
+        if (!result.success)
+          for (const issue of result.error.issues)
+            ctx.addIssue({ code: 'custom', path: issue.path as (string | number)[], message: issue.message });
       }
-      for (const issue of takenIssues(taken.current, owns, values)) ctx.addIssue({ code: "custom", path: issue.path.split("."), message: issue.message });
+      for (const issue of takenIssues(taken.current, owns, values))
+        ctx.addIssue({ code: 'custom', path: issue.path.split('.'), message: issue.message });
     });
   }, []);
 
@@ -85,23 +100,34 @@ export function useWizardGuard(): WizardGuard {
     taken.current.delete(path);
   }, []);
 
-  const handleServerError = React.useCallback((error: unknown, values: unknown): boolean => {
-    setBanner(apiErrorMessage(error));
-    if (!isApiError(error)) return false;
-    let routed = false;
-    for (const [path, messages] of Object.entries(error.fieldErrors)) {
-      const message = messages[0];
-      if (!message || !owners.current.some((owns) => owns(path))) continue;
-      const value = valueAt(values, path);
-      if (norm(value) === "") continue;
-      markTaken(path, value, message);
-      routed = true;
-    }
-    if (routed) requestAnimationFrame(() => clickSaveWhenEnabled(rootRef.current));
-    return routed;
-  }, [markTaken]);
+  const handleServerError = React.useCallback(
+    (error: unknown, values: unknown): boolean => {
+      setBanner(apiErrorMessage(error));
+      if (!isApiError(error)) return false;
+      let routed = false;
+      for (const [path, messages] of Object.entries(error.fieldErrors)) {
+        const message = messages[0];
+        if (!message || !owners.current.some((owns) => owns(path))) continue;
+        const value = valueAt(values, path);
+        if (norm(value) === '') continue;
+        markTaken(path, value, message);
+        routed = true;
+      }
+      if (routed) requestAnimationFrame(() => clickSaveWhenEnabled(rootRef.current));
+      return routed;
+    },
+    [markTaken],
+  );
 
-  return { rootRef, banner, dismissBanner: () => setBanner(null), guard, handleServerError, markTaken, clearTaken };
+  return {
+    rootRef,
+    banner,
+    dismissBanner: () => setBanner(null),
+    guard,
+    handleServerError,
+    markTaken,
+    clearTaken,
+  };
 }
 
 /**
@@ -111,7 +137,15 @@ export function useWizardGuard(): WizardGuard {
 export function useAvailabilityCheck<T extends FieldValues>(
   wizardGuard: WizardGuard,
   form: UseFormReturn<T>,
-  { url, paths, params }: { readonly url: string; readonly paths: readonly Path<T>[]; readonly params: (values: T) => Record<string, string | undefined> | null },
+  {
+    url,
+    paths,
+    params,
+  }: {
+    readonly url: string;
+    readonly paths: readonly Path<T>[];
+    readonly params: (values: T) => Record<string, string | undefined> | null;
+  },
 ): { readonly checking: boolean } {
   const [checking, setChecking] = React.useState(false);
   const watched = form.watch(paths as Path<T>[]);
@@ -133,10 +167,10 @@ export function useAvailabilityCheck<T extends FieldValues>(
             const state = form.getFieldState(path);
             if (message) {
               wizardGuard.markTaken(path, form.getValues(path), message);
-              form.setError(path, { type: "taken", message });
+              form.setError(path, { type: 'taken', message });
             } else {
               wizardGuard.clearTaken(path);
-              if (state.error?.type === "taken" || state.error?.type === "server") form.clearErrors(path);
+              if (state.error?.type === 'taken' || state.error?.type === 'server') form.clearErrors(path);
             }
           }
         })

@@ -1,10 +1,10 @@
 /** `POST /api/workflows/reorder { ids }` — drag sequence (evaluation order). */
-import { defineRoute } from "@/server/api/define-route";
-import { reorderSchema } from "@/lib/grid-defs/integrations/workflows";
-import { reorderWorkflows } from "@/server/repositories/workflows";
+import { defineRoute } from '@/server/api/define-route';
+import { reorderSchema } from '@/lib/grid-defs/integrations/workflows';
+import { reorderWorkflows } from '@/server/repositories/workflows';
 
 export const POST = defineRoute({
-  permission: "automation.workflows.edit",
+  permission: 'automation.workflows.edit',
   body: reorderSchema,
   handler: async ({ db, auth, actor, body }) => await reorderWorkflows(db, auth, actor, body.ids),
 });

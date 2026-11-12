@@ -4,14 +4,13 @@
  * real start scans on untimed completed tasks, so the labor analytics show measured work.
  * See src/server/repositories/analytics-labor-backfill.ts. Never rewrites a timed task.
  */
-import { closeDb, getDb } from "../src/server/db";
-import { backfillLaborHistory } from "../src/server/repositories/analytics-labor-backfill";
-import { withWriteTx } from "../src/server/db/sql";
-
+import { closeDb, getDb } from '../src/server/db';
+import { backfillLaborHistory } from '../src/server/repositories/analytics-labor-backfill';
+import { withWriteTx } from '../src/server/db/sql';
 
 async function main(): Promise<void> {
-  if (process.env.NODE_ENV === "production" && !process.env.ALLOW_PROD_SEED) {
-    throw new Error("Refusing to write demo labor history in production. Set ALLOW_PROD_SEED=1 to override.");
+  if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_PROD_SEED) {
+    throw new Error('Refusing to write demo labor history in production. Set ALLOW_PROD_SEED=1 to override.');
   }
   const db = await getDb();
   try {
@@ -23,6 +22,8 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error: unknown) => {
-  process.stderr.write(`Labor history backfill failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+  process.stderr.write(
+    `Labor history backfill failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
+  );
   process.exitCode = 1;
 });

@@ -1,28 +1,43 @@
-"use client";
+'use client';
 
 /**
  * Grid cell library (BUILD_PLAN F4.3). All formatting follows user preferences via
  * `useFormat()`; empty values render the shared em dash.
  */
-import * as React from "react";
-import Link from "next/link";
-import { ExternalLink } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { EMPTY_VALUE } from "@/lib/format";
-import { useFormat } from "@/lib/format";
-import { findIntegration, svgDataUri } from "@/lib/channel-catalog";
-import { serializeGridQuery, type GridFilter } from "@/server/query/grid-query";
-import { Avatar } from "@/components/ui/avatar";
-import { YesNoPill } from "@/components/ui/status-pill";
+import * as React from 'react';
+import Link from 'next/link';
+import { ExternalLink } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { EMPTY_VALUE } from '@/lib/format';
+import { useFormat } from '@/lib/format';
+import { findIntegration, svgDataUri } from '@/lib/channel-catalog';
+import { serializeGridQuery, type GridFilter } from '@/server/query/grid-query';
+import { Avatar } from '@/components/ui/avatar';
+import { YesNoPill } from '@/components/ui/status-pill';
 
 export { YesNoPill };
 
 const Empty = () => <span className="text-faint">{EMPTY_VALUE}</span>;
 
 /** Primary-key / hyperlink cell. Stops row-click propagation. */
-export function LinkCell({ href, children, className }: { readonly href: string; readonly children: React.ReactNode; readonly className?: string }) {
+export function LinkCell({
+  href,
+  children,
+  className,
+}: {
+  readonly href: string;
+  readonly children: React.ReactNode;
+  readonly className?: string;
+}) {
   return (
-    <Link href={href} onClick={(e) => e.stopPropagation()} className={cn("font-medium text-primary underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30", className)}>
+    <Link
+      href={href}
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        'font-medium text-primary underline-offset-2 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30',
+        className,
+      )}
+    >
       {children}
     </Link>
   );
@@ -35,7 +50,17 @@ export function filteredListHref(path: string, filters: readonly GridFilter[]): 
 }
 
 /** Opens a pre-filtered list in a new tab (e.g. "12 orders" → Orders filtered by SKU). */
-export function ExternalFilterLink({ path, filters, children, label }: { readonly path: string; readonly filters: readonly GridFilter[]; readonly children: React.ReactNode; readonly label?: string }) {
+export function ExternalFilterLink({
+  path,
+  filters,
+  children,
+  label,
+}: {
+  readonly path: string;
+  readonly filters: readonly GridFilter[];
+  readonly children: React.ReactNode;
+  readonly label?: string;
+}) {
   return (
     <a
       href={filteredListHref(path, filters)}
@@ -59,25 +84,59 @@ export const DATE_TIME_COLUMN_WIDTH = 172;
 /** Fits the widest priority pill ("⇈ Urgent") plus padding. */
 export const PRIORITY_COLUMN_WIDTH = 104;
 
-export function DateCell({ value, dateOnly = false }: { readonly value: string | Date | null | undefined; readonly dateOnly?: boolean }) {
+export function DateCell({
+  value,
+  dateOnly = false,
+}: {
+  readonly value: string | Date | null | undefined;
+  readonly dateOnly?: boolean;
+}) {
   const fmt = useFormat();
   if (!value) return <Empty />;
   const text = dateOnly ? fmt.date(value) : fmt.gridDateTime(value);
   const full = dateOnly ? undefined : fmt.dateTime(value);
-  return <span title={full} className="whitespace-nowrap tabular-nums text-body">{text || EMPTY_VALUE}</span>;
+  return (
+    <span title={full} className="whitespace-nowrap tabular-nums text-body">
+      {text || EMPTY_VALUE}
+    </span>
+  );
 }
 
-export function MoneyCell({ value, currency = "USD" }: { readonly value: number | null | undefined; readonly currency?: string }) {
-  const fmt = useFormat();
-  if (value === null || value === undefined) return <Empty />;
-  return <span className="block whitespace-nowrap text-right tabular-nums text-body">{fmt.money(value, currency, "grid")}</span>;
-}
-
-export function QtyCell({ value, muteZero = false, unit }: { readonly value: number | null | undefined; readonly muteZero?: boolean; readonly unit?: string }) {
+export function MoneyCell({
+  value,
+  currency = 'USD',
+}: {
+  readonly value: number | null | undefined;
+  readonly currency?: string;
+}) {
   const fmt = useFormat();
   if (value === null || value === undefined) return <Empty />;
   return (
-    <span className={cn("tabular-nums", muteZero && value === 0 ? "text-faint" : "text-body", value < 0 && "text-danger")}>
+    <span className="block whitespace-nowrap text-right tabular-nums text-body">
+      {fmt.money(value, currency, 'grid')}
+    </span>
+  );
+}
+
+export function QtyCell({
+  value,
+  muteZero = false,
+  unit,
+}: {
+  readonly value: number | null | undefined;
+  readonly muteZero?: boolean;
+  readonly unit?: string;
+}) {
+  const fmt = useFormat();
+  if (value === null || value === undefined) return <Empty />;
+  return (
+    <span
+      className={cn(
+        'tabular-nums',
+        muteZero && value === 0 ? 'text-faint' : 'text-body',
+        value < 0 && 'text-danger',
+      )}
+    >
       {fmt.quantity(value)}
       {unit ? <span className="ml-1 text-2xs text-faint">{unit}</span> : null}
     </span>
@@ -90,14 +149,23 @@ export interface TagChip {
   readonly color: string;
 }
 
-export function TagsCell({ tags, max = 2 }: { readonly tags: readonly TagChip[] | null | undefined; readonly max?: number }) {
+export function TagsCell({
+  tags,
+  max = 2,
+}: {
+  readonly tags: readonly TagChip[] | null | undefined;
+  readonly max?: number;
+}) {
   if (!tags || tags.length === 0) return <Empty />;
   const shown = tags.slice(0, max);
   const hidden = tags.length - shown.length;
   return (
-    <span className="inline-flex items-center gap-1" title={tags.map((t) => t.name).join(", ")}>
+    <span className="inline-flex items-center gap-1" title={tags.map((t) => t.name).join(', ')}>
       {shown.map((t) => (
-        <span key={t.id} className="inline-flex max-w-[110px] items-center gap-1 truncate rounded-full border border-border px-2 py-0.5 text-2xs font-medium text-body">
+        <span
+          key={t.id}
+          className="inline-flex max-w-[110px] items-center gap-1 truncate rounded-full border border-border px-2 py-0.5 text-2xs font-medium text-body"
+        >
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: t.color }} aria-hidden />
           <span className="truncate">{t.name}</span>
         </span>
@@ -108,16 +176,33 @@ export function TagsCell({ tags, max = 2 }: { readonly tags: readonly TagChip[] 
 }
 
 /** Channel or carrier logo + name (falls back to the catalog monogram). */
-export function ChannelCell({ channel, kind = "channel", store }: { readonly channel: string | null | undefined; readonly kind?: "channel" | "carrier"; readonly store?: string | null }) {
+export function ChannelCell({
+  channel,
+  kind = 'channel',
+  store,
+}: {
+  readonly channel: string | null | undefined;
+  readonly kind?: 'channel' | 'carrier';
+  readonly store?: string | null;
+}) {
   if (!channel) return <Empty />;
   const entry = findIntegration(kind, channel.toLowerCase());
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5">
       {entry ? (
         // eslint-disable-next-line @next/next/no-img-element -- tiny inline data-URI logo
-        <img src={svgDataUri(entry.logoSvg)} alt="" width={20} height={20} className="h-5 w-5 shrink-0 rounded" />
+        <img
+          src={svgDataUri(entry.logoSvg)}
+          alt=""
+          width={20}
+          height={20}
+          className="h-5 w-5 shrink-0 rounded"
+        />
       ) : (
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-neutral-soft text-2xs font-bold text-neutral" aria-hidden>
+        <span
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-neutral-soft text-2xs font-bold text-neutral"
+          aria-hidden
+        >
           {channel.slice(0, 2).toUpperCase()}
         </span>
       )}
@@ -129,7 +214,13 @@ export function ChannelCell({ channel, kind = "channel", store }: { readonly cha
   );
 }
 
-export function UserCell({ name, email }: { readonly name: string | null | undefined; readonly email?: string | null }) {
+export function UserCell({
+  name,
+  email,
+}: {
+  readonly name: string | null | undefined;
+  readonly email?: string | null;
+}) {
   if (!name && !email) return <Empty />;
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5" title={email ?? undefined}>
@@ -174,7 +265,16 @@ export function CountdownCell({ deadline }: { readonly deadline: string | Date |
   if (now === null) return <span className="text-faint">…</span>;
   const remaining = target - now;
   return (
-    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums", remaining < 0 ? "bg-danger-soft text-danger" : remaining < SOON_MS ? "bg-warning-soft text-warning" : "bg-neutral-soft text-secondary")}>
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums',
+        remaining < 0
+          ? 'bg-danger-soft text-danger'
+          : remaining < SOON_MS
+            ? 'bg-warning-soft text-warning'
+            : 'bg-neutral-soft text-secondary',
+      )}
+    >
       {formatCountdown(remaining)}
     </span>
   );

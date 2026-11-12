@@ -3,8 +3,8 @@
  * session. Goes through POST /api/auth/login (the same endpoint the login form
  * uses) so the session cookie lands in the request context's cookie jar.
  */
-import type { APIRequestContext } from "@playwright/test";
-import { ROLE_EMAILS, e2eBaseUrl, e2ePassword, type Role } from "./roles";
+import type { APIRequestContext } from '@playwright/test';
+import { ROLE_EMAILS, e2eBaseUrl, e2ePassword, type Role } from './roles';
 
 const MAX_ATTEMPTS = 3;
 const DEFAULT_RETRY_AFTER_S = 5;
@@ -28,7 +28,7 @@ export async function loginViaApi(request: APIRequestContext, role: Role): Promi
     });
     if (response.ok()) return;
     if (response.status() === 429 && attempt < MAX_ATTEMPTS) {
-      await sleep(parseRetryAfter(response.headers()["retry-after"]) * 1000);
+      await sleep(parseRetryAfter(response.headers()['retry-after']) * 1000);
       continue;
     }
     const body = await response.text();

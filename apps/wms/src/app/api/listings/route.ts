@@ -1,10 +1,10 @@
 /** `GET /api/listings?link=unlinked|linked` + grid grammar. M09. */
-import { z } from "zod";
-import { LISTING_READ_PERMISSIONS } from "@/lib/grid-defs/products/permissions";
-import { defineRoute } from "@/server/api/define-route";
-import { listResult } from "@/server/api/envelope";
-import { listListings } from "@/server/repositories/listings";
-import { LISTING_LINK_STATES } from "@/lib/grid-defs/products/listings-grid";
+import { z } from 'zod';
+import { LISTING_READ_PERMISSIONS } from '@/lib/grid-defs/products/permissions';
+import { defineRoute } from '@/server/api/define-route';
+import { listResult } from '@/server/api/envelope';
+import { listListings } from '@/server/repositories/listings';
+import { LISTING_LINK_STATES } from '@/lib/grid-defs/products/listings-grid';
 
 export const GET = defineRoute({
   permission: LISTING_READ_PERMISSIONS,

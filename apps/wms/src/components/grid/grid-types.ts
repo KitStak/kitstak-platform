@@ -3,27 +3,27 @@
  * by `src/lib/grid-defs/<module>/**` definitions that the server also reads (export
  * columns, filter fields, sort keys). Do not import React or DOM APIs here.
  */
-import type * as React from "react";
-import type { ColumnDef, RowData } from "@tanstack/react-table";
-import { DENSITIES, GRID_PAGE_SIZES } from "@/lib/enums";
+import type * as React from 'react';
+import type { ColumnDef, RowData } from '@tanstack/react-table';
+import { DENSITIES, GRID_PAGE_SIZES } from '@/lib/enums';
 
 /* ---------------- filters ---------------- */
 
-export const FILTER_FIELD_TYPES = ["enum", "text", "number", "boolean", "date"] as const;
+export const FILTER_FIELD_TYPES = ['enum', 'text', 'number', 'boolean', 'date'] as const;
 export type FilterFieldType = (typeof FILTER_FIELD_TYPES)[number];
 
 /** The text operators the field editor offers (Logiwa parity). "nin" is Exclude: none of the listed values. */
-export const TEXT_FILTER_OPS = ["ct", "eq", "sw", "ew", "nin", "ex", "empty"] as const;
+export const TEXT_FILTER_OPS = ['ct', 'eq', 'sw', 'ew', 'nin', 'ex', 'empty'] as const;
 export type TextFilterOp = (typeof TEXT_FILTER_OPS)[number];
 
 export const TEXT_FILTER_OP_LABELS: Readonly<Record<TextFilterOp, string>> = {
-  ct: "Contains",
-  eq: "Equals",
-  sw: "Starts With",
-  ew: "Ends With",
-  nin: "Exclude",
-  ex: "Is Not Empty",
-  empty: "Is Empty",
+  ct: 'Contains',
+  eq: 'Equals',
+  sw: 'Starts With',
+  ew: 'Ends With',
+  nin: 'Exclude',
+  ex: 'Is Not Empty',
+  empty: 'Is Empty',
 };
 
 export interface FilterOptionDef {
@@ -54,7 +54,7 @@ export interface FilterFieldDef {
 
 export interface GridColumnMeta {
   /** Freeze the column at the grid's right edge. */
-  sticky?: "right";
+  sticky?: 'right';
   /** Frozen at the left edge by default (in addition to any user pins). */
   pinLeft?: boolean;
   /** Pinned left by default, but the user can unpin it in the column chooser (stored in grid prefs). */
@@ -72,7 +72,7 @@ export interface GridColumnMeta {
   /** Filter definition offered by the filter builder. */
   filter?: FilterFieldDef;
   /** Header alignment (cells align themselves). */
-  align?: "left" | "right";
+  align?: 'left' | 'right';
   /** Extra classes for the rendered header label. */
   headerClassName?: string;
   /**
@@ -83,10 +83,10 @@ export interface GridColumnMeta {
   /** `false` turns off the default `overflow-hidden text-ellipsis` clipping (icons, pills). */
   clip?: boolean;
   /** Horizontal alignment of the cell content. */
-  justify?: "center";
+  justify?: 'center';
 }
 
-declare module "@tanstack/react-table" {
+declare module '@tanstack/react-table' {
   // Declaration merging requires an interface with TanStack's type params.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-object-type
   interface ColumnMeta<TData extends RowData, TValue> extends GridColumnMeta {}
@@ -133,7 +133,7 @@ export interface BulkAction {
 
 export type GridDensity = (typeof DENSITIES)[number];
 export const GRID_DENSITIES: readonly GridDensity[] = DENSITIES;
-export const DEFAULT_DENSITY: GridDensity = "Small";
+export const DEFAULT_DENSITY: GridDensity = 'Small';
 
 export type GridPageSize = (typeof GRID_PAGE_SIZES)[number];
 export const PAGE_SIZE_OPTIONS: readonly number[] = GRID_PAGE_SIZES;

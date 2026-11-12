@@ -3,11 +3,11 @@
  * for every method instead of Next's HTML 404 page, so API clients never parse HTML.
  * Specific routes always win over this optional segment.
  */
-import { notFoundError } from "@/server/api/errors";
-import { jsonError } from "@/server/api/envelope";
+import { notFoundError } from '@/server/api/errors';
+import { jsonError } from '@/server/api/envelope';
 
 function notFound(): Response {
-  return jsonError(notFoundError("API route"));
+  return jsonError(notFoundError('API route'));
 }
 
 export const GET = notFound;

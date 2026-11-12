@@ -6,17 +6,24 @@
  * The lock lifts as soon as the plan / line is cancelled, posted (Inventory Updated) or replaced by a recount.
  * Ledger enforcement is requested in docs/requests/counts.md REQ-1; this helper is the intended entry point.
  */
-import { sql } from "drizzle-orm";
-import type { AppDb } from "@/server/api/db";
-import type { Tx } from "@/server/domain/types";
-import { dbGet } from "@/server/db/sql";
+import { sql } from 'drizzle-orm';
+import type { AppDb } from '@/server/api/db';
+import type { Tx } from '@/server/domain/types';
+import { dbGet } from '@/server/db/sql';
 
-export const LOCKING_PLAN_STATUSES = ["Pending", "Ready To Count", "Count Started", "Count Completed"] as const;
-export const RELEASED_LINE_STATUSES = ["Cancelled", "Inventory Updated", "Recount Created"] as const;
+export const LOCKING_PLAN_STATUSES = [
+  'Pending',
+  'Ready To Count',
+  'Count Started',
+  'Count Completed',
+] as const;
+export const RELEASED_LINE_STATUSES = ['Cancelled', 'Inventory Updated', 'Recount Created'] as const;
 
 /** Code of the open count plan that locks `locationId`, or null. */
 export async function countLockFor(tx: Tx | AppDb, locationId: string): Promise<string | null> {
-  const row = await dbGet<{ code: string }>(tx, sql`
+  const row = await dbGet<{ code: string }>(
+    tx,
+    sql`
     SELECT p.code AS code FROM count_plan_lines l JOIN count_plans p ON p.id = l.plan_id
     WHERE p.lock_locations = true
       AND p.status IN ('Pending', 'Ready To Count', 'Count Started', 'Count Completed')
@@ -28,7 +35,8 @@ export async function countLockFor(tx: Tx | AppDb, locationId: string): Promise<
           WHERE i.location_id = ${locationId} AND i.product_id = l.product_id AND i.warehouse_id = p.warehouse_id AND i.on_hand > 0))
       )
     ORDER BY p.created_at
-    LIMIT 1`);
+    LIMIT 1`,
+  );
   return row?.code ?? null;
 }
 

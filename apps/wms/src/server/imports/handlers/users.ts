@@ -4,11 +4,11 @@
  * role / warehouse). Rules and change log come from the Users repository; see
  * `repositories/users-import.ts`.
  */
-import { importUserRow } from "@/server/repositories/users-import";
-import type { ImportHandler } from "../types";
+import { importUserRow } from '@/server/repositories/users-import';
+import type { ImportHandler } from '../types';
 
 export const handler: ImportHandler = {
   configured: true,
-  owner: "M14",
+  owner: 'M14',
   apply: async ({ db, auth, actor }, row) => await importUserRow(db, auth, actor, row),
 };

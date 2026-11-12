@@ -13,11 +13,16 @@
  * through the aisle front or back (whichever is shorter); the route starts and ends at the
  * front of the first aisle (the pack/induction area).
  */
-export const AI_JOB_TYPES = ["AI-OrderBasedPickPack", "AI-IdenticalOrderBatchPick", "AI-SingleItemBatchPick"] as const;
+export const AI_JOB_TYPES = [
+  'AI-OrderBasedPickPack',
+  'AI-IdenticalOrderBatchPick',
+  'AI-SingleItemBatchPick',
+] as const;
 export type AiJobType = (typeof AI_JOB_TYPES)[number];
-export const AI_JOB_PREFIX = "AI-";
+export const AI_JOB_PREFIX = 'AI-';
 
-export const isAiJobType = (jobType: string | null | undefined): boolean => Boolean(jobType?.startsWith(AI_JOB_PREFIX));
+export const isAiJobType = (jobType: string | null | undefined): boolean =>
+  Boolean(jobType?.startsWith(AI_JOB_PREFIX));
 
 export const AISLE_SPACING_M = 3;
 export const BAY_WIDTH_M = 1.2;
@@ -46,7 +51,7 @@ function aisleIndex(aisle: string): number {
 }
 
 const num = (v: string | null | undefined): number => {
-  const m = /\d+/.exec(v ?? "");
+  const m = /\d+/.exec(v ?? '');
   return m ? Number(m[0]) : 0;
 };
 
@@ -57,7 +62,10 @@ export function locationPoint(loc: PickLocation): Point {
     // Bulk / dock / staging locations without rack coordinates: place them by walking path.
     return { x: 0, y: Math.max(0, loc.walkingPathPriority) / 100 };
   }
-  return { x: aisleIndex(loc.aisle) * AISLE_SPACING_M, y: (Math.max(0, rack - 1) * BAYS_PER_RACK + Math.max(0, bay - 1)) * BAY_WIDTH_M + BAY_WIDTH_M / 2 };
+  return {
+    x: aisleIndex(loc.aisle) * AISLE_SPACING_M,
+    y: (Math.max(0, rack - 1) * BAYS_PER_RACK + Math.max(0, bay - 1)) * BAY_WIDTH_M + BAY_WIDTH_M / 2,
+  };
 }
 
 export const DEPOT: Point = { x: 0, y: 0 };
@@ -70,7 +78,7 @@ function depthOf(points: readonly Point[]): number {
 export function walkDistance(a: Point, b: Point, depth: number): number {
   if (Math.abs(a.x - b.x) < 1e-9) return Math.abs(a.y - b.y);
   const viaFront = a.y + b.y;
-  const viaBack = (depth - a.y) + (depth - b.y);
+  const viaBack = depth - a.y + (depth - b.y);
   return Math.abs(a.x - b.x) + Math.min(viaFront, viaBack);
 }
 
@@ -78,7 +86,8 @@ export function walkDistance(a: Point, b: Point, depth: number): number {
 export function routeLength(stops: readonly Point[], depth = depthOf(stops)): number {
   if (stops.length === 0) return 0;
   let total = walkDistance(DEPOT, stops[0] as Point, depth);
-  for (let i = 1; i < stops.length; i += 1) total += walkDistance(stops[i - 1] as Point, stops[i] as Point, depth);
+  for (let i = 1; i < stops.length; i += 1)
+    total += walkDistance(stops[i - 1] as Point, stops[i] as Point, depth);
   return total + walkDistance(stops[stops.length - 1] as Point, DEPOT, depth);
 }
 
@@ -87,11 +96,18 @@ export function routeLength(stops: readonly Point[], depth = depthOf(stops)): nu
  * with 2-opt. The result is never longer than `baseline` (the walking-path order); when the
  * heuristic cannot beat it, the baseline is returned unchanged.
  */
-export function optimizeRoute(stops: readonly Point[], baseline: readonly number[] = stops.map((_, i) => i)): number[] {
+export function optimizeRoute(
+  stops: readonly Point[],
+  baseline: readonly number[] = stops.map((_, i) => i),
+): number[] {
   const n = stops.length;
   if (n <= 2) return [...baseline];
   const depth = depthOf(stops);
-  const len = (order: readonly number[]) => routeLength(order.map((i) => stops[i] as Point), depth);
+  const len = (order: readonly number[]) =>
+    routeLength(
+      order.map((i) => stops[i] as Point),
+      depth,
+    );
   const remaining = new Set(stops.map((_, i) => i));
   const order: number[] = [];
   let at: Point = DEPOT;
@@ -100,7 +116,10 @@ export function optimizeRoute(stops: readonly Point[], baseline: readonly number
     let bestD = Infinity;
     for (const i of remaining) {
       const d = walkDistance(at, stops[i] as Point, depth);
-      if (d < bestD - 1e-9 || (Math.abs(d - bestD) < 1e-9 && i < best)) { best = i; bestD = d; }
+      if (d < bestD - 1e-9 || (Math.abs(d - bestD) < 1e-9 && i < best)) {
+        best = i;
+        bestD = d;
+      }
     }
     order.push(best);
     remaining.delete(best);
@@ -116,7 +135,11 @@ export function optimizeRoute(stops: readonly Point[], baseline: readonly number
       for (let k = i + 1; k < n; k += 1) {
         const candidate = [...order.slice(0, i), ...order.slice(i, k + 1).reverse(), ...order.slice(k + 1)];
         const l = len(candidate);
-        if (l < current - 1e-6) { order.splice(0, n, ...candidate); current = l; improved = true; }
+        if (l < current - 1e-6) {
+          order.splice(0, n, ...candidate);
+          current = l;
+          improved = true;
+        }
       }
     }
   }
@@ -141,7 +164,10 @@ export interface AiGroup {
 
 function centroid(points: readonly Point[]): Point {
   if (points.length === 0) return DEPOT;
-  return { x: points.reduce((s, p) => s + p.x, 0) / points.length, y: points.reduce((s, p) => s + p.y, 0) / points.length };
+  return {
+    x: points.reduce((s, p) => s + p.x, 0) / points.length,
+    y: points.reduce((s, p) => s + p.y, 0) / points.length,
+  };
 }
 
 /** Chunks orders into batches of at most `max`, ordered along the walk (aisle, then depth) so each batch stays compact. */
@@ -163,16 +189,24 @@ export function groupForAi(orders: readonly AiOrder[], maxOrdersPerJob: number):
   const bySignature = new Map<string, AiOrder[]>();
   for (const o of multi) bySignature.set(o.signature, [...(bySignature.get(o.signature) ?? []), o]);
   const groups: AiGroup[] = [];
-  for (const batch of proximityBatches(singles, max)) groups.push({ aiType: "AI-SingleItemBatchPick", orderIds: batch });
+  for (const batch of proximityBatches(singles, max))
+    groups.push({ aiType: 'AI-SingleItemBatchPick', orderIds: batch });
   const leftovers: AiOrder[] = [];
   for (const same of [...bySignature.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v)) {
-    if (same.length < 2) { leftovers.push(...same); continue; }
+    if (same.length < 2) {
+      leftovers.push(...same);
+      continue;
+    }
     for (const batch of proximityBatches(same, max)) {
-      if (batch.length < 2) { leftovers.push(...same.filter((o) => batch.includes(o.id))); continue; }
-      groups.push({ aiType: "AI-IdenticalOrderBatchPick", orderIds: batch });
+      if (batch.length < 2) {
+        leftovers.push(...same.filter((o) => batch.includes(o.id)));
+        continue;
+      }
+      groups.push({ aiType: 'AI-IdenticalOrderBatchPick', orderIds: batch });
     }
   }
-  for (const o of [...leftovers].sort((a, b) => a.id.localeCompare(b.id))) groups.push({ aiType: "AI-OrderBasedPickPack", orderIds: [o.id] });
+  for (const o of [...leftovers].sort((a, b) => a.id.localeCompare(b.id)))
+    groups.push({ aiType: 'AI-OrderBasedPickPack', orderIds: [o.id] });
   return groups;
 }
 
@@ -193,8 +227,8 @@ export function savingsPct(stats: AiRouteStats): number {
 export function describeAiJob(orderCount: number, stats: AiRouteStats): string {
   const pct = savingsPct(stats);
   const walk = `${Math.round(stats.optimizedM)} m walk`;
-  const vs = pct > 0 ? ` (−${pct}% vs walking path)` : " (already shortest)";
-  return `${orderCount} ${orderCount === 1 ? "order" : "orders"} · ${stats.stops} ${stats.stops === 1 ? "stop" : "stops"} · ${walk}${vs}`;
+  const vs = pct > 0 ? ` (−${pct}% vs walking path)` : ' (already shortest)';
+  return `${orderCount} ${orderCount === 1 ? 'order' : 'orders'} · ${stats.stops} ${stats.stops === 1 ? 'stop' : 'stops'} · ${walk}${vs}`;
 }
 
 /**
@@ -206,6 +240,12 @@ export function routeStats(sequenced: readonly PickLocation[]): AiRouteStats {
   const stops = sequenced.filter((l) => (seen.has(l.id) ? false : (seen.add(l.id), true)));
   const points = stops.map(locationPoint);
   const depth = depthOf(points);
-  const baseline = [...stops].sort((a, b) => a.walkingPathPriority - b.walkingPathPriority || a.code.localeCompare(b.code)).map(locationPoint);
-  return { stops: stops.length, optimizedM: routeLength(points, depth), baselineM: routeLength(baseline, depth) };
+  const baseline = [...stops]
+    .sort((a, b) => a.walkingPathPriority - b.walkingPathPriority || a.code.localeCompare(b.code))
+    .map(locationPoint);
+  return {
+    stops: stops.length,
+    optimizedM: routeLength(points, depth),
+    baselineM: routeLength(baseline, depth),
+  };
 }

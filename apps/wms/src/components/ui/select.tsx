@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
 /**
  * Select (BUILD_PLAN F4.2): Radix listbox styled as a 32px control. For long or
  * searchable lists use `Combobox`; for the legacy native element see `input.tsx`.
  */
-import * as React from "react";
-import { Select as SelectPrimitive } from "radix-ui";
-import { Check, ChevronDown, X } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { controlVariants, itemClass, panelClass, type ControlSize } from "./control-styles";
+import * as React from 'react';
+import { Select as SelectPrimitive } from 'radix-ui';
+import { Check, ChevronDown, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { controlVariants, itemClass, panelClass, type ControlSize } from './control-styles';
 
 export interface SelectOption<V extends string = string> {
   readonly value: V;
@@ -34,11 +34,13 @@ export interface SelectProps<V extends string = string> {
   readonly className?: string;
   readonly contentClassName?: string;
   readonly onBlur?: () => void;
-  readonly "aria-label"?: string;
-  readonly "aria-describedby"?: string;
+  readonly 'aria-label'?: string;
+  readonly 'aria-describedby'?: string;
 }
 
-function groupOptions<V extends string>(options: readonly SelectOption<V>[]): readonly { readonly label: string | null; readonly items: readonly SelectOption<V>[] }[] {
+function groupOptions<V extends string>(
+  options: readonly SelectOption<V>[],
+): readonly { readonly label: string | null; readonly items: readonly SelectOption<V>[] }[] {
   const groups: { label: string | null; items: SelectOption<V>[] }[] = [];
   for (const option of options) {
     const label = option.group ?? null;
@@ -50,8 +52,23 @@ function groupOptions<V extends string>(options: readonly SelectOption<V>[]): re
 }
 
 function SelectInner<V extends string>(
-  { options, value, onChange, placeholder = "Select…", clearable, disabled, invalid, size = "md", id, name, className, contentClassName, onBlur, ...aria }: SelectProps<V>,
-  ref: React.ForwardedRef<HTMLButtonElement>
+  {
+    options,
+    value,
+    onChange,
+    placeholder = 'Select…',
+    clearable,
+    disabled,
+    invalid,
+    size = 'md',
+    id,
+    name,
+    className,
+    contentClassName,
+    onBlur,
+    ...aria
+  }: SelectProps<V>,
+  ref: React.ForwardedRef<HTMLButtonElement>,
 ) {
   const groups = groupOptions(options);
   // The selected label is rendered as the Value's children so it is in the server HTML:
@@ -61,8 +78,8 @@ function SelectInner<V extends string>(
   return (
     <div className="relative w-full">
       <SelectPrimitive.Root
-        value={value ?? ""}
-        onValueChange={(next) => onChange(next === "" ? null : (next as V))}
+        value={value ?? ''}
+        onValueChange={(next) => onChange(next === '' ? null : (next as V))}
         disabled={disabled}
         name={name}
         onOpenChange={(open) => {
@@ -73,18 +90,20 @@ function SelectInner<V extends string>(
           ref={ref}
           id={id}
           aria-invalid={invalid || undefined}
-          aria-label={aria["aria-label"]}
-          aria-describedby={aria["aria-describedby"]}
+          aria-label={aria['aria-label']}
+          aria-describedby={aria['aria-describedby']}
           className={cn(
             controlVariants({ size }),
-            "flex items-center justify-between gap-2 text-left data-[placeholder]:text-faint",
-            "data-[state=open]:border-info data-[state=open]:ring-2 data-[state=open]:ring-info/25",
-            showClear && "pr-12",
-            className
+            'flex items-center justify-between gap-2 text-left data-[placeholder]:text-faint',
+            'data-[state=open]:border-info data-[state=open]:ring-2 data-[state=open]:ring-info/25',
+            showClear && 'pr-12',
+            className,
           )}
         >
           <span className="min-w-0 flex-1 truncate">
-            <SelectPrimitive.Value placeholder={placeholder}>{selected ? (selected.textValue ?? selected.label) : undefined}</SelectPrimitive.Value>
+            <SelectPrimitive.Value placeholder={placeholder}>
+              {selected ? (selected.textValue ?? selected.label) : undefined}
+            </SelectPrimitive.Value>
           </span>
           <SelectPrimitive.Icon asChild>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-secondary" aria-hidden />
@@ -95,13 +114,19 @@ function SelectInner<V extends string>(
             position="popper"
             sideOffset={4}
             collisionPadding={8}
-            className={cn(panelClass, "min-w-[var(--radix-select-trigger-width)] max-h-[min(320px,var(--radix-select-content-available-height))] overflow-hidden", contentClassName)}
+            className={cn(
+              panelClass,
+              'min-w-[var(--radix-select-trigger-width)] max-h-[min(320px,var(--radix-select-content-available-height))] overflow-hidden',
+              contentClassName,
+            )}
           >
             <SelectPrimitive.Viewport className="p-1">
               {groups.map((group, gi) => (
                 <SelectPrimitive.Group key={group.label ?? `g${gi}`}>
                   {group.label ? (
-                    <SelectPrimitive.Label className="px-2 pb-1 pt-2 text-2xs font-semibold text-faint">{group.label}</SelectPrimitive.Label>
+                    <SelectPrimitive.Label className="px-2 pb-1 pt-2 text-2xs font-semibold text-faint">
+                      {group.label}
+                    </SelectPrimitive.Label>
                   ) : null}
                   {group.items.map((option) => (
                     <SelectPrimitive.Item
@@ -109,11 +134,13 @@ function SelectInner<V extends string>(
                       value={option.value}
                       disabled={option.disabled}
                       textValue={option.textValue}
-                      className={cn(itemClass, "pr-7", option.description ? "items-start" : null)}
+                      className={cn(itemClass, 'pr-7', option.description ? 'items-start' : null)}
                     >
                       <span className="flex min-w-0 flex-col">
                         <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
-                        {option.description ? <span className="text-2xs leading-4 text-faint">{option.description}</span> : null}
+                        {option.description ? (
+                          <span className="text-2xs leading-4 text-faint">{option.description}</span>
+                        ) : null}
                       </span>
                       <SelectPrimitive.ItemIndicator className="absolute right-2 inline-flex">
                         <Check className="h-3.5 w-3.5 text-primary" aria-hidden />
@@ -142,5 +169,5 @@ function SelectInner<V extends string>(
 }
 
 export const Select = React.forwardRef(SelectInner) as <V extends string = string>(
-  props: SelectProps<V> & { readonly ref?: React.ForwardedRef<HTMLButtonElement> }
+  props: SelectProps<V> & { readonly ref?: React.ForwardedRef<HTMLButtonElement> },
 ) => React.ReactElement;

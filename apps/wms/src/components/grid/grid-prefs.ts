@@ -3,7 +3,7 @@
  * size). PURE helpers: zod parsing of the stored/remote shape and reconciliation with
  * the grid's current column set (columns may be added or removed between releases).
  */
-import { z } from "zod";
+import { z } from 'zod';
 import {
   DEFAULT_DENSITY,
   GRID_DENSITIES,
@@ -12,8 +12,8 @@ import {
   PAGE_SIZE_OPTIONS,
   type GridDensity,
   type GridPrefs,
-} from "./grid-types";
-import { DEFAULT_PAGE_SIZE } from "@/server/query/grid-query";
+} from './grid-types';
+import { DEFAULT_PAGE_SIZE } from '@/server/query/grid-query';
 
 const MAX_COLUMNS = 200;
 
@@ -75,7 +75,9 @@ export function reconcileGridPrefs(raw: unknown, columns: readonly PrefColumn[])
     else if (!storedKnown.has(c.id) && c.defaultVisible) visibleSet.add(c.id);
   }
   const widths = Object.fromEntries(
-    Object.entries(stored.widths).filter(([id]) => known.has(id)).map(([id, w]) => [id, clampWidth(w)])
+    Object.entries(stored.widths)
+      .filter(([id]) => known.has(id))
+      .map(([id, w]) => [id, clampWidth(w)]),
   );
   return {
     visible: order.filter((id) => visibleSet.has(id)),

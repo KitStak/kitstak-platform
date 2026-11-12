@@ -3,11 +3,16 @@
  * and 2-column chart cards — the same layout the data lands in, so nothing jumps.
  * Server-safe (no hooks).
  */
-import { Skeleton } from "@/components/ui/card";
+import { Skeleton } from '@/components/ui/card';
 
 export function AnalyticsSkeleton() {
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-10" aria-busy="true" aria-label="Loading dashboard" data-testid="analytics-skeleton">
+    <div
+      className="flex min-h-0 flex-1 flex-col pb-10"
+      aria-busy="true"
+      aria-label="Loading dashboard"
+      data-testid="analytics-skeleton"
+    >
       <div className="px-6 pt-3">
         <Skeleton className="h-3 w-40 rounded" />
         <Skeleton className="mt-2 h-6 w-56 rounded" />
@@ -35,11 +40,18 @@ export function AnalyticsSkeleton() {
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="rounded-xl border border-border bg-surface p-5 shadow-xs">
               <div className="flex items-start justify-between gap-3">
-                <div><Skeleton className="h-4 w-44 rounded" /><Skeleton className="mt-1.5 h-3 w-64 rounded" /></div>
+                <div>
+                  <Skeleton className="h-4 w-44 rounded" />
+                  <Skeleton className="mt-1.5 h-3 w-64 rounded" />
+                </div>
                 <Skeleton className="h-7 w-7 rounded-md" />
               </div>
               <div className="mt-5 flex h-[240px] items-end gap-2">
-                {[44, 70, 56, 88, 62, 36, 74, 50].map((h, j) => <div key={j} className="flex-1" style={{ height: `${h}%` }}><Skeleton className="h-full w-full rounded-t" /></div>)}
+                {[44, 70, 56, 88, 62, 36, 74, 50].map((h, j) => (
+                  <div key={j} className="flex-1" style={{ height: `${h}%` }}>
+                    <Skeleton className="h-full w-full rounded-t" />
+                  </div>
+                ))}
               </div>
             </div>
           ))}

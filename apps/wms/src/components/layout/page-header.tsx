@@ -1,26 +1,48 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { PAGE_TAB_GROUPS, type PageTabGroupKey } from "@/config/page-tabs";
-import { PageTabs, UnderlineTabs as UiUnderlineTabs, type PageTabItem } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
-import { AutoBreadcrumbs, Breadcrumbs, type Crumb } from "./breadcrumbs";
-import { useShellAllows } from "./shell-context";
+import * as React from 'react';
+import { PAGE_TAB_GROUPS, type PageTabGroupKey } from '@/config/page-tabs';
+import { PageTabs, UnderlineTabs as UiUnderlineTabs, type PageTabItem } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
+import { AutoBreadcrumbs, Breadcrumbs, type Crumb } from './breadcrumbs';
+import { useShellAllows } from './shell-context';
 
 export { Breadcrumbs, AutoBreadcrumbs, type Crumb };
 
 function BetaTag() {
-  return <span className="ml-1 rounded-sm bg-muted px-1 py-px text-2xs font-medium text-fg-secondary">Beta</span>;
+  return (
+    <span className="ml-1 rounded-sm bg-muted px-1 py-px text-2xs font-medium text-fg-secondary">Beta</span>
+  );
 }
 
 /** Route tabs for a config group, filtered by the viewer's permissions. */
-export function GroupTabs({ group, className, alwaysShow = false }: { readonly group: PageTabGroupKey; readonly className?: string; /** Render a single allowed tab too, so the page shell does not shift by role. */ readonly alwaysShow?: boolean }) {
+export function GroupTabs({
+  group,
+  className,
+  alwaysShow = false,
+}: {
+  readonly group: PageTabGroupKey;
+  readonly className?: string;
+  /** Render a single allowed tab too, so the page shell does not shift by role. */ readonly alwaysShow?: boolean;
+}) {
   const allows = useShellAllows();
   const tabs = React.useMemo<readonly PageTabItem[]>(
     () =>
       PAGE_TAB_GROUPS[group]
         .filter((t) => allows(t.permission))
-        .map((t) => ({ href: t.href, exact: t.exact, match: t.match, label: t.badge ? <>{t.label}<BetaTag /></> : t.label })),
+        .map((t) => ({
+          href: t.href,
+          exact: t.exact,
+          match: t.match,
+          label: t.badge ? (
+            <>
+              {t.label}
+              <BetaTag />
+            </>
+          ) : (
+            t.label
+          ),
+        })),
     [group, allows],
   );
   if (tabs.length === 0 || (tabs.length < 2 && !alwaysShow)) return null;
@@ -49,9 +71,20 @@ export interface PageHeaderProps {
 }
 
 /** Page chrome (BUILD_PLAN 0.3): breadcrumb, H1, helper text under it, CTAs top-right, route tabs. */
-export function PageHeader({ breadcrumbs, crumbLabel, title, helper, helperLink, alwaysShowTabs, actions, tabs, className, helpHref }: PageHeaderProps) {
+export function PageHeader({
+  breadcrumbs,
+  crumbLabel,
+  title,
+  helper,
+  helperLink,
+  alwaysShowTabs,
+  actions,
+  tabs,
+  className,
+  helpHref,
+}: PageHeaderProps) {
   return (
-    <div className={cn("pt-3", className)}>
+    <div className={cn('pt-3', className)}>
       <div className="px-6">
         {breadcrumbs ? <Breadcrumbs items={breadcrumbs} /> : <AutoBreadcrumbs currentLabel={crumbLabel} />}
         {/* H1 with the helper left-aligned beneath it; CTAs top-right (DESIGN_SPEC page header). */}
@@ -61,7 +94,14 @@ export function PageHeader({ breadcrumbs, crumbLabel, title, helper, helperLink,
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-semibold tracking-[-0.01em] text-fg">{title}</h1>
               {helpHref ? (
-                <a data-slot="page-help" href={helpHref} target="_blank" rel="noopener" aria-label={`Help: ${title}`} className="rounded text-xs font-medium text-fg-secondary underline-offset-2 hover:text-fg hover:underline">
+                <a
+                  data-slot="page-help"
+                  href={helpHref}
+                  target="_blank"
+                  rel="noopener"
+                  aria-label={`Help: ${title}`}
+                  className="rounded text-xs font-medium text-fg-secondary underline-offset-2 hover:text-fg hover:underline"
+                >
                   Help
                 </a>
               ) : null}
@@ -71,8 +111,11 @@ export function PageHeader({ breadcrumbs, crumbLabel, title, helper, helperLink,
                 {helper}
                 {helperLink ? (
                   <>
-                    {helper ? " " : null}
-                    <a href={helperLink.href} className="font-medium text-fg-secondary underline underline-offset-2 hover:text-fg">
+                    {helper ? ' ' : null}
+                    <a
+                      href={helperLink.href}
+                      className="font-medium text-fg-secondary underline underline-offset-2 hover:text-fg"
+                    >
                       {helperLink.label}
                     </a>
                   </>
@@ -83,7 +126,11 @@ export function PageHeader({ breadcrumbs, crumbLabel, title, helper, helperLink,
           {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
         </div>
       </div>
-      {tabs === undefined ? null : typeof tabs === "string" ? <GroupTabs group={tabs} className="mt-2" alwaysShow={alwaysShowTabs} /> : <PageTabs tabs={tabs} className="mt-2" />}
+      {tabs === undefined ? null : typeof tabs === 'string' ? (
+        <GroupTabs group={tabs} className="mt-2" alwaysShow={alwaysShowTabs} />
+      ) : (
+        <PageTabs tabs={tabs} className="mt-2" />
+      )}
     </div>
   );
 }

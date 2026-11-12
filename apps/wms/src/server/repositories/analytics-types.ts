@@ -5,7 +5,8 @@
  * PURE types: shared by the server builders and the client renderer.
  */
 
-export type AnalyticsChartKind = "line" | "bar" | "stackedBar" | "area" | "scatter" | "heatmap" | "donut" | "scorecards";
+export type AnalyticsChartKind =
+  'line' | 'bar' | 'stackedBar' | 'area' | 'scatter' | 'heatmap' | 'donut' | 'scorecards';
 
 export interface AnalyticsSeries {
   readonly key: string;
@@ -15,13 +16,13 @@ export interface AnalyticsSeries {
    * Line charts: "percent" series are drawn against a right-hand 0–100 % axis so they never
    * share a scale with the count series on the left axis.
    */
-  readonly axis?: "percent";
+  readonly axis?: 'percent';
 }
 
 export interface AnalyticsColumn {
   readonly key: string;
   readonly label: string;
-  readonly kind?: "text" | "number" | "decimal" | "percent" | "money" | "hours" | "minutes";
+  readonly kind?: 'text' | 'number' | 'decimal' | 'percent' | 'money' | 'hours' | 'minutes';
 }
 
 export type AnalyticsRow = Readonly<Record<string, string | number | null>>;
@@ -82,7 +83,7 @@ export interface AnalyticsKpi {
 export interface AnalyticsGate {
   readonly appKey: string;
   readonly appName: string;
-  readonly reason: "inactive";
+  readonly reason: 'inactive';
 }
 
 export interface AnalyticsPayload {
@@ -107,53 +108,99 @@ export interface TimingShare {
 }
 
 export interface AnalyticsNotice {
-  readonly kind: "self-only" | "no-billing";
+  readonly kind: 'self-only' | 'no-billing';
   readonly title: string;
   readonly message: string;
 }
 
-export const LABOR_PAGES = ["average-task", "associate-task", "performance-quadrant", "associate", "receiving-performance"] as const;
-export const OPERATIONAL_PAGES = ["inbound-inventory", "fulfillment", "management", "productivity"] as const;
+export const LABOR_PAGES = [
+  'average-task',
+  'associate-task',
+  'performance-quadrant',
+  'associate',
+  'receiving-performance',
+] as const;
+export const OPERATIONAL_PAGES = ['inbound-inventory', 'fulfillment', 'management', 'productivity'] as const;
 export type LaborPage = (typeof LABOR_PAGES)[number];
 export type OperationalPage = (typeof OPERATIONAL_PAGES)[number];
 
-export const ANALYTICS_TITLES: Readonly<Record<LaborPage | OperationalPage, { title: string; helper: string }>> = {
-  "average-task": { title: "Average Task Analysis", helper: "Average minutes per task by task type and day, with the trend across the period." },
-  "associate-task": { title: "Associate Task Analysis", helper: "How many tasks each associate completed, split by task type." },
-  "performance-quadrant": { title: "Performance Quadrant Analysis", helper: "Speed (tasks per hour) against volume (tasks completed) for every associate, split at the team medians." },
-  associate: { title: "Associate Analysis", helper: "A scorecard per associate: volume, speed, average task time, daily trend and rank." },
-  "receiving-performance": { title: "Receiving Performance Analysis", helper: "Units and lines received per associate, per hour on the dock." },
-  "inbound-inventory": { title: "Inbound & Inventory Dashboard", helper: "Receipts trend, dock-to-stock time, inventory value, aging and your top SKUs." },
-  fulfillment: { title: "Fulfillment Dashboard", helper: "Orders created against orders shipped, on-time shipping, backlog and shortages." },
-  management: { title: "Management Dashboard", helper: "Volume, revenue proxies and billing totals per client." },
-  productivity: { title: "Productivity Dashboard", helper: "Units per hour by work area and shift, and when the floor is busiest." },
+export const ANALYTICS_TITLES: Readonly<
+  Record<LaborPage | OperationalPage, { title: string; helper: string }>
+> = {
+  'average-task': {
+    title: 'Average Task Analysis',
+    helper: 'Average minutes per task by task type and day, with the trend across the period.',
+  },
+  'associate-task': {
+    title: 'Associate Task Analysis',
+    helper: 'How many tasks each associate completed, split by task type.',
+  },
+  'performance-quadrant': {
+    title: 'Performance Quadrant Analysis',
+    helper:
+      'Speed (tasks per hour) against volume (tasks completed) for every associate, split at the team medians.',
+  },
+  associate: {
+    title: 'Associate Analysis',
+    helper: 'A scorecard per associate: volume, speed, average task time, daily trend and rank.',
+  },
+  'receiving-performance': {
+    title: 'Receiving Performance Analysis',
+    helper: 'Units and lines received per associate, per hour on the dock.',
+  },
+  'inbound-inventory': {
+    title: 'Inbound & Inventory Dashboard',
+    helper: 'Receipts trend, dock-to-stock time, inventory value, aging and your top SKUs.',
+  },
+  fulfillment: {
+    title: 'Fulfillment Dashboard',
+    helper: 'Orders created against orders shipped, on-time shipping, backlog and shortages.',
+  },
+  management: {
+    title: 'Management Dashboard',
+    helper: 'Volume, revenue proxies and billing totals per client.',
+  },
+  productivity: {
+    title: 'Productivity Dashboard',
+    helper: 'Units per hour by work area and shift, and when the floor is busiest.',
+  },
 };
 
 /** Shown by the API (400 VALIDATION) and the client guard when From is after To. */
-export const RANGE_ORDER_MESSAGE = "From must be on or before To";
+export const RANGE_ORDER_MESSAGE = 'From must be on or before To';
 
-export const LABOR_APP = { key: "labor-analytics", name: "Labor Analytics", permission: "analytics.labor_analytics.view" } as const;
-export const OPERATIONAL_APP = { key: "operational-analytics", name: "Operational Analytics", permission: "analytics.operational_analytics.view" } as const;
+export const LABOR_APP = {
+  key: 'labor-analytics',
+  name: 'Labor Analytics',
+  permission: 'analytics.labor_analytics.view',
+} as const;
+export const OPERATIONAL_APP = {
+  key: 'operational-analytics',
+  name: 'Operational Analytics',
+  permission: 'analytics.operational_analytics.view',
+} as const;
 
 /**
  * Money on the Management Dashboard (merchandise shipped, 3PL billed) follows the same gate as
  * the billing screens: 3PL Billing or Billing Report view. Without it the money KPIs, series and
  * columns are removed server side (not just hidden).
  */
-export const BILLING_VIEW_PERMISSIONS = ["settings.billing.view", "settings.billing_report.view"] as const;
+export const BILLING_VIEW_PERMISSIONS = ['settings.billing.view', 'settings.billing_report.view'] as const;
 /**
  * Team-wide labor analytics (every coworker's tasks/h and rank) are for Supervisors and up,
  * i.e. roles that can view Users. Anyone else sees only their own work.
  */
-export const LABOR_TEAM_PERMISSION = "settings.users.view";
+export const LABOR_TEAM_PERMISSION = 'settings.users.view';
 
 export const SELF_ONLY_NOTICE: AnalyticsNotice = {
-  kind: "self-only",
-  title: "Showing your own work only",
-  message: "Team-wide labor analytics (every associate's speed and rank) are available to supervisors and admins. Team medians are shown for comparison.",
+  kind: 'self-only',
+  title: 'Showing your own work only',
+  message:
+    "Team-wide labor analytics (every associate's speed and rank) are available to supervisors and admins. Team medians are shown for comparison.",
 };
 export const NO_BILLING_NOTICE: AnalyticsNotice = {
-  kind: "no-billing",
-  title: "Revenue and billing figures are hidden",
-  message: "Merchandise value and 3PL billing need the 3PL Billing or Billing Report view permission. Volumes are shown instead.",
+  kind: 'no-billing',
+  title: 'Revenue and billing figures are hidden',
+  message:
+    'Merchandise value and 3PL billing need the 3PL Billing or Billing Report view permission. Volumes are shown instead.',
 };

@@ -1,6 +1,6 @@
 /** Row shapes of the count grids (M07). PURE: shared by the API and the UI. */
-import type { CountLineStatus, CountPlanStatus } from "@/lib/enums";
-import type { CountOperationType, CountType } from "./count-grids";
+import type { CountLineStatus, CountPlanStatus } from '@/lib/enums';
+import type { CountOperationType, CountType } from './count-grids';
 
 export interface CountPlanListRow {
   readonly id: string;

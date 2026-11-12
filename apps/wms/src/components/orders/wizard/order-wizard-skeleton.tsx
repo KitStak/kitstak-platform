@@ -1,11 +1,16 @@
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from '@/components/ui/skeleton';
 
 const STEPS = 6;
 
 /** Loading state shaped like the Create Shipment Order wizard: stepper, step form, side rail. */
 export function OrderWizardSkeleton() {
   return (
-    <div className="space-y-4 px-6 pt-4" aria-busy="true" aria-label="Loading order form" data-testid="order-wizard-skeleton">
+    <div
+      className="space-y-4 px-6 pt-4"
+      aria-busy="true"
+      aria-label="Loading order form"
+      data-testid="order-wizard-skeleton"
+    >
       <Skeleton className="h-3 w-48" />
       <div className="flex items-center justify-between gap-4">
         <Skeleton className="h-6 w-60" />

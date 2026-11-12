@@ -1,16 +1,16 @@
-import { and, count, eq, inArray, isNotNull, like, sql } from "drizzle-orm";
-import { desc } from "@/server/db/order";
-import { getDb, schema } from "@/server/db";
-import type { AppDb } from "@/server/api/db";
-import { BACKLOG_STATUSES } from "./orders";
+import { and, count, eq, inArray, isNotNull, like, sql } from 'drizzle-orm';
+import { desc } from '@/server/db/order';
+import { getDb, schema } from '@/server/db';
+import type { AppDb } from '@/server/api/db';
+import { BACKLOG_STATUSES } from './orders';
 
 const { shipmentOrders, orderLines, clients, jobs, users } = schema;
 
 /** Statuses that mean an order has left the building (carrier ranking scope). */
-const SHIPPED_OUT_STATUSES = ["Shipped", "Delivered"] as const;
+const SHIPPED_OUT_STATUSES = ['Shipped', 'Delivered'] as const;
 
 /** Job statuses shown in the dashboard's active jobs table. */
-const ACTIVE_JOB_STATUSES = ["In Progress", "Pending"] as const;
+const ACTIVE_JOB_STATUSES = ['In Progress', 'Pending'] as const;
 
 export interface RankEntry {
   name: string;
@@ -78,9 +78,12 @@ function toRank(rows: ReadonlyArray<{ name: string | null; count: number }>): Ra
 
 /** "Today" is derived from the newest order so the seeded demo stays stable. */
 async function deriveToday(db: AppDb): Promise<string> {
-  const row = (await db
-    .select({ d: sql<string | null>`max(${shipmentOrders.orderDate})` })
-    .from(shipmentOrders).limit(1))[0];
+  const row = (
+    await db
+      .select({ d: sql<string | null>`max(${shipmentOrders.orderDate})` })
+      .from(shipmentOrders)
+      .limit(1)
+  )[0];
   const iso = row?.d ?? new Date().toISOString();
   return iso.slice(0, 10);
 }
@@ -91,21 +94,39 @@ export async function getDashboardData(): Promise<DashboardData> {
   const todayPrefix = `${today}%`;
 
   const ordersCreated =
-    (await db.select({ n: count() }).from(shipmentOrders).where(like(shipmentOrders.orderDate, todayPrefix)).limit(1))[0]?.n ?? 0;
-  const shippedToday = (await db
-    .select({
-      n: count(),
-      units: sql<number>`coalesce(sum(${shipmentOrders.totalQuantity}), 0)`,
-    })
-    .from(shipmentOrders)
-    .where(like(shipmentOrders.shippedAt, todayPrefix)).limit(1))[0];
-  const ordersDelivered =
-    (await db.select({ n: count() }).from(shipmentOrders).where(like(shipmentOrders.deliveredAt, todayPrefix)).limit(1))[0]?.n ?? 0;
-  const openOrders =
-    (await db
-      .select({ n: count() })
+    (
+      await db
+        .select({ n: count() })
+        .from(shipmentOrders)
+        .where(like(shipmentOrders.orderDate, todayPrefix))
+        .limit(1)
+    )[0]?.n ?? 0;
+  const shippedToday = (
+    await db
+      .select({
+        n: count(),
+        units: sql<number>`coalesce(sum(${shipmentOrders.totalQuantity}), 0)`,
+      })
       .from(shipmentOrders)
-      .where(inArray(shipmentOrders.status, [...BACKLOG_STATUSES])).limit(1))[0]?.n ?? 0;
+      .where(like(shipmentOrders.shippedAt, todayPrefix))
+      .limit(1)
+  )[0];
+  const ordersDelivered =
+    (
+      await db
+        .select({ n: count() })
+        .from(shipmentOrders)
+        .where(like(shipmentOrders.deliveredAt, todayPrefix))
+        .limit(1)
+    )[0]?.n ?? 0;
+  const openOrders =
+    (
+      await db
+        .select({ n: count() })
+        .from(shipmentOrders)
+        .where(inArray(shipmentOrders.status, [...BACKLOG_STATUSES]))
+        .limit(1)
+    )[0]?.n ?? 0;
 
   const statusBreakdown = await db
     .select({ status: shipmentOrders.status, count: count() })
@@ -113,23 +134,26 @@ export async function getDashboardData(): Promise<DashboardData> {
     .groupBy(shipmentOrders.status)
     .orderBy(desc(count()));
 
-  const unfulfilledAgg = (await db
-    .select({
-      orders: sql<number>`count(distinct ${shipmentOrders.id})`,
-      units: sql<number>`coalesce(sum(${orderLines.quantity}), 0)`,
-      pickedUnits: sql<number>`coalesce(sum(${orderLines.pickedQuantity}), 0)`,
-      packedUnits: sql<number>`coalesce(sum(${orderLines.packedQuantity}), 0)`,
-    })
-    .from(shipmentOrders)
-    .innerJoin(orderLines, eq(orderLines.orderId, shipmentOrders.id))
-    .where(inArray(shipmentOrders.status, [...BACKLOG_STATUSES])).limit(1))[0];
+  const unfulfilledAgg = (
+    await db
+      .select({
+        orders: sql<number>`count(distinct ${shipmentOrders.id})`,
+        units: sql<number>`coalesce(sum(${orderLines.quantity}), 0)`,
+        pickedUnits: sql<number>`coalesce(sum(${orderLines.pickedQuantity}), 0)`,
+        packedUnits: sql<number>`coalesce(sum(${orderLines.packedQuantity}), 0)`,
+      })
+      .from(shipmentOrders)
+      .innerJoin(orderLines, eq(orderLines.orderId, shipmentOrders.id))
+      .where(inArray(shipmentOrders.status, [...BACKLOG_STATUSES]))
+      .limit(1)
+  )[0];
 
   const channelRank = toRank(
     await db
       .select({ name: shipmentOrders.channel, count: count() })
       .from(shipmentOrders)
       .groupBy(shipmentOrders.channel)
-      .orderBy(desc(count()))
+      .orderBy(desc(count())),
   );
   const clientRank = toRank(
     await db
@@ -137,7 +161,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       .from(shipmentOrders)
       .innerJoin(clients, eq(shipmentOrders.clientId, clients.id))
       .groupBy(clients.name)
-      .orderBy(desc(count()))
+      .orderBy(desc(count())),
   );
   // Carriers rank only orders that actually went out the door (Shipped +
   // Delivered) so the card's total reconciles with Order Breakdown's
@@ -148,56 +172,55 @@ export async function getDashboardData(): Promise<DashboardData> {
       .select({ name: shipmentOrders.carrier, count: count() })
       .from(shipmentOrders)
       .where(
-        and(
-          isNotNull(shipmentOrders.carrier),
-          inArray(shipmentOrders.status, [...SHIPPED_OUT_STATUSES])
-        )
+        and(isNotNull(shipmentOrders.carrier), inArray(shipmentOrders.status, [...SHIPPED_OUT_STATUSES])),
       )
       .groupBy(shipmentOrders.carrier)
-      .orderBy(desc(count()))
+      .orderBy(desc(count())),
   );
   const countryRank = toRank(
     await db
       .select({ name: shipmentOrders.shipCountry, count: count() })
       .from(shipmentOrders)
       .groupBy(shipmentOrders.shipCountry)
-      .orderBy(desc(count()))
+      .orderBy(desc(count())),
   );
 
-  const jobTotals = (await db
-    .select({
-      total: count(),
-      pending: sql<number>`sum(case when ${jobs.status} = 'Pending' then 1 else 0 end)`,
-      inProgress: sql<number>`sum(case when ${jobs.status} = 'In Progress' then 1 else 0 end)`,
-    })
-    .from(jobs).limit(1))[0];
+  const jobTotals = (
+    await db
+      .select({
+        total: count(),
+        pending: sql<number>`sum(case when ${jobs.status} = 'Pending' then 1 else 0 end)`,
+        inProgress: sql<number>`sum(case when ${jobs.status} = 'In Progress' then 1 else 0 end)`,
+      })
+      .from(jobs)
+      .limit(1)
+  )[0];
   const completedToday =
-    (await db.select({ n: count() }).from(jobs).where(like(jobs.completedAt, todayPrefix)).limit(1))[0]?.n ?? 0;
+    (await db.select({ n: count() }).from(jobs).where(like(jobs.completedAt, todayPrefix)).limit(1))[0]?.n ??
+    0;
   // Pending jobs are "active pick/count work across the floor" per the card's
   // subtitle, so they belong in the table alongside In Progress jobs. In
   // Progress rows sort first so live work stays at the top.
-  const activeJobs = (await db
-    .select({
-      id: jobs.id,
-      code: jobs.code,
-      jobType: jobs.jobType,
-      status: jobs.status,
-      assigneeName: users.name,
-      waveNumber: jobs.waveNumber,
-      unitCount: jobs.unitCount,
-      completedUnits: jobs.completedUnits,
-    })
-    .from(jobs)
-    .leftJoin(users, eq(jobs.assignedToUserId, users.id))
-    .where(inArray(jobs.status, [...ACTIVE_JOB_STATUSES]))
-    .orderBy(
-      sql`case when ${jobs.status} = 'In Progress' then 0 else 1 end`,
-      desc(jobs.createdAt)
-    ))
-    .map((j) => ({
-      ...j,
-      pctComplete: j.unitCount > 0 ? Math.round((j.completedUnits / j.unitCount) * 100) : 0,
-    }));
+  const activeJobs = (
+    await db
+      .select({
+        id: jobs.id,
+        code: jobs.code,
+        jobType: jobs.jobType,
+        status: jobs.status,
+        assigneeName: users.name,
+        waveNumber: jobs.waveNumber,
+        unitCount: jobs.unitCount,
+        completedUnits: jobs.completedUnits,
+      })
+      .from(jobs)
+      .leftJoin(users, eq(jobs.assignedToUserId, users.id))
+      .where(inArray(jobs.status, [...ACTIVE_JOB_STATUSES]))
+      .orderBy(sql`case when ${jobs.status} = 'In Progress' then 0 else 1 end`, desc(jobs.createdAt))
+  ).map((j) => ({
+    ...j,
+    pctComplete: j.unitCount > 0 ? Math.round((j.completedUnits / j.unitCount) * 100) : 0,
+  }));
 
   return {
     asOf: today,

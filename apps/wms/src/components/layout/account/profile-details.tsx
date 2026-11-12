@@ -1,9 +1,9 @@
-import * as React from "react";
-import Link from "next/link";
-import { Avatar } from "@/components/ui/avatar";
-import { DateCell } from "@/components/grid/cells";
-import type { AccountProfile } from "@/server/account/account-data";
-import { roleLabel } from "../role-label";
+import * as React from 'react';
+import Link from 'next/link';
+import { Avatar } from '@/components/ui/avatar';
+import { DateCell } from '@/components/grid/cells';
+import type { AccountProfile } from '@/server/account/account-data';
+import { roleLabel } from '../role-label';
 
 function Row({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
   return (
@@ -26,20 +26,36 @@ export function ProfileDetails({ profile }: { readonly profile: AccountProfile }
         </div>
       </div>
       <dl className="mt-4">
-        <Row label="Role">{roleLabel(profile.role)}{profile.isApiUser ? " · API user" : ""}</Row>
-        <Row label="User type">{profile.userType ?? "—"}</Row>
-        <Row label="Warehouses">{profile.warehouses.length > 0 ? profile.warehouses.join(", ") : "None assigned"}</Row>
-        <Row label="Clients">{profile.allClients ? "All clients" : "Assigned clients only"}</Row>
-        <Row label="Last sign-in"><DateCell value={profile.lastLoginAt} /></Row>
+        <Row label="Role">
+          {roleLabel(profile.role)}
+          {profile.isApiUser ? ' · API user' : ''}
+        </Row>
+        <Row label="User type">{profile.userType ?? '—'}</Row>
+        <Row label="Warehouses">
+          {profile.warehouses.length > 0 ? profile.warehouses.join(', ') : 'None assigned'}
+        </Row>
+        <Row label="Clients">{profile.allClients ? 'All clients' : 'Assigned clients only'}</Row>
+        <Row label="Last sign-in">
+          <DateCell value={profile.lastLoginAt} />
+        </Row>
         <Row label="Password changed">
           <span className="inline-flex items-center gap-2">
             <DateCell value={profile.passwordChangedAt} />
-            <Link href="/account/password" className="text-xs font-medium text-primary underline-offset-2 hover:underline">Change</Link>
+            <Link
+              href="/account/password"
+              className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Change
+            </Link>
           </span>
         </Row>
-        <Row label="Member since"><DateCell value={profile.createdAt} dateOnly /></Row>
+        <Row label="Member since">
+          <DateCell value={profile.createdAt} dateOnly />
+        </Row>
       </dl>
-      <p className="mt-4 text-xs text-faint">Your name, role and warehouse access are managed by an administrator.</p>
+      <p className="mt-4 text-xs text-faint">
+        Your name, role and warehouse access are managed by an administrator.
+      </p>
     </>
   );
 }

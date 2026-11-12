@@ -1,7 +1,7 @@
 /** Global search contracts (BUILD_PLAN F6 `search/`, F7 `GET /api/search`). */
-import type { AppDb } from "@/server/api/db";
-import type { AuthContext } from "@/server/auth/context";
-import type { StatusDomain } from "@/lib/status-colors";
+import type { AppDb } from '@/server/api/db';
+import type { AuthContext } from '@/server/auth/context';
+import type { StatusDomain } from '@/lib/status-colors';
 
 export interface SearchContext {
   readonly db: AppDb;
@@ -43,7 +43,12 @@ export interface SearchProvider {
   search(ctx: SearchContext): readonly SearchHit[] | Promise<readonly SearchHit[]>;
 }
 
-export function createStubSearchProvider(key: string, label: string, owner: string, permission: string): SearchProvider {
+export function createStubSearchProvider(
+  key: string,
+  label: string,
+  owner: string,
+  permission: string,
+): SearchProvider {
   return { key, label, owner, configured: false, permission, search: () => [] };
 }
 

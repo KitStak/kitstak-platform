@@ -2,7 +2,7 @@
  * Wave-rule schedule math (pure; shared by the wizard, the grid countdown and the
  * scheduler). Times are "HH:mm" in the warehouse time zone; days are Mon..Sun.
  */
-import { WEEKDAYS } from "@/lib/enums";
+import { WEEKDAYS } from '@/lib/enums';
 
 export type Weekday = (typeof WEEKDAYS)[number];
 
@@ -22,7 +22,7 @@ export function toMinutes(time: string): number {
 export function fromMinutes(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 /** "Repeat every n minutes" bounds (validated inline in the wizard, never clamped silently). */
@@ -36,16 +36,32 @@ export const HIGH_FREQUENCY_RUNS = 48;
  * app's grid date shape: "11/10/2026 2:00 PM EST".
  */
 export function formatInZone(iso: string | Date, timeZone: string): string {
-  const at = typeof iso === "string" ? new Date(iso) : iso;
-  if (Number.isNaN(at.getTime())) return "—";
+  const at = typeof iso === 'string' ? new Date(iso) : iso;
+  if (Number.isNaN(at.getTime())) return '—';
   let parts: Intl.DateTimeFormatPart[];
   try {
-    parts = new Intl.DateTimeFormat("en-US", { timeZone, month: "2-digit", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).formatToParts(at);
+    parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    }).formatToParts(at);
   } catch {
-    parts = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "2-digit", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).formatToParts(at);
+    parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'UTC',
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    }).formatToParts(at);
   }
-  const get = (type: Intl.DateTimeFormatPartTypes): string => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("month")}/${get("day")}/${get("year")} ${get("hour")}:${get("minute")} ${get("dayPeriod")} ${get("timeZoneName")}`.trim();
+  const get = (type: Intl.DateTimeFormatPartTypes): string => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('month')}/${get('day')}/${get('year')} ${get('hour')}:${get('minute')} ${get('dayPeriod')} ${get('timeZoneName')}`.trim();
 }
 
 /** "Repeat every n minutes From/To" → the generated start times (inclusive). */
@@ -64,23 +80,53 @@ export function normalizeTimes(times: readonly string[]): string[] {
   return [...new Set(times.filter(isTime))].sort((a, b) => toMinutes(a) - toMinutes(b));
 }
 
-interface LocalParts { readonly year: number; readonly month: number; readonly day: number; readonly weekday: Weekday; readonly minutes: number }
+interface LocalParts {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly weekday: Weekday;
+  readonly minutes: number;
+}
 
-const WEEKDAY_SHORT: Readonly<Record<string, Weekday>> = { Mon: "Mon", Tue: "Tue", Wed: "Wed", Thu: "Thu", Fri: "Fri", Sat: "Sat", Sun: "Sun" };
+const WEEKDAY_SHORT: Readonly<Record<string, Weekday>> = {
+  Mon: 'Mon',
+  Tue: 'Tue',
+  Wed: 'Wed',
+  Thu: 'Thu',
+  Fri: 'Fri',
+  Sat: 'Sat',
+  Sun: 'Sun',
+};
 
 export function localParts(at: Date, timeZone: string): LocalParts {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", weekday: "short", hourCycle: "h23",
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    weekday: 'short',
+    hourCycle: 'h23',
   }).formatToParts(at);
-  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? "0";
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '0';
   return {
-    year: Number(get("year")), month: Number(get("month")), day: Number(get("day")),
-    weekday: WEEKDAY_SHORT[get("weekday")] ?? "Mon", minutes: Number(get("hour")) * 60 + Number(get("minute")),
+    year: Number(get('year')),
+    month: Number(get('month')),
+    day: Number(get('day')),
+    weekday: WEEKDAY_SHORT[get('weekday')] ?? 'Mon',
+    minutes: Number(get('hour')) * 60 + Number(get('minute')),
   };
 }
 
 /** UTC instant of a wall-clock time in `timeZone` (handles DST by re-probing the offset). */
-export function zonedToUtc(year: number, month: number, day: number, minutes: number, timeZone: string): Date {
+export function zonedToUtc(
+  year: number,
+  month: number,
+  day: number,
+  minutes: number,
+  timeZone: string,
+): Date {
   const guess = Date.UTC(year, month - 1, day, Math.floor(minutes / 60), minutes % 60);
   let utc = guess;
   for (let i = 0; i < 2; i += 1) {
@@ -92,7 +138,12 @@ export function zonedToUtc(year: number, month: number, day: number, minutes: nu
 }
 
 /** Next run strictly after `now`, or null when the rule is unscheduled. */
-export function nextRunAt(days: readonly string[], times: readonly string[], timeZone: string, now: Date): Date | null {
+export function nextRunAt(
+  days: readonly string[],
+  times: readonly string[],
+  timeZone: string,
+  now: Date,
+): Date | null {
   const ts = normalizeTimes(times);
   if (days.length === 0 || ts.length === 0) return null;
   for (let offset = 0; offset <= 7; offset += 1) {
@@ -113,7 +164,7 @@ export function formatWaveCountdown(ms: number): string {
   const h = Math.floor((total % 86_400) / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  const hms = [h, m, s].map((v) => String(v).padStart(2, "0")).join(":");
+  const hms = [h, m, s].map((v) => String(v).padStart(2, '0')).join(':');
   // Critic R3: readable "1d 10:46:40" instead of Logiwa's zero-padded "0001:10:46:40".
   return days > 0 ? `${days}d ${hms}` : hms;
 }
