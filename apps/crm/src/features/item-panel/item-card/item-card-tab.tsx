@@ -10,6 +10,7 @@ import { ArrowUpRight, ChevronRight, EyeOff, Info, Link2, Plus } from 'lucide-re
 import { Button, Skeleton, Tooltip, cn } from '@/components/ui';
 import { Cell, ColumnTypeIcon, type CellBoard, type CellCommitValue } from '@/features/cells';
 import { useCreateItem, useSubitems, useUpdateCell } from '@/lib/hooks';
+import { cardFields } from '../lib/card-fields';
 import type { ColumnDto, ItemDetailDto, ItemDto, UserSummaryDto } from '@/server/services/contracts/dto';
 
 export interface ItemCardTabProps {
@@ -184,7 +185,7 @@ function Connected({ detail, onOpenItem, columns }: { readonly detail: ItemDetai
 
 export function ItemCardTab({ item, detail, columns, board, users, term, canEdit, onOpenItem }: ItemCardTabProps) {
   const updateCell = useUpdateCell();
-  const fields = useMemo(() => columns.filter((column) => column.type !== 'name'), [columns]);
+  const fields = useMemo(() => cardFields(columns, item.parentItemId), [columns, item.parentItemId]);
   const onGridKey = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (!target.hasAttribute('data-ks-cell')) return;
