@@ -47,3 +47,4 @@ npm run dev        # start the dev server at http://localhost:3000
 | `npm run lint` | Run ESLint |
 | `npm run db:push` | Push the Drizzle schema to SQLite |
 | `npm run db:seed` | Seed the database with demo data |
+

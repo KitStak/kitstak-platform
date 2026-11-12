@@ -38,3 +38,6 @@ Thumbs.db
 deploy/secrets.env
 deploy/.link/
 deploy/.cloud-url
+
+.vercel
+.env*
