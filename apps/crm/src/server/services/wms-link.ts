@@ -4,14 +4,43 @@
  * Drizzle objects from `@kitstak/db`, queried over the app's own executor — both apps share
  * one Postgres, so no cross-service calls are involved.
  */
-import { and, asc, eq, ilike, isNull, or, type SQL } from 'drizzle-orm';
+import { and, asc, eq, ilike, inArray, isNull, or, type SQL } from 'drizzle-orm';
 import { customerLinks, customers as coreCustomers } from '@kitstak/db/schema';
+import { organization } from '@/server/db/schema';
 import { NotFoundError, ValidationError } from '@/server/http/errors';
 import { requireItem } from './access';
 import { inTransaction, type ServiceContext } from './context';
 import type { CoreCustomerDto, CoreCustomersQuery, SetCustomerLinkInput, WmsLinkDto } from './wms-link-contracts';
 
 const SEARCH_LIMIT = 50;
+
+/**
+ * The org that owns the WMS deployment's client registry. The WMS has no org column of its
+ * own: `syncClientToCore` mirrors every wms.clients row into core.customers under the
+ * platform organization (apps/wms `PLATFORM_ORG_SLUG` — keep in sync).
+ */
+const WMS_PLATFORM_ORG_SLUG = 'kitstak';
+
+/**
+ * Orgs whose core.customers rows the caller may see and link. Always the caller's own org;
+ * when that org carries no registry rows of its own (the bundled deployment, where the one
+ * WMS mirrors its clients under the platform org), the shared platform registry as well.
+ * Orgs with their own rows (true multi-tenant setups) stay strictly org-scoped.
+ */
+async function registryOrgIds(ctx: ServiceContext): Promise<string[]> {
+  const own = await ctx.db
+    .select({ id: coreCustomers.id })
+    .from(coreCustomers)
+    .where(and(eq(coreCustomers.orgId, ctx.orgId), isNull(coreCustomers.deletedAt)))
+    .limit(1);
+  if (own.length > 0) return [ctx.orgId];
+  const [platform] = await ctx.db
+    .select({ id: organization.id })
+    .from(organization)
+    .where(eq(organization.slug, WMS_PLATFORM_ORG_SLUG))
+    .limit(1);
+  return platform && platform.id !== ctx.orgId ? [ctx.orgId, platform.id] : [ctx.orgId];
+}
 
 const customerColumns = {
   id: coreCustomers.id,
@@ -24,12 +53,13 @@ function escapeLike(term: string): string {
   return term.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
-/** Core customers in the caller's org, filtered by name/code, ordered by name. */
+/** Core customers visible to the caller's org, filtered by name/code, ordered by name. */
 export async function searchCoreCustomers(
   ctx: ServiceContext,
   query: CoreCustomersQuery,
 ): Promise<CoreCustomerDto[]> {
-  const conditions: SQL[] = [eq(coreCustomers.orgId, ctx.orgId), isNull(coreCustomers.deletedAt)];
+  const orgIds = await registryOrgIds(ctx);
+  const conditions: SQL[] = [inArray(coreCustomers.orgId, orgIds), isNull(coreCustomers.deletedAt)];
   const term = query.search?.trim();
   if (term) {
     const pattern = `%${escapeLike(term)}%`;
@@ -90,7 +120,7 @@ export async function setCustomerLink(
     .where(
       and(
         eq(coreCustomers.id, input.coreCustomerId),
-        eq(coreCustomers.orgId, ctx.orgId),
+        inArray(coreCustomers.orgId, await registryOrgIds(ctx)),
         isNull(coreCustomers.deletedAt),
       ),
     )

@@ -16,6 +16,7 @@ export { LabelPicker, type LabelPickerProps } from './label-picker';
 export { EditLabelsDialog, LabelEditor, type EditLabelsDialogProps, type LabelEditorProps } from './label-editor';
 export { LabelChip } from './renderers/labels';
 export { CellServicesProvider, useBoardCellServices, useCellServices, useLabelUsage } from './services';
+export { useMediaQuery } from './parts/use-media';
 export { RENDERERS as CELL_RENDERERS } from './renderers';
 export { isCellEmpty, rawCellValue, computeProgress } from './lib/values';
 export { labelsFromSettings, countLabelUsage } from './lib/labels';

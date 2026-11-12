@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { ApiClientError } from '@/lib/api';
 import type { ViewDto } from '@/server/services/contracts/dto';
 import { useBoardData } from './hooks/use-board-data';
+import { BoardCardList, useMobileTable } from './components/board-card-list';
 import { TableError, TableSkeleton } from './components/table-states';
 import type { OpenItemOptions } from './table-context';
 import { TableView } from './table-view';
@@ -36,6 +37,7 @@ export function BoardTable({
   realtime = true,
 }: BoardTableProps) {
   const { payload, items, loadingMore } = useBoardData(boardId, { currentUserId, realtime });
+  const mobile = useMobileTable();
   const open = useCallback(
     (itemId: string, options?: OpenItemOptions) => onOpenItem(itemId, options),
     [onOpenItem],
@@ -57,6 +59,21 @@ export function BoardTable({
     return (
       <div className="bt-root">
         <TableError message={message} onRetry={() => void payload.refetch()} />
+      </div>
+    );
+  }
+  // Below 768px the grid is unusable (the name column gets a few characters): render rows
+  // as cards instead and edit through the item panel.
+  if (mobile) {
+    return (
+      <div className="bt-root">
+        <BoardCardList
+          boardId={boardId}
+          payload={payload.data}
+          items={items}
+          view={view}
+          onOpenItem={open}
+        />
       </div>
     );
   }

@@ -282,7 +282,23 @@ describe('column layout', () => {
     expect(layout.columns.map((entry) => entry.column.key)).toEqual(['amount', 'stage']);
     expect(layout.columns[1]?.width).toBe(32);
     expect(layout.columns[0]?.width).toBe(200);
-    expect(layout.nameWidth).toBe(300);
+    // Stored name defaults below the registry default (360) are floored so names stay readable.
+    expect(layout.nameWidth).toBe(360);
+  });
+
+  it('keeps an explicit view width for the name column (above the 280px floor)', () => {
+    const layout = computeLayout(COLUMNS, {
+      columnWidths: { name: 290 },
+      hiddenColumnKeys: [],
+      collapsedColumnKeys: [],
+    });
+    expect(layout.nameWidth).toBe(290);
+    const clamped = computeLayout(COLUMNS, {
+      columnWidths: { name: 120 },
+      hiddenColumnKeys: [],
+      collapsedColumnKeys: [],
+    });
+    expect(clamped.nameWidth).toBe(280);
   });
 
   it('auto-fits to content', () => {

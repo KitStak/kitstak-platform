@@ -40,6 +40,27 @@ export async function listUserOrgs(userId: string): Promise<OrgSummary[]> {
     .map((row) => ({ ...row, role: row.role.split(',')[0]?.trim() || 'member' }));
 }
 
+export interface OrgGlance {
+  /** Active (non-deactivated) memberships. */
+  readonly memberCount: number;
+  readonly createdAt: Date;
+}
+
+/** Headline numbers for the launcher's org-at-a-glance strip; null when the org vanished. */
+export async function getOrgGlance(orgId: string): Promise<OrgGlance | null> {
+  const [orgRow] = await db
+    .select({ createdAt: organization.createdAt })
+    .from(organization)
+    .where(eq(organization.id, orgId));
+  if (!orgRow) return null;
+  const memberRows = await db
+    .select({ role: member.role })
+    .from(member)
+    .where(eq(member.organizationId, orgId));
+  const memberCount = memberRows.filter((row) => !row.role.startsWith(DEACTIVATED_PREFIX)).length;
+  return { memberCount, createdAt: orgRow.createdAt };
+}
+
 /**
  * The org the launcher should show: the session's active organization when the user is
  * still a member of it, otherwise the first org, otherwise null (no-org empty state).

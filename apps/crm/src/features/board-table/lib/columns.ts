@@ -10,7 +10,10 @@ import { LAYOUT } from './rows';
 import { clampWidth, type TableViewState } from './view-state';
 
 export const COLLAPSED_COLUMN_WIDTH = 32;
-export const NAME_MIN_WIDTH = 200;
+/** The name column is the row's identity: never let it shrink below a readable width. */
+export const NAME_MIN_WIDTH = 280;
+/** Default name width when the view has not chosen one (the registry default). */
+const NAME_DEFAULT_WIDTH = Math.max(COLUMN_TYPE_REGISTRY.name?.defaultWidth ?? 360, NAME_MIN_WIDTH);
 const CELL_PADDING = 24;
 /** Header padding + reveal-on-hover menu button around the title text. */
 const HEADER_CHROME = 48;
@@ -48,7 +51,13 @@ export function columnWidth(
   if (explicit !== undefined) return clampWidth(explicit, minWidthFor(column.type));
   // No width chosen in this view yet: never truncate the header title by default.
   const base = column.width ?? COLUMN_TYPE_REGISTRY[column.type]?.defaultWidth ?? 160;
-  const fitsTitle = column.type === 'name' ? base : Math.max(base, headerTitleWidth(column.title));
+  // Older templates stored narrower name defaults (260–300px) that truncate real names
+  // around 18 characters while other columns have slack: floor the name column at the
+  // registry default until the view picks an explicit width.
+  const fitsTitle =
+    column.type === 'name'
+      ? Math.max(base, NAME_DEFAULT_WIDTH)
+      : Math.max(base, headerTitleWidth(column.title));
   return clampWidth(fitsTitle, minWidthFor(column.type));
 }
 

@@ -46,6 +46,7 @@ import {
 } from './data-grid-columns';
 import { ExportButton, type ExportColumnSpec } from './export-button';
 import { GridFooter } from './grid-footer';
+import { MobileCardList } from './mobile-card-list';
 import { clampWidth, moveColumn, visibilityMap, type PrefColumn } from './grid-prefs';
 import { nextSort } from './grid-sort';
 import { exportCsv } from './legacy-csv';
@@ -115,6 +116,13 @@ export interface DataGridProps<T> {
   /** Excel export key/query when they differ from the prefs `gridKey` / `queryString` (e.g. a detail page lines grid). */
   readonly exportGridKey?: string;
   readonly exportQuery?: string;
+  /** Row navigating away (useRowNav): it shows a pending overlay until the route lands. */
+  readonly pendingRowId?: string | null;
+  /**
+   * Phone fallback: below `md` the table (which only fits ~2 columns) hides and each row
+   * renders as a tappable card with this body instead (MobileCardList).
+   */
+  readonly renderMobileCard?: (row: T) => React.ReactNode;
 }
 
 /** Scroll a row into view and flash it once when `rowId` appears in the rendered page. */
@@ -392,7 +400,13 @@ export function DataGrid<T>(props: DataGridProps<T>) {
           <div className="relative flex min-h-0 flex-1 flex-col">
             {props.hideToolbar ? (
               // External toolbar (useGrid + GridToolbar): pin the chooser to the header row's right end (Logiwa parity).
-              <div className="absolute right-1 top-1 z-30 rounded-md bg-surface shadow-[-8px_0_8px_-4px_var(--surface)]">
+              <div
+                className={cn(
+                  'absolute right-1 top-1 z-30 rounded-md bg-surface shadow-[-8px_0_8px_-4px_var(--surface)]',
+                  // Card view has no columns to choose.
+                  props.renderMobileCard && 'max-md:hidden',
+                )}
+              >
                 <ColumnChooser
                   columns={chooserColumns}
                   prefs={prefs.prefs}
@@ -410,11 +424,36 @@ export function DataGrid<T>(props: DataGridProps<T>) {
                 className="ks-grid-progress pointer-events-none absolute inset-x-0 top-0 z-40 h-0.5 overflow-hidden bg-info/15"
               />
             ) : null}
+            {props.renderMobileCard ? (
+              <div
+                aria-busy={refreshing || undefined}
+                className="ks-scroll max-h-[calc(100dvh-8rem)] min-h-0 flex-1 overflow-auto md:hidden"
+              >
+                <MobileCardList
+                  data={data}
+                  getRowId={props.getRowId}
+                  renderCard={props.renderMobileCard}
+                  onRowClick={onRowClick}
+                  pendingRowId={props.pendingRowId}
+                  loading={loading}
+                  error={error}
+                  onRetry={onRetry}
+                  emptyTitle={props.emptyTitle ?? 'Nothing here yet'}
+                  emptyDescription={
+                    props.emptyDescription ?? 'Adjust your filters or create a new record to get started.'
+                  }
+                  className={cn('transition-opacity', refreshing && 'opacity-60')}
+                />
+              </div>
+            ) : null}
             <div
               ref={scrollRef}
               aria-busy={refreshing || undefined}
               data-refreshing={refreshing || undefined}
-              className="ks-scroll max-h-[calc(100dvh-8rem)] min-h-0 flex-1 overflow-auto"
+              className={cn(
+                'ks-scroll max-h-[calc(100dvh-8rem)] min-h-0 flex-1 overflow-auto',
+                props.renderMobileCard && 'max-md:hidden',
+              )}
             >
               <table
                 aria-rowcount={total + 1}
@@ -449,6 +488,7 @@ export function DataGrid<T>(props: DataGridProps<T>) {
                   scrollRef={scrollRef}
                   rowOffset={(Math.max(1, page) - 1) * pageSize}
                   highlightRowId={props.highlightRowId ?? null}
+                  pendingRowId={props.pendingRowId ?? null}
                 />
               </table>
             </div>

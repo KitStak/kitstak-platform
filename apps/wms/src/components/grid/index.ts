@@ -19,6 +19,8 @@ export { RowMenu } from './row-menu';
 export { ExportButton, EXPORT_STARTED_MESSAGE } from './export-button';
 export * from './cells';
 export { useGrid, useLocalGrid, type UseGridOptions, type UseGridResult } from './use-grid';
+export { useRowNav, type RowNav } from './use-row-nav';
+export { MobileCardList, type MobileCardListProps } from './mobile-card-list';
 export { useSavedViews, type SavedView } from './use-saved-views';
 export { useGridPrefs } from './use-grid-prefs';
 export * from './grid-types';

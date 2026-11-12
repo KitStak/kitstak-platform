@@ -15,6 +15,14 @@ import {
 } from '@/components/ui';
 import { organization } from '@/lib/auth-client';
 
+/** 'Northwind Robotics' -> 'NR'; single-word names fall back to their first two letters. */
+function orgInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const first = words[0]?.[0] ?? '';
+  const second = words[1]?.[0] ?? '';
+  return second ? `${first}${second}` : name.trim().slice(0, 2);
+}
+
 export interface OrgOption {
   readonly id: string;
   readonly name: string;
@@ -49,13 +57,22 @@ export function OrgSwitcher({
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          'inline-flex h-8 min-w-0 max-w-[150px] items-center gap-2 rounded-md border border-border-input bg-panel px-2.5 text-sm font-medium text-fg sm:max-w-[260px]',
+          'inline-flex h-8 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border-input bg-panel px-2 text-sm font-medium text-fg sm:max-w-[260px] sm:gap-2 sm:px-2.5',
           'hover:border-border-input-hover hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
           'data-[state=open]:bg-selected',
         )}
       >
-        <Building2 aria-hidden className="size-4 shrink-0 text-icon" />
-        <span className="truncate">{active.name}</span>
+        <Building2 aria-hidden className="hidden size-4 shrink-0 text-icon sm:block" />
+        {/* At phone widths the full name truncates to nothing useful; show an initials chip
+            instead and let the dropdown carry the full name. */}
+        <span
+          aria-hidden
+          className="flex size-5 shrink-0 items-center justify-center rounded-sm bg-sunken text-2xs font-bold text-fg-secondary uppercase sm:hidden"
+        >
+          {orgInitials(active.name)}
+        </span>
+        <span className="sr-only sm:hidden">{active.name}</span>
+        <span className="hidden truncate sm:block">{active.name}</span>
         <ChevronsUpDown aria-hidden className="size-3.5 shrink-0 text-icon" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
@@ -63,7 +80,7 @@ export function OrgSwitcher({
         {orgs.map((org) => (
           <DropdownMenuItem key={org.id} onSelect={() => void switchTo(org.id)}>
             <span className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-sunken text-2xs font-bold text-fg-secondary uppercase">
-              {org.name.slice(0, 2)}
+              {orgInitials(org.name)}
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{org.name}</span>

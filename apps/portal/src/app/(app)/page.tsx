@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
-import { CreditCard, Package, Plus, Settings2, type LucideIcon } from 'lucide-react';
+import { CalendarDays, CreditCard, LayoutGrid, Package, Plus, Settings2, Users, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { Module } from '@kitstak/entitlements';
 import { env } from '@/server/env';
 import { requirePageSession } from '@/server/session';
-import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
+import { getOrgGlance, listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getOrgModuleStates } from '@/server/entitlements';
 import { getLauncherStats } from '@/server/product-stats';
 import { CreateOrgForm } from '@/features/launcher/create-org-form';
@@ -46,6 +46,29 @@ interface QuickLink {
   readonly href: string;
   readonly icon: LucideIcon;
   readonly external: boolean;
+}
+
+const glanceDateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' });
+
+interface GlanceItem {
+  readonly label: string;
+  readonly value: string;
+  readonly icon: LucideIcon;
+}
+
+function GlanceCell({ item }: { readonly item: GlanceItem }) {
+  const Icon = item.icon;
+  return (
+    <div className="flex items-center gap-3 px-5 py-4">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sunken">
+        <Icon aria-hidden className="size-4 text-icon" />
+      </span>
+      <div className="flex min-w-0 flex-col">
+        <span className="truncate text-md font-semibold text-fg tabular-nums">{item.value}</span>
+        <span className="text-xs text-fg-muted">{item.label}</span>
+      </div>
+    </div>
+  );
 }
 
 function QuickLinkChip({ link }: { readonly link: QuickLink }) {
@@ -94,9 +117,10 @@ export default async function LauncherPage() {
     );
   }
 
-  const [{ devAllowAll, modules }, stats] = await Promise.all([
+  const [{ devAllowAll, modules }, stats, glance] = await Promise.all([
     getOrgModuleStates(activeOrg.id),
     getLauncherStats(activeOrg.id),
+    getOrgGlance(activeOrg.id),
   ]);
   const entitledFor = (module: Module): boolean =>
     modules.find((state) => state.module === module)?.entitled ?? false;
@@ -159,6 +183,37 @@ export default async function LauncherPage() {
           ))}
         </div>
       </section>
+
+      {glance ? (
+        <section aria-label="Organization at a glance">
+          <h2 className="text-2xs font-semibold tracking-[0.08em] text-fg-muted uppercase">
+            {activeOrg.name} at a glance
+          </h2>
+          <div className="mt-3 grid grid-cols-1 divide-y divide-border-subtle rounded-xl border border-border-default bg-panel shadow-xs sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <GlanceCell
+              item={{
+                label: glance.memberCount === 1 ? 'Member' : 'Members',
+                value: String(glance.memberCount),
+                icon: Users,
+              }}
+            />
+            <GlanceCell
+              item={{
+                label: 'Modules active',
+                value: `${modules.filter((state) => state.entitled).length} of ${modules.length}`,
+                icon: LayoutGrid,
+              }}
+            />
+            <GlanceCell
+              item={{
+                label: 'Org created',
+                value: glanceDateFormat.format(glance.createdAt),
+                icon: CalendarDays,
+              }}
+            />
+          </div>
+        </section>
+      ) : null}
 
       {devAllowAll ? (
         <p className="flex items-center gap-2 text-xs text-fg-muted">

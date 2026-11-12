@@ -7,7 +7,7 @@
  */
 import * as React from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import {
   ChevronDown,
   Edit3,
@@ -34,7 +34,16 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { InfoTip } from '@/components/ui/info-tip';
 import { toast } from '@/components/ui/toast';
 import { DisabledReason } from '@/components/ui/tooltip';
-import { DataGrid, GridToolbar, useGrid, type FilterFieldDef, type RowAction } from '@/components/grid';
+import {
+  DataGrid,
+  DateCell,
+  GridToolbar,
+  useGrid,
+  useRowNav,
+  type FilterFieldDef,
+  type RowAction,
+} from '@/components/grid';
+import { OrderStatusPill } from './order-status-pill';
 import { ChangeLogDrawer } from '@/components/shared';
 import { PageHeader } from '@/components/layout/page-header';
 import { orderCrumbs } from './order-crumbs';
@@ -294,8 +303,24 @@ function useShippedDefault(view: OrderView, g: ReturnType<typeof useGrid<OrderRo
   }, [view, g.views.isLoading, g.views.views, g.grid, params]);
 }
 
+/** Phone card (below `md`): order #, client, status chip and order date. */
+function OrderMobileCard({ row }: { readonly row: OrderRow }) {
+  return (
+    <span className="flex min-w-0 flex-col gap-1">
+      <span className="flex items-center justify-between gap-2">
+        <span className="truncate text-sm font-semibold text-foreground">{row.code}</span>
+        <OrderStatusPill status={row.status} size="sm" />
+      </span>
+      <span className="truncate text-xs text-body">{String(row.clientName ?? '—')}</span>
+      <span className="text-xs text-faint">
+        <DateCell value={row.orderDate as string | null | undefined} />
+      </span>
+    </span>
+  );
+}
+
 export function OrdersListPage({ view }: { readonly view: OrderView }) {
-  const router = useRouter();
+  const rowNav = useRowNav();
   const copy = COPY[view];
   const { permissions, isLoading: permissionsLoading } = usePermissionSet();
   const options = useOrderOptions();
@@ -414,7 +439,9 @@ export function OrdersListPage({ view }: { readonly view: OrderView }) {
           columns={columns}
           getRowId={(row) => row.id}
           rowActions={rowActions}
-          onRowClick={(row) => router.push(`/orders/${encodeURIComponent(row.code)}`)}
+          onRowClick={(row) => rowNav.navigate(row.id, `/orders/${encodeURIComponent(row.code)}`)}
+          pendingRowId={rowNav.pendingRowId}
+          renderMobileCard={(row) => <OrderMobileCard row={row} />}
           emptyTitle={
             hasState
               ? 'Could not find any shipment order'

@@ -35,6 +35,8 @@ export interface DataGridBodyProps<T> {
   /** Absolute index of the first row on this page (for aria-rowindex). */
   readonly rowOffset?: number;
   readonly highlightRowId?: string | null;
+  /** Row navigating away (useRowNav): it shows a pending overlay until the route lands. */
+  readonly pendingRowId?: string | null;
 }
 
 function FullRow({ colSpan, children }: { readonly colSpan: number; readonly children: React.ReactNode }) {
@@ -59,6 +61,7 @@ interface BodyRowProps<T> {
   readonly measureRef?: (el: HTMLTableRowElement | null) => void;
   readonly index?: number;
   readonly rowOffset?: number;
+  readonly pendingRowId?: string | null;
 }
 
 function BodyRow<T>({
@@ -71,8 +74,10 @@ function BodyRow<T>({
   measureRef,
   index,
   rowOffset = 0,
+  pendingRowId,
 }: BodyRowProps<T>) {
   const selected = row.getIsSelected();
+  const pending = pendingRowId != null && pendingRowId === row.id;
   const cells = row.getVisibleCells();
   return (
     <>
@@ -81,9 +86,11 @@ function BodyRow<T>({
         role="row"
         data-index={index ?? row.index}
         data-row-id={row.id}
+        data-pending-nav={pending || undefined}
         aria-rowindex={rowOffset + row.index + 2}
         aria-selected={selected || undefined}
-        onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+        aria-busy={pending || undefined}
+        onClick={onRowClick && !pending ? () => onRowClick(row.original) : undefined}
         style={{ height }}
         className={cn(
           'group border-t border-border transition-colors',
@@ -108,7 +115,11 @@ function BodyRow<T>({
                 meta?.justify === 'center' && 'text-center [&>*]:mx-auto',
                 placement.className,
                 placement.sticky &&
-                  (selected ? 'bg-primary-soft' : 'bg-surface group-hover:bg-surface-sunken'),
+                  (pending
+                    ? 'bg-selected'
+                    : selected
+                      ? 'bg-primary-soft'
+                      : 'bg-surface group-hover:bg-surface-sunken'),
               )}
             >
               {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -218,6 +229,7 @@ export function DataGridBody<T>({
   stickyRightOffset,
   scrollRef,
   rowOffset = 0,
+  pendingRowId = null,
 }: DataGridBodyProps<T>) {
   const columns = table.getVisibleLeafColumns();
   const height = ROW_HEIGHT[density];
@@ -271,7 +283,7 @@ export function DataGridBody<T>({
       </tbody>
     );
   }
-  const rowProps = { table, height, onRowClick, renderExpanded, stickyRightOffset, rowOffset };
+  const rowProps = { table, height, onRowClick, renderExpanded, stickyRightOffset, rowOffset, pendingRowId };
   return (
     <tbody>
       {rows.length > VIRTUALIZE_ABOVE ? (

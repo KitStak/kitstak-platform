@@ -30,6 +30,12 @@ const ACCESS_BADGE: Readonly<
 
 const dateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+/** Shown in place of the stat grid when every stat is zero — '0 / 0' reads like a bug. */
+const EMPTY_STATS_COPY: Readonly<Record<Module, string>> = {
+  crm: 'No deals yet',
+  wms: 'No open orders',
+};
+
 /** One launcher tile: product identity, entitlement state, and the Open / unlock action. */
 export function ProductTile({
   module,
@@ -62,14 +68,20 @@ export function ProductTile({
         <p className="mt-2 text-sm text-fg-muted">{description}</p>
       </div>
       {entitled && stats && stats.length > 0 ? (
-        <dl className="mt-5 grid grid-cols-2 gap-2">
-          {stats.map((stat) => (
-            <div key={stat.label} className="flex flex-col rounded-lg bg-sunken px-3 py-2">
-              <dd className="order-1 text-lg font-semibold text-fg tabular-nums">{stat.value}</dd>
-              <dt className="order-2 text-xs text-fg-muted">{stat.label}</dt>
-            </div>
-          ))}
-        </dl>
+        stats.every((stat) => stat.value === 0) ? (
+          <p className="mt-5 rounded-lg bg-sunken px-3 py-2.5 text-sm text-fg-muted">
+            {EMPTY_STATS_COPY[module]}
+          </p>
+        ) : (
+          <dl className="mt-5 grid grid-cols-2 gap-2">
+            {stats.map((stat) => (
+              <div key={stat.label} className="flex flex-col rounded-lg bg-sunken px-3 py-2">
+                <dd className="order-1 text-lg font-semibold text-fg tabular-nums">{stat.value}</dd>
+                <dt className="order-2 text-xs text-fg-muted">{stat.label}</dt>
+              </div>
+            ))}
+          </dl>
+        )
       ) : null}
       <div className="mt-5 flex items-center justify-between border-t border-border-subtle pt-4">
         {access === 'grace' && periodEnd ? (
