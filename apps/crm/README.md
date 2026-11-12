@@ -43,3 +43,4 @@ npm run dev                     # http://localhost:3100
 - `src/proxy.ts` — CSP nonce, origin check for API mutations, login redirect.
 - `GET /api/v1/health` — liveness + DB connectivity.
 
+
