@@ -1,6 +1,12 @@
-import { BRAND_NAME } from '@/config/brand';
+import { Logo, LogoMark } from '@kitstak/ui/logo';
 
-/** Brand palette (from the KitStak identity kit). Kept here so the mark renders identically everywhere. */
+/*
+ * Compatibility shim: the KitStak marks are rendered by the shared @kitstak/ui/logo lockup
+ * (bars + wordtype artwork) so WMS shows the exact same logo as CRM and the portal. The old
+ * BrandMark/BrandLogo prop shapes are kept so existing call sites (and printouts) keep working.
+ */
+
+/** Brand palette (from the KitStak identity kit). Kept for printouts/labels that need literals. */
 export const BRAND_COLORS = {
   crimson: '#C8102E',
   maroon: '#8F122C',
@@ -18,59 +24,30 @@ interface BrandMarkProps {
   readonly className?: string;
 }
 
-/** The two-bar KitStak mark. Top bar is always crimson; the lower bar is maroon on dark, rose on light. */
-export function BrandMark({ tone = 'dark', size = 20, className }: BrandMarkProps) {
-  const lower = tone === 'dark' ? BRAND_COLORS.maroon : BRAND_COLORS.rose;
-  return (
-    <svg width={size} height={(size * 13) / 20} viewBox="0 0 20 13" aria-hidden className={className}>
-      <rect x="0" y="0" width="20" height="5" fill={BRAND_COLORS.crimson} />
-      <rect x="0" y="8" width="20" height="5" fill={lower} />
-    </svg>
-  );
+/** The two-bar KitStak mark (shared geometry: red over oxblood, 10:5 viewBox). */
+export function BrandMark({ size = 20, className }: BrandMarkProps) {
+  // The legacy mark rendered size × (size × 13/20); the shared mark renders size × (size / 2).
+  // Scale by 1.3 so the stacked bars keep the same rendered height (optical weight).
+  return <LogoMark size={Math.round(size * 1.3)} className={className} />;
 }
 
 interface BrandLogoProps {
   readonly tone?: BrandTone;
-  /** Cap height of the wordmark in px; the mark scales with it. */
+  /** Cap height of the wordmark in px; the lockup scales with it. */
   readonly height?: number;
   readonly showProduct?: boolean;
   readonly className?: string;
   readonly wordmarkClassName?: string;
 }
 
-/** Mark + condensed uppercase wordmark, matching the KitStak logo lockup. */
-export function BrandLogo({
-  tone = 'dark',
-  height = 20,
-  showProduct = false,
-  className,
-  wordmarkClassName,
-}: BrandLogoProps) {
-  // "light" tone sits on theme surfaces, so it follows the shared --logo-ink token (navy in light mode, cream in dark).
-  const textColor = tone === 'dark' ? BRAND_COLORS.cream : 'var(--logo-ink)';
+/** The KitStak lockup (bars + wordtype artwork), with the WMS product tag when requested. */
+export function BrandLogo({ tone = 'dark', height = 20, showProduct = false, className }: BrandLogoProps) {
   return (
-    <span className={`inline-flex items-center ${className ?? ''}`} style={{ gap: Math.round(height * 0.5) }}>
-      <BrandMark tone={tone} size={Math.round(height * 1.0)} />
-      <span
-        className={`font-display uppercase leading-none ${wordmarkClassName ?? ''}`}
-        style={{ color: textColor, fontSize: Math.round(height * 1.3), letterSpacing: '0.06em' }}
-      >
-        {BRAND_NAME}
-      </span>
-      {showProduct ? (
-        // Product tag: a hairline divider and letter-spaced label, the same lockup as KitStak CRM.
-        <span
-          className="border-l pl-2 font-semibold uppercase leading-none tracking-[0.18em]"
-          style={{
-            fontSize: Math.max(9, Math.round(height * 0.6)),
-            lineHeight: `${Math.round(height * 1.1)}px`,
-            color: tone === 'dark' ? 'rgba(243,240,231,0.72)' : 'var(--logo-product)',
-            borderColor: tone === 'dark' ? 'rgba(243,240,231,0.24)' : 'var(--logo-divider)',
-          }}
-        >
-          WMS
-        </span>
-      ) : null}
-    </span>
+    <Logo
+      size={Math.round(height / 0.8)}
+      product={showProduct ? 'WMS' : undefined}
+      tone={tone === 'dark' ? 'inverse' : 'auto'}
+      className={className}
+    />
   );
 }

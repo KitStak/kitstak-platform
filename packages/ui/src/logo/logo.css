@@ -1,0 +1,20 @@
+/* ---------------------------------------------------------------------------------------------
+ * KitStak lockup (./logo.tsx). The wordtype is the supplied artwork used as an alpha mask,
+ * painted with --logo-ink (navy on light, cream on dark). `.ks-logo-inverse` pins the cream ink
+ * for navy brand panels in either theme. Each app serves /brand/kitstak-wordtype.png from its
+ * own public directory.
+ * ------------------------------------------------------------------------------------------- */
+.ks-wordtype {
+  background-color: var(--logo-ink);
+  -webkit-mask: url('/brand/kitstak-wordtype.png') center / 100% 100% no-repeat;
+  mask: url('/brand/kitstak-wordtype.png') center / 100% 100% no-repeat;
+}
+.ks-logo-product {
+  color: var(--logo-product);
+  border-color: var(--logo-divider);
+}
+.ks-logo-inverse {
+  --logo-ink: var(--brand-cream);
+  --logo-divider: rgb(244 241 233 / 0.24);
+  --logo-product: rgb(244 241 233 / 0.72);
+}

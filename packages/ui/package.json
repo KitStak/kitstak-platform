@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./app-switcher": "./src/app-switcher/index.ts",
+    "./logo": "./src/logo/index.ts",
     "./styles/tokens.css": "./src/styles/tokens.css",
     "./theme": "./src/theme/index.ts"
   },
