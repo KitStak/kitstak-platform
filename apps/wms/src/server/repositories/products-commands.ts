@@ -2,6 +2,11 @@
  * Product writes (M09): create / update from the wizard payload, status changes and the
  * guarded delete. Every write goes through `change_log` (field-level, human labels) and is
  * checked against the caller's client scope (cross-scope → 404).
+ *
+ * Shared core registry (BLUEPRINT.md §2.4): every write here also syncs the product's
+ * identity fields (sku/name/barcode/uom/is_kit/status/category) to core.items in the same
+ * transaction via repositories/core-sync.ts; wms.products.core_item_id points at the core
+ * row. Reads stay on wms.products — core carries identity only.
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { AppDb } from '@/server/api/db';
@@ -22,6 +27,7 @@ import {
   type ProductValue,
 } from '@/lib/grid-defs/products/product-form';
 import { fillDerivedPackWeights } from '@/lib/grid-defs/products/pack-derivation';
+import { removeProductFromCore, syncProductToCore } from './core-sync';
 import { getProductForm } from './products-detail';
 import { productSnapshot } from './products-snapshot';
 import { dbGet, mapSeq } from '@/server/db/sql';
@@ -541,8 +547,9 @@ export async function createProductFromWizard(
   )[0];
   await syncPackTypes(tx, ctx, row.id, v);
   await syncChildren(tx, row.id, v);
+  const coreItemId = await syncProductToCore(tx, row.id);
   await recordCreate(tx, ctx, { entityType: ENTITY, entityId: row.id, entityCode: row.sku });
-  return row;
+  return { ...row, coreItemId };
 }
 
 export async function loadProduct(tx: AppDb, ctx: ScopedCtx, id: string): Promise<ProductRow> {
@@ -574,6 +581,7 @@ export async function updateProductFromWizard(
     .where(eq(p.id, id));
   await syncPackTypes(tx, ctx, id, v);
   await syncChildren(tx, id, v);
+  await syncProductToCore(tx, id);
   const after = await productSnapshot(tx, id);
   await recordUpdate(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: v.sku, before, after });
   return (await tx.select().from(p).where(eq(p.id, id)).limit(1))[0] as ProductRow;
@@ -594,6 +602,7 @@ export async function setProductStatus(
     .update(p)
     .set({ status, updatedBy: ctx.userId, version: existing.version + 1 })
     .where(eq(p.id, id));
+  await syncProductToCore(tx, id);
   await recordUpdate(tx, ctx, {
     entityType: ENTITY,
     entityId: id,
@@ -682,5 +691,6 @@ export async function deleteProduct(tx: AppDb, ctx: ScopedCtx, id: string): Prom
     .set({ productId: null, linkedAt: null })
     .where(eq(schema.productListings.productId, id));
   await tx.delete(p).where(eq(p.id, id));
+  await removeProductFromCore(tx, existing.coreItemId);
   await recordDelete(tx, ctx, { entityType: ENTITY, entityId: id, entityCode: existing.sku });
 }

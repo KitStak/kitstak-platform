@@ -1,0 +1,35 @@
+{
+  "name": "@kitstak/entitlements",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Per-module entitlements for KitStak orgs (BLUEPRINT.md §3): cached reads of core.entitlements, grace-window gating, manual grants, and the dev allow-all switch. Stripe sync is deferred by owner decision — no Stripe code lives here. TypeScript source-shipped (consumers transpile via Next transpilePackages).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./modules": "./src/modules.ts",
+    "./read": "./src/read.ts",
+    "./grant": "./src/grant.ts",
+    "./dev": "./src/dev.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "grant": "tsx scripts/grant.ts"
+  },
+  "dependencies": {
+    "@kitstak/db": "workspace:*"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "^0.45.4"
+  },
+  "devDependencies": {
+    "@kitstak/config": "workspace:*",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^5.1.0"
+  }
+}

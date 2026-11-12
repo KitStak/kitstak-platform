@@ -10,7 +10,7 @@ CREATE SCHEMA IF NOT EXISTS "crm";
 CREATE SCHEMA IF NOT EXISTS "wms";
 --> statement-breakpoint
 -- Shared company/depositor registry (canonicalizes wms.clients; CRM accounts link to it)
-CREATE TABLE "core"."customers" (
+CREATE TABLE IF NOT EXISTS "core"."customers" (
   "id"            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "org_id"        uuid NOT NULL,
   "code"          text NOT NULL,
@@ -34,10 +34,10 @@ CREATE TABLE "core"."customers" (
   CONSTRAINT "customers_org_id_code_unique" UNIQUE ("org_id", "code")
 );
 --> statement-breakpoint
-CREATE INDEX "customers_org_idx" ON "core"."customers" ("org_id") WHERE "deleted_at" IS NULL;
+CREATE INDEX IF NOT EXISTS "customers_org_idx" ON "core"."customers" ("org_id") WHERE "deleted_at" IS NULL;
 --> statement-breakpoint
 -- Shared item/SKU registry (identity only; WMS keeps operational detail)
-CREATE TABLE "core"."items" (
+CREATE TABLE IF NOT EXISTS "core"."items" (
   "id"            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "org_id"        uuid NOT NULL,
   "customer_id"   uuid NOT NULL,
@@ -61,17 +61,17 @@ CREATE TABLE "core"."items" (
     REFERENCES "core"."customers"("id") ON DELETE CASCADE
 );
 --> statement-breakpoint
-CREATE INDEX "items_barcode_idx" ON "core"."items" ("barcode");
+CREATE INDEX IF NOT EXISTS "items_barcode_idx" ON "core"."items" ("barcode");
 --> statement-breakpoint
 -- Billing / entitlements
-CREATE TABLE "core"."stripe_customers" (
+CREATE TABLE IF NOT EXISTS "core"."stripe_customers" (
   "org_id"             uuid PRIMARY KEY,
   "stripe_customer_id" text NOT NULL,
   "created_at"         timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT "stripe_customers_stripe_customer_id_unique" UNIQUE ("stripe_customer_id")
 );
 --> statement-breakpoint
-CREATE TABLE "core"."entitlements" (
+CREATE TABLE IF NOT EXISTS "core"."entitlements" (
   "id"                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "org_id"                 uuid NOT NULL,
   "module"                 text NOT NULL,
@@ -90,7 +90,7 @@ CREATE TABLE "core"."entitlements" (
 );
 --> statement-breakpoint
 -- Webhook idempotency ledger
-CREATE TABLE "core"."billing_events" (
+CREATE TABLE IF NOT EXISTS "core"."billing_events" (
   "id"           text PRIMARY KEY,
   "type"         text NOT NULL,
   "payload"      jsonb NOT NULL,
@@ -98,7 +98,7 @@ CREATE TABLE "core"."billing_events" (
 );
 --> statement-breakpoint
 -- Cross-app link bridges (keep each app's native model intact)
-CREATE TABLE "crm"."customer_links" (
+CREATE TABLE IF NOT EXISTS "crm"."customer_links" (
   "core_customer_id" uuid NOT NULL,
   "org_id"           uuid NOT NULL,
   "board_id"         uuid NOT NULL,
@@ -108,17 +108,17 @@ CREATE TABLE "crm"."customer_links" (
     REFERENCES "core"."customers"("id") ON DELETE CASCADE
 );
 --> statement-breakpoint
-CREATE TABLE "crm"."item_links" (
+CREATE TABLE IF NOT EXISTS "crm"."core_item_links" (
   "core_item_id" uuid NOT NULL,
   "item_id"      uuid NOT NULL,
   "column_key"   text,
-  CONSTRAINT "item_links_pkey" PRIMARY KEY ("core_item_id", "item_id"),
-  CONSTRAINT "item_links_core_item_id_items_id_fk" FOREIGN KEY ("core_item_id")
+  CONSTRAINT "core_item_links_pkey" PRIMARY KEY ("core_item_id", "item_id"),
+  CONSTRAINT "core_item_links_core_item_id_items_id_fk" FOREIGN KEY ("core_item_id")
     REFERENCES "core"."items"("id") ON DELETE CASCADE
 );
 --> statement-breakpoint
 -- WMS user profile extension (WMS-only identity columns off core.user)
-CREATE TABLE "wms"."user_profiles" (
+CREATE TABLE IF NOT EXISTS "wms"."user_profiles" (
   "user_id"             uuid PRIMARY KEY,
   "legacy_role"         text NOT NULL DEFAULT 'viewer',
   "user_type"           text NOT NULL DEFAULT 'Operation',
@@ -143,6 +143,6 @@ ALTER TABLE "core"."billing_events" ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE "crm"."customer_links" ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
-ALTER TABLE "crm"."item_links" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "crm"."core_item_links" ENABLE ROW LEVEL SECURITY;
 --> statement-breakpoint
 ALTER TABLE "wms"."user_profiles" ENABLE ROW LEVEL SECURITY;

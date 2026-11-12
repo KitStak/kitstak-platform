@@ -122,6 +122,13 @@ export const getPageOrgMembership = cache(
     // Org IP allow-list applies to pages as well as /api/v1 (throws ForbiddenError when blocked).
     const { enforceNetworkPolicy } = await import('@/server/services/admin-org');
     await enforceNetworkPolicy(membership.organization.id, clientIp(await headers()));
+    // Module entitlement gate (BLUEPRINT.md §3.3): members of an unentitled org land on the
+    // branded lock page (served outside this gate, so no redirect loop). Dev/test default
+    // to allow-all — see @/server/entitlements.
+    const { orgHasCrmModule } = await import('@/server/entitlements');
+    if (!(await orgHasCrmModule(membership.organization.id))) {
+      redirect(`/${membership.organization.slug}/locked`);
+    }
     return { session, membership };
   },
 );

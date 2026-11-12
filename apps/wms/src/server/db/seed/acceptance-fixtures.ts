@@ -26,6 +26,7 @@ import { allocation, changeLog, licensePlates, sequences } from '@/server/domain
 import { ledger } from '@/server/domain/ledger';
 import { createOrder } from '@/server/domain/orders';
 import type { DomainCtx } from '@/server/domain/types';
+import { syncAllClientsToCore, syncAllProductsToCore } from '@/server/repositories/core-sync';
 import { seedStationFixtures } from '@/server/repositories/packing-fixtures';
 import { ensureDemoSuggestedListings } from '@/server/repositories/listings-demo';
 import { SEED_APPS } from './platform';
@@ -593,5 +594,9 @@ export async function seedAcceptanceFixtures(tx: AppDb, ctx: DomainCtx): Promise
   const listings = await ensureDemoSuggestedListings(tx, ctx);
   created.push(...listings.created.map((sku) => `listing ${sku}`));
   skipped.push(...listings.skipped.map((sku) => `listing ${sku}`));
+  // Fixture products are inserted directly (not via the wizard commands), so mirror the
+  // final state into the shared core registry (§2.4) the same way db:seed does.
+  await syncAllClientsToCore(tx);
+  await syncAllProductsToCore(tx);
   return { created, skipped };
 }

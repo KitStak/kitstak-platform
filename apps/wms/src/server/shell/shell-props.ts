@@ -3,10 +3,12 @@
  * (app) layout (which redirects when signed out) and the root 404 (which falls back to
  * a branded frame), so both render the identical shell.
  */
+import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 import type { InitialShellContext } from '@/lib/context-label';
 import { getAppDb, type AppDb } from '@/server/api/db';
 import { getAuthContext } from '@/server/auth/context';
+import { wmsModuleEntitled } from '@/server/auth/entitlements';
 import { getPasswordPolicy, isPasswordExpired } from '@/server/auth/password-policy';
 import { users } from '@/server/db/schema';
 import { getSessionIdleMinutes } from '@/server/repositories/company';
@@ -75,6 +77,9 @@ export async function loadShellProps(): Promise<ShellProps | null> {
   if (!auth) return null;
   const user = { id: auth.user.id, name: auth.user.name, email: auth.user.email, role: auth.user.role };
   const db = await getAppDb();
+  // Module entitlement gate (BLUEPRINT.md §3.3): signed-in but unentitled installs land
+  // on the branded /locked page instead of the shell (dev/test default to allow-all).
+  if (!(await wmsModuleEntitled(db))) redirect('/locked');
   const initialContext = await loadInitialShellContext(db, auth);
   return {
     user,

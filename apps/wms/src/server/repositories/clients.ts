@@ -2,6 +2,14 @@
  * Clients repository (M11): grid, detail (KPIs, settings, addresses, users with access,
  * billing contracts), 4-step create, full edit, settings-only edit, bulk activate /
  * deactivate and guarded delete. Every write logs field-level change_log on "client".
+ *
+ * Shared core registry (BLUEPRINT.md §2.4, adapted): every write path here ALSO upserts
+ * (or removes) the client's core.customers copy in the same transaction via
+ * repositories/core-sync.ts. Read paths deliberately stay on wms.clients — the
+ * blueprint's "replace wms.clients with a view over core.customers" idea was rejected as
+ * higher risk (a view breaks drizzle table metadata and puts a shared table in the hot
+ * path of every client query); write-through keeps wms.clients the operational source of
+ * truth while core carries an always-current identity copy.
  */
 import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { asc } from '@/server/db/order';
@@ -43,6 +51,7 @@ import {
   type OwnedAddress,
 } from './clients-shared';
 import { contractsForClient, logContractEvent, type ContractRow } from './billing';
+import { removeClientFromCore, syncClientToCore } from './core-sync';
 import { dbAll, dbGet, dbRun } from '@/server/db/sql';
 
 const c = s.clients;
@@ -428,6 +437,7 @@ export async function createClient(
       .values({ ...columns(input), createdBy: actor.userId, updatedBy: actor.userId })
       .returning({ id: c.id, code: c.code, name: c.name })
   )[0];
+  await syncClientToCore(tx, row.id);
   const ctx = domainCtxOf(actor, auth);
   await logCreate(tx, ctx, CLIENT_ENTITY, row.id, row.code);
   if (input.addresses.length)
@@ -462,6 +472,7 @@ export async function updateClient(
       .where(eq(c.id, id))
       .returning()
   )[0];
+  await syncClientToCore(tx, id);
   const ctx = domainCtxOf(actor, auth);
   await logUpdate(tx, ctx, CLIENT_ENTITY, id, after.code, snapshot(before), snapshot(after));
   await saveAddresses(
@@ -495,6 +506,7 @@ export async function updateClientSettings(
       .where(eq(c.id, id))
       .returning()
   )[0];
+  await syncClientToCore(tx, id);
   await logUpdate(
     tx,
     domainCtxOf(actor, auth),
@@ -538,6 +550,7 @@ export async function setClientStatus(
       .update(c)
       .set({ status, updatedBy: actor.userId, version: sql`${c.version} + 1` })
       .where(eq(c.id, id));
+    await syncClientToCore(inner, id);
     await logUpdate(inner, ctx, CLIENT_ENTITY, id, row.code, { status: row.status }, { status });
     // The billing-periods scheduler skips contracts of Inactive clients: say so on each Approved contract's change log.
     const approved = await inner
@@ -615,6 +628,7 @@ export async function deleteClients(
       .delete(s.addresses)
       .where(and(eq(s.addresses.ownerType, 'client'), eq(s.addresses.ownerId, id)));
     await inner.delete(c).where(eq(c.id, id));
+    await removeClientFromCore(inner, id);
     await logDelete(inner, ctx, CLIENT_ENTITY, id, row.code);
   });
 }

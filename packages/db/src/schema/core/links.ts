@@ -1,5 +1,5 @@
 /**
- * crm.customer_links / crm.item_links — cross-app link bridges (BLUEPRINT.md §2.3).
+ * crm.customer_links / crm.core_item_links (renamed from item_links: the CRM app owns its own crm.item_links board table) — cross-app link bridges (BLUEPRINT.md §2.3).
  * Keep each app's native model intact; board/item ids are plain uuids into the CRM's
  * own crm.* tables (no FK — those tables live in apps/crm's schema).
  */
@@ -26,7 +26,7 @@ export const customerLinks = crmSchema.table(
 
 /** CRM board item <-> core item (deal line / catalog ref). */
 export const itemLinks = crmSchema.table(
-  'item_links',
+  'core_item_links',
   {
     coreItemId: uuid('core_item_id')
       .notNull()
@@ -35,7 +35,7 @@ export const itemLinks = crmSchema.table(
     itemId: uuid('item_id').notNull(),
     columnKey: text('column_key'),
   },
-  (t) => [primaryKey({ name: 'item_links_pkey', columns: [t.coreItemId, t.itemId] })],
+  (t) => [primaryKey({ name: 'core_item_links_pkey', columns: [t.coreItemId, t.itemId] })],
 );
 
 export type CustomerLink = typeof customerLinks.$inferSelect;

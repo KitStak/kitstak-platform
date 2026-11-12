@@ -24,6 +24,7 @@ import { buildAuthContext, type AuthContext } from '@/server/auth/context';
 import { isSafeMethod, verifyOrigin } from '@/server/auth/origin';
 import { canAny } from '@/server/auth/permissions';
 import { auditIp, clientIp, hitRateLimit, RATE_LIMITS, type RateLimitPolicy } from '@/server/auth/rate-limit';
+import { requireWmsEntitlement } from '@/server/auth/entitlements';
 import { CONTEXT_CLIENT_COOKIE, CONTEXT_WAREHOUSE_COOKIE } from '@/server/auth/scope';
 import { getRequestSession, readCookie } from '@/server/auth/session';
 import { log } from '@/server/log';
@@ -158,6 +159,11 @@ async function guard(
   const session = await getRequestSession(db, request);
   const required = (config.auth ?? 'required') === 'required';
   if (required && !session.ok) throw unauthenticatedError();
+
+  // Module entitlement gate (BLUEPRINT.md §3.3): the platform org must hold the `wms`
+  // module. `auth: 'public'` routes and the exempt paths (health, cron tick, bootstrap)
+  // skip; dev/test default to allow-all (see @/server/auth/entitlements).
+  if (required) await requireWmsEntitlement(db, new URL(request.url).pathname);
 
   const auth = session.ok
     ? await buildAuthContext(db, session.user, {

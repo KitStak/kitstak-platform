@@ -15,6 +15,7 @@ import { ActivityComposer, type ComposerOptions } from './activity-composer';
 import { AccountCard, ContactsCard, DealsCard, DetailsCard, NextStepsCard } from './record-cards';
 import { RecordHeader } from './record-header';
 import { Timeline } from './timeline';
+import { WmsCard } from './wms-card';
 
 /** Shared width + gutters for every CRM record state (matches PageFrame `wide`). */
 const FRAME = 'mx-auto flex max-w-[1440px] flex-col gap-6 px-4 py-6 sm:px-8 sm:py-8';
@@ -178,13 +179,16 @@ function ContactSide({ record, orgSlug }: { readonly record: Contact360Dto; read
 
 function AccountSide({ record, orgSlug }: { readonly record: Account360Dto; readonly orgSlug: string }) {
   return (
-    <ContactsCard
-      testId="crm-account-contacts"
-      title="Contacts"
-      contacts={record.contacts}
-      orgSlug={orgSlug}
-      emptyText="No contacts linked to this account yet."
-    />
+    <>
+      <ContactsCard
+        testId="crm-account-contacts"
+        title="Contacts"
+        contacts={record.contacts}
+        orgSlug={orgSlug}
+        emptyText="No contacts linked to this account yet."
+      />
+      <WmsCard itemId={record.id} />
+    </>
   );
 }
 

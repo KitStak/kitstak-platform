@@ -22,6 +22,7 @@ import type {
   PipelinePeriod,
   PipelineSettingsInput,
 } from '@/server/services/crm-contracts';
+import type { CoreCustomerDto, WmsLinkDto } from '@/server/services/wms-link-contracts';
 import type { z } from 'zod';
 import type { logActivitySchema } from '@/server/services/crm-contracts';
 
@@ -36,6 +37,8 @@ export const crmKeys = {
   activityOptions: (orgId: string, itemId: string) => ['org', orgId, 'crm', 'activity-options', itemId] as const,
   conversion: (orgId: string, itemId: string) => ['org', orgId, 'crm', 'conversion', itemId] as const,
   duplicates: (orgId: string, kind: 'contacts' | 'accounts') => ['org', orgId, 'crm', 'duplicates', kind] as const,
+  wmsLink: (orgId: string, itemId: string) => ['org', orgId, 'crm', 'wms-link', itemId] as const,
+  wmsCustomers: (orgId: string) => ['org', orgId, 'crm', 'wms-customers'] as const,
 };
 
 export interface PipelineParams {
@@ -178,6 +181,40 @@ export function useConvertLead(itemId: string) {
     },
     // The wizard renders the error inline; skip the global "Couldn't save your change" toast.
     onError: () => undefined,
+  });
+}
+
+/** The WMS client (core customer) linked to an account board item. */
+export function useWmsLink(itemId: string) {
+  const orgId = useOrgId();
+  return useQuery({
+    queryKey: crmKeys.wmsLink(orgId, itemId),
+    queryFn: ({ signal }) => apiRequest<WmsLinkDto>(`/crm/accounts/${itemId}/wms-link`, { orgId, signal }),
+    staleTime: 30_000,
+  });
+}
+
+/** Core customers available to link (the combobox filters client-side). */
+export function useWmsCustomers(enabled: boolean) {
+  const orgId = useOrgId();
+  return useQuery({
+    queryKey: crmKeys.wmsCustomers(orgId),
+    queryFn: ({ signal }) => apiRequest<CoreCustomerDto[]>('/crm/wms/customers', { orgId, signal }),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+/** Link / unlink (`coreCustomerId: null`) an account item to a core customer. */
+export function useSetWmsLink(itemId: string) {
+  const orgId = useOrgId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (coreCustomerId: string | null) =>
+      apiRequest<WmsLinkDto>(`/crm/accounts/${itemId}/wms-link`, { orgId, method: 'PUT', body: { coreCustomerId } }),
+    onSuccess: (result) => queryClient.setQueryData(crmKeys.wmsLink(orgId, itemId), result),
+    onError: (error) => toastError(error, 'Couldn’t update the WMS link'),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: crmKeys.wmsLink(orgId, itemId) }),
   });
 }
 

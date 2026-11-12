@@ -57,6 +57,20 @@
       "when": 1794441600002,
       "tag": "0008_core_rate_limit",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794528000000,
+      "tag": "0009_core_business_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794614400000,
+      "tag": "0010_core_entitlements",
+      "breakpoints": true
     }
   ]
 }

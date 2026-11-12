@@ -1,0 +1,230 @@
+@import 'tailwindcss';
+@import '@kitstak/ui/styles/tokens.css';
+
+/* Dark variant follows the resolved theme attribute (set before paint by the theme script). */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/*
+ * Tailwind theme → design tokens (same mapping as apps/crm so the portal shares the CRM/WMS
+ * visual language exactly). `inline` makes utilities read the token variables directly, so a
+ * theme switch is a single attribute change with no class churn.
+ */
+@theme inline {
+  --color-app: var(--surface-app);
+  --color-panel: var(--surface-panel);
+  --color-raised: var(--surface-raised);
+  --color-sunken: var(--surface-sunken);
+  --color-muted: var(--surface-muted);
+  --color-hover: var(--surface-hover);
+  --color-pressed: var(--surface-pressed);
+  --color-selected: var(--surface-selected);
+  --color-selected-hover: var(--surface-selected-hover);
+  --color-highlight: var(--surface-highlight);
+  --color-inverse: var(--surface-inverse);
+  --color-overlay: var(--surface-overlay);
+  --color-skeleton: var(--surface-skeleton);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-border-input: var(--border-input);
+  --color-border-input-hover: var(--border-input-hover);
+
+  --color-fg: var(--text-primary);
+  --color-fg-secondary: var(--text-secondary);
+  --color-fg-muted: var(--text-muted);
+  --color-fg-disabled: var(--text-disabled);
+  --color-fg-placeholder: var(--text-placeholder);
+  --color-fg-inverse: var(--text-inverse);
+  --color-fg-link: var(--text-link);
+  --color-icon: var(--icon-default);
+  --color-icon-strong: var(--icon-strong);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-selected: var(--primary-selected);
+  --color-primary-selected-hover: var(--primary-selected-hover);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-text: var(--primary-text);
+  --color-focus: var(--focus-ring);
+
+  --color-success: var(--success);
+  --color-success-hover: var(--success-hover);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-hover: var(--warning-hover);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-text: var(--warning-text);
+  --color-warning-accent: var(--warning-accent);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-active: var(--danger-active);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-danger-text: var(--danger-text);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-text: var(--info-text);
+
+  --font-sans: var(--font-ui);
+  --font-heading: var(--font-ui);
+
+  --shadow-xs: var(--elevation-xs);
+  --shadow-sm: var(--elevation-sm);
+  --shadow-md: var(--elevation-md);
+  --shadow-lg: var(--elevation-lg);
+  --shadow-popover: var(--elevation-popover);
+  --shadow-modal: var(--elevation-modal);
+  --shadow-sticky: var(--elevation-sticky);
+}
+
+/* Static scales (not theme dependent). 1 spacing unit = 4px regardless of root font size. */
+@theme {
+  --spacing: 4px;
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --text-2xs: 11px;
+  --text-2xs--line-height: 14px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 13px;
+  --text-sm--line-height: 18px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+  --text-md: 16px;
+  --text-md--line-height: 22px;
+  --text-lg: 18px;
+  --text-lg--line-height: 24px;
+  --text-xl: 24px;
+  --text-xl--line-height: 30px;
+  --text-2xl: 32px;
+  --text-2xl--line-height: 40px;
+
+  --animate-fade-in: ks-fade-in 150ms var(--ease-enter);
+  --animate-pop-in: ks-pop-in 160ms var(--ease-enter);
+  --animate-pop-out: ks-pop-out 110ms var(--ease-exit);
+  --animate-spin: spin 0.7s linear infinite;
+
+  @keyframes ks-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes ks-pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(var(--ks-pop-offset, -4px)) scale(0.98);
+    }
+  }
+  @keyframes ks-pop-out {
+    to {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background: var(--surface-app);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: var(--type-base);
+    line-height: var(--type-base-lh);
+    font-feature-settings: 'cv05', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Data reads in columns: tables get tabular numerals by default. */
+  table,
+  [role='grid'],
+  [role='table'] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background: var(--primary-200);
+    color: var(--text-primary);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  button,
+  [role='button'] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-placeholder);
+    opacity: 1;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * KitStak lockup: the wordtype artwork (public/brand/kitstak-wordtype.png) is used as an
+ * alpha mask, painted with --logo-ink (navy on light, cream on dark). `.ks-logo-inverse` pins
+ * the cream ink for navy brand surfaces in either theme. (Same mechanics as apps/crm.)
+ * ------------------------------------------------------------------------------------------- */
+.ks-wordtype {
+  background-color: var(--logo-ink);
+  -webkit-mask: url('/brand/kitstak-wordtype.png') center / 100% 100% no-repeat;
+  mask: url('/brand/kitstak-wordtype.png') center / 100% 100% no-repeat;
+}
+.ks-logo-product {
+  color: var(--logo-product);
+  border-color: var(--logo-divider);
+}
+.ks-logo-inverse {
+  --logo-ink: var(--brand-cream);
+  --logo-divider: rgb(244 241 233 / 0.24);
+  --logo-product: rgb(244 241 233 / 0.72);
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * Brand panel (auth showcase). Flat --surface-brand: KitStak navy on light, charcoal on dark;
+ * the dark panel is set apart by a 1px inset border (CRM parity).
+ * ------------------------------------------------------------------------------------------- */
+.auth-hero {
+  --logo-ink: var(--brand-cream);
+  background: var(--surface-brand);
+}
+:root[data-theme='dark'] .auth-hero {
+  box-shadow: inset -1px 0 0 var(--border-subtle);
+}

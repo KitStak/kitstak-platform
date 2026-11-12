@@ -22,7 +22,7 @@ everything from zero, in journal order.
 
 | File | Journal | Contents |
 | --- | --- | --- |
-| `0000_core_init.sql` | idx 0 | `CREATE SCHEMA core/crm/wms`; `core.customers`, `core.items`, `core.stripe_customers`, `core.entitlements`, `core.billing_events`, `crm.customer_links`, `crm.item_links`, `wms.user_profiles`; indexes; RLS enabled (no policies) on every table. |
+| `0000_core_init.sql` | idx 0 | `CREATE SCHEMA core/crm/wms`; `core.customers`, `core.items`, `core.stripe_customers`, `core.entitlements`, `core.billing_events`, `crm.customer_links`, `crm.core_item_links`, `wms.user_profiles`; indexes; RLS enabled (no policies) on every table. |
 | `0001_core_fks.sql` | idx 1 | FKs from the tables above to `core.organization` / `core."user"` — the Better Auth tables that CRM migration `apps/crm/drizzle/0003_core_auth.sql` relocates from `public` into `core` (Phase 3). Every FK is guarded on the TARGET table's existence (`to_regclass`), so a standalone run against a database that does not yet have the auth tables skips them gracefully; each ALTER is also guarded on the constraint name, so re-runs are no-ops. **Caveat:** the runner records the tag as applied even when the targets were absent — if that happened, re-execute the file once by hand after the CRM migrations have created the core auth tables (it is idempotent). |
 
 ## Conventions (§2.2)

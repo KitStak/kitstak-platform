@@ -42,6 +42,7 @@ import { txAt, type SeedEnv } from './types';
 import { scheduleWaves } from './waves';
 import { resetWorkState } from './work';
 import { managerCtx, noteFailure, type World } from './world';
+import { syncAllClientsToCore, syncAllProductsToCore } from '@/server/repositories/core-sync';
 import { repairPoStatusDrift } from '@/server/repositories/purchase-orders-integrity';
 import { recalcKitInventory } from '@/server/repositories/kits';
 import { dbGet, mapSeq } from '@/server/db/sql';
@@ -105,6 +106,10 @@ async function finish(w: World): Promise<void> {
     await seedCartOccupancy(tx, managerCtx(w), w.org.mlt1);
     const pxp = w.org.clientByCode.get('PXP');
     if (pxp) await tx.update(schema.clients).set({ status: 'Inactive' }).where(eq(schema.clients.id, pxp.id));
+    // Shared core registry (§2.4): mirror the FINAL seeded clients/products (post-retire,
+    // post-PXP-deactivation) into core.customers / core.items via the repo sync functions.
+    await syncAllClientsToCore(tx);
+    await syncAllProductsToCore(tx);
   });
 }
 

@@ -1,5 +1,5 @@
 /** Catalog: products, pack types (UOM model), barcodes, kits, listings, serials. */
-import { index, integer, primaryKey, doublePrecision, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, primaryKey, doublePrecision, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { wmsSchema } from './_schema';
 import {
   ACTIVE_STATUSES,
@@ -47,6 +47,8 @@ export const products = wmsSchema.table(
       .notNull()
       .references(() => clients.id),
     sku: text('sku').notNull(),
+    /** core.items identity row (§2.4), maintained by repositories/core-sync.ts. */
+    coreItemId: uuid('core_item_id'),
     barcode: text('barcode').notNull(),
     name: text('name').notNull(),
     category: text('category').notNull(),

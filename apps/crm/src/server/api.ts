@@ -27,6 +27,7 @@ import {
   type Session,
 } from '@/server/auth/session';
 import { db, type Database } from '@/server/db';
+import { orgHasCrmModule } from '@/server/entitlements';
 import { trustedOrigins } from '@/server/env';
 import { ORG_HEADER, REQUEST_ID_HEADER, type ApiMeta } from '@/server/http/envelope';
 import {
@@ -207,6 +208,17 @@ export function withApi<const O extends ApiOptions, T>(
       }
       // Org IP allow-list (admin center → Security). Cached per org; no-op when disabled.
       if (membership) await enforceNetworkPolicy(membership.organization.id, ip);
+
+      // Module entitlement gate (BLUEPRINT.md §3.3), after org resolution and before RBAC:
+      // org-scoped calls require the `crm` module (dev/test default to allow-all — see
+      // @/server/entitlements). Routes without an org in play (org: 'none', or optional
+      // with none named) skip. The 402 envelope is fixed shape, outside the AppError map.
+      if (membership && !(await orgHasCrmModule(membership.organization.id))) {
+        return NextResponse.json(
+          { ok: false, error: { code: 'entitlement.missing', module: 'crm' } },
+          { status: 402, headers: { ...BASE_HEADERS, [REQUEST_ID_HEADER]: requestId } },
+        );
+      }
 
       const tokenDenied =
         tokenAuth !== null && options.permission !== undefined && !scopesAllow(tokenAuth.scopes, options.permission);
