@@ -39,8 +39,8 @@ for (const k of ['BETTER_AUTH_SECRET', 'WEBHOOK_KDF_SECRET', 'INTEGRATION_KEY'])
   if (!s[k]) fail(`${k} missing from deploy/secrets.env`);
 const { BETTER_AUTH_SECRET, WEBHOOK_KDF_SECRET, INTEGRATION_KEY } = s;
 
-const pooled = `postgres://postgres.${SUPABASE_REF}:${s.DB_PASSWORD}@aws-0-us-west-1.pooler.supabase.com:6543/postgres`;
-const direct = `postgres://postgres:${s.DB_PASSWORD}@db.${SUPABASE_REF}.supabase.co:5432/postgres`;
+const pooled = `postgres://postgres.${SUPABASE_REF}:${s.DB_PASSWORD}@aws-1-us-west-1.pooler.supabase.com:6543/postgres`;
+const direct = `postgres://postgres.${SUPABASE_REF}:${s.DB_PASSWORD}@aws-1-us-west-1.pooler.supabase.com:5432/postgres`; // session mode: the db.<ref> direct host is IPv6-only
 const urls = { portal: s.URL_PORTAL, crm: s.URL_CRM, wms: s.URL_WMS };
 const scope = s.VERCEL_TEAM ? ['--scope', s.VERCEL_TEAM] : [];
 
