@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Builds
+.next/
+dist/
+out/
+.turbo/
+
+# Env
+.env
+.env.local
+.env*.local
+
+# Testing
+coverage/
+test-results/
+playwright-report/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+*.swp
+
+# Vercel
+.vercel/
+
+# TypeScript
+*.tsbuildinfo

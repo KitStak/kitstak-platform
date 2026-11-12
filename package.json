@@ -1,0 +1,25 @@
+{
+  "name": "kitstak",
+  "version": "0.1.0",
+  "private": true,
+  "description": "KitStak platform monorepo — CRM + WMS, deeply integrated, independently licensable.",
+  "packageManager": "pnpm@10.18.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "dev:crm": "turbo dev --filter=kitstak-crm",
+    "dev:wms": "turbo dev --filter=kitstak-wms",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.8"
+  }
+}
