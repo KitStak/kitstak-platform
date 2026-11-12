@@ -4,6 +4,7 @@ import { env } from '@/server/env';
 import { requirePageSession } from '@/server/session';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getOrgModuleStates } from '@/server/entitlements';
+import { CommandPalette } from '@/features/shell/command-palette';
 import { Logo } from '@/features/shell/logo';
 import { OrgSwitcher } from '@/features/shell/org-switcher';
 import { ThemeToggle } from '@/features/shell/theme-toggle';
@@ -63,6 +64,13 @@ export default async function AppLayout({ children }: { readonly children: React
             </Link>
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:ml-2">
+            <CommandPalette
+              orgs={orgs}
+              activeOrgId={activeOrg?.id ?? null}
+              crmUrl={appUrls.crm}
+              wmsUrl={appUrls.wms}
+              entitled={{ crm: entitledFor('crm'), wms: entitledFor('wms') }}
+            />
             <AppSwitcher
               current="portal"
               urls={appUrls}

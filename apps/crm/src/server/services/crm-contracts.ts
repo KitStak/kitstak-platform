@@ -278,6 +278,33 @@ export interface Account360Dto extends RecordBaseDto {
 export type Record360Dto = Contact360Dto | Account360Dto;
 
 // ---------------------------------------------------------------------------------------------
+// Records index (/crm/contacts and /crm/accounts)
+// ---------------------------------------------------------------------------------------------
+
+/** One row of the flat records list. Contact-only and account-only fields are null elsewhere. */
+export interface CrmRecordRowDto {
+  readonly id: string;
+  readonly name: string;
+  readonly owner: CrmUserDto | null;
+  /** Lifecycle / type (contacts) or industry (accounts) pill. */
+  readonly label: CrmLabelDto | null;
+  readonly email: string | null;
+  readonly title: string | null;
+  /** Linked account name (contacts). */
+  readonly account: string | null;
+  /** Website domain (accounts). */
+  readonly domain: string | null;
+  readonly lastContacted: string | null;
+  readonly updatedAt: string;
+}
+
+export interface CrmRecordsDto {
+  readonly kind: 'contacts' | 'accounts';
+  readonly board: CrmBoardRefDto | null;
+  readonly rows: readonly CrmRecordRowDto[];
+}
+
+// ---------------------------------------------------------------------------------------------
 // Log activity
 // ---------------------------------------------------------------------------------------------
 

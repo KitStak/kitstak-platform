@@ -104,15 +104,18 @@ export function HelpMenu() {
       >
         <CircleHelp className="h-4 w-4" aria-hidden />
       </HeaderIconButton>
-      {/* Logiwa-style "Feedback & Updates" side tab; hidden on small screens and in print. */}
+      {/* Logiwa-style feedback side tab; hidden on small screens and in print. Compact (w-6,
+          short label) and anchored to the lower third so it stays clear of grid headers and
+          action columns; the shell reserves a matching lg:pr-6 gutter so it never overlaps
+          table edges at 1440. */}
       <button
         type="button"
         onClick={() => setView({ kind: 'feedback' })}
         aria-label="Feedback and updates"
-        className="fixed right-0 top-1/2 z-30 hidden w-7 -translate-y-1/2 items-center justify-center gap-1.5 rounded-l-md bg-inverse px-0 py-3 text-2xs font-semibold leading-none text-fg-inverse shadow-md transition-colors [writing-mode:vertical-rl] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60 print:hidden lg:flex"
+        className="fixed right-0 top-2/3 z-30 hidden w-6 -translate-y-1/2 items-center justify-center gap-1 rounded-l-md bg-inverse px-0 py-2.5 text-2xs font-semibold leading-none text-fg-inverse shadow-md transition-colors [writing-mode:vertical-rl] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60 print:hidden lg:flex"
       >
-        <MessageSquarePlus className="h-3.5 w-3.5 rotate-90" aria-hidden />
-        Feedback &amp; Updates
+        <MessageSquarePlus className="h-3 w-3 rotate-90" aria-hidden />
+        Feedback
       </button>
       <HelpPanel
         view={view}

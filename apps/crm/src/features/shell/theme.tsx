@@ -25,7 +25,18 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 const CHANGE_EVENT = 'kitstak:theme-change';
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 
+function readCookiePreference(): ThemePreference | null {
+  return parseThemeCookie(/(?:^|; )kitstak-theme=([^;]*)/.exec(document.cookie)?.[1]);
+}
+
+/**
+ * Cross-app contract (packages/ui theme): the `kitstak-theme` cookie WINS everywhere —
+ * Portal and WMS set it, and CRM must honor it. localStorage is only a fallback for
+ * preferences saved before the cookie existed.
+ */
 function readPreference(): ThemePreference {
+  const fromCookie = readCookiePreference();
+  if (fromCookie === 'light' || fromCookie === 'dark') return fromCookie;
   try {
     const value = window.localStorage.getItem(THEME_STORAGE_KEY);
     return value === 'light' || value === 'dark' ? value : 'system';
@@ -36,8 +47,19 @@ function readPreference(): ThemePreference {
 
 function syncCookie(preference: ThemePreference): void {
   const wanted = preference === 'system' ? null : preference;
-  const current = parseThemeCookie(/(?:^|; )kitstak-theme=([^;]*)/.exec(document.cookie)?.[1]);
+  const current = readCookiePreference();
   if (current !== wanted) document.cookie = themeCookieString(wanted);
+}
+
+/**
+ * Passive migration only: writes the cookie when a legacy localStorage preference exists
+ * and the shared cookie is missing. NEVER clears the cookie — a CRM tab whose local
+ * preference is "system" must not wipe a preference another KitStak app persisted
+ * (that was the cross-app dark-mode bug: opening CRM reverted Portal/WMS to light).
+ */
+function migrateCookie(preference: ThemePreference): void {
+  if (preference === 'system') return;
+  if (readCookiePreference() === null) document.cookie = themeCookieString(preference);
 }
 
 const systemPrefersDark = (): boolean => window.matchMedia(DARK_QUERY).matches;
@@ -79,8 +101,8 @@ export function ThemeProvider({ children }: { readonly children: ReactNode }) {
   useEffect(() => {
     // Read the live value (not the hydration snapshot) so the first commit never flashes.
     document.documentElement.setAttribute('data-theme', currentResolved());
-    // Keep the server-readable cookie in sync (migrates preferences saved before the cookie existed).
-    syncCookie(readPreference());
+    // Migration-only cookie write; an explicit user choice goes through setPreference.
+    migrateCookie(readPreference());
   }, [resolved]);
 
   const setPreference = useCallback((next: ThemePreference) => {

@@ -1,12 +1,14 @@
 /**
  * One date-time rule for the receiving module (M05): instants render in the warehouse's time
- * zone, labelled, as `2026/11/10 1:02 AM EST`. The PO rail, the Receipts panel, the receipt
- * drawer, the PO / Receiving History grids and the change log all use it, so a time reads the
- * same everywhere regardless of the viewer's browser zone.
+ * zone, labelled, humanized — `Nov 10, 1:02 AM EST` (the year appears only when it differs
+ * from the current one: `Nov 10, 2025, 1:02 AM EST`). The PO rail, the Receipts panel, the
+ * receipt drawer, the PO / Receiving History grids and the change log all use it, so a time
+ * reads the same everywhere regardless of the viewer's browser zone.
  */
 export function formatZoned(
   value: string | null | undefined,
   timeZone: string | null | undefined = 'UTC',
+  now: Date = new Date(),
 ): string {
   if (!value) return '';
   const d = new Date(value);
@@ -15,8 +17,8 @@ export function formatZoned(
     new Intl.DateTimeFormat('en-US', {
       timeZone: tz,
       year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
+      month: 'short',
+      day: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
@@ -30,5 +32,8 @@ export function formatZoned(
   }
   const get = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? '';
   const zone = get('timeZoneName');
-  return `${get('year')}/${get('month')}/${get('day')} ${get('hour')}:${get('minute')} ${get('dayPeriod').toUpperCase()}${zone ? ` ${zone}` : ''}`;
+  const year = get('year');
+  const yearPart = year === String(now.getFullYear()) ? '' : `, ${year}`;
+  const time = `${get('hour')}:${get('minute')} ${get('dayPeriod').toUpperCase()}`;
+  return `${get('month')} ${get('day')}${yearPart}, ${time}${zone ? ` ${zone}` : ''}`;
 }

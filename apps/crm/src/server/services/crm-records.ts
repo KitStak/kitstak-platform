@@ -13,7 +13,9 @@ import {
   findColumn,
   labelDto,
   labelsOf,
+  loadBoardRows,
   loadCrmBoard,
+  loadItemsByIds,
   orgUsers,
   readAmount,
   readConnect,
@@ -39,6 +41,8 @@ import type {
   ContactRowDto,
   CrmBoardRefDto,
   CrmLabelDto,
+  CrmRecordRowDto,
+  CrmRecordsDto,
   CrmUserDto,
   DealRowDto,
   DealTotalsDto,
@@ -577,6 +581,63 @@ export async function getAccount360(ctx: ServiceContext, itemId: string): Promis
     activityBoard: assembled.activityRef,
     activityTypes: assembled.activityTypes,
   };
+}
+
+/** Exact-key status/dropdown column (no type fallback: a wrong pill is worse than none). */
+function pillColumn(columns: readonly ColumnRow[], keys: readonly string[]): ColumnRow | undefined {
+  for (const key of keys) {
+    const hit = columns.find((column) => column.scope === 'item' && column.key === key && (column.type === 'status' || column.type === 'dropdown'));
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+function pillLabel(item: ItemRow, column: ColumnRow | undefined): CrmLabelDto | null {
+  if (!column) return null;
+  if (column.type === 'dropdown') {
+    const [first] = readLabelIds(item.values, column);
+    return labelDto(column, first ?? null);
+  }
+  return labelDto(column, readLabelId(item.values, column));
+}
+
+/** Flat records list behind the /crm/contacts and /crm/accounts index pages. */
+export async function listCrmRecords(ctx: ServiceContext, kind: 'contacts' | 'accounts'): Promise<CrmRecordsDto> {
+  const resolved = await resolveCrmBoards(ctx);
+  const board = await loadCrmBoard(ctx, resolved.primary[kind]);
+  if (!board) return { kind, board: null, rows: [] };
+  const [boardItems, users] = await Promise.all([loadBoardRows(ctx, board.row.id), orgUsers(ctx)]);
+  const cols = board.columns;
+  const ownerColumn = findColumn(cols, kind === 'contacts' ? ['owner', 'contact_owner'] : ['owner', 'account_owner'], 'people');
+  const labelColumn = pillColumn(cols, kind === 'contacts' ? ['lifecycle', 'type', 'segment'] : ['industry', 'health']);
+  const emailColumn = kind === 'contacts' ? findColumn(cols, ['email'], 'email') : undefined;
+  const titleColumn = kind === 'contacts' ? findColumn(cols, ['job_title', 'title'], 'text') : undefined;
+  const lastContactedColumn = kind === 'contacts' ? findColumn(cols, ['last_contacted'], 'date') : undefined;
+  const websiteColumn = kind === 'accounts' ? findColumn(cols, ['website', 'domain'], 'link') : undefined;
+  const accountColumn = kind === 'contacts' ? findColumn(cols, ['account', 'company'], 'connect_boards') : undefined;
+  const accountNames = new Map<string, string>();
+  if (accountColumn) {
+    const linked = await loadItemsByIds(ctx, boardItems.flatMap((item) => readConnect(item.values, accountColumn)));
+    for (const row of linked) accountNames.set(row.id, row.name);
+  }
+  const rows: CrmRecordRowDto[] = boardItems
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      owner: person(users, readPeople(item.values, ownerColumn)),
+      label: pillLabel(item, labelColumn),
+      email: readEmail(item.values, emailColumn),
+      title: readText(item.values, titleColumn),
+      account:
+        readConnect(item.values, accountColumn)
+          .map((id) => accountNames.get(id))
+          .find(Boolean) ?? null,
+      domain: readDomain(item.values, websiteColumn),
+      lastContacted: readDate(item.values, lastContactedColumn),
+      updatedAt: item.updatedAt.toISOString(),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  return { kind, board: board.ref, rows };
 }
 
 /** What the "Log activity" composer can link to, for a contact, account or deal. */

@@ -15,6 +15,7 @@ import type {
   ConversionResultDto,
   ConvertLeadInput,
   CrmBoardsDto,
+  CrmRecordsDto,
   DuplicatesDto,
   LoggedActivityDto,
   MergeResultDto,
@@ -34,6 +35,7 @@ export const crmKeys = {
   pipeline: (orgId: string, params: PipelineParams) =>
     ['org', orgId, 'crm', 'pipeline', { boardId: params.boardId ?? null, owner: params.owner ?? null, period: params.period }] as const,
   record: (orgId: string, kind: 'contacts' | 'accounts', itemId: string) => ['org', orgId, 'crm', kind, itemId] as const,
+  records: (orgId: string, kind: 'contacts' | 'accounts') => ['org', orgId, 'crm', 'records', kind] as const,
   activityOptions: (orgId: string, itemId: string) => ['org', orgId, 'crm', 'activity-options', itemId] as const,
   conversion: (orgId: string, itemId: string) => ['org', orgId, 'crm', 'conversion', itemId] as const,
   duplicates: (orgId: string, kind: 'contacts' | 'accounts') => ['org', orgId, 'crm', 'duplicates', kind] as const,
@@ -108,6 +110,16 @@ export function useSavePipelineSettings(params: PipelineParams) {
       toastError(error, 'Couldn’t save pipeline settings');
     },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: crmKeys.root(orgId) }),
+  });
+}
+
+/** Flat records list for the /crm/contacts and /crm/accounts index pages. */
+export function useCrmRecords(kind: 'contacts' | 'accounts') {
+  const orgId = useOrgId();
+  return useQuery({
+    queryKey: crmKeys.records(orgId, kind),
+    queryFn: ({ signal }) => apiRequest<CrmRecordsDto>(`/crm/${kind}`, { orgId, signal }),
+    staleTime: 30_000,
   });
 }
 

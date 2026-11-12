@@ -7,5 +7,6 @@ export * from './button';
 export * from './input';
 export * from './checkbox';
 export * from './badge';
+export * from './kbd';
 export * from './spinner';
 export * from './dropdown-menu';

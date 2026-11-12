@@ -122,7 +122,15 @@ export function buildProductColumns(): Col[] {
         </span>
       ),
     },
-    { id: 'name', accessorKey: 'name', header: 'Name', size: 240, cell: ({ getValue }) => text(getValue()) },
+    // Wide enough that typical names ("Copperline Roaster's Sampler Kit") don't truncate at 1440.
+    {
+      id: 'name',
+      accessorKey: 'name',
+      header: 'Name',
+      size: 300,
+      minSize: 200,
+      cell: ({ getValue }) => text(getValue()),
+    },
     {
       id: 'status',
       accessorKey: 'status',

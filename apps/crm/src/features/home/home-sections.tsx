@@ -115,9 +115,10 @@ function RecentCard({ recent }: { readonly recent: HomeRecentDto }) {
                 ? recent.groups.map((group, index) => (
                     <span
                       key={`${group.title}-${index}`}
-                      // One neutral hue, stepped by opacity: the split is visible without a rainbow.
-                      className="border-r border-panel bg-[var(--text-muted)] last:border-r-0"
-                      style={{ width: `${widths[index] ?? 0}%`, opacity: Math.max(0.3, 0.9 - index * 0.18) }}
+                      // Each group's own label color: visible on the track in both themes and
+                      // matching the dots in the hover breakdown.
+                      className="border-r border-panel last:border-r-0"
+                      style={{ width: `${widths[index] ?? 0}%`, background: `var(--label-${toLabelColor(group.color)})` }}
                     />
                   ))
                 : null}
@@ -128,9 +129,13 @@ function RecentCard({ recent }: { readonly recent: HomeRecentDto }) {
           <span
             aria-hidden
             className={cn(
-              'pointer-events-none absolute inset-x-0 bottom-0 flex translate-y-2 flex-col gap-1 border-t border-border-subtle bg-raised/95 px-4 py-3 opacity-0 backdrop-blur-sm',
-              'transition-[opacity,transform] delay-0 duration-[var(--duration-normal)] ease-[var(--ease-out)]',
-              'group-hover:translate-y-0 group-hover:opacity-100 group-hover:delay-300 group-focus-visible:translate-y-0 group-focus-visible:opacity-100',
+              // `invisible` (transitioned) keeps the hidden panel out of paint and hit-testing;
+              // no reveal delay — the breakdown fades in as soon as the card is hovered instead
+              // of popping over the metrics 300ms after the pointer settles.
+              'pointer-events-none invisible absolute inset-x-0 bottom-0 flex translate-y-2 flex-col gap-1 border-t border-border-subtle bg-raised/95 px-4 py-3 opacity-0 backdrop-blur-sm',
+              'transition-[opacity,transform,visibility] duration-[var(--duration-normal)] ease-[var(--ease-out)]',
+              'group-hover:visible group-hover:translate-y-0 group-hover:opacity-100',
+              'group-focus-visible:visible group-focus-visible:translate-y-0 group-focus-visible:opacity-100',
             )}
           >
             {recent.groups.slice(0, 4).map((group, index) => (

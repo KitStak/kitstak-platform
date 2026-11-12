@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
-import { ChevronRight, Maximize2, MessageCircle, MessageCirclePlus } from 'lucide-react';
+import { ChevronRight, Maximize2, MessageCircle, MessageCirclePlus, Pencil } from 'lucide-react';
 import { Tooltip, cn } from '@/components/ui';
 import type { ItemDto } from '@/server/services/contracts/dto';
 import { useTableStore } from '../state/table-store';
@@ -26,9 +26,9 @@ export interface NameCellProps {
 }
 
 /**
- * Sticky item name cell: click the text to rename inline (double-click selects all), click
- * the empty area or "Open" to open the item, the bubble opens Updates, the chevron expands
- * subitems. Keyboard: Enter/F2 rename, typing starts a rename, Ctrl/Cmd+Enter opens.
+ * Sticky item name cell: a click anywhere (the name included) opens the item — matching
+ * monday.com — while inline rename sits behind the hover pencil (or F2/Enter/typing with the
+ * cell focused). The bubble opens Updates, the chevron expands subitems, Ctrl/Cmd+Enter opens.
  */
 export function NameCell({
   item,
@@ -79,10 +79,8 @@ export function NameCell({
   };
 
   const onClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.defaultPrevented || editing) return;
-    const onText = (event.target as HTMLElement).closest('[data-name-text]');
-    if (onText && canRename && event.detail === 1) editName(item.id, null, false);
-    else if (!onText && !isTemp) onOpenItem(item.id);
+    if (event.defaultPrevented || editing || isTemp) return;
+    onOpenItem(item.id);
   };
 
   const bubble = item.updateCount > 0;
@@ -98,10 +96,6 @@ export function NameCell({
       data-editing={editing ? 'true' : undefined}
       onKeyDown={onKeyDown}
       onClick={onClick}
-      onDoubleClick={(event) => {
-        if (canRename && (event.target as HTMLElement).closest('[data-name-text]'))
-          editName(item.id, null, true);
-      }}
       className={cn(
         'bt-sticky-cell bt-focusable group/name cursor-pointer gap-1 pr-1.5',
         variant === 'subitem' ? 'pl-1' : 'pl-1.5',
@@ -123,16 +117,29 @@ export function NameCell({
       ) : (
         <span
           data-name-text=""
-          className={cn(
-            'min-w-0 truncate rounded-xs px-1 py-0.5 text-base text-fg',
-            canRename && 'hover:shadow-[inset_0_0_0_1px_var(--border-input)]',
-          )}
+          className="min-w-0 truncate rounded-xs px-1 py-0.5 text-base text-fg underline-offset-2 group-hover/name:underline"
           title={item.name.length > 40 ? item.name : undefined}
         >
           {item.name}
         </span>
       )}
-      {editing ? null : <span className="min-w-2 flex-1" />}
+      {!editing && canRename ? (
+        <button
+          type="button"
+          tabIndex={-1}
+          data-testid="name-edit"
+          aria-label={`Rename ${item.name}`}
+          onClick={(event) => {
+            event.preventDefault();
+            editName(item.id, null, true);
+          }}
+          className="bt-reveal inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-icon hover:bg-hover hover:text-icon-strong focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-focus"
+        >
+          <Pencil aria-hidden className="size-3.5" />
+        </button>
+      ) : null}
+      {/* Reserve room for the absolute "Open" reveal so the pencil never sits under it. */}
+      {editing ? null : <span className="min-w-16 flex-1" />}
       {!editing && !isTemp ? (
         <>
           <button

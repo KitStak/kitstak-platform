@@ -250,7 +250,7 @@ describe('Actual Receiving Date after a cancelled receipt', () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]?.fromValue).toBe('(empty)');
     expect(entries[0]?.message).toMatch(
-      /^Actual Receiving Date is modified\. \(empty\) --> \d{4}\/\d{2}\/\d{2} /,
+      /^Actual Receiving Date is modified\. \(empty\) --> [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M /,
     );
   });
 });
@@ -382,11 +382,21 @@ describe('PO serial pre-advice', () => {
 });
 
 describe('one date-time rule', () => {
-  it('formats instants in the warehouse zone, labelled', () => {
-    expect(formatZoned('2026-11-10T06:02:44.000Z', 'America/New_York')).toBe('2026/11/10 1:02 AM EST');
-    expect(formatZoned('2026-11-10T05:59:03.000Z', 'America/Chicago')).toBe('2026/11/09 11:59 PM CST');
-    expect(formatZoned('2026-11-10T06:02:44.000Z', 'Not/AZone')).toBe('2026/11/10 6:02 AM UTC');
+  const sameYear = new Date('2026-11-12T00:00:00.000Z');
+  it('formats instants in the warehouse zone, labelled and humanized', () => {
+    expect(formatZoned('2026-11-10T06:02:44.000Z', 'America/New_York', sameYear)).toBe(
+      'Nov 10, 1:02 AM EST',
+    );
+    expect(formatZoned('2026-11-10T05:59:03.000Z', 'America/Chicago', sameYear)).toBe(
+      'Nov 9, 11:59 PM CST',
+    );
+    expect(formatZoned('2026-11-10T06:02:44.000Z', 'Not/AZone', sameYear)).toBe('Nov 10, 6:02 AM UTC');
     expect(formatZoned(null, 'UTC')).toBe('');
+  });
+  it('keeps the year once it differs from the current one', () => {
+    expect(formatZoned('2026-11-10T06:02:44.000Z', 'America/New_York', new Date('2027-01-05'))).toBe(
+      'Nov 10, 2026, 1:02 AM EST',
+    );
   });
 });
 

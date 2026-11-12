@@ -1,7 +1,7 @@
 /**
  * Change-log presentation for purchase orders (M05). The shared `changeLog.recordUpdate`
  * writes values verbatim, so PO snapshots are humanised here first: date-only fields as
- * `YYYY/MM/DD`, timestamps as `YYYY/MM/DD h:mm AM` in the warehouse timezone, and empty
+ * `YYYY/MM/DD`, timestamps as `Nov 9, 2026, 9:51 PM CST` in the warehouse timezone, and empty
  * values as "(empty)" so a message never reads "is modified.  --> x".
  */
 import { eq } from 'drizzle-orm';
@@ -30,9 +30,13 @@ export function logDate(value: string): string {
   return m ? `${m[1]}/${m[2]}/${m[3]}` : value;
 }
 
-/** ISO instant → `2026/11/09 9:51 PM CST` in `timeZone` (UTC when unknown or invalid); the module-wide rule (`formatZoned`). */
+/**
+ * ISO instant → `Nov 9, 2026, 9:51 PM CST` in `timeZone` (UTC when unknown or invalid); the
+ * module-wide rule (`formatZoned`). Audit text always carries the year (epoch `now` so the
+ * current-year elision never applies), since log entries are read long after they're written.
+ */
 export function logDateTime(value: string, timeZone = 'UTC'): string {
-  return formatZoned(value, timeZone);
+  return formatZoned(value, timeZone, new Date(0));
 }
 
 /** One snapshot value as it should read in the change log. */

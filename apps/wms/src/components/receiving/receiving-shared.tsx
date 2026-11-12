@@ -363,7 +363,7 @@ export function ProductThumb({
 }
 
 /** Code-like cell for confirm mini tables: never breaks inside a token (the table scrolls). */
-/** An instant in the warehouse zone, labelled (`2026/11/10 1:02 AM EST`): the module's one date-time rule. */
+/** An instant in the warehouse zone, labelled (`Nov 10, 1:02 AM EST`): the module's one date-time rule. */
 export function ZonedTime({
   value,
   timeZone,

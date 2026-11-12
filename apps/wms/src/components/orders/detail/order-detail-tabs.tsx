@@ -7,6 +7,7 @@
  */
 import * as React from 'react';
 import Link from 'next/link';
+import { Truck } from 'lucide-react';
 import { EMPTY_VALUE, useFormat } from '@/lib/format';
 import { countryName } from '@/lib/countries';
 import { effectiveRank, priorityFromRank } from '@/lib/grid-defs/orders/priority';
@@ -553,6 +554,72 @@ export function addressLines(a: {
   ].filter((x): x is string => Boolean(x && String(x).trim()));
 }
 
+const hasFieldValue = (v: React.ReactNode): boolean => v !== null && v !== undefined && v !== '';
+
+/**
+ * Shipping card with progressive disclosure: pre-shipment it shows only the fields that have
+ * data plus a "Not shipped yet" note instead of a wall of em-dashes; tracking, packages and
+ * shipping cost appear once a shipment or label exists.
+ */
+function ShippingCard({
+  detail,
+  tracking,
+  shippingCost,
+}: {
+  readonly detail: OrderDetail;
+  readonly tracking: readonly string[];
+  readonly shippingCost: number | null | undefined;
+}) {
+  const fmt = useFormat();
+  const o = detail.order;
+  const shipped = Boolean(o.shippedAt) || detail.shipments.length > 0 || tracking.length > 0;
+  const cost = shippingCost === null || shippingCost === undefined ? null : fmt.money(shippingCost, 'USD', 'summary');
+  const base: ReadonlyArray<readonly [string, React.ReactNode]> = [
+    ['Carrier', detail.carrierSetupName ?? o.carrier],
+    ['Service', detail.carrierServiceName ?? o.shippingService],
+    ['Package', detail.shipmentPackageName],
+    ['Requested option', o.requestedShippingOption],
+  ];
+  const fields = shipped ? base : base.filter(([, v]) => hasFieldValue(v));
+  return (
+    <OverviewCard title="Shipping" testId="order-card-shipping">
+      {fields.length > 0 ? (
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {fields.map(([label, v]) => (
+            <Field key={label} label={label}>
+              {v}
+            </Field>
+          ))}
+          {shipped ? (
+            <>
+              <Field
+                label={tracking.length > 1 ? 'Tracking numbers' : 'Tracking'}
+                mono
+                className="sm:col-span-2"
+              >
+                {tracking.length ? tracking.join(', ') : null}
+              </Field>
+              <Field label="Shipping cost">{cost}</Field>
+              <Field label="Packages">
+                {detail.shipments.length ? String(detail.shipments.length) : null}
+              </Field>
+            </>
+          ) : null}
+        </dl>
+      ) : null}
+      {shipped ? null : (
+        <p
+          className="flex items-center gap-2 rounded-md border border-dashed border-border px-3 py-3 text-xs text-secondary"
+          data-testid="order-shipping-empty"
+        >
+          <Truck className="h-4 w-4 shrink-0 text-faint" aria-hidden />
+          Not shipped yet. Tracking, packages and shipping cost appear once the order ships.
+        </p>
+      )}
+    </OverviewCard>
+  );
+}
+
 /** Overview: who and where the order ships to, how, and when (Logiwa shows these on one form). */
 export function OrderOverviewCards({ detail }: { readonly detail: OrderDetail }) {
   const fmt = useFormat();
@@ -637,23 +704,7 @@ export function OrderOverviewCards({ detail }: { readonly detail: OrderDetail })
           </div>
         </dl>
       </OverviewCard>
-      <OverviewCard title="Shipping" testId="order-card-shipping">
-        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Carrier">{detail.carrierSetupName ?? o.carrier}</Field>
-          <Field label="Service">{detail.carrierServiceName ?? o.shippingService}</Field>
-          <Field label="Package">{detail.shipmentPackageName}</Field>
-          <Field label="Requested option">{o.requestedShippingOption}</Field>
-          <Field label={tracking.length > 1 ? 'Tracking numbers' : 'Tracking'} mono className="sm:col-span-2">
-            {tracking.length ? tracking.join(', ') : null}
-          </Field>
-          <Field label="Shipping cost">
-            {shippingCost === null || shippingCost === undefined
-              ? null
-              : fmt.money(shippingCost, 'USD', 'summary')}
-          </Field>
-          <Field label="Packages">{detail.shipments.length ? String(detail.shipments.length) : null}</Field>
-        </dl>
-      </OverviewCard>
+      <ShippingCard detail={detail} tracking={tracking} shippingCost={shippingCost} />
       <OverviewCard title="Dates & type" testId="order-card-dates" className="md:col-span-2 2xl:col-span-1">
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-2">
           <Field label="Order type">{detail.orderTypeName}</Field>

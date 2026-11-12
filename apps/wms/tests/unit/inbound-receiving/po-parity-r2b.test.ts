@@ -238,9 +238,9 @@ describe('change log', () => {
   });
   it('log helpers', () => {
     expect(logDate('2026-11-09')).toBe('2026/11/09');
-    expect(logDateTime('2026-11-10T03:27:13.549Z', 'UTC')).toBe('2026/11/10 3:27 AM UTC');
-    expect(logDateTime('2026-11-10T03:27:13.549Z', 'America/Chicago')).toBe('2026/11/09 9:27 PM CST');
-    expect(logDateTime('2026-11-10T03:27:13.549Z', 'Not/AZone')).toBe('2026/11/10 3:27 AM UTC');
+    expect(logDateTime('2026-11-10T03:27:13.549Z', 'UTC')).toBe('Nov 10, 2026, 3:27 AM UTC');
+    expect(logDateTime('2026-11-10T03:27:13.549Z', 'America/Chicago')).toBe('Nov 9, 2026, 9:27 PM CST');
+    expect(logDateTime('2026-11-10T03:27:13.549Z', 'Not/AZone')).toBe('Nov 10, 2026, 3:27 AM UTC');
     expect(logSnapshot({ receivedAt: null, note: '', status: 'Started' })).toEqual({
       receivedAt: EMPTY_LOG_VALUE,
       note: EMPTY_LOG_VALUE,

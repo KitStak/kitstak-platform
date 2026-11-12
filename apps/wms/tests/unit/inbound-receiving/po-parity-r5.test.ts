@@ -267,6 +267,6 @@ describe('human validation copy', () => {
   });
 
   it('labels change-log times with the warehouse zone', () => {
-    expect(logDateTime('2026-11-10T04:41:00.000Z', 'America/Chicago')).toBe('2026/11/09 10:41 PM CST');
+    expect(logDateTime('2026-11-10T04:41:00.000Z', 'America/Chicago')).toBe('Nov 9, 2026, 10:41 PM CST');
   });
 });

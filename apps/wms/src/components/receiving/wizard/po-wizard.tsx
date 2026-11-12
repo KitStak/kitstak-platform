@@ -106,10 +106,20 @@ export interface PoWizardProps {
   readonly onCreated?: (po: PoDetail) => void;
   /** Detail without the edit permission: read-only review, no Save / Edit / step links. */
   readonly readOnly?: boolean;
+  /** Overrides the read-only explainer (view mode: the viewer can edit but hasn't asked to). */
+  readonly readOnlyNote?: string;
 }
 
-/** Read-only purchase order (roles without `inventory.purchase_orders.edit`). */
-function ReadOnlyPo({ po, railExtra }: { readonly po: PoDetail; readonly railExtra?: React.ReactNode }) {
+/** Read-only purchase order (view mode, or roles without `inventory.purchase_orders.edit`). */
+function ReadOnlyPo({
+  po,
+  railExtra,
+  note,
+}: {
+  readonly po: PoDetail;
+  readonly railExtra?: React.ReactNode;
+  readonly note?: string;
+}) {
   const fmt = useFormat();
   const values = React.useMemo(() => valuesFromDetail(po), [po]);
   const form = useForm<PoFormValues>({ defaultValues: values });
@@ -120,9 +130,10 @@ function ReadOnlyPo({ po, railExtra }: { readonly po: PoDetail; readonly railExt
           <h2 className="text-base font-semibold text-foreground">Order review</h2>
           <p className="mt-0.5 flex items-center gap-1 text-xs text-secondary">
             <Lock className="h-3 w-3" aria-hidden />
-            {po.status === 'Cancelled'
-              ? 'View only. A cancelled purchase order can’t be edited.'
-              : 'View only. You don’t have permission to edit purchase orders.'}
+            {note ??
+              (po.status === 'Cancelled'
+                ? 'View only. A cancelled purchase order can’t be edited.'
+                : 'View only. You don’t have permission to edit purchase orders.')}
           </p>
         </header>
         <StepConfirm
@@ -163,7 +174,8 @@ function StaleCodeCheckReset({ form }: { readonly form: UseFormReturn<PoFormValu
 }
 
 export function PoWizard(props: PoWizardProps) {
-  if (props.readOnly && props.po) return <ReadOnlyPo po={props.po} railExtra={props.railExtra} />;
+  if (props.readOnly && props.po)
+    return <ReadOnlyPo po={props.po} railExtra={props.railExtra} note={props.readOnlyNote} />;
   return <EditablePoWizard {...props} />;
 }
 

@@ -1,6 +1,9 @@
-import { DetailPageSkeleton } from '@/components/layout/shell-skeleton';
+import { RecordDetailSkeleton } from '@/components/layout/shell-skeleton';
 
-/** Record pages stream with a detail-shaped skeleton, not the generic list grid. */
+/**
+ * Order detail streams with a skeleton that mirrors the real page (header + helper,
+ * tab strip, main column + right rail), not the generic list grid.
+ */
 export default function OrderDetailLoading() {
-  return <DetailPageSkeleton />;
+  return <RecordDetailSkeleton />;
 }

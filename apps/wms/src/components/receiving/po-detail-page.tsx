@@ -1,7 +1,9 @@
 'use client';
 
 /**
- * `/receiving/[id]` — purchase order detail / edit. The wizard in free mode opens on Confirm
+ * `/receiving/[id]` — purchase order detail. Drilling in opens a read-only VIEW of the
+ * order (the wizard's Confirm summary); the prominent "Edit purchase order" button (or a
+ * `?step=` / `?edit` link) opens the wizard in free mode on Confirm
  * (steps clickable, client locked). Right rail: Save, Other actions ▾ (Receive items,
  * Receive PO, Delete order, Cancel order — gated by status and permission), Summary with the
  * status pencil and change log, Billing charges download and Printouts. Receipts are listed
@@ -27,6 +29,7 @@ import {
 } from 'lucide-react';
 import { HomeLink, StatusScreen } from '@/components/layout/status-screen';
 import { PageHeader } from '@/components/layout/page-header';
+import { RecordDetailSkeleton } from '@/components/layout/shell-skeleton';
 import { ChangeLogDrawer, DocumentsViewer, DocumentUploadModal } from '@/components/shared';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -343,10 +346,13 @@ function ReceivedSummary({ po }: { readonly po: PoDetail }) {
 function DetailView({
   po,
   initialStep,
+  initialEdit,
   refresh,
 }: {
   readonly po: PoDetail;
   readonly initialStep: string;
+  /** `?step=` / `?edit` deep links open the wizard directly; a plain drill-in opens the view. */
+  readonly initialEdit: boolean;
   readonly refresh: () => Promise<void>;
 }) {
   const router = useRouter();
@@ -391,6 +397,9 @@ function DetailView({
     po.status === 'Cancelled' ? 'PO is cancelled' : po.status === 'Completed' ? 'PO is fully received' : null;
   // Cancelled POs are read-only (Logiwa parity); Completed POs keep header edits, lines are locked.
   const editable = (can.edit.allowed || can.edit.isLoading) && po.status !== 'Cancelled';
+  // Drilling in lands on a read-only VIEW of the order; Edit (or a `?step=` link) opens the wizard.
+  const [editMode, setEditMode] = React.useState(initialEdit);
+  const editing = editable && editMode;
 
   // The confirm closes as soon as the mutation resolves; the page refetches in the background.
   const run = async (kind: Exclude<Confirm, null>) => {
@@ -626,7 +635,7 @@ function DetailView({
   return (
     <div className="flex flex-col gap-4 pb-8">
       <PageHeader
-        title={editable ? 'Edit purchase order' : 'Purchase order'}
+        title={editing ? 'Edit purchase order' : 'Purchase order'}
         crumbLabel={po.code}
         helper={`${po.clientName} · ${po.warehouseName} · created ${fmt.date(po.createdAt)}`}
         actions={
@@ -636,11 +645,21 @@ function DetailView({
             </Link>
             {can.receive && po.status !== 'Cancelled' && po.status !== 'Completed' ? (
               <DisabledReason reason={rReceive}>
-                <Button variant="primary" disabled={Boolean(rReceive)} onClick={() => setReceiveOpen(true)}>
+                <Button
+                  variant={editing ? 'primary' : 'secondary'}
+                  disabled={Boolean(rReceive)}
+                  onClick={() => setReceiveOpen(true)}
+                >
                   <PackageCheck className="h-3.5 w-3.5" aria-hidden />
                   Receive items
                 </Button>
               </DisabledReason>
+            ) : null}
+            {editable && !editing ? (
+              <Button variant="primary" onClick={() => setEditMode(true)}>
+                <Pencil className="h-3.5 w-3.5" aria-hidden />
+                Edit purchase order
+              </Button>
             ) : null}
           </>
         }
@@ -649,7 +668,12 @@ function DetailView({
         <PoWizard
           key={`${po.id}:${po.version}`}
           po={po}
-          readOnly={!editable}
+          readOnly={!editing}
+          readOnlyNote={
+            editable
+              ? 'Read-only view of the order. Use Edit purchase order to make changes.'
+              : undefined
+          }
           initialStep={initialStep}
           railExtra={railExtra}
           onSaved={() => void refresh()}
@@ -758,18 +782,7 @@ export function PoDetailPage() {
     await q.refetch();
   }, [q]);
 
-  if (q.isPending) {
-    return (
-      <div className="flex flex-col gap-4" aria-busy>
-        <Skeleton className="h-10 w-1/3" />
-        <Skeleton className="h-12 w-full" />
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <Skeleton className="h-[420px]" />
-          <Skeleton className="h-[420px]" />
-        </div>
-      </div>
-    );
-  }
+  if (q.isPending) return <RecordDetailSkeleton />;
   if (q.error || !q.data) {
     const status = isApiError(q.error) ? q.error.status : 0;
     if (status === 404)
@@ -814,5 +827,12 @@ export function PoDetailPage() {
       />
     );
   }
-  return <DetailView po={q.data.data} initialStep={search.get('step') ?? 'confirm'} refresh={refresh} />;
+  return (
+    <DetailView
+      po={q.data.data}
+      initialStep={search.get('step') ?? 'confirm'}
+      initialEdit={search.has('step') || search.has('edit')}
+      refresh={refresh}
+    />
+  );
 }

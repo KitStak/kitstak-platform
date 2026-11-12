@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowUpRight, Lock } from 'lucide-react';
 import type { Module } from '@kitstak/entitlements';
 import type { ModuleAccess } from '@/server/entitlements';
+import type { TileStat } from '@/server/product-stats';
 import { Badge, cn } from '@/components/ui';
 
 export interface ProductTileProps {
@@ -13,6 +14,8 @@ export interface ProductTileProps {
   readonly entitled: boolean;
   readonly access: ModuleAccess;
   readonly periodEnd: Date | null;
+  /** Live numbers from the shared db (null: stats unavailable — render nothing). */
+  readonly stats?: readonly TileStat[] | null;
 }
 
 const ACCESS_BADGE: Readonly<
@@ -37,6 +40,7 @@ export function ProductTile({
   entitled,
   access,
   periodEnd,
+  stats,
 }: ProductTileProps) {
   const badge = ACCESS_BADGE[access];
   const body = (
@@ -57,7 +61,17 @@ export function ProductTile({
         <p className="mt-0.5 text-sm font-medium text-fg-secondary">{tagline}</p>
         <p className="mt-2 text-sm text-fg-muted">{description}</p>
       </div>
-      <div className="mt-6 flex items-center justify-between border-t border-border-subtle pt-4">
+      {entitled && stats && stats.length > 0 ? (
+        <dl className="mt-5 grid grid-cols-2 gap-2">
+          {stats.map((stat) => (
+            <div key={stat.label} className="flex flex-col rounded-lg bg-sunken px-3 py-2">
+              <dd className="order-1 text-lg font-semibold text-fg tabular-nums">{stat.value}</dd>
+              <dt className="order-2 text-xs text-fg-muted">{stat.label}</dt>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      <div className="mt-5 flex items-center justify-between border-t border-border-subtle pt-4">
         {access === 'grace' && periodEnd ? (
           <span className="text-xs font-medium text-warning-text">
             Access ends soon — period ended {dateFormat.format(periodEnd)}

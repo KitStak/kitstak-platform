@@ -45,7 +45,7 @@ const WIDTH: Readonly<Record<string, number>> = {
   age: 72,
   processingAge: 96,
   daysSinceShipped: 132,
-  clientName: 136,
+  clientName: 176,
   warehouseCode: 184,
   status: 132,
   pickShortStatus: 96,

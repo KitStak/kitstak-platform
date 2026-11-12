@@ -23,6 +23,14 @@ const STATUS_BADGE: Readonly<
 
 const dateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+/** Production-shaped period-end copy: a real date, or an honest reason there is none. */
+function periodEndLabel(source: string | undefined): string {
+  if (source === 'manual') return 'Manual grant — no renewal';
+  if (source === 'trial') return 'Trial — no end date set';
+  if (source === 'stripe') return 'No renewal date on file';
+  return 'No subscription';
+}
+
 /**
  * Honest billing stub (owner decision: Stripe is deferred). Shows the org's real
  * entitlement rows and points at the administrator — no fake checkout.
@@ -54,7 +62,17 @@ export default async function BillingPage({
     <div className="mx-auto flex max-w-[760px] flex-col gap-8">
       <header>
         <p className="text-sm font-medium text-fg-muted">{activeOrg.name}</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-fg">Billing</h1>
+        <h1 className="mt-1 flex items-center gap-2.5 text-2xl font-semibold tracking-[-0.02em] text-fg">
+          Billing
+          {devAllowAll ? (
+            <Badge
+              tone="info"
+              title="ENTITLEMENTS_DEV_ALLOW_ALL is on — every module opens on this environment regardless of status"
+            >
+              Dev override
+            </Badge>
+          ) : null}
+        </h1>
         <p className="mt-2 text-md text-fg-secondary">What your organization is entitled to run today.</p>
       </header>
 
@@ -105,9 +123,7 @@ export default async function BillingPage({
                     {state.entitlement?.periodEnd ? (
                       dateFormat.format(state.entitlement.periodEnd)
                     ) : (
-                      <span title="No subscription on file" aria-label="No subscription on file">
-                        —
-                      </span>
+                      <span className="text-fg-muted">{periodEndLabel(state.entitlement?.source)}</span>
                     )}
                   </td>
                 </tr>
@@ -127,13 +143,6 @@ export default async function BillingPage({
             Self-serve checkout and plan management aren’t available yet. To enable or change modules for{' '}
             {activeOrg.name}, contact your administrator.
           </p>
-          {devAllowAll ? (
-            <p className="mt-3 text-xs text-fg-muted">
-              Development mode is on for this environment, so every module above opens regardless of status.
-              Production access is granted per organization by a KitStak operator — see the entitlements guide
-              in the project docs.
-            </p>
-          ) : null}
         </div>
       </section>
     </div>

@@ -163,8 +163,8 @@ export function AppShell({
             Skip to content
           </a>
           <TopBar />
-          {/* lg:pr-7 reserves a gutter as wide as the fixed (w-7) "Feedback & Updates" side tab so it never covers grid action columns. */}
-          <main id="main-content" className="flex min-h-0 flex-1 flex-col lg:pr-7 print:pr-0">
+          {/* lg:pr-6 reserves a gutter as wide as the fixed (w-6) "Feedback" side tab so it never covers grid action columns. */}
+          <main id="main-content" className="flex min-h-0 flex-1 flex-col lg:pr-6 print:pr-0">
             <PasswordChangeGate reason={passwordChange}>{children}</PasswordChangeGate>
           </main>
           <IdleSignOut minutes={idleMinutes} />
