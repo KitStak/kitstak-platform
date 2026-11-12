@@ -1,0 +1,213 @@
+/*
+ * Cell-specific styles that utilities can't express cleanly: the status pill's folded corner,
+ * the checkbox bounce, the battery/time-bar fills and the file drop overlay.
+ * All colors come from tokens (no literal hex).
+ */
+
+/* ------------------------------------------------------------ Root cell */
+.ks-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  height: var(--ks-cell-h, var(--row-height));
+  font-size: var(--type-base);
+  line-height: var(--type-base-lh);
+  color: var(--text-primary);
+  outline: none;
+  user-select: none;
+  transition: background-color var(--duration-instant) var(--ease-out), box-shadow var(--duration-instant) var(--ease-out);
+}
+.ks-cell[data-density='compact'] {
+  --ks-cell-h: var(--row-height-compact);
+}
+.ks-cell[data-density='comfortable'] {
+  --ks-cell-h: var(--row-height-comfortable);
+}
+.ks-cell[data-interactive='true']:hover,
+.ks-cell[data-interactive='true'][data-force-hover='true'] {
+  background-color: var(--surface-hover);
+}
+.ks-cell:focus-visible,
+.ks-cell[data-editing='true'] {
+  box-shadow: inset 0 0 0 2px var(--focus-ring);
+  z-index: 1;
+}
+.ks-cell[data-flash='true'] {
+  animation: ks-cell-flash 600ms var(--ease-out);
+}
+@keyframes ks-cell-flash {
+  from {
+    background-color: var(--surface-highlight);
+  }
+}
+
+/* ------------------------------------------------------------ Status pill (tinted)
+ * The cell is no longer a full-bleed fill. The status reads as one shared pill: a tinted
+ * background (--lc-subtle), the label colour as text (--lc-text) and a solid dot (--lc-bg).
+ * Same recipe as StatusPill in components/ui and as KitStak WMS. */
+.ks-pill {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  /* Label text with ink mixed in so it stays AA on its own tint (see --pill-text-mix). */
+  color: color-mix(in srgb, var(--lc-text), var(--text-primary) var(--pill-text-mix));
+  transition: background-color var(--duration-instant) var(--ease-out);
+  overflow: hidden;
+}
+.ks-pill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background-color: var(--lc-subtle);
+  font-size: var(--type-xs);
+  line-height: var(--type-xs-lh);
+  font-weight: var(--weight-medium);
+}
+.ks-pill-chip::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--lc-bg);
+}
+.ks-cell:focus-visible .ks-pill,
+.ks-cell[data-editing='true'] .ks-pill {
+  box-shadow: inset 0 0 0 2px var(--focus-ring);
+}
+.ks-cell[data-interactive='true']:hover .ks-pill,
+.ks-cell[data-force-hover='true'] .ks-pill,
+.ks-cell[data-editing='true'] .ks-pill {
+  background-color: var(--surface-hover);
+}
+/* Empty status: a quiet dashed slot, no dot. */
+.ks-pill[data-empty='true'] {
+  color: var(--text-muted);
+}
+.ks-pill[data-empty='true'] .ks-pill-chip {
+  min-width: 48px;
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+.ks-pill[data-empty='true'] .ks-pill-chip::before {
+  display: none;
+}
+.ks-pill-pop {
+  animation: ks-pill-pop var(--duration-normal) var(--ease-emphasized);
+}
+@keyframes ks-pill-pop {
+  from {
+    filter: brightness(1.18);
+  }
+}
+
+/* ------------------------------------------------------------ Checkbox */
+.ks-check {
+  transition: background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
+}
+.ks-check[data-checked='true'] svg {
+  animation: ks-check-bounce 220ms var(--ease-emphasized);
+}
+@keyframes ks-check-bounce {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ------------------------------------------------------------ Rating */
+.ks-star {
+  transition: transform var(--duration-fast) var(--ease-emphasized), color var(--duration-instant) var(--ease-out);
+}
+.ks-star[data-pop='true'] {
+  animation: ks-star-pop 260ms var(--ease-emphasized);
+}
+@keyframes ks-star-pop {
+  50% {
+    transform: scale(1.3);
+  }
+}
+
+/* ------------------------------------------------------------ Bars (timeline / progress / battery) */
+.ks-bar-fill {
+  transform-origin: left center;
+  transition: transform var(--duration-slow) var(--ease-out);
+}
+
+/* ------------------------------------------------------------ Files drop overlay */
+.ks-drop-overlay {
+  position: absolute;
+  inset: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1.5px dashed var(--primary);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-highlight) 92%, transparent);
+  color: var(--primary-text);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------ Label editor drag */
+.ks-label-row[data-dragging='true'] {
+  box-shadow: var(--elevation-lg);
+  background: var(--surface-raised);
+  z-index: 2;
+}
+
+/* ------------------------------------------------------------ Narrow-screen editor sheet */
+@keyframes ks-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes ks-sheet-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+.ks-cell-sheet[data-state='open'] {
+  animation: ks-sheet-in 200ms var(--ease-enter);
+}
+.ks-cell-sheet[data-state='closed'] {
+  animation: ks-sheet-out 150ms var(--ease-exit);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ks-pill::after,
+  .ks-pill,
+  .ks-bar-fill {
+    transition-duration: 0.01ms;
+  }
+  .ks-check[data-checked='true'] svg,
+  .ks-star[data-pop='true'],
+  .ks-pill-pop,
+  .ks-cell-sheet {
+    animation: none;
+  }
+}

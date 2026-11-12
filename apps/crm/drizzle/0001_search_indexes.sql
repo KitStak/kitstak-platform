@@ -1,0 +1,2 @@
+CREATE INDEX "items_search_idx" ON "items" USING gin ((to_tsvector('simple'::regconfig, "name") || jsonb_to_tsvector('simple'::regconfig, "values", '["string"]'::jsonb)));--> statement-breakpoint
+CREATE INDEX "updates_search_idx" ON "updates" USING gin (to_tsvector('simple'::regconfig, "body_text"));

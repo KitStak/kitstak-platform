@@ -1,0 +1,41 @@
+/* Step transition for the import wizard: 16px slide + fade (opacity-only when motion is reduced). */
+.ie-step-enter {
+  animation: ie-step-in var(--duration-slow, 250ms) var(--ease-enter, cubic-bezier(0, 0, 0.2, 1)) both;
+}
+.ie-step-enter[data-direction='back'] {
+  animation-name: ie-step-in-back;
+}
+@keyframes ie-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ie-step-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ie-step-enter,
+  .ie-step-enter[data-direction='back'] {
+    animation: ie-fade 70ms linear both;
+  }
+  @keyframes ie-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}

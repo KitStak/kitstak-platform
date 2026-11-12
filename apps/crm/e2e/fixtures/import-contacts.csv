@@ -1,0 +1,7 @@
+Full name,E-mail,Phone,Stage,Owner,Deal value,Next follow-up,Notes
+Ada Lovelace,ada@analytical.example,+1 415 555 0100,Qualified,maya@northwind-robotics.example,"$12,500",2026-11-20,Met at RoboConf
+Grace Hopper,grace@cobol.example,(212) 555-0199,New,liam@northwind-robotics.example,"$8,000",2026-11-22,Wants a pilot
+Alan Turing,not-an-email,+44 20 7946 0000,Qualified,sofia@northwind-robotics.example,"$21,000",2026-12-01,"Asked about pricing, then security"
+Katherine Johnson,katherine@nasa.example,+1 757 555 0123,Lost,maya@northwind-robotics.example,"$4,200",someday,Budget cut
+Linus Torvalds,linus@kernel.example,+358 9 555 0101,New,liam@northwind-robotics.example,"$15,750",2026-12-15,
+,orphan@nowhere.example,,New,,,,Row without a name

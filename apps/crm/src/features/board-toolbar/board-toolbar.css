@@ -1,0 +1,13 @@
+/* Board search matches (CSS Custom Highlight API, see hooks/use-search-highlight.ts). */
+::highlight(ks-board-search) {
+  background-color: var(--mark-bg);
+  color: var(--mark-fg);
+}
+
+@media print {
+  [data-testid='board-toolbar'],
+  [data-testid='view-tabs'],
+  [data-testid='board-header-actions'] {
+    display: none !important;
+  }
+}
