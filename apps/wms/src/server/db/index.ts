@@ -73,7 +73,12 @@ export const APP_SEARCH_PATH = 'wms, public';
 
 export async function openPostgres(
   url: string,
-  options: { readonly max?: number; readonly searchPath?: string } = {},
+  options: {
+    readonly max?: number;
+    readonly searchPath?: string;
+    /** Server-side statement_timeout in ms; null disables it (migrations, bootstrap, resets). */
+    readonly statementTimeoutMs?: number | null;
+  } = {},
 ): Promise<OpenDatabase> {
   const { default: postgres } = await import('postgres');
   const { drizzle } = await import('drizzle-orm/postgres-js');
@@ -81,12 +86,23 @@ export async function openPostgres(
     // Supabase transaction-mode pooler: no server-side prepared statements.
     prepare: false,
     max: options.max ?? poolMax(),
+    // Serverless self-healing (postgres-js seconds): a connection poisoned by an instance
+    // suspend (Vercel freezes the Lambda the moment the response ends, leaving the query
+    // in flight and the pooled connection checked out forever — postgres-js has NO acquire
+    // timeout, so later queries queue silently) must die within minutes, not wedge the pool.
     idle_timeout: 20,
-    connect_timeout: 15,
+    connect_timeout: 10,
+    max_lifetime: 300,
     onnotice: () => {},
     connection: {
       application_name: 'kitstak-wms',
       search_path: options.searchPath ?? APP_SEARCH_PATH,
+      // Server-side kill switch for the same failure: the backend cancels any statement
+      // still running 30 s after it started, releasing the server slot even while the
+      // client is frozen. Sent as a startup parameter (milliseconds) like search_path;
+      // Supavisor transaction mode accepted search_path, but may ignore this one — it is
+      // defense in depth, never correctness. Migrations/bootstrap pass null to disable.
+      ...(options.statementTimeoutMs === null ? {} : { statement_timeout: options.statementTimeoutMs ?? 30_000 }),
     },
   });
   const db = drizzle(client, { schema });

@@ -53,16 +53,23 @@ export async function authenticateApiToken(headers: Headers): Promise<TokenPrinc
 
   if (shouldTouchLastUsed(row.token.lastUsedAt, now.getTime())) {
     const cutoff = new Date(now.getTime() - TOKEN_LAST_USED_THROTTLE_MS);
-    void db
-      .update(apiTokens)
-      .set({ lastUsedAt: now })
-      .where(
-        and(
-          eq(apiTokens.id, row.token.id),
-          or(isNull(apiTokens.lastUsedAt), lt(apiTokens.lastUsedAt, cutoff)),
-        ),
-      )
-      .catch((error: unknown) => logger.warn('api_token.touch_failed', { tokenId: row.token.id, error }));
+    // AWAITED (best effort): the fire-and-forget UPDATE could still be in flight when the
+    // response ended; a serverless suspend then freezes it mid-query and wedges the pooled
+    // connection. The touch is throttled to at most once a minute per token, so the extra
+    // round-trip is negligible.
+    try {
+      await db
+        .update(apiTokens)
+        .set({ lastUsedAt: now })
+        .where(
+          and(
+            eq(apiTokens.id, row.token.id),
+            or(isNull(apiTokens.lastUsedAt), lt(apiTokens.lastUsedAt, cutoff)),
+          ),
+        );
+    } catch (error: unknown) {
+      logger.warn('api_token.touch_failed', { tokenId: row.token.id, error });
+    }
   }
 
   const session = {

@@ -13,6 +13,7 @@
  * Rows left pending by a crash are picked up the next time the worker runs.
  */
 import { randomUUID } from 'node:crypto';
+import { after } from 'next/server';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db as defaultDb, type Executor } from '@/server/db';
 import { auditLog, webhooks } from '@/server/db/schema';
@@ -130,6 +131,21 @@ let draining: Promise<number> | null = null;
 
 /** Schedule a drain soon (after the enqueuing transaction has had time to commit). */
 export function kickWebhookWorker(): void {
+  // Serverless (Vercel): timer-driven drains run detached from any request, so the instance
+  // is suspended the moment the response ends — freezing the drain's queries mid-connection
+  // and wedging the pool. `after()` runs the drain once the response (and therefore the
+  // enqueuing transaction's commit) is finished, and Vercel keeps the instance alive for it.
+  if (process.env.VERCEL) {
+    try {
+      after(async () => {
+        await drainWebhookOutbox();
+      });
+    } catch (error) {
+      // Outside a request scope: the next enqueue's drain claims every due row, these included.
+      logger.warn('webhooks.kick_deferred_failed', { error });
+    }
+    return;
+  }
   if (!sweepTimer) {
     sweepTimer = setInterval(() => void drainWebhookOutbox(), SWEEP_MS);
     sweepTimer.unref?.();

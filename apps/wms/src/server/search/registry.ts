@@ -3,6 +3,7 @@
  * `GET /api/search`. Providers run in parallel; one failing or slow provider is logged
  * and dropped, never failing the whole search.
  */
+import { after } from 'next/server';
 import { z } from 'zod';
 import { canAny } from '@/server/auth/permissions';
 import { log } from '@/server/log';
@@ -71,7 +72,20 @@ export function visibleProviders(
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`timed out after ${ms} ms`)), ms);
+    const timer = setTimeout(() => {
+      // The losing provider's DB queries are still in flight on pooled connections. The
+      // response must not end before they settle: on Vercel the instance is suspended as
+      // soon as the response finishes, freezing the query mid-connection and wedging the
+      // pool for every later request. `after()` keeps the instance alive until they land.
+      try {
+        after(async () => {
+          await promise.catch(() => undefined);
+        });
+      } catch {
+        // Outside a request scope (tests, scripts) there is no instance to keep alive.
+      }
+      reject(new Error(`timed out after ${ms} ms`));
+    }, ms);
     promise.then(
       (value) => {
         clearTimeout(timer);

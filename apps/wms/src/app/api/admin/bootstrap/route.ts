@@ -77,7 +77,8 @@ export async function POST(request: Request): Promise<NextResponse> {
   const body = (await request.json().catch(() => ({}))) as { action?: string; confirm?: string };
 
   const started = Date.now();
-  const handle = await openPostgres(url, { max: 1 });
+  // statementTimeoutMs: null — migrations and the snapshot restore may run longer than 30 s.
+  const handle = await openPostgres(url, { max: 1, statementTimeoutMs: null });
   try {
     const migrations = await applyMigrations(handle.db);
 

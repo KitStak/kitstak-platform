@@ -16,12 +16,18 @@ export type KitstakPgExecutor = KitstakPgDatabase | KitstakPgTransaction;
 const DEFAULT_POOL_MAX = 5;
 const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
 const DEFAULT_CONNECTION_TIMEOUT_MS = 5_000;
+const DEFAULT_MAX_LIFETIME_S = 300;
+const DEFAULT_STATEMENT_TIMEOUT_MS = 30_000;
 const DEFAULT_APPLICATION_NAME = 'kitstak-db';
 
 export interface CreatePgPoolOptions {
   readonly max?: number;
   readonly idleTimeoutMillis?: number;
   readonly connectionTimeoutMillis?: number;
+  /** Connection recycling cap in seconds (serverless self-healing); null disables. */
+  readonly maxLifetimeSeconds?: number | null;
+  /** Server-side statement_timeout in ms (sent in the startup packet); null disables (migrations). */
+  readonly statementTimeoutMs?: number | null;
   readonly applicationName?: string;
   /** Idle client errors (e.g. server restart) must not crash the process. */
   readonly onIdleClientError?: (error: Error) => void;
@@ -43,6 +49,16 @@ export function createPgPool(connectionString: string, options: CreatePgPoolOpti
     max: options.max ?? DEFAULT_POOL_MAX,
     idleTimeoutMillis: options.idleTimeoutMillis ?? DEFAULT_IDLE_TIMEOUT_MS,
     connectionTimeoutMillis: options.connectionTimeoutMillis ?? DEFAULT_CONNECTION_TIMEOUT_MS,
+    // Serverless self-healing: a connection poisoned by a suspended instance (query frozen
+    // in flight on a serverless suspend) must recycle within minutes, not wedge the pool.
+    maxLifetimeSeconds:
+      options.maxLifetimeSeconds === null ? 0 : (options.maxLifetimeSeconds ?? DEFAULT_MAX_LIFETIME_S),
+    // Server-side kill switch: pg sends statement_timeout in the startup packet, so the
+    // backend cancels statements running past the cap even while the client is frozen.
+    // Supavisor transaction mode may ignore it — defense in depth, never correctness.
+    ...(options.statementTimeoutMs === null
+      ? {}
+      : { statement_timeout: options.statementTimeoutMs ?? DEFAULT_STATEMENT_TIMEOUT_MS }),
     application_name: options.applicationName ?? DEFAULT_APPLICATION_NAME,
   });
   const onIdleClientError =

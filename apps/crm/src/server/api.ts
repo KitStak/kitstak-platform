@@ -223,7 +223,10 @@ export function withApi<const O extends ApiOptions, T>(
       const tokenDenied =
         tokenAuth !== null && options.permission !== undefined && !scopesAllow(tokenAuth.scopes, options.permission);
       if (options.permission && membership && (tokenDenied || !hasPermission(membership.roles, options.permission))) {
-        void recordAudit({
+        // AWAITED: fire-and-forget left the audit INSERT in flight when the 403 ended the
+        // response; a serverless suspend then freezes it mid-query and wedges the pooled
+        // connection (`recordAudit` never throws).
+        await recordAudit({
           orgId: membership.organization.id,
           actorId,
           action: 'auth.forbidden',

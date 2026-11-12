@@ -135,7 +135,8 @@ export async function migrateUrl(
   const { openPostgres } = await import('./index');
   // search_path pinned at connection startup too: on a transaction pooler a session-level SET
   // may not stick to the backend the migrator's transaction runs on.
-  const handle = await openPostgres(url, { max: 1, searchPath: 'public' });
+  // statementTimeoutMs: null — migration DDL may legitimately run longer than the app's 30 s cap.
+  const handle = await openPostgres(url, { max: 1, searchPath: 'public', statementTimeoutMs: null });
   try {
     if (isTransactionPoolerUrl(url)) {
       process.stderr.write(

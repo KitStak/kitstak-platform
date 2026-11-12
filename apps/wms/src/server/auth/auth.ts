@@ -171,9 +171,11 @@ function wmsSignInGate(db: AppDb) {
       .where(eq(users.email, email))
       .limit(1);
     if (!legacy) return;
-    const genericRejection = (reason: string): APIError => {
-      // Audit first (best effort), then the uniform refusal.
-      void writeAudit(db, {
+    const genericRejection = async (reason: string): Promise<APIError> => {
+      // Audit first (best effort, AWAITED), then the uniform refusal. Fire-and-forget left
+      // the INSERT in flight when the 401 ended the response; on Vercel the instance is then
+      // suspended mid-query and the pooled connection stays wedged (`writeAudit` never throws).
+      await writeAudit(db, {
         action: 'auth.login',
         entity: 'user',
         entityId: legacy.id,
@@ -182,7 +184,7 @@ function wmsSignInGate(db: AppDb) {
         detail: { email, reason },
         ip: ctx.headers?.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
         userAgent: ctx.headers?.get('user-agent') ?? null,
-      }).catch(() => undefined);
+      });
       return new APIError('UNAUTHORIZED', {
         message: 'Invalid email or password',
         code: 'INVALID_EMAIL_OR_PASSWORD',
@@ -194,14 +196,14 @@ function wmsSignInGate(db: AppDb) {
       // answer is a timing oracle separating "inactive account" from "wrong password"
       // (which costs a full scrypt verify). Burn one dummy KDF run before throwing.
       await burnDummyPasswordVerify(password);
-      throw genericRejection('user_inactive');
+      throw await genericRejection('user_inactive');
     }
     // Lazy import: apps-sso pulls the integrations crypto module; only load it on sign-in.
     const { passwordLoginBlockedBySso } = await import('@/server/repositories/apps-sso');
     if (await passwordLoginBlockedBySso(db, legacy.id)) {
       // NEW-5: same timing equalizer as the inactive-user rejection above.
       await burnDummyPasswordVerify(password);
-      throw genericRejection('sso_required');
+      throw await genericRejection('sso_required');
     }
   });
 }

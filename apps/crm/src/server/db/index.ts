@@ -26,6 +26,13 @@ function createPool(): pg.Pool {
     max: env.DB_POOL_MAX,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
+    // Serverless self-healing: a connection poisoned by a suspended instance (query frozen
+    // in flight when the response ended) must recycle within minutes, not wedge the pool.
+    maxLifetimeSeconds: 300,
+    // Server-side kill switch: pg sends statement_timeout (ms) in the startup packet, so the
+    // backend cancels statements running past 30 s even while the client is frozen. Supavisor
+    // transaction mode may ignore it — defense in depth, never correctness.
+    statement_timeout: 30_000,
     application_name: 'kitstak-crm',
   });
   pool.on('error', (error) => {

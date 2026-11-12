@@ -19,7 +19,9 @@ async function main(): Promise<void> {
     throw new Error('Refusing to reset the database in production. Set ALLOW_PROD_SEED=1 to override.');
   }
   const url = migrationUrl();
-  const handle = url ? await openPostgres(url, { max: 1 }) : await openPglite(PGLITE_DIR, { migrate: false });
+  const handle = url
+    ? await openPostgres(url, { max: 1, statementTimeoutMs: null })
+    : await openPglite(PGLITE_DIR, { migrate: false });
   try {
     const dropped = await dropAllObjects(handle.db);
     out(
