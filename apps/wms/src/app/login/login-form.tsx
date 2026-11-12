@@ -237,7 +237,7 @@ export function LoginForm({ showDemoCredentials = false }: LoginFormProps): Reac
 
       {showDemoCredentials ? (
         <div className="mt-4 rounded-lg border border-border bg-surface-sunken px-4 py-3 text-xs text-secondary shadow-xs">
-          <span className="font-semibold text-body">Demo workspace</span> — sign in with{' '}
+          <span className="font-semibold text-body">Demo workspace</span>: sign in with{' '}
           <code className="rounded bg-neutral-soft px-1 py-px font-mono text-2xs text-body">
             admin@kitstak.io
           </code>{' '}

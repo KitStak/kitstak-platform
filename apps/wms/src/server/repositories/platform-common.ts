@@ -19,8 +19,8 @@ export const entityRefSchema = z.object({ entityType: entityTypeSchema, entityId
 /** Bulk input `{ ids }` (0.2: max 1000). */
 export const bulkIdsSchema = z
   .array(idSchema)
-  .min(1, 'Select at least one record')
-  .max(MAX_BULK_IDS, `At most ${MAX_BULK_IDS} records at once`);
+  .min(1, 'Select at least one item')
+  .max(MAX_BULK_IDS, `At most ${MAX_BULK_IDS} items at once`);
 
 export const pagingSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

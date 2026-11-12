@@ -245,7 +245,7 @@ export const SERIAL_TRANSACTIONS_DEF: ReportDef = {
   title: 'Serial Number Transaction History',
   path: '/api/reports/transaction-history/serial',
   permission: 'reports.serial_number_transaction_history.view',
-  helper: 'Every inventory transaction that moved a serial-tracked unit, one row per serial number.',
+  helper: 'Every inventory transaction that moved a serial-tracked unit, one line per serial number.',
   fields: [
     CLIENT_FIELD,
     text('damageReason', 'Damage Reason'),

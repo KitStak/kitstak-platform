@@ -80,9 +80,9 @@ export function ClusterCard({ cluster, kind, orgSlug, canEdit }: ClusterCardProp
         onUndo: async () => {
           try {
             await merge.restore(result.mergedIds, result.primary.id);
-            toast.success('Merge undone', 'The records, their fields and relations are back as they were.');
+            toast.success('Merge undone', 'The duplicates, their fields and relations are back as they were.');
           } catch {
-            toast.error('Couldn’t undo the merge', 'Restore the records from Trash instead.');
+            toast.error('Couldn’t undo the merge', 'Restore the duplicates from Trash instead.');
           }
         },
       });
@@ -156,7 +156,7 @@ export function ClusterCard({ cluster, kind, orgSlug, canEdit }: ClusterCardProp
       {isPossible ? (
         <p className="flex items-start gap-2 border-b border-border-subtle bg-sunken px-4 py-2.5 text-sm text-fg-secondary">
           <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-icon" />
-          Only the name matches. Check the details below — nothing is selected for merging until you tick a record.
+          Only the name matches. Check the details below: nothing is selected for merging until you tick a duplicate.
         </p>
       ) : null}
       <CompareTable
@@ -176,10 +176,10 @@ export function ClusterCard({ cluster, kind, orgSlug, canEdit }: ClusterCardProp
         onOpenChange={setConfirming}
         destructive
         loading={merge.isPending}
-        title={`Merge ${plural(mergeIds.length, recordNoun)} into ${primary?.name ?? 'the kept record'}?`}
+        title={`Merge ${plural(mergeIds.length, recordNoun)} into ${primary?.name ?? `the kept ${recordNoun}`}?`}
         description={[
           conflicts.length > 0 ? 'Conflicting fields keep the values you picked.' : null,
-          'Empty fields are filled from the duplicates, every relation (deals, contacts, activities) moves to the kept record, and the duplicates go to Trash. You can undo right after.',
+          'Empty fields are filled from the duplicates, every relation (deals, contacts, activities) moves to the one you keep, and the duplicates go to Trash. You can undo right after.',
         ]
           .filter(Boolean)
           .join(' ')}
@@ -215,7 +215,7 @@ function CompareTable({ cluster, kind, orgSlug, canEdit, primaryId, included, ch
   return (
     <div className="overflow-x-auto" data-testid="crm-duplicate-compare">
       {cluster.records.length > 1 ? (
-        <p className="px-4 pt-2 text-xs text-fg-muted sm:hidden">Scroll sideways to compare all {cluster.records.length} records.</p>
+        <p className="px-4 pt-2 text-xs text-fg-muted sm:hidden">Scroll sideways to compare all {cluster.records.length} {kind}.</p>
       ) : null}
       <table className="w-full border-separate border-spacing-0 text-sm">
         <caption className="sr-only">Field-by-field comparison of {cluster.records.map((record) => record.name).join(', ')}</caption>
@@ -259,7 +259,7 @@ function CompareTable({ cluster, kind, orgSlug, canEdit, primaryId, included, ch
                     ) : null}
                     <p className="text-xs text-fg-muted">
                       {isPrimary
-                        ? 'Kept record'
+                        ? 'Kept'
                         : differs.length > 0
                           ? `Differs: ${differs.join(', ')}`
                           : 'No conflicting values'}

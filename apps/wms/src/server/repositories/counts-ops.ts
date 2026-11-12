@@ -60,8 +60,8 @@ import { dbAll, dbGet, mapSeq, withWriteTx } from '@/server/db/sql';
 export const idsSchema = z.object({
   ids: z
     .array(z.string().min(1).max(64))
-    .min(1, 'Select at least one record')
-    .max(1000, 'At most 1000 records at once'),
+    .min(1, 'Select at least one item')
+    .max(1000, 'At most 1000 items at once'),
 });
 export const cancelSchema = idsSchema.extend({ reason: z.string().trim().max(400).nullish() });
 export const updateInvSchema = idsSchema.extend({

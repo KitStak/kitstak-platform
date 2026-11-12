@@ -227,7 +227,7 @@ function VasForm({
       {conflict ? (
         <Callout
           variant="attention"
-          title="This record changed since you opened it"
+          title="This service changed since you opened it"
           action={
             <Button size="sm" onClick={() => window.location.reload()}>
               Reload

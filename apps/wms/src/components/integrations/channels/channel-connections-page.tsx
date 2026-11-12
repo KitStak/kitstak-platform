@@ -564,7 +564,7 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
         onOpenChange={(o) => !o && setToDelete(null)}
         variant="danger"
         title={`Delete ${toDelete?.storeName ?? ''}?`}
-        description="Its channel methods, run history, listings and missing orders are removed. Orders already downloaded stay. Connections with open orders can't be deleted — deactivate them instead."
+        description="Its channel methods, run history, listings and missing orders are removed. Orders already downloaded stay. Connections with open orders can't be deleted. Deactivate them instead."
         confirmLabel="Yes, delete"
         cancelLabel="No"
         records={

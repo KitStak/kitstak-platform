@@ -141,7 +141,7 @@ describe('copy', () => {
       }),
     ).toBe('Fix the highlighted fields');
     expect(friendlyErrorMessage({ code: 'CONFLICT', message: 'stale' })).toBe(
-      'This record changed since you opened it — Reload',
+      'This item changed since you opened it. Reload and try again.',
     );
     expect(friendlyErrorMessage({ code: 'INVALID_STATE', message: 'Holds 4 units' })).toBe('Holds 4 units');
   });

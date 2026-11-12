@@ -215,7 +215,7 @@ export function AtpPage() {
           emptyDescription={
             hasState
               ? 'Clear a filter or switch Equal to Starts With.'
-              : 'Rows appear once a product has stock, an open shipment order or an open purchase order.'
+              : 'Results appear once a product has stock, an open shipment order or an open purchase order.'
           }
         />
       </div>

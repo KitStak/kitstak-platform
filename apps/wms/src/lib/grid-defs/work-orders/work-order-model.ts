@@ -11,7 +11,7 @@ export const WO_INSTRUCTIONS_MAX = 4000;
 export const MAX_KIT_QTY = 100_000;
 
 /** Logiwa's exact unsaved-changes copy for the Create/Edit Work Order drawer. */
-export const WO_UNSAVED_TITLE = 'You have unsaved changes!';
+export const WO_UNSAVED_TITLE = 'You have unsaved changes';
 export const WO_UNSAVED_DESCRIPTION =
   'If you leave this form, all unsaved changes will be lost. Are you sure you want to leave this form?';
 

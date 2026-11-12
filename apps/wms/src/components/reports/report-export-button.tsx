@@ -38,7 +38,7 @@ export function ReportExportButton({
 }) {
   const queryClient = React.useContext(QueryClientContext);
   const [pending, setPending] = React.useState(false);
-  const reason = pending ? 'Starting export…' : total === 0 ? 'There are no records to export' : null;
+  const reason = pending ? 'Starting export…' : total === 0 ? 'There is nothing to export' : null;
   const run = async () => {
     setPending(true);
     try {

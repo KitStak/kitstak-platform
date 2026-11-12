@@ -293,7 +293,7 @@ export function CarrierConnectionsPage({ provider: slug }: { readonly provider: 
         onOpenChange={(o) => !o && setToDelete(null)}
         variant="danger"
         title={`Delete ${toDelete?.setupName ?? ''}?`}
-        description="Its services are removed from rate shopping presets. Setups with open orders or label history can't be deleted — set them inactive instead."
+        description="Its services are removed from rate shopping presets. Setups with open orders or label history can't be deleted. Set them inactive instead."
         confirmLabel="Yes, delete"
         cancelLabel="No"
         records={

@@ -112,7 +112,7 @@ export function buildProductColumns(): Col[] {
           <span className="truncate font-mono text-xs">{row.original.barcode}</span>
           {row.original.barcodeConflictCount > 0 ? (
             <span
-              title={`Barcode shared with ${row.original.barcodeConflictCount} other product${row.original.barcodeConflictCount === 1 ? '' : 's'} of this client — scans are ambiguous`}
+              title={`Barcode shared with ${row.original.barcodeConflictCount} other product${row.original.barcodeConflictCount === 1 ? '' : 's'} of this client. Scans are ambiguous`}
             >
               <Badge tone="warning" size="sm">
                 Conflict

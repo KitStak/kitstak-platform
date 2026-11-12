@@ -98,7 +98,7 @@ export function bulkToast(
     .map((f) =>
       f.message.includes(labels.get(f.id) ?? '\u0000')
         ? f.message
-        : `${labels.get(f.id) ?? 'Record'}: ${f.message}`,
+        : `${labels.get(f.id) ?? 'Item'}: ${f.message}`,
     )
     .join(' · ');
   const more = result.failed.length > 3 ? ` · +${result.failed.length - 3} more` : '';

@@ -472,7 +472,7 @@ export async function deleteLookupValues(
     if (row.usageCount > 0)
       throw new AppError(
         'INVALID_STATE',
-        `${row.name} is used by ${row.usageCount} ${row.usageCount === 1 ? 'record' : 'records'}. Deactivate it instead.`,
+        `${row.name} is used by ${row.usageCount} ${row.usageCount === 1 ? 'item' : 'items'}. Deactivate it instead.`,
       );
     await inner.delete(l).where(eq(l.id, id));
     await logDelete(inner, ctx, {

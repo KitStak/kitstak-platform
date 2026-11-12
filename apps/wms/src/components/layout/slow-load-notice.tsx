@@ -32,7 +32,7 @@ export function SlowLoadNotice({ slowMs = 6000, failMs = 20000 }: { slowMs?: num
       <span>
         {failed
           ? "This page didn't load. The server may be busy or unreachable."
-          : 'Still loading — this is taking longer than usual.'}
+          : 'Still loading. This is taking longer than usual.'}
       </span>
       <button
         type="button"

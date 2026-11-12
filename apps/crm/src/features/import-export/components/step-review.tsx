@@ -374,7 +374,7 @@ export function StepReview({ model, onDraft }: StepReviewProps) {
         </div>
         {built.issues.length === 0 ? (
           <p className="flex items-center gap-2 rounded-lg border border-border-subtle bg-success-subtle px-4 py-3 text-sm text-success-text">
-            <CheckCircle2 aria-hidden className="size-4" /> Every value fits its column. You&apos;re good to go.
+            <CheckCircle2 aria-hidden className="size-4" /> Every value fits its column. Ready to import.
           </p>
         ) : (
           <div className="overflow-hidden rounded-lg border border-border-subtle bg-panel">
@@ -419,7 +419,7 @@ export function StepReview({ model, onDraft }: StepReviewProps) {
         {built.issues.length ? (
           <p className="text-sm text-fg-muted">
             <span className="text-warning-text">Amber</span> values don&apos;t fit their column and are left empty; the rest of the row imports
-            {draft.skipRowsWithIssues ? ' — but “Skip rows with problems” is on, so those rows are skipped.' : '.'} Rows without a name are always skipped.
+            {draft.skipRowsWithIssues ? ', but “Skip rows with problems” is on, so those rows are skipped.' : '.'} Rows without a name are always skipped.
           </p>
         ) : null}
       </section>

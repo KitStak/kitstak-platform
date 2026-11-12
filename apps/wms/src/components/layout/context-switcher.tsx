@@ -128,7 +128,7 @@ export function ContextSwitcher() {
             <Warehouse className="h-3.5 w-3.5 shrink-0 text-fg-muted" aria-hidden />
             <span className="hidden xl:max-[1439px]:inline">{label.compact}</span>
             <span className="hidden min-[1440px]:inline">{label.summary}</span>
-            <span className="sr-only">{` — change working context (${label.description})`}</span>
+            <span className="sr-only">{`. Change working context (${label.description})`}</span>
             <ChevronDown className="hidden h-3 w-3 shrink-0 text-fg-muted xl:block" aria-hidden />
           </button>
         </PopoverTrigger>

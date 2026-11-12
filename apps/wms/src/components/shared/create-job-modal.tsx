@@ -110,7 +110,7 @@ function EligibilityStep({
             {
               value: 'create',
               title: 'Create new job',
-              description: 'Batch the eligible records into new jobs',
+              description: 'Batch the eligible items into new jobs',
               icon: ListPlus,
             },
           ]}
@@ -363,7 +363,7 @@ function Body({ onOpenChange, operation, ids, invalidate = [], onDone }: Omit<Cr
   const nextReason = !data
     ? 'Checking eligibility…'
     : data.eligible.length === 0
-      ? 'No records are eligible'
+      ? 'No items are eligible'
       : path
         ? null
         : 'Choose how to continue';

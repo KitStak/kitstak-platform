@@ -216,7 +216,7 @@ function CustomerForm({
       {conflict ? (
         <Callout
           variant="attention"
-          title="This record changed since you opened it"
+          title="This customer changed since you opened it"
           action={
             <Button size="sm" onClick={() => window.location.reload()}>
               Reload

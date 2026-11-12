@@ -78,7 +78,7 @@ function Conflict({ onReload }: { readonly onReload: () => void }) {
   return (
     <Callout
       variant="attention"
-      title="This record changed since you opened it"
+      title="This client changed since you opened it"
       action={
         <Button size="sm" onClick={onReload}>
           Reload

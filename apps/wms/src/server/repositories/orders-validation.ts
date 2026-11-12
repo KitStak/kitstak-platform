@@ -27,7 +27,7 @@ const LABELS: Readonly<
   productId: { label: 'a product', verb: 'Choose' },
   quantity: { label: 'a quantity', verb: 'Enter' },
   unitPrice: { label: 'a price', verb: 'Enter' },
-  version: { label: 'the record version (reload the page)', verb: 'Enter' },
+  version: { label: 'the current version (reload the page)', verb: 'Enter' },
 };
 
 type Issue = Parameters<NonNullable<z.core.ParseContext<z.core.$ZodIssue>['error']>>[0];

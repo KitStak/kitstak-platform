@@ -100,7 +100,7 @@ export function TagPopover({
     setSelected(next);
   };
 
-  const reason = disabledReason ?? (ids.length === 0 ? 'Select at least one record' : null);
+  const reason = disabledReason ?? (ids.length === 0 ? 'Select at least one item' : null);
   const applyReason = apply.isPending
     ? 'Saving…'
     : mode === 'add' && selected.size === 0
@@ -143,7 +143,7 @@ export function TagPopover({
             <div className="flex flex-col items-center gap-2 py-5 text-center">
               <TagIcon className="h-5 w-5 text-faint" aria-hidden />
               <p className="text-sm font-semibold text-foreground">No tags yet</p>
-              <p className="text-xs text-faint">Create a tag to group and filter records.</p>
+              <p className="text-xs text-faint">Create a tag to group and filter items.</p>
               <Button size="sm" variant="primary" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-3.5 w-3.5" aria-hidden />
                 Create Tag

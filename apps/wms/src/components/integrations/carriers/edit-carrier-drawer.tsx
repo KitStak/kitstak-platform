@@ -376,7 +376,7 @@ function Body({
       {conflict ? (
         <Callout
           variant="attention"
-          title="This record changed since you opened it"
+          title="This carrier changed since you opened it"
           action={
             <Button size="sm" onClick={() => window.location.reload()}>
               Reload
@@ -739,7 +739,7 @@ function Body({
           <section className="rounded-lg border border-border p-4">
             <h3 className="text-sm font-semibold">Markup rate</h3>
             <p className="text-xs text-secondary">
-              Set a general markup, or client-based markups on the Clients tab — those take priority.
+              Set a general markup, or client-based markups on the Clients tab. Those take priority.
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Select

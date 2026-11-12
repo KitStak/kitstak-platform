@@ -290,7 +290,7 @@ function Body({
       {conflict ? (
         <Callout
           variant="attention"
-          title="This record changed since you opened it"
+          title="This store changed since you opened it"
           action={
             <Button size="sm" onClick={() => window.location.reload()}>
               Reload
@@ -665,7 +665,7 @@ function Body({
                   }
                 />
                 {st.tagFilter.tags.length === 0 ? (
-                  <p className="text-2xs text-faint">No order tag has been added yet — every tag passes.</p>
+                  <p className="text-2xs text-faint">No order tag has been added yet, so every tag passes.</p>
                 ) : null}
               </div>
             </div>

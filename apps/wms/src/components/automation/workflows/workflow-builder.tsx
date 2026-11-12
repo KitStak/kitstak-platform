@@ -503,7 +503,7 @@ function Body({ detail }: { readonly detail: WorkflowDetail | null }) {
         <div className="px-6 pt-3">
           <Callout
             variant="attention"
-            title="This record changed since you opened it"
+            title="This workflow changed since you opened it"
             action={
               <Button size="sm" onClick={() => window.location.reload()}>
                 Reload
@@ -684,7 +684,7 @@ function Body({ detail }: { readonly detail: WorkflowDetail | null }) {
                   No conditions: the workflow applies to every{' '}
                   {catalog === 'purchaseOrder' ? 'purchase order' : 'order'} in its scope
                   {broad
-                    ? ' — and its scope is all warehouses and all clients. Add a condition or pick a warehouse or client.'
+                    ? ', and its scope is all warehouses and all clients. Add a condition or pick a warehouse or client.'
                     : '.'}
                 </p>
               ) : (
@@ -1053,7 +1053,7 @@ function TestPanel({ form }: { readonly form: Form }) {
               ))}
             </ul>
           ) : (
-            <p className="text-xs text-secondary">No conditions — every order matches.</p>
+            <p className="text-xs text-secondary">No conditions. Every order matches.</p>
           )}
           {result.actions.length > 0 ? (
             <div>

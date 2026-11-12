@@ -63,7 +63,7 @@ export function OrgProfileForm({
             aria-describedby={describedBy}
             invalid={invalid}
             trailing={canManage ? undefined : <Lock aria-hidden className="size-3.5" />}
-            title={canManage ? undefined : 'Read-only — only owners and admins can edit'}
+            title={canManage ? undefined : 'Read-only. Only owners and admins can edit.'}
           />
         )}
       </Field>

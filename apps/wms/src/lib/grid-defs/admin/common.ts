@@ -41,7 +41,7 @@ export const idField = z.string().trim().min(1).max(64);
 export const versionField = z.number().int().min(1).optional();
 
 export const bulkIdsSchema = z.object({
-  ids: z.array(idField).min(1, 'Select at least one record').max(1000, 'At most 1000 records at once'),
+  ids: z.array(idField).min(1, 'Select at least one item').max(1000, 'At most 1000 items at once'),
 });
 
 export const emailField = z

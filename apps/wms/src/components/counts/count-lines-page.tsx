@@ -138,7 +138,7 @@ function MoreDetailsButton({
   const reason = !allowed
     ? "You don't have permission to export count details"
     : total === 0
-      ? 'There are no records to export'
+      ? 'There is nothing to export'
       : pending
         ? 'Starting export…'
         : running

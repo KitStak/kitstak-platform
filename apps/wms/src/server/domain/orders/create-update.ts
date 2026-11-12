@@ -298,7 +298,7 @@ export async function updateOrder(tx: Tx, ctx: DomainCtx, raw: UpdateOrderInput)
   const input = updateOrderSchema.parse(raw);
   const order = await loadOrderRow(tx, ctx, input.id);
   if (order.version !== input.version)
-    throw new DomainError('CONFLICT', 'This record changed since you opened it — Reload');
+    throw new DomainError('CONFLICT', 'This order changed since you opened it. Reload and try again.');
   const patch = Object.fromEntries(Object.entries(input.patch).filter(([, v]) => v !== undefined));
   if (
     TERMINAL.includes(order.status) &&
@@ -338,7 +338,7 @@ export async function updateOrder(tx: Tx, ctx: DomainCtx, raw: UpdateOrderInput)
       .where(and(eq(schema.shipmentOrders.id, order.id), eq(schema.shipmentOrders.version, input.version)))
       .returning()
   )[0];
-  if (!after) throw new DomainError('CONFLICT', 'This record changed since you opened it — Reload');
+  if (!after) throw new DomainError('CONFLICT', 'This order changed since you opened it. Reload and try again.');
   await recordUpdate(tx, ctx, {
     entityType: 'shipment_order',
     entityId: order.id,

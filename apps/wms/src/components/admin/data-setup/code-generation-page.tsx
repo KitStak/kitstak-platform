@@ -208,7 +208,7 @@ export function CodeGenerationPage() {
       <PageHeader
         title="Auto Code Generation Preferences"
         crumbLabel="Auto code generation"
-        helper="Automate record codes for traceability, or keep entering them by hand."
+        helper="Automate codes for traceability, or keep entering them by hand."
       />
       <div className="grid gap-4 px-6 py-5 xl:grid-cols-2">
         {q.isPending ? (

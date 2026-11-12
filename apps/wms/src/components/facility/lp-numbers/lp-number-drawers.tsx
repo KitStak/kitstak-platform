@@ -369,7 +369,7 @@ function EditForm({
       {conflict ? (
         <Callout
           variant="attention"
-          title="This record changed since you opened it"
+          title="This LP number changed since you opened it"
           action={
             <Button size="sm" onClick={() => window.location.reload()}>
               Reload

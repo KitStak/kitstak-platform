@@ -103,7 +103,7 @@ export interface EodGuardRow {
 /** Why "Print End of the Day Report" is blocked for the selection, or null. */
 export function closeBlockReason(rows: readonly EodGuardRow[]): string | null {
   if (rows.some((r) => r.status === 'Closed'))
-    return 'Only Open manifests can be closed — use Reprint for closed ones';
+    return 'Only Open manifests can be closed. Use Reprint for closed ones';
   if (rows.some((r) => r.totalPackages === 0)) return "A manifest with no active packages can't be closed";
   return null;
 }

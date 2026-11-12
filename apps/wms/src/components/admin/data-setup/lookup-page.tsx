@@ -904,7 +904,7 @@ export function LookupPage({
         onOpenChange={(o) => !o && setToDelete(null)}
         variant="danger"
         title={`Delete ${toDelete?.length === 1 ? `"${toDelete[0]?.name}"` : `${toDelete?.length ?? 0} values`}?`}
-        description="Values still used by records are skipped — deactivate those instead."
+        description="Values still in use are skipped. Deactivate those instead."
         confirmLabel="Yes, delete"
         cancelLabel="No"
         records={{

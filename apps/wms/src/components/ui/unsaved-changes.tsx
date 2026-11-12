@@ -5,7 +5,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useBeforeUnload, useNavigationGuard } from '@/lib/use-unsaved-changes';
 import { ConfirmDialog } from './confirm-dialog';
 
-export const UNSAVED_TITLE = 'You have unsaved changes!';
+export const UNSAVED_TITLE = 'You have unsaved changes';
 export const UNSAVED_DESCRIPTION =
   'If you leave now, the changes you made will be lost. Do you want to leave?';
 

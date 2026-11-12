@@ -168,7 +168,7 @@ export const bulkIdsBodySchema = z.object({
   ids: z
     .array(z.string().trim().min(1).max(64))
     .min(1, 'Select at least one purchase order')
-    .max(1000, 'At most 1000 records at once'),
+    .max(1000, 'At most 1000 purchase orders at once'),
 });
 
 /* ------------------------------------------------------------ receiving */

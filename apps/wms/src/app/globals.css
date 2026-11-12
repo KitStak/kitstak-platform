@@ -53,6 +53,23 @@
   --surface-skeleton-shine: #31353c;
 }
 
+/* ---------------------------------------------------------------------------------------------
+ * Brand panel (auth showcase). Flat --surface-brand: KitStak navy on light, charcoal on dark;
+ * the dark panel is set apart by a 1px inset border (portal/CRM parity).
+ * ------------------------------------------------------------------------------------------- */
+.auth-hero {
+  --logo-ink: var(--brand-cream);
+  background: var(--surface-brand);
+}
+:root[data-theme='dark'] .auth-hero {
+  box-shadow: inset -1px 0 0 var(--border-subtle);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .auth-hero {
+    box-shadow: inset -1px 0 0 var(--border-subtle);
+  }
+}
+
 @theme inline {
   /* ---- legacy WMS utility names (bg-surface, text-secondary, border-border, ...) ---- */
   --color-background: var(--background);

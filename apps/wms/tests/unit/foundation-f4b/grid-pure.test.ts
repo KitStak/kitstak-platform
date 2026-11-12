@@ -306,7 +306,7 @@ describe('toolbar helpers', () => {
   it('explains disabled bulk actions', () => {
     const action = { key: 'ship', label: 'Ship', onSelect: () => undefined };
     expect(bulkDisabledReason(action, 0, 'order')).toBe('Select at least one order');
-    expect(bulkDisabledReason(action, 0)).toBe('Select at least one record');
+    expect(bulkDisabledReason(action, 0)).toBe('Select at least one item');
     expect(bulkDisabledReason({ ...action, disabledReason: 'Only Open orders' }, 2)).toBe('Only Open orders');
     expect(bulkDisabledReason(action, 2)).toBeNull();
   });

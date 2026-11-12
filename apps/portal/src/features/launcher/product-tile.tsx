@@ -134,7 +134,7 @@ export function ProductTile({
       <div className="mt-5 flex items-center justify-between border-t border-border-subtle pt-4">
         {access === 'grace' && periodEnd ? (
           <span className="text-xs font-medium text-warning-text">
-            Access ends soon — period ended {dateFormat.format(periodEnd)}
+            Access ends soon. Period ended {dateFormat.format(periodEnd)}
           </span>
         ) : access === 'locked' ? (
           <span className="text-xs text-fg-muted">Not included in your plan</span>

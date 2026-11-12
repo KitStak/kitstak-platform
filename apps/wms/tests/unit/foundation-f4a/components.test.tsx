@@ -104,7 +104,7 @@ describe('Drawer', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Close' }));
     expect(onOpenChange).not.toHaveBeenCalled();
-    expect(await screen.findByText('You have unsaved changes!')).toBeTruthy();
+    expect(await screen.findByText('You have unsaved changes')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Leave' }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

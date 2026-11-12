@@ -223,7 +223,7 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, entitled }: 
         </div>
         <Command.List className="min-h-0 flex-1 overflow-y-auto pb-2">
           <Command.Empty className="px-6 py-8 text-center text-sm text-fg-muted">
-            No matches — try an app, page or organization name.
+            No matches. Try an app, page or organization name.
           </Command.Empty>
           <Command.Group heading="Apps" className={groupClass}>
             <PaletteItem
@@ -237,7 +237,7 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, entitled }: 
                   <Lock aria-hidden className="size-4" />
                 )
               }
-              meta={entitled.crm ? 'Pipelines, boards and automations' : 'Locked — view billing'}
+              meta={entitled.crm ? 'Pipelines, boards and automations' : 'Locked. View billing'}
               external={entitled.crm}
             >
               Open CRM
@@ -253,7 +253,7 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, entitled }: 
                   <Lock aria-hidden className="size-4" />
                 )
               }
-              meta={entitled.wms ? 'Warehouse operations' : 'Locked — view billing'}
+              meta={entitled.wms ? 'Warehouse operations' : 'Locked. View billing'}
               external={entitled.wms}
             >
               Open WMS

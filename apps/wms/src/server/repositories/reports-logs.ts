@@ -270,7 +270,7 @@ export async function presentChangeLogRows(db: AppDb, rows: readonly Row[]): Pro
   const names = await resolveIds(db, ids);
   const show = (v: unknown): string | null => {
     if (typeof v !== 'string' || v === '') return null;
-    return UUID_RE.test(v) ? (names.get(v) ?? 'Removed record') : v;
+    return UUID_RE.test(v) ? (names.get(v) ?? 'Removed item') : v;
   };
   return rows.map((r) => {
     const field = typeof r.field === 'string' ? r.field : '';
@@ -315,7 +315,7 @@ export function presentMessage(message: unknown, names: ReadonlyMap<string, stri
   return message
     .replace(
       /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
-      (id) => names.get(id) ?? 'removed record',
+      (id) => names.get(id) ?? 'removed item',
     )
     .replace(/\b[A-Za-z]+\.NameKey\.([A-Za-z0-9_]+)/g, (_, k: string) => humanizeProperty(k) ?? k)
     .replace(/\s+-->\s+/g, ' → ')

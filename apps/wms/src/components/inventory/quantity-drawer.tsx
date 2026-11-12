@@ -268,7 +268,7 @@ function QuantityForm({
             required
             info={
               mode === 'adjust'
-                ? 'Replaces current inventory with this new total. Setting the quantity to 0 will delete this inventory record.'
+                ? 'Replaces current inventory with this new total. Setting the quantity to 0 will delete this inventory line.'
                 : undefined
             }
           >

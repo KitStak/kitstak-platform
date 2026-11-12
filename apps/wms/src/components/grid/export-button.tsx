@@ -57,7 +57,7 @@ export function ExportButton({ gridKey, queryString, columns, total, disabledRea
   // Optional: the grid also renders on legacy pages without a QueryProvider.
   const queryClient = React.useContext(QueryClientContext);
   const [pending, setPending] = React.useState(false);
-  const reason = disabledReason ?? (total === 0 ? 'There are no records to export' : null);
+  const reason = disabledReason ?? (total === 0 ? 'There is nothing to export' : null);
 
   const run = async () => {
     setPending(true);

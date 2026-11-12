@@ -45,7 +45,7 @@ export async function authorizeChangeLog(
   entityId: string,
 ): Promise<void> {
   const d = getEntityDef(entityType);
-  if (!d) throw notFoundError('Record');
+  if (!d) throw notFoundError('Item');
   if (!canAny(auth, d.permissions.changeLog)) throw forbiddenError();
   const ref = await findEntity(db, entityType, entityId);
   if (ref) {

@@ -20,7 +20,7 @@ import {
 import { DisabledReason } from '@/components/ui/tooltip';
 import type { BulkAction } from './grid-types';
 
-export const DEFAULT_EMPTY_REASON = 'Select at least one record';
+export const DEFAULT_EMPTY_REASON = 'Select at least one item';
 export const BULK_PENDING_REASON = 'Working…';
 
 /** Why `action` is unavailable for the selection (count or ids), or null when it can run. */

@@ -226,7 +226,7 @@ function toApiError(error: unknown): ApiError {
   return new ApiError({ code: 'INTERNAL', message, status: 0 });
 }
 
-const CONFLICT_MESSAGE = 'This record changed since you opened it — Reload';
+const CONFLICT_MESSAGE = 'This item changed since you opened it. Reload and try again.';
 
 export function useApiMutation<TVars = void, TData = unknown, TForm extends FieldValues = FieldValues>(
   options: UseApiMutationOptions<TVars, TData, TForm>,

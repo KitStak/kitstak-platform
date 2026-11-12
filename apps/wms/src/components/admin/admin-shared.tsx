@@ -114,7 +114,7 @@ export interface BulkResponse {
 
 export function errorMessage(error: unknown): string {
   if (!isApiError(error)) return 'Something went wrong. Try again.';
-  return error.code === 'CONFLICT' ? 'This record changed since you opened it — Reload' : error.message;
+  return error.code === 'CONFLICT' ? 'This item changed since you opened it. Reload and try again.' : error.message;
 }
 
 /** Runs a JSON mutation, toasts failures and invalidates queries. Returns data or null. */

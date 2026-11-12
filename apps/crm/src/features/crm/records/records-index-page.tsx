@@ -34,12 +34,12 @@ export type RecordsKind = 'contacts' | 'accounts';
 const COPY: Record<RecordsKind, { title: string; description: string; empty: string }> = {
   accounts: {
     title: 'Accounts',
-    description: 'Every account with its owner and industry — open one for the full 360 view',
+    description: 'Every account with its owner and industry. Open one for the full 360 view',
     empty: 'Create an Accounts board from the CRM template to track the companies you sell to.',
   },
   contacts: {
     title: 'Contacts',
-    description: 'Every contact with their account and owner — open one for the full 360 view',
+    description: 'Every contact with their account and owner. Open one for the full 360 view',
     empty: 'Create a Contacts board from the CRM template to track the people you work with.',
   },
 };
@@ -247,7 +247,7 @@ function Cell({ children }: { readonly children: ReactNode }) {
 
 function RecordsSkeleton() {
   return (
-    <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading records" data-skeleton>
+    <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading" data-skeleton>
       <Skeleton height={36} width={288} rounded="md" />
       <div className="flex flex-col gap-2">
         {Array.from({ length: 8 }, (_, index) => (

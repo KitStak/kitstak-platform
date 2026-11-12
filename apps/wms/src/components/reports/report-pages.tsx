@@ -88,7 +88,7 @@ export function ChannelSalesReport() {
           &ldquo;Has Sales?&rdquo; chip to include them.
         </InfoNote>
       }
-      emptyDescription="Rows appear once an order ships, or a product is listed on a sales channel."
+      emptyDescription="Results appear once an order ships, or a product is listed on a sales channel."
     />
   );
 }
@@ -97,7 +97,7 @@ export function OrderInventoryReport() {
   return (
     <ReportGridPage
       def={ORDER_INVENTORY_DEF}
-      emptyDescription="Rows appear while stock is allocated to an open shipment order or work order."
+      emptyDescription="Results appear while stock is allocated to an open shipment order or work order."
     />
   );
 }
@@ -117,7 +117,7 @@ export function SerialShipmentsReport() {
     <ReportGridPage
       def={SERIAL_SHIPMENTS_DEF}
       tabs="serial"
-      emptyDescription="Rows appear once an order with serial-tracked products ships."
+      emptyDescription="Results appear once an order with serial-tracked products ships."
     />
   );
 }
@@ -127,7 +127,7 @@ export function SerialReceiptsReport() {
     <ReportGridPage
       def={SERIAL_RECEIPTS_DEF}
       tabs="serial"
-      emptyDescription="Rows appear once a serial-tracked product is received."
+      emptyDescription="Results appear once a serial-tracked product is received."
     />
   );
 }
@@ -141,7 +141,7 @@ export function ReplenishmentReport() {
           {TO_REPLENISH_TIP} Set min/max levels on the product&apos;s Replenishment tab.
         </InfoNote>
       }
-      emptyDescription="Rows appear for products that have min/max replenishment levels in a warehouse."
+      emptyDescription="Results appear for products that have min/max replenishment levels in a warehouse."
     />
   );
 }
@@ -301,7 +301,7 @@ export function InventoryAgingReport() {
           Aging Bucket to find stock older than 90 or 180 days.
         </InfoNote>
       }
-      emptyDescription="Rows appear for every inventory bucket with units on hand."
+      emptyDescription="Results appear for every inventory bucket with units on hand."
     />
   );
 }
@@ -323,7 +323,7 @@ export function LocationUtilizationReport() {
           </InfoNote>
         </div>
       }
-      emptyDescription="Rows appear for every active location in your warehouses."
+      emptyDescription="Results appear for every active location in your warehouses."
     />
   );
 }
@@ -360,7 +360,7 @@ export function SerialTransactionsReport() {
     <ReportGridPage
       def={SERIAL_TRANSACTIONS_DEF}
       tabs="transactions"
-      emptyDescription="Rows appear once a serial-tracked unit moves."
+      emptyDescription="Results appear once a serial-tracked unit moves."
     />
   );
 }
@@ -369,7 +369,7 @@ export function MissingLogReport() {
   return (
     <ReportGridPage
       def={MISSING_LOG_DEF}
-      emptyDescription="Rows appear when a picker reports stock missing at a location."
+      emptyDescription="Results appear when a picker reports stock missing at a location."
     />
   );
 }
@@ -378,7 +378,7 @@ export function PoReceivingReport() {
   return (
     <ReportGridPage
       def={PO_RECEIVING_DEF}
-      emptyDescription="Rows appear once a purchase order starts receiving."
+      emptyDescription="Results appear once a purchase order starts receiving."
     />
   );
 }
@@ -404,7 +404,7 @@ export function UserPerformanceReport() {
           </InfoNote>
         )
       }
-      emptyDescription="Rows appear once users complete picking, packing, sorting, replenishment, receiving, count or return work. Try a longer period."
+      emptyDescription="Results appear once users complete picking, packing, sorting, replenishment, receiving, count or return work. Try a longer period."
     />
   );
 }
@@ -509,7 +509,7 @@ export function OrderLinesReport() {
           needs picking or packing.
         </InfoNote>
       }
-      emptyDescription="Rows appear for every line of an open order or an order shipped today."
+      emptyDescription="Results appear for every line of an open order or an order shipped today."
     />
   );
 }

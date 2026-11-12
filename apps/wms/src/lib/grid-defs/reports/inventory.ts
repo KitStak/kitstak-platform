@@ -191,7 +191,7 @@ export const REPLENISHMENT_DEF: ReportDef = {
     col('sourceFreeQty', 'Source Location Free Quantity', {
       kind: 'number',
       width: 210,
-      tip: 'Reserve units that are neither allocated nor damaged — what a replenishment can move.',
+      tip: 'Reserve units that are neither allocated nor damaged: what a replenishment can move.',
     }),
     col('targetAvailableQty', 'Target Location Available Qty', {
       kind: 'number',

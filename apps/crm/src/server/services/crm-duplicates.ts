@@ -200,14 +200,14 @@ interface MergeDiff {
 /** Merge duplicates into the primary record. */
 export async function mergeDuplicates(ctx: ServiceContext, input: MergeDuplicatesInput): Promise<MergeResultDto> {
   const duplicateIds = [...new Set(input.duplicateIds)].filter((id) => id !== input.primaryId);
-  if (duplicateIds.length === 0) throw new BadRequestError('Pick at least one record to merge');
+  if (duplicateIds.length === 0) throw new BadRequestError('Pick at least one duplicate to merge');
   const { board } = await boardFor(ctx, input.kind);
   if (!board) throw new NotFoundError('Board');
   await requireBoard(ctx, board.row.id, 'write');
   const records = await loadItemsByIds(ctx, [input.primaryId, ...duplicateIds], [board.row.id]);
   const primary = records.find((row) => row.id === input.primaryId);
   const duplicates = records.filter((row) => row.id !== input.primaryId);
-  if (!primary || duplicates.length !== duplicateIds.length) throw new NotFoundError('Record');
+  if (!primary || duplicates.length !== duplicateIds.length) throw new NotFoundError('Item');
   const choices = Object.fromEntries(
     Object.entries(input.fieldChoices ?? {}).filter(([, id]) => id === primary.id || duplicateIds.includes(id)),
   );

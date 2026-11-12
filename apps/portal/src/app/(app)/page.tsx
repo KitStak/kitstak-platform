@@ -114,7 +114,7 @@ export default async function LauncherPage() {
         <LogoMark size={40} />
         <h1 className="mt-8 text-2xl font-semibold tracking-[-0.02em] text-fg">Create your organization</h1>
         <p className="mt-2 max-w-md text-md text-fg-secondary">
-          You’re signed in, but you don’t belong to an organization yet. Create one to start using KitStak —
+          You’re signed in, but you don’t belong to an organization yet. Create one to start using KitStak,
           or ask a teammate for an invitation.
         </p>
         <div className="mt-8 flex w-full justify-center">
@@ -158,7 +158,7 @@ export default async function LauncherPage() {
           Good to see you, {firstName(session.user.name)}
         </h1>
         <p className="mt-2 max-w-xl text-md text-fg-secondary">
-          Pick an app to open. Your session carries over — no second sign-in.
+          Pick an app to open. Your session carries over: no second sign-in.
         </p>
       </section>
 
@@ -226,7 +226,7 @@ export default async function LauncherPage() {
       {devAllowAll ? (
         <p className="flex items-center gap-2 text-xs text-fg-muted">
           <Badge tone="info">Dev</Badge>
-          Every module is unlocked on this environment — production requires explicit entitlements.
+          Every module is unlocked on this environment. In production, access follows your plan.
         </p>
       ) : null}
     </div>

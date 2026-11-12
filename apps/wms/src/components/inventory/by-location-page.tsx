@@ -240,7 +240,7 @@ export function ByLocationPage() {
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
         title="Inventory by Location"
-        helper="Every stock row by location, lot, LP and status. Add, adjust, remove or transfer from here."
+        helper="Every stock line by location, lot, LP and status. Add, adjust, remove or transfer from here."
         actions={headerActions}
         tabs="inventory"
       />

@@ -244,12 +244,12 @@ export function ReportGridPage({
           queryString={exportRegistered ? g.gridProps.queryString : undefined}
           exportMode={exportRegistered ? 'auto' : 'none'}
           rowActions={rowActions}
-          emptyTitle={emptyTitle ?? (hasState ? 'No rows match these filters' : 'Nothing to report yet')}
+          emptyTitle={emptyTitle ?? (hasState ? 'No results match these filters' : 'Nothing to report yet')}
           emptyDescription={
             emptyDescription ??
             (hasState
               ? 'Clear a filter, widen the date range or switch Equal to Starts With.'
-              : 'Rows appear here as soon as the warehouse records activity for this report.')
+              : 'Results appear here as soon as the warehouse records activity for this report.')
           }
           emptyAction={emptyAction}
         />

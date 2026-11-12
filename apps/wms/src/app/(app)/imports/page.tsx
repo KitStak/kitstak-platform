@@ -62,7 +62,7 @@ async function Hub() {
       <PageHeader
         breadcrumbs={[{ label: 'Data Import' }]}
         title="Data Import"
-        helper="Bulk load or update records from Excel. Pick an entity, download its template, then upload. Every upload is validated row by row and kept in the history below."
+        helper="Bulk load or update data from Excel. Pick an entity, download its template, then upload. Every upload is validated row by row and kept in the history below."
       />
       <div className="grid gap-6 px-6 pt-4 xl:grid-cols-[minmax(0,1fr)_420px]">
         <section aria-labelledby="entities" className="space-y-4">

@@ -62,8 +62,8 @@ export const versionField = z.number().int().min(1).optional();
 export const bulkIds = z.object({
   ids: z
     .array(z.string().trim().min(1).max(64))
-    .min(1, 'Select at least one record')
-    .max(1000, 'At most 1000 records at once'),
+    .min(1, 'Select at least one item')
+    .max(1000, 'At most 1000 items at once'),
 });
 
 export const round2 = (value: number): number => Math.round(value * 100) / 100;

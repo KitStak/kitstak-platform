@@ -212,7 +212,7 @@ function ChannelAllocations() {
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-3 py-4 text-center text-faint">
-                  No records to display
+                  Nothing to display
                 </td>
               </tr>
             ) : (
@@ -333,7 +333,7 @@ function Replenishment() {
                 {levels.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-3 py-4 text-center text-faint">
-                      No records to display
+                      Nothing to display
                     </td>
                   </tr>
                 ) : (

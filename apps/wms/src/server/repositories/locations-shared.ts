@@ -109,7 +109,7 @@ export function assertFound<T>(row: T | undefined | null, what: string): T {
 
 export function assertVersion(stored: number, sent: number | undefined): void {
   if (sent !== undefined && stored !== sent)
-    throw new AppError('CONFLICT', 'This record changed since you opened it — Reload');
+    throw new AppError('CONFLICT', 'This location changed since you opened it. Reload and try again.');
 }
 
 export { isUniqueViolation };

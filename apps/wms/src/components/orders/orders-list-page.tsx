@@ -77,7 +77,7 @@ const COPY: Readonly<
 > = {
   backlog: {
     title: 'Shipment Orders',
-    helper: 'Every open order across channels — allocate, pick, pack and ship from one place.',
+    helper: 'Every open order across channels. Allocate, pick, pack and ship from one place.',
     gridKey: SHIPMENT_ORDERS_GRID_KEY,
   },
   shipped: {

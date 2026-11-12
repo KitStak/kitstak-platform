@@ -545,7 +545,7 @@ function EditorBody({
         <div className="px-6 pb-2">
           <Callout
             variant="attention"
-            title="This record changed since you opened it"
+            title="This algorithm changed since you opened it"
             action={
               <Button size="sm" onClick={() => window.location.reload()}>
                 Reload

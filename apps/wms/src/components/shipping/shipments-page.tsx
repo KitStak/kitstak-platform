@@ -414,7 +414,7 @@ export function ShipmentsPage() {
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
         title="Carrier Shipment Details"
-        helper="Every label and package your carriers created — track, reprint or void them in one place."
+        helper="Every label and package your carriers created. Track, reprint or void them in one place."
         tabs="shipments"
       />
       <GridToolbar

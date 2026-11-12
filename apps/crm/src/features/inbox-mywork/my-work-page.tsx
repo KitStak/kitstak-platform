@@ -64,7 +64,7 @@ function RecordsNote({
     <p className="text-center text-sm text-fg-muted" data-testid="my-work-records-note">
       {shown
         ? 'Showing contacts, accounts and boards without a due date.'
-        : `${hidden} other assigned ${hidden === 1 ? 'record' : 'records'} (contacts, accounts, boards without a due date) ${hidden === 1 ? 'is' : 'are'} hidden.`}{' '}
+        : `${hidden} other assigned ${hidden === 1 ? 'item' : 'items'} (contacts, accounts, boards without a due date) ${hidden === 1 ? 'is' : 'are'} hidden.`}{' '}
       <button
         type="button"
         onClick={onToggle}

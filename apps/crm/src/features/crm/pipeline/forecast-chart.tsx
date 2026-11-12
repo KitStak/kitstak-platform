@@ -110,7 +110,7 @@ export function ForecastChart({
                 />
               ))}
             </div>
-            <div role="group" aria-label="Forecast by month — use arrow keys to move between months" className="relative flex items-end gap-2 sm:gap-3">
+            <div role="group" aria-label="Forecast by month. Use arrow keys to move between months" className="relative flex items-end gap-2 sm:gap-3">
               {visible.map((month, index) => {
                 const scale = (value: number) => Math.round((value / axisMax) * CHART_HEIGHT);
                 const overdue = month.month === 'overdue';

@@ -532,7 +532,7 @@ export async function reprintManifests(
   if (open)
     throw new AppError(
       'INVALID_STATE',
-      `The ${open.row.carrierPrefix} manifest for ${open.row.shipDate} is still open — print the End Of The Day Report first.`,
+      `The ${open.row.carrierPrefix} manifest for ${open.row.shipDate} is still open. Print the End Of The Day Report first.`,
     );
   const reports = await mapSeq(
     groups,

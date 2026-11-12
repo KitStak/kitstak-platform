@@ -64,7 +64,7 @@ export const ACTION_PARAMS: Readonly<Record<WorkflowActionName, readonly ActionP
       label: 'Reason shown to the team',
       kind: 'text',
       required: false,
-      placeholder: 'e.g. PO box address — confirm a street address',
+      placeholder: 'e.g. PO box address, confirm a street address',
     },
   ],
   'Partially Block Order': [

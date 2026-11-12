@@ -627,7 +627,7 @@ export async function completePacking(
   const context = await packContext(db, ctx.scope, input.orderId);
   const order = await loadPackOrder(db, ctx.scope, input.orderId);
   if (input.version !== undefined && order.version !== input.version)
-    throw new DomainError('CONFLICT', 'This order changed since you opened it — Reload');
+    throw new DomainError('CONFLICT', 'This order changed since you opened it. Reload and try again.');
   if (order.warehouseId !== station.warehouseId)
     throw new DomainError('VALIDATION', `Station ${station.code} is in another warehouse.`);
   if (!(PACKABLE_STATUSES as readonly string[]).includes(order.status))

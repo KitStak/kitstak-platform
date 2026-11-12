@@ -570,7 +570,7 @@ function Body({
       {conflict ? (
         <Callout
           variant="attention"
-          title="This record changed since you opened it"
+          title="This count plan changed since you opened it"
           action={
             <Button
               size="sm"

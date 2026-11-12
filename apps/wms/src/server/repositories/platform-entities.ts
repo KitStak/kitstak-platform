@@ -412,7 +412,7 @@ export async function requireEntity(
   action: EntityAction,
 ): Promise<EntityRecordRef> {
   const d = getEntityDef(type);
-  if (!d) throw notFoundError('Record');
+  if (!d) throw notFoundError('Item');
   if (!canAny(auth, d.permissions[action])) throw forbiddenError();
   const ref = await findEntity(db, type, id);
   assertInScope(auth.scope, ref, d.label);

@@ -159,7 +159,7 @@ function SessionsCard() {
         onOpenChange={(open) => (open ? undefined : setConfirm(null))}
         destructive
         title={`Sign out ${confirm?.userName ?? ''}?`}
-        description={`Their ${confirm?.device.browser ?? ''} session on ${confirm?.device.os ?? ''} ends now — in KitStak everywhere, including any other organizations they belong to. They can sign in again with their password.`}
+        description={`Their ${confirm?.device.browser ?? ''} session on ${confirm?.device.os ?? ''} ends now, in KitStak everywhere, including any other organizations they belong to. They can sign in again with their password.`}
         confirmLabel="Sign out session"
         onConfirm={() => {
           if (confirm) revoke.mutate(confirm.id, { onSuccess: () => toast.success('Session signed out') });

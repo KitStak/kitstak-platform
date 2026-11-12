@@ -107,7 +107,7 @@ export function EmptyBoard({
   return (
     <EmptyState
       illustration="board"
-      title={`This board is empty — add your first ${noun.toLowerCase()}`}
+      title={`This board is empty. Add your first ${noun.toLowerCase()}`}
       description={
         canEdit
           ? `${noun}s you add show up here, grouped and ready to track.`

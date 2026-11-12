@@ -12,7 +12,7 @@ export default function Page() {
       fallback={
         <ShipListFallback
           title="Shipment History"
-          helper="Every unit that left inventory — shipped orders and remove-inventory actions — by SKU, lot and LPN, straight from the ledger."
+          helper="Every unit that left inventory: shipped orders and remove-inventory actions, by SKU, lot and LPN, straight from the ledger."
         />
       }
     >

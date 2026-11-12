@@ -26,7 +26,7 @@ export interface MyWorkBoardDto {
   readonly itemTerminology: string;
   /** Caller can write cells on this board (false for view-only board members). */
   readonly canEdit: boolean;
-  /** Reference-record board (contacts, accounts): shown under "Other assigned records". */
+  /** Reference-record board (contacts, accounts): shown under "Other assigned items". */
   readonly recordList: boolean;
   /** Progress status column for the inline pill; null when no column tracks progress. */
   readonly status: {

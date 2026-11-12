@@ -200,7 +200,7 @@ export function DashboardView({ initial = null }: { readonly initial?: Dashboard
     <div className="flex min-h-0 flex-1 flex-col pb-10">
       <PageHeader
         title="Dashboard"
-        helper="Live fulfillment picture for the warehouses and clients you pick. Click any number to open those records."
+        helper="Live fulfillment picture for the warehouses and clients you pick. Click any number to open those items."
         actions={
           <div className="flex items-center gap-2">
             {data?.businessDay ? (

@@ -189,8 +189,8 @@ export const versionField = z.number().int().min(1).optional();
 export const bulkIds = z.object({
   ids: z
     .array(z.string().trim().min(1).max(64))
-    .min(1, 'Select at least one record')
-    .max(1000, 'At most 1000 records at once'),
+    .min(1, 'Select at least one item')
+    .max(1000, 'At most 1000 items at once'),
 });
 
 /** Rounds money/dimension values at the service boundary. */
@@ -230,7 +230,7 @@ export function friendlyErrorMessage(
   },
   fallback = 'Something went wrong. Try again.',
 ): string {
-  if (error.code === 'CONFLICT') return 'This record changed since you opened it — Reload';
+  if (error.code === 'CONFLICT') return 'This item changed since you opened it. Reload and try again.';
   if (error.code === 'VALIDATION') {
     const fields = Object.values(error.fieldErrors ?? {}).filter((m) => m.length > 0);
     if (fields.length === 1) return fields[0]?.[0] ?? fallback;

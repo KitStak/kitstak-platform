@@ -18,7 +18,7 @@ export const BUCKETS: readonly { id: BucketId; title: string; tone: 'danger' | '
   { id: 'next-week', title: 'Next week', tone: 'neutral' },
   { id: 'later', title: 'Later', tone: 'neutral' },
   { id: 'no-date', title: 'Without a date', tone: 'neutral' },
-  { id: 'records', title: 'Other assigned records', tone: 'neutral' },
+  { id: 'records', title: 'Other assigned items', tone: 'neutral' },
 ];
 
 /** Groups whose name says the work inside is finished (Closed lost, Completed, Done...). */

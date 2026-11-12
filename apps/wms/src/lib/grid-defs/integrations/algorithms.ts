@@ -106,5 +106,5 @@ export const allocationDryRunSchema = z.object({
 
 export const REPLENISHMENT_INFO =
   'At least one replenishment algorithm must be active, so its status and the dynamic replenishment option are locked here. ' +
-  'When you choose another algorithm for dynamic replenishment, this one becomes passive. Replenishment algorithms are exclusive and are never used for putaway — ' +
-  'keep a separate algorithm for putaway.';
+  'When you choose another algorithm for dynamic replenishment, this one becomes passive. Replenishment algorithms are exclusive and are never used for putaway. ' +
+  'Keep a separate algorithm for putaway.';

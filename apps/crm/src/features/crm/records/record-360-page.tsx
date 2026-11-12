@@ -92,7 +92,7 @@ export function Record360Page({ kind, itemId }: { readonly kind: 'contacts' | 'a
               }
             />
           ) : (
-            <ErrorBlock error={query.error} title="Couldn’t load this record" onRetry={() => void query.refetch()} />
+            <ErrorBlock error={query.error} title={kind === 'contacts' ? 'Couldn’t load this contact' : 'Couldn’t load this account'} onRetry={() => void query.refetch()} />
           )}
         </div>
       </div>
@@ -119,7 +119,7 @@ export function Record360Page({ kind, itemId }: { readonly kind: 'contacts' | 'a
                 <CrmCard
                   id="crm-activity-card"
                   title="Activity"
-                  description="Calls, emails, meetings and updates across this record and its deals"
+                  description={`Calls, emails, meetings and updates across this ${kind === 'contacts' ? 'contact' : 'account'} and its deals`}
                   aside={
                     composerOpen ? (
                       <Button variant="ghost" size="sm" leadingIcon={<ChevronUp aria-hidden />} onClick={() => setComposerOpen(false)} aria-expanded>
@@ -144,7 +144,7 @@ export function Record360Page({ kind, itemId }: { readonly kind: 'contacts' | 'a
                   <Timeline entries={record.timeline} orgSlug={org.slug} />
                 </CrmCard>
               </div>
-              <aside className="flex min-w-0 flex-col gap-6 lg:col-span-4" aria-label="Related records">
+              <aside className="flex min-w-0 flex-col gap-6 lg:col-span-4" aria-label="Related information">
                 <NextStepsCard
                   steps={record.nextSteps}
                   orgSlug={org.slug}
@@ -194,7 +194,7 @@ function AccountSide({ record, orgSlug }: { readonly record: Account360Dto; read
 
 function RecordSkeleton() {
   return (
-    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Loading record" data-skeleton>
+    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Loading" data-skeleton>
       <div className="rounded-xl border border-border-subtle bg-panel p-6">
         <div className="flex items-center gap-4">
           <Skeleton width={64} height={64} rounded="full" className="shrink-0" />

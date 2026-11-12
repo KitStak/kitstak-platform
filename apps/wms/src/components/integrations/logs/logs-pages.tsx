@@ -461,7 +461,7 @@ function RunDetailDialog({ run, onClose }: { readonly run: RunRow | null; readon
                   {(d?.items ?? []).length === 0 ? (
                     <tr>
                       <td colSpan={3} className="px-3 py-6 text-center text-faint">
-                        No rows to display.
+                        Nothing to display.
                       </td>
                     </tr>
                   ) : (

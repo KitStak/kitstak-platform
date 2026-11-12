@@ -162,9 +162,9 @@ export function toAppError(error: unknown): AppError {
   if (isAppError(error)) return error;
   switch (pgCode(error)) {
     case PG_UNIQUE_VIOLATION:
-      return new ConflictError('A record with these values already exists');
+      return new ConflictError('An item with these values already exists');
     case PG_FOREIGN_KEY_VIOLATION:
-      return new BadRequestError('A referenced record does not exist');
+      return new BadRequestError('A linked item does not exist');
     case PG_INVALID_TEXT_REPRESENTATION:
       return new BadRequestError('An identifier in the request is malformed');
     case PG_CHECK_VIOLATION:

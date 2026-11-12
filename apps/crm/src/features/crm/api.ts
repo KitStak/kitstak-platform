@@ -281,7 +281,7 @@ export function useMergeDuplicates() {
   const mutation = useClusterMutation<
     { kind: 'contacts' | 'accounts'; primaryId: string; duplicateIds: string[]; fieldChoices?: Record<string, string> },
     MergeResultDto
-  >('/crm/duplicates/merge', (vars) => vars.primaryId, 'Couldn’t merge records');
+  >('/crm/duplicates/merge', (vars) => vars.primaryId, 'Couldn’t merge the duplicates');
   return {
     ...mutation,
     afterSuccess: (result: MergeResultDto) => invalidateCrm(queryClient, orgId, [result.primary.boardId]),

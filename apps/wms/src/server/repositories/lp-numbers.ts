@@ -525,7 +525,7 @@ export function lpRemovalPlan(f: LpRemovalFacts): LpRemoval {
       reason: `holds ${f.units.toLocaleString('en-US')} ${f.units === 1 ? 'unit' : 'units'}; move or adjust the stock first`,
     };
   if (f.status === 'Shipped')
-    return { mode: 'blocked', reason: 'has shipped; shipped LPs keep their shipment record' };
+    return { mode: 'blocked', reason: 'has shipped; shipped LPs keep their shipment history' };
   if (f.parentNumber)
     return {
       mode: 'blocked',

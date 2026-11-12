@@ -72,7 +72,7 @@ export function CustomReportDialog({ open, onOpenChange, selected }: Props) {
       <DialogContent size="md">
         <DialogHeader
           title="Print custom report"
-          description="Totals by client and service for every manifest in the range — open or closed."
+          description="Totals by client and service for every manifest in the range, open or closed."
         />
         <DialogBody className="grid gap-3">
           <label className="grid gap-1">

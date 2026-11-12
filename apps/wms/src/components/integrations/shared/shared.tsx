@@ -289,7 +289,7 @@ export function useAction(invalidate: readonly QueryKey[]) {
             'Error',
             isApiError(error)
               ? error.code === 'CONFLICT'
-                ? 'This record changed since you opened it — Reload'
+                ? 'This item changed since you opened it. Reload and try again.'
                 : error.message
               : 'Something went wrong',
           );

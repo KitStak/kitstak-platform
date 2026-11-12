@@ -315,7 +315,7 @@ export function bulkToast(
 
 export function errorMessage(error: unknown): string {
   if (isApiError(error))
-    return error.code === 'CONFLICT' ? 'This record changed since you opened it — Reload' : error.message;
+    return error.code === 'CONFLICT' ? 'This purchase order changed since you opened it. Reload and try again.' : error.message;
   return error instanceof Error ? error.message : 'Something went wrong';
 }
 

@@ -55,7 +55,7 @@ export const formSettingsSchema = z.object({
   align: z.enum(['left', 'center']).default('left'),
   questions: z.array(formQuestionSchema).max(100).default([]),
   submitLabel: z.string().max(60).default('Submit'),
-  thankYouTitle: z.string().max(200).default('Thanks — we got it!'),
+  thankYouTitle: z.string().max(200).default('Thanks, we got it.'),
   thankYouMessage: z.string().max(2000).default('Your response was recorded. Someone from the team will follow up shortly.'),
   allowAnother: z.boolean().default(true),
   redirectUrl: z.string().max(2048).nullish(),

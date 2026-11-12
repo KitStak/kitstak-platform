@@ -105,7 +105,7 @@ export function ActivityTimeline({
     );
   }
   if (items.length === 0)
-    return <p className="text-xs text-faint">No activity recorded for this record yet.</p>;
+    return <p className="text-xs text-faint">No activity recorded for this item yet.</p>;
 
   return (
     <div className="flex flex-col gap-2">

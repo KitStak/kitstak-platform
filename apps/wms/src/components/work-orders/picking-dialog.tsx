@@ -208,7 +208,7 @@ function Body({
                       {o.outcome === 'allocated'
                         ? 'Components allocate; a picking job is created'
                         : o.outcome === 'shortage'
-                          ? 'Short components — the work order becomes Shortage with a manual allocation exception'
+                          ? 'Short components: the work order becomes Shortage with a manual allocation exception'
                           : o.message}
                     </span>
                     {o.shortages.length ? (

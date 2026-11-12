@@ -26,7 +26,7 @@ export function reportSaveError(
 ): void {
   if (isApiError(error) && error.code === 'CONFLICT') {
     toast.error(
-      'This record changed since you opened it',
+      'This order changed since you opened it',
       'Reload to see the latest version before saving again.',
       {
         action: { label: 'Reload', onClick: () => window.location.reload() },

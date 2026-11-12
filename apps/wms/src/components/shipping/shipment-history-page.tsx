@@ -144,7 +144,7 @@ export function ShipmentHistoryPage() {
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
         title="Shipment History"
-        helper="Every unit that left inventory — shipped orders and remove-inventory actions — by SKU, lot and LPN, straight from the ledger."
+        helper="Every unit that left inventory: shipped orders and remove-inventory actions, by SKU, lot and LPN, straight from the ledger."
       />
       <GridToolbar
         {...g.toolbarProps}
@@ -162,7 +162,7 @@ export function ShipmentHistoryPage() {
           emptyDescription={
             hasState
               ? 'Try changing the filters or search term.'
-              : 'Rows appear once orders ship or inventory is removed.'
+              : 'Results appear once orders ship or inventory is removed.'
           }
         />
       </div>

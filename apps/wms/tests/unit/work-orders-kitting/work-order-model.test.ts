@@ -140,7 +140,7 @@ describe('contracts', () => {
     expect(createKitSchema.safeParse({ workOrderId: 'x', qty: 1 }).success).toBe(false);
   });
   it("keeps Logiwa's unsaved-changes copy", () => {
-    expect(WO_UNSAVED_TITLE).toBe('You have unsaved changes!');
+    expect(WO_UNSAVED_TITLE).toBe('You have unsaved changes');
     expect(WO_UNSAVED_DESCRIPTION).toMatch(/^If you leave this form, all unsaved changes will be lost\./);
   });
 });

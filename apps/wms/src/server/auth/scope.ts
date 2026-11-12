@@ -130,7 +130,7 @@ export function scopedWhere(table: object, scope: Scope, columns?: ScopeColumns)
 export function assertInScope(
   scope: Scope,
   record: { readonly warehouseId?: string | null; readonly clientId?: string | null } | null | undefined,
-  what = 'Record',
+  what = 'Item',
 ): void {
   if (!record) throw notFoundError(what);
   if (record.warehouseId && !hasWarehouse(scope, record.warehouseId)) throw notFoundError(what);

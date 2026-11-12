@@ -24,7 +24,7 @@ export function DealsCard({
   return (
     <CrmCard id="crm-deals-card" testId="crm-deals-card" title="Deals" description={`${totals.count} linked`} bodyClassName="p-2 sm:p-3">
       {deals.length === 0 ? (
-        <EmptyState size="sm" illustration="board" title="No deals yet" description="Deals linked to this record show up here." />
+        <EmptyState size="sm" illustration="board" title="No deals yet" description="Linked deals show up here." />
       ) : (
         <div className="flex flex-col gap-2">
           <dl className="grid grid-cols-3 gap-2 px-2 pt-1 pb-2">

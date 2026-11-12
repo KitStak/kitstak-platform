@@ -610,7 +610,7 @@ function WizardBody({
       {conflict ? (
         <Callout
           variant="attention"
-          title="This record changed since you opened it"
+          title="This location changed since you opened it"
           action={
             <Button size="sm" onClick={() => window.location.reload()}>
               Reload

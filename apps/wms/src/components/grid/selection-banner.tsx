@@ -38,7 +38,7 @@ export function SelectionBanner({
     >
       {allMatching ? (
         <span>
-          All <strong className="tabular-nums">{fmt.number(total)}</strong> matching records are selected.
+          All <strong className="tabular-nums">{fmt.number(total)}</strong> matching items are selected.
         </span>
       ) : offerAll ? (
         <>

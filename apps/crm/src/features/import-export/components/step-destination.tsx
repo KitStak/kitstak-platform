@@ -149,7 +149,7 @@ export function StepDestination({
           </Field>
           <fieldset className="sm:col-span-2">
             <legend className="mb-2 text-sm font-semibold text-fg">What are you importing?</legend>
-            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Record type">
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="What are you importing">
               {KINDS.map((kind) => {
                 const selected = destination.kind === kind.id;
                 return (

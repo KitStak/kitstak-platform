@@ -110,7 +110,7 @@ export interface ActivityComposerProps {
 
 function friendlyError(cause: unknown): string {
   if (cause instanceof ApiClientError && cause.status >= 400 && cause.status < 500 && cause.status !== 429) return cause.message;
-  return 'Something went wrong on our side. Your notes are still here — try again.';
+  return 'Something went wrong on our side. Your notes are still here, try again.';
 }
 
 /** Type chips → subject/outcome/date → notes → linked records → Log. Optimistic in the timeline. */
@@ -261,7 +261,7 @@ export function ActivityComposer({
               autoFocus={autoFocus}
               value={subject}
               maxLength={200}
-              placeholder={type ? `${type.name} — short summary` : 'Short summary'}
+              placeholder={type ? `${type.name}: short summary` : 'Short summary'}
               onChange={(event) => setSubject(event.target.value)}
               data-testid="crm-activity-subject"
             />

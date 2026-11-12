@@ -113,7 +113,7 @@ export default async function OrganizationSettingsPage() {
         <p className="text-sm font-medium text-fg-muted">{activeOrg.name}</p>
         <h1 className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-fg">Organization</h1>
         <p className="mt-2 text-md text-fg-secondary">
-          Profile, members and invitations — shared by every KitStak app.
+          Profile, members and invitations, shared by every KitStak app.
         </p>
       </header>
 
@@ -175,14 +175,13 @@ export default async function OrganizationSettingsPage() {
           ) : (
             <div className="border-t border-border-subtle px-6 py-4">
               <p className="text-sm text-fg-secondary">
-                Only owners and admins can invite members or change roles
+                Only owners and admins can invite members or change roles.
                 {orgAdminName ? (
                   <>
                     {' '}
-                    — ask <span className="font-semibold text-fg">{orgAdminName}</span>
+                    Ask <span className="font-semibold text-fg">{orgAdminName}</span>.
                   </>
                 ) : null}
-                .
               </p>
             </div>
           )}

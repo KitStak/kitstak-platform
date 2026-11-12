@@ -169,7 +169,7 @@ export function lpRowRemovalBlocker(row: {
 }): string | null {
   if (row.units > 0 || row.status === 'Occupied')
     return `Holds ${row.units.toLocaleString('en-US')} ${row.units === 1 ? 'unit' : 'units'}; move or adjust the stock first`;
-  if (row.status === 'Shipped') return 'Shipped LPs keep their shipment record';
+  if (row.status === 'Shipped') return 'Shipped LPs keep their shipment history';
   if (row.parentLpNumber) return `On parent LP ${row.parentLpNumber}; take it off the parent first`;
   return null;
 }

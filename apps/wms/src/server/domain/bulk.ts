@@ -12,7 +12,7 @@ export async function runBulk(
   fn: (inner: Tx, id: string) => void | Promise<void>,
 ): Promise<BulkResult> {
   const unique = [...new Set(ids)];
-  if (unique.length === 0) throw new DomainError('VALIDATION', 'Select at least one record');
+  if (unique.length === 0) throw new DomainError('VALIDATION', 'Select at least one item');
   if (unique.length > MAX_BULK_IDS)
     throw new DomainError('VALIDATION', `At most ${MAX_BULK_IDS} records can be processed at once`);
   const succeeded: string[] = [];

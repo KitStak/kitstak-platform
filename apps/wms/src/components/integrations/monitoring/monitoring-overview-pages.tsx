@@ -404,9 +404,9 @@ function VolumeChart({ volume }: { readonly volume: SetupDetails['volume'] }) {
         </span>{' '}
         created in KitStak
         {shape.activeDays === 0
-          ? ' — no orders in the last 14 days'
+          ? ': no orders in the last 14 days'
           : shape.sparse
-            ? ` — activity on ${shape.activeDays} of ${volume.length} days`
+            ? `: activity on ${shape.activeDays} of ${volume.length} days`
             : ''}
       </p>
       <div className="h-44">
@@ -471,7 +471,7 @@ function MiniTable({
   readonly heads: readonly string[];
   readonly rows: readonly (readonly React.ReactNode[])[];
 }) {
-  if (rows.length === 0) return <p className="py-8 text-center text-xs text-faint">No records to display</p>;
+  if (rows.length === 0) return <p className="py-8 text-center text-xs text-faint">Nothing to display</p>;
   return (
     <table className="w-full text-xs">
       <thead className="text-2xs text-faint">
@@ -639,7 +639,7 @@ export function SetupDetailsPage() {
             <div className="lg:col-span-2">
               <CardShell
                 title="Shipment order volumes"
-                tip="Orders seen on the channel vs. orders created in KitStak per day (14 days). A gap means orders are failing — check Missing Shipment Orders."
+                tip="Orders seen on the channel vs. orders created in KitStak per day (14 days). A gap means orders are failing. Check Missing Shipment Orders."
               >
                 <VolumeChart volume={d.volume} />
               </CardShell>

@@ -80,12 +80,12 @@ export function isErrorCode(value: unknown): value is ErrorCode {
   return typeof value === 'string' && (ERROR_CODES as readonly string[]).includes(value);
 }
 
-export const notFoundError = (what = 'Record'): AppError => new AppError('NOT_FOUND', `${what} not found`);
+export const notFoundError = (what = 'Item'): AppError => new AppError('NOT_FOUND', `${what} not found`);
 export const forbiddenError = (message = 'You do not have permission to perform this action'): AppError =>
   new AppError('FORBIDDEN', message);
 export const unauthenticatedError = (message = 'Authentication required'): AppError =>
   new AppError('UNAUTHENTICATED', message);
-export const conflictError = (message = 'This record changed since you opened it — Reload'): AppError =>
+export const conflictError = (message = 'This item changed since you opened it. Reload and try again.'): AppError =>
   new AppError('CONFLICT', message);
 export const validationError = (message: string, fieldErrors?: FieldErrors): AppError =>
   new AppError('VALIDATION', message, { fieldErrors });

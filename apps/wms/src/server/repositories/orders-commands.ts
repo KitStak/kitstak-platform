@@ -453,7 +453,7 @@ export async function verifyOrderAddress(
     country: order.shipCountry,
   });
   if (order.version !== version)
-    throw new DomainError('CONFLICT', 'This record changed since you opened it — Reload');
+    throw new DomainError('CONFLICT', 'This order changed since you opened it. Reload and try again.');
   const after = (
     await tx
       .update(so)
@@ -889,7 +889,7 @@ export async function releaseWorkflowBlock(
   if (order.workflowBlocked === 'None')
     throw new DomainError('INVALID_STATE', `Order ${order.code} is not blocked by a workflow.`);
   if (order.version !== version)
-    throw new DomainError('CONFLICT', 'This record changed since you opened it — Reload');
+    throw new DomainError('CONFLICT', 'This order changed since you opened it. Reload and try again.');
   const after = (
     await tx
       .update(so)
@@ -897,7 +897,7 @@ export async function releaseWorkflowBlock(
       .where(and(eq(so.id, order.id), eq(so.version, version)))
       .returning()
   )[0];
-  if (!after) throw new DomainError('CONFLICT', 'This record changed since you opened it — Reload');
+  if (!after) throw new DomainError('CONFLICT', 'This order changed since you opened it. Reload and try again.');
   await changeLog.recordUpdate(tx, ctx, {
     entityType: 'shipment_order',
     entityId: order.id,

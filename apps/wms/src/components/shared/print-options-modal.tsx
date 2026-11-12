@@ -166,7 +166,7 @@ export function PrintOptionsModal({
   const implemented = selected ? isPrintImplemented(selected.typeKey) : false;
 
   const reason = !selected
-    ? 'No printout template is available for this record'
+    ? 'No printout template is available for this item'
     : !implemented
       ? 'This printout is not configured yet'
       : records.length === 0

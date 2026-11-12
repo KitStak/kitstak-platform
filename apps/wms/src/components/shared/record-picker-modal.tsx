@@ -68,7 +68,7 @@ function PickerBody<T>({
   const reason = pending
     ? 'Adding…'
     : count === 0
-      ? 'Select at least one record'
+      ? 'Select at least one item'
       : maxSelection && count > maxSelection
         ? `Select at most ${maxSelection}`
         : null;

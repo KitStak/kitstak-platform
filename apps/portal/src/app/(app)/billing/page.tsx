@@ -16,7 +16,7 @@ const STATUS_BADGE: Readonly<
 > = {
   active: { label: 'Active', tone: 'success' },
   trial: { label: 'Trial', tone: 'info' },
-  grace: { label: 'Past due — in grace', tone: 'warning' },
+  grace: { label: 'Past due, in grace', tone: 'warning' },
   dev: { label: 'Dev access', tone: 'info' },
   locked: { label: 'Not enabled', tone: 'neutral' },
 };
@@ -25,10 +25,22 @@ const dateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'nume
 
 /** Production-shaped period-end copy: a real date, or an honest reason there is none. */
 function periodEndLabel(source: string | undefined): string {
-  if (source === 'manual') return 'Manual grant — no renewal';
-  if (source === 'trial') return 'Trial — no end date set';
+  if (source === 'manual') return 'Manual grant, no renewal';
+  if (source === 'trial') return 'Trial, no end date set';
   if (source === 'stripe') return 'No renewal date on file';
   return 'No subscription';
+}
+
+/** Friendly names for access sources (never show the raw value). */
+const SOURCE_LABELS: Readonly<Record<string, string>> = {
+  manual: 'Manual grant',
+  trial: 'Trial',
+  stripe: 'Stripe',
+};
+
+function sourceLabel(source: string | undefined, access: ModuleAccess): string {
+  if (source) return SOURCE_LABELS[source] ?? 'Other';
+  return access === 'dev' ? 'Dev override' : 'None';
 }
 
 /**
@@ -67,13 +79,13 @@ export default async function BillingPage({
           {devAllowAll ? (
             <Badge
               tone="info"
-              title="ENTITLEMENTS_DEV_ALLOW_ALL is on — every module opens on this environment regardless of status"
+              title="Development override is on. Every module opens on this environment regardless of plan status."
             >
               Dev override
             </Badge>
           ) : null}
         </h1>
-        <p className="mt-2 text-md text-fg-secondary">What your organization is entitled to run today.</p>
+        <p className="mt-2 text-md text-fg-secondary">The modules your organization can run today.</p>
       </header>
 
       {requested ? (
@@ -82,12 +94,12 @@ export default async function BillingPage({
           className="rounded-lg border border-warning/25 bg-warning-subtle px-4 py-3 text-sm text-warning-text"
         >
           <span className="font-semibold">{MODULE_NAMES[requested]}</span> isn’t enabled for {activeOrg.name}.
-          Your administrator can arrange access — see below.
+          Your administrator can arrange access. See below.
         </div>
       ) : null}
 
       <section
-        aria-label="Current entitlements"
+        aria-label="Module access"
         className="overflow-hidden rounded-xl border border-border-default bg-panel shadow-xs"
       >
         <table className="w-full text-left text-sm">
@@ -116,8 +128,8 @@ export default async function BillingPage({
                   <td className="px-5 py-4">
                     <Badge tone={badge.tone}>{badge.label}</Badge>
                   </td>
-                  <td className="px-5 py-4 text-fg-secondary capitalize">
-                    {state.entitlement?.source ?? (state.access === 'dev' ? 'Dev override' : '—')}
+                  <td className="px-5 py-4 text-fg-secondary">
+                    {sourceLabel(state.entitlement?.source, state.access)}
                   </td>
                   <td className="px-5 py-4 text-fg-secondary">
                     {state.entitlement?.periodEnd ? (

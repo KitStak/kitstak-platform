@@ -130,7 +130,7 @@ export function CustomFieldsSection({
           </button>
         </p>
       ) : active.length === 0 ? (
-        <p className="text-xs text-faint">No custom fields are configured for this record type.</p>
+        <p className="text-xs text-faint">No custom fields are configured for this item type.</p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {active.map((def) => (

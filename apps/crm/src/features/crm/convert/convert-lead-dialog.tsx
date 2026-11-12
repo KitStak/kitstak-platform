@@ -81,7 +81,7 @@ function initialDraft(preview: ConversionPreviewDto): Draft {
     title: lead.title ?? '',
     fillEmpty: true,
     createDeal: Boolean(preview.boards.deals),
-    dealName: `${lead.company ?? lead.name} — New deal`,
+    dealName: `${lead.company ?? lead.name}: New deal`,
     amount: '',
     stageId: preview.defaultStageId ?? '',
     closeDate: todayIso(closeDate),
@@ -381,7 +381,7 @@ function ContactStep({ preview, draft, patch }: StepProps) {
     <fieldset className="flex flex-col gap-3" data-testid="crm-convert-contact">
       <legend className="mb-2 flex items-center gap-2 text-base text-fg-secondary">
         <UserRound aria-hidden className="size-4 text-icon" />
-        {matches.length > 0 ? 'This person may already be a contact. Merge into the existing record or create a new one.' : 'No contact with this email or name exists yet.'}
+        {matches.length > 0 ? 'This person may already be a contact. Merge into the existing contact or create a new one.' : 'No contact with this email or name exists yet.'}
       </legend>
       {matches.map((match) => (
         <ChoiceCard

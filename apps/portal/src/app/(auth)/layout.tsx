@@ -33,7 +33,7 @@ function LauncherPreview() {
       </div>
       <div className="mt-3 flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
         <span className="size-2 rounded-full bg-emerald-400" aria-hidden />
-        <span className="text-xs text-white/70">Signed in once — open everywhere</span>
+        <span className="text-xs text-white/70">Signed in once, open everywhere</span>
       </div>
     </div>
   );

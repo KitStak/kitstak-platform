@@ -15,7 +15,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: { default: 'KitStak CRM', template: '%s · KitStak' },
-  description: 'KitStak — the work OS for revenue teams: boards, pipelines and automations.',
+  description: 'KitStak: the work OS for revenue teams. Boards, pipelines and automations.',
   robots: { index: false, follow: false },
 };
 

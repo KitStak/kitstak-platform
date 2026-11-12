@@ -314,7 +314,7 @@ export function ProductWizard({
       const ctx = ctxRef.current;
       if (isApiError(error) && error.code === 'CONFLICT') {
         toast.error(
-          'This record changed since you opened it',
+          'This product changed since you opened it',
           'Reload to see the latest version before saving again.',
           {
             action: { label: 'Reload', onClick: () => window.location.reload() },

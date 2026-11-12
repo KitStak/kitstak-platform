@@ -13,7 +13,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: { default: 'KitStak Portal', template: '%s · KitStak' },
-  description: 'KitStak — one account for every KitStak app: launch CRM and WMS, manage your organization.',
+  description: 'KitStak: one account for every KitStak app. Launch CRM and WMS and manage your organization.',
   robots: { index: false, follow: false },
 };
 

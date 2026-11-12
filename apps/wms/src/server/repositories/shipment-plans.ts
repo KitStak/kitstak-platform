@@ -584,7 +584,7 @@ export async function updatePlan(
       .where(and(eq(schema.shipmentPlans.id, id), eq(schema.shipmentPlans.version, plan.version)))
       .returning()
   )[0];
-  if (!updated) throw new AppError('CONFLICT', 'This record changed since you opened it — Reload');
+  if (!updated) throw new AppError('CONFLICT', 'This plan changed since you opened it. Reload and try again.');
   if (removed.length > 0)
     await tx
       .delete(schema.shipmentPlanOrders)

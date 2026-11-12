@@ -131,7 +131,7 @@ function EditInfoDialog({
             {conflict ? (
               <Callout
                 variant="attention"
-                title="This record changed since you opened it"
+                title="This bill changed since you opened it"
                 action={
                   <Button size="sm" onClick={() => window.location.reload()}>
                     Reload

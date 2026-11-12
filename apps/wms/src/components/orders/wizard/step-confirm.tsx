@@ -157,7 +157,7 @@ export function StepConfirm({ goTo }: { readonly goTo: (key: string) => void }) 
               </span>
             ))}
             {addressNeedsAttention(v) ? (
-              <span className="text-xs text-warning">Not verified — it is verified when you save.</span>
+              <span className="text-xs text-warning">Not verified. It is verified when you save.</span>
             ) : null}
           </div>
           <div className="flex flex-col gap-1">

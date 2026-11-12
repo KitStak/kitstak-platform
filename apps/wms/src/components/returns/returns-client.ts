@@ -99,7 +99,7 @@ export function useLookupOptions(
 
 export function errorText(error: unknown, fallback = 'Something went wrong'): string {
   if (isApiError(error))
-    return error.code === 'CONFLICT' ? 'This record changed since you opened it — Reload' : error.message;
+    return error.code === 'CONFLICT' ? 'This return changed since you opened it. Reload and try again.' : error.message;
   return error instanceof Error ? error.message : fallback;
 }
 

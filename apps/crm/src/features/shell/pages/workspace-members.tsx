@@ -139,7 +139,7 @@ export function WorkspaceMembersTab({ workspace }: { readonly workspace: Workspa
         ) : current.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-fg-muted">
             {workspace.kind === 'open'
-              ? 'No explicit members — everyone in the organization can open this workspace.'
+              ? 'No explicit members. Everyone in the organization can open this workspace.'
               : 'No members yet. Add people so they can see this closed workspace.'}
           </p>
         ) : (

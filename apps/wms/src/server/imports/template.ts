@@ -102,7 +102,7 @@ export async function buildImportTemplate(def: ImportDefinition): Promise<Buffer
         type: '',
         rules: '',
         description:
-          'Fill one record per row on the Template sheet. Delete the example row before uploading. Columns marked * are required.',
+          'Fill one entry per row on the Template sheet. Delete the example row before uploading. Columns marked * are required.',
         example: '',
       },
     ],
