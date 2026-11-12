@@ -52,7 +52,7 @@ export function ProductTile({
         </span>
         <Badge tone={badge.tone}>{badge.label}</Badge>
       </div>
-      <div className="mt-5">
+      <div className="mt-5 grow">
         <h2 className="text-lg font-semibold text-fg">{name}</h2>
         <p className="mt-0.5 text-sm font-medium text-fg-secondary">{tagline}</p>
         <p className="mt-2 text-sm text-fg-muted">{description}</p>
@@ -62,8 +62,6 @@ export function ProductTile({
           <span className="text-xs font-medium text-warning-text">
             Access ends soon — period ended {dateFormat.format(periodEnd)}
           </span>
-        ) : access === 'dev' ? (
-          <span className="text-xs text-fg-muted">ENTITLEMENTS_DEV_ALLOW_ALL</span>
         ) : access === 'locked' ? (
           <span className="text-xs text-fg-muted">Not included in your plan</span>
         ) : (

@@ -70,7 +70,11 @@ export function fillRowHeight(available: number, rows: number, min: number, max:
 }
 
 const FUNNEL_ROW_MAX = 56;
+const FUNNEL_ROW_MIN = 30;
 const FUNNEL_CONNECTOR = 18;
+/** Hard floors for very short widgets, where rows and connectors shrink together. */
+const FUNNEL_ROW_FLOOR = 20;
+const FUNNEL_CONNECTOR_FLOOR = 12;
 
 export function FunnelWidget({ insight, settings, filtered, onConfigure }: WidgetRenderProps) {
   const [ref, size] = useElementSize<HTMLOListElement>();
@@ -79,22 +83,35 @@ export function FunnelWidget({ insight, settings, filtered, onConfigure }: Widge
   if (stages.length === 0 || top === 0) return <NoDataState filtered={filtered} onConfigure={onConfigure} />;
   const format = resolveFormat(settings, insight.valueColumn, settings.valueColumnKey ? settings.aggregate : 'count');
   const last = stages[stages.length - 1];
-  const connectors = Math.max(stages.length - 1, 0) * FUNNEL_CONNECTOR;
-  const rowHeight = fillRowHeight(size.height - connectors, stages.length, 30, FUNNEL_ROW_MAX);
-  const barHeight = Math.min(Math.max(rowHeight - 10, 24), 40);
+  // When the body is shorter than the comfortable minimums, rows and connectors scale down
+  // proportionally (to hard floors) instead of cropping the first and last stages; if even the
+  // floors overflow, the list top-aligns and scrolls so every stage stays reachable.
+  const connectorCount = Math.max(stages.length - 1, 0);
+  const naturalMin = stages.length * FUNNEL_ROW_MIN + connectorCount * FUNNEL_CONNECTOR;
+  const squeeze = size.height > 0 && size.height < naturalMin ? size.height / naturalMin : 1;
+  const connectorHeight = squeeze < 1 ? Math.max(Math.round(FUNNEL_CONNECTOR * squeeze), FUNNEL_CONNECTOR_FLOOR) : FUNNEL_CONNECTOR;
+  const rowHeight =
+    squeeze < 1
+      ? Math.max(Math.floor(FUNNEL_ROW_MIN * squeeze), FUNNEL_ROW_FLOOR)
+      : fillRowHeight(size.height - connectorCount * connectorHeight, stages.length, FUNNEL_ROW_MIN, FUNNEL_ROW_MAX);
+  const barHeight = Math.min(Math.max(rowHeight - 10, squeeze < 1 ? 16 : 24), 40);
+  const scrollable = size.height > 0 && stages.length * rowHeight + connectorCount * connectorHeight > size.height;
   return (
     <div className="flex h-full min-h-0 flex-col gap-2" data-testid="funnel-widget">
-      <ol ref={ref} className="flex min-h-0 flex-1 flex-col justify-center overflow-hidden">
+      <ol
+        ref={ref}
+        className={cn('flex min-h-0 flex-1 flex-col', scrollable ? 'justify-start overflow-y-auto' : 'justify-center overflow-hidden')}
+      >
         {stages.map((stage, index) => {
           const color = seriesColor(stage.color, index, settings.colorOverrides, stage.key);
           const width = Math.max((stage.count / top) * 100, 6);
           const previous = stages[index - 1];
           return (
-            <li key={stage.key} className="flex flex-col">
+            <li key={stage.key} className="flex shrink-0 flex-col">
               {index > 0 ? (
-                <span className="flex items-center gap-1.5 pl-3" style={{ height: FUNNEL_CONNECTOR }}>
+                <span className="flex items-center gap-1.5 pl-3" style={{ height: connectorHeight }}>
                   <span aria-hidden className="h-full w-px bg-border-default" />
-                  {stage.conversion !== null && stage.conversion !== undefined ? (
+                  {connectorHeight >= 16 && stage.conversion !== null && stage.conversion !== undefined ? (
                     <span
                       className="rounded-full border border-border-subtle bg-panel px-1.5 text-2xs leading-4 font-semibold text-fg-secondary tabular-nums"
                       aria-label={`${formatPercent(stage.conversion)} converted from ${previous?.label ?? 'the previous stage'}`}

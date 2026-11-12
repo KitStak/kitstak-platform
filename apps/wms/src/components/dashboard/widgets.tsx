@@ -56,6 +56,9 @@ function PanelStamp() {
   if (!f) return null;
   const label = freshnessLabel(f);
   if (!label && !f.refreshing) return null;
+  // Every card refreshes from the same payload: the routine "Updated hh:mm" lives once in the
+  // page header. A card only speaks up when it is refreshing or its data has gone stale.
+  if (!f.refreshing && !label?.stale) return null;
   return (
     <p
       data-testid="panel-updated"
@@ -604,7 +607,7 @@ function UnfulfilledDonut({
           </div>
         ) : (
           <div>
-            <div className="text-2xs text-faint">Total Order</div>
+            <div className="text-2xs text-faint">Total Orders</div>
             <div className="text-xl font-semibold tabular-nums">{fmt(total)}</div>
           </div>
         )}
@@ -660,7 +663,7 @@ export function UnfulfilledCard({ data }: { readonly data: LiveDashboard }) {
             <thead>
               <tr className="text-left text-2xs text-faint">
                 <th className="py-1 font-semibold" />
-                <th className="py-1 text-right font-semibold">Total Order</th>
+                <th className="py-1 text-right font-semibold">Total Orders</th>
                 <th className="py-1 text-right font-semibold">Total Pack Qty</th>
               </tr>
             </thead>

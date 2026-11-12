@@ -20,6 +20,26 @@ const BELL_POLL_MS = 60_000;
 
 export type { MarkReadInput };
 
+/** Last-known unread count, so the badge paints immediately on load instead of popping in after the fetch. */
+const UNREAD_CACHE_KEY = 'wms-bell-unread';
+
+function readCachedUnread(): number {
+  try {
+    const v = Number(window.localStorage.getItem(UNREAD_CACHE_KEY));
+    return Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeCachedUnread(count: number): void {
+  try {
+    window.localStorage.setItem(UNREAD_CACHE_KEY, String(count));
+  } catch {
+    // Storage unavailable (private window): the badge simply waits for the fetch.
+  }
+}
+
 type NotificationsEntry = ApiQueryData<readonly NotificationView[]>;
 
 /** Marks notifications read optimistically (badge + list update at once), rolls back on error. */
@@ -60,7 +80,15 @@ export function NotificationsBell() {
     refetchInterval: BELL_POLL_MS,
   });
   const markRead = useMarkNotificationsRead();
-  const unread = typeof list.data?.meta?.unread === 'number' ? list.data.meta.unread : 0;
+  // The badge renders the cached count right away (after mount, so SSR and hydration agree)
+  // and is corrected by the fetch; identical in both themes, no late pop-in on page load.
+  const [cachedUnread, setCachedUnread] = React.useState(0);
+  React.useEffect(() => setCachedUnread(readCachedUnread()), []);
+  const liveUnread = list.data?.meta?.unread;
+  const unread = typeof liveUnread === 'number' ? liveUnread : cachedUnread;
+  React.useEffect(() => {
+    if (typeof liveUnread === 'number') writeCachedUnread(liveUnread);
+  }, [liveUnread]);
   const rows = list.data?.data ?? [];
 
   const openNotification = (n: NotificationView): void => {

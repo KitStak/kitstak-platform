@@ -12,6 +12,7 @@ import {
   Sparkles,
   UserPlus,
 } from 'lucide-react';
+import { AppSwitcher } from '@kitstak/ui/app-switcher';
 import {
   CountBadge,
   DropdownMenu,
@@ -32,6 +33,13 @@ import { useShellStore } from './store';
 import { TopNav } from './top-nav/top-nav';
 import { UserMenu } from './user-menu';
 import { NotificationsRealtime } from '@/features/notifications';
+
+/** Cross-app origins for the shared AppSwitcher (BLUEPRINT.md §6); dev defaults match the three dev ports. */
+const APP_URLS = {
+  portal: process.env.NEXT_PUBLIC_PORTAL_URL ?? 'http://localhost:3300',
+  crm: process.env.NEXT_PUBLIC_CRM_URL ?? 'http://localhost:3100',
+  wms: process.env.NEXT_PUBLIC_WMS_URL ?? 'http://localhost:3000',
+} as const;
 
 function HelpMenu() {
   const openPanel = useShellStore((state) => state.openPanel);
@@ -175,6 +183,7 @@ export function TopBar() {
             badge={<CountBadge count={unread} ringClassName="ring-[var(--surface-panel)]" />}
           />
         </nav>
+        <AppSwitcher current="crm" urls={APP_URLS} />
         <UserMenu />
       </div>
     </header>

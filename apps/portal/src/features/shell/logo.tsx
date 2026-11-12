@@ -81,7 +81,7 @@ export function Logo({ size = 28, product = 'Portal', tone = 'auto', className }
       </span>
       {product ? (
         <span
-          className="ks-logo-product ml-2.5 border-l pl-2.5 font-heading font-semibold tracking-[0.14em] uppercase"
+          className="ks-logo-product ml-2.5 hidden border-l pl-2.5 font-heading font-semibold tracking-[0.14em] uppercase sm:block"
           style={{ fontSize: Math.max(11, Math.round(height * 0.52)), lineHeight: `${height}px` }}
         >
           {product}

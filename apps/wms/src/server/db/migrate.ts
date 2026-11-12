@@ -46,12 +46,25 @@ function firstRow(result: unknown): Record<string, unknown> | undefined {
   return Array.isArray(rows) ? (rows[0] as Record<string, unknown> | undefined) : undefined;
 }
 
+/**
+ * WMS-owned migrations tracking table. MUST differ from drizzle's default
+ * (`drizzle.__drizzle_migrations`): on a shared platform database the CRM's migrator
+ * records there, and drizzle-orm's migrator skips any journal entry older than the
+ * newest recorded timestamp — the CRM's newer entries would silently mask every WMS
+ * migration ("applied 0 of N").
+ */
+export const WMS_MIGRATIONS_TABLE = '__drizzle_migrations_wms';
+
 export async function countAppliedMigrations(db: AppDb): Promise<number> {
   const exists = firstRow(
-    await db.execute(sql`SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS "exists"`),
+    await db.execute(
+      sql`SELECT to_regclass(${'drizzle.' + WMS_MIGRATIONS_TABLE}) IS NOT NULL AS "exists"`,
+    ),
   );
   if (!exists?.exists) return 0;
-  const row = firstRow(await db.execute(sql`SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations`));
+  const row = firstRow(
+    await db.execute(sql.raw(`SELECT count(*)::int AS n FROM drizzle.${WMS_MIGRATIONS_TABLE}`)),
+  );
   return Number(row?.n ?? 0);
 }
 
@@ -75,10 +88,16 @@ export async function applyMigrations(
   try {
     if (is(db, PgliteDatabase)) {
       const { migrate } = await import('drizzle-orm/pglite/migrator');
-      await migrate(db as unknown as Parameters<typeof migrate>[0], { migrationsFolder });
+      await migrate(db as unknown as Parameters<typeof migrate>[0], {
+        migrationsFolder,
+        migrationsTable: WMS_MIGRATIONS_TABLE,
+      });
     } else {
       const { migrate } = await import('drizzle-orm/postgres-js/migrator');
-      await migrate(db as unknown as Parameters<typeof migrate>[0], { migrationsFolder });
+      await migrate(db as unknown as Parameters<typeof migrate>[0], {
+        migrationsFolder,
+        migrationsTable: WMS_MIGRATIONS_TABLE,
+      });
     }
   } finally {
     const { APP_SEARCH_PATH } = await import('./index');

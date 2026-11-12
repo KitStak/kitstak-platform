@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { CreditCard } from 'lucide-react';
-import { MODULES, isModule } from '@kitstak/entitlements';
+import { isModule } from '@kitstak/entitlements';
 import { requirePageSession } from '@/server/session';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getOrgModuleStates } from '@/server/entitlements';
@@ -99,10 +99,16 @@ export default async function BillingPage({
                     <Badge tone={badge.tone}>{badge.label}</Badge>
                   </td>
                   <td className="px-5 py-4 text-fg-secondary capitalize">
-                    {state.entitlement?.source ?? '—'}
+                    {state.entitlement?.source ?? (state.access === 'dev' ? 'Dev override' : '—')}
                   </td>
                   <td className="px-5 py-4 text-fg-secondary">
-                    {state.entitlement?.periodEnd ? dateFormat.format(state.entitlement.periodEnd) : '—'}
+                    {state.entitlement?.periodEnd ? (
+                      dateFormat.format(state.entitlement.periodEnd)
+                    ) : (
+                      <span title="No subscription on file" aria-label="No subscription on file">
+                        —
+                      </span>
+                    )}
                   </td>
                 </tr>
               );
@@ -123,12 +129,9 @@ export default async function BillingPage({
           </p>
           {devAllowAll ? (
             <p className="mt-3 text-xs text-fg-muted">
-              Development mode is on (<code>ENTITLEMENTS_DEV_ALLOW_ALL=1</code>): every module above opens
-              regardless of status. Operators grant production access with{' '}
-              <code>
-                pnpm --filter @kitstak/entitlements grant grant &lt;org-slug&gt; &lt;{MODULES.join('|')}&gt;
-              </code>
-              .
+              Development mode is on for this environment, so every module above opens regardless of status.
+              Production access is granted per organization by a KitStak operator — see the entitlements guide
+              in the project docs.
             </p>
           ) : null}
         </div>

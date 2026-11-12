@@ -87,6 +87,12 @@ export default async function OrganizationSettingsPage() {
     .orderBy(asc(invitation.email));
   const invitations = invitationRows.map(toInvitationView);
 
+  // Non-admins get a named contact instead of a silently missing invite form.
+  const orgAdminName =
+    members.find(
+      (row) => row.userId !== session.user.id && MANAGER_ROLES.has(row.role.split(',')[0]?.trim() ?? ''),
+    )?.name ?? null;
+
   return (
     <div className="mx-auto flex max-w-[760px] flex-col gap-8">
       <header>
@@ -151,7 +157,20 @@ export default async function OrganizationSettingsPage() {
               <InviteMemberForm />
             </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="border-t border-border-subtle px-6 py-4">
+            <p className="text-sm text-fg-secondary">
+              Only owners and admins can invite members or change roles
+              {orgAdminName ? (
+                <>
+                  {' '}
+                  — ask <span className="font-semibold text-fg">{orgAdminName}</span>
+                </>
+              ) : null}
+              .
+            </p>
+          </div>
+        )}
       </section>
 
       {invitations.length > 0 ? (

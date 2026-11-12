@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { AppSwitcher } from '@kitstak/ui/app-switcher';
 import { PRODUCT_NAME } from '@/config/brand';
 import { BrandLogo } from './brand-logo';
 import { DASHBOARD_ITEM, HEADER_ITEMS, NAV_MENUS, USER_MENU_ITEMS } from '@/config/nav-config';
@@ -64,6 +65,13 @@ function Logo() {
   );
 }
 
+/** Cross-app origins for the shared AppSwitcher (BLUEPRINT.md §6); dev defaults match the three dev ports. */
+const APP_URLS = {
+  portal: process.env.NEXT_PUBLIC_PORTAL_URL ?? 'http://localhost:3300',
+  crm: process.env.NEXT_PUBLIC_CRM_URL ?? 'http://localhost:3100',
+  wms: process.env.NEXT_PUBLIC_WMS_URL ?? 'http://localhost:3000',
+} as const;
+
 function TopBar() {
   const { permissions, activeApps: ssrApps } = useShell();
   const allows = useShellAllows();
@@ -98,6 +106,7 @@ function TopBar() {
             <HelpMenu />
             <NotificationsBell />
           </div>
+          <AppSwitcher current="wms" urls={APP_URLS} />
           <UserMenu />
         </div>
       </div>

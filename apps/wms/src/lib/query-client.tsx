@@ -147,9 +147,15 @@ export function useApiQuery<T>(
   const { query, enabled, timeoutMs, ...rest } = options;
   return useQuery<ApiQueryData<T>, ApiError>({
     queryKey: query === undefined ? key : [...key, query],
-    queryFn: async ({ signal }) => {
-      if (!timeoutMs || typeof AbortSignal.any !== 'function')
-        return apiRequest<T>(path ?? '', { query, signal });
+    // `ctx.signal` is only read when a timeout is requested: reading it marks the query
+    // cancellable, and cancellable queries abort when their last observer unmounts — in dev,
+    // StrictMode's mount/unmount/mount then aborts the first fetch of EVERY query (five
+    // ERR_ABORTED shell requests on each page load) and refetches from zero. Without the
+    // signal the in-flight request is simply reused. Grid queries pass `timeoutMs`, so they
+    // keep true cancellation (filter spam aborts stale list requests).
+    queryFn: async (ctx) => {
+      if (!timeoutMs || typeof AbortSignal.any !== 'function') return apiRequest<T>(path ?? '', { query });
+      const { signal } = ctx;
       const timer = AbortSignal.timeout(timeoutMs);
       try {
         return await apiRequest<T>(path ?? '', { query, signal: AbortSignal.any([signal, timer]) });

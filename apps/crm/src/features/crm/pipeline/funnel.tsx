@@ -50,7 +50,6 @@ export function PipelineFunnel({
       <ol className="flex flex-col" aria-label="Open pipeline stages">
         {open.map((stage, index) => {
           const width = funnelWidth(stage.count, maxCount);
-          const inside = width >= 78;
           return (
             <li key={stage.label.id} className="flex flex-col">
               {index > 0 ? (
@@ -63,7 +62,9 @@ export function PipelineFunnel({
                   <span className="hidden sm:inline">moved on</span>
                 </div>
               ) : null}
-              <div className="grid grid-cols-[112px_1fr_auto] items-center gap-3 sm:grid-cols-[136px_1fr_176px]">
+              {/* Counts live in their own fixed column right of the bars (never inside the
+                  fill), so the eye can scan one straight column of numbers. */}
+              <div className="grid grid-cols-[112px_1fr_2.25rem_auto] items-center gap-3 sm:grid-cols-[136px_1fr_2.25rem_176px]">
                 <span className="flex min-w-0 items-center gap-2" style={labelColorStyle(toLabelColor(stage.label.color))}>
                   <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-[var(--lc-bg)]" />
                   <span className="truncate text-sm font-medium text-fg" title={stage.label.name}>
@@ -87,19 +88,9 @@ export function PipelineFunnel({
                       className="absolute inset-y-0 left-0 rounded-md bg-[var(--lc-bg)] transition-[width] duration-[var(--duration-slow)] ease-[var(--ease-enter)]"
                       style={{ width: `${width}%` }}
                     />
-                    <span
-                      aria-hidden
-                      className="absolute inset-y-0 flex items-center text-sm font-semibold tabular-nums"
-                      style={
-                        inside
-                          ? { right: `calc(${100 - width}% + 8px)`, color: 'var(--lc-fg)' }
-                          : { left: `calc(${width}% + 8px)`, color: 'var(--lc-text)' }
-                      }
-                    >
-                      {stage.count}
-                    </span>
                   </button>
                 </Tooltip>
+                <span className="text-right text-sm font-semibold tabular-nums text-fg">{stage.count}</span>
                 <div className="flex flex-col items-end text-right leading-tight">
                   <span className="text-base font-semibold tabular-nums text-fg">{formatMoney(stage.value, currency)}</span>
                   <span className="text-xs tabular-nums text-fg-muted">

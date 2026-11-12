@@ -9,7 +9,8 @@ export const inputSurface = cva(
     'flex w-full items-center gap-2 rounded-md border bg-panel text-fg',
     'transition-[border-color,box-shadow,background-color] duration-[var(--duration-fast)] ease-out',
     'border-border-input hover:border-border-input-hover',
-    'focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--focus-ring-soft)] focus-within:hover:border-primary',
+    // Neutral focus treatment: brand red stays reserved for invalid states (design review P2).
+    'focus-within:border-border-strong focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--border-strong)_28%,transparent)] focus-within:hover:border-border-strong',
     'has-[:disabled]:cursor-not-allowed has-[:disabled]:bg-muted has-[:disabled]:opacity-60 has-[:disabled]:hover:border-border-input',
     'data-[invalid=true]:border-danger data-[invalid=true]:hover:border-danger data-[invalid=true]:focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--danger)_22%,transparent)]',
   ],

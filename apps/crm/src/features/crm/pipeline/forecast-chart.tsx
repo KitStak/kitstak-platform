@@ -59,9 +59,11 @@ export function ForecastChart({
     <div className="flex flex-col gap-4" data-testid="crm-forecast">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-secondary">
         <span className="flex flex-wrap items-center gap-x-4 gap-y-1" aria-hidden>
+          {/* Weighted is informational blue (from the stage palette), never brand red: red is
+              reserved for risk / lost / overdue on this page. */}
           <Legend swatch="bg-[var(--label-green)]" label="Won" />
-          <Legend swatch="bg-primary" label="Weighted" />
-          <Legend swatch="border border-dashed border-primary bg-primary-subtle" label="Best case" />
+          <Legend swatch="bg-[var(--label-blue)]" label="Weighted" />
+          <Legend swatch="border border-dashed border-[var(--label-blue)] bg-[var(--label-blue-subtle)]" label="Best case" />
         </span>
         <span className="ml-auto inline-flex items-center gap-1 tabular-nums">
           Commit <strong className="font-semibold text-fg">{formatMoney(total.won + total.weighted, currency)}</strong>
@@ -145,7 +147,9 @@ export function ForecastChart({
                         <span
                           className={cn(
                             'absolute inset-x-0 bottom-0 rounded-t-sm border border-dashed transition-colors duration-[var(--duration-fast)]',
-                            overdue ? 'border-danger bg-danger-subtle' : 'border-primary bg-primary-subtle group-hover:bg-primary-selected',
+                            overdue
+                              ? 'border-danger bg-danger-subtle'
+                              : 'border-[var(--label-blue)] bg-[var(--label-blue-subtle)] group-hover:bg-[var(--label-blue-light-subtle)]',
                           )}
                           style={{ height: scale(month.bestCase + month.won) }}
                         />
@@ -155,7 +159,7 @@ export function ForecastChart({
                           >
                             {commit > 0 ? formatMoney(commit, currency) : ''}
                           </span>
-                          <span className={cn('w-full rounded-t-sm', overdue ? 'bg-danger' : 'bg-primary')} style={{ height: scale(month.weighted) }} />
+                          <span className={cn('w-full rounded-t-sm', overdue ? 'bg-danger' : 'bg-[var(--label-blue)]')} style={{ height: scale(month.weighted) }} />
                           <span className="w-full bg-[var(--label-green)]" style={{ height: scale(month.won) }} />
                         </span>
                       </span>

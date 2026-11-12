@@ -7,7 +7,7 @@
  */
 import * as React from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ChevronDown, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -165,6 +165,8 @@ export function DashboardView({ initial = null }: { readonly initial?: Dashboard
     router.replace(s ? `${pathname}?${s}` : pathname, { scroll: false });
   };
 
+  // Phones only: the filter row starts collapsed behind the "Filters" toggle.
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
   // The stamp is browser-local time: render it only after mount so SSR and hydration agree.
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
@@ -232,20 +234,49 @@ export function DashboardView({ initial = null }: { readonly initial?: Dashboard
           </div>
         }
       />
-      <div className="flex flex-wrap items-center justify-end gap-2 px-6 pt-3">
-        <DashboardFilterBar
-          warehouses={warehouses}
-          clients={clients}
-          warehouseIds={shownWh}
-          clientIds={shownCl}
-          onChange={onChange}
-        />
-        <CustomizeDashboard
-          layout={layout}
-          onSave={(next) => void saveLayout(next)}
-          warehouses={warehouses}
-          clients={clients}
-        />
+      <div className="px-6 pt-3">
+        {/* Phones: ~300px of filter chrome would push every KPI below the fold, so the whole
+            row collapses behind one "Filters" toggle (selection count shown); >=768px unchanged. */}
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((v) => !v)}
+          aria-expanded={filtersOpen}
+          aria-controls="dashboard-filters"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-secondary transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:hidden"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+          Filters
+          {shownWh.length + shownCl.length > 0 ? (
+            <span className="rounded-full bg-primary-soft px-1.5 text-2xs font-semibold text-primary">
+              {shownWh.length + shownCl.length}
+            </span>
+          ) : null}
+          <ChevronDown
+            className={cn('h-3.5 w-3.5 text-faint transition-transform', filtersOpen && 'rotate-180')}
+            aria-hidden
+          />
+        </button>
+        <div
+          id="dashboard-filters"
+          className={cn(
+            'flex-wrap items-center justify-end gap-2 max-md:mt-2 md:flex',
+            filtersOpen ? 'flex' : 'hidden',
+          )}
+        >
+          <DashboardFilterBar
+            warehouses={warehouses}
+            clients={clients}
+            warehouseIds={shownWh}
+            clientIds={shownCl}
+            onChange={onChange}
+          />
+          <CustomizeDashboard
+            layout={layout}
+            onSave={(next) => void saveLayout(next)}
+            warehouses={warehouses}
+            clients={clients}
+          />
+        </div>
       </div>
       <div className={cn('space-y-4 px-6 pt-4 transition-opacity', q.isFetching && data && 'opacity-80')}>
         {q.error && !data ? (

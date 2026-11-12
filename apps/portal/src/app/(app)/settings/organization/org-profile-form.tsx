@@ -1,6 +1,7 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { Lock } from 'lucide-react';
 import { Button, Field, Input } from '@/components/ui';
 import { organization } from '@/lib/auth-client';
 
@@ -58,15 +59,28 @@ export function OrgProfileForm({
             size="lg"
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            disabled={!canManage}
+            readOnly={!canManage}
             aria-describedby={describedBy}
             invalid={invalid}
+            trailing={canManage ? undefined : <Lock aria-hidden className="size-3.5" />}
+            title={canManage ? undefined : 'Read-only — only owners and admins can edit'}
           />
         )}
       </Field>
-      <Field label="Slug" hint="Used in URLs and the entitlements CLI. Slugs can’t be changed here.">
+      <Field
+        label="Slug"
+        hint="Identifies this organization across every KitStak app. Slugs can’t be changed here."
+      >
         {({ inputId, describedBy }) => (
-          <Input id={inputId} size="lg" value={slug} readOnly disabled aria-describedby={describedBy} />
+          <Input
+            id={inputId}
+            size="lg"
+            value={slug}
+            readOnly
+            aria-describedby={describedBy}
+            trailing={<Lock aria-hidden className="size-3.5" />}
+            title="Read-only"
+          />
         )}
       </Field>
       {canManage ? (

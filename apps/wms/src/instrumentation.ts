@@ -13,9 +13,14 @@ export function shouldStartScheduler(env: Readonly<Record<string, string | undef
 }
 
 export async function register(): Promise<void> {
-  if (process.env.NEXT_RUNTIME !== 'nodejs' || !shouldStartScheduler(process.env)) {
+  if (process.env.NEXT_RUNTIME !== 'nodejs') {
     return;
   }
-  const { startNodeScheduler } = await import('./instrumentation-node');
+  const { guardStdioAgainstBrokenPipe, startNodeScheduler } = await import('./instrumentation-node');
+  // Always: a broken log pipe (EPIPE on stdout/stderr) must never livelock the server.
+  guardStdioAgainstBrokenPipe();
+  if (!shouldStartScheduler(process.env)) {
+    return;
+  }
   await startNodeScheduler();
 }

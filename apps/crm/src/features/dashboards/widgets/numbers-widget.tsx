@@ -112,7 +112,12 @@ export function NumbersWidget({ insight, settings, filtered }: WidgetRenderProps
         ) : insight.comparison ? (
           <Delta current={insight.comparison.current} previous={insight.comparison.previous} label={insight.comparison.label} />
         ) : (
-          <span className="text-xs text-fg-muted">{insight.itemCount.toLocaleString('en-US')} {insight.itemCount === 1 ? 'item' : 'items'}</span>
+          /* Without a comparison, say what the number is (not just a repeated item count), so
+             two KPIs over the same items still read as different metrics. */
+          <span className="max-w-full truncate px-2 text-xs text-fg-muted">
+            {aggregate !== 'count' && insight.valueColumn ? `${describeAggregate(aggregate, insight.valueColumn, [])} · ` : ''}
+            {insight.itemCount.toLocaleString('en-US')} {insight.itemCount === 1 ? 'item' : 'items'}
+          </span>
         )}
       </div>
       <div className={cn(BOTTOM_SLOT, 'mt-2 hidden flex-col justify-end [@container(min-height:116px)]:flex')}>

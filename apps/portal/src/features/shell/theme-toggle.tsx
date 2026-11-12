@@ -27,6 +27,7 @@ export function ThemeToggle({ className }: { readonly className?: string }) {
       type="button"
       onClick={toggle}
       aria-label="Toggle light/dark theme"
+      title="Toggle light/dark theme"
       className={cn(
         'inline-flex size-8 items-center justify-center rounded-md text-icon',
         'hover:bg-hover hover:text-icon-strong focus-visible:outline-2 focus-visible:outline-focus',

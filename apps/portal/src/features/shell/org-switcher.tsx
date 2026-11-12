@@ -49,7 +49,7 @@ export function OrgSwitcher({
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          'inline-flex h-8 max-w-[260px] items-center gap-2 rounded-md border border-border-input bg-panel px-2.5 text-sm font-medium text-fg',
+          'inline-flex h-8 min-w-0 max-w-[150px] items-center gap-2 rounded-md border border-border-input bg-panel px-2.5 text-sm font-medium text-fg sm:max-w-[260px]',
           'hover:border-border-input-hover hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
           'data-[state=open]:bg-selected',
         )}

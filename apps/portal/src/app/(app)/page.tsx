@@ -94,8 +94,8 @@ export default async function LauncherPage() {
 
       {devAllowAll ? (
         <p className="rounded-lg border border-info/25 bg-info-subtle px-4 py-3 text-sm text-info-text">
-          Development mode: <code className="font-semibold">ENTITLEMENTS_DEV_ALLOW_ALL=1</code> grants every
-          module. Production requires explicit entitlements — see Billing.
+          Development mode: every module is unlocked on this environment. Production requires explicit
+          entitlements — see Billing.
         </p>
       ) : null}
     </div>

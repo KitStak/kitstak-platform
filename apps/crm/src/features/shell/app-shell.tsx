@@ -13,6 +13,7 @@ import { useShellStore, type CreateRequest } from './store';
 import { TopBar } from './top-bar';
 import { useShellLayout } from './use-media-query';
 import { useShellHotkeys } from './use-shell-hotkeys';
+import { useShellPrefetch } from './use-shell-prefetch';
 import { useShellRealtime } from './use-shell-realtime';
 
 /**
@@ -111,6 +112,7 @@ function Panels({ slots, orgSlug }: { readonly slots?: AppShellSlots; readonly o
 export function AppShell({ context, slots, children }: AppShellProps) {
   useShellHotkeys(context.org.slug);
   useShellRealtime(context.org.id);
+  useShellPrefetch(context.org.id);
   const layout = useShellLayout();
   return (
     <OrgProvider value={context}>

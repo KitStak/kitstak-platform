@@ -193,6 +193,10 @@ export function RecentSection({
   } as React.CSSProperties;
   const canToggleMobile = recents.length > 1;
 
+  // Nothing visited yet: hide the module entirely so real content (work, updates) leads the
+  // page instead of an empty placeholder spending the above-the-fold slot.
+  if (!loading && !error && recents.length === 0) return null;
+
   return (
     <section ref={ref} aria-labelledby="home-recents" className="flex flex-col gap-3" style={gridStyle}>
       <div className="flex items-center justify-between gap-3">
@@ -231,11 +235,6 @@ export function RecentSection({
         </ul>
       ) : error ? (
         <SectionError what="recent boards" onRetry={onRetry} />
-      ) : recents.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border-default px-6 py-8 text-center">
-          <p className="font-semibold text-fg">Nothing visited yet</p>
-          <p className="mt-1 text-sm text-fg-muted">Boards and dashboards you open will show up here for one-click return.</p>
-        </div>
       ) : (
         <>
           {/* Mobile rail: every recent, scrolled horizontally. */}

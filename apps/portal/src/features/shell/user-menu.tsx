@@ -1,6 +1,7 @@
 'use client';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LogOut } from 'lucide-react';
+import { CreditCard, LayoutGrid, LogOut, Settings2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,6 +44,25 @@ export function UserMenu({ name, email }: { readonly name: string; readonly emai
           <p className="truncate text-sm font-semibold text-fg">{name}</p>
           <p className="truncate text-xs text-fg-muted">{email}</p>
         </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/">
+            <LayoutGrid aria-hidden className="size-4 text-icon" />
+            Apps
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/billing">
+            <CreditCard aria-hidden className="size-4 text-icon" />
+            Billing
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/settings/organization">
+            <Settings2 aria-hidden className="size-4 text-icon" />
+            Organization settings
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => void onSignOut()}

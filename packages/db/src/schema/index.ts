@@ -8,6 +8,10 @@ export { coreSchema, crmSchema, wmsSchema } from './_shared';
 export * from './core/auth';
 export * from './core/auth-policy';
 export * from './core/rate-limit';
+// Better Auth's drizzle adapter resolves plugin models by their snake_case model name;
+// every consumer passing this barrel as the adapter schema needs these aliases.
+export { passwordPolicyState as password_policy_state } from './core/auth-policy';
+export { rateLimit as rate_limit } from './core/rate-limit';
 export * from './core/customers';
 export * from './core/items';
 export * from './core/billing';

@@ -101,7 +101,7 @@ export function MemberRow({
             onChange={(event) => void changeRole(event.target.value as AssignableRole)}
             className={cn(
               'h-8 rounded-md border border-border-input bg-panel px-2 text-sm text-fg capitalize',
-              'hover:border-border-input-hover focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)] focus:outline-none',
+              'hover:border-border-input-hover focus:border-border-strong focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--border-strong)_28%,transparent)] focus:outline-none',
             )}
           >
             {ASSIGNABLE_ROLES.map((option) => (
@@ -121,7 +121,13 @@ export function MemberRow({
           </Button>
         </>
       ) : (
-        <span className="text-sm font-medium text-fg-secondary capitalize">{primaryRole}</span>
+        <Badge
+          tone="neutral"
+          className={cn('capitalize', !canManage && 'cursor-default')}
+          title={canManage ? undefined : 'Only owners and admins can change roles'}
+        >
+          {primaryRole}
+        </Badge>
       )}
     </li>
   );

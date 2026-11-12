@@ -56,6 +56,9 @@ export function Breadcrumbs({
   );
 }
 
+/** The route "Home" links to; its own breadcrumb would be self-referential. */
+const HOME_PATH = '/dashboard';
+
 /** Breadcrumbs derived from the nav config for the current route. */
 export function AutoBreadcrumbs({
   currentLabel,
@@ -66,5 +69,7 @@ export function AutoBreadcrumbs({
 }) {
   const pathname = usePathname();
   const items = React.useMemo(() => breadcrumbsFor(pathname, currentLabel), [pathname, currentLabel]);
+  // "Home › Dashboard" on the home route says nothing: suppress the trail there.
+  if (pathname === HOME_PATH) return null;
   return <Breadcrumbs items={items} className={className} />;
 }

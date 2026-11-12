@@ -1,6 +1,9 @@
 import Link from 'next/link';
+import { AppSwitcher } from '@kitstak/ui/app-switcher';
+import { env } from '@/server/env';
 import { requirePageSession } from '@/server/session';
 import { listUserOrgs, resolveActiveOrg } from '@/server/orgs';
+import { getOrgModuleStates } from '@/server/entitlements';
 import { Logo } from '@/features/shell/logo';
 import { OrgSwitcher } from '@/features/shell/org-switcher';
 import { ThemeToggle } from '@/features/shell/theme-toggle';
@@ -12,20 +15,30 @@ export default async function AppLayout({ children }: { readonly children: React
   const orgs = await listUserOrgs(session.user.id);
   const activeOrg = await resolveActiveOrg(session, orgs);
 
+  // Real entitlement reads for the shared AppSwitcher (BLUEPRINT.md §6); no org → both locked.
+  const moduleStates = activeOrg ? await getOrgModuleStates(activeOrg.id) : null;
+  const entitledFor = (module: 'crm' | 'wms'): boolean =>
+    moduleStates?.modules.find((state) => state.module === module)?.entitled ?? false;
+  const appUrls = {
+    portal: env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3300',
+    crm: env.NEXT_PUBLIC_CRM_URL,
+    wms: env.NEXT_PUBLIC_WMS_URL,
+  };
+
   return (
     <div className="flex min-h-dvh flex-col bg-app">
       <header className="sticky top-0 z-40 border-b border-border-subtle bg-panel/90 backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-[1120px] items-center gap-4 px-4 sm:px-6">
+        <div className="mx-auto flex h-14 w-full max-w-[1120px] items-center gap-2 px-4 sm:gap-4 sm:px-6">
           <Link
             href="/"
             aria-label="KitStak Portal home"
-            className="inline-flex rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+            className="inline-flex shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
           >
             <Logo size={26} />
           </Link>
           {activeOrg ? (
             <>
-              <span aria-hidden className="h-5 w-px bg-border-default" />
+              <span aria-hidden className="hidden h-5 w-px bg-border-default sm:block" />
               <OrgSwitcher orgs={orgs} activeOrgId={activeOrg.id} />
             </>
           ) : null}
@@ -49,7 +62,12 @@ export default async function AppLayout({ children }: { readonly children: React
               Organization
             </Link>
           </nav>
-          <div className="flex items-center gap-1.5 sm:ml-2">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:ml-2">
+            <AppSwitcher
+              current="portal"
+              urls={appUrls}
+              entitled={{ crm: entitledFor('crm'), wms: entitledFor('wms') }}
+            />
             <ThemeToggle />
             <UserMenu name={session.user.name} email={session.user.email} />
           </div>

@@ -21,8 +21,14 @@ const badgeVariants = cva(
 export interface BadgeProps extends VariantProps<typeof badgeVariants> {
   readonly children: ReactNode;
   readonly className?: string;
+  /** Native tooltip, e.g. to explain a read-only state. */
+  readonly title?: string;
 }
 
-export function Badge({ tone, children, className }: BadgeProps) {
-  return <span className={cn(badgeVariants({ tone }), className)}>{children}</span>;
+export function Badge({ tone, children, className, title }: BadgeProps) {
+  return (
+    <span title={title} className={cn(badgeVariants({ tone }), className)}>
+      {children}
+    </span>
+  );
 }

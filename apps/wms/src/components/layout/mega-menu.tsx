@@ -94,8 +94,10 @@ function MenuPanel({ menu, pathname }: { readonly menu: NavMenu; readonly pathna
   );
 }
 
+// Primary navigation never drops below 13px: operators read these triggers all day on
+// 1024-1440px office monitors (overflow is solved with tighter gap/padding, not font size).
 const triggerClass =
-  'group relative flex h-14 items-center gap-0.5 rounded-md px-1 text-xs xl:gap-1 xl:px-1.5 xl:text-sm min-[1440px]:px-2 font-semibold outline-none transition-colors ' +
+  'group relative flex h-14 items-center gap-0.5 rounded-md px-1 text-[13px] leading-none xl:gap-1 xl:px-1.5 xl:text-sm min-[1440px]:px-2 font-semibold outline-none transition-colors ' +
   'focus-visible:bg-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus data-[state=open]:text-fg';
 
 /**
@@ -130,8 +132,8 @@ export function MegaMenuBar({
       className="relative hidden lg:block"
     >
       <NavigationMenu.List className="flex items-center">
-        {/* The logo already goes home (Logiwa parity); the text link only fits from 1440px. */}
-        <NavigationMenu.Item className="hidden min-[1440px]:block">
+        {/* Explicit way home at every width the bar renders (the logo going home is not discoverable). */}
+        <NavigationMenu.Item>
           <NavigationMenu.Link asChild active={dashboardActive}>
             <Link
               href={dashboardHref}

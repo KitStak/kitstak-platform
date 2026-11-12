@@ -849,18 +849,96 @@ async function shiftInfos(db: AppDb, scope: Scope): Promise<ShiftInfo[]> {
   }));
 }
 
+/**
+ * Short server-side cache for the dashboard aggregates (the page shows an "Updated hh:mm"
+ * stamp and auto-refreshes every 60 s, so 30 s of staleness is semantically free). Keyed by
+ * viewer + effective scope + selection; concurrent identical requests (SSR + the client's
+ * first fetch) share one in-flight computation instead of running the ~20 queries twice.
+ */
+const DASHBOARD_CACHE_TTL_MS = 30_000;
+const DASHBOARD_CACHE_MAX_ENTRIES = 200;
+const dashboardCache = new Map<string, { readonly at: number; readonly value: Promise<LiveDashboard> }>();
+
+function dashboardCacheKey(auth: AuthContext, sel: DashboardSelection): string {
+  return JSON.stringify([
+    auth.user.id,
+    auth.user.sessionVersion,
+    auth.viewScope.warehouseIds,
+    auth.viewScope.clientIds,
+    auth.scope.warehouseIds,
+    auth.scope.clientIds,
+    sel.warehouseIds,
+    sel.clientIds,
+  ]);
+}
+
 export async function getLiveDashboard(
   db: AppDb,
   auth: AuthContext,
   sel: DashboardSelection,
-  now: Date = new Date(),
+  now?: Date,
+): Promise<LiveDashboard> {
+  // An explicit `now` (tests) always computes fresh.
+  if (now) return computeLiveDashboard(db, auth, sel, now);
+  const key = dashboardCacheKey(auth, sel);
+  const hit = dashboardCache.get(key);
+  const at = Date.now();
+  if (hit && at - hit.at < DASHBOARD_CACHE_TTL_MS) return hit.value;
+  const value = computeLiveDashboard(db, auth, sel, new Date(at));
+  dashboardCache.set(key, { at, value });
+  // A failed computation must not be served for 30 s.
+  value.catch(() => dashboardCache.delete(key));
+  if (dashboardCache.size > DASHBOARD_CACHE_MAX_ENTRIES) {
+    for (const [k, v] of dashboardCache) {
+      if (at - v.at >= DASHBOARD_CACHE_TTL_MS) dashboardCache.delete(k);
+    }
+  }
+  return value;
+}
+
+async function computeLiveDashboard(
+  db: AppDb,
+  auth: AuthContext,
+  sel: DashboardSelection,
+  now: Date,
 ): Promise<LiveDashboard> {
   const scope = effectiveScope(auth, sel);
   const zone = await dashboardZone(db, scope.warehouseIds);
   const days = dashboardDays(zone.tz, now);
   const ctx: Ctx = { db, scope, base: scopeFilters(scope, sel), days };
-  const open = await metric(ctx, 'Open', 'backlog', inStatuses(['Open']));
-  const inProgress = await metric(ctx, 'In Progress', 'backlog', inStatuses(IN_PROGRESS_STATUSES));
+  // Every widget's queries are independent reads: run them in parallel, not one after the
+  // other — this cut the dashboard payload's compute time by roughly the number of widgets.
+  const [
+    open,
+    inProgress,
+    shifts,
+    progressRows,
+    unfulfilledAgeRows,
+    breakdownRows,
+    backlogTotal,
+    channels,
+    clients,
+    carriers,
+    countries,
+    carriersShipped,
+    snapshotGapRows,
+    jobRows,
+  ] = await Promise.all([
+    metric(ctx, 'Open', 'backlog', inStatuses(['Open'])),
+    metric(ctx, 'In Progress', 'backlog', inStatuses(IN_PROGRESS_STATUSES)),
+    shiftInfos(db, scope),
+    progress(ctx),
+    unfulfilledAge(ctx),
+    breakdown(ctx),
+    metric(ctx, 'Backlog orders', 'backlog', ''),
+    ranks(ctx, sql`channel`, 'channel', 'enum'),
+    clientRanks(ctx),
+    ranks(ctx, sql`NULLIF(carrier, '')`, 'carrier', 'enum'),
+    ranks(ctx, sql`NULLIF(ship_country, '')`, 'shipCountry', 'text'),
+    ranks(ctx, sql`NULLIF(carrier, '')`, 'carrier', 'enum', 'shipped', carrierShippedQs(days)),
+    snapshotGaps(db, auth, scope, days),
+    jobs(ctx),
+  ]);
   const total: Metric = {
     label: 'Total',
     count: open.count + inProgress.count,
@@ -871,29 +949,15 @@ export async function getLiveDashboard(
     asOf: now.toISOString(),
     businessDay: { date: days.day(0), timeZone: days.tz, mixedZones: zone.mixed, zoneWarehouse: zone.label },
     selection: { warehouseIds: scope.warehouseIds, clientIds: scope.clientIds },
-    ...((shifts) => ({ shift: scope.warehouseIds.length === 1 ? (shifts[0] ?? null) : null, shifts }))(
-      await shiftInfos(db, scope),
-    ),
-    progress: await progress(ctx),
+    shift: scope.warehouseIds.length === 1 ? (shifts[0] ?? null) : null,
+    shifts,
+    progress: progressRows,
     unfulfilled: { total, open, inProgress },
-    unfulfilledAge: await unfulfilledAge(ctx),
-    breakdown: await breakdown(ctx),
-    backlogTotal: await metric(ctx, 'Backlog orders', 'backlog', ''),
-    ranks: {
-      channels: await ranks(ctx, sql`channel`, 'channel', 'enum'),
-      clients: await clientRanks(ctx),
-      carriers: await ranks(ctx, sql`NULLIF(carrier, '')`, 'carrier', 'enum'),
-      countries: await ranks(ctx, sql`NULLIF(ship_country, '')`, 'shipCountry', 'text'),
-      carriersShipped: await ranks(
-        ctx,
-        sql`NULLIF(carrier, '')`,
-        'carrier',
-        'enum',
-        'shipped',
-        carrierShippedQs(days),
-      ),
-    },
-    snapshotGaps: await snapshotGaps(db, auth, scope, days),
-    jobs: await jobs(ctx),
+    unfulfilledAge: unfulfilledAgeRows,
+    breakdown: breakdownRows,
+    backlogTotal,
+    ranks: { channels, clients, carriers, countries, carriersShipped },
+    snapshotGaps: snapshotGapRows,
+    jobs: jobRows,
   };
 }

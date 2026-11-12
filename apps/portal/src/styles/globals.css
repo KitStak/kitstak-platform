@@ -137,6 +137,8 @@
   }
 
   body {
+    /* Backstop against horizontal panning on small viewports (popovers, long content). */
+    overflow-x: clip;
     background: var(--surface-app);
     color: var(--text-primary);
     font-family: var(--font-ui);
