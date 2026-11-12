@@ -42,6 +42,9 @@ const { BETTER_AUTH_SECRET, WEBHOOK_KDF_SECRET, INTEGRATION_KEY } = s;
 const pooled = `postgres://postgres.${SUPABASE_REF}:${s.DB_PASSWORD}@aws-1-us-west-1.pooler.supabase.com:6543/postgres`;
 const direct = `postgres://postgres.${SUPABASE_REF}:${s.DB_PASSWORD}@aws-1-us-west-1.pooler.supabase.com:5432/postgres`; // session mode: the db.<ref> direct host is IPv6-only
 const urls = { portal: s.URL_PORTAL, crm: s.URL_CRM, wms: s.URL_WMS };
+const LEGACY = ['https://portal-kitstakllc.vercel.app','https://crm-kitstakllc.vercel.app','https://wms-kitstakllc.vercel.app'];
+const trusted = (...own) => [...own, ...LEGACY].join(',');
+const COOKIE_DOMAIN = '.kitstak.app';
 const scope = s.VERCEL_TEAM ? ['--scope', s.VERCEL_TEAM] : [];
 
 /** [key, value, sensitive] per project */
@@ -53,7 +56,8 @@ const PLANS = {
     ['NEXT_PUBLIC_APP_URL', urls.portal, false],
     ['NEXT_PUBLIC_CRM_URL', urls.crm, false],
     ['NEXT_PUBLIC_WMS_URL', urls.wms, false],
-    ['TRUSTED_ORIGINS', `${urls.crm},${urls.wms}`, false],
+    ['TRUSTED_ORIGINS', trusted(urls.crm, urls.wms), false],
+    ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
     ['ENTITLEMENTS_DEV_ALLOW_ALL', '1', false],
   ],
   [s.PROJECT_CRM]: [
@@ -64,7 +68,8 @@ const PLANS = {
     ['BETTER_AUTH_URL', urls.crm, false],
     ['NEXT_PUBLIC_APP_URL', urls.crm, false],
     ['NEXT_PUBLIC_PORTAL_URL', urls.portal, false],
-    ['TRUSTED_ORIGINS', `${urls.portal},${urls.wms}`, false],
+    ['TRUSTED_ORIGINS', trusted(urls.portal, urls.wms), false],
+    ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
     ['ENTITLEMENTS_DEV_ALLOW_ALL', '1', false],
   ],
   [s.PROJECT_WMS]: [
@@ -77,7 +82,8 @@ const PLANS = {
     ['BETTER_AUTH_URL', urls.wms, false],
     ['NEXT_PUBLIC_PORTAL_URL', urls.portal, false],
     ['NEXT_PUBLIC_CRM_URL', urls.crm, false],
-    ['TRUSTED_ORIGINS', `${urls.portal},${urls.crm}`, false],
+    ['TRUSTED_ORIGINS', trusted(urls.portal, urls.crm), false],
+    ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
     ['ENTITLEMENTS_DEV_ALLOW_ALL', '1', false],
   ],
 };
