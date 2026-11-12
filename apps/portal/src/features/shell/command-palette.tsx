@@ -19,6 +19,7 @@ import {
   Search,
   Settings2,
 } from 'lucide-react';
+import { withThemeParam } from '@kitstak/ui/theme-handoff';
 import { Kbd, Spinner, cn } from '@/components/ui';
 import { organization, signOut } from '@/lib/auth-client';
 
@@ -144,7 +145,8 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, entitled }: 
   const openApp = useCallback(
     (url: string) => {
       close();
-      window.open(url, '_blank', 'noopener');
+      // Programmatic navigation bypasses the ThemeHandoff click listener; append by hand.
+      window.open(withThemeParam(url), '_blank', 'noopener');
     },
     [close],
   );
