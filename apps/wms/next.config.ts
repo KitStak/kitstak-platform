@@ -105,8 +105,8 @@ export function buildLegacyRedirects(
 
 const nextConfig: NextConfig = {
   devIndicators: false,
-  // @kitstak/ui is source-shipped TypeScript (no build step); Next compiles it with the app.
-  transpilePackages: ["@kitstak/ui"],
+  // @kitstak/* packages are source-shipped TypeScript (no build step); Next compiles them with the app.
+  transpilePackages: ["@kitstak/auth", "@kitstak/db", "@kitstak/ui"],
   // Database drivers stay outside the server bundle: PGlite loads its WASM + data files from
   // its own package directory at runtime (docs/POSTGRES_MIGRATION.md).
   serverExternalPackages: ["@electric-sql/pglite", "postgres"],

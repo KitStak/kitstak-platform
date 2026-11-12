@@ -1,135 +1,126 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { SignJWT } from 'jose';
-import { users, userSessions } from '@/server/db/schema';
-import {
-  bumpSessionVersion,
-  getSessionSecret,
-  issueSession,
-  listActiveSessions,
-  purgeStaleSessions,
-  resolveSession,
-  revokeSession,
-  revokeUserSessions,
-  SESSION_TTL_SECONDS,
-} from '@/server/auth/session-store';
+import { session as coreSession } from '@kitstak/db/schema';
+import { users } from '@/server/db/schema';
+import type { AppDb } from '@/server/api/db';
 import { seededDb, type SeededDb } from './fixtures';
 
-describe('sessions (jti + sv + user_sessions)', () => {
-  let t: SeededDb;
-  afterEach(async () => await t.close());
+let current: SeededDb;
+vi.mock('@/server/api/db', () => ({ getAppDb: async (): Promise<AppDb> => current.db }));
 
-  it('issues a token that resolves to the user', async () => {
-    t = await seededDb();
-    const issued = await issueSession(t.db, t.ids.admin, { ip: '1.1.1.1', userAgent: 'vitest' });
-    const res = await resolveSession(t.db, issued.token);
+const { resolveSession, revokeSession, revokeUserSessions, bumpSessionVersion, listActiveSessions } =
+  await import('@/server/auth/session-store');
+const { signInCookie, forgetSignInCookies, SESSION_COOKIE_NAME } = await import('../../setup/auth-session');
+
+const headersWith = (cookie: string): Headers => new Headers({ cookie });
+
+async function sessionIdOf(cookie: string): Promise<string> {
+  const res = await resolveSession(current.db, headersWith(cookie));
+  if (!res.ok) throw new Error(`expected a live session, got ${res.reason}`);
+  return res.user.sessionId;
+}
+
+describe('sessions (shared Better Auth core.session)', () => {
+  afterEach(async () => {
+    forgetSignInCookies(current.db);
+    await current.close();
+  });
+
+  it('a real sign-in resolves to the SessionUser shape (profile-backed role/scope)', async () => {
+    current = await seededDb();
+    const cookie = await signInCookie(current.db, 'admin@kitstak.io');
+    expect(cookie.startsWith(`${SESSION_COOKIE_NAME}=`)).toBe(true);
+    const res = await resolveSession(current.db, headersWith(cookie));
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.user).toMatchObject({
-        id: t.ids.admin,
+        id: current.ids.admin,
         email: 'admin@kitstak.io',
         role: 'admin',
-        sessionId: issued.sessionId,
+        userType: 'Operation',
+        allClients: true,
+        isApiUser: false,
         sessionVersion: 1,
       });
+      expect(res.user.sessionId).toBeTruthy();
+      expect(Date.parse(res.user.sessionExpiresAt)).toBeGreaterThan(Date.now());
     }
-    expect(issued.maxAgeSeconds).toBe(SESSION_TTL_SECONDS);
   });
 
-  it('rejects a revoked session (logout)', async () => {
-    t = await seededDb();
-    const issued = await issueSession(t.db, t.ids.admin);
-    expect(await revokeSession(t.db, issued.sessionId)).toBe(true);
-    expect(await revokeSession(t.db, issued.sessionId)).toBe(false);
-    expect(await resolveSession(t.db, issued.token)).toEqual({ ok: false, reason: 'revoked' });
+  it('missing/garbage cookies resolve to unauthenticated, never throw', async () => {
+    current = await seededDb();
+    expect(await resolveSession(current.db, new Headers())).toEqual({
+      ok: false,
+      reason: 'unauthenticated',
+    });
+    expect(
+      await resolveSession(current.db, headersWith(`${SESSION_COOKIE_NAME}=not-a-real-token.sig`)),
+    ).toEqual({ ok: false, reason: 'unauthenticated' });
   });
 
-  it('bumping session_version kills every open session', async () => {
-    t = await seededDb();
-    const a = await issueSession(t.db, t.ids.admin);
-    const b = await issueSession(t.db, t.ids.admin);
-    expect(await bumpSessionVersion(t.db, t.ids.admin)).toBe(2);
-    expect((await resolveSession(t.db, a.token)).ok).toBe(false);
-    expect((await resolveSession(t.db, b.token)).ok).toBe(false);
-    const fresh = await issueSession(t.db, t.ids.admin);
-    expect((await resolveSession(t.db, fresh.token)).ok).toBe(true);
+  it('rejects a revoked session (sign-out semantics)', async () => {
+    current = await seededDb();
+    const cookie = await signInCookie(current.db, 'admin@kitstak.io');
+    const sessionId = await sessionIdOf(cookie);
+    expect(await revokeSession(current.db, sessionId)).toBe(true);
+    expect(await revokeSession(current.db, sessionId)).toBe(false);
+    expect((await resolveSession(current.db, headersWith(cookie))).ok).toBe(false);
   });
 
-  it('detects a version mismatch even without revocation', async () => {
-    t = await seededDb();
-    const issued = await issueSession(t.db, t.ids.admin);
-    await t.db.update(users).set({ sessionVersion: 7 }).where(eq(users.id, t.ids.admin));
-    expect(await resolveSession(t.db, issued.token)).toEqual({ ok: false, reason: 'version_mismatch' });
+  it('bumpSessionVersion (legacy seam) revokes every open session of the user', async () => {
+    current = await seededDb();
+    const a = await signInCookie(current.db, 'admin@kitstak.io');
+    forgetSignInCookies(current.db);
+    const b = await signInCookie(current.db, 'admin@kitstak.io');
+    expect(a).not.toBe(b);
+    expect(await bumpSessionVersion(current.db, current.ids.admin)).toBe(2);
+    expect((await resolveSession(current.db, headersWith(a))).ok).toBe(false);
+    expect((await resolveSession(current.db, headersWith(b))).ok).toBe(false);
+    forgetSignInCookies(current.db);
+    const fresh = await signInCookie(current.db, 'admin@kitstak.io');
+    expect((await resolveSession(current.db, headersWith(fresh))).ok).toBe(true);
   });
 
-  it('deactivated users lose access on the next request', async () => {
-    t = await seededDb();
-    const issued = await issueSession(t.db, t.ids.admin);
-    await t.db.update(users).set({ isActive: false }).where(eq(users.id, t.ids.admin));
-    expect(await resolveSession(t.db, issued.token)).toEqual({ ok: false, reason: 'user_inactive' });
-    await expect(issueSession(t.db, t.ids.admin)).rejects.toThrow();
-  });
-
-  it('enforces the 12 h absolute TTL', async () => {
-    t = await seededDb();
-    const now = new Date('2026-11-05T00:00:00.000Z');
-    const issued = await issueSession(t.db, t.ids.admin, {}, now);
-    expect((await resolveSession(t.db, issued.token, new Date(now.getTime() + 11 * 3600_000))).ok).toBe(true);
-    expect((await resolveSession(t.db, issued.token, new Date(now.getTime() + 13 * 3600_000))).ok).toBe(
-      false,
+  it('deactivated users lose access on the next request and cannot sign in again', async () => {
+    current = await seededDb();
+    const cookie = await signInCookie(current.db, 'admin@kitstak.io');
+    await current.db.update(users).set({ isActive: false }).where(eq(users.id, current.ids.admin));
+    expect(await resolveSession(current.db, headersWith(cookie))).toEqual({
+      ok: false,
+      reason: 'user_inactive',
+    });
+    forgetSignInCookies(current.db);
+    // The WMS sign-in gate answers inactive users like a wrong password (hook APIError).
+    await expect(signInCookie(current.db, 'admin@kitstak.io')).rejects.toThrow(
+      /Invalid email or password|401/,
     );
   });
 
-  it('rejects tampered, foreign and malformed tokens', async () => {
-    t = await seededDb();
-    const issued = await issueSession(t.db, t.ids.admin);
-    expect(await resolveSession(t.db, `${issued.token}x`)).toEqual({ ok: false, reason: 'invalid_token' });
-    expect(await resolveSession(t.db, '')).toEqual({ ok: false, reason: 'malformed' });
-    const forged = await new SignJWT({ sv: 1 })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setSubject(t.ids.viewer)
-      .setJti(issued.sessionId)
-      .setIssuedAt()
-      .setExpirationTime('1h')
-      .sign(getSessionSecret());
-    expect(await resolveSession(t.db, forged)).toEqual({ ok: false, reason: 'unknown_session' });
-    const noSv = await new SignJWT({})
-      .setProtectedHeader({ alg: 'HS256' })
-      .setSubject(t.ids.admin)
-      .setJti('x')
-      .setExpirationTime('1h')
-      .sign(getSessionSecret());
-    expect(await resolveSession(t.db, noSv)).toEqual({ ok: false, reason: 'malformed' });
+  it('sign out other sessions keeps the chosen one', async () => {
+    current = await seededDb();
+    const keep = await signInCookie(current.db, 'admin@kitstak.io');
+    const keepId = await sessionIdOf(keep);
+    forgetSignInCookies(current.db);
+    await signInCookie(current.db, 'admin@kitstak.io');
+    forgetSignInCookies(current.db);
+    await signInCookie(current.db, 'admin@kitstak.io');
+    expect(await listActiveSessions(current.db, current.ids.admin)).toHaveLength(3);
+    expect(await revokeUserSessions(current.db, current.ids.admin, { exceptSessionId: keepId })).toBe(2);
+    expect((await listActiveSessions(current.db, current.ids.admin)).map((s) => s.id)).toEqual([keepId]);
+    expect((await resolveSession(current.db, headersWith(keep))).ok).toBe(true);
   });
 
-  it('slides lastSeenAt at most once per resolution window', async () => {
-    t = await seededDb();
-    const now = new Date('2026-11-05T00:00:00.000Z');
-    const issued = await issueSession(t.db, t.ids.admin, {}, now);
-    const seen = async (): Promise<string | null | undefined> =>
-      (
-        await t.db
-          .select({ v: userSessions.lastSeenAt })
-          .from(userSessions)
-          .where(eq(userSessions.id, issued.sessionId))
-          .limit(1)
-      )[0]?.v;
-    await resolveSession(t.db, issued.token, new Date(now.getTime() + 10_000));
-    expect(await seen()).toBe(now.toISOString());
-    const later = new Date(now.getTime() + 120_000);
-    await resolveSession(t.db, issued.token, later);
-    expect(await seen()).toBe(later.toISOString());
-  });
-
-  it('sign out other sessions keeps the current one; purge removes stale rows', async () => {
-    t = await seededDb();
-    const keep = await issueSession(t.db, t.ids.admin);
-    await issueSession(t.db, t.ids.admin);
-    await issueSession(t.db, t.ids.admin);
-    expect(await listActiveSessions(t.db, t.ids.admin)).toHaveLength(3);
-    expect(await revokeUserSessions(t.db, t.ids.admin, { exceptSessionId: keep.sessionId })).toBe(2);
-    expect((await listActiveSessions(t.db, t.ids.admin)).map((s) => s.id)).toEqual([keep.sessionId]);
-    expect((await resolveSession(t.db, keep.token)).ok).toBe(true);
-    expect(await purgeStaleSessions(t.db, new Date(Date.now() + 30 * 86_400_000))).toBe(3);
+  it('wrong passwords fail sign-in and bcrypt-compat hashes verify (migration round-trip)', async () => {
+    current = await seededDb();
+    // The seeded credential is a bcrypt hash: a successful sign-in IS the compat proof.
+    const cookie = await signInCookie(current.db, 'viewer@kitstak.io');
+    expect((await resolveSession(current.db, headersWith(cookie))).ok).toBe(true);
+    const [row] = await current.db
+      .select({ n: coreSession.id })
+      .from(coreSession)
+      .limit(1);
+    expect(row).toBeTruthy();
+    forgetSignInCookies(current.db);
+    await expect(signInCookie(current.db, 'viewer@kitstak.io', 'Wrong!password9')).rejects.toThrow(/401/);
   });
 });

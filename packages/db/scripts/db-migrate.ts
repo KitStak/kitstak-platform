@@ -8,8 +8,8 @@
  * `pgbouncer=true`) the session advisory lock could leak, so it is skipped with a warning.
  *
  * Hand-rolled on purpose (not drizzle-kit, never `drizzle-kit push`): only migrations
- * listed in drizzle/meta/_journal.json are applied, so deferred files such as
- * 0001_core_fks.sql (Phase 3) stay out of the run. Applied tags are recorded in
+ * listed in drizzle/meta/_journal.json are applied, so a file can be committed first
+ * and journaled later (as 0001_core_fks.sql was in Phase 3). Applied tags are recorded in
  * `drizzle.__kitstak_db_migrations` with a content hash; a hash mismatch on an applied
  * file aborts, since editing applied migrations breaks fresh-from-zero rebuilds.
  */

@@ -1,18 +1,7 @@
 /**
- * Better Auth organization-plugin access control.
- *
- * Governs Better Auth's own organization endpoints (invite, update member, teams...).
- * Application permissions live in `src/server/rbac`; role names are shared.
+ * Better Auth organization-plugin access control now lives in `@kitstak/auth`
+ * (blueprint §1.3); this module is a compatibility re-export so existing
+ * `@/server/auth/access-control` imports keep working. Application permissions
+ * live in `src/server/rbac`; role names are shared.
  */
-import { createAccessControl } from 'better-auth/plugins/access';
-import { adminAc, defaultStatements, memberAc, ownerAc } from 'better-auth/plugins/organization/access';
-
-export const orgAccessControl = createAccessControl(defaultStatements);
-
-export const orgRoles = {
-  owner: orgAccessControl.newRole(ownerAc.statements),
-  admin: orgAccessControl.newRole(adminAc.statements),
-  member: orgAccessControl.newRole(memberAc.statements),
-  viewer: orgAccessControl.newRole(memberAc.statements),
-  guest: orgAccessControl.newRole({ organization: [], member: [], invitation: [], team: [], ac: [] }),
-};
+export { orgAccessControl, orgRoles } from '@kitstak/auth/access-control';

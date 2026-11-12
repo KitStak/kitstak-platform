@@ -25,13 +25,6 @@ interface Bucket {
   damageReason: string | null;
 }
 
-async function csrf(page: Page): Promise<string> {
-  const c = (await page.context().cookies(base)).find((x) => x.name === 'ks_csrf')?.value;
-  if (c) return c;
-  await page.request.get(`${base}/api/auth/csrf`);
-  return (await page.context().cookies(base)).find((x) => x.name === 'ks_csrf')?.value ?? '';
-}
-
 async function bucket(request: APIRequestContext): Promise<Bucket> {
   const res = await request.get(`${base}/api/inventory/by-location?q=${SKU}&qm=eq&f.location=eq:${LOCATION}`);
   const rows = (await res.json()).data as Bucket[];
@@ -45,7 +38,7 @@ async function restoreQty(page: Page, qty: number): Promise<void> {
   if (b.totalQty === qty) return;
   const reasons = (await (await page.request.get(`${base}/api/inventory/reasons`)).json()).data;
   const res = await page.request.post(`${base}/api/inventory/buckets/${b.id}/quantity`, {
-    headers: { 'x-csrf-token': await csrf(page), Origin: base },
+    headers: { Origin: base },
     data: {
       mode: 'adjust',
       qty,
@@ -247,7 +240,7 @@ test.describe('inventory pages', () => {
     await expect(page.getByRole('button', { name: 'Add Inventory' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Transfer LP/Loc' })).toHaveCount(0);
     const res = await page.request.post(`${base}/api/inventory/transfer-location`, {
-      headers: { 'x-csrf-token': await csrf(page), Origin: base },
+      headers: { Origin: base },
       data: { fromLocationId: 'x', target: { kind: 'location', id: 'y' } },
     });
     expect(res.status()).toBe(403);
@@ -316,7 +309,7 @@ test.describe('inventory transfers', () => {
       const missing = start.totalQty - origin.totalQty;
       if (moved && missing > 0) {
         const res = await page.request.post(`${base}/api/inventory/transfer-product`, {
-          headers: { 'x-csrf-token': await csrf(page), Origin: base },
+          headers: { Origin: base },
           data: {
             inventoryId: moved.id,
             qty: missing,
@@ -438,7 +431,7 @@ test.describe('inventory transfers', () => {
           const res = await page.request.post(
             `${base}/api/inventory/${kind === 'lp' ? 'transfer-lp' : 'transfer-location'}`,
             {
-              headers: { 'x-csrf-token': await csrf(page), Origin: base },
+              headers: { Origin: base },
               data:
                 kind === 'lp'
                   ? {
@@ -487,7 +480,7 @@ test.describe('inventory transfers', () => {
         reasons.adjustmentReasons.find((r) => r.direction !== avoid) ??
         reasons.adjustmentReasons[0])!.id;
     const added = await page.request.post(`${base}/api/inventory/add`, {
-      headers: { 'x-csrf-token': await csrf(page), Origin: base },
+      headers: { Origin: base },
       data: {
         warehouseId: ref!.warehouseId,
         clientId: ref!.clientId,
@@ -530,7 +523,7 @@ test.describe('inventory transfers', () => {
       const left = (await rowsAt(page.request, LOC)).find((r) => r.sku === ZERO_SKU);
       if (left) {
         await page.request.post(`${base}/api/inventory/buckets/${left.id}/quantity`, {
-          headers: { 'x-csrf-token': await csrf(page), Origin: base },
+          headers: { Origin: base },
           data: {
             mode: 'adjust',
             qty: 0,

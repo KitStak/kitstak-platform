@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, LogOut, Monitor, MonitorX, Moon, Sun } from 'lucide-react';
 import { USER_MENU_ITEMS } from '@/config/nav-config';
-import { apiRequest } from '@/lib/api-client';
+import { authClient } from '@/lib/auth-client';
 import { useTheme, type ThemePreference } from '@/lib/theme';
 import { Avatar } from '@/components/ui/avatar';
 import {
@@ -78,10 +78,11 @@ export function UserMenu() {
     if (busy) return;
     setBusy(true);
     try {
-      await apiRequest(everywhere ? '/api/auth/logout-all' : '/api/auth/logout', {
-        method: 'POST',
-        body: everywhere ? { includeCurrent: true } : {},
-      });
+      // Better Auth (blueprint §1.4): "everywhere" revokes every other session first,
+      // then signOut ends this one and clears the kitstak.* cookies.
+      if (everywhere) await authClient.revokeOtherSessions();
+      const result = await authClient.signOut();
+      if (result.error) throw new Error(result.error.message || 'Sign out failed');
       // Stop in-flight polling and leave with a full navigation: clearing the cache while the
       // shell is still mounted would refetch /api/me without a session (a console 401).
       await queryClient.cancelQueries();

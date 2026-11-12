@@ -3,18 +3,14 @@
  *
  *   2. Every registered route (F4.7) resolves; legacy `?tab=` URLs redirect.
  *   3. Access control: viewer has no Settings menu, viewer gets the 403 page on
- *      /settings/users and 403 on POST /api/tags, a POST without the CSRF token is
- *      rejected, and deactivating a user kills their session on the next request.
+ *      /settings/users and 403 on POST /api/tags, a cross-site POST is rejected
+ *      (same-origin check; the CSRF token is retired — blueprint §1.4), and
+ *      deactivating a user kills their session on the next request.
  *
  * Runs against the shared app (E2E_BASE_URL, default http://localhost:3000) on a
  * freshly reset database: `npm run db:reset && npx playwright test --project=e2e tests/e2e/foundation`.
  */
-import {
-  request as playwrightRequest,
-  type APIRequestContext,
-  type BrowserContext,
-  type Page,
-} from '@playwright/test';
+import { request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
 import { ROUTE_PATTERNS, ROUTE_REGISTRY } from '../../../src/config/route-registry';
 import { LEGACY_TAB_REDIRECTS } from '../../../next.config';
 import { expect, test } from '../fixtures/auth';
@@ -31,16 +27,6 @@ const ROUTE_TIMEOUT_MS = 120_000;
 const baseUrl = e2eBaseUrl();
 const sameOrigin = { Origin: baseUrl, Referer: `${baseUrl}/dashboard` } as const;
 
-async function csrfToken(context: BrowserContext): Promise<string> {
-  const existing = (await context.cookies(baseUrl)).find((c) => c.name === 'ks_csrf')?.value;
-  if (existing) return existing;
-  const res = await context.request.get(`${baseUrl}/api/auth/csrf`);
-  expect(res.ok()).toBe(true);
-  const issued = (await context.cookies(baseUrl)).find((c) => c.name === 'ks_csrf')?.value;
-  if (!issued) throw new Error('GET /api/auth/csrf did not set the ks_csrf cookie');
-  return issued;
-}
-
 async function errorCode(res: Awaited<ReturnType<APIRequestContext['post']>>): Promise<string | undefined> {
   const body = (await res.json()) as { code?: string };
   return body.code;
@@ -54,9 +40,6 @@ async function setUserActive(email: string, active: boolean): Promise<void> {
   const api = await playwrightRequest.newContext({ baseURL: baseUrl });
   try {
     await loginViaApi(api, 'admin');
-    await api.get(`${baseUrl}/api/auth/csrf`);
-    const csrf = (await api.storageState()).cookies.find((c) => c.name === 'ks_csrf')?.value;
-    if (!csrf) throw new Error('GET /api/auth/csrf did not set the ks_csrf cookie');
     const list = await api.get(`${baseUrl}/api/users?q=${encodeURIComponent(email)}&qm=eq`);
     expect(list.ok()).toBe(true);
     const rows = ((await list.json()) as { data: { id: string; email: string }[] }).data.filter(
@@ -65,7 +48,7 @@ async function setUserActive(email: string, active: boolean): Promise<void> {
     if (rows.length !== 1) throw new Error(`Expected one user with email ${email}, found ${rows.length}`);
     const res = await api.post(`${baseUrl}/api/users/bulk-status`, {
       data: { ids: [rows[0]?.id], isActive: active },
-      headers: { ...sameOrigin, 'x-csrf-token': csrf },
+      headers: sameOrigin,
     });
     expect(res.ok()).toBe(true);
   } finally {
@@ -132,21 +115,20 @@ test.describe('F8.3 access control', () => {
     await expect(viewerPage.getByText(FORBIDDEN_TEXT).first()).toBeVisible();
   });
 
-  test('viewer POST /api/tags is forbidden (with a valid CSRF token)', async ({ viewerPage }) => {
+  test('viewer POST /api/tags is forbidden (same-origin request)', async ({ viewerPage }) => {
     await viewerPage.goto('/dashboard');
-    const token = await csrfToken(viewerPage.context());
     const res = await viewerPage.request.post(`${baseUrl}/api/tags`, {
-      headers: { ...sameOrigin, 'x-csrf-token': token },
+      headers: sameOrigin,
       data: { name: 'f8-viewer-tag', scope: 'order', color: 'blue' },
     });
     expect(res.status()).toBe(403);
     expect(await errorCode(res)).toBe('FORBIDDEN');
   });
 
-  test('a POST without the CSRF token is rejected', async ({ adminPage }) => {
+  test('a cross-site POST is rejected (same-origin check)', async ({ adminPage }) => {
     await adminPage.goto('/dashboard');
     const res = await adminPage.request.post(`${baseUrl}/api/tags`, {
-      headers: sameOrigin,
+      headers: { Origin: 'https://evil.example', Referer: 'https://evil.example/' },
       data: { name: 'f8-no-csrf-tag', scope: 'order', color: 'blue' },
     });
     expect(res.status()).toBe(403);

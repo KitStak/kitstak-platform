@@ -5,12 +5,12 @@
  * (pointer, key, wheel, touch) is shared through localStorage, so a user working in one tab is
  * never signed out by another. A warning dialog with a live countdown appears
  * `IDLE_WARNING_SECONDS` before the end; "Stay signed in" resets the timer. At zero the session
- * is ended server-side (`/api/auth/logout`) and every tab goes to /login.
+ * is ended server-side (Better Auth `/api/auth/sign-out`) and every tab goes to /login.
  */
 import * as React from 'react';
 import { usePathname } from 'next/navigation';
 import { Clock } from 'lucide-react';
-import { apiRequest } from '@/lib/api-client';
+import { authClient } from '@/lib/auth-client';
 import { IDLE_WARNING_SECONDS } from '@/lib/grid-defs/admin/company';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@/components/ui/dialog';
@@ -75,7 +75,7 @@ export function IdleSignOut({ minutes }: { readonly minutes: number | null }) {
     leaving.current = true;
     writeShared(SIGNED_OUT_KEY, Date.now());
     try {
-      await apiRequest('/api/auth/logout', { method: 'POST', body: {} });
+      await authClient.signOut();
     } catch {
       /* the session may already be gone */
     }

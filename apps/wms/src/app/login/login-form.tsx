@@ -8,30 +8,10 @@ import { Button } from '@/components/ui/button';
 import { SsoButton } from './sso-sign-in';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { authClient } from '@/lib/auth-client';
 import { validateLogin, type LoginField, type LoginFieldErrors } from './login-schema';
 
 const INVALID_INPUT = 'border-danger focus:border-danger focus:ring-danger/20';
-
-interface LoginSuccessResponse {
-  success: true;
-  data: { user: { id: string; email: string; name: string; role: string } };
-}
-
-interface LoginFailureResponse {
-  success: false;
-  error?: string;
-}
-
-type LoginResponse = LoginSuccessResponse | LoginFailureResponse;
-
-function isLoginResponse(value: unknown): value is LoginResponse {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'success' in value &&
-    typeof (value as { success: unknown }).success === 'boolean'
-  );
-}
 
 /** Only allow same-origin relative paths as a post-login destination. */
 function safeNextPath(raw: string | null): string {
@@ -119,25 +99,14 @@ export function LoginForm({ showDemoCredentials = false }: LoginFormProps): Reac
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        // Wrong credentials come back as 200 + success:false (no console 401 for an expected outcome).
-        headers: { 'Content-Type': 'application/json', 'x-ks-soft-auth-failure': '1' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const body: unknown = await response.json().catch(() => null);
-      if (response.ok && isLoginResponse(body) && body.success) {
+      // Shared Better Auth sign-in (blueprint §1.4): sets the kitstak.* session cookies.
+      const result = await authClient.signIn.email({ email, password });
+      if (!result.error) {
         router.push(safeNextPath(searchParams.get('next')));
         router.refresh();
         return;
       }
-
-      const message =
-        isLoginResponse(body) && !body.success && body.error
-          ? body.error
-          : 'Unable to sign in. Please try again.';
-      setError(message);
+      setError(result.error.message || 'Unable to sign in. Please try again.');
       setIsSubmitting(false);
     } catch {
       setError('Network error. Check your connection and try again.');
@@ -166,7 +135,7 @@ export function LoginForm({ showDemoCredentials = false }: LoginFormProps): Reac
         {/* method/action: a submit before hydration is a POST (never a GET that puts the password in the URL). */}
         <form
           method="post"
-          action="/api/auth/login"
+          action="/api/auth/sign-in/email"
           onSubmit={handleSubmit}
           className="mt-5 flex flex-col gap-4"
           noValidate

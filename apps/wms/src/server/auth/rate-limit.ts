@@ -4,8 +4,9 @@
  *
  * One atomic UPSERT per hit: a row whose window has elapsed restarts at count 1.
  *
- * Policies (BUILD_PLAN F3):
- *   login IP 5/min · login account 10/15 min · mutations 120/min/user · exports+imports 10/min/user.
+ * Policies (BUILD_PLAN F3; the login-ip/login-account buckets moved to Better Auth's
+ * own `customRules` on /api/auth/* — blueprint §1.4):
+ *   mutations 120/min/user · exports+imports 10/min/user · password reset 5/15 min/IP.
  * `clientIp()` trusts `x-forwarded-for` only when TRUST_PROXY=1.
  */
 import { lt, sql } from 'drizzle-orm';
@@ -20,8 +21,6 @@ export interface RateLimitPolicy {
 }
 
 export const RATE_LIMITS = {
-  loginIp: { name: 'login-ip', limit: 5, windowMs: 60_000 },
-  loginAccount: { name: 'login-account', limit: 10, windowMs: 15 * 60_000 },
   passwordReset: { name: 'password-reset', limit: 5, windowMs: 15 * 60_000 },
   mutation: { name: 'mutation', limit: 120, windowMs: 60_000 },
   bulkIo: { name: 'bulk-io', limit: 10, windowMs: 60_000 },
@@ -109,16 +108,4 @@ export function clientIp(request: Request): string {
     if (real) return real;
   }
   return 'direct';
-}
-
-/**
- * Gives back one hit for `subject` (floor 0). Used after a successful login so the shared
- * per-IP login bucket only throttles failed attempts: a scanner fleet behind one NAT (or
- * every client in the "direct" bucket without TRUST_PROXY) can all sign in at shift start.
- */
-export async function refundRateLimit(db: AppDb, policy: RateLimitPolicy, subject: string): Promise<void> {
-  await dbRun(
-    db,
-    sql`UPDATE rate_limits SET count = GREATEST(0, count - 1) WHERE key = ${`${policy.name}:${subject}`}`,
-  );
 }

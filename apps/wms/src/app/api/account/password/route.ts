@@ -1,13 +1,10 @@
 /**
- * `POST /api/account/password` — Change Password. CSRF (defineRoute), a strict per-user rate
- * limit (5 tries / 15 min), policy check, then session rotation: every session ends
- * (session version bump) and this browser gets a fresh session cookie.
+ * `POST /api/account/password` — Change Password. Same-origin check (defineRoute), a
+ * strict per-user rate limit (5 tries / 15 min), policy check, then session rotation:
+ * every OTHER Better Auth session ends; this browser's session stays alive.
  */
-import { NextResponse } from 'next/server';
 import { defineRoute } from '@/server/api/define-route';
 import { AppError } from '@/server/api/errors';
-import { successBody } from '@/server/api/envelope';
-import { issueSession, setSessionCookie } from '@/server/auth/session';
 import { accountPasswordSchema } from '@/lib/grid-defs/admin/account';
 import { changeOwnPassword } from '@/server/repositories/users-account';
 import { withWriteTx } from '@/server/db/sql';
@@ -19,7 +16,7 @@ export const POST = defineRoute({
   body: accountPasswordSchema,
   rateLimit: PASSWORD_CHANGE_LIMIT,
   transaction: false,
-  handler: async ({ db, auth, actor, body, ip, userAgent, audit }) => {
+  handler: async ({ db, auth, actor, body, audit }) => {
     try {
       await withWriteTx(
         db,
@@ -48,9 +45,6 @@ export const POST = defineRoute({
       entityId: auth.user.id,
       detail: { otherSessionsEnded: true },
     });
-    const issued = await issueSession(db, auth.user.id, { ip, userAgent });
-    const response = NextResponse.json(successBody({ changed: true }));
-    setSessionCookie(response, issued.token, issued.maxAgeSeconds);
-    return response;
+    return { changed: true };
   },
 });

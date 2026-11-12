@@ -29,13 +29,6 @@ interface Envelope<T> {
   readonly data: T;
 }
 
-async function csrf(page: Page): Promise<string> {
-  const c = (await page.context().cookies(base)).find((x) => x.name === 'ks_csrf')?.value;
-  if (c) return c;
-  await page.request.get(`${base}/api/auth/csrf`);
-  return (await page.context().cookies(base)).find((x) => x.name === 'ks_csrf')?.value ?? '';
-}
-
 async function getJson<T>(request: APIRequestContext, path: string): Promise<T> {
   const res = await request.get(`${base}${path}`, { timeout: 120_000 });
   expect(res.ok(), `${path} → ${res.status()}`).toBe(true);
@@ -45,7 +38,7 @@ async function getJson<T>(request: APIRequestContext, path: string): Promise<T> 
 async function postJson<T>(page: Page, path: string, data: unknown): Promise<T> {
   const res = await page.request.post(`${base}${path}`, {
     data,
-    headers: { 'x-csrf-token': await csrf(page), Origin: base },
+    headers: { Origin: base },
     timeout: 120_000,
   });
   const body = (await res.json()) as Envelope<T> & { error?: string };
@@ -379,7 +372,7 @@ test.describe('stations & returns', () => {
     await expect(page).toHaveURL(/\/forbidden/, { timeout: 90_000 });
     const res = await page.request.post(`${base}/api/returns`, {
       data: {},
-      headers: { 'x-csrf-token': await csrf(page), Origin: base },
+      headers: { Origin: base },
       timeout: 120_000,
     });
     expect(res.status()).toBe(403);

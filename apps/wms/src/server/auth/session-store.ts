@@ -1,30 +1,24 @@
 /**
- * Session persistence + verification core (framework-free, DB-injected, unit-testable).
+ * Session verification + management over the shared Better Auth tables (blueprint §1.4).
  *
- * A session is a `user_sessions` row whose id is the JWT `jti`. The signed JWT carries
- * `sub` (user id), `jti` and `sv` (the user's `session_version` at issue time).
- * A token is accepted only when ALL of these hold:
- *   - signature + `exp` valid (12 h absolute TTL);
- *   - the row exists, belongs to `sub`, is not revoked and not expired;
- *   - `sv` == row.session_version == users.session_version;
- *   - the user is active.
- * Bumping `users.session_version` (deactivation, role change, password change) therefore
- * kills every open session on the next request.
+ * `resolveSession()` is THE seam: it asks the shared Better Auth instance to validate
+ * the `kitstak.session_token` cookie (DB-backed `core.session`, cookie cache bypassed so
+ * revocation/deactivation bite on the next request) and adapts the result to the
+ * existing `SessionUser` shape every `defineRoute()` handler and page consumes:
+ * `role/userType/allClients/isApiUser` come from `wms.user_profiles` (§2.4),
+ * `sessionId` is the Better Auth session id, `sessionVersion` is pinned to 1 (the
+ * version-bump mechanism is replaced by revoking `core.session` rows — see
+ * `bumpSessionVersion`, kept as the §1.2 call-site seam).
+ *
+ * The legacy `wms.users` row still carries `is_active` (admin module), so an inactive
+ * user is rejected here even while their Better Auth session row exists.
  */
-import { createHash, randomUUID } from 'node:crypto';
-import { and, eq, gt, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, eq, gt } from 'drizzle-orm';
+import { session as coreSession, userProfiles } from '@kitstak/db/schema';
 import { desc } from '@/server/db/order';
-import { SignJWT, jwtVerify } from 'jose';
-import { users, userSessions } from '@/server/db/schema';
+import { users } from '@/server/db/schema';
 import type { AppDb } from '@/server/api/db';
-import { log } from '@/server/log';
-import { bestEffort, rowCount } from '@/server/db/sql';
-
-export const SESSION_TTL_SECONDS = 12 * 60 * 60;
-/** `last_seen_at` is only rewritten when older than this, to avoid a write per request. */
-export const LAST_SEEN_RESOLUTION_MS = 60_000;
-const JWT_ALG = 'HS256';
-const MIN_SECRET_LENGTH = 32;
+import { getWmsAuth } from './auth';
 
 export type LegacyRole = (typeof users.$inferSelect)['role'];
 export type UserType = (typeof users.$inferSelect)['userType'];
@@ -43,205 +37,101 @@ export interface SessionUser {
   readonly sessionExpiresAt: string;
 }
 
-export interface SessionMeta {
-  readonly ip?: string | null;
-  readonly userAgent?: string | null;
-}
-
-export interface IssuedSession {
-  readonly token: string;
-  readonly sessionId: string;
-  readonly expiresAt: string;
-  readonly maxAgeSeconds: number;
-}
-
-export type SessionRejectReason =
-  | 'malformed'
-  | 'invalid_token'
-  | 'unknown_session'
-  | 'revoked'
-  | 'expired'
-  | 'user_inactive'
-  | 'version_mismatch';
+export type SessionRejectReason = 'unauthenticated' | 'user_inactive' | 'no_profile';
 
 export type SessionResolution =
   | { readonly ok: true; readonly user: SessionUser }
   | { readonly ok: false; readonly reason: SessionRejectReason };
 
-let warnedMissingSecret = false;
+const toIso = (value: Date | string): string =>
+  value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 
-/** HS256 key from SESSION_SECRET. Fatal in production when missing/short. */
-export function getSessionSecret(): Uint8Array {
-  const secret = process.env.SESSION_SECRET;
-  if (secret && secret.length >= MIN_SECRET_LENGTH) return new TextEncoder().encode(secret);
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('SESSION_SECRET is not configured (min 32 chars). Set it in the environment.');
-  }
-  if (!warnedMissingSecret) {
-    warnedMissingSecret = true;
-    log.warn('SESSION_SECRET missing — using an insecure dev-only derived secret', { component: 'auth' });
-  }
-  return new TextEncoder().encode(
-    createHash('sha256').update('kitstak-dev-fallback-session-secret').digest('hex'),
-  );
-}
-
-/** Creates the `user_sessions` row and signs the JWT. The user must exist and be active. */
-export async function issueSession(
-  db: AppDb,
-  userId: string,
-  meta: SessionMeta = {},
-  now: Date = new Date(),
-): Promise<IssuedSession> {
-  const [user] = await db
-    .select({ id: users.id, isActive: users.isActive, sessionVersion: users.sessionVersion })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  if (!user || !user.isActive) throw new Error('Cannot issue a session for a missing or inactive user');
-
-  const sessionId = randomUUID();
-  const expiresAt = new Date(now.getTime() + SESSION_TTL_SECONDS * 1000).toISOString();
-  await db.insert(userSessions).values({
-    id: sessionId,
-    userId,
-    sessionVersion: user.sessionVersion,
-    createdAt: now.toISOString(),
-    lastSeenAt: now.toISOString(),
-    expiresAt,
-    ip: meta.ip ?? null,
-    userAgent: meta.userAgent ? meta.userAgent.slice(0, 400) : null,
-  });
-
-  const issuedAt = Math.floor(now.getTime() / 1000);
-  const token = await new SignJWT({ sv: user.sessionVersion })
-    .setProtectedHeader({ alg: JWT_ALG })
-    .setSubject(userId)
-    .setJti(sessionId)
-    .setIssuedAt(issuedAt)
-    .setExpirationTime(issuedAt + SESSION_TTL_SECONDS)
-    .sign(getSessionSecret());
-
-  return { token, sessionId, expiresAt, maxAgeSeconds: SESSION_TTL_SECONDS };
-}
-
-interface TokenClaims {
-  readonly sub: string;
-  readonly jti: string;
-  readonly sv: number;
-}
-
-async function verifyToken(token: string, now: Date): Promise<TokenClaims | SessionRejectReason> {
+/**
+ * Verifies the request's Better Auth session and loads the WMS identity columns.
+ * Never throws for bad/missing cookies.
+ */
+export async function resolveSession(db: AppDb, headers: Headers): Promise<SessionResolution> {
+  const auth = await getWmsAuth();
+  let resolved: Awaited<ReturnType<typeof auth.api.getSession>>;
   try {
-    const { payload } = await jwtVerify(token, getSessionSecret(), {
-      algorithms: [JWT_ALG],
-      currentDate: now,
+    resolved = await auth.api.getSession({
+      headers,
+      query: { disableCookieCache: true },
     });
-    const { sub, jti, sv } = payload as { sub?: unknown; jti?: unknown; sv?: unknown };
-    if (typeof sub !== 'string' || typeof jti !== 'string' || typeof sv !== 'number') return 'malformed';
-    return { sub, jti, sv };
   } catch {
-    return 'invalid_token';
+    return { ok: false, reason: 'unauthenticated' };
   }
-}
+  if (!resolved) return { ok: false, reason: 'unauthenticated' };
 
-/** Verifies a session token against the database. Never throws for bad tokens. */
-export async function resolveSession(
-  db: AppDb,
-  token: string,
-  now: Date = new Date(),
-): Promise<SessionResolution> {
-  if (!token) return { ok: false, reason: 'malformed' };
-  const claims = await verifyToken(token, now);
-  if (typeof claims === 'string') return { ok: false, reason: claims };
-
-  const [row] = await db
-    .select({ session: userSessions, user: users })
-    .from(userSessions)
-    .innerJoin(users, eq(users.id, userSessions.userId))
-    .where(eq(userSessions.id, claims.jti))
+  const [profile] = await db
+    .select({
+      legacyRole: userProfiles.legacyRole,
+      userType: userProfiles.userType,
+      isApiUser: userProfiles.isApiUser,
+      allClients: userProfiles.allClients,
+    })
+    .from(userProfiles)
+    .where(eq(userProfiles.userId, resolved.user.id))
     .limit(1);
-  if (!row || row.session.userId !== claims.sub) return { ok: false, reason: 'unknown_session' };
-  const { session, user } = row;
-  if (session.revokedAt) return { ok: false, reason: 'revoked' };
-  if (session.expiresAt <= now.toISOString()) return { ok: false, reason: 'expired' };
-  if (!user.isActive) return { ok: false, reason: 'user_inactive' };
-  if (claims.sv !== session.sessionVersion || claims.sv !== user.sessionVersion) {
-    return { ok: false, reason: 'version_mismatch' };
-  }
+  const [legacy] = await db
+    .select({ isActive: users.isActive, role: users.role, userType: users.userType })
+    .from(users)
+    .where(eq(users.id, resolved.user.id))
+    .limit(1);
+  if (legacy && !legacy.isActive) return { ok: false, reason: 'user_inactive' };
 
-  await touchLastSeen(db, session.id, session.lastSeenAt, now);
+  // No profile row (e.g. a CRM-only platform user): minimum-privilege viewer defaults.
+  const role = (profile?.legacyRole ?? 'viewer') as LegacyRole;
+  const userType = (profile?.userType ?? legacy?.userType ?? 'Operation') as UserType;
   return {
     ok: true,
     user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      userType: user.userType,
-      allClients: user.allClients,
-      isApiUser: user.isApiUser,
-      sessionId: session.id,
-      sessionVersion: session.sessionVersion,
-      sessionExpiresAt: session.expiresAt,
+      id: resolved.user.id,
+      email: resolved.user.email,
+      name: resolved.user.name,
+      role,
+      userType,
+      allClients: profile?.allClients ?? false,
+      isApiUser: profile?.isApiUser ?? false,
+      sessionId: resolved.session.id,
+      sessionVersion: 1,
+      sessionExpiresAt: toIso(resolved.session.expiresAt),
     },
   };
 }
 
-async function touchLastSeen(
-  db: AppDb,
-  sessionId: string,
-  lastSeenAt: string | null,
-  now: Date,
-): Promise<void> {
-  const stale = !lastSeenAt || now.getTime() - Date.parse(lastSeenAt) >= LAST_SEEN_RESOLUTION_MS;
-  if (!stale) return;
-  // Best effort (savepoint): a busy DB must not log the user out or abort an enclosing transaction.
-  const result = await bestEffort(db, async (sp) => {
-    await sp
-      .update(userSessions)
-      .set({ lastSeenAt: now.toISOString() })
-      .where(eq(userSessions.id, sessionId));
-  });
-  if (!result.ok) log.warn('session lastSeenAt update failed', { component: 'auth', err: result.error });
+/** Revokes (deletes) one Better Auth session row. True when a live row was removed. */
+export async function revokeSession(db: AppDb, sessionId: string): Promise<boolean> {
+  const removed = await db
+    .delete(coreSession)
+    .where(eq(coreSession.id, sessionId))
+    .returning({ id: coreSession.id });
+  return removed.length > 0;
 }
 
-/** Revokes one session. Returns true when a live row was revoked. */
-export async function revokeSession(db: AppDb, sessionId: string, now: Date = new Date()): Promise<boolean> {
-  const res = await db
-    .update(userSessions)
-    .set({ revokedAt: now.toISOString() })
-    .where(and(eq(userSessions.id, sessionId), isNull(userSessions.revokedAt)));
-  return rowCount(res) > 0;
-}
-
-/** Revokes every live session of a user, optionally keeping one (the caller's). */
+/** Revokes every session of a user, optionally keeping one (the caller's). */
 export async function revokeUserSessions(
   db: AppDb,
   userId: string,
   options: { readonly exceptSessionId?: string } = {},
-  now: Date = new Date(),
 ): Promise<number> {
-  const conditions = [eq(userSessions.userId, userId), isNull(userSessions.revokedAt)];
-  const where = options.exceptSessionId
-    ? and(...conditions, ne(userSessions.id, options.exceptSessionId))
-    : and(...conditions);
-  return rowCount(await db.update(userSessions).set({ revokedAt: now.toISOString() }).where(where));
+  const rows = await db
+    .select({ id: coreSession.id })
+    .from(coreSession)
+    .where(eq(coreSession.userId, userId));
+  const ids = rows.map((r) => r.id).filter((id) => id !== options.exceptSessionId);
+  let revoked = 0;
+  for (const id of ids) if (await revokeSession(db, id)) revoked += 1;
+  return revoked;
 }
 
 /**
- * Increments `users.session_version` and revokes all sessions. Call on deactivation,
- * role change and password change. Returns the new version.
+ * Legacy name kept at the §1.2 call sites (password change, admin access change,
+ * deactivation): with Better Auth there is no session_version — ending every session of
+ * the user IS the semantics. Returns the number of sessions revoked.
  */
-export async function bumpSessionVersion(db: AppDb, userId: string, now: Date = new Date()): Promise<number> {
-  const [row] = await db
-    .update(users)
-    .set({ sessionVersion: sql`${users.sessionVersion} + 1`, updatedAt: now.toISOString() })
-    .where(eq(users.id, userId))
-    .returning({ sessionVersion: users.sessionVersion });
-  if (!row) throw new Error(`User ${userId} not found`);
-  await revokeUserSessions(db, userId, {}, now);
-  return row.sessionVersion;
+export async function bumpSessionVersion(db: AppDb, userId: string, _now: Date = new Date()): Promise<number> {
+  return await revokeUserSessions(db, userId);
 }
 
 export interface SessionSummary {
@@ -253,38 +143,30 @@ export interface SessionSummary {
   readonly userAgent: string | null;
 }
 
-/** Live (not revoked, not expired) sessions of a user, newest first. */
+/** Live (unexpired) sessions of a user, newest first (`lastSeenAt` = Better Auth updatedAt). */
 export async function listActiveSessions(
   db: AppDb,
   userId: string,
   now: Date = new Date(),
 ): Promise<readonly SessionSummary[]> {
-  return db
+  const rows = await db
     .select({
-      id: userSessions.id,
-      createdAt: userSessions.createdAt,
-      lastSeenAt: userSessions.lastSeenAt,
-      expiresAt: userSessions.expiresAt,
-      ip: userSessions.ip,
-      userAgent: userSessions.userAgent,
+      id: coreSession.id,
+      createdAt: coreSession.createdAt,
+      updatedAt: coreSession.updatedAt,
+      expiresAt: coreSession.expiresAt,
+      ip: coreSession.ipAddress,
+      userAgent: coreSession.userAgent,
     })
-    .from(userSessions)
-    .where(
-      and(
-        eq(userSessions.userId, userId),
-        isNull(userSessions.revokedAt),
-        gt(userSessions.expiresAt, now.toISOString()),
-      ),
-    )
-    .orderBy(desc(userSessions.createdAt));
-}
-
-/** Deletes rows that expired or were revoked more than `graceDays` ago. */
-export async function purgeStaleSessions(db: AppDb, now: Date = new Date(), graceDays = 7): Promise<number> {
-  const cutoff = new Date(now.getTime() - graceDays * 86_400_000).toISOString();
-  return rowCount(
-    await db
-      .delete(userSessions)
-      .where(or(lt(userSessions.expiresAt, cutoff), lt(userSessions.revokedAt, cutoff))),
-  );
+    .from(coreSession)
+    .where(and(eq(coreSession.userId, userId), gt(coreSession.expiresAt, now)))
+    .orderBy(desc(coreSession.createdAt));
+  return rows.map((row) => ({
+    id: row.id,
+    createdAt: toIso(row.createdAt),
+    lastSeenAt: row.updatedAt ? toIso(row.updatedAt) : null,
+    expiresAt: toIso(row.expiresAt),
+    ip: row.ip,
+    userAgent: row.userAgent,
+  }));
 }

@@ -7,7 +7,7 @@
  *     handler: async ({ db, auth, query, grid }) => listResult(await listOrders(db, ...), meta),
  *   });
  *
- * Pipeline: session (user_sessions + sv) → CSRF (non-GET) → permission → rate limit
+ * Pipeline: session (Better Auth `core.session`) → same-origin (non-GET) → permission → rate limit
  * (mutations) → zod params/query/body → handler → envelope. Mutations (and
  * `transaction: true`) run the handler inside `db.transaction(async (tx) => …)` after
  * `takeWriteLock(tx)`: one app-wide advisory lock, so writers are serialised exactly as with
@@ -21,7 +21,7 @@ import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { writeAudit, type AuditEntry } from '@/server/auth/audit';
 import { buildAuthContext, type AuthContext } from '@/server/auth/context';
-import { isSafeMethod, verifyCsrf } from '@/server/auth/csrf';
+import { isSafeMethod, verifyOrigin } from '@/server/auth/origin';
 import { canAny } from '@/server/auth/permissions';
 import { auditIp, clientIp, hitRateLimit, RATE_LIMITS, type RateLimitPolicy } from '@/server/auth/rate-limit';
 import { CONTEXT_CLIENT_COOKIE, CONTEXT_WAREHOUSE_COOKIE } from '@/server/auth/scope';
@@ -71,7 +71,10 @@ export interface RouteConfig<QS extends Schema, BS extends Schema, PS extends Sc
   readonly query?: QS;
   readonly body?: BS;
   readonly params?: PS;
-  /** Default: enforced on non-GET. Set false only for pre-session flows (login, forgot). */
+  /**
+   * Same-origin check on non-GET (the CSRF token is retired — blueprint §1.4). Set
+   * false only for endpoints that must accept cross-site posts (e.g. SAML ACS).
+   */
   readonly csrf?: boolean;
   /** Default: `RATE_LIMITS.mutation` per user on non-GET. */
   readonly rateLimit?: RateLimitPolicy | false;
@@ -168,13 +171,10 @@ async function guard(
     });
 
   if (mutation && config.csrf !== false) {
-    const check = verifyCsrf(request);
+    const check = verifyOrigin(request);
     if (!check.ok) {
       await audit('security.csrf_rejected', { reason: check.reason, method: request.method });
-      throw new AppError(
-        'CSRF',
-        'Your session security token is missing or invalid. Refresh the page and try again.',
-      );
+      throw new AppError('CSRF', 'Cross-site requests are not allowed. Refresh the page and try again.');
     }
   }
 

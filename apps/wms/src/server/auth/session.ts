@@ -1,67 +1,41 @@
 /**
  * Session API for Next.js (server components, route handlers, proxy).
  *
- * - `getSessionUser()`  — server components / layouts (reads `cookies()`), DB-verified.
- * - `getRequestSession(db, request)` — route handlers (reads the request cookie).
- * - `setSessionCookie` / `clearSessionCookie` — attach to a `NextResponse`.
+ * - `getSessionUser()`  — server components / layouts (reads request headers), DB-verified.
+ * - `getRequestSession(db, request)` — route handlers (reads the request's headers).
  *
- * Verification rules live in `session-store.ts` (jti + sv + user_sessions revocation).
+ * Verification happens in `session-store.ts` against the shared Better Auth instance
+ * (blueprint §1.4); cookies are set by Better Auth itself (`/api/auth/*` + nextCookies),
+ * so there are no cookie writers here any more.
  */
 import { cache } from 'react';
-import { cookies } from 'next/headers';
-import { connection, type NextRequest, type NextResponse } from 'next/server';
+import { headers } from 'next/headers';
+import { connection, type NextRequest } from 'next/server';
+import { SESSION_COOKIE_NAMES } from '@kitstak/auth/options';
 import { getAppDb, type AppDb } from '@/server/api/db';
 import { log } from '@/server/log';
 import { resolveSession, type SessionResolution, type SessionUser } from './session-store';
 
 export {
   bumpSessionVersion,
-  issueSession,
   listActiveSessions,
   revokeSession,
   revokeUserSessions,
-  SESSION_TTL_SECONDS,
-  type IssuedSession,
   type SessionUser,
 } from './session-store';
 
-export const SESSION_COOKIE = 'kitstak_session';
+/** Shared session cookie (host-only in dev; `__Secure-` prefixed in production). */
+export const SESSION_COOKIE = SESSION_COOKIE_NAMES[0];
 
 /** Legacy alias kept for existing imports. */
 export type SessionRole = SessionUser['role'];
 
-function isProduction(): boolean {
-  return process.env.NODE_ENV === 'production';
-}
-
-export interface CookieSpec {
-  readonly httpOnly: boolean;
-  readonly sameSite: 'lax' | 'strict';
-  readonly secure: boolean;
-  readonly path: string;
-  readonly maxAge: number;
-}
-
-export function sessionCookieOptions(maxAgeSeconds: number): CookieSpec {
-  return { httpOnly: true, sameSite: 'lax', secure: isProduction(), path: '/', maxAge: maxAgeSeconds };
-}
-
-export function setSessionCookie(response: NextResponse, token: string, maxAgeSeconds: number): void {
-  response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(maxAgeSeconds));
-}
-
-export function clearSessionCookie(response: NextResponse): void {
-  response.cookies.set(SESSION_COOKIE, '', sessionCookieOptions(0));
-}
-
-/** Verifies the session cookie of a route-handler request. */
+/** Verifies the session of a route-handler request. */
 export async function getRequestSession(
   db: AppDb,
   request: NextRequest | Request,
 ): Promise<SessionResolution> {
-  const token = readCookie(request, SESSION_COOKIE);
-  if (!token) return { ok: false, reason: 'malformed' };
-  return resolveSession(db, token);
+  return await resolveSession(db, request.headers);
 }
 
 /** Reads a cookie from a `NextRequest` or a plain `Request`. */
@@ -83,16 +57,14 @@ export function readCookie(request: NextRequest | Request, name: string): string
  * Returns null when the cookie is missing, invalid, revoked or the user was deactivated.
  */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
-  // `cookies()` stays outside the try: during prerendering Next signals dynamic usage
+  // `headers()` stays outside the try: during prerendering Next signals dynamic usage
   // through it, and that signal must propagate.
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE)?.value;
-  if (!token) return null;
-  // Session checks read the clock (expiry, lastSeenAt): mark the render as request-time.
+  const requestHeaders = await headers();
+  // Session checks read the clock (expiry): mark the render as request-time.
   await connection();
   try {
     const db = await getAppDb();
-    const resolution = await resolveSession(db, token);
+    const resolution = await resolveSession(db, requestHeaders);
     return resolution.ok ? resolution.user : null;
   } catch (error: unknown) {
     log.error('getSessionUser failed', { component: 'auth', err: error });

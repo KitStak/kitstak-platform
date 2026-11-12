@@ -8,8 +8,8 @@ import type { z } from 'zod';
 import type { AppDb } from '@/server/api/db';
 import { AppError } from '@/server/api/errors';
 import type { AuthContext } from '@/server/auth/context';
-import { hashPassword, verifyPassword } from '@/server/auth/password';
-import { bumpSessionVersion } from '@/server/auth/session-store';
+import { setCredentialPassword, syncCoreUser, verifyCredentialPassword } from '@/server/auth/credentials';
+import { revokeUserSessions } from '@/server/auth/session-store';
 import * as s from '@/server/db/schema';
 import type { profileSchema } from '@/lib/grid-defs/admin/account';
 import { assertPasswordPolicy, loadUser, USER_ENTITY } from './users';
@@ -31,7 +31,7 @@ export async function updateOwnProfile(
       throw new AppError('VALIDATION', 'Enter your current password to change your email', {
         fieldErrors: { currentPassword: ['Required to change your email'] },
       });
-    if (!verifyPassword(input.currentPassword, before.passwordHash))
+    if (!(await verifyCredentialPassword(tx, before.id, input.currentPassword)))
       throw new AppError('VALIDATION', 'Current password is incorrect', {
         fieldErrors: { currentPassword: ['Current password is incorrect'] },
       });
@@ -56,6 +56,8 @@ export async function updateOwnProfile(
       version: sql`${s.users.version} + 1`,
     })
     .where(eq(s.users.id, before.id));
+  // The shared core."user" row (Better Auth) carries the sign-in email/name: keep in sync.
+  await syncCoreUser(tx, before.id, { email, name: after.name });
   await logUpdate(
     tx,
     domainCtxOf(actor, auth),
@@ -66,7 +68,10 @@ export async function updateOwnProfile(
   return { name: after.name, email, emailChanged };
 }
 
-/** Verifies the current password, applies the policy, sets the new hash and ends every session. */
+/**
+ * Verifies the current password, applies the policy, sets the new credential (core.account,
+ * Better Auth scrypt) and ends every OTHER session — this browser's session stays alive.
+ */
 export async function changeOwnPassword(
   tx: AppDb,
   auth: AuthContext,
@@ -75,7 +80,7 @@ export async function changeOwnPassword(
   newPassword: string,
 ): Promise<void> {
   const row = await loadUser(tx, auth.user.id);
-  if (!verifyPassword(currentPassword, row.passwordHash)) {
+  if (!(await verifyCredentialPassword(tx, row.id, currentPassword))) {
     throw new AppError('VALIDATION', 'Current password is incorrect', {
       fieldErrors: { currentPassword: ['Current password is incorrect'] },
     });
@@ -86,14 +91,11 @@ export async function changeOwnPassword(
     });
   await assertPasswordPolicy(tx, newPassword, row.email, 'newPassword');
   const now = new Date();
+  await setCredentialPassword(tx, row.id, newPassword, { passwordChangedAt: now }, now);
+  // Legacy mirror only (credentials live in core.account; this keeps old reports/exports sane).
   await tx
     .update(s.users)
-    .set({
-      passwordHash: hashPassword(newPassword),
-      passwordChangedAt: now.toISOString(),
-      failedLoginCount: 0,
-      lockedUntil: null,
-    })
+    .set({ passwordChangedAt: now.toISOString(), failedLoginCount: 0, lockedUntil: null })
     .where(eq(s.users.id, row.id));
   await logUpdate(
     tx,
@@ -102,7 +104,7 @@ export async function changeOwnPassword(
     { password: '••••' },
     { password: 'Changed by the user' },
   );
-  await bumpSessionVersion(tx, row.id, now);
+  await revokeUserSessions(tx, row.id, { exceptSessionId: auth.user.sessionId });
 }
 
 /** Timezone of the user's default warehouse (or the first one in scope). */

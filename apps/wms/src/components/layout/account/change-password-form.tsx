@@ -45,15 +45,15 @@ function PolicyChecklist({
 }
 
 /**
- * Current / new / confirm with the live policy checklist. POST /api/auth/change-password
- * signs out every other device and re-issues the session for this browser.
+ * Current / new / confirm with the live policy checklist. POST /api/account/password
+ * signs out every other device; this browser's session stays alive (blueprint §1.4).
  */
 export function ChangePasswordForm({ policy }: { readonly policy: PasswordPolicyHints }) {
   const schema = React.useMemo(() => changePasswordSchema(policy), [policy]);
   const form = useZodForm(schema, EMPTY);
   const newPassword = useWatch({ control: form.control, name: 'newPassword' }) ?? '';
   const mutation = useApiMutation<ChangePasswordValues, unknown, ChangePasswordValues>({
-    path: '/api/auth/change-password',
+    path: '/api/account/password',
     method: 'POST',
     form,
     successTitle: 'Password changed',

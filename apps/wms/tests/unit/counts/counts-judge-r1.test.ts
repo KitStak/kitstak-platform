@@ -1,8 +1,8 @@
 /**
  * Blind-judge repair round 1 (M07): Inventory Update User backfill, cancelled lines in the plan
  * totals and the job preview, superseded approved quantities, picker filter breadth, the handheld
- * "assigned to other counters" list, description edits on Inventory Updated plans, the ledger
- * count lock (REQ-1) and the login rate limit refund.
+ * "assigned to other counters" list, description edits on Inventory Updated plans and the
+ * ledger count lock (REQ-1).
  */
 import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -10,8 +10,6 @@ import { jobTypeSettingsSchema } from '@/lib/domain-types';
 import { approvedQtySuperseded, planNameLockedReason } from '@/lib/grid-defs/counts/count-math';
 import * as schema from '@/server/db/schema';
 import type { AuthContext } from '@/server/auth/context';
-import { authenticate } from '@/server/auth/login';
-import { hashPassword } from '@/server/auth/password';
 import { ledger } from '@/server/domain/ledger';
 import { parseGridQuery } from '@/server/query/grid-query';
 import {
@@ -221,25 +219,5 @@ describe('ledger count lock (REQ-1)', () => {
   });
 });
 
-describe('login rate limit', () => {
-  it('successful sign-ins do not use up the shared per-IP budget; failures still do', async () => {
-    const now = new Date('2026-11-10T08:00:00.000Z');
-    const email = 'jr1-scanner@example.com';
-    await w.db
-      .insert(schema.users)
-      .values({ email, name: 'Scanner', passwordHash: hashPassword('Scan!ner2026', 4), role: 'operator' });
-    for (let i = 0; i < 12; i += 1)
-      expect(
-        await authenticate(w.db, { email, password: 'Scan!ner2026', ip: 'direct', userAgent: null }, now),
-      ).toMatchObject({ ok: true });
-    for (let i = 0; i < 5; i += 1)
-      await authenticate(
-        w.db,
-        { email: `nobody${i}@x.io`, password: 'x', ip: 'direct', userAgent: null },
-        now,
-      );
-    expect(
-      await authenticate(w.db, { email, password: 'Scan!ner2026', ip: 'direct', userAgent: null }, now),
-    ).toMatchObject({ ok: false, reason: 'rate_limited' });
-  });
-});
+// The 'login rate limit' suite (per-IP refund on success) is retired with the legacy
+// login path: auth rate limiting now lives in Better Auth's customRules (blueprint §1.4).

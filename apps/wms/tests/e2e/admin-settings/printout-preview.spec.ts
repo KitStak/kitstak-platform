@@ -9,13 +9,9 @@ import { e2eBaseUrl } from '../fixtures/roles';
 test.use({ actionTimeout: 45_000, navigationTimeout: 90_000 });
 
 const base = e2eBaseUrl();
-async function headers(page: Page): Promise<Record<string, string>> {
-  let c = (await page.context().cookies(base)).find((x) => x.name === 'ks_csrf')?.value;
-  if (!c) {
-    await page.request.get(`${base}/api/auth/csrf`);
-    c = (await page.context().cookies(base)).find((x) => x.name === 'ks_csrf')?.value;
-  }
-  return { 'x-csrf-token': c ?? '', Origin: base };
+async function headers(_page: Page): Promise<Record<string, string>> {
+  // Same-origin header: the CSRF token is retired (blueprint §1.4).
+  return { Origin: base };
 }
 
 const LAYOUT = {

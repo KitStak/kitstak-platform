@@ -18,7 +18,7 @@ const PUBLIC_PATHS: readonly RegExp[] = [
   /^\/signup\/?$/,
   /^\/forgot-password\/?$/,
   /^\/reset-password\/?$/,
-  /^\/invite(\/.*)?$/,
+  /^\/welcome\/invite(\/.*)?$/, // invite accept page (real route: /welcome/invite/[invitationId])
   /^\/forms\/.+$/, // public form views
   /^\/(privacy|terms)\/?$/, // legal pages
 ];

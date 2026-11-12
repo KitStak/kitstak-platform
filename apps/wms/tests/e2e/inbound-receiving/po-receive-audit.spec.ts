@@ -20,9 +20,8 @@ async function api(role: 'admin' | 'operator'): Promise<{ c: APIRequestContext; 
     storageState: storageStatePath(role),
     timeout: 120_000,
   });
-  await c.get('/api/auth/csrf');
-  const token = (await c.storageState()).cookies.find((k) => k.name === 'ks_csrf')?.value ?? '';
-  return { c, h: { 'x-csrf-token': token } };
+  // Same-origin header: the CSRF token is retired (blueprint §1.4).
+  return { c, h: { Origin: e2eBaseUrl() } };
 }
 
 async function json<T>(res: Awaited<ReturnType<APIRequestContext['get']>>): Promise<T> {

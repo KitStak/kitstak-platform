@@ -1,5 +1,6 @@
 /**
- * Shared helpers for the M05 browser specs: an API context with the CSRF header, JSON
+ * Shared helpers for the M05 browser specs: an admin API context (Origin header — the
+ * CSRF token is retired, mutations pass the same-origin check), JSON
  * unwrapping, a test PO factory, and `quietHmr` (on the shared dev server other modules'
  * edits push Fast Refresh rebuilds / "HMR hash mismatch" reloads to every open page; the
  * proxy drops those messages so a page under test is not reloaded mid-step. The app itself
@@ -25,9 +26,7 @@ export async function api(): Promise<Api> {
     storageState: storageStatePath('admin'),
     timeout: 30_000,
   });
-  await c.get('/api/auth/csrf');
-  const token = (await c.storageState()).cookies.find((k) => k.name === 'ks_csrf')?.value ?? '';
-  return { c, h: { 'x-csrf-token': token } };
+  return { c, h: { Origin: e2eBaseUrl() } };
 }
 
 export async function json<T>(res: APIResponse): Promise<T> {

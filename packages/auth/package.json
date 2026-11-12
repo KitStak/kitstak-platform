@@ -1,0 +1,41 @@
+{
+  "name": "@kitstak/auth",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared KitStak Better Auth SSO: options, access control, createAuth/createKitstakAuthClient factories, bcrypt password compat, and the password-policy/lockout plugin (TypeScript source-shipped — consumers transpile via Next transpilePackages).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/create-auth-client.ts",
+    "./options": "./src/options.ts",
+    "./access-control": "./src/access-control.ts",
+    "./create-auth": "./src/create-auth.ts",
+    "./password-compat": "./src/password-compat.ts",
+    "./password-policy": "./src/password-policy-plugin.ts",
+    "./session-cookie": "./src/session-cookie.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-auth": "^1.7.18"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "^0.45.4",
+    "react": "^19"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@kitstak/config": "workspace:*",
+    "@types/react": "^19",
+    "drizzle-orm": "^0.45.4",
+    "next": "16.4.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typescript": "^5"
+  }
+}

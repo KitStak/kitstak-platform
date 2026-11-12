@@ -3,8 +3,12 @@
  *
  * - `requestPasswordReset` always "succeeds" from the caller's view (no account enumeration).
  * - Only the SHA-256 of the token is stored; the raw token travels in the emailed link.
- * - A successful reset changes the hash, bumps `session_version` (kills every session),
- *   clears lockout and consumes the token.
+ * - A successful reset sets the core.account credential (Better Auth scrypt), revokes
+ *   every Better Auth session, clears lockout and consumes the token.
+ *
+ * Kept (not replaced by Better Auth request-password-reset/reset-password) because the
+ * admin "send invite" flow (users-invite.ts) issues these tokens and neither app has a
+ * Better Auth mailer configured (blueprint §1.4 note).
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -14,7 +18,7 @@ import { AppError } from '@/server/api/errors';
 import { log } from '@/server/log';
 import { withWriteTx } from '@/server/db/sql';
 import { writeAudit } from './audit';
-import { hashPassword } from './password';
+import { setCredentialPassword } from './credentials';
 import { getPasswordPolicy, validatePassword } from './password-policy';
 import { bumpSessionVersion } from './session-store';
 import { sendCompanyMail } from '@/server/repositories/company-mail';
@@ -155,7 +159,6 @@ export async function resetPassword(
     });
   }
   const userId = row.user.id;
-  const passwordHash = hashPassword(input.password);
   await withWriteTx(db, async (tx) => {
     // Single use: the check above ran outside the write lock, so a concurrent redeem of the
     // same token must lose here (the conditional claim matches no row) and roll back.
@@ -169,9 +172,12 @@ export async function resetPassword(
         fieldErrors: { token: ['Invalid or expired link'] },
       });
     }
+    // Credential lives in core.account (blueprint §1.4); the wms.users columns below are
+    // legacy mirrors for admin grids only.
+    await setCredentialPassword(tx, userId, input.password, { passwordChangedAt: now }, now);
     await tx
       .update(users)
-      .set({ passwordHash, passwordChangedAt: now.toISOString(), failedLoginCount: 0, lockedUntil: null })
+      .set({ passwordChangedAt: now.toISOString(), failedLoginCount: 0, lockedUntil: null })
       .where(eq(users.id, userId));
     await bumpSessionVersion(tx, userId, now);
   });

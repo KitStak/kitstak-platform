@@ -48,8 +48,10 @@ const pools = new Map<string, PGlite[]>();
 const POOL_LIMIT = 2;
 
 async function appTables(pg: PGlite): Promise<string[]> {
+  // `core` included: the shared Better Auth tables (0007_core_auth) must be truncated
+  // between tests like every other app table.
   const res = await pg.query<{ t: string }>(
-    `SELECT format('%I.%I', schemaname, tablename) AS t FROM pg_tables WHERE schemaname IN ('public', 'wms') ORDER BY 1`,
+    `SELECT format('%I.%I', schemaname, tablename) AS t FROM pg_tables WHERE schemaname IN ('public', 'wms', 'core') ORDER BY 1`,
   );
   return res.rows.map((r) => r.t);
 }

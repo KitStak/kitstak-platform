@@ -2,22 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, apiFetch, apiRequest, buildUrl, resetApiClientForTests } from '@/lib/api-client';
 
-const TOKEN_A = 'a'.repeat(43);
-const TOKEN_B = 'b'.repeat(43);
-
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-
-function clearCookie() {
-  document.cookie = 'ks_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
-}
 
 describe('apiFetch', () => {
   const fetchMock = vi.fn<typeof fetch>();
 
   beforeEach(() => {
     resetApiClientForTests();
-    clearCookie();
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
   });
@@ -60,45 +52,14 @@ describe('apiFetch', () => {
     expect(apiErr.fieldMessage('name')).toBe('Required');
   });
 
-  it('sends the CSRF cookie as a header on mutations', async () => {
-    document.cookie = `ks_csrf=${TOKEN_A}; path=/`;
+  it('mutations carry no CSRF token header (retired — same-origin check server-side)', async () => {
     fetchMock.mockResolvedValueOnce(json(200, { success: true, data: { ok: true } }));
     await apiFetch('/api/x', { method: 'POST', body: { a: 1 } });
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
-    expect((init.headers as Record<string, string>)['x-csrf-token']).toBe(TOKEN_A);
-    expect(init.body).toBe('{"a":1}');
-  });
-
-  it('fetches a token when the cookie is missing', async () => {
-    fetchMock.mockResolvedValueOnce(json(200, { success: true, data: { token: TOKEN_B } }));
-    fetchMock.mockResolvedValueOnce(json(200, { success: true, data: null }));
-    await apiFetch('/api/x', { method: 'DELETE' });
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/auth/csrf');
-    expect(
-      ((fetchMock.mock.calls[1]?.[1] as RequestInit).headers as Record<string, string>)['x-csrf-token'],
-    ).toBe(TOKEN_B);
-  });
-
-  it('refreshes the token once and retries on a CSRF failure', async () => {
-    document.cookie = `ks_csrf=${TOKEN_A}; path=/`;
-    fetchMock
-      .mockResolvedValueOnce(json(403, { success: false, error: 'Bad token', code: 'CSRF' }))
-      .mockResolvedValueOnce(json(200, { success: true, data: { token: TOKEN_B } }))
-      .mockResolvedValueOnce(json(200, { success: true, data: 'done' }));
-    await expect(apiFetch('/api/x', { method: 'PATCH', body: {} })).resolves.toBe('done');
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(
-      ((fetchMock.mock.calls[2]?.[1] as RequestInit).headers as Record<string, string>)['x-csrf-token'],
-    ).toBe(TOKEN_B);
-  });
-
-  it('does not send CSRF on GET', async () => {
-    fetchMock.mockResolvedValueOnce(json(200, { success: true, data: 1 }));
-    await apiFetch('/api/x');
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(
-      ((fetchMock.mock.calls[0]?.[1] as RequestInit).headers as Record<string, string>)['x-csrf-token'],
-    ).toBeUndefined();
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Record<string, string>)['x-csrf-token']).toBeUndefined();
+    expect(init.body).toBe('{"a":1}');
+    expect(init.credentials).toBe('same-origin');
   });
 
   it('redirects to login on 401 unless suppressed', async () => {

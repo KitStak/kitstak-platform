@@ -1,26 +1,14 @@
 'use client';
 /**
- * Browser auth client. Use the hooks/actions exported here from client components:
+ * Browser auth client, created by the shared `@kitstak/auth` factory (blueprint §1.3).
+ * Use the hooks/actions exported here from client components:
  *   const { data: session, isPending } = useSession();
  *   await signIn.email({ email, password });
  *   await organization.setActive({ organizationId });
  */
-import { createAuthClient } from 'better-auth/react';
-import { inferAdditionalFields, organizationClient } from 'better-auth/client/plugins';
-import { orgAccessControl, orgRoles } from '@/server/auth/access-control';
+import { createKitstakAuthClient } from '@kitstak/auth/client';
 
-export const authClient = createAuthClient({
-  basePath: '/api/auth',
-  plugins: [
-    organizationClient({ ac: orgAccessControl, roles: orgRoles, teams: { enabled: true } }),
-    inferAdditionalFields({
-      user: {
-        title: { type: 'string', required: false },
-        timezone: { type: 'string', required: false },
-      },
-    }),
-  ],
-});
+export const authClient = createKitstakAuthClient();
 
 export const {
   signIn,

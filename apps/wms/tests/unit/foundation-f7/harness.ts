@@ -12,9 +12,12 @@ import { NextRequest } from 'next/server';
 import { expect } from 'vitest';
 import * as schema from '@/server/db/schema';
 import type { AppDb } from '@/server/api/db';
-import { CSRF_COOKIE, CSRF_HEADER, generateCsrfToken } from '@/server/auth/csrf-shared';
-import { issueSession } from '@/server/auth/session-store';
+import { upsertCoreIdentity } from '@/server/auth/credentials';
+import { forgetSignInCookies, signInCookieForUser } from '../../setup/auth-session';
+import { TEST_PASSWORD, testHash } from '../foundation-f3/fixtures';
 import { createWorld, type World } from '../foundation/domain/fixtures';
+
+export { TEST_PASSWORD };
 
 const FILES_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'ks-f7-files-'));
 process.env.KITSTAK_FILES_DIR = FILES_ROOT;
@@ -79,11 +82,33 @@ export async function openWorld(): Promise<F7World> {
     await db.insert(schema.userWarehouses).values({ userId, warehouseId: w.warehouseId });
     await db.insert(schema.userClients).values({ userId, clientId: w.clientId });
   }
+  // Shared Better Auth identities (core."user"/account/member + wms.user_profiles) so
+  // `cookieFor` can run the real /sign-in/email flow against this database.
+  const logins = [
+    { userId: w.userId, email: 'admin@test.io', name: 'Admin', legacyRole: 'admin', allClients: true },
+    { userId: viewerId, email: 'viewer@test.io', name: 'Viewer', legacyRole: 'viewer', allClients: false },
+    {
+      userId: operatorId,
+      email: 'operator@test.io',
+      name: 'Operator',
+      legacyRole: 'operator',
+      allClients: false,
+    },
+  ] as const;
+  for (const login of logins) {
+    await upsertCoreIdentity(db as AppDb, {
+      ...login,
+      passwordHash: testHash(),
+      userType: 'Operation',
+      isApiUser: false,
+    });
+  }
   world = { ...w, viewerId, operatorId, otherWarehouseId };
   return world;
 }
 
 export function closeWorld(): void {
+  if (world) forgetSignInCookies(world.db as AppDb);
   world?.close();
   world = null;
 }
@@ -92,14 +117,14 @@ export function removeFilesRoot(): void {
   fs.rmSync(FILES_ROOT, { recursive: true, force: true });
 }
 
+/** Real Better Auth sign-in for a wms user id; cached per world (tests/setup/auth-session). */
 export async function cookieFor(userId: string): Promise<string> {
-  const { token } = await issueSession(current().db as AppDb, userId);
-  return `kitstak_session=${token}`;
+  return await signInCookieForUser(current().db as AppDb, userId);
 }
 
 export interface ReqOptions {
   readonly cookie?: string;
-  /** false = omit the CSRF cookie + header. */
+  /** false = simulate a CROSS-SITE request (the CSRF token is retired — §1.4). */
   readonly csrf?: false;
   readonly body?: unknown;
   readonly form?: FormData;
@@ -107,11 +132,12 @@ export interface ReqOptions {
 }
 
 export function req(method: string, url: string, opts: ReqOptions = {}): NextRequest {
-  const token = opts.csrf === false ? null : generateCsrfToken();
-  const cookies = [opts.cookie, token ? `${CSRF_COOKIE}=${token}` : undefined].filter(Boolean).join('; ');
-  const headers = new Headers({ host: 'localhost:3000', origin: BASE, ...(opts.headers ?? {}) });
-  if (cookies) headers.set('cookie', cookies);
-  if (token) headers.set(CSRF_HEADER, token);
+  const headers = new Headers({
+    host: 'localhost:3000',
+    origin: opts.csrf === false ? 'https://evil.example' : BASE,
+    ...(opts.headers ?? {}),
+  });
+  if (opts.cookie) headers.set('cookie', opts.cookie);
   let body: BodyInit | undefined;
   if (opts.form) body = opts.form;
   else if (opts.body !== undefined) {

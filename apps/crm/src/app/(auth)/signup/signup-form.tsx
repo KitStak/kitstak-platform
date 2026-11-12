@@ -41,9 +41,9 @@ const STAGE_LABEL: Readonly<Record<Stage, string>> = {
   workspace: 'Setting up your workspace…',
 };
 
-/** Invitees (signup?next=/invite/…) skip org creation and continue to their invitation. */
+/** Invitees (signup?next=/welcome/invite/…) skip org creation and continue to their invitation. */
 function isInviteFlow(next: string | null): boolean {
-  return Boolean(next && next.startsWith('/invite/'));
+  return Boolean(next && next.startsWith('/welcome/invite/'));
 }
 
 export function SignupForm({ next }: { readonly next: string | null }) {

@@ -1,29 +1,28 @@
-/** `GET /api/auth/sso/start?returnTo=/path` — redirects to the identity provider (OpenID Connect + PKCE). */
+/**
+ * `GET /api/auth/sso/start?returnTo=/path` — single sign-on entry.
+ *
+ * TODO(blueprint §1.4, DEFERRED): the hand-rolled OIDC+PKCE flow (apps-sso.ts
+ * `startSso`/`completeSso`) must be re-registered as a Better Auth `genericOAuth`
+ * provider built dynamically from the `apps` table row `key='sso'` (AES config storage
+ * via INTEGRATION_KEY kept), so the provider callback lands in the shared session
+ * tables. Until that port lands, interactive SSO sign-in answers 501; the enforce /
+ * admin break-glass / allowedDomains / never-auto-create rules already run as hooks on
+ * `/sign-in/email` (src/server/auth/auth.ts) and `/api/auth/sso/status` stays live for
+ * the login page.
+ */
 import { NextResponse } from 'next/server';
 import { defineRoute } from '@/server/api/define-route';
-import { AppError } from '@/server/api/errors';
-import { sessionCookieOptions } from '@/server/auth/session';
-import { SSO_STATE_COOKIE, SSO_STATE_TTL_SECONDS, startSso } from '@/server/repositories/apps-sso';
 
 export const GET = defineRoute({
   auth: 'public',
   transaction: false,
-  handler: async ({ db, request }) => {
+  handler: ({ request }) => {
     const url = new URL(request.url);
-    try {
-      const { redirectUrl, cookie } = await startSso(db, url.origin, url.searchParams.get('returnTo'));
-      const res = NextResponse.redirect(redirectUrl, 302);
-      res.cookies.set(SSO_STATE_COOKIE, cookie, {
-        ...sessionCookieOptions(SSO_STATE_TTL_SECONDS),
-        path: '/api/auth/sso',
-      });
-      return res;
-    } catch (e) {
-      const message = e instanceof AppError ? e.message : 'Single sign-on is unavailable right now';
-      return NextResponse.redirect(
-        new URL(`/login?sso_error=${encodeURIComponent(message)}`, url.origin),
-        302,
-      );
+    const message = 'Single sign-on is being upgraded and is temporarily unavailable. Use your password.';
+    const wantsJson = request.headers.get('accept')?.includes('application/json');
+    if (wantsJson) {
+      return NextResponse.json({ success: false, error: message, code: 'NOT_IMPLEMENTED' }, { status: 501 });
     }
+    return NextResponse.redirect(new URL(`/login?sso_error=${encodeURIComponent(message)}`, url.origin), 302);
   },
 });

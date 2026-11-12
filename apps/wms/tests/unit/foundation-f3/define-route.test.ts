@@ -5,8 +5,6 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { auditLog, users, warehouses } from '@/server/db/schema';
 import type { AppDb } from '@/server/api/db';
-import { CSRF_COOKIE, CSRF_HEADER, generateCsrfToken } from '@/server/auth/csrf-shared';
-import { issueSession } from '@/server/auth/session-store';
 import { seededDb, type SeededDb } from './fixtures';
 
 let current: SeededDb;
@@ -15,24 +13,26 @@ vi.mock('@/server/api/db', () => ({ getAppDb: async (): Promise<AppDb> => curren
 const { defineRoute } = await import('@/server/api/define-route');
 const { created, listResult } = await import('@/server/api/envelope');
 const { AppError } = await import('@/server/api/errors');
+const { signInCookieForUser, forgetSignInCookies } = await import('../../setup/auth-session');
 
 const BASE = 'http://localhost:3000';
 
 async function cookieFor(userId: string): Promise<string> {
-  const { token } = await issueSession(current.db, userId);
-  return `kitstak_session=${token}`;
+  return await signInCookieForUser(current.db, userId);
 }
 
 function request(
   method: string,
   path: string,
-  opts: { cookie?: string; csrf?: string | false; body?: unknown } = {},
+  // csrf:false now means "simulate a cross-site request" (the token is retired; the
+  // same-origin check is the mutation guard — blueprint §1.4).
+  opts: { cookie?: string; csrf?: false; body?: unknown } = {},
 ): NextRequest {
-  const csrf = opts.csrf === undefined ? generateCsrfToken() : opts.csrf;
-  const cookies = [opts.cookie, csrf ? `${CSRF_COOKIE}=${csrf}` : undefined].filter(Boolean).join('; ');
-  const headers = new Headers({ host: 'localhost:3000', origin: BASE });
-  if (cookies) headers.set('cookie', cookies);
-  if (csrf) headers.set(CSRF_HEADER, csrf);
+  const headers = new Headers({
+    host: 'localhost:3000',
+    origin: opts.csrf === false ? 'https://evil.example' : BASE,
+  });
+  if (opts.cookie) headers.set('cookie', opts.cookie);
   if (opts.body !== undefined) headers.set('content-type', 'application/json');
   return new NextRequest(`${BASE}${path}`, {
     method,
@@ -76,7 +76,10 @@ describe('defineRoute', () => {
   beforeEach(async () => {
     current = await seededDb();
   });
-  afterEach(async () => await current.close());
+  afterEach(async () => {
+    forgetSignInCookies(current.db);
+    await current.close();
+  });
 
   it('401 without a session, 200 with one (envelope + meta)', async () => {
     expect((await listRoute(request('GET', '/api/wh'))).status).toBe(401);
@@ -106,7 +109,7 @@ describe('defineRoute', () => {
     expect(await json(res)).toMatchObject({ code: 'VALIDATION' });
   });
 
-  it('rejects mutations without a CSRF token (403 + audit)', async () => {
+  it('rejects cross-site mutations (403 + audit)', async () => {
     const res = await createRoute(
       request('POST', '/api/wh', {
         cookie: await cookieFor(current.ids.admin),

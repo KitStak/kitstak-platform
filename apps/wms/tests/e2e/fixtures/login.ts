@@ -1,7 +1,8 @@
 /**
  * API login used by the auth setup project and by fixtures that need a fresh
- * session. Goes through POST /api/auth/login (the same endpoint the login form
- * uses) so the session cookie lands in the request context's cookie jar.
+ * session. Goes through Better Auth's POST /api/auth/sign-in/email (the same
+ * endpoint the login form uses) so the `kitstak.session_token` cookie lands in
+ * the request context's cookie jar (blueprint §1.4).
  */
 import type { APIRequestContext } from '@playwright/test';
 import { ROLE_EMAILS, e2eBaseUrl, e2ePassword, type Role } from './roles';
@@ -21,9 +22,9 @@ export function parseRetryAfter(header: string | undefined): number {
 export async function loginViaApi(request: APIRequestContext, role: Role): Promise<void> {
   const baseUrl = e2eBaseUrl();
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const response = await request.post(`${baseUrl}/api/auth/login`, {
+    const response = await request.post(`${baseUrl}/api/auth/sign-in/email`, {
       data: { email: ROLE_EMAILS[role], password: e2ePassword() },
-      // Same-origin headers so origin-based CSRF checks accept the request.
+      // Same-origin headers so Better Auth's trusted-origin check accepts the request.
       headers: { Origin: baseUrl, Referer: `${baseUrl}/login` },
     });
     if (response.ok()) return;

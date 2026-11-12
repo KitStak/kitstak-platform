@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { defineRoute } from '@/server/api/define-route';
 import { AppError } from '@/server/api/errors';
-import { isSameOriginRequest } from '@/server/auth/csrf';
+import { isSameOriginRequest } from '@/server/auth/origin';
 import { requestPasswordReset } from '@/server/auth/password-reset';
 import { hitRateLimit, RATE_LIMITS } from '@/server/auth/rate-limit';
 

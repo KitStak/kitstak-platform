@@ -121,10 +121,19 @@ describe('on PGlite', () => {
   afterEach(() => t.close());
 
   it('enables row level security on every table (Supabase Data API sees nothing)', async () => {
+    // `core` included (blueprint §2.1): the shared Better Auth tables from 0007_core_auth
+    // follow the same deny-by-default posture.
     const res = await t.pg.query<{ name: string }>(
-      "SELECT relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN ('public', 'wms') AND c.relkind = 'r' AND NOT c.relrowsecurity",
+      "SELECT relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN ('public', 'wms', 'core') AND c.relkind = 'r' AND NOT c.relrowsecurity",
     );
     expect(res.rows.map((r) => r.name)).toEqual([]);
+  });
+
+  it('creates the shared core auth tables (0007) for the WMS-local database', async () => {
+    const res = await t.pg.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM pg_tables WHERE schemaname = 'core' AND tablename IN ('user', 'session', 'account', 'verification', 'organization', 'member', 'team', 'team_member', 'invitation', 'password_policy_state')",
+    );
+    expect(res.rows[0]?.n).toBe(10);
   });
 
   it('moves every app table into the wms schema (0006): public holds none', async () => {

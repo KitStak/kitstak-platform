@@ -7,13 +7,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { pgTable, text, jsonb } from 'drizzle-orm/pg-core';
-import { companySettings, printoutTemplates, users } from '@/server/db/schema';
+import { companySettings, printoutTemplates } from '@/server/db/schema';
 import { asc, desc } from '@/server/db/order';
 import { dbAll } from '@/server/db/sql';
 import { compileFilters, type FilterFieldDef } from '@/server/query/filters';
 import { likePattern } from '@/server/repositories/shared';
-import { authenticate } from '@/server/auth/login';
+import type { AppDb } from '@/server/api/db';
 import { DEFAULT_PASSWORD_POLICY } from '@/server/auth/password-policy';
+import { passwordPolicyState } from '@kitstak/db/schema';
 import {
   devLogMailAdapter,
   requestPasswordReset,
@@ -25,6 +26,15 @@ import { getCompany } from '@/server/repositories/company';
 import { ensureDefaultPrintouts } from '@/server/repositories/printouts';
 import { seededDb, type SeededDb } from './fixtures';
 import { createTestDb, type TestDb } from '../../setup/test-db';
+
+let currentForAuth: SeededDb | undefined;
+vi.mock('@/server/api/db', () => ({
+  getAppDb: async (): Promise<AppDb> => {
+    if (!currentForAuth) throw new Error('seededDb not open');
+    return currentForAuth.db;
+  },
+}));
+const { getWmsAuth } = await import('@/server/auth/auth');
 
 const probe = pgTable('zz_probe', { id: text('id').primaryKey(), d: text('d'), cf: jsonb('cf') });
 
@@ -106,26 +116,34 @@ describe('read-then-write paths are race-safe without the synchronous driver', (
     await e?.close();
     s = undefined;
     e = undefined;
+    currentForAuth = undefined;
   });
 
-  it('concurrent failed logins all count, so the lockout threshold is reached', async () => {
+  it('repeated failed sign-ins reach the company lockout threshold (policy plugin)', async () => {
     s = await seededDb();
-    await s.db
-      .insert(companySettings)
-      .values({
-        displayName: 'K',
-        fullName: 'K',
-        passwordPolicy: { ...DEFAULT_PASSWORD_POLICY, lockoutThreshold: 3 },
-      });
-    const now = new Date('2026-11-05T10:00:00.000Z');
-    const a = (ip: string) => ({ email: 'admin@kitstak.io', password: 'wrong', ip, userAgent: 'vitest' });
-    await Promise.all([
-      authenticate(s.db, a('ip1'), now),
-      authenticate(s.db, a('ip2'), now),
-      authenticate(s.db, a('ip3'), now),
-    ]);
-    const row = (await s.db.select().from(users).where(eq(users.id, s.ids.admin)).limit(1))[0];
-    expect(row?.lockedUntil).not.toBeNull();
+    currentForAuth = s;
+    await s.db.insert(companySettings).values({
+      displayName: 'K',
+      fullName: 'K',
+      passwordPolicy: { ...DEFAULT_PASSWORD_POLICY, lockoutThreshold: 3 },
+    });
+    const auth = await getWmsAuth();
+    const attempt = async (ip: string): Promise<number> =>
+      (
+        await auth.api.signInEmail({
+          body: { email: 'admin@kitstak.io', password: 'Wrong!pass99' },
+          headers: new Headers({ origin: 'http://localhost:3000', 'x-forwarded-for': ip }),
+          asResponse: true,
+        })
+      ).status;
+    expect(await attempt('10.1.0.1')).toBe(401);
+    expect(await attempt('10.1.0.2')).toBe(401);
+    expect(await attempt('10.1.0.3')).toBe(401);
+    const [state] = await s.db
+      .select()
+      .from(passwordPolicyState)
+      .where(eq(passwordPolicyState.email, 'admin@kitstak.io'));
+    expect(state?.lockedUntil).not.toBeNull();
   });
 
   it('a reset token can be redeemed only once, even concurrently', async () => {

@@ -29,15 +29,10 @@ interface EodRow {
 
 const LOADING = ['Loading Started', 'Loading Completed'] as const;
 
-/** Mutations need the double-submit CSRF token and a same-origin header. */
-async function csrfHeaders(page: Page): Promise<Record<string, string>> {
+/** Mutations pass the same-origin check (the CSRF token is retired — blueprint §1.4). */
+async function csrfHeaders(_page: Page): Promise<Record<string, string>> {
   const base = e2eBaseUrl();
-  let token = (await page.context().cookies(base)).find((c) => c.name === 'ks_csrf')?.value;
-  if (!token) {
-    await page.request.get('/api/auth/csrf');
-    token = (await page.context().cookies(base)).find((c) => c.name === 'ks_csrf')?.value;
-  }
-  return { 'x-csrf-token': token ?? '', Origin: base, Referer: `${base}/` };
+  return { Origin: base, Referer: `${base}/` };
 }
 
 test('unshipped plans have no actual shipment date (API and grid)', async ({ page }) => {

@@ -4,16 +4,16 @@
 import { sql } from 'drizzle-orm';
 import { boolean, jsonb, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { wmsSchema } from '../_shared';
+import { user } from './auth';
 
 export const WMS_LEGACY_ROLES = ['admin', 'manager', 'operator', 'viewer'] as const;
 export type WmsLegacyRole = (typeof WMS_LEGACY_ROLES)[number];
 
 export const userProfiles = wmsSchema.table('user_profiles', {
-  /**
-   * TODO(Phase 3): add the drizzle FK `.references(() => user.id, { onDelete: 'cascade' })`
-   * once Better Auth core."user" relocates; SQL FK deferred in drizzle/0001_core_fks.sql.
-   */
-  userId: uuid('user_id').primaryKey(),
+  /** SQL FK ships guarded in drizzle/0001_core_fks.sql (skipped until core."user" exists). */
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => user.id, { onDelete: 'cascade' }),
   legacyRole: text('legacy_role', { enum: WMS_LEGACY_ROLES }).notNull().default('viewer'),
   userType: text('user_type').notNull().default('Operation'),
   isApiUser: boolean('is_api_user').notNull().default(false),

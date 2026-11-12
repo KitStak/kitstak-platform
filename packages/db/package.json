@@ -6,12 +6,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema/index.ts",
+    "./schema/core/auth": "./src/schema/core/auth.ts",
+    "./schema/core/auth-policy": "./src/schema/core/auth-policy.ts",
     "./client-pg": "./src/client-pg.ts",
     "./client-postgres-js": "./src/client-postgres-js.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "db:migrate": "tsx scripts/db-migrate.ts"
+    "db:migrate": "tsx scripts/db-migrate.ts",
+    "migrate:wms-identity": "tsx scripts/migrate-wms-identity.ts"
   },
   "peerDependencies": {
     "drizzle-orm": "^0.45.4",

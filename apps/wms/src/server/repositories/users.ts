@@ -10,6 +10,11 @@ import { asc } from '@/server/db/order';
 import type { AppDb } from '@/server/api/db';
 import { AppError, fromZodError } from '@/server/api/errors';
 import type { AuthContext } from '@/server/auth/context';
+import {
+  clearLockoutState,
+  setCredentialPassword,
+  upsertCoreIdentity,
+} from '@/server/auth/credentials';
 import { hashPassword } from '@/server/auth/password';
 import { getPasswordPolicy, validatePassword } from '@/server/auth/password-policy';
 import { hasWarehouse } from '@/server/auth/scope';
@@ -19,6 +24,7 @@ import {
   revokeSession,
   type SessionSummary,
 } from '@/server/auth/session-store';
+import { session as coreSession } from '@kitstak/db/schema';
 import * as s from '@/server/db/schema';
 import { runBulk } from '@/server/domain/bulk';
 import type { BulkResult } from '@/server/domain/types';
@@ -57,7 +63,7 @@ const warehouseCodesSql = sql<
   string | null
 >`(SELECT string_agg((w.code)::text, ', ') FROM user_warehouses uw JOIN warehouses w ON w.id = uw.warehouse_id WHERE uw.user_id = ${qc(u.id)})`;
 const statusSql = sql<string>`CASE WHEN ${qc(u.isActive)} = true THEN 'Active' ELSE 'Inactive' END`;
-const sessionCountSql = sql<number>`(SELECT COUNT(*) FROM user_sessions us WHERE us.user_id = ${qc(u.id)} AND us.revoked_at IS NULL AND us.expires_at > to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))`;
+const sessionCountSql = sql<number>`(SELECT COUNT(*) FROM core.session cs WHERE (cs.user_id)::text = ${qc(u.id)} AND cs.expires_at > now())`;
 
 const USER_SQL: Readonly<Record<string, SQL>> = {
   name: sql`${qc(u.name)}`,
@@ -391,6 +397,7 @@ export async function createUser(
     throw fieldError('roleIds', 'Only an administrator can assign the Admin role');
   }
   const now = new Date().toISOString();
+  const legacyRole = legacyRoleFor(roles.map((r) => r.key));
   const row = (
     await tx
       .insert(u)
@@ -399,8 +406,9 @@ export async function createUser(
         name: displayName(input.firstName, input.lastName),
         firstName: input.firstName.trim(),
         lastName: input.lastName.trim(),
+        // Frozen legacy mirror: credentials live in core.account (blueprint §1.4).
         passwordHash: hashPassword(input.password),
-        role: legacyRoleFor(roles.map((r) => r.key)),
+        role: legacyRole,
         userType: input.userType,
         isActive: input.isActive,
         allClients: input.allClients,
@@ -410,6 +418,19 @@ export async function createUser(
       })
       .returning({ id: u.id, name: u.name, email: u.email })
   )[0];
+  // Shared Better Auth identity: core."user" + credential account + platform-org member +
+  // wms.user_profiles, all keyed by the SAME uuid as the wms.users row.
+  await upsertCoreIdentity(tx, {
+    userId: row.id,
+    email: row.email,
+    name: row.name,
+    password: input.password,
+    legacyRole,
+    userType: input.userType,
+    isApiUser: false,
+    allClients: input.allClients,
+    passwordChangedAt: new Date(now),
+  });
   await writeLinks(tx, row.id, input);
   await logCreate(tx, domainCtxOf(actor, auth), {
     entityType: USER_ENTITY,
@@ -479,14 +500,23 @@ export async function updateUser(
       isActive: input.isActive,
       allClients: input.allClients,
       role,
-      ...(input.password
-        ? { passwordHash: hashPassword(input.password), passwordChangedAt: new Date().toISOString() }
-        : {}),
+      ...(input.password ? { passwordChangedAt: new Date().toISOString() } : {}),
       updatedBy: actor.userId,
       updatedAt: new Date().toISOString(),
       version: sql`${u.version} + 1`,
     })
     .where(eq(u.id, id));
+  // Sync the shared Better Auth identity (email/name/role/profile; new credential if set).
+  await upsertCoreIdentity(tx, {
+    userId: id,
+    email: input.email.toLowerCase(),
+    name: displayName(input.firstName, input.lastName),
+    ...(input.password ? { password: input.password, passwordChangedAt: new Date() } : {}),
+    legacyRole: role,
+    userType: input.userType,
+    isApiUser: before.isApiUser,
+    allClients: input.allClients,
+  });
   await writeLinks(tx, id, input);
   const next = await snapshot(tx, id);
   await logUpdate(
@@ -547,6 +577,7 @@ export async function setUsersActive(
       { status: row.isActive ? 'Active' : 'Inactive' },
       { status: isActive ? 'Active' : 'Inactive' },
     );
+    if (isActive) await clearLockoutState(inner, row.email);
     if (!isActive) await bumpSessionVersion(inner, id);
   });
 }
@@ -563,8 +594,11 @@ export function generateTemporaryPassword(length = 14): string {
 }
 
 /**
- * Sets a one-time temporary password, revokes every session and marks the password as
- * expired (`password_changed_at = null`) so the user must choose a new one.
+ * Sets a one-time temporary password (core.account credential), revokes every session
+ * and marks the password as expired (`password_changed_at = null`) so the user must
+ * choose a new one. (Blueprint §1.4: neither app has a mailer, so the admin-reset flow
+ * stays; `auth.api.setUserPassword` needs the admin plugin, so the credential is set
+ * through the shared hasher instead.)
  */
 export async function resetUserPassword(
   tx: AppDb,
@@ -576,10 +610,10 @@ export async function resetUserPassword(
   if (id === auth.user.id)
     throw new AppError('INVALID_STATE', 'Use Change Password to change your own password');
   const temporaryPassword = generateTemporaryPassword();
+  await setCredentialPassword(tx, id, temporaryPassword, { passwordChangedAt: null });
   await tx
     .update(u)
     .set({
-      passwordHash: hashPassword(temporaryPassword),
       passwordChangedAt: null,
       failedLoginCount: 0,
       lockedUntil: null,
@@ -623,9 +657,9 @@ export async function revokeUserSession(
   await loadUser(tx, userId);
   const sess = (
     await tx
-      .select({ userId: s.userSessions.userId })
-      .from(s.userSessions)
-      .where(eq(s.userSessions.id, sessionId))
+      .select({ userId: coreSession.userId })
+      .from(coreSession)
+      .where(eq(coreSession.id, sessionId))
       .limit(1)
   )[0];
   if (!sess || sess.userId !== userId) throw new AppError('NOT_FOUND', 'Session not found');

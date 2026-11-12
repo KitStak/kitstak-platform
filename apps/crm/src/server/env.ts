@@ -41,6 +41,17 @@ const envSchema = z.object({
   BETTER_AUTH_URL: z.url('BETTER_AUTH_URL must be an absolute URL'),
   NEXT_PUBLIC_APP_URL: z.url().optional(),
   TRUSTED_ORIGINS: commaList,
+  /**
+   * Cookie Domain for cross-subdomain SSO (`.kitstak.io` in prod). Leave unset in dev —
+   * localhost ports already share host-only `kitstak.*` cookies (BLUEPRINT.md §1.2).
+   */
+  AUTH_COOKIE_DOMAIN: z
+    .string()
+    .regex(
+      /^\.?[a-z0-9-]+(\.[a-z0-9-]+)+$/i,
+      'AUTH_COOKIE_DOMAIN must be a bare cookie domain like .kitstak.io (no scheme, no port)',
+    )
+    .optional(),
   LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
   /** Optional token that unlocks the detailed /api/v1/health payload in production. */
   HEALTH_TOKEN: z.string().min(24, 'HEALTH_TOKEN must be at least 24 characters').optional(),

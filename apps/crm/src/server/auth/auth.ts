@@ -1,89 +1,71 @@
 /**
  * Runtime Better Auth instance (email + password, organizations, DB sessions).
+ * Thin wrapper over the shared `@kitstak/auth` factory (blueprint §1.3): CRM supplies its
+ * Drizzle db/schema, env-derived secrets/origins and the org-metadata guard hooks; cookie
+ * names, session TTLs, rate-limit rules and the organization plugin are package behaviour
+ * shared with every KitStak app (`nextCookies()` stays the last plugin inside the factory).
  * Server-only. Route handler: `src/app/api/auth/[...all]/route.ts`.
  */
 import 'server-only';
-import { betterAuth } from 'better-auth';
-import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { nextCookies } from 'better-auth/next-js';
+import { createAuth, type KitstakAuth } from '@kitstak/auth';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { metadataTouchesKitstak, redactOrgMetadata } from '@/server/services/admin-policy';
 import { db } from '@/server/db';
 import * as schema from '@/server/db/schema';
 import { env, isProduction, trustedOrigins } from '@/server/env';
-import { sharedAuthOptions } from './options';
 
-function createAuth() {
-  return betterAuth({
-    ...sharedAuthOptions,
+/**
+ * Organization metadata holds KitStak's private org settings + member preferences (admin
+ * module). Never expose it through Better Auth's organization endpoints, and never let them
+ * overwrite it: KitStak settings are only written through validated, audited /api/v1/admin routes.
+ * CRM-specific policy, so it is passed into the shared factory rather than baked into it.
+ */
+const kitstakOrgMetadataHooks = {
+  before: createAuthMiddleware(async (ctx) => {
+    if (!ctx.path.startsWith('/organization/')) return;
+    const body = (ctx.body ?? {}) as { data?: { metadata?: unknown }; metadata?: unknown };
+    if (ctx.path === '/organization/update' && body.data?.metadata !== undefined) {
+      throw new APIError('FORBIDDEN', {
+        message: 'Organization metadata is managed by KitStak admin settings',
+      });
+    }
+    if (ctx.path === '/organization/create' && metadataTouchesKitstak(body.metadata)) {
+      throw new APIError('FORBIDDEN', { message: 'The kitstak metadata key is reserved' });
+    }
+  }),
+  after: createAuthMiddleware(async (ctx) => {
+    if (!ctx.path.startsWith('/organization')) return;
+    const returned = ctx.context.returned;
+    if (
+      !returned ||
+      typeof returned !== 'object' ||
+      returned instanceof Response ||
+      returned instanceof Error
+    )
+      return;
+    return ctx.json(redactOrgMetadata(returned));
+  }),
+};
+
+function buildAuth(): KitstakAuth {
+  return createAuth({
+    db,
+    schema,
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
-    basePath: '/api/auth',
     trustedOrigins: trustedOrigins(),
-    database: drizzleAdapter(db, { provider: 'pg', schema, transaction: true }),
-    rateLimit: {
-      enabled: true,
-      storage: 'memory',
-      window: 60,
-      max: 120,
-      customRules: {
-        '/sign-in/email': { window: 60, max: 10 },
-        '/sign-up/email': { window: 60 * 10, max: 5 },
-        '/forget-password': { window: 60 * 10, max: 5 },
-        '/request-password-reset': { window: 60 * 10, max: 5 },
-        '/reset-password': { window: 60 * 10, max: 10 },
-        '/change-password': { window: 60, max: 5 },
-      },
-    },
-    advanced: {
-      ...sharedAuthOptions.advanced,
-      useSecureCookies: isProduction(),
-      defaultCookieAttributes: {
-        ...sharedAuthOptions.advanced.defaultCookieAttributes,
-        secure: isProduction(),
-      },
-    },
-    telemetry: { enabled: false },
-    // Organization metadata holds KitStak's private org settings + member preferences (admin
-    // module). Never expose it through Better Auth's organization endpoints, and never let them
-    // overwrite it: KitStak settings are only written through validated, audited /api/v1/admin routes.
-    hooks: {
-      before: createAuthMiddleware(async (ctx) => {
-        if (!ctx.path.startsWith('/organization/')) return;
-        const body = (ctx.body ?? {}) as { data?: { metadata?: unknown }; metadata?: unknown };
-        if (ctx.path === '/organization/update' && body.data?.metadata !== undefined) {
-          throw new APIError('FORBIDDEN', {
-            message: 'Organization metadata is managed by KitStak admin settings',
-          });
-        }
-        if (ctx.path === '/organization/create' && metadataTouchesKitstak(body.metadata)) {
-          throw new APIError('FORBIDDEN', { message: 'The kitstak metadata key is reserved' });
-        }
-      }),
-      after: createAuthMiddleware(async (ctx) => {
-        if (!ctx.path.startsWith('/organization')) return;
-        const returned = ctx.context.returned;
-        if (
-          !returned ||
-          typeof returned !== 'object' ||
-          returned instanceof Response ||
-          returned instanceof Error
-        )
-          return;
-        return ctx.json(redactOrgMetadata(returned));
-      }),
-    },
-    // nextCookies must be the last plugin so Set-Cookie works from Server Actions.
-    plugins: [...sharedAuthOptions.plugins, nextCookies()],
+    useSecureCookies: isProduction(),
+    ...(env.AUTH_COOKIE_DOMAIN ? { cookieDomain: env.AUTH_COOKIE_DOMAIN } : {}),
+    hooks: kitstakOrgMetadataHooks,
   });
 }
 
-export type Auth = ReturnType<typeof createAuth>;
+export type Auth = KitstakAuth;
 
 let instance: Auth | undefined;
 
 function getAuth(): Auth {
-  instance ??= createAuth();
+  instance ??= buildAuth();
   return instance;
 }
 

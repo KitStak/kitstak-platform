@@ -21,14 +21,6 @@ const LOC_CODE = 'KS-E2E-LOC-01';
 // Shared dev server: first hits compile routes, so API calls get generous timeouts.
 test.use({ actionTimeout: 45_000 });
 
-async function csrf(page: Page): Promise<string> {
-  const read = async () => (await page.context().cookies(base)).find((c) => c.name === 'ks_csrf')?.value;
-  const existing = await read();
-  if (existing) return existing;
-  await page.request.get(`${base}/api/auth/csrf`);
-  return (await read()) ?? '';
-}
-
 async function api<T>(
   page: Page,
   method: 'GET' | 'POST' | 'DELETE',
@@ -39,7 +31,7 @@ async function api<T>(
   body: { data: T; error?: string; code?: string; fieldErrors?: Record<string, string[]> };
 }> {
   const headers: Record<string, string> =
-    method === 'GET' ? {} : { 'x-csrf-token': await csrf(page), Origin: base };
+    method === 'GET' ? {} : { Origin: base };
   const res = await page.request.fetch(`${base}${path}`, { method, headers, data, timeout: 90_000 });
   return { status: res.status(), body: await res.json() };
 }

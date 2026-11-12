@@ -43,6 +43,13 @@
       "when": 1794352600645,
       "tag": "0006_wms_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794441600001,
+      "tag": "0007_core_auth",
+      "breakpoints": true
     }
   ]
 }

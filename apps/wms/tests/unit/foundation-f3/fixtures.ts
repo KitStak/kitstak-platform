@@ -1,4 +1,4 @@
-/** Shared fixtures for F3 platform tests (in-memory SQLite with real migrations). */
+/** Shared fixtures for F3 platform tests (in-memory PGlite with real migrations). */
 import {
   clients,
   roles,
@@ -9,12 +9,13 @@ import {
   userWarehouses,
   warehouses,
 } from '@/server/db/schema';
+import { upsertCoreIdentity } from '@/server/auth/credentials';
 import { hashPassword } from '@/server/auth/password';
 import { createTestDb, type TestDb } from '../../setup/test-db';
 
 export const TEST_PASSWORD = 'KitStak!demo2026';
 let cachedHash: string | null = null;
-/** Low-cost hash so tests stay fast. */
+/** Low-cost bcrypt hash so tests stay fast (verified via the shared passwordCompat path). */
 export function testHash(): string {
   cachedHash ??= hashPassword(TEST_PASSWORD, 4);
   return cachedHash;
@@ -35,10 +36,12 @@ export interface SeededDb extends TestDb {
 export async function seededDb(): Promise<SeededDb> {
   const testDb = await createTestDb();
   const { db } = testDb;
+  // User ids are uuids: core."user".id (shared Better Auth table) is a uuid and keeps
+  // the SAME value as wms.users.id (blueprint §1.4).
   const ids = {
-    admin: 'u-admin',
-    viewer: 'u-viewer',
-    operator: 'u-operator',
+    admin: '0a000000-0000-4000-8000-000000000001',
+    viewer: '0a000000-0000-4000-8000-000000000002',
+    operator: '0a000000-0000-4000-8000-000000000003',
     wh1: 'wh-1',
     wh2: 'wh-2',
     c1: 'c-1',
@@ -84,6 +87,33 @@ export async function seededDb(): Promise<SeededDb> {
   ]);
   await db.insert(userWarehouses).values({ userId: ids.viewer, warehouseId: ids.wh1 });
   await db.insert(userClients).values({ userId: ids.viewer, clientId: ids.c1 });
+  // Shared Better Auth identities (core."user"/account/member + wms.user_profiles) so
+  // auth.api.signInEmail works against this database.
+  const identity = { userType: 'Operation', isApiUser: false, passwordHash: testHash() } as const;
+  await upsertCoreIdentity(db, {
+    ...identity,
+    userId: ids.admin,
+    email: 'admin@kitstak.io',
+    name: 'Admin',
+    legacyRole: 'admin',
+    allClients: true,
+  });
+  await upsertCoreIdentity(db, {
+    ...identity,
+    userId: ids.viewer,
+    email: 'viewer@kitstak.io',
+    name: 'Viewer',
+    legacyRole: 'viewer',
+    allClients: false,
+  });
+  await upsertCoreIdentity(db, {
+    ...identity,
+    userId: ids.operator,
+    email: 'op@kitstak.io',
+    name: 'Op',
+    legacyRole: 'operator',
+    allClients: true,
+  });
   return { ...testDb, ids };
 }
 

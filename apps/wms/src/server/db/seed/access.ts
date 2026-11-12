@@ -4,6 +4,7 @@
  * client scopes.
  */
 import { hashPassword } from '@/server/auth/password';
+import { upsertCoreIdentity } from '@/server/auth/credentials';
 import {
   DEFAULT_ROLE_PERMISSIONS,
   DEFAULT_ROLES,
@@ -249,6 +250,22 @@ export async function seedAccess(tx: Tx, org: OrgRefs, password: string): Promis
         })
         .returning({ id: schema.users.id })
     )[0].id;
+    // Shared Better Auth identity (blueprint §1.4): core."user" + credential account +
+    // platform-org member + wms.user_profiles, keyed by the SAME uuid. The bcrypt hash
+    // goes into core.account verbatim — the shared passwordCompat verifier accepts it,
+    // which also exercises the WMS-migration verify path on every demo sign-in.
+    await upsertCoreIdentity(tx, {
+      userId: id,
+      email: u.email,
+      name,
+      passwordHash,
+      legacyRole: u.role,
+      userType: u.userType,
+      isApiUser: u.isApiUser ?? false,
+      allClients: !u.clientCodes,
+      passwordChangedAt: new Date(isoOf(utcAt(14, 15))),
+      createdAt: new Date(createdAt),
+    });
     await tx.insert(schema.userRoles).values({ userId: id, roleId: roleIds.get(u.roleKey) as Id });
     await tx
       .insert(schema.userWarehouses)

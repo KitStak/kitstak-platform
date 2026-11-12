@@ -30,13 +30,6 @@ async function api<T>(page: Page, path: string): Promise<{ data: T; meta?: { tot
   return res.json();
 }
 
-async function csrf(page: Page): Promise<string> {
-  const c = (await page.context().cookies(base)).find((x) => x.name === 'ks_csrf')?.value;
-  if (c) return c;
-  await page.request.get(`${base}/api/auth/csrf`);
-  return (await page.context().cookies(base)).find((x) => x.name === 'ks_csrf')?.value ?? '';
-}
-
 /** `/jobs?…` → `/api/jobs?…`; the page routes and list APIs share the grid grammar. */
 const apiOf = (href: string): string => {
   const [path = '', qs = ''] = href.split('?');
@@ -130,7 +123,7 @@ test.describe('reports', () => {
     const expected =
       (await api<unknown[]>(page, `/api/reports/po-receiving?${query}&pageSize=1`)).meta?.total ?? 0;
     const res = await page.request.post(`${base}/api/exports`, {
-      headers: { 'x-csrf-token': await csrf(page), Origin: base },
+      headers: { Origin: base },
       data: { gridKey: 'report-po-receiving', query },
     });
     expect(res.status()).toBe(202);

@@ -3,12 +3,10 @@
  *   success: { success: true, data, meta? }
  *   failure: { success: false, error, code, fieldErrors?, requestId? }
  *
- * CSRF (see `src/server/auth/csrf-shared.ts`): every non-safe request carries
- * `x-csrf-token` = the `ks_csrf` cookie. A missing cookie is fetched from
- * `GET /api/auth/csrf`; a 403 `CSRF` failure refreshes the token and retries once.
- * A 401 sends the browser to `/login?next=<current path>`.
+ * CSRF: the double-submit token is retired (blueprint §1.4) — cookies are SameSite=Lax
+ * and `defineRoute` enforces a same-origin check on every mutation, so requests carry no
+ * `x-csrf-token` header any more. A 401 sends the browser to `/login?next=<current path>`.
  */
-import { CSRF_HEADER, isSafeMethod, readCsrfTokenFromCookie } from '@/server/auth/csrf-shared';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -75,48 +73,9 @@ export interface ApiResponse<T> {
 
 /** Mirrors `TZ_OFFSET_HEADER` in server/query/request-tz (not imported: that module is server-only). */
 const TZ_HEADER = 'x-tz-offset';
-const CSRF_ENDPOINT = '/api/auth/csrf';
 const LOGIN_PATH = '/login';
 const NETWORK_ERROR_MESSAGE = 'Could not reach the server. Check your connection and try again.';
 const UNEXPECTED_ERROR_MESSAGE = 'The server returned an unexpected response.';
-
-/* ---------------- CSRF token ---------------- */
-
-let pendingCsrf: Promise<string> | null = null;
-
-function readCookieToken(): string | null {
-  if (typeof document === 'undefined') return null;
-  return readCsrfTokenFromCookie(document.cookie);
-}
-
-async function fetchCsrfToken(): Promise<string> {
-  const res = await fetch(CSRF_ENDPOINT, { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
-  const body: unknown = await res.json().catch(() => null);
-  const token =
-    isRecord(body) && isRecord(body.data) && typeof body.data.token === 'string' ? body.data.token : null;
-  if (!res.ok || !token) {
-    throw new ApiError({
-      code: 'CSRF',
-      message: 'Could not establish a secure session. Reload the page.',
-      status: res.status || 403,
-    });
-  }
-  return token;
-}
-
-/** Current CSRF token: cookie first, otherwise one shared in-flight fetch. */
-export async function getCsrfToken(forceRefresh = false): Promise<string> {
-  if (!forceRefresh) {
-    const fromCookie = readCookieToken();
-    if (fromCookie) return fromCookie;
-  }
-  if (!pendingCsrf) {
-    pendingCsrf = fetchCsrfToken().finally(() => {
-      pendingCsrf = null;
-    });
-  }
-  return pendingCsrf;
-}
 
 /* ---------------- request building ---------------- */
 
@@ -153,12 +112,11 @@ function encodeBody(body: unknown): { body?: BodyInit; contentType?: string } {
   return { body: JSON.stringify(body), contentType: 'application/json' };
 }
 
-async function send(path: string, options: ApiRequestOptions, csrfToken: string | null): Promise<Response> {
+async function send(path: string, options: ApiRequestOptions): Promise<Response> {
   const method = options.method ?? 'GET';
   const encoded = encodeBody(options.body);
   const headers: Record<string, string> = { accept: 'application/json', ...options.headers };
   if (encoded.contentType) headers['content-type'] = encoded.contentType;
-  if (csrfToken) headers[CSRF_HEADER] = csrfToken;
   // Viewer's UTC offset (minutes east), so server date chips cut at local midnight.
   if (!(TZ_HEADER in headers)) headers[TZ_HEADER] = String(-new Date().getTimezoneOffset());
   try {
@@ -263,17 +221,8 @@ export function sessionReallyEnded(): Promise<boolean> {
  * (network failures use code `NETWORK`, status 0).
  */
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<ApiResponse<T>> {
-  const method = options.method ?? 'GET';
-  const needsCsrf = !isSafeMethod(method);
-  let token = needsCsrf ? await getCsrfToken() : null;
-  let res = await send(path, options, token);
-  let body = await readBody(res);
-
-  if (needsCsrf && res.status === 403 && isRecord(body) && body.code === 'CSRF') {
-    token = await getCsrfToken(true);
-    res = await send(path, options, token);
-    body = await readBody(res);
-  }
+  const res = await send(path, options);
+  const body = await readBody(res);
 
   // Confirm with /api/me before leaving: redirect only when the session is really gone.
   if (
@@ -296,7 +245,7 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   return data;
 }
 
-/** Test hook: forget any in-flight CSRF fetch. */
+/** Test hook: reset module-level client state between tests. */
 export function resetApiClientForTests(): void {
-  pendingCsrf = null;
+  sessionRecheck = null;
 }
