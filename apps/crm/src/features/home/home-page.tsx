@@ -38,8 +38,11 @@ function QuickActions({ workspaceId }: { readonly workspaceId: string | null }) 
   const [pendingCreate, setPendingCreate] = useState(false);
   useEffect(() => {
     if (!pendingCreate || !workspaceId) return;
-    setPendingCreate(false);
-    requestCreate({ kind: 'board', workspaceId });
+    const timer = setTimeout(() => {
+      setPendingCreate(false);
+      requestCreate({ kind: 'board', workspaceId });
+    }, 0);
+    return () => clearTimeout(timer);
   }, [pendingCreate, workspaceId, requestCreate]);
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="home-quick-actions">

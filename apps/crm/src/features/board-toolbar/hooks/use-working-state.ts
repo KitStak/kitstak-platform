@@ -155,7 +155,6 @@ export function useWorkingState({ boardId, view, defaultViewId, columns, canEdit
     }
     for (const draftKey of externalAdoptions(before, saved, working, pending?.from ?? null)) {
       // Syncing from an external change (someone else saved the view): intended.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (draftKey === 'groupBy') setGroupByState(saved.groupBy);
       else if (draftKey === 'filters') api.setFilters(saved.filters);
       else if (draftKey === 'sort') api.setSort(saved.sort);

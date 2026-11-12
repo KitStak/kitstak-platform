@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3000",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3000",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -17,7 +17,7 @@
     "db:seed": "tsx src/server/db/seed.ts",
     "db:drop": "tsx scripts/db-reset.ts",
     "db:fixtures": "tsx scripts/seed-fixtures.ts",
-    "db:reset": "npm run db:drop && npm run db:migrate && npm run db:seed && npm run db:fixtures",
+    "db:reset": "pnpm run db:drop && pnpm run db:migrate && pnpm run db:seed && pnpm run db:fixtures",
     "db:verify": "tsx scripts/verify-ledger.ts",
     "audit:dead-clicks": "playwright test --project=dead-click-audit"
   },
@@ -57,7 +57,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
-    "@playwright/test": "1.55.0",
+    "@playwright/test": "^1.65.0",
     "@tailwindcss/turbopack": "^4",
     "@testing-library/dom": "10.4.2",
     "@testing-library/react": "16.3.3",
@@ -70,12 +70,16 @@
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.4.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "jsdom": "31.0.0",
-    "playwright": "1.55.0",
-    "playwright-core": "1.55.0",
+    "playwright": "^1.65.0",
+    "playwright-core": "^1.65.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "5.1.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
