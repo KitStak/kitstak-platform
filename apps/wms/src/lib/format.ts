@@ -164,6 +164,21 @@ export function formatDate(value: DateInput, prefs: FormatPreferences = DEFAULT_
   return formatPattern(value, splitDatePart(prefs.dateFormat));
 }
 
+/**
+ * Compact human form for phone cards: "Nov 12, 3:54 AM" (the year is added only when it
+ * is not the current year: "Nov 12, 2025, 3:54 AM"). Honors the 24h preference.
+ */
+export function formatHumanDateTime(
+  value: DateInput,
+  prefs: FormatPreferences = DEFAULT_FORMAT_PREFERENCES,
+  now: Date = new Date(),
+): string {
+  const d = toDate(value);
+  if (!d) return EMPTY_VALUE;
+  const pattern = d.getFullYear() === now.getFullYear() ? 'MMM D, h:mm A' : 'MMM D, YYYY, h:mm A';
+  return formatPattern(d, applyTimeFormat(pattern, prefs.timeFormat));
+}
+
 export function formatTime(value: DateInput, prefs: FormatPreferences = DEFAULT_FORMAT_PREFERENCES): string {
   return formatPattern(value, prefs.timeFormat === '24h' ? 'HH:mm' : 'h:mm A');
 }
@@ -357,6 +372,8 @@ export interface Formatter {
   readonly dateTime: (value: DateInput) => string;
   /** Compact grid form: no seconds, padded month/day. */
   readonly gridDateTime: (value: DateInput) => string;
+  /** Phone-card form: "Nov 12, 3:54 AM" (year only when not this year). */
+  readonly humanDateTime: (value: DateInput) => string;
   readonly date: (value: DateInput) => string;
   readonly time: (value: DateInput) => string;
   readonly number: (value: number | null | undefined, decimals?: number) => string;
@@ -377,6 +394,7 @@ export function createFormatter(prefs: Partial<FormatPreferences> = {}): Formatt
     prefs: p,
     dateTime: (v) => formatDateTime(v, p),
     gridDateTime: (v) => formatGridDateTime(v, p),
+    humanDateTime: (v) => formatHumanDateTime(v, p),
     date: (v) => formatDate(v, p),
     time: (v) => formatTime(v, p),
     number: (v, d) => formatNumber(v, d, p),

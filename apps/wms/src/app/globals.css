@@ -326,11 +326,45 @@ input[type='number'] {
    selected-tone fill, dimmed content — while the route transition runs (use-row-nav.ts). */
 [data-pending-nav] {
   background: var(--surface-selected) !important;
+  position: relative;
 }
-[data-pending-nav] > td,
 [data-pending-nav] > * {
   opacity: 0.55;
   transition: opacity 120ms ease-out;
+}
+/* Right-edge spinner on top of the dim. Pure CSS off the data attribute, because the React
+   state behind the row renders at transition priority and does not commit while the route
+   suspends — exactly the window the spinner must cover. The arc is primary-on-track, so a
+   static frame still reads "loading". Table rows host it in their last (sticky) cell,
+   mobile cards over their chevron. */
+/* No `position` override on the td: the kebab cell is `position: sticky` (its own containing
+   block) and forcing relative would un-stick it; a static last cell falls back to the row.
+   The cell itself skips the dim (its kebab is hidden below) so the arc stays full-strength. */
+tr[data-pending-nav] > td:last-child {
+  opacity: 1;
+}
+tr[data-pending-nav] > td:last-child > *,
+[data-pending-nav][data-testid='grid-mobile-card'] > svg:last-child {
+  visibility: hidden;
+}
+tr[data-pending-nav] > td:last-child::after,
+[data-pending-nav][data-testid='grid-mobile-card']::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  height: 16px;
+  width: 16px;
+  margin-top: -8px;
+  border-radius: 9999px;
+  border: 2px solid color-mix(in srgb, var(--color-primary) 25%, transparent);
+  border-top-color: var(--color-primary);
+  animation: ks-pending-spin 0.7s linear infinite;
+}
+@keyframes ks-pending-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Route transition: after 400ms of a pending navigation the old page dims (route-progress.tsx). */

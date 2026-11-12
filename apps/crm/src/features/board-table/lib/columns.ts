@@ -13,7 +13,7 @@ export const COLLAPSED_COLUMN_WIDTH = 32;
 /** The name column is the row's identity: never let it shrink below a readable width. */
 export const NAME_MIN_WIDTH = 280;
 /** Default name width when the view has not chosen one (the registry default). */
-const NAME_DEFAULT_WIDTH = Math.max(COLUMN_TYPE_REGISTRY.name?.defaultWidth ?? 360, NAME_MIN_WIDTH);
+const NAME_DEFAULT_WIDTH = Math.max(COLUMN_TYPE_REGISTRY.name?.defaultWidth ?? 520, NAME_MIN_WIDTH);
 const CELL_PADDING = 24;
 /** Header padding + reveal-on-hover menu button around the title text. */
 const HEADER_CHROME = 48;
@@ -49,16 +49,19 @@ export function columnWidth(
 ): number {
   const explicit = live?.[column.key] ?? state.columnWidths[column.key];
   if (explicit !== undefined) return clampWidth(explicit, minWidthFor(column.type));
-  // No width chosen in this view yet: never truncate the header title by default.
-  const base = column.width ?? COLUMN_TYPE_REGISTRY[column.type]?.defaultWidth ?? 160;
   // Older templates stored narrower name defaults (260–300px) that truncate real names
   // around 18 characters while other columns have slack: floor the name column at the
   // registry default until the view picks an explicit width.
-  const fitsTitle =
-    column.type === 'name'
-      ? Math.max(base, NAME_DEFAULT_WIDTH)
-      : Math.max(base, headerTitleWidth(column.title));
-  return clampWidth(fitsTitle, minWidthFor(column.type));
+  if (column.type === 'name') {
+    return clampWidth(Math.max(column.width ?? NAME_DEFAULT_WIDTH, NAME_DEFAULT_WIDTH), NAME_MIN_WIDTH);
+  }
+  // A stored column width is a deliberate default (templates pick narrow widths for dense
+  // numeric columns like "Close probability"): honor it so those columns stop hoarding row
+  // width. Only width-less columns fall back to the registry default, widened so the header
+  // title never truncates (board creation bakes the title fit into the stored width).
+  if (column.width != null) return clampWidth(column.width, minWidthFor(column.type));
+  const base = COLUMN_TYPE_REGISTRY[column.type]?.defaultWidth ?? 160;
+  return clampWidth(Math.max(base, headerTitleWidth(column.title)), minWidthFor(column.type));
 }
 
 /** Header width that shows the whole title plus the grip / menu affordances. */

@@ -278,7 +278,7 @@ export const DEALS_TEMPLATE: BoardTemplate = {
   itemTerminology: 'Deal',
   primaryStatusColumnKey: 'stage',
   columns: [
-    { key: 'name', title: 'Deal', type: 'name', width: 300 },
+    { key: 'name', title: 'Deal', type: 'name', width: 520 },
     { key: 'stage', title: 'Stage', type: 'status', settings: DEAL_STAGE_LABELS },
     { key: 'owner', title: 'Owner', type: 'people' },
     {
@@ -288,9 +288,12 @@ export const DEALS_TEMPLATE: BoardTemplate = {
       settings: { currency: 'USD', decimals: 0, summary: 'sum' },
     },
     {
+      // Deliberately narrow: the values are 2–3 digit percentages, so the name column keeps
+      // the width (the header may ellipsize; the column menu shows the full title).
       key: 'probability',
       title: 'Close probability',
       type: 'number',
+      width: 140,
       settings: { unit: '%', unitPosition: 'suffix', decimals: 0, summary: 'average' },
     },
     {

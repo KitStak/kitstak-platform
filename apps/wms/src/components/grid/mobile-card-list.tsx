@@ -100,6 +100,9 @@ export function MobileCardList<T>({
           <>
             <span className="min-w-0 flex-1">{renderCard(row)}</span>
             {onRowClick ? (
+              // While the card is pending (data-pending-nav), globals.css hides this chevron
+              // and draws a spinner in its place — CSS so it paints during the suspended
+              // route transition (React state commits too late for the pending window).
               <ChevronRight className="h-4 w-4 shrink-0 self-center text-faint" aria-hidden />
             ) : null}
           </>

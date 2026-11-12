@@ -16,6 +16,8 @@ export interface ProductTileProps {
   readonly periodEnd: Date | null;
   /** Live numbers from the shared db (null: stats unavailable — render nothing). */
   readonly stats?: readonly TileStat[] | null;
+  /** Deep link for the empty-state CTA cell (e.g. the CRM pipeline). */
+  readonly emptyStateHref?: string;
 }
 
 const ACCESS_BADGE: Readonly<
@@ -31,10 +33,57 @@ const ACCESS_BADGE: Readonly<
 const dateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
 /** Shown in place of the stat grid when every stat is zero — '0 / 0' reads like a bug. */
-const EMPTY_STATS_COPY: Readonly<Record<Module, string>> = {
-  crm: 'No deals yet',
-  wms: 'No open orders',
+interface EmptyStateCopy {
+  readonly message: string;
+  readonly cta: string;
+}
+
+const EMPTY_STATS_COPY: Readonly<Record<Module, EmptyStateCopy>> = {
+  crm: { message: 'No deals yet', cta: 'Create your first deal' },
+  wms: { message: 'No open orders', cta: 'Create your first order' },
 };
+
+/** Matches the stat-cell geometry (text-lg value line + text-xs label line) so both tiles stay equal height. */
+const EMPTY_CELL_CLASS = 'flex flex-col rounded-lg bg-sunken px-3 py-2';
+
+/** Two-cell empty state with the same footprint as the stat grid. */
+function EmptyStats({ module, ctaHref }: { readonly module: Module; readonly ctaHref?: string }) {
+  const copy = EMPTY_STATS_COPY[module];
+  const cta = (
+    <>
+      <span aria-hidden className="text-lg font-semibold text-fg-muted transition-transform group-hover/cta:translate-x-0.5">
+        &rarr;
+      </span>
+      <span className="text-xs text-fg-muted group-hover/cta:text-fg-secondary">{copy.cta}</span>
+    </>
+  );
+  return (
+    <div className="mt-5 grid grid-cols-2 gap-2">
+      <p className={EMPTY_CELL_CLASS}>
+        <span aria-hidden className="text-lg font-semibold text-fg-muted">
+          &mdash;
+        </span>
+        <span className="text-xs text-fg-muted">{copy.message}</span>
+      </p>
+      {ctaHref ? (
+        <a
+          href={ctaHref}
+          target="_blank"
+          rel="noopener"
+          className={cn(
+            EMPTY_CELL_CLASS,
+            'group/cta relative transition-colors duration-[var(--duration-fast)] hover:bg-muted',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+          )}
+        >
+          {cta}
+        </a>
+      ) : (
+        <p className={EMPTY_CELL_CLASS}>{cta}</p>
+      )}
+    </div>
+  );
+}
 
 /** One launcher tile: product identity, entitlement state, and the Open / unlock action. */
 export function ProductTile({
@@ -47,6 +96,7 @@ export function ProductTile({
   access,
   periodEnd,
   stats,
+  emptyStateHref,
 }: ProductTileProps) {
   const badge = ACCESS_BADGE[access];
   const body = (
@@ -69,9 +119,7 @@ export function ProductTile({
       </div>
       {entitled && stats && stats.length > 0 ? (
         stats.every((stat) => stat.value === 0) ? (
-          <p className="mt-5 rounded-lg bg-sunken px-3 py-2.5 text-sm text-fg-muted">
-            {EMPTY_STATS_COPY[module]}
-          </p>
+          <EmptyStats module={module} ctaHref={emptyStateHref} />
         ) : (
           <dl className="mt-5 grid grid-cols-2 gap-2">
             {stats.map((stat) => (
@@ -128,10 +176,19 @@ export function ProductTile({
   );
 
   if (entitled) {
+    // Stretched-link pattern: the overlay anchor opens the product, so the empty-state
+    // CTA can be its own (non-nested) link layered above it via `relative`.
     return (
-      <a href={href} target="_blank" rel="noopener" className={tileClass}>
+      <div className={tileClass}>
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener"
+          aria-label={`Open ${name}`}
+          className="absolute inset-0 rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        />
         {body}
-      </a>
+      </div>
     );
   }
   return (

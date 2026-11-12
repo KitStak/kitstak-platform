@@ -9,6 +9,8 @@
 import { useMemo } from 'react';
 import { AvatarGroup, cn } from '@/components/ui';
 import { LabelChip, labelsFromSettings, useMediaQuery } from '@/features/cells';
+import { formatCurrencyValue, formatNumberValue, type NumberFormatSettings } from '@/features/cells/lib/format';
+import { readCurrency, readNumber } from '@/features/cells/lib/values';
 import type { Label } from '@/server/db/schema/column-types';
 import type { BoardPayloadDto, ColumnDto, ItemDto, ViewDto } from '@/server/services/contracts/dto';
 import { itemsByGroup } from '../lib/filter-sort';
@@ -49,6 +51,8 @@ interface CardColumns {
   readonly statusLabels: readonly Label[];
   readonly people: ColumnDto | null;
   readonly date: ColumnDto | null;
+  /** First currency/number column (deal value on the Deals board). */
+  readonly value: ColumnDto | null;
 }
 
 function statusLabelOf(item: ItemDto, card: CardColumns): Label | null {
@@ -76,6 +80,20 @@ function dateOf(item: ItemDto, card: CardColumns): string | null {
   if (!card.date) return null;
   const raw: unknown = item.values[card.date.key];
   return isRecord(raw) && typeof raw.date === 'string' ? shortDate(raw.date) : null;
+}
+
+/** Deal value (or first numeric column), formatted exactly like the desktop cell. */
+function valueOf(item: ItemDto, card: CardColumns): string | null {
+  if (!card.value) return null;
+  if (card.value.type === 'currency') {
+    const value = readCurrency(item.values[card.value.key]);
+    if (!value) return null;
+    const decimals = (card.value.settings as { decimals?: number }).decimals ?? 0;
+    return formatCurrencyValue(value.amount, value.currency, decimals);
+  }
+  const value = readNumber(item.values[card.value.key]);
+  if (value === null) return null;
+  return formatNumberValue(value, card.value.settings as NumberFormatSettings);
 }
 
 export interface BoardCardListProps {
@@ -111,6 +129,7 @@ export function BoardCardList({ boardId, payload, items, view, onOpenItem }: Boa
       statusLabels: status ? labelsFromSettings(status.settings) : [],
       people: columns.find((column) => column.type === 'people') ?? null,
       date: columns.find((column) => column.type === 'date') ?? null,
+      value: columns.find((column) => column.type === 'currency' || column.type === 'number') ?? null,
     };
   }, [columns]);
   const usersById = useMemo(
@@ -195,6 +214,7 @@ function ItemCard({
   const label = statusLabelOf(item, card);
   const people = peopleOf(item, card, usersById);
   const date = dateOf(item, card);
+  const value = valueOf(item, card);
   return (
     <li className="list-none">
       <button
@@ -213,12 +233,23 @@ function ItemCard({
           style={{ background: groupColorVar(groupColor) }}
         />
         <span className="line-clamp-2 min-w-0 text-base font-medium text-fg">{item.name}</span>
-        {label || people.length > 0 || date ? (
+        {label || people.length > 0 || date || value ? (
           <span className="flex min-w-0 items-center gap-2">
             {label ? <LabelChip label={label} className="h-5 max-w-36 text-xs" /> : null}
             {date ? <span className="shrink-0 text-sm text-fg-secondary tabular-nums">{date}</span> : null}
             {people.length > 0 ? (
               <AvatarGroup people={people} max={3} size="xs" className="ml-auto" />
+            ) : null}
+            {value ? (
+              <span
+                data-testid="board-card-value"
+                className={cn(
+                  'shrink-0 text-right text-sm font-medium text-fg tabular-nums',
+                  people.length === 0 && 'ml-auto',
+                )}
+              >
+                {value}
+              </span>
             ) : null}
           </span>
         ) : null}

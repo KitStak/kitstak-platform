@@ -23,7 +23,20 @@ export interface CoreCustomerDto {
   readonly status: string;
 }
 
+/**
+ * Small operational peek for a linked client, read from the WMS tables in the shared
+ * Postgres (`wms.shipment_orders` / `wms.inventory`). Null when the WMS schema is not
+ * deployed alongside the CRM — the card then stays identity-only (fail-soft).
+ */
+export interface WmsOpsPeekDto {
+  /** Shipment orders not yet shipped, delivered or cancelled. */
+  readonly openOrders: number;
+  /** Units on hand across warehouses. */
+  readonly onHandUnits: number;
+}
+
 /** The WMS client linked to an account board item (null when unlinked). */
 export interface WmsLinkDto {
   readonly customer: CoreCustomerDto | null;
+  readonly ops: WmsOpsPeekDto | null;
 }

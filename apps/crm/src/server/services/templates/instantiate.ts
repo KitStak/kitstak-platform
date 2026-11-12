@@ -5,7 +5,7 @@
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { boardMembers, boards, columns, groups, items, views } from '@/server/db/schema';
 import { parseColumnSettings } from '@/server/db/schema/cell-values';
-import { COLUMN_TYPE_REGISTRY } from '@/server/db/schema/column-types';
+import { COLUMN_TYPE_REGISTRY, defaultStoredWidth } from '@/server/db/schema/column-types';
 import type { ServiceContext } from '../context';
 import { initialPositions, positionAfter } from '../positions';
 import { findTemplate } from './crm';
@@ -78,7 +78,7 @@ export async function instantiateTemplate(
         column.type,
         column.settings ?? COLUMN_TYPE_REGISTRY[column.type].defaultSettings(),
       ),
-      width: column.width ?? COLUMN_TYPE_REGISTRY[column.type].defaultWidth,
+      width: column.width ?? defaultStoredWidth(column.type, column.title),
       position: columnPositions[index] as string,
       hidden: column.hidden ?? false,
       createdBy: ctx.userId,

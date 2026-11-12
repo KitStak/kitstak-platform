@@ -45,7 +45,8 @@ const WIDTH: Readonly<Record<string, number>> = {
   age: 72,
   processingAge: 96,
   daysSinceShipped: 132,
-  clientName: 176,
+  clientName: 220,
+  channelPaymentStatus: 136,
   warehouseCode: 184,
   status: 132,
   pickShortStatus: 96,
@@ -131,6 +132,16 @@ function cellFor(def: OrderColumnDef): ColumnDef<OrderRow, unknown>['cell'] {
       );
     case 'status':
       return ({ row }) => <OrderStatusPill status={row.original.status} />;
+    case 'channelPaymentStatus':
+      // Raw channel value ("paid", "partially_refunded") → the shared status chip.
+      return ({ getValue }) => {
+        const raw = getValue();
+        return raw === null || raw === undefined || raw === '' ? (
+          dash
+        ) : (
+          <StatusPill status={String(raw).replaceAll('_', ' ')} domain="payment" size="sm" />
+        );
+      };
     case 'pickShortStatus':
     case 'packShortStatus':
       return ({ getValue }) => shortPill(getValue());
@@ -239,6 +250,12 @@ export function headerFitWidth(label: string): number {
   return Math.ceil(raw / 4) * 4;
 }
 
+/**
+ * Shorter header text where the full Logiwa name would force a needlessly wide column
+ * (the chooser, filters and export keep the full label via `meta.label`).
+ */
+const HEADER_TEXT: Readonly<Record<string, string>> = { channelPaymentStatus: 'Payment' };
+
 export function buildOrderColumns(view: OrderView): ColumnDef<OrderRow, unknown>[] {
   return columnsForView(view).map((def): ColumnDef<OrderRow, unknown> => {
     const numeric =
@@ -246,12 +263,12 @@ export function buildOrderColumns(view: OrderView): ColumnDef<OrderRow, unknown>
     const base =
       WIDTH[def.id] ??
       (def.kind === 'datetime' ? DATE_TIME_COLUMN_WIDTH : def.kind === 'boolean' ? 110 : 140);
-    const fit = headerFitWidth(def.label);
+    const fit = headerFitWidth(HEADER_TEXT[def.id] ?? def.label);
     const width = Math.max(base, fit);
     return {
       id: def.id,
       accessorKey: def.id,
-      header: def.label,
+      header: HEADER_TEXT[def.id] ?? def.label,
       size: width,
       // A resize can never squeeze the header under its label (no "STATSTORE" overprint).
       minSize: fit,
@@ -269,6 +286,7 @@ export function buildOrderColumns(view: OrderView): ColumnDef<OrderRow, unknown>
           'pickShortStatus',
           'packShortStatus',
           'mergedOrderStatus',
+          'channelPaymentStatus',
         ].includes(def.id),
       },
       cell: cellFor(def),

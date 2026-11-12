@@ -120,7 +120,13 @@ describe.skipIf(!available)('wms-link service (integration)', async () => {
 
     const linked = await setCustomerLink(rep, accountItemId, { coreCustomerId: acmeId });
     expect(linked.customer?.code).toBe('ACME');
-    expect((await getCustomerLink(rep, accountItemId)).customer?.id).toBe(acmeId);
+    const fetched = await getCustomerLink(rep, accountItemId);
+    expect(fetched.customer?.id).toBe(acmeId);
+    // Operational peek: present when the WMS tables share this database (a fresh test
+    // customer has no WMS rows, so both counts read 0), null otherwise (fail-soft).
+    if (fetched.ops !== null) {
+      expect(fetched.ops).toEqual({ openOrders: 0, onHandUnits: 0 });
+    }
 
     // Relinking replaces the existing row — one link per item.
     const replaced = await setCustomerLink(rep, accountItemId, { coreCustomerId: globexId });
@@ -134,7 +140,10 @@ describe.skipIf(!available)('wms-link service (integration)', async () => {
 
     const unlinked = await setCustomerLink(rep, accountItemId, { coreCustomerId: null });
     expect(unlinked.customer).toBeNull();
-    expect((await getCustomerLink(rep, accountItemId)).customer).toBeNull();
+    expect(unlinked.ops).toBeNull();
+    const cleared = await getCustomerLink(rep, accountItemId);
+    expect(cleared.customer).toBeNull();
+    expect(cleared.ops).toBeNull();
   });
 
   it('is org-scoped: foreign customers and foreign items read as not found', async () => {

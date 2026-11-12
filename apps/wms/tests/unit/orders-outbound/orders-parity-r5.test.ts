@@ -27,7 +27,10 @@ describe('backlog grid headers', () => {
     for (const view of ['backlog', 'shipped'] as const) {
       const defs = columnsForView(view);
       for (const col of buildOrderColumns(view)) {
-        const label = defs.find((d) => d.id === col.id)?.label ?? '';
+        // The invariant guards the RENDERED header text (round 4 shortens a few, e.g.
+        // "Channel Payment Status" renders as "Payment" over a chip column).
+        const label =
+          typeof col.header === 'string' ? col.header : (defs.find((d) => d.id === col.id)?.label ?? '');
         const fit = headerFitWidth(label);
         expect(col.size ?? 0, label).toBeGreaterThanOrEqual(fit);
         expect(col.minSize ?? 0, label).toBe(fit);

@@ -233,7 +233,8 @@ export function FilterPopover({
             aria-label={count ? `Filter, ${count} applied` : 'Filter'}
           >
             <ListFilter className="h-3.5 w-3.5" aria-hidden />
-            Filter
+            {/* Phones: icon + count only, so search + filter share one toolbar row. */}
+            <span className="hidden md:inline">Filter</span>
             {count > 0 ? (
               <span className="rounded-full bg-primary px-1.5 text-2xs font-bold text-white">{count}</span>
             ) : null}

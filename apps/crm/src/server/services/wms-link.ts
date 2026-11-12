@@ -4,13 +4,20 @@
  * Drizzle objects from `@kitstak/db`, queried over the app's own executor — both apps share
  * one Postgres, so no cross-service calls are involved.
  */
-import { and, asc, eq, ilike, inArray, isNull, or, type SQL } from 'drizzle-orm';
+import { and, asc, count, eq, ilike, inArray, isNull, notInArray, or, sql, sum, type SQL } from 'drizzle-orm';
+import { integer, pgSchema, text } from 'drizzle-orm/pg-core';
 import { customerLinks, customers as coreCustomers } from '@kitstak/db/schema';
 import { organization } from '@/server/db/schema';
 import { NotFoundError, ValidationError } from '@/server/http/errors';
 import { requireItem } from './access';
 import { inTransaction, type ServiceContext } from './context';
-import type { CoreCustomerDto, CoreCustomersQuery, SetCustomerLinkInput, WmsLinkDto } from './wms-link-contracts';
+import type {
+  CoreCustomerDto,
+  CoreCustomersQuery,
+  SetCustomerLinkInput,
+  WmsLinkDto,
+  WmsOpsPeekDto,
+} from './wms-link-contracts';
 
 const SEARCH_LIMIT = 50;
 
@@ -48,6 +55,64 @@ const customerColumns = {
   name: coreCustomers.name,
   status: coreCustomers.status,
 };
+
+// ---------------------------------------------------------------------------------------------
+// Operational peek: minimal read-only mirrors of the WMS tables (apps/wms owns the schema; both
+// apps share one Postgres, same pattern as the core.customers joins above). Only the columns
+// this service reads are declared.
+// ---------------------------------------------------------------------------------------------
+
+const wmsOps = pgSchema('wms');
+const wmsShipmentOrders = wmsOps.table('shipment_orders', {
+  clientId: text('client_id').notNull(),
+  status: text('status').notNull(),
+});
+const wmsInventory = wmsOps.table('inventory', {
+  clientId: text('client_id'),
+  onHand: integer('on_hand').notNull(),
+});
+
+/** Terminal shipment-order statuses (apps/wms `SO_STATUSES`); everything else counts as open. */
+const CLOSED_SO_STATUSES = ['Shipped', 'Delivered', 'Cancelled'];
+
+/** True when the WMS operational tables exist in this database (never throws). */
+async function wmsTablesAvailable(ctx: ServiceContext): Promise<boolean> {
+  const result = await ctx.db.execute<{ ok: boolean }>(
+    sql`select to_regclass('wms.shipment_orders') is not null and to_regclass('wms.inventory') is not null as ok`,
+  );
+  return result.rows[0]?.ok === true;
+}
+
+/**
+ * Open shipment orders + on-hand units for a linked client. `core.customers.id` equals
+ * `wms.clients.id` (write-through sync), so the core customer id is the WMS client id.
+ * Fails soft to null so the link card degrades to identity-only when the WMS is absent.
+ */
+async function loadOpsPeek(ctx: ServiceContext, coreCustomerId: string): Promise<WmsOpsPeekDto | null> {
+  try {
+    if (!(await wmsTablesAvailable(ctx))) return null;
+    const [orders] = await ctx.db
+      .select({ openOrders: count() })
+      .from(wmsShipmentOrders)
+      .where(
+        and(
+          eq(wmsShipmentOrders.clientId, coreCustomerId),
+          notInArray(wmsShipmentOrders.status, CLOSED_SO_STATUSES),
+        ),
+      );
+    const [stock] = await ctx.db
+      .select({ onHandUnits: sum(wmsInventory.onHand) })
+      .from(wmsInventory)
+      .where(eq(wmsInventory.clientId, coreCustomerId));
+    return {
+      openOrders: Number(orders?.openOrders ?? 0),
+      onHandUnits: Number(stock?.onHandUnits ?? 0),
+    };
+  } catch {
+    // Identity-only beats a broken card: swallow WMS-side read errors.
+    return null;
+  }
+}
 
 function escapeLike(term: string): string {
   return term.replace(/[\\%_]/g, (char) => `\\${char}`);
@@ -88,7 +153,8 @@ export async function getCustomerLink(ctx: ServiceContext, itemId: string): Prom
       ),
     )
     .limit(1);
-  return { customer: row ?? null };
+  if (!row) return { customer: null, ops: null };
+  return { customer: row, ops: await loadOpsPeek(ctx, row.id) };
 }
 
 /**
@@ -105,7 +171,7 @@ export async function setCustomerLink(
 
   if (input.coreCustomerId === null) {
     await ctx.db.delete(customerLinks).where(unlinkScope);
-    return { customer: null };
+    return { customer: null, ops: null };
   }
 
   if (board.kind !== 'accounts') {
@@ -136,5 +202,5 @@ export async function setCustomerLink(
       itemId,
     });
   });
-  return { customer };
+  return { customer, ops: await loadOpsPeek(ctx, customer.id) };
 }

@@ -1,4 +1,6 @@
 /** Bulk writers for seed items, links and activity history. */
+import { and, inArray, isNull, sql } from 'drizzle-orm';
+import { customerLinks, customers as coreCustomers } from '@kitstak/db/schema';
 import type { Executor } from '../index';
 import { activityLog, itemLinks, items } from '../schema';
 import type { StoredCellValue } from '../schema/cell-values';
@@ -85,6 +87,64 @@ export async function writeLinks(
     }
   }
   await insertChunked(rows, (chunk) => db.insert(itemLinks).values(chunk).onConflictDoNothing());
+  return rows.length;
+}
+
+/**
+ * WMS seed clients paired with a name-adjacent CRM account-name prefix, so demos show a
+ * plausible "Warehouse (WMS)" link out of the box (e.g. "Apex Threads Co." under the account
+ * "Apex Freight"). Order matters: the first unused account wins.
+ */
+const WMS_PAIRINGS: ReadonlyArray<readonly [code: string, namePrefix: string]> = [
+  ['APX', 'Apex '],
+  ['HRB', 'Harbor '],
+  ['SMT', 'Summit '],
+];
+
+/**
+ * Pre-link 2–3 seeded accounts to WMS clients mirrored into `core.customers` (demo pairing
+ * only). Fail-soft: when the core registry tables are absent (CRM-only database) or the WMS
+ * seed has not run, nothing is written and the seed carries on.
+ */
+export async function writeWmsLinks(
+  db: Executor,
+  orgId: string,
+  accountsBoardId: string | undefined,
+  accounts: readonly SeedItem[],
+): Promise<number> {
+  if (!accountsBoardId) return 0;
+  const probe = await db.execute<{ ok: boolean }>(
+    sql`select to_regclass('core.customers') is not null and to_regclass('crm.customer_links') is not null as ok`,
+  );
+  if (probe.rows[0]?.ok !== true) return 0;
+  const candidates = await db
+    .select({ id: coreCustomers.id, code: coreCustomers.code })
+    .from(coreCustomers)
+    .where(
+      and(
+        inArray(
+          coreCustomers.code,
+          WMS_PAIRINGS.map(([code]) => code),
+        ),
+        isNull(coreCustomers.deletedAt),
+      ),
+    );
+  const customerByCode = new Map(candidates.map((row) => [row.code, row.id]));
+  const used = new Set<string>();
+  const rows: (typeof customerLinks.$inferInsert)[] = [];
+  for (const [code, namePrefix] of WMS_PAIRINGS) {
+    const coreCustomerId = customerByCode.get(code);
+    if (!coreCustomerId) continue;
+    // Prefer the name-adjacent account; fall back to the first unused customer account so the
+    // demo still shows 2–3 links when the RNG sampled no matching company name.
+    const account =
+      accounts.find((entry) => !used.has(entry.id) && entry.name.startsWith(namePrefix)) ??
+      accounts.find((entry) => !used.has(entry.id) && entry.group === 'customers');
+    if (!account) continue;
+    used.add(account.id);
+    rows.push({ coreCustomerId, orgId, boardId: accountsBoardId, itemId: account.id });
+  }
+  if (rows.length > 0) await db.insert(customerLinks).values(rows).onConflictDoNothing();
   return rows.length;
 }
 

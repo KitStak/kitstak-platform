@@ -37,6 +37,13 @@ function productUrl(module: Module): string {
   return module === 'crm' ? env.NEXT_PUBLIC_CRM_URL : env.NEXT_PUBLIC_WMS_URL;
 }
 
+/** Where the tile's empty-state CTA deep-links: straight to the screen that creates the first record. */
+function emptyStateUrl(module: Module, orgSlug: string): string {
+  return module === 'crm'
+    ? `${env.NEXT_PUBLIC_CRM_URL}/${orgSlug}/crm/pipeline`
+    : `${env.NEXT_PUBLIC_WMS_URL}/orders`;
+}
+
 function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || name;
 }
@@ -170,6 +177,7 @@ export default async function LauncherPage() {
               access={state.access}
               periodEnd={state.entitlement?.periodEnd ?? null}
               stats={stats[state.module]}
+              emptyStateHref={emptyStateUrl(state.module, activeOrg.slug)}
             />
           );
         })}

@@ -497,6 +497,8 @@ export function DataGrid<T>(props: DataGridProps<T>) {
         <GridFooter
           loading={(loading || Boolean(error)) && data.length === 0}
           showSelected={selectable}
+          // Below `md` the card list replaces the table, so Large/Small means nothing there.
+          hideDensityOnPhones={Boolean(props.renderMobileCard)}
           total={total}
           page={page}
           pageSize={pageSize}

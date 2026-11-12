@@ -233,7 +233,10 @@ export const COLUMN_TYPE_REGISTRY: { readonly [K in ColumnType]: ColumnTypeDefin
     description: 'The item name',
     icon: 'Type',
     category: 'essentials',
-    defaultWidth: 360,
+    // The name cell reserves ~165px for its affordances (expand toggle, rename pencil, the
+    // "Open" reveal spacer and the updates bubble), so typical seeded deal names (~320-345px
+    // of text) need ~520px before they stop ellipsizing.
+    defaultWidth: 520,
     minWidth: 200,
     summary: 'none',
     unique: true,
@@ -491,6 +494,21 @@ export const COLUMN_TYPE_REGISTRY: { readonly [K in ColumnType]: ColumnTypeDefin
 
 export function getColumnTypeDefinition<T extends ColumnType>(type: T): ColumnTypeDefinition<T> {
   return COLUMN_TYPE_REGISTRY[type];
+}
+
+/** Average glyph width used to approximate header text (matches board-table's `approxMeasure`). */
+const APPROX_GLYPH_WIDTH = 7.4;
+/** Header padding + reveal-on-hover menu button around the title (matches board-table's chrome). */
+const HEADER_CHROME = 48;
+
+/**
+ * Stored width for a new column without an explicit width: the registry default, widened so
+ * `title` fits the header. Stored widths are honored as-is by the table, so the title fit is
+ * baked in at creation time; templates that set a width deliberately keep their narrow pick.
+ */
+export function defaultStoredWidth(type: ColumnType, title: string): number {
+  const definition = COLUMN_TYPE_REGISTRY[type];
+  return Math.max(definition.defaultWidth, Math.ceil(title.length * APPROX_GLYPH_WIDTH + HEADER_CHROME));
 }
 
 /** Validate (and fill defaults for) column settings of the given type. */

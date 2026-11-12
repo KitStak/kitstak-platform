@@ -177,6 +177,20 @@ const PRIORITY: StatusMap = {
   none: 'grey',
 };
 const ACTIVE: StatusMap = { active: 'green', passive: 'grey', inactive: 'grey' };
+// Channel payment status (store financial status, e.g. Shopify/eBay): paid green,
+// anything part-way amber, not-yet-paid red-leaning amber, terminal non-payment grey/red.
+const PAYMENT: StatusMap = {
+  paid: 'green',
+  'partially paid': 'amber',
+  partial: 'amber',
+  'partially refunded': 'amber',
+  pending: 'amber',
+  authorized: 'blue',
+  unpaid: 'red',
+  expired: 'red',
+  voided: 'grey',
+  refunded: 'grey',
+};
 
 /** Fallback used when no domain is given or the domain has no entry for the status. */
 const GENERIC: StatusMap = {
@@ -212,6 +226,7 @@ export const STATUS_DOMAINS = {
   yesNo: YES_NO,
   priority: PRIORITY,
   active: ACTIVE,
+  payment: PAYMENT,
   generic: GENERIC,
 } as const satisfies Readonly<Record<string, StatusMap>>;
 

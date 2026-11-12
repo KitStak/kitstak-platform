@@ -17,6 +17,7 @@ import {
   MoreHorizontal,
   PackagePlus,
   Plus,
+  RefreshCw,
   RotateCcw,
   ScanLine,
   Trash2,
@@ -36,13 +37,13 @@ import { toast } from '@/components/ui/toast';
 import { DisabledReason } from '@/components/ui/tooltip';
 import {
   DataGrid,
-  DateCell,
   GridToolbar,
   useGrid,
   useRowNav,
   type FilterFieldDef,
   type RowAction,
 } from '@/components/grid';
+import { useFormat } from '@/lib/format';
 import { OrderStatusPill } from './order-status-pill';
 import { ChangeLogDrawer } from '@/components/shared';
 import { PageHeader } from '@/components/layout/page-header';
@@ -158,29 +159,52 @@ function ImportMenu() {
 function PendingHeaderActions({ view }: { readonly view: OrderView }) {
   if (view === 'shipped') {
     return (
-      <DisabledReason reason={CHECKING_PERMISSIONS}>
-        <Button variant="secondary" disabled>
-          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-          Bulk update return info
-        </Button>
-      </DisabledReason>
+      <>
+        <span className="hidden md:inline-flex">
+          <DisabledReason reason={CHECKING_PERMISSIONS}>
+            <Button variant="secondary" disabled>
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+              Bulk update return info
+            </Button>
+          </DisabledReason>
+        </span>
+        <span className="inline-flex md:hidden">
+          <Button variant="secondary" size="icon" aria-label="More order actions" disabled>
+            <MoreHorizontal className="h-4 w-4" aria-hidden />
+          </Button>
+        </span>
+      </>
     );
   }
   return (
     <>
-      <DisabledReason reason={CHECKING_PERMISSIONS}>
-        <Button variant="secondary" disabled>
-          <Upload className="h-3.5 w-3.5" aria-hidden />
-          Import
-          <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
+      <span className="hidden items-center gap-2 md:flex">
+        <DisabledReason reason={CHECKING_PERMISSIONS}>
+          <Button variant="secondary" disabled>
+            <Upload className="h-3.5 w-3.5" aria-hidden />
+            Import
+            <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
+          </Button>
+        </DisabledReason>
+        <DisabledReason reason={CHECKING_PERMISSIONS}>
+          <Button variant="primary" disabled>
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            Create shipment order
+          </Button>
+        </DisabledReason>
+      </span>
+      {/* Phones mirror the loaded layout (compact primary + overflow) so nothing jumps. */}
+      <span className="flex items-center gap-2 md:hidden">
+        <DisabledReason reason={CHECKING_PERMISSIONS}>
+          <Button variant="primary" disabled>
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            New order
+          </Button>
+        </DisabledReason>
+        <Button variant="secondary" size="icon" aria-label="More order actions" disabled>
+          <MoreHorizontal className="h-4 w-4" aria-hidden />
         </Button>
-      </DisabledReason>
-      <DisabledReason reason={CHECKING_PERMISSIONS}>
-        <Button variant="primary" disabled>
-          <Plus className="h-3.5 w-3.5" aria-hidden />
-          Create shipment order
-        </Button>
-      </DisabledReason>
+      </span>
     </>
   );
 }
@@ -193,6 +217,7 @@ function HeaderActions({
   canEdit,
   selected,
   onReturnInfo,
+  onRefresh,
 }: {
   readonly view: OrderView;
   readonly ready: boolean;
@@ -201,35 +226,47 @@ function HeaderActions({
   readonly canEdit: boolean;
   readonly selected: readonly OrderRow[];
   readonly onReturnInfo: () => void;
+  readonly onRefresh: () => void;
 }) {
   if (!ready) return <PendingHeaderActions view={view} />;
   if (view === 'shipped') {
-    // Read-only roles never see a control they can't use (the drawer lives with the bulk menus).
-    if (!canEdit) return null;
-    const reason = eligibility.returnInfo(selected);
     return (
-      <span className="flex items-center gap-1.5">
-        <DisabledReason reason={reason}>
-          <Button variant="secondary" disabled={Boolean(reason)} onClick={onReturnInfo}>
-            <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-            Bulk update return info
-          </Button>
-        </DisabledReason>
-        <InfoTip content="Set the return carrier, shipping option, cost and tracking numbers for the selected orders in one step." />
-        {reason ? (
-          <span className="text-xs text-faint">
-            {selected.length === 0
-              ? 'Select shipped orders to enable'
-              : 'Cancelled orders have no return info'}
+      <>
+        {/* Read-only roles never see a control they can't use (the drawer lives with the bulk menus).
+            Phones hide it too: cards have no selection, so the bulk drawer can never apply there. */}
+        {canEdit ? (
+          <span className="hidden items-center gap-1.5 md:flex">
+            <DisabledReason reason={eligibility.returnInfo(selected)}>
+              <Button
+                variant="secondary"
+                disabled={Boolean(eligibility.returnInfo(selected))}
+                onClick={onReturnInfo}
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                Bulk update return info
+              </Button>
+            </DisabledReason>
+            <InfoTip content="Set the return carrier, shipping option, cost and tracking numbers for the selected orders in one step." />
+            {eligibility.returnInfo(selected) ? (
+              <span className="text-xs text-faint">
+                {selected.length === 0
+                  ? 'Select shipped orders to enable'
+                  : 'Cancelled orders have no return info'}
+              </span>
+            ) : null}
           </span>
         ) : null}
-      </span>
+        {/* Phones: Refresh moved off the toolbar into the overflow. */}
+        <span className="flex items-center gap-2 md:hidden" data-testid="orders-mobile-actions">
+          <MobileOverflowMenu canImport={false} onRefresh={onRefresh} />
+        </span>
+      </>
     );
   }
   return (
     <>
       {/* Desktop / tablet: Import menu + primary CTA. */}
-      <span className="hidden items-center gap-2 sm:flex">
+      <span className="hidden items-center gap-2 md:flex">
         {canImport ? <ImportMenu /> : null}
         {canCreate ? (
           <Link href="/orders/new" className={buttonVariants({ variant: 'primary' })}>
@@ -238,21 +275,27 @@ function HeaderActions({
           </Link>
         ) : null}
       </span>
-      {/* Phones: one compact primary + an overflow menu, stacked under the title. */}
-      <span className="flex items-center gap-2 sm:hidden" data-testid="orders-mobile-actions">
+      {/* Phones: one compact primary + an overflow menu (imports, Refresh) beside the title. */}
+      <span className="flex items-center gap-2 md:hidden" data-testid="orders-mobile-actions">
         {canCreate ? (
           <Link href="/orders/new" className={buttonVariants({ variant: 'primary' })}>
             <Plus className="h-3.5 w-3.5" aria-hidden />
             New order
           </Link>
         ) : null}
-        {canImport ? <MobileOverflowMenu /> : null}
+        <MobileOverflowMenu canImport={canImport} onRefresh={onRefresh} />
       </span>
     </>
   );
 }
 
-function MobileOverflowMenu() {
+function MobileOverflowMenu({
+  canImport,
+  onRefresh,
+}: {
+  readonly canImport: boolean;
+  readonly onRefresh: () => void;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -260,28 +303,35 @@ function MobileOverflowMenu() {
           <MoreHorizontal className="h-4 w-4" aria-hidden />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-[240px]">
-        <DropdownMenuItem
-          icon={FileSpreadsheet}
-          href="/imports/shipment-orders"
-          description="Create orders from an Excel file"
-        >
-          Bulk import shipment orders
+      <DropdownMenuContent align="end" className="min-w-[240px]">
+        <DropdownMenuItem icon={RefreshCw} description="Reload the list" onSelect={onRefresh}>
+          Refresh
         </DropdownMenuItem>
-        <DropdownMenuItem
-          icon={FileSpreadsheet}
-          href="/imports/shipment-orders-update"
-          description="Update existing orders by order code"
-        >
-          Bulk update shipment orders
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          icon={ScanLine}
-          href="/imports/so-serials"
-          description="Attach serial numbers to order lines"
-        >
-          Import serial numbers
-        </DropdownMenuItem>
+        {canImport ? (
+          <>
+            <DropdownMenuItem
+              icon={FileSpreadsheet}
+              href="/imports/shipment-orders"
+              description="Create orders from an Excel file"
+            >
+              Bulk import shipment orders
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              icon={FileSpreadsheet}
+              href="/imports/shipment-orders-update"
+              description="Update existing orders by order code"
+            >
+              Bulk update shipment orders
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              icon={ScanLine}
+              href="/imports/so-serials"
+              description="Attach serial numbers to order lines"
+            >
+              Import serial numbers
+            </DropdownMenuItem>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -303,8 +353,10 @@ function useShippedDefault(view: OrderView, g: ReturnType<typeof useGrid<OrderRo
   }, [view, g.views.isLoading, g.views.views, g.grid, params]);
 }
 
-/** Phone card (below `md`): order #, client, status chip and order date. */
+/** Phone card (below `md`): order #, client, status chip and a humanized order date. */
 function OrderMobileCard({ row }: { readonly row: OrderRow }) {
+  const fmt = useFormat();
+  const orderDate = row.orderDate as string | null | undefined;
   return (
     <span className="flex min-w-0 flex-col gap-1">
       <span className="flex items-center justify-between gap-2">
@@ -312,8 +364,9 @@ function OrderMobileCard({ row }: { readonly row: OrderRow }) {
         <OrderStatusPill status={row.status} size="sm" />
       </span>
       <span className="truncate text-xs text-body">{String(row.clientName ?? '—')}</span>
-      <span className="text-xs text-faint">
-        <DateCell value={row.orderDate as string | null | undefined} />
+      {/* "Nov 12, 3:54 AM" (format.ts humanDateTime); the full timestamp stays on the title. */}
+      <span className="text-xs text-faint" title={orderDate ? fmt.dateTime(orderDate) : undefined}>
+        {fmt.humanDateTime(orderDate)}
       </span>
     </span>
   );
@@ -397,9 +450,10 @@ export function OrdersListPage({ view }: { readonly view: OrderView }) {
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden pb-4">
       <PageHeader
         title={copy.title}
+        mobileTitle={view === 'backlog' ? 'Orders' : 'Shipped'}
         breadcrumbs={orderCrumbs(copy.title)}
         // The helper sentence is hidden on phones so the grid keeps its rows.
-        helper={<span className="hidden sm:inline">{copy.helper}</span>}
+        helper={<span className="hidden md:inline">{copy.helper}</span>}
         tabs="orders"
         actions={
           <HeaderActions
@@ -410,6 +464,7 @@ export function OrdersListPage({ view }: { readonly view: OrderView }) {
             canEdit={permissions.has(ORDER_PERMISSIONS.edit)}
             selected={selectedRows}
             onReturnInfo={() => setReturnInfoOpen(true)}
+            onRefresh={refresh}
           />
         }
       />
@@ -419,7 +474,7 @@ export function OrdersListPage({ view }: { readonly view: OrderView }) {
         onRefresh={refresh}
         trailing={
           canMutate ? (
-            <span className={selectedRows.length === 0 ? 'hidden sm:contents' : 'contents'}>
+            <span className={selectedRows.length === 0 ? 'hidden md:contents' : 'contents'}>
               <OrderBulkMenus
                 view={view}
                 rows={selectedRows}

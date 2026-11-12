@@ -77,6 +77,8 @@ export interface GridFooterProps {
   readonly loading?: boolean;
   /** Show the "Selected: N" counter (DataGrid passes `selectable`). Default true. */
   readonly showSelected?: boolean;
+  /** Hide the Large/Small toggle below `md` (card view has no table rows to densify). */
+  readonly hideDensityOnPhones?: boolean;
 }
 
 export function GridFooter({
@@ -91,6 +93,7 @@ export function GridFooter({
   trailing,
   loading = false,
   showSelected = true,
+  hideDensityOnPhones = false,
 }: GridFooterProps) {
   const fmt = useFormat();
   const pageCount = pageCountOf(total, pageSize);
@@ -100,7 +103,7 @@ export function GridFooter({
         <div
           role="radiogroup"
           aria-label="Row density"
-          className="flex rounded-md border border-border p-0.5"
+          className={cn('flex rounded-md border border-border p-0.5', hideDensityOnPhones && 'max-md:hidden')}
         >
           {GRID_DENSITIES.map((d) => (
             <button

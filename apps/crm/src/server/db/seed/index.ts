@@ -34,7 +34,7 @@ import { seedAutomations, seedNotifications, seedPersonal, seedUpdates } from '.
 import { generateCrmData, type BoardKey, type UserIds } from './crm-data';
 import { DEMO_EMAIL_DOMAIN, DEMO_ORG, DEMO_TEAMS, DEMO_USERS } from './fixtures';
 import { createRng, startOfDay } from './rng';
-import { writeActivity, writeItems, writeLinks, type BoardTarget } from './writer';
+import { writeActivity, writeItems, writeLinks, writeWmsLinks, type BoardTarget } from './writer';
 
 /** Dev-only demo password shared by every seeded user (documented in README.md). */
 const DEMO_PASSWORD = 'Northwind-Demo-2026!';
@@ -216,6 +216,12 @@ async function seed(): Promise<void> {
       ),
     );
     const links = await writeLinks(tx, org.id, dataset.items, connectKeys);
+    const wmsLinks = await writeWmsLinks(
+      tx,
+      org.id,
+      targets.get('crm-accounts')?.boardId,
+      dataset.byBoard('crm-accounts'),
+    );
     const activity = await writeActivity(tx, org.id, targets, dataset.items);
     const seedCtx = { db: tx, orgId: org.id, rng, users, today, targets };
     const updatesResult = await seedUpdates(seedCtx, dataset.items);
@@ -258,6 +264,7 @@ async function seed(): Promise<void> {
       onboardingTasks: count('cs-onboarding', true),
       renewals: count('cs-renewals'),
       links,
+      wmsLinks,
       activity,
       updateThreads: updatesResult.threads,
       notifications: notificationCount,

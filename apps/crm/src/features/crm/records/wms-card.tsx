@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Link2, Unlink, Warehouse } from 'lucide-react';
 import { Button, Combobox, cn } from '@/components/ui';
-import type { CoreCustomerDto } from '@/server/services/wms-link-contracts';
+import type { CoreCustomerDto, WmsOpsPeekDto } from '@/server/services/wms-link-contracts';
 import { useSetWmsLink, useWmsCustomers, useWmsLink } from '../api';
 import { CardSkeleton, CrmCard, ErrorBlock } from '../components/crm-ui';
 
@@ -21,12 +21,16 @@ function StatusChip({ status }: { readonly status: string }) {
   );
 }
 
+const COUNT_FORMAT = new Intl.NumberFormat('en-US');
+
 function LinkedCustomer({
   customer,
+  ops,
   onUnlink,
   busy,
 }: {
   readonly customer: CoreCustomerDto;
+  readonly ops: WmsOpsPeekDto | null;
   readonly onUnlink: () => void;
   readonly busy: boolean;
 }) {
@@ -45,6 +49,13 @@ function LinkedCustomer({
         <span className="truncate text-xs text-fg-muted" title={customer.code}>
           Client code {customer.code}
         </span>
+        {/* The ops row wraps rather than truncates: the counts are its point on phones. */}
+        {ops ? (
+          <span className="text-xs text-fg-secondary tabular-nums" data-testid="crm-wms-ops">
+            Open orders {COUNT_FORMAT.format(ops.openOrders)} · On hand{' '}
+            {COUNT_FORMAT.format(ops.onHandUnits)} units
+          </span>
+        ) : null}
       </span>
       <Button
         variant="ghost"
@@ -118,7 +129,12 @@ export function WmsCard({ itemId }: { readonly itemId: string }) {
       ) : query.isError ? (
         <ErrorBlock error={query.error} title="Couldn’t load the WMS link" onRetry={() => void query.refetch()} className="m-2" />
       ) : query.data.customer ? (
-        <LinkedCustomer customer={query.data.customer} onUnlink={() => mutation.mutate(null)} busy={mutation.isPending} />
+        <LinkedCustomer
+          customer={query.data.customer}
+          ops={query.data.ops ?? null}
+          onUnlink={() => mutation.mutate(null)}
+          busy={mutation.isPending}
+        />
       ) : (
         <LinkPicker onLink={(coreCustomerId) => mutation.mutate(coreCustomerId)} busy={mutation.isPending} />
       )}

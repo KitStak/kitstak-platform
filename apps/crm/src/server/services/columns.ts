@@ -9,7 +9,7 @@ import {
   type Label,
   type StoredCellValue,
 } from '@/server/db/schema/cell-values';
-import { COLUMN_TYPE_REGISTRY } from '@/server/db/schema/column-types';
+import { COLUMN_TYPE_REGISTRY, defaultStoredWidth } from '@/server/db/schema/column-types';
 import { BadRequestError, ConflictError, NotFoundError, ValidationError } from '@/server/http/errors';
 import { publish } from '@/server/realtime/publisher';
 import { filterVisibleBoardIds, requireBoard } from './access';
@@ -114,7 +114,7 @@ export async function createColumn(
         type: input.type,
         scope: input.scope,
         settings: settings as never,
-        width: input.width ?? definition.defaultWidth,
+        width: input.width ?? defaultStoredWidth(input.type, input.title),
         position,
         hidden: input.hidden,
         createdBy: tx.userId,

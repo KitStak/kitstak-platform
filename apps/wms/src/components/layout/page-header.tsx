@@ -55,6 +55,8 @@ export interface PageHeaderProps {
   /** Replaces the last derived crumb (e.g. an order code on a detail page). */
   readonly crumbLabel?: string;
   readonly title: string;
+  /** Shorter H1 for phones (<md), where long titles wrap and eat the compact chrome budget. */
+  readonly mobileTitle?: string;
   /** Helper sentence, left-aligned under the H1 (13px, secondary). */
   readonly helper?: React.ReactNode;
   /** Contextual doc link appended to the helper ("Learn more about LP types"). */
@@ -75,6 +77,7 @@ export function PageHeader({
   breadcrumbs,
   crumbLabel,
   title,
+  mobileTitle,
   helper,
   helperLink,
   alwaysShowTabs,
@@ -89,10 +92,20 @@ export function PageHeader({
         {breadcrumbs ? <Breadcrumbs items={breadcrumbs} /> : <AutoBreadcrumbs currentLabel={crumbLabel} />}
         {/* H1 with the helper left-aligned beneath it; CTAs top-right (DESIGN_SPEC page header). */}
         <div className="mt-1.5 flex min-h-8 flex-wrap items-start justify-between gap-x-4 gap-y-2">
-          {/* Phones: the title takes the full row so the CTAs wrap beneath it instead of squeezing the helper. */}
-          <div className="min-w-0 flex-1 basis-full sm:basis-0">
+          {/* One row everywhere: on phones the title shares its row with the primary CTA
+              (the chrome stack must stay short); the helper is below and wraps freely. */}
+          <div className="min-w-0 flex-1 basis-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold tracking-[-0.01em] text-fg">{title}</h1>
+              <h1 className="text-xl font-semibold tracking-[-0.01em] text-fg">
+                {mobileTitle ? (
+                  <>
+                    <span className="md:hidden">{mobileTitle}</span>
+                    <span className="hidden md:inline">{title}</span>
+                  </>
+                ) : (
+                  title
+                )}
+              </h1>
               {helpHref ? (
                 <a
                   data-slot="page-help"
