@@ -1,5 +1,6 @@
 /** Counts: count plans, plan lines, per-bucket count entries. */
-import { index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import {
   COUNT_LINE_STATUSES,
   COUNT_OPERATION_TYPES,
@@ -9,7 +10,7 @@ import {
 import { bool, nowIso, pk, stamps } from '../columns';
 import { warehouses } from './org';
 
-export const countPlans = pgTable(
+export const countPlans = wmsSchema.table(
   'count_plans',
   {
     id: pk(),
@@ -34,7 +35,7 @@ export const countPlans = pgTable(
   (t) => [uniqueIndex('count_plan_code_idx').on(t.warehouseId, t.code)],
 );
 
-export const countPlanLines = pgTable(
+export const countPlanLines = wmsSchema.table(
   'count_plan_lines',
   {
     id: pk(),
@@ -69,7 +70,7 @@ export const countPlanLines = pgTable(
 );
 
 /** One row per bucket counted in a line. */
-export const countLineEntries = pgTable(
+export const countLineEntries = wmsSchema.table(
   'count_line_entries',
   {
     id: pk(),

@@ -1,5 +1,6 @@
 /** Facility: locations, capacities, LP types, license plates, mobile carts, shipment packages. */
-import { index, integer, primaryKey, doublePrecision, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, primaryKey, doublePrecision, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import {
   ABC_CODES,
   AREA_TYPES,
@@ -15,7 +16,7 @@ import { products } from './catalog';
 import { clients, warehouses } from './org';
 
 /** Existing `type` is kept as the legacy role; `locationType` / `areaType` are authoritative. */
-export const locations = pgTable(
+export const locations = wmsSchema.table(
   'locations',
   {
     id: pk(),
@@ -77,7 +78,7 @@ export const locations = pgTable(
   ],
 );
 
-export const locationProductCapacity = pgTable(
+export const locationProductCapacity = wmsSchema.table(
   'location_product_capacity',
   {
     id: pk(),
@@ -97,7 +98,7 @@ export const locationProductCapacity = pgTable(
   (t) => [uniqueIndex('lpc_idx').on(t.locationId, t.productId, t.packType)],
 );
 
-export const lpTypes = pgTable(
+export const lpTypes = wmsSchema.table(
   'lp_types',
   {
     id: pk(),
@@ -133,7 +134,7 @@ export const lpTypes = pgTable(
   (t) => [uniqueIndex('lp_types_code_idx').on(t.warehouseId, t.code)],
 );
 
-export const locationLpCapacity = pgTable(
+export const locationLpCapacity = wmsSchema.table(
   'location_lp_capacity',
   {
     id: pk(),
@@ -151,7 +152,7 @@ export const locationLpCapacity = pgTable(
   (t) => [index('llc_location_idx').on(t.locationId)],
 );
 
-export const licensePlates = pgTable(
+export const licensePlates = wmsSchema.table(
   'license_plates',
   {
     id: pk(),
@@ -184,7 +185,7 @@ export const licensePlates = pgTable(
   ],
 );
 
-export const mobileCarts = pgTable(
+export const mobileCarts = wmsSchema.table(
   'mobile_carts',
   {
     id: pk(),
@@ -208,7 +209,7 @@ export const mobileCarts = pgTable(
   (t) => [uniqueIndex('mobile_cart_code_idx').on(t.warehouseId, t.code)],
 );
 
-export const mobileCartCells = pgTable(
+export const mobileCartCells = wmsSchema.table(
   'mobile_cart_cells',
   {
     id: pk(),
@@ -223,7 +224,7 @@ export const mobileCartCells = pgTable(
   (t) => [uniqueIndex('cart_cell_idx').on(t.cartId, t.level, t.column)],
 );
 
-export const shipmentPackages = pgTable(
+export const shipmentPackages = wmsSchema.table(
   'shipment_packages',
   {
     id: pk(),
@@ -256,7 +257,7 @@ export const shipmentPackages = pgTable(
   (t) => [uniqueIndex('ship_pkg_code_idx').on(t.warehouseId, t.code)],
 );
 
-export const shipmentPackageClients = pgTable(
+export const shipmentPackageClients = wmsSchema.table(
   'shipment_package_clients',
   {
     packageId: text('package_id')

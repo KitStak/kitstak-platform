@@ -1,5 +1,6 @@
 /** Integrations: sales channels (stores) and carriers. */
-import { index, integer, primaryKey, doublePrecision, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, primaryKey, doublePrecision, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import type { CarrierSettingsInput, ChannelSettingsInput } from '../../../lib/domain-types';
 import {
   CALL_STATUSES,
@@ -20,7 +21,7 @@ import {
 import { bool, json, nowIso, pk, stamps } from '../columns';
 import { clients, warehouses } from './org';
 
-export const channelConnections = pgTable(
+export const channelConnections = wmsSchema.table(
   'channel_connections',
   {
     id: pk(),
@@ -41,7 +42,7 @@ export const channelConnections = pgTable(
   (t) => [index('channel_conn_client_idx').on(t.clientId)],
 );
 
-export const channelLocationMappings = pgTable(
+export const channelLocationMappings = wmsSchema.table(
   'channel_location_mappings',
   {
     id: pk(),
@@ -57,7 +58,7 @@ export const channelLocationMappings = pgTable(
   (t) => [uniqueIndex('channel_loc_map_idx').on(t.connectionId, t.channelLocationId)],
 );
 
-export const channelMethods = pgTable(
+export const channelMethods = wmsSchema.table(
   'channel_methods',
   {
     id: pk(),
@@ -75,7 +76,7 @@ export const channelMethods = pgTable(
   (t) => [uniqueIndex('channel_method_idx').on(t.connectionId, t.method)],
 );
 
-export const channelRuns = pgTable(
+export const channelRuns = wmsSchema.table(
   'channel_runs',
   {
     id: pk(),
@@ -94,7 +95,7 @@ export const channelRuns = pgTable(
   (t) => [index('channel_runs_conn_idx').on(t.connectionId, t.startedAt)],
 );
 
-export const channelRunItems = pgTable(
+export const channelRunItems = wmsSchema.table(
   'channel_run_items',
   {
     id: pk(),
@@ -112,7 +113,7 @@ export const channelRunItems = pgTable(
   (t) => [index('channel_run_items_run_idx').on(t.runId)],
 );
 
-export const channelMissingOrders = pgTable(
+export const channelMissingOrders = wmsSchema.table(
   'channel_missing_orders',
   {
     id: pk(),
@@ -130,7 +131,7 @@ export const channelMissingOrders = pgTable(
   (t) => [index('channel_missing_conn_idx').on(t.connectionId, t.status)],
 );
 
-export const carrierConnections = pgTable(
+export const carrierConnections = wmsSchema.table(
   'carrier_connections',
   {
     id: pk(),
@@ -153,7 +154,7 @@ export const carrierConnections = pgTable(
   (t) => [index('carrier_conn_wh_idx').on(t.warehouseId)],
 );
 
-export const carrierConnectionClients = pgTable(
+export const carrierConnectionClients = wmsSchema.table(
   'carrier_connection_clients',
   {
     connectionId: text('connection_id')
@@ -169,7 +170,7 @@ export const carrierConnectionClients = pgTable(
   (t) => [primaryKey({ columns: [t.connectionId, t.clientId] })],
 );
 
-export const carrierServices = pgTable(
+export const carrierServices = wmsSchema.table(
   'carrier_services',
   {
     id: pk(),
@@ -186,7 +187,7 @@ export const carrierServices = pgTable(
   (t) => [uniqueIndex('carrier_service_idx').on(t.connectionId, t.serviceCode)],
 );
 
-export const carrierPackages = pgTable(
+export const carrierPackages = wmsSchema.table(
   'carrier_packages',
   {
     id: pk(),
@@ -200,7 +201,7 @@ export const carrierPackages = pgTable(
   (t) => [uniqueIndex('carrier_package_idx').on(t.connectionId, t.code)],
 );
 
-export const carrierThirdPartyAccounts = pgTable(
+export const carrierThirdPartyAccounts = wmsSchema.table(
   'carrier_third_party_accounts',
   {
     id: pk(),
@@ -214,7 +215,7 @@ export const carrierThirdPartyAccounts = pgTable(
   (t) => [index('carrier_3p_conn_idx').on(t.connectionId)],
 );
 
-export const carrierCallLogs = pgTable(
+export const carrierCallLogs = wmsSchema.table(
   'carrier_call_logs',
   {
     id: pk(),

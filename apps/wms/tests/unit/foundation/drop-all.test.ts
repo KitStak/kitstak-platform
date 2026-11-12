@@ -34,25 +34,27 @@ describe('drop-all (db:reset step 1)', () => {
     const objects = await listUserObjects(handle.db);
     const names = objects.map((o) => o.name);
     expect(names).toEqual(
-      expect.arrayContaining(['parents', 'children', 'parent_names', 'odd"name', 'users', 'drizzle']),
+      expect.arrayContaining(['parents', 'children', 'parent_names', 'odd"name', 'users', 'drizzle', 'wms']),
     );
     expect(
       objects.some((o) => o.type === 'function' && o.name.startsWith('billing_reports_period_guard(')),
     ).toBe(true);
   });
 
-  it('orders drops views -> tables -> functions -> journal schema', () => {
+  it('orders drops views -> tables -> functions -> app/journal schemas', () => {
     const statements = buildDropStatements([
-      { type: 'schema', name: 'drizzle' },
-      { type: 'function', name: 'f(integer)' },
-      { type: 'table', name: 't' },
-      { type: 'view', name: 'v' },
+      { type: 'schema', schema: '', name: 'drizzle' },
+      { type: 'schema', schema: '', name: 'wms' },
+      { type: 'function', schema: 'wms', name: 'f(integer)' },
+      { type: 'table', schema: 'wms', name: 't' },
+      { type: 'view', schema: 'public', name: 'v' },
     ]);
     expect(statements).toEqual([
       'DROP VIEW IF EXISTS "public"."v" CASCADE',
-      'DROP TABLE IF EXISTS "public"."t" CASCADE',
-      'DROP FUNCTION IF EXISTS "public"."f"(integer) CASCADE',
+      'DROP TABLE IF EXISTS "wms"."t" CASCADE',
+      'DROP FUNCTION IF EXISTS "wms"."f"(integer) CASCADE',
       'DROP SCHEMA IF EXISTS "drizzle" CASCADE',
+      'DROP SCHEMA IF EXISTS "wms" CASCADE',
     ]);
   });
 

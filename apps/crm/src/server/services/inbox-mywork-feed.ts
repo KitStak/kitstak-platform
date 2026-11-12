@@ -26,11 +26,11 @@ function requireUser(ctx: ServiceContext): string {
 function fragments(userId: string) {
   const assignedPath = `$.*.ids[*] ? (@ == "${userId.replace(/[^0-9a-f-]/gi, '')}")`;
   const inThread = sql`(r.id = ${updates.id} or r.parent_update_id = ${updates.id}) and r.deleted_at is null`;
-  const lastActivity = sql<Date>`date_trunc('milliseconds', greatest(${updates.createdAt}, coalesce((select max(r.created_at) from updates r where r.parent_update_id = ${updates.id} and r.deleted_at is null), ${updates.createdAt})))`;
-  const mentionsMe = sql<boolean>`exists (select 1 from updates r where ${inThread} and ${userId}::uuid = any(r.mentioned_user_ids))`;
-  const unread = sql<boolean>`exists (select 1 from updates r where ${inThread} and r.author_id is distinct from ${userId}::uuid and not exists (select 1 from update_reads ur where ur.update_id = r.id and ur.user_id = ${userId}::uuid))`;
-  const othersPosted = sql`exists (select 1 from updates r where ${inThread} and r.author_id is distinct from ${userId}::uuid)`;
-  const follows = sql`(${items.values} @? ${assignedPath}::jsonpath or ${items.createdBy} = ${userId}::uuid or exists (select 1 from updates r where r.item_id = ${items.id} and r.author_id = ${userId}::uuid and r.deleted_at is null) or ${mentionsMe})`;
+  const lastActivity = sql<Date>`date_trunc('milliseconds', greatest(${updates.createdAt}, coalesce((select max(r.created_at) from crm.updates r where r.parent_update_id = ${updates.id} and r.deleted_at is null), ${updates.createdAt})))`;
+  const mentionsMe = sql<boolean>`exists (select 1 from crm.updates r where ${inThread} and ${userId}::uuid = any(r.mentioned_user_ids))`;
+  const unread = sql<boolean>`exists (select 1 from crm.updates r where ${inThread} and r.author_id is distinct from ${userId}::uuid and not exists (select 1 from crm.update_reads ur where ur.update_id = r.id and ur.user_id = ${userId}::uuid))`;
+  const othersPosted = sql`exists (select 1 from crm.updates r where ${inThread} and r.author_id is distinct from ${userId}::uuid)`;
+  const follows = sql`(${items.values} @? ${assignedPath}::jsonpath or ${items.createdBy} = ${userId}::uuid or exists (select 1 from crm.updates r where r.item_id = ${items.id} and r.author_id = ${userId}::uuid and r.deleted_at is null) or ${mentionsMe})`;
   return { lastActivity, mentionsMe, unread, othersPosted, follows };
 }
 

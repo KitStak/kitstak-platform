@@ -11,14 +11,14 @@ import { createTestDb, type TestDb } from '../../setup/test-db';
 
 async function tableNames(pg: PGlite): Promise<Set<string>> {
   const res = await pg.query<{ name: string }>(
-    "SELECT tablename AS name FROM pg_tables WHERE schemaname = 'public'",
+    "SELECT tablename AS name FROM pg_tables WHERE schemaname = 'wms'",
   );
   return new Set(res.rows.map((r) => r.name));
 }
 
 async function indexNames(pg: PGlite): Promise<Set<string>> {
   const res = await pg.query<{ name: string }>(
-    "SELECT indexname AS name FROM pg_indexes WHERE schemaname = 'public'",
+    "SELECT indexname AS name FROM pg_indexes WHERE schemaname = 'wms'",
   );
   return new Set(res.rows.map((r) => r.name));
 }
@@ -84,7 +84,7 @@ describe('F1 schema migrations', () => {
   it('enables row level security on every table (Supabase Data API sees nothing)', async () => {
     testDb = await createTestDb();
     const res = await testDb.pg.query<{ name: string }>(
-      "SELECT relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity",
+      "SELECT relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN ('public', 'wms') AND c.relkind = 'r' AND NOT c.relrowsecurity",
     );
     expect(res.rows.map((r) => r.name)).toEqual([]);
   });

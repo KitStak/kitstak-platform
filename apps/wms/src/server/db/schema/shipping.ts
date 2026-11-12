@@ -1,5 +1,6 @@
 /** Shipping: carrier shipments (labels), shipment items, end-of-day manifests, shipment plans. */
-import { index, integer, primaryKey, doublePrecision, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, primaryKey, doublePrecision, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import {
   EOD_STATUSES,
   LABEL_FORMATS,
@@ -12,7 +13,7 @@ import { warehouses } from './org';
 import { shipmentOrders } from './outbound';
 
 /** One row per package/label (Carrier Shipment Details). */
-export const shipments = pgTable(
+export const shipments = wmsSchema.table(
   'shipments',
   {
     id: pk(),
@@ -74,7 +75,7 @@ export const shipments = pgTable(
   ],
 );
 
-export const shipmentItems = pgTable(
+export const shipmentItems = wmsSchema.table(
   'shipment_items',
   {
     id: pk(),
@@ -92,7 +93,7 @@ export const shipmentItems = pgTable(
   (t) => [index('shipment_items_shipment_idx').on(t.shipmentId)],
 );
 
-export const endOfDayManifests = pgTable(
+export const endOfDayManifests = wmsSchema.table(
   'end_of_day_manifests',
   {
     id: pk(),
@@ -113,7 +114,7 @@ export const endOfDayManifests = pgTable(
   (t) => [uniqueIndex('eod_unique_idx').on(t.warehouseId, t.carrierConnectionId, t.shipDate, t.sequence)],
 );
 
-export const shipmentPlans = pgTable(
+export const shipmentPlans = wmsSchema.table(
   'shipment_plans',
   {
     id: pk(),
@@ -144,7 +145,7 @@ export const shipmentPlans = pgTable(
   (t) => [uniqueIndex('shipment_plan_code_idx').on(t.code)],
 );
 
-export const shipmentPlanOrders = pgTable(
+export const shipmentPlanOrders = wmsSchema.table(
   'shipment_plan_orders',
   {
     planId: text('plan_id')

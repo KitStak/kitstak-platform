@@ -169,7 +169,7 @@ describe('url state', () => {
 describe('filter model', () => {
   it('offers type-matched operators and value editors', () => {
     expect(operatorsFor(stage).map((op) => op.value)).toEqual(['any_of', 'none_of', 'is_empty', 'is_not_empty']);
-    expect(defaultOperator(value)).toBe('gt');
+    expect(defaultOperator(value)).toBe('eq');
     expect(valueKind(close, 'between')).toBe('date-range');
     expect(valueKind(name, 'contains')).toBe('text');
     expect(valueKind(stage, 'is_empty')).toBe('none');

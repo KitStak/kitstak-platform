@@ -1,5 +1,6 @@
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { crmSchema } from './_schema';
 import { automationRunStatusEnum, createdAt, deletedAt, id, orgId, timestamps, userRef } from './_shared';
 import { boards, items } from './boards';
 
@@ -17,7 +18,7 @@ export interface AutomationAction {
   readonly config?: Record<string, unknown>;
 }
 
-export const automations = pgTable(
+export const automations = crmSchema.table(
   'automations',
   {
     id: id(),
@@ -46,7 +47,7 @@ export const automations = pgTable(
   ],
 );
 
-export const automationRuns = pgTable(
+export const automationRuns = crmSchema.table(
   'automation_runs',
   {
     id: id(),

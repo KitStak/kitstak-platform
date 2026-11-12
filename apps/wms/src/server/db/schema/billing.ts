@@ -1,5 +1,6 @@
 /** Billing: contracts, fees, tiers, bills (reports), bill lines, VAS operations. */
-import { index, integer, doublePrecision, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, doublePrecision, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import type { RuleCondition } from '../../../lib/domain-types';
 import {
   BILL_STATUSES,
@@ -15,7 +16,7 @@ import {
 import { bool, EMPTY_JSON_ARRAY, json, pk, stamps } from '../columns';
 import { clients, warehouses } from './org';
 
-export const billingContracts = pgTable(
+export const billingContracts = wmsSchema.table(
   'billing_contracts',
   {
     id: pk(),
@@ -36,7 +37,7 @@ export const billingContracts = pgTable(
   (t) => [index('billing_contracts_client_idx').on(t.clientId, t.warehouseId)],
 );
 
-export const billingFees = pgTable(
+export const billingFees = wmsSchema.table(
   'billing_fees',
   {
     id: pk(),
@@ -68,7 +69,7 @@ export const billingFees = pgTable(
   (t) => [index('billing_fees_contract_idx').on(t.contractId)],
 );
 
-export const billingFeeTiers = pgTable(
+export const billingFeeTiers = wmsSchema.table(
   'billing_fee_tiers',
   {
     id: pk(),
@@ -83,7 +84,7 @@ export const billingFeeTiers = pgTable(
   (t) => [index('billing_tiers_fee_idx').on(t.feeId)],
 );
 
-export const billingReports = pgTable(
+export const billingReports = wmsSchema.table(
   'billing_reports',
   {
     id: pk(),
@@ -110,7 +111,7 @@ export const billingReports = pgTable(
   ],
 );
 
-export const billingReportLines = pgTable(
+export const billingReportLines = wmsSchema.table(
   'billing_report_lines',
   {
     id: pk(),
@@ -142,7 +143,7 @@ export const billingReportLines = pgTable(
   (t) => [index('billing_lines_report_idx').on(t.reportId)],
 );
 
-export const vasOperations = pgTable(
+export const vasOperations = wmsSchema.table(
   'vas_operations',
   {
     id: pk(),

@@ -39,7 +39,7 @@ export function hasMigrations(dir: string = MIGRATIONS_DIR): boolean {
 
 interface Template {
   readonly dump: Blob;
-  /** `"public"."t1", ...` of every table in the migrated schema. */
+  /** `"wms"."t1", ...` of every table in the migrated schema. */
   readonly tables: readonly string[];
 }
 
@@ -47,9 +47,9 @@ const templates = new Map<string, Promise<Template>>();
 const pools = new Map<string, PGlite[]>();
 const POOL_LIMIT = 2;
 
-async function publicTables(pg: PGlite): Promise<string[]> {
+async function appTables(pg: PGlite): Promise<string[]> {
   const res = await pg.query<{ t: string }>(
-    `SELECT format('%I.%I', schemaname, tablename) AS t FROM pg_tables WHERE schemaname = 'public' ORDER BY 1`,
+    `SELECT format('%I.%I', schemaname, tablename) AS t FROM pg_tables WHERE schemaname IN ('public', 'wms') ORDER BY 1`,
   );
   return res.rows.map((r) => r.t);
 }
@@ -61,7 +61,7 @@ function template(migrationsFolder: string): Promise<Template> {
       const pg = await PGlite.create();
       try {
         await migrate(drizzle(pg, { schema }), { migrationsFolder });
-        const tables = await publicTables(pg);
+        const tables = await appTables(pg);
         const dump = await pg.dumpDataDir('none');
         return { dump, tables };
       } finally {
@@ -75,7 +75,7 @@ function template(migrationsFolder: string): Promise<Template> {
 }
 
 async function reset(pg: PGlite, tables: readonly string[]): Promise<boolean> {
-  const now = await publicTables(pg);
+  const now = await appTables(pg);
   if (now.length !== tables.length || now.some((t, i) => t !== tables[i])) return false;
   await pg.exec(`TRUNCATE ${tables.join(', ')} RESTART IDENTITY CASCADE`);
   return true;
@@ -91,6 +91,8 @@ export async function createTestDb(migrationsFolder: string = MIGRATIONS_DIR): P
   const pg = pool.pop() ?? (await PGlite.create({ loadDataDir: tpl.dump }));
   // SQLite's datetime('now') was UTC; keep the session clock in UTC (as src/server/db does).
   await pg.exec("SET TIME ZONE 'UTC'");
+  // Raw SQL resolves against the wms schema, as the app drivers do (src/server/db/index.ts).
+  await pg.exec('SET search_path TO wms, public');
   const db = drizzle(pg, { schema }) as unknown as AppDb;
   let closed = false;
   return {

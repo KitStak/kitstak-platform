@@ -8,6 +8,7 @@
  * Auth tables, and `org_id` columns reference `organization.id`.
  */
 export * from './auth';
+export * from './_schema';
 export * from './_shared';
 export * from './workspaces';
 export * from './boards';

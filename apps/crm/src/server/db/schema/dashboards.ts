@@ -1,4 +1,5 @@
-import { index, integer, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, text, uuid } from 'drizzle-orm/pg-core';
+import { crmSchema } from './_schema';
 import { deletedAt, fractionalKey, id, orgId, timestamps, userRef, widgetTypeEnum } from './_shared';
 import { workspaces } from './workspaces';
 
@@ -8,7 +9,7 @@ export interface DashboardConfig {
   readonly [key: string]: unknown;
 }
 
-export const dashboards = pgTable(
+export const dashboards = crmSchema.table(
   'dashboards',
   {
     id: id(),
@@ -28,7 +29,7 @@ export const dashboards = pgTable(
   ],
 );
 
-export const dashboardWidgets = pgTable(
+export const dashboardWidgets = crmSchema.table(
   'dashboard_widgets',
   {
     id: id(),

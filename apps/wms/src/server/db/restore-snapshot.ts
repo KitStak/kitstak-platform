@@ -1,5 +1,5 @@
 /**
- * Replaces every public table's rows with a data snapshot inside one transaction.
+ * Replaces every `wms` table's rows with a data snapshot inside one transaction.
  *
  * Used by the hosted bootstrap (`/api/admin/bootstrap`, action `restore-snapshot`) to load the
  * pre-verified demo dataset in seconds instead of replaying the seed over the network.
@@ -32,7 +32,7 @@ export async function restoreSnapshot(
       tx,
       sql`
       SELECT conrelid::regclass::text AS t, conname AS c FROM pg_constraint
-      WHERE contype = 'f' AND connamespace = 'public'::regnamespace AND NOT condeferrable`,
+      WHERE contype = 'f' AND connamespace = 'wms'::regnamespace AND NOT condeferrable`,
     );
     for (const fk of fks)
       await tx.execute(
@@ -42,24 +42,24 @@ export async function restoreSnapshot(
       tx,
       sql`
       SELECT DISTINCT t.tgrelid::regclass::text AS t FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
-      WHERE NOT t.tgisinternal AND c.relnamespace = 'public'::regnamespace`,
+      WHERE NOT t.tgisinternal AND c.relnamespace = 'wms'::regnamespace`,
     );
     for (const t of triggered) await tx.execute(sql.raw(`ALTER TABLE ${t.t} DISABLE TRIGGER USER`));
 
     const tables = await dbAll<{ t: string }>(
       tx,
-      sql`SELECT tablename AS t FROM pg_tables WHERE schemaname = 'public'`,
+      sql`SELECT tablename AS t FROM pg_tables WHERE schemaname = 'wms'`,
     );
     if (tables.length) {
       await tx.execute(
         sql.raw(
-          `TRUNCATE ${tables.map((x) => `public.${quoteIdent(x.t)}`).join(', ')} RESTART IDENTITY CASCADE`,
+          `TRUNCATE ${tables.map((x) => `wms.${quoteIdent(x.t)}`).join(', ')} RESTART IDENTITY CASCADE`,
         ),
       );
     }
 
     for (const table of snapshot.tables) {
-      const target = sql.raw(`public.${quoteIdent(table.name)}`);
+      const target = sql.raw(`wms.${quoteIdent(table.name)}`);
       for (let i = 0; i < table.rows.length; i += ROWS_PER_INSERT) {
         const chunk = JSON.stringify(table.rows.slice(i, i + ROWS_PER_INSERT));
         await tx.execute(
@@ -79,10 +79,10 @@ export async function restoreSnapshot(
       tx,
       sql`
       SELECT table_name AS t, column_name AS c FROM information_schema.columns
-      WHERE table_schema = 'public' AND (column_default LIKE 'nextval(%' OR is_identity = 'YES')`,
+      WHERE table_schema = 'wms' AND (column_default LIKE 'nextval(%' OR is_identity = 'YES')`,
     );
     for (const s of serials) {
-      const table = `public.${quoteIdent(s.t)}`;
+      const table = `wms.${quoteIdent(s.t)}`;
       await tx.execute(
         sql.raw(
           `SELECT setval(pg_get_serial_sequence(${quoteLiteral(table)}, ${quoteLiteral(s.c)}), COALESCE((SELECT max(${quoteIdent(s.c)}) FROM ${table}), 0) + 1, false)`,

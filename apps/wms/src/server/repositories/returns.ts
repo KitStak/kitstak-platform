@@ -694,7 +694,7 @@ export async function rmaExtraColumns(
     (
       await dbAll<{ name: string }>(
         db,
-        sql`SELECT column_name AS name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'return_orders'`,
+        sql`SELECT column_name AS name FROM information_schema.columns WHERE table_schema = 'wms' AND table_name = 'return_orders'`,
       )
     ).map((r) => r.name),
   );

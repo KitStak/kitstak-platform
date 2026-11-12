@@ -8,7 +8,11 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createTestOrgs, ctxFor, databaseAvailable, type TestOrg } from './db-fixture';
 
+// `env` validates the whole schema on first access; provide test defaults for every required
+// variable (never overriding a real `.env.local`, which db-fixture loads first).
 process.env.BETTER_AUTH_SECRET ??= 'test-secret-test-secret-test-secret-1234';
+process.env.BETTER_AUTH_URL ??= 'http://localhost:3100';
+process.env.DATABASE_URL ??= 'postgres://test:test@localhost:5544/kitstak_test';
 
 describe('webhook helpers (pure)', async () => {
   const { isPrivateAddress, signPayload, webhookEventsFor, encryptSecret, decryptSecret } =

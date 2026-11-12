@@ -1,5 +1,6 @@
-import { type AnyPgColumn, index, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { type AnyPgColumn, index, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { crmSchema } from './_schema';
 import {
   deletedAt,
   fractionalKey,
@@ -12,7 +13,7 @@ import {
   workspaceRoleEnum,
 } from './_shared';
 
-export const workspaces = pgTable(
+export const workspaces = crmSchema.table(
   'workspaces',
   {
     id: id(),
@@ -36,7 +37,7 @@ export const workspaces = pgTable(
   ],
 );
 
-export const workspaceMembers = pgTable(
+export const workspaceMembers = crmSchema.table(
   'workspace_members',
   {
     id: id(),
@@ -54,7 +55,7 @@ export const workspaceMembers = pgTable(
   ],
 );
 
-export const folders = pgTable(
+export const folders = crmSchema.table(
   'folders',
   {
     id: id(),

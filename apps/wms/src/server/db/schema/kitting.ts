@@ -1,11 +1,12 @@
 /** Kitting: work orders, work order components, kit inventory stats. */
-import { index, integer, primaryKey, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import { WORK_ORDER_STATUSES, WORK_ORDER_TYPES } from '../../../lib/enums';
 import { customFields, pk, stamps } from '../columns';
 import { products } from './catalog';
 import { clients, warehouses } from './org';
 
-export const workOrders = pgTable(
+export const workOrders = wmsSchema.table(
   'work_orders',
   {
     id: pk(),
@@ -50,7 +51,7 @@ export const workOrders = pgTable(
   ],
 );
 
-export const workOrderComponents = pgTable(
+export const workOrderComponents = wmsSchema.table(
   'work_order_components',
   {
     id: pk(),
@@ -74,7 +75,7 @@ export const workOrderComponents = pgTable(
 );
 
 /** Recalculated by the scheduler. */
-export const kitInventoryStats = pgTable(
+export const kitInventoryStats = wmsSchema.table(
   'kit_inventory_stats',
   {
     kitProductId: text('kit_product_id').notNull(),

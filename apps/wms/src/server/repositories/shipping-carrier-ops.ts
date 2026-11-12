@@ -398,9 +398,10 @@ export async function schedulePickup(
  * local HH:mm).
  */
 async function ensureAutoCloseTable(db: AppDb): Promise<void> {
+  await dbRun(db, sql`CREATE SCHEMA IF NOT EXISTS wms`);
   await dbRun(
     db,
-    sql`CREATE TABLE IF NOT EXISTS eod_auto_close_rules (
+    sql`CREATE TABLE IF NOT EXISTS wms.eod_auto_close_rules (
     id TEXT PRIMARY KEY NOT NULL,
     warehouse_id TEXT NOT NULL,
     carrier_connection_id TEXT NOT NULL,
@@ -415,7 +416,7 @@ async function ensureAutoCloseTable(db: AppDb): Promise<void> {
   );
   await dbRun(
     db,
-    sql`CREATE UNIQUE INDEX IF NOT EXISTS eod_auto_close_conn_idx ON eod_auto_close_rules (warehouse_id, carrier_connection_id)`,
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS eod_auto_close_conn_idx ON wms.eod_auto_close_rules (warehouse_id, carrier_connection_id)`,
   );
 }
 

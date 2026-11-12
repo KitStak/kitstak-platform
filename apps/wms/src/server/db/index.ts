@@ -63,9 +63,17 @@ export function parseInt8(value: string): number | bigint {
   return Number.isSafeInteger(n) ? n : BigInt(value);
 }
 
+/**
+ * Every WMS connection resolves unqualified raw SQL against the `wms` schema first (all app
+ * tables moved there in migration 0006), falling back to `public` for anything left behind.
+ * Migration runs pin `search_path` to `public` instead (see migrate.ts) so 0000-0005 always
+ * build in `public` before 0006 moves the tables.
+ */
+export const APP_SEARCH_PATH = 'wms, public';
+
 export async function openPostgres(
   url: string,
-  options: { readonly max?: number } = {},
+  options: { readonly max?: number; readonly searchPath?: string } = {},
 ): Promise<OpenDatabase> {
   const { default: postgres } = await import('postgres');
   const { drizzle } = await import('drizzle-orm/postgres-js');
@@ -76,7 +84,10 @@ export async function openPostgres(
     idle_timeout: 20,
     connect_timeout: 15,
     onnotice: () => {},
-    connection: { application_name: 'kitstak-wms' },
+    connection: {
+      application_name: 'kitstak-wms',
+      search_path: options.searchPath ?? APP_SEARCH_PATH,
+    },
   });
   const db = drizzle(client, { schema });
   // After drizzle(): it installs its own (transparent) date parsers on the same table.
@@ -153,6 +164,8 @@ export async function openPglite(
     const client = dataDir ? await PGlite.create(dataDir) : await PGlite.create();
     // SQLite's datetime('now') was UTC; keep every session clock in UTC.
     await client.exec("SET TIME ZONE 'UTC'");
+    // Raw SQL resolves against the wms schema (applyMigrations pins itself to public).
+    await client.exec(`SET search_path TO ${APP_SEARCH_PATH}`);
     const db = drizzle(client, { schema }) as unknown as AppDb;
     if (options.migrate !== false) await applyMigrations(db, options.migrationsFolder ?? MIGRATIONS_FOLDER);
     return {

@@ -22,9 +22,10 @@ const ensured = new WeakSet<object>();
 /** Creates `pack_drafts` when the database does not have it yet (idempotent, cheap). */
 export async function ensurePackDraftTable(db: AppDb): Promise<void> {
   if (ensured.has(db)) return;
+  await dbRun(db, sql`CREATE SCHEMA IF NOT EXISTS wms`);
   await dbRun(
     db,
-    sql`CREATE TABLE IF NOT EXISTS pack_drafts (
+    sql`CREATE TABLE IF NOT EXISTS wms.pack_drafts (
     order_id TEXT PRIMARY KEY NOT NULL,
     station_id TEXT,
     state TEXT NOT NULL,

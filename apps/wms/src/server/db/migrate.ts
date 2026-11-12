@@ -55,7 +55,15 @@ export async function countAppliedMigrations(db: AppDb): Promise<number> {
   return Number(row?.n ?? 0);
 }
 
-/** Applies pending migrations to an open database (either driver); returns how many were applied. */
+/**
+ * Applies pending migrations to an open database (either driver); returns how many were applied.
+ *
+ * `search_path` is pinned to `public` for the run: 0000-0005 create unqualified objects that
+ * must land in `public` even when the `wms` schema already exists (packages/db core migrations
+ * create core/crm/wms up front) and even though app connections open with `wms, public`
+ * (src/server/db/index.ts). 0006 then moves everything into `wms` explicitly. The app
+ * search_path is restored afterwards.
+ */
 export async function applyMigrations(
   db: AppDb,
   migrationsFolder: string = MIGRATIONS_FOLDER,
@@ -63,12 +71,18 @@ export async function applyMigrations(
   const total = readJournalSize(migrationsFolder);
   const before = await countAppliedMigrations(db);
   const { PgliteDatabase } = await import('drizzle-orm/pglite');
-  if (is(db, PgliteDatabase)) {
-    const { migrate } = await import('drizzle-orm/pglite/migrator');
-    await migrate(db as unknown as Parameters<typeof migrate>[0], { migrationsFolder });
-  } else {
-    const { migrate } = await import('drizzle-orm/postgres-js/migrator');
-    await migrate(db as unknown as Parameters<typeof migrate>[0], { migrationsFolder });
+  await db.execute(sql`SET search_path TO public`);
+  try {
+    if (is(db, PgliteDatabase)) {
+      const { migrate } = await import('drizzle-orm/pglite/migrator');
+      await migrate(db as unknown as Parameters<typeof migrate>[0], { migrationsFolder });
+    } else {
+      const { migrate } = await import('drizzle-orm/postgres-js/migrator');
+      await migrate(db as unknown as Parameters<typeof migrate>[0], { migrationsFolder });
+    }
+  } finally {
+    const { APP_SEARCH_PATH } = await import('./index');
+    await db.execute(sql.raw(`SET search_path TO ${APP_SEARCH_PATH}`));
   }
   const after = await countAppliedMigrations(db);
   return { applied: after - before, total };
@@ -100,7 +114,9 @@ export async function migrateUrl(
   migrationsFolder: string = MIGRATIONS_FOLDER,
 ): Promise<MigrationResult> {
   const { openPostgres } = await import('./index');
-  const handle = await openPostgres(url, { max: 1 });
+  // search_path pinned at connection startup too: on a transaction pooler a session-level SET
+  // may not stick to the backend the migrator's transaction runs on.
+  const handle = await openPostgres(url, { max: 1, searchPath: 'public' });
   try {
     if (isTransactionPoolerUrl(url)) {
       process.stderr.write(

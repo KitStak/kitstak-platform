@@ -4,13 +4,13 @@ import {
   boolean,
   index,
   jsonb,
-  pgTable,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { crmSchema } from './_schema';
 import { deletedAt, id, notificationKindEnum, orgId, ownedByUser, timestamps, userRef } from './_shared';
 import { boards, items } from './boards';
 
@@ -21,7 +21,7 @@ export interface RichTextDoc {
 }
 
 /** Item updates (comments) with threaded replies. */
-export const updates = pgTable(
+export const updates = crmSchema.table(
   'updates',
   {
     id: id(),
@@ -59,7 +59,7 @@ export const updates = pgTable(
   ],
 );
 
-export const updateReactions = pgTable(
+export const updateReactions = crmSchema.table(
   'update_reactions',
   {
     id: id(),
@@ -75,7 +75,7 @@ export const updateReactions = pgTable(
 );
 
 /** "Seen by" receipts. */
-export const updateReads = pgTable(
+export const updateReads = crmSchema.table(
   'update_reads',
   {
     id: id(),
@@ -93,7 +93,7 @@ export const updateReads = pgTable(
   ],
 );
 
-export const files = pgTable(
+export const files = crmSchema.table(
   'files',
   {
     id: id(),
@@ -123,7 +123,7 @@ export const files = pgTable(
 );
 
 /** Activity log: every item/board change (powers the item "Activity" tab and undo). */
-export const activityLog = pgTable(
+export const activityLog = crmSchema.table(
   'activity_log',
   {
     id: id(),
@@ -147,7 +147,7 @@ export const activityLog = pgTable(
   ],
 );
 
-export const notifications = pgTable(
+export const notifications = crmSchema.table(
   'notifications',
   {
     id: id(),

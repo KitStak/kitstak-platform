@@ -18,7 +18,7 @@ export async function databaseAvailable(): Promise<boolean> {
   try {
     await client.connect();
     const result = await client.query<{ ok: boolean }>(
-      "select to_regclass('public.items') is not null as ok",
+      "select to_regclass('crm.items') is not null as ok",
     );
     return result.rows[0]?.ok === true;
   } catch {

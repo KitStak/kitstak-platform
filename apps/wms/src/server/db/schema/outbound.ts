@@ -1,5 +1,6 @@
 /** Outbound: shipment orders, order lines, line shortages. */
-import { index, integer, doublePrecision, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, doublePrecision, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import type { AddressValue } from '../../../lib/domain-types';
 import {
   ADDRESS_TYPES,
@@ -19,7 +20,7 @@ import { bool, customFields, json, pk, stamps } from '../columns';
 import { products } from './catalog';
 import { clients, customers, warehouses } from './org';
 
-export const shipmentOrders = pgTable(
+export const shipmentOrders = wmsSchema.table(
   'shipment_orders',
   {
     id: pk(),
@@ -145,7 +146,7 @@ export const shipmentOrders = pgTable(
   ],
 );
 
-export const orderLines = pgTable(
+export const orderLines = wmsSchema.table(
   'order_lines',
   {
     id: pk(),
@@ -184,7 +185,7 @@ export const orderLines = pgTable(
   (t) => [index('order_lines_order_idx').on(t.orderId), index('order_lines_product_idx').on(t.productId)],
 );
 
-export const orderLineShortages = pgTable(
+export const orderLineShortages = wmsSchema.table(
   'order_line_shortages',
   {
     id: pk(),

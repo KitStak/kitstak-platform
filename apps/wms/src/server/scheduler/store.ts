@@ -13,9 +13,10 @@ import { dbAll, dbGet, dbRun } from '@/server/db/sql';
 export const LEASE_NAME = 'scheduler';
 
 export async function ensureSchedulerTables(db: AppDb): Promise<void> {
+  await dbRun(db, sql`CREATE SCHEMA IF NOT EXISTS wms`);
   await dbRun(
     db,
-    sql`CREATE TABLE IF NOT EXISTS scheduler_lease (
+    sql`CREATE TABLE IF NOT EXISTS wms.scheduler_lease (
     name TEXT PRIMARY KEY NOT NULL,
     owner TEXT NOT NULL,
     expires_at TEXT NOT NULL,
@@ -24,7 +25,7 @@ export async function ensureSchedulerTables(db: AppDb): Promise<void> {
   );
   await dbRun(
     db,
-    sql`CREATE TABLE IF NOT EXISTS scheduler_task_runs (
+    sql`CREATE TABLE IF NOT EXISTS wms.scheduler_task_runs (
     task_key TEXT PRIMARY KEY NOT NULL,
     last_started_at TEXT,
     last_finished_at TEXT,

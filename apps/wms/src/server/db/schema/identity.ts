@@ -1,5 +1,6 @@
 /** Identity & access: users, roles, scopes, sessions, preferences, security audit log. */
-import { index, integer, primaryKey, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import type { UserPreferences } from '../../../lib/domain-types';
 import {
   AUDIT_OUTCOMES,
@@ -13,7 +14,7 @@ import type { ROLE_RESTRICTIONS } from '../../../lib/enums';
 import { bool, EMPTY_JSON_ARRAY, json, nowIso, pk, stamps } from '../columns';
 import { clients, warehouses } from './org';
 
-export const users = pgTable(
+export const users = wmsSchema.table(
   'users',
   {
     id: pk(),
@@ -38,7 +39,7 @@ export const users = pgTable(
   (t) => [uniqueIndex('users_email_idx').on(t.email)],
 );
 
-export const roles = pgTable(
+export const roles = wmsSchema.table(
   'roles',
   {
     id: pk(),
@@ -55,7 +56,7 @@ export const roles = pgTable(
   (t) => [uniqueIndex('roles_key_idx').on(t.key)],
 );
 
-export const rolePermissions = pgTable(
+export const rolePermissions = wmsSchema.table(
   'role_permissions',
   {
     roleId: text('role_id')
@@ -66,7 +67,7 @@ export const rolePermissions = pgTable(
   (t) => [primaryKey({ columns: [t.roleId, t.permission] })],
 );
 
-export const userRoles = pgTable(
+export const userRoles = wmsSchema.table(
   'user_roles',
   {
     userId: text('user_id')
@@ -79,7 +80,7 @@ export const userRoles = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.roleId] })],
 );
 
-export const userWarehouses = pgTable(
+export const userWarehouses = wmsSchema.table(
   'user_warehouses',
   {
     userId: text('user_id')
@@ -92,7 +93,7 @@ export const userWarehouses = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.warehouseId] })],
 );
 
-export const userClients = pgTable(
+export const userClients = wmsSchema.table(
   'user_clients',
   {
     userId: text('user_id')
@@ -105,7 +106,7 @@ export const userClients = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.clientId] })],
 );
 
-export const userSessions = pgTable(
+export const userSessions = wmsSchema.table(
   'user_sessions',
   {
     id: pk(), // == JWT jti
@@ -123,7 +124,7 @@ export const userSessions = pgTable(
   (t) => [index('user_sessions_user_idx').on(t.userId)],
 );
 
-export const passwordResetTokens = pgTable(
+export const passwordResetTokens = wmsSchema.table(
   'password_reset_tokens',
   {
     id: pk(),
@@ -137,13 +138,13 @@ export const passwordResetTokens = pgTable(
   (t) => [uniqueIndex('password_reset_token_idx').on(t.tokenHash)],
 );
 
-export const rateLimits = pgTable('rate_limits', {
+export const rateLimits = wmsSchema.table('rate_limits', {
   key: text('key').primaryKey(),
   count: integer('count').notNull(),
   windowStart: text('window_start').notNull(),
 });
 
-export const userPrinters = pgTable(
+export const userPrinters = wmsSchema.table(
   'user_printers',
   {
     userId: text('user_id')
@@ -168,7 +169,7 @@ export interface GridPrefs {
   pinned?: string[];
 }
 
-export const userGridPrefs = pgTable(
+export const userGridPrefs = wmsSchema.table(
   'user_grid_prefs',
   {
     userId: text('user_id')
@@ -180,7 +181,7 @@ export const userGridPrefs = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.gridKey] })],
 );
 
-export const savedViews = pgTable(
+export const savedViews = wmsSchema.table(
   'saved_views',
   {
     id: pk(),
@@ -215,7 +216,7 @@ export interface PasswordPolicy {
   lockoutMinutes: number;
 }
 
-export const companySettings = pgTable('company_settings', {
+export const companySettings = wmsSchema.table('company_settings', {
   id: text('id').primaryKey().default('company'),
   displayName: text('display_name').notNull(),
   fullName: text('full_name').notNull(),
@@ -225,7 +226,7 @@ export const companySettings = pgTable('company_settings', {
   ...stamps(),
 });
 
-export const apps = pgTable('apps', {
+export const apps = wmsSchema.table('apps', {
   key: text('key').primaryKey(),
   name: text('name').notNull(),
   description: text('description').notNull(),
@@ -236,7 +237,7 @@ export const apps = pgTable('apps', {
   activatedBy: text('activated_by'),
 });
 
-export const notifications = pgTable(
+export const notifications = wmsSchema.table(
   'notifications',
   {
     id: pk(),
@@ -255,7 +256,7 @@ export const notifications = pgTable(
 );
 
 /** Security events (logins, permission changes). Business edits go to `change_log`. */
-export const auditLog = pgTable(
+export const auditLog = wmsSchema.table(
   'audit_log',
   {
     id: pk(),

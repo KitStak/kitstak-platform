@@ -3,7 +3,8 @@
  * attachments, notes, background tasks, imports, printouts, screen configs.
  */
 import { sql } from 'drizzle-orm';
-import { index, integer, primaryKey, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import {
   ATTACHMENT_DOCUMENT_TYPES,
   BG_TASK_KINDS,
@@ -22,7 +23,7 @@ import { bool, json, nowIso, pk, stamps } from '../columns';
 import { users } from './identity';
 import { clients, warehouses } from './org';
 
-export const lookupValues = pgTable(
+export const lookupValues = wmsSchema.table(
   'lookup_values',
   {
     id: pk(),
@@ -51,7 +52,7 @@ export const lookupValues = pgTable(
   ],
 );
 
-export const codeSequences = pgTable(
+export const codeSequences = wmsSchema.table(
   'code_sequences',
   {
     key: text('key').notNull(),
@@ -64,7 +65,7 @@ export const codeSequences = pgTable(
   (t) => [primaryKey({ columns: [t.key, t.warehouseId] })],
 );
 
-export const changeLog = pgTable(
+export const changeLog = wmsSchema.table(
   'change_log',
   {
     id: pk(),
@@ -90,7 +91,7 @@ export const changeLog = pgTable(
   ],
 );
 
-export const tags = pgTable(
+export const tags = wmsSchema.table(
   'tags',
   {
     id: pk(),
@@ -102,7 +103,7 @@ export const tags = pgTable(
   (t) => [uniqueIndex('tags_name_scope_idx').on(t.name, t.scope)],
 );
 
-export const entityTags = pgTable(
+export const entityTags = wmsSchema.table(
   'entity_tags',
   {
     tagId: text('tag_id')
@@ -117,7 +118,7 @@ export const entityTags = pgTable(
   ],
 );
 
-export const customFieldDefs = pgTable(
+export const customFieldDefs = wmsSchema.table(
   'custom_field_defs',
   {
     id: pk(),
@@ -131,7 +132,7 @@ export const customFieldDefs = pgTable(
   (t) => [uniqueIndex('cfd_slot_idx').on(t.entityType, t.slot)],
 );
 
-export const files = pgTable(
+export const files = wmsSchema.table(
   'files',
   {
     id: pk(),
@@ -149,7 +150,7 @@ export const files = pgTable(
   (t) => [index('files_owner_idx').on(t.ownerEntityType, t.ownerEntityId)],
 );
 
-export const attachments = pgTable(
+export const attachments = wmsSchema.table(
   'attachments',
   {
     id: pk(),
@@ -165,7 +166,7 @@ export const attachments = pgTable(
   (t) => [index('attachments_entity_idx').on(t.entityType, t.entityId)],
 );
 
-export const entityNotes = pgTable(
+export const entityNotes = wmsSchema.table(
   'entity_notes',
   {
     id: pk(),
@@ -178,7 +179,7 @@ export const entityNotes = pgTable(
   (t) => [index('entity_notes_entity_idx').on(t.entityType, t.entityId)],
 );
 
-export const backgroundTasks = pgTable(
+export const backgroundTasks = wmsSchema.table(
   'background_tasks',
   {
     id: pk(),
@@ -200,7 +201,7 @@ export const backgroundTasks = pgTable(
   (t) => [index('bg_tasks_user_idx').on(t.userId, t.createdAt)],
 );
 
-export const importBatches = pgTable(
+export const importBatches = wmsSchema.table(
   'import_batches',
   {
     id: pk(),
@@ -222,7 +223,7 @@ export const importBatches = pgTable(
   (t) => [index('import_batches_key_idx').on(t.importKey, t.createdAt)],
 );
 
-export const importRows = pgTable(
+export const importRows = wmsSchema.table(
   'import_rows',
   {
     id: pk(),
@@ -238,7 +239,7 @@ export const importRows = pgTable(
   (t) => [index('import_rows_batch_idx').on(t.batchId)],
 );
 
-export const printoutTemplates = pgTable(
+export const printoutTemplates = wmsSchema.table(
   'printout_templates',
   {
     id: pk(),
@@ -259,7 +260,7 @@ export const printoutTemplates = pgTable(
   (t) => [index('printout_type_idx').on(t.typeKey)],
 );
 
-export const printoutTemplateClients = pgTable(
+export const printoutTemplateClients = wmsSchema.table(
   'printout_template_clients',
   {
     templateId: text('template_id')
@@ -285,7 +286,7 @@ export interface ScreenConfigSteps {
   steps: { key: string; enabled: boolean; required: boolean }[];
 }
 
-export const screenConfigs = pgTable(
+export const screenConfigs = wmsSchema.table(
   'screen_configs',
   {
     id: pk(),

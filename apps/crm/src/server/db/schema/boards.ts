@@ -4,12 +4,12 @@ import {
   index,
   integer,
   jsonb,
-  pgTable,
   text,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { crmSchema } from './_schema';
 import {
   archivedAt,
   boardKindEnum,
@@ -41,7 +41,7 @@ export interface BoardSettings {
   readonly [key: string]: unknown;
 }
 
-export const boards = pgTable(
+export const boards = crmSchema.table(
   'boards',
   {
     id: id(),
@@ -73,7 +73,7 @@ export const boards = pgTable(
 );
 
 /** Board owners, explicit members (private / shareable boards) and subscribers. */
-export const boardMembers = pgTable(
+export const boardMembers = crmSchema.table(
   'board_members',
   {
     id: id(),
@@ -91,7 +91,7 @@ export const boardMembers = pgTable(
   ],
 );
 
-export const columns = pgTable(
+export const columns = crmSchema.table(
   'columns',
   {
     id: id(),
@@ -122,7 +122,7 @@ export const columns = pgTable(
   ],
 );
 
-export const groups = pgTable(
+export const groups = crmSchema.table(
   'groups',
   {
     id: id(),
@@ -142,7 +142,7 @@ export const groups = pgTable(
   (t) => [index('groups_board_position_idx').on(t.boardId, t.position), index('groups_org_idx').on(t.orgId)],
 );
 
-export const items = pgTable(
+export const items = crmSchema.table(
   'items',
   {
     id: id(),
@@ -182,7 +182,7 @@ export const items = pgTable(
 );
 
 /** connect_boards relations (directed; reciprocal columns create a row per direction). */
-export const itemLinks = pgTable(
+export const itemLinks = crmSchema.table(
   'item_links',
   {
     id: id(),
@@ -218,7 +218,7 @@ export interface ViewConfig {
   readonly [key: string]: unknown;
 }
 
-export const views = pgTable(
+export const views = crmSchema.table(
   'views',
   {
     id: id(),

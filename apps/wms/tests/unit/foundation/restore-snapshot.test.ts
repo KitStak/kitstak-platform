@@ -38,14 +38,14 @@ describe.skipIf(!haveSnapshot)('restoreSnapshot (bundled demo snapshot)', () => 
     const deferrable = await dbGet<{ n: number }>(
       t.db,
       sql`
-      SELECT count(*)::int AS n FROM pg_constraint WHERE contype = 'f' AND connamespace = 'public'::regnamespace AND condeferrable`,
+      SELECT count(*)::int AS n FROM pg_constraint WHERE contype = 'f' AND connamespace = 'wms'::regnamespace AND condeferrable`,
     );
     expect(deferrable?.n).toBe(0);
     const disabled = await dbAll<{ name: string }>(
       t.db,
       sql`
       SELECT tgname AS name FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
-      WHERE NOT t.tgisinternal AND c.relnamespace = 'public'::regnamespace AND t.tgenabled = 'D'`,
+      WHERE NOT t.tgisinternal AND c.relnamespace = 'wms'::regnamespace AND t.tgenabled = 'D'`,
     );
     expect(disabled).toEqual([]);
 

@@ -3,6 +3,7 @@
  * (BUILD_PLAN F1); this file re-exports them all for Drizzle, drizzle-kit
  * (`drizzle.config.ts`) and the app (`import { schema } from "@/server/db"`).
  */
+export * from './schema/_schema';
 export * from './schema/identity';
 export * from './schema/org';
 export * from './schema/platform';

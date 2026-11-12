@@ -256,7 +256,7 @@ describe('recipes', () => {
     const recipe = RECIPES.find((entry) => entry.id === 'status-notify');
     if (!recipe) throw new Error('missing recipe');
     expect(partsToText(draftParts(recipeDraft(recipe), genericResolver('Item')))).toBe(
-      'When status changes to something, then notify someone with a message',
+      'When a status changes to something, then notify someone with a message',
     );
   });
 });

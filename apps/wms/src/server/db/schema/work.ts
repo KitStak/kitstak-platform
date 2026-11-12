@@ -1,5 +1,6 @@
 /** Work: jobs, job types, tasks, wave rules, waves, allocation exceptions. */
-import { index, integer, primaryKey, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import { sql } from 'drizzle-orm';
 import type { FilterCondition, JobTypeSettings, OrderByClause } from '../../../lib/domain-types';
 import {
@@ -23,7 +24,7 @@ import { users } from './identity';
 import { clients, warehouses } from './org';
 import { shipmentOrders } from './outbound';
 
-export const jobTypes = pgTable(
+export const jobTypes = wmsSchema.table(
   'job_types',
   {
     id: pk(),
@@ -55,7 +56,7 @@ export const jobTypes = pgTable(
 );
 
 /** `jobType` is the job-type code snapshot (plain text); `jobTypeId` is authoritative. */
-export const jobs = pgTable(
+export const jobs = wmsSchema.table(
   'jobs',
   {
     id: requiredPk(),
@@ -102,7 +103,7 @@ export const jobs = pgTable(
   ],
 );
 
-export const jobOrders = pgTable(
+export const jobOrders = wmsSchema.table(
   'job_orders',
   {
     jobId: text('job_id')
@@ -116,7 +117,7 @@ export const jobOrders = pgTable(
   (t) => [primaryKey({ columns: [t.jobId, t.orderId] }), index('job_orders_order_idx').on(t.orderId)],
 );
 
-export const tasks = pgTable(
+export const tasks = wmsSchema.table(
   'tasks',
   {
     id: pk(),
@@ -175,7 +176,7 @@ export const tasks = pgTable(
   ],
 );
 
-export const waveRules = pgTable(
+export const waveRules = wmsSchema.table(
   'wave_rules',
   {
     id: pk(),
@@ -212,7 +213,7 @@ export const waveRules = pgTable(
   (t) => [index('wave_rules_wh_idx').on(t.warehouseId, t.operationType)],
 );
 
-export const waves = pgTable(
+export const waves = wmsSchema.table(
   'waves',
   {
     id: pk(),
@@ -233,7 +234,7 @@ export const waves = pgTable(
   (t) => [uniqueIndex('waves_no_idx').on(t.waveNo), index('waves_rule_idx').on(t.waveRuleId)],
 );
 
-export const allocationExceptions = pgTable(
+export const allocationExceptions = wmsSchema.table(
   'allocation_exceptions',
   {
     id: pk(),

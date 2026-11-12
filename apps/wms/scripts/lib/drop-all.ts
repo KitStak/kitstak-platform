@@ -1,10 +1,12 @@
 /**
  * Drops every app object from a Postgres database (local PGlite or DATABASE_URL), including
- * Drizzle's migration journal (schema `drizzle`), so `db:migrate` rebuilds from scratch.
+ * Drizzle's migration journal (schema `drizzle`) and the `wms` schema the app tables live in
+ * (migration 0006), so `db:migrate` rebuilds from scratch.
  *
- * Only objects in the `public` schema that the app created are dropped: views, tables (CASCADE
- * takes their indexes, triggers and constraints) and functions that do not belong to an
- * extension. Supabase-managed schemas (auth, storage, extensions, ...) are never touched.
+ * Only objects the app created are dropped: views, tables (CASCADE takes their indexes,
+ * triggers and constraints) and functions that do not belong to an extension, in the `public`
+ * and `wms` schemas. Supabase-managed schemas (auth, storage, extensions, ...) and the shared
+ * platform schemas (`core`, `crm` — owned by packages/db migrations) are never touched.
  */
 import { sql } from 'drizzle-orm';
 import type { AppDb } from '../../src/server/api/db';
@@ -14,6 +16,8 @@ export type PgObjectType = 'view' | 'table' | 'function' | 'schema';
 
 export interface PgObject {
   readonly type: PgObjectType;
+  /** Schema the object lives in; '' for schema objects themselves. */
+  readonly schema: string;
   /** Quoted-ready name; functions include their argument list, e.g. `my_fn()`. */
   readonly name: string;
 }
@@ -26,32 +30,36 @@ export function quoteIdent(name: string): string {
 }
 
 export async function listUserObjects(db: AppDb): Promise<readonly PgObject[]> {
-  const views = await dbAll<{ name: string }>(
+  const views = await dbAll<{ schema: string; name: string }>(
     db,
-    sql`SELECT viewname AS name FROM pg_views WHERE schemaname = 'public' ORDER BY 1`,
+    sql`SELECT schemaname AS schema, viewname AS name FROM pg_views WHERE schemaname IN ('public', 'wms') ORDER BY 1, 2`,
   );
-  const tables = await dbAll<{ name: string }>(
+  const tables = await dbAll<{ schema: string; name: string }>(
     db,
-    sql`SELECT tablename AS name FROM pg_tables WHERE schemaname = 'public' ORDER BY 1`,
+    sql`SELECT schemaname AS schema, tablename AS name FROM pg_tables WHERE schemaname IN ('public', 'wms') ORDER BY 1, 2`,
   );
-  const functions = await dbAll<{ name: string; args: string }>(
+  const functions = await dbAll<{ schema: string; name: string; args: string }>(
     db,
     sql`
-    SELECT p.proname AS name, pg_get_function_identity_arguments(p.oid) AS args
+    SELECT n.nspname AS schema, p.proname AS name, pg_get_function_identity_arguments(p.oid) AS args
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public'
+    WHERE n.nspname IN ('public', 'wms')
       AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
-    ORDER BY 1`,
+    ORDER BY 1, 2`,
   );
-  const journal = await dbAll<{ name: string }>(
+  const schemas = await dbAll<{ name: string }>(
     db,
-    sql`SELECT nspname AS name FROM pg_namespace WHERE nspname = 'drizzle'`,
+    sql`SELECT nspname AS name FROM pg_namespace WHERE nspname IN ('drizzle', 'wms') ORDER BY 1`,
   );
   return [
-    ...views.map((v) => ({ type: 'view' as const, name: v.name })),
-    ...tables.map((t) => ({ type: 'table' as const, name: t.name })),
-    ...functions.map((f) => ({ type: 'function' as const, name: `${f.name}(${f.args})` })),
-    ...journal.map((s) => ({ type: 'schema' as const, name: s.name })),
+    ...views.map((v) => ({ type: 'view' as const, schema: v.schema, name: v.name })),
+    ...tables.map((t) => ({ type: 'table' as const, schema: t.schema, name: t.name })),
+    ...functions.map((f) => ({
+      type: 'function' as const,
+      schema: f.schema,
+      name: `${f.name}(${f.args})`,
+    })),
+    ...schemas.map((s) => ({ type: 'schema' as const, schema: '', name: s.name })),
   ];
 }
 
@@ -62,10 +70,10 @@ export function buildDropStatements(objects: readonly PgObject[]): readonly stri
       .map((o) => {
         if (type === 'function') {
           const open = o.name.indexOf('(');
-          return `DROP FUNCTION IF EXISTS "public".${quoteIdent(o.name.slice(0, open))}${o.name.slice(open)} CASCADE`;
+          return `DROP FUNCTION IF EXISTS ${quoteIdent(o.schema)}.${quoteIdent(o.name.slice(0, open))}${o.name.slice(open)} CASCADE`;
         }
         if (type === 'schema') return `DROP SCHEMA IF EXISTS ${quoteIdent(o.name)} CASCADE`;
-        return `DROP ${type.toUpperCase()} IF EXISTS "public".${quoteIdent(o.name)} CASCADE`;
+        return `DROP ${type.toUpperCase()} IF EXISTS ${quoteIdent(o.schema)}.${quoteIdent(o.name)} CASCADE`;
       }),
   );
 }

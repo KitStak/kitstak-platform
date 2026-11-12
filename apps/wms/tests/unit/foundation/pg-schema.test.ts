@@ -122,9 +122,20 @@ describe('on PGlite', () => {
 
   it('enables row level security on every table (Supabase Data API sees nothing)', async () => {
     const res = await t.pg.query<{ name: string }>(
-      "SELECT relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity",
+      "SELECT relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN ('public', 'wms') AND c.relkind = 'r' AND NOT c.relrowsecurity",
     );
     expect(res.rows.map((r) => r.name)).toEqual([]);
+  });
+
+  it('moves every app table into the wms schema (0006): public holds none', async () => {
+    const left = await t.pg.query<{ name: string }>(
+      "SELECT tablename AS name FROM pg_tables WHERE schemaname = 'public' ORDER BY 1",
+    );
+    expect(left.rows.map((r) => r.name)).toEqual([]);
+    const moved = await t.pg.query<{ n: number }>(
+      "SELECT count(*)::int AS n FROM pg_tables WHERE schemaname = 'wms'",
+    );
+    expect(moved.rows[0]?.n).toBeGreaterThanOrEqual(115);
   });
 
   it('creates the runtime-owned tables in a migration, with RLS, so on-demand DDL never adds an open table', async () => {
@@ -133,7 +144,7 @@ describe('on PGlite', () => {
     await ensureSchedulerTables(t.db);
     await ensurePackDraftTable(t.db);
     const res = await t.pg.query<{ name: string; rls: boolean }>(
-      "SELECT relname AS name, relrowsecurity AS rls FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND relname IN ('scheduler_lease', 'scheduler_task_runs', 'pack_drafts', 'eod_auto_close_rules') ORDER BY relname",
+      "SELECT relname AS name, relrowsecurity AS rls FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'wms' AND c.relkind = 'r' AND relname IN ('scheduler_lease', 'scheduler_task_runs', 'pack_drafts', 'eod_auto_close_rules') ORDER BY relname",
     );
     expect(res.rows).toEqual([
       { name: 'eod_auto_close_rules', rls: true },

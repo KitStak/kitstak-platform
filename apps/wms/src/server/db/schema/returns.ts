@@ -1,10 +1,11 @@
 /** Returns: return orders (RMA) and lines. */
-import { index, integer, doublePrecision, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, doublePrecision, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import { RETURN_DISPOSITIONS, RETURN_SOURCES, RETURN_STATUSES } from '../../../lib/enums';
 import { json, pk, stamps } from '../columns';
 import { shipmentOrders } from './outbound';
 
-export const returnOrders = pgTable(
+export const returnOrders = wmsSchema.table(
   'return_orders',
   {
     id: pk(),
@@ -39,7 +40,7 @@ export const returnOrders = pgTable(
   ],
 );
 
-export const returnOrderLines = pgTable(
+export const returnOrderLines = wmsSchema.table(
   'return_order_lines',
   {
     id: pk(),

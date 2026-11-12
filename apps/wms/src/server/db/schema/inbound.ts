@@ -1,12 +1,13 @@
 /** Inbound: purchase orders, PO lines, receipts (Receiving History rows). */
-import { index, integer, doublePrecision, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, doublePrecision, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import { PO_STATUSES, PO_TYPES, RECEIVING_TYPES } from '../../../lib/enums';
 import { bool, customFields, nowIso, pk, stamps } from '../columns';
 import { products } from './catalog';
 import { clients, vendors, warehouses } from './org';
 
 /** `receivedAt` == Actual Receiving Date; `vendorName` is kept as the display snapshot. */
-export const purchaseOrders = pgTable(
+export const purchaseOrders = wmsSchema.table(
   'purchase_orders',
   {
     id: pk(),
@@ -45,7 +46,7 @@ export const purchaseOrders = pgTable(
   ],
 );
 
-export const purchaseOrderLines = pgTable(
+export const purchaseOrderLines = wmsSchema.table(
   'purchase_order_lines',
   {
     id: pk(),
@@ -73,7 +74,7 @@ export const purchaseOrderLines = pgTable(
   (t) => [index('po_lines_po_idx').on(t.purchaseOrderId)],
 );
 
-export const receipts = pgTable(
+export const receipts = wmsSchema.table(
   'receipts',
   {
     id: pk(),
@@ -121,7 +122,7 @@ export const receipts = pgTable(
 );
 
 /** Serial numbers pre-advised per PO line (Import Serial Numbers / Remove Serial Number). */
-export const purchaseOrderSerials = pgTable(
+export const purchaseOrderSerials = wmsSchema.table(
   'purchase_order_serials',
   {
     id: pk(),

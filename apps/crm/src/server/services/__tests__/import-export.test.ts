@@ -138,7 +138,7 @@ describe('parseImportFile', () => {
   it('rejects unsupported and malformed files with friendly messages', () => {
     expect(() => parseImportFile('a.xls', Uint8Array.from([0xd0, 0xcf, 0x11]))).toThrow(/Legacy .xls/);
     expect(() => parseImportFile('a.pdf', Uint8Array.from([0x25, 0x50]))).toThrow(/Upload a .csv/);
-    expect(() => parseImportFile('a.xlsx', Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 0, 0]))).toThrow(/couldn't read/i);
+    expect(() => parseImportFile('a.xlsx', Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 0, 0]))).toThrow(/isn't a valid \.xlsx/i);
     expect(() => parseImportFile('a.csv', new Uint8Array())).toThrow(/empty/);
   });
 });

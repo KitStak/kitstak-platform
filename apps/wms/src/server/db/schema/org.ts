@@ -1,5 +1,6 @@
 /** Organization: warehouses, clients, addresses, customers, vendors, retailers. */
-import { index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import type { ClientSettingsInput } from '../../../lib/domain-types';
 import {
   ACTIVE_STATUSES,
@@ -11,7 +12,7 @@ import {
 } from '../../../lib/enums';
 import { bool, customFields, EMPTY_JSON_OBJECT, json, pk, stamps } from '../columns';
 
-export const warehouses = pgTable(
+export const warehouses = wmsSchema.table(
   'warehouses',
   {
     id: pk(),
@@ -47,7 +48,7 @@ export const warehouses = pgTable(
   (t) => [uniqueIndex('warehouses_code_idx').on(t.code)],
 );
 
-export const clients = pgTable(
+export const clients = wmsSchema.table(
   'clients',
   {
     id: pk(),
@@ -68,7 +69,7 @@ export const clients = pgTable(
   (t) => [uniqueIndex('clients_code_idx').on(t.code)],
 );
 
-export const addresses = pgTable(
+export const addresses = wmsSchema.table(
   'addresses',
   {
     id: pk(),
@@ -95,7 +96,7 @@ export const addresses = pgTable(
   (t) => [index('addresses_owner_idx').on(t.ownerType, t.ownerId)],
 );
 
-export const customers = pgTable(
+export const customers = wmsSchema.table(
   'customers',
   {
     id: pk(),
@@ -112,7 +113,7 @@ export const customers = pgTable(
   (t) => [index('customers_client_idx').on(t.clientId)],
 );
 
-export const vendors = pgTable(
+export const vendors = wmsSchema.table(
   'vendors',
   {
     id: pk(),
@@ -128,7 +129,7 @@ export const vendors = pgTable(
   (t) => [uniqueIndex('vendors_client_name_idx').on(t.clientId, t.displayName)],
 );
 
-export const retailers = pgTable(
+export const retailers = wmsSchema.table(
   'retailers',
   {
     id: pk(),

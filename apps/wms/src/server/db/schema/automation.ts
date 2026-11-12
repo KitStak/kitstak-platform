@@ -1,5 +1,6 @@
 /** Automation: putaway/allocation algorithms, workflows, rate shopping presets. */
-import { index, integer, primaryKey, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import type { OrderByClause, RuleCondition, RuleConditionNode } from '../../../lib/domain-types';
 import {
   ACTIVE_PASSIVE,
@@ -13,7 +14,7 @@ import { bool, EMPTY_JSON_ARRAY, json, nowIso, pk, stamps } from '../columns';
 import { carrierServices } from './integrations';
 import { warehouses } from './org';
 
-export const algorithms = pgTable(
+export const algorithms = wmsSchema.table(
   'algorithms',
   {
     id: pk(),
@@ -36,7 +37,7 @@ export interface AlgorithmAction {
   value?: unknown;
 }
 
-export const algorithmRules = pgTable(
+export const algorithmRules = wmsSchema.table(
   'algorithm_rules',
   {
     id: pk(),
@@ -59,7 +60,7 @@ export interface WorkflowAction {
   params: Record<string, unknown>;
 }
 
-export const workflows = pgTable(
+export const workflows = wmsSchema.table(
   'workflows',
   {
     id: pk(),
@@ -81,7 +82,7 @@ export const workflows = pgTable(
   (t) => [index('workflows_trigger_idx').on(t.trigger, t.sequence)],
 );
 
-export const workflowRuns = pgTable(
+export const workflowRuns = wmsSchema.table(
   'workflow_runs',
   {
     id: pk(),
@@ -99,7 +100,7 @@ export const workflowRuns = pgTable(
   (t) => [index('wf_runs_entity_idx').on(t.entityType, t.entityId)],
 );
 
-export const rateShoppingPresets = pgTable('rate_shopping_presets', {
+export const rateShoppingPresets = wmsSchema.table('rate_shopping_presets', {
   id: pk(),
   name: text('name').notNull(),
   description: text('description').notNull(),
@@ -113,7 +114,7 @@ export const rateShoppingPresets = pgTable('rate_shopping_presets', {
   ...stamps(),
 });
 
-export const rateShoppingPresetServices = pgTable(
+export const rateShoppingPresetServices = wmsSchema.table(
   'rate_shopping_preset_services',
   {
     presetId: text('preset_id')

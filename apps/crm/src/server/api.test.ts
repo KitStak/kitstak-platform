@@ -11,6 +11,10 @@ vi.mock('@/server/auth/session', () => sessionMock);
 vi.mock('@/server/audit', () => auditMock);
 vi.mock('@/server/db', () => ({ db: {} }));
 vi.mock('@/server/env', () => ({ trustedOrigins: () => ['http://localhost:3100'] }));
+// The org IP allow-list stage reads org metadata through the real `db`; stub it as "disabled".
+vi.mock('@/server/services/admin-org', () => ({
+  enforceNetworkPolicy: vi.fn().mockResolvedValue(undefined),
+}));
 
 const { withApi, apiResult } = await import('./api');
 const { NotFoundError } = await import('./http/errors');

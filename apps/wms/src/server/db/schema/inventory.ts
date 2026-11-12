@@ -1,5 +1,6 @@
 /** Inventory ledger: buckets, transactions, allocations, snapshots, missing log. */
-import { index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import { ALLOCATION_STATUSES, INVENTORY_STATUSES, TXN_TYPES } from '../../../lib/enums';
 import { bool, nowIso, pk, stamps } from '../columns';
 import { products } from './catalog';
@@ -18,7 +19,7 @@ export const LEGACY_BUCKET_KEY_PREFIX = 'legacy:';
  * so the pre-F2 seed (which predates the column) still inserts; the ledger
  * always sets it and `db:verify` should assert it is present.
  */
-export const inventory = pgTable(
+export const inventory = wmsSchema.table(
   'inventory',
   {
     id: pk(),
@@ -61,7 +62,7 @@ export const inventory = pgTable(
   ],
 );
 
-export const inventoryTransactions = pgTable(
+export const inventoryTransactions = wmsSchema.table(
   'inventory_transactions',
   {
     id: pk(),
@@ -119,7 +120,7 @@ export const inventoryTransactions = pgTable(
   ],
 );
 
-export const inventoryAllocations = pgTable(
+export const inventoryAllocations = wmsSchema.table(
   'inventory_allocations',
   {
     id: pk(),
@@ -146,7 +147,7 @@ export const inventoryAllocations = pgTable(
   ],
 );
 
-export const inventorySnapshots = pgTable(
+export const inventorySnapshots = wmsSchema.table(
   'inventory_snapshots',
   {
     id: pk(),
@@ -169,7 +170,7 @@ export const inventorySnapshots = pgTable(
   (t) => [index('snap_at_idx').on(t.snapshotAt, t.warehouseId)],
 );
 
-export const missingLog = pgTable(
+export const missingLog = wmsSchema.table(
   'missing_log',
   {
     id: pk(),

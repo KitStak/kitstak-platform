@@ -1,5 +1,6 @@
 /** Catalog: products, pack types (UOM model), barcodes, kits, listings, serials. */
-import { index, integer, primaryKey, doublePrecision, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { index, integer, primaryKey, doublePrecision, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { wmsSchema } from './_schema';
 import {
   ACTIVE_STATUSES,
   HAZMAT_TYPES,
@@ -38,7 +39,7 @@ export interface ProductHazmat {
 }
 
 /** Existing `price` == Sales Price, `uom` == primary pack type, `isHazmat` == hazmat switch. */
-export const products = pgTable(
+export const products = wmsSchema.table(
   'products',
   {
     id: pk(),
@@ -114,7 +115,7 @@ export const products = pgTable(
   (t) => [uniqueIndex('products_sku_idx').on(t.clientId, t.sku), index('products_barcode_idx').on(t.barcode)],
 );
 
-export const productPackTypes = pgTable(
+export const productPackTypes = wmsSchema.table(
   'product_pack_types',
   {
     id: pk(),
@@ -142,7 +143,7 @@ export const productPackTypes = pgTable(
   (t) => [uniqueIndex('ppt_product_pack_idx').on(t.productId, t.packType)],
 );
 
-export const productBarcodes = pgTable(
+export const productBarcodes = wmsSchema.table(
   'product_barcodes',
   {
     id: pk(),
@@ -157,7 +158,7 @@ export const productBarcodes = pgTable(
   (t) => [index('product_barcodes_code_idx').on(t.barcode)],
 );
 
-export const kitComponents = pgTable(
+export const kitComponents = wmsSchema.table(
   'kit_components',
   {
     id: pk(),
@@ -173,7 +174,7 @@ export const kitComponents = pgTable(
   (t) => [uniqueIndex('kit_component_idx').on(t.kitProductId, t.componentProductId)],
 );
 
-export const productReplenishmentLevels = pgTable(
+export const productReplenishmentLevels = wmsSchema.table(
   'product_replenishment_levels',
   {
     productId: text('product_id')
@@ -188,7 +189,7 @@ export const productReplenishmentLevels = pgTable(
   (t) => [primaryKey({ columns: [t.productId, t.warehouseId] })],
 );
 
-export const productChannelAllocations = pgTable(
+export const productChannelAllocations = wmsSchema.table(
   'product_channel_allocations',
   {
     id: pk(),
@@ -207,7 +208,7 @@ export const productChannelAllocations = pgTable(
   (t) => [index('pca_product_idx').on(t.productId)],
 );
 
-export const productListings = pgTable(
+export const productListings = wmsSchema.table(
   'product_listings',
   {
     id: pk(),
@@ -237,7 +238,7 @@ export const productListings = pgTable(
   ],
 );
 
-export const serialNumbers = pgTable(
+export const serialNumbers = wmsSchema.table(
   'serial_numbers',
   {
     id: pk(),
@@ -259,7 +260,7 @@ export const serialNumbers = pgTable(
   (t) => [uniqueIndex('serial_unique_idx').on(t.productId, t.primarySerial)],
 );
 
-export const serialTransactions = pgTable(
+export const serialTransactions = wmsSchema.table(
   'serial_transactions',
   {
     id: pk(),

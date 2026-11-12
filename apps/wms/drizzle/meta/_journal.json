@@ -36,6 +36,13 @@
       "when": 1794352540645,
       "tag": "0004_runtime_tables_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794352600645,
+      "tag": "0006_wms_schema",
+      "breakpoints": true
     }
   ]
 }

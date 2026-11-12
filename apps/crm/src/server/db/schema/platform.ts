@@ -4,17 +4,17 @@ import {
   index,
   integer,
   jsonb,
-  pgTable,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { crmSchema } from './_schema';
 import { entityTypeEnum, fractionalKey, id, orgId, ownedByUser, timestamps, userRef } from './_shared';
 import { boards } from './boards';
 
-export const favorites = pgTable(
+export const favorites = crmSchema.table(
   'favorites',
   {
     id: id(),
@@ -31,7 +31,7 @@ export const favorites = pgTable(
   ],
 );
 
-export const recentVisits = pgTable(
+export const recentVisits = crmSchema.table(
   'recent_visits',
   {
     id: id(),
@@ -49,7 +49,7 @@ export const recentVisits = pgTable(
   ],
 );
 
-export const savedFilters = pgTable(
+export const savedFilters = crmSchema.table(
   'saved_filters',
   {
     id: id(),
@@ -67,7 +67,7 @@ export const savedFilters = pgTable(
 );
 
 /** Personal API tokens. Only a SHA-256 hash is stored; the raw token is shown once. */
-export const apiTokens = pgTable(
+export const apiTokens = crmSchema.table(
   'api_tokens',
   {
     id: id(),
@@ -90,7 +90,7 @@ export const apiTokens = pgTable(
 );
 
 /** Security-relevant organization events (append-only). */
-export const auditLog = pgTable(
+export const auditLog = crmSchema.table(
   'audit_log',
   {
     id: id(),
@@ -113,7 +113,7 @@ export const auditLog = pgTable(
   ],
 );
 
-export const webhooks = pgTable(
+export const webhooks = crmSchema.table(
   'webhooks',
   {
     id: id(),
