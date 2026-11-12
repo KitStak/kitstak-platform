@@ -21,5 +21,14 @@
   "devDependencies": {
     "prettier": "^3.6.2",
     "turbo": "^2.5.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@embedded-postgres/darwin-arm64",
+      "@embedded-postgres/linux-x64",
+      "@embedded-postgres/windows-x64",
+      "esbuild",
+      "sharp"
+    ]
   }
 }
