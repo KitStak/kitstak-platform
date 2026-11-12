@@ -473,7 +473,8 @@ export interface UploadedAssetDto {
 /** Mirrors `src/server/auth/options.ts` (kept client-safe; equality is unit tested). */
 export const PASSWORD_POLICY = {
   minLength: 10,
-  maxLength: 128,
+  // 72, not 128: bcrypt-compat credentials ignore bytes past the 72nd (auth review L3).
+  maxLength: 72,
   sessionDays: 14,
   refreshHours: 24,
   revokeOnReset: true,

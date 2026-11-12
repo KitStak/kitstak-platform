@@ -6,10 +6,19 @@
  *     core user id, so every wms.* FK and `SessionUser.id` stays valid;
  *   - insert a `core.account` credential row (`provider_id='credential'`) carrying the
  *     bcrypt `password_hash` VERBATIM — the shared passwordCompat verifier accepts
- *     `$2a$/$2b$/$2y$` hashes, so nobody's password changes;
+ *     `$2a$/$2b$/$2y$` hashes, so nobody's password changes. ONLY for ACTIVE users
+ *     (auth review 2026-11-11, round 2 NEW-1): an `is_active = false` row gets NO
+ *     credential, and any existing credential row for that user is DELETED — otherwise
+ *     the migration would hand every deactivated WMS user a working password on every
+ *     instance (CRM included, which has no is_active gate). The core user / member /
+ *     wms.user_profiles rows ARE still created so reactivation (admin password reset)
+ *     works without re-running the migration;
  *   - insert a `core.member` row in the platform organization (slug `kitstak`,
  *     created from wms.company_settings.display_name when absent), role mapped
- *     admin→admin, manager→member, operator→member, viewer→viewer;
+ *     admin→member, manager→member, operator→member, viewer→viewer — a WMS admin is a
+ *     warehouse admin, NOT a platform org admin (auth review 2026-11-11, H3: org admin
+ *     grants Better Auth member-management powers on every app). Only an explicitly
+ *     chosen platform owner is ever given org owner/admin, manually;
  *   - insert `wms.user_profiles` (legacy_role, user_type, is_api_user, all_clients,
  *     preferences + preserved first/last name, password_changed_at, last_login_at).
  *
@@ -19,8 +28,13 @@
  * reconciliation and skipped — silently rebinding would break wms.* FKs.
  *
  * Run with: pnpm --filter @kitstak/db migrate:wms-identity [connection-string]
- * Connection: argv[2], else DIRECT_URL, else DATABASE_URL. Idempotent: re-running
- * updates in place and never duplicates accounts/members/profiles.
+ * Connection: first positional arg, else DIRECT_URL, else DATABASE_URL. Idempotent:
+ * re-running updates in place and never duplicates accounts/members/profiles.
+ *
+ * Escape hatch (default OFF): `--include-inactive-credentials` migrates credential rows
+ * for inactive users too, restoring the pre-review behaviour. Use it ONLY when a
+ * downstream system intentionally verifies inactive users' passwords and you accept
+ * that a deactivated user can sign in on instances without an is_active gate.
  */
 import postgres from 'postgres';
 
@@ -46,18 +60,30 @@ interface WmsUser {
   readonly created_at: string;
 }
 
-function orgRole(role: WmsUser['role']): 'admin' | 'member' | 'viewer' {
-  if (role === 'admin') return 'admin';
-  if (role === 'viewer') return 'viewer';
-  return 'member';
+/** H3: WMS admin → org MEMBER (never org admin); see the header comment. */
+function orgRole(role: WmsUser['role']): 'member' | 'viewer' {
+  return role === 'viewer' ? 'viewer' : 'member';
 }
 
-function connectionString(): string {
-  const url = process.argv[2] ?? process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+interface CliOptions {
+  readonly connection: string;
+  /** NEW-1 escape hatch, default off: also migrate credentials of inactive users. */
+  readonly includeInactiveCredentials: boolean;
+}
+
+function cliOptions(argv: readonly string[] = process.argv.slice(2)): CliOptions {
+  const flags = argv.filter((arg) => arg.startsWith('--'));
+  const positional = argv.filter((arg) => !arg.startsWith('--'));
+  const unknown = flags.filter((flag) => flag !== '--include-inactive-credentials');
+  if (unknown.length > 0) throw new Error(`Unknown flag(s): ${unknown.join(', ')}`);
+  const url = positional[0] ?? process.env.DIRECT_URL ?? process.env.DATABASE_URL;
   if (!url) {
     throw new Error('Pass a connection string, or set DIRECT_URL / DATABASE_URL.');
   }
-  return url.trim();
+  return {
+    connection: url.trim(),
+    includeInactiveCredentials: flags.includes('--include-inactive-credentials'),
+  };
 }
 
 async function ensurePlatformOrg(sql: Sql): Promise<string> {
@@ -82,6 +108,7 @@ async function migrateUser(
   sql: Sql,
   orgId: string,
   user: WmsUser,
+  includeInactiveCredentials: boolean,
 ): Promise<'migrated' | 'email_conflict'> {
   const email = user.email.trim().toLowerCase();
   const clash = await sql<{ id: string }[]>`
@@ -93,17 +120,27 @@ async function migrateUser(
     VALUES (${user.id}::uuid, ${user.name}, ${email}, true, ${user.created_at}::timestamptz, now())
     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email, updated_at = now()`;
 
-  const account = await sql<{ id: string }[]>`
-    SELECT id FROM core.account
-    WHERE user_id = ${user.id}::uuid AND provider_id = 'credential' LIMIT 1`;
-  if (account[0]) {
-    await sql`
-      UPDATE core.account SET password = ${user.password_hash}, updated_at = now()
-      WHERE id = ${account[0].id}::uuid`;
+  // NEW-1: an inactive user is migrated WITHOUT a credential (and any credential row a
+  // previous run inserted is removed), so password sign-in stays dead on every instance
+  // (H3 model: no credential row = no sign-in; reactivation goes through an admin
+  // password reset). `--include-inactive-credentials` restores the old behaviour.
+  if (user.is_active || includeInactiveCredentials) {
+    const account = await sql<{ id: string }[]>`
+      SELECT id FROM core.account
+      WHERE user_id = ${user.id}::uuid AND provider_id = 'credential' LIMIT 1`;
+    if (account[0]) {
+      await sql`
+        UPDATE core.account SET password = ${user.password_hash}, updated_at = now()
+        WHERE id = ${account[0].id}::uuid`;
+    } else {
+      await sql`
+        INSERT INTO core.account (id, account_id, provider_id, user_id, password, created_at, updated_at)
+        VALUES (gen_random_uuid(), ${user.id}, 'credential', ${user.id}::uuid, ${user.password_hash}, now(), now())`;
+    }
   } else {
     await sql`
-      INSERT INTO core.account (id, account_id, provider_id, user_id, password, created_at, updated_at)
-      VALUES (gen_random_uuid(), ${user.id}, 'credential', ${user.id}::uuid, ${user.password_hash}, now(), now())`;
+      DELETE FROM core.account
+      WHERE user_id = ${user.id}::uuid AND provider_id = 'credential'`;
   }
 
   const membership = await sql<{ id: string }[]>`
@@ -142,7 +179,8 @@ async function migrateUser(
 }
 
 async function main(): Promise<void> {
-  const sql = postgres(connectionString(), { prepare: false, max: 1, onnotice: () => {} });
+  const options = cliOptions();
+  const sql = postgres(options.connection, { prepare: false, max: 1, onnotice: () => {} });
   const out = (line: string): void => {
     process.stdout.write(`${line}\n`);
   };
@@ -158,15 +196,30 @@ async function main(): Promise<void> {
       const users = await tx<WmsUser[]>`SELECT * FROM wms.users ORDER BY created_at`;
       const conflicts: string[] = [];
       let migrated = 0;
+      let inactiveWithoutCredential = 0;
       for (const user of users) {
-        const result = await migrateUser(tx as unknown as Sql, orgId, user);
+        const result = await migrateUser(
+          tx as unknown as Sql,
+          orgId,
+          user,
+          options.includeInactiveCredentials,
+        );
         if (result === 'email_conflict') conflicts.push(user.email);
-        else migrated += 1;
+        else {
+          migrated += 1;
+          if (!user.is_active && !options.includeInactiveCredentials) inactiveWithoutCredential += 1;
+        }
       }
       // Legacy session/reset machinery is retired (§1.4): everyone re-authenticates once.
       await tx`DELETE FROM wms.user_sessions`;
       await tx`DELETE FROM wms.password_reset_tokens`;
       out(`migrate-wms-identity: ${migrated}/${users.length} users migrated into core (org ${orgId})`);
+      if (inactiveWithoutCredential > 0) {
+        out(
+          `${inactiveWithoutCredential} inactive user(s) migrated WITHOUT a credential (NEW-1): ` +
+            'reactivate via admin password reset, or re-run with --include-inactive-credentials.',
+        );
+      }
       if (conflicts.length > 0) {
         out(
           `WARNING: ${conflicts.length} email(s) already belong to a core user with a different id ` +

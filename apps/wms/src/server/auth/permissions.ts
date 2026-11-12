@@ -4,12 +4,15 @@
  * Effective permissions of a user:
  *   - legacy role `admin`  → every catalog key (owner/superuser; cannot be locked out);
  *   - has `user_roles` rows → union of their `role_permissions` (+ self-service keys);
- *   - no role rows yet     → `DEFAULT_ROLE_PERMISSIONS[users.role]` (pre-seed fallback).
+ *   - no role rows yet     → `DEFAULT_ROLE_PERMISSIONS[users.role]` (pre-seed fallback),
+ *     but ONLY for users with a `wms.user_profiles` row — a core user without a WMS
+ *     profile (e.g. CRM-only) is an explicit DENY: zero permissions (auth review C1).
  * Restrictions (carrier cost, carrier account data, rate shopping data) are the union of the
  * assigned roles' `restrictions`, applied by serializers through `redactFor`.
  */
 import { eq, inArray } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
+import { userProfiles } from '@kitstak/db/schema';
 import { rolePermissions, roles, userRoles } from '@/server/db/schema';
 import type { ROLE_RESTRICTIONS } from '@/lib/enums';
 import { getAppDb, type AppDb } from '@/server/api/db';
@@ -53,6 +56,14 @@ export async function loadPermissions(
     return { permissions: new Set(PERMISSION_KEYS), restrictions, roleKeys };
   }
   if (assigned.length === 0) {
+    // Pre-seed fallback applies only to real WMS identities: without a profile row the
+    // grant is empty (C1 — resolveSession already rejects these; this is defence in depth).
+    const [profile] = await db
+      .select({ userId: userProfiles.userId })
+      .from(userProfiles)
+      .where(eq(userProfiles.userId, user.id))
+      .limit(1);
+    if (!profile) return { permissions: new Set<PermissionKey>(), restrictions, roleKeys };
     return { permissions: new Set(DEFAULT_ROLE_PERMISSIONS[user.role]), restrictions, roleKeys };
   }
   const granted = (

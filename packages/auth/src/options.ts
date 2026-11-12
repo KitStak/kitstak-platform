@@ -17,7 +17,15 @@ export const SESSION_COOKIE_NAMES = [
 ] as const;
 
 export const PASSWORD_MIN_LENGTH = 10;
-export const PASSWORD_MAX_LENGTH = 128;
+/**
+ * 72, not 128: migrated WMS credentials are bcrypt hashes, and bcrypt silently ignores
+ * every byte after the 72nd — a longer password would authenticate with any suffix
+ * (auth review 2026-11-11, L3). The cap is enforced in the shared options so NO instance
+ * (CRM included) can set a password the compat verifier would later truncate. Better
+ * Auth's `maxPasswordLength` counts characters; the password-policy plugin additionally
+ * enforces the 72-BYTE rule for multi-byte passwords on every password-setting path.
+ */
+export const PASSWORD_MAX_LENGTH = 72;
 
 export const organizationPlugin = () =>
   organization({

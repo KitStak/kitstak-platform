@@ -1,12 +1,15 @@
 /**
  * Better Auth sign-in against the WMS instance (replaces password-login.test.ts):
- * bcrypt-compat credential round-trip, the lockout plugin, the policy gate on
- * change-password, and the audit rows the plugin emits (blueprint §1.4).
+ * bcrypt-compat credential round-trip + rehash-to-scrypt (auth review M1), closed
+ * sign-up (C1), the lockout plugin with its generic locked answer (M5), the blocked
+ * /change-password endpoint (M3), and the audit rows the plugin emits (blueprint §1.4).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { and, eq } from 'drizzle-orm';
+import { isBcryptHash } from '@kitstak/auth';
 import type { AppDb } from '@/server/api/db';
 import { auditLog } from '@/server/db/schema';
-import { passwordPolicyState } from '@kitstak/db/schema';
+import { account, passwordPolicyState } from '@kitstak/db/schema';
 import { seededDb, TEST_PASSWORD, type SeededDb } from './fixtures';
 
 let current: SeededDb;
@@ -22,7 +25,7 @@ function headersFor(extra: Record<string, string> = {}): Headers {
   return new Headers({
     origin: 'http://localhost:3000',
     host: 'localhost:3000',
-    'x-forwarded-for': `10.77.0.${(ipCounter % 250) + 1}`,
+    'x-forwarded-for': `10.77.${Math.floor(ipCounter / 250)}.${(ipCounter % 250) + 1}`,
     ...extra,
   });
 }
@@ -36,7 +39,13 @@ function statusOf(error: unknown): number {
   return (err.status && STATUS_BY_NAME[err.status]) || 500;
 }
 
-async function signInStatus(email: string, password: string): Promise<number> {
+interface SignInFailure {
+  readonly status: number;
+  readonly message: string | null;
+  readonly code: string | null;
+}
+
+async function signInOutcome(email: string, password: string): Promise<SignInFailure> {
   const auth = await getWmsAuth();
   try {
     const response = await auth.api.signInEmail({
@@ -44,24 +53,28 @@ async function signInStatus(email: string, password: string): Promise<number> {
       headers: headersFor(),
       asResponse: true,
     });
-    return response.status;
+    return { status: response.status, message: null, code: null };
   } catch (error: unknown) {
-    return statusOf(error);
+    const err = error as { body?: { message?: string; code?: string } };
+    return {
+      status: statusOf(error),
+      message: err.body?.message ?? null,
+      code: err.body?.code ?? null,
+    };
   }
 }
 
-async function changePasswordStatus(cookie: string, newPassword: string): Promise<number> {
-  const auth = await getWmsAuth();
-  try {
-    const response = await auth.api.changePassword({
-      body: { currentPassword: TEST_PASSWORD, newPassword, revokeOtherSessions: false },
-      headers: headersFor({ cookie }),
-      asResponse: true,
-    });
-    return response.status;
-  } catch (error: unknown) {
-    return statusOf(error);
-  }
+async function signInStatus(email: string, password: string): Promise<number> {
+  return (await signInOutcome(email, password)).status;
+}
+
+async function credentialHash(db: AppDb, userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ password: account.password })
+    .from(account)
+    .where(and(eq(account.userId, userId), eq(account.providerId, 'credential')))
+    .limit(1);
+  return row?.password ?? null;
 }
 
 describe('Better Auth sign-in (WMS instance)', () => {
@@ -70,16 +83,41 @@ describe('Better Auth sign-in (WMS instance)', () => {
     await current.close();
   });
 
-  it('round-trips the seeded bcrypt credential through the compat verifier', async () => {
+  it('round-trips the seeded bcrypt credential and rehashes it to scrypt (M1)', async () => {
     current = await seededDb();
     // The stored hash is bcrypt ($2b$) — a 200 here proves the §1.4 migration contract.
+    expect(isBcryptHash((await credentialHash(current.db, current.ids.admin)) ?? '')).toBe(true);
+    expect(await signInStatus('admin@kitstak.io', TEST_PASSWORD)).toBe(200);
+    // M1: the successful bcrypt login upgraded the stored credential to scrypt...
+    const upgraded = await credentialHash(current.db, current.ids.admin);
+    expect(upgraded).toBeTruthy();
+    expect(isBcryptHash(upgraded ?? '')).toBe(false);
+    // ...and the SAME password still signs in through the scrypt verifier.
     expect(await signInStatus('admin@kitstak.io', TEST_PASSWORD)).toBe(200);
     expect(await signInStatus('admin@kitstak.io', 'Wrong!password9')).toBe(401);
     expect(await verifyCredentialPassword(current.db, current.ids.admin, TEST_PASSWORD)).toBe(true);
     expect(await verifyCredentialPassword(current.db, current.ids.admin, 'nope')).toBe(false);
   });
 
-  it('locks the account after repeated failures and audits every outcome', async () => {
+  it('sign-up is closed on the WMS instance (C1)', async () => {
+    current = await seededDb();
+    const auth = await getWmsAuth();
+    let status: number;
+    try {
+      const response = await auth.api.signUpEmail({
+        body: { email: 'intruder@evil.example', password: 'Str0ng!Passw0rd', name: 'Intruder' },
+        headers: headersFor(),
+        asResponse: true,
+      });
+      status = response.status;
+    } catch (error: unknown) {
+      status = statusOf(error);
+    }
+    expect(status).toBeGreaterThanOrEqual(400);
+    expect(status).toBeLessThan(500);
+  });
+
+  it('locks after repeated failures, answers the GENERIC error while locked (M5), audits reasons', async () => {
     current = await seededDb();
     for (let i = 0; i < 5; i += 1) {
       expect(await signInStatus('viewer@kitstak.io', `Bad!password${i}1`)).toBe(401);
@@ -87,10 +125,17 @@ describe('Better Auth sign-in (WMS instance)', () => {
     const [state] = await current.db.select().from(passwordPolicyState);
     expect(state?.email).toBe('viewer@kitstak.io');
     expect(state?.lockedUntil).toBeTruthy();
-    // Locked: even the CORRECT password is refused until the lock expires.
-    expect(await signInStatus('viewer@kitstak.io', TEST_PASSWORD)).toBe(401);
-    const actions = (await current.db.select().from(auditLog)).map((row) => [row.action, row.outcome]);
+    // Locked: even the CORRECT password is refused — and the answer is byte-for-byte the
+    // invalid-credentials contract, never a distinct "account locked" oracle.
+    const locked = await signInOutcome('viewer@kitstak.io', TEST_PASSWORD);
+    expect(locked.status).toBe(401);
+    expect(locked.message).toBe('Invalid email or password');
+    expect(locked.code).not.toBe('ACCOUNT_LOCKED');
+    const audits = await current.db.select().from(auditLog);
+    const actions = audits.map((row) => [row.action, row.outcome]);
     expect(actions).toContainEqual(['auth.login', 'failure']);
+    // The specific reason is audit-only (M5).
+    expect(audits.some((row) => JSON.stringify(row.detail).includes('locked'))).toBe(true);
   });
 
   it('a successful sign-in clears the failure counter and writes a success audit row', async () => {
@@ -105,13 +150,36 @@ describe('Better Auth sign-in (WMS instance)', () => {
     expect(success?.userId).toBe(current.ids.operator);
   });
 
-  it('change-password enforces the company policy and rehashes to scrypt', async () => {
+  it("Better Auth's own /change-password and /update-user are blocked on WMS (M3)", async () => {
     current = await seededDb();
     const cookie = await signInCookie(current.db, 'admin@kitstak.io');
-    expect(await changePasswordStatus(cookie, 'short')).toBe(400);
-    expect(await changePasswordStatus(cookie, 'Brand!new2026pass')).toBe(200);
-    expect(await verifyCredentialPassword(current.db, current.ids.admin, 'Brand!new2026pass')).toBe(true);
+    const auth = await getWmsAuth();
+    let changeStatus: number;
+    try {
+      const response = await auth.api.changePassword({
+        body: { currentPassword: TEST_PASSWORD, newPassword: 'Brand!new2026pass', revokeOtherSessions: false },
+        headers: headersFor({ cookie }),
+        asResponse: true,
+      });
+      changeStatus = response.status;
+    } catch (error: unknown) {
+      changeStatus = statusOf(error);
+    }
+    expect(changeStatus).toBe(403);
+    let updateStatus: number;
+    try {
+      const response = await auth.api.updateUser({
+        body: { name: 'Hijacked' },
+        headers: headersFor({ cookie }),
+        asResponse: true,
+      });
+      updateStatus = response.status;
+    } catch (error: unknown) {
+      updateStatus = statusOf(error);
+    }
+    expect(updateStatus).toBe(403);
+    // The password is unchanged: the guarded /api/account/password flow is the only door.
     forgetSignInCookies(current.db);
-    expect(await signInStatus('admin@kitstak.io', 'Brand!new2026pass')).toBe(200);
+    expect(await signInStatus('admin@kitstak.io', TEST_PASSWORD)).toBe(200);
   });
 });

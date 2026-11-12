@@ -22,6 +22,8 @@ export interface RateLimitPolicy {
 
 export const RATE_LIMITS = {
   passwordReset: { name: 'password-reset', limit: 5, windowMs: 15 * 60_000 },
+  /** Per-TARGET-email forgot bucket (auth review H2): caps reset mail to one mailbox. */
+  passwordResetEmail: { name: 'password-reset-email', limit: 3, windowMs: 15 * 60_000 },
   mutation: { name: 'mutation', limit: 120, windowMs: 60_000 },
   bulkIo: { name: 'bulk-io', limit: 10, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitPolicy>;
@@ -85,12 +87,16 @@ async function maybePurge(db: AppDb, now: Date): Promise<void> {
     .where(lt(rateLimits.windowStart, new Date(now.getTime() - MAX_WINDOW_MS).toISOString()));
 }
 
-/** Client IP for rate limiting. Without TRUST_PROXY all clients share the "direct" bucket. */
 /**
  * IP recorded on audit and session rows (never "direct"). With TRUST_PROXY=1 the first
  * `x-forwarded-for` hop; otherwise the address Next's own router server forwards in
  * `x-forwarded-for` (dev and `next start`), then `x-real-ip`, falling back to 127.0.0.1.
- * The rate-limit bucket keeps using `clientIp` (spoof-resistant without a trusted proxy).
+ *
+ * SECURITY (auth review 2026-11-11, L2 — accepted as documented): without a trusted
+ * proxy this value is an ATTACKER-CHOSEN string. It is display/forensics DATA only and
+ * must NEVER feed a trust decision — rate-limit keys, allow-lists, lockout gates. Every
+ * limiter keys on `clientIp` (exposed to routes as `ctx.rateIp`), which honours the
+ * header only behind TRUST_PROXY=1 and otherwise collapses to the shared "direct" bucket.
  */
 export function auditIp(request: Request): string {
   const first = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();

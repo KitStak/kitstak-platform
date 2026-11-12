@@ -10,12 +10,15 @@
  *
  * Rules:
  *   - warehouses: legacy `admin` → all; otherwise `user_warehouses` rows. A non-admin with
- *     NO rows falls back to all warehouses (pre-seed compatibility; F2 seeds links, M14 requires ≥1).
+ *     NO rows falls back to all warehouses ONLY when a `wms.user_profiles` row exists
+ *     (pre-seed compatibility; F2 seeds links, M14 requires ≥1). A core user without a
+ *     WMS profile gets ZERO warehouses (auth review 2026-11-11, C1 — explicit deny).
  *   - clients: `users.all_clients` → "all"; otherwise `user_clients` rows (possibly none).
  *   - context cookies (`ks_ctx_wh`, `ks_ctx_client`) only ever NARROW the scope.
  */
 import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
+import { userProfiles } from '@kitstak/db/schema';
 import { userClients, userWarehouses, warehouses } from '@/server/db/schema';
 import type { AppDb } from '@/server/api/db';
 import { notFoundError } from '@/server/api/errors';
@@ -43,7 +46,23 @@ export async function getScope(
       .from(userWarehouses)
       .where(eq(userWarehouses.userId, user.id))
   ).map((r) => r.id);
-  const warehouseIds = user.role === 'admin' || linked.length === 0 ? await allWarehouseIds() : linked;
+  const hasProfile = async (): Promise<boolean> =>
+    (
+      await db
+        .select({ userId: userProfiles.userId })
+        .from(userProfiles)
+        .where(eq(userProfiles.userId, user.id))
+        .limit(1)
+    ).length > 0;
+  const warehouseIds =
+    user.role === 'admin'
+      ? await allWarehouseIds()
+      : linked.length > 0
+        ? linked
+        : // C1: the all-warehouses pre-seed fallback never applies to profile-less users.
+          (await hasProfile())
+          ? await allWarehouseIds()
+          : [];
 
   const clientIds: ClientScope = user.allClients
     ? 'all'

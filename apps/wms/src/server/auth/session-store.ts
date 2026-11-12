@@ -80,9 +80,14 @@ export async function resolveSession(db: AppDb, headers: Headers): Promise<Sessi
     .limit(1);
   if (legacy && !legacy.isActive) return { ok: false, reason: 'user_inactive' };
 
-  // No profile row (e.g. a CRM-only platform user): minimum-privilege viewer defaults.
-  const role = (profile?.legacyRole ?? 'viewer') as LegacyRole;
-  const userType = (profile?.userType ?? legacy?.userType ?? 'Operation') as UserType;
+  // No wms.user_profiles row (e.g. a CRM-only platform user): EXPLICIT DENY (auth
+  // review 2026-11-11, C1). A shared-session identity without a WMS profile gets zero
+  // WMS access — never viewer defaults, which exposed every viewer-visible screen
+  // across all warehouses to any core user.
+  if (!profile) return { ok: false, reason: 'no_profile' };
+
+  const role = profile.legacyRole as LegacyRole;
+  const userType = (profile.userType ?? legacy?.userType ?? 'Operation') as UserType;
   return {
     ok: true,
     user: {
@@ -91,8 +96,8 @@ export async function resolveSession(db: AppDb, headers: Headers): Promise<Sessi
       name: resolved.user.name,
       role,
       userType,
-      allClients: profile?.allClients ?? false,
-      isApiUser: profile?.isApiUser ?? false,
+      allClients: profile.allClients,
+      isApiUser: profile.isApiUser,
       sessionId: resolved.session.id,
       sessionVersion: 1,
       sessionExpiresAt: toIso(resolved.session.expiresAt),

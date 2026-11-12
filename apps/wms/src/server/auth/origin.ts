@@ -37,6 +37,10 @@ function safeUrlHost(url: string): string | null {
 /**
  * Rejects requests a browser marks as cross-site. Requests without Origin/Sec-Fetch-Site
  * (curl, server-to-server) pass this check — they cannot carry a victim's cookies.
+ *
+ * Accepted residual (auth review 2026-11-11, L2): this is a CSRF control only. It is no
+ * barrier to a non-browser attacker, so endpoints behind it must still carry their own
+ * authn/rate limits, and header-derived addresses (`auditIp`) stay data, never trust.
  */
 export function isSameOriginRequest(request: Request): boolean {
   const fetchSite = request.headers.get('sec-fetch-site');

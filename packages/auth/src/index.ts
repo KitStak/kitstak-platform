@@ -11,4 +11,5 @@ export * from './access-control';
 export * from './create-auth';
 export * from './password-compat';
 export * from './password-policy-plugin';
+export * from './timing';
 export { getKitstakSessionCookie, hasKitstakSessionCookie } from './session-cookie';

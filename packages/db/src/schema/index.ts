@@ -7,6 +7,7 @@
 export { coreSchema, crmSchema, wmsSchema } from './_shared';
 export * from './core/auth';
 export * from './core/auth-policy';
+export * from './core/rate-limit';
 export * from './core/customers';
 export * from './core/items';
 export * from './core/billing';

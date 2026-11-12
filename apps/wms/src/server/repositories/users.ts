@@ -12,6 +12,7 @@ import { AppError, fromZodError } from '@/server/api/errors';
 import type { AuthContext } from '@/server/auth/context';
 import {
   clearLockoutState,
+  deleteCredentialAccount,
   setCredentialPassword,
   upsertCoreIdentity,
 } from '@/server/auth/credentials';
@@ -424,7 +425,9 @@ export async function createUser(
     userId: row.id,
     email: row.email,
     name: row.name,
-    password: input.password,
+    // An inactive user must not hold a live shared credential (CRM has no is_active
+    // gate); admin reset issues it on activation, mirroring updateUser/resetUserPassword.
+    password: input.isActive ? input.password : undefined,
     legacyRole,
     userType: input.userType,
     isApiUser: false,
@@ -506,12 +509,16 @@ export async function updateUser(
       version: sql`${u.version} + 1`,
     })
     .where(eq(u.id, id));
-  // Sync the shared Better Auth identity (email/name/role/profile; new credential if set).
+  // Sync the shared Better Auth identity (email/name/role/profile; new credential if
+  // set). NEW-2: a password submitted for a user whose RESULTING state is inactive is
+  // skipped — an inactive user must never (re)gain a sign-in credential through an edit.
   await upsertCoreIdentity(tx, {
     userId: id,
     email: input.email.toLowerCase(),
     name: displayName(input.firstName, input.lastName),
-    ...(input.password ? { password: input.password, passwordChangedAt: new Date() } : {}),
+    ...(input.password && input.isActive
+      ? { password: input.password, passwordChangedAt: new Date() }
+      : {}),
     legacyRole: role,
     userType: input.userType,
     isApiUser: before.isApiUser,
@@ -534,6 +541,14 @@ export async function updateUser(
       { password: '••••' },
       { password: 'Changed' },
     );
+
+  // An inactive RESULTING state kills the shared credential so password sign-in dies on
+  // EVERY instance (CRM included) — reactivation requires an admin password reset (auth
+  // review 2026-11-11, H3). NEW-2: keyed on the resulting state, not the active→inactive
+  // transition, so an edit of an ALREADY-inactive user also clears any credential a
+  // concurrent writer (or an earlier bug) left behind. Runs AFTER upsertCoreIdentity so
+  // a submitted password cannot resurrect the credential of an inactive user.
+  if (!input.isActive) await deleteCredentialAccount(tx, id);
 
   // Access, status or password changes end every session of the user (BUILD_PLAN F3 note).
   const accessChanged =
@@ -577,8 +592,15 @@ export async function setUsersActive(
       { status: row.isActive ? 'Active' : 'Inactive' },
       { status: isActive ? 'Active' : 'Inactive' },
     );
+    // Reactivation clears the lockout but does NOT restore the deleted credential:
+    // the admin must issue a password reset (auth review H3 — mirror of the delete below).
     if (isActive) await clearLockoutState(inner, row.email);
-    if (!isActive) await bumpSessionVersion(inner, id);
+    if (!isActive) {
+      // H3: revoking sessions is not enough — the shared credential row must go too,
+      // or the deactivated user simply signs in again at crm.kitstak.io.
+      await deleteCredentialAccount(inner, id);
+      await bumpSessionVersion(inner, id);
+    }
   });
 }
 
@@ -609,6 +631,13 @@ export async function resetUserPassword(
   const row = await loadUser(tx, id);
   if (id === auth.user.id)
     throw new AppError('INVALID_STATE', 'Use Change Password to change your own password');
+  // NEW-2: a reset would (re)create the shared core.account credential, silently
+  // reactivating password sign-in on every instance for a deactivated user (H3).
+  if (!row.isActive)
+    throw new AppError(
+      'INVALID_STATE',
+      `${row.name} is inactive. Activate the user first, then reset their password.`,
+    );
   const temporaryPassword = generateTemporaryPassword();
   await setCredentialPassword(tx, id, temporaryPassword, { passwordChangedAt: null });
   await tx

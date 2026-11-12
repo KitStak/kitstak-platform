@@ -5,7 +5,8 @@ import { Input, cn, type InputProps } from '@/components/ui';
 
 /** Mirrors PASSWORD_*_LENGTH in src/server/auth/options.ts (kept local so the browser bundle stays free of server auth code). */
 export const PASSWORD_MIN_LENGTH = 10;
-export const PASSWORD_MAX_LENGTH = 128;
+/** 72, not 128: bcrypt-compat credentials ignore bytes past the 72nd (auth review L3). */
+export const PASSWORD_MAX_LENGTH = 72;
 
 export function AuthHeading({ title, subtitle }: { readonly title: string; readonly subtitle?: ReactNode }) {
   return (

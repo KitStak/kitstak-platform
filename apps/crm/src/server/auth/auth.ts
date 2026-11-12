@@ -7,7 +7,7 @@
  * Server-only. Route handler: `src/app/api/auth/[...all]/route.ts`.
  */
 import 'server-only';
-import { createAuth, type KitstakAuth } from '@kitstak/auth';
+import { createAuth, ipAddressFromTrustProxy, type KitstakAuth } from '@kitstak/auth';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { metadataTouchesKitstak, redactOrgMetadata } from '@/server/services/admin-policy';
 import { db } from '@/server/db';
@@ -48,6 +48,10 @@ const kitstakOrgMetadataHooks = {
 };
 
 function buildAuth(): KitstakAuth {
+  // NEW-3: Better Auth's rate-limit/session IP resolution follows TRUST_PROXY (same
+  // contract as WMS clientIp). On Vercel the defaults are safe; behind nginx/CF set
+  // trusted proxies or the shared core.rate_limit bucket 429s everyone.
+  const ipAddress = ipAddressFromTrustProxy(env.TRUST_PROXY);
   return createAuth({
     db,
     schema,
@@ -56,6 +60,7 @@ function buildAuth(): KitstakAuth {
     trustedOrigins: trustedOrigins(),
     useSecureCookies: isProduction(),
     ...(env.AUTH_COOKIE_DOMAIN ? { cookieDomain: env.AUTH_COOKIE_DOMAIN } : {}),
+    ...(ipAddress ? { ipAddress } : {}),
     hooks: kitstakOrgMetadataHooks,
   });
 }

@@ -18,9 +18,10 @@ export const POST = defineRoute({
   rateLimit: false,
   transaction: false,
   body: bodySchema,
-  handler: async ({ db, request, body, ip }) => {
+  handler: async ({ db, request, body, ip, rateIp }) => {
     if (!isSameOriginRequest(request)) throw new AppError('CSRF', 'Cross-site requests are not allowed');
-    const limit = await hitRateLimit(db, RATE_LIMITS.passwordReset, `reset:${ip}`);
+    // Auth review H2: keyed on the spoof-resistant rateIp, not the forgeable audit ip.
+    const limit = await hitRateLimit(db, RATE_LIMITS.passwordReset, `reset:${rateIp}`);
     if (!limit.allowed) {
       throw new AppError('RATE_LIMITED', 'Too many attempts. Please try again later.', {
         headers: { 'Retry-After': String(limit.retryAfterSeconds) },

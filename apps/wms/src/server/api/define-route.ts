@@ -54,7 +54,14 @@ export interface RouteCtx<Q, B, P, A extends AuthMode> {
   readonly searchParams: URLSearchParams;
   /** Parses the grid grammar from the URL; throws VALIDATION on malformed parts. */
   grid(): GridQuery;
+  /** Audit/display address: first `x-forwarded-for` hop — attacker-chosen, data only. */
   readonly ip: string;
+  /**
+   * Spoof-resistant rate-limit key (`clientIp`): honours `x-forwarded-for` only behind
+   * a trusted proxy (TRUST_PROXY=1), otherwise the shared "direct" bucket. Routes that
+   * hand-roll limits (forgot/reset) MUST key on this, never on `ip` (auth review H2).
+   */
+  readonly rateIp: string;
   readonly userAgent: string | null;
   /** For change_log / ledger calls: `{ userId, source: <email> }`. */
   readonly actor: { readonly userId: string | null; readonly source: string };
@@ -256,6 +263,7 @@ export function defineRoute<
             return parsed.query;
           },
           ip,
+          rateIp,
           userAgent,
           actor: { userId, source: auth?.user.email ?? 'System' },
           audit: async (entry: Omit<AuditEntry, 'userId' | 'ip' | 'userAgent'>) =>

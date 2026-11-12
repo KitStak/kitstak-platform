@@ -51,7 +51,29 @@ export type WebhookRow = typeof webhooks.$inferSelect;
 
 // Secrets --------------------------------------------------------------------------------------
 
+let warnedLegacyKdf = false;
+
+/**
+ * Webhook-secret KDF (auth review 2026-11-11, M6): prefers the dedicated
+ * `WEBHOOK_KDF_SECRET` so the webhook vault is decoupled from the platform-wide
+ * `BETTER_AUTH_SECRET` (shared across WMS/CRM/portal envs — compromise of any of them
+ * must not disclose webhook secrets, and rotating it must not brick decryption).
+ * The legacy derivation stays as a fallback for existing deployments; switching to the
+ * dedicated secret requires a one-time re-encrypt of `webhooks.secret_ciphertext`.
+ */
 function encryptionKey(): Buffer {
+  const dedicated = env.WEBHOOK_KDF_SECRET;
+  if (dedicated) {
+    return createHash('sha256').update(`kitstak:webhook-secret:v1:${dedicated}`).digest();
+  }
+  if (!warnedLegacyKdf) {
+    warnedLegacyKdf = true;
+    logger.warn('webhook.kdf.legacy_secret', {
+      message:
+        'WEBHOOK_KDF_SECRET is not set — webhook secrets are encrypted with a key derived from the ' +
+        'shared BETTER_AUTH_SECRET (deprecated). Set WEBHOOK_KDF_SECRET and re-encrypt webhook secrets.',
+    });
+  }
   return createHash('sha256').update(`kitstak:webhook-secret:v1:${env.BETTER_AUTH_SECRET}`).digest();
 }
 

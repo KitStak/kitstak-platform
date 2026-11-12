@@ -17,12 +17,21 @@ export const POST = defineRoute({
   rateLimit: false,
   transaction: false,
   body: bodySchema,
-  handler: async ({ db, request, body, ip }) => {
+  handler: async ({ db, request, body, ip, rateIp }) => {
     if (!isSameOriginRequest(request)) throw new AppError('CSRF', 'Cross-site requests are not allowed');
-    const limit = await hitRateLimit(db, RATE_LIMITS.passwordReset, ip);
-    if (!limit.allowed) {
+    // Auth review H2: the limiter keys on the spoof-resistant rateIp (rotating
+    // x-forwarded-for no longer opens a fresh bucket), plus a per-target-email bucket
+    // so one mailbox cannot be reset-mail-bombed from many addresses either.
+    const limit = await hitRateLimit(db, RATE_LIMITS.passwordReset, rateIp);
+    const emailLimit = await hitRateLimit(
+      db,
+      RATE_LIMITS.passwordResetEmail,
+      body.email.trim().toLowerCase(),
+    );
+    if (!limit.allowed || !emailLimit.allowed) {
+      const retryAfter = Math.max(limit.retryAfterSeconds, emailLimit.retryAfterSeconds);
       throw new AppError('RATE_LIMITED', 'Too many reset requests. Please try again later.', {
-        headers: { 'Retry-After': String(limit.retryAfterSeconds) },
+        headers: { 'Retry-After': String(retryAfter) },
       });
     }
     await requestPasswordReset(db, { email: body.email, baseUrl: new URL(request.url).origin, ip });

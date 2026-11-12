@@ -5,6 +5,13 @@
  * 15 min by default, lock resets the counter, a failure that lost the race to a lockout
  * does not touch the state, success clears the state).
  *
+ * Lockout accounting covers `/sign-in/email` AND `/change-password` (auth review
+ * 2026-11-11, M3 residual): change-password verifies the CURRENT password, so on an
+ * instance that serves it (CRM) it is a credential oracle exactly like sign-in. Failed
+ * current-password attempts increment the same per-email state — keyed on the SIGNED-IN
+ * user's email from the session, never the request body — and a locked account's
+ * `/change-password` is rejected with the same generic message as sign-in.
+ *
  * The policy source is injected (`loadPolicy`): WMS passes a loader reading
  * `wms.company_settings.password_policy`; CRM passes nothing and gets defaults. Audit
  * emission is injected too (`onAuditEvent`). Lockout state lives in the plugin's own
@@ -12,16 +19,31 @@
  * adapter, so the table is generated with the rest of the auth schema).
  */
 import type { BetterAuthPlugin } from 'better-auth';
-import { APIError, createAuthMiddleware } from 'better-auth/api';
+import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
+import { sql } from 'drizzle-orm';
+import { burnDummyPasswordVerify } from './timing';
 
 /** bcrypt only uses the first 72 bytes; longer inputs are rejected by the policy. */
 export const MAX_PASSWORD_BYTES = 72;
 export const DEFAULT_LOCKOUT_THRESHOLD = 5;
 export const DEFAULT_LOCKOUT_MINUTES = 15;
 
+/**
+ * The ONLY message a failed sign-in ever shows, locked accounts included: a distinct
+ * "account locked" response would confirm the account exists and that the lockout
+ * threshold was reached (auth review 2026-11-11, M5). The specific reason goes to the
+ * injected audit sink only.
+ */
 export const INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password';
-export const LOCKED_MESSAGE =
-  'This account is temporarily locked after too many failed attempts. Try again later.';
+/** Error code matching Better Auth's own invalid-credentials response (no oracle). */
+export const INVALID_CREDENTIALS_CODE = 'INVALID_EMAIL_OR_PASSWORD';
+
+/** Internal marker so the after-hook can tell a lockout rejection from a real bad password. */
+const LOCKOUT_REJECTION = Symbol('kitstak-lockout-rejection');
+
+function isLockoutRejection(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && LOCKOUT_REJECTION in error;
+}
 
 export interface PasswordPolicy {
   readonly minLength: number;
@@ -102,11 +124,23 @@ export interface PasswordPolicyAuditEvent {
 /** Sparse policy loader; missing keys fall back to `DEFAULT_PASSWORD_POLICY`. */
 export type PasswordPolicyLoader = () => Partial<PasswordPolicy> | Promise<Partial<PasswordPolicy>>;
 
+/**
+ * Minimal raw-SQL seam (a Drizzle db handle has it). When present, failure counting is
+ * one atomic `INSERT ... ON CONFLICT (email) DO UPDATE` instead of read-then-write, so
+ * parallel bad attempts can neither overshoot the window nor race the unique constraint
+ * into a 500 (auth review 2026-11-11, L1).
+ */
+export interface RawSqlExecutor {
+  execute(query: ReturnType<typeof sql>): Promise<unknown>;
+}
+
 export interface PasswordPolicyPluginOptions {
   /** Injected policy source (WMS: company settings loader). Omitted → defaults. */
   readonly loadPolicy?: PasswordPolicyLoader;
   /** Injected audit sink (WMS: `audit_log` writer). Failures here never block auth. */
   readonly onAuditEvent?: (event: PasswordPolicyAuditEvent) => void | Promise<void>;
+  /** Raw SQL handle for the atomic lockout upsert (the factory passes the app's Drizzle db). */
+  readonly rawDb?: RawSqlExecutor;
   /** Clock override for tests. */
   readonly now?: () => Date;
 }
@@ -167,16 +201,53 @@ function findState(adapter: PolicyAdapter, email: string): Promise<PasswordPolic
 }
 
 /**
- * Counts a failed attempt. Mirrors WMS `registerFailure`: the count is re-read first, and
- * an attempt that lost the race to a lockout does not touch the row (it must not clear
- * `lockedUntil`); reaching the threshold resets the counter and sets the deadline.
+ * Counts a failed attempt. Semantics mirror WMS `registerFailure`: an attempt that lost
+ * the race to a lockout does not touch the row (it must not clear `lockedUntil`);
+ * reaching the threshold resets the counter and sets the deadline.
+ *
+ * With `rawDb` (the normal path — the factory passes the app's Drizzle handle) this is a
+ * single atomic upsert: the count arithmetic and the lockout decision happen SQL-side
+ * under the `email` unique constraint, so N parallel failures can neither skip counts
+ * nor 500 on a duplicate insert (L1). Without it, the adapter read-then-write fallback
+ * keeps the plugin usable standalone.
  */
 async function registerFailure(
   adapter: PolicyAdapter,
+  rawDb: RawSqlExecutor | undefined,
   email: string,
   policy: PasswordPolicy,
   now: Date,
 ): Promise<void> {
+  if (rawDb) {
+    const nowIso = now.toISOString();
+    const lockIso = new Date(now.getTime() + policy.lockoutMinutes * 60_000).toISOString();
+    const threshold = policy.lockoutThreshold;
+    await rawDb.execute(sql`
+      INSERT INTO core.password_policy_state (email, failed_login_count, locked_until)
+      VALUES (
+        ${email},
+        CASE WHEN 1 >= ${threshold} THEN 0 ELSE 1 END,
+        CASE WHEN 1 >= ${threshold} THEN CAST(${lockIso} AS timestamp) ELSE NULL END
+      )
+      ON CONFLICT (email) DO UPDATE SET
+        failed_login_count = CASE
+          WHEN password_policy_state.locked_until IS NOT NULL
+            AND password_policy_state.locked_until > CAST(${nowIso} AS timestamp)
+            THEN password_policy_state.failed_login_count
+          WHEN password_policy_state.failed_login_count + 1 >= ${threshold} THEN 0
+          ELSE password_policy_state.failed_login_count + 1
+        END,
+        locked_until = CASE
+          WHEN password_policy_state.locked_until IS NOT NULL
+            AND password_policy_state.locked_until > CAST(${nowIso} AS timestamp)
+            THEN password_policy_state.locked_until
+          WHEN password_policy_state.failed_login_count + 1 >= ${threshold}
+            THEN CAST(${lockIso} AS timestamp)
+          ELSE NULL
+        END
+    `);
+    return;
+  }
   const state = await findState(adapter, email);
   const lockedTime = toTime(state?.lockedUntil);
   if (lockedTime !== null && lockedTime > now.getTime()) return;
@@ -210,6 +281,44 @@ const NEW_PASSWORD_PATHS: Record<string, 'password' | 'newPassword'> = {
   '/reset-password': 'newPassword',
 };
 
+/**
+ * Paths the lockout state machine covers (M3 residual): both verify a password for an
+ * identified account, so both are credential oracles the per-email lockout must gate.
+ */
+const LOCKOUT_PATHS = new Set(['/sign-in/email', '/change-password']);
+
+/** Better Auth's wrong-CURRENT-password code on `/change-password` (BASE_ERROR_CODES). */
+const INVALID_CURRENT_PASSWORD_CODE = 'INVALID_PASSWORD';
+
+type MiddlewareCtx = Parameters<Parameters<typeof createAuthMiddleware>[0]>[0];
+
+/**
+ * The email the lockout state is keyed on. `/sign-in/email` identifies the account by
+ * the request body; `/change-password` targets the SIGNED-IN user, so the email comes
+ * from the session (M3 residual: a body-supplied email would let an attacker shard the
+ * counter across keys and never trip the lock).
+ */
+async function lockoutEmail(ctx: MiddlewareCtx): Promise<string | null> {
+  if (ctx.path === '/change-password') {
+    const cached = ctx.context.session?.user as { email?: string } | undefined;
+    if (cached?.email) return normalizeEmail(cached.email);
+    try {
+      const session = await getSessionFromCtx(ctx);
+      return normalizeEmail(session?.user?.email);
+    } catch {
+      return null; // no/invalid session: the endpoint itself answers 401
+    }
+  }
+  const body = (ctx.body ?? {}) as { email?: unknown };
+  return normalizeEmail(body.email);
+}
+
+/** The password-bearing body field on a lockout-covered path (for the timing burn). */
+function submittedPassword(ctx: MiddlewareCtx): unknown {
+  const body = (ctx.body ?? {}) as { password?: unknown; currentPassword?: unknown };
+  return ctx.path === '/change-password' ? body.currentPassword : body.password;
+}
+
 export function passwordPolicyPlugin(options: PasswordPolicyPluginOptions = {}) {
   const now = options.now ?? (() => new Date());
 
@@ -222,6 +331,12 @@ export function passwordPolicyPlugin(options: PasswordPolicyPluginOptions = {}) 
     }
   };
 
+  /**
+   * Attribution DATA for audit rows only (auth review 2026-11-11, L2 — accepted): the
+   * first `x-forwarded-for` hop is attacker-chosen without a trusted proxy, so this
+   * value must NEVER feed a trust decision (rate-limit keys, allow-lists). Spoof-aware
+   * limiting uses the app's `clientIp`/`rateIp` (TRUST_PROXY-gated) instead.
+   */
   const requestMeta = (headers: Headers | undefined): { ip: string | null; userAgent: string | null } => ({
     ip: headers?.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
     userAgent: headers?.get('user-agent') ?? null,
@@ -246,25 +361,45 @@ export function passwordPolicyPlugin(options: PasswordPolicyPluginOptions = {}) 
       before: [
         {
           // Lockout gate: a locked account is rejected before credentials are even checked
-          // (WMS returned `locked` regardless of password correctness).
-          matcher: (ctx) => ctx.path === '/sign-in/email',
+          // (WMS returned `locked` regardless of password correctness). Covers sign-in AND
+          // change-password (M3 residual — both verify a password for the account).
+          matcher: (ctx) => ctx.path !== undefined && LOCKOUT_PATHS.has(ctx.path),
           handler: createAuthMiddleware(async (ctx) => {
-            const body = (ctx.body ?? {}) as { email?: unknown };
-            const email = normalizeEmail(body.email);
+            const email = await lockoutEmail(ctx);
             if (!email) return;
             const adapter = ctx.context.adapter as unknown as PolicyAdapter;
             const state = await findState(adapter, email);
             const lockedTime = toTime(state?.lockedUntil);
             if (lockedTime !== null && lockedTime > now().getTime()) {
               await emitAudit({
-                action: 'auth.login',
+                action: ctx.path === '/change-password' ? 'auth.password.rejected' : 'auth.login',
                 outcome: 'failure',
                 email,
                 userId: null,
                 reason: 'locked',
                 ...requestMeta(ctx.headers),
               });
-              throw new APIError('UNAUTHORIZED', { message: LOCKED_MESSAGE, code: 'ACCOUNT_LOCKED' });
+              // NEW-5: this gate rejects before any KDF runs, so a fast answer would be a
+              // timing oracle distinguishing "locked" from "wrong password" (which costs a
+              // full scrypt verify). Burn one dummy verification before throwing.
+              await burnDummyPasswordVerify(submittedPassword(ctx));
+              // M5: externally indistinguishable from a wrong password — the lock is
+              // enforced silently and only the audit row above carries the reason.
+              // On /change-password the "wrong password" answer is Better Auth's 400
+              // INVALID_PASSWORD, so a locked account must answer the same way or the
+              // status code becomes a lock oracle for session holders.
+              const rejection =
+                ctx.path === '/change-password'
+                  ? new APIError('BAD_REQUEST', {
+                      message: 'Invalid password',
+                      code: 'INVALID_PASSWORD',
+                    })
+                  : new APIError('UNAUTHORIZED', {
+                      message: INVALID_CREDENTIALS_MESSAGE,
+                      code: INVALID_CREDENTIALS_CODE,
+                    });
+              Object.defineProperty(rejection, LOCKOUT_REJECTION, { value: true });
+              throw rejection;
             }
           }),
         },
@@ -306,17 +441,42 @@ export function passwordPolicyPlugin(options: PasswordPolicyPluginOptions = {}) 
         {
           // Outcome tracking: failures count toward lockout (only for existing users,
           // like WMS — unknown emails audit but never create state rows); success clears
-          // the counter and deadline.
-          matcher: (ctx) => ctx.path === '/sign-in/email',
+          // the counter and deadline. `/change-password` failures count too (M3): a wrong
+          // CURRENT password there is the same credential guess as a wrong sign-in password.
+          matcher: (ctx) => ctx.path !== undefined && LOCKOUT_PATHS.has(ctx.path),
           handler: createAuthMiddleware(async (ctx) => {
-            const body = (ctx.body ?? {}) as { email?: unknown };
-            const email = normalizeEmail(body.email);
+            const email = await lockoutEmail(ctx);
             if (!email) return;
             const adapter = ctx.context.adapter as unknown as PolicyAdapter;
             const meta = requestMeta(ctx.headers);
             const returned = ctx.context.returned;
+            if (ctx.path === '/change-password') {
+              if (!(returned instanceof Error)) {
+                // The current password verified: the account owner is present.
+                await clearFailures(adapter, email);
+                return;
+              }
+              // A lockout rejection already audited as 'locked' and must not re-count.
+              if (isLockoutRejection(returned)) return;
+              // Only a wrong CURRENT password is a credential guess. Policy rejections of
+              // the NEW password, missing-credential errors etc. never touch the counter.
+              const code = (returned as { body?: { code?: string } }).body?.code;
+              if (code !== INVALID_CURRENT_PASSWORD_CODE) return;
+              const policy = await resolvePolicy(options.loadPolicy);
+              await registerFailure(adapter, options.rawDb, email, policy, now());
+              await emitAudit({
+                action: 'auth.password.rejected',
+                outcome: 'failure',
+                email,
+                userId: ctx.context.session?.user?.id ?? null,
+                reason: 'invalid_current_password',
+                ...meta,
+              });
+              return;
+            }
             if (returned instanceof Error) {
-              if (returned instanceof APIError && returned.body?.code === 'ACCOUNT_LOCKED') return;
+              // A lockout rejection already audited as 'locked' and must not re-count.
+              if (isLockoutRejection(returned)) return;
               const user = await adapter.findOne<{ id: string }>({
                 model: 'user',
                 where: [{ field: 'email', value: email }],
@@ -333,7 +493,7 @@ export function passwordPolicyPlugin(options: PasswordPolicyPluginOptions = {}) 
                 return;
               }
               const policy = await resolvePolicy(options.loadPolicy);
-              await registerFailure(adapter, email, policy, now());
+              await registerFailure(adapter, options.rawDb, email, policy, now());
               await emitAudit({
                 action: 'auth.login',
                 outcome: 'failure',

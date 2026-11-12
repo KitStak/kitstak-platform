@@ -23,11 +23,15 @@ export const CREDENTIAL_PROVIDER = 'credential';
 
 export type WmsLegacyRole = (typeof users.$inferSelect)['role'];
 
-/** Blueprint §1.4 role mapping: admin→admin, manager/operator→member, viewer→viewer. */
-export function orgRoleForLegacy(role: WmsLegacyRole): 'admin' | 'member' | 'viewer' {
-  if (role === 'admin') return 'admin';
-  if (role === 'viewer') return 'viewer';
-  return 'member';
+/**
+ * Org-role mapping (auth review 2026-11-11, H3): a WMS `admin` is a warehouse admin,
+ * NOT a platform organization admin — org `admin` would grant Better Auth's
+ * /api/auth/organization/* powers (invite arbitrary emails, update member roles,
+ * remove members) on every app. Everyone maps to `member`/`viewer`; only an explicitly
+ * chosen platform owner is ever given org owner/admin (done manually, never here).
+ */
+export function orgRoleForLegacy(role: WmsLegacyRole): 'member' | 'viewer' {
+  return role === 'viewer' ? 'viewer' : 'member';
 }
 
 /** The one platform organization every WMS user belongs to (§2.4); created on demand. */
@@ -252,6 +256,21 @@ export async function setCredentialPassword(
     await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1)
   )[0];
   if (legacy) await clearLockoutState(db, legacy.email);
+}
+
+/**
+ * Deletes the credential `core.account` row (auth review 2026-11-11, H3): the shared
+ * tables have no banned/active column Better Auth checks, so removing the credential is
+ * what makes password sign-in die on EVERY instance (CRM included) when WMS deactivates
+ * a user. Reactivation deliberately does NOT restore it — the admin password-reset flow
+ * (`resetUserPassword` → `setCredentialPassword`) issues the new credential.
+ */
+export async function deleteCredentialAccount(db: AppDb, userId: string): Promise<boolean> {
+  const removed = await db
+    .delete(account)
+    .where(and(eq(account.userId, userId), eq(account.providerId, CREDENTIAL_PROVIDER)))
+    .returning({ id: account.id });
+  return removed.length > 0;
 }
 
 /** Clears the password-policy plugin's lockout row for an email. */

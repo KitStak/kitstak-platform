@@ -38,6 +38,17 @@ const envSchema = z.object({
     .refine((value) => /^postgres(ql)?:\/\//.test(value), 'DATABASE_URL_UNPOOLED must be a postgres:// URL')
     .optional(),
   BETTER_AUTH_SECRET: z.string().min(32, 'BETTER_AUTH_SECRET must be at least 32 characters'),
+  /**
+   * Dedicated KDF input for webhook-secret encryption (auth review 2026-11-11, M6).
+   * BETTER_AUTH_SECRET is shared across every KitStak app, so deriving the webhook key
+   * from it means any app's env compromise discloses CRM webhook secrets — and rotating
+   * it bricks decryption. Set this to decouple; unset falls back to the legacy
+   * BETTER_AUTH_SECRET derivation with a server-side deprecation warning.
+   */
+  WEBHOOK_KDF_SECRET: z
+    .string()
+    .min(32, 'WEBHOOK_KDF_SECRET must be at least 32 characters')
+    .optional(),
   BETTER_AUTH_URL: z.url('BETTER_AUTH_URL must be an absolute URL'),
   NEXT_PUBLIC_APP_URL: z.url().optional(),
   TRUSTED_ORIGINS: commaList,
@@ -52,6 +63,13 @@ const envSchema = z.object({
       'AUTH_COOKIE_DOMAIN must be a bare cookie domain like .kitstak.io (no scheme, no port)',
     )
     .optional(),
+  /**
+   * Client-IP trust for Better Auth's shared DB rate limiter (round-2 NEW-3; same
+   * contract as WMS): unset/'0' → Better Auth defaults (Vercel-safe), '1' → the fronting
+   * proxy overwrites x-forwarded-for / x-real-ip, anything else → comma list of trusted
+   * proxy IPs/CIDRs walked right-to-left (nginx / Cloudflare).
+   */
+  TRUST_PROXY: z.string().optional(),
   LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
   /** Optional token that unlocks the detailed /api/v1/health payload in production. */
   HEALTH_TOKEN: z.string().min(24, 'HEALTH_TOKEN must be at least 24 characters').optional(),
