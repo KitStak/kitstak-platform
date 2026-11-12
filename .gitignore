@@ -37,3 +37,4 @@ Thumbs.db
 *.tsbuildinfo
 deploy/secrets.env
 deploy/.link/
+deploy/.cloud-url

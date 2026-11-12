@@ -399,45 +399,9 @@
 :root[data-theme='dark'] .auth-hero {
   box-shadow: inset -1px 0 0 var(--border-subtle);
 }
-:root[data-theme='dark'] .auth-hero .auth-card-a {
-  stop-color: #1b1d21;
-}
-:root[data-theme='dark'] .auth-hero .auth-card-b {
-  stop-color: #1b1d21;
-}
-:root[data-theme='dark'] .auth-hero .auth-surface {
-  fill: #1b1d21;
-}
-:root[data-theme='dark'] .auth-hero .auth-surface-stroke {
-  stroke: #2c3036;
-}
-:root[data-theme='dark'] .auth-hero .auth-line {
-  fill: #3a3f46;
-}
-:root[data-theme='dark'] .auth-hero .auth-ink {
-  fill: #ecedef;
-}
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) .auth-hero {
     box-shadow: inset -1px 0 0 var(--border-subtle);
-  }
-  :root:not([data-theme='light']) .auth-hero .auth-card-a {
-    stop-color: #1b1d21;
-  }
-  :root:not([data-theme='light']) .auth-hero .auth-card-b {
-    stop-color: #1b1d21;
-  }
-  :root:not([data-theme='light']) .auth-hero .auth-surface {
-    fill: #1b1d21;
-  }
-  :root:not([data-theme='light']) .auth-hero .auth-surface-stroke {
-    stroke: #2c3036;
-  }
-  :root:not([data-theme='light']) .auth-hero .auth-line {
-    fill: #3a3f46;
-  }
-  :root:not([data-theme='light']) .auth-hero .auth-ink {
-    fill: #ecedef;
   }
 }

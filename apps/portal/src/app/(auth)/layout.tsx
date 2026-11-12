@@ -66,15 +66,6 @@ export default function AuthLayout({ children }: { readonly children: React.Reac
         aria-hidden
         className="auth-hero relative hidden overflow-hidden lg:flex lg:flex-col lg:items-center lg:justify-center lg:gap-10 lg:p-12"
       >
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.12]"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
-            backgroundSize: '44px 44px',
-            maskImage: 'radial-gradient(ellipse at center, black 30%, transparent 75%)',
-          }}
-        />
         <LauncherPreview />
         <div className="relative max-w-md text-center text-white">
           <p className="text-2xl leading-tight font-semibold tracking-[-0.02em]">

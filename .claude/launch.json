@@ -2,24 +2,22 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "wms-preview",
+      "name": "crm",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "--dir",
-        "C:\\Users\\MIKELU~1\\AppData\\Local\\Temp\\claude\\b24f55f35439d2fe\\37034c96-ce27-4562-8f0a-92636a2cc401\\scratchpad\\preview\\apps\\wms",
-        "dev"
-      ],
-      "port": 3210
+      "runtimeArgs": ["--dir", "apps/crm", "dev"],
+      "port": 3100
     },
     {
-      "name": "crm-preview",
+      "name": "portal",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "--dir",
-        "C:\\Users\\MIKELU~1\\AppData\\Local\\Temp\\claude\\b24f55f35439d2fe\\37034c96-ce27-4562-8f0a-92636a2cc401\\scratchpad\\preview\\apps\\crm",
-        "dev"
-      ],
-      "port": 3100
+      "runtimeArgs": ["--dir", "apps/portal", "dev"],
+      "port": 3300
+    },
+    {
+      "name": "wms",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "apps/wms", "dev"],
+      "port": 3000
     }
   ]
 }
