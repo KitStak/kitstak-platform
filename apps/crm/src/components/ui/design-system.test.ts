@@ -1,28 +1,42 @@
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { LABEL_COLORS, colorForString, isLabelColor, labelColorStyle, toLabelColor } from './label-color';
 import { initialsFor } from './avatar';
 import { cn } from './cn';
 
-const tokens = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
+/**
+ * Design tokens are shared with KitStak WMS through the @kitstak/ui workspace package
+ * (the single source of truth — no per-app copy, so no hash pinning is needed).
+ */
+const tokensPath = createRequire(import.meta.url).resolve('@kitstak/ui/styles/tokens.css');
+const tokens = readFileSync(tokensPath, 'utf8');
 const lightBlock = tokens.slice(0, tokens.indexOf("[data-theme='dark']"));
 
-/**
- * src/styles/tokens.css is shared byte-for-byte with KitStak WMS (same path there).
- * This hash is pinned in BOTH repos. To change a token: edit the file, update the hash,
- * then copy the file and the hash to the other repo. A one-sided edit fails here.
- */
-const SHARED_TOKENS_SHA256 = 'a13e548687afe83c6f0715783dbb181ba7678873dcef0928af99ac830456ba38';
-
 describe('shared design tokens', () => {
-  it('matches the hash pinned in both KitStak repos (no drift)', () => {
-    const actual = createHash('sha256').update(tokens.replace(/\r\n/g, '\n')).digest('hex');
-    expect(
-      actual,
-      'src/styles/tokens.css changed. Update SHARED_TOKENS_SHA256 here AND copy the file and hash to the other KitStak repo.',
-    ).toBe(SHARED_TOKENS_SHA256);
+  it('imports the @kitstak/ui tokens in globals.css (no local copy)', () => {
+    const globals = readFileSync(join(process.cwd(), 'src/styles/globals.css'), 'utf8');
+    expect(globals).toContain("@import '@kitstak/ui/styles/tokens.css';");
+    expect(existsSync(join(process.cwd(), 'src/styles/tokens.css'))).toBe(false);
+  });
+
+  it('defines the core custom properties the design system reads', () => {
+    for (const name of [
+      'surface-app',
+      'surface-panel',
+      'surface-raised',
+      'border-default',
+      'text-primary',
+      'text-secondary',
+      'text-muted',
+      'primary',
+      'primary-600',
+      'danger',
+      'pill-text-mix',
+    ]) {
+      expect(lightBlock, `--${name}`).toMatch(new RegExp(`--${name}:`));
+    }
   });
 });
 
@@ -34,7 +48,9 @@ function tokenValue(name: string): string {
 
 function luminance(hex: string): number {
   const channels = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-  const [r = 0, g = 0, b = 0] = channels.map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  const [r = 0, g = 0, b = 0] = channels.map((c) =>
+    c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+  );
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
@@ -90,7 +106,8 @@ describe('label palette tokens', () => {
     const darkBlock = tokens.slice(tokens.indexOf("[data-theme='dark']"));
     const panel = /--surface-panel:\s*(#[0-9a-fA-F]{6});/.exec(darkBlock)?.[1] ?? '#000000';
     for (const color of LABEL_COLORS.filter((name) => !name.endsWith('-light'))) {
-      const value = new RegExp(`--label-${color}-text:\\s*(#[0-9a-fA-F]{6});`).exec(darkBlock)?.[1] ?? '#000000';
+      const value =
+        new RegExp(`--label-${color}-text:\\s*(#[0-9a-fA-F]{6});`).exec(darkBlock)?.[1] ?? '#000000';
       expect(contrast(value, panel), `dark ${color}-text`).toBeGreaterThanOrEqual(4.5);
     }
   });
@@ -103,10 +120,15 @@ describe('label palette tokens', () => {
 });
 
 describe('status pill contrast', () => {
-  const darkBlock = tokens.slice(tokens.indexOf("[data-theme='dark']"), tokens.indexOf('@media (prefers-color-scheme: dark)'));
+  const darkBlock = tokens.slice(
+    tokens.indexOf("[data-theme='dark']"),
+    tokens.indexOf('@media (prefers-color-scheme: dark)'),
+  );
 
   function resolve(block: string, name: string, depth = 0): string {
-    const raw = new RegExp(`--${name}:\\s*([^;]+);`).exec(block)?.[1]?.trim() ?? new RegExp(`--${name}:\\s*([^;]+);`).exec(lightBlock)?.[1]?.trim();
+    const raw =
+      new RegExp(`--${name}:\\s*([^;]+);`).exec(block)?.[1]?.trim() ??
+      new RegExp(`--${name}:\\s*([^;]+);`).exec(lightBlock)?.[1]?.trim();
     if (!raw) throw new Error(`token --${name} missing`);
     const alias = /^var\(--([a-z0-9-]+)\)$/.exec(raw)?.[1];
     return alias && depth < 5 ? resolve(block, alias, depth + 1) : raw;
@@ -141,7 +163,10 @@ describe('label-color helpers', () => {
   });
 
   it('exposes css variables for a color', () => {
-    expect(labelColorStyle('teal')).toMatchObject({ '--lc-bg': 'var(--label-teal)', '--lc-fg': 'var(--label-teal-fg)' });
+    expect(labelColorStyle('teal')).toMatchObject({
+      '--lc-bg': 'var(--label-teal)',
+      '--lc-fg': 'var(--label-teal-fg)',
+    });
   });
 
   it('assigns deterministic colors', () => {

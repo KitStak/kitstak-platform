@@ -24,7 +24,7 @@ export function pillText(name: string): string {
   return `color-mix(in srgb, var(--label-${name}-text), var(--text-primary) var(--pill-text-mix))`;
 }
 
-/** A tone from the shared label palette (src/styles/tokens.css, same tokens as KitStak CRM). */
+/** A tone from the shared label palette (@kitstak/ui/styles/tokens.css, same tokens as KitStak CRM). */
 function label(name: string): StatusTone {
   return { bg: `var(--label-${name}-subtle)`, fg: pillText(name), dot: `var(--label-${name})` };
 }

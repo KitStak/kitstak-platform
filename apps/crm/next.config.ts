@@ -27,6 +27,8 @@ const nextConfig: NextConfig = {
   // Components / Partial Prerendering are intentionally not enabled.
   poweredByHeader: false,
   reactStrictMode: true,
+  // Workspace packages are shipped as TypeScript source; Next transpiles them.
+  transpilePackages: ['@kitstak/ui'],
   serverExternalPackages: ['pg', 'embedded-postgres'],
   turbopack: {
     rules: {

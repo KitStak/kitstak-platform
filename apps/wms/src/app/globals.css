@@ -1,11 +1,11 @@
 @import 'tailwindcss';
-@import '../styles/tokens.css';
+@import '@kitstak/ui/styles/tokens.css';
 
 /* Dark variant follows the resolved theme attribute (set before paint by the theme script). */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* ================= Legacy WMS token names =================
-   Design tokens live in src/styles/tokens.css, shared byte-for-byte with KitStak CRM.
+   Design tokens live in @kitstak/ui/styles/tokens.css, the canonical file shared with KitStak CRM.
    The names below predate that file. They are aliases only (no literal colours), so
    existing components keep working and pick up both themes from the shared tokens.
    New code should use the shared token names directly.

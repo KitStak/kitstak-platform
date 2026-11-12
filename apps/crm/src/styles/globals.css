@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-@import './tokens.css';
+@import '@kitstak/ui/styles/tokens.css';
 
 /* Dark variant follows the resolved theme attribute (set before paint by the theme script). */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
@@ -79,7 +79,6 @@
   --shadow-popover: var(--elevation-popover);
   --shadow-modal: var(--elevation-modal);
   --shadow-sticky: var(--elevation-sticky);
-
 }
 
 /* Static scales (not theme dependent). 1 spacing unit = 4px regardless of root font size. */
@@ -397,20 +396,48 @@
   background: var(--surface-brand);
 }
 
-:root[data-theme='dark'] .auth-hero { box-shadow: inset -1px 0 0 var(--border-subtle); }
-:root[data-theme='dark'] .auth-hero .auth-card-a { stop-color: #1b1d21; }
-:root[data-theme='dark'] .auth-hero .auth-card-b { stop-color: #1b1d21; }
-:root[data-theme='dark'] .auth-hero .auth-surface { fill: #1b1d21; }
-:root[data-theme='dark'] .auth-hero .auth-surface-stroke { stroke: #2c3036; }
-:root[data-theme='dark'] .auth-hero .auth-line { fill: #3a3f46; }
-:root[data-theme='dark'] .auth-hero .auth-ink { fill: #ecedef; }
+:root[data-theme='dark'] .auth-hero {
+  box-shadow: inset -1px 0 0 var(--border-subtle);
+}
+:root[data-theme='dark'] .auth-hero .auth-card-a {
+  stop-color: #1b1d21;
+}
+:root[data-theme='dark'] .auth-hero .auth-card-b {
+  stop-color: #1b1d21;
+}
+:root[data-theme='dark'] .auth-hero .auth-surface {
+  fill: #1b1d21;
+}
+:root[data-theme='dark'] .auth-hero .auth-surface-stroke {
+  stroke: #2c3036;
+}
+:root[data-theme='dark'] .auth-hero .auth-line {
+  fill: #3a3f46;
+}
+:root[data-theme='dark'] .auth-hero .auth-ink {
+  fill: #ecedef;
+}
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .auth-hero { box-shadow: inset -1px 0 0 var(--border-subtle); }
-  :root:not([data-theme='light']) .auth-hero .auth-card-a { stop-color: #1b1d21; }
-  :root:not([data-theme='light']) .auth-hero .auth-card-b { stop-color: #1b1d21; }
-  :root:not([data-theme='light']) .auth-hero .auth-surface { fill: #1b1d21; }
-  :root:not([data-theme='light']) .auth-hero .auth-surface-stroke { stroke: #2c3036; }
-  :root:not([data-theme='light']) .auth-hero .auth-line { fill: #3a3f46; }
-  :root:not([data-theme='light']) .auth-hero .auth-ink { fill: #ecedef; }
+  :root:not([data-theme='light']) .auth-hero {
+    box-shadow: inset -1px 0 0 var(--border-subtle);
+  }
+  :root:not([data-theme='light']) .auth-hero .auth-card-a {
+    stop-color: #1b1d21;
+  }
+  :root:not([data-theme='light']) .auth-hero .auth-card-b {
+    stop-color: #1b1d21;
+  }
+  :root:not([data-theme='light']) .auth-hero .auth-surface {
+    fill: #1b1d21;
+  }
+  :root:not([data-theme='light']) .auth-hero .auth-surface-stroke {
+    stroke: #2c3036;
+  }
+  :root:not([data-theme='light']) .auth-hero .auth-line {
+    fill: #3a3f46;
+  }
+  :root:not([data-theme='light']) .auth-hero .auth-ink {
+    fill: #ecedef;
+  }
 }

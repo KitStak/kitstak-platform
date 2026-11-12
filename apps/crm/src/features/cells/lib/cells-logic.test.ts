@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import type { Label } from '@/server/db/schema/column-types';
 import { LABEL_COLORS } from '@/server/db/schema/column-types';
@@ -34,10 +34,26 @@ import {
   setDoneLabel,
   validateLabels,
 } from './labels';
-import { batterySummary, checkboxSummary, dateRangeSummary, mirrorIsNumeric, numericSummary, numericValues, peopleSummary } from './summary';
+import {
+  batterySummary,
+  checkboxSummary,
+  dateRangeSummary,
+  mirrorIsNumeric,
+  numericSummary,
+  numericValues,
+  peopleSummary,
+} from './summary';
 import { collectLinkedIds, shortItemId } from './values';
 import { formatPhoneNational } from './countries';
-import { computeProgress, isCellEmpty, isItemDone, readCurrency, readDate, readFormula, rawCellValue } from './values';
+import {
+  computeProgress,
+  isCellEmpty,
+  isItemDone,
+  readCurrency,
+  readDate,
+  readFormula,
+  rawCellValue,
+} from './values';
 
 const NOW = new Date(2026, 10, 5, 12, 0, 0); // Thu Nov 5 2026, local
 
@@ -85,11 +101,21 @@ function item(values: Record<string, unknown>, computed: Record<string, unknown>
   };
 }
 
-const statusColumn = column({ key: 'status', type: 'status', settings: { labels: LABELS } as ColumnDto['settings'] });
+const statusColumn = column({
+  key: 'status',
+  type: 'status',
+  settings: { labels: LABELS } as ColumnDto['settings'],
+});
 
 describe('labels', () => {
   it('reads labels in board order and drops malformed entries', () => {
-    const labels = labelsFromSettings({ labels: [{ id: 'b', name: 'B', color: 'red', position: 2 }, { id: 'a', name: 'A', color: 'nope', position: 1 }, { bad: true }] });
+    const labels = labelsFromSettings({
+      labels: [
+        { id: 'b', name: 'B', color: 'red', position: 2 },
+        { id: 'a', name: 'A', color: 'nope', position: 1 },
+        { bad: true },
+      ],
+    });
     expect(labels.map((label) => label.id)).toEqual(['a', 'b']);
     expect(labels[0]?.color).toBe('gray');
   });
@@ -121,14 +147,20 @@ describe('labels', () => {
   });
 
   it('flags duplicate and blank dropdown names', () => {
-    const result = validateLabels([...LABELS, { id: 'dup', name: 'done ', color: 'blue', position: 4 }], 'status');
+    const result = validateLabels(
+      [...LABELS, { id: 'dup', name: 'done ', color: 'blue', position: 4 }],
+      'status',
+    );
     expect(result.ok).toBe(false);
     expect(result.errors.get('dup')).toMatch(/already/);
     expect(validateLabels([{ id: 'x', name: '', color: 'blue', position: 0 }], 'dropdown').ok).toBe(false);
   });
 
   it('counts usage across status and dropdown values', () => {
-    const counts = countLabelUsage([item({ s: { labelId: 'done' } }), item({ s: { labelIds: ['done', 'stuck'] } })], 's');
+    const counts = countLabelUsage(
+      [item({ s: { labelId: 'done' } }), item({ s: { labelIds: ['done', 'stuck'] } })],
+      's',
+    );
     expect(counts.get('done')).toBe(2);
     expect(counts.get('stuck')).toBe(1);
   });
@@ -307,8 +339,20 @@ describe('values', () => {
     const check = column({ key: 'check', type: 'checkbox' });
     const columns = [statusColumn, check, progress];
     expect(computeProgress(progress, item({ status: { labelId: 'done' }, check: true }), columns)).toBe(100);
-    expect(computeProgress(progress, item({ status: { labelId: 'working' }, check: true }), columns)).toBe(50);
-    expect(computeProgress(column({ key: 'p', type: 'progress', settings: { sourceColumnKeys: ['check'] } as ColumnDto['settings'] }), item({ check: false }), columns)).toBe(0);
+    expect(computeProgress(progress, item({ status: { labelId: 'working' }, check: true }), columns)).toBe(
+      50,
+    );
+    expect(
+      computeProgress(
+        column({
+          key: 'p',
+          type: 'progress',
+          settings: { sourceColumnKeys: ['check'] } as ColumnDto['settings'],
+        }),
+        item({ check: false }),
+        columns,
+      ),
+    ).toBe(0);
     expect(isItemDone(item({ status: { labelId: 'done' } }), columns)).toBe(true);
     expect(isItemDone(item({}), columns)).toBe(false);
   });
@@ -329,7 +373,12 @@ describe('summaries', () => {
   });
 
   it('builds a status battery in board order with empties last', () => {
-    const items = [item({ status: { labelId: 'done' } }), item({ status: { labelId: 'done' } }), item({ status: { labelId: 'stuck' } }), item({})];
+    const items = [
+      item({ status: { labelId: 'done' } }),
+      item({ status: { labelId: 'done' } }),
+      item({ status: { labelId: 'stuck' } }),
+      item({}),
+    ];
     const summary = batterySummary(statusColumn, items);
     expect(summary.total).toBe(4);
     expect(summary.segments.map((segment) => [segment.id, segment.count, segment.percent])).toEqual([
@@ -342,12 +391,26 @@ describe('summaries', () => {
 
   it('summarises checkboxes, dates, people and numeric columns', () => {
     const items = [
-      item({ c: true, d: { date: '2026-11-01' }, t: { from: '2026-10-01', to: '2026-10-09' }, p: { ids: ['u1', 'u2'] }, m: { amount: 10, currency: 'USD' } }),
+      item({
+        c: true,
+        d: { date: '2026-11-01' },
+        t: { from: '2026-10-01', to: '2026-10-09' },
+        p: { ids: ['u1', 'u2'] },
+        m: { amount: 10, currency: 'USD' },
+      }),
       item({ c: false, d: { date: '2026-12-15' }, p: { ids: ['u2'] }, m: { amount: 5, currency: 'USD' } }),
     ];
     expect(checkboxSummary('c', items)).toEqual({ checked: 1, total: 2 });
-    expect(dateRangeSummary(column({ key: 'd', type: 'date' }), items)).toEqual({ from: '2026-11-01', to: '2026-12-15', count: 2 });
-    expect(dateRangeSummary(column({ key: 't', type: 'timeline' }), items)).toEqual({ from: '2026-10-01', to: '2026-10-09', count: 1 });
+    expect(dateRangeSummary(column({ key: 'd', type: 'date' }), items)).toEqual({
+      from: '2026-11-01',
+      to: '2026-12-15',
+      count: 2,
+    });
+    expect(dateRangeSummary(column({ key: 't', type: 'timeline' }), items)).toEqual({
+      from: '2026-10-01',
+      to: '2026-10-09',
+      count: 1,
+    });
     expect(peopleSummary('p', items)).toEqual([
       { id: 'u2', count: 2 },
       { id: 'u1', count: 1 },
@@ -358,7 +421,10 @@ describe('summaries', () => {
   it('only sums mirror columns whose mirrored values are numeric', () => {
     const mirror = column({ key: 'mi', type: 'mirror' });
     const text = [item({ mi: { display: 'Strategic', values: ['Strategic'] } }), item({})];
-    const numbers = [item({ mi: { display: '1,200', values: [1200] } }), item({ mi: { display: '$30', values: [{ amount: 30, currency: 'USD' }] } })];
+    const numbers = [
+      item({ mi: { display: '1,200', values: [1200] } }),
+      item({ mi: { display: '$30', values: [{ amount: 30, currency: 'USD' }] } }),
+    ];
     expect(mirrorIsNumeric(mirror, text)).toBe(false);
     expect(mirrorIsNumeric(mirror, [])).toBe(false);
     expect(mirrorIsNumeric(mirror, numbers)).toBe(true);
@@ -376,7 +442,10 @@ describe('ids and phone display', () => {
   it('collects linked item ids from connect values only', () => {
     const id1 = '11111111-1111-4111-8111-111111111111';
     const id2 = '22222222-2222-4222-8222-222222222222';
-    const ids = collectLinkedIds([item({ a: { itemIds: [id2, id1] }, b: { labelIds: ['x'] } }), item({ a: { itemIds: [id1, 'nope'] } })]);
+    const ids = collectLinkedIds([
+      item({ a: { itemIds: [id2, id1] }, b: { labelIds: ['x'] } }),
+      item({ a: { itemIds: [id1, 'nope'] } }),
+    ]);
     expect(ids).toEqual([id1, id2]);
   });
 
@@ -387,7 +456,10 @@ describe('ids and phone display', () => {
 });
 
 describe('pill contrast (CE-011)', () => {
-  const tokens = readFileSync(path.resolve(__dirname, '../../../styles/tokens.css'), 'utf8');
+  const tokens = readFileSync(
+    createRequire(import.meta.url).resolve('@kitstak/ui/styles/tokens.css'),
+    'utf8',
+  );
   const lightBlock = tokens.slice(0, tokens.indexOf(":root[data-theme='dark']"));
   const token = (name: string) => new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`).exec(lightBlock)?.[1];
 
@@ -409,7 +481,8 @@ describe('pill contrast (CE-011)', () => {
   const darkStart = tokens.indexOf(":root[data-theme='dark']");
   const darkBlock = tokens.slice(darkStart, tokens.indexOf('@media (prefers-color-scheme: dark)', darkStart));
   const mediaBlock = tokens.slice(tokens.indexOf('@media (prefers-color-scheme: dark)', darkStart));
-  const darkToken = (block: string, name: string) => new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`).exec(block)?.[1];
+  const darkToken = (block: string, name: string) =>
+    new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`).exec(block)?.[1];
 
   it.each(LABEL_COLORS)('label %s is dimmed for dark and keeps AA text (both dark selectors)', (color) => {
     for (const block of [darkBlock, mediaBlock]) {

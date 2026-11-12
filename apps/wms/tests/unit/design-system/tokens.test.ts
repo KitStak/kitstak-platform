@@ -1,20 +1,21 @@
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { cn } from '@/lib/utils';
 
 /**
- * src/styles/tokens.css is shared byte-for-byte with KitStak CRM (same path there).
- * This hash is pinned in BOTH repos. To change a token: edit the file, update the hash,
- * then copy the file and the hash to the other repo. A one-sided edit fails here.
+ * Design tokens are shared with KitStak CRM through @kitstak/ui/styles/tokens.css —
+ * one canonical file in packages/ui that both apps import. These tests pin the
+ * contract WMS relies on: globals.css pulls the shared file, and the shared file
+ * defines every custom property the legacy aliases reference.
  */
-const SHARED_TOKENS_SHA256 = 'a13e548687afe83c6f0715783dbb181ba7678873dcef0928af99ac830456ba38';
+const requireFromHere = createRequire(import.meta.url);
 
-const read = (file: string): string => readFileSync(join(process.cwd(), file), 'utf8').replace(/\r\n/g, '\n');
+const read = (file: string): string => readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
 
-const tokens = read('src/styles/tokens.css');
-const globals = read('src/app/globals.css');
+const tokens = read(requireFromHere.resolve('@kitstak/ui/styles/tokens.css'));
+const globals = read(join(process.cwd(), 'src/app/globals.css'));
 
 /** Legacy WMS names that must keep resolving, each as an alias of a shared token. */
 const LEGACY_ALIASES = [
@@ -85,16 +86,8 @@ function aliasBlock(): string {
 }
 
 describe('shared design tokens', () => {
-  it('matches the hash pinned in both KitStak repos (no drift)', () => {
-    const actual = createHash('sha256').update(tokens).digest('hex');
-    expect(
-      actual,
-      'src/styles/tokens.css changed. Update SHARED_TOKENS_SHA256 here AND copy the file and hash to the other KitStak repo.',
-    ).toBe(SHARED_TOKENS_SHA256);
-  });
-
-  it('is imported by globals.css', () => {
-    expect(globals).toContain('@import "../styles/tokens.css";');
+  it('imports the shared package tokens from globals.css', () => {
+    expect(globals).toMatch(/@import\s+['"]@kitstak\/ui\/styles\/tokens\.css['"];/);
   });
 
   it('ships light, forced dark and OS-preference dark themes', () => {

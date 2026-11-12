@@ -1,30 +1,53 @@
 'use client';
 
 /**
- * Light / dark / system theme. The choice lives in localStorage (per browser) and is applied as
- * `<html data-theme="light|dark">`, which globals.css keys its tokens on. THEME_INIT_SCRIPT runs
- * before first paint (root layout) so a dark-mode user never sees a light flash.
+ * Light / dark / system theme, unified with KitStak CRM through @kitstak/ui/theme.
+ * The preference persists to BOTH shared stores (cookie 'kitstak-theme' — which wins —
+ * and localStorage 'kitstak-theme') and is applied as `<html data-theme="light|dark">`,
+ * which the shared tokens.css keys on. THEME_INIT_SCRIPT runs before first paint
+ * (root layout) so a dark-mode user never sees a light flash.
+ *
+ * Migration: the pre-unification 'ks-theme' localStorage key is still read when the
+ * shared stores are empty, so existing users keep their preference; the next explicit
+ * change writes the shared stores and clears the legacy key.
  */
 import * as React from 'react';
-import { DARK_QUERY, THEME_STORAGE_KEY } from './theme-script';
+import {
+  DARK_QUERY,
+  parseStoredTheme,
+  persistTheme,
+  THEME_COOKIE,
+  THEME_STORAGE_KEY,
+} from '@kitstak/ui/theme';
+import { LEGACY_THEME_STORAGE_KEY } from './theme-script';
 
 export const THEME_PREFERENCES = ['light', 'dark', 'system'] as const;
 export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 export type ResolvedTheme = 'light' | 'dark';
 
 const THEME_EVENT = 'ks-theme-change';
+const COOKIE_PATTERN = new RegExp(`(?:^|; )${THEME_COOKIE}=([^;]*)`);
 
-function isThemePreference(value: unknown): value is ThemePreference {
-  return typeof value === 'string' && (THEME_PREFERENCES as readonly string[]).includes(value);
+function readCookieTheme(): ResolvedTheme | null {
+  const match = COOKIE_PATTERN.exec(document.cookie);
+  return parseStoredTheme(match?.[1] === undefined ? null : decodeURIComponent(match[1]));
+}
+
+function readStorageTheme(key: string): ResolvedTheme | null {
+  try {
+    return parseStoredTheme(window.localStorage.getItem(key));
+  } catch {
+    return null;
+  }
 }
 
 function readPreference(): ThemePreference {
-  try {
-    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-    return isThemePreference(stored) ? stored : 'system';
-  } catch {
-    return 'system';
-  }
+  return (
+    readCookieTheme() ??
+    readStorageTheme(THEME_STORAGE_KEY) ??
+    readStorageTheme(LEGACY_THEME_STORAGE_KEY) ??
+    'system'
+  );
 }
 
 function systemTheme(): ResolvedTheme {
@@ -43,11 +66,11 @@ function applyTheme(preference: ThemePreference): void {
 }
 
 export function setThemePreference(preference: ThemePreference): void {
+  persistTheme(preference);
   try {
-    if (preference === 'system') window.localStorage.removeItem(THEME_STORAGE_KEY);
-    else window.localStorage.setItem(THEME_STORAGE_KEY, preference);
+    window.localStorage.removeItem(LEGACY_THEME_STORAGE_KEY);
   } catch {
-    // Storage blocked (private mode): the theme still applies for this page view.
+    // Storage blocked (private mode): the cookie still carries the preference.
   }
   applyTheme(preference);
   window.dispatchEvent(new Event(THEME_EVENT));

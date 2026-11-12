@@ -13,11 +13,12 @@ import { listAtp } from '@/server/repositories/inventory-atp';
 import { atpExport, byLocationExport, totalInventoryExport } from '@/server/repositories/inventory-export';
 import type { ExportContext, ExportProvider } from '@/server/exports/types';
 import { createWorld, locationRow, type World } from '../foundation/domain/fixtures';
+import { scaledBudgetMs } from '../perf-budget';
 import { withWriteTx } from '@/server/db/sql';
 
 const SKUS = 3_000;
 const LOCATIONS = 8_500;
-const BUDGET_MS = 2_000;
+const BUDGET_MS = scaledBudgetMs(2_000); // see perf-budget.ts (PERF_BUDGET_SCALE)
 
 let w: World;
 let auth: AuthContext;

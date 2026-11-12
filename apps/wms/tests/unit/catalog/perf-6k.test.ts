@@ -11,10 +11,11 @@ import { EMPTY_GRID_QUERY, type GridQuery } from '@/server/query/grid-query';
 import { listProducts } from '@/server/repositories/products';
 import { listListings } from '@/server/repositories/listings';
 import { createWorld, type World } from '../foundation/domain/fixtures';
+import { scaledBudgetMs } from '../perf-budget';
 import { dbRun } from '@/server/db/sql';
 
 const N = 6500;
-const BUDGET_MS = 250; // server share of the 1 s first render
+const BUDGET_MS = scaledBudgetMs(250); // server share of the 1 s first render (see perf-budget.ts)
 let w: World;
 let scope: Scope;
 

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { LABEL_COLORS } from '@/server/db/schema/column-types';
 import type { ColumnDto, UserSummaryDto } from '@/server/services/contracts/dto';
@@ -15,7 +15,10 @@ const USERS = [
 ] as unknown as UserSummaryDto[];
 const ctx = { users: USERS, now: NOW };
 
-function column(type: ColumnDto['type'], settings: Record<string, unknown> = {}): Pick<ColumnDto, 'type' | 'settings'> {
+function column(
+  type: ColumnDto['type'],
+  settings: Record<string, unknown> = {},
+): Pick<ColumnDto, 'type' | 'settings'> {
   return { type, settings } as Pick<ColumnDto, 'type' | 'settings'>;
 }
 
@@ -35,7 +38,9 @@ describe('cell clipboard', () => {
   });
 
   it('pastes people by name or email, numbers leniently, checkboxes from words', () => {
-    expect(textToCell(column('people'), 'Maya Chen, dev@example.com', ctx)).toEqual({ ids: [USERS[0]?.id, USERS[1]?.id] });
+    expect(textToCell(column('people'), 'Maya Chen, dev@example.com', ctx)).toEqual({
+      ids: [USERS[0]?.id, USERS[1]?.id],
+    });
     expect(textToCell(column('number'), '$1,200', ctx)).toBe(1200);
     expect(textToCell(column('checkbox'), 'yes', ctx)).toBe(true);
     expect(textToCell(column('email'), 'not an email', ctx)).toBeUndefined();
@@ -81,16 +86,25 @@ describe('label palette order', () => {
 });
 
 describe('dark theme tokens (round 3)', () => {
-  const tokens = readFileSync(path.resolve(__dirname, '../../../styles/tokens.css'), 'utf8');
+  const tokens = readFileSync(
+    createRequire(import.meta.url).resolve('@kitstak/ui/styles/tokens.css'),
+    'utf8',
+  );
   const darkStart = tokens.indexOf(":root[data-theme='dark']");
   const darkBlock = tokens.slice(darkStart, tokens.indexOf('@media (prefers-color-scheme: dark)', darkStart));
   const mediaBlock = tokens.slice(tokens.indexOf('@media (prefers-color-scheme: dark)', darkStart));
   const lightBlock = tokens.slice(0, darkStart);
-  const read = (block: string, name: string) => new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`).exec(block)?.[1] as string;
+  const read = (block: string, name: string) =>
+    new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`).exec(block)?.[1] as string;
 
   it('team tile icon (label text on label subtle) reaches 3:1 in light and both dark selectors', () => {
     for (const block of [lightBlock, darkBlock, mediaBlock]) {
-      expect(contrastRatio(read(block, 'label-indigo-text') ?? read(lightBlock, 'label-indigo-text'), read(block, 'label-indigo-subtle'))).toBeGreaterThanOrEqual(3);
+      expect(
+        contrastRatio(
+          read(block, 'label-indigo-text') ?? read(lightBlock, 'label-indigo-text'),
+          read(block, 'label-indigo-subtle'),
+        ),
+      ).toBeGreaterThanOrEqual(3);
     }
   });
 

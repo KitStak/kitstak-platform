@@ -3,7 +3,7 @@
  * snapshot catch-up from the ledger, Others drilldowns, date-only report chips, busiest hour.
  */
 import { eq, sql } from 'drizzle-orm';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as schema from '@/server/db/schema';
 import type { AuthContext } from '@/server/auth/context';
 import { createOrder } from '@/server/domain/orders';
@@ -51,7 +51,10 @@ beforeEach(async () => {
     context: { warehouseId: null, clientId: null },
   } as unknown as AuthContext;
 });
-afterEach(() => w.close());
+afterEach(() => {
+  vi.useRealTimers();
+  return w.close();
+});
 
 describe('dashboard business day (warehouse zone, not UTC)', () => {
   // 21:30 in Memphis (America/Chicago, CST = UTC-6) on Nov 10 is already Nov 11 in UTC.
@@ -73,6 +76,11 @@ describe('dashboard business day (warehouse zone, not UTC)', () => {
   });
 
   it('counts an order shipped at 20:00 local as shipped today at 21:30, and its drilldown opens it', async () => {
+    // listOrderLines resolves "shipped today" from the wall clock (orderLinesDays' `now`
+    // default), so pin Date to the same instant the dashboard is queried at; otherwise the
+    // test only passes while the machine's real Chicago-local day is 2026-11-10. Timers
+    // stay real so async DB work is unaffected.
+    vi.useFakeTimers({ toFake: ['Date'], now: evening });
     const o = await createOrder(w.db, w.ctx, orderInput(w, [{ productId: w.productId, quantity: 1 }]));
     await w.db
       .update(schema.shipmentOrders)

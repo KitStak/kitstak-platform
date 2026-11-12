@@ -66,7 +66,7 @@ const GAP_SERIES = new Set(['onTimePct']);
  * Categorical donut palette: hues spaced around the wheel (blue, amber, green, purple,
  * orange, cyan, magenta, slate) so neighbouring slices never read as the same colour.
  */
-/** The shared restrained chart palette (src/styles/tokens.css), used in order. */
+/** The shared restrained chart palette (@kitstak/ui/styles/tokens.css), used in order. */
 export const DONUT_COLORS = [
   'var(--chart-1)',
   'var(--chart-2)',
