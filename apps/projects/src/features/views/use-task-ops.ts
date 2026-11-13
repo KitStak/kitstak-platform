@@ -10,7 +10,7 @@ import { toast } from '@/components/ui';
 import { qk } from '@/lib/query-keys';
 import { rankBetween } from '@/lib/rank';
 import { routes } from '@/lib/routes';
-import { useTaskMutations } from '@/lib/hooks/use-task-mutations';
+import { syncProjectProgress, useTaskMutations } from '@/lib/hooks/use-task-mutations';
 import type { TaskSummary } from '@/lib/types';
 import { duplicateTaskAction, moveTaskAction, moveTaskToProjectAction, setTaskLabelsAction, updateTaskAction } from '@/server/actions/tasks';
 import { useCurrentProject } from '@/features/projects/project-context';
@@ -86,8 +86,10 @@ export function useTaskOps() {
             })
           : list,
       );
+      if (statusId) syncProjectProgress(queryClient);
       const fail = (message: string) => {
         queryClient.setQueryData(tasksKey, before);
+        syncProjectProgress(queryClient);
         toast.error("Couldn't move that task", message);
         void queryClient.invalidateQueries({ queryKey: tasksKey });
         return false;

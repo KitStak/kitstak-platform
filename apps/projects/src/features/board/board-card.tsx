@@ -185,7 +185,8 @@ export const BoardCard = memo(function BoardCard({ id, task, container, labels, 
           }}
           onKeyDown={(event) => {
             if (!inside(event)) return;
-            if (event.key === 'Enter' && !isDragging) {
+            // Ctrl/Cmd+Enter is "mark done" (shared key map), not "open".
+            if (event.key === 'Enter' && !isDragging && !event.metaKey && !event.ctrlKey) {
               event.preventDefault();
               onOpen(task);
               return;

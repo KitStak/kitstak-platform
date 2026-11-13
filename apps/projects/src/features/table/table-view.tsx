@@ -7,7 +7,7 @@
  * Enter to edit, Esc to cancel, Tab to the next cell). Sticky header and task column, totals
  * row, multi-select with the bulk bar, and add a task at the bottom.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, EyeOff, Layers, Maximize2, MoreHorizontal, Plus, X } from 'lucide-react';
 import {
   Button,
@@ -29,7 +29,7 @@ import {
   toast,
 } from '@/components/ui';
 import { PRIORITIES } from '@/lib/constants';
-import { useProjectLinks, useProjectTasks } from '@/lib/hooks/use-data';
+import { useCycles, useProjectLinks, useProjectTasks } from '@/lib/hooks/use-data';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { compareRank } from '@/lib/rank';
@@ -245,7 +245,7 @@ function BodyCell({ def, task, ctx, ops, canEdit, active, editing, seed, width, 
 
   const content = (
     <span className={cn('flex h-full min-w-0 items-center px-2 text-sm', def.align === 'right' && 'justify-end', def.align === 'center' && 'justify-center')}>
-      {display ?? <span aria-hidden className="text-fg-placeholder opacity-0 group-hover/row:opacity-100">{editable ? '–' : ''}</span>}
+      {display ?? (editable ? <Plus aria-hidden className="size-3.5 text-fg-placeholder opacity-0 group-hover/row:opacity-100" /> : null)}
     </span>
   );
 
@@ -421,7 +421,7 @@ function BodyCell({ def, task, ctx, ops, canEdit, active, editing, seed, width, 
       data-col={def.key}
       data-active={active || undefined}
       aria-selected={active}
-      style={{ width, minWidth: width, maxWidth: width, left: stickyLeft }}
+      style={{ width, minWidth: width, maxWidth: width, ...(stickyLeft !== undefined ? { '--sticky-left': `${stickyLeft}px` } : {}) } as CSSProperties}
       onMouseDown={(event) => {
         if (event.button !== 0) return;
         onActivate();
@@ -437,7 +437,7 @@ function BodyCell({ def, task, ctx, ops, canEdit, active, editing, seed, width, 
       className={cn(
         'relative overflow-hidden border-r border-b border-border-subtle p-0 outline-none',
         ROW_HEIGHT,
-        stickyLeft !== undefined && 'z-[2] bg-panel md:sticky group-hover/row:bg-[color-mix(in_srgb,var(--surface-panel),var(--text-primary)_4%)] group-data-[selected=true]/row:bg-primary-selected',
+        stickyLeft !== undefined && 'z-[2] bg-panel md:sticky md:left-[var(--sticky-left)] group-hover/row:bg-[color-mix(in_srgb,var(--surface-panel),var(--text-primary)_4%)] group-data-[selected=true]/row:bg-primary-selected',
         active && (stickyLeft !== undefined ? 'z-[3]' : 'z-[1]'),
         active && 'shadow-[inset_0_0_0_2px_var(--primary)]',
         editing && def.editor !== 'title' && PICKERS.has(def.editor) === false && 'shadow-[inset_0_0_0_2px_var(--primary)]',
@@ -487,8 +487,8 @@ function HeaderCell({
     <th
       scope="col"
       aria-sort={sortDir === 'asc' ? 'ascending' : sortDir === 'desc' ? 'descending' : 'none'}
-      style={{ width, minWidth: width, maxWidth: width, left: stickyLeft }}
-      className={cn('group/th relative h-9 border-r border-b border-border-subtle bg-sunken p-0 text-left text-xs font-medium text-fg-secondary', stickyLeft !== undefined && 'z-[6] md:sticky')}
+      style={{ width, minWidth: width, maxWidth: width, ...(stickyLeft !== undefined ? { '--sticky-left': `${stickyLeft}px` } : {}) } as CSSProperties}
+      className={cn('group/th relative h-9 border-r border-b border-border-subtle bg-sunken p-0 text-left text-xs font-medium text-fg-secondary', stickyLeft !== undefined && 'z-[6] md:sticky md:left-[var(--sticky-left)]')}
       data-col={def.key}
     >
       <div className="flex h-full items-center">
@@ -590,7 +590,7 @@ export function TableView() {
   const columns = useMemo(() => resolveColumns(defs, view.settings.columns), [defs, view.settings.columns]);
   const [widthDraft, setWidthDraft] = useState<{ key: string; width: number } | null>(null);
   const widthOf = useCallback((column: ViewColumn) => (widthDraft?.key === column.key ? widthDraft.width : (column.width ?? defByKey.get(column.key)?.defaultWidth ?? 140)), [defByKey, widthDraft]);
-  const shown = columns.filter((column) => !column.hidden && defByKey.has(column.key));
+  const shown = useMemo(() => columns.filter((column) => !column.hidden && defByKey.has(column.key)), [columns, defByKey]);
   const sort = view.settings.sort;
   const sorter = useSorter(sort);
   const groupBy = view.settings.groupBy;
@@ -605,7 +605,41 @@ export function TableView() {
   const rows = useMemo(() => sorter(view.visible(all)), [all, sorter, view]);
   const projectLinks = useProjectLinks(project.key);
   const projectCustomer = useMemo(() => (projectLinks.data ?? []).find((link) => !link.taskId && isCustomerLink(link)) ?? null, [projectLinks.data]);
-  const ctx = useMemo<RenderContext>(() => ({ statusById, labelById, sectionById, links: linksByTask, projectCustomer }), [labelById, linksByTask, projectCustomer, sectionById, statusById]);
+  const showsCycle = shown.some((column) => column.key === 'cycle');
+  const cyclesQuery = useCycles(project.key, { enabled: showsCycle });
+  const cycleByTask = useMemo(() => {
+    const data = cyclesQuery.data;
+    const map = new Map<string, string>();
+    if (!data) return map;
+    const names = new Map(data.cycles.map((cycle) => [cycle.id, cycle.name || `Cycle ${cycle.number}`]));
+    for (const [taskId, cycleId] of Object.entries(data.taskCycle)) {
+      const name = names.get(cycleId);
+      if (name) map.set(taskId, name);
+    }
+    return map;
+  }, [cyclesQuery.data]);
+  const ctx = useMemo<RenderContext>(() => ({ statusById, labelById, sectionById, links: linksByTask, projectCustomer, cycleByTask }), [cycleByTask, labelById, linksByTask, projectCustomer, sectionById, statusById]);
+  // The grid's visible width: the Task column grows to fill it, and an edge shadow shows when
+  // more columns sit off to the right.
+  const [gridWidth, setGridWidth] = useState(0);
+  const [moreRight, setMoreRight] = useState(false);
+  useEffect(() => {
+    const element = gridRef.current;
+    if (!element) return;
+    const update = () => {
+      setGridWidth(element.clientWidth);
+      setMoreRight(element.scrollLeft + element.clientWidth < element.scrollWidth - 2);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    element.addEventListener('scroll', update, { passive: true });
+    return () => {
+      observer.disconnect();
+      element.removeEventListener('scroll', update);
+    };
+  });
 
   const entries = useMemo<Entry[]>(() => {
     if (groupBy === 'none') return rows.map((task) => ({ type: 'task', task, group: 'all' }));
@@ -852,14 +886,18 @@ export function TableView() {
     );
   }
 
-  const titleWidth = widthOf(shown[0] ?? { key: TITLE_KEY });
-  const tableWidth = ROW_HEADER_WIDTH + shown.reduce((sum, column) => sum + widthOf(column), 0) + 48;
+  const savedTitleWidth = widthOf(shown[0] ?? { key: TITLE_KEY });
+  const otherWidth = ROW_HEADER_WIDTH + shown.slice(1).reduce((sum, column) => sum + widthOf(column), 0) + 48;
+  // Task takes any spare room so the table always reaches the right edge (never while resizing it).
+  const titleWidth = widthDraft?.key === shown[0]?.key ? savedTitleWidth : Math.max(savedTitleWidth, gridWidth - otherWidth);
+  const tableWidth = otherWidth + titleWidth;
   const allSelected = rows.length > 0 && selection.count === new Set(rows.map((task) => task.id)).size;
   const sumCells = shown.map((column) => defByKey.get(column.key)?.sum?.(rows) ?? null);
 
   return (
     <div className="flex h-full flex-col" data-testid="table-view">
       {toolbar}
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={gridRef} className="relative min-h-0 flex-1 overflow-auto [scrollbar-width:thin]" onKeyDown={onGridKeyDown}>
         {rows.length === 0 && view.activeFilterCount > 0 ? (
           <EmptyState illustration="search" size="sm" title="No tasks match these filters" description="Try removing a filter or searching for something else." actions={<Button variant="secondary" onClick={view.clearFilters}>Clear filters</Button>} />
@@ -893,7 +931,7 @@ export function TableView() {
                   <HeaderCell
                     key={column.key}
                     def={def}
-                    width={widthOf(column)}
+                    width={index === 0 ? titleWidth : widthOf(column)}
                     stickyLeft={index === 0 ? ROW_HEADER_WIDTH : undefined}
                     sortIndex={sortIndex}
                     sortDir={sortIndex >= 0 ? (sort[sortIndex]?.dir ?? null) : null}
@@ -1037,9 +1075,12 @@ export function TableView() {
                 </ContextMenu>
               );
             })}
+          </tbody>
+          {/* "Add a task" lives in the sticky footer, so a long table never hides it. */}
+          <tfoot className="sticky bottom-0 z-[4]">
             {canCreate ? (
               <tr>
-                <td colSpan={shown.length + 2} className="border-b border-border-subtle bg-panel p-0">
+                <td colSpan={shown.length + 2} className="border-t border-border-subtle bg-panel p-0">
                   <form
                     className="sticky left-0 flex h-9 w-[min(560px,100vw)] items-center gap-2 pl-3"
                     onSubmit={(event) => {
@@ -1056,14 +1097,12 @@ export function TableView() {
                 </td>
               </tr>
             ) : null}
-          </tbody>
-          <tfoot className="sticky bottom-0 z-[4]">
             <tr>
               <td className="sticky left-0 z-[5] h-9 border-t border-r border-border-subtle bg-sunken px-3 text-xs font-medium whitespace-nowrap text-fg-secondary" style={{ width: ROW_HEADER_WIDTH }}>
                 {rows.length} {rows.length === 1 ? 'task' : 'tasks'}
               </td>
               {shown.map((column, index) => (
-                <td key={column.key} className={cn('h-9 border-t border-r border-border-subtle bg-sunken px-2 text-xs font-medium text-fg-secondary tabular-nums', index === 0 && 'z-[5] md:sticky', defByKey.get(column.key)?.align === 'right' && 'text-right')} style={{ left: index === 0 ? ROW_HEADER_WIDTH : undefined }}>
+                <td key={column.key} className={cn('h-9 border-t border-r border-border-subtle bg-sunken px-2 text-xs font-medium text-fg-secondary tabular-nums', index === 0 && 'z-[5] md:sticky md:left-[var(--sticky-left)]', defByKey.get(column.key)?.align === 'right' && 'text-right')} style={index === 0 ? ({ '--sticky-left': `${ROW_HEADER_WIDTH}px` } as CSSProperties) : undefined}>
                   {sumCells[index] ? <span title="Total of the shown tasks">Σ {sumCells[index]}</span> : null}
                 </td>
               ))}
@@ -1079,6 +1118,10 @@ export function TableView() {
             description="Type a task name in the row above and press Enter. Every field becomes a column you can sort and edit."
           />
         ) : null}
+      </div>
+      {moreRight ? (
+        <div aria-hidden className="pointer-events-none absolute top-0 right-0 bottom-0 z-[8] w-6 bg-gradient-to-l from-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] to-transparent" />
+      ) : null}
       </div>
       <BulkBar selection={selection} tasks={all} ops={ops} />
     </div>

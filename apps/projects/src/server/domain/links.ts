@@ -4,7 +4,9 @@
  * `refreshLinks` re-reads them. `findLinkedWork` answers the cross-app question
  * "which tasks/projects are linked to this CRM deal / WMS order?".
  */
+import { undash } from '@/lib/undash';
 import 'server-only';
+import { linkPathOf } from '@/lib/link-path';
 import type { LinkStatusChange } from './automation-sweep';
 import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
@@ -74,9 +76,9 @@ export async function addLink(ctx: DomainContext, input: AddLinkInput): Promise<
         projectId: input.taskId ? null : projectId,
         targetType: input.targetType,
         targetId: input.targetId,
-        cachedTitle: target.title,
+        cachedTitle: undash(target.title),
         cachedStatus: target.status,
-        cachedUrl: target.url,
+        cachedUrl: linkPathOf(target.url),
         cachedAt: new Date(),
         meta: target.meta ?? {},
         createdBy: ctx.userId,
@@ -154,7 +156,7 @@ export async function refreshLinks(ctx: DomainContext, owner: { taskId: string }
       }
       await db
         .update(integrationLinks)
-        .set({ cachedTitle: target.title, cachedStatus: target.status, cachedUrl: target.url, cachedAt: new Date(), meta: target.meta ?? {} })
+        .set({ cachedTitle: undash(target.title), cachedStatus: target.status, cachedUrl: linkPathOf(target.url), cachedAt: new Date(), meta: target.meta ?? {} })
         .where(eq(integrationLinks.id, link.id));
     }
   }

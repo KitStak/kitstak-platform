@@ -2,6 +2,7 @@
  * Plain-language sentence for an activity row, without the actor ("moved this to Done").
  * Shared by the task activity feed, the project Activity tab and dashboards.
  */
+import { undash } from './undash';
 import { PRIORITY_LABELS, type Priority } from './constants';
 import type { ActivityDTO } from './types';
 
@@ -26,7 +27,7 @@ const FIELD_WORDS: Readonly<Record<string, string>> = {
   reporter: 'changed the reporter',
 };
 
-const str = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
+const str = (value: unknown): string | undefined => (typeof value === 'string' ? undash(value) : undefined);
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === 'object' ? (value as Record<string, unknown>) : {});
 
 export function describeActivity(event: ActivityDTO, lookups: ActivityLookups = {}): string {
@@ -56,8 +57,17 @@ export function describeActivity(event: ActivityDTO, lookups: ActivityLookups = 
       if (event.field?.startsWith('custom:')) return 'updated a custom field';
       return FIELD_WORDS[event.field ?? ''] ?? 'updated this task';
     }
-    case 'task.moved':
-      return 'moved this';
+    case 'task.moved': {
+      const before = record(event.before);
+      const after = record(event.after);
+      if ((before.parentTaskId ?? null) !== (after.parentTaskId ?? null)) {
+        return after.parentTaskId ? 'made this a subtask' : 'made this a top-level task';
+      }
+      const direction = str(after.direction) ?? (str(after.position) && str(before.position) ? ((after.position as string) < (before.position as string) ? 'up' : 'down') : undefined);
+      const where = str(after.statusName);
+      if (!direction) return 'changed the order';
+      return where ? `moved this ${direction} in ${where}` : `moved this ${direction} in the order`;
+    }
     case 'task.moved_project':
       return `moved this to ${str(record(event.after).key) ?? 'another project'}`;
     case 'task.deleted':

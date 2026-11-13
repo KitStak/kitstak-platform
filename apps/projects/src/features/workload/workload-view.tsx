@@ -5,7 +5,7 @@
  * Drag a task to another person or week to rebalance; it's saved right away with Undo.
  * Capacity (team default + per person) is saved on the project for everyone.
  */
-import { useMemo, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, Gauge, Move, Scale, UserRound } from 'lucide-react';
 import {
@@ -95,8 +95,9 @@ function autoUnit(tasks: readonly TaskSummary[]): LoadUnit {
   if (tasks.length === 0) return 'tasks';
   const points = tasks.filter((task) => task.estimatePoints !== null).length;
   const hours = tasks.filter((task) => task.estimateMinutes !== null).length;
-  if (points >= hours && points * 2 >= tasks.length) return 'points';
-  if (hours * 2 >= tasks.length) return 'hours';
+  // A quarter of the work estimated is enough to plan in effort; the rest is flagged as missing.
+  if (points >= hours && points * 4 >= tasks.length) return 'points';
+  if (hours * 4 >= tasks.length) return 'hours';
   return 'tasks';
 }
 
@@ -134,7 +135,19 @@ export function WorkloadView() {
 
   const openTasks = useMemo(() => (tasksQuery.data ?? []).filter((task) => !isClosed(task) && !task.isMilestone), [tasksQuery.data]);
   const unit: LoadUnit = useMemo(() => (prefs.unit === 'auto' ? autoUnit(openTasks) : prefs.unit), [openTasks, prefs.unit]);
-  const weekCount = narrow ? Math.min(4, Number(prefs.weeks)) : Number(prefs.weeks);
+  // Show only the weeks that fit the screen (never a clipped last column).
+  const [gridWidth, setGridWidth] = useState(0);
+  const gridObserver = useRef<ResizeObserver | null>(null);
+  const measureGrid = useCallback((node: HTMLDivElement | null) => {
+    gridObserver.current?.disconnect();
+    if (!node) return;
+    gridObserver.current = new ResizeObserver(([entry]) => setGridWidth(Math.round(entry?.contentRect.width ?? 0)));
+    gridObserver.current.observe(node);
+  }, []);
+  const nameWidth = narrow ? 136 : 248;
+  const colMin = narrow ? 148 : 168;
+  const fitWeeks = gridWidth > 0 && !narrow ? Math.max(1, Math.floor((gridWidth - nameWidth - 2 * colMin) / colMin)) : Number(prefs.weeks);
+  const weekCount = Math.min(narrow ? 4 : 12, Number(prefs.weeks), fitWeeks);
   const weeks = useMemo(() => weekStarts(anchor, weekCount), [anchor, weekCount]);
   const settings = useMemo(() => readWorkloadSettings(project.settings, unit), [project.settings, unit]);
   const collapsed = useMemo(() => new Set(prefs.collapsed), [prefs.collapsed]);
@@ -169,6 +182,9 @@ export function WorkloadView() {
     return out;
   }, [personIds, rows, settings, weeks]);
 
+  const hoursCount = useMemo(() => openTasks.filter((task) => task.estimateMinutes !== null).length, [openTasks]);
+  const pointsCount = useMemo(() => openTasks.filter((task) => task.estimatePoints !== null).length, [openTasks]);
+  const estimatedCount = Math.max(hoursCount, pointsCount);
   const unestimated = useMemo(() => [...rows.values()].reduce((sum, row) => sum + row.unestimated, 0), [rows]);
   const thisWeek = startOfWeekIso(today);
 
@@ -258,11 +274,9 @@ export function WorkloadView() {
     );
   }
 
-  const nameWidth = narrow ? 136 : 248;
-  const colMin = narrow ? 148 : 168;
   const gridTemplate = `${nameWidth}px repeat(${buckets.length}, minmax(${colMin}px, 1fr))`;
   const lastWeek = weeks.at(-1) as IsoDate;
-  const rangeTitle = `${SHORT.format(parseIsoDate(weeks[0] as IsoDate))} – ${SHORT.format(parseIsoDate(addDaysIso(lastWeek, 6)))}`;
+  const rangeTitle = `${SHORT.format(parseIsoDate(weeks[0] as IsoDate))} to ${SHORT.format(parseIsoDate(addDaysIso(lastWeek, 6)))}`;
   const unitLabel = UNIT_LABELS[unit];
 
   const bucketHeader = (bucket: string) => {
@@ -353,7 +367,7 @@ export function WorkloadView() {
           {overdue ? <span aria-label="Past its due date" className="size-1.5 shrink-0 rounded-full bg-danger" /> : null}
           {unit !== 'tasks' ? (
             <span className={cn('shrink-0 text-2xs tabular-nums', load === 0 ? 'text-warning-text' : 'text-fg-muted')} title={load === 0 ? 'No estimate yet' : undefined}>
-              {load === 0 ? '–' : `${formatLoad(load)}${unitLabel.short}`}
+              {load === 0 ? 'No estimate' : `${formatLoad(load)}${unitLabel.short}`}
             </span>
           ) : share < 0.999 ? (
             <span className="shrink-0 text-2xs text-fg-muted" title={`This task runs across more than one week, so ${Math.round(share * 100)}% of it counts here`}>
@@ -459,13 +473,28 @@ export function WorkloadView() {
         </p>
       ) : null}
 
+      {unit === 'tasks' && openTasks.length > 0 ? (
+        <p role="status" className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border-subtle bg-muted px-4 py-1.5 text-xs text-fg-secondary sm:px-6" data-testid="workload-tasks-hint">
+          <Gauge aria-hidden className="size-3.5 text-icon" />
+          <span>
+            Counting tasks, so a quick task weighs the same as a big one.{' '}
+            {estimatedCount > 0 ? `${estimatedCount} of ${openTasks.length} open tasks have an estimate.` : 'No open task has an estimate yet.'}
+          </span>
+          {estimatedCount > 0 ? (
+            <button type="button" onClick={() => setPrefs({ unit: hoursCount >= pointsCount ? 'hours' : 'points' })} className="rounded-xs font-medium text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-focus">
+              Measure in {hoursCount >= pointsCount ? 'hours' : 'points'}
+            </button>
+          ) : null}
+        </p>
+      ) : null}
+
       {openTasks.length === 0 && personIds.length === 0 ? (
         <div className="flex flex-1 items-center justify-center bg-sunken p-6">
           <EmptyState illustration="board" title="No open work to balance" description="When tasks are assigned and dated, you’ll see how the work is spread across the team, week by week." />
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto bg-sunken" data-testid="workload-grid">
-          <div role="grid" aria-label={`${project.name} workload`} className="grid min-w-full" style={{ gridTemplateColumns: gridTemplate, width: 'max-content' }}>
+        <div ref={measureGrid} className="min-h-0 flex-1 overflow-auto bg-sunken" data-testid="workload-grid">
+          <div role="grid" aria-label={`${project.name} workload`} className="grid min-w-full" style={{ gridTemplateColumns: gridTemplate, width: narrow ? 'max-content' : '100%' }}>
             {/* Header */}
             <div role="row" className="contents">
               <div role="columnheader" className="sticky top-0 left-0 z-[var(--z-header)] flex h-10 items-center justify-between border-r border-b border-border-default bg-panel px-3 text-xs font-semibold text-fg-muted">
@@ -507,7 +536,7 @@ export function WorkloadView() {
                 const isWeek = bucket !== EARLIER && bucket !== NO_DATE;
                 return (
                   <div role="gridcell" key={bucket} className={cn('border-r border-b border-border-subtle bg-muted px-3 py-2.5', bucket === thisWeek && 'bg-highlight')}>
-                    {isWeek ? meter(total, teamCapacity, true) : <span className="text-xs font-semibold text-fg-secondary tabular-nums">{total > 0 ? unitText(total, unit) : '–'}</span>}
+                    {isWeek ? meter(total, teamCapacity, true) : <span className={cn('text-xs tabular-nums', total > 0 ? 'font-semibold text-fg-secondary' : 'text-fg-muted')}>{total > 0 ? unitText(total, unit) : 'None'}</span>}
                   </div>
                 );
               })}
@@ -541,9 +570,9 @@ export function WorkloadView() {
                       </span>
                     )}
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-fg">{person?.name ?? (id === UNASSIGNED ? 'Unassigned' : 'Former member')}</span>
-                      <span className="block truncate text-2xs text-fg-muted">
-                        {openCount} open {openCount === 1 ? 'task' : 'tasks'}
+                      <span className={cn('block text-sm font-medium text-fg', narrow ? 'line-clamp-2 break-words' : 'truncate')}>{person?.name ?? (id === UNASSIGNED ? 'Unassigned' : 'Former member')}</span>
+                      <span className={cn('block text-2xs text-fg-muted', narrow ? 'break-words' : 'truncate')}>
+                        {openCount} open{narrow ? '' : ` ${openCount === 1 ? 'task' : 'tasks'}`}
                         {capacity !== null ? (
                           <>
                             {' · '}
@@ -589,7 +618,7 @@ export function WorkloadView() {
                           over === key && 'bg-primary-subtle shadow-[inset_0_0_0_2px_var(--focus-ring)]',
                         )}
                       >
-                        {isWeek && (capacity !== null || load > 0) ? meter(load, capacity) : load > 0 ? <span className="text-xs font-semibold text-fg-secondary tabular-nums">{unitText(load, unit)}</span> : <span className="text-xs text-fg-muted">–</span>}
+                        {isWeek && (capacity !== null || load > 0) ? meter(load, capacity) : load > 0 ? <span className="text-xs font-semibold text-fg-secondary tabular-nums">{unitText(load, unit)}</span> : isWeek ? <span className="text-xs text-fg-muted">Nothing scheduled</span> : null}
                         {!isCollapsed && cell && cell.tasks.length > 0 ? <ul className="flex flex-col gap-1">{cell.tasks.map((entry) => chip(entry, id, bucket))}</ul> : null}
                         {!isCollapsed && (!cell || cell.tasks.length === 0) && canEdit && bucket !== EARLIER ? (
                           <span className="hidden text-2xs text-fg-muted group-hover/row:block">Drop a task here</span>

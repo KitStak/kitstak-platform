@@ -293,6 +293,8 @@ export interface TimeEntryDTO {
   readonly note: string | null;
   readonly billable: boolean;
   readonly source: TimeEntrySource;
+  /** Key and title of the task (only on the running timer, so the timer pill needs no extra fetch). */
+  readonly task?: { readonly key: string; readonly title: string } | null;
 }
 
 export interface NotificationDTO {

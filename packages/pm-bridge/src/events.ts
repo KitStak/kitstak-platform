@@ -10,7 +10,7 @@
  * atomic with the change — both are safe).
  */
 import { sql } from 'drizzle-orm';
-import { isUuid, pmAvailability, query, queryOne, type BridgeExecutor } from './executor';
+import { isUuid, pmAvailability, query, queryOne, storedLinkPath, type BridgeExecutor } from './executor';
 import type { RecordStatusEvent } from './types';
 
 const norm = (value: string | null | undefined): string => (value ?? '').trim().toLowerCase();
@@ -47,7 +47,7 @@ export async function emitRecordStatusChange(db: BridgeExecutor, event: RecordSt
         sql`update pm.integration_links
                set cached_status = ${event.status},
                    cached_title = coalesce(${event.title ?? null}, cached_title),
-                   cached_url = coalesce(${event.url ?? null}, cached_url),
+                   cached_url = coalesce(${storedLinkPath(event.url)}, cached_url),
                    cached_at = now()
              where org_id = ${event.orgId}::uuid and target_type = ${event.target.type} and target_id = ${event.target.id}
              returning id`,

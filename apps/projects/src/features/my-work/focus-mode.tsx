@@ -5,7 +5,7 @@
  */
 import { useMemo, useState } from 'react';
 import { ArrowRight, Check, CornerUpRight, PartyPopper, Sunrise } from 'lucide-react';
-import { Button, Dialog, DialogContent, Kbd, ProgressBar, cn } from '@/components/ui';
+import { Button, Dialog, DialogContent, Kbd, ProgressBar, cn, useModKey } from '@/components/ui';
 import { DueDate, EntityIcon, PersonAvatar, PriorityIcon } from '@/components/pm';
 import { PRIORITY_LABELS } from '@/lib/constants';
 import { addDaysIso, todayIso } from '@/lib/dates';
@@ -91,10 +91,13 @@ function FocusBody({
     advance('tomorrow');
   };
 
-  useHotkey(['d', 'Enter'], () => void done(), { allowInDialogs: true, enabled: Boolean(task) });
-  useHotkey('t', () => void tomorrow(), { allowInDialogs: true, enabled: Boolean(task) });
-  useHotkey('s', () => advance('skipped'), { allowInDialogs: true, enabled: Boolean(task) });
-  useHotkey('o', () => task && onOpenTask(task), { allowInDialogs: true, enabled: Boolean(task) });
+  const mod = useModKey();
+  // Same key map as everywhere else: Ctrl/Cmd+Enter done, Shift+T tomorrow, Enter open.
+  // N (next) skips; S stays "status" across the app, so it is not reused here.
+  useHotkey('mod+Enter', () => void done(), { allowInDialogs: true, enabled: Boolean(task) });
+  useHotkey('shift+t', () => void tomorrow(), { allowInDialogs: true, enabled: Boolean(task) });
+  useHotkey('n', () => advance('skipped'), { allowInDialogs: true, enabled: Boolean(task) });
+  useHotkey('Enter', () => task && onOpenTask(task), { allowInDialogs: true, enabled: Boolean(task), preventDefault: false });
 
   const project = task ? projects.get(task.projectId) : undefined;
   const progress = queue.length ? Math.round((Math.min(index, queue.length) / queue.length) * 100) : 100;
@@ -168,16 +171,16 @@ function FocusBody({
           </dl>
           <div className="flex flex-wrap items-center gap-2">
             <Button size="lg" leadingIcon={<Check aria-hidden />} onClick={() => void done()} loading={busy} data-testid="focus-done">
-              Mark done <Kbd tone="inverse" className="ml-1">D</Kbd>
+              Mark done <Kbd tone="inverse" className="ml-1">{mod}</Kbd><Kbd tone="inverse">Enter</Kbd>
             </Button>
             <Button size="lg" variant="secondary" leadingIcon={<Sunrise aria-hidden />} onClick={() => void tomorrow()} disabled={busy} data-testid="focus-tomorrow">
-              Do it tomorrow <Kbd className="ml-1">T</Kbd>
+              Do it tomorrow <Kbd className="ml-1">Shift</Kbd><Kbd>T</Kbd>
             </Button>
             <Button size="lg" variant="ghost" leadingIcon={<CornerUpRight aria-hidden />} onClick={() => advance('skipped')} disabled={busy} data-testid="focus-skip">
-              Skip <Kbd className="ml-1">S</Kbd>
+              Skip <Kbd className="ml-1">N</Kbd>
             </Button>
             <Button variant="ghost" trailingIcon={<ArrowRight aria-hidden />} onClick={() => onOpenTask(task)} className="ml-auto">
-              Open details
+              Open details <Kbd className="ml-1">Enter</Kbd>
             </Button>
           </div>
           <ol className="flex gap-1" aria-label="Your list">

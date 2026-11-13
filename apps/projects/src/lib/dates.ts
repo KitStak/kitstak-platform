@@ -83,9 +83,9 @@ export function formatDue(dueDate: IsoDate, today: IsoDate = todayIso()): string
   return date.getFullYear() === parseIsoDate(today).getFullYear() ? SHORT.format(date) : SHORT_YEAR.format(date);
 }
 
-/** "Mar 3 – Mar 14" style range label. */
+/** "Mar 3 to Mar 14" style range label (no dashes in KitStak copy). */
 export function formatRange(start: IsoDate | null, end: IsoDate | null): string {
-  if (start && end) return `${SHORT.format(parseIsoDate(start))} – ${SHORT.format(parseIsoDate(end))}`;
+  if (start && end) return `${SHORT.format(parseIsoDate(start))} to ${SHORT.format(parseIsoDate(end))}`;
   if (end) return `Due ${SHORT.format(parseIsoDate(end))}`;
   if (start) return `Starts ${SHORT.format(parseIsoDate(start))}`;
   return 'No dates';

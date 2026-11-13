@@ -14,6 +14,7 @@ import {
   Checkbox,
   EmptyState,
   Kbd,
+  useModKey,
   SearchInput,
   Select,
   Skeleton,
@@ -49,6 +50,7 @@ import {
   type WhenGroup,
 } from './my-work-model';
 import { MyWorkRow, TASK_DRAG_TYPE } from './my-work-row';
+import { copyTaskLink } from '@/features/task/task-keys';
 import { useCompleteTask } from './use-complete-task';
 
 type Scope = 'assigned' | 'created' | 'watching';
@@ -70,6 +72,7 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
   const openQuickAdd = useShellStore((state) => state.openQuickAdd);
   const { openTask } = useTaskDrawer();
   const { updateTask } = useTaskMutations();
+  const mod = useModKey();
   const complete = useCompleteTask();
 
   const scope = pick(params.get('scope'), ['assigned', 'created', 'watching'] as const, 'assigned');
@@ -160,9 +163,23 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
   };
   useHotkey(['j', 'ArrowDown'], () => focusRow(1), { enabled: visibleTasks.length > 0 && !focusOpen });
   useHotkey(['k', 'ArrowUp'], () => focusRow(-1), { enabled: visibleTasks.length > 0 && !focusOpen });
-  useHotkey('d', () => active && void complete(active, active.statusCategory !== 'done'), { enabled: Boolean(active) && !focusOpen });
-  useHotkey('t', () => active && void reschedule(active, today), { enabled: Boolean(active) && !focusOpen });
-  useHotkey('m', () => active && void reschedule(active, addDaysIso(today, 1)), { enabled: Boolean(active) && !focusOpen });
+  // The shared task key map (task-keys.ts): D due date, T today, Shift+T tomorrow,
+  // Ctrl/Cmd+Enter done or reopen, Ctrl/Cmd+. copy link, I assign to me. Same keys as List and Board.
+  const keysOn = Boolean(active) && !focusOpen;
+  useHotkey('mod+Enter', () => active && void complete(active, active.statusCategory !== 'done'), { enabled: keysOn });
+  useHotkey('mod+.', () => active && void copyTaskLink(active), { enabled: keysOn });
+  useHotkey('d', () => {
+    const row = listRef.current?.querySelector<HTMLElement>(`[data-task-id="${active?.id ?? ''}"]`);
+    row?.querySelector<HTMLButtonElement>('[data-testid="my-work-due"]:not(:disabled)')?.click();
+  }, { enabled: keysOn });
+  useHotkey('t', () => active && void reschedule(active, today), { enabled: keysOn });
+  useHotkey('shift+t', () => active && void reschedule(active, addDaysIso(today, 1)), { enabled: keysOn });
+  useHotkey('i', () => {
+    if (!active || active.assigneeId === user.id) return;
+    const previous = active.assigneeId;
+    void updateTask(active.id, { assigneeId: user.id });
+    toast.undo(`Assigned ${active.key} to you`, { onUndo: () => void updateTask(active.id, { assigneeId: previous }) });
+  }, { enabled: keysOn });
   useHotkey('f', () => startFocus(), { enabled: queue.length > 0 && !focusOpen });
 
 
@@ -355,7 +372,9 @@ export function MyWorkView({ initialTasks }: { readonly initialTasks: TaskSummar
           })}
           <p className="hidden flex-wrap items-center gap-1 px-1 text-xs text-fg-muted md:flex">
             <Kbd>J</Kbd>
-            <Kbd>K</Kbd> move · <Kbd>Enter</Kbd> open · <Kbd>D</Kbd> done · <Kbd>T</Kbd> due today · <Kbd>M</Kbd> due tomorrow · <Kbd>F</Kbd> focus mode · drag a task onto a group to reschedule it
+            <Kbd>K</Kbd> move · <Kbd>Enter</Kbd> open · <Kbd>{mod}</Kbd>
+            <Kbd>Enter</Kbd> done · <Kbd>D</Kbd> due date · <Kbd>T</Kbd> due today · <Kbd>Shift</Kbd>
+            <Kbd>T</Kbd> due tomorrow · <Kbd>F</Kbd> focus mode · <Kbd>?</Kbd> all shortcuts · drag a task onto a group to reschedule it
           </p>
         </div>
       )}

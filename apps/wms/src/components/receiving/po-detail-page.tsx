@@ -66,6 +66,7 @@ import {
 } from './receiving-shared';
 import { useCancelReceipt } from './receipt-cancel';
 import { DiffPill } from './wizard/step-confirm';
+import { ProjectTasksCard } from '@/components/projects/project-tasks-card';
 import { COMPACT_STEPPER, PoWizard } from './wizard/po-wizard';
 
 const P = 'inventory.purchase_orders.';
@@ -614,6 +615,7 @@ function DetailView({
           </DisabledReason>
         </div>
       </RailCard>
+      <ProjectTasksCard kind="receipt" variant="divided" recordId={po.id} recordLabel={po.code} />
     </>
   );
 

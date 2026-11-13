@@ -37,6 +37,7 @@ import { usePeople, useProject, useProjects } from '@/lib/hooks/use-data';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { useTaskMutations } from '@/lib/hooks/use-task-mutations';
 import { parseQuickAdd, type QuickAddToken } from '@/lib/nl-parse';
+import { useWmsCodeLinks, WmsCodeLinkChips } from '@/features/integrations/wms-code-links';
 import { qk } from '@/lib/query-keys';
 import { createLabelAction } from '@/server/actions/structure';
 import { LabelDot } from '@/features/views/field-pickers';
@@ -174,7 +175,9 @@ function QuickAddForm() {
     }
     return out;
   }, [labelIds, newLabelChoice, parsed.newLabels, projectLabels]);
-  const finalTitle = parsed.title;
+  // WMS codes in the name (PO2240) are written the WMS way (PO002240) and linked to that record.
+  const wmsLinks = useWmsCodeLinks(title);
+  const finalTitle = wmsLinks.normalize(parsed.title);
 
   const tokenOf = useCallback((kind: QuickAddToken['kind']) => parsed.tokens.find((t) => t.kind === kind && !t.unresolved), [parsed.tokens]);
   /** A picker change replaces whatever the text said: drop that word from the text. */
@@ -209,6 +212,7 @@ function QuickAddForm() {
     setLabelIds([]);
     setNewLabels([]);
     setAttempted(false);
+    wmsLinks.reset();
     titleRef.current?.focus();
   };
 
@@ -239,12 +243,18 @@ function QuickAddForm() {
         dueDate,
         priority,
         labelIds: [...labelIds, ...createdLabelIds],
-        sectionId: defaults.sectionId ?? null,
+        // No section picked: the project's first section, so the task lands where you can see it
+        // instead of in a "No section" group at the very bottom.
+        sectionId: defaults.sectionId ?? (defaults.parentTaskId ? null : (detail.data?.sections[0]?.id ?? null)),
         parentTaskId: defaults.parentTaskId ?? null,
         at: 'bottom',
       },
       selectedProject.key,
     );
+    if (created) {
+      const linked = await wmsLinks.linkTo(created.id, finalTitle);
+      if (linked) void queryClient.invalidateQueries({ queryKey: qk.projectTaskLinks(selectedProject.key) });
+    }
     setSaving(false);
     if (!created) return;
     try {
@@ -252,7 +262,11 @@ function QuickAddForm() {
     } catch {
       // storage unavailable
     }
-    toast.success(`Added ${created.key}`, created.title);
+    const missed = parsed.tokens.find((token) => token.unresolved && token.kind === 'assignee');
+    toast.success(
+      `Added ${created.key}`,
+      missed && !assigneeId ? `${created.title}. ${missed.display}, so it is unassigned.` : created.title,
+    );
     if (openAfter) {
       close();
       openTask(created.key);
@@ -314,6 +328,7 @@ function QuickAddForm() {
           }}
         />
         <UnderstoodChips tokens={parsed.tokens} onDismiss={dismiss} onCreateLabel={canCreateLabels ? confirmLabel : undefined} />
+        <WmsCodeLinkChips state={wmsLinks} />
         {finalTitle && finalTitle !== title.trim() ? (
           <p className="-mt-1 truncate text-xs text-fg-muted" data-testid="quick-add-final-title">
             Task name: <span className="font-medium text-fg-secondary">{finalTitle}</span>

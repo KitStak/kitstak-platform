@@ -204,7 +204,11 @@ export function PublicForm({ form }: { readonly form: PublicFormDTO }) {
                       describedBy={describedBy}
                       invalid={invalid}
                       value={answers[field.id]}
-                      onChange={(value) => setAnswers((current) => ({ ...current, [field.id]: value }))}
+                      onChange={(value) => {
+                        setAnswers((current) => ({ ...current, [field.id]: value }));
+                        // A fixed answer drops its error right away (no need to send again to see it go).
+                        if (errors[field.id]) setErrors((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== field.id)));
+                      }}
                     />
                   )}
                 </Field>
@@ -229,7 +233,10 @@ export function PublicForm({ form }: { readonly form: PublicFormDTO }) {
                         size="lg"
                         type="email"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          if (errors.submitterEmail) setErrors((current) => Object.fromEntries(Object.entries(current).filter(([key]) => key !== 'submitterEmail')));
+                        }}
                         autoComplete="email"
                         invalid={invalid}
                       />

@@ -7,12 +7,14 @@ import type { ReactNode } from 'react';
 import { AlignLeft, Building2, Calendar, CalendarClock, CheckSquare, CircleDashed, Clock, DollarSign, FolderOpen, Hash, Link2, ListChecks, Signal, Tag, ToggleLeft, UserRound, Users } from 'lucide-react';
 import { DueDate, LabelPill, PersonAvatar, PriorityIcon, StatusIcon } from '@/components/pm';
 import { PRIORITY_LABELS } from '@/lib/constants';
-import { formatRelative, parseIsoDate } from '@/lib/dates';
+import { formatMinutes, formatRelative, parseIsoDate } from '@/lib/dates';
 import { NO_GROUP } from '@/lib/task-filters';
 import type { CustomFieldDTO, IntegrationLinkDTO, LabelDTO, SectionDTO, StatusDTO, TaskSummary } from '@/lib/types';
 import type { GroupField, SortRule, ViewColumn } from '@/lib/view-config';
 import { LabelDot } from '@/features/views/field-pickers';
-import { LinkChips, cleanTitle } from '@/features/views/link-chips';
+import { LinkChip, cleanTitle } from '@/features/views/link-chips';
+import { CollapsingRow } from '@/features/list/collapsing-row';
+import { Repeat2, Timer } from 'lucide-react';
 
 export type EditorKind = 'title' | 'status' | 'priority' | 'assignee' | 'date' | 'labels' | 'section' | 'number' | 'text' | 'checkbox' | 'select' | 'multiselect' | 'person' | 'readonly';
 
@@ -38,6 +40,8 @@ export interface RenderContext {
   readonly labelById: ReadonlyMap<string, LabelDTO>;
   readonly sectionById: ReadonlyMap<string, SectionDTO>;
   readonly links: ReadonlyMap<string, readonly IntegrationLinkDTO[]>;
+  /** Cycle name per task id ("Cycle 4"), when the project runs cycles. */
+  readonly cycleByTask?: ReadonlyMap<string, string>;
   /** The project's own customer link (CRM account or KitStak customer), the fallback for the Customer column. */
   readonly projectCustomer?: IntegrationLinkDTO | null;
 }
@@ -120,6 +124,20 @@ export function buildColumns(customFields: readonly CustomFieldDTO[]): ColumnDef
         return total === null ? null : `${formatNumber(total)} pts`;
       },
     },
+    {
+      key: 'estimateTime',
+      label: 'Time estimate',
+      icon: <Timer aria-hidden />,
+      defaultWidth: 130,
+      minWidth: 90,
+      align: 'right',
+      editor: 'readonly',
+      sum: (tasks) => {
+        const total = sumOf(tasks, (task) => task.estimateMinutes);
+        return total === null ? null : formatMinutes(total);
+      },
+    },
+    { key: 'cycle', label: 'Cycle', icon: <Repeat2 aria-hidden />, defaultWidth: 130, minWidth: 90, editor: 'readonly' },
     { key: 'section', label: 'Section', icon: <FolderOpen aria-hidden />, defaultWidth: 150, minWidth: 110, sort: { field: 'section', dir: 'asc' }, group: { field: 'section' }, editor: 'section' },
     { key: 'subtasks', label: 'Subtasks', icon: <CheckSquare aria-hidden />, defaultWidth: 120, minWidth: 90, editor: 'readonly' },
     { key: 'links', label: 'Linked to', icon: <Link2 aria-hidden />, defaultWidth: 200, minWidth: 120, editor: 'readonly' },
@@ -205,6 +223,8 @@ export function cellText(def: ColumnDef, task: TaskSummary, ctx: RenderContext):
       return task.startDate ?? '';
     case 'estimate':
       return task.estimatePoints === null ? '' : String(task.estimatePoints);
+    case 'estimateTime':
+      return task.estimateMinutes === null ? '' : formatMinutes(task.estimateMinutes);
     default:
       if (def.field) {
         const value = customValue(task, def.field);
@@ -239,18 +259,24 @@ export function renderCell(def: ColumnDef, task: TaskSummary, ctx: RenderContext
       return task.dueDate ? <DueDate date={task.dueDate} done={done} /> : null;
     case 'startDate':
       return task.startDate ? <span className="text-sm text-fg-secondary tabular-nums">{DATE_FORMAT.format(parseIsoDate(task.startDate))}</span> : null;
-    case 'labels':
-      return task.labelIds.length ? (
-        <span className="flex min-w-0 items-center gap-1 overflow-hidden" title={task.labelIds.map((id) => ctx.labelById.get(id)?.name ?? '').filter(Boolean).join(', ')}>
-          {task.labelIds.slice(0, 2).map((id, index) => {
-            const label = ctx.labelById.get(id);
-            return label ? <LabelPill key={id} name={label.name} color={label.color} className={index === 0 ? 'max-w-full min-w-0 shrink' : 'max-w-28 min-w-0 shrink-[2]'} /> : null;
-          })}
-          {task.labelIds.length > 2 ? <span className="shrink-0 text-2xs text-fg-muted">+{task.labelIds.length - 2}</span> : null}
-        </span>
+    case 'labels': {
+      const labels = task.labelIds.map((id) => ctx.labelById.get(id)).filter((label): label is LabelDTO => Boolean(label));
+      return labels.length ? (
+        <CollapsingRow names={labels.map((label) => label.name)}>
+          {labels.map((label) => (
+            <LabelPill key={label.id} name={label.name} color={label.color} className="max-w-none" />
+          ))}
+        </CollapsingRow>
       ) : null;
+    }
     case 'estimate':
       return task.estimatePoints === null ? null : <span className="tabular-nums">{task.estimatePoints}</span>;
+    case 'estimateTime':
+      return task.estimateMinutes === null ? null : <span className="tabular-nums">{formatMinutes(task.estimateMinutes)}</span>;
+    case 'cycle': {
+      const cycle = ctx.cycleByTask?.get(task.id);
+      return cycle ? <span className="truncate text-fg-secondary">{cycle}</span> : null;
+    }
     case 'section':
       return task.sectionId ? <span className="truncate">{ctx.sectionById.get(task.sectionId)?.name ?? ''}</span> : <span className="text-fg-muted">No section</span>;
     case 'subtasks':
@@ -262,8 +288,16 @@ export function renderCell(def: ColumnDef, task: TaskSummary, ctx: RenderContext
           {task.subtaskDoneCount}/{task.subtaskCount}
         </span>
       ) : null;
-    case 'links':
-      return <LinkChips links={ctx.links.get(task.id)?.filter((link) => !isCustomerLink(link))} max={1} variant="ref" />;
+    case 'links': {
+      const links = ctx.links.get(task.id)?.filter((link) => !isCustomerLink(link) && Boolean(link.targetId)) ?? [];
+      return links.length ? (
+        <CollapsingRow names={links.map((link) => cleanTitle(link.title ?? ''))}>
+          {links.map((link) => (
+            <LinkChip key={link.id} link={link} variant="ref" />
+          ))}
+        </CollapsingRow>
+      ) : null;
+    }
     case 'customer': {
       const customer = customerOf(task, ctx);
       if (!customer) return null;
@@ -345,6 +379,10 @@ export function csvValue(def: ColumnDef, task: TaskSummary, ctx: RenderContext, 
       return task.labelIds.map((id) => ctx.labelById.get(id)?.name ?? '').filter(Boolean).join('; ');
     case 'estimate':
       return task.estimatePoints === null ? '' : String(task.estimatePoints);
+    case 'estimateTime':
+      return task.estimateMinutes === null ? '' : String(task.estimateMinutes);
+    case 'cycle':
+      return ctx.cycleByTask?.get(task.id) ?? '';
     case 'section':
       return task.sectionId ? (ctx.sectionById.get(task.sectionId)?.name ?? '') : '';
     case 'subtasks':

@@ -74,6 +74,11 @@ const DAY_HEADER_H = 30;
 const SLOT_H = 24;
 const MIN_ROW_H = 132;
 const WEEK_SLOT_H = 52;
+/** Tasks longer than a week draw as thin bands at the top of each week, not as full lanes. */
+const THIN_MIN_DAYS = 7;
+const THIN_LANE_H = 14;
+/** At most this many thin bands per week; more fold into the "+N more" list. */
+const THIN_MAX = 2;
 
 type TaskEvent = CalendarEvent<TaskSummary>;
 
@@ -90,8 +95,8 @@ function weekTitle(days: readonly IsoDate[]): string {
   const b = parseIsoDate(last);
   const sameMonth = first.slice(0, 7) === last.slice(0, 7);
   return sameMonth
-    ? `${MONTH_SHORT.format(a)} ${a.getDate()} – ${b.getDate()}, ${b.getFullYear()}`
-    : `${MONTH_SHORT.format(a)} ${a.getDate()} – ${MONTH_SHORT.format(b)} ${b.getDate()}, ${b.getFullYear()}`;
+    ? `${MONTH_SHORT.format(a)} ${a.getDate()} to ${b.getDate()}, ${b.getFullYear()}`
+    : `${MONTH_SHORT.format(a)} ${a.getDate()} to ${MONTH_SHORT.format(b)} ${b.getDate()}, ${b.getFullYear()}`;
 }
 
 export function CalendarSkeleton() {
@@ -160,6 +165,8 @@ export function CalendarView() {
     }
     return out;
   }, [tasks, prefs.plot]);
+  const longEvents = useMemo(() => events.filter((event) => diffDays(event.start, event.end) >= THIN_MIN_DAYS), [events]);
+  const shortEvents = useMemo(() => events.filter((event) => diffDays(event.start, event.end) < THIN_MIN_DAYS), [events]);
   const unscheduled = useMemo(() => tasks.filter((task) => !task.startDate && !task.dueDate), [tasks]);
 
   const weeks = useMemo(() => {
@@ -168,7 +175,6 @@ export function CalendarView() {
   }, [anchor, mode, prefs.showWeekends]);
   const columns = weeks[0]?.length ?? 7;
   const rowHeight = Math.max(MIN_ROW_H, Math.floor((gridHeight - 32) / Math.max(1, weeks.length)));
-  const monthSlots = Math.max(2, Math.floor((rowHeight - DAY_HEADER_H - 6) / SLOT_H));
   const title = mode === 'month' ? MONTH_TITLE.format(parseIsoDate(anchor)) : weekTitle(weekOf(anchor));
   const visibleCount = useMemo(() => {
     const first = weeks[0]?.[0];
@@ -286,7 +292,7 @@ export function CalendarView() {
 
   const look = (task: TaskSummary) => labelColorStyle(taskColor(task, prefs.colorBy, statusById));
 
-  const chip = (task: TaskSummary, options: { days: readonly IsoDate[]; segment?: WeekSegment<TaskSummary>; style?: CSSProperties; className?: string; variant: 'chip' | 'card' | 'list' }) => {
+  const chip = (task: TaskSummary, options: { days: readonly IsoDate[]; segment?: WeekSegment<TaskSummary>; style?: CSSProperties; className?: string; variant: 'chip' | 'card' | 'list' | 'thin'; showTitle?: boolean }) => {
     const { segment, variant } = options;
     const done = isClosed(task);
     const span = taskSpan(task);
@@ -343,6 +349,9 @@ export function CalendarView() {
             variant === 'card' &&
               'flex-col items-stretch justify-center gap-0.5 rounded-md border border-l-[3px] border-[color-mix(in_srgb,var(--lc-bg)_45%,transparent)] border-l-[var(--lc-bg)] bg-[color-mix(in_srgb,var(--lc-bg)_14%,var(--surface-panel))] px-2 py-1.5 text-fg',
             variant === 'list' && 'h-8 w-full rounded-md border-l-[3px] border-[var(--lc-bg)] px-2 text-fg hover:bg-hover',
+            // Long tasks: a slim tinted band (title only where it starts), so they never crowd out real work.
+            variant === 'thin' && 'rounded-full bg-[color-mix(in_srgb,var(--lc-bg)_30%,var(--surface-panel))] px-1.5 text-2xs leading-3 text-fg-secondary hover:text-fg',
+            variant === 'thin' && (options.showTitle ? 'h-3' : 'h-1.5 hover:h-2'),
             segment?.continuesBefore && 'rounded-l-none',
             segment?.continuesBefore && variant === 'card' && 'border-l',
             segment?.continuesAfter && 'rounded-r-none',
@@ -353,7 +362,9 @@ export function CalendarView() {
             options.className,
           )}
         >
-          {variant === 'card' ? (
+          {variant === 'thin' ? (
+            options.showTitle ? <span className="truncate">{task.title}</span> : <span className="sr-only">{task.title}</span>
+          ) : variant === 'card' ? (
             <>
               <span className="flex min-w-0 items-center gap-1.5">
                 <StatusIcon category={task.statusCategory} color={status?.color} size={12} />
@@ -418,11 +429,24 @@ export function CalendarView() {
           </div>
         ))}
       </div>
-      {weeks.map((days) => {
-        const segments = layoutWeek(days, events);
-        const hidden = hiddenPerColumn(segments, days.length, monthSlots);
+      {weeks.map((days, weekIndex) => {
+        // Tasks longer than a week become thin bands under the day numbers; everything else gets
+        // the full lanes, so a month-long task never pushes real work behind "+N more".
+        const thinAll = prefs.plot === 'span' ? layoutWeek(days, longEvents) : [];
+        const thinSegments = thinAll.filter((segment) => segment.slot < THIN_MAX);
+        const thinLanes = thinSegments.reduce((max, segment) => Math.max(max, segment.slot + 1), 0);
+        const band = thinLanes ? thinLanes * THIN_LANE_H + 2 : 0;
+        const segments = layoutWeek(days, prefs.plot === 'span' ? shortEvents : events);
+        const height = Math.max(rowHeight, DAY_HEADER_H + band + 4 * SLOT_H + 6);
+        const slots = Math.max(3, Math.floor((height - DAY_HEADER_H - band - 6) / SLOT_H));
+        const hiddenShort = hiddenPerColumn(segments, days.length, slots);
+        const thinHidden = Array.from({ length: days.length }, () => 0);
+        for (const segment of thinAll) if (segment.slot >= THIN_MAX) for (let col = segment.startCol; col < segment.startCol + segment.span; col += 1) thinHidden[col] = (thinHidden[col] ?? 0) + 1;
+        const hidden = hiddenShort.map((count, col) => count + (count > 0 ? (thinHidden[col] ?? 0) : 0));
+        const extraOnly = hiddenShort.map((count, col) => (count === 0 ? (thinHidden[col] ?? 0) : 0));
+        const lanesTop = DAY_HEADER_H + band;
         return (
-          <div role="row" key={days[0]} data-week-row className="relative grid shrink-0" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, height: rowHeight }}>
+          <div role="row" key={days[0]} data-week-row className="relative grid shrink-0" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, height }}>
             {days.map((day, col) => {
               const outside = day.slice(0, 7) !== anchor.slice(0, 7);
               const isToday = day === today;
@@ -471,7 +495,7 @@ export function CalendarView() {
                           </button>
                         ) : null}
                       </div>
-                      {(hidden[col] ?? 0) > 0 ? (
+                      {(hidden[col] ?? 0) > 0 || (extraOnly[col] ?? 0) > 0 ? (
                         <Popover open={moreDay === day} onOpenChange={(open) => setMoreDay(open ? day : null)}>
                           <PopoverAnchor asChild>
                             <button
@@ -481,10 +505,10 @@ export function CalendarView() {
                                 event.stopPropagation();
                                 setMoreDay(day);
                               }}
-                              style={{ top: DAY_HEADER_H + (monthSlots - 1) * SLOT_H }}
+                              style={(hidden[col] ?? 0) > 0 ? { top: lanesTop + (slots - 1) * SLOT_H } : { bottom: 2 }}
                               className="absolute right-1 left-1 z-[2] flex h-[22px] items-center rounded-sm px-1.5 text-xs font-semibold text-fg-secondary hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
                             >
-                              +{hidden[col]}
+                              +{(hidden[col] ?? 0) || (extraOnly[col] ?? 0)}
                               <span className={cn(narrow && 'sr-only')}>&nbsp;more</span>
                             </button>
                           </PopoverAnchor>
@@ -504,8 +528,22 @@ export function CalendarView() {
                 </Popover>
               );
             })}
+            {thinSegments.map((segment) =>
+              chip(segment.event.item, {
+                days,
+                segment,
+                variant: 'thin',
+                showTitle: !segment.continuesBefore || weekIndex === 0,
+                className: 'absolute z-[1]',
+                style: {
+                  top: DAY_HEADER_H + segment.slot * THIN_LANE_H + (!segment.continuesBefore || weekIndex === 0 ? 0 : 3),
+                  left: `calc(${(segment.startCol / columns) * 100}% + ${segment.continuesBefore ? 0 : 4}px)`,
+                  width: `calc(${(segment.span / columns) * 100}% - ${(segment.continuesBefore ? 0 : 4) + (segment.continuesAfter ? 0 : 4)}px)`,
+                },
+              }),
+            )}
             {segments
-              .filter((segment) => isSegmentVisible(segment, hidden, monthSlots))
+              .filter((segment) => isSegmentVisible(segment, hiddenShort, slots))
               .map((segment) =>
                 chip(segment.event.item, {
                   days,
@@ -513,7 +551,7 @@ export function CalendarView() {
                   variant: 'chip',
                   className: 'absolute z-[1]',
                   style: {
-                    top: DAY_HEADER_H + segment.slot * SLOT_H,
+                    top: lanesTop + segment.slot * SLOT_H,
                     left: `calc(${(segment.startCol / columns) * 100}% + ${segment.continuesBefore ? 0 : 4}px)`,
                     width: `calc(${(segment.span / columns) * 100}% - ${(segment.continuesBefore ? 0 : 4) + (segment.continuesAfter ? 0 : 4)}px)`,
                   },

@@ -50,6 +50,7 @@ import { useShell } from '@/features/shell/shell-context';
 import { useTaskContext } from './task-context';
 import { TaskPickerList } from './task-picker';
 import { useWatchToggle } from './watchers';
+import { toggleDoneWithUndo } from './done-toggle';
 
 export function useTaskActions() {
   const context = useTaskContext();
@@ -82,9 +83,7 @@ export function useTaskActions() {
     toggleDone: async () => {
       const target = isClosed ? todoStatus : doneStatus;
       if (!target) return;
-      const previous = task.statusId;
-      const ok = await patch({ statusId: target.id });
-      if (ok && !isClosed) toast.undo(`Marked ${task.key} done`, { onUndo: () => void patch({ statusId: previous }) });
+      await toggleDoneWithUndo({ taskKey: task.key, closing: !isClosed, target: target.id, previous: task.statusId, save: (statusId) => patch({ statusId }) });
     },
     wontDo: async () => {
       if (!cancelledStatus) return;

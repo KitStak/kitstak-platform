@@ -147,6 +147,10 @@
   min-height: var(--ks-editor-min, 80px);
   padding: 8px 10px;
 }
+/* Empty and not being edited: one line with the placeholder, no tall blank box. */
+.ks-task-editor .ProseMirror:not(.ProseMirror-focused):has(> p.is-editor-empty:only-child) {
+  min-height: 0;
+}
 .ks-task-editor .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;

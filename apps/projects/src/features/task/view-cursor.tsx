@@ -5,19 +5,27 @@ import './view-cursor.css';
  * (`useTaskNav`). Works the moment the page opens:
  *   ↓ / ↑  next / previous task with nothing focused   Enter  open the cursor task
  *   h / l  (board) column to the left / right (←/→ too when no card has focus)
- *   s status · a assignee · p priority · d due date · l (list) or Shift+L labels
+ *   s status · a assignee · p priority · d due date · # labels · i assign to me
+ *   t due today · Shift+T due tomorrow · Ctrl/Cmd+Enter done or reopen · Ctrl/Cmd+. copy link
+ * One key map for every page (`task-keys.ts`): the same key never means two things.
  * The cursor task gets focus and a 2px brand ring (`data-view-cursor`), and keeps the ring while
  * a picker is open or the drawer shows it. Keys never fire while typing, in a menu or a dialog.
  *
  *   <ViewCursor rootRef={listRef} mode="list" tasks={tasks} ops={ops} canEdit onOpen={open} />
  */
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { toast } from '@/components/ui';
 import { isEditableTarget } from '@/lib/hooks/use-hotkeys';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import type { TaskSummary } from '@/lib/types';
 import type { TaskOps } from '@/features/views/use-task-ops';
 import { AssigneePicker, DuePicker, LabelsPicker, PriorityPicker, StatusPicker } from '@/features/views/field-pickers';
+import { addDaysIso, todayIso } from '@/lib/dates';
+import { useCurrentProject } from '@/features/projects/project-context';
+import { useShell } from '@/features/shell/shell-context';
 import { fieldForKey, neighbourCell, stepIndex, type CursorField } from './view-cursor-nav';
+import { toggleDoneWithUndo } from './done-toggle';
+import { copyTaskLink, taskKeyAction } from './task-keys';
 
 export const VIEW_CURSOR_ATTR = 'data-view-cursor';
 
@@ -74,9 +82,11 @@ export function ViewCursor({
   const cursorKey = useRef<string | null>(null);
   const [picker, setPicker] = useState<PickerState | null>(null);
   const { taskKey } = useTaskDrawer();
-  const latest = useRef({ tasks, ops, canEdit, onOpen });
+  const { statuses } = useCurrentProject();
+  const { user } = useShell();
+  const latest = useRef({ tasks, ops, canEdit, onOpen, statuses, userId: user.id });
   useEffect(() => {
-    latest.current = { tasks, ops, canEdit, onOpen };
+    latest.current = { tasks, ops, canEdit, onOpen, statuses, userId: user.id };
   });
 
   const items = useCallback((): HTMLElement[] => {
@@ -150,12 +160,54 @@ export function ViewCursor({
     return () => observer.disconnect();
   }, [mark, rootRef]);
 
+  /** Instant actions (no picker): done, copy link, assign to me, due today or tomorrow. */
+  const runAction = useCallback((action: string, task: TaskSummary) => {
+    const { ops: taskOps, canEdit: editable, statuses: list, userId } = latest.current;
+    if (action === 'copy-link') {
+      void copyTaskLink(task);
+      return;
+    }
+    if (!editable) return;
+    const today = todayIso();
+    if (action === 'assign-me') {
+      if (task.assigneeId === userId) return;
+      const previous = task.assigneeId;
+      void taskOps.updateTask(task.id, { assigneeId: userId });
+      toast.undo(`Assigned ${task.key} to you`, { onUndo: () => void taskOps.updateTask(task.id, { assigneeId: previous }) });
+    } else if (action === 'due-today' || action === 'due-tomorrow') {
+      const dueDate = action === 'due-today' ? today : addDaysIso(today, 1);
+      if (task.dueDate === dueDate) return;
+      const previous = task.dueDate;
+      void taskOps.updateTask(task.id, { dueDate });
+      toast.undo(`${task.key} is due ${action === 'due-today' ? 'today' : 'tomorrow'}`, { onUndo: () => void taskOps.updateTask(task.id, { dueDate: previous }) });
+    } else if (action === 'toggle-done') {
+      const closed = task.statusCategory === 'done' || task.statusCategory === 'cancelled';
+      const target = closed
+        ? (list.find((status) => status.isDefault && status.category !== 'done' && status.category !== 'cancelled') ?? list.find((status) => status.category === 'todo'))
+        : list.find((status) => status.category === 'done');
+      if (!target) return;
+      void toggleDoneWithUndo({ taskKey: task.key, closing: !closed, target: target.id, previous: task.statusId, save: (statusId) => taskOps.updateTask(task.id, { statusId }) });
+    }
+  }, []);
+
   useEffect(() => {
     let lastG = 0;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.defaultPrevented || event.altKey) return;
       const target = event.target as Element | null;
       if (isEditableTarget(target)) return;
+      if (event.metaKey || event.ctrlKey) {
+        // Ctrl/Cmd+Enter (done) and Ctrl/Cmd+. (copy link) act on the cursor task.
+        const action = taskKeyAction(event);
+        if (!action || keyboardIsBusy()) return;
+        if (target instanceof Element && target.closest('[data-task-panel]')) return;
+        const here = current();
+        const task = here ? latest.current.tasks.find((entry) => entry.key === here.dataset.taskKey) : undefined;
+        if (!task) return;
+        event.preventDefault();
+        runAction(action, task);
+        return;
+      }
       // "g then p" and friends belong to the shell's go-to chords.
       if (event.key === 'g') {
         lastG = Date.now();
@@ -224,7 +276,15 @@ export function ViewCursor({
         return;
       }
 
-      const field = fieldForKey(key, mode);
+      const quick = taskKeyAction(event);
+      if (quick === 'assign-me' || quick === 'due-today' || quick === 'due-tomorrow') {
+        if (!latest.current.canEdit) return;
+        event.preventDefault();
+        mark(task.key);
+        runAction(quick, task);
+        return;
+      }
+      const field = fieldForKey(key);
       if (!field || !latest.current.canEdit) return;
       if (key === 'L' && !event.shiftKey) return;
       event.preventDefault();
@@ -235,7 +295,7 @@ export function ViewCursor({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [current, items, mark, mode, moveTo, rootRef]);
+  }, [current, items, mark, mode, moveTo, rootRef, runAction]);
 
   if (!picker) return null;
   const { task, field } = picker;

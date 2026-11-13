@@ -28,11 +28,14 @@ describe('neighbourCell', () => {
 
 describe('fieldForKey', () => {
   it('maps Linear style keys', () => {
-    expect(fieldForKey('s', 'list')).toBe('status');
-    expect(fieldForKey('a', 'board')).toBe('assignee');
-    expect(fieldForKey('l', 'list')).toBe('labels');
-    expect(fieldForKey('l', 'board')).toBeNull();
-    expect(fieldForKey('L', 'board')).toBe('labels');
-    expect(fieldForKey('q', 'list')).toBeNull();
+    expect(fieldForKey('s')).toBe('status');
+    expect(fieldForKey('a')).toBe('assignee');
+    // One key map: l never means labels (it is "column right" on a board), # always does.
+    expect(fieldForKey('l')).toBeNull();
+    expect(fieldForKey('l')).toBeNull();
+    expect(fieldForKey('#')).toBe('labels');
+    expect(fieldForKey('#')).toBe('labels');
+    expect(fieldForKey('L')).toBe('labels');
+    expect(fieldForKey('q')).toBeNull();
   });
 });

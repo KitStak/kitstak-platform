@@ -144,7 +144,7 @@ export const northwindSeed: OrgSeed = {
           start: 10,
           due: 14,
           deps: ['safety'],
-          sub: [{ t: 'First shift (6am–2pm)' }, { t: 'Second shift (2pm–10pm)' }, { t: 'Third shift (10pm–6am)', a: 'lucas' }],
+          sub: [{ t: 'First shift (6am to 2pm)' }, { t: 'Second shift (2pm to 10pm)' }, { t: 'Third shift (10pm to 6am)', a: 'lucas' }],
         },
         {
           t: 'Go-live and two weeks of hypercare',
@@ -261,7 +261,7 @@ export const northwindSeed: OrgSeed = {
           labels: ['Security review'],
           cf: { 'Deal size': 620000, 'Close confidence': 'Medium' },
           links: [deal('Lumen Health Systems · AMR fleet', 'negotiation')],
-          time: [['daniel', 180, 3, 'Answered sections 1–6'], ['daniel', 150, 1, 'Camera data questions']],
+          time: [['daniel', 180, 3, 'Answered sections 1 to 6'], ['daniel', 150, 1, 'Camera data questions']],
           sub: [{ t: 'Final read before sending it to Lumen', a: 'maya', due: 0 }, { t: 'Attach the SOC 2 report and bridge letter', a: 'daniel', done: true }],
           c: [
             ['daniel', 'All 186 answered. Camera frames are never stored, only obstacle maps. {maya} can you give it a final read?'],
@@ -398,7 +398,7 @@ export const northwindSeed: OrgSeed = {
         { t: 'Battery swap scheduling', d: p('Plan battery swaps around shift changes so no more than 2 robots charge at the same time in a zone.'), s: 'Fleet dashboard', st: 'In progress', a: 'daniel', p: 'medium', pts: 5, due: 8, labels: ['Feature'] },
         {
           id: 'map',
-          t: 'Live fleet map shows robots 2–3 seconds late',
+          t: 'Live fleet map shows robots 2 to 3 seconds late',
           s: 'Fleet dashboard',
           st: 'QA',
           a: 'daniel',
@@ -667,7 +667,7 @@ export const northwindSeed: OrgSeed = {
       tasks: [
         {
           t: 'Bluestone Foods: forklift #3 stops at the cold room door',
-          d: p('Autonomous forklift #3 stops for 20–40 seconds every time it passes the cold room door. Started after they installed a new air curtain.'),
+          d: p('Autonomous forklift #3 stops for 20 to 40 seconds every time it passes the cold room door. Started after they installed a new air curtain.'),
           s: 'Requests',
           st: 'In progress',
           a: 'ethan',

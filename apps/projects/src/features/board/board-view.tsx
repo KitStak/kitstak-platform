@@ -297,9 +297,21 @@ export function BoardView() {
     const siblings = ids.filter((id) => id !== activeId).map((id) => taskById.get(taskIdOf(id))).filter((entry): entry is TaskSummary => Boolean(entry));
     const neighbours = manual ? { above: siblings[index - 1] ?? null, below: siblings[index] ?? null } : undefined;
     const status = statusById.get(target.statusId);
-    void ops.applyMove(task, { patch: laneMove?.patch ?? {}, statusId: target.statusId, labelIds: laneMove?.labelIds }, neighbours).then((ok) => {
+    const finishing = status?.category === 'done' && task.statusCategory !== 'done';
+    const pending = ops.applyMove(task, { patch: laneMove?.patch ?? {}, statusId: target.statusId, labelIds: laneMove?.labelIds }, neighbours).then((ok) => {
       if (ok && moved && status) setLiveMessage(`Moved ${task.key} to ${columnName(to)}.`);
+      return ok;
     });
+    if (finishing) {
+      // Same Undo as the List and the drawer: the toast shows as the card lands.
+      const previous = task.statusId;
+      const undoId = toast.undo(`Marked ${task.key} done`, {
+        onUndo: async () => {
+          if (await pending) await ops.updateTask(task.id, { statusId: previous });
+        },
+      });
+      void pending.then((ok) => (ok ? undefined : toast.forgetUndo(undoId)));
+    }
     // Keep the dropped layout until the optimistic cache update renders.
     setDragId(null);
     setLive(null);

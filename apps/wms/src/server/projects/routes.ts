@@ -32,7 +32,7 @@ export const createTaskBodySchema = z
   })
   .strict();
 
-export function projectTasksRoutes(type: WmsRecordType, permission: string) {
+export function projectTasksRoutes(type: WmsRecordType, permission: string | readonly string[]) {
   return {
     GET: defineRoute({
       permission,
@@ -50,7 +50,7 @@ export function projectTasksRoutes(type: WmsRecordType, permission: string) {
   };
 }
 
-export function projectLinkRoutes(type: WmsRecordType, permission: string) {
+export function projectLinkRoutes(type: WmsRecordType, permission: string | readonly string[]) {
   return {
     DELETE: defineRoute({
       permission,

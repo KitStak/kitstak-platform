@@ -12,11 +12,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { ChevronDown, ChevronRight, ChevronUp, X } from 'lucide-react';
-import { Button, EmptyState, IconButton, Skeleton, Tooltip, cn } from '@/components/ui';
+import { Button, EmptyState, IconButton, Skeleton, Tooltip, cn, toast } from '@/components/ui';
 import { EntityIcon, StatusIcon } from '@/components/pm';
 import { isEditableTarget, useHotkey } from '@/lib/hooks/use-hotkeys';
-import { useProject, useTask } from '@/lib/hooks/use-data';
+import { useProject, useTask, useTaskAttachments } from '@/lib/hooks/use-data';
 import { TASKS_DELETED_EVENT } from '@/lib/hooks/use-task-mutations';
+import { addDaysIso, todayIso } from '@/lib/dates';
 import { routes } from '@/lib/routes';
 import { parseTaskKey } from '@/lib/task-key';
 import type { TaskDetail } from '@/lib/types';
@@ -34,6 +35,8 @@ import { TaskProperties } from './task-properties';
 import { TimeSection } from './time-section';
 import { useTaskUploads } from './use-task-uploads';
 import { WatchersButton } from './watchers';
+import { taskKeyAction } from './task-keys';
+import { useShell } from '@/features/shell/shell-context';
 
 export interface TaskDetailViewProps {
   /** Task uuid or key (OPS-42). */
@@ -66,9 +69,73 @@ function useWide(ref: React.RefObject<HTMLElement | null>): boolean {
   return wide;
 }
 
+/**
+ * The shared task key map inside the drawer and on the task page: Ctrl/Cmd+Enter marks it done
+ * (or reopens it), Ctrl/Cmd+. copies its link, I assigns it to you, T / Shift+T make it due
+ * today / tomorrow. In the drawer the keys only count while focus is in the panel; outside it,
+ * the view behind acts on its cursor task (which is the task the drawer shows).
+ */
+function useTaskKeys(actions: ReturnType<typeof useTaskActions>) {
+  const { task, canEdit, patch, variant } = useTaskContext();
+  const { user } = useShell();
+  const ref = useRef({ actions, task, canEdit, patch, userId: user.id });
+  useEffect(() => {
+    ref.current = { actions, task, canEdit, patch, userId: user.id };
+  });
+  useEffect(() => {
+    const run = (event: KeyboardEvent): boolean => {
+      const action = taskKeyAction(event);
+      if (!action) return false;
+      const { actions: current, task: shown, canEdit: editable, patch: save, userId } = ref.current;
+      if (action === 'copy-link') {
+        void current.copyLink();
+        return true;
+      }
+      if (!editable) return false;
+      if (action === 'toggle-done') {
+        void current.toggleDone();
+        return true;
+      }
+      if (action === 'assign-me' && shown.assigneeId !== userId) {
+        const previous = shown.assigneeId;
+        void save({ assigneeId: userId });
+        toast.undo(`Assigned ${shown.key} to you`, { onUndo: () => void save({ assigneeId: previous }) });
+        return true;
+      }
+      if (action === 'due-today' || action === 'due-tomorrow') {
+        const dueDate = action === 'due-today' ? todayIso() : addDaysIso(todayIso(), 1);
+        const previous = shown.dueDate;
+        void save({ dueDate });
+        toast.undo(`${shown.key} is due ${action === 'due-today' ? 'today' : 'tomorrow'}`, { onUndo: () => void save({ dueDate: previous }) });
+        return true;
+      }
+      return false;
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (isEditableTarget(target) || target?.closest(BUSY_KEYS_SELECTOR)) return;
+      if (variant === 'page' && document.querySelector('[role="dialog"][data-state="open"], [role="menu"], [cmdk-root]')) return;
+      if (run(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    if (variant === 'page') {
+      window.addEventListener('keydown', onKey);
+      return () => window.removeEventListener('keydown', onKey);
+    }
+    const panel = document.querySelector<HTMLElement>(`[${TASK_PANEL_ATTR}]`);
+    if (!panel) return undefined;
+    panel.addEventListener('keydown', onKey);
+    return () => panel.removeEventListener('keydown', onKey);
+  }, [variant]);
+}
+
 function TaskTitle() {
   const { task, canEdit, patch, statusById } = useTaskContext();
   const actions = useTaskActions();
+  useTaskKeys(actions);
   const [draft, setDraft] = useState<string | null>(null);
   const status = statusById.get(task.statusId);
   const closed = task.statusCategory === 'done' || task.statusCategory === 'cancelled';
@@ -508,6 +575,9 @@ export function TaskDetailView({
   const task = useTask(taskRef, { initialData, enabled: live && Boolean(taskRef) });
   const data = task.data;
   const project = useProject(data?.projectKey ?? '', { enabled: Boolean(data) });
+  // Files load next to the project, not after the body renders, so the Files tiles draw real
+  // names and sizes on the first paint of the panel.
+  useTaskAttachments(data?.id, { enabled: live && Boolean(data?.id) && (data?.attachmentCount ?? 0) > 0 });
   const retire = useCallback(() => {
     liveRef.current = false;
     setLive(false);

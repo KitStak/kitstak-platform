@@ -80,7 +80,8 @@ describe('workload model', () => {
     expect(maya?.unestimated).toBe(1);
     expect(rows.get(UNASSIGNED)?.cells.get(NO_DATE)?.tasks.length).toBe(1);
     const counted = buildWorkload([task({ id: 'b', assigneeId: 'maya', startDate: '2026-11-12', dueDate: '2026-11-17' })], weeks, 'tasks');
-    expect(counted.get('maya')?.cells.get('2026-11-09')?.load).toBe(1);
+    // Counting tasks, a task spanning two weeks counts once, in its due week.
+    expect(counted.get('maya')?.cells.get('2026-11-09')).toBeUndefined();
     expect(counted.get('maya')?.cells.get('2026-11-16')?.load).toBe(1);
   });
 

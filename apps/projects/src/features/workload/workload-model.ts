@@ -1,5 +1,5 @@
 /**
- * Workload math, pure for tests. Each open task's effort is spread over the work days (Mon–Fri)
+ * Workload math, pure for tests. Each open task's effort is spread over the work days (Monday to Friday)
  * between its start and due date, then added up per person per week and compared with that
  * person's weekly capacity.
  */
@@ -147,8 +147,8 @@ export function buildWorkload(tasks: readonly TaskSummary[], weeks: readonly Iso
     rows.set(personId, row);
     const cell = row.cells.get(bucket) ?? { load: 0, tasks: [] };
     row.cells.set(bucket, cell);
-    // Counting tasks: a task counts once in every week it touches ("3 tasks this week").
-    // Points and hours are split across the weeks so the total stays the task's estimate.
+    // Counting tasks: a task counts once, in the week it is due. Points and hours are split
+    // across the weeks it runs so the total stays the task's estimate.
     cell.load += unit === 'tasks' ? 1 : taskLoad(task, unit) * share;
     cell.tasks.push({ task, share });
   };
@@ -165,6 +165,13 @@ export function buildWorkload(tasks: readonly TaskSummary[], weeks: readonly Iso
       if (b < first) {
         add(person, EARLIER, task, 1);
         counted = true;
+      } else if (unit === 'tasks') {
+        // One task, one place: its due week (or the last visible week while it is still running).
+        if (a <= addDaysIso(last, 6)) {
+          const dueWeek = startOfWeekIso(b);
+          add(person, dueWeek > last ? last : dueWeek, task, 1);
+          counted = true;
+        }
       } else {
         let earlierShare = 0;
         for (const [week, share] of weekShares(a, b)) {
@@ -201,7 +208,7 @@ export function loadLevel(load: number, capacity: number): LoadLevel {
   return 'light';
 }
 
-/** "6", "2.5", "13" – at most one decimal, no trailing zero. */
+/** "6", "2.5", "13": at most one decimal, no trailing zero. */
 export function formatLoad(value: number): string {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);

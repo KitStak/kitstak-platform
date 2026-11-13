@@ -13,6 +13,7 @@ import { BoardTable, filterItems, type OpenItemOptions } from '@/features/board-
 import { BoardView, hasBoardViewComponent } from '@/features/board-views';
 import { ImportDialog } from '@/features/import-export';
 import { ItemPanelRoute, useItemPanelUrlState } from '@/features/item-panel';
+import { usePrefetchItemProjects } from '@/features/item-panel/projects/api';
 import { useOrg } from '@/features/shell/org-context';
 import { routes } from '@/features/shell/routes';
 import { ApiClientError } from '@/lib/api';
@@ -83,6 +84,8 @@ function actorName(notice: BoardLifecycleNotice | null, users: readonly { id: st
 
 export function BoardPage({ boardId }: { readonly boardId: string }) {
   const board = useBoard(boardId);
+  // A deep-linked record's Projects tab loads in parallel with the board, not after it.
+  usePrefetchItemProjects(useItemPanelUrlState().itemId);
   const { org, user } = useOrg();
   // One realtime subscription for the page (views, lifecycle, items), whatever the view type.
   const notice = useBoardRealtime(boardId, user.id);
@@ -122,7 +125,7 @@ function BoardWorkspace({
     recordVisit({ entityType: 'board', entityId: boardId });
   }, [boardId, recordVisit]);
   useEffect(() => {
-    document.title = `${board.name} · KitStak`;
+    document.title = `${board.name} · KitStak CRM`;
   }, [board.name]);
 
   const viewApi = useActiveView(payload.views);

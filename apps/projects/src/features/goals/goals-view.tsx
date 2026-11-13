@@ -58,7 +58,7 @@ import { deleteGoalAction, deleteKeyResultAction, linkGoalProjectAction, restore
 import { useShell } from '@/features/shell/shell-context';
 import { ProgressRing } from '@/features/dashboards/charts';
 import { LocalTime } from '@/features/task/local-time';
-import { CheckInDialog, GOAL_HEALTH_COLOR, GOAL_TONE, GoalDialog, KeyResultDialog, formatKrValue, krValueText } from './goal-dialogs';
+import { CheckInDialog, GOAL_HEALTH_COLOR, GOAL_TONE, GoalDialog, KeyResultDialog, formatKrValue, krBarTone, krProgressFormula, krValueText } from './goal-dialogs';
 
 type DialogState =
   | { kind: 'goal'; goal: GoalDTO | null; parentId?: string | null }
@@ -81,14 +81,45 @@ function GoalHealthBadge({ health }: { readonly health: GoalHealth }) {
   );
 }
 
+/** "Started 97.2% · Now 98.6% · Target 99.5%", with the current value in bold. */
+function KrNumbers({ start, now, target, lowerIsBetter, align = 'start' }: { readonly start: string; readonly now: string; readonly target: string; readonly lowerIsBetter: boolean; readonly align?: 'start' | 'end' }) {
+  return (
+    <span className={cn('inline-flex flex-wrap items-center gap-x-1.5 text-fg-muted', align === 'end' && 'sm:justify-end')} data-testid="kr-numbers">
+      <span>Started {start}</span>
+      <span aria-hidden>·</span>
+      <span className="text-fg-secondary">
+        Now <strong className="font-semibold text-fg">{now}</strong>
+      </span>
+      <span aria-hidden>·</span>
+      <span className="inline-flex items-center gap-0.5">
+        {lowerIsBetter ? <ArrowDownRight aria-label="Lower is better" className="size-3" /> : null}
+        Target {target}
+      </span>
+    </span>
+  );
+}
+
+/** Tooltip body: the plain-words explanation, then the sum on its own line. */
+function KrFormula({ kr }: { readonly kr: KeyResultDTO }) {
+  const { text, steps } = krProgressFormula(kr);
+  return (
+    <span className="flex max-w-72 flex-col gap-1">
+      <span>{text}</span>
+      {steps ? <span className="font-medium whitespace-nowrap tabular-nums">{steps}</span> : null}
+    </span>
+  );
+}
+
 function KeyResultRow({
   kr,
+  health,
   projects,
   canEdit,
   onSaved,
   onEdit,
 }: {
   readonly kr: KeyResultDTO;
+  readonly health: GoalHealth;
   readonly projects: ReadonlyMap<string, ProjectSummary>;
   readonly canEdit: boolean;
   readonly onSaved: (goal: GoalDTO) => void;
@@ -178,28 +209,21 @@ function KeyResultRow({
               data-testid="kr-value"
             >
               {(() => {
-                const { lowerIsBetter } = krValueText(kr);
                 if (kr.kind === 'boolean') return <strong className="font-semibold text-fg">{formatKrValue(kr, kr.currentValue)}</strong>;
-                return lowerIsBetter ? (
-                  <span className="inline-flex items-center gap-1" title={`Lower is better. Started at ${formatKrValue(kr, kr.startValue)}.`}>
-                    <ArrowDownRight aria-label="Lower is better" className="size-3 text-fg-muted" />
-                    <span>
-                      Now <strong className="font-semibold text-fg">{formatKrValue(kr, kr.currentValue)}</strong>, target {formatKrValue(kr, kr.targetValue)} or less
-                    </span>
-                  </span>
-                ) : (
-                  <>
-                    <strong className="font-semibold text-fg">{formatKrValue(kr, kr.currentValue)}</strong> of {formatKrValue(kr, kr.targetValue)}
-                  </>
-                );
+                const text = krValueText(kr);
+                return <KrNumbers {...text} align="end" />;
               })()}
             </button>
           </Tooltip>
         )}
       </div>
       <div className="order-4 col-span-2 flex items-center gap-2 sm:order-none sm:col-span-1">
-        <ProgressBar value={kr.progress} size="sm" label={`${kr.name} progress`} tone={kr.progress >= 100 ? 'success' : 'primary'} className="flex-1" />
-        <span className="w-9 text-right text-xs font-medium text-fg tabular-nums">{kr.progress}%</span>
+        <ProgressBar value={kr.progress} size="sm" label={`${kr.name} progress`} tone={krBarTone(kr.progress, health)} className="flex-1" />
+        <Tooltip content={<KrFormula kr={kr} />}>
+          <span tabIndex={0} className="w-9 cursor-help rounded-sm text-right text-xs font-medium text-fg tabular-nums underline decoration-border-strong decoration-dotted underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-focus" data-testid="kr-percent">
+            {kr.progress}%
+          </span>
+        </Tooltip>
       </div>
       <div className="flex items-center justify-end">
         {canEdit ? (
@@ -340,7 +364,7 @@ function GoalCard({
             {goal.keyResults.length ? (
               <ul className="flex flex-col divide-y divide-border-subtle" aria-label={`Key results for ${goal.name}`}>
                 {goal.keyResults.map((kr) => (
-                  <KeyResultRow key={`${kr.id}-${kr.currentValue}`} kr={kr} projects={projects} canEdit={canEdit} onSaved={onSaved} onEdit={() => onDialog({ kind: 'kr', goal, keyResult: kr })} />
+                  <KeyResultRow key={`${kr.id}-${kr.currentValue}`} kr={kr} health={goal.health} projects={projects} canEdit={canEdit} onSaved={onSaved} onEdit={() => onDialog({ kind: 'kr', goal, keyResult: kr })} />
                 ))}
               </ul>
             ) : goal.progressMode === 'key_results' && canEdit ? (
@@ -435,13 +459,24 @@ function GoalPanel({ goal, all, projects, canEdit, onClose, onDialog }: { readon
               <ul className="flex flex-col gap-2.5">
                 {goal.keyResults.map((kr) => (
                   <li key={kr.id}>
-                    <div className="flex items-center justify-between gap-2 text-sm">
-                      <span className="truncate text-fg">{kr.name}</span>
-                      <span className="shrink-0 text-xs text-fg-muted tabular-nums">
-                        {kr.kind === 'project' ? (kr.projectId ? (projects.get(kr.projectId)?.name ?? 'Project') : 'Project') : krValueText(kr).text}
-                      </span>
+                    <p className="truncate text-sm text-fg">{kr.name}</p>
+                    <p className="mt-0.5 text-xs text-fg-muted tabular-nums">
+                      {kr.kind === 'project' ? (
+                        kr.projectId ? (projects.get(kr.projectId)?.name ?? 'Project') : 'Project'
+                      ) : kr.kind === 'boolean' ? (
+                        formatKrValue(kr, kr.currentValue)
+                      ) : (
+                        <KrNumbers {...krValueText(kr)} />
+                      )}
+                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <ProgressBar value={kr.progress} size="sm" label={`${kr.name} progress`} className="flex-1" tone={krBarTone(kr.progress, goal.health)} />
+                      <Tooltip content={<KrFormula kr={kr} />}>
+                        <span tabIndex={0} className="w-9 cursor-help text-right text-xs font-medium text-fg tabular-nums underline decoration-border-strong decoration-dotted underline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-focus">
+                          {kr.progress}%
+                        </span>
+                      </Tooltip>
                     </div>
-                    <ProgressBar value={kr.progress} size="sm" label={`${kr.name} progress`} className="mt-1" tone={kr.progress >= 100 ? 'success' : 'primary'} />
                   </li>
                 ))}
               </ul>

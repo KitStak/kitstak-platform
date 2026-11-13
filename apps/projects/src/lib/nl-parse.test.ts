@@ -251,10 +251,10 @@ describe('assignee', () => {
     expect(result.tokens[0]?.display).toBe('Me');
   });
 
-  it('takes unknown names out of the title and flags them', () => {
+  it('keeps unknown names in the title as typed and flags them', () => {
     const result = parse('Ask @nobody about it');
     expect(result.assigneeId).toBeNull();
-    expect(result.title).toBe('Ask about it');
+    expect(result.title).toBe('Ask @nobody about it');
     expect(result.tokens[0]).toMatchObject({ unresolved: true, display: 'No one named nobody' });
   });
 
@@ -294,7 +294,7 @@ describe('labels', () => {
   it('unknown labels wait for a confirmation and never fuzzy match', () => {
     const unconfirmed = parse('Fix #bug and #design-review');
     expect(unconfirmed.newLabels).toEqual([]);
-    expect(unconfirmed.title).toBe('Fix and');
+    expect(unconfirmed.title).toBe('Fix #bug and #design-review');
     expect(unconfirmed.tokens.find((t) => t.raw === '#bug')).toMatchObject({ value: null, unresolved: true, display: 'No label called bug', name: 'bug' });
     const result = parse('Fix #bug and #design-review #Design-Review', { createLabels: ['bug', 'Design Review'] });
     expect(result.labelIds).toEqual([]);
@@ -319,10 +319,10 @@ describe('project', () => {
     expect(parse('Order boxes +WH').projectId).toBe('p-wh');
   });
 
-  it('flags unknown projects and keeps them out of the title', () => {
+  it('flags unknown projects and keeps them in the title as typed', () => {
     const result = parse('Order boxes +nope');
     expect(result.projectId).toBeNull();
-    expect(result.title).toBe('Order boxes');
+    expect(result.title).toBe('Order boxes +nope');
     expect(result.tokens[0]).toMatchObject({ unresolved: true });
   });
 
@@ -394,9 +394,10 @@ describe('segmentQuickAdd', () => {
 });
 
 describe('spec example and fuzzy people', () => {
-  it('never leaves an unresolved token in the title', () => {
+  it('keeps an unresolved token in the title as typed (its chip warns)', () => {
     const result = parseQuickAdd('Call Acme tomorrow !high @maya #sales', { today: TODAY, people: [], labels: [] });
-    expect(result.title).toBe('Call Acme');
+    expect(result.title).toBe('Call Acme @maya #sales');
+    expect(result.assigneeId).toBeNull();
     expect(result.newLabels).toEqual([]);
     expect(result.tokens.filter((t) => t.unresolved).map((t) => t.kind)).toEqual(['assignee', 'label']);
   });

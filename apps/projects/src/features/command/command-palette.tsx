@@ -24,6 +24,7 @@ import {
   Keyboard,
   ClipboardList,
   LayoutTemplate,
+  ListChecks,
   LogOut,
   Moon,
   Plus,
@@ -32,6 +33,7 @@ import {
   Sun,
   Target,
   TextSearch,
+  Trash2,
   Workflow,
   type LucideIcon,
 } from 'lucide-react';
@@ -49,6 +51,7 @@ import { useShell } from '@/features/shell/shell-context';
 import { orgInitials } from '@/features/shell/org-switcher';
 import { useShellStore } from '@/features/shell/store';
 import { markUsedSearch } from './usage-flags';
+import { useSelectionCommands } from './selection-commands';
 
 const groupClass =
   '[&_[cmdk-group-heading]]:px-4 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-fg-muted';
@@ -148,6 +151,8 @@ export function CommandPalette() {
   const debounced = useDebouncedValue(query.trim(), 150);
   const results = useSearch(debounced, { enabled: open && debounced.length > 0 });
   const projects = useProjects({}, { enabled: open });
+  const selectionHeading = useSelectionCommands((state) => state.heading);
+  const selectionCommands = useSelectionCommands((state) => state.commands);
 
   useEffect(() => {
     if (open) markUsedSearch();
@@ -270,6 +275,26 @@ export function CommandPalette() {
         <PaletteEmpty remoteCount={remoteCount} searching={searching} fetching={results.isFetching} />
 
 
+
+        {selectionHeading && selectionCommands.length ? (
+          <Command.Group heading={selectionHeading} className={groupClass} data-testid="palette-selection">
+            {selectionCommands.map((command) => (
+              <Item
+                key={command.id}
+                value={`selection-${command.id} ${command.label}`}
+                keywords={command.keywords}
+                onSelect={() => {
+                  close();
+                  command.run();
+                }}
+                icon={command.danger ? <Trash2 aria-hidden className="size-4 text-danger" /> : <ListChecks aria-hidden className="size-4" />}
+                testId="palette-selection-item"
+              >
+                {command.label}
+              </Item>
+            ))}
+          </Command.Group>
+        ) : null}
 
         {typing ? null : (
           <Command.Group heading="Create" className={groupClass}>

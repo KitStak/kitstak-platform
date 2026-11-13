@@ -37,7 +37,7 @@ import { entitlementsAllowAll } from '@/server/auth/entitlements';
 import { assertInScope } from '@/server/auth/scope';
 import * as schema from '@/server/db/schema';
 
-export type WmsRecordType = 'wms_order' | 'wms_work_order';
+export type WmsRecordType = 'wms_order' | 'wms_work_order' | 'wms_receipt' | 'wms_count';
 
 export interface RecordProjectsDto {
   readonly available: boolean;
@@ -138,6 +138,43 @@ async function snapshot(
       title: `${row.code} · ${label}`,
       status: row.status,
       url: `${origin}/orders/${encodeURIComponent(row.id)}`,
+      meta: { code: row.code },
+    };
+  }
+  if (type === 'wms_receipt') {
+    const t = schema.purchaseOrders;
+    const [row] = await db
+      .select({ id: t.id, code: t.code, status: t.status, warehouseId: t.warehouseId, clientId: t.clientId })
+      .from(t)
+      .where(or(eq(t.id, idOrCode), eq(t.code, idOrCode)))
+      .limit(1);
+    if (!row) throw notFoundError('Purchase order');
+    assertInScope(auth.scope, row, 'Purchase order');
+    // Same title Projects resolves for a receipt link (apps/projects server/integrations/wms.ts).
+    return {
+      type,
+      id: row.id,
+      title: `${row.code} · Purchase order`,
+      status: row.status,
+      url: `${origin}/receiving/${encodeURIComponent(row.id)}`,
+      meta: { code: row.code },
+    };
+  }
+  if (type === 'wms_count') {
+    const t = schema.countPlans;
+    const [row] = await db
+      .select({ id: t.id, code: t.code, status: t.status, description: t.description, warehouseId: t.warehouseId })
+      .from(t)
+      .where(or(eq(t.id, idOrCode), eq(t.code, idOrCode)))
+      .limit(1);
+    if (!row) throw notFoundError('Cycle count');
+    assertInScope(auth.scope, row, 'Cycle count');
+    return {
+      type,
+      id: row.id,
+      title: `${row.code} · ${row.description?.trim() || 'Cycle count'}`,
+      status: row.status,
+      url: `${origin}/counts/${encodeURIComponent(row.id)}`,
       meta: { code: row.code },
     };
   }

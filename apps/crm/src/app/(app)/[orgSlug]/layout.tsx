@@ -14,7 +14,7 @@ interface OrgLayoutProps {
 export async function generateMetadata({ params }: OrgLayoutProps): Promise<Metadata> {
   const { orgSlug } = await params;
   const result = await getPageOrgMembership(orgSlug);
-  return { title: { default: result?.membership.organization.name ?? 'KitStak', template: '%s · KitStak' } };
+  return { title: { default: result ? `${result.membership.organization.name} · KitStak CRM` : 'KitStak CRM', template: '%s · KitStak CRM' } };
 }
 
 /**

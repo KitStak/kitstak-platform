@@ -9,6 +9,7 @@
  */
 import * as React from 'react';
 import Link from 'next/link';
+import { ProjectTasksCard } from '@/components/projects/project-tasks-card';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { RowSelectionState } from '@tanstack/react-table';
 import {
@@ -632,6 +633,10 @@ function Loaded({
           sublabel={`${exact} of ${plural(accuracyLines.length, 'counted line', 'counted lines')} ${exact === 1 && accuracyLines.length === 1 ? 'matches' : 'match'}`}
           tone={accuracyLines.length && exact === accuracyLines.length ? 'success' : 'default'}
         />
+      </div>
+      {/* KitStak Projects work linked to this count (hidden when Projects is not available). */}
+      <div className="px-6 pb-4 empty:hidden">
+        <ProjectTasksCard kind="count" variant="aside" recordId={plan.id} recordLabel={plan.code} />
       </div>
       <div className="relative">
         <div ref={tabStrip}>

@@ -503,7 +503,9 @@ function PanelBody({
   const shellOrg = useOptionalOrg();
   const projectsEntitled = shellOrg?.apps?.entitled.projects ?? false;
   const projectsEligible = projectsEntitled && data.item?.parentItemId === null;
-  const projectsQuery = useItemProjects(itemId, projectsEligible);
+  // Fetched in parallel with the record itself (not after it), so a ?itemTab=projects deep link
+  // shows linked work as soon as the panel does. Subitems turn it off once the record is known.
+  const projectsQuery = useItemProjects(itemId, projectsEntitled && data.item?.parentItemId == null);
   // Entitlement comes from the server-rendered shell, so the tab (and a ?itemTab=projects deep
   // link) renders right away with a skeleton; it only disappears if the pm schema turns out missing.
   const projectsAvailable = projectsEligible && projectsQuery.data?.available !== false;

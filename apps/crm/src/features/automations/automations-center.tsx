@@ -84,7 +84,7 @@ export function AutomationsCenter({ boardId }: { readonly boardId: string }) {
 
   const boardName = board.data?.board.name;
   useEffect(() => {
-    if (boardName) document.title = `Automations · ${boardName} · KitStak`;
+    if (boardName) document.title = `Automations · ${boardName} · KitStak CRM`;
   }, [boardName]);
 
   const setQuery = useCallback(

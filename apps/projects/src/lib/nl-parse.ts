@@ -15,8 +15,8 @@
  *   - Project:   +OPS (key) or +operations (name). A unique prefix is enough.
  *
  * Tokens that don't resolve (an @name nobody has, an unconfirmed new #label) are reported with
- * `unresolved: true` and are left out of the title too: the chip warns instead, so a typo never
- * ends up in the task name. Users can dismiss a chip: pass its `id` in `ignore` and that text is
+ * `unresolved: true` and stay in the title as typed: nothing the user wrote disappears without a
+ * word, and the red chip ("Assign to: no one named maya") says why it was not applied. Users can dismiss a chip: pass its `id` in `ignore` and that text is
  * treated as plain words (kept in the title).
  */
 import { addDaysIso, isIsoDate, parseIsoDate, startOfWeekIso, toIsoDate, type IsoDate } from './dates';
@@ -426,8 +426,8 @@ export function parseQuickAdd(input: string, options: QuickAddParseOptions): Qui
   const labelTokens = active.filter((t) => t.kind === 'label');
   const shown = active.filter((t) => t.kind === 'label' || t.unresolved || usedSingles.has(t));
 
-  // 4. Title = input minus every token: applied ones, and unresolved ones (their chip warns).
-  const removed = shown;
+  // 4. Title = input minus the applied tokens. Unresolved ones stay as typed (their chip warns).
+  const removed = shown.filter((t) => !t.unresolved);
   let title = '';
   let cursor = 0;
   for (const token of removed) {

@@ -16,6 +16,7 @@ export function Toaster({ theme = 'system' }: ToasterProps) {
       offset={20}
       gap={8}
       visibleToasts={4}
+      expand
       closeButton
       duration={6000}
       icons={{
@@ -54,6 +55,19 @@ export interface UndoToastOptions {
   readonly duration?: number;
 }
 
+/** The most recent change that can be undone (Ctrl/Cmd+Z runs it, see `toast.undoLast`). */
+let lastUndo: { readonly id: string | number; readonly run: () => void; readonly until: number } | null = null;
+
+function runUndo(onUndo: () => void | Promise<void>): void {
+  void Promise.resolve()
+    .then(onUndo)
+    .catch((error: unknown) => {
+      sonnerToast.error("Couldn't undo", {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    });
+}
+
 /**
  * Typed toast API. `toast.undo('Board deleted', { onUndo })` shows the standard Undo action used
  * after destructive operations.
@@ -66,21 +80,35 @@ export const toast = {
   loading: (message: string) => sonnerToast.loading(message),
   dismiss: (id?: string | number) => sonnerToast.dismiss(id),
   promise: sonnerToast.promise,
-  undo: (message: string, { description, onUndo, undoLabel = 'Undo', duration = 8000 }: UndoToastOptions) =>
-    sonnerToast(message, {
+  undo: (message: string, { description, onUndo, undoLabel = 'Undo', duration = 8000 }: UndoToastOptions) => {
+    let done = false;
+    const once = () => {
+      if (done) return;
+      done = true;
+      if (lastUndo?.id === id) lastUndo = null;
+      runUndo(onUndo);
+    };
+    const id = sonnerToast(message, {
       description,
       duration,
-      action: {
-        label: undoLabel,
-        onClick: () => {
-          void Promise.resolve()
-            .then(onUndo)
-            .catch((error: unknown) => {
-              sonnerToast.error("Couldn't undo", {
-                description: error instanceof Error ? error.message : 'Please try again.',
-              });
-            });
-        },
-      },
-    }),
+      action: { label: undoLabel, onClick: once },
+    });
+    // Ctrl/Cmd+Z stays available for a while after the toast fades, like an editor's undo.
+    lastUndo = { id, run: once, until: Date.now() + Math.max(duration, 60_000) };
+    return id;
+  },
+  /** Undo the latest change that showed an Undo toast. False when there is nothing to undo. */
+  undoLast: (): boolean => {
+    const entry = lastUndo;
+    if (!entry || entry.until < Date.now()) return false;
+    lastUndo = null;
+    sonnerToast.dismiss(entry.id);
+    entry.run();
+    return true;
+  },
+  /** Forget a pending undo (the change it would revert failed). */
+  forgetUndo: (id: string | number) => {
+    if (lastUndo?.id === id) lastUndo = null;
+    sonnerToast.dismiss(id);
+  },
 } as const;

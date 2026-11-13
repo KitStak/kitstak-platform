@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
-import Script from 'next/script';
-import { THEME_INIT_SCRIPT } from '@kitstak/ui/theme';
 import { Providers } from './providers';
+import { ThemeScript } from './theme-script';
 import '@/styles/globals.css';
 
 /** Sibling-app origins for the cross-app theme handoff; dev defaults match the dev ports. */
@@ -33,10 +32,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     // data-theme is set by THEME_INIT_SCRIPT before hydration, so the attribute differs from SSR on purpose.
     <html lang="en" className={`${inter.variable} h-full`} suppressHydrationWarning>
+      <head>
+        <ThemeScript />
+      </head>
       <body className="min-h-full">
-        <Script id="ks-theme-init" strategy="beforeInteractive">
-          {THEME_INIT_SCRIPT}
-        </Script>
         <Providers siblingUrls={SIBLING_APP_URLS}>{children}</Providers>
       </body>
     </html>

@@ -862,15 +862,28 @@ export async function moveTask(ctx: DomainContext, taskId: string, input: MoveTa
     const result = await applyTaskUpdate(tx, ctx, project, task, patch);
     if (position !== task.position || parentTaskId !== task.parentTaskId) {
       await tx.update(tasks).set({ position, parentTaskId, updatedAt: new Date() }).where(eq(tasks.id, task.id));
-      await logActivity(tx, ctx, {
-        verb: 'task.moved',
-        entityType: 'task',
-        entityId: task.id,
-        projectId: project.id,
-        taskId: task.id,
-        before: { position: task.position, parentTaskId: task.parentTaskId },
-        after: { position, parentTaskId },
-      });
+      // One drag is one history entry: a new spot that comes with a status or section change is
+      // already told by that change ("moved this to In progress"), so only a plain reorder or a
+      // new parent gets its own entry, worded with where it went ("moved this up in To do").
+      const statusOrSectionChanged =
+        result.task.statusId !== task.statusId || (result.task.sectionId ?? null) !== (task.sectionId ?? null);
+      if (parentTaskId !== task.parentTaskId || !statusOrSectionChanged) {
+        const [statusRow] = await tx.select({ name: statuses.name }).from(statuses).where(eq(statuses.id, task.statusId));
+        await logActivity(tx, ctx, {
+          verb: 'task.moved',
+          entityType: 'task',
+          entityId: task.id,
+          projectId: project.id,
+          taskId: task.id,
+          before: { position: task.position, parentTaskId: task.parentTaskId },
+          after: {
+            position,
+            parentTaskId,
+            direction: position < task.position ? 'up' : 'down',
+            statusName: statusRow?.name ?? null,
+          },
+        });
+      }
     }
     return { events: result.events, position };
   });

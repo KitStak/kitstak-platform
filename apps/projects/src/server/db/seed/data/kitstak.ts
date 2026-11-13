@@ -98,7 +98,7 @@ export const kitstakSeed: OrgSeed = {
           p: 'medium',
           due: -20,
           labels: ['Quick win'],
-          time: [['jonah', 150, 21, 'Levels A–C'], ['jonah', 95, 20, 'Levels D–E and a scan test']],
+          time: [['jonah', 150, 21, 'Levels A to C'], ['jonah', 95, 20, 'Levels D to E and a scan test']],
           c: [['jonah', 'All 64 faces are relabeled. Scan test passed on every one.', { react: [['renata', '🎉']] }]],
         },
         {
@@ -165,7 +165,7 @@ export const kitstakSeed: OrgSeed = {
           ],
         },
         {
-          t: 'Weekly cycle count – zone D aisle 1', d: p('Standard weekly count. Count every location in D-01, then approve any variance under 3 units in the WMS.'),
+          t: 'Weekly cycle count · zone D aisle 1', d: p('Standard weekly count. Count every location in D-01, then approve any variance under 3 units in the WMS.'),
           s: 'Storage & inventory',
           st: 'In progress',
           a: 'jonah',
@@ -174,8 +174,8 @@ export const kitstakSeed: OrgSeed = {
           links: [{ type: 'wms_count', code: 'CNT000144' }],
         },
         {
-          t: 'Investigate putaway delays on PO2240',
-          d: p('Bluebird & Main pallets from PO2240 sat in the staging lane for 2 days before putaway. Find out why and fix the step that stalled.'),
+          t: 'Investigate putaway delays on PO002240',
+          d: p('Bluebird & Main pallets from PO002240 sat in the staging lane for 2 days before putaway. Find out why and fix the step that stalled.'),
           s: 'Inbound',
           st: 'In progress',
           a: 'jonah',
@@ -347,7 +347,7 @@ export const kitstakSeed: OrgSeed = {
           time: [['jonah', 240, 7, 'Racking install with two helpers']],
           c: [['jonah', 'Racking is up and the 40 locations are live in the WMS (F-01-01 to F-10-04).']],
         },
-        { t: 'Rent two extra pallet jacks and a reach truck', d: p('Rental from Columbus Lift for Nov 20 – Jan 5. Quote is $2,850 including delivery and pickup.'), s: 'Capacity', st: 'In review', a: 'jonah', p: 'medium', due: 2, cf: { Cost: 2850, Area: 'Receiving' } },
+        { t: 'Rent two extra pallet jacks and a reach truck', d: p('Rental from Columbus Lift for Nov 20 to Jan 5. Quote is $2,850 including delivery and pickup.'), s: 'Capacity', st: 'In review', a: 'jonah', p: 'medium', due: 2, cf: { Cost: 2850, Area: 'Receiving' } },
         {
           t: 'Pre-build 600 Apex Threads gift sets',
           d: p('Apex wants 600 holiday gift sets (scarf + beanie + card) built before Black Friday so they ship as one SKU.'),
@@ -585,7 +585,7 @@ export const kitstakSeed: OrgSeed = {
         { t: 'Set up an ESD-safe storage area for circuit boards', d: p('Six shelving bays in zone C with ESD mats, wrist-strap station and a sign at the entrance. Boards stay in their anti-static bags.'), s: 'Setup', st: 'To do', a: 'renata', p: 'high', due: 12 },
         {
           id: 'asn',
-          t: 'Get ASN sample files from NovaForge', d: p('We need 3–5 real advance ship notices (EDI 856) from their two distributors to map fields and test the import.'),
+          t: 'Get ASN sample files from NovaForge', d: p('We need 3 to 5 real advance ship notices (EDI 856) from their two distributors to map fields and test the import.'),
           s: 'Integration',
           st: 'To do',
           a: 'diego',
@@ -946,7 +946,7 @@ export const kitstakSeed: OrgSeed = {
         { name: 'Average dock-to-stock (hours)', kind: 'number', start: 41, target: 24, current: 30, unit: 'hours' },
         { name: 'Receiving doors with scanners', kind: 'number', start: 2, target: 6, current: 4 },
       ],
-      checkIns: [{ by: 'jonah', daysAgo: 4, health: 'at_risk', note: 'PO2240 sat in staging for 2 days and pulled the average up. Fix is in progress.', values: { 'Average dock-to-stock (hours)': 30 } }],
+      checkIns: [{ by: 'jonah', daysAgo: 4, health: 'at_risk', note: 'PO002240 sat in staging for 2 days and pulled the average up. Fix is in progress.', values: { 'Average dock-to-stock (hours)': 30 } }],
     },
     {
       name: 'Launch Client portal 2.0',

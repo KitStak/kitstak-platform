@@ -47,7 +47,8 @@ export interface CalendarProps {
 }
 
 /** Inline single-date calendar. */
-export function Calendar({ selected, onSelect, weekStartsOn = 0 }: CalendarProps) {
+/** Weeks start on Monday, like the project Calendar and Workload views. */
+export function Calendar({ selected, onSelect, weekStartsOn = 1 }: CalendarProps) {
   return (
     <DayPicker
       mode="single"
@@ -77,6 +78,7 @@ export function RangeCalendar({ selected, onSelect, numberOfMonths = 2 }: RangeC
       onSelect={onSelect}
       defaultMonth={selected?.from}
       numberOfMonths={numberOfMonths}
+      weekStartsOn={1}
       showOutsideDays
       classNames={dayPickerClassNames}
       components={components}

@@ -608,14 +608,54 @@ export function CheckInDialog({ goal, open, onOpenChange, onSaved }: { readonly 
 }
 
 /**
- * Plain words for a key result's value. "6 of 10" only reads right when more is better; when the
- * target is below the start (mis-picks, dock-to-stock hours) it says "Now 11, target 8 or less"
- * so nobody reads 11 of 8 as more than done.
+ * Plain words for a key result's value, start included, so "98.6% of 99.5%" never reads as almost
+ * done when it started at 97.2%: "Started 97.2% · Now 98.6% · Target 99.5%". When the target is
+ * below the start (mis-picks, dock-to-stock hours) the target says "or less".
  */
-export function krValueText(kr: Pick<KeyResultDTO, 'kind' | 'unit' | 'startValue' | 'targetValue' | 'currentValue'>): { readonly text: string; readonly lowerIsBetter: boolean } {
+export function krValueText(kr: Pick<KeyResultDTO, 'kind' | 'unit' | 'startValue' | 'targetValue' | 'currentValue'>): {
+  readonly text: string;
+  readonly lowerIsBetter: boolean;
+  readonly start: string;
+  readonly now: string;
+  readonly target: string;
+} {
   const lowerIsBetter = kr.kind !== 'boolean' && kr.kind !== 'project' && kr.targetValue < kr.startValue;
   const now = formatKrValue(kr, kr.currentValue);
-  if (kr.kind === 'boolean') return { text: now, lowerIsBetter };
-  if (lowerIsBetter) return { text: `Now ${now}, target ${formatKrValue(kr, kr.targetValue)} or less`, lowerIsBetter };
-  return { text: `${now} of ${formatKrValue(kr, kr.targetValue)}`, lowerIsBetter };
+  const start = formatKrValue(kr, kr.startValue);
+  const target = `${formatKrValue(kr, kr.targetValue)}${lowerIsBetter ? ' or less' : ''}`;
+  if (kr.kind === 'boolean') return { text: now, lowerIsBetter, start, now, target };
+  return { text: `Started ${start} · Now ${now} · Target ${target}`, lowerIsBetter, start, now, target };
+}
+
+/** One number for the formula text: plain, no unit, at most two decimals. */
+function plain(value: number): string {
+  return (Math.round(value * 100) / 100).toLocaleString('en-US');
+}
+
+/**
+ * How a key result's percent is worked out, for its tooltip. Progress counts from the start
+ * value, not from zero, which is why 98.6% of a 99.5% target can be 61%.
+ */
+export function krProgressFormula(kr: Pick<KeyResultDTO, 'kind' | 'unit' | 'startValue' | 'targetValue' | 'currentValue' | 'progress'>): { readonly text: string; readonly steps: string | null } {
+  if (kr.kind === 'project') return { text: `${kr.progress}% of the linked project's tasks are done.`, steps: null };
+  if (kr.kind === 'boolean') return { text: kr.currentValue >= 1 ? 'Done, so 100%.' : 'Not done yet, so 0%. It jumps to 100% when it is done.', steps: null };
+  const span = kr.targetValue - kr.startValue;
+  if (span === 0) return { text: `Start and target are the same, so it is 100% once it reaches ${formatKrValue(kr, kr.targetValue)}.`, steps: null };
+  const moved = kr.currentValue - kr.startValue;
+  const steps = `(${plain(kr.currentValue)} \u2212 ${plain(kr.startValue)}) \u00f7 (${plain(kr.targetValue)} \u2212 ${plain(kr.startValue)}) = ${kr.progress}%`;
+  const backwards = Math.sign(moved) === -Math.sign(span);
+  const lead = backwards
+    ? `It has moved ${plain(Math.abs(moved))} the wrong way since the start, so it counts as 0%.`
+    : span < 0
+      ? `It has come down ${plain(Math.abs(moved))} of the ${plain(Math.abs(span))} it needs to drop.`
+      : `It has gone up ${plain(moved)} of the ${plain(span)} it needs to gain.`;
+  return { text: `Progress counts from where it started, not from zero. ${lead}`, steps: backwards ? null : steps };
+}
+
+/** Bar color follows the goal's health (red only means trouble), and goes green when hit. */
+export function krBarTone(progress: number, health: GoalHealth): 'success' | 'warning' | 'danger' {
+  if (progress >= 100) return 'success';
+  if (health === 'off_track' || health === 'missed') return 'danger';
+  if (health === 'at_risk') return 'warning';
+  return 'success';
 }

@@ -1,7 +1,11 @@
 'use client';
 /** Project health pill (On track / At risk / Off track), shared by the directory, header, overview and dashboards. */
+import { useState } from 'react';
 import { AlertTriangle, CheckCircle2, OctagonAlert } from 'lucide-react';
-import { Badge, Tooltip } from '@/components/ui';
+import { Badge, Button, Popover, PopoverContent, PopoverTrigger } from '@/components/ui';
+import { useServerAction } from '@/lib/hooks/use-action';
+import { qk } from '@/lib/query-keys';
+import { postProjectUpdateAction } from '@/server/actions/portfolio';
 import { PROJECT_HEALTH_LABELS, type ProjectHealth } from '@/lib/constants';
 import { todayIso } from '@/lib/dates';
 import { expectedProgress, suggestHealth } from '@/lib/rollups';
@@ -52,26 +56,55 @@ export function healthMismatch(project: HealthInputs, today?: string): boolean {
 }
 
 /**
- * One truth for health: the owner's call, and when the numbers disagree an amber outline plus a
- * second line "Data says: At risk" so nobody has to guess which one to believe.
+ * One truth for health: the owner's pill. When the numbers disagree, the pill gets a small amber
+ * dot; clicking it explains why ("56% of the time used, 31% of tasks done") and, for people who
+ * can edit the project, switches the health in one click (posted as a status update).
  */
-export function ProjectHealthBadge({ project, size = 'md' }: { readonly project: HealthInputs; readonly size?: 'sm' | 'md' }) {
+export function ProjectHealthBadge({ project, size = 'md', canEdit = false }: { readonly project: HealthInputs & { readonly id?: string; readonly key?: string }; readonly size?: 'sm' | 'md'; readonly canEdit?: boolean }) {
   const data = dataHealth(project);
   const mismatch = data !== null && data.health !== project.health;
+  const [open, setOpen] = useState(false);
+  const accept = useServerAction(postProjectUpdateAction, {
+    invalidate: project.key ? [qk.project(project.key), qk.projects()] : [qk.projects()],
+    successMessage: data ? `Health set to ${PROJECT_HEALTH_LABELS[data.health]}` : undefined,
+    onSuccess: () => setOpen(false),
+  });
   if (!mismatch || !data) return <HealthBadge health={project.health} size={size} />;
+  const suggested = PROJECT_HEALTH_LABELS[data.health];
   return (
-    <Tooltip
-      side="bottom"
-      content={`Owner says ${PROJECT_HEALTH_LABELS[project.health]}. Data says ${PROJECT_HEALTH_LABELS[data.health]}: ${data.expected}% of the time has passed and ${data.actual}% of tasks are done.`}
-    >
-      <span tabIndex={0} className="inline-flex items-center gap-1.5 rounded-full outline-none focus-visible:outline-2 focus-visible:outline-focus" data-testid="health-mismatch">
-        <span className="rounded-full ring-2 ring-[var(--warning-accent,var(--warning))] ring-offset-1 ring-offset-[var(--surface-panel)]">
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`${PROJECT_HEALTH_LABELS[project.health]}. The numbers suggest ${suggested}. Show why`}
+          onClick={(event) => event.stopPropagation()}
+          className="relative inline-flex rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          data-testid="health-mismatch"
+        >
           <HealthBadge health={project.health} size={size} />
-        </span>
-        <span className="text-xs whitespace-nowrap text-warning-text max-sm:sr-only">
-          Data says {PROJECT_HEALTH_LABELS[data.health].toLowerCase()}
-        </span>
-      </span>
-    </Tooltip>
+          <span aria-hidden className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-warning ring-2 ring-[var(--surface-panel)]" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72" onClick={(event) => event.stopPropagation()}>
+        <p className="flex items-start gap-2 text-sm text-fg">
+          <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-warning-text" />
+          <span>
+            The numbers suggest <strong className="font-semibold">{suggested}</strong>: {data.expected}% of the time is used and {data.actual}% of tasks are done.
+          </span>
+        </p>
+        {canEdit && project.id ? (
+          <div className="mt-3 flex items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+              Keep {PROJECT_HEALTH_LABELS[project.health]}
+            </Button>
+            <Button size="sm" loading={accept.pending} onClick={() => void accept.run({ projectId: project.id as string, health: data.health, note: null })} data-testid="health-accept">
+              Switch to {suggested}
+            </Button>
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-fg-muted">The project owner sets the health.</p>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }

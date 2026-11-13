@@ -64,9 +64,9 @@ export function linkRef(title: string): string {
 /**
  * `full` shows title and status, `ref` the short record code and status (board cards), `pill` the
  * app mark with a status dot (list rows, where the task title must win the space), `compact` the
- * app mark alone. The tooltip always carries the full record title and status.
+ * app mark alone, `key` the short record code with a status dot (list rows). The tooltip always carries the full record title and status.
  */
-export type LinkChipVariant = 'full' | 'ref' | 'pill' | 'compact';
+export type LinkChipVariant = 'full' | 'ref' | 'key' | 'pill' | 'compact';
 
 /** Live status colour by meaning (shipped/won green, short/on hold amber, cancelled/lost red). */
 const STATUS_DOT: Readonly<Record<StatusTone, string>> = {
@@ -98,14 +98,14 @@ export function LinkChip({ link, compact = false, variant }: { readonly link: In
     <>
       <span className={cn('inline-flex shrink-0', crm ? 'text-[var(--label-blue)]' : 'text-[var(--label-teal)]')}>{crm ? <CrmGlyph /> : <WmsGlyph />}</span>
       {mode === 'full' ? <span className="truncate">{title}</span> : null}
-      {mode === 'ref' ? <span className="truncate font-mono">{linkRef(title)}</span> : null}
+      {mode === 'ref' || mode === 'key' ? <span className={cn('truncate font-medium', !crm && 'tabular-nums slashed-zero')}>{linkRef(title)}</span> : null}
       {link.status && (mode === 'full' || mode === 'ref') ? (
         <span className={cn('inline-flex min-w-0 items-center gap-1 truncate', STATUS_TEXT[tone])}>
           <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', STATUS_DOT[tone])} />
           {link.status}
         </span>
       ) : null}
-      {link.status && mode === 'pill' ? <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', STATUS_DOT[tone])} /> : null}
+      {link.status && (mode === 'pill' || mode === 'key') ? <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', STATUS_DOT[tone])} /> : null}
       <span className="sr-only">{`${kind}: ${title}${link.status ? `, ${link.status}` : ''}`}</span>
     </>
   );

@@ -544,9 +544,8 @@ export function ListView() {
             <div className="sticky top-0 z-[var(--z-sticky)] -mx-1 mb-1 hidden h-8 items-center gap-1 bg-app pr-2 pl-1 text-xs font-medium text-fg-muted md:flex" aria-hidden>
               <span className="w-[52px] shrink-0" />
               <span className="min-w-0 flex-1 pl-7">Task</span>
-              <span className="w-44 pr-1.5 text-right max-xl:hidden">Labels</span>
-              <span className="w-36 pl-1.5 max-lg:hidden">Status</span>
-              <span className="w-40 pl-1.5">Assignee</span>
+              <span className="w-32 pl-1.5 max-lg:hidden">Status</span>
+              <span className="w-36 pl-1.5">Assignee</span>
               <span className="w-24 pl-1.5">Due</span>
               <span className="w-9 text-center max-sm:hidden">Priority</span>
               <span className="w-8" />

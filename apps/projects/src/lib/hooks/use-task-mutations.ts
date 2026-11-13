@@ -10,7 +10,8 @@ import { toast } from '@/components/ui';
 import { qk } from '@/lib/query-keys';
 import { rankBetween } from '@/lib/rank';
 import type { StatusCategory } from '@/lib/constants';
-import type { TaskDetail, TaskSummary } from '@/lib/types';
+import { todayIso } from '@/lib/dates';
+import type { ProjectDetail, TaskDetail, TaskSummary } from '@/lib/types';
 import {
   bulkUpdateTasksAction,
   createTaskAction,
@@ -38,6 +39,36 @@ function snapshot(queryClient: QueryClient): Snapshot {
 
 function restore(queryClient: QueryClient, saved: Snapshot): void {
   for (const [key, data] of saved) queryClient.setQueryData(key, data);
+  syncProjectProgress(queryClient);
+}
+
+/**
+ * Recompute the project header numbers ("3 of 12 tasks done") from each cached project task
+ * list, with the same rules as the server (top-level tasks, cancelled excluded), so the header
+ * changes in the same frame as the optimistic edit instead of after the detail refetch.
+ */
+export function syncProjectProgress(queryClient: QueryClient): void {
+  const today = todayIso();
+  for (const [key, list] of queryClient.getQueriesData<TaskSummary[]>({ predicate: (query) => query.queryKey[0] === 'project' && query.queryKey[2] === 'tasks' && query.queryKey.length === 3 })) {
+    if (!Array.isArray(list)) continue;
+    const projectKey = key[1];
+    if (typeof projectKey !== 'string') continue;
+    let total = 0;
+    let done = 0;
+    let overdue = 0;
+    for (const task of list) {
+      if (task.parentTaskId || task.statusCategory === 'cancelled') continue;
+      total += 1;
+      if (task.statusCategory === 'done') done += 1;
+      else if (task.dueDate && task.dueDate < today) overdue += 1;
+    }
+    queryClient.setQueryData<ProjectDetail>(['project', projectKey], (project) => {
+      if (!project?.progress) return project;
+      const { progress } = project;
+      if (progress.total === total && progress.done === done && progress.overdue === overdue) return project;
+      return { ...project, progress: { ...progress, total, done, overdue, percent: total === 0 ? 0 : Math.round((done / total) * 100) } };
+    });
+  }
 }
 
 function patchLists(queryClient: QueryClient, ids: ReadonlySet<string>, apply: (task: TaskSummary) => TaskSummary | null): void {
@@ -61,6 +92,7 @@ function patchLists(queryClient: QueryClient, ids: ReadonlySet<string>, apply: (
       return next ? ({ ...detail, ...next } as TaskDetail) : detail;
     });
   }
+  syncProjectProgress(queryClient);
 }
 
 /**
@@ -202,7 +234,10 @@ export function useTaskMutations(options: { readonly statusCategory?: StatusCate
         return undefined;
       }
       if (projectKey) {
-        queryClient.setQueryData<TaskSummary[]>(qk.projectTasks(projectKey), (list) => (Array.isArray(list) ? [...list, result.data] : list));
+        queryClient.setQueryData<TaskSummary[]>(qk.projectTasks(projectKey), (list) =>
+          Array.isArray(list) ? [...list.filter((task) => task.id !== result.data.id), result.data] : list,
+        );
+        syncProjectProgress(queryClient);
       }
       invalidateTasks(queryClient);
       return result.data;

@@ -61,6 +61,8 @@ export function HomeView({
   );
   const buckets = useMemo(() => homeBuckets(list, today, keepDone), [list, today, keepDone]);
   const stats = useMemo(() => homeStats(list, today), [list, today]);
+  // Same rule as Dashboards: the big number counts tasks; subtasks are listed beside it.
+  const openSubtasks = useMemo(() => homeStats(list.filter((task) => task.parentTaskId !== null), today).open, [list, today]);
   const projectNames = useMemo(() => new Map((projects.data ?? []).map((p) => [p.id, p.name])), [projects.data]);
   const [bucketChoice, setBucket] = useState<Bucket | null>(null);
   const bucket: Bucket = bucketChoice ?? (buckets.today.length ? 'today' : buckets.overdue.length ? 'overdue' : 'week');
@@ -94,7 +96,7 @@ export function HomeView({
       <section aria-label="Your numbers" className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="home-stats">
         <StatTile label="Due today" value={stats.dueToday} icon={<Sun aria-hidden />} tone={stats.dueToday ? 'warning' : 'neutral'} onClick={() => setBucket('today')} active={bucket === 'today'} />
         <StatTile label="Overdue" value={stats.overdue} icon={<AlarmClock aria-hidden />} tone={stats.overdue ? 'danger' : 'neutral'} onClick={() => setBucket('overdue')} active={bucket === 'overdue'} />
-        <StatTile label="Open tasks" value={stats.open} icon={<ListTodo aria-hidden />} tone="primary" href={routes.myWork()} />
+        <StatTile label="Open tasks" value={stats.open - openSubtasks} hint={openSubtasks ? `+ ${openSubtasks} ${openSubtasks === 1 ? 'subtask' : 'subtasks'}` : undefined} icon={<ListTodo aria-hidden />} tone="primary" href={routes.myWork()} />
         <StatTile label="Done this week" value={stats.doneThisWeek} icon={<CircleCheckBig aria-hidden />} tone={stats.doneThisWeek ? 'success' : 'neutral'} href={routes.myWork()} />
       </section>
 
@@ -197,9 +199,11 @@ function StatTile({
   onClick,
   href,
   active,
+  hint,
 }: {
   readonly label: string;
   readonly value: number;
+  readonly hint?: string;
   readonly icon: ReactNode;
   readonly tone: keyof typeof TONE;
   readonly onClick?: () => void;
@@ -211,7 +215,10 @@ function StatTile({
       <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg max-sm:hidden [&_svg]:size-[18px]', TONE[tone])}>{icon}</span>
       <span className="flex min-w-0 flex-col">
         <span className="text-2xl leading-7 font-semibold tracking-[-0.02em] text-fg tabular-nums">{value}</span>
-        <span className="truncate text-sm text-fg-muted">{label}</span>
+        <span className="truncate text-sm text-fg-muted">
+          {label}
+          {hint ? <span className="text-xs"> · {hint}</span> : null}
+        </span>
       </span>
     </>
   );

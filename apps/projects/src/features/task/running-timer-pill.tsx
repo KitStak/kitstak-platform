@@ -27,7 +27,9 @@ function useTick(active: boolean): number {
 
 /** Key and title of the task a timer runs on (shared by the pill and the time section). */
 export function useTimerTask(entry: TimeEntryDTO | null | undefined) {
-  const task = useTask(entry?.taskId, { enabled: Boolean(entry?.taskId), staleTime: 60_000 });
+  // The running-timer payload carries the task key and title; fetch the task only if it doesn't.
+  const task = useTask(entry?.taskId, { enabled: Boolean(entry?.taskId) && !entry?.task, staleTime: 60_000 });
+  if (entry?.task) return entry.task;
   return task.data ? { key: task.data.key, title: task.data.title } : null;
 }
 

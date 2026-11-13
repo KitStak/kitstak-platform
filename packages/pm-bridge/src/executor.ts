@@ -69,3 +69,18 @@ export async function pmAvailability(db: BridgeExecutor): Promise<BridgeAvailabi
 export function resetAvailabilityCache(db: BridgeExecutor): void {
   cache.delete(db);
 }
+
+/**
+ * Links store a path ("/receiving/<id>"), not an absolute URL: Projects adds the sibling app's
+ * current origin when it renders the chip, so a domain change or another port never goes stale.
+ */
+export function storedLinkPath(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith('/')) return url;
+  try {
+    const parsed = new URL(url);
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}

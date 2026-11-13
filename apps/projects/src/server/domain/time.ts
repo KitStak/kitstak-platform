@@ -2,7 +2,7 @@
 import 'server-only';
 import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { timeEntries, type TimeEntry } from '@/server/db/schema';
+import { projects, tasks, timeEntries, type TimeEntry } from '@/server/db/schema';
 import { forbidden, invalid, notFound } from '@/server/errors';
 import type { TimeEntryDTO } from '@/lib/types';
 import { cleanText, toTimeEntryDTO, type DomainContext } from './_shared';
@@ -13,12 +13,17 @@ const minutesBetween = (start: Date, end: Date): number => Math.max(0, Math.roun
 
 /** The actor's running timer anywhere in the org, or null. */
 export async function getRunningTimer(ctx: DomainContext): Promise<TimeEntryDTO | null> {
+  // The task's key and title ride along, so the top-bar timer pill needs no second request.
   const [row] = await db
-    .select()
+    .select({ entry: timeEntries, number: tasks.number, title: tasks.title, projectKey: projects.key })
     .from(timeEntries)
+    .leftJoin(tasks, eq(tasks.id, timeEntries.taskId))
+    .leftJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(eq(timeEntries.orgId, ctx.orgId), eq(timeEntries.userId, ctx.userId), isNull(timeEntries.endedAt), isNull(timeEntries.deletedAt)))
     .limit(1);
-  return row ? toTimeEntryDTO(row) : null;
+  if (!row) return null;
+  const task = row.projectKey && row.number !== null && row.title !== null ? { key: `${row.projectKey}-${row.number}`, title: row.title } : null;
+  return { ...toTimeEntryDTO(row.entry), task };
 }
 
 async function stopRow(ctx: DomainContext, row: TimeEntry): Promise<TimeEntry> {

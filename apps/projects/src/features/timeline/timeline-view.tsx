@@ -74,6 +74,7 @@ import { SavedViewsMenu } from './saved-views';
 import { TASK_MIME, UnscheduledTray } from './unscheduled-tray';
 import { OptionSelect, OptionSwitch, OptionsDivider, OptionsMenu, ToolbarSpacer, ViewTips, ViewToolbar } from './view-toolbar';
 
+const MIN_BAR_W = 28;
 const ROW_H = 36;
 const HEADER_H = 52;
 
@@ -776,7 +777,8 @@ export function TimelineView() {
 
     const inside = width >= Math.min(task.title.length * 6.4 + 28, 160);
     return (
-      <div className="group/bar absolute top-1/2 z-[3] -translate-y-1/2" style={{ left, width: Math.max(width, 8), ...labelColorStyle(color) }} onPointerLeave={() => unmute(task.id)}>
+      // Very short tasks still get a bar wide enough to see, grab and read (at least 28px).
+      <div className="group/bar absolute top-1/2 z-[3] -translate-y-1/2" style={{ left, width: Math.max(width, MIN_BAR_W), ...labelColorStyle(color) }} onPointerLeave={() => unmute(task.id)}>
         {live ? <LiveLabel text={live} /> : null}
         <Tooltip content={tip} open={!gesture && tipFor === task.id} onOpenChange={(open) => setTipFor(open && tipMuted.current !== task.id ? task.id : null)} side="top" delayDuration={300}>
           <button
@@ -827,8 +829,8 @@ export function TimelineView() {
           </button>
         </Tooltip>
         {handle}
-        {!inside && left + Math.max(width, 8) > viewX - 4 ? (
-          <span className={cn('pointer-events-none absolute top-1/2 left-full ml-5 flex max-w-64 -translate-y-1/2 items-center gap-1.5 text-xs font-medium whitespace-nowrap text-fg', dimmed && 'opacity-50', done && 'text-fg-muted')}>
+        {!inside && left + Math.max(width, MIN_BAR_W) > viewX - 4 ? (
+          <span className={cn('pointer-events-none absolute top-1/2 left-full z-[3] ml-4 flex max-w-64 -translate-y-1/2 items-center gap-1.5 rounded-sm bg-[color-mix(in_srgb,var(--surface-panel)_90%,transparent)] px-1 text-xs leading-5 font-medium whitespace-nowrap text-fg', dimmed && 'opacity-50', done && 'text-fg-muted')}>
             {overdue ? <span aria-label="Past its due date" className="size-1.5 shrink-0 rounded-full bg-danger" /> : null}
             <span className="truncate">{task.title}</span>
           </span>
@@ -1269,9 +1271,10 @@ export function TimelineView() {
                     // Stop before the Today flag that shares this row (about 48px wide, centred on today).
                     const flag = showToday ? todayX + px / 2 - 26 : Infinity;
                     const room = Math.min(tick.x + tick.width, flag > start ? flag : Infinity) - start;
-                    const text = room >= tick.label.length * 7.5 + 20 ? tick.label : room >= 44 ? tick.label.slice(0, 3) : '';
+                    // Under ~72px of a month on screen, its name is left out (it reads as a clipped sliver).
+                    const text = room >= tick.label.length * 7.5 + 20 ? tick.label : room >= 72 ? tick.label.slice(0, 3) : '';
                     return (
-                      <div key={tick.key} className="absolute top-0 h-6 border-l border-border-subtle text-xs leading-6 font-semibold text-fg" style={{ left: tick.x, width: tick.width }}>
+                      <div key={tick.key} title={text ? undefined : tick.label} className="absolute top-0 h-6 border-l border-border-subtle text-xs leading-6 font-semibold text-fg" style={{ left: tick.x, width: tick.width }}>
                         <span className="absolute top-0 block truncate px-2" style={{ left: start - tick.x, maxWidth: Math.max(0, room) }}>
                           {text}
                         </span>
@@ -1294,7 +1297,8 @@ export function TimelineView() {
                       {tick.width >= 16 && tick.x >= viewX - 2 ? tick.label : ''}
                     </div>
                   ))}
-                  {showToday ? <span aria-hidden className="absolute inset-y-0 z-[1] w-0.5 bg-primary" style={{ left: todayX + px / 2 - 1 }} /> : null}
+                  {/* A short tick under the Today flag; the line itself starts below the week labels so it never cuts through them. */}
+                  {showToday ? <span aria-hidden className="absolute top-0 z-[1] h-1.5 w-0.5 bg-primary" style={{ left: todayX + px / 2 - 1 }} /> : null}
                 </div>
               </div>
             </div>

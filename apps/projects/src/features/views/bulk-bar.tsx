@@ -27,6 +27,7 @@ import { AssigneePicker, DuePicker, LabelDot, PriorityPicker, StatusPicker } fro
 import { OptionList } from './option-list';
 import type { Selection } from './use-selection';
 import type { TaskOps } from './use-task-ops';
+import { useViewSelectionCommands } from '@/features/command/use-view-selection-commands';
 
 interface BarButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly icon: ReactNode;
@@ -58,6 +59,7 @@ export function BulkBar({ selection, tasks, ops }: { readonly selection: Selecti
   const { project, capabilities } = useCurrentProject();
   const projects = useProjects();
   const chosen = useMemo(() => tasks.filter((task) => selection.has(task.id)), [selection, tasks]);
+  useViewSelectionCommands(chosen, ops, selection.clear);
   if (selection.count === 0) return null;
   const ids = chosen.map((task) => task.id);
   const canEdit = capabilities['task:update'];

@@ -26,6 +26,7 @@ import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import type { TaskSummary } from '@/lib/types';
 import { useCurrentProject } from '@/features/projects/project-context';
 import { useShell } from '@/features/shell/shell-context';
+import { toggleDoneWithUndo } from '@/features/task/done-toggle';
 import type { TaskOps } from './use-task-ops';
 
 type ItemProps = { readonly icon?: ReactNode; readonly onSelect?: (event: Event) => void; readonly variant?: 'default' | 'danger'; readonly children: ReactNode; readonly disabled?: boolean; readonly shortcut?: string };
@@ -79,7 +80,7 @@ export function TaskMenuItems({ task, ops, kind }: { readonly task: TaskSummary;
         <>
           <Separator />
           {done && task.statusId !== done.id ? (
-            <Item icon={<SquareCheckBig aria-hidden />} onSelect={() => void ops.updateTask(task.id, { statusId: done.id })}>
+            <Item icon={<SquareCheckBig aria-hidden />} onSelect={() => void toggleDoneWithUndo({ taskKey: task.key, closing: true, target: done.id, previous: task.statusId, save: (statusId) => ops.updateTask(task.id, { statusId }) })}>
               Mark done
             </Item>
           ) : null}

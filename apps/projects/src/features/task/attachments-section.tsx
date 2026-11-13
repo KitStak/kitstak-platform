@@ -302,12 +302,22 @@ export function AttachmentsSection({ uploads }: { readonly uploads: Uploads }) {
           if (picked.length) void uploads.upload(picked);
         }}
       />
-      {files.isLoading ? (
-        <div className="mt-2 grid grid-cols-2 gap-2 @min-[560px]:grid-cols-3">
-          <Skeleton height={140} rounded="lg" />
-          <Skeleton height={140} rounded="lg" />
-        </div>
-      ) : count === 0 ? (
+      {files.isLoading && task.attachmentCount > 0 ? (
+        // Real tile frames from the first paint (icon, room for name and size), never blank boxes.
+        <ul className="mt-2 grid grid-cols-2 gap-2 @min-[560px]:grid-cols-3 @min-[900px]:grid-cols-4" aria-busy="true" aria-label="Loading files">
+          {Array.from({ length: Math.min(task.attachmentCount, 8) }, (_, index) => (
+            <li key={index} className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border-subtle bg-panel">
+              <span className="flex h-24 w-full items-center justify-center bg-sunken text-icon">
+                <FileText aria-hidden className="size-7 opacity-60" />
+              </span>
+              <span className="flex flex-col gap-1.5 px-2.5 py-2.5">
+                <Skeleton height={12} width="70%" />
+                <Skeleton height={10} width="45%" />
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : files.isLoading ? null : count === 0 ? (
         <button
           type="button"
           onClick={() => input.current?.click()}

@@ -173,7 +173,12 @@ function PreviewSection({ icon, title, children }: { readonly icon: ReactNode; r
 function TemplatePreview({ template, onUse }: { readonly template: TemplateDTO | null; readonly onUse: () => void }) {
   const payload = template?.payload;
   const statuses = payload?.statuses ?? BLANK_STATUSES;
-  const tasks = (payload?.tasks ?? []).filter((task) => !task.isMilestone);
+  // Every top-level task, milestone tasks included, so the list adds up to the count in the
+  // heading (which is also what the created project shows).
+  const tasks = payload?.tasks ?? [];
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? tasks : tasks.slice(0, 6);
+  const hidden = tasks.length - visible.length;
   return (
     <aside className="flex flex-col gap-4 rounded-xl border border-border-subtle bg-panel p-4 shadow-xs" aria-label="Template preview" data-testid="template-preview">
       <div className="flex items-start gap-3">
@@ -208,13 +213,28 @@ function TemplatePreview({ template, onUse }: { readonly template: TemplateDTO |
       {tasks.length ? (
         <PreviewSection icon={<LayoutList aria-hidden />} title={template ? `Starter work: ${taskCountText(template)}` : `${tasks.length} starter tasks`}>
           <ul className="flex flex-col gap-1 text-sm">
-            {tasks.slice(0, 6).map((task) => (
-              <li key={task.title} className="flex items-center gap-2 truncate text-fg-secondary">
-                <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-border-strong" />
+            {visible.map((task, index) => (
+              <li key={`${index}-${task.title}`} className="flex items-center gap-2 truncate text-fg-secondary">
+                {task.isMilestone ? (
+                  <Flag aria-label="Milestone" className="size-3 shrink-0 text-primary-text" />
+                ) : (
+                  <span aria-hidden className="mx-[3px] size-1.5 shrink-0 rounded-full bg-border-strong" />
+                )}
                 <span className="truncate">{task.title}</span>
+                {task.subtasks?.length ? (
+                  <span className="shrink-0 text-xs text-fg-muted">
+                    {task.subtasks.length} {task.subtasks.length === 1 ? 'subtask' : 'subtasks'}
+                  </span>
+                ) : null}
               </li>
             ))}
-            {tasks.length > 6 ? <li className="text-xs text-fg-muted">and {tasks.length - 6} more</li> : null}
+            {hidden > 0 ? (
+              <li>
+                <button type="button" onClick={() => setShowAll(true)} className="text-xs font-medium text-primary-text hover:underline" data-testid="template-preview-more">
+                  Show {hidden} more {hidden === 1 ? 'task' : 'tasks'}
+                </button>
+              </li>
+            ) : null}
           </ul>
         </PreviewSection>
       ) : null}
@@ -429,7 +449,7 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
               ) : null}
             </div>
             <div className="hidden lg:sticky lg:top-4 lg:block">
-              <TemplatePreview template={template} onUse={() => goTo(1)} />
+              <TemplatePreview key={template?.id ?? 'blank'} template={template} onUse={() => goTo(1)} />
             </div>
           </div>
           <div className="sticky bottom-0 -mx-6 mt-5 flex items-center justify-between gap-3 border-t border-border-subtle bg-app/95 px-6 py-3 backdrop-blur lg:hidden">
@@ -473,7 +493,7 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
                     id={inputId}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder={template ? `e.g. ${template.name} – Acme` : 'e.g. Acme warehouse go-live'}
+                    placeholder={template ? `e.g. ${template.name} for Acme` : 'e.g. Acme warehouse go-live'}
                     autoFocus
                     aria-describedby={describedBy}
                     invalid={invalid}

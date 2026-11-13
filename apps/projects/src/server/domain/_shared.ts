@@ -25,6 +25,7 @@ import type {
   Status,
   TimeEntry,
 } from '@/server/db/schema';
+import { linkHref } from '@/server/integrations/link-url';
 
 /** Who is acting, in which org. Built from the request (`toDomainContext`) or by scripts. */
 export interface DomainContext {
@@ -132,7 +133,8 @@ export function toIntegrationLinkDTO(row: IntegrationLink): IntegrationLinkDTO {
     targetId: row.targetId,
     title: row.cachedTitle,
     status: row.cachedStatus,
-    url: row.cachedUrl,
+    // Stored as a path; the sibling app's current origin is added here (link-url.ts).
+    url: linkHref(row.targetType, row.cachedUrl),
     cachedAt: iso(row.cachedAt),
     meta: row.meta,
   };

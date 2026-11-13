@@ -10,7 +10,9 @@
  * Events go through the normal executor (runAutomationsForEvents), which records each run and
  * skips repeats using the event's dedupe key.
  */
+import { undash } from '@/lib/undash';
 import 'server-only';
+import { linkPathOf } from '@/lib/link-path';
 import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { after } from 'next/server';
 import { db } from '@/server/db';
@@ -211,7 +213,7 @@ async function linkedRecordChanges(ctx: DomainContext, rules: readonly Scheduled
       if (!target || norm(target.status) === norm(link.cachedStatus)) continue;
       await db
         .update(integrationLinks)
-        .set({ cachedTitle: target.title, cachedStatus: target.status, cachedUrl: target.url, cachedAt: new Date() })
+        .set({ cachedTitle: undash(target.title), cachedStatus: target.status, cachedUrl: linkPathOf(target.url), cachedAt: new Date() })
         .where(eq(integrationLinks.id, link.id));
       changes.push({
         taskId: link.taskId as string,

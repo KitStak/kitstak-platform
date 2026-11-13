@@ -7,7 +7,7 @@
 import { sql } from 'drizzle-orm';
 import { generateKeyBetween } from 'fractional-indexing';
 import { BridgeError, orgRoleOf, projectAccess } from './access';
-import { isUuid, pmAvailability, query, queryOne, type BridgeExecutor } from './executor';
+import { isUuid, pmAvailability, query, queryOne, storedLinkPath, type BridgeExecutor } from './executor';
 import { canEditProject } from './permissions';
 import { loadTasks, taskUrl } from './read';
 import {
@@ -82,7 +82,7 @@ async function insertLink(
     tx,
     sql`insert into pm.integration_links (org_id, project_id, task_id, target_type, target_id, cached_title, cached_status, cached_url, cached_at, meta, created_by)
         values (${actor.orgId}::uuid, ${projectId}::uuid, ${taskId}::uuid, ${link.type}, ${link.id}, ${link.title.slice(0, 300)},
-                ${link.status ?? null}, ${link.url ?? null}, now(), ${JSON.stringify(link.meta ?? {})}::jsonb, ${actor.userId}::uuid)
+                ${link.status ?? null}, ${storedLinkPath(link.url)}, now(), ${JSON.stringify(link.meta ?? {})}::jsonb, ${actor.userId}::uuid)
         on conflict do nothing
         returning id`,
   );

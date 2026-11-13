@@ -157,7 +157,7 @@ export const SmartTitleInput = forwardRef<
           segment.token ? (
             <mark
               key={index}
-              className={cn('rounded-[3px] px-0 [box-decoration-break:clone]', segment.token.unresolved ? 'bg-transparent text-fg underline decoration-warning decoration-wavy underline-offset-4' : TOKEN_TEXT[segment.token.kind])}
+              className={cn('rounded-[3px] px-0 [box-decoration-break:clone]', segment.token.unresolved ? cn('bg-transparent text-fg underline decoration-wavy underline-offset-4', segment.token.kind === 'label' ? 'decoration-warning' : 'decoration-danger') : TOKEN_TEXT[segment.token.kind])}
             >
               {segment.text}
             </mark>
@@ -216,8 +216,8 @@ export const SmartTitleInput = forwardRef<
           {empty ? (
             <li role="presentation" className="px-2 py-1.5 text-sm text-fg-secondary" data-testid="quick-add-no-match">
               {token.sigil === '@'
-                ? `No one matches “${token.partial}”. It won't be added to the task name.`
-                : `No project matches “${token.partial}”.`}
+                ? `No one in this workspace matches “${token.partial}”. The task will be unassigned and “@${token.partial}” stays in its name.`
+                : `No project matches “${token.partial}”. It stays in the task name as typed.`}
             </li>
           ) : null}
           {suggestions.map((suggestion, index) => {
@@ -281,12 +281,22 @@ export function UnderstoodChips({
                 data-kind={token.kind}
                 className={cn(
                   'inline-flex h-7 max-w-full items-center gap-1 rounded-full pr-1 pl-2.5 text-xs font-medium',
-                  token.unresolved ? 'bg-warning-subtle text-warning-text' : TOKEN_TEXT[token.kind],
+                  token.unresolved
+                    ? token.kind === 'label'
+                      ? 'bg-warning-subtle text-warning-text'
+                      : 'bg-danger-subtle text-danger-text ring-1 ring-danger/40 ring-inset'
+                    : TOKEN_TEXT[token.kind],
                 )}
+                data-unresolved={token.unresolved ? '' : undefined}
+                title={token.unresolved && token.kind !== 'label' ? `“${token.raw}” matched nobody, so it stays in the task name. Fix the spelling or pick from the list.` : undefined}
               >
                 <Icon aria-hidden className="size-3.5 shrink-0" />
                 <span className="truncate">
-                  {token.unresolved ? token.display : (
+                  {token.unresolved && token.kind !== 'label' ? (
+                    <>
+                      <span className="opacity-75">{CHIP_PREFIX[token.kind]}:</span> {token.display.charAt(0).toLowerCase() + token.display.slice(1)}
+                    </>
+                  ) : token.unresolved ? token.display : (
                     <>
                       <span className="opacity-75">{CHIP_PREFIX[token.kind]}:</span> {token.display}
                     </>

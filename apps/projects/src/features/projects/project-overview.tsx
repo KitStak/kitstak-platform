@@ -189,7 +189,7 @@ function StatusUpdatesPanel({ project, canEdit }: { readonly project: ProjectDet
             <p className="flex items-start gap-2 rounded-md bg-sunken px-3 py-2 text-xs text-fg-secondary" data-testid="health-hint">
               <CalendarRange aria-hidden className="mt-0.5 size-3.5 shrink-0 text-icon" />
               <span>
-                <strong className="font-semibold text-fg">Owner says: {PROJECT_HEALTH_LABELS[project.health]} · Data says: {PROJECT_HEALTH_LABELS[suggested]}.</strong> {expected}% of the time has passed and {actual}% of tasks are done.{' '}
+                The numbers suggest <strong className="font-semibold text-fg">{PROJECT_HEALTH_LABELS[suggested]}</strong>: {expected}% of the time is used and {actual}% of tasks are done.{' '}
                 <button type="button" className="font-medium text-fg-link hover:underline" onClick={() => setHealth(suggested)}>
                   Use “{PROJECT_HEALTH_LABELS[suggested]}”
                 </button>
@@ -290,7 +290,7 @@ function ProgressPanel({ project }: { readonly project: ProjectDetail }) {
         <ProgressRing percent={project.progress.percent} size={88} strokeWidth={8} label="Tasks done" tone={HEALTH_TONE[project.health] === 'success' ? 'primary' : HEALTH_TONE[project.health]} />
         <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label="Tasks" value={project.progress.total} />
-          <Stat label="In progress" value={inProgress ?? '–'} />
+          <Stat label="In progress" value={inProgress ?? 'None'} />
           <Stat label="Done" value={project.progress.done} tone={project.progress.done ? 'success' : undefined} />
           <Stat label="Overdue" value={project.progress.overdue} tone={project.progress.overdue ? 'danger' : undefined} />
         </div>
@@ -768,7 +768,7 @@ export function ProjectOverview() {
           ) : null}
         </div>
       ) : null}
-      <Customer360Strip projectKey={project.key} />
+      <Customer360Strip projectKey={project.key} projectId={project.id} canEdit={canEdit} />
       <div className="flex min-w-0 flex-col gap-5">
         <StatusUpdatesPanel key={`${project.health}-${project.status}`} project={project} canEdit={canEdit} />
         <ProgressPanel project={project} />

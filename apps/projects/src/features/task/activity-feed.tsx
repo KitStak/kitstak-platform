@@ -47,6 +47,29 @@ const FOLD_AFTER = 8;
 /** Verbs that are shown as comments (or are noise) rather than history lines. */
 const HIDDEN_VERBS = new Set(['comment.added', 'comment.edited']);
 
+const record = (value: unknown): Record<string, unknown> => (value && typeof value === 'object' ? (value as Record<string, unknown>) : {});
+
+/**
+ * One drag, one line: older history logged a bare reorder next to the status or section change
+ * of the same drag. Drop that reorder when the same person changed the status or section within
+ * a few seconds of it (new writes no longer log it at all).
+ */
+export function withoutMoveEchoes(events: readonly ActivityDTO[]): ActivityDTO[] {
+  return events.filter((event) => {
+    if (event.verb !== 'task.moved') return true;
+    if ((record(event.before).parentTaskId ?? null) !== (record(event.after).parentTaskId ?? null)) return true;
+    const at = new Date(event.createdAt).getTime();
+    return !events.some(
+      (other) =>
+        other !== event &&
+        other.verb === 'task.updated' &&
+        (other.field === 'status' || other.field === 'section') &&
+        other.actorId === event.actorId &&
+        Math.abs(new Date(other.createdAt).getTime() - at) < 5000,
+    );
+  });
+}
+
 function verbIcon(event: ActivityDTO): LucideIcon {
   if (event.actorKind === 'automation' || event.verb === 'automation.ran') return Bot;
   if (event.verb === 'task.created') return Plus;
@@ -149,7 +172,7 @@ export function ActivityFeed() {
 
   const commentList = useMemo(() => comments.data ?? [], [comments.data]);
   const events = useMemo(
-    () => (activity.data?.items ?? []).filter((event) => !HIDDEN_VERBS.has(event.verb)),
+    () => withoutMoveEchoes((activity.data?.items ?? []).filter((event) => !HIDDEN_VERBS.has(event.verb))),
     [activity.data?.items],
   );
 

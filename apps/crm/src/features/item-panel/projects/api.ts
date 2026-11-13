@@ -3,11 +3,13 @@
  * Data hooks for the item panel's Projects tab (KitStak Projects work linked to a record).
  * Server: src/server/services/projects-bridge.ts via /api/v1/crm/items/:id/projects.
  */
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BridgeTask } from '@kitstak/pm-bridge/types';
 import { apiRequest } from '@/lib/api';
 import { toastError } from '@/lib/hooks/cache';
 import { useOrgId } from '@/lib/hooks/org-context';
+import { useOptionalOrg } from '@/features/shell/org-context';
 import type {
   CreateItemTaskInput,
   ItemProjectsDto,
@@ -29,6 +31,25 @@ export function useItemProjects(itemId: string | null, enabled = true) {
     staleTime: 15_000,
     refetchOnWindowFocus: true,
   });
+}
+
+/**
+ * Starts loading a record's linked Projects work as soon as the page knows the record id
+ * (`?item=` in the URL), before the board and the item panel have loaded. A deep link to
+ * `?itemTab=projects` then shows linked work as soon as the panel opens instead of skeletons.
+ */
+export function usePrefetchItemProjects(itemId: string | null) {
+  const orgId = useOrgId();
+  const queryClient = useQueryClient();
+  const entitled = useOptionalOrg()?.apps?.entitled.projects ?? false;
+  useEffect(() => {
+    if (!itemId || !entitled) return;
+    void queryClient.prefetchQuery({
+      queryKey: projectsKeys.item(orgId, itemId),
+      queryFn: ({ signal }) => apiRequest<ItemProjectsDto>(`/crm/items/${itemId}/projects`, { orgId, signal }),
+      staleTime: 15_000,
+    });
+  }, [entitled, itemId, orgId, queryClient]);
 }
 
 /** Projects the user can add tasks to (with their statuses) + the people they can assign. */

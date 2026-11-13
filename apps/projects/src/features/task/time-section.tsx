@@ -26,7 +26,7 @@ import { formatDue, formatMinutes, formatRelative, todayIso } from '@/lib/dates'
 import { useRunningTimer, useTaskTime } from '@/lib/hooks/use-data';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { qk } from '@/lib/query-keys';
-import type { TimeEntryDTO } from '@/lib/types';
+import type { TaskDetail, TimeEntryDTO } from '@/lib/types';
 import {
   addManualTimeAction,
   deleteTimeEntryAction,
@@ -283,20 +283,63 @@ export function TimeSection() {
     refresh();
   };
 
+  /**
+   * Optimistic: the button, the elapsed clock, the top bar pill and the "running on" note flip in
+   * the same frame as the click, and the toast shows right away. A failed save puts it all back.
+   */
   const toggle = async () => {
+    if (busy) return;
     setBusy(true);
-    const result = mine ? await stopTimerAction() : await startTimerAction({ taskId: task.id });
+    const isDetail = (key: readonly unknown[]) => key[0] === 'task' && key.length === 2;
+    const saved = [
+      ...queryClient.getQueriesData({ predicate: (query) => isDetail(query.queryKey) }),
+      [qk.runningTimer(), queryClient.getQueryData(qk.runningTimer())] as const,
+      [qk.taskTime(task.id), queryClient.getQueryData(qk.taskTime(task.id))] as const,
+    ];
+    const stopping = Boolean(mine);
+    const loggedMinutes = Math.max(1, runningMinutes);
+    const optimistic: TimeEntryDTO | null = stopping
+      ? null
+      : {
+          id: `optimistic-${task.id}`,
+          projectId: task.projectId,
+          taskId: task.id,
+          userId: user.id,
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+          durationMinutes: null,
+          note: null,
+          billable: false,
+          source: 'timer',
+        };
+    queryClient.setQueryData(qk.runningTimer(), optimistic);
+    const endedAt = new Date().toISOString();
+    queryClient.setQueryData<TimeEntryDTO[]>(qk.taskTime(task.id), (rows) => {
+      if (!Array.isArray(rows)) return rows;
+      if (optimistic) return [optimistic, ...rows];
+      return rows.map((row) => (row.endedAt === null && row.userId === user.id ? { ...row, endedAt, durationMinutes: loggedMinutes } : row));
+    });
+    queryClient.setQueriesData<TaskDetail>({ predicate: (query) => isDetail(query.queryKey) }, (detail) => {
+      if (!detail || typeof detail !== 'object' || !('runningTimer' in detail)) return detail;
+      if (detail.id === task.id) {
+        return { ...detail, runningTimer: optimistic, timeTotalMinutes: stopping ? detail.timeTotalMinutes + loggedMinutes : detail.timeTotalMinutes };
+      }
+      return detail.runningTimer ? { ...detail, runningTimer: null } : detail;
+    });
+    const toastId = stopping
+      ? toast.success(`Logged ${formatMinutes(loggedMinutes)} on ${task.key}`)
+      : elsewhere
+        ? toast.info('Timer moved here', `We stopped and saved the timer on ${elsewhereTask?.key ?? 'your other task'}.`)
+        : null;
+    const result = stopping ? await stopTimerAction() : await startTimerAction({ taskId: task.id });
     setBusy(false);
     if (!result.ok) {
-      toast.error(mine ? "Couldn't stop the timer" : "Couldn't start the timer", result.error.message);
+      for (const [key, data] of saved) queryClient.setQueryData(key, data);
+      if (toastId !== null) toast.dismiss(toastId);
+      toast.error(stopping ? "Couldn't stop the timer" : "Couldn't start the timer", result.error.message);
       return;
     }
-    if (mine) {
-      const stopped = result.data as TimeEntryDTO | null;
-      toast.success(`Logged ${formatMinutes(stopped?.durationMinutes ?? runningMinutes)} on ${task.key}`);
-    } else if (elsewhere) {
-      toast.info('Timer moved here', `We stopped and saved the timer on ${elsewhereTask?.key ?? 'your other task'}.`);
-    }
+    if (!stopping) queryClient.setQueryData(qk.runningTimer(), result.data as TimeEntryDTO | null);
     invalidate();
   };
 
@@ -337,7 +380,7 @@ export function TimeSection() {
             <button
               type="button"
               onClick={() => void toggle()}
-              disabled={busy}
+              aria-busy={busy}
               data-testid="task-timer-toggle"
               aria-pressed={Boolean(mine)}
               className={cn(

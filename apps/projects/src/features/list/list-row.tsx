@@ -8,7 +8,7 @@ import { memo, useState, type KeyboardEvent } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { CalendarPlus, ChevronDown, ChevronRight, GripVertical, MessageSquare, MoreHorizontal, Pencil, Plus, Tag } from 'lucide-react';
-import { Checkbox, ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, Tooltip, cn, toast } from '@/components/ui';
+import { Checkbox, ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, Tooltip, cn } from '@/components/ui';
 import { DueDate, LabelPill, PersonAvatar, PriorityIcon, StatusIcon } from '@/components/pm';
 import { PRIORITY_LABELS } from '@/lib/constants';
 import { usePeopleMap } from '@/lib/hooks/use-people';
@@ -16,8 +16,11 @@ import type { IntegrationLinkDTO, LabelDTO, StatusDTO, TaskSummary } from '@/lib
 import { AssigneePicker, DuePicker, LabelsPicker, PriorityPicker, StatusPicker } from '@/features/views/field-pickers';
 import { InlineTitle } from '@/features/views/inline-title';
 import { LazyPicker } from '@/features/views/lazy-picker';
-import { LinkChips } from '@/features/views/link-chips';
+import { LinkChip, cleanTitle } from '@/features/views/link-chips';
+import { INTEGRATION_TARGET_LABELS } from '@/lib/constants';
+import { CollapsingRow } from './collapsing-row';
 import { TaskMenuItems } from '@/features/views/task-menu';
+import { toggleDoneWithUndo } from '@/features/task/done-toggle';
 import type { TaskOps } from '@/features/views/use-task-ops';
 
 export interface ListRowProps {
@@ -62,16 +65,17 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id, data: { type: 'row', taskId: task.id, group }, disabled: !draggable || editing });
   const done = task.statusCategory === 'done' || task.statusCategory === 'cancelled';
   const assignee = task.assigneeId ? people.get(task.assigneeId) : undefined;
+  const taskLabels = task.labelIds.map((labelId) => labels.get(labelId)).filter((label): label is LabelDTO => Boolean(label));
+  const realLinks = (links ?? []).filter((link) => Boolean(link.targetId));
+  const chipNames = [...realLinks.map((link) => cleanTitle(link.title ?? INTEGRATION_TARGET_LABELS[link.targetType])), ...taskLabels.map((label) => label.name)];
+  const chipItems = [
+    ...realLinks.map((link) => <LinkChip key={link.id} link={link} variant="key" />),
+    ...taskLabels.map((label) => <LabelPill key={label.id} name={label.name} color={label.color} className="max-w-none" />),
+  ];
   const toggleDone = async () => {
     const target = done ? props.reopenStatusId : props.doneStatusId;
     if (!target) return;
-    const previous = task.statusId;
-    const saved = await ops.updateTask(task.id, { statusId: target });
-    if (!saved) return;
-    toast.undo(done ? `Reopened ${task.key}` : `Marked ${task.key} done`, {
-      // updateTask toasts its own failure, so Undo doesn't add a second error.
-      onUndo: () => void ops.updateTask(task.id, { statusId: previous }),
-    });
+    await toggleDoneWithUndo({ taskKey: task.key, closing: !done, target, previous: task.statusId, save: (statusId) => ops.updateTask(task.id, { statusId }) });
   };
 
   return (
@@ -97,6 +101,8 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
           }}
           onKeyDown={(event) => {
             if (editing || event.target !== event.currentTarget) return;
+            // Ctrl/Cmd+Enter is "mark done" (shared key map), not "open".
+            if (event.metaKey || event.ctrlKey) return;
             if (event.key === 'Enter') {
               event.preventDefault();
               onOpen(task);
@@ -178,7 +184,7 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
                     event.stopPropagation();
                     setEditing(true);
                   }}
-                  className={cn('min-w-0 shrink truncate', done ? 'text-fg-muted' : 'text-fg')}
+                  className={cn('min-w-16 shrink truncate max-md:line-clamp-2 max-md:whitespace-normal', done ? 'text-fg-muted' : 'text-fg')}
                   title={task.title}
                 >
                   {task.title}
@@ -190,8 +196,6 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
                     </button>
                   </Cell>
                 ) : null}
-                {/* Meta gives way before the title does: it shrinks 100x faster and clips. */}
-                <span className="flex min-w-0 shrink-[100] items-center gap-1.5 overflow-hidden">
                 {task.subtaskCount > 0 ? (
                   <span className="shrink-0 rounded-full bg-muted px-1.5 text-2xs leading-5 text-fg-secondary tabular-nums" title={`${task.subtaskDoneCount} of ${task.subtaskCount} subtasks done`}>
                     {task.subtaskDoneCount}/{task.subtaskCount}
@@ -203,8 +207,23 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
                     {task.commentCount}
                   </span>
                 ) : null}
-                <LinkChips links={links} max={1} variant="pill" className="max-w-40 shrink-0 max-md:hidden" />
-                </span>
+                {/* Chips and labels sit right after the title and take only the room they need.
+                    Whole chips that do not fit fold into "+N"; the title keeps the rest. */}
+                {chipItems.length ? (
+                  <CollapsingRow names={chipNames} className="min-w-[min(7.5rem,35%)] shrink-[20] max-md:hidden">
+                    {chipItems}
+                  </CollapsingRow>
+                ) : null}
+                <span aria-hidden className="min-w-0 flex-1" />
+                {canEdit ? (
+                  <Cell className="max-md:hidden">
+                    <LazyPicker disabled={!canEdit} picker={(p) => <LabelsPicker value={task.labelIds} onChange={(labelIds) => void ops.setLabels(task, labelIds)} disabled={!canEdit} align="end" {...p}>{p.trigger}</LabelsPicker>}>
+                      <button type="button" aria-label="Change labels" title="Labels" className="inline-flex size-6 items-center justify-center rounded-xs text-icon opacity-0 outline-none group-hover/row:opacity-100 hover:bg-pressed focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-focus data-[state=open]:opacity-100">
+                        <Tag aria-hidden className="size-3.5" />
+                      </button>
+                    </LazyPicker>
+                  </Cell>
+                ) : null}
                 {canEdit && depth === 0 ? (
                   <Cell className="max-md:hidden">
                     <Tooltip content="Add a subtask" side="top">
@@ -217,24 +236,7 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
               </>
             )}
           </div>
-          <Cell className="w-44 justify-end max-xl:hidden">
-            <LazyPicker disabled={!canEdit} picker={(p) => <LabelsPicker value={task.labelIds} onChange={(labelIds) => void ops.setLabels(task, labelIds)} disabled={!canEdit} align="end" {...p}>{p.trigger}</LabelsPicker>}>
-              <button type="button" aria-label="Change labels" className={cn(cellButton, 'justify-end')}>
-                {task.labelIds.length ? (
-                  <>
-                    {task.labelIds.slice(0, 2).map((labelId) => {
-                      const label = labels.get(labelId);
-                      return label ? <LabelPill key={labelId} name={label.name} color={label.color} className="max-w-24" /> : null;
-                    })}
-                    {task.labelIds.length > 2 ? <span className="text-2xs text-fg-muted">+{task.labelIds.length - 2}</span> : null}
-                  </>
-                ) : (
-                  <Tag aria-hidden className="size-3.5 text-icon opacity-0 group-hover/row:opacity-100" />
-                )}
-              </button>
-            </LazyPicker>
-          </Cell>
-          <Cell className="w-36 max-lg:hidden">
+          <Cell className="w-32 max-lg:hidden">
             <LazyPicker disabled={!canEdit} picker={(p) => <StatusPicker value={task.statusId} onChange={(statusId) => void ops.updateTask(task.id, { statusId })} disabled={!canEdit} {...p}>{p.trigger}</StatusPicker>}>
               <button type="button" aria-label={`Status: ${status?.name ?? ''}. Change status`} className={cellButton} data-testid="row-status">
                 <StatusIcon category={task.statusCategory} color={status?.color} />
@@ -242,7 +244,7 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
               </button>
             </LazyPicker>
           </Cell>
-          <Cell className="w-40 max-md:w-auto">
+          <Cell className="w-36 max-md:w-auto">
             <LazyPicker disabled={!canEdit} picker={(p) => <AssigneePicker value={task.assigneeId} onChange={(assigneeId) => void ops.updateTask(task.id, { assigneeId })} disabled={!canEdit} align="end" {...p}>{p.trigger}</AssigneePicker>}>
               <button type="button" aria-label={assignee ? `Assigned to ${assignee.name}. Change` : 'Assign'} className={cellButton} data-testid="row-assignee">
                 <PersonAvatar userId={task.assigneeId} size="xs" />
@@ -257,7 +259,7 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
               </button>
             </LazyPicker>
           </Cell>
-          <Cell className="w-9 justify-center max-sm:hidden">
+          <Cell className="w-9 justify-center max-sm:w-6">
             <LazyPicker disabled={!canEdit} picker={(p) => <PriorityPicker value={task.priority} onChange={(priority) => void ops.updateTask(task.id, { priority })} disabled={!canEdit} align="end" {...p}>{p.trigger}</PriorityPicker>}>
               <button type="button" aria-label={`Priority: ${PRIORITY_LABELS[task.priority]}. Change`} title={PRIORITY_LABELS[task.priority]} className={cn(cellButton, 'justify-center px-1', task.priority === 'none' && 'opacity-40 group-hover/row:opacity-100')} data-testid="row-priority">
                 <PriorityIcon priority={task.priority} />

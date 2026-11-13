@@ -1,5 +1,6 @@
 'use client';
 /** Project header (icon, name, health, star, members, share) and the view tab strip. */
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -81,6 +82,7 @@ function CycleStrip({ projectKey }: { readonly projectKey: string }) {
 
 export function ProjectFrame({ children }: { readonly children: React.ReactNode }) {
   const { project, capabilities } = useCurrentProject();
+  const [noteOpen, setNoteOpen] = useState(false);
   const pathname = usePathname() ?? '';
   const queryClient = useQueryClient();
   const openQuickAdd = useShellStore((state) => state.openQuickAdd);
@@ -118,20 +120,31 @@ export function ProjectFrame({ children }: { readonly children: React.ReactNode 
         <div className="flex flex-wrap items-center gap-3 px-6 pt-4">
           <EntityIcon icon={project.icon} color={project.color} size={32} />
           <div className="min-w-0 flex-1 basis-[calc(100%-56px)] sm:basis-0">
-            <div className="flex min-w-0 items-center gap-2">
-              <h1 className="truncate text-xl font-semibold tracking-[-0.01em] text-fg">{project.name}</h1>
+            <div className="flex min-w-0 items-center gap-2 max-sm:items-start">
+              <h1 className="min-w-0 text-xl font-semibold tracking-[-0.01em] text-fg max-sm:line-clamp-2 max-sm:text-lg max-sm:leading-snug sm:truncate">{project.name}</h1>
               <IconButton
                 label={project.starred ? 'Remove star' : 'Star this project'}
                 icon={<Star aria-hidden className={cn(project.starred && 'fill-warning text-warning')} />}
                 size="sm"
                 onClick={() => void toggleStar()}
               />
-              <ProjectHealthBadge project={project} />
+              <ProjectHealthBadge project={project} canEdit={capabilities['project:update']} />
             </div>
-            <p className="truncate text-xs text-fg-muted">
+            <p className="truncate text-xs text-fg-muted max-sm:hidden">
               <span className="font-mono">{project.key}</span> · {project.progress.done} of {project.progress.total} tasks done
               {project.healthNote ? ` · ${project.healthNote}` : ''}
             </p>
+            {/* Phones: progress on its own line, the latest update as a tappable line that opens in full. */}
+            <div className="text-xs text-fg-muted sm:hidden">
+              <p>
+                <span className="font-mono">{project.key}</span> · {project.progress.done} of {project.progress.total} tasks done
+              </p>
+              {project.healthNote ? (
+                <button type="button" onClick={() => setNoteOpen((open) => !open)} aria-expanded={noteOpen} className={cn('mt-0.5 block w-full rounded-xs text-left outline-none focus-visible:outline-2 focus-visible:outline-focus', !noteOpen && 'line-clamp-2')}>
+                  {project.healthNote}
+                </button>
+              ) : null}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <AvatarGroup className="hidden -space-x-1 sm:flex" people={project.members.map((m) => ({ id: m.userId, name: m.person.name, src: m.person.image }))} max={4} size="md" />

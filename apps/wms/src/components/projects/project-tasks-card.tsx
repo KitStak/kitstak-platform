@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * "Project tasks" rail card on shipment order and work order pages: the KitStak Projects tasks
+ * "Project tasks" rail card on shipment order, work order, purchase order and cycle count pages: the KitStak Projects tasks
  * linked to this record (live status, assignee, due date) plus linked projects with progress,
  * and "Create task" to plan follow-up work without leaving the WMS. Hidden entirely when
  * Projects isn't available to this install or user.
@@ -34,13 +34,26 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { RailCard } from '@/components/orders/wizard/order-summary';
 import type { ProjectOptionsDto, RecordProjectsDto } from '@/server/projects/bridge';
 
-type RecordKind = 'order' | 'work-order';
+type RecordKind = 'order' | 'work-order' | 'receipt' | 'count';
 
 const API_BASE: Readonly<Record<RecordKind, string>> = {
   order: '/api/orders',
   'work-order': '/api/work-orders',
+  receipt: '/api/purchase-orders',
+  count: '/api/counts',
 };
-const NOUN: Readonly<Record<RecordKind, string>> = { order: 'order', 'work-order': 'work order' };
+const NOUN: Readonly<Record<RecordKind, string>> = {
+  order: 'order',
+  'work-order': 'work order',
+  receipt: 'purchase order',
+  count: 'cycle count',
+};
+const PLACEHOLDER: Readonly<Record<RecordKind, string>> = {
+  order: 'e.g. Confirm the delivery window with the customer',
+  'work-order': 'e.g. Order extra boxes for this kit run',
+  receipt: 'e.g. Check the damaged cartons with the vendor',
+  count: 'e.g. Recount bin D1-04 and fix the variance',
+};
 
 const PRIORITIES: readonly { value: BridgePriority; label: string }[] = [
   { value: 'none', label: 'No priority' },
@@ -313,11 +326,7 @@ function CreateTaskForm({
             value={title}
             maxLength={500}
             invalid={Boolean(errors.title)}
-            placeholder={
-              kind === 'order'
-                ? 'e.g. Confirm the delivery window with the customer'
-                : 'e.g. Order extra boxes for this kit run'
-            }
+            placeholder={PLACEHOLDER[kind]}
             onChange={(event) => setTitle(event.target.value)}
             data-testid="wms-task-title"
           />
@@ -418,14 +427,17 @@ function CreateTaskForm({
   );
 }
 
-/** Order pages use the rail's small caps card; work order pages use the aside's section style. */
+/**
+ * Order pages use the rail's small caps card; work order pages use the aside's section style;
+ * purchase order and count pages use a divided rail block like their other rail sections.
+ */
 function CardShell({
   variant,
   title,
   action,
   children,
 }: {
-  readonly variant: 'rail' | 'aside';
+  readonly variant: 'rail' | 'aside' | 'divided';
   readonly title: React.ReactNode;
   readonly action: React.ReactNode;
   readonly children: React.ReactNode;
@@ -435,6 +447,16 @@ function CardShell({
       <RailCard title={title} action={action}>
         {children}
       </RailCard>
+    );
+  if (variant === 'divided')
+    return (
+      <section className="flex min-w-0 flex-col gap-2 border-t border-border pt-3" data-testid="wms-project-tasks">
+        <header className="flex items-center justify-between gap-2">
+          <h2 className="text-xs font-semibold text-foreground">{title}</h2>
+          {action}
+        </header>
+        {children}
+      </section>
     );
   return (
     <section className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-surface p-4 shadow-xs">
@@ -453,7 +475,7 @@ export function ProjectTasksCard({
   recordLabel,
   variant = 'rail',
 }: {
-  readonly variant?: 'rail' | 'aside';
+  readonly variant?: 'rail' | 'aside' | 'divided';
   readonly kind: RecordKind;
   /** Record id (or code). */
   readonly recordId: string;

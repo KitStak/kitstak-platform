@@ -45,8 +45,12 @@ export function neighbourCell(cells: readonly CellBox[], current: number, direct
 
 export type CursorField = 'status' | 'assignee' | 'priority' | 'labels' | 'due';
 
-/** Single-key property hotkeys on the cursor task (Linear style). `L` (shift) also opens labels. */
-export function fieldForKey(key: string, mode: 'list' | 'board'): CursorField | null {
+/**
+ * Single-key property hotkeys on the cursor task (Linear style), the same in List and Board:
+ * s status, a assignee, p priority, d due date, # labels (as in "#label" when adding a task).
+ * Shift+L still opens labels for people used to it; plain l is the board's "column right".
+ */
+export function fieldForKey(key: string): CursorField | null {
   switch (key) {
     case 's':
       return 'status';
@@ -56,11 +60,9 @@ export function fieldForKey(key: string, mode: 'list' | 'board'): CursorField | 
       return 'priority';
     case 'd':
       return 'due';
+    case '#':
     case 'L':
       return 'labels';
-    case 'l':
-      // On a board, l moves right a column (h/l), so labels live on Shift+L there.
-      return mode === 'list' ? 'labels' : null;
     default:
       return null;
   }
