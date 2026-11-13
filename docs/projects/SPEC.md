@@ -80,3 +80,9 @@ Assets in `apps/projects/public/brand/` (see `BRAND-README.txt`):
 - `kitstak-icon-projects.svg` (+ 512/1024 PNG): the Projects app mark (three staggered bars, red `#C8102E` / pink `#D65A6E`). Use as favicon (`src/app/icon.svg` / `icon.png` / `apple-icon.png`), the sidebar/top-bar product mark, the Portal launcher tile icon and the `projects` entry in the shared app switcher.
 - `kitstak-loader-projects.svg`: animated loader (respects reduced motion). Use for route `loading.tsx` states, full-page loads and long actions instead of generic spinners.
 - Brand colors: Red `#C8102E`, Pink `#D65A6E`, Navy `#0A1628` (text on light), Cream `#F5F1E8` (text on dark). Logo font Bebas Neue (+0.0485em letter spacing). Keep consistent with the shared `@kitstak/ui` tokens.
+
+### Sibling app icons (same brand pack)
+- CRM: `apps/crm/public/brand/kitstak-icon-crm.svg` (+512/1024 PNG), a funnel of three centered bars (red, pink, red).
+- Portal: `apps/portal/public/brand/kitstak-icon-portal.svg` (+512/1024 PNG), a 2x2 grid (red/pink checker).
+- Copies of all app SVG marks also live in `apps/projects/public/brand/` and `apps/portal/public/brand/`.
+Use them for each app's favicon/top-bar mark, the shared app switcher entries (`packages/ui/src/app-switcher`, render inline SVG with these exact rects so it works on every origin) and the Portal launcher tiles. WMS has no new mark yet: keep its current one.
