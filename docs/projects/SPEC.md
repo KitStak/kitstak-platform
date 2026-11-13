@@ -86,3 +86,6 @@ Assets in `apps/projects/public/brand/` (see `BRAND-README.txt`):
 - Portal: `apps/portal/public/brand/kitstak-icon-portal.svg` (+512/1024 PNG), a 2x2 grid (red/pink checker).
 - Copies of all app SVG marks also live in `apps/projects/public/brand/` and `apps/portal/public/brand/`.
 Use them for each app's favicon/top-bar mark, the shared app switcher entries (`packages/ui/src/app-switcher`, render inline SVG with these exact rects so it works on every origin) and the Portal launcher tiles. - WMS: `apps/wms/public/brand/kitstak-icon-wms.svg` (+512/1024 PNG), two red shelves with pink boxes.
+
+### Logo font
+Bebas Neue (SIL OFL) lives in `packages/ui/src/fonts/` (woff2 + ttf + OFL-LICENSE.txt, license must ship with it). Use only for logo lettering / wordmarks (`KITSTAK PROJECTS`, etc.) with `letter-spacing: 0.0485em` and `font-kerning: none`, via an `@font-face` in `@kitstak/ui` (`font-display: swap`). Body/UI text stays on the existing token fonts.
