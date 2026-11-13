@@ -84,8 +84,10 @@ theirs. Seeding is optional — `db:seed` in each app for demo data.)
 
 - `TRUSTED_ORIGINS` / `NEXT_PUBLIC_*_URL`: come back and fill with the real
   assigned origins, then redeploy.
-- Custom domains later (`app./crm./wms.kitstak.io`): set
-  `AUTH_COOKIE_DOMAIN=.kitstak.io` in all three for cross-subdomain SSO.
+- Production domains: portal `kitstak.app` (apex; `www.` and `app.kitstak.app`
+  308-redirect to it), CRM `crm.kitstak.app`, WMS `wms.kitstak.app`.
+  `AUTH_COOKIE_DOMAIN=.kitstak.app` in all three for cross-app SSO (covers the apex).
+  `deploy/secrets.env` `URL_PORTAL` must be `https://kitstak.app`.
   On `*.vercel.app` origins the apps work but sessions don't carry across
   (different sites) — SSO is fully seamless once custom subdomains exist.
 - WMS cron (`/api/cron/tick` every minute) comes from `apps/wms/vercel.json`
