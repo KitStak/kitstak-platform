@@ -13,6 +13,7 @@ import { StatusPill, Tooltip, cn } from '@/components/ui';
 import { INTEGRATION_TARGET_LABELS, type IntegrationTargetType } from '@/lib/constants';
 import type { IntegrationLinkDTO } from '@/lib/types';
 import { TONE_COLOR, statusTone, targetApp } from './status-tone';
+import { RecordHoverCard } from './record-hover-card';
 
 const MARKS: Readonly<
   Record<'crm' | 'wms', readonly (readonly [number, number, number, number, boolean?])[]>
@@ -115,27 +116,32 @@ export function RecordChip({
     className,
   );
   const tooltip = `${label}${record.status ? ` · ${record.status}` : ''}${record.url ? ' · opens in a new tab' : ''}`;
+  const anchor = record.url ? (
+    <a
+      href={record.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn(
+        shell,
+        'transition-colors hover:border-border-default hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus',
+      )}
+    >
+      {body}
+    </a>
+  ) : (
+    <span className={shell} tabIndex={0}>
+      {body}
+    </span>
+  );
   return (
     <span className="inline-flex max-w-full min-w-0 items-center gap-0.5" data-testid="record-chip">
-      <Tooltip content={tooltip}>
-        {record.url ? (
-          <a
-            href={record.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(
-              shell,
-              'transition-colors hover:border-border-default hover:bg-hover focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus',
-            )}
-          >
-            {body}
-          </a>
-        ) : (
-          <span className={shell} tabIndex={0}>
-            {body}
-          </span>
-        )}
-      </Tooltip>
+      {link && link.targetType !== 'core_customer' ? (
+        <RecordHoverCard type={link.targetType} id={link.targetId}>
+          {anchor}
+        </RecordHoverCard>
+      ) : (
+        <Tooltip content={tooltip}>{anchor}</Tooltip>
+      )}
       {trailing}
       {onRemove ? (
         <button

@@ -47,8 +47,9 @@ export interface QuickFilters {
 
 export const EMPTY_QUICK: QuickFilters = { q: '', mine: false, assignees: [], statuses: [], priorities: [], labels: [], due: null };
 
-export type Swimlane = 'none' | 'assignee' | 'priority' | 'label';
-export const SWIMLANES: readonly Swimlane[] = ['none', 'assignee', 'priority', 'label'];
+/** `crm` / `wms`: lanes by linked CRM customer or WMS status (src/features/integrations/link-lanes.tsx). */
+export type Swimlane = 'none' | 'assignee' | 'priority' | 'label' | 'crm' | 'wms';
+export const SWIMLANES: readonly Swimlane[] = ['none', 'assignee', 'priority', 'label', 'crm', 'wms'];
 
 export type ListGroup = Extract<GroupField, 'section' | 'status' | 'priority' | 'assignee' | 'label' | 'none'>;
 export const LIST_GROUPS: readonly ListGroup[] = ['section', 'status', 'priority', 'assignee', 'label', 'none'];
@@ -64,6 +65,8 @@ export const GROUP_LABELS: Readonly<Record<string, string>> = {
   assignee: 'Assignee',
   label: 'Label',
   custom: 'Custom field',
+  crm: 'CRM customer',
+  wms: 'WMS status',
 };
 
 /** Card/row order for board columns and list groups. `position` = manual (drag to reorder). */

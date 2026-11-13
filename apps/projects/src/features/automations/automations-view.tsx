@@ -57,6 +57,7 @@ import {
   updateAutomationAction,
 } from '@/server/actions/automations';
 import { useShell } from '@/features/shell/shell-context';
+import { CrossAppRecipes } from '@/features/integrations/cross-app-recipes';
 import { LocalTime } from '@/features/task/local-time';
 import { SampleProjectButton } from '@/features/onboarding/sample-project-button';
 import { AutomationBuilder, blankDraft, draftFromRule, type AutomationDraft } from './automation-builder';
@@ -67,7 +68,7 @@ export interface AutomationRow extends AutomationDTO {
   readonly sentence: string;
 }
 
-type Tab = 'rules' | 'recipes' | 'history';
+type Tab = 'rules' | 'recipes' | 'history' | 'apps';
 type StateFilter = 'all' | 'on' | 'off';
 
 function useUrlState() {
@@ -328,7 +329,7 @@ export function AutomationsView({
   const { can, integrations } = useShell();
   const { params, set } = useUrlState();
   const tab = (
-    ['rules', 'recipes', 'history'].includes(params?.get('tab') ?? '') ? params?.get('tab') : 'rules'
+    ['rules', 'recipes', 'apps', 'history'].includes(params?.get('tab') ?? '') ? params?.get('tab') : 'rules'
   ) as Tab;
   const projectFilter = params?.get('project') ?? 'all';
   const [query, setQuery] = useState('');
@@ -554,6 +555,11 @@ export function AutomationsView({
               <TabsTrigger value="recipes" count={RECIPES.length} data-testid="automations-tab-recipes">
                 Recipes
               </TabsTrigger>
+              {integrations.crm || integrations.wms ? (
+                <TabsTrigger value="apps" data-testid="automations-tab-apps">
+                  From CRM and WMS
+                </TabsTrigger>
+              ) : null}
               <TabsTrigger value="history" data-testid="automations-tab-history">
                 Run history
               </TabsTrigger>
@@ -730,6 +736,8 @@ export function AutomationsView({
           </ul>
         </div>
       ) : null}
+
+      {tab === 'apps' ? <CrossAppRecipes /> : null}
 
       {tab === 'history' ? (
         <div className="flex flex-col gap-3">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countTemplateTaskTree, describeTemplateTaskCounts, withScheduledStarts } from './template-math';
+import { countTemplateTaskTree, describeTemplateTaskCounts, startingStatusKey, withScheduledStarts } from './template-math';
 import type { TemplatePayload } from './template-types';
 
 const payload: TemplatePayload = {
@@ -41,5 +41,24 @@ describe('withScheduledStarts', () => {
   });
   it('gives undated subtasks the parent range', () => {
     expect(tasks[1]?.subtasks?.[0]).toMatchObject({ startOffsetDays: 4, dueOffsetDays: 8 });
+  });
+});
+
+describe('startingStatusKey', () => {
+  const statuses = [
+    { key: 'todo', category: 'todo' as const },
+    { key: 'doing', category: 'in_progress' as const },
+    { key: 'done', category: 'done' as const },
+    { key: 'dropped', category: 'cancelled' as const },
+  ];
+  it('keeps open statuses', () => {
+    expect(startingStatusKey(statuses, { statusKey: 'doing' })).toBe('doing');
+    expect(startingStatusKey(statuses, { statusKey: 'todo' })).toBe('todo');
+  });
+  it('sends finished and unknown statuses back to the default', () => {
+    expect(startingStatusKey(statuses, { statusKey: 'done' })).toBeUndefined();
+    expect(startingStatusKey(statuses, { statusKey: 'dropped' })).toBeUndefined();
+    expect(startingStatusKey(statuses, { statusKey: 'gone' })).toBeUndefined();
+    expect(startingStatusKey(statuses, {})).toBeUndefined();
   });
 });

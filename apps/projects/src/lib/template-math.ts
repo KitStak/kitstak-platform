@@ -3,7 +3,7 @@
  * counts them: top-level tasks, subtasks separately) and start-date filling so timeline bars
  * have a real length when a template only gives due dates.
  */
-import type { TemplatePayload, TemplateTask } from './template-types';
+import type { TemplatePayload, TemplateStatus, TemplateTask } from './template-types';
 
 export interface TemplateTaskCounts {
   /** Top-level tasks (what the project header and Overview call "tasks"). */
@@ -56,4 +56,19 @@ export function withScheduledStarts(payload: TemplatePayload): TemplatePayload {
     return { ...task, ...(start !== undefined ? { startOffsetDays: start } : {}), ...(subtasks ? { subtasks } : {}) };
   });
   return { ...payload, tasks: next };
+}
+
+/**
+ * The status a template task starts in: its own status, unless that is a finished one (done or
+ * cancelled). A template saved from a finished project would otherwise create a project where
+ * every task is already done. Undefined means "the project's default status".
+ */
+export function startingStatusKey(
+  statuses: readonly Pick<TemplateStatus, 'key' | 'category'>[] | undefined,
+  task: Pick<TemplateTask, 'statusKey'>,
+): string | undefined {
+  if (!task.statusKey) return undefined;
+  const status = statuses?.find((s) => s.key === task.statusKey);
+  if (!status) return undefined;
+  return status.category === 'done' || status.category === 'cancelled' ? undefined : status.key;
 }

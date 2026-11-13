@@ -6,12 +6,13 @@ import type { DomainContext } from '@/server/domain/_shared';
 import { orgsWithScheduledAutomations, sweepAutomations } from '@/server/domain/automation-sweep';
 import { env } from '@/server/env';
 import { drainIntegrationEvents, orgsWithPendingEvents } from '@/server/integrations/events';
+import { orgsWithRecordTriggers } from '@/server/integrations/record-triggers';
 
 /**
  * The scheduler's heartbeat (Vercel Cron, every 5 minutes, with CRON_SECRET set):
  *   1. drains CRM/WMS events (pm.integration_events) for every org that has some, and
- *   2. runs scheduled automations ("due soon", "overdue", CRM stage, WMS shipped) for every org
- *      with such a rule,
+ *   2. runs scheduled automations ("due soon", "overdue", CRM stage, WMS shipped) and cross-app
+ *      recipes (deal won, receipt discrepancy, count variance) for every org with such a rule,
  * so automations fire even when nobody has Projects open. Signed-in use also does both lazily.
  */
 function authorized(request: Request): boolean {
@@ -37,9 +38,9 @@ export async function GET(request: Request) {
   if (!authorized(request)) {
     return NextResponse.json({ error: { code: 'UNAUTHENTICATED', message: 'This route is for the scheduler.' } }, { status: 401 });
   }
-  const [eventOrgs, ruleOrgs] = await Promise.all([orgsWithPendingEvents(), orgsWithScheduledAutomations()]);
+  const [eventOrgs, ruleOrgs, recipeOrgs] = await Promise.all([orgsWithPendingEvents(), orgsWithScheduledAutomations(), orgsWithRecordTriggers()]);
   const pending = new Set(eventOrgs);
-  const orgIds = [...new Set([...eventOrgs, ...ruleOrgs])];
+  const orgIds = [...new Set([...eventOrgs, ...ruleOrgs, ...recipeOrgs])];
   let handled = 0;
   let checked = 0;
   for (const orgId of orgIds) {

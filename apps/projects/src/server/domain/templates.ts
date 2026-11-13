@@ -31,7 +31,7 @@ import { logActivity } from './activity';
 import { getProjectDetail, insertProject, type CreateProjectInput } from './projects';
 import { insertTask } from './tasks';
 import { BUILTIN_TEMPLATES, findBuiltinTemplate } from './templates-builtin';
-import { countTemplateTaskTree } from '@/lib/template-math';
+import { countTemplateTaskTree, startingStatusKey } from '@/lib/template-math';
 
 function templateCounts(payload: TemplatePayload): { taskCount: number; subtaskCount: number } {
   const counts = countTemplateTaskTree(payload);
@@ -135,7 +135,8 @@ export async function templateFromProject(
       key: row.id,
       title: row.title,
       description: row.description ?? undefined,
-      statusKey: row.statusId,
+      // Templates are fresh work: finished tasks start again in the default status.
+      statusKey: startingStatusKey(payload.statuses, { statusKey: row.statusId }),
       sectionKey: row.sectionId ?? undefined,
       priority: row.priority,
       startOffsetDays: offset(row.startDate),
@@ -375,7 +376,10 @@ async function materialize(
           projectId: project.id,
           title: item.title,
           description: item.description ?? null,
-          statusId: item.statusKey ? (statusMap.get(item.statusKey) ?? null) : null,
+          statusId: (() => {
+            const key = startingStatusKey(payload.statuses, item);
+            return key ? (statusMap.get(key) ?? null) : null;
+          })(),
           sectionId: item.sectionKey ? (sectionMap.get(item.sectionKey) ?? null) : null,
           priority: item.priority ?? 'none',
           startDate: item.startOffsetDays !== undefined ? addDaysIso(start, item.startOffsetDays) : null,

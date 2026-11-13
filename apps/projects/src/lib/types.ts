@@ -425,6 +425,39 @@ export interface IntegrationLinkDTO {
   readonly meta: Readonly<Record<string, unknown>>;
 }
 
+/** One fact on a linked record's hover card ("Deal value: $310,000"). */
+export interface RecordDetailFact {
+  readonly label: string;
+  readonly value: string;
+  readonly tone?: 'success' | 'warning' | 'danger';
+}
+
+/** One line item on a linked record's hover card ("Dock leveler kit · 3 of 4 received"). */
+export interface RecordDetailLine {
+  readonly label: string;
+  readonly sku: string | null;
+  readonly value: string;
+  readonly tone?: 'success' | 'warning' | 'danger';
+}
+
+/** Live detail of a linked CRM / WMS record (`GET /api/v1/integrations/record?type&id`). */
+export interface RecordDetail {
+  readonly type: IntegrationTargetType;
+  readonly id: string;
+  readonly app: 'crm' | 'wms';
+  /** "WMS receipt", "CRM deal". */
+  readonly kindLabel: string;
+  readonly title: string;
+  readonly status: string | null;
+  readonly url: string;
+  readonly facts: readonly RecordDetailFact[];
+  readonly lines: readonly RecordDetailLine[];
+  readonly linesLabel: string | null;
+  readonly moreLines: number;
+  readonly updatedAt: string | null;
+  readonly checkedAt: IsoDateTime;
+}
+
 export interface FormDTO {
   readonly id: string;
   readonly projectId: string;

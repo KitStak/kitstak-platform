@@ -35,7 +35,7 @@ import { useIntegrationSearch, useIntegrationStatus, usePeople, useProjects, use
 import { qk } from '@/lib/query-keys';
 import { routes } from '@/lib/routes';
 import { suggestProjectKey } from '@/lib/task-key';
-import { describeTemplateTaskCounts } from '@/lib/template-math';
+import { describeTemplateTaskCounts, startingStatusKey } from '@/lib/template-math';
 import type { TemplatePayload } from '@/lib/template-types';
 import type { TemplateDTO } from '@/lib/types';
 import { addLinkAction } from '@/server/actions/links';
@@ -87,7 +87,7 @@ function TemplateThumbnail({ payload, color }: { readonly payload: TemplatePaylo
   return (
     <div className="grid h-[92px] gap-1.5 overflow-hidden rounded-lg border border-border-subtle bg-sunken p-2" style={{ gridTemplateColumns: `repeat(${statuses.length}, minmax(0, 1fr))`, boxShadow: `inset 0 3px 0 var(--label-${toLabelColor(color)})` }} aria-hidden>
       {statuses.map((status, index) => {
-        const cards = tasks.filter((task) => (task.statusKey ?? fallbackKey) === status.key).slice(0, 2);
+        const cards = tasks.filter((task) => (startingStatusKey(payload?.statuses, task) ?? fallbackKey) === status.key).slice(0, 2);
         const placeholder = !payload && index === 0;
         return (
           <div key={status.key} className="flex min-w-0 flex-col gap-1">
@@ -134,10 +134,11 @@ function TemplateCard({ template, selected, onSelect, onOpen }: { readonly templ
           {template ? (
             <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-fg-muted">
               {template.builtIn === false ? <Badge tone="info" size="sm">Your team</Badge> : null}
-              {[template.category, taskCountText(template), duration].filter(Boolean).map((part, index, parts) => (
+              {[template.category, taskCountText(template), duration].filter(Boolean).map((part, index) => (
+                // The dot travels with the part after it, so a wrapped line never ends on "·".
                 <span key={part} className="whitespace-nowrap">
+                  {index > 0 ? <span aria-hidden className="mr-1.5">·</span> : null}
                   {part}
-                  {index < parts.length - 1 ? <span aria-hidden className="ml-1.5">·</span> : null}
                 </span>
               ))}
             </p>

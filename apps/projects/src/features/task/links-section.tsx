@@ -26,24 +26,17 @@ import type { IntegrationLinkDTO } from '@/lib/types';
 import { addLinkAction, refreshLinksAction, removeLinkAction } from '@/server/actions/links';
 import { SectionHeading } from './property-row';
 import { useTaskContext } from './task-context';
-import { RecordStatus } from '@/features/integrations/record-chip';
+import { RecordStatus, SiblingAppMark } from '@/features/integrations/record-chip';
+import { RecordHoverCard } from '@/features/integrations/record-hover-card';
 import { useLiveLinks } from '@/features/integrations/use-live-links';
 
 const CRM_TYPES: ReadonlySet<IntegrationTargetType> = new Set(['crm_item', 'crm_account', 'core_customer']);
 
+/** The sibling app's brand mark (CRM funnel / WMS shelves) from the KitStak brand pack. */
 function AppBadge({ type }: { readonly type: IntegrationTargetType }) {
-  const crm = CRM_TYPES.has(type);
   return (
-    <span
-      aria-hidden
-      className={cn(
-        'inline-flex size-8 shrink-0 items-center justify-center rounded-md text-2xs font-bold tracking-wide',
-        crm
-          ? 'bg-[color-mix(in_srgb,var(--label-blue)_14%,transparent)] text-[var(--label-blue-text)]'
-          : 'bg-[color-mix(in_srgb,var(--label-teal)_16%,transparent)] text-[var(--label-teal-text)]',
-      )}
-    >
-      {crm ? 'CRM' : 'WMS'}
+    <span aria-hidden className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border-subtle bg-panel">
+      <SiblingAppMark app={CRM_TYPES.has(type) ? 'crm' : 'wms'} size={18} />
     </span>
   );
 }
@@ -72,19 +65,21 @@ function LinkRow({
   );
   return (
     <li className="group/link flex items-center gap-1 rounded-md hover:bg-hover" data-testid="task-link-row">
-      {link.url ? (
-        <a
-          href={link.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md p-1.5 focus-visible:outline-2 focus-visible:outline-focus"
-          aria-label={`${kind}: ${title}${link.status ? `, ${link.status}` : ''} (opens in a new tab)`}
-        >
-          {body}
-        </a>
-      ) : (
-        <span className="flex min-w-0 flex-1 items-center gap-2.5 p-1.5">{body}</span>
-      )}
+      <RecordHoverCard type={link.targetType} id={link.targetId} side="bottom" className="flex-1">
+        {link.url ? (
+          <a
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md p-1.5 focus-visible:outline-2 focus-visible:outline-focus"
+            aria-label={`${kind}: ${title}${link.status ? `, ${link.status}` : ''} (opens in a new tab)`}
+          >
+            {body}
+          </a>
+        ) : (
+          <span className="flex min-w-0 flex-1 items-center gap-2.5 p-1.5">{body}</span>
+        )}
+      </RecordHoverCard>
       {canEdit ? (
         <IconButton
           size="sm"

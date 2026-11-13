@@ -40,9 +40,107 @@ import { qk } from '@/lib/query-keys';
 import { shortDate } from '@/lib/report-math';
 import type { CycleDTO, TaskSummary } from '@/lib/types';
 import { completeCycleAction, createCycleAction, deleteCycleAction, setTasksCycleAction, updateCycleAction } from '@/server/actions/cycles';
-import { ColumnChart, LineChart } from '@/features/dashboards/charts';
+import { LineChart } from '@/features/dashboards/charts';
 import { SERIES } from '@/features/dashboards/report-panels';
 import { useCurrentProject } from './project-context';
+
+interface ScopeDay {
+  readonly date: string;
+  readonly label: string;
+  readonly added: number;
+  readonly removed: number;
+  readonly description: string;
+  readonly today: boolean;
+}
+
+/**
+ * Diverging day bars: tasks added after the start go up, tasks taken out go down. Whole-number
+ * ticks only (you can't add half a task); keyboard reachable, with a screen-reader table.
+ */
+function ScopeChangeChart({ days, title }: { readonly days: readonly ScopeDay[]; readonly title: string }) {
+  const [active, setActive] = useState(() => {
+    const today = days.findIndex((d) => d.today);
+    return today >= 0 ? today : Math.max(0, days.length - 1);
+  });
+  const peakUp = Math.max(0, ...days.map((d) => d.added));
+  const peakDown = Math.max(0, ...days.map((d) => d.removed));
+  const top = Math.max(1, peakUp);
+  const bottom = peakDown;
+  const half = 76;
+  const upHeight = bottom ? half : half * 2;
+  const downHeight = bottom ? half : 0;
+  const scaleUp = (n: number) => (n ? Math.max(3, Math.round((n / top) * upHeight)) : 0);
+  const scaleDown = (n: number) => (n && bottom ? Math.max(3, Math.round((n / bottom) * downHeight)) : 0);
+  const onKey = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const last = days.length - 1;
+    const next = event.key === 'ArrowRight' ? Math.min(last, index + 1) : event.key === 'ArrowLeft' ? Math.max(0, index - 1) : event.key === 'Home' ? 0 : event.key === 'End' ? last : null;
+    if (next === null) return;
+    event.preventDefault();
+    setActive(next);
+    (event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
+  };
+  const current = days[active];
+  if (!peakUp && !peakDown) {
+    return <p className="rounded-md bg-sunken px-4 py-8 text-center text-sm text-fg-muted">No tasks added or taken out since the cycle started. Steady scope.</p>;
+  }
+  return (
+    <div>
+      <div className="grid grid-cols-[auto_1fr] gap-2">
+        <div className="relative w-7 text-right text-2xs text-fg-muted tabular-nums" style={{ height: upHeight + downHeight }} aria-hidden>
+          <span className="absolute right-0 -translate-y-1/2" style={{ top: 0 }}>+{top}</span>
+          <span className="absolute right-0 -translate-y-1/2" style={{ top: upHeight }}>0</span>
+          {bottom ? <span className="absolute right-0 -translate-y-1/2" style={{ top: upHeight + downHeight }}>-{bottom}</span> : null}
+        </div>
+        <div className="relative min-w-0">
+          <span aria-hidden className="pointer-events-none absolute inset-x-0 border-t border-dashed border-border-subtle" style={{ top: 0 }} />
+          <span aria-hidden className="pointer-events-none absolute inset-x-0 border-t border-border-default" style={{ top: upHeight }} />
+          {bottom ? <span aria-hidden className="pointer-events-none absolute inset-x-0 border-t border-dashed border-border-subtle" style={{ top: upHeight + downHeight }} /> : null}
+          <div role="group" aria-label={`${title}. Use the arrow keys to move between days.`} className="relative flex gap-1 sm:gap-1.5" style={{ height: upHeight + downHeight }}>
+            {days.map((day, index) => (
+              <button
+                key={day.date}
+                type="button"
+                tabIndex={index === active ? 0 : -1}
+                aria-label={day.description}
+                title={day.description}
+                onFocus={() => setActive(index)}
+                onMouseEnter={() => setActive(index)}
+                onKeyDown={(event) => onKey(event, index)}
+                className="relative min-w-0 flex-1 rounded-sm outline-none hover:bg-hover/60 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
+              >
+                <span aria-hidden className="absolute inset-x-[15%] rounded-t-[3px]" style={{ bottom: downHeight, height: scaleUp(day.added), background: SERIES.velocity }} />
+                <span aria-hidden className="absolute inset-x-[15%] rounded-b-[3px]" style={{ top: upHeight, height: scaleDown(day.removed), background: 'var(--danger)', opacity: 0.75 }} />
+              </button>
+            ))}
+          </div>
+          <div className="mt-1.5 flex gap-1 sm:gap-1.5" aria-hidden>
+            {days.map((day) => (
+              <span key={day.date} className={cn('min-w-0 flex-1 truncate text-center text-2xs tabular-nums', day.today ? 'font-semibold text-fg' : 'text-fg-muted')}>
+                {day.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-secondary" aria-live="polite">
+        <span className="inline-flex items-center gap-1.5"><span aria-hidden className="size-2 rounded-sm" style={{ background: SERIES.velocity }} />Added</span>
+        <span className="inline-flex items-center gap-1.5"><span aria-hidden className="size-2 rounded-sm opacity-75" style={{ background: 'var(--danger)' }} />Taken out</span>
+        {current ? <span className="ml-auto text-fg-muted">{current.description}</span> : null}
+      </p>
+      <table className="sr-only">
+        <caption>{title}</caption>
+        <tbody>
+          {days.map((day) => (
+            <tr key={day.date}>
+              <th scope="row">{day.date}</th>
+              <td>{day.description}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export const cycleName = (cycle: Pick<CycleDTO, 'name' | 'number'>) => cycle.name?.trim() || `Cycle ${cycle.number}`;
 
@@ -435,18 +533,17 @@ function CycleDetail({ cycleId, backlog, onDeleted, onSelect }: { readonly cycle
         </Panel>
         <Panel title="Scope changes">
           <p className="mb-3 text-sm text-fg-secondary">Tasks added (up) or taken out (down) after the cycle started. Lots of change mid-cycle makes the goal harder to hit.</p>
-          <ColumnChart
+          <ScopeChangeChart
             title={`${cycleName(cycle)} scope changes`}
-            data={report.days.map((d) => ({
-              id: d.date,
+            days={report.days.map((d) => ({
+              date: d.date,
               // Day of the month keeps two-week cycles readable; the full date is in the description.
               label: String(Number(d.date.slice(8))),
-              value: d.future ? null : d.added - d.removed,
+              added: d.future ? 0 : d.added,
+              removed: d.future ? 0 : d.removed,
               description: `${shortDate(d.date)}: ${d.added} added, ${d.removed} taken out, ${d.scope} in the cycle`,
-              highlight: d.date === today,
+              today: d.date === today,
             }))}
-            color={SERIES.velocity}
-            formatValue={(v) => (v > 0 ? `+${v}` : String(v))}
           />
         </Panel>
       </div>

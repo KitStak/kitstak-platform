@@ -4,7 +4,7 @@
  * stored on the server; starting one stops any other), manual entries ("1h 30m" yesterday,
  * billable or not), every entry with who logged it, and the total against the estimate.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { CirclePlay, CircleStop, Clock, Hand, Plus, Timer, Trash2 } from 'lucide-react';
 import {
@@ -252,6 +252,8 @@ function EntryRow({ entry, onDelete }: { readonly entry: TimeEntryDTO; readonly 
   );
 }
 
+const noopSubscribe = () => () => undefined;
+
 export function TimeSection() {
   const { task, canLogTime, refresh, live, openTask } = useTaskContext();
   const { user } = useShell();
@@ -261,7 +263,10 @@ export function TimeSection() {
   const [busy, setBusy] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const mine = task.runningTimer ?? (running.data && running.data.taskId === task.id ? running.data : null);
-  const elsewhere = running.data && running.data.taskId !== task.id ? running.data : null;
+  // The running-timer cache can be filled before hydration (shell prefetch), so only show the
+  // "running on another task" note after mount to keep server and client markup identical.
+  const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
+  const elsewhere = hydrated && running.data && running.data.taskId !== task.id ? running.data : null;
   const elsewhereTask = useTimerTask(elsewhere);
   const now = useNow(Boolean(mine));
   const elapsedMs = mine ? now - new Date(mine.startedAt).getTime() : 0;
@@ -392,18 +397,22 @@ export function TimeSection() {
           <Timer aria-hidden className="mr-1 inline size-3.5 align-[-2px]" />
           Your timer is running on{' '}
           {elsewhereTask ? (
-            <button
-              type="button"
-              onClick={() => openTask(elsewhereTask.key)}
+            // A link, not a button: buttons are atomic inline blocks and break the sentence apart.
+            <a
+              href={`?task=${encodeURIComponent(elsewhereTask.key)}`}
+              onClick={(event) => {
+                event.preventDefault();
+                openTask(elsewhereTask.key);
+              }}
               className="font-medium text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-focus"
               data-testid="task-timer-elsewhere"
             >
               {elsewhereTask.key} {elsewhereTask.title}
-            </button>
+            </a>
           ) : (
             'another task'
           )}
-          . Starting here will stop and save it.
+          . Starting here stops and saves it.
         </p>
       ) : null}
       {entries.isLoading ? (

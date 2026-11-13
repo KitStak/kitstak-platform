@@ -112,9 +112,9 @@ export function trustedOrigins(): string[] {
       throw new Error(`TRUSTED_ORIGINS contains an invalid URL: ${origin}`);
     }
   }
-  // Local development: teammates run extra dev servers on 3400-3420 (NEXT_DIST_DIR=.next-<name>).
+  // Local development: teammates run extra dev servers on 3400-3440 (NEXT_DIST_DIR=.next/<name>).
   if (current.NODE_ENV !== 'production') {
-    for (let port = 3400; port <= 3420; port += 1) {
+    for (let port = 3400; port <= 3440; port += 1) {
       origins.add(`http://localhost:${port}`);
       origins.add(`http://127.0.0.1:${port}`);
     }

@@ -97,7 +97,8 @@ function toDeal(ctx: DomainContext, row: DealRow, linkedIds: ReadonlySet<string>
   const amount = row.amount !== null && row.amount !== '' ? Number(row.amount) : null;
   return {
     id: row.id,
-    name: row.name,
+    // CRM names can carry long dashes ("Acme \u2014 Plan"); KitStak copy uses a middle dot.
+    name: row.name.replace(/\s*[\u2014\u2013]\s*/g, ' · '),
     stage: label?.name || null,
     stageColor: label?.color ?? null,
     outcome: outcomeOf(row.stage_id, label?.name ?? null, label?.isDone === true),
@@ -146,7 +147,7 @@ async function crmPart(
         sql`select id, board_id, name from crm.items where org_id = ${ctx.orgId} and id = ${accountId}::uuid and deleted_at is null`,
       );
       const row = acc.rows[0];
-      if (row) account = { id: row.id, name: row.name, url: crmItemUrl(ctx.orgSlug, row.board_id, row.id) };
+      if (row) account = { id: row.id, name: row.name.replace(/\s*[\u2014\u2013]\s*/g, ' · '), url: crmItemUrl(ctx.orgSlug, row.board_id, row.id) };
       others = (
         await db.execute<DealRow>(sql`${DEAL_SELECT}
           where i.org_id = ${ctx.orgId} and b.kind::text = 'deals' and i.deleted_at is null and i.archived_at is null

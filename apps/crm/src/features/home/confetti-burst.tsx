@@ -43,7 +43,8 @@ export function ConfettiBurst({ pieceCount = 26 }: { readonly pieceCount?: numbe
   // Pieces are generated client-side after mount so SSR markup stays deterministic.
   const [pieces, setPieces] = useState<readonly ConfettiPiece[]>([]);
   useEffect(() => {
-    setPieces(makePieces(pieceCount));
+    const frame = requestAnimationFrame(() => setPieces(makePieces(pieceCount)));
+    return () => cancelAnimationFrame(frame);
   }, [pieceCount]);
   return (
     <span

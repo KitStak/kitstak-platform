@@ -237,6 +237,9 @@ export async function sweepAutomations(ctx: DomainContext, options: { readonly f
   lastSweep.set(ctx.orgId, now);
   if (lastSweep.size > 5000) lastSweep.clear();
   try {
+    // Cross-app recipes (CRM deal won, WMS receipt discrepancy, count variance): own throttle, never throws.
+    const { runRecordTriggers } = await import('@/server/integrations/record-triggers');
+    await runRecordTriggers(ctx, options);
     const rules = await scheduledRules(ctx.orgId);
     if (rules.length === 0) return 0;
     const runCtx = sweepContext(ctx);

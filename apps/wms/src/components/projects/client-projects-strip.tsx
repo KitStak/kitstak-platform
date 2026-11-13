@@ -40,6 +40,8 @@ export function ClientProjectsStrip({ clientId }: { readonly clientId: string })
   const live = data.projects.filter((project) => !project.archived && project.status !== 'completed');
   if (live.length === 0) return null;
   const risky = live.filter((project) => project.health !== 'on_track').length;
+  // Open work across this client's live projects (not only tasks linked to the client itself).
+  const openTasks = live.reduce((sum, project) => sum + Math.max(0, project.progress.total - project.progress.done), 0) || data.openTasks;
   const shown = live.slice(0, 3);
   return (
     <section
@@ -60,7 +62,7 @@ export function ClientProjectsStrip({ clientId }: { readonly clientId: string })
         {risky > 0 ? `${risky} at risk or off track` : live.length === 1 ? 'On track' : 'All on track'}
       </span>
       <span className="text-sm text-secondary">
-        {data.openTasks} open {data.openTasks === 1 ? 'task' : 'tasks'}
+        {openTasks} open {openTasks === 1 ? 'task' : 'tasks'}
       </span>
       <ul className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
         {shown.map((project) => (

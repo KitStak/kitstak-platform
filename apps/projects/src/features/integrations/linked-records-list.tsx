@@ -16,6 +16,7 @@ import type { IntegrationLinkDTO } from '@/lib/types';
 import { refreshLinksAction, removeLinkAction } from '@/server/actions/links';
 import { LinkRecordDialog, type LinkOwner } from './link-record-dialog';
 import { RecordChip, RecordStatus, SiblingAppMark } from './record-chip';
+import { RecordHoverCard } from './record-hover-card';
 import { targetApp } from './status-tone';
 
 const STALE_MS = 2 * 60_000;
@@ -165,14 +166,16 @@ export function LinkedRecordsList({
               </span>
               <span className="flex min-w-0 flex-1 flex-col">
                 {link.url ? (
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="truncate text-sm font-medium text-fg hover:underline"
-                  >
-                    {link.title ?? INTEGRATION_TARGET_LABELS[link.targetType]}
-                  </a>
+                  <RecordHoverCard type={link.targetType} id={link.targetId}>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate text-sm font-medium text-fg hover:underline"
+                    >
+                      {link.title ?? INTEGRATION_TARGET_LABELS[link.targetType]}
+                    </a>
+                  </RecordHoverCard>
                 ) : (
                   <span className="truncate text-sm font-medium text-fg">
                     {link.title ?? INTEGRATION_TARGET_LABELS[link.targetType]}

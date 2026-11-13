@@ -12,3 +12,4 @@ export * from './planning';
 export * from './studio';
 export * from './integrations';
 export * from './cycles';
+export * from './record-triggers';

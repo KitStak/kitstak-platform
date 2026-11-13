@@ -213,8 +213,10 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
   const lastRefresh = useRef(0);
   const { steps, summary } = state;
 
+  // Read the saved preference after mount (localStorage is client only) so SSR markup matches.
   useEffect(() => {
-    setCollapsed(readCollapsed());
+    const frame = requestAnimationFrame(() => setCollapsed(readCollapsed()));
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   // Steps completed in CRM/WMS check themselves off when the user tabs back.

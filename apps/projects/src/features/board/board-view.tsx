@@ -33,7 +33,7 @@ import { useProjectTasks } from '@/lib/hooks/use-data';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { qk } from '@/lib/query-keys';
 import { NO_GROUP, sortTasks } from '@/lib/task-filters';
-import type { TaskSummary } from '@/lib/types';
+import type { IntegrationLinkDTO, TaskSummary } from '@/lib/types';
 import { updateStatusAction } from '@/server/actions/structure';
 import { useCurrentProject } from '@/features/projects/project-context';
 import { useShellStore } from '@/features/shell/store';
@@ -47,6 +47,7 @@ import { useViewState } from '@/features/views/use-view-state';
 import { ViewToolbar } from '@/features/views/view-toolbar';
 import { GROUP_LABELS, ORDER_FIELDS, ORDER_LABELS, orderFieldOf, orderRules, SWIMLANES, type OrderField, type Swimlane } from '@/features/views/view-state';
 import { ViewCursor } from '@/features/task/view-cursor';
+import { LinkFilterBar, hasLinkLane, linkLaneKeys, useLinkFilter, useLinkLaneMeta } from '@/features/integrations/link-lanes';
 import { BoardCard, BoardCardOverlay } from './board-card';
 import { BoardComposer } from './board-composer';
 import { BoardCell, COLLAPSED_WIDTH, COLUMN_WIDTH, CollapsedColumn, ColumnHeader } from './board-column';
@@ -68,8 +69,11 @@ function containerOf(map: ContainerMap, id: string): string | undefined {
   return undefined;
 }
 
-function laneKeysOf(task: TaskSummary, lane: Swimlane): string[] {
+function laneKeysOf(task: TaskSummary, lane: Swimlane, linksByTask: ReadonlyMap<string, readonly IntegrationLinkDTO[]>): string[] {
   switch (lane) {
+    case 'crm':
+    case 'wms':
+      return linkLaneKeys(task, lane, linksByTask);
     case 'assignee':
       return [task.assigneeId ?? NO_GROUP];
     case 'priority':
@@ -151,7 +155,10 @@ export function BoardView() {
   const order = orderFieldOf(view.settings.sort);
   const manual = order === 'position';
   const lane = view.settings.swimlane;
-  const laneMeta = useGroupMeta(lane === 'none' ? 'none' : lane, all);
+  const fieldLaneMeta = useGroupMeta(lane === 'none' || lane === 'crm' || lane === 'wms' ? 'none' : lane, all);
+  const linkLaneMeta = useLinkLaneMeta(lane, linksByTask);
+  const linkFilter = useLinkFilter(linksByTask);
+  const laneMeta = linkLaneMeta ?? fieldLaneMeta;
   const storedCollapsed = useStoredSet(`ks.projects.board.collapsed.${project.id}`);
   const expandedColumns = useStoredSet(`ks.projects.board.expanded.${project.id}`);
   const boardPrefs = useStoredSet(`ks.projects.board.prefs.${project.id}`);
@@ -166,33 +173,34 @@ export function BoardView() {
 
   const visible = useMemo(() => {
     let shown = view.visible(all);
+    if (linkFilter.key) shown = shown.filter((task) => linkFilter.matches(task));
     if (recentDoneOnly) {
       // "Done in the last 14 days": older finished work leaves the board but stays in List and Table.
       const cutoff = addDaysIso(todayIso(), -RECENT_DONE_DAYS);
       shown = shown.filter((task) => !(task.statusCategory === 'done' || task.statusCategory === 'cancelled') || !task.completedAt || task.completedAt.slice(0, 10) >= cutoff);
     }
     return sortTasks(shown, manual ? [{ field: 'position', dir: 'asc' }] : orderRules(order));
-  }, [all, manual, order, recentDoneOnly, view]);
+  }, [all, linkFilter, manual, order, recentDoneOnly, view]);
   const taskById = useMemo(() => new Map(all.map((task) => [task.id, task])), [all]);
 
   const lanes = useMemo<string[]>(() => {
     if (lane === 'none') return ['all'];
     const present = new Set<string>();
-    for (const task of visible) for (const key of laneKeysOf(task, lane)) present.add(key);
+    for (const task of visible) for (const key of laneKeysOf(task, lane, linksByTask)) present.add(key);
     const keys = laneMeta.order.filter((key) => present.has(key));
     return keys.length ? keys : [];
-  }, [lane, laneMeta.order, visible]);
+  }, [lane, laneMeta.order, linksByTask, visible]);
 
   const baseIds = useMemo<ContainerMap>(() => {
     const map: ContainerMap = new Map();
     for (const laneKey of lanes) for (const status of statuses) map.set(cellId(laneKey, status.id), []);
     for (const task of visible) {
-      for (const laneKey of laneKeysOf(task, lane)) {
+      for (const laneKey of laneKeysOf(task, lane, linksByTask)) {
         map.get(cellId(laneKey, task.statusId))?.push(cardId(laneKey, task.id));
       }
     }
     return map;
-  }, [lane, lanes, statuses, visible]);
+  }, [lane, lanes, linksByTask, statuses, visible]);
   const shownIds = live ?? baseIds;
 
   const columnCounts = useMemo(() => {
@@ -415,7 +423,10 @@ export function BoardView() {
     />
   );
 
-  const laneOptions = SWIMLANES.map((value) => ({ value, label: value === 'none' ? 'No swimlanes' : GROUP_LABELS[value] ?? value }));
+  const laneOptions = SWIMLANES.filter((value) => (value === 'crm' || value === 'wms' ? value === lane || hasLinkLane(value, linksByTask) : true)).map((value) => ({
+    value,
+    label: value === 'none' ? 'No swimlanes' : GROUP_LABELS[value] ?? value,
+  }));
   const controls = ({ iconOnly }: { iconOnly: boolean }) => (
     <DisplayMenu
       iconOnly={iconOnly}
@@ -482,6 +493,7 @@ export function BoardView() {
     <div className="flex h-full min-h-[420px] flex-col" data-testid="board-view">
       {toolbar}
       {banner}
+      <LinkFilterBar filter={linkFilter} shown={visible.length} />
       <ViewCursor rootRef={boardRef} mode="board" tasks={all} ops={ops} canEdit={canEdit} onOpen={openCard} />
       <span role="status" aria-live="polite" className="sr-only">
         {liveMessage}
@@ -554,6 +566,16 @@ export function BoardView() {
                               <span className="truncate">{lane === 'priority' ? PRIORITY_LABELS[laneKey as keyof typeof PRIORITY_LABELS] ?? info.title : info.title}</span>
                               <span className="font-normal text-fg-muted tabular-nums">{laneCount}</span>
                             </button>
+                            {(lane === 'crm' || lane === 'wms') && laneKey !== NO_GROUP ? (
+                              <button
+                                type="button"
+                                onClick={() => linkFilter.set(lane, linkFilter.key === laneKey.toLowerCase() ? null : laneKey)}
+                                className="h-7 rounded-md px-2 text-xs font-medium text-fg-link hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus"
+                                data-testid="lane-only"
+                              >
+                                {linkFilter.key === laneKey.toLowerCase() ? 'Show all' : 'Show only this'}
+                              </button>
+                            ) : null}
                           </div>
                           {closed ? null : (
                             <div className="flex gap-3 px-4 sm:px-6">

@@ -46,6 +46,8 @@ export const qk = {
   integrationStatus: () => ['integrations', 'status'] as const,
   integrationSearch: (type: string, q: string) => ['integrations', 'search', type, q] as const,
   links: (type: string, id: string) => ['links', type, id] as const,
+  /** Live detail of one linked CRM/WMS record (chip hover cards). */
+  recordDetail: (type: string, id: string) => ['integrations', 'record', type, id] as const,
   /** Portfolio team: status update history (under the project prefix), goal check-ins, reports. */
   projectUpdates: (key: string) => ['project', key, 'updates'] as const,
   goalCheckIns: (goalId: string) => ['goals', 'check-ins', goalId] as const,

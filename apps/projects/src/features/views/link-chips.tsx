@@ -9,6 +9,8 @@ import { Tooltip, cn } from '@/components/ui';
 import { INTEGRATION_TARGET_LABELS, type IntegrationTargetType } from '@/lib/constants';
 import { useProjectTaskLinks } from '@/lib/hooks/use-data';
 import type { IntegrationLinkDTO } from '@/lib/types';
+import { RecordHoverCard } from '@/features/integrations/record-hover-card';
+import { statusTone, type StatusTone } from '@/features/integrations/status-tone';
 
 const CRM_TYPES: ReadonlySet<IntegrationTargetType> = new Set(['crm_item', 'crm_account', 'core_customer']);
 
@@ -66,12 +68,28 @@ export function linkRef(title: string): string {
  */
 export type LinkChipVariant = 'full' | 'ref' | 'pill' | 'compact';
 
+/** Live status colour by meaning (shipped/won green, short/on hold amber, cancelled/lost red). */
+const STATUS_DOT: Readonly<Record<StatusTone, string>> = {
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-danger',
+  progress: 'bg-[var(--label-blue)]',
+  neutral: 'bg-fg-muted',
+};
+const STATUS_TEXT: Readonly<Record<StatusTone, string>> = {
+  success: 'text-success-text',
+  warning: 'text-warning-text',
+  danger: 'text-danger-text',
+  progress: 'text-fg-secondary',
+  neutral: 'text-fg-muted',
+};
+
 export function LinkChip({ link, compact = false, variant }: { readonly link: IntegrationLinkDTO; readonly compact?: boolean; readonly variant?: LinkChipVariant }) {
   const mode: LinkChipVariant = variant ?? (compact ? 'compact' : 'full');
   const crm = isCrmLink(link.targetType);
   const kind = INTEGRATION_TARGET_LABELS[link.targetType];
   const title = cleanTitle(link.title ?? kind);
-  const tooltip = `${kind}: ${title}${link.status ? ` · ${link.status}` : ''}${link.url ? ' (opens in a new tab)' : ''}`;
+  const tone = statusTone(link.status);
   const className = cn(
     'inline-flex h-5 max-w-full min-w-0 shrink items-center gap-1 rounded-full border px-1.5 text-2xs font-medium',
     crm ? 'border-[color-mix(in_srgb,var(--label-blue)_35%,transparent)] bg-[color-mix(in_srgb,var(--label-blue)_10%,transparent)] text-fg' : 'border-[color-mix(in_srgb,var(--label-teal)_40%,transparent)] bg-[color-mix(in_srgb,var(--label-teal)_10%,transparent)] text-fg',
@@ -81,12 +99,18 @@ export function LinkChip({ link, compact = false, variant }: { readonly link: In
       <span className={cn('inline-flex shrink-0', crm ? 'text-[var(--label-blue)]' : 'text-[var(--label-teal)]')}>{crm ? <CrmGlyph /> : <WmsGlyph />}</span>
       {mode === 'full' ? <span className="truncate">{title}</span> : null}
       {mode === 'ref' ? <span className="truncate font-mono">{linkRef(title)}</span> : null}
-      {link.status && (mode === 'full' || mode === 'ref') ? <span className="min-w-0 truncate text-fg-muted">· {link.status}</span> : null}
-      {link.status && mode === 'pill' ? <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', crm ? 'bg-[var(--label-blue)]' : 'bg-[var(--label-teal)]')} /> : null}
+      {link.status && (mode === 'full' || mode === 'ref') ? (
+        <span className={cn('inline-flex min-w-0 items-center gap-1 truncate', STATUS_TEXT[tone])}>
+          <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', STATUS_DOT[tone])} />
+          {link.status}
+        </span>
+      ) : null}
+      {link.status && mode === 'pill' ? <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', STATUS_DOT[tone])} /> : null}
+      <span className="sr-only">{`${kind}: ${title}${link.status ? `, ${link.status}` : ''}`}</span>
     </>
   );
   return (
-    <Tooltip content={tooltip} side="top">
+    <RecordHoverCard type={link.targetType} id={link.targetId}>
       {link.url ? (
         <a
           href={link.url}
@@ -104,7 +128,7 @@ export function LinkChip({ link, compact = false, variant }: { readonly link: In
           {body}
         </span>
       )}
-    </Tooltip>
+    </RecordHoverCard>
   );
 }
 
