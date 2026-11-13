@@ -705,7 +705,7 @@ export function LocationDetailPage({ id }: { readonly id: string }) {
             { key: 'wh', label: 'Warehouse' },
             { key: 'area', label: 'Area' },
           ],
-          rows: [{ code: d.code, wh: d.warehouseCode, area: d.areaType ?? '—' }],
+          rows: [{ code: d.code, wh: d.warehouseCode, area: d.areaType ?? 'None' }],
         }}
         onConfirm={async () => {
           const r = await deleteAction.run<BulkResponse>('/api/locations/bulk-delete', 'POST', { ids: [id] });

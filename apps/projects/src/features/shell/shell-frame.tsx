@@ -2,7 +2,7 @@ import 'server-only';
 import { AppShell } from '@/features/shell';
 import { listProjects, listSpaces, toDomainContext, unreadCount } from '@/server/domain';
 import { orgHasProjectsModule, orgModuleFlags } from '@/server/entitlements';
-import { appUrls } from '@/server/env';
+import { appUrls, env } from '@/server/env';
 import { integrationAvailability } from '@/server/integrations';
 import type { ProjectsContext } from '@/server/session';
 
@@ -22,6 +22,8 @@ export async function loadShell(context: ProjectsContext) {
     appUrls: urls,
     modules: { ...modules, projects: entitled },
     integrations,
+    // WMS tables are single-tenant: only the platform org can use WMS (CONTRACTS section 7).
+    notInPlan: context.org.slug === env.WMS_PLATFORM_ORG_SLUG ? [] : (['wms'] as const),
   };
   if (!entitled) return { ctx, entitled, urls, shellContext, projects: [], spaces: [], unread: 0 };
   const [projects, spaces, unread] = await Promise.all([listProjects(ctx), listSpaces(ctx), unreadCount(ctx)]);

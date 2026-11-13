@@ -511,6 +511,7 @@ export function BoardView() {
         {liveMessage}
       </span>
       <DndContext
+        id={`board-${project.id}`}
         sensors={sensors}
         collisionDetection={collision}
         onDragStart={onDragStart}

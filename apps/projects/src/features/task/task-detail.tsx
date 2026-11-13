@@ -217,7 +217,7 @@ function Breadcrumb() {
               <button
                 type="button"
                 onClick={() => openTask(task.parent!.key)}
-                className="truncate rounded-sm px-1 py-0.5 font-mono text-xs hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
+                className="truncate rounded-sm px-1 py-0.5 font-key text-xs hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
                 title={task.parent.title}
               >
                 {task.parent.key}
@@ -229,7 +229,7 @@ function Breadcrumb() {
           <ChevronRight className="size-3.5" />
         </li>
         <li className="shrink-0">
-          <span aria-current="page" className="px-1 font-mono text-xs font-medium text-fg">
+          <span aria-current="page" className="px-1 font-key text-xs font-medium text-fg">
             {task.key}
           </span>
         </li>

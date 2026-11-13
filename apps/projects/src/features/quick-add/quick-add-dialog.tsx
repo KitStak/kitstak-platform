@@ -27,6 +27,7 @@ import {
   Textarea,
   UserPicker,
   cn,
+  taskToastId,
   toast,
   useModKey,
 } from '@/components/ui';
@@ -138,6 +139,7 @@ function QuickAddForm() {
     editable.find((p) => p.id === readLastProject()) ??
     editable[0] ??
     null;
+  const canCreateLabels = selectedProject?.role === 'owner' || selectedProject?.role === 'editor';
   const detail = useProject(selectedProject?.key ?? '', { enabled: Boolean(selectedProject) });
   const statuses = useMemo(() => detail.data?.statuses ?? [], [detail.data?.statuses]);
   const projectLabels = useMemo(() => detail.data?.labels ?? [], [detail.data?.labels]);
@@ -153,8 +155,13 @@ function QuickAddForm() {
         meId: user.id,
         ignore,
         createLabels,
+        // Like Linear: a #name you typed is a label. New ones are created on save (chip "name (new)");
+        // the chip's × keeps it as text. Closing the suggestion list (Esc) never drops it.
+        createUnknownLabels: canCreateLabels,
+        // An @name that matched nobody leaves the title too; its red chip says the task is unassigned.
+        stripUnknownPeople: true,
       }),
-    [title, today, people.data, editable, projectLabels, user.id, ignore, createLabels],
+    [title, today, people.data, editable, projectLabels, user.id, ignore, createLabels, canCreateLabels],
   );
 
   // What will be saved: words in the text win over the pickers.
@@ -266,6 +273,7 @@ function QuickAddForm() {
     toast.success(
       `Added ${created.key}`,
       missed && !assigneeId ? `${created.title}. ${missed.display}, so it is unassigned.` : created.title,
+      { id: taskToastId(created.key) },
     );
     if (openAfter) {
       close();
@@ -288,7 +296,6 @@ function QuickAddForm() {
     () => projectLabels.map((label) => ({ value: label.id, label: label.name, icon: <LabelDot color={label.color} /> })),
     [projectLabels],
   );
-  const canCreateLabels = selectedProject?.role === 'owner' || selectedProject?.role === 'editor';
   const confirmLabel = (name: string) => {
     setCreateLabels((list) => (list.some((entry) => entry.toLowerCase() === name.toLowerCase()) ? list : [...list, name]));
     titleRef.current?.focus();

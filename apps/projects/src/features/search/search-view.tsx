@@ -546,7 +546,7 @@ function ProjectResult({ project, q }: { readonly project: ProjectSummary; reado
             <Highlight text={project.name} query={q} className="truncate text-sm font-medium text-fg" />
             <span className="shrink-0 text-xs text-fg-muted">{project.key}</span>
           </span>
-          <ProgressBar value={project.progress.percent} size="sm" label={`${project.name} progress`} className="max-w-56" />
+          <ProgressBar value={project.progress.percent} size="sm" tone={project.health === 'off_track' ? 'danger' : project.health === 'at_risk' ? 'warning' : 'success'} label={`${project.name} progress`} className="max-w-56" />
         </span>
         <Badge tone={HEALTH_TONE[project.health]} size="sm" className="hidden sm:inline-flex">
           {PROJECT_HEALTH_LABELS[project.health]}

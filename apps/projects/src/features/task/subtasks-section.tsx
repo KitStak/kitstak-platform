@@ -122,7 +122,7 @@ function SubtaskRow({
       >
         {child.title}
       </button>
-      <span className="hidden shrink-0 font-mono text-2xs text-fg-muted @min-[520px]:inline">
+      <span className="hidden shrink-0 font-key text-2xs text-fg-muted @min-[520px]:inline">
         {child.key}
       </span>
       <DuePicker

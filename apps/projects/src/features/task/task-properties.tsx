@@ -121,7 +121,7 @@ function EstimateEditor() {
       }}
     >
       <PopoverTrigger asChild disabled={!canEdit}>
-        <button type="button" className={PROPERTY_TRIGGER} disabled={!canEdit}>
+        <button type="button" className={PROPERTY_TRIGGER} disabled={!canEdit} data-task-estimate-trigger="">
           {parts.length ? (
             <span className="truncate tabular-nums">{parts.join(' · ')}</span>
           ) : (

@@ -201,12 +201,17 @@ export function DescriptionEditor() {
         >
           <Toolbar editor={editor} mod={mod} />
           <EditorContent editor={editor} />
-          {editor ? null : (
+          {editor ? null : task.description ? (
+            // Until the editor mounts, show the saved text at the same size so nothing jumps.
             <div
               aria-hidden
-              className="ks-skeleton m-2.5 h-4 w-1/2 rounded-full"
-              style={{ marginBottom: 72 }}
+              className="ks-rich px-2.5 py-2 [&_input]:pointer-events-none"
+              dangerouslySetInnerHTML={{ __html: task.description }}
             />
+          ) : (
+            <div aria-hidden className="px-2.5 py-2 text-sm leading-6 text-fg-placeholder">
+              Add details: what needs to happen, links, a checklist…
+            </div>
           )}
         </div>
       </div>

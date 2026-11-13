@@ -35,7 +35,7 @@ describe('calendar dates never shift a day', () => {
     expect(parseCalendarDate('2026-02-31')).toBeNull();
     expect(parseCalendarDate('2026-13-45')).toBeNull();
     expect(formatCalendarDate('2026-02-31', prefs)).toBe('2026-02-31');
-    expect(formatCalendarDate(null, prefs)).toBe('—');
+    expect(formatCalendarDate(null, prefs)).toBe('None');
   });
   it("shows an instant's local calendar day (same as the date-time column)", () => {
     const local = new Date(2026, 10, 9, 22, 46);

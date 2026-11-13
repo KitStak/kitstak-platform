@@ -170,7 +170,7 @@ function ChannelAllocations() {
   const err = errors.channelAllocations as { message?: string; root?: { message?: string } } | undefined;
   const store = (id: string) => options.channels.find((c) => c.value === id)?.label ?? 'Unknown channel';
   const wh = (id: string | null) =>
-    id ? (options.warehouses.find((w) => w.value === id)?.label ?? '—') : 'All warehouses';
+    id ? (options.warehouses.find((w) => w.value === id)?.label ?? 'None') : 'All warehouses';
   const commit = (next: ChannelAllocationFormValue[]) =>
     form.setValue('channelAllocations', next, { shouldDirty: true });
   const fresh = (): ChannelAllocationFormValue => ({
@@ -220,10 +220,10 @@ function ChannelAllocations() {
                 <tr key={r.key}>
                   <td className="px-3 py-2 font-medium text-foreground">{store(r.channelConnectionId)}</td>
                   <td className="px-3 py-2">{wh(r.warehouseId)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{r.staticQty ?? '—'}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{r.reserveQty ?? '—'}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.staticQty ?? 'None'}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.reserveQty ?? 'None'}</td>
                   <td className="px-3 py-2 text-right tabular-nums">
-                    {r.allocationPct === null ? '—' : `${r.allocationPct}%`}
+                    {r.allocationPct === null ? 'None' : `${r.allocationPct}%`}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-faint">Next sync</td>
                   <td className="px-2 py-1">

@@ -17,7 +17,7 @@ import { useProjects, useReport, useSpaces } from '@/lib/hooks/use-data';
 import { routes } from '@/lib/routes';
 import type { ProjectSummary, ReportDTO, SpaceDTO } from '@/lib/types';
 import { useShell } from '@/features/shell/shell-context';
-import { HealthBadge } from '@/features/projects/health';
+import { ProjectHealthBadge, healthMismatch } from '@/features/projects/health';
 import { ProgressRing } from './charts';
 import { BurnPanel, CompletedPanel, CycleTimePanel, KpiTiles, OverduePanel, StatusPanel, VelocityPanel, WorkloadPanel } from './report-panels';
 
@@ -48,6 +48,10 @@ function writeUrl(pathname: string, filters: DashboardsFilters, keep: URLSearchP
 function PortfolioProjects({ projects, spaces }: { readonly projects: readonly ProjectSummary[]; readonly spaces: ReadonlyMap<string, SpaceDTO> }) {
   const counts = PROJECT_HEALTHS.map((health) => ({ health, count: projects.filter((p) => p.health === health).length }));
   const total = Math.max(1, projects.length);
+  // Needs attention: off track, or the numbers say worse than the owner's health. Those sort first.
+  const attention = (project: ProjectSummary) => project.health === 'off_track' || healthMismatch(project);
+  const needsAttention = projects.filter(attention).length;
+  const sorted = [...projects].sort((a, b) => Number(attention(b)) - Number(attention(a)));
   return (
     <Panel title="Projects at a glance" bodyClassName="p-0">
       <div className="border-b border-border-subtle px-4 py-3">
@@ -61,22 +65,28 @@ function PortfolioProjects({ projects, spaces }: { readonly projects: readonly P
               {PROJECT_HEALTH_LABELS[c.health]} <strong className="font-semibold text-fg tabular-nums">{c.count}</strong>
             </li>
           ))}
+          {needsAttention ? (
+            <li className="inline-flex items-center gap-1.5 font-medium text-warning-text" data-testid="needs-attention-count">
+              <span aria-hidden className="size-2 rounded-full border border-warning" />
+              Needs attention <strong className="font-semibold tabular-nums">{needsAttention}</strong>
+            </li>
+          ) : null}
         </ul>
       </div>
       {projects.length === 0 ? (
         <p className="px-4 py-8 text-center text-sm text-fg-muted">No active projects in this view.</p>
       ) : (
         <ul className="divide-y divide-border-subtle">
-          {projects.map((project) => (
-            <li key={project.id} className="flex items-center gap-3 px-4 py-2.5">
-              <ProgressRing percent={project.progress.percent} size={36} strokeWidth={3.5} label={`${project.name} progress`} tone={project.health === 'off_track' ? 'danger' : project.health === 'at_risk' ? 'warning' : 'primary'} />
+          {sorted.map((project) => (
+            <li key={project.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5">
+              <ProgressRing percent={project.progress.percent} size={36} strokeWidth={3.5} label={`${project.name} progress`} tone={project.health === 'off_track' ? 'danger' : project.health === 'at_risk' ? 'warning' : 'success'} />
               <div className="min-w-0 flex-1">
                 <Link href={routes.project(project.key)} className="flex min-w-0 items-center gap-2 text-sm font-medium text-fg hover:underline">
                   <EntityIcon icon={project.icon} color={project.color} size={18} />
                   <span className="truncate">{project.name}</span>
                 </Link>
-                <p className="truncate text-xs text-fg-muted">
-                  {project.key}
+                <p className="text-xs text-fg-muted">
+                  <span className="font-key">{project.key}</span>
                   {project.spaceId && spaces.get(project.spaceId) ? ` · ${spaces.get(project.spaceId)?.name}` : ''} · {project.progress.done} of {project.progress.total} done
                   {project.progress.overdue ? <span className="text-danger-text"> · {project.progress.overdue} overdue</span> : null}
                 </p>
@@ -84,7 +94,7 @@ function PortfolioProjects({ projects, spaces }: { readonly projects: readonly P
               <span className="hidden sm:block">
                 <DueDate date={project.dueDate} done={project.status === 'completed'} />
               </span>
-              <HealthBadge health={project.health} />
+              <ProjectHealthBadge project={project} canEdit={false} />
               <Link
                 href={`${routes.dashboards()}?project=${project.key}`}
                 className="hidden rounded-md px-2 py-1 text-xs font-medium text-fg-link outline-none hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus md:inline-flex"
@@ -124,6 +134,14 @@ export function DashboardsView({ initialReport, initialProjects, initialFilters 
   const projects = useProjects({}, { initialData: initialProjects });
   const spaces = useSpaces();
   const people = usePeopleMap();
+  // Same words as /projects: "7 active projects" (completed ones are counted apart, not hidden in the total).
+  const scopeLabel = (total: number) => {
+    const scoped = (projects.data ?? []).filter((p) => p.status !== 'archived' && (!filters.space || p.spaceId === filters.space));
+    if (scoped.length !== total) return `${total} ${total === 1 ? 'project' : 'projects'}`;
+    const completed = scoped.filter((p) => p.status === 'completed').length;
+    const active = total - completed;
+    return `${active} active ${active === 1 ? 'project' : 'projects'}${completed ? ` and ${completed} completed` : ''}`;
+  };
   const isInitial = filters.project === initialFilters.project && filters.space === initialFilters.space && filters.weeks === initialFilters.weeks;
   const report = useReport(
     { project: filters.project, space: filters.project ? null : (filters.space ?? null), weeks: filters.weeks },
@@ -215,7 +233,7 @@ export function DashboardsView({ initialReport, initialProjects, initialFilters 
           onValueChange={(value) => setFilters({ weeks: Number(value) })}
           options={WEEK_OPTIONS}
         />
-        {data?.scope.kind === 'portfolio' ? <Badge tone="neutral">{data.scope.projectCount} {data.scope.projectCount === 1 ? 'project' : 'projects'}</Badge> : null}
+        {data?.scope.kind === 'portfolio' ? <Badge tone="neutral">{scopeLabel(data.scope.projectCount)}</Badge> : null}
       </div>
 
       {report.isError && !data ? (

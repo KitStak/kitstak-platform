@@ -162,7 +162,7 @@ export function YesNo({ value }: { readonly value: boolean | null | undefined })
 }
 
 export function Muted({ children }: { readonly children?: React.ReactNode }) {
-  return <span className="text-faint">{children ?? '—'}</span>;
+  return <span className="text-faint">{children ?? 'None'}</span>;
 }
 
 export function Num({
@@ -240,7 +240,7 @@ export function useModuleDates(): ModuleDates {
 /** A date-time cell: compact text, full timestamp on hover, never truncated. */
 export function DateTimeText({
   value,
-  empty = '—',
+  empty = 'None',
 }: {
   readonly value: string | null | undefined;
   readonly empty?: string;
@@ -410,10 +410,10 @@ export function EntityChangeLogDrawer({
                       <p className="text-sm text-body">
                         <span className="font-medium">{r.fieldLabel}</span>{' '}
                         <span className="text-faint line-through decoration-faint/60">
-                          {r.fromValue || '—'}
+                          {r.fromValue || 'None'}
                         </span>
                         <span className="mx-1 text-faint">→</span>
-                        <span className="font-medium text-foreground">{r.toValue || '—'}</span>
+                        <span className="font-medium text-foreground">{r.toValue || 'None'}</span>
                       </p>
                     ) : (
                       <p className="text-sm text-body">{r.message}</p>

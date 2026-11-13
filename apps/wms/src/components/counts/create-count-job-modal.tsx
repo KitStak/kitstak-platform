@@ -307,7 +307,7 @@ function Body({ plans, onOpenChange, onDone }: Omit<CreateCountJobModalProps, 'o
                     <span className="flex shrink-0 flex-col items-end leading-tight">
                       {batchProblem ? (
                         <span className="font-semibold text-faint" title="Fix the batch size to see the jobs">
-                          —
+                          None
                         </span>
                       ) : jobsFor(p) === null ? (
                         <Spinner className="h-3 w-3" label="Calculating" />
@@ -356,7 +356,7 @@ function Body({ plans, onOpenChange, onDone }: Omit<CreateCountJobModalProps, 'o
         <span className="mr-auto text-xs text-secondary">
           <strong className="text-foreground">{assignee ? 1 : 0}</strong> Person Assigned{' '}
           <span className="mx-1 text-border-strong">|</span>{' '}
-          <strong className="text-foreground">{totalJobs ?? (batchProblem ? '—' : '…')}</strong> Total{' '}
+          <strong className="text-foreground">{totalJobs ?? (batchProblem ? 'None' : '…')}</strong> Total{' '}
           {totalJobs === 1 ? 'Job' : 'Jobs'}
         </span>
         <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={saving}>

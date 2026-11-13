@@ -34,7 +34,7 @@ const LOCAL_TONES: Readonly<Record<string, StatusTone>> = {
   'not picked': TONES.amber,
 };
 
-const Empty = () => <span className="text-faint">—</span>;
+const Empty = () => <span className="text-faint">None</span>;
 
 export function ReportPill({
   status,
@@ -60,7 +60,7 @@ export function ReportPill({
 /** Receiving difference pill (spec 07): negative red, positive green, blank at zero. */
 export function DiffPill({ value }: { readonly value: number | null | undefined }) {
   const fmt = useFormat();
-  if (value === null || value === undefined || value === 0) return <span className="text-faint">—</span>;
+  if (value === null || value === undefined || value === 0) return <span className="text-faint">None</span>;
   const tone = differenceTone(value);
   return (
     <span

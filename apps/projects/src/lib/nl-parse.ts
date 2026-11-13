@@ -70,6 +70,16 @@ export interface QuickAddParseOptions {
   readonly ignore?: ReadonlySet<string> | readonly string[];
   /** New label names the user chose to create ("Create label sales"); other unknown #names stay unresolved. */
   readonly createLabels?: readonly string[];
+  /**
+   * Treat every unknown #name as a new label to create on save (the quick add dialog does this for
+   * people who may create labels; the chip shows "name (new)" and its × keeps the text instead).
+   */
+  readonly createUnknownLabels?: boolean;
+  /**
+   * Take an @name that matched nobody out of the title too (its chip still warns, and its × keeps
+   * the text). Off by default: then it stays in the title as typed.
+   */
+  readonly stripUnknownPeople?: boolean;
 }
 
 export interface QuickAddParse {
@@ -395,7 +405,7 @@ export function parseQuickAdd(input: string, options: QuickAddParseOptions): Qui
       tokens.push(
         resolved
           ? { id: tokenId('label', raw), kind: 'label', start, end, raw, value: resolved.id, display: resolved.name }
-          : confirmed.has(squash(pretty))
+          : options.createUnknownLabels || confirmed.has(squash(pretty))
             ? { id: tokenId('label', raw), kind: 'label', start, end, raw, value: null, display: `${pretty} (new)`, name: pretty }
             : { id: tokenId('label', raw), kind: 'label', start, end, raw, value: null, display: `No label called ${pretty}`, name: pretty, unresolved: true },
       );
@@ -426,8 +436,9 @@ export function parseQuickAdd(input: string, options: QuickAddParseOptions): Qui
   const labelTokens = active.filter((t) => t.kind === 'label');
   const shown = active.filter((t) => t.kind === 'label' || t.unresolved || usedSingles.has(t));
 
-  // 4. Title = input minus the applied tokens. Unresolved ones stay as typed (their chip warns).
-  const removed = shown.filter((t) => !t.unresolved);
+  // 4. Title = input minus the applied tokens. Unresolved ones stay as typed (their chip warns),
+  // except unknown @names when `stripUnknownPeople` is on.
+  const removed = shown.filter((t) => !t.unresolved || (options.stripUnknownPeople && t.kind === 'assignee'));
   let title = '';
   let cursor = 0;
   for (const token of removed) {

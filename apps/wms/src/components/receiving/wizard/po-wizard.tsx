@@ -374,9 +374,9 @@ function EditablePoWizard({
       {/* Detail: PO number / client / vendor live in the Summary card below (no duplicates). */}
       {editing ? null : (
         <>
-          <RailRow label="PO number">{v.code || '—'}</RailRow>
-          <RailRow label="Client">{v.clientLabel || '—'}</RailRow>
-          <RailRow label="Vendor">{v.vendorLabel || '—'}</RailRow>
+          <RailRow label="PO number">{v.code || 'None'}</RailRow>
+          <RailRow label="Client">{v.clientLabel || 'None'}</RailRow>
+          <RailRow label="Vendor">{v.vendorLabel || 'None'}</RailRow>
         </>
       )}
       <RailRow label="Number of SKU">{skuCount(v.lines ?? [])}</RailRow>

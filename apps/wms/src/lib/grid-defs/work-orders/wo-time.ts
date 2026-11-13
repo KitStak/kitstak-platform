@@ -10,7 +10,7 @@ export function formatInZone(
   value: string | Date | null | undefined,
   timeZone: string | null | undefined,
 ): string {
-  if (value === null || value === undefined || value === '') return '–';
+  if (value === null || value === undefined || value === '') return 'None';
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
   try {

@@ -5,6 +5,7 @@
 export const qk = {
   me: () => ['me'] as const,
   people: () => ['people'] as const,
+  customerPulse: () => ['integrations', 'customer-pulse'] as const,
   spaces: () => ['spaces'] as const,
   projects: (params?: Record<string, unknown>) => (params ? (['projects', params] as const) : (['projects'] as const)),
   project: (key: string) => ['project', key] as const,

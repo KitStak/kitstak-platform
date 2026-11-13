@@ -220,7 +220,7 @@ function PipelineBody({
         <MetricTile label="Win rate" value={formatPercent(summary.winRate)} hint={`${summary.wonCount} won · ${summary.lostCount} lost`} />
         <MetricTile
           label="Avg won deal"
-          value={summary.avgDealSize !== null ? formatMoney(summary.avgDealSize, currency) : '—'}
+          value={summary.avgDealSize !== null ? formatMoney(summary.avgDealSize, currency) : 'None'}
           exact={summary.avgDealSize !== null ? formatExactMoney(summary.avgDealSize, currency) : undefined}
           hint="Closed won in period"
         />

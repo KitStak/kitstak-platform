@@ -301,7 +301,7 @@ function SettingsStep({
             ].map(([label, code]) => (
               <div key={label} className="rounded-md border border-border bg-surface px-3 py-2">
                 <dt className="text-faint">{label}</dt>
-                <dd className="mt-0.5 font-mono text-foreground">{code ?? '—'}</dd>
+                <dd className="mt-0.5 font-mono text-foreground">{code ?? 'None'}</dd>
               </div>
             ))}
           </dl>

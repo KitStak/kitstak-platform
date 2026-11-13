@@ -1,4 +1,5 @@
 'use client';
+import { useEffect, useState } from 'react';
 import { Toaster as SonnerToaster, toast as sonnerToast } from 'sonner';
 import { CircleAlert, CircleCheck, Info, TriangleAlert } from 'lucide-react';
 import { Spinner } from './spinner';
@@ -7,15 +8,43 @@ export interface ToasterProps {
   readonly theme?: 'light' | 'dark' | 'system';
 }
 
+const EDGE = 20;
+
+/**
+ * Left edge of the page content (`#main-content`), so toasts sit over the content and never over
+ * the sidebar, and stay clear of the task drawer on the right. Follows sidebar collapse and resizes.
+ */
+function useContentLeft(): number {
+  const [left, setLeft] = useState(0);
+  useEffect(() => {
+    const measure = () => {
+      const main = document.getElementById('main-content');
+      setLeft(main ? Math.max(0, Math.round(main.getBoundingClientRect().left)) : 0);
+    };
+    measure();
+    const main = document.getElementById('main-content');
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    if (main && observer) observer.observe(main);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+  return left;
+}
+
 /** App-wide toaster, themed with KitStak tokens. Mount once (in Providers). */
 export function Toaster({ theme = 'system' }: ToasterProps) {
+  const contentLeft = useContentLeft();
   return (
     <SonnerToaster
       theme={theme}
       position="bottom-left"
-      offset={20}
+      offset={{ bottom: EDGE, left: contentLeft + EDGE }}
+      mobileOffset={{ bottom: 12, left: 12, right: 12 }}
       gap={8}
-      visibleToasts={4}
+      visibleToasts={3}
       expand
       closeButton
       duration={6000}
@@ -47,7 +76,18 @@ export function Toaster({ theme = 'system' }: ToasterProps) {
   );
 }
 
-export interface UndoToastOptions {
+export interface ToastOptions {
+  /**
+   * Stable id. A new toast with the same id replaces the one on screen instead of stacking on it,
+   * e.g. `task:OPS-23` so "Added OPS-23" turns into "Marked OPS-23 done · Undo".
+   */
+  readonly id?: string | number;
+}
+
+/** Toast id for messages about one task: later toasts about the same task replace earlier ones. */
+export const taskToastId = (taskKey: string): string => `task:${taskKey}`;
+
+export interface UndoToastOptions extends ToastOptions {
   readonly description?: string;
   /** Invoked when the user clicks Undo. May be async; errors surface as an error toast. */
   readonly onUndo: () => void | Promise<void>;
@@ -73,14 +113,18 @@ function runUndo(onUndo: () => void | Promise<void>): void {
  * after destructive operations.
  */
 export const toast = {
-  success: (message: string, description?: string) => sonnerToast.success(message, { description }),
-  error: (message: string, description?: string) => sonnerToast.error(message, { description }),
-  info: (message: string, description?: string) => sonnerToast.info(message, { description }),
-  warning: (message: string, description?: string) => sonnerToast.warning(message, { description }),
+  success: (message: string, description?: string, options?: ToastOptions) =>
+    sonnerToast.success(message, { description, id: options?.id }),
+  error: (message: string, description?: string, options?: ToastOptions) =>
+    sonnerToast.error(message, { description, id: options?.id }),
+  info: (message: string, description?: string, options?: ToastOptions) =>
+    sonnerToast.info(message, { description, id: options?.id }),
+  warning: (message: string, description?: string, options?: ToastOptions) =>
+    sonnerToast.warning(message, { description, id: options?.id }),
   loading: (message: string) => sonnerToast.loading(message),
   dismiss: (id?: string | number) => sonnerToast.dismiss(id),
   promise: sonnerToast.promise,
-  undo: (message: string, { description, onUndo, undoLabel = 'Undo', duration = 8000 }: UndoToastOptions) => {
+  undo: (message: string, { id: wantedId, description, onUndo, undoLabel = 'Undo', duration = 8000 }: UndoToastOptions) => {
     let done = false;
     const once = () => {
       if (done) return;
@@ -89,8 +133,11 @@ export const toast = {
       runUndo(onUndo);
     };
     const id = sonnerToast(message, {
+      id: wantedId,
       description,
       duration,
+      // Replacing a success toast in place: drop its check icon so the row reads as a fresh message.
+      icon: null,
       action: { label: undoLabel, onClick: once },
     });
     // Ctrl/Cmd+Z stays available for a while after the toast fades, like an editor's undo.

@@ -44,7 +44,12 @@ export interface RenderContext {
   readonly cycleByTask?: ReadonlyMap<string, string>;
   /** The project's own customer link (CRM account or KitStak customer), the fallback for the Customer column. */
   readonly projectCustomer?: IntegrationLinkDTO | null;
+  /** Narrow screens: Assignee shows the avatar only and Priority the icon only (names in tooltips). */
+  readonly compact?: boolean;
 }
+
+/** Widths used for the compact Assignee and Priority columns (when the user has not resized them). */
+export const COMPACT_WIDTHS: Readonly<Record<string, number>> = { assignee: 64, priority: 64, status: 132, dueDate: 112, startDate: 112 };
 
 const CUSTOMER_TYPES = new Set(['core_customer', 'crm_account']);
 
@@ -247,8 +252,15 @@ export function renderCell(def: ColumnDef, task: TaskSummary, ctx: RenderContext
       );
     }
     case 'assignee':
-      return <PersonAvatar userId={task.assigneeId} size="xs" showName />;
+      return <PersonAvatar userId={task.assigneeId} size={ctx.compact ? 'sm' : 'xs'} showName={!ctx.compact} />;
     case 'priority':
+      if (ctx.compact)
+        return (
+          <span className={`inline-flex items-center ${task.priority === 'none' ? 'text-fg-muted' : ''}`} title={PRIORITY_LABELS[task.priority]}>
+            <PriorityIcon priority={task.priority} />
+            <span className="sr-only">{PRIORITY_LABELS[task.priority]}</span>
+          </span>
+        );
       return (
         <span className={`inline-flex min-w-0 items-center gap-1.5 ${task.priority === 'none' ? 'text-fg-muted' : ''}`}>
           <PriorityIcon priority={task.priority} />

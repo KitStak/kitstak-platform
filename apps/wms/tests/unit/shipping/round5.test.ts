@@ -92,7 +92,7 @@ describe('consignee derivation (grid = detail)', () => {
 describe('EOD close date in warehouse time', () => {
   it('prints the zone label like the PDF', () => {
     expect(formatInZone('2026-11-10T09:29:00Z', 'America/New_York')).toBe('11/10/2026 4:29 AM EST');
-    expect(formatInZone(null, 'America/New_York')).toBe('—');
+    expect(formatInZone(null, 'America/New_York')).toBe('None');
     expect(formatInZone('2026-11-10T09:29:00Z', 'Not/AZone')).toMatch(/^11\/10\/2026 /);
   });
 });

@@ -13,7 +13,7 @@ import type { JobsColumnDef } from '@/lib/grid-defs/jobs/columns';
 
 export type CellRenderer<T> = (ctx: CellContext<T, unknown>) => React.ReactNode;
 
-export const Dash = () => <span className="text-faint">—</span>;
+export const Dash = () => <span className="text-faint">None</span>;
 
 /**
  * Critic R4 (dark mode): the shared tones are light tints set inline, so the neutral grey

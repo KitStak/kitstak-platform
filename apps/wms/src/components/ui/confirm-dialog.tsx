@@ -89,7 +89,7 @@ function RecordsTable({ records }: { readonly records: ConfirmRecords }) {
             <tr key={i} className="border-b border-border last:border-b-0">
               {records.columns.map((c) => (
                 <td key={c.key} className="px-2.5 py-1.5 text-body tabular-nums">
-                  {row[c.key] ?? '—'}
+                  {row[c.key] ?? 'None'}
                 </td>
               ))}
             </tr>

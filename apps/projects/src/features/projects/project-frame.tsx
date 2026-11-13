@@ -1,11 +1,12 @@
 'use client';
 /** Project header (icon, name, health, star, members, share) and the view tab strip. */
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, CalendarDays, GanttChart, Inbox, KanbanSquare, LayoutDashboard, List, Plus, Repeat, Settings2, Star, Table2, Users, Activity, Paperclip } from 'lucide-react';
-import { AvatarGroup, Button, CountBadge, IconButton, ProgressBar, cn, toast } from '@/components/ui';
+import { ArrowRight, ChevronDown, CalendarDays, GanttChart, Inbox, KanbanSquare, LayoutDashboard, List, Plus, Repeat, Settings2, Star, Table2, Users, Activity, Paperclip } from 'lucide-react';
+import { AvatarGroup, Button, CountBadge, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, IconButton, ProgressBar, cn, toast } from '@/components/ui';
 import { EntityIcon } from '@/components/pm';
 import { cycleDaysLeft } from '@/lib/cycle-math';
 import { formatRange, todayIso } from '@/lib/dates';
@@ -15,6 +16,7 @@ import { PROJECT_TABS, routes, type ProjectTab } from '@/lib/routes';
 import { starProjectAction } from '@/server/actions/projects';
 import { useShellStore } from '@/features/shell/store';
 import { ProjectHealthBadge } from './health';
+import { useCustomer360 } from '@/features/integrations/customer-360-strip';
 import { useCurrentProject } from './project-context';
 
 const TAB_META: Readonly<Record<ProjectTab | 'cycles' | 'triage', { label: string; icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }> }>> = {
@@ -80,6 +82,124 @@ function CycleStrip({ projectKey }: { readonly projectKey: string }) {
   );
 }
 
+function tabHref(projectKey: string, t: FrameTab): string {
+  return t === 'cycles' ? routes.projectCycles(projectKey) : t === 'triage' ? routes.projectTriage(projectKey) : routes.projectTab(projectKey, t);
+}
+
+const tabClass = 'relative flex h-10 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium whitespace-nowrap outline-none';
+/** Room kept for the "More" button when some tabs do not fit. */
+const MORE_ROOM = 92;
+
+/**
+ * The view tab strip. Tabs that do not fit the width fold into a "More" menu (never cut at the
+ * edge); the active tab always stays visible. Widths come from an invisible measuring copy.
+ */
+function ProjectTabs({ tabs, active, projectKey, triageCount }: { readonly tabs: readonly FrameTab[]; readonly active: FrameTab | null; readonly projectKey: string; readonly triageCount: number }) {
+  const router = useRouter();
+  const navRef = useRef<HTMLElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [visibleCount, setVisibleCount] = useState(tabs.length);
+
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    const measure = measureRef.current;
+    if (!nav || !measure) return;
+    const update = () => {
+      const widths = (Array.from(measure.children) as HTMLElement[]).map((el) => el.offsetWidth + 4);
+      const available = nav.clientWidth - 32;
+      const total = widths.reduce((sum, w) => sum + w, 0);
+      let count = tabs.length;
+      if (total > available) {
+        let used = 0;
+        count = 0;
+        while (count < widths.length && used + (widths[count] ?? 0) <= available - MORE_ROOM) {
+          used += widths[count] ?? 0;
+          count += 1;
+        }
+        count = Math.max(1, count);
+      }
+      setVisibleCount((previous) => (previous === count ? previous : count));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(nav);
+    observer.observe(measure);
+    return () => observer.disconnect();
+  }, [tabs]);
+
+  let shown = tabs.slice(0, visibleCount);
+  // Keep the active tab visible: it takes the place of the last tab that fits.
+  if (active && !shown.includes(active) && tabs.includes(active)) shown = [...shown.slice(0, -1), active];
+  const overflow = tabs.filter((t) => !shown.includes(t));
+
+  const renderInner = (t: FrameTab) => {
+    const meta = TAB_META[t];
+    const Icon = meta.icon;
+    return (
+      <>
+        <Icon aria-hidden className="size-4" />
+        {meta.label}
+        {t === 'triage' && triageCount > 0 ? <CountBadge count={triageCount} tone="primary" ringClassName="ring-transparent" label={`${triageCount} waiting`} /> : null}
+      </>
+    );
+  };
+
+  return (
+    <nav ref={navRef} aria-label="Project views" className="relative mt-2 flex gap-1 overflow-hidden px-4">
+      <div ref={measureRef} aria-hidden className="pointer-events-none invisible absolute top-0 left-0 flex gap-1">
+        {tabs.map((t) => (
+          <span key={t} className={tabClass}>
+            {renderInner(t)}
+          </span>
+        ))}
+      </div>
+      {shown.map((t) => {
+        const isActive = active === t;
+        return (
+          <Link
+            key={t}
+            href={tabHref(projectKey, t)}
+            // Tab pages are thin client views over the shared task cache: prefetch them fully
+            // so switching tabs only re-renders (no loading skeleton, no server round trip).
+            prefetch
+            aria-current={isActive ? 'page' : undefined}
+            data-testid={`project-tab-${t}`}
+            className={cn(
+              tabClass,
+              'focus-visible:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus',
+              isActive ? 'text-fg' : 'text-fg-secondary hover:text-fg',
+            )}
+          >
+            {renderInner(t)}
+            <span aria-hidden className={cn('absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary transition-opacity', isActive ? 'opacity-100' : 'opacity-0')} />
+          </Link>
+        );
+      })}
+      {overflow.length ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={cn(tabClass, 'text-fg-secondary hover:text-fg focus-visible:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus data-[state=open]:text-fg')} data-testid="project-tab-more">
+              More
+              <ChevronDown aria-hidden className="size-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            {overflow.map((t) => {
+              const Icon = TAB_META[t].icon;
+              return (
+                <DropdownMenuItem key={t} icon={<Icon aria-hidden className="size-4" />} onSelect={() => router.push(tabHref(projectKey, t))} data-testid={`project-tab-more-${t}`}>
+                  {TAB_META[t].label}
+                  {t === 'triage' && triageCount > 0 ? <span className="ml-auto text-2xs text-fg-muted tabular-nums">{triageCount}</span> : null}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </nav>
+  );
+}
+
 export function ProjectFrame({ children }: { readonly children: React.ReactNode }) {
   const { project, capabilities } = useCurrentProject();
   const [noteOpen, setNoteOpen] = useState(false);
@@ -92,6 +212,8 @@ export function ProjectFrame({ children }: { readonly children: React.ReactNode 
   const taskPage = /^\d+$/.test(frameSegment(pathname, project.key));
   const triage = useTriage(project.key, 'open', { staleTime: 30_000, enabled: !taskPage });
   const triageCount = triage.data?.counts.pending ?? 0;
+  // Live CRM and warehouse risks feed the header's "data says" health (same query as the Overview card).
+  const customer = useCustomer360(project.key, { enabled: !taskPage });
 
   const toggleStar = async () => {
     const result = await starProjectAction({ projectId: project.id, starred: !project.starred });
@@ -120,7 +242,7 @@ export function ProjectFrame({ children }: { readonly children: React.ReactNode 
         <div className="flex flex-wrap items-center gap-3 px-6 pt-4">
           <EntityIcon icon={project.icon} color={project.color} size={32} />
           <div className="min-w-0 flex-1 basis-[calc(100%-56px)] sm:basis-0">
-            <div className="flex min-w-0 items-center gap-2 max-sm:items-start">
+            <div className="flex min-w-0 items-center gap-2 max-sm:flex-wrap max-sm:items-start">
               <h1 className="min-w-0 text-xl font-semibold tracking-[-0.01em] text-fg max-sm:line-clamp-2 max-sm:text-lg max-sm:leading-snug sm:truncate">{project.name}</h1>
               <IconButton
                 label={project.starred ? 'Remove star' : 'Star this project'}
@@ -128,16 +250,16 @@ export function ProjectFrame({ children }: { readonly children: React.ReactNode 
                 size="sm"
                 onClick={() => void toggleStar()}
               />
-              <ProjectHealthBadge project={project} canEdit={capabilities['project:update']} />
+              <ProjectHealthBadge project={project} canEdit={capabilities['project:update']} risks={customer.data?.risks ?? []} />
             </div>
             <p className="truncate text-xs text-fg-muted max-sm:hidden">
-              <span className="font-mono">{project.key}</span> · {project.progress.done} of {project.progress.total} tasks done
+              <span className="font-key">{project.key}</span> · {project.progress.done} of {project.progress.total} tasks done
               {project.healthNote ? ` · ${project.healthNote}` : ''}
             </p>
             {/* Phones: progress on its own line, the latest update as a tappable line that opens in full. */}
             <div className="text-xs text-fg-muted sm:hidden">
               <p>
-                <span className="font-mono">{project.key}</span> · {project.progress.done} of {project.progress.total} tasks done
+                <span className="font-key">{project.key}</span> · {project.progress.done} of {project.progress.total} tasks done
               </p>
               {project.healthNote ? (
                 <button type="button" onClick={() => setNoteOpen((open) => !open)} aria-expanded={noteOpen} className={cn('mt-0.5 block w-full rounded-xs text-left outline-none focus-visible:outline-2 focus-visible:outline-focus', !noteOpen && 'line-clamp-2')}>
@@ -162,34 +284,7 @@ export function ProjectFrame({ children }: { readonly children: React.ReactNode 
             ) : null}
           </div>
         </div>
-        <nav aria-label="Project views" className="mt-2 flex gap-1 overflow-x-auto px-4">
-          {tabs.map((t) => {
-            const meta = TAB_META[t];
-            const Icon = meta.icon;
-            const active = tab === t;
-            return (
-              <Link
-                key={t}
-                href={t === 'cycles' ? routes.projectCycles(project.key) : t === 'triage' ? routes.projectTriage(project.key) : routes.projectTab(project.key, t)}
-                // Tab pages are thin client views over the shared task cache: prefetch them fully
-                // so switching tabs only re-renders (no loading skeleton, no server round trip).
-                prefetch
-                aria-current={active ? 'page' : undefined}
-                data-testid={`project-tab-${t}`}
-                className={cn(
-                  'relative flex h-10 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium whitespace-nowrap outline-none',
-                  'focus-visible:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus',
-                  active ? 'text-fg' : 'text-fg-secondary hover:text-fg',
-                )}
-              >
-                <Icon aria-hidden className="size-4" />
-                {meta.label}
-                {t === 'triage' && triageCount > 0 ? <CountBadge count={triageCount} tone="primary" ringClassName="ring-transparent" label={`${triageCount} waiting`} /> : null}
-                <span aria-hidden className={cn('absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary transition-opacity', active ? 'opacity-100' : 'opacity-0')} />
-              </Link>
-            );
-          })}
-        </nav>
+        <ProjectTabs tabs={tabs} active={tab} projectKey={project.key} triageCount={triageCount} />
         {tab === 'board' || tab === 'list' ? <CycleStrip projectKey={project.key} /> : null}
       </header>
       <div className="min-h-0 flex-1 overflow-auto">{children}</div>

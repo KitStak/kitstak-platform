@@ -35,6 +35,11 @@ export interface AppSwitcherProps {
   readonly current: AppSwitcherAppId;
   readonly urls: AppSwitcherUrls;
   readonly entitled?: AppSwitcherEntitled;
+  /**
+   * Apps this org cannot use on any plan (for example WMS outside the platform org). Their rows
+   * read "Not in your plan" with a lock and open Portal billing, whatever `entitled` says.
+   */
+  readonly notInPlan?: readonly AppSwitcherAppId[];
 }
 
 interface AppMeta {
@@ -156,12 +161,14 @@ function AppRow({
   app,
   current,
   locked,
+  lockedLabel,
   href,
   onNavigate,
 }: {
   readonly app: AppMeta;
   readonly current: boolean;
   readonly locked: boolean;
+  readonly lockedLabel: string;
   readonly href: string;
   readonly onNavigate: (event: React.MouseEvent<HTMLAnchorElement>) => void;
 }) {
@@ -181,7 +188,7 @@ function AppRow({
         <span className="ks-appswitcher-text">
           <span className="ks-appswitcher-name">{app.name}</span>
           <span className="ks-appswitcher-desc">
-            {locked ? 'Locked. Unlock it in Portal billing' : app.descriptor}
+            {locked ? lockedLabel : app.descriptor}
           </span>
         </span>
         {current ? (
@@ -201,7 +208,7 @@ function AppRow({
 }
 
 /** Module-grid button + popover listing Portal / CRM / WMS / Projects with entitlement-aware rows. */
-export function AppSwitcher({ current, urls, entitled }: AppSwitcherProps) {
+export function AppSwitcher({ current, urls, entitled, notInPlan }: AppSwitcherProps) {
   const [open, setOpen] = React.useState(false);
   const [handoff, startHandoff] = useHandoff();
   const [handoffTitle, setHandoffTitle] = React.useState('');
@@ -231,13 +238,15 @@ export function AppSwitcher({ current, urls, entitled }: AppSwitcherProps) {
               const href = appUrl(app.id, urls);
               // The current app always lists itself; another app with no configured origin is hidden.
               if (href === undefined && app.id !== current) return null;
-              const locked = !isUnlocked(app.id, entitled);
+              const unavailable = app.id !== current && (notInPlan?.includes(app.id) ?? false);
+              const locked = unavailable || !isUnlocked(app.id, entitled);
               return (
                 <AppRow
                   key={app.id}
                   app={app}
                   current={app.id === current}
                   locked={locked}
+                  lockedLabel={unavailable ? 'Not in your plan' : 'Locked. Unlock it in Portal billing'}
                   href={locked ? billingHref : (href ?? '/')}
                   onNavigate={(event) => {
                     setOpen(false);

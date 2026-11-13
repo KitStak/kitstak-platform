@@ -346,11 +346,11 @@ export const PRODUCTS = [
 ];
 
 export const DEAL_PATTERNS = [
-  '{company} — {product}',
+  '{company} · {product}',
   '{company} {product} expansion',
   '{company}: {product} pilot',
   '{company} DC{n} automation',
-  '{company} — {product} renewal',
+  '{company} · {product} renewal',
 ];
 
 export const NEXT_STEPS = [
@@ -391,13 +391,13 @@ export const ONBOARDING_TASKS = [
 
 export const UPDATE_TEXTS = [
   'Had a great call with their ops team today. They want to see throughput numbers from a similar site before moving forward.',
-  'Procurement asked for a 3-year pricing option. Drafting it now — will share by Friday.',
+  'Procurement asked for a 3-year pricing option. Drafting it now and will share it by Friday.',
   'Security questionnaire is done and sent back. Waiting on their IT review.',
   'Champion confirmed budget is approved for Q1. Next step is legal review of the MSA.',
   'Site survey scheduled for next Tuesday. Ethan will join to scope the WMS integration.',
   'They are comparing us with two other vendors. Our differentiation: fleet orchestration + uptime SLA.',
   'Pilot results look strong: 31% fewer touches per order on the night shift.',
-  'Exec sponsor is changing roles next month — we need to multi-thread this account.',
+  'Exec sponsor is changing roles next month, so we need to multi-thread this account.',
   'Sent over the ROI model. Payback period comes out at 14 months with current volumes.',
   'Contract redlines received. Mostly liability caps; looping in legal.',
   'Customer asked about adding two more DCs to the rollout. Big expansion potential here.',
@@ -405,12 +405,12 @@ export const UPDATE_TEXTS = [
 ];
 
 export const REPLY_TEXTS = [
-  'Nice work — let me know if you need help with the exec alignment.',
+  'Nice work! Let me know if you need help with the exec alignment.',
   'Agreed. I can join the call on Thursday.',
   'I added the case study from the Rotterdam deployment to the shared folder.',
   'Let us make sure the mutual action plan reflects the new timeline.',
   'Great progress! Keep me posted.',
-  'I talked to their CFO last year — happy to make an intro.',
+  'I talked to their CFO last year and am happy to make an intro.',
 ];
 
 export const REACTIONS = ['👍', '🎉', '🔥', '👀', '🙌', '✅'];

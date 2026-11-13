@@ -206,7 +206,7 @@ export function BulkResultModal({
     ? [
         ...state.result.failed.map((f) => ({
           id: f.id,
-          code: state.codes.get(f.id) ?? '—',
+          code: state.codes.get(f.id) ?? 'None',
           description: f.message,
           ok: false,
           warn: false,
@@ -215,7 +215,7 @@ export function BulkResultModal({
           const note = state.notes?.get(id);
           return {
             id,
-            code: state.codes.get(id) ?? '—',
+            code: state.codes.get(id) ?? 'None',
             description: note ?? `Order ${state.verbPast}.`,
             ok: true,
             warn: Boolean(note),

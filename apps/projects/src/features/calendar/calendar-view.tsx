@@ -9,7 +9,7 @@
  * Every change is optimistic (useTaskMutations) with an Undo toast.
  */
 import { useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react';
-import { ChevronLeft, ChevronRight, CircleCheck, Inbox, Keyboard, MousePointerClick, Move, Plus } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, CircleCheck, Inbox, Keyboard, MousePointerClick, Move, Plus } from 'lucide-react';
 import {
   Button,
   EmptyState,
@@ -48,6 +48,8 @@ type Plot = 'span' | 'due';
 
 interface CalendarPrefs {
   readonly mode: CalendarMode;
+  /** Phones have their own mode (week by default): a 7-column month is unreadable at 390px. */
+  readonly phoneMode: CalendarMode;
   readonly colorBy: ColorBy;
   readonly plot: Plot;
   readonly showWeekends: boolean;
@@ -59,7 +61,7 @@ interface CalendarPrefs {
 
 type CalendarViewOptions = Pick<CalendarPrefs, 'mode' | 'colorBy' | 'plot' | 'showWeekends' | 'showCompleted' | 'showSubtasks'>;
 
-const DEFAULT_PREFS: CalendarPrefs = { mode: 'month', colorBy: 'status', plot: 'span', showWeekends: true, showCompleted: false, showSubtasks: true, trayOpen: false, viewId: null };
+const DEFAULT_PREFS: CalendarPrefs = { mode: 'month', phoneMode: 'week', colorBy: 'status', plot: 'span', showWeekends: true, showCompleted: false, showSubtasks: true, trayOpen: false, viewId: null };
 
 function viewOptions(prefs: CalendarPrefs): CalendarViewOptions {
   const { mode, colorBy, plot, showWeekends, showCompleted, showSubtasks } = prefs;
@@ -74,11 +76,6 @@ const DAY_HEADER_H = 30;
 const SLOT_H = 24;
 const MIN_ROW_H = 132;
 const WEEK_SLOT_H = 52;
-/** Tasks longer than a week draw as thin bands at the top of each week, not as full lanes. */
-const THIN_MIN_DAYS = 7;
-const THIN_LANE_H = 14;
-/** At most this many thin bands per week; more fold into the "+N more" list. */
-const THIN_MAX = 2;
 
 type TaskEvent = CalendarEvent<TaskSummary>;
 
@@ -142,7 +139,7 @@ export function CalendarView() {
     gridObserver.current.observe(node);
   }, []);
 
-  const mode: CalendarMode = prefs.mode;
+  const mode: CalendarMode = narrow ? prefs.phoneMode : prefs.mode;
   const allTasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const tasks = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -165,8 +162,6 @@ export function CalendarView() {
     }
     return out;
   }, [tasks, prefs.plot]);
-  const longEvents = useMemo(() => events.filter((event) => diffDays(event.start, event.end) >= THIN_MIN_DAYS), [events]);
-  const shortEvents = useMemo(() => events.filter((event) => diffDays(event.start, event.end) < THIN_MIN_DAYS), [events]);
   const unscheduled = useMemo(() => tasks.filter((task) => !task.startDate && !task.dueDate), [tasks]);
 
   const weeks = useMemo(() => {
@@ -292,7 +287,7 @@ export function CalendarView() {
 
   const look = (task: TaskSummary) => labelColorStyle(taskColor(task, prefs.colorBy, statusById));
 
-  const chip = (task: TaskSummary, options: { days: readonly IsoDate[]; segment?: WeekSegment<TaskSummary>; style?: CSSProperties; className?: string; variant: 'chip' | 'card' | 'list' | 'thin'; showTitle?: boolean }) => {
+  const chip = (task: TaskSummary, options: { days: readonly IsoDate[]; segment?: WeekSegment<TaskSummary>; style?: CSSProperties; className?: string; variant: 'chip' | 'card' | 'list' }) => {
     const { segment, variant } = options;
     const done = isClosed(task);
     const span = taskSpan(task);
@@ -349,9 +344,6 @@ export function CalendarView() {
             variant === 'card' &&
               'flex-col items-stretch justify-center gap-0.5 rounded-md border border-l-[3px] border-[color-mix(in_srgb,var(--lc-bg)_45%,transparent)] border-l-[var(--lc-bg)] bg-[color-mix(in_srgb,var(--lc-bg)_14%,var(--surface-panel))] px-2 py-1.5 text-fg',
             variant === 'list' && 'h-8 w-full rounded-md border-l-[3px] border-[var(--lc-bg)] px-2 text-fg hover:bg-hover',
-            // Long tasks: a slim tinted band (title only where it starts), so they never crowd out real work.
-            variant === 'thin' && 'rounded-full bg-[color-mix(in_srgb,var(--lc-bg)_30%,var(--surface-panel))] px-1.5 text-2xs leading-3 text-fg-secondary hover:text-fg',
-            variant === 'thin' && (options.showTitle ? 'h-3' : 'h-1.5 hover:h-2'),
             segment?.continuesBefore && 'rounded-l-none',
             segment?.continuesBefore && variant === 'card' && 'border-l',
             segment?.continuesAfter && 'rounded-r-none',
@@ -362,16 +354,14 @@ export function CalendarView() {
             options.className,
           )}
         >
-          {variant === 'thin' ? (
-            options.showTitle ? <span className="truncate">{task.title}</span> : <span className="sr-only">{task.title}</span>
-          ) : variant === 'card' ? (
+          {variant === 'card' ? (
             <>
               <span className="flex min-w-0 items-center gap-1.5">
                 <StatusIcon category={task.statusCategory} color={status?.color} size={12} />
                 <span className={cn('truncate', done && 'line-through decoration-1')}>{task.title}</span>
               </span>
               <span className="flex min-w-0 items-center gap-1.5 text-2xs font-normal text-fg-muted">
-                <span className="font-mono">{task.key}</span>
+                <span className="font-key">{task.key}</span>
                 {task.priority !== 'none' ? <PriorityIcon priority={task.priority} size={12} /> : null}
                 {overdue ? <span className="font-medium text-danger-text">Overdue</span> : null}
                 <span className="ml-auto">
@@ -382,12 +372,13 @@ export function CalendarView() {
           ) : (
             <>
               {variant === 'list' ? <StatusIcon category={task.statusCategory} color={status?.color} size={12} /> : null}
+              {segment?.continuesBefore ? <ArrowLeft aria-label="Continued from the week before" className="size-3 shrink-0 opacity-70" /> : null}
               {overdue ? <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full bg-danger', variant === 'chip' && 'ring-1 ring-panel')} /> : null}
               {done && variant === 'chip' ? <CircleCheck aria-label="Done" className="size-3 shrink-0 text-[var(--lc-bg)]" /> : null}
               <span className={cn('truncate', done && variant !== 'chip' && 'line-through decoration-1')}>{task.title}</span>
               {variant === 'list' ? (
                 <span className="ml-auto flex shrink-0 items-center gap-1.5">
-                  <span className="font-mono text-2xs font-normal text-fg-muted">{task.key}</span>
+                  <span className="font-key text-2xs font-normal text-fg-muted">{task.key}</span>
                   <PersonAvatar userId={task.assigneeId} size="xs" />
                 </span>
               ) : null}
@@ -429,22 +420,19 @@ export function CalendarView() {
           </div>
         ))}
       </div>
-      {weeks.map((days, weekIndex) => {
-        // Tasks longer than a week become thin bands under the day numbers; everything else gets
-        // the full lanes, so a month-long task never pushes real work behind "+N more".
-        const thinAll = prefs.plot === 'span' ? layoutWeek(days, longEvents) : [];
-        const thinSegments = thinAll.filter((segment) => segment.slot < THIN_MAX);
-        const thinLanes = thinSegments.reduce((max, segment) => Math.max(max, segment.slot + 1), 0);
-        const band = thinLanes ? thinLanes * THIN_LANE_H + 2 : 0;
-        const segments = layoutWeek(days, prefs.plot === 'span' ? shortEvents : events);
-        const height = Math.max(rowHeight, DAY_HEADER_H + band + 4 * SLOT_H + 6);
-        const slots = Math.max(3, Math.floor((height - DAY_HEADER_H - band - 6) / SLOT_H));
+      {weeks.map((days) => {
+        // Every task, long or short, is one bar style at full height in the lanes. A task that runs
+        // across weeks repeats its title on every week row (with an arrow when it started earlier),
+        // so a continuation is never an unlabeled strip.
+        const segments = layoutWeek(days, events);
+        // Rows grow to show up to 5 lanes before folding into "+N more" (the grid scrolls instead).
+        const lanesNeeded = segments.reduce((max, segment) => Math.max(max, segment.slot + 1), 0);
+        const height = Math.max(rowHeight, DAY_HEADER_H + Math.max(4, Math.min(5, lanesNeeded)) * SLOT_H + 6);
+        const slots = Math.max(3, Math.floor((height - DAY_HEADER_H - 6) / SLOT_H));
         const hiddenShort = hiddenPerColumn(segments, days.length, slots);
-        const thinHidden = Array.from({ length: days.length }, () => 0);
-        for (const segment of thinAll) if (segment.slot >= THIN_MAX) for (let col = segment.startCol; col < segment.startCol + segment.span; col += 1) thinHidden[col] = (thinHidden[col] ?? 0) + 1;
-        const hidden = hiddenShort.map((count, col) => count + (count > 0 ? (thinHidden[col] ?? 0) : 0));
-        const extraOnly = hiddenShort.map((count, col) => (count === 0 ? (thinHidden[col] ?? 0) : 0));
-        const lanesTop = DAY_HEADER_H + band;
+        const hidden = hiddenShort;
+        const extraOnly = hiddenShort.map(() => 0);
+        const lanesTop = DAY_HEADER_H;
         return (
           <div role="row" key={days[0]} data-week-row className="relative grid shrink-0" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, height }}>
             {days.map((day, col) => {
@@ -528,20 +516,6 @@ export function CalendarView() {
                 </Popover>
               );
             })}
-            {thinSegments.map((segment) =>
-              chip(segment.event.item, {
-                days,
-                segment,
-                variant: 'thin',
-                showTitle: !segment.continuesBefore || weekIndex === 0,
-                className: 'absolute z-[1]',
-                style: {
-                  top: DAY_HEADER_H + segment.slot * THIN_LANE_H + (!segment.continuesBefore || weekIndex === 0 ? 0 : 3),
-                  left: `calc(${(segment.startCol / columns) * 100}% + ${segment.continuesBefore ? 0 : 4}px)`,
-                  width: `calc(${(segment.span / columns) * 100}% - ${(segment.continuesBefore ? 0 : 4) + (segment.continuesAfter ? 0 : 4)}px)`,
-                },
-              }),
-            )}
             {segments
               .filter((segment) => isSegmentVisible(segment, hiddenShort, slots))
               .map((segment) =>
@@ -566,6 +540,41 @@ export function CalendarView() {
   const weekDays = weeks[0] ?? [];
   const weekSegments = layoutWeek(weekDays, events);
   const weekSlots = weekSegments.reduce((max, segment) => Math.max(max, segment.slot + 1), 0);
+  // Phones: the week as an agenda, one day per row with full-width task lines (Google Calendar's
+  // schedule view). Seven columns at 390px leave about 45px per task, too little to read.
+  const agendaList = (
+    <div role="list" aria-label={title} className="flex min-h-0 flex-1 flex-col overflow-auto" data-testid="calendar-agenda">
+      {weekDays.map((day) => {
+        const isToday = day === today;
+        const dayEvents = eventsOn(day, events);
+        return (
+          <section role="listitem" key={day} data-date={day} {...dayDropProps(day)} className={cn('border-b border-border-subtle px-3 py-2', isWeekendIso(day) ? 'bg-sunken' : 'bg-panel', overDay === day && 'bg-primary-subtle')}>
+            <div className="flex items-center gap-2">
+              <span aria-current={isToday ? 'date' : undefined} className={cn('inline-flex size-7 items-center justify-center rounded-full text-sm font-semibold tabular-nums', isToday ? 'bg-primary text-primary-fg' : 'text-fg')}>
+                {Number(day.slice(8, 10))}
+              </span>
+              <h3 className="text-sm font-semibold text-fg">{WEEKDAY_LONG.format(parseIsoDate(day))}</h3>
+              {canCreate ? (
+                <button type="button" onClick={() => openQuickAdd({ projectId: project.id, dueDate: day })} aria-label={`Add a task on ${WEEKDAY_LONG.format(parseIsoDate(day))}`} className="ml-auto inline-flex size-8 items-center justify-center rounded-sm text-icon outline-none hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus">
+                  <Plus aria-hidden className="size-4" />
+                </button>
+              ) : null}
+            </div>
+            {dayEvents.length ? (
+              <ul className="mt-1 flex flex-col gap-1">
+                {dayEvents.map((event) => (
+                  <li key={event.id}>{chip(event.item, { days: weekDays, variant: 'list' })}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-0.5 pl-9 text-xs text-fg-muted">Nothing scheduled</p>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+
   const weekGrid = (
     <div role="grid" aria-label={title} className="flex min-h-0 flex-1 flex-col overflow-auto" data-testid="calendar-week">
       <div role="row" className="sticky top-0 z-[var(--z-sticky)] grid shrink-0 border-b border-border-subtle bg-panel" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
@@ -657,7 +666,7 @@ export function CalendarView() {
           size="sm"
           label="Calendar view"
           value={mode}
-          onValueChange={(next) => setPrefs({ mode: next })}
+          onValueChange={(next) => setPrefs(narrow ? { phoneMode: next } : { mode: next })}
           options={[
             { value: 'month', label: 'Month' },
             { value: 'week', label: 'Week' },
@@ -737,6 +746,8 @@ export function CalendarView() {
             </div>
           ) : mode === 'month' ? (
             monthGrid
+          ) : narrow ? (
+            agendaList
           ) : (
             weekGrid
           )}

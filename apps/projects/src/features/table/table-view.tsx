@@ -8,7 +8,7 @@
  * row, multi-select with the bulk bar, and add a task at the bottom.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, EyeOff, Layers, Maximize2, MoreHorizontal, Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp, ChevronDown, ChevronRight, Download, EyeOff, Layers, Maximize2, MoreHorizontal, Plus, X } from 'lucide-react';
 import {
   Button,
   Checkbox,
@@ -54,7 +54,7 @@ import { useViewState } from '@/features/views/use-view-state';
 import { ViewToolbar } from '@/features/views/view-toolbar';
 import { GROUP_LABELS } from '@/features/views/view-state';
 import { ColumnsMenu } from './columns-menu';
-import { TITLE_KEY, buildColumns, csvValue, fieldOptions, isCustomerLink, renderCell, resolveColumns, toCsv, type ColumnDef, type RenderContext } from './table-columns';
+import { COMPACT_WIDTHS, TITLE_KEY, buildColumns, csvValue, fieldOptions, isCustomerLink, renderCell, resolveColumns, toCsv, type ColumnDef, type RenderContext } from './table-columns';
 
 const ROW_HEADER_WIDTH = 112;
 const ROW_HEIGHT = 'h-9';
@@ -496,12 +496,13 @@ function HeaderCell({
           type="button"
           disabled={!def.sort}
           onClick={(event) => onSort('toggle', event.shiftKey)}
-          title={def.sort ? 'Click to sort. Shift+click to add a second sort.' : undefined}
+          title={def.sort ? `${def.label}: click to sort. Shift+click to add a second sort.` : def.label}
           className={cn('flex h-full min-w-0 flex-1 items-center gap-1.5 px-2 outline-none hover:text-fg focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus disabled:cursor-default disabled:hover:text-fg-secondary [&_svg]:size-3.5 [&_svg]:shrink-0', def.align === 'right' && 'justify-end')}
           data-testid={`th-${def.key}`}
         >
           <span className="text-icon">{def.icon}</span>
-          <span className="truncate">{def.label}</span>
+          {/* Compact columns (Assignee and Priority on narrow screens) show the icon only. */}
+          <span className={cn('truncate', width < 96 && 'sr-only')}>{def.label}</span>
           {sortDir ? (
             <span className="inline-flex items-center text-primary-text">
               {sortDir === 'asc' ? <ArrowUp aria-label="sorted ascending" /> : <ArrowDown aria-label="sorted descending" />}
@@ -585,11 +586,41 @@ export function TableView() {
   const canEdit = capabilities['task:update'];
   const canCreate = capabilities['task:create'];
   const all = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
+  // The Task column fits the longest title (up to 480px) when nobody has resized it, so titles are
+  // not cut while there is room. Measured after mount (the server has no fonts to measure with).
+  const [titleFit, setTitleFit] = useState(0);
+  useEffect(() => {
+    const context = document.createElement('canvas').getContext('2d');
+    if (!context) return;
+    context.font = `400 14px ${getComputedStyle(document.body).fontFamily}`;
+    let longest = 0;
+    for (const task of all) if (!task.parentTaskId) longest = Math.max(longest, context.measureText(task.title).width);
+    // Measuring needs the DOM (fonts), so it can only happen after mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTitleFit(Math.min(480, Math.ceil(longest) + 40));
+  }, [all]);
   const defs = useMemo(() => buildColumns(project.customFields), [project.customFields]);
   const defByKey = useMemo(() => new Map(defs.map((def) => [def.key, def])), [defs]);
   const columns = useMemo(() => resolveColumns(defs, view.settings.columns), [defs, view.settings.columns]);
   const [widthDraft, setWidthDraft] = useState<{ key: string; width: number } | null>(null);
-  const widthOf = useCallback((column: ViewColumn) => (widthDraft?.key === column.key ? widthDraft.width : (column.width ?? defByKey.get(column.key)?.defaultWidth ?? 140)), [defByKey, widthDraft]);
+  // The grid's visible width: the Task column grows to fill it, and an edge shadow shows when
+  // more columns sit off to the right.
+  const [gridWidth, setGridWidth] = useState(0);
+  // Narrow grids (laptops under ~1366px wide, tablets) fit more columns: Assignee becomes an avatar
+  // and Priority an icon, unless the person resized those columns themselves.
+  const compactGrid = gridWidth > 0 && gridWidth < 1120;
+  const widthOf = useCallback(
+    (column: ViewColumn) => {
+      if (widthDraft?.key === column.key) return widthDraft.width;
+      const def = defByKey.get(column.key);
+      const saved = column.width ?? def?.defaultWidth ?? 140;
+      // Narrow grids cap Assignee, Priority, Status and dates at compact widths.
+      const compactWidth = COMPACT_WIDTHS[column.key];
+      if (compactGrid && compactWidth !== undefined) return Math.min(saved, compactWidth);
+      return saved;
+    },
+    [compactGrid, defByKey, widthDraft],
+  );
   const shown = useMemo(() => columns.filter((column) => !column.hidden && defByKey.has(column.key)), [columns, defByKey]);
   const sort = view.settings.sort;
   const sorter = useSorter(sort);
@@ -618,17 +649,21 @@ export function TableView() {
     }
     return map;
   }, [cyclesQuery.data]);
-  const ctx = useMemo<RenderContext>(() => ({ statusById, labelById, sectionById, links: linksByTask, projectCustomer, cycleByTask }), [cycleByTask, labelById, linksByTask, projectCustomer, sectionById, statusById]);
-  // The grid's visible width: the Task column grows to fill it, and an edge shadow shows when
-  // more columns sit off to the right.
-  const [gridWidth, setGridWidth] = useState(0);
-  const [moreRight, setMoreRight] = useState(false);
+  const [moreRight, setMoreRight] = useState(0);
+  const ctx = useMemo<RenderContext>(() => ({ statusById, labelById, sectionById, links: linksByTask, projectCustomer, cycleByTask, compact: compactGrid }), [compactGrid, cycleByTask, labelById, linksByTask, projectCustomer, sectionById, statusById]);
   useEffect(() => {
     const element = gridRef.current;
     if (!element) return;
     const update = () => {
       setGridWidth(element.clientWidth);
-      setMoreRight(element.scrollLeft + element.clientWidth < element.scrollWidth - 2);
+      // How many columns sit (even partly) past the right edge: the "N more columns" button.
+      const edge = element.scrollLeft + element.clientWidth + 2;
+      let count = 0;
+      if (element.scrollLeft + element.clientWidth < element.scrollWidth - 2)
+        element.querySelectorAll<HTMLElement>('thead th[data-col]').forEach((th) => {
+          if (th.offsetLeft + th.offsetWidth > edge) count += 1;
+        });
+      setMoreRight(count);
     };
     update();
     const observer = new ResizeObserver(update);
@@ -886,10 +921,16 @@ export function TableView() {
     );
   }
 
-  const savedTitleWidth = widthOf(shown[0] ?? { key: TITLE_KEY });
+  const titleColumn = shown[0] ?? { key: TITLE_KEY };
+  const titleDefault = defByKey.get(TITLE_KEY)?.defaultWidth;
+  const titleResized = widthDraft?.key === titleColumn.key || (titleColumn.width !== undefined && titleColumn.width !== titleDefault);
+  // Phones: the Task column fits the screen next to the ID, so the next column peeks in (a visible
+  // hint that the table scrolls sideways) instead of the title running off the edge.
+  const phoneTitle = gridWidth > 0 && gridWidth < 640 ? Math.max(180, gridWidth - ROW_HEADER_WIDTH - 36) : null;
+  const savedTitleWidth = titleResized ? widthOf(titleColumn) : (phoneTitle ?? Math.max(widthOf(titleColumn), titleFit));
   const otherWidth = ROW_HEADER_WIDTH + shown.slice(1).reduce((sum, column) => sum + widthOf(column), 0) + 48;
   // Task takes any spare room so the table always reaches the right edge (never while resizing it).
-  const titleWidth = widthDraft?.key === shown[0]?.key ? savedTitleWidth : Math.max(savedTitleWidth, gridWidth - otherWidth);
+  const titleWidth = widthDraft?.key === shown[0]?.key || (phoneTitle !== null && !titleResized) ? savedTitleWidth : Math.max(savedTitleWidth, gridWidth - otherWidth);
   const tableWidth = otherWidth + titleWidth;
   const allSelected = rows.length > 0 && selection.count === new Set(rows.map((task) => task.id)).size;
   const sumCells = shown.map((column) => defByKey.get(column.key)?.sum?.(rows) ?? null);
@@ -1020,7 +1061,7 @@ export function TableView() {
                             }}
                             aria-label={`Select ${task.key}`}
                           />
-                          <span className="truncate font-mono text-xs text-fg-muted">{task.key}</span>
+                          <span className="truncate font-key text-xs text-fg-muted">{task.key}</span>
                         </div>
                       </td>
                       {shown.map((column, index) => {
@@ -1120,7 +1161,18 @@ export function TableView() {
         ) : null}
       </div>
       {moreRight ? (
-        <div aria-hidden className="pointer-events-none absolute top-0 right-0 bottom-0 z-[8] w-6 bg-gradient-to-l from-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] to-transparent" />
+        <>
+          <div aria-hidden className="pointer-events-none absolute top-0 right-0 bottom-0 z-[8] w-6 bg-gradient-to-l from-[color-mix(in_srgb,var(--text-primary)_10%,transparent)] to-transparent" />
+          <button
+            type="button"
+            onClick={() => gridRef.current?.scrollBy({ left: Math.max(200, (gridRef.current?.clientWidth ?? 600) * 0.6), behavior: 'smooth' })}
+            className="absolute top-1 right-2 z-[9] inline-flex h-7 items-center gap-1 rounded-full border border-border-default bg-panel px-2.5 text-xs font-medium text-fg-secondary shadow-sm outline-none hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus"
+            data-testid="table-more-columns"
+          >
+            {moreRight === 1 ? '1 more column' : `${moreRight} more columns`}
+            <ArrowRight aria-hidden className="size-3.5" />
+          </button>
+        </>
       ) : null}
       </div>
       <BulkBar selection={selection} tasks={all} ops={ops} />

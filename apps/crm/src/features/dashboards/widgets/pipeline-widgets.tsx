@@ -18,7 +18,7 @@ export function BatteryWidget({ insight, settings, filtered, onConfigure }: Widg
     <div ref={ref} className="flex h-full min-h-0 flex-col justify-center gap-3" data-testid="battery-widget">
       <div className="flex items-baseline gap-2">
         <span className="text-xl font-medium tabular-nums text-fg">
-          {insight.doneRatio === null ? '—' : formatPercent(insight.doneRatio)}
+          {insight.doneRatio === null ? 'None' : formatPercent(insight.doneRatio)}
         </span>
         <span className="text-sm text-fg-secondary">done</span>
         <span className="ml-auto text-xs text-fg-muted tabular-nums">{total.toLocaleString('en-US')} items</span>

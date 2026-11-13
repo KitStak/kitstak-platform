@@ -415,7 +415,7 @@ function associateTask(
       },
       {
         label: 'Top associate',
-        value: users[0]?.user ?? '—',
+        value: users[0]?.user ?? 'None',
         hint: users[0] ? `${fmtInt(users[0].tasks)} tasks` : 'No completed tasks yet',
         href: users[0] ? tasksHref(r, `&f.executedBy=eq:${enc(users[0].user)}`) : undefined,
       },
@@ -518,7 +518,7 @@ function quadrant(
         },
         {
           label: 'Your volume',
-          value: me ? `${fmtInt(Number(me.volume))} tasks` : '—',
+          value: me ? `${fmtInt(Number(me.volume))} tasks` : 'None',
           hint: 'Tasks you completed in the period',
           href: tasksHref(r, ''),
         },
@@ -619,7 +619,7 @@ function bestSpeedKpi(rows: readonly AnalyticsRow[]): AnalyticsKpi {
         hint: `${String(best.user)} (min. ${MIN_QUADRANT_TASKS} tasks)`,
         href: String(best.href),
       }
-    : { label: 'Best speed', value: '—', hint: `Needs an associate with ${MIN_QUADRANT_TASKS}+ tasks` };
+    : { label: 'Best speed', value: 'None', hint: `Needs an associate with ${MIN_QUADRANT_TASKS}+ tasks` };
 }
 
 /** "Picking:12,Packing:3" (most first): the per-type split behind an associate's detail view. */
@@ -657,7 +657,7 @@ function associates(
       : null;
     return {
       kpis: [
-        { label: 'Your rank', value: u ? `#${idx + 1} of ${users.length}` : '—', hint: 'By tasks completed' },
+        { label: 'Your rank', value: u ? `#${idx + 1} of ${users.length}` : 'None', hint: 'By tasks completed' },
         {
           label: 'Your tasks',
           value: u ? fmtInt(u.tasks) : '0',
@@ -666,7 +666,7 @@ function associates(
         },
         {
           label: 'Your speed',
-          value: u ? `${speedOf(u.measured, u.mins)} tasks/h` : '—',
+          value: u ? `${speedOf(u.measured, u.mins)} tasks/h` : 'None',
           hint: 'Timed tasks per measured hour',
           href: tasksHref(r, ''),
         },
@@ -838,7 +838,7 @@ async function receivingPerformance(
       },
       {
         label: 'Units per dock hour',
-        value: hours ? fmtInt(units / hours) : '—',
+        value: hours ? fmtInt(units / hours) : 'None',
         hint: `${round(hours, 1)} dock hours`,
         href,
       },

@@ -345,3 +345,16 @@ export function niceMax(value: number): number {
   const step = [1, 2, 2.5, 5, 10].find((candidate) => normalized <= candidate) ?? 10;
   return step * magnitude;
 }
+
+/**
+ * A ceiling just above `value` for line charts (burn-up): 105 gives 120, not 200, so the lines use
+ * the full height. Halves stay readable tick labels (60, 120).
+ */
+export function tightNiceMax(value: number): number {
+  if (value <= 0) return 1;
+  if (value <= 4) return Math.ceil(value);
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const normalized = value / magnitude;
+  const step = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((candidate) => normalized <= candidate) ?? 10;
+  return Math.round(step * magnitude * 100) / 100;
+}

@@ -88,7 +88,7 @@ const text = (id: keyof AtpRow & string, label: string, size = 140, sortable = t
   size,
   enableSorting: sortable,
   meta: { label },
-  cell: ({ row }) => (row.original[id] as string | null) ?? <span className="text-faint">—</span>,
+  cell: ({ row }) => (row.original[id] as string | null) ?? <span className="text-faint">None</span>,
 });
 
 /**

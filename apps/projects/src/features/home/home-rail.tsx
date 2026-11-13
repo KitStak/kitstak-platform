@@ -163,7 +163,7 @@ export function RecentProjects({ projects }: { readonly projects: readonly Proje
                     <span className="truncate text-sm font-medium text-fg">{project.name}</span>
                     <span aria-label={PROJECT_HEALTH_LABELS[project.health]} title={PROJECT_HEALTH_LABELS[project.health]} className={cn('size-1.5 shrink-0 rounded-full', HEALTH_DOT[project.health])} />
                   </span>
-                  <ProgressBar value={project.progress.percent} size="sm" label={`${project.name} progress`} />
+                  <ProgressBar value={project.progress.percent} size="sm" tone={project.health === 'off_track' ? 'danger' : project.health === 'at_risk' ? 'warning' : 'success'} label={`${project.name} progress`} />
                 </span>
                 <span className="w-9 text-right text-xs text-fg-muted tabular-nums">{project.progress.percent}%</span>
               </Link>

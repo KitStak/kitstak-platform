@@ -147,7 +147,7 @@ function PickCodeCell({ value, openCount }: { readonly value: string; readonly o
   );
 }
 const pickText = (v: string | null | undefined) =>
-  v ? <span className="truncate">{v}</span> : <span className="text-faint">—</span>;
+  v ? <span className="truncate">{v}</span> : <span className="text-faint">None</span>;
 const pickQty = (v: number) => (
   <span className="block w-full text-right tabular-nums">
     <QtyCell value={v} muteZero />
@@ -224,7 +224,7 @@ function lineItems(detail: DetailPayload): { countType: CountType; items: TaskIt
       countType === 'SKU'
         ? {
             id,
-            label: l.sku ?? '—',
+            label: l.sku ?? 'None',
             sub1: l.productType ?? null,
             sub2: l.productGroup ?? null,
             onHand: l.initialStockQty,
@@ -232,14 +232,14 @@ function lineItems(detail: DetailPayload): { countType: CountType; items: TaskIt
         : countType === 'LP'
           ? {
               id,
-              label: l.lpNumber ?? '—',
+              label: l.lpNumber ?? 'None',
               sub1: l.lpType ?? null,
               sub2: l.locationCode,
               onHand: l.initialStockQty,
             }
           : {
               id,
-              label: l.locationCode ?? '—',
+              label: l.locationCode ?? 'None',
               sub1: l.locationType ?? null,
               sub2: l.locationGroup ?? null,
               onHand: l.initialStockQty,
@@ -1107,8 +1107,8 @@ function TasksStep({
                       ) : null}
                     </span>
                   </td>
-                  <td className="px-3 py-1.5 text-secondary">{i.sub1 ?? '—'}</td>
-                  <td className="px-3 py-1.5 text-secondary">{i.sub2 ?? '—'}</td>
+                  <td className="px-3 py-1.5 text-secondary">{i.sub1 ?? 'None'}</td>
+                  <td className="px-3 py-1.5 text-secondary">{i.sub2 ?? 'None'}</td>
                   <td className="px-3 py-1.5 text-right">
                     <QtyCell value={i.onHand} muteZero />
                   </td>

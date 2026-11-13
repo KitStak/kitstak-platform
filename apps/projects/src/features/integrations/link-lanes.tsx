@@ -8,6 +8,7 @@
  * The lane meta mirrors `GroupMeta` (src/features/views/group-meta.tsx): dragging between these
  * lanes only changes the status column (the link itself is not something a drag should edit).
  */
+import { displayText } from '@kitstak/ui/text';
 import { useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { NO_GROUP } from '@/lib/task-filters';
@@ -22,8 +23,7 @@ const CRM_TYPES = new Set(['crm_item', 'crm_account', 'core_customer']);
 const WMS_PREFIX = 'wms_';
 
 /** Record titles from sibling apps can carry a long dash; show a middle dot instead. */
-const LONG_DASH = new RegExp(`\\s*${String.fromCharCode(0x2014)}\\s*`, 'g');
-const clean = (title: string): string => title.replace(LONG_DASH, ' · ');
+const clean = (title: string): string => displayText(title, '');
 
 function crmKey(link: IntegrationLinkDTO): string {
   return `${link.targetType}:${link.targetId}`;

@@ -324,7 +324,7 @@ export function ChangeLogList({
                           <span className="text-faint line-through decoration-faint/60">{r.fromValue}</span>
                         ) : null}
                         {r.fromValue ? <span className="mx-1 text-faint">→</span> : null}
-                        <span className="font-medium text-foreground">{r.toValue || '—'}</span>
+                        <span className="font-medium text-foreground">{r.toValue || 'None'}</span>
                       </p>
                     ) : (
                       <p className="text-sm text-body">{prettyLogMessage(r.message)}</p>
@@ -403,7 +403,7 @@ export interface DetailItem {
 }
 
 export function Muted({ children }: { readonly children?: React.ReactNode }) {
-  return <span className="text-faint">{children ?? '—'}</span>;
+  return <span className="text-faint">{children ?? 'None'}</span>;
 }
 
 /** Two-column label/value grid used by the "Show details" drawers. */

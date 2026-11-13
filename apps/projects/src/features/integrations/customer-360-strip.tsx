@@ -36,13 +36,14 @@ import { RecordStatus, SiblingAppMark } from './record-chip';
 
 export const customer360Key = (projectKey: string) => ['project', projectKey, 'customer-360'] as const;
 
-export function useCustomer360(projectKey: string) {
+export function useCustomer360(projectKey: string, options: { readonly enabled?: boolean } = {}) {
   return useQuery({
     queryKey: customer360Key(projectKey),
     queryFn: () => apiGet<Customer360>(apiPath(`projects/${encodeURIComponent(projectKey)}/customer-360`)),
     staleTime: 30_000,
     refetchOnWindowFocus: 'always',
     refetchInterval: 120_000,
+    enabled: options.enabled ?? true,
   });
 }
 
@@ -115,7 +116,7 @@ function Metric({
       >
         {value}
       </span>
-      {hint ? <span className="truncate text-xs text-fg-muted">{hint}</span> : null}
+      {hint ? <span className="line-clamp-2 text-xs text-fg-muted">{hint}</span> : null}
     </>
   );
   const className = 'group/metric relative flex min-w-0 flex-col gap-0.5 rounded-md px-2.5 py-2';
@@ -222,12 +223,27 @@ function CrmStrip({
     const who = data.account?.name ?? data.customer?.name ?? 'this customer';
     return (
       <div className="flex min-w-0 flex-col gap-2">
-        <StripHeading app="crm" label="CRM" href={data.account?.url ?? data.urls.crm} linkLabel={data.account ? 'Account' : 'Open CRM'} />
+        <StripHeading app="crm" label="CRM" href={data.account?.url ?? data.urls.crm} linkLabel={data.account ? 'Open account in CRM' : 'Open CRM'} />
         <EmptyAction
           app="crm"
-          text={`No CRM deal is linked to this project yet. Link the deal for ${who} to see its stage, value, close date and contacts here.`}
+          text={
+            data.crmReady
+              ? `No CRM deal is linked to this project yet. Link the deal for ${who} to see its stage, value, close date and contacts here.`
+              : `Your CRM has no deals pipeline yet. Set one up from a template, then link the deal for ${who} to see its stage, value and contacts here.`
+          }
           action={
-            canEdit ? (
+            !data.crmReady ? (
+              <a
+                href={data.urls.crmTemplates}
+                {...external}
+                className={buttonVariants({ size: 'sm', variant: 'secondary' })}
+                data-testid="c360-setup-crm"
+              >
+                <SiblingAppMark app="crm" />
+                Set up CRM
+                <ArrowUpRight aria-hidden />
+              </a>
+            ) : canEdit ? (
               <Button size="sm" variant="secondary" onClick={() => onLink('crm_item')} data-testid="c360-link-deal">
                 <Link2 aria-hidden />
                 Link the CRM deal
@@ -246,7 +262,7 @@ function CrmStrip({
   const others = crm.deals.filter((entry) => entry.id !== deal.id);
   return (
     <div className="flex min-w-0 flex-col gap-2" data-testid="c360-crm">
-      <StripHeading app="crm" label="CRM" href={data.account?.url} linkLabel="Account" />
+      <StripHeading app="crm" label="CRM" href={data.account?.url} linkLabel="Open account in CRM" />
       <a href={deal.url} {...external} className="group/headline flex min-w-0 items-center gap-2 rounded-md px-2.5 py-1 hover:bg-hover" data-testid="c360-deal-name">
         <span className="min-w-0 truncate text-md font-semibold text-fg">{deal.name}</span>
         {deal.linked ? <span className="shrink-0 rounded-sm bg-primary-subtle px-1.5 py-px text-2xs font-semibold text-primary-text">This project</span> : null}
@@ -366,7 +382,7 @@ function WmsStrip({
   const receipt = wms.lastReceipt;
   return (
     <div className="flex min-w-0 flex-col gap-2" data-testid="c360-wms">
-      <StripHeading app="wms" label="Warehouse" href={wms.clientUrl} linkLabel="Client" />
+      <StripHeading app="wms" label="Warehouse" href={wms.clientUrl} linkLabel="Open client in WMS" />
       <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
         <Metric
           label="SKUs received"

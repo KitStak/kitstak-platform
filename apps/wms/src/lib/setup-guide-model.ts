@@ -52,7 +52,7 @@ export const SETUP_STEPS: readonly SetupStepDef[] = [
   {
     key: 'wms_warehouse',
     title: 'Create your warehouse',
-    description: 'Name, address and time zone — everything else hangs off a facility.',
+    description: 'Name, address and time zone. Everything else hangs off a facility.',
     minutes: 2,
     cta: { label: 'Add warehouse', href: '/settings/warehouses', permission: ['settings.warehouse.view'] },
     dependsOn: null,
@@ -68,7 +68,7 @@ export const SETUP_STEPS: readonly SetupStepDef[] = [
   {
     key: 'wms_client',
     title: 'Add your first client',
-    description: 'The company you fulfill for — products and orders belong to a client.',
+    description: 'The company you fulfill for. Products and orders belong to a client.',
     minutes: 2,
     cta: { label: 'Add client', href: '/clients', permission: ['settings.clients.view'] },
     dependsOn: 'wms_warehouse',

@@ -1065,7 +1065,7 @@ function TestPanel({ form }: { readonly form: Form }) {
                       {a.applied ? 'Applied' : 'Skipped'}
                     </span>{' '}
                     · {a.action}
-                    {a.message ? <span className="text-faint"> — {a.message}</span> : null}
+                    {a.message ? <span className="text-faint"> · {a.message}</span> : null}
                   </li>
                 ))}
               </ul>

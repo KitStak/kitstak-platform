@@ -363,7 +363,7 @@ function OrderMobileCard({ row }: { readonly row: OrderRow }) {
         <span className="truncate text-sm font-semibold text-foreground">{row.code}</span>
         <OrderStatusPill status={row.status} size="sm" />
       </span>
-      <span className="truncate text-xs text-body">{String(row.clientName ?? '—')}</span>
+      <span className="truncate text-xs text-body">{String(row.clientName ?? 'None')}</span>
       {/* "Nov 12, 3:54 AM" (format.ts humanDateTime); the full timestamp stays on the title. */}
       <span className="text-xs text-faint" title={orderDate ? fmt.dateTime(orderDate) : undefined}>
         {fmt.humanDateTime(orderDate)}

@@ -151,7 +151,7 @@ function dealRows(
         nextSteps.push({
           id: `deal:${item.id}`,
           kind: 'deal',
-          title: `${step} — ${item.name}`,
+          title: `${step} · ${item.name}`,
           due: closeDate,
           overdue: closeDate !== null && closeDate < new Date().toISOString().slice(0, 10),
           itemId: item.id,

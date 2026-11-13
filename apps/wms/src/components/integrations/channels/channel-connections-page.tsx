@@ -579,7 +579,7 @@ export function ChannelConnectionsPage({ provider }: { readonly provider: string
                   {
                     store: toDelete.storeName,
                     client: toDelete.clientName,
-                    wh: toDelete.warehouses.join(', ') || '—',
+                    wh: toDelete.warehouses.join(', ') || 'None',
                   },
                 ],
               }

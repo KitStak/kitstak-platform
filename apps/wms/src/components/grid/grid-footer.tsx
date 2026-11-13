@@ -143,7 +143,7 @@ export function GridFooter({
         >
           Total:{' '}
           <span className="font-semibold tabular-nums text-foreground">
-            {loading ? '—' : fmt.number(total)}
+            {loading ? 'None' : fmt.number(total)}
           </span>
           {showSelected ? (
             <span>

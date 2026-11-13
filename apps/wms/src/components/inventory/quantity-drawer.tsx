@@ -314,7 +314,7 @@ function QuantityForm({
           <span className="tabular-nums text-body">{formatQty(row.totalPackQty)}</span>
           <ArrowRight className="h-3.5 w-3.5 text-faint" aria-hidden />
           <span className="font-semibold tabular-nums text-foreground">
-            {after === null ? '—' : formatQty(after)}
+            {after === null ? 'None' : formatQty(after)}
           </span>
           <span className="text-faint">{row.packType}</span>
           {after !== null && row.unitsPerPack > 1 ? (

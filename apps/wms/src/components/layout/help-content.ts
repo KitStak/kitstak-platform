@@ -440,8 +440,8 @@ export const HELP_CATEGORIES: readonly HelpCategory[] = [
         contexts: ['/dashboard'],
         steps: [
           'The "Get set up" panel on the Dashboard lists the five first-run steps in operational order: warehouse → locations → client → products → first order.',
-          'Steps complete themselves from live data — create a warehouse anywhere and the step is checked off; a skipped step is still checked off once the data exists.',
-          'Later steps stay locked until what they depend on is done or skipped (products need a client, orders need products) — skipping a step unlocks the ones after it.',
+          'Steps complete themselves from live data. Create a warehouse anywhere and the step is checked off; a skipped step is still checked off once the data exists.',
+          'Later steps stay locked until what they depend on is done or skipped (products need a client, orders need products). Skipping a step unlocks the ones after it.',
           'Admins can skip a step with its inline Skip button (undo any time) or dismiss the whole guide from the panel menu; the dashboard then looks exactly as before.',
         ],
         links: [

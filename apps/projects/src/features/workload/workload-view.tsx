@@ -144,8 +144,10 @@ export function WorkloadView() {
     gridObserver.current = new ResizeObserver(([entry]) => setGridWidth(Math.round(entry?.contentRect.width ?? 0)));
     gridObserver.current.observe(node);
   }, []);
-  const nameWidth = narrow ? 136 : 248;
-  const colMin = narrow ? 148 : 168;
+  // Phones: a slim name column and one full-width week (task chips readable), the next weeks a
+  // sideways scroll away (the next column peeks in at the edge as the hint).
+  const nameWidth = narrow ? 108 : 248;
+  const colMin = narrow ? (gridWidth > 0 ? Math.max(200, gridWidth - nameWidth - 28) : 240) : 168;
   const fitWeeks = gridWidth > 0 && !narrow ? Math.max(1, Math.floor((gridWidth - nameWidth - 2 * colMin) / colMin)) : Number(prefs.weeks);
   const weekCount = Math.min(narrow ? 4 : 12, Number(prefs.weeks), fitWeeks);
   const weeks = useMemo(() => weekStarts(anchor, weekCount), [anchor, weekCount]);
@@ -274,7 +276,7 @@ export function WorkloadView() {
     );
   }
 
-  const gridTemplate = `${nameWidth}px repeat(${buckets.length}, minmax(${colMin}px, 1fr))`;
+  const gridTemplate = narrow ? `${nameWidth}px repeat(${buckets.length}, ${colMin}px)` : `${nameWidth}px repeat(${buckets.length}, minmax(${colMin}px, 1fr))`;
   const lastWeek = weeks.at(-1) as IsoDate;
   const rangeTitle = `${SHORT.format(parseIsoDate(weeks[0] as IsoDate))} to ${SHORT.format(parseIsoDate(addDaysIso(lastWeek, 6)))}`;
   const unitLabel = UNIT_LABELS[unit];
@@ -562,7 +564,7 @@ export function WorkloadView() {
                     >
                       {isCollapsed ? <ChevronRight aria-hidden className="size-3.5" /> : <ChevronDown aria-hidden className="size-3.5" />}
                     </button>
-                    {person ? (
+                    {narrow ? null : person ? (
                       <Avatar name={person.name} src={person.image} size="sm" />
                     ) : (
                       <span aria-hidden className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dashed border-border-strong text-icon">

@@ -77,7 +77,7 @@ function DependencyRow({
   return (
     <li className="group/dep flex h-9 items-center gap-2 rounded-md pr-1 pl-1.5 hover:bg-hover">
       <StatusIcon category={dep.task.statusCategory} size={15} />
-      <span className="shrink-0 font-mono text-2xs text-fg-muted">{dep.task.key}</span>
+      <span className="shrink-0 font-key text-2xs text-fg-muted">{dep.task.key}</span>
       <button
         type="button"
         onClick={() => openTask(dep.task.key)}

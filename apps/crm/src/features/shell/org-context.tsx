@@ -20,6 +20,8 @@ export interface ShellOrg {
 export interface ShellApps {
   readonly urls: { readonly portal: string; readonly crm: string; readonly wms: string; readonly projects: string };
   readonly entitled: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
+  /** Apps this org cannot use on any plan (WMS outside the platform org). */
+  readonly notInPlan?: readonly ('crm' | 'wms' | 'projects')[];
 }
 
 export interface OrgContextValue {

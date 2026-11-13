@@ -8,7 +8,7 @@ export const SHORTCUT_GROUPS: readonly { title: string; items: readonly { keys: 
     title: 'Anywhere',
     items: [
       { keys: ['mod', 'K'], label: 'Search and commands' },
-      { keys: ['/'], label: 'Search' },
+      { keys: ['/'], label: 'Filter this view (or search everything)' },
       { keys: ['C'], label: 'New task' },
       { keys: ['?'], label: 'Show keyboard shortcuts' },
       { keys: ['['], label: 'Collapse or expand the sidebar' },
@@ -81,12 +81,12 @@ export function ShortcutsDialog() {
   const mod = useModKey();
   return (
     <Dialog open={open} onOpenChange={(value) => (value ? undefined : close())}>
-      <DialogContent size="lg" data-testid="shortcuts-dialog">
+      <DialogContent size="xl" data-testid="shortcuts-dialog">
         <DialogHeader title="Keyboard shortcuts" description="Work faster without the mouse." />
-        <DialogBody>
-          <div className="grid gap-6 sm:grid-cols-2">
+        <DialogBody className="relative pb-0">
+          <div className="columns-1 gap-8 sm:columns-2 lg:columns-3">
             {SHORTCUT_GROUPS.map((group) => (
-              <section key={group.title}>
+              <section key={group.title} className="mb-6 break-inside-avoid">
                 <h3 className="mb-2 text-xs font-semibold tracking-[0.06em] text-fg-muted uppercase">{group.title}</h3>
                 <ul className="flex flex-col gap-1.5">
                   {group.items.map((item) => (
@@ -103,6 +103,8 @@ export function ShortcutsDialog() {
               </section>
             ))}
           </div>
+          {/* Scroll cue: fades the last visible row while there is more below; at the end it only covers the padding. */}
+          <div aria-hidden className="pointer-events-none sticky bottom-0 -mx-6 h-6 bg-gradient-to-t from-raised to-transparent" />
         </DialogBody>
       </DialogContent>
     </Dialog>

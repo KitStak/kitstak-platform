@@ -35,7 +35,7 @@ export function SetupCallout() {
       <Rocket aria-hidden className="size-3.5 shrink-0 text-primary-text" />
       <p className="min-w-0 flex-1 truncate text-xs text-fg">
         <span className="font-semibold">Setup step: {step.title}</span>
-        <span className="text-fg-muted"> — {step.description}</span>
+        <span className="text-fg-muted"> · {step.description}</span>
       </p>
       <IconButton
         size="xs"

@@ -395,7 +395,7 @@ function BacklogPicker({ cycle, backlog, onAdded }: { readonly cycle: CycleDTO; 
           {shown.map((task) => (
             <li key={task.id} className="flex items-center gap-2 rounded-md px-1 hover:bg-hover">
               <Checkbox checked={picked.has(task.id)} onCheckedChange={() => toggle(task.id)} aria-label={`Pick ${task.key} ${task.title}`} />
-              <span className="w-16 shrink-0 font-mono text-2xs text-fg-muted">{task.key}</span>
+              <span className="w-16 shrink-0 font-key text-2xs text-fg-muted">{task.key}</span>
               <button type="button" onClick={() => toggle(task.id)} className="min-w-0 flex-1 truncate py-2 text-left text-sm text-fg outline-none focus-visible:underline">
                 {task.title}
               </button>

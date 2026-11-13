@@ -56,7 +56,7 @@ export function TaskCard({
         </div>
       ) : null}
       <div className="flex items-center gap-2 text-2xs text-fg-muted">
-        <span className="font-mono">{task.key}</span>
+        <span className="font-key">{task.key}</span>
         {task.subtaskCount ? (
           <span className="inline-flex items-center gap-0.5">
             <CheckSquare aria-hidden className="size-3" />

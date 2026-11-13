@@ -432,7 +432,7 @@ function humanKey(key: string): string {
 }
 
 function humanValue(key: string, value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (value === null || value === undefined || value === '') return 'None';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (key === 'durationMs' && typeof value === 'number') return value < 1000 ? `${value} ms` : `${(value / 1000).toFixed(1)} s`;
   if (Array.isArray(value)) {

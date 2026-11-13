@@ -104,7 +104,7 @@ export function NumbersWidget({ insight, settings, filtered }: WidgetRenderProps
             data-testid="numbers-value"
             aria-label={noMatch ? 'No matching items' : exact}
           >
-            {noMatch ? '—' : formatCompact(insight.total, format)}
+            {noMatch ? 'None' : formatCompact(insight.total, format)}
           </p>
         </Tooltip>
         {noMatch ? (

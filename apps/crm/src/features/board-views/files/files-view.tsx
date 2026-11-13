@@ -309,7 +309,7 @@ export function FilesView({ boardId, view, onOpenItem, className }: BoardViewPro
                       </button>
                     ) : null}
                   </td>
-                  <td className="border-b border-border-subtle px-3 text-fg-secondary">{info.uploader?.name ?? '—'}</td>
+                  <td className="border-b border-border-subtle px-3 text-fg-secondary">{info.uploader?.name ?? 'None'}</td>
                   <td className="border-b border-border-subtle px-3 text-fg-secondary tabular-nums">{info.date}</td>
                   <td className="border-b border-border-subtle px-3 text-fg-secondary tabular-nums">{formatBytes(file.size)}</td>
                   <td className="w-10 border-b border-border-subtle px-2">{menu(file, index)}</td>

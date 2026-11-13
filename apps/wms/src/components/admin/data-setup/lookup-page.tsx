@@ -86,7 +86,7 @@ const yesNo = (on: boolean) => (
 );
 const num = (v: unknown) => (
   <span className="block text-right tabular-nums">
-    {typeof v === 'number' ? v.toLocaleString('en-US') : '—'}
+    {typeof v === 'number' ? v.toLocaleString('en-US') : 'None'}
   </span>
 );
 

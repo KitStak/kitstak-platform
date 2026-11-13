@@ -300,7 +300,7 @@ function CompareTable({ cluster, kind, orgSlug, canEdit, primaryId, included, ch
                         <span className="min-w-0 break-words">{value}</span>
                       </label>
                     ) : (
-                      <span className={cn('block break-words', value === null ? 'text-fg-muted' : 'text-fg')}>{value ?? '—'}</span>
+                      <span className={cn('block break-words', value === null ? 'text-fg-muted' : 'text-fg')}>{value ?? 'None'}</span>
                     )}
                   </td>
                 );

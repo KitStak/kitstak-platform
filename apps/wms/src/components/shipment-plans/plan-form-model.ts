@@ -341,7 +341,7 @@ export function humanizePlanChange(message: string): string {
     return parts.length ? parts.join('; ') : 'Orders unchanged';
   }
   const name = FIELD_NAMES[field] ?? field;
-  if (field === 'Status') return `Status changed from ${before || '—'} to ${after || '—'}`;
+  if (field === 'Status') return `Status changed from ${before || 'None'} to ${after || 'None'}`;
   if (!before && after) return `${name} set to ${after}`;
   if (before && !after) return `${name} cleared (was ${before})`;
   return `${name} changed from ${before} to ${after}`;

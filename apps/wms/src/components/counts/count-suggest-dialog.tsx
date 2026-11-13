@@ -177,7 +177,7 @@ function Body({
                         <span className="flex flex-col leading-tight">
                           <span className="font-semibold text-foreground">{r.label}</span>
                           <span className="text-2xs text-secondary">
-                            {[r.sub1, r.sub2].filter(Boolean).join(' · ') || '—'}
+                            {[r.sub1, r.sub2].filter(Boolean).join(' · ') || 'None'}
                           </span>
                         </span>
                       </td>

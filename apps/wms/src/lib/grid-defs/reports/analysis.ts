@@ -148,7 +148,7 @@ export const BAND_TONE: Readonly<
 
 /** "1,240 %" / "85.5 %"; em dash when there is no capacity. */
 export function formatUtilizationPct(pct: number | null | undefined): string {
-  if (pct === null || pct === undefined || !Number.isFinite(pct)) return '—';
+  if (pct === null || pct === undefined || !Number.isFinite(pct)) return 'None';
   return `${pct.toLocaleString('en-US', { maximumFractionDigits: 1 })} %`;
 }
 

@@ -14,6 +14,7 @@ import type {
   AutomationRunDTO,
   CommentDTO,
   CustomFieldDTO,
+  CustomerPulseDTO,
   CycleDetailDTO,
   CycleListDTO,
   DashboardDTO,
@@ -296,3 +297,7 @@ export const useCycle = (id: string | null, opts?: Opts<CycleDetailDTO>) =>
 
 export const useTriage = (key: string, filter: 'open' | 'snoozed' | 'decided' = 'open', opts?: Opts<TriageQueueDTO>) =>
   useQuery({ queryKey: qk.triage(key, filter), queryFn: () => apiGet<TriageQueueDTO>(apiPath(`projects/${encodeURIComponent(key)}/triage`, { filter })), ...opts });
+
+/** Home "Your customers today" (CRM + WMS per customer, plus mismatches). Loads after first paint. */
+export const useCustomerPulse = (opts?: Opts<CustomerPulseDTO>) =>
+  useQuery({ queryKey: qk.customerPulse(), queryFn: () => apiGet<CustomerPulseDTO>(apiPath('integrations/customer-pulse')), staleTime: 60_000, ...opts });

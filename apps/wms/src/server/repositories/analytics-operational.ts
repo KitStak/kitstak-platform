@@ -144,7 +144,7 @@ async function inbound(db: AppDb, r: Range, wh: readonly string[]): Promise<Buil
       },
       {
         label: 'Avg dock-to-stock',
-        value: d2s?.hrs != null ? `${round(Number(d2s.hrs), 1)} h` : '—',
+        value: d2s?.hrs != null ? `${round(Number(d2s.hrs), 1)} h` : 'None',
         hint: d2s?.pending
           ? `${fmtInt(Number(d2s.pending))} receipts still on the dock`
           : 'Every receipt is put away',
@@ -817,7 +817,7 @@ async function productivity(db: AppDb, r: Range, wh: readonly string[]): Promise
     kpis: [
       {
         label: 'Units per hour',
-        value: cm > 0 ? fmtInt(unitsPerHour(cu, cm)) : '—',
+        value: cm > 0 ? fmtInt(unitsPerHour(cu, cm)) : 'None',
         hint: perArea || 'Timed tasks only, counts excluded',
         href: workHref,
       },
@@ -832,7 +832,7 @@ async function productivity(db: AppDb, r: Range, wh: readonly string[]): Promise
       // active days of the range, with the single peak hour as a secondary hint (and link).
       {
         label: 'Busiest hour',
-        value: pattern ? pattern.label : '—',
+        value: pattern ? pattern.label : 'None',
         hint:
           pattern && busiest
             ? `avg ${fmtDecimal(pattern.avg)} tasks/day over ${fmtInt(pattern.days)} active day${pattern.days === 1 ? '' : 's'} · peak ${peakLabel} (${fmtInt(busiest[1].n)})`

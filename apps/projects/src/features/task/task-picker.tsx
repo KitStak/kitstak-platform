@@ -65,7 +65,7 @@ export function TaskPickerList({
   const row = (task: TaskRef, projectName?: string) => (
     <Command.Item key={task.id} value={task.id} onSelect={() => onPick(task)} className="ks-menu-item">
       <StatusIcon category={task.statusCategory} />
-      <span className="shrink-0 font-mono text-2xs text-fg-muted">{task.key}</span>
+      <span className="shrink-0 font-key text-2xs text-fg-muted">{task.key}</span>
       <span
         className={
           task.statusCategory === 'done'

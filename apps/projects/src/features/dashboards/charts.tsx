@@ -7,7 +7,7 @@
  */
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Tooltip, cn } from '@/components/ui';
-import { niceMax } from '@/lib/report-math';
+import { niceMax, tightNiceMax } from '@/lib/report-math';
 
 const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -253,7 +253,7 @@ export function LineChart({
   const gradientId = useId().replace(/:/g, '');
   const count = labels.length;
   const roving = useRoving(count);
-  const max = niceMax(Math.max(0, ...series.flatMap((s) => s.values.filter((v): v is number => v !== null))));
+  const max = tightNiceMax(Math.max(0, ...series.flatMap((s) => s.values.filter((v): v is number => v !== null))));
   const innerW = Math.max(0, width - PAD.left - PAD.right);
   const innerH = height - PAD.top - PAD.bottom;
   const x = (index: number) => PAD.left + (count <= 1 ? innerW / 2 : (index / (count - 1)) * innerW);

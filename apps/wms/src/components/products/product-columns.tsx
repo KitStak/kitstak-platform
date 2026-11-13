@@ -14,7 +14,7 @@ import { ProductThumb, type ProductListRow } from './catalog-shared';
 
 type Col = ColumnDef<ProductListRow, unknown>;
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 const text = (v: unknown) =>
   v === null || v === undefined || v === '' ? (
     dash
@@ -40,7 +40,7 @@ const flag = (
       <YesNoPill value />
     ) : (
       <span className="text-faint" aria-label="No" title="No">
-        —
+        None
       </span>
     ),
 });

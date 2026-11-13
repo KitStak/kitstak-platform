@@ -138,7 +138,7 @@ function UpdateItem({ update, latest }: { readonly update: ProjectUpdateDTO; rea
         <p className="text-sm text-fg-secondary">
           <span className="font-semibold text-fg">{author}</span> marked it <span className="font-medium" style={{ color: HEALTH_COLOR[update.health] }}>{PROJECT_HEALTH_LABELS[update.health].toLowerCase()}</span>
           {update.status ? <> and moved it to <span className="font-medium text-fg">{PROJECT_STATUS_LABELS[update.status]}</span></> : null}
-          <span className="text-fg-muted"> · {update.progress}% done · </span>
+          <span className="text-fg-muted"> · {update.progress}% done at the time · </span>
           <LocalTime iso={update.createdAt} className="text-fg-muted" />
           {latest ? <span className="ml-1.5 rounded-sm bg-primary-subtle px-1.5 py-px text-2xs font-semibold text-primary-text">Latest</span> : null}
         </p>
@@ -274,8 +274,12 @@ function ScheduleBar({ start, due, percent }: { readonly start: string | null; r
 
 function ProgressPanel({ project }: { readonly project: ProjectDetail }) {
   const report = useReport({ project: project.key });
+  // The task cache is seeded with the page, so this number is there on first paint (the report,
+  // which also draws the charts, streams in after).
+  const tasks = useProjectTasks(project.key);
+  const fromTasks = tasks.data ? tasks.data.filter((task) => !task.parentTaskId && task.statusCategory === 'in_progress').length : undefined;
   const data = report.data;
-  const inProgress = data?.totals.inProgress;
+  const inProgress = fromTasks ?? data?.totals.inProgress;
   return (
     <Panel
       title="Progress"
@@ -287,10 +291,10 @@ function ProgressPanel({ project }: { readonly project: ProjectDetail }) {
       }
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <ProgressRing percent={project.progress.percent} size={88} strokeWidth={8} label="Tasks done" tone={HEALTH_TONE[project.health] === 'success' ? 'primary' : HEALTH_TONE[project.health]} />
+        <ProgressRing percent={project.progress.percent} size={88} strokeWidth={8} label="Tasks done" tone={HEALTH_TONE[project.health]} />
         <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label="Tasks" value={project.progress.total} />
-          <Stat label="In progress" value={inProgress ?? 'None'} />
+          <Stat label="In progress" value={inProgress === undefined ? '…' : inProgress} />
           <Stat label="Done" value={project.progress.done} tone={project.progress.done ? 'success' : undefined} />
           <Stat label="Overdue" value={project.progress.overdue} tone={project.progress.overdue ? 'danger' : undefined} />
         </div>
@@ -576,7 +580,7 @@ function DetailsPanel({ project, canEdit }: { readonly project: ProjectDetail; r
           </span>
         </DetailRow>
         <DetailRow label="Key">
-          <span className="font-mono" title={`Tasks are numbered ${project.key}-1, ${project.key}-2 and so on`}>{project.key}</span>
+          <span className="font-key" title={`Tasks are numbered ${project.key}-1, ${project.key}-2 and so on`}>{project.key}</span>
         </DetailRow>
       </dl>
     </Panel>

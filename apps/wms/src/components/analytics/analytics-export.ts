@@ -8,7 +8,7 @@ const nf = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
 export function formatCell(value: unknown, col: AnalyticsColumn): string {
-  if (value === null || value === undefined || value === '') return '—';
+  if (value === null || value === undefined || value === '') return 'None';
   if (typeof value !== 'number') return String(value);
   switch (col.kind) {
     case 'money':

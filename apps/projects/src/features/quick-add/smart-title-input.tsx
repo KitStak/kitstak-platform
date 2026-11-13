@@ -288,7 +288,7 @@ export function UnderstoodChips({
                     : TOKEN_TEXT[token.kind],
                 )}
                 data-unresolved={token.unresolved ? '' : undefined}
-                title={token.unresolved && token.kind !== 'label' ? `“${token.raw}” matched nobody, so it stays in the task name. Fix the spelling or pick from the list.` : undefined}
+                title={token.unresolved && token.kind === 'assignee' ? `“${token.raw}” matched nobody, so the task stays unassigned and the name leaves it out. Fix the spelling, pick from the list, or press × to keep it as text.` : token.unresolved && token.kind !== 'label' ? `“${token.raw}” matched nothing, so it stays in the task name. Fix the spelling or pick from the list.` : undefined}
               >
                 <Icon aria-hidden className="size-3.5 shrink-0" />
                 <span className="truncate">

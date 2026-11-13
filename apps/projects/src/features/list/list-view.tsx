@@ -551,7 +551,7 @@ export function ListView() {
               <span className="w-8" />
             </div>
           ) : null}
-          <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={reset}>
+          <DndContext id={`list-${project.id}`} sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={reset}>
             {all.length > 0
               ? groups.map((groupKey) => {
                   const ids = shownIds.get(groupKey) ?? [];

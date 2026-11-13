@@ -518,13 +518,13 @@ export function CountEntryTable({
   const totalCounted =
     totals.counted === null ? (
       <span className="font-normal text-danger" title="Fix the invalid counted quantities">
-        —
+        None
       </span>
     ) : (
       totals.counted.toLocaleString()
     );
   const totalPct = totals.invalid ? (
-    <span className="text-faint">—</span>
+    <span className="text-faint">None</span>
   ) : (
     <DifferenceBadge value={totals.pct} />
   );
@@ -589,7 +589,7 @@ export function CountEntryTable({
                     {blind ? null : (
                       <span className="pb-3">
                         {delta === null ? (
-                          <span className="text-faint">—</span>
+                          <span className="text-faint">None</span>
                         ) : (
                           <DeltaBadge value={delta} system={d.systemQty} />
                         )}
@@ -677,7 +677,7 @@ export function CountEntryTable({
                       </td>
                       <td className="px-3 py-1.5 text-secondary">
                         <span className="block">
-                          {[d.lotNumber, d.lpNumber].filter(Boolean).join(' · ') || '—'}
+                          {[d.lotNumber, d.lpNumber].filter(Boolean).join(' · ') || 'None'}
                         </span>
                         {reasonEditor(d)}
                       </td>
@@ -690,7 +690,7 @@ export function CountEntryTable({
                       {blind ? null : (
                         <td className="px-3 py-1.5 text-right">
                           {delta === null ? (
-                            <span className="text-faint">—</span>
+                            <span className="text-faint">None</span>
                           ) : (
                             <DeltaBadge value={delta} system={d.systemQty} />
                           )}

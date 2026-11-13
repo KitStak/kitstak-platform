@@ -201,7 +201,7 @@ function ImportManual({
                     </td>
                     <td className="border-b border-border px-2 py-2 text-secondary">{columnRule(c)}</td>
                     <td className="border-b border-border px-2 py-2 font-mono text-2xs text-body">
-                      {c.example || '—'}
+                      {c.example || 'None'}
                     </td>
                     <td className="border-b border-border px-2 py-2 text-secondary">
                       {c.description ?? (c.required ? 'Required.' : 'Optional.')}

@@ -100,7 +100,7 @@ export function JobTypeDetailDrawer({
           <dl>
             <Row label="Description">{d.description}</Row>
             {d.operationType === 'Picking' || d.operationType === 'Work Order' ? (
-              <Row label="Allocation algorithm">{d.algorithmName ?? '—'}</Row>
+              <Row label="Allocation algorithm">{d.algorithmName ?? 'None'}</Row>
             ) : null}
             {d.operationType === 'Picking' ? (
               <>

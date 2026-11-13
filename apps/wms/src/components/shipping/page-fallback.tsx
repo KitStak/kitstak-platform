@@ -53,7 +53,7 @@ export function ShipListFallback({
             Show 100 items
           </span>
           <span>
-            Total: <span className="font-semibold text-foreground">—</span>
+            Total: <span className="font-semibold text-foreground">None</span>
           </span>
         </div>
       </div>

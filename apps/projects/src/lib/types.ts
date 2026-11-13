@@ -659,3 +659,25 @@ export interface TriageQueueDTO {
   readonly items: readonly TriageItemDTO[];
   readonly counts: Readonly<Record<'pending' | 'snoozed' | 'decided', number>>;
 }
+
+// --- Home: cross-app customer pulse (GET /api/v1/integrations/customer-pulse) -----------------
+
+export interface CustomerPulseRowDTO {
+  readonly key: string;
+  readonly customerName: string;
+  readonly customerUrl: string | null;
+  readonly projects: readonly { readonly id: string; readonly key: string; readonly name: string; readonly openTasks: number; readonly overdue: number }[];
+  readonly deal: { readonly name: string; readonly stage: string | null; readonly outcome: 'won' | 'lost' | 'open'; readonly closeDate: string | null; readonly url: string } | null;
+  readonly lateReceipts: number;
+  readonly exceptions: number;
+  readonly openOrders: number;
+  readonly receiptsUrl: string | null;
+  readonly exceptionsUrl: string | null;
+  readonly risks: readonly { readonly id: string; readonly tone: 'danger' | 'warning'; readonly text: string; readonly href: string | null }[];
+}
+
+export interface CustomerPulseDTO {
+  readonly available: { readonly crm: boolean; readonly wms: boolean };
+  readonly rows: readonly CustomerPulseRowDTO[];
+  readonly mismatches: readonly { readonly id: string; readonly tone: 'danger' | 'warning'; readonly text: string; readonly href: string }[];
+}

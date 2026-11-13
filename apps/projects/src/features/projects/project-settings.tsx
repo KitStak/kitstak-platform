@@ -114,7 +114,7 @@ function GeneralSettings({ highlight }: { readonly highlight?: boolean }) {
                   aria-describedby={describedBy}
                   invalid={invalid}
                   size="lg"
-                  className="font-mono"
+                  className="font-key"
                 />
               )}
             </Field>

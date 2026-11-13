@@ -290,7 +290,7 @@ function Body({ d, actions }: { readonly d: Detail; readonly actions: ShipmentAc
                   <td className="max-w-[180px] truncate" title={i.productName}>
                     {i.productName}
                   </td>
-                  <td>{i.lotNumber ?? '—'}</td>
+                  <td>{i.lotNumber ?? 'None'}</td>
                   <td className="text-right tabular-nums">
                     {i.quantity} {i.packType}
                   </td>

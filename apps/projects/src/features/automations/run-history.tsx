@@ -141,7 +141,7 @@ export function RunHistoryList({
               data-task-key={run.taskKey}
               onClick={() => openTask(run.taskKey as string)}
             >
-              <span className="font-mono text-xs text-fg-muted">{run.taskKey}</span>
+              <span className="font-key text-xs text-fg-muted">{run.taskKey}</span>
               <span className="truncate">{run.taskTitle}</span>
             </Button>
           ) : run.taskId ? (

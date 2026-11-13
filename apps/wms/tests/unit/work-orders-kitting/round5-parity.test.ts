@@ -76,6 +76,6 @@ describe('warehouse time zone formatting', () => {
     expect(formatInZone('2026-11-10T05:44:16.000Z', 'America/Chicago')).toBe('11/09/2026 11:44 PM CST');
   });
   it('renders empty values as a dash', () => {
-    expect(formatInZone(null, 'America/Chicago')).toBe('–');
+    expect(formatInZone(null, 'America/Chicago')).toBe('None');
   });
 });

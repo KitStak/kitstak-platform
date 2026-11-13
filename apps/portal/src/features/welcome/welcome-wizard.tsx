@@ -41,7 +41,7 @@ const STEP_ORDER: readonly WizardStep[] = ['focus', 'about', 'start', 'plan'];
 const STEP_COPY: Readonly<Record<WizardStep, { title: string; subtitle: string }>> = {
   focus: {
     title: 'What will your team run on KitStak?',
-    subtitle: 'Pick what you need today — you can always turn on more later.',
+    subtitle: 'Pick what you need today. You can always turn on more later.',
   },
   about: {
     title: 'What kind of business are you?',
@@ -49,7 +49,7 @@ const STEP_COPY: Readonly<Record<WizardStep, { title: string; subtitle: string }
   },
   start: {
     title: 'How do you want to start?',
-    subtitle: 'Every option leads to the same place — a working workspace.',
+    subtitle: 'Every option leads to the same place: a working workspace.',
   },
   plan: {
     title: 'Here’s your setup plan',
@@ -296,7 +296,7 @@ export function WelcomeWizard({ firstName, orgName, crmEntitled, wmsEntitled }: 
             <div className="flex items-center gap-2 border-t border-border-subtle px-5 py-3">
               <Check aria-hidden className="size-4 text-success-text" />
               <p className="text-xs text-fg-muted">
-                KitStak detects each step as you finish it — your progress updates by itself.
+                KitStak detects each step as you finish it, and your progress updates by itself.
               </p>
             </div>
           </div>

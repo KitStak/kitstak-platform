@@ -391,7 +391,7 @@ function EditForm({
           </div>
           <div>
             <dt className="text-2xs text-faint">Location</dt>
-            <dd>{detail.locationCode ?? '—'}</dd>
+            <dd>{detail.locationCode ?? 'None'}</dd>
           </div>
         </dl>
       </FormSection>

@@ -143,7 +143,7 @@ const lineColumns = (exported: boolean): GridColumnDef<LineRow>[] => [
     id: 'activityDate',
     header: 'Activity date',
     size: 110,
-    cell: ({ row }) => (row.original.activityDate ? <Day value={row.original.activityDate} /> : '—'),
+    cell: ({ row }) => (row.original.activityDate ? <Day value={row.original.activityDate} /> : 'None'),
   },
   {
     id: 'referenceNumber',
@@ -161,7 +161,7 @@ const lineColumns = (exported: boolean): GridColumnDef<LineRow>[] => [
           {row.original.referenceNumber}
         </Link>
       ) : (
-        <span className="font-mono">{row.original.referenceNumber ?? '—'}</span>
+        <span className="font-mono">{row.original.referenceNumber ?? 'None'}</span>
       );
     },
   },
@@ -175,7 +175,7 @@ const lineColumns = (exported: boolean): GridColumnDef<LineRow>[] => [
         <span className="font-mono text-xs">{sku}</span>
       ) : (
         <span className="text-faint" title="This charge covers the whole order / receipt, not one SKU">
-          —
+          None
         </span>
       );
     },
@@ -185,7 +185,7 @@ const lineColumns = (exported: boolean): GridColumnDef<LineRow>[] => [
     header: 'LP / tracking',
     size: 140,
     meta: { defaultVisible: false },
-    cell: ({ row }) => <span className="font-mono text-xs">{row.original.lpNumber ?? '—'}</span>,
+    cell: ({ row }) => <span className="font-mono text-xs">{row.original.lpNumber ?? 'None'}</span>,
   },
   {
     id: 'chargeBy',
@@ -877,10 +877,10 @@ export function BillingReportDetailPage({ id }: { readonly id: string }) {
                         <td className="px-3 py-2">{l.feeBy}</td>
                         <td className="px-3 py-2">{l.chargeBy}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {l.fromQty !== null ? num(l.fromQty, 0) : '—'}
+                          {l.fromQty !== null ? num(l.fromQty, 0) : 'None'}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {l.fromQty === null ? '—' : l.toQty === null ? '∞' : num(l.toQty, 0)}
+                          {l.fromQty === null ? 'None' : l.toQty === null ? '∞' : num(l.toQty, 0)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
                           {num(l.quantity, l.quantity % 1 ? 2 : 0)}
@@ -890,7 +890,7 @@ export function BillingReportDetailPage({ id }: { readonly id: string }) {
                         <td
                           className={`px-3 py-2 text-right tabular-nums ${l.minMaxAdjustment ? 'text-warning' : 'text-faint'}`}
                         >
-                          {l.minMaxAdjustment ? num(l.minMaxAdjustment) : '—'}
+                          {l.minMaxAdjustment ? num(l.minMaxAdjustment) : 'None'}
                         </td>
                         <td className="px-3 py-2 text-right font-semibold tabular-nums">
                           {moneyGrid(l.adjustedPrice, b.currency)}

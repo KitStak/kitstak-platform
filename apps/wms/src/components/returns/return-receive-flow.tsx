@@ -633,7 +633,7 @@ export function ReturnWithRma({
                 title={c.reason ?? undefined}
               >
                 <span>
-                  <strong>{c.rmaCode}</strong> · {c.orderCode ?? 'Manual'} · {c.customerName ?? '—'}
+                  <strong>{c.rmaCode}</strong> · {c.orderCode ?? 'Manual'} · {c.customerName ?? 'None'}
                 </span>
                 <span className="flex items-center gap-2 text-xs text-secondary">
                   {c.returnedQty}/{c.requestedQty}
@@ -653,7 +653,7 @@ export function ReturnWithRma({
                 <StatusPill status={rma.status} domain="return" size="sm" />
               </p>
               <p className="text-xs text-secondary">
-                {rma.order?.code ?? 'Manual'} · {rma.customerName ?? '—'} · {rma.clientName}
+                {rma.order?.code ?? 'Manual'} · {rma.customerName ?? 'None'} · {rma.clientName}
                 {rma.trackingNumber ? ` · ${rma.trackingNumber}` : ''}
               </p>
             </div>

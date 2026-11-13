@@ -175,7 +175,7 @@ const EXC_COLS = buildColumns<GridRow>(ALLOCATION_EXCEPTION_COLUMNS, {
           : 'text-body';
       return (
         <span className={`truncate ${tone}`} title={text}>
-          {text || '—'}
+          {text || 'None'}
         </span>
       );
     },

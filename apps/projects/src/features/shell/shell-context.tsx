@@ -23,6 +23,8 @@ export interface ShellContextValue {
   readonly appUrls: { readonly portal: string; readonly crm: string; readonly wms: string; readonly projects: string };
   readonly modules: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
   readonly integrations: { readonly crm: boolean; readonly wms: boolean };
+  /** Sibling apps this org cannot use on any plan (app switcher shows them as "Not in your plan"). */
+  readonly notInPlan?: readonly ('crm' | 'wms')[];
 }
 
 interface ShellContextApi extends ShellContextValue {

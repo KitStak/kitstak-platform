@@ -38,7 +38,7 @@ export const OPEN_PO_DELETE_REASON =
 export const OPEN_PO_DEACTIVATE_REASON =
   'This vendor has open purchase orders. Complete or cancel them before deactivating.';
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 
 function buildColumns(openVendor: (row: VendorRow) => void): ColumnDef<VendorRow, unknown>[] {
   return [

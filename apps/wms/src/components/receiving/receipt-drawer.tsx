@@ -92,24 +92,24 @@ export function ReceiptDrawer({
                   {r.poCode}
                 </Link>
               ) : (
-                '—'
+                'None'
               ),
           },
           {
             label: 'PO status',
-            value: r.poStatus ? <StatusPill status={r.poStatus} domain="purchaseOrder" size="sm" /> : '—',
+            value: r.poStatus ? <StatusPill status={r.poStatus} domain="purchaseOrder" size="sm" /> : 'None',
           },
           {
             label: 'Quantity',
             value: `${r.quantity.toLocaleString()} ${r.packType}${r.uomQuantity !== r.quantity ? ` (${r.uomQuantity.toLocaleString()} ${r.uomPackType})` : ''}`,
           },
           { label: 'Location', value: r.locationCode },
-          { label: 'LPN', value: r.lpNumber ? `${r.lpNumber}${r.lpType ? ` · ${r.lpType}` : ''}` : '—' },
-          { label: 'Lot/batch number', value: r.lotNumber ?? '—' },
-          { label: 'Expiry date', value: r.expiryDate ? fmt.date(calendarDay(r.expiryDate)) : '—' },
+          { label: 'LPN', value: r.lpNumber ? `${r.lpNumber}${r.lpType ? ` · ${r.lpType}` : ''}` : 'None' },
+          { label: 'Lot/batch number', value: r.lotNumber ?? 'None' },
+          { label: 'Expiry date', value: r.expiryDate ? fmt.date(calendarDay(r.expiryDate)) : 'None' },
           {
             label: 'Production date',
-            value: r.productionDate ? fmt.date(calendarDay(r.productionDate)) : '—',
+            value: r.productionDate ? fmt.date(calendarDay(r.productionDate)) : 'None',
           },
           {
             label: 'Damage reason',
@@ -118,12 +118,12 @@ export function ReceiptDrawer({
                 {r.damageReason}
               </Badge>
             ) : (
-              '—'
+              'None'
             ),
           },
           { label: 'Received', value: `${formatZoned(r.receivedAt, r.timeZone)} · ${r.receivedBy}` },
           { label: 'Client / warehouse', value: `${r.clientName} · ${r.warehouseName}` },
-          { label: 'Note', value: r.note ?? '—' },
+          { label: 'Note', value: r.note ?? 'None' },
         ]
       : []
   ).map((f) => ({ ...f, key: f.label }));

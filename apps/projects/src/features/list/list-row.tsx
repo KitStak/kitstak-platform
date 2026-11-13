@@ -56,6 +56,8 @@ function Cell({ className, children }: { readonly className?: string; readonly c
   );
 }
 
+const hoverAction = 'inline-flex size-6 items-center justify-center rounded-xs text-icon outline-none hover:bg-pressed focus-visible:outline-2 focus-visible:outline-focus data-[state=open]:bg-selected';
+
 const cellButton = 'inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-sm px-1.5 text-left text-sm outline-none hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus data-[state=open]:bg-selected disabled:pointer-events-none';
 
 export const ListRow = memo(function ListRow(props: ListRowProps) {
@@ -156,7 +158,7 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
               className={cn(!selected && 'opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 max-md:opacity-100')}
             />
           </Cell>
-          <div className="flex min-w-0 flex-1 items-center gap-1.5" style={{ paddingLeft: depth * 24 }}>
+          <div className="relative flex min-w-0 flex-1 items-center gap-1.5" style={{ paddingLeft: depth * 24 }}>
             {task.subtaskCount > 0 ? (
               <Cell className="w-5 justify-center">
                 <button type="button" onClick={() => onToggleExpand(task.id)} aria-expanded={expanded} aria-label={expanded ? `Hide subtasks of ${task.key}` : `Show ${task.subtaskCount} subtasks of ${task.key}`} className="inline-flex size-5 items-center justify-center rounded-xs text-icon outline-none hover:bg-pressed focus-visible:outline-2 focus-visible:outline-focus">
@@ -184,18 +186,11 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
                     event.stopPropagation();
                     setEditing(true);
                   }}
-                  className={cn('min-w-16 shrink truncate max-md:line-clamp-2 max-md:whitespace-normal', done ? 'text-fg-muted' : 'text-fg')}
+                  className={cn('min-w-0 flex-[0_1_auto] truncate max-md:line-clamp-2 max-md:whitespace-normal', done ? 'text-fg-muted' : 'text-fg')}
                   title={task.title}
                 >
                   {task.title}
                 </span>
-                {canEdit ? (
-                  <Cell className="max-md:hidden">
-                    <button type="button" onClick={() => setEditing(true)} aria-label={`Rename ${task.key}`} title="Rename (double-click)" className="inline-flex size-6 items-center justify-center rounded-xs text-icon opacity-0 outline-none group-hover/row:opacity-100 hover:bg-pressed focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-focus">
-                      <Pencil aria-hidden className="size-3.5" />
-                    </button>
-                  </Cell>
-                ) : null}
                 {task.subtaskCount > 0 ? (
                   <span className="shrink-0 rounded-full bg-muted px-1.5 text-2xs leading-5 text-fg-secondary tabular-nums" title={`${task.subtaskDoneCount} of ${task.subtaskCount} subtasks done`}>
                     {task.subtaskDoneCount}/{task.subtaskCount}
@@ -207,31 +202,42 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
                     {task.commentCount}
                   </span>
                 ) : null}
-                {/* Chips and labels sit right after the title and take only the room they need.
-                    Whole chips that do not fit fold into "+N"; the title keeps the rest. */}
+                {/* The title has first claim on the width (basis = its full text). Chips and labels
+                    only get the room left over (basis 0) and fold whole chips into "+N" before the
+                    title is cut; the title is cut only when even "+N" would not fit beside it. */}
                 {chipItems.length ? (
-                  <CollapsingRow names={chipNames} className="min-w-[min(7.5rem,35%)] shrink-[20] max-md:hidden">
+                  <CollapsingRow names={chipNames} className="min-w-9 flex-[1_1_0%] max-md:hidden">
                     {chipItems}
                   </CollapsingRow>
-                ) : null}
-                <span aria-hidden className="min-w-0 flex-1" />
+                ) : (
+                  <span aria-hidden className="min-w-0 flex-1" />
+                )}
+                {/* Hover actions float over the end of the title area, so they never take width
+                    from the title or chips while hidden. */}
                 {canEdit ? (
-                  <Cell className="max-md:hidden">
-                    <LazyPicker disabled={!canEdit} picker={(p) => <LabelsPicker value={task.labelIds} onChange={(labelIds) => void ops.setLabels(task, labelIds)} disabled={!canEdit} align="end" {...p}>{p.trigger}</LabelsPicker>}>
-                      <button type="button" aria-label="Change labels" title="Labels" className="inline-flex size-6 items-center justify-center rounded-xs text-icon opacity-0 outline-none group-hover/row:opacity-100 hover:bg-pressed focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-focus data-[state=open]:opacity-100">
-                        <Tag aria-hidden className="size-3.5" />
+                  <div className="pointer-events-none absolute top-1/2 right-0 flex -translate-y-1/2 items-center gap-0.5 rounded-md border border-border-subtle bg-panel px-0.5 opacity-0 shadow-sm transition-opacity group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100 has-[[data-state=open]]:pointer-events-auto has-[[data-state=open]]:opacity-100 max-md:hidden">
+                    <Cell>
+                      <button type="button" onClick={() => setEditing(true)} aria-label={`Rename ${task.key}`} title="Rename (double-click)" className={hoverAction}>
+                        <Pencil aria-hidden className="size-3.5" />
                       </button>
-                    </LazyPicker>
-                  </Cell>
-                ) : null}
-                {canEdit && depth === 0 ? (
-                  <Cell className="max-md:hidden">
-                    <Tooltip content="Add a subtask" side="top">
-                      <button type="button" onClick={() => onAddSubtask(task)} aria-label={`Add a subtask to ${task.key}`} className="inline-flex size-6 items-center justify-center rounded-xs text-icon opacity-0 outline-none group-hover/row:opacity-100 hover:bg-pressed focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-focus">
-                        <Plus aria-hidden className="size-3.5" />
-                      </button>
-                    </Tooltip>
-                  </Cell>
+                    </Cell>
+                    <Cell>
+                      <LazyPicker disabled={!canEdit} picker={(p) => <LabelsPicker value={task.labelIds} onChange={(labelIds) => void ops.setLabels(task, labelIds)} disabled={!canEdit} align="end" {...p}>{p.trigger}</LabelsPicker>}>
+                        <button type="button" aria-label="Change labels" title="Labels" className={hoverAction}>
+                          <Tag aria-hidden className="size-3.5" />
+                        </button>
+                      </LazyPicker>
+                    </Cell>
+                    {depth === 0 ? (
+                      <Cell>
+                        <Tooltip content="Add a subtask" side="top">
+                          <button type="button" onClick={() => onAddSubtask(task)} aria-label={`Add a subtask to ${task.key}`} className={hoverAction}>
+                            <Plus aria-hidden className="size-3.5" />
+                          </button>
+                        </Tooltip>
+                      </Cell>
+                    ) : null}
+                  </div>
                 ) : null}
               </>
             )}
@@ -294,7 +300,7 @@ export function ListRowOverlay({ task, status }: { readonly task: TaskSummary; r
       <GripVertical aria-hidden className="size-3.5 text-icon" />
       <StatusIcon category={task.statusCategory} color={status?.color} size={16} />
       <span className="truncate text-fg">{task.title}</span>
-      <span className="ml-auto font-mono text-2xs text-fg-muted">{task.key}</span>
+      <span className="ml-auto font-key text-2xs text-fg-muted">{task.key}</span>
     </div>
   );
 }

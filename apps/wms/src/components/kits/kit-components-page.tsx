@@ -59,7 +59,7 @@ export function kitComponentRowActions(r: KitComponentRow): readonly RowAction[]
 export const KIT_COMPONENTS_HELPER =
   'Inventory levels and reorder requirements of kit product components can be monitored in this report.';
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 const text = (v: unknown) =>
   v === null || v === undefined || v === '' ? dash : <span className="truncate">{String(v)}</span>;
 const qty = (

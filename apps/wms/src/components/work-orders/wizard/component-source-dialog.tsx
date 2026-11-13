@@ -242,10 +242,10 @@ function Body({
                           ) : null}
                         </span>
                       </td>
-                      <td className="px-3 py-1.5 text-secondary">{b.lpNumber ?? '–'}</td>
-                      <td className="px-3 py-1.5 text-secondary">{b.lotNumber ?? '–'}</td>
-                      <td className="px-3 py-1.5 text-secondary">{b.expiryDate?.slice(0, 10) ?? '–'}</td>
-                      <td className="px-3 py-1.5 text-secondary">{b.productionDate?.slice(0, 10) ?? '–'}</td>
+                      <td className="px-3 py-1.5 text-secondary">{b.lpNumber ?? 'None'}</td>
+                      <td className="px-3 py-1.5 text-secondary">{b.lotNumber ?? 'None'}</td>
+                      <td className="px-3 py-1.5 text-secondary">{b.expiryDate?.slice(0, 10) ?? 'None'}</td>
+                      <td className="px-3 py-1.5 text-secondary">{b.productionDate?.slice(0, 10) ?? 'None'}</td>
                       <td
                         className={cn(
                           'px-3 py-1.5 text-right font-semibold tabular-nums',
@@ -275,10 +275,10 @@ function Body({
             {picked.locationId ? (
               <p className="text-xs text-secondary">
                 Taken from the selected stock: lot{' '}
-                <strong className="text-foreground">{picked.lotNumber ?? '–'}</strong> · expiry{' '}
-                <strong className="text-foreground">{picked.expiryDate?.slice(0, 10) ?? '–'}</strong> ·
+                <strong className="text-foreground">{picked.lotNumber ?? 'None'}</strong> · expiry{' '}
+                <strong className="text-foreground">{picked.expiryDate?.slice(0, 10) ?? 'None'}</strong> ·
                 production{' '}
-                <strong className="text-foreground">{picked.productionDate?.slice(0, 10) ?? '–'}</strong>.
+                <strong className="text-foreground">{picked.productionDate?.slice(0, 10) ?? 'None'}</strong>.
                 Clear the source to enter attributes instead.
               </p>
             ) : requireLocation ? (

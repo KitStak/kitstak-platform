@@ -10,7 +10,6 @@ import { format, parseISO } from 'date-fns';
 import {
   ArrowUpRight,
   CalendarDays,
-  Check,
   ChevronDown,
   Link2,
   MoreHorizontal,
@@ -19,6 +18,8 @@ import {
   Unlink,
 } from 'lucide-react';
 import type { BridgeProject, BridgeTask } from '@kitstak/pm-bridge/types';
+import { StatusIcon } from '@kitstak/ui/status-icon';
+import { displayText } from '@kitstak/ui/text';
 import {
   Avatar,
   Button,
@@ -131,9 +132,9 @@ function ProjectCard({
               href={project.url}
               {...EXTERNAL}
               className="min-w-0 truncate text-base font-medium text-fg hover:underline focus-visible:outline-2 focus-visible:outline-focus"
-              title={project.name}
+              title={displayText(project.name)}
             >
-              {project.name}
+              {displayText(project.name)}
             </a>
             <span className="shrink-0 font-mono text-xs text-fg-muted">{project.key}</span>
           </div>
@@ -225,23 +226,8 @@ function TaskRow({ task, onUnlink }: { readonly task: BridgeTask; readonly onUnl
   const priority = PRIORITY_LABEL[task.priority];
   return (
     <li className="group/task flex min-h-11 items-center gap-2.5 px-3 py-2" data-testid="crm-linked-task">
-      <span
-        aria-hidden
-        className={cn(
-          'flex size-4 shrink-0 items-center justify-center rounded-full border-[1.5px]',
-          task.done
-            ? 'border-success bg-success text-white'
-            : task.status.category === 'in_progress'
-              ? 'border-primary'
-              : 'border-border-strong',
-        )}
-      >
-        {task.done ? (
-          <Check className="size-2.5" strokeWidth={3} />
-        ) : task.status.category === 'in_progress' ? (
-          <span className="size-1.5 rounded-full bg-primary" />
-        ) : null}
-      </span>
+      {/* Same glyph as KitStak Projects, tinted with the task's status color. */}
+      <StatusIcon category={task.status.category} color={task.status.color} size={16} label={task.status.name} />
       <div className="min-w-0 flex-1">
         <a
           href={task.url}
@@ -250,16 +236,16 @@ function TaskRow({ task, onUnlink }: { readonly task: BridgeTask; readonly onUnl
             'block truncate text-base text-fg hover:underline focus-visible:outline-2 focus-visible:outline-focus',
             task.done && 'text-fg-muted line-through decoration-fg-muted/60',
           )}
-          title={task.title}
+          title={displayText(task.title)}
         >
-          {task.title}
+          {displayText(task.title)}
         </a>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-fg-muted">
           <span className="shrink-0 font-mono">{task.key}</span>
           <span aria-hidden className="shrink-0">
             ·
           </span>
-          <span className="min-w-0 truncate">{task.projectName}</span>
+          <span className="min-w-0 truncate">{displayText(task.projectName)}</span>
           {priority ? (
             <span
               className={cn(

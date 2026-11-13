@@ -8,7 +8,9 @@
  */
 import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowUpRight, Check, MoreHorizontal, Plus, Unlink } from 'lucide-react';
+import { ArrowUpRight, MoreHorizontal, Plus, Unlink } from 'lucide-react';
+import { StatusIcon } from '@kitstak/ui/status-icon';
+import { displayText } from '@kitstak/ui/text';
 import type { BridgePriority, BridgeTask, WritableProject } from '@kitstak/pm-bridge/types';
 import { apiFetch } from '@/lib/api-client';
 import { useApiQuery } from '@/lib/query-client';
@@ -110,62 +112,30 @@ function ProjectsMark({ size = 14 }: { readonly size?: number }) {
   );
 }
 
-function TaskStatusDot({ task }: { readonly task: BridgeTask }) {
-  if (task.done) {
-    return (
-      <span
-        aria-hidden
-        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-success text-white"
-      >
-        <Check className="h-2.5 w-2.5" strokeWidth={3} />
-      </span>
-    );
-  }
-  return (
-    <span
-      aria-hidden
-      className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-[1.5px]"
-      style={{
-        borderColor: task.status.category === 'in_progress' ? 'var(--primary)' : 'var(--border-strong)',
-      }}
-    >
-      {task.status.category === 'in_progress' ? (
-        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-      ) : null}
-    </span>
-  );
-}
-
 function TaskItem({ task, onUnlink }: { readonly task: BridgeTask; readonly onUnlink: () => void }) {
   return (
     <li className="group flex items-start gap-2.5 py-2" data-testid="wms-project-task">
-      <span className="mt-0.5">
-        <TaskStatusDot task={task} />
+      {/* Same glyph as KitStak Projects, tinted with the task's status color. */}
+      <span className="mt-0.5 inline-flex">
+        <StatusIcon category={task.status.category} color={task.status.color} size={16} label={task.status.name} />
       </span>
       <div className="min-w-0 flex-1">
         <a
           href={task.url}
           target="_blank"
           rel="noopener noreferrer"
-          title={task.title}
+          title={displayText(task.title)}
           className={cn(
-            'block truncate text-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30',
+            'line-clamp-2 break-words text-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/30',
             task.done && 'text-faint line-through',
           )}
         >
-          {task.title}
+          {displayText(task.title)}
         </a>
-        <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-secondary">
+        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-secondary">
           <span className="shrink-0 font-mono">{task.key}</span>
           <span aria-hidden>·</span>
-          <span className="inline-flex min-w-0 items-center gap-1">
-            <span
-              aria-hidden
-              className="h-1.5 w-1.5 shrink-0 rounded-full"
-              style={{ background: pmColor(task.status.color) }}
-            />
-            <span className="truncate">{task.status.name}</span>
-          </span>
+          <span className="shrink-0">{task.status.name}</span>
           {task.dueDate ? (
             <>
               <span aria-hidden>·</span>
@@ -176,9 +146,10 @@ function TaskItem({ task, onUnlink }: { readonly task: BridgeTask; readonly onUn
             </>
           ) : null}
         </div>
-        <p className="mt-0.5 truncate text-xs text-faint">
-          {task.projectName}
-          {task.assignee ? ` · ${task.assignee.name}` : ' · Unassigned'}
+        <p className="mt-0.5 flex min-w-0 flex-wrap gap-x-1.5 text-xs text-faint">
+          <span className="min-w-0 break-words">{displayText(task.projectName)}</span>
+          <span aria-hidden>·</span>
+          <span className="shrink-0">{task.assignee ? task.assignee.name : 'Unassigned'}</span>
         </p>
       </div>
       <DropdownMenu>
@@ -554,7 +525,7 @@ export function ProjectTasksCard({
                   className="h-2 w-2 shrink-0 rounded-sm"
                   style={{ background: pmColor(project.color) }}
                 />
-                <span className="truncate">{project.name}</span>
+                <span className="truncate">{displayText(project.name)}</span>
                 <ArrowUpRight className="ml-auto h-3.5 w-3.5 shrink-0 text-faint" aria-hidden />
               </a>
               <ProgressBar

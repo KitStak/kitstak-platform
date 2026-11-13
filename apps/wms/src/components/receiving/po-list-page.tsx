@@ -504,7 +504,7 @@ export function PoListPage() {
         rows: dialog.rows.map((r) => ({
           code: <Nowrap mono>{r.code}</Nowrap>,
           status: <StatusPill status={r.status} domain="purchaseOrder" size="sm" />,
-          date: <Nowrap>{r.poDate ? fmt.date(r.poDate) : '—'}</Nowrap>,
+          date: <Nowrap>{r.poDate ? fmt.date(r.poDate) : 'None'}</Nowrap>,
           qty: Math.max(0, r.totalQuantity - r.receivedQuantity).toLocaleString(),
         })),
       }

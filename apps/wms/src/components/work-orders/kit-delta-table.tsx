@@ -90,7 +90,7 @@ export function KitDeltaTable({
                   {signed(l.change)}
                 </td>
                 <td className="px-3 py-1.5 text-right tabular-nums text-foreground">
-                  {current !== null ? current + l.change : '—'}
+                  {current !== null ? current + l.change : 'None'}
                 </td>
                 {actions ? (
                   <td className="px-2 py-1 text-right">

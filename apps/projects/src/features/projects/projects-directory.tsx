@@ -136,7 +136,7 @@ function sortProjects(list: readonly ProjectSummary[], sort: SortKey, dir: 'asc'
   return [...list].sort((a, b) => sign * compare(a, b) || a.name.localeCompare(b.name));
 }
 
-const ringTone = (health: ProjectHealth) => (health === 'off_track' ? 'danger' : health === 'at_risk' ? 'warning' : 'primary');
+const ringTone = (health: ProjectHealth) => (health === 'off_track' ? 'danger' : health === 'at_risk' ? 'warning' : 'success');
 
 /** Star / archive / restore / delete with optimistic cache updates and undo toasts. */
 function useProjectOps() {
@@ -283,7 +283,7 @@ function ProjectCard({ project, space, ops, canCreate }: { readonly project: Pro
             </Link>
           </h3>
           <p className="truncate text-xs text-fg-muted">
-            <span className="font-mono">{project.key}</span>
+            <span className="font-key">{project.key}</span>
             {space ? ` · ${space.name}` : ''} · {project.archivedAt ? 'Archived' : PROJECT_STATUS_LABELS[project.status]}
           </p>
         </div>
@@ -384,7 +384,7 @@ function ProjectTable({
                     <span className="min-w-0">
                       <span className="block truncate font-medium text-fg group-hover:underline">{project.name}</span>
                       <span className="block truncate text-xs text-fg-muted">
-                        <span className="font-mono">{project.key}</span>
+                        <span className="font-key">{project.key}</span>
                         {space ? ` · ${space.name}` : ''}
                       </span>
                     </span>

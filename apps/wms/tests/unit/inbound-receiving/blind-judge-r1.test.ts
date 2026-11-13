@@ -28,7 +28,7 @@ describe('receiving type labels', () => {
   });
   it('splits unknown camel case and handles empty', () => {
     expect(receivingTypeLabel('CrossDockReceive')).toBe('Cross dock receive');
-    expect(receivingTypeLabel(null)).toBe('—');
+    expect(receivingTypeLabel(null)).toBe('None');
   });
 });
 

@@ -377,7 +377,7 @@ export function StaticF({
         className="flex h-8 min-w-0 items-center truncate text-sm font-medium text-foreground"
         title={typeof value === 'string' ? value : undefined}
       >
-        {value === null || value === undefined || value === '' ? '—' : value}
+        {value === null || value === undefined || value === '' ? 'None' : value}
       </span>
       {description ? <p className="text-2xs text-faint">{description}</p> : null}
     </div>
@@ -396,7 +396,7 @@ export function ReadValue({
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className="text-2xs font-semibold text-faint">{label}</span>
       <span className="truncate text-sm text-foreground">
-        {children === null || children === undefined || children === '' ? '—' : children}
+        {children === null || children === undefined || children === '' ? 'None' : children}
       </span>
     </div>
   );

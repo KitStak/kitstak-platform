@@ -41,7 +41,7 @@
 
 .ks-appswitcher-menu {
   z-index: var(--z-popover);
-  width: 296px;
+  width: 320px;
   max-width: calc(100vw - 24px);
   padding: var(--space-2);
   border: 1px solid var(--border-subtle);
@@ -155,12 +155,12 @@
 }
 
 .ks-appswitcher-desc {
-  overflow: hidden;
   font-size: var(--type-xs);
   line-height: var(--type-xs-lh);
   color: var(--text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Wrap instead of clipping: the current row's checkmark and a locked row's padlock take width. */
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .ks-appswitcher-row[data-locked] .ks-appswitcher-name {

@@ -55,6 +55,8 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
         projects: env.NEXT_PUBLIC_PROJECTS_URL,
       },
       entitled,
+      // WMS is single-tenant: only the platform org can use it (apps/wms PLATFORM_ORG_SLUG).
+      notInPlan: membership.organization.slug === (process.env.WMS_PLATFORM_ORG_SLUG || 'kitstak') ? [] : ['wms'],
     },
   };
 

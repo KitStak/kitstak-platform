@@ -328,7 +328,7 @@ export function CustomFieldsPage() {
                         className="max-w-[280px] truncate px-3 py-2.5 text-secondary"
                         title={(r.options ?? []).join(', ')}
                       >
-                        {t === 'dropDown' ? (r.options ?? []).join(', ') : '—'}
+                        {t === 'dropDown' ? (r.options ?? []).join(', ') : 'None'}
                       </td>
                       <td className="px-3 py-2.5">
                         <DisabledReason reason={canManage ? null : NO_PERMISSION}>

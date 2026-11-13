@@ -281,7 +281,7 @@ export function PackingDashboard() {
           <Card className="flex items-center gap-3 p-4">
             <Avatar name={user?.name ?? user?.email ?? '?'} size="lg" />
             <div className="min-w-0">
-              <p className="truncate font-semibold">{user?.name ?? '—'}</p>
+              <p className="truncate font-semibold">{user?.name ?? 'None'}</p>
               <p className="truncate text-xs text-secondary">
                 {roleLabel(user?.role) ? (
                   <span className="font-medium text-body">{roleLabel(user?.role)} · </span>
@@ -295,7 +295,7 @@ export function PackingDashboard() {
           </Card>
           <StatTile
             label="Orders packed today"
-            value={k?.ordersPackedToday ?? '—'}
+            value={k?.ordersPackedToday ?? 'None'}
             icon={PackageCheck}
             tone="success"
             loading={kpis.isPending && Boolean(warehouseId)}
@@ -303,7 +303,7 @@ export function PackingDashboard() {
           />
           <StatTile
             label="Products packed today"
-            value={k?.productsPackedToday ?? '—'}
+            value={k?.productsPackedToday ?? 'None'}
             icon={Boxes}
             tone="primary"
             loading={kpis.isPending && Boolean(warehouseId)}
@@ -311,7 +311,7 @@ export function PackingDashboard() {
           />
           <StatTile
             label="Total orders to be packed"
-            value={k?.ordersToPack ?? '—'}
+            value={k?.ordersToPack ?? 'None'}
             icon={Package}
             tone="warning"
             loading={kpis.isPending && Boolean(warehouseId)}
@@ -320,7 +320,7 @@ export function PackingDashboard() {
           />
           <StatTile
             label="Pack-short orders held"
-            value={k?.packShortHeld ?? '—'}
+            value={k?.packShortHeld ?? 'None'}
             icon={AlertTriangle}
             tone={k?.packShortHeld ? 'danger' : 'default'}
             loading={kpis.isPending && Boolean(warehouseId)}
@@ -329,7 +329,7 @@ export function PackingDashboard() {
           />
           <StatTile
             label="Orders with packing warnings"
-            value={k?.ordersWithWarnings ?? '—'}
+            value={k?.ordersWithWarnings ?? 'None'}
             icon={MessageSquareWarning}
             tone={k?.ordersWithWarnings ? 'warning' : 'default'}
             loading={kpis.isPending && Boolean(warehouseId)}

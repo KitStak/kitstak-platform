@@ -512,7 +512,7 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
                     aria-describedby={describedBy}
                     invalid={invalid}
                     size="lg"
-                    className="font-mono uppercase"
+                    className="font-key uppercase"
                     data-testid="project-key"
                   />
                 )}
@@ -675,7 +675,7 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold text-fg">{name || 'Untitled project'}</p>
                 <p className="truncate text-xs text-fg-muted">
-                  <span className="font-mono">{key}</span> · {template?.name ?? 'Blank project'} · {spaceId === 'none' ? 'No space' : (spaces.data ?? []).find((s) => s.id === spaceId)?.name}
+                  <span className="font-key">{key}</span> · {template?.name ?? 'Blank project'} · {spaceId === 'none' ? 'No space' : (spaces.data ?? []).find((s) => s.id === spaceId)?.name}
                 </p>
               </div>
               <span className="hidden text-xs text-fg-secondary sm:block">{formatRange(startDate, dueDate)}</span>

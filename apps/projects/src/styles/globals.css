@@ -499,3 +499,13 @@
   padding: 0 0.2em;
   font-weight: 500;
 }
+
+/*
+ * Task and project keys (OPS-42): the UI sans face with tabular figures. Monospace faces on some
+ * systems draw the letter O nearly like the digit 0 ("0PS-1"), so keys never use font-mono.
+ */
+@utility font-key {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}

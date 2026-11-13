@@ -16,7 +16,7 @@ export function formatExactMoney(value: number, currency = 'USD'): string {
 }
 
 export function formatPercent(ratio: number | null | undefined, digits = 0): string {
-  if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) return '—';
+  if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) return 'None';
   return `${(ratio * 100).toFixed(digits)}%`;
 }
 
@@ -32,7 +32,7 @@ export function formatMonth(month: string, short = false): string {
 
 /** "2026-11-05" → "Nov 5, 2026" (year omitted when it matches `today`). */
 export function formatDay(isoDate: string | null | undefined, today = new Date()): string {
-  if (!isoDate) return '—';
+  if (!isoDate) return 'None';
   const [year, month, day] = isoDate.slice(0, 10).split('-').map(Number);
   if (!year || !month || !day) return isoDate;
   const name = MONTHS[month - 1] ?? '';
@@ -47,7 +47,7 @@ export function daysFrom(isoDate: string, today = new Date()): number {
 }
 
 export function relativeDay(isoDate: string | null | undefined, today = new Date()): string {
-  if (!isoDate) return '—';
+  if (!isoDate) return 'None';
   const days = daysFrom(isoDate, today);
   if (days === 0) return 'Today';
   if (days === 1) return 'Yesterday';

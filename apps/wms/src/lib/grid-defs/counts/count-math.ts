@@ -19,7 +19,7 @@ export function percentDifference(
 
 /** "−10.00", "+2.50", "0.00". Uses a real minus sign. */
 export function formatDifference(value: number | null | undefined): string {
-  if (value === null || value === undefined) return '—';
+  if (value === null || value === undefined) return 'None';
   if (value === 0) return '0.00';
   const abs = Math.abs(value).toFixed(2);
   return value > 0 ? `+${abs}` : `−${abs}`;

@@ -30,7 +30,7 @@ export function ProfileDetails({ profile }: { readonly profile: AccountProfile }
           {roleLabel(profile.role)}
           {profile.isApiUser ? ' · API user' : ''}
         </Row>
-        <Row label="User type">{profile.userType ?? '—'}</Row>
+        <Row label="User type">{profile.userType ?? 'None'}</Row>
         <Row label="Warehouses">
           {profile.warehouses.length > 0 ? profile.warehouses.join(', ') : 'None assigned'}
         </Row>

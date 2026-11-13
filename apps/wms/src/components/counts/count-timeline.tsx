@@ -32,7 +32,7 @@ interface Item {
   readonly source: string;
 }
 
-const EMPTY = new Set(['', '—', '-', 'null']);
+const EMPTY = new Set(['', 'None', '-', 'null']);
 
 type ChangeFields = Pick<
   ChangeLogEntry,
@@ -54,7 +54,7 @@ export function countChangeParts(c: ChangeFields): { readonly label: string | nu
         (label && c.message.startsWith(`${label} -> `) ? c.message.slice(label.length + 4) : c.message),
     };
   if (c.type === 'Update' && c.field === 'status') {
-    const to = c.toValue ? statusLabel(c.toValue) : '—';
+    const to = c.toValue ? statusLabel(c.toValue) : 'None';
     if (!c.fromValue || EMPTY.has(c.fromValue.trim()))
       return { label, text: `${isLine ? 'Recount line created' : 'Created'} (${to})` };
     return { label, text: `Status changed from ${statusLabel(c.fromValue)} to ${to}` };

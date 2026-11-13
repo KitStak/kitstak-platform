@@ -62,7 +62,7 @@ function NumberCell({ value, style, compact }: { readonly value: number; readonl
 function Cell({ display }: { readonly display: CellDisplay }) {
   switch (display.kind) {
     case 'empty':
-      return <span className="text-fg-muted">—</span>;
+      return <span className="text-fg-muted">None</span>;
     case 'text':
       return <span className={display.align === 'end' ? 'block text-right tabular-nums' : 'block truncate'}>{display.text}</span>;
     case 'label':
@@ -214,7 +214,7 @@ export function TableWidget({ insight, orgSlug, filtered, onConfigure, expanded 
                     const column = columnOf(item, header.key);
                     return (
                       <td key={header.key} className="max-w-[200px] border-b border-l border-border-subtle px-2 text-fg">
-                        {column ? <ValueCell column={column} item={item} users={users} /> : <span className="text-fg-muted">—</span>}
+                        {column ? <ValueCell column={column} item={item} users={users} /> : <span className="text-fg-muted">None</span>}
                       </td>
                     );
                   })}

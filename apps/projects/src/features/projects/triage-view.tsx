@@ -410,7 +410,7 @@ function RequestDetail({ item, onAction }: { readonly item: TriageItemDTO; reado
       {item.task ? (
         <button type="button" onClick={() => openTask(item.task!.key)} className="flex items-center gap-2 rounded-lg border border-border-subtle px-3 py-2 text-left text-sm hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus">
           <StatusIcon category={item.task.statusCategory} size={16} />
-          <span className="font-mono text-xs text-fg-muted">{item.task.key}</span>
+          <span className="font-key text-xs text-fg-muted">{item.task.key}</span>
           <span className="min-w-0 flex-1 truncate text-fg">{item.task.title}</span>
           <span className="text-xs text-fg-link">{item.state === 'merged' ? 'Merged into this task' : 'Open task'}</span>
         </button>

@@ -144,7 +144,7 @@ export function ContractSummary({
       {row(
         <Building2 className="h-4 w-4" />,
         'Client · warehouse',
-        client || wh ? `${client ?? '—'} · ${wh ?? '—'}` : '',
+        client || wh ? `${client ?? 'None'} · ${wh ?? 'None'}` : '',
       )}
       {row(
         <CalendarRange className="h-4 w-4" />,

@@ -90,7 +90,7 @@ export function DifferenceBadge({
   readonly suffix?: string;
   readonly className?: string;
 }) {
-  if (value === null || value === undefined) return <span className="text-faint">—</span>;
+  if (value === null || value === undefined) return <span className="text-faint">None</span>;
   const band = differenceBand(value);
   return (
     <Pill

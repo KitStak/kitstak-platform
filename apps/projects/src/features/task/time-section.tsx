@@ -50,8 +50,38 @@ function useNow(active: boolean): number {
   return now;
 }
 
+const isTaskDetailKey = (key: readonly unknown[]) => key[0] === 'task' && key.length === 2;
+
+/**
+ * Optimistically adds `minutes` (and an entry row when given) to a task's time caches: the entries
+ * list and every cached copy of the task detail (by uuid and by key). Returns a function that puts
+ * the caches back exactly as they were.
+ */
+function patchTaskTime(
+  queryClient: ReturnType<typeof useQueryClient>,
+  taskId: string,
+  minutes: number,
+  entry: TimeEntryDTO | null,
+): () => void {
+  const saved = [
+    ...queryClient.getQueriesData({ predicate: (query) => isTaskDetailKey(query.queryKey) }),
+    [qk.taskTime(taskId), queryClient.getQueryData(qk.taskTime(taskId))] as const,
+  ];
+  if (entry) {
+    queryClient.setQueryData<TimeEntryDTO[]>(qk.taskTime(taskId), (rows) => (Array.isArray(rows) ? [entry, ...rows] : [entry]));
+  }
+  queryClient.setQueriesData<TaskDetail>({ predicate: (query) => isTaskDetailKey(query.queryKey) }, (detail) => {
+    if (!detail || typeof detail !== 'object' || !('timeTotalMinutes' in detail) || detail.id !== taskId) return detail;
+    return { ...detail, timeTotalMinutes: Math.max(0, detail.timeTotalMinutes + minutes) };
+  });
+  return () => {
+    for (const [key, data] of saved) queryClient.setQueryData(key, data);
+  };
+}
+
 function ManualEntry({ onDone }: { readonly onDone: () => void }) {
   const { task, refresh } = useTaskContext();
+  const { user } = useShell();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [duration, setDuration] = useState('');
@@ -61,6 +91,11 @@ function ManualEntry({ onDone }: { readonly onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  /**
+   * Optimistic, like the timer: the total, the progress bar and the new entry row update in the
+   * same frame as Enter, together with the toast. A failed save puts the caches back and reopens
+   * the form with what was typed and the reason.
+   */
   const submit = async () => {
     const minutes = parseDuration(duration);
     if (!minutes) {
@@ -71,21 +106,33 @@ function ManualEntry({ onDone }: { readonly onDone: () => void }) {
       setError('One entry can be up to 24 hours.');
       return;
     }
+    if (saving) return;
     setSaving(true);
-    const result = await addManualTimeAction({
+    const day = date ?? todayIso();
+    const trimmed = note.trim() || null;
+    const restore = patchTaskTime(queryClient, task.id, minutes, {
+      id: `optimistic-manual-${Date.now()}`,
+      projectId: task.projectId,
       taskId: task.id,
-      minutes,
-      date: date ?? undefined,
-      note: note.trim() || null,
+      userId: user.id,
+      startedAt: `${day}T12:00:00.000Z`,
+      endedAt: `${day}T12:00:00.000Z`,
+      durationMinutes: minutes,
+      note: trimmed,
       billable,
+      source: 'manual',
     });
+    const toastId = toast.success(`Logged ${formatMinutes(minutes)} on ${task.key}`);
+    setOpen(false);
+    const result = await addManualTimeAction({ taskId: task.id, minutes, date: day, note: trimmed, billable });
     setSaving(false);
     if (!result.ok) {
+      restore();
+      toast.dismiss(toastId);
       setError(result.error.message);
+      setOpen(true);
       return;
     }
-    toast.success(`Logged ${formatMinutes(minutes)} on ${task.key}`);
-    setOpen(false);
     setDuration('');
     setNote('');
     void queryClient.invalidateQueries({ queryKey: qk.taskTime(task.id) });
@@ -204,13 +251,17 @@ function EntryRow({ entry, onDelete }: { readonly entry: TimeEntryDTO; readonly 
     ? Math.floor((now - new Date(entry.startedAt).getTime()) / 60000)
     : (entry.durationMinutes ?? 0);
   return (
-    <li className="group/time flex min-h-9 items-center gap-2 rounded-md px-1.5 py-1 hover:bg-hover">
-      <PersonAvatar userId={entry.userId} size="xs" decorative />
+    <li className="group/time flex min-h-9 items-start gap-2 rounded-md px-1.5 py-1.5 hover:bg-hover">
+      <span className="mt-0.5 flex shrink-0"><PersonAvatar userId={entry.userId} size="xs" decorative /></span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm text-fg">
-          <span className="font-medium">{people.get(entry.userId)?.name ?? 'Former member'}</span>
-          {entry.note ? <span className="text-fg-secondary"> · {entry.note}</span> : null}
+        <span className="block truncate text-sm font-medium text-fg">
+          {people.get(entry.userId)?.name ?? 'Former member'}
         </span>
+        {entry.note ? (
+          <span className="line-clamp-2 text-xs break-words text-fg-secondary" title={entry.note}>
+            {entry.note}
+          </span>
+        ) : null}
         <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-2xs whitespace-nowrap text-fg-muted">
           {entry.source === 'timer' ? (
             <Timer aria-hidden className="size-3" />
@@ -252,10 +303,53 @@ function EntryRow({ entry, onDelete }: { readonly entry: TimeEntryDTO; readonly 
   );
 }
 
+/**
+ * Opens the Estimate property (the same task view) with the hours field focused, so the time card
+ * can ask for hours without sending people hunting for the field.
+ */
+function openEstimateHours(from: HTMLElement) {
+  let scope: HTMLElement | null = from;
+  let trigger: HTMLElement | null = null;
+  while (scope && !trigger) {
+    trigger = scope.querySelector<HTMLElement>('[data-task-estimate-trigger]');
+    scope = scope.parentElement;
+  }
+  if (!trigger) return;
+  trigger.scrollIntoView({ block: 'nearest' });
+  trigger.click();
+  window.setTimeout(() => document.getElementById('task-estimate-time')?.focus(), 60);
+}
+
+/** What the time card says when there is no time estimate to compare against. */
+function EstimateHint({ points, canEdit }: { readonly points: number | null; readonly canEdit: boolean }) {
+  if (!canEdit) {
+    return (
+      <p className="text-2xs text-fg-muted" data-testid="task-time-estimate-hint">
+        {points !== null ? 'Estimated in points, with no hours to compare.' : 'No time estimate to compare with.'}
+      </p>
+    );
+  }
+  const action = (label: string) => (
+    <button
+      type="button"
+      onClick={(event) => openEstimateHours(event.currentTarget)}
+      className="font-medium text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-focus"
+      data-testid="task-time-add-hours"
+    >
+      {label}
+    </button>
+  );
+  return (
+    <p className="text-2xs text-fg-muted" data-testid="task-time-estimate-hint">
+      {points !== null ? <>Estimated in points. {action('Add hours')} to compare with time logged.</> : <>{action('Add an estimate in hours')} to compare with time logged.</>}
+    </p>
+  );
+}
+
 const noopSubscribe = () => () => undefined;
 
 export function TimeSection() {
-  const { task, canLogTime, refresh, live, openTask } = useTaskContext();
+  const { task, canLogTime, canEdit: canEditEstimate, refresh, live, openTask } = useTaskContext();
   const { user } = useShell();
   const queryClient = useQueryClient();
   const entries = useTaskTime(task.id, { enabled: live });
@@ -290,7 +384,7 @@ export function TimeSection() {
   const toggle = async () => {
     if (busy) return;
     setBusy(true);
-    const isDetail = (key: readonly unknown[]) => key[0] === 'task' && key.length === 2;
+    const isDetail = isTaskDetailKey;
     const saved = [
       ...queryClient.getQueriesData({ predicate: (query) => isDetail(query.queryKey) }),
       [qk.runningTimer(), queryClient.getQueryData(qk.runningTimer())] as const,
@@ -344,12 +438,16 @@ export function TimeSection() {
   };
 
   const remove = async (entry: TimeEntryDTO) => {
+    const restore = patchTaskTime(queryClient, task.id, -(entry.durationMinutes ?? 0), null);
+    queryClient.setQueryData<TimeEntryDTO[]>(qk.taskTime(task.id), (rows) => (Array.isArray(rows) ? rows.filter((row) => row.id !== entry.id) : rows));
+    const toastId = toast.success(`Removed ${formatMinutes(entry.durationMinutes)} from ${task.key}`);
     const result = await deleteTimeEntryAction({ entryId: entry.id });
     if (!result.ok) {
+      restore();
+      toast.dismiss(toastId);
       toast.error("Couldn't delete that entry", result.error.message);
       return;
     }
-    toast.success(`Removed ${formatMinutes(entry.durationMinutes)} from ${task.key}`);
     invalidate();
   };
 
@@ -426,7 +524,7 @@ export function TimeSection() {
               className="mt-1.5"
             />
           ) : (
-            <p className="text-2xs text-fg-muted">Add a time estimate above to compare.</p>
+            <EstimateHint points={task.estimatePoints} canEdit={canEditEstimate} />
           )}
           {over ? (
             <p className="mt-1 text-2xs font-medium text-danger-text">
@@ -458,7 +556,8 @@ export function TimeSection() {
           . Starting here stops and saves it.
         </p>
       ) : null}
-      {entries.isLoading ? (
+      {/* Only hold space for rows that exist: a task with no time logged shows no placeholder bars. */}
+      {entries.isLoading && (task.timeTotalMinutes > 0 || mine) ? (
         <div className="mt-2 flex flex-col gap-1.5">
           <Skeleton height={32} />
           <Skeleton height={32} />
@@ -470,7 +569,7 @@ export function TimeSection() {
               <EntryRow
                 key={entry.id}
                 entry={entry}
-                onDelete={entry.userId === user.id ? () => void remove(entry) : undefined}
+                onDelete={entry.userId === user.id && !entry.id.startsWith('optimistic-') ? () => void remove(entry) : undefined}
               />
             ))}
           </ul>

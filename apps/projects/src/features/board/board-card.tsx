@@ -82,7 +82,7 @@ export function CardBody({ task, labels, links, ops, canEdit, interactive = true
       {/* Meta on the left clips and wraps; the editable due, priority and assignee on the right never move. */}
       <div className="flex min-h-5 items-center gap-2 text-2xs text-fg-muted">
         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 overflow-hidden">
-        <span className="shrink-0 font-mono whitespace-nowrap">{task.key}</span>
+        <span className="shrink-0 font-key whitespace-nowrap">{task.key}</span>
         {task.subtaskCount ? <SubtaskProgress done={task.subtaskDoneCount} total={task.subtaskCount} /> : null}
         {task.commentCount ? (
           <span className="inline-flex items-center gap-0.5" title={`${task.commentCount} comments`}>

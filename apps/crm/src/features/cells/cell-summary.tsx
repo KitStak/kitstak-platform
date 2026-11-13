@@ -184,7 +184,7 @@ function NumericSummary({ column, items, board }: { readonly column: ColumnDto; 
     <span className="flex min-w-0 flex-col items-center leading-none group-data-[align=end]/summary:items-end">
       <span className="flex items-center gap-1 text-base font-semibold text-fg tabular-nums">
         {column.type === 'rating' && result !== null ? <Star aria-hidden className="size-3.5 fill-[var(--warning-accent)] text-[var(--warning-accent)]" /> : null}
-        <span className="truncate">{fn === 'none' ? '—' : text || '—'}</span>
+        <span className="truncate">{fn === 'none' ? 'None' : text || 'None'}</span>
       </span>
       <span className="mt-0.5 text-2xs font-medium tracking-wide text-fg-muted lowercase">{NUMERIC_FN_LABELS[fn]}</span>
     </span>

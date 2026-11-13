@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReport, cycleDays, dayRange, median, niceMax, type ReportTaskRow } from './report-math';
+import { buildReport, cycleDays, dayRange, median, niceMax, tightNiceMax, type ReportTaskRow } from './report-math';
 
 const at = (day: string, hour = 10) => new Date(`${day}T${String(hour).padStart(2, '0')}:00:00`).toISOString();
 
@@ -46,6 +46,14 @@ describe('report math', () => {
     expect(niceMax(7)).toBe(10);
     expect(niceMax(23)).toBe(25);
     expect(niceMax(130)).toBe(200);
+  });
+
+  it('keeps line chart ceilings just above the data', () => {
+    expect(tightNiceMax(0)).toBe(1);
+    expect(tightNiceMax(3)).toBe(3);
+    expect(tightNiceMax(105)).toBe(120);
+    expect(tightNiceMax(130)).toBe(150);
+    expect(tightNiceMax(16)).toBe(20);
   });
 
   it('builds totals, distribution, burn and weekly velocity', () => {

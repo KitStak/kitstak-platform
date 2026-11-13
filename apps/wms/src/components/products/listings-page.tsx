@@ -76,7 +76,7 @@ export const LISTINGS_HELPER =
   "Product listings act as a record of the products you're selling across your sales channels. You'll be able to see all listings of a product here.";
 
 type Col = ColumnDef<ListingRow, unknown>;
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 const text = (v: unknown) =>
   v === null || v === undefined || v === '' ? (
     dash
@@ -101,7 +101,7 @@ function ExceptionCell({ row }: { readonly row: ListingRow }) {
   if (!row.exception)
     return (
       <span className="text-faint" title="No exception">
-        —
+        None
       </span>
     );
   return (

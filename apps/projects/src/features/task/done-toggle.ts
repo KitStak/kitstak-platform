@@ -8,7 +8,7 @@
  *   toggleDoneWithUndo({ taskKey: task.key, closing: true, target: done.id, previous: task.statusId,
  *     save: (statusId) => ops.updateTask(task.id, { statusId }) });
  */
-import { toast } from '@/components/ui';
+import { taskToastId, toast } from '@/components/ui';
 
 export interface DoneToggleInput {
   readonly taskKey: string;
@@ -22,7 +22,10 @@ export interface DoneToggleInput {
 
 export function toggleDoneWithUndo({ taskKey, closing, target, previous, save }: DoneToggleInput): Promise<boolean> {
   const pending = save(target);
+  // Same id as "Added OPS-23" and other toasts about this task: the new message replaces the old
+  // one in place, so Undo is never buried under a stack of toasts about the same task.
   const id = toast.undo(closing ? `Marked ${taskKey} done` : `Reopened ${taskKey}`, {
+    id: taskToastId(taskKey),
     onUndo: async () => {
       // Let the first save land before reverting, so the two writes cannot cross.
       await pending;

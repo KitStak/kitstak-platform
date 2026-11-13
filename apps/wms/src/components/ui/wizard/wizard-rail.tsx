@@ -87,7 +87,7 @@ export function RailRow({
   return (
     <div className="flex items-start justify-between gap-3">
       <span className="shrink-0 text-faint">{label}</span>
-      <span className="min-w-0 text-right font-medium text-body">{children ?? '—'}</span>
+      <span className="min-w-0 text-right font-medium text-body">{children ?? 'None'}</span>
     </div>
   );
 }

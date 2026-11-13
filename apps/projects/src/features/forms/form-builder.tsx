@@ -581,7 +581,7 @@ function Responses({ form, fields }: { readonly form: FormDTO; readonly fields: 
                       data-task-key={submission.taskKey}
                       onClick={() => openTask(submission.taskKey as string)}
                     >
-                      <span className="font-mono text-xs text-fg-muted">{submission.taskKey}</span> Open task
+                      <span className="font-key text-xs text-fg-muted">{submission.taskKey}</span> Open task
                     </Button>
                   ) : (
                     <Badge>Task deleted</Badge>

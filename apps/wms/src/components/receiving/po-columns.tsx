@@ -7,7 +7,7 @@ import { StatusPill } from '@/components/ui/status-pill';
 import { cn } from '@/lib/utils';
 import { ZonedTime, type PoRow } from './receiving-shared';
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 const text = (v: unknown) =>
   v === null || v === undefined || v === '' ? (
     dash

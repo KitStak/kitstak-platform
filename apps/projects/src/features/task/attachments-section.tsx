@@ -120,6 +120,85 @@ function FileTile({
   );
 }
 
+const KIND_TONE: Record<string, string> = {
+  PDF: 'bg-danger-subtle text-danger-text',
+  Spreadsheet: 'bg-success-subtle text-success-text',
+  Document: 'bg-info-subtle text-info-text',
+  Slides: 'bg-warning-subtle text-warning-text',
+  Archive: 'bg-warning-subtle text-warning-text',
+};
+
+/** Short type badge: the extension when there is one (TXT, XLSX), else the kind. */
+function typeBadge(file: { readonly name: string; readonly contentType: string }): string {
+  const ext = file.name.includes('.') ? file.name.split('.').pop()!.toUpperCase() : '';
+  return ext && ext.length <= 5 ? ext : fileKind(file.name, file.contentType);
+}
+
+/**
+ * A non-image file as a compact row (icon, name, size and who added it, type badge), like Linear
+ * and Asana: a big grey tile with a generic icon says nothing about a 24 byte note.
+ */
+function FileRow({
+  file,
+  onOpen,
+  onDelete,
+  canDelete,
+}: {
+  readonly file: AttachmentDTO;
+  readonly onOpen: () => void;
+  readonly onDelete: () => void;
+  readonly canDelete: boolean;
+}) {
+  const people = usePeopleMap();
+  const uploader = file.uploadedBy ? people.get(file.uploadedBy)?.name : undefined;
+  const kind = fileKind(file.name, file.contentType);
+  return (
+    <li
+      className="group/file relative flex min-h-12 min-w-0 items-center gap-2.5 rounded-lg border border-border-subtle bg-panel py-1.5 pr-1.5 pl-2 transition-colors hover:bg-hover"
+      data-testid="attachment-row"
+    >
+      <span
+        className={cn(
+          'flex size-8 shrink-0 items-center justify-center rounded-md',
+          KIND_TONE[kind] ?? 'bg-sunken text-icon',
+        )}
+      >
+        <KindIcon file={file} className="size-4" />
+      </span>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 flex-col items-start text-left after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-focus"
+        aria-label={`Open ${file.name}`}
+        title={file.name}
+      >
+        <span className="max-w-full truncate text-sm font-medium text-fg">{file.name}</span>
+        <span className="max-w-full truncate text-2xs text-fg-muted">
+          {formatBytes(file.sizeBytes)} · {uploader ? `${uploader.split(' ')[0]}, ` : ''}
+          {formatRelative(file.createdAt)}
+        </span>
+      </button>
+      <span className="shrink-0 rounded-xs border border-border-subtle px-1.5 py-px text-2xs font-semibold tracking-wide text-fg-secondary tabular-nums">
+        {typeBadge(file)}
+      </span>
+      <span className="relative z-[1] flex shrink-0 gap-0.5 opacity-0 transition-opacity group-focus-within/file:opacity-100 group-hover/file:opacity-100 max-sm:opacity-100">
+        <Tooltip content="Download">
+          <a
+            href={`${file.url}?download=1`}
+            aria-label={`Download ${file.name}`}
+            className="inline-flex size-7 items-center justify-center rounded-sm text-icon hover:bg-pressed hover:text-icon-strong focus-visible:outline-2 focus-visible:outline-focus"
+          >
+            <Download aria-hidden className="size-3.5" />
+          </a>
+        </Tooltip>
+        {canDelete ? (
+          <IconButton size="sm" label={`Delete ${file.name}`} icon={<Trash2 aria-hidden />} onClick={onDelete} />
+        ) : null}
+      </span>
+    </li>
+  );
+}
+
 export function Lightbox({
   files,
   index,
@@ -231,6 +310,9 @@ export function AttachmentsSection({ uploads }: { readonly uploads: Uploads }) {
   const [viewer, setViewer] = useState<number | null>(null);
   const list = files.data ?? [];
   const images = list.filter((file) => isImageType(file.contentType));
+  const others = list.filter((file) => !isImageType(file.contentType));
+  const imageQueue = uploads.queue.filter((item) => Boolean(item.previewUrl));
+  const fileQueue = uploads.queue.filter((item) => !item.previewUrl);
 
   const remove = async (file: AttachmentDTO) => {
     const key = qk.taskAttachments(task.id);
@@ -303,16 +385,16 @@ export function AttachmentsSection({ uploads }: { readonly uploads: Uploads }) {
         }}
       />
       {files.isLoading && task.attachmentCount > 0 ? (
-        // Real tile frames from the first paint (icon, room for name and size), never blank boxes.
-        <ul className="mt-2 grid grid-cols-2 gap-2 @min-[560px]:grid-cols-3 @min-[900px]:grid-cols-4" aria-busy="true" aria-label="Loading files">
-          {Array.from({ length: Math.min(task.attachmentCount, 8) }, (_, index) => (
-            <li key={index} className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border-subtle bg-panel">
-              <span className="flex h-24 w-full items-center justify-center bg-sunken text-icon">
-                <FileText aria-hidden className="size-7 opacity-60" />
+        // Row frames from the first paint (icon, room for name and size), never blank boxes.
+        <ul className="mt-2 flex flex-col gap-1.5" aria-busy="true" aria-label="Loading files">
+          {Array.from({ length: Math.min(task.attachmentCount, 6) }, (_, index) => (
+            <li key={index} className="flex min-h-12 items-center gap-2.5 rounded-lg border border-border-subtle bg-panel py-1.5 pr-2 pl-2">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sunken text-icon">
+                <FileText aria-hidden className="size-4 opacity-60" />
               </span>
-              <span className="flex flex-col gap-1.5 px-2.5 py-2.5">
-                <Skeleton height={12} width="70%" />
-                <Skeleton height={10} width="45%" />
+              <span className="flex flex-1 flex-col gap-1.5">
+                <Skeleton height={12} width="55%" />
+                <Skeleton height={10} width="30%" />
               </span>
             </li>
           ))}
@@ -329,40 +411,72 @@ export function AttachmentsSection({ uploads }: { readonly uploads: Uploads }) {
           </span>
         </button>
       ) : (
-        <ul className="mt-2 grid grid-cols-2 gap-2 @min-[560px]:grid-cols-3 @min-[900px]:grid-cols-4">
-          {uploads.queue.map((item) => (
-            <li
-              key={item.id}
-              className="relative flex flex-col overflow-hidden rounded-lg border border-border-subtle bg-panel"
-              aria-busy="true"
-            >
-              <span className="relative flex h-24 items-center justify-center bg-sunken">
-                {item.previewUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- local blob preview
-                  <img
-                    src={item.previewUrl}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover opacity-50"
-                  />
-                ) : null}
-                <Spinner size="md" label={`Uploading ${item.name}`} />
-              </span>
-              <span className="flex flex-col px-2.5 py-2">
-                <span className="truncate text-sm font-medium text-fg">{item.name}</span>
-                <span className="text-2xs text-fg-muted">Uploading · {formatBytes(item.size)}</span>
-              </span>
-            </li>
-          ))}
-          {list.map((file) => (
-            <FileTile
-              key={file.id}
-              file={file}
-              onOpen={() => open(file)}
-              onDelete={() => void remove(file)}
-              canDelete={canDelete || file.uploadedBy === user.id}
-            />
-          ))}
-        </ul>
+        <div className="mt-2 flex flex-col gap-2">
+          {imageQueue.length || images.length ? (
+            <ul className="grid grid-cols-2 gap-2 @min-[560px]:grid-cols-3 @min-[900px]:grid-cols-4" aria-label="Images">
+              {imageQueue.map((item) => (
+                <li
+                  key={item.id}
+                  className="relative flex flex-col overflow-hidden rounded-lg border border-border-subtle bg-panel"
+                  aria-busy="true"
+                >
+                  <span className="relative flex h-24 items-center justify-center bg-sunken">
+                    {item.previewUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- local blob preview
+                      <img
+                        src={item.previewUrl}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover opacity-50"
+                      />
+                    ) : null}
+                    <Spinner size="md" label={`Uploading ${item.name}`} />
+                  </span>
+                  <span className="flex flex-col px-2.5 py-2">
+                    <span className="truncate text-sm font-medium text-fg">{item.name}</span>
+                    <span className="text-2xs text-fg-muted">Uploading · {formatBytes(item.size)}</span>
+                  </span>
+                </li>
+              ))}
+              {images.map((file) => (
+                <FileTile
+                  key={file.id}
+                  file={file}
+                  onOpen={() => open(file)}
+                  onDelete={() => void remove(file)}
+                  canDelete={canDelete || file.uploadedBy === user.id}
+                />
+              ))}
+            </ul>
+          ) : null}
+          {fileQueue.length || others.length ? (
+            <ul className="flex flex-col gap-1.5" aria-label="Files">
+              {fileQueue.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex min-h-12 items-center gap-2.5 rounded-lg border border-border-subtle bg-panel py-1.5 pr-2 pl-2"
+                  aria-busy="true"
+                >
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-sunken">
+                    <Spinner size="sm" label={`Uploading ${item.name}`} />
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm font-medium text-fg">{item.name}</span>
+                    <span className="text-2xs text-fg-muted">Uploading · {formatBytes(item.size)}</span>
+                  </span>
+                </li>
+              ))}
+              {others.map((file) => (
+                <FileRow
+                  key={file.id}
+                  file={file}
+                  onOpen={() => open(file)}
+                  onDelete={() => void remove(file)}
+                  canDelete={canDelete || file.uploadedBy === user.id}
+                />
+              ))}
+            </ul>
+          ) : null}
+        </div>
       )}
       <Lightbox files={images} index={viewer} onIndex={setViewer} onClose={() => setViewer(null)} />
     </section>

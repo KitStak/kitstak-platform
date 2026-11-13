@@ -283,7 +283,7 @@ export function SetupGuide({ orgName, state, canManage }: SetupGuideProps) {
               {orgName} is ready for business
             </h2>
             <p className="mt-0.5 text-sm text-fg-secondary">
-              Every setup step is done. Nice work — your team can get straight to it.
+              Every setup step is done. Nice work, your team can get straight to it.
             </p>
           </div>
           {canManage ? (

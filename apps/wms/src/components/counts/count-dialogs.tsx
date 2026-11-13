@@ -532,7 +532,7 @@ function UpdateBody({ onOpenChange, level, ids, onDone }: Omit<UpdateInventoryDi
                               ) : null}
                             </span>
                           </td>
-                          <td className="px-2.5 py-1.5 text-secondary">{r.lotNumber ?? '—'}</td>
+                          <td className="px-2.5 py-1.5 text-secondary">{r.lotNumber ?? 'None'}</td>
                           <td className="px-2.5 py-1.5 text-right tabular-nums">
                             {r.systemQty.toLocaleString()}
                           </td>
@@ -706,8 +706,8 @@ function RecountBody({
                   <tr key={l.id} className="border-t border-border">
                     <td className="px-2.5 py-1.5 font-semibold text-foreground">{l.label}</td>
                     <td className="px-2.5 py-1.5">{l.planCode}</td>
-                    <td className="px-2.5 py-1.5 text-right tabular-nums">{l.systemQty ?? '—'}</td>
-                    <td className="px-2.5 py-1.5 text-right tabular-nums">{l.countedQty ?? '—'}</td>
+                    <td className="px-2.5 py-1.5 text-right tabular-nums">{l.systemQty ?? 'None'}</td>
+                    <td className="px-2.5 py-1.5 text-right tabular-nums">{l.countedQty ?? 'None'}</td>
                   </tr>
                 ))}
               </tbody>

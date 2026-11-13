@@ -141,7 +141,7 @@ function StepRow({ step, index, perms, canManage, busy, onAction }: StepRowProps
         {step.status === 'locked' ? (
           <p className="mt-0.5 text-xs text-fg-muted">Unlocks after {step.lockedBy}</p>
         ) : step.status === 'skipped' ? (
-          <p className="mt-0.5 text-xs text-fg-muted">Skipped — live data still checks this off.</p>
+          <p className="mt-0.5 text-xs text-fg-muted">Skipped. Live data still checks this off.</p>
         ) : step.status === 'ready' ? (
           <p className="mt-0.5 text-xs text-secondary">{step.description}</p>
         ) : null}
@@ -248,7 +248,7 @@ function WrappedUp({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-4" data-testid="setup-wrapped-up">
       <p className="text-sm text-secondary">
-        Wrapped up — {skipped.length} {skipped.length === 1 ? 'step' : 'steps'} skipped.
+        Wrapped up: {skipped.length} {skipped.length === 1 ? 'step' : 'steps'} skipped.
       </p>
       {canManage
         ? skipped.map((step) => (

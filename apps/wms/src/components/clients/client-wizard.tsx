@@ -211,7 +211,7 @@ function InformationStep({
       </FormSection>
       {!isEdit ? (
         <p className="text-xs text-faint">
-          Code preview: <code className="font-mono text-secondary">{getValues('code') || '—'}</code>
+          Code preview: <code className="font-mono text-secondary">{getValues('code') || 'None'}</code>
         </p>
       ) : null}
     </div>

@@ -47,7 +47,7 @@ function useSchedules(gridKey?: string) {
 }
 
 function when(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return 'None';
   const t = Date.parse(iso);
   return Number.isFinite(t)
     ? new Date(t).toLocaleString('en-US', {
@@ -57,7 +57,7 @@ function when(iso: string | null): string {
         hour: 'numeric',
         minute: '2-digit',
       })
-    : '—';
+    : 'None';
 }
 
 export function ScheduleRow({
@@ -112,7 +112,7 @@ export function ScheduleRow({
           {s.cadence} · {s.format.toUpperCase()} · to {s.recipients.join(', ')}
         </p>
         <p className="text-faint">
-          Next {s.active ? when(s.nextRunAt) : '— (paused)'} · Last {when(s.lastRunAt)}
+          Next {s.active ? when(s.nextRunAt) : 'Paused'} · Last {when(s.lastRunAt)}
           {s.lastStatus ? (
             <span className={s.lastStatus === 'error' ? 'text-danger' : 'text-success'}>
               {' '}

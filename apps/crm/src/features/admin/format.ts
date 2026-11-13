@@ -26,7 +26,7 @@ export const ROLE_DESCRIPTION: Readonly<Record<OrgRole, string>> = {
 export function relativeTime(iso: string | null | undefined, now: Date = new Date()): string {
   if (!iso) return 'Never';
   const time = Date.parse(iso);
-  if (Number.isNaN(time)) return '—';
+  if (Number.isNaN(time)) return 'None';
   const diff = now.getTime() - time;
   if (diff < 0) {
     const ahead = -diff;
@@ -43,16 +43,16 @@ export function relativeTime(iso: string | null | undefined, now: Date = new Dat
 }
 
 export function formatDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return 'None';
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '—';
+  if (Number.isNaN(date.getTime())) return 'None';
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return 'None';
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '—';
+  if (Number.isNaN(date.getTime())) return 'None';
   return date.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
@@ -186,7 +186,7 @@ export function passwordStrength(password: string, minLength = 10): PasswordStre
 
 /** Shortens IPv6 for display (`0000:…:0001` → `::1`); IPv4 and unknown input pass through. */
 export function formatIp(ip: string | null | undefined): string {
-  if (!ip) return '—';
+  if (!ip) return 'None';
   if (!ip.includes(':')) return ip;
   const groups = ip.split(':');
   if (groups.length !== 8 || groups.some((group) => !/^[0-9a-f]{1,4}$/i.test(group))) return ip;

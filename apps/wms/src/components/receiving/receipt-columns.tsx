@@ -61,7 +61,7 @@ export interface ReceiptRow {
   readonly timeZone?: string;
 }
 
-const dash = <span className="text-faint">—</span>;
+const dash = <span className="text-faint">None</span>;
 const text = (v: unknown) =>
   v === null || v === undefined || v === '' ? (
     dash

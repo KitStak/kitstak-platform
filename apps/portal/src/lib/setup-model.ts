@@ -221,7 +221,7 @@ const BLUEPRINTS: readonly StepBlueprint[] = [
     key: 'wms_first_order',
     scope: 'wms',
     title: 'Create your first order',
-    description: 'Run one order through pick, pack and ship — the whole loop, end to end.',
+    description: 'Run one order through pick, pack and ship: the whole loop, end to end.',
     cta: 'Create order',
     minutes: 2,
     auto: true,

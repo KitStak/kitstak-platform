@@ -4,6 +4,7 @@
  * that opens the task, and a stop button that saves the time. Hidden when no timer runs.
  */
 import { Suspense, useEffect, useState } from 'react';
+import { toast as sonnerToast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { CircleStop } from 'lucide-react';
 import { Tooltip, cn, toast } from '@/components/ui';
@@ -14,6 +15,61 @@ import { qk } from '@/lib/query-keys';
 import type { TimeEntryDTO } from '@/lib/types';
 import { stopTimerAction } from '@/server/actions/time';
 import { formatClock } from './task-utils';
+
+/** Ask about a running timer after this long with no clicks or keys. */
+const IDLE_NUDGE_MS = 45 * 60_000;
+
+/**
+ * Idle nudge (like Toggl and ClickUp): after 45 minutes with no clicks or keys in this tab while a
+ * timer runs, ask once whether to keep it, so a forgotten timer does not log a bogus hour.
+ */
+function useIdleNudge(entry: TimeEntryDTO | null) {
+  const queryClient = useQueryClient();
+  const entryId = entry?.id ?? null;
+  const startedAt = entry?.startedAt ?? null;
+  useEffect(() => {
+    if (!entryId || !startedAt) return;
+    const started = new Date(startedAt).getTime();
+    let last = Date.now();
+    let shown = false;
+    const mark = () => {
+      last = Date.now();
+    };
+    const check = () => {
+      const idle = Date.now() - Math.max(started, last);
+      if (shown || idle < IDLE_NUDGE_MS) return;
+      shown = true;
+      sonnerToast(`Your timer has run ${Math.round(idle / 60000)} minutes with no activity`, {
+        id: `timer-idle-${entryId}`,
+        description: 'Keep it running, or stop it and save the time so far.',
+        duration: Infinity,
+        action: {
+          label: 'Stop timer',
+          onClick: () => {
+            void stopTimerAction().then((result) => {
+              if (!result.ok) {
+                toast.error("Couldn't stop the timer", result.error.message);
+                return;
+              }
+              queryClient.setQueryData(qk.runningTimer(), null);
+              void queryClient.invalidateQueries({ queryKey: qk.runningTimer() });
+              void queryClient.invalidateQueries({ queryKey: qk.me() });
+            });
+          },
+        },
+        cancel: { label: 'Keep it', onClick: () => undefined },
+      });
+    };
+    window.addEventListener('pointerdown', mark, { passive: true });
+    window.addEventListener('keydown', mark);
+    const timer = window.setInterval(check, 30_000);
+    return () => {
+      window.removeEventListener('pointerdown', mark);
+      window.removeEventListener('keydown', mark);
+      window.clearInterval(timer);
+    };
+  }, [entryId, startedAt, queryClient]);
+}
 
 function useTick(active: boolean): number {
   const [now, setNow] = useState(() => Date.now());
@@ -41,6 +97,7 @@ function Pill() {
   const { openTask } = useTaskDrawer();
   const now = useTick(Boolean(entry));
   const [stopping, setStopping] = useState(false);
+  useIdleNudge(entry);
   if (!entry) return null;
   const elapsed = now - new Date(entry.startedAt).getTime();
   const label = task ? `${task.key} ${task.title}` : 'your task';
@@ -79,7 +136,7 @@ function Pill() {
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-danger opacity-60 motion-reduce:hidden" />
             <span className="relative inline-flex size-2 rounded-full bg-danger" />
           </span>
-          <span className="hidden font-mono md:inline">{task?.key ?? ''}</span>
+          <span className="hidden font-key md:inline">{task?.key ?? ''}</span>
           <span className="tabular-nums">{formatClock(elapsed)}</span>
         </button>
       </Tooltip>

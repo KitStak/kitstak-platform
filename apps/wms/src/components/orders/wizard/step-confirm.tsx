@@ -67,8 +67,8 @@ export function StepConfirm({ goTo }: { readonly goTo: (key: string) => void }) 
   const { options } = useOrderWizard();
   const v = useWatch() as OrderFormValues;
   const totals = orderTotals(v.lines ?? [], v.discount);
-  const warehouse = options?.warehouses.find((w) => w.value === v.warehouseId)?.label ?? '—';
-  const client = options?.clients.find((c) => c.value === v.clientId)?.label ?? '—';
+  const warehouse = options?.warehouses.find((w) => w.value === v.warehouseId)?.label ?? 'None';
+  const client = options?.clients.find((c) => c.value === v.clientId)?.label ?? 'None';
   const carrier = options?.carriers.find((c) => c.connectionId === v.carrierConnectionId);
   const service = carrier?.services.find((s) => s.id === v.carrierServiceId)?.name;
   const preset = options?.presets.find((p) => p.value === v.rateShoppingPresetId)?.label;
@@ -93,7 +93,7 @@ export function StepConfirm({ goTo }: { readonly goTo: (key: string) => void }) 
         postal: v.billing.postalCode,
         country: v.billing.country,
       });
-  const name = [v.customerFirstName, v.customerLastName].filter(Boolean).join(' ') || '—';
+  const name = [v.customerFirstName, v.customerLastName].filter(Boolean).join(' ') || 'None';
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">

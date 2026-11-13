@@ -61,7 +61,7 @@ const CELLS: Readonly<Record<string, CellRenderer<TaskRow>>> = {
   // Task ID is an identifier: no thousands separator ("1397", not "1,397").
   taskNo: ({ getValue }) => (
     <span className="font-medium tabular-nums text-foreground">
-      {getValue() == null ? '—' : String(getValue())}
+      {getValue() == null ? 'None' : String(getValue())}
     </span>
   ),
   jobCode: link((r) => (r.jobId ? `/jobs/${encodeURIComponent(r.jobId)}` : null), 'jobCode'),

@@ -331,7 +331,7 @@ export function OrderLinesTab({ detail }: { readonly detail: OrderDetail }) {
                 </td>
                 {hasLot ? (
                   <td className="whitespace-nowrap px-2 py-2 text-xs text-secondary">
-                    {[l.lotNumber, l.pinnedLocationCode].filter(Boolean).join(' · ') || '—'}
+                    {[l.lotNumber, l.pinnedLocationCode].filter(Boolean).join(' · ') || 'None'}
                   </td>
                 ) : null}
               </tr>
@@ -452,7 +452,7 @@ export function OrderShipmentsTab({ detail }: { readonly detail: OrderDetail }) 
                     <td className="px-3 py-2 text-right tabular-nums">{fmt.money(s.shippingCost)}</td>
                     <td className="px-3 py-2 text-xs text-secondary">{fmt.dateTime(s.labelCreatedAt)}</td>
                     <td className="px-3 py-2 text-xs text-secondary">
-                      {s.actualShipmentAt ? fmt.dateTime(s.actualShipmentAt) : '—'}
+                      {s.actualShipmentAt ? fmt.dateTime(s.actualShipmentAt) : 'None'}
                     </td>
                   </tr>
                 ))}
@@ -687,7 +687,7 @@ export function OrderOverviewCards({ detail }: { readonly detail: OrderDetail })
               </span>
             </dt>
             <dd className="text-sm text-foreground">
-              {ship.length ? lines(ship) : <span className="text-faint">—</span>}
+              {ship.length ? lines(ship) : <span className="text-faint">None</span>}
             </dd>
           </div>
           <div className="flex min-w-0 flex-col gap-0.5 sm:col-span-2">
@@ -698,7 +698,7 @@ export function OrderOverviewCards({ detail }: { readonly detail: OrderDetail })
               ) : billing.length ? (
                 lines(billing)
               ) : (
-                <span className="text-faint">—</span>
+                <span className="text-faint">None</span>
               )}
             </dd>
           </div>

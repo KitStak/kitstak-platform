@@ -279,7 +279,7 @@ function LpDetailDrawer({
                         <span className="font-medium">{c.sku}</span>
                         <span className="ml-1 text-faint">{c.productName}</span>
                       </td>
-                      <td className="px-3 py-2">{c.lotNumber ?? '—'}</td>
+                      <td className="px-3 py-2">{c.lotNumber ?? 'None'}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{c.onHand}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{c.allocated}</td>
                     </tr>

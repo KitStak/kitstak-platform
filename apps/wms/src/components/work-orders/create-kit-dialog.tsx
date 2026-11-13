@@ -399,7 +399,7 @@ function Body({
       ? chosenCodes.join(', ')
       : 'FEFO (all bins)';
   const fefoComponents = withPicking ? 0 : d.components.filter((c) => !c.locationCode && !c.lpNumber).length;
-  const targetText = [locationLabel ?? '—', lpLabel ? `LP ${lpLabel}` : null].filter(Boolean).join(' · ');
+  const targetText = [locationLabel ?? 'None', lpLabel ? `LP ${lpLabel}` : null].filter(Boolean).join(' · ');
   const qtyError =
     qty === null || !Number.isInteger(qty) || qty < 1
       ? 'Enter how many kits to build (at least 1)'
@@ -410,7 +410,7 @@ function Body({
   const deltas = createKitDeltas(
     {
       sku: d.kit.sku,
-      location: [locationLabel ?? '—', lpLabel].filter(Boolean).join(' · '),
+      location: [locationLabel ?? 'None', lpLabel].filter(Boolean).join(' · '),
       current: kitCurrent,
     },
     lines.map((l) => ({
@@ -602,11 +602,11 @@ function Body({
                 <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
                   <div>
                     <dt className="text-faint">Location</dt>
-                    <dd className="font-semibold text-foreground">{summary.location ?? '—'}</dd>
+                    <dd className="font-semibold text-foreground">{summary.location ?? 'None'}</dd>
                   </div>
                   <div>
                     <dt className="text-faint">Lot</dt>
-                    <dd className="font-semibold text-foreground">{summary.lot ?? '—'}</dd>
+                    <dd className="font-semibold text-foreground">{summary.lot ?? 'None'}</dd>
                   </div>
                   <div>
                     <dt className="text-faint">Processed / requested</dt>
@@ -791,8 +791,8 @@ function Body({
                     <ul className="list-disc pl-5 text-xs">
                       {pendingPicks.map((t) => (
                         <li key={t.id}>
-                          Task #{t.taskNo} · {t.sku ?? '—'} · {t.plannedQty} from{' '}
-                          {t.sourceLocationCode ?? '—'} to{' '}
+                          Task #{t.taskNo} · {t.sku ?? 'None'} · {t.plannedQty} from{' '}
+                          {t.sourceLocationCode ?? 'None'} to{' '}
                           {t.targetLocationCode ?? d.outputLocationCode ?? 'kitting area'} · {t.status}
                         </li>
                       ))}

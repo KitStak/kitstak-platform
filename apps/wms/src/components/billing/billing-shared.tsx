@@ -712,7 +712,7 @@ export function printContract(c: ContractDetail, dates: PrintDates = DEFAULT_PRI
         f,
       ) => `<tr><td><strong>${esc(f.name)}</strong>${f.conditions.length ? `<div class="muted">If ${esc(f.conditions.map((x) => x.text).join(' and '))}</div>` : ''}</td><td>${esc(f.operationType)}${f.calculationType ? `<div class="muted">${esc(f.calculationType)}</div>` : ''}</td><td>${esc(f.feeBy)}</td><td>${esc(f.chargeBy)}</td>
     <td>${f.calculationType === 'Split Month Storage' ? `${esc((f.standardRate ?? 0).toFixed(2))} through day ${esc(f.splitDay)}, then ${esc((f.alternateRate ?? 0).toFixed(2))}` : `<div class="muted">${esc(PRICING_MODE_META[f.pricingMode ?? 'graduated'].title)}${f.chargeOneTime ? ' · one time' : ''}</div>${f.tiers.map((t) => `${esc(t.fromQty ?? 1)}–${t.toQty ?? '∞'} @ ${esc(t.rate.toFixed(2))}`).join('<br>')}`}</td>
-    <td class="r">${f.useMinPrice ? esc(moneyGrid(f.minPrice, c.currency)) : '—'}</td><td class="r">${f.useMaxPrice ? esc(moneyGrid(f.maxPrice, c.currency)) : '—'}</td></tr>`,
+    <td class="r">${f.useMinPrice ? esc(moneyGrid(f.minPrice, c.currency)) : 'None'}</td><td class="r">${f.useMaxPrice ? esc(moneyGrid(f.maxPrice, c.currency)) : 'None'}</td></tr>`,
     )
     .join('');
   openPrint(

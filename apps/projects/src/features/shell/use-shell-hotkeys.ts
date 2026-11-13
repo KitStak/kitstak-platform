@@ -1,6 +1,7 @@
 'use client';
 /**
- * Global shortcuts: c (new task), / and mod+k (palette), ? (help), [ (sidebar), mod+z (undo the
+ * Global shortcuts: c (new task), mod+k (palette), / (filter the current view like Linear and Jira;
+ * the palette on pages without a view search), ? (help), [ (sidebar), mod+z (undo the
  * last change that showed an Undo toast), g then h/m/i/s/p/g/d/a/t (go to).
  */
 import { useEffect, useRef } from 'react';
@@ -18,7 +19,15 @@ export function useShellHotkeys(): void {
     if (state.paletteOpen) state.closePalette();
     else state.openPalette();
   }, { allowInInputs: true, allowInDialogs: true });
-  useHotkey('/', () => store.getState().openPalette());
+  useHotkey('/', () => {
+    // List, Board, Table and the other project views own a "Search tasks" field (also Ctrl/Cmd+F).
+    // Hand '/' to it so it filters the view in place; elsewhere it opens the palette.
+    if (document.querySelector('[data-testid="view-toolbar"]')) {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, metaKey: false, bubbles: true, cancelable: true }));
+      return;
+    }
+    store.getState().openPalette();
+  });
   useHotkey('c', () => store.getState().openQuickAdd());
   useHotkey('?', () => store.getState().openShortcuts());
   useHotkey('[', () => store.getState().toggleSidebar());

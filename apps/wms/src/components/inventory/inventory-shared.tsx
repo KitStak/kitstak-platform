@@ -120,7 +120,7 @@ export function InventoryStatusPill({
 }
 
 export function DamagePill({ reason }: { readonly reason: string | null }) {
-  if (!reason) return <span className="text-faint">—</span>;
+  if (!reason) return <span className="text-faint">None</span>;
   return (
     <span className="inline-flex items-center rounded-full bg-[var(--label-brown-subtle)] px-2 py-0.5 text-2xs font-semibold leading-4 whitespace-nowrap text-[var(--label-brown-text)]">
       {reason}
@@ -180,7 +180,7 @@ export function Qty({
   readonly tone?: 'default' | 'danger' | 'warning' | 'success';
   readonly muteZero?: boolean;
 }) {
-  if (value === null || value === undefined) return <span className="text-faint">—</span>;
+  if (value === null || value === undefined) return <span className="text-faint">None</span>;
   const color =
     value < 0
       ? 'text-danger'

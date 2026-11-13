@@ -171,7 +171,7 @@ describe('utilization presentation helpers', () => {
   it('formats utilization as a percent', () => {
     expect(formatUtilizationPct(1240)).toBe('1,240 %');
     expect(formatUtilizationPct(85.54)).toBe('85.5 %');
-    expect(formatUtilizationPct(null)).toBe('—');
+    expect(formatUtilizationPct(null)).toBe('None');
   });
   it('puts the utilization bar and band next to the location', () => {
     expect(UTILIZATION_DEF.columns.slice(0, 3).map((c) => c.id)).toEqual([

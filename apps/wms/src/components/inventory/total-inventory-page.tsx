@@ -81,7 +81,7 @@ const text = (id: keyof TotalInventoryRow & string, label: string, size = 140, s
   size: headerWidth(label, size),
   enableSorting: sortable,
   meta: { label },
-  cell: ({ row }) => (row.original[id] as string | null) ?? <span className="text-faint">—</span>,
+  cell: ({ row }) => (row.original[id] as string | null) ?? <span className="text-faint">None</span>,
 });
 
 export function buildTotalColumns(): Col[] {

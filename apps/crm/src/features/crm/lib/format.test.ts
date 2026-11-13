@@ -13,7 +13,7 @@ describe('crm format', () => {
   it('formats percentages and handles null', () => {
     expect(formatPercent(0.4567)).toBe('46%');
     expect(formatPercent(0.4567, 1)).toBe('45.7%');
-    expect(formatPercent(null)).toBe('—');
+    expect(formatPercent(null)).toBe('None');
   });
 
   it('formats months and days', () => {
@@ -22,7 +22,7 @@ describe('crm format', () => {
     expect(formatMonth('overdue')).toBe('Overdue');
     expect(formatDay('2026-12-24', TODAY)).toBe('Dec 24');
     expect(formatDay('2027-01-02', TODAY)).toBe('Jan 2, 2027');
-    expect(formatDay(null)).toBe('—');
+    expect(formatDay(null)).toBe('None');
   });
 
   it('computes relative days', () => {

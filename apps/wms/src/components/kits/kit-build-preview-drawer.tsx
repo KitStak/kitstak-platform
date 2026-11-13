@@ -173,7 +173,7 @@ function Body({
           <span className="text-base font-semibold text-foreground">{row.sku}</span>
           <span className="text-sm text-secondary">{row.name}</span>
           <QtyChip label="Warehouse" value={row.warehouseCode} />
-          <QtyChip label="Kit type" value={row.kitType ?? '—'} />
+          <QtyChip label="Kit type" value={row.kitType ?? 'None'} />
           <QtyChip label="Can build now" value={capacity} />
           <QtyChip label="Required" value={row.requiredKittingQty} />
         </div>

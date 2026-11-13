@@ -48,7 +48,7 @@ function PreviewCell({
   readonly value: unknown;
   readonly onCycle: () => void;
 }) {
-  const muted = <span className="text-fg-muted">—</span>;
+  const muted = <span className="text-fg-muted">None</span>;
   switch (column.type) {
     case 'status': {
       const label = labelFor(column, value);

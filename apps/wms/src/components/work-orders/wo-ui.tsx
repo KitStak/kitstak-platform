@@ -84,7 +84,7 @@ export function MetaChip({ label, value }: { readonly label: string; readonly va
     <span className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-1.5 py-0.5 text-2xs">
       <span className="text-faint">{label}:</span>
       <span className={cn('font-medium', empty ? 'text-faint' : 'text-foreground')}>
-        {empty ? '–' : value}
+        {empty ? 'None' : value}
       </span>
     </span>
   );

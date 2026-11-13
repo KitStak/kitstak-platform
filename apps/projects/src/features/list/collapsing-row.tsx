@@ -34,8 +34,9 @@ export function CollapsingRow({ children, names, className }: CollapsingRowProps
       if (!allFit) {
         visible = 0;
         while (visible < items.length && fits(items[visible] as HTMLElement, BADGE_ROOM)) visible += 1;
-        // Always show the first chip (cut if it must) so the cell never reads as empty.
-        visible = Math.max(visible, 1);
+        // A lone chip may be cut (there is nothing to count). With several, a chip that does not fit
+        // beside the badge is folded too, so the cell can read just "+3"; nothing ever overlaps.
+        if (items.length === 1) visible = 1;
       }
       let left = 0;
       items.forEach((item, index) => {
@@ -51,7 +52,7 @@ export function CollapsingRow({ children, names, className }: CollapsingRowProps
         }
       });
       const hidden = items.length - visible;
-      if (hidden > 0) left = Math.min(left, Math.max(0, width - BADGE_ROOM + 2));
+      if (hidden > 0) left = visible === 0 ? 0 : Math.min(left, Math.max(0, width - BADGE_ROOM + 2));
       setState((previous) => (previous.hidden === hidden && previous.left === left ? previous : { hidden, left }));
     };
     measure();

@@ -409,3 +409,32 @@ describe('spec example and fuzzy people', () => {
     expect(parseQuickAdd('Ping @ml', { today: TODAY, people: team }).assigneeId).toBe('u-ml');
   });
 });
+
+describe('quick add options', () => {
+  it('createUnknownLabels turns an unknown #name into a new label', () => {
+    const result = parseQuickAdd('Probe #zzz-new', { today: TODAY, labels: [], createUnknownLabels: true });
+    expect(result.title).toBe('Probe');
+    expect(result.newLabels).toEqual(['zzz new']);
+    expect(result.tokens[0]).toMatchObject({ kind: 'label', value: null, display: 'zzz new (new)' });
+    expect(result.tokens[0]?.unresolved).toBeUndefined();
+  });
+
+  it('stripUnknownPeople takes an unmatched @name out of the title but still flags it', () => {
+    const result = parseQuickAdd('Ask @nobody about it', { today: TODAY, people: [], stripUnknownPeople: true });
+    expect(result.title).toBe('Ask about it');
+    expect(result.assigneeId).toBeNull();
+    expect(result.tokens[0]).toMatchObject({ unresolved: true, display: 'No one named nobody' });
+  });
+
+  it('a dismissed token stays in the title as typed', () => {
+    const first = parseQuickAdd('Ask @nobody #zzz', { today: TODAY, stripUnknownPeople: true, createUnknownLabels: true });
+    const result = parseQuickAdd('Ask @nobody #zzz', {
+      today: TODAY,
+      stripUnknownPeople: true,
+      createUnknownLabels: true,
+      ignore: first.tokens.map((t) => t.id),
+    });
+    expect(result.title).toBe('Ask @nobody #zzz');
+    expect(result.newLabels).toEqual([]);
+  });
+});

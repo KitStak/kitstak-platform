@@ -232,7 +232,7 @@ function Body({
     setForm((f) => ({ ...f, settings: patch(f.settings) }));
     setErrors({});
   };
-  const wh = (wid: string) => warehouses.short.find((w) => w.value === wid)?.label ?? '—';
+  const wh = (wid: string) => warehouses.short.find((w) => w.value === wid)?.label ?? 'None';
 
   const save = async () => {
     const body = {

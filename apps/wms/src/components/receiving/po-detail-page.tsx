@@ -207,12 +207,12 @@ function ReceiptsPanel({
                     {r.quantity.toLocaleString()} {r.packType}
                   </td>
                   <td className="border-b border-border px-2.5 py-2">{r.locationCode}</td>
-                  <td className="border-b border-border px-2.5 py-2">{r.lpNumber ?? '—'}</td>
-                  <td className="border-b border-border px-2.5 py-2">{r.lotNumber ?? '—'}</td>
+                  <td className="border-b border-border px-2.5 py-2">{r.lpNumber ?? 'None'}</td>
+                  <td className="border-b border-border px-2.5 py-2">{r.lotNumber ?? 'None'}</td>
                   <td className="border-b border-border px-2.5 py-2">
-                    {r.expiryDate ? fmt.date(calendarDay(r.expiryDate)) : '—'}
+                    {r.expiryDate ? fmt.date(calendarDay(r.expiryDate)) : 'None'}
                   </td>
-                  <td className="border-b border-border px-2.5 py-2">{r.damageReason ?? '—'}</td>
+                  <td className="border-b border-border px-2.5 py-2">{r.damageReason ?? 'None'}</td>
                   <td className="border-b border-border px-2.5 py-2">
                     <ZonedTime value={r.receivedAt} timeZone={r.timeZone ?? po.warehouseTimeZone} />
                   </td>
@@ -520,7 +520,7 @@ function DetailView({
         <div className="flex items-center justify-between gap-2 text-xs">
           <span className="text-faint">Vendor</span>
           <span className="truncate font-medium text-body" title={po.vendorName}>
-            {po.vendorName || '—'}
+            {po.vendorName || 'None'}
           </span>
         </div>
         <div className="flex items-center justify-between gap-2 text-xs">
@@ -529,7 +529,7 @@ function DetailView({
         </div>
         <div className="flex items-center justify-between gap-2 text-xs">
           <span className="text-faint">PO date</span>
-          <span>{po.poDate ? fmt.date(po.poDate) : '—'}</span>
+          <span>{po.poDate ? fmt.date(po.poDate) : 'None'}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <StatusPill status={po.status} domain="purchaseOrder" />
@@ -615,7 +615,6 @@ function DetailView({
           </DisabledReason>
         </div>
       </RailCard>
-      <ProjectTasksCard kind="receipt" variant="divided" recordId={po.id} recordLabel={po.code} />
     </>
   );
 
@@ -687,6 +686,8 @@ function DetailView({
           onCancel={(r) => cancelReceipt.ask(r)}
         />
         <PreAdvicePanel po={po} />
+        {/* KitStak Projects work linked to this PO: full width like the count page (hidden when Projects is off). */}
+        <ProjectTasksCard kind="receipt" variant="aside" recordId={po.id} recordLabel={po.code} />
       </div>
 
       <ReceiveItemsDrawer

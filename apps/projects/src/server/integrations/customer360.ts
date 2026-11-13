@@ -17,6 +17,7 @@
  * Every part fails soft: a missing app, table or permission just leaves that part null.
  */
 import 'server-only';
+import { displayText } from '@kitstak/ui/text';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { appUrls } from '@/server/env';
@@ -79,8 +80,10 @@ export interface Customer360Receipt {
 
 export interface Customer360 {
   readonly available: { readonly crm: boolean; readonly wms: boolean };
-  /** Sibling app origins, for empty-state actions. */
-  readonly urls: { readonly crm: string; readonly wms: string };
+  /** Sibling app origins, for empty-state actions. `crmTemplates` opens CRM's template gallery. */
+  readonly urls: { readonly crm: string; readonly wms: string; readonly crmTemplates: string };
+  /** False when CRM is connected but the org has no deals pipeline yet (nothing to link). */
+  readonly crmReady: boolean;
   readonly customer: { readonly id: string; readonly code: string; readonly name: string } | null;
   readonly account: { readonly id: string; readonly name: string; readonly url: string } | null;
   readonly crm: {
@@ -133,7 +136,7 @@ type DealRow = {
 const UUID = /^[0-9a-f-]{36}$/i;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-const undashName = (name: string) => name.replace(/\s*[—–]\s*/g, ' · ');
+const undashName = (name: string) => displayText(name, '');
 
 function outcomeOf(stageId: string | null, stageName: string | null, isDone: boolean): Customer360Deal['outcome'] {
   const key = `${stageId ?? ''} ${stageName ?? ''}`.toLowerCase();
@@ -203,6 +206,18 @@ async function peopleById(ids: readonly string[]): Promise<Map<string, Customer3
 }
 
 const idList = (value: unknown): string[] => (Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string' && UUID.test(id)) : []);
+
+/** Whether the org has a live CRM deals board (CRM's "Create your CRM workspace" setup step). Fails soft to true. */
+async function hasDealsPipeline(ctx: DomainContext): Promise<boolean> {
+  try {
+    const rows = await db.execute<{ ok: number }>(
+      sql`select 1 as ok from crm.boards where org_id = ${ctx.orgId}::uuid and kind::text = 'deals' and deleted_at is null and archived_at is null limit 1`,
+    );
+    return rows.rows.length > 0;
+  } catch {
+    return true;
+  }
+}
 
 async function crmPart(
   ctx: DomainContext,
@@ -514,14 +529,18 @@ export async function customer360(
   const accountHint = links.find((link) => link.type === 'crm_account' && UUID.test(link.id))?.id ?? null;
   let customerId = project.crmCustomerId ?? links.find((link) => link.type === 'core_customer')?.id ?? null;
 
-  const crm = availability.crm ? await crmPart(ctx, dealIds, accountHint, customerId) : { crm: null, account: null, customerFromAccount: null };
+  const [crm, crmReady] = await Promise.all([
+    availability.crm ? crmPart(ctx, dealIds, accountHint, customerId) : Promise.resolve({ crm: null, account: null, customerFromAccount: null }),
+    availability.crm ? hasDealsPipeline(ctx) : Promise.resolve(false),
+  ]);
   customerId = customerId ?? crm.customerFromAccount;
   const customer = customerId ? ((await getCustomers(ctx, [customerId])).get(customerId) ?? null) : null;
   const wms = customer && availability.wms ? await wmsPart(customer) : null;
   const risks = await risksFor(project.id, crm.crm, wms, checkedAt.slice(0, 10));
   return {
     available: { crm: availability.crm, wms: availability.wms },
-    urls: { crm: `${appUrls().crm}/${ctx.orgSlug}`, wms: appUrls().wms },
+    urls: { crm: `${appUrls().crm}/${ctx.orgSlug}`, wms: appUrls().wms, crmTemplates: `${appUrls().crm}/${ctx.orgSlug}/workspaces?templates=1` },
+    crmReady,
     customer: customer ? { id: customer.id, code: customer.code, name: customer.name } : null,
     account: crm.account,
     crm: crm.crm,

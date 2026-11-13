@@ -320,7 +320,7 @@ function TrashRow({
         </span>
       </td>
       <td className={cn(TABLE_CELL, 'hidden max-w-[260px] text-sm text-fg-secondary md:table-cell')}>
-        <span className="block truncate">{location || '—'}</span>
+        <span className="block truncate">{location || 'None'}</span>
       </td>
       <td className={cn(TABLE_CELL, 'text-sm whitespace-nowrap text-fg-secondary')} title={formatDateTime(entry.deletedAt)}>
         <span className="block text-fg">{relativeTime(entry.deletedAt)}</span>

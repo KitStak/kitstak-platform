@@ -616,7 +616,7 @@ function InvitationsTable({ invitations }: { readonly invitations: readonly Admi
                 <RoleBadge role={entry.role} />
               </td>
               <td className={cn(TABLE_CELL, 'hidden text-sm text-fg-secondary md:table-cell')}>
-                {entry.inviterName ?? '—'} · {relativeTime(entry.createdAt)}
+                {entry.inviterName ?? 'None'} · {relativeTime(entry.createdAt)}
               </td>
               <td className={cn(TABLE_CELL, 'text-sm whitespace-nowrap')}>
                 {entry.expired ? <Badge tone="danger">Expired</Badge> : <span className="text-fg-secondary">{relativeTime(entry.expiresAt)}</span>}
@@ -659,7 +659,7 @@ function InvitationsTable({ invitations }: { readonly invitations: readonly Admi
 
 /** First team as a chip, the rest behind a "+N" chip whose tooltip lists every team. */
 function TeamChips({ names }: { readonly names: readonly string[] }) {
-  if (names.length === 0) return <span className="text-sm text-fg-muted">—</span>;
+  if (names.length === 0) return <span className="text-sm text-fg-muted">None</span>;
   const [first, ...rest] = names;
   return (
     <span className="flex min-w-0 items-center gap-1" data-testid="user-teams">

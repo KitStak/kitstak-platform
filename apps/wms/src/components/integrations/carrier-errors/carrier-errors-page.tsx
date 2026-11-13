@@ -246,7 +246,7 @@ export function CarrierErrorsPage({ step }: { readonly step: CallStep }) {
             header: 'Tracking number',
             size: 190,
             cell: ({ row }) => (
-              <span className="font-mono text-xs">{row.original.trackingNumber ?? '—'}</span>
+              <span className="font-mono text-xs">{row.original.trackingNumber ?? 'None'}</span>
             ),
           } satisfies GridColumnDef<CallLogRow>,
           order,

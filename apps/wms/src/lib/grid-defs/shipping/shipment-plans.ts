@@ -462,7 +462,7 @@ export function planChangeMessage(field: string, label: string, from: string, to
     return parts.length ? `${parts.join('; ')}.` : 'Orders unchanged.';
   }
   const name = sentenceName(field, label);
-  if (field === 'status') return `Status changed from ${from || '—'} to ${to || '—'}.`;
+  if (field === 'status') return `Status changed from ${from || 'None'} to ${to || 'None'}.`;
   if (!from && to) return `${name} set to ${to}.`;
   if (from && !to) return `${name} cleared (was ${from}).`;
   return `${name} changed from ${from} to ${to}.`;

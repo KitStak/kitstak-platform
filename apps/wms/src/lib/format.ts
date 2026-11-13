@@ -23,7 +23,7 @@ export const DEFAULT_DATETIME_FORMAT = 'M/D/YYYY h:mm:ss A';
 export const INPUT_DATETIME_FORMAT = 'YYYY/MM/DD HH:mm';
 export const INPUT_DATE_FORMAT = 'YYYY/MM/DD';
 export const INPUT_TIME_FORMAT = 'HH:mm';
-export const EMPTY_VALUE = '—';
+export const EMPTY_VALUE = 'None';
 
 export const DEFAULT_FORMAT_PREFERENCES: FormatPreferences = {
   dateFormat: DEFAULT_DATETIME_FORMAT,

@@ -73,18 +73,18 @@ const COLUMNS: ColumnDef<EligibleOrder, unknown>[] = [
       );
     },
   },
-  { id: 'warehouseCode', header: 'Warehouse', cell: ({ row }) => row.original.warehouseCode ?? '—' },
-  { id: 'clientName', header: 'Client', cell: ({ row }) => row.original.clientName ?? '—' },
-  { id: 'customerName', header: 'Customer', cell: ({ row }) => row.original.customerName ?? '—' },
-  { id: 'storeName', header: 'Store', cell: ({ row }) => row.original.storeName ?? '—' },
-  { id: 'orderType', header: 'Order type', cell: ({ row }) => row.original.orderType ?? '—' },
+  { id: 'warehouseCode', header: 'Warehouse', cell: ({ row }) => row.original.warehouseCode ?? 'None' },
+  { id: 'clientName', header: 'Client', cell: ({ row }) => row.original.clientName ?? 'None' },
+  { id: 'customerName', header: 'Customer', cell: ({ row }) => row.original.customerName ?? 'None' },
+  { id: 'storeName', header: 'Store', cell: ({ row }) => row.original.storeName ?? 'None' },
+  { id: 'orderType', header: 'Order type', cell: ({ row }) => row.original.orderType ?? 'None' },
   {
     id: 'sku',
     header: 'SKU',
     enableSorting: false,
     cell: ({ row }) => (
       <span className="block max-w-[220px] truncate" title={row.original.sku ?? undefined}>
-        {row.original.sku ?? '—'}
+        {row.original.sku ?? 'None'}
       </span>
     ),
   },
@@ -101,7 +101,7 @@ const COLUMNS: ColumnDef<EligibleOrder, unknown>[] = [
     meta: { align: 'right' },
     cell: ({ row }) => (
       <span className="block text-right tabular-nums" title="Days since the order was created">
-        {row.original.ageDays === null ? '—' : `${row.original.ageDays} d`}
+        {row.original.ageDays === null ? 'None' : `${row.original.ageDays} d`}
       </span>
     ),
   },
@@ -119,7 +119,7 @@ const COLUMNS: ColumnDef<EligibleOrder, unknown>[] = [
           ))}
         </span>
       ) : (
-        <span className="text-faint">—</span>
+        <span className="text-faint">None</span>
       ),
   },
 ];

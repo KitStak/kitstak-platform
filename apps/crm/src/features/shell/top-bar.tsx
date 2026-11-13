@@ -203,7 +203,7 @@ export function TopBar() {
             badge={<CountBadge count={unread} ringClassName="ring-[var(--surface-panel)]" />}
           />
         </nav>
-        <AppSwitcher current="crm" urls={apps?.urls ?? APP_URLS} entitled={apps?.entitled} />
+        <AppSwitcher current="crm" urls={apps?.urls ?? APP_URLS} entitled={apps?.entitled} notInPlan={apps?.notInPlan} />
         <UserMenu />
       </div>
     </header>

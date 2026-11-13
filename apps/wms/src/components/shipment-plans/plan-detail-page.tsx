@@ -67,7 +67,7 @@ function DerivedValue({
   readonly value: string | null | undefined;
   readonly hint: string | null | undefined;
 }) {
-  if (!value) return <span className="text-faint">—</span>;
+  if (!value) return <span className="text-faint">None</span>;
   return (
     <span className="block min-w-0 break-words pr-1" title={hint ? `${value} (${hint})` : value}>
       {value}
@@ -329,9 +329,9 @@ function OrdersSection({
                   <td className="px-2">
                     <StatusPill status={String(o.planStatus)} domain="shipmentPlan" size="sm" />
                   </td>
-                  <td className="truncate px-2">{String(o.customerName ?? '—')}</td>
+                  <td className="truncate px-2">{String(o.customerName ?? 'None')}</td>
                   <td className="truncate px-2">
-                    {[o.orderCarrier, o.shippingService].filter(Boolean).join(' · ') || '—'}
+                    {[o.orderCarrier, o.shippingService].filter(Boolean).join(' · ') || 'None'}
                   </td>
                   <td className="px-2 text-right tabular-nums">{String(o.totalQuantity ?? 0)}</td>
                   {canEdit && !terminal ? (

@@ -488,7 +488,7 @@ function SecuritySection({
       </FormSection>
       <FormSection
         title="Account lockout"
-        description={`After ${w.lockoutThreshold ?? '—'} failed sign-ins in a row the account is locked for ${w.lockoutMinutes ?? '—'} minutes.`}
+        description={`After ${w.lockoutThreshold ?? 'None'} failed sign-ins in a row the account is locked for ${w.lockoutMinutes ?? 'None'} minutes.`}
       >
         <FormGrid>
           <NumberField<CompanySecurityValues>
@@ -515,7 +515,7 @@ function SecuritySection({
         title="Idle sign-out"
         description={
           w.idleTimeout
-            ? `Web users are signed out after ${w.idleMinutes ?? '—'} minutes without activity in any tab, with a ${IDLE_WARNING_SECONDS}-second warning first.`
+            ? `Web users are signed out after ${w.idleMinutes ?? 'None'} minutes without activity in any tab, with a ${IDLE_WARNING_SECONDS}-second warning first.`
             : 'Web sessions stay signed in until they expire or the user signs out.'
         }
       >

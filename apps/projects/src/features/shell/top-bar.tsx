@@ -67,7 +67,7 @@ function HelpMenu() {
 
 /** 56px top bar (CRM/WMS anatomy): menu (mobile), logo, org switcher, search, quick add, inbox, help, apps, theme, account. */
 export function TopBar() {
-  const { appUrls, modules } = useShell();
+  const { appUrls, modules, notInPlan } = useShell();
   const mod = useModKey();
   const openPalette = useShellStore((state) => state.openPalette);
   const openQuickAdd = useShellStore((state) => state.openQuickAdd);
@@ -159,6 +159,7 @@ export function TopBar() {
           current="projects"
           urls={appUrls}
           entitled={{ crm: modules.crm, wms: modules.wms, projects: modules.projects }}
+          notInPlan={notInPlan}
         />
         <ThemeToggle className="hidden sm:inline-flex" />
         <UserMenu />

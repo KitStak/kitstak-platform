@@ -4,8 +4,13 @@
  * Click a notification to open its task in the drawer (it's marked read). Filters, date groups,
  * multi-select bulk actions, archive with Undo, "Load older" paging and keyboard control:
  * J/K move · Enter open · E archive · U read/unread · X select.
+ *
+ * Wide screens (1200px and up) split the page: the list on the left and the selected item's task
+ * (details, comments, reply box) on the right, so J/K triage never leaves the inbox. E archives and
+ * the next item slides into the preview.
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { BellRing } from 'lucide-react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, CheckCheck, CircleDot, MailOpen } from 'lucide-react';
 import {
@@ -29,6 +34,9 @@ import type { NotificationDTO } from '@/lib/types';
 import { KIND_TONE, NotificationAvatar } from './notification-avatar';
 import { KIND_LABEL, groupByDate } from './notification-utils';
 import { useInboxActions } from './use-inbox-actions';
+import { TaskDetailView } from '@/features/task/task-detail';
+import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
+import { useIsNarrow } from '@/features/timeline/use-view-prefs';
 
 export type InboxFilter = 'all' | 'unread' | 'mentions' | 'assigned' | 'comments' | 'due' | 'archived';
 
@@ -43,13 +51,29 @@ const FILTERS: readonly { value: InboxFilter; label: string }[] = [
 ];
 
 const EMPTY: Record<InboxFilter, { title: string; description: string }> = {
-  all: { title: 'You’re all caught up', description: 'When someone mentions you, assigns you a task or updates something you follow, it shows up here.' },
+  all: {
+    title: 'You’re all caught up',
+    description:
+      'When someone mentions you, assigns you a task or updates something you follow, it shows up here.',
+  },
   unread: { title: 'Nothing unread', description: 'You’ve seen everything. New updates will appear here.' },
-  mentions: { title: 'No mentions yet', description: 'When someone types @ and your name in a comment, you’ll see it here.' },
-  assigned: { title: 'Nothing assigned lately', description: 'When a teammate gives you a task, it shows up here.' },
+  mentions: {
+    title: 'No mentions yet',
+    description: 'When someone types @ and your name in a comment, you’ll see it here.',
+  },
+  assigned: {
+    title: 'Nothing assigned lately',
+    description: 'When a teammate gives you a task, it shows up here.',
+  },
   comments: { title: 'No new comments', description: 'Comments on tasks you follow show up here.' },
-  due: { title: 'No due-date reminders', description: 'We remind you here when a task of yours is due today, tomorrow, or is late.' },
-  archived: { title: 'Nothing archived', description: 'Archive notifications you’re done with to keep your inbox tidy.' },
+  due: {
+    title: 'No due-date reminders',
+    description: 'We remind you here when a task of yours is due today, tomorrow, or is late.',
+  },
+  archived: {
+    title: 'Nothing archived',
+    description: 'Archive notifications you’re done with to keep your inbox tidy.',
+  },
 };
 
 export function InboxView({ initial }: { readonly initial: InboxPage }) {
@@ -60,11 +84,15 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
   const listRef = useRef<HTMLUListElement>(null);
   const { markRead, archive, markAll, open } = useInboxActions();
   const projects = useProjects();
-  const projectKeys = useMemo(() => new Map((projects.data ?? []).map((p) => [p.id, p.key])), [projects.data]);
+  const projectKeys = useMemo(
+    () => new Map((projects.data ?? []).map((p) => [p.id, p.key])),
+    [projects.data],
+  );
 
   const inbox = useInfiniteQuery({
     queryKey: ['notifications', filter, 'feed'],
-    queryFn: ({ pageParam }) => apiGet<InboxPage>(apiPath('notifications', { filter, before: pageParam ?? undefined })),
+    queryFn: ({ pageParam }) =>
+      apiGet<InboxPage>(apiPath('notifications', { filter, before: pageParam ?? undefined })),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
     initialData: filter === 'all' ? { pages: [initial], pageParams: [null] } : undefined,
@@ -76,7 +104,11 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
   // New notifications arrive through the unread poll: refresh the list when the count goes up.
   const lastCount = useRef(unreadCount);
   useEffect(() => {
-    if (unreadCount > lastCount.current) void queryClient.invalidateQueries({ queryKey: ['notifications'], predicate: (q) => q.queryKey[1] !== 'unread-count' });
+    if (unreadCount > lastCount.current)
+      void queryClient.invalidateQueries({
+        queryKey: ['notifications'],
+        predicate: (q) => q.queryKey[1] !== 'unread-count',
+      });
     lastCount.current = unreadCount;
   }, [unreadCount, queryClient]);
 
@@ -84,6 +116,16 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
   const selectedItems = items.filter((item) => selected.has(item.id));
   const allSelected = items.length > 0 && selectedItems.length === items.length;
   const active = items[Math.min(cursor, items.length - 1)];
+  // Split view: list plus live task preview at 1200px and wider.
+  const split = useIsNarrow('(min-width: 1200px)');
+  const { openTask } = useTaskDrawer();
+  const previewTask = split && active?.taskId ? active.taskId : null;
+  // Previewing an unread item for a moment marks it read (like opening it would).
+  useEffect(() => {
+    if (!split || !active || active.readAt) return;
+    const timer = window.setTimeout(() => void markRead([active], true), 1200);
+    return () => window.clearTimeout(timer);
+  }, [split, active, markRead]);
 
   const changeFilter = (value: InboxFilter) => {
     setFilter(value);
@@ -124,9 +166,15 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
     <Page
       title="Inbox"
       subtitle="Mentions, assignments and updates on tasks you follow."
-      width="narrow"
+      width={split ? 'full' : 'narrow'}
       actions={
-        <Button variant="secondary" leadingIcon={<CheckCheck aria-hidden />} onClick={() => void markAll()} disabled={unreadCount === 0} data-testid="inbox-mark-all">
+        <Button
+          variant="secondary"
+          leadingIcon={<CheckCheck aria-hidden />}
+          onClick={() => void markAll()}
+          disabled={unreadCount === 0}
+          data-testid="inbox-mark-all"
+        >
           Mark all read
         </Button>
       }
@@ -135,7 +183,12 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
           <div className="-mx-1 overflow-x-auto px-1">
             <TabsList aria-label="Filter notifications" className="min-w-max">
               {FILTERS.map((entry) => (
-                <TabsTrigger key={entry.value} value={entry.value} data-testid={`inbox-filter-${entry.value}`} count={entry.value === 'unread' && unreadCount ? unreadCount : undefined}>
+                <TabsTrigger
+                  key={entry.value}
+                  value={entry.value}
+                  data-testid={`inbox-filter-${entry.value}`}
+                  count={entry.value === 'unread' && unreadCount ? unreadCount : undefined}
+                >
                   {entry.label}
                 </TabsTrigger>
               ))}
@@ -144,89 +197,157 @@ export function InboxView({ initial }: { readonly initial: InboxPage }) {
         </Tabs>
       }
     >
-      {items.length > 0 ? (
-        <div className="mb-2 flex min-h-9 items-center gap-2 px-1" data-testid="inbox-toolbar">
-          <Checkbox
-            aria-label={allSelected ? 'Clear selection' : 'Select all'}
-            checked={allSelected ? true : bulk ? 'indeterminate' : false}
-            onCheckedChange={() => setSelected(allSelected ? new Set() : new Set(items.map((item) => item.id)))}
-            className="ml-3 max-sm:hidden"
-          />
-          {bulk ? (
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="mr-1 text-sm font-medium text-fg">{selectedItems.length} selected</span>
-              <Button size="sm" variant="ghost" leadingIcon={<MailOpen aria-hidden />} onClick={() => { void markRead(selectedItems, true); setSelected(new Set()); }}>
-                Mark read
-              </Button>
-              <Button size="sm" variant="ghost" leadingIcon={<CircleDot aria-hidden />} onClick={() => { void markRead(selectedItems, false); setSelected(new Set()); }}>
-                Mark unread
-              </Button>
+      <div
+        className={cn(split && 'grid grid-cols-[minmax(380px,440px)_minmax(0,1fr)] items-start gap-6')}
+        data-testid={split ? 'inbox-split' : undefined}
+      >
+        <div className="min-w-0">
+          {items.length > 0 ? (
+            <div className="mb-2 flex min-h-9 items-center gap-2 px-1" data-testid="inbox-toolbar">
+              <Checkbox
+                aria-label={allSelected ? 'Clear selection' : 'Select all'}
+                checked={allSelected ? true : bulk ? 'indeterminate' : false}
+                onCheckedChange={() =>
+                  setSelected(allSelected ? new Set() : new Set(items.map((item) => item.id)))
+                }
+                className="ml-3 max-sm:hidden"
+              />
+              {bulk ? (
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="mr-1 text-sm font-medium text-fg">{selectedItems.length} selected</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leadingIcon={<MailOpen aria-hidden />}
+                    onClick={() => {
+                      void markRead(selectedItems, true);
+                      setSelected(new Set());
+                    }}
+                  >
+                    Mark read
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leadingIcon={<CircleDot aria-hidden />}
+                    onClick={() => {
+                      void markRead(selectedItems, false);
+                      setSelected(new Set());
+                    }}
+                  >
+                    Mark unread
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    leadingIcon={
+                      filter === 'archived' ? <ArchiveRestore aria-hidden /> : <Archive aria-hidden />
+                    }
+                    onClick={() => {
+                      void archive(selectedItems, filter !== 'archived');
+                      setSelected(new Set());
+                    }}
+                  >
+                    {filter === 'archived' ? 'Move to inbox' : 'Archive'}
+                  </Button>
+                </div>
+              ) : (
+                <p className="hidden items-center gap-1 text-xs whitespace-nowrap text-fg-muted sm:flex">
+              <Kbd>J</Kbd>
+              <Kbd>K</Kbd> move · <Kbd>E</Kbd> archive{split ? null : <> · <Kbd>Enter</Kbd> open · <Kbd>U</Kbd> read/unread · <Kbd>X</Kbd> select</>}
+            </p>
+              )}
+            </div>
+          ) : null}
+
+          {inbox.isPending ? (
+            <div className="flex flex-col gap-2">
+              {Array.from({ length: 6 }, (_, i) => (
+                <Skeleton key={i} height={64} rounded="md" />
+              ))}
+            </div>
+          ) : items.length === 0 ? (
+            <EmptyState
+              illustration={filter === 'unread' || filter === 'all' ? 'inbox' : 'notifications'}
+              title={EMPTY[filter].title}
+              description={EMPTY[filter].description}
+            />
+          ) : (
+            <ul
+              ref={listRef}
+              className="flex flex-col gap-4"
+              data-testid="inbox-list"
+              aria-label="Notifications"
+            >
+              {groups.map((group) => (
+                <li key={group.label}>
+                  <h2 className="mb-1 px-1 text-xs font-semibold tracking-[0.06em] text-fg-muted uppercase">
+                    {group.label}
+                  </h2>
+                  <ul className="overflow-hidden rounded-xl border border-border-subtle bg-panel">
+                    {group.items.map((item) => {
+                      const index = items.indexOf(item);
+                      return (
+                        <InboxRow
+                          key={item.id}
+                          item={item}
+                          index={index}
+                          projectKey={item.projectId ? projectKeys.get(item.projectId) : undefined}
+                          selected={selected.has(item.id)}
+                          current={index === cursor}
+                          onFocus={() => setCursor(index)}
+                          onKeyDown={(event) => onRowKeyDown(event, item)}
+                          onOpen={() => open(item)}
+                          onSelect={() => toggleSelect(item.id)}
+                          onRead={() => void markRead([item], !item.readAt)}
+                          onArchive={() => void archive([item], !item.archivedAt)}
+                        />
+                      );
+                    })}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          )}
+          {inbox.hasNextPage ? (
+            <div className="mt-4 flex justify-center">
               <Button
-                size="sm"
-                variant="ghost"
-                leadingIcon={filter === 'archived' ? <ArchiveRestore aria-hidden /> : <Archive aria-hidden />}
-                onClick={() => {
-                  void archive(selectedItems, filter !== 'archived');
-                  setSelected(new Set());
-                }}
+                variant="secondary"
+                onClick={() => void inbox.fetchNextPage()}
+                loading={inbox.isFetchingNextPage}
               >
-                {filter === 'archived' ? 'Move to inbox' : 'Archive'}
+                Load older notifications
               </Button>
             </div>
-          ) : (
-            <p className="hidden items-center gap-1 text-xs text-fg-muted sm:flex">
-              <Kbd>J</Kbd>
-              <Kbd>K</Kbd> move · <Kbd>Enter</Kbd> open · <Kbd>E</Kbd> archive · <Kbd>U</Kbd> read/unread · <Kbd>X</Kbd> select
-            </p>
-          )}
+          ) : null}
         </div>
-      ) : null}
-
-      {inbox.isPending ? (
-        <div className="flex flex-col gap-2">
-          {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} height={64} rounded="md" />
-          ))}
-        </div>
-      ) : items.length === 0 ? (
-        <EmptyState illustration={filter === 'unread' || filter === 'all' ? 'inbox' : 'notifications'} title={EMPTY[filter].title} description={EMPTY[filter].description} />
-      ) : (
-        <ul ref={listRef} className="flex flex-col gap-4" data-testid="inbox-list" aria-label="Notifications">
-          {groups.map((group) => (
-            <li key={group.label}>
-              <h2 className="mb-1 px-1 text-xs font-semibold tracking-[0.06em] text-fg-muted uppercase">{group.label}</h2>
-              <ul className="overflow-hidden rounded-xl border border-border-subtle bg-panel">
-                {group.items.map((item) => {
-                  const index = items.indexOf(item);
-                  return (
-                    <InboxRow
-                      key={item.id}
-                      item={item}
-                      index={index}
-                      projectKey={item.projectId ? projectKeys.get(item.projectId) : undefined}
-                      selected={selected.has(item.id)}
-                      current={index === cursor}
-                      onFocus={() => setCursor(index)}
-                      onKeyDown={(event) => onRowKeyDown(event, item)}
-                      onOpen={() => open(item)}
-                      onSelect={() => toggleSelect(item.id)}
-                      onRead={() => void markRead([item], !item.readAt)}
-                      onArchive={() => void archive([item], !item.archivedAt)}
-                    />
-                  );
-                })}
-              </ul>
-            </li>
-          ))}
-        </ul>
-      )}
-      {inbox.hasNextPage ? (
-        <div className="mt-4 flex justify-center">
-          <Button variant="secondary" onClick={() => void inbox.fetchNextPage()} loading={inbox.isFetchingNextPage}>
-            Load older notifications
-          </Button>
-        </div>
-      ) : null}
+        {split ? (
+          <aside
+            aria-label="Preview"
+            className="sticky top-0 flex max-h-[calc(100dvh-180px)] min-h-[420px] min-w-0 flex-col overflow-hidden rounded-xl border border-border-subtle bg-panel shadow-xs"
+            data-testid="inbox-preview"
+          >
+            {previewTask ? (
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <TaskDetailView
+                  key={previewTask}
+                  taskRef={previewTask}
+                  variant="drawer"
+                  onOpenTask={(key) => openTask(key)}
+                />
+              </div>
+            ) : active ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
+                <BellRing aria-hidden className="size-6 text-icon" />
+                <p className="text-sm font-semibold text-fg">{active.title}</p>
+                {active.body ? <p className="max-w-md text-sm text-fg-secondary">{active.body}</p> : null}
+              </div>
+            ) : (
+              <p className="m-auto p-8 text-sm text-fg-muted">Pick a notification to see it here.</p>
+            )}
+          </aside>
+        ) : null}
+      </div>
     </Page>
   );
 }
@@ -274,7 +395,10 @@ function InboxRow({
           checked={selected}
           onCheckedChange={onSelect}
           tabIndex={-1}
-          className={cn('transition-opacity', selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100')}
+          className={cn(
+            'transition-opacity',
+            selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
+          )}
         />
       </span>
       <NotificationAvatar item={item} />
@@ -292,8 +416,14 @@ function InboxRow({
         aria-label={`${unread ? 'Unread. ' : ''}${item.title}${item.body ? `. ${item.body}` : ''}`}
         className="min-w-0 flex-1 text-left outline-none"
       >
-        <span className={cn('block text-sm leading-5', unread ? 'font-semibold text-fg' : 'text-fg-secondary')}>{item.title}</span>
-        {item.body ? <span className="mt-0.5 line-clamp-2 block text-sm text-fg-muted">{item.body}</span> : null}
+        <span
+          className={cn('block text-sm leading-5', unread ? 'font-semibold text-fg' : 'text-fg-secondary')}
+        >
+          {item.title}
+        </span>
+        {item.body ? (
+          <span className="mt-0.5 line-clamp-2 block text-sm text-fg-muted">{item.body}</span>
+        ) : null}
         <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted">
           <span className={KIND_TONE[item.kind]}>{KIND_LABEL[item.kind]}</span>
           {projectKey ? (
@@ -308,8 +438,18 @@ function InboxRow({
           </time>
         </span>
       </button>
-      <span className="flex shrink-0 items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 sm:group-focus-visible:opacity-100" onClick={(event) => event.stopPropagation()}>
-        <IconButton size="sm" label={unread ? 'Mark as read' : 'Mark as unread'} shortcut={['U']} icon={unread ? <MailOpen aria-hidden /> : <CircleDot aria-hidden />} onClick={onRead} tabIndex={-1} />
+      <span
+        className="flex shrink-0 items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 sm:group-focus-visible:opacity-100"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <IconButton
+          size="sm"
+          label={unread ? 'Mark as read' : 'Mark as unread'}
+          shortcut={['U']}
+          icon={unread ? <MailOpen aria-hidden /> : <CircleDot aria-hidden />}
+          onClick={onRead}
+          tabIndex={-1}
+        />
         <IconButton
           size="sm"
           label={item.archivedAt ? 'Move back to inbox' : 'Archive'}
@@ -321,7 +461,9 @@ function InboxRow({
         />
       </span>
       <span className="flex h-5 w-2 shrink-0 items-center">
-        {unread ? <span aria-hidden data-testid="unread-dot" className="size-2 rounded-full bg-primary" /> : null}
+        {unread ? (
+          <span aria-hidden data-testid="unread-dot" className="size-2 rounded-full bg-primary" />
+        ) : null}
       </span>
     </li>
   );

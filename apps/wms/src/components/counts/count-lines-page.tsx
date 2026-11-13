@@ -422,7 +422,7 @@ export function CountLinesPage({ kind }: { readonly kind: Kind }) {
             line: lineLabel(r),
             plan: r.planCode,
             status: <CountStatusPill status={r.status} domain="count" size="sm" />,
-            job: r.jobCode ?? '—',
+            job: r.jobCode ?? 'None',
           })),
         }
       : undefined;

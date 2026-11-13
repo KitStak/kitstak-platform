@@ -305,7 +305,7 @@ export function CompletedPanel({ report, className, taskHref }: { readonly repor
             <li key={task.id}>
               <Link href={taskHref(task.key)} data-task-key={task.key} scroll={false} className="flex items-center gap-3 rounded-md px-2 py-2 text-sm outline-none hover:bg-hover focus-visible:outline-2 focus-visible:outline-focus">
                 <CheckCircle2 aria-hidden className="size-4 shrink-0 text-success" />
-                <span className="w-16 shrink-0 font-mono text-xs text-fg-muted">{task.key}</span>
+                <span className="w-16 shrink-0 font-key text-xs text-fg-muted">{task.key}</span>
                 <span className="min-w-0 flex-1 truncate text-fg">{task.title}</span>
                 <PersonAvatar userId={task.assigneeId} size="xs" />
                 <LocalTime iso={task.completedAt} className="hidden w-24 shrink-0 text-right text-xs text-fg-muted sm:block" />
