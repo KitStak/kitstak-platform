@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { LINKS, ROUTES } from '../site-links';
+import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
 import { PREVIEW_PRODUCT, PRIMARY_NAV, PRODUCT_NAV, isCurrentPath } from './nav-data';
 import styles from './mobile-menu.module.css';
@@ -70,7 +71,7 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
                 aria-current={isCurrentPath(pathname, product.href) ? 'page' : undefined}
                 onClick={onClose}
               >
-                <StakMark lit={product.id} size={32} />
+                <AppIcon app={product.id} size={40} />
                 <span>
                   <span className={styles.productName}>{product.name}</span>
                   <span className={styles.blurb}>{product.blurb}</span>
@@ -85,7 +86,7 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
               aria-current={pathname === ROUTES.products ? 'page' : undefined}
               onClick={onClose}
             >
-              <StakMark lit="both" size={32} />
+              <StakMark lit="both" size={40} />
               <span>
                 <span className={styles.productName}>Both, bundled</span>
                 <span className={styles.blurb}>Compare the products and see what you save.</span>
@@ -99,7 +100,7 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
               aria-current={isCurrentPath(pathname, PREVIEW_PRODUCT.href) ? 'page' : undefined}
               onClick={onClose}
             >
-              <StakMark lit="projects" size={32} />
+              <AppIcon app="projects" size={40} />
               <span>
                 <span className={styles.productName}>
                   {PREVIEW_PRODUCT.name} <span className={styles.badge}>{PREVIEW_PRODUCT.badge}</span>

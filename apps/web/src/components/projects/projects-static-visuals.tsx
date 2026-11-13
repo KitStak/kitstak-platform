@@ -1,4 +1,4 @@
-import { StakMark } from '../stak-mark';
+import { AppIcon } from '../app-icon';
 import mock from '../mock/mock.module.css';
 import styles from './projects-visuals.module.css';
 
@@ -7,19 +7,19 @@ import styles from './projects-visuals.module.css';
 const RECIPES = [
   {
     from: 'CRM',
-    lit: 'crm',
+    app: 'crm',
     when: 'a deal is won',
     then: 'create a project from the Client onboarding template',
   },
   {
     from: 'WMS',
-    lit: 'wms',
+    app: 'wms',
     when: 'a receipt has a discrepancy',
     then: 'create a task to resolve it',
   },
   {
     from: 'WMS',
-    lit: 'wms',
+    app: 'wms',
     when: 'a count shows a variance',
     then: 'create a task to recount the location',
   },
@@ -32,7 +32,7 @@ export function CrossRecipes() {
       {RECIPES.map((recipe, i) => (
         <li key={recipe.when} className={mock.panel} data-reveal style={{ '--reveal-delay': 90 * i } as React.CSSProperties}>
           <span className={styles.recipeFrom}>
-            <StakMark lit={recipe.lit} size={22} /> From the {recipe.from}
+            <AppIcon app={recipe.app} size={28} /> From the {recipe.from}
           </span>
           <p className={styles.recipeLine}>
             <span className={styles.recipeWord}>When</span> <span className={styles.recipeWhen}>{recipe.when}</span>
@@ -48,10 +48,10 @@ export function CrossRecipes() {
 /* ------------------------------------------------------------------ Customer card */
 
 const SIGNALS = [
-  { app: 'CRM', lit: 'crm', label: 'Deal stage', value: 'Renewal · proposal sent', token: 'orange' },
-  { app: 'WMS', lit: 'wms', label: 'Receiving', value: '1 receipt running late', token: 'red' },
-  { app: 'WMS', lit: 'wms', label: 'Open order', value: 'SO-10482 · picking', token: 'sky' },
-  { app: 'Projects', lit: 'projects', label: 'Onboarding project', value: 'At risk · 3 tasks overdue', token: 'orange' },
+  { app: 'CRM', icon: 'crm', label: 'Deal stage', value: 'Renewal · proposal sent', token: 'orange' },
+  { app: 'WMS', icon: 'wms', label: 'Receiving', value: '1 receipt running late', token: 'red' },
+  { app: 'WMS', icon: 'wms', label: 'Open order', value: 'SO-10482 · picking', token: 'sky' },
+  { app: 'Projects', icon: 'projects', label: 'Onboarding project', value: 'At risk · 3 tasks overdue', token: 'orange' },
 ] as const;
 
 /** The customer card on a project's Overview: what sales, the warehouse and the project each know. */
@@ -68,7 +68,7 @@ export function CustomerCard() {
         {SIGNALS.map((signal) => (
           <li key={signal.label} className={`${mock.row} ${styles.signal}`}>
             <span className={styles.signalFrom}>
-              <StakMark lit={signal.lit} size={20} />
+              <AppIcon app={signal.icon} size={30} />
               <span>
                 <span className={styles.signalLabel}>{signal.label}</span>
                 <span className={styles.signalApp}>{signal.app}</span>

@@ -15,6 +15,7 @@ import {
 import type { Option, StakAnswers } from '@/lib/stak';
 import type { StackChoice } from '../site-links';
 import { BillingToggle, Stepper } from '../stak/stak-parts';
+import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
 import styles from './wizard.module.css';
 
@@ -120,7 +121,13 @@ export function StackStep({ answers, update }: StepProps) {
               checked={answers.focus === stack.value}
               onChange={() => update({ focus: stack.value })}
             />
-            <StakMark lit={stack.value} size={56} />
+            {stack.value === 'both' ? (
+              <span className={styles.stackGlyph}>
+                <StakMark lit="both" size={44} />
+              </span>
+            ) : (
+              <AppIcon app={stack.value} size={64} className={styles.stackGlyph} />
+            )}
             <span className={styles.stackText}>
               <span className={styles.stackLabel}>
                 {stack.label}
@@ -169,7 +176,7 @@ export function ShapeStep({ answers, update }: StepProps) {
       {hasWms(answers) ? (
         <section className={styles.product} aria-label="Warehouse">
           <h3 className={styles.productHead}>
-            <StakMark lit="wms" size={28} /> Your warehouse
+            <AppIcon app="wms" size={38} /> Your warehouse
           </h3>
           <div className={styles.quantity}>
             <span>
@@ -196,7 +203,7 @@ export function ShapeStep({ answers, update }: StepProps) {
       {hasCrm(answers) ? (
         <section className={styles.product} aria-label="CRM">
           <h3 className={styles.productHead}>
-            <StakMark lit="crm" size={28} /> Your CRM
+            <AppIcon app="crm" size={38} /> Your CRM
           </h3>
           <div className={styles.quantity}>
             <span>

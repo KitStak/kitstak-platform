@@ -57,7 +57,10 @@
   border-bottom: 1px solid var(--border-default);
 }
 .product > svg {
-  margin-top: 6px;
+  margin-top: 10px;
+}
+.product > img {
+  margin-top: -2px;
 }
 .product[aria-current='page'] .productName {
   text-decoration: underline;

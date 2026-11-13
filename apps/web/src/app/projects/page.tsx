@@ -46,7 +46,7 @@ export default function ProjectsPage() {
       <main id="main">
         <ProductHero
           product="KitStak Projects"
-          lit="projects"
+          app="projects"
           badge="Preview"
           lines={['Plan it.', 'Run it.', 'Land it.']}
           lead="KitStak Projects is the next app on the stack: tasks, timelines and workload for the work that sits between a deal and a delivery. It is in development, and this page shows what it does so far."

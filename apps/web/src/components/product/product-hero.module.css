@@ -30,7 +30,7 @@
 .crumbHere {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   color: var(--brand-cream);
   font-weight: var(--weight-semibold);
 }

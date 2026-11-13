@@ -53,7 +53,7 @@ export default function WmsPage() {
       <main id="main">
         <ProductHero
           product="KitStak WMS"
-          lit="wms"
+          app="wms"
           lines={['Dock.', 'Shelf.', 'Door.']}
           lead="KitStak WMS runs receiving, inventory, picking, packing, shipping and returns. One warehouse or a 3PL floor full of clients, every unit has a location and every location has a count."
           primary={{ href: getStartedHref('wms'), label: 'Start with the WMS' }}

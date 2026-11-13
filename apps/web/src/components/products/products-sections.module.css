@@ -154,7 +154,8 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 14px;
+  gap: 8px;
+  margin-left: -8px;
 }
 .cardName {
   font-weight: var(--weight-semibold);
@@ -227,7 +228,10 @@
   font-weight: var(--weight-bold);
 }
 .table thead th svg {
-  margin: 0 auto 10px;
+  margin: 12px auto 22px;
+}
+.table thead th img {
+  margin: 0 auto 6px;
 }
 .table tbody th {
   padding-left: 0;

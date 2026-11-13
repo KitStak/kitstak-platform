@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ROUTES, getStartedHref } from '../site-links';
+import { AppIcon } from '../app-icon';
 import { StakMark } from '../stak-mark';
 import { PREVIEW_PRODUCT, PRODUCT_NAV, isCurrentPath } from './nav-data';
 import styles from './products-menu.module.css';
@@ -24,7 +25,7 @@ export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuP
               aria-current={isCurrentPath(pathname, product.href) ? 'page' : undefined}
               onClick={onNavigate}
             >
-              <StakMark lit={product.id} size={36} />
+              <AppIcon app={product.id} size={44} />
               <span>
                 <span className={styles.productName}>
                   {product.name} <span className={styles.arrow} aria-hidden>→</span>
@@ -64,7 +65,7 @@ export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuP
           aria-current={isCurrentPath(pathname, PREVIEW_PRODUCT.href) ? 'page' : undefined}
           onClick={onNavigate}
         >
-          <StakMark lit="projects" size={28} />
+          <AppIcon app="projects" size={34} />
           <span className={styles.previewName}>{PREVIEW_PRODUCT.name}</span>
           <span className={styles.previewBadge}>{PREVIEW_PRODUCT.badge}</span>
           <span className={styles.previewBlurb}>{PREVIEW_PRODUCT.blurb}</span>

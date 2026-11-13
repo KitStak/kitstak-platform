@@ -51,7 +51,7 @@ export default function CrmPage() {
       <main id="main">
         <ProductHero
           product="KitStak CRM"
-          lit="crm"
+          app="crm"
           lines={['Track it.', 'Chase it.', 'Close it.']}
           lead="KitStak CRM keeps leads, deals, accounts and follow-ups on boards your team shapes for itself. Automations do the chasing, dashboards do the reporting, and nobody asks where a deal stands."
           primary={{ href: getStartedHref('crm'), label: 'Start with the CRM' }}

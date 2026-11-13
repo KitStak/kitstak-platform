@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ROUTES } from '../site-links';
-import { StakMark } from '../stak-mark';
-import type { StakMarkLit } from '../stak-mark';
+import { AppIcon } from '../app-icon';
+import type { AppId } from '../app-icon';
 import styles from './product-hero.module.css';
 
 export interface HeroAction {
@@ -17,7 +17,7 @@ export interface HeroFact {
 interface ProductHeroProps {
   /** Product tag shown beside the mark, e.g. "KitStak WMS". */
   readonly product: string;
-  readonly lit: StakMarkLit;
+  readonly app: AppId;
   /** Headline, one short line per entry. The last line is set in KitStak Red. */
   readonly lines: readonly string[];
   readonly lead: string;
@@ -29,7 +29,7 @@ interface ProductHeroProps {
   readonly badge?: string;
 }
 
-export function ProductHero({ product, lit, lines, lead, primary, secondary, visual, facts, badge }: ProductHeroProps) {
+export function ProductHero({ product, app, lines, lead, primary, secondary, visual, facts, badge }: ProductHeroProps) {
   return (
     <section id="top" className={styles.hero} aria-labelledby="hero-heading">
       <div className={`container ${styles.inner}`}>
@@ -38,7 +38,7 @@ export function ProductHero({ product, lit, lines, lead, primary, secondary, vis
             <Link href={ROUTES.products}>Products</Link>
             <span aria-hidden>/</span>
             <span className={styles.crumbHere} aria-current="page">
-              <StakMark lit={lit} size={22} />
+              <AppIcon app={app} size={30} />
               {product}
             </span>
             {badge ? <span className={styles.badge}>{badge}</span> : null}
