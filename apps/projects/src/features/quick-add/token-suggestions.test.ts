@@ -39,10 +39,15 @@ describe('suggestFor', () => {
     expect(suggestFor({ sigil: '@', partial: 'diaz', start: 0, end: 5 }, data).map((s) => s.id)).toEqual(['u2']);
     expect(suggestFor({ sigil: '@', partial: '', start: 0, end: 1 }, data)[0]).toMatchObject({ id: 'me', insert: '@me' });
   });
+  it('people by initials, and near misses', () => {
+    expect(suggestFor({ sigil: '@', partial: 'mc', start: 0, end: 3 }, data).map((s) => s.id)[0]).toBe('u1');
+    expect(suggestFor({ sigil: '@', partial: 'mya', start: 0, end: 4 }, data).map((s) => s.id)).toContain('u1');
+    expect(suggestFor({ sigil: '@', partial: 'okafr', start: 0, end: 6 }, data).map((s) => s.id)).toEqual(['u3']);
+  });
   it('labels, with a create option for new names', () => {
     const out = suggestFor({ sigil: '#', partial: 'sal', start: 0, end: 4 }, data);
     expect(out[0]).toMatchObject({ id: 'l1', insert: '#Sales-lead' });
-    expect(out.at(-1)).toMatchObject({ id: 'new:sal' });
+    expect(out.at(-1)).toMatchObject({ id: 'new:sal', label: 'Create label “sal”' });
     expect(suggestFor({ sigil: '#', partial: 'bug', start: 0, end: 4 }, data).map((s) => s.id)).toEqual(['l2']);
   });
   it('projects by key or name', () => {

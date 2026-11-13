@@ -965,6 +965,19 @@ export function FormBuilder({
           </Panel>
           <Panel title="After someone sends it">
             <div className="flex flex-col gap-4">
+              <label className="flex items-center justify-between gap-4 rounded-lg border border-border-subtle px-3 py-2.5">
+                <span>
+                  <span className="block text-sm font-medium text-fg">Send responses to Triage first</span>
+                  <span className="block text-xs text-fg-muted">
+                    Each response waits in the project’s Triage list. Someone accepts it into a task, declines it, snoozes it or merges it with a task that already exists.
+                  </span>
+                </span>
+                <Switch
+                  checked={draft.settings.sendToTriage ?? false}
+                  onCheckedChange={(sendToTriage) => setSettings({ sendToTriage })}
+                  aria-label="Send responses to Triage first"
+                />
+              </label>
               <Field label="Thank-you message">
                 {({ inputId }) => (
                   <Textarea

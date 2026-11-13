@@ -31,7 +31,7 @@ export function PageHeader({ breadcrumbs, title, icon, subtitle, actions, tabs, 
               {icon}
               <h1 className="truncate text-xl font-semibold tracking-[-0.01em] text-fg">{title}</h1>
             </div>
-            {subtitle ? <p className="mt-0.5 max-w-[720px] truncate text-sm text-fg-muted">{subtitle}</p> : null}
+            {subtitle ? <p className="mt-0.5 max-w-[720px] text-sm text-fg-muted sm:truncate">{subtitle}</p> : null}
           </div>
           {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
         </div>

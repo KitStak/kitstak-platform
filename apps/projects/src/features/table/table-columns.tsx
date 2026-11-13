@@ -4,7 +4,7 @@
  * each one displays, sorts, groups, edits and sums. Pure-ish (React nodes, no hooks).
  */
 import type { ReactNode } from 'react';
-import { AlignLeft, Calendar, CalendarClock, CheckSquare, CircleDashed, Clock, DollarSign, FolderOpen, Hash, Link2, ListChecks, Signal, Tag, ToggleLeft, UserRound, Users } from 'lucide-react';
+import { AlignLeft, Building2, Calendar, CalendarClock, CheckSquare, CircleDashed, Clock, DollarSign, FolderOpen, Hash, Link2, ListChecks, Signal, Tag, ToggleLeft, UserRound, Users } from 'lucide-react';
 import { DueDate, LabelPill, PersonAvatar, PriorityIcon, StatusIcon } from '@/components/pm';
 import { PRIORITY_LABELS } from '@/lib/constants';
 import { formatRelative, parseIsoDate } from '@/lib/dates';
@@ -12,7 +12,7 @@ import { NO_GROUP } from '@/lib/task-filters';
 import type { CustomFieldDTO, IntegrationLinkDTO, LabelDTO, SectionDTO, StatusDTO, TaskSummary } from '@/lib/types';
 import type { GroupField, SortRule, ViewColumn } from '@/lib/view-config';
 import { LabelDot } from '@/features/views/field-pickers';
-import { LinkChips } from '@/features/views/link-chips';
+import { LinkChips, cleanTitle } from '@/features/views/link-chips';
 
 export type EditorKind = 'title' | 'status' | 'priority' | 'assignee' | 'date' | 'labels' | 'section' | 'number' | 'text' | 'checkbox' | 'select' | 'multiselect' | 'person' | 'readonly';
 
@@ -38,6 +38,21 @@ export interface RenderContext {
   readonly labelById: ReadonlyMap<string, LabelDTO>;
   readonly sectionById: ReadonlyMap<string, SectionDTO>;
   readonly links: ReadonlyMap<string, readonly IntegrationLinkDTO[]>;
+  /** The project's own customer link (CRM account or KitStak customer), the fallback for the Customer column. */
+  readonly projectCustomer?: IntegrationLinkDTO | null;
+}
+
+const CUSTOMER_TYPES = new Set(['core_customer', 'crm_account']);
+
+/** The task's customer: its own customer link, else the project's customer. */
+export function customerOf(task: TaskSummary, ctx: RenderContext): { readonly link: IntegrationLinkDTO; readonly inherited: boolean } | null {
+  const own = ctx.links.get(task.id)?.find((link) => CUSTOMER_TYPES.has(link.targetType));
+  if (own) return { link: own, inherited: false };
+  return ctx.projectCustomer ? { link: ctx.projectCustomer, inherited: true } : null;
+}
+
+export function isCustomerLink(link: IntegrationLinkDTO): boolean {
+  return CUSTOMER_TYPES.has(link.targetType);
 }
 
 const DATE_FORMAT = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -107,7 +122,8 @@ export function buildColumns(customFields: readonly CustomFieldDTO[]): ColumnDef
     },
     { key: 'section', label: 'Section', icon: <FolderOpen aria-hidden />, defaultWidth: 150, minWidth: 110, sort: { field: 'section', dir: 'asc' }, group: { field: 'section' }, editor: 'section' },
     { key: 'subtasks', label: 'Subtasks', icon: <CheckSquare aria-hidden />, defaultWidth: 120, minWidth: 90, editor: 'readonly' },
-    { key: 'links', label: 'CRM / WMS', icon: <Link2 aria-hidden />, defaultWidth: 200, minWidth: 120, editor: 'readonly' },
+    { key: 'links', label: 'Linked to', icon: <Link2 aria-hidden />, defaultWidth: 200, minWidth: 120, editor: 'readonly' },
+    { key: 'customer', label: 'Customer', icon: <Building2 aria-hidden />, defaultWidth: 180, minWidth: 110, editor: 'readonly' },
     { key: 'createdAt', label: 'Created', icon: <Clock aria-hidden />, defaultWidth: 130, minWidth: 100, sort: { field: 'createdAt', dir: 'desc' }, editor: 'readonly' },
     { key: 'updatedAt', label: 'Updated', icon: <Clock aria-hidden />, defaultWidth: 130, minWidth: 100, sort: { field: 'updatedAt', dir: 'desc' }, editor: 'readonly' },
   ];
@@ -138,7 +154,9 @@ export function buildColumns(customFields: readonly CustomFieldDTO[]): ColumnDef
 }
 
 /** The default visible set (others start hidden but can be turned on). */
-const DEFAULT_VISIBLE = new Set([TITLE_KEY, 'status', 'assignee', 'priority', 'dueDate', 'labels', 'estimate']);
+const DEFAULT_VISIBLE = new Set([TITLE_KEY, 'status', 'assignee', 'priority', 'dueDate', 'labels', 'estimate', 'links', 'customer']);
+/** Built-in columns added after launch: shown even in tables saved before they existed. */
+const LATER_DEFAULTS = new Set(['customer']);
 
 /**
  * The view's column layout merged with what exists: saved order first, then any new columns
@@ -157,7 +175,8 @@ export function resolveColumns(defs: readonly ColumnDef[], saved: readonly ViewC
   for (const def of defs) {
     if (seen.has(def.key)) continue;
     // Fresh tables show the first few custom fields too; columns added later start hidden.
-    const visible = saved.length === 0 && (DEFAULT_VISIBLE.has(def.key) || (def.field !== undefined && customShown++ < 4));
+    // Built-in columns introduced after a view was saved (Customer) show up too, so nobody misses them.
+    const visible = saved.length === 0 ? DEFAULT_VISIBLE.has(def.key) || (def.field !== undefined && customShown++ < 4) : LATER_DEFAULTS.has(def.key);
     out.push({ key: def.key, width: def.defaultWidth, hidden: !visible });
   }
   // The task name always comes first.
@@ -222,11 +241,12 @@ export function renderCell(def: ColumnDef, task: TaskSummary, ctx: RenderContext
       return task.startDate ? <span className="text-sm text-fg-secondary tabular-nums">{DATE_FORMAT.format(parseIsoDate(task.startDate))}</span> : null;
     case 'labels':
       return task.labelIds.length ? (
-        <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-          {task.labelIds.map((id) => {
+        <span className="flex min-w-0 items-center gap-1 overflow-hidden" title={task.labelIds.map((id) => ctx.labelById.get(id)?.name ?? '').filter(Boolean).join(', ')}>
+          {task.labelIds.slice(0, 2).map((id, index) => {
             const label = ctx.labelById.get(id);
-            return label ? <LabelPill key={id} name={label.name} color={label.color} /> : null;
+            return label ? <LabelPill key={id} name={label.name} color={label.color} className={index === 0 ? 'max-w-full min-w-0 shrink' : 'max-w-28 min-w-0 shrink-[2]'} /> : null;
           })}
+          {task.labelIds.length > 2 ? <span className="shrink-0 text-2xs text-fg-muted">+{task.labelIds.length - 2}</span> : null}
         </span>
       ) : null;
     case 'estimate':
@@ -243,7 +263,17 @@ export function renderCell(def: ColumnDef, task: TaskSummary, ctx: RenderContext
         </span>
       ) : null;
     case 'links':
-      return <LinkChips links={ctx.links.get(task.id)} max={2} />;
+      return <LinkChips links={ctx.links.get(task.id)?.filter((link) => !isCustomerLink(link))} max={1} variant="ref" />;
+    case 'customer': {
+      const customer = customerOf(task, ctx);
+      if (!customer) return null;
+      const name = cleanTitle(customer.link.title ?? 'Customer');
+      return (
+        <span className={`truncate ${customer.inherited ? 'text-fg-muted' : ''}`} title={customer.inherited ? `${name} (from the project)` : name}>
+          {name}
+        </span>
+      );
+    }
     case 'createdAt':
       return <span className="text-xs text-fg-secondary">{formatRelative(task.createdAt)}</span>;
     case 'updatedAt':
@@ -320,7 +350,9 @@ export function csvValue(def: ColumnDef, task: TaskSummary, ctx: RenderContext, 
     case 'subtasks':
       return task.subtaskCount ? `${task.subtaskDoneCount}/${task.subtaskCount}` : '';
     case 'links':
-      return (ctx.links.get(task.id) ?? []).map((link) => link.title ?? '').filter(Boolean).join('; ');
+      return (ctx.links.get(task.id) ?? []).filter((link) => !isCustomerLink(link)).map((link) => link.title ?? '').filter(Boolean).join('; ');
+    case 'customer':
+      return customerOf(task, ctx)?.link.title ?? '';
     case 'createdAt':
       return task.createdAt.slice(0, 10);
     case 'updatedAt':

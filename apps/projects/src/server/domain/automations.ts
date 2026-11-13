@@ -7,10 +7,11 @@
 import 'server-only';
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/server/db';
-import { automationRuns, automations, labels, projects, sections, statuses, tasks, type Automation } from '@/server/db/schema';
+import { automationRuns, automations, labels, notifications, projects, sections, statuses, tasks, type Automation } from '@/server/db/schema';
 import { invalid, notFound } from '@/server/errors';
 import {
   MAX_AUTOMATION_DEPTH,
+  automationEventHeadline,
   describeAutomation,
   planAutomations,
   type EngineRule,
@@ -404,14 +405,40 @@ async function applyAction(
       await taskApi.updateTask(autoCtx, taskId, { sectionId: action.sectionId });
       return `Moved ${label} to another section`;
     case 'notify': {
-      const recipients = await resolvePeople(action.target, action.userId, taskId, originalCtx);
-      const title = action.message
-        ? fill(action.message, `${label} ${row.title}`, row.projectName, event)
-        : `${ruleName}: ${label} ${row.title}`;
+      let recipients = await resolvePeople(action.target, action.userId, taskId, originalCtx);
+      const taskLabel = `${label} ${row.title}`;
+      let statusName: string | null = null;
+      if (!action.message && event?.type === 'status_changed') {
+        const [status] = await db.select({ name: statuses.name }).from(statuses).where(eq(statuses.id, event.task.statusId));
+        statusName = status?.name ?? null;
+      }
+      // Headline says what happened; the rule name is the secondary line.
+      const title = action.message ? fill(action.message, taskLabel, row.projectName, event) : automationEventHeadline(event, taskLabel, statusName);
+      // Due-date rules share the built-in reminder's kind, so one overdue task gives one inbox
+      // item per person per day: skip anyone already reminded today (ensureDueReminders does the
+      // same check the other way round).
+      const reminderKind = event?.type === 'overdue' || event?.type === 'due_soon' ? event.type : null;
+      if (reminderKind && recipients.length > 0) {
+        const already = await db
+          .select({ userId: notifications.userId })
+          .from(notifications)
+          .where(
+            and(
+              eq(notifications.orgId, autoCtx.orgId),
+              eq(notifications.taskId, taskId),
+              eq(notifications.kind, reminderKind),
+              inArray(notifications.userId, recipients),
+              sql`${notifications.createdAt} >= current_date`,
+            ),
+          );
+        const reminded = new Set(already.map((entry) => entry.userId));
+        recipients = recipients.filter((id) => !reminded.has(id));
+      }
       const sent = await notify(db, autoCtx, {
         recipients,
-        kind: 'automation',
+        kind: reminderKind ?? 'automation',
         title,
+        body: `Automation: ${ruleName}`,
         url: routes.task(row.key, row.number),
         projectId: row.projectId,
         taskId,

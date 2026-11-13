@@ -20,14 +20,14 @@ import {
   toast,
 } from '@/components/ui';
 import { INTEGRATION_TARGET_LABELS, type IntegrationTargetType } from '@/lib/constants';
-import { formatRelative } from '@/lib/dates';
 import { useDebouncedValue } from '@/lib/hooks/use-debounced-value';
 import { useIntegrationSearch, useIntegrationStatus } from '@/lib/hooks/use-data';
 import type { IntegrationLinkDTO } from '@/lib/types';
 import { addLinkAction, refreshLinksAction, removeLinkAction } from '@/server/actions/links';
 import { SectionHeading } from './property-row';
 import { useTaskContext } from './task-context';
-import { LocalTime } from './local-time';
+import { RecordStatus } from '@/features/integrations/record-chip';
+import { useLiveLinks } from '@/features/integrations/use-live-links';
 
 const CRM_TYPES: ReadonlySet<IntegrationTargetType> = new Set(['crm_item', 'crm_account', 'core_customer']);
 
@@ -64,18 +64,9 @@ function LinkRow({
       <AppBadge type={link.targetType} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-fg">{title}</span>
-        <span className="flex items-center gap-1.5 truncate text-2xs text-fg-muted">
-          {kind}
-          {link.cachedAt ? (
-            <LocalTime iso={link.cachedAt}>· checked {formatRelative(link.cachedAt)}</LocalTime>
-          ) : null}
-        </span>
+        <span className="flex items-center gap-1.5 truncate text-2xs text-fg-muted">{kind}</span>
       </span>
-      {link.status ? (
-        <span className="max-w-32 shrink-0 truncate rounded-full bg-muted px-2 py-0.5 text-2xs font-medium text-fg-secondary">
-          {link.status}
-        </span>
-      ) : null}
+      <RecordStatus status={link.status} className="max-w-32 truncate" />
       {link.url ? <ExternalLink aria-hidden className="size-3.5 shrink-0 text-icon" /> : null}
     </>
   );
@@ -191,6 +182,11 @@ export function LinksSection() {
   const [refreshing, setRefreshing] = useState(false);
   const types = status.data?.targetTypes ?? [];
   const links = task.links;
+  // Live statuses: re-read the linked records on open and when the window regains focus.
+  useLiveLinks(links, async () => {
+    const result = await refreshLinksAction({ taskId: task.id });
+    if (result.ok) refresh();
+  });
 
   if (links.length === 0 && types.length === 0) return null;
 

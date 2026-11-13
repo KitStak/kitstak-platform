@@ -1,9 +1,14 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+import { DocumentTitle } from '@/components/layout/document-title';
 import { EmptyState } from '@/components/ui';
+
+export const metadata: Metadata = { title: 'Not found' };
 
 export default function NotFound() {
   return (
     <div className="flex h-full items-center justify-center p-6">
+      <DocumentTitle title="Not found · KitStak Projects" />
       <EmptyState
         illustration="search"
         title="We couldn’t find that"

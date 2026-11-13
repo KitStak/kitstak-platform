@@ -422,7 +422,7 @@ export function SubtasksSection() {
             placeholder={
               ordered.length
                 ? 'Add another subtask'
-                : 'Break this into smaller steps: type one and press Enter'
+                : 'Add a subtask'
             }
             aria-label="New subtask"
             maxLength={500}

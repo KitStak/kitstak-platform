@@ -56,10 +56,12 @@ import { useGroupMeta, type GroupMeta } from '@/features/views/group-meta';
 import { useTaskLinksMap } from '@/features/views/link-chips';
 import { useSelection } from '@/features/views/use-selection';
 import { useStoredSet } from '@/features/views/use-stored-set';
+import { useTaskNav } from '@/features/views/use-task-nav';
 import { useTaskOps } from '@/features/views/use-task-ops';
 import { useViewState } from '@/features/views/use-view-state';
 import { ViewToolbar } from '@/features/views/view-toolbar';
 import { GROUP_LABELS, LIST_GROUPS, ORDER_FIELDS, ORDER_LABELS, orderFieldOf, orderRules, type OrderField } from '@/features/views/view-state';
+import { ViewCursor } from '@/features/task/view-cursor';
 import { ListRow, ListRowOverlay } from './list-row';
 
 type GroupMap = Map<string, string[]>;
@@ -259,6 +261,7 @@ export function ListView() {
   const [addingSection, setAddingSection] = useState(false);
   const [deleting, setDeleting] = useState<{ id: string; name: string; count: number } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  useTaskNav(listRef);
 
   const doneStatus = statuses.find((status) => status.category === 'done');
   const reopenStatus = statuses.find((status) => status.isDefault && status.category !== 'done') ?? statuses.find((status) => status.category === 'todo');
@@ -508,6 +511,7 @@ export function ListView() {
   return (
     <div className="flex h-full flex-col" data-testid="list-view">
       {toolbar}
+      <ViewCursor rootRef={listRef} mode="list" tasks={all} ops={ops} canEdit={canEdit} onOpen={onOpen} />
       <div className="min-h-0 flex-1 overflow-auto [scrollbar-width:thin]" onKeyDown={listKeyDown}>
         <div ref={listRef} role="grid" aria-label={`${project.name} tasks`} aria-multiselectable className="mx-auto w-full max-w-[1320px] px-4 pt-3 pb-28 sm:px-6">
           {all.length === 0 ? (

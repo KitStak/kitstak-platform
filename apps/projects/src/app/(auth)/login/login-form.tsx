@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { Mail } from 'lucide-react';
+import { HandoffScreen } from '@kitstak/ui/handoff';
 import { Button, Checkbox, Field, Input } from '@/components/ui';
 import { signIn } from '@/lib/auth-client';
 import { safeNextPath } from '@/lib/routes';
@@ -15,7 +16,17 @@ const schema = z.object({
 
 type FieldErrors = Partial<Record<'email' | 'password', string>>;
 
-export function LoginForm({ next, notice, portalUrl }: { readonly next: string | null; readonly notice: string | null; readonly portalUrl: string }) {
+export function LoginForm({
+  next,
+  notice,
+  portalUrl,
+  resetUrl,
+}: {
+  readonly next: string | null;
+  readonly notice: string | null;
+  readonly portalUrl: string;
+  readonly resetUrl: string;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -52,6 +63,7 @@ export function LoginForm({ next, notice, portalUrl }: { readonly next: string |
 
   return (
     <>
+      {pending ? <HandoffScreen title="Signing you in" detail="Opening your projects and tasks" /> : null}
       <AuthHeading title="Welcome back" subtitle="Sign in to see your projects and tasks." />
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
         {notice ? <FormAlert tone="success">{notice}</FormAlert> : null}
@@ -73,7 +85,15 @@ export function LoginForm({ next, notice, portalUrl }: { readonly next: string |
             />
           )}
         </Field>
-        <Field label="Password" error={fieldErrors.password}>
+        <Field
+          label="Password"
+          error={fieldErrors.password}
+          labelAside={
+            <a href={resetUrl} className="text-sm font-medium text-fg-link hover:underline">
+              Forgot password?
+            </a>
+          }
+        >
           {({ inputId, describedBy, invalid }) => (
             <PasswordInput
               id={inputId}

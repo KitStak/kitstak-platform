@@ -98,7 +98,7 @@ export function WatchersButton() {
             <ul className="flex max-h-48 flex-col gap-0.5 overflow-y-auto">
               {watchers.map((person) => (
                 <li key={person.id} className="flex items-center gap-2 rounded-md px-1 py-1">
-                  <Avatar name={person.name} src={person.image} size="xs" />
+                  <Avatar name={person.name} src={person.image} size="xs" decorative />
                   <span className="min-w-0 flex-1 truncate text-sm text-fg">
                     {person.id === user.id ? `${person.name} (you)` : person.name}
                   </span>

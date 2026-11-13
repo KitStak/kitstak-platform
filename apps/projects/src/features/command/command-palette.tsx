@@ -112,7 +112,7 @@ function Item({
         <span className="truncate">{children}</span>
         {meta ? <span className="truncate text-xs text-fg-muted">{meta}</span> : null}
       </span>
-      {hint ? <span className="flex shrink-0 items-center gap-1 text-xs text-fg-muted">{hint}</span> : null}
+      {hint ? <span className="flex shrink-0 items-center gap-1 text-xs text-fg-muted pointer-coarse:has-[kbd]:hidden">{hint}</span> : null}
       <span aria-hidden className="hidden shrink-0 items-center gap-1 text-fg-muted group-data-[selected=true]/item:flex">
         {external ? <ArrowUpRight className="size-3.5" /> : null}
         <CornerDownLeft className="size-3.5" />

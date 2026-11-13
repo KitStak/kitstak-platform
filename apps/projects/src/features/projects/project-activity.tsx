@@ -8,7 +8,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { Activity as ActivityIcon, Zap } from 'lucide-react';
 import { Button, EmptyState, Select, Skeleton } from '@/components/ui';
 import { PersonAvatar } from '@/components/pm';
-import { describeActivity } from '@/lib/activity-text';
+import { describeActivity, describeActivityParts } from '@/lib/activity-text';
 import { apiGet, apiPath } from '@/lib/api-client';
 import { useProjectTasks, type ActivityPage } from '@/lib/hooks/use-data';
 import { usePeopleMap } from '@/lib/hooks/use-people';
@@ -115,16 +115,22 @@ export function ProjectActivity() {
                       <div className="min-w-0 flex-1 text-sm">
                         <p className="text-fg-secondary">
                           <span className="font-semibold text-fg">{automated ? 'Automation' : event.actorId ? (people.get(event.actorId)?.name ?? 'Someone') : 'KitStak'}</span>{' '}
-                          {describeActivity(event, { statusName: (id) => statusById.get(id)?.name, personName: (id) => people.get(id)?.name, labelName: (id) => labelById.get(id)?.name })}
                           {task ? (
-                            <>
-                              {' '}
-                              on{' '}
-                              <button type="button" data-task-key={task.key} onClick={() => openTask(task.key)} className="rounded-sm font-medium text-fg-link outline-none hover:underline focus-visible:outline-2 focus-visible:outline-focus">
-                                {task.key} {task.title}
-                              </button>
-                            </>
-                          ) : null}
+                            (() => {
+                              const parts = describeActivityParts(event, { statusName: (id) => statusById.get(id)?.name, personName: (id) => people.get(id)?.name, labelName: (id) => labelById.get(id)?.name });
+                              return (
+                                <>
+                                  {parts.before}{' '}
+                                  <button type="button" data-task-key={task.key} onClick={() => openTask(task.key)} className="rounded-sm font-medium text-fg-link outline-none hover:underline focus-visible:outline-2 focus-visible:outline-focus">
+                                    {task.key} {task.title}
+                                  </button>
+                                  {parts.after ? ` ${parts.after}` : null}
+                                </>
+                              );
+                            })()
+                          ) : (
+                            describeActivity(event, { statusName: (id) => statusById.get(id)?.name, personName: (id) => people.get(id)?.name, labelName: (id) => labelById.get(id)?.name })
+                          )}
                         </p>
                         {event.verb === 'project.update_posted' && typeof (event.after as { note?: unknown } | null)?.note === 'string' ? (
                           <p className="mt-1 rounded-md bg-sunken px-3 py-2 text-sm whitespace-pre-wrap text-fg">{(event.after as { note: string }).note}</p>

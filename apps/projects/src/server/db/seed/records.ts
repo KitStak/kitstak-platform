@@ -72,7 +72,7 @@ export class RecordPicker {
         const name = choice.type === 'crm_item' ? choice.deal : choice.account;
         const exact = await db.execute<{ id: string; name: string }>(sql`
           select i.id::text, i.name from crm.items i join crm.boards b on b.id = i.board_id
-          where i.org_id = ${this.orgId} and b.kind = ${kind} and i.deleted_at is null and i.parent_item_id is null and i.name = ${name}
+          where i.org_id = ${this.orgId} and b.kind = ${kind} and i.deleted_at is null and i.parent_item_id is null and replace(i.name, ' ' || chr(8212) || ' ', ' · ') = replace(${name}, ' ' || chr(8212) || ' ', ' · ')
           order by i.created_at limit 1`);
         let row = exact.rows[0];
         if (!row && choice.type === 'crm_item' && choice.fallbackStage) {

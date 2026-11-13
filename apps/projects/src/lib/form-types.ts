@@ -48,4 +48,6 @@ export interface FormSettings {
   /** Ask for the submitter's name + email (public forms). */
   readonly collectContact?: boolean;
   readonly accentColor?: string;
+  /** New responses wait in the project's Triage queue (accept, decline, snooze, merge) instead of becoming tasks right away. */
+  readonly sendToTriage?: boolean;
 }

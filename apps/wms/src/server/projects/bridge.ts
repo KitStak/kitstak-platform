@@ -328,3 +328,30 @@ export function wmsOrigin(request: Request): string {
     process.env.NEXT_PUBLIC_WMS_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.BETTER_AUTH_URL;
   return (configured || new URL(request.url).origin).replace(/\/+$/, '');
 }
+
+export interface ClientProjectsDto {
+  readonly available: boolean;
+  readonly projectsUrl: string;
+  readonly projects: LinkedWork['projects'];
+  readonly openTasks: number;
+  /** Projects list filtered to this customer. */
+  readonly filteredUrl: string;
+}
+
+/**
+ * KitStak Projects health for a WMS client: the projects serving the shared core customer
+ * (WMS client ids are the core.customers ids) with their health and progress. Fails soft.
+ */
+export async function getClientProjects(db: AppDb, auth: AuthContext, clientId: string): Promise<ClientProjectsDto> {
+  const base = projectsUrl();
+  const filteredUrl = `${base}/projects?customer=${encodeURIComponent(clientId)}`;
+  const { reason, orgId } = await unavailable(db, auth);
+  if (reason || !orgId) return { available: false, projectsUrl: base, projects: [], openTasks: 0, filteredUrl };
+  const work = await listLinkedWork(
+    bridgeDb(db),
+    { orgId, userId: auth.user.id },
+    [{ type: 'core_customer', id: clientId }],
+    { projectsUrl: base },
+  );
+  return { available: true, projectsUrl: base, projects: work.projects, openTasks: work.openTasks, filteredUrl };
+}

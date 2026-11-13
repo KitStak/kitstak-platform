@@ -82,8 +82,9 @@ export function useTaskActions() {
     toggleDone: async () => {
       const target = isClosed ? todoStatus : doneStatus;
       if (!target) return;
+      const previous = task.statusId;
       const ok = await patch({ statusId: target.id });
-      if (ok && !isClosed) toast.success(`${task.key} is done`, 'Nice work!');
+      if (ok && !isClosed) toast.undo(`Marked ${task.key} done`, { onUndo: () => void patch({ statusId: previous }) });
     },
     wontDo: async () => {
       if (!cancelledStatus) return;

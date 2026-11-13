@@ -30,7 +30,7 @@ import { usePeopleMap } from '@/lib/hooks/use-people';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { useTaskMutations } from '@/lib/hooks/use-task-mutations';
 import { qk } from '@/lib/query-keys';
-import type { ProjectDetail } from '@/lib/types';
+import type { ProjectDetail, TaskSummary } from '@/lib/types';
 import { updateProjectAction } from '@/server/actions/projects';
 import { useCurrentProject } from '@/features/projects/project-context';
 import { isClosed } from '@/features/timeline/task-colors';
@@ -58,7 +58,8 @@ import {
 } from './workload-model';
 
 interface WorkloadPrefs {
-  readonly unit: LoadUnit;
+  /** `auto` measures in points (or hours) when most open tasks carry that estimate, else in tasks. */
+  readonly unit: LoadUnit | 'auto';
   readonly weeks: '4' | '6' | '8' | '12';
   readonly hideIdle: boolean;
   readonly collapsed: readonly string[];
@@ -67,7 +68,7 @@ interface WorkloadPrefs {
 
 type WorkloadViewOptions = Pick<WorkloadPrefs, 'unit' | 'weeks' | 'hideIdle'>;
 
-const DEFAULT_PREFS: WorkloadPrefs = { unit: 'tasks', weeks: '6', hideIdle: false, collapsed: [], viewId: null };
+const DEFAULT_PREFS: WorkloadPrefs = { unit: 'auto', weeks: '6', hideIdle: false, collapsed: [], viewId: null };
 
 function viewOptions(prefs: WorkloadPrefs): WorkloadViewOptions {
   return { unit: prefs.unit, weeks: prefs.weeks, hideIdle: prefs.hideIdle };
@@ -87,6 +88,24 @@ interface DragPayload {
   readonly taskId: string;
   readonly fromPerson: string;
   readonly fromBucket: string;
+}
+
+/** Planning works in effort, not task counts: use points or hours when most open tasks have them. */
+function autoUnit(tasks: readonly TaskSummary[]): LoadUnit {
+  if (tasks.length === 0) return 'tasks';
+  const points = tasks.filter((task) => task.estimatePoints !== null).length;
+  const hours = tasks.filter((task) => task.estimateMinutes !== null).length;
+  if (points >= hours && points * 2 >= tasks.length) return 'points';
+  if (hours * 2 >= tasks.length) return 'hours';
+  return 'tasks';
+}
+
+/** "Nov 13 to 16" in one month, "Oct 30 to Nov 17" across months (never a bare "Oct 30–17"). */
+function shortRange(start: IsoDate, end: IsoDate): string {
+  const a = parseIsoDate(start);
+  const b = parseIsoDate(end);
+  if (start === end) return SHORT.format(a);
+  return a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear() ? `${SHORT.format(a)} to ${b.getDate()}` : `${SHORT.format(a)} to ${SHORT.format(b)}`;
 }
 
 function unitText(value: number, unit: LoadUnit): string {
@@ -113,13 +132,13 @@ export function WorkloadView() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const dragRef = useRef<DragPayload | null>(null);
 
-  const unit = prefs.unit;
+  const openTasks = useMemo(() => (tasksQuery.data ?? []).filter((task) => !isClosed(task) && !task.isMilestone), [tasksQuery.data]);
+  const unit: LoadUnit = useMemo(() => (prefs.unit === 'auto' ? autoUnit(openTasks) : prefs.unit), [openTasks, prefs.unit]);
   const weekCount = narrow ? Math.min(4, Number(prefs.weeks)) : Number(prefs.weeks);
   const weeks = useMemo(() => weekStarts(anchor, weekCount), [anchor, weekCount]);
   const settings = useMemo(() => readWorkloadSettings(project.settings, unit), [project.settings, unit]);
   const collapsed = useMemo(() => new Set(prefs.collapsed), [prefs.collapsed]);
 
-  const openTasks = useMemo(() => (tasksQuery.data ?? []).filter((task) => !isClosed(task) && !task.isMilestone), [tasksQuery.data]);
   const taskById = useMemo(() => new Map(openTasks.map((task) => [task.id, task])), [openTasks]);
   const rows = useMemo(() => buildWorkload(openTasks, weeks, unit), [openTasks, weeks, unit]);
 
@@ -337,8 +356,8 @@ export function WorkloadView() {
               {load === 0 ? '–' : `${formatLoad(load)}${unitLabel.short}`}
             </span>
           ) : share < 0.999 ? (
-            <span className="shrink-0 text-2xs text-fg-muted" title="This task runs across more than one week">
-              {task.startDate && task.dueDate ? `${SHORT.format(parseIsoDate(task.startDate))}–${parseIsoDate(task.dueDate).getDate()}` : ''}
+            <span className="shrink-0 text-2xs text-fg-muted" title={`This task runs across more than one week, so ${Math.round(share * 100)}% of it counts here`}>
+              {task.startDate && task.dueDate ? shortRange(task.startDate, task.dueDate) : ''}
             </span>
           ) : null}
         </div>

@@ -49,6 +49,9 @@ export const routes = {
   project: (key: string) => `/p/${encodeURIComponent(key)}`,
   projectTab: (key: string, tab: ProjectTab) =>
     tab === 'overview' ? `/p/${encodeURIComponent(key)}` : `/p/${encodeURIComponent(key)}/${tab}`,
+  /** Planning pages next to the view tabs (planning team): `/p/OPS/cycles?cycle=<id>`, `/p/OPS/triage`. */
+  projectCycles: (key: string, cycleId?: string) => `/p/${encodeURIComponent(key)}/cycles${cycleId ? `?cycle=${encodeURIComponent(cycleId)}` : ''}`,
+  projectTriage: (key: string) => `/p/${encodeURIComponent(key)}/triage`,
   /** Full-page task. Views open the drawer with `?task=OPS-42` instead (see taskDrawerParam). */
   task: (projectKey: string, number: number) => `/p/${encodeURIComponent(projectKey)}/${number}`,
   goals: () => '/goals',

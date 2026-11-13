@@ -35,3 +35,4 @@ export * from './table';
 export * from './page-header';
 export * from './spinner';
 export * from './use-mod-key';
+export * from './brand-loader';

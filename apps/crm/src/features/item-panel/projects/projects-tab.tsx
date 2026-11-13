@@ -622,6 +622,7 @@ export function ProjectsTab({ itemId, recordName, term }: ProjectsTabProps) {
         term={term}
         open={creating !== null}
         projectId={creating?.projectId ?? null}
+        linkedProjectIds={projects.map((project) => project.id)}
         onOpenChange={(open) => (open ? undefined : setCreating(null))}
       />
       <LinkProjectDialog

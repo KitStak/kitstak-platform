@@ -35,6 +35,7 @@ import { useIntegrationSearch, useIntegrationStatus, usePeople, useProjects, use
 import { qk } from '@/lib/query-keys';
 import { routes } from '@/lib/routes';
 import { suggestProjectKey } from '@/lib/task-key';
+import { describeTemplateTaskCounts } from '@/lib/template-math';
 import type { TemplatePayload } from '@/lib/template-types';
 import type { TemplateDTO } from '@/lib/types';
 import { addLinkAction } from '@/server/actions/links';
@@ -63,6 +64,10 @@ const STEPS = [
   { id: 'details', title: 'Details' },
   { id: 'team', title: 'People & links' },
 ];
+
+function taskCountText(template: TemplateDTO, noun = 'tasks'): string {
+  return describeTemplateTaskCounts({ tasks: template.taskCount, subtasks: template.subtaskCount ?? 0 }, noun);
+}
 
 function weeksLabel(days: number | undefined): string | null {
   if (!days) return null;
@@ -126,9 +131,19 @@ function TemplateCard({ template, selected, onSelect, onOpen }: { readonly templ
         {template ? <EntityIcon icon={template.icon} color={template.color} size={28} /> : <EntityIcon icon="file-text" color="gray" size={28} />}
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-fg">{template?.name ?? 'Blank project'}</p>
-          <p className="truncate text-xs text-fg-muted">
-            {template ? [template.category, `${template.taskCount} tasks`, duration].filter(Boolean).join(' · ') : 'Start from scratch'}
-          </p>
+          {template ? (
+            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-fg-muted">
+              {template.builtIn === false ? <Badge tone="info" size="sm">Your team</Badge> : null}
+              {[template.category, taskCountText(template), duration].filter(Boolean).map((part, index, parts) => (
+                <span key={part} className="whitespace-nowrap">
+                  {part}
+                  {index < parts.length - 1 ? <span aria-hidden className="ml-1.5">·</span> : null}
+                </span>
+              ))}
+            </p>
+          ) : (
+            <p className="text-xs text-fg-muted">Start from scratch</p>
+          )}
         </div>
         <span
           aria-hidden
@@ -138,7 +153,6 @@ function TemplateCard({ template, selected, onSelect, onOpen }: { readonly templ
         </span>
       </div>
       <p className="line-clamp-2 text-sm text-fg-secondary">{template?.description ?? 'An empty project with To do, In progress, In review and Done. Good for small or one-off work.'}</p>
-      {template?.builtIn === false ? <Badge tone="info" size="sm" className="absolute top-4 right-4">Your team</Badge> : null}
     </button>
   );
 }
@@ -191,7 +205,7 @@ function TemplatePreview({ template, onUse }: { readonly template: TemplateDTO |
         </PreviewSection>
       ) : null}
       {tasks.length ? (
-        <PreviewSection icon={<LayoutList aria-hidden />} title={`${template?.taskCount ?? tasks.length} starter tasks`}>
+        <PreviewSection icon={<LayoutList aria-hidden />} title={template ? `Starter work: ${taskCountText(template)}` : `${tasks.length} starter tasks`}>
           <ul className="flex flex-col gap-1 text-sm">
             {tasks.slice(0, 6).map((task) => (
               <li key={task.title} className="flex items-center gap-2 truncate text-fg-secondary">
@@ -369,7 +383,7 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
     <Page
       title="New project"
       subtitle="Pick a starting point, give it a name, and you’re ready to go."
-      width={step === 0 ? 'default' : 'narrow'}
+      width="default"
       breadcrumbs={[{ label: 'Projects', href: routes.projects() }, { label: 'New project' }]}
     >
       <WizardSteps steps={STEPS} current={step} className="mb-6 max-w-[640px] px-0" />
@@ -404,7 +418,7 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
             </div>
           </div>
           <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="template-gallery">
+            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3" data-testid="template-gallery">
               {category === 'All' && !search.trim() ? <TemplateCard template={null} selected={templateId === null} onSelect={() => setTemplateId(null)} onOpen={() => goTo(1)} /> : null}
               {templates.isPending
                 ? Array.from({ length: 5 }, (_, i) => <div key={i} className="ks-skeleton h-[220px] rounded-xl" />)
@@ -429,7 +443,7 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
         </div>
       ) : step === 1 ? (
         <form
-          className="flex animate-step-in flex-col gap-5"
+          className="flex max-w-[760px] animate-step-in flex-col gap-5"
           data-testid="wizard-details"
           onSubmit={(event) => {
             event.preventDefault();
@@ -531,8 +545,8 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
           {template && template.taskCount > 0 ? (
             <label className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-border-subtle bg-panel px-4 py-3">
               <span>
-                <span className="block text-sm font-medium text-fg">Add the {template.taskCount} starter tasks</span>
-                <span className="block text-xs text-fg-muted">Dates line up with your start date. Turn off to get just the columns, labels and milestones.</span>
+                <span className="block text-sm font-medium text-fg">Add the starter work ({taskCountText(template)})</span>
+                <span className="block text-xs text-fg-muted">Start and due dates line up with your start date. Turn off to get just the columns, labels and milestones.</span>
               </span>
               <Switch checked={includeTasks} onCheckedChange={setIncludeTasks} aria-label="Add the starter tasks" />
             </label>
@@ -548,7 +562,7 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
           </div>
         </form>
       ) : (
-        <div className="flex animate-step-in flex-col gap-5" data-testid="wizard-team">
+        <div className="flex max-w-[760px] animate-step-in flex-col gap-5" data-testid="wizard-team">
           <section className="flex flex-col gap-3 rounded-xl border border-border-subtle bg-panel p-4 shadow-xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -647,7 +661,7 @@ export function NewProjectWizard({ prefill }: { readonly prefill: NewProjectPref
             </div>
             <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-secondary">
               <li className="inline-flex items-center gap-1"><Users aria-hidden className="size-3.5" />{members.length + 1} {members.length === 0 ? 'person' : 'people'}</li>
-              <li className="inline-flex items-center gap-1"><LayoutList aria-hidden className="size-3.5" />{template && includeTasks ? `${template.taskCount} starter tasks` : 'No tasks yet'}</li>
+              <li className="inline-flex items-center gap-1"><LayoutList aria-hidden className="size-3.5" />{template && includeTasks && template.taskCount > 0 ? taskCountText(template) : 'No tasks yet'}</li>
               <li className="inline-flex items-center gap-1">{visibility === 'private' ? <Lock aria-hidden className="size-3.5" /> : <Users aria-hidden className="size-3.5" />}{visibility === 'private' ? 'Private' : 'Whole workspace'}</li>
               {customer ? <li className="inline-flex items-center gap-1">Customer: <strong className="font-medium text-fg">{customer.title}</strong></li> : null}
               {crmRecord ? <li className="inline-flex items-center gap-1">CRM: <strong className="font-medium text-fg">{crmRecord.title}</strong></li> : null}

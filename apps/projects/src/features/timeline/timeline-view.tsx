@@ -163,6 +163,17 @@ export function TimelineView() {
   const [selectedDep, setSelectedDep] = useState<{ id: string; x: number; y: number } | null>(null);
   const [dropPreview, setDropPreview] = useState<{ day: IsoDate; y: number } | null>(null);
   const scroller = useRef<HTMLDivElement | null>(null);
+  /** Left edge of the visible track (in track pixels): keeps header labels and bar labels readable. */
+  const [viewX, setViewX] = useState(0);
+  const scrollRaf = useRef(0);
+  const onGridScroll = useCallback(() => {
+    if (scrollRaf.current) return;
+    scrollRaf.current = requestAnimationFrame(() => {
+      scrollRaf.current = 0;
+      setViewX(scroller.current?.scrollLeft ?? 0);
+    });
+  }, []);
+  useEffect(() => () => cancelAnimationFrame(scrollRaf.current), []);
   const autoScroll = useRef<{ raf: number; speed: number }>({ raf: 0, speed: 0 });
 
   const zoom = prefs.zoom;
@@ -816,7 +827,7 @@ export function TimelineView() {
           </button>
         </Tooltip>
         {handle}
-        {!inside ? (
+        {!inside && left + Math.max(width, 8) > viewX - 4 ? (
           <span className={cn('pointer-events-none absolute top-1/2 left-full ml-5 flex max-w-64 -translate-y-1/2 items-center gap-1.5 text-xs font-medium whitespace-nowrap text-fg', dimmed && 'opacity-50', done && 'text-fg-muted')}>
             {overdue ? <span aria-label="Past its due date" className="size-1.5 shrink-0 rounded-full bg-danger" /> : null}
             <span className="truncate">{task.title}</span>
@@ -1201,6 +1212,7 @@ export function TimelineView() {
             if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropPreview(null);
           }}
           onDrop={onGridDrop}
+          onScroll={onGridScroll}
           className={cn('relative min-h-0 flex-1 overflow-auto overscroll-contain bg-panel', gesture && 'select-none', gesture?.type === 'bar' && gesture.mode !== 'move' && 'cursor-ew-resize')}
         >
           <div className="relative" style={{ width: nameWidth + trackWidth, minHeight: '100%' }}>
@@ -1250,13 +1262,27 @@ export function TimelineView() {
               </div>
               <div role="columnheader" className="relative shrink-0 border-b border-border-default bg-panel" style={{ width: trackWidth }}>
                 <div className="relative h-6 border-b border-border-subtle">
-                  {ticks.major.map((tick) => (
-                    <div key={tick.key} className="absolute top-0 h-6 border-l border-border-subtle text-xs leading-6 font-semibold text-fg" style={{ left: tick.x, width: tick.width }}>
-                      <span className="sticky block w-fit max-w-full truncate px-2" style={{ left: nameWidth }}>
-                        {tick.label}
-                      </span>
-                    </div>
-                  ))}
+                  {ticks.major.map((tick) => {
+                    // The label sits at the left of the visible part of its month, and shortens
+                    // ("Oct") or hides when too little of the month is on screen, instead of clipping.
+                    const start = Math.max(tick.x, viewX);
+                    // Stop before the Today flag that shares this row (about 48px wide, centred on today).
+                    const flag = showToday ? todayX + px / 2 - 26 : Infinity;
+                    const room = Math.min(tick.x + tick.width, flag > start ? flag : Infinity) - start;
+                    const text = room >= tick.label.length * 7.5 + 20 ? tick.label : room >= 44 ? tick.label.slice(0, 3) : '';
+                    return (
+                      <div key={tick.key} className="absolute top-0 h-6 border-l border-border-subtle text-xs leading-6 font-semibold text-fg" style={{ left: tick.x, width: tick.width }}>
+                        <span className="absolute top-0 block truncate px-2" style={{ left: start - tick.x, maxWidth: Math.max(0, room) }}>
+                          {text}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {showToday ? (
+                    <span className="absolute top-1 z-[1] -translate-x-1/2 rounded-sm bg-primary px-1.5 text-2xs leading-4 font-semibold text-primary-fg shadow-xs" style={{ left: todayX + px / 2 }} data-testid="timeline-today-flag">
+                      Today
+                    </span>
+                  ) : null}
                 </div>
                 <div className="relative h-[27px]">
                   {ticks.minor.map((tick) => (
@@ -1265,14 +1291,10 @@ export function TimelineView() {
                       className={cn('absolute top-0 h-full truncate border-l border-border-subtle text-center text-2xs leading-[27px] text-fg-muted tabular-nums', tick.weekend && 'bg-sunken')}
                       style={{ left: tick.x, width: tick.width }}
                     >
-                      {tick.width >= 16 ? tick.label : ''}
+                      {tick.width >= 16 && tick.x >= viewX - 2 ? tick.label : ''}
                     </div>
                   ))}
-                  {showToday ? (
-                    <span className="absolute bottom-0 z-[1] -translate-x-1/2 rounded-t-sm bg-primary px-1.5 text-2xs leading-4 font-semibold text-primary-fg" style={{ left: todayX + px / 2 }}>
-                      Today
-                    </span>
-                  ) : null}
+                  {showToday ? <span aria-hidden className="absolute inset-y-0 z-[1] w-0.5 bg-primary" style={{ left: todayX + px / 2 - 1 }} /> : null}
                 </div>
               </div>
             </div>

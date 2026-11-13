@@ -15,6 +15,13 @@
       "when": 1794873600000,
       "tag": "0001_integration_events",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794960000000,
+      "tag": "0002_cycles_triage",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,7 @@
 /** Public intake form at /forms/<token>: anyone with the link fills it in and a task is created. */
 import { useState, type FormEvent } from 'react';
 import { CheckCircle2 } from 'lucide-react';
-import { Button, Checkbox, Field, Input, Textarea } from '@/components/ui';
+import { Button, Checkbox, Field, Input, IsoDatePicker, Textarea } from '@/components/ui';
 import type { FormField } from '@/lib/form-types';
 import type { PublicFormDTO } from '@/lib/types';
 import { submitFormAction } from '@/server/actions/forms';
@@ -80,6 +80,19 @@ export function FormFieldControl({
         </div>
       );
     }
+    case 'date':
+      // Same picker as the app (Today / Tomorrow / Next week, themed), not the browser's mm/dd/yyyy box.
+      return (
+        <IsoDatePicker
+          id={id}
+          value={typeof value === 'string' && value ? value : null}
+          onChange={(next) => onChange(next ?? '')}
+          placeholder={field.placeholder || 'Pick a date'}
+          aria-label={field.label}
+          clearable
+          className={invalid ? '[&>button:first-child]:h-10 [&>button:first-child]:text-base [&>button:first-child]:ring-2 [&>button:first-child]:ring-danger/40' : '[&>button:first-child]:h-10 [&>button:first-child]:text-base'}
+        />
+      );
     default:
       return (
         <Input
@@ -90,9 +103,7 @@ export function FormFieldControl({
               ? 'email'
               : field.type === 'number'
                 ? 'number'
-                : field.type === 'date'
-                  ? 'date'
-                  : field.type === 'url'
+                : field.type === 'url'
                     ? 'url'
                     : field.type === 'phone'
                       ? 'tel'

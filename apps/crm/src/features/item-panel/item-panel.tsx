@@ -69,6 +69,7 @@ import { FilesTab as FilesTabView } from './files/files-tab';
 import { ActivityTab as ActivityTabView } from './activity/activity-tab';
 import { ItemCardTab as ItemCardTabView } from './item-card/item-card-tab';
 import { ProjectsTab } from './projects/projects-tab';
+import { ProjectsHealthLine } from './projects/projects-health';
 import { ProjectsMark } from './projects/projects-mark';
 import { useItemProjects } from './projects/api';
 import { useOptionalOrg } from '@/features/shell/org-context';
@@ -501,8 +502,11 @@ function PanelBody({
   // KitStak Projects tab: only when the org has Projects (and its tables exist). Top-level records only.
   const shellOrg = useOptionalOrg();
   const projectsEntitled = shellOrg?.apps?.entitled.projects ?? false;
-  const projectsQuery = useItemProjects(itemId, projectsEntitled && data.item?.parentItemId === null);
-  const projectsAvailable = projectsQuery.data?.available === true;
+  const projectsEligible = projectsEntitled && data.item?.parentItemId === null;
+  const projectsQuery = useItemProjects(itemId, projectsEligible);
+  // Entitlement comes from the server-rendered shell, so the tab (and a ?itemTab=projects deep
+  // link) renders right away with a skeleton; it only disappears if the pm schema turns out missing.
+  const projectsAvailable = projectsEligible && projectsQuery.data?.available !== false;
   const projectsCount = projectsAvailable ? (projectsQuery.data?.work.projects.length ?? 0) + (projectsQuery.data?.work.openTasks ?? 0) : 0;
   const actions = useItemActions(data.boardId, data.term);
   const baseServices = useBoardCellServices(data.boardId, data.payload?.items ?? []);
@@ -707,6 +711,15 @@ function PanelBody({
           </div>
           <div className={cn('px-2 pt-1 pb-2', inner)}>
             <ItemNameEditor name={item.name} term={data.term} readOnly={!canEdit} onRename={(name) => actions.rename(item, name)} />
+            {projectsAvailable && projectsQuery.data?.available ? (
+              <div className="px-2 pt-1">
+                <ProjectsHealthLine
+                  projects={projectsQuery.data.work.projects}
+                  openTasks={projectsQuery.data.work.openTasks}
+                  onOpen={() => setTab('projects')}
+                />
+              </div>
+            ) : null}
           </div>
           {removed ? (
             <div className={cn('px-4 pb-2', inner)}>

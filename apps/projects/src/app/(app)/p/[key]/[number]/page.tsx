@@ -18,8 +18,8 @@ export async function generateMetadata({ params }: { readonly params: Params }):
     return { title: `${projectKey}-${parsed} ${task.title}` };
   } catch (error) {
     unstable_rethrow(error);
-    // The page itself shows the friendly "We couldn't find that task" state.
-    return fallback;
+    // Unknown task: the (app) layout already answers 404; the tab title says so too.
+    return { title: { absolute: 'Not found · KitStak Projects' } };
   }
 }
 

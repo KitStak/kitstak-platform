@@ -57,8 +57,9 @@ export function NotificationAvatar({ item, size = 'md' }: { readonly item: Notif
   return (
     <span className="relative mt-0.5 shrink-0">
       <PersonAvatar userId={item.actorId} size={size} />
-      <span className="absolute -right-1 -bottom-1 flex size-[18px] items-center justify-center rounded-full bg-panel ring-1 ring-border-subtle">
-        <Icon aria-hidden className={cn('size-3', KIND_TONE[item.kind] ?? 'text-icon')} />
+      {/* Small kind badge tucked outside the corner so the initials stay readable. */}
+      <span className={cn('absolute flex items-center justify-center rounded-full bg-panel ring-1 ring-border-subtle', size === 'md' ? '-right-1.5 -bottom-1.5 size-4' : '-right-1.5 -bottom-1.5 size-3.5')}>
+        <Icon aria-hidden className={cn(size === 'md' ? 'size-2.5' : 'size-2', KIND_TONE[item.kind] ?? 'text-icon')} />
       </span>
     </span>
   );

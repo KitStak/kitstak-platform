@@ -29,7 +29,7 @@ import {
   toast,
 } from '@/components/ui';
 import { PRIORITIES } from '@/lib/constants';
-import { useProjectTasks } from '@/lib/hooks/use-data';
+import { useProjectLinks, useProjectTasks } from '@/lib/hooks/use-data';
 import { usePeopleMap } from '@/lib/hooks/use-people';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { compareRank } from '@/lib/rank';
@@ -48,12 +48,13 @@ import { OptionList } from '@/features/views/option-list';
 import { TaskMenuItems } from '@/features/views/task-menu';
 import { useSelection } from '@/features/views/use-selection';
 import { useStoredSet } from '@/features/views/use-stored-set';
+import { useTaskNav } from '@/features/views/use-task-nav';
 import { useTaskOps, type TaskOps } from '@/features/views/use-task-ops';
 import { useViewState } from '@/features/views/use-view-state';
 import { ViewToolbar } from '@/features/views/view-toolbar';
 import { GROUP_LABELS } from '@/features/views/view-state';
 import { ColumnsMenu } from './columns-menu';
-import { TITLE_KEY, buildColumns, csvValue, fieldOptions, renderCell, resolveColumns, toCsv, type ColumnDef, type RenderContext } from './table-columns';
+import { TITLE_KEY, buildColumns, csvValue, fieldOptions, isCustomerLink, renderCell, resolveColumns, toCsv, type ColumnDef, type RenderContext } from './table-columns';
 
 const ROW_HEADER_WIDTH = 112;
 const ROW_HEIGHT = 'h-9';
@@ -214,6 +215,10 @@ const PICKERS = new Set(['status', 'priority', 'assignee', 'date', 'labels', 'se
 
 function BodyCell({ def, task, ctx, ops, canEdit, active, editing, seed, width, stickyLeft, onActivate, onEdit, onMove, onOpen }: CellProps) {
   const { project } = useCurrentProject();
+  const openTimer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (openTimer.current) window.clearTimeout(openTimer.current);
+  }, []);
   const editable = canEdit && def.editor !== 'readonly';
   const field = def.field;
   const display = renderCell(def, task, ctx);
@@ -249,7 +254,7 @@ function BodyCell({ def, task, ctx, ops, canEdit, active, editing, seed, width, 
     if (def.editor === 'title') {
       body = (
         <span className="flex h-full items-center px-1">
-          <InlineTitle value={task.title} onSave={(title) => void ops.updateTask(task.id, { title })} onDone={() => onEdit(false)} className="h-7" />
+          <InlineTitle value={task.title} caret="end" onSave={(title) => void ops.updateTask(task.id, { title })} onDone={() => onEdit(false)} className="h-7" />
         </span>
       );
     } else if (def.editor === 'number' || def.editor === 'text') {
@@ -373,19 +378,26 @@ function BodyCell({ def, task, ctx, ops, canEdit, active, editing, seed, width, 
   if (def.editor === 'title' && !editing) {
     body = (
       <span className="flex h-full min-w-0 items-center gap-1 px-2">
-        <button
-          type="button"
-          tabIndex={-1}
+        <span
           onClick={(event) => {
-            event.stopPropagation();
-            onOpen();
+            // Spreadsheet feel: one click opens the task, a double-click renames it instead.
+            if (event.detail > 1) {
+              if (openTimer.current) window.clearTimeout(openTimer.current);
+              openTimer.current = null;
+              return;
+            }
+            if (openTimer.current) window.clearTimeout(openTimer.current);
+            openTimer.current = window.setTimeout(() => {
+              openTimer.current = null;
+              onOpen();
+            }, canEdit ? 260 : 0);
           }}
-          className={cn('min-w-0 truncate text-left text-sm font-medium outline-none hover:underline', task.statusCategory === 'done' || task.statusCategory === 'cancelled' ? 'text-fg-muted line-through decoration-1' : 'text-fg', task.parentTaskId && 'font-normal text-fg-secondary')}
-          title={task.title}
+          className={cn('min-w-0 cursor-pointer truncate text-left text-sm font-medium hover:underline', task.statusCategory === 'done' || task.statusCategory === 'cancelled' ? 'text-fg-muted' : 'text-fg', task.parentTaskId && 'font-normal text-fg-secondary')}
+          title={canEdit ? `${task.title} (click to open, double-click or F2 to rename)` : task.title}
         >
           {task.parentTaskId ? <span className="mr-1 text-fg-muted">↳</span> : null}
           {task.title}
-        </button>
+        </span>
         <button
           type="button"
           tabIndex={-1}
@@ -418,6 +430,8 @@ function BodyCell({ def, task, ctx, ops, canEdit, active, editing, seed, width, 
         if (editable && PICKERS.has(def.editor) && !editing) onEdit(true);
       }}
       onDoubleClick={() => {
+        if (openTimer.current) window.clearTimeout(openTimer.current);
+        openTimer.current = null;
         if (editable && (def.editor === 'title' || def.editor === 'text' || def.editor === 'number')) onEdit(true);
       }}
       className={cn(
@@ -589,7 +603,9 @@ export function TableView() {
   const gridRef = useRef<HTMLDivElement>(null);
 
   const rows = useMemo(() => sorter(view.visible(all)), [all, sorter, view]);
-  const ctx = useMemo<RenderContext>(() => ({ statusById, labelById, sectionById, links: linksByTask }), [labelById, linksByTask, sectionById, statusById]);
+  const projectLinks = useProjectLinks(project.key);
+  const projectCustomer = useMemo(() => (projectLinks.data ?? []).find((link) => !link.taskId && isCustomerLink(link)) ?? null, [projectLinks.data]);
+  const ctx = useMemo<RenderContext>(() => ({ statusById, labelById, sectionById, links: linksByTask, projectCustomer }), [labelById, linksByTask, projectCustomer, sectionById, statusById]);
 
   const entries = useMemo<Entry[]>(() => {
     if (groupBy === 'none') return rows.map((task) => ({ type: 'task', task, group: 'all' }));
@@ -615,6 +631,18 @@ export function TableView() {
   const taskEntries = useMemo(() => entries.filter((entry): entry is Extract<Entry, { type: 'task' }> => entry.type === 'task'), [entries]);
   const rowKeys = useMemo(() => taskEntries.map((entry) => `${entry.group}|${entry.task.id}`), [taskEntries]);
   const selection = useSelection(useMemo(() => [...new Set(taskEntries.map((entry) => entry.task.id))], [taskEntries]));
+
+  // J / K walk the rows from anywhere on the page; the first press lands on the first title cell.
+  const titleCol = shown[0]?.key ?? TITLE_KEY;
+  useTaskNav(gridRef, {
+    enabled: editing === null,
+    focusTask: (row) => {
+      const taskId = row.dataset.row;
+      if (!taskId) return;
+      setActive({ taskId, col: titleCol });
+      row.querySelector<HTMLElement>(`td[data-col="${CSS.escape(titleCol)}"]`)?.focus();
+    },
+  });
 
   // Focus follows the active cell (roving tabindex).
   useEffect(() => {
@@ -696,6 +724,12 @@ export function TableView() {
       event.preventDefault();
       if (def.editor === 'checkbox' && def.field && canEdit) void ops.updateTask(task.id, { customFields: { [def.field.id]: task.customFields[def.field.id] !== true } });
       else selection.toggle(task.id);
+      return;
+    }
+    if (event.key === 'Enter' && def.editor === 'title') {
+      // Enter on the task name opens it (like List and Board); F2 or double-click renames.
+      event.preventDefault();
+      openTask(task.key);
       return;
     }
     if (!canEdit || def.editor === 'readonly' || def.editor === 'checkbox') return;
@@ -876,7 +910,31 @@ export function TableView() {
                   />
                 );
               })}
-              <th aria-hidden className="h-9 border-b border-border-subtle bg-sunken" style={{ width: 48 }} />
+              <th scope="col" className="h-9 border-b border-border-subtle bg-sunken p-0" style={{ width: 48 }}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" aria-label="Add a column" title="Add a column" className="mx-auto flex size-7 items-center justify-center rounded-sm text-icon outline-none hover:bg-hover hover:text-icon-strong focus-visible:outline-2 focus-visible:outline-focus data-[state=open]:bg-hover" data-testid="add-column">
+                      <Plus aria-hidden className="size-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="max-h-[360px] w-60 overflow-y-auto">
+                    {columns.filter((column) => column.hidden && defByKey.has(column.key)).length === 0 ? (
+                      <DropdownMenuItem disabled>Every column is showing</DropdownMenuItem>
+                    ) : (
+                      columns
+                        .filter((column) => column.hidden && defByKey.has(column.key))
+                        .map((column) => {
+                          const def = defByKey.get(column.key) as ColumnDef;
+                          return (
+                            <DropdownMenuItem key={column.key} icon={<span className="flex [&_svg]:size-4">{def.icon}</span>} description={def.field ? 'Custom field' : undefined} onSelect={() => commitColumns(columns.map((entry) => (entry.key === column.key ? { ...entry, hidden: false } : entry)))}>
+                              {def.label}
+                            </DropdownMenuItem>
+                          );
+                        })
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </th>
             </tr>
           </thead>
           <tbody>

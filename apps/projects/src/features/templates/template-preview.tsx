@@ -4,6 +4,7 @@
  * their tasks and "day N" dates, milestones, labels, custom fields and the automations that come
  * with it, written as plain sentences.
  */
+import { describeTemplateTaskCounts } from '@/lib/template-math';
 import Link from 'next/link';
 import { ArrowRight, CalendarRange, Diamond, Flag, ListChecks, Tag, Workflow, Zap } from 'lucide-react';
 import { Badge, SheetContent, buttonVariants, cn, labelColorStyle, toLabelColor } from '@/components/ui';
@@ -145,7 +146,7 @@ export function TemplatePreview({
         {weeks(payload.durationDays) ? (
           <Badge icon={<CalendarRange aria-hidden />}>About {weeks(payload.durationDays)}</Badge>
         ) : null}
-        <Badge icon={<ListChecks aria-hidden />}>{template.taskCount} tasks</Badge>
+        <Badge icon={<ListChecks aria-hidden />}>{describeTemplateTaskCounts({ tasks: template.taskCount, subtasks: template.subtaskCount ?? 0 })}</Badge>
         {automations.length ? (
           <Badge icon={<Zap aria-hidden />} tone="warning">
             {automations.length} {automations.length === 1 ? 'automation' : 'automations'}
@@ -181,7 +182,7 @@ export function TemplatePreview({
       </Section>
 
       {tasks.length ? (
-        <Section icon={<ListChecks aria-hidden />} title="Tasks" count={template.taskCount}>
+        <Section icon={<ListChecks aria-hidden />} title={template.subtaskCount ? `Tasks (+ ${template.subtaskCount} subtasks)` : 'Tasks'} count={template.taskCount}>
           <div className="flex flex-col gap-3">
             {grouped.map((group) => (
               <div key={group.key}>

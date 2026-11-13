@@ -251,10 +251,10 @@ describe('assignee', () => {
     expect(result.tokens[0]?.display).toBe('Me');
   });
 
-  it('keeps unknown names in the title and flags them', () => {
+  it('takes unknown names out of the title and flags them', () => {
     const result = parse('Ask @nobody about it');
     expect(result.assigneeId).toBeNull();
-    expect(result.title).toBe('Ask @nobody about it');
+    expect(result.title).toBe('Ask about it');
     expect(result.tokens[0]).toMatchObject({ unresolved: true, display: 'No one named nobody' });
   });
 
@@ -291,8 +291,12 @@ describe('labels', () => {
     expect(result.title).toBe('Pitch');
   });
 
-  it('unknown labels become new labels (never a fuzzy match)', () => {
-    const result = parse('Fix #bug and #design-review #Design-Review');
+  it('unknown labels wait for a confirmation and never fuzzy match', () => {
+    const unconfirmed = parse('Fix #bug and #design-review');
+    expect(unconfirmed.newLabels).toEqual([]);
+    expect(unconfirmed.title).toBe('Fix and');
+    expect(unconfirmed.tokens.find((t) => t.raw === '#bug')).toMatchObject({ value: null, unresolved: true, display: 'No label called bug', name: 'bug' });
+    const result = parse('Fix #bug and #design-review #Design-Review', { createLabels: ['bug', 'Design Review'] });
     expect(result.labelIds).toEqual([]);
     expect(result.newLabels).toEqual(['bug', 'design review']);
     expect(result.tokens.find((t) => t.raw === '#bug')).toMatchObject({ value: null, display: 'bug (new)', name: 'bug' });
@@ -315,10 +319,10 @@ describe('project', () => {
     expect(parse('Order boxes +WH').projectId).toBe('p-wh');
   });
 
-  it('flags unknown projects and leaves the text', () => {
+  it('flags unknown projects and keeps them out of the title', () => {
     const result = parse('Order boxes +nope');
     expect(result.projectId).toBeNull();
-    expect(result.title).toBe('Order boxes +nope');
+    expect(result.title).toBe('Order boxes');
     expect(result.tokens[0]).toMatchObject({ unresolved: true });
   });
 
@@ -386,5 +390,21 @@ describe('segmentQuickAdd', () => {
 
   it('handles no tokens', () => {
     expect(segmentQuickAdd('Plain', [])).toEqual([{ text: 'Plain', token: null }]);
+  });
+});
+
+describe('spec example and fuzzy people', () => {
+  it('never leaves an unresolved token in the title', () => {
+    const result = parseQuickAdd('Call Acme tomorrow !high @maya #sales', { today: TODAY, people: [], labels: [] });
+    expect(result.title).toBe('Call Acme');
+    expect(result.newLabels).toEqual([]);
+    expect(result.tokens.filter((t) => t.unresolved).map((t) => t.kind)).toEqual(['assignee', 'label']);
+  });
+
+  it('matches people by initials and last name', () => {
+    const team = [{ id: 'u-jo', name: 'Jonah Okafor' }, { id: 'u-ml', name: 'Mike Lunsford' }];
+    expect(parseQuickAdd('Ping @jo', { today: TODAY, people: team }).assigneeId).toBe('u-jo');
+    expect(parseQuickAdd('Ping @okafor', { today: TODAY, people: team }).assigneeId).toBe('u-jo');
+    expect(parseQuickAdd('Ping @ml', { today: TODAY, people: team }).assigneeId).toBe('u-ml');
   });
 });

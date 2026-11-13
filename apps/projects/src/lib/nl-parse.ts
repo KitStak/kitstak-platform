@@ -9,12 +9,15 @@
  *                12/5/2027, 2026-12-05. A leading "on", "by" or "due" is swallowed with it.
  *                When several dates appear, the last one wins (the rest stay in the title).
  *   - Priority:  !urgent !high !medium !low !none, !p1..!p4, !1..!4, !!!! (urgent) !!! (high) !! (medium)
- *   - Assignee:  @maya, @maya.chen, @mchen (email name), @me. A unique prefix is enough.
- *   - Labels:    #sales, #sales-lead (matches the label "Sales lead"). Unknown names become new labels.
+ *   - Assignee:  @maya, @maya.chen, @mchen, @chen, @mc (initials), @me. A unique prefix is enough.
+ *   - Labels:    #sales, #sales-lead (matches the label "Sales lead"). An unknown name only becomes a
+ *                new label once the user confirms it (`createLabels`, from "Create label …").
  *   - Project:   +OPS (key) or +operations (name). A unique prefix is enough.
  *
- * Tokens that don't resolve (an @name nobody has) are reported with `value: null` and stay in the
- * title. Users can dismiss a chip: pass its `id` in `ignore` and that text is treated as plain words.
+ * Tokens that don't resolve (an @name nobody has, an unconfirmed new #label) are reported with
+ * `unresolved: true` and are left out of the title too: the chip warns instead, so a typo never
+ * ends up in the task name. Users can dismiss a chip: pass its `id` in `ignore` and that text is
+ * treated as plain words (kept in the title).
  */
 import { addDaysIso, isIsoDate, parseIsoDate, startOfWeekIso, toIsoDate, type IsoDate } from './dates';
 import type { Priority } from './constants';
@@ -65,6 +68,8 @@ export interface QuickAddParseOptions {
   readonly meId?: string | null;
   /** Token ids the user dismissed (kept as plain text). */
   readonly ignore?: ReadonlySet<string> | readonly string[];
+  /** New label names the user chose to create ("Create label sales"); other unknown #names stay unresolved. */
+  readonly createLabels?: readonly string[];
 }
 
 export interface QuickAddParse {
@@ -325,7 +330,10 @@ function pick<T>(items: readonly T[], query: string, keys: (item: T) => readonly
 function personKeys(person: QuickAddPerson): string[] {
   const parts = person.name.trim().split(/\s+/).filter(Boolean);
   const keys = [person.name, ...parts];
-  if (parts.length > 1) keys.push(`${parts[0]![0] ?? ''}${parts.at(-1)}`); // mchen
+  if (parts.length > 1) {
+    keys.push(`${parts[0]![0] ?? ''}${parts.at(-1)}`); // mchen
+    keys.push(parts.map((part) => part[0] ?? '').join('')); // mc
+  }
   if (person.email) keys.push(person.email.split('@')[0]!);
   return keys;
 }
@@ -344,6 +352,7 @@ export function parseQuickAdd(input: string, options: QuickAddParseOptions): Qui
   const people = options.people ?? [];
   const projects = options.projects ?? [];
   const labels = options.labels ?? [];
+  const confirmed = new Set((options.createLabels ?? []).map(squash));
   const tokens: QuickAddToken[] = [];
 
   // 1. Sigil tokens (!priority, @person, #label, +project).
@@ -386,7 +395,9 @@ export function parseQuickAdd(input: string, options: QuickAddParseOptions): Qui
       tokens.push(
         resolved
           ? { id: tokenId('label', raw), kind: 'label', start, end, raw, value: resolved.id, display: resolved.name }
-          : { id: tokenId('label', raw), kind: 'label', start, end, raw, value: null, display: `${pretty} (new)`, name: pretty },
+          : confirmed.has(squash(pretty))
+            ? { id: tokenId('label', raw), kind: 'label', start, end, raw, value: null, display: `${pretty} (new)`, name: pretty }
+            : { id: tokenId('label', raw), kind: 'label', start, end, raw, value: null, display: `No label called ${pretty}`, name: pretty, unresolved: true },
       );
     } else {
       const project = pick(projects, name, (p) => [p.key, p.name]);
@@ -415,8 +426,8 @@ export function parseQuickAdd(input: string, options: QuickAddParseOptions): Qui
   const labelTokens = active.filter((t) => t.kind === 'label');
   const shown = active.filter((t) => t.kind === 'label' || t.unresolved || usedSingles.has(t));
 
-  // 4. Title = input minus the tokens that were applied.
-  const removed = shown.filter((t) => !t.unresolved);
+  // 4. Title = input minus every token: applied ones, and unresolved ones (their chip warns).
+  const removed = shown;
   let title = '';
   let cursor = 0;
   for (const token of removed) {
@@ -434,7 +445,7 @@ export function parseQuickAdd(input: string, options: QuickAddParseOptions): Qui
   const seenNew = new Set<string>();
   const newLabels: string[] = [];
   for (const token of labelTokens) {
-    if (token.value || !token.name) continue;
+    if (token.value || !token.name || token.unresolved) continue;
     const key = squash(token.name);
     if (seenNew.has(key)) continue;
     seenNew.add(key);

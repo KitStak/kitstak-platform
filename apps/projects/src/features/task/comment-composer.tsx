@@ -451,7 +451,7 @@ export const CommentComposer = forwardRef<ComposerHandle, CommentComposerProps>(
               onMouseEnter={() => setPopup({ ...popup, index })}
               onClick={() => pickMention(person)}
             >
-              <Avatar name={person.name} src={person.image} size="sm" />
+              <Avatar name={person.name} src={person.image} size="sm" decorative />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-sm">{person.name}</span>
                 <span className="truncate text-2xs text-fg-muted">{person.title ?? person.email}</span>

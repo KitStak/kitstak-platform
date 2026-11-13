@@ -5,7 +5,7 @@
  * swimlanes by assignee, priority or label; add a task right inside a column; collapse columns
  * and lanes; filter bar + saved views; full keyboard support with screen-reader announcements.
  */
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -28,6 +28,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronLeft, ChevronRight, KanbanSquare, Plus } from 'lucide-react';
 import { Button, EmptyState, Skeleton, cn, toast } from '@/components/ui';
 import { PRIORITY_LABELS } from '@/lib/constants';
+import { addDaysIso, todayIso } from '@/lib/dates';
 import { useProjectTasks } from '@/lib/hooks/use-data';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { qk } from '@/lib/query-keys';
@@ -40,10 +41,12 @@ import { DisplayMenu } from '@/features/views/display-menu';
 import { useGroupMeta } from '@/features/views/group-meta';
 import { useTaskLinksMap } from '@/features/views/link-chips';
 import { useStoredSet } from '@/features/views/use-stored-set';
+import { useTaskNav } from '@/features/views/use-task-nav';
 import { useTaskOps } from '@/features/views/use-task-ops';
 import { useViewState } from '@/features/views/use-view-state';
 import { ViewToolbar } from '@/features/views/view-toolbar';
 import { GROUP_LABELS, ORDER_FIELDS, ORDER_LABELS, orderFieldOf, orderRules, SWIMLANES, type OrderField, type Swimlane } from '@/features/views/view-state';
+import { ViewCursor } from '@/features/task/view-cursor';
 import { BoardCard, BoardCardOverlay } from './board-card';
 import { BoardComposer } from './board-composer';
 import { BoardCell, COLLAPSED_WIDTH, COLUMN_WIDTH, CollapsedColumn, ColumnHeader } from './board-column';
@@ -130,6 +133,8 @@ function BoardSkeleton() {
   );
 }
 
+const RECENT_DONE_DAYS = 14;
+
 export function BoardView() {
   const { project, statuses, statusById, labelById, capabilities } = useCurrentProject();
   const queryClient = useQueryClient();
@@ -147,14 +152,27 @@ export function BoardView() {
   const manual = order === 'position';
   const lane = view.settings.swimlane;
   const laneMeta = useGroupMeta(lane === 'none' ? 'none' : lane, all);
-  const collapsedColumns = useStoredSet(`ks.projects.board.collapsed.${project.id}`);
+  const storedCollapsed = useStoredSet(`ks.projects.board.collapsed.${project.id}`);
+  const expandedColumns = useStoredSet(`ks.projects.board.expanded.${project.id}`);
+  const boardPrefs = useStoredSet(`ks.projects.board.prefs.${project.id}`);
+  const recentDoneOnly = boardPrefs.has('recent-done');
   const collapsedLanes = useStoredSet(`ks.projects.board.lanes.${project.id}.${lane}`);
   const [composer, setComposer] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [live, setLive] = useState<ContainerMap | null>(null);
   const [liveMessage, setLiveMessage] = useState('');
+  const boardRef = useRef<HTMLDivElement>(null);
+  useTaskNav(boardRef, { enabled: dragId === null });
 
-  const visible = useMemo(() => sortTasks(view.visible(all), manual ? [{ field: 'position', dir: 'asc' }] : orderRules(order)), [all, manual, order, view]);
+  const visible = useMemo(() => {
+    let shown = view.visible(all);
+    if (recentDoneOnly) {
+      // "Done in the last 14 days": older finished work leaves the board but stays in List and Table.
+      const cutoff = addDaysIso(todayIso(), -RECENT_DONE_DAYS);
+      shown = shown.filter((task) => !(task.statusCategory === 'done' || task.statusCategory === 'cancelled') || !task.completedAt || task.completedAt.slice(0, 10) >= cutoff);
+    }
+    return sortTasks(shown, manual ? [{ field: 'position', dir: 'asc' }] : orderRules(order));
+  }, [all, manual, order, recentDoneOnly, view]);
   const taskById = useMemo(() => new Map(all.map((task) => [task.id, task])), [all]);
 
   const lanes = useMemo<string[]>(() => {
@@ -182,6 +200,21 @@ export function BoardView() {
     for (const task of visible) counts.set(task.statusId, (counts.get(task.statusId) ?? 0) + 1);
     return counts;
   }, [visible]);
+  /**
+   * Collapsed columns: the ones you collapsed, plus empty Cancelled columns (a thin rail with a
+   * count) unless you expanded them. This keeps every working column on screen at 1440px.
+   */
+  const collapsedColumns = useMemo(() => {
+    const auto = (id: string) => statusById.get(id)?.category === 'cancelled' && !(columnCounts.get(id) ?? 0);
+    const has = (id: string) => storedCollapsed.has(id) || (auto(id) && !expandedColumns.has(id));
+    return {
+      has,
+      toggle: (id: string) => {
+        if (auto(id) && !storedCollapsed.has(id)) expandedColumns.toggle(id);
+        else storedCollapsed.toggle(id);
+      },
+    };
+  }, [columnCounts, expandedColumns, statusById, storedCollapsed]);
   /** Work-in-progress limits always count every top-level task in the status (filters don't hide work). */
   const wipCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -394,6 +427,7 @@ export function BoardView() {
       toggles={[
         { label: 'Done tasks', checked: view.settings.showCompleted, onChange: (checked) => view.setSettings({ showCompleted: checked }), testId: 'toggle-done' },
         { label: 'Subtasks as cards', checked: view.settings.showSubtasks, onChange: (checked) => view.setSettings({ showSubtasks: checked }), testId: 'toggle-subtasks' },
+        { label: `Only done in the last ${RECENT_DONE_DAYS} days`, checked: recentDoneOnly, onChange: () => boardPrefs.toggle('recent-done'), testId: 'toggle-recent-done' },
       ]}
     />
   );
@@ -448,6 +482,7 @@ export function BoardView() {
     <div className="flex h-full min-h-[420px] flex-col" data-testid="board-view">
       {toolbar}
       {banner}
+      <ViewCursor rootRef={boardRef} mode="board" tasks={all} ops={ops} canEdit={canEdit} onOpen={openCard} />
       <span role="status" aria-live="polite" className="sr-only">
         {liveMessage}
       </span>
@@ -460,7 +495,7 @@ export function BoardView() {
         onDragCancel={reset}
         accessibility={{ announcements, screenReaderInstructions: { draggable: 'Press Space to pick up the card. Arrow keys move it, Space drops it, Escape cancels. Enter opens it.' } }}
       >
-        <div className="relative flex min-h-0 flex-1">
+        <div ref={boardRef} className="relative flex min-h-0 flex-1">
           <div
             ref={attach}
             className={cn(

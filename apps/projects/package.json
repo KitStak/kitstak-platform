@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "db:seed": "tsx --conditions=react-server src/server/db/seed/index.ts",
-    "shot": "node scripts/shot.mjs"
+    "shot": "node scripts/shot.mjs",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Logo, ProjectsMark } from '@/features/shell/logo';
+import { appUrls } from '@/server/env';
 
 /** Brand showcase: a stylized board preview (what Projects feels like). */
 function BoardPreview() {
@@ -38,6 +39,7 @@ function BoardPreview() {
 }
 
 export default function AuthLayout({ children }: { readonly children: React.ReactNode }) {
+  const urls = appUrls();
   return (
     <div className="grid min-h-dvh bg-panel lg:grid-cols-[minmax(480px,1fr)_minmax(0,1.1fr)]">
       <div className="flex flex-col px-6 py-6 sm:px-12">
@@ -51,7 +53,15 @@ export default function AuthLayout({ children }: { readonly children: React.Reac
         </main>
         <footer className="flex flex-wrap items-center justify-between gap-2 text-xs text-fg-muted">
           <span>© {new Date().getFullYear()} KitStak</span>
-          <span>One account for every KitStak app</span>
+          <span className="flex items-center gap-4">
+            <span className="hidden sm:inline">One account for every KitStak app</span>
+            <a className="hover:text-fg hover:underline" href={`${urls.crm}/privacy`}>
+              Privacy
+            </a>
+            <a className="hover:text-fg hover:underline" href={`${urls.crm}/terms`}>
+              Terms
+            </a>
+          </span>
         </footer>
       </div>
       <aside aria-hidden className="auth-hero relative hidden overflow-hidden lg:flex lg:flex-col lg:items-center lg:justify-center lg:gap-10 lg:p-12">

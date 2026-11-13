@@ -1,13 +1,14 @@
 'use client';
 /**
  * Shared cross-app launcher menu (BLUEPRINT.md §6): a module-grid trigger in each app's top bar
- * opening a popover that lists Portal / CRM / WMS / Projects. Purely presentational — origins and
+ * opening a popover that lists Portal / CRM / WMS / Projects. Purely presentational: origins and
  * entitlement flags arrive as props (no data fetching here), and styling uses tokens.css custom
  * properties exclusively so the menu inherits the host app's light/dark theme. Keyboard and
  * focus behavior (aria-haspopup/expanded, Escape, focus return) come from the Radix popover.
  */
 import * as React from 'react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
+import { HandoffScreen, useHandoff } from '../handoff';
 import './app-switcher.css';
 
 export type AppSwitcherAppId = 'portal' | 'crm' | 'wms' | 'projects';
@@ -162,7 +163,7 @@ function AppRow({
   readonly current: boolean;
   readonly locked: boolean;
   readonly href: string;
-  readonly onNavigate: () => void;
+  readonly onNavigate: (event: React.MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
     <li>
@@ -180,7 +181,7 @@ function AppRow({
         <span className="ks-appswitcher-text">
           <span className="ks-appswitcher-name">{app.name}</span>
           <span className="ks-appswitcher-desc">
-            {locked ? 'Locked — unlock in Portal billing' : app.descriptor}
+            {locked ? 'Locked. Unlock it in Portal billing' : app.descriptor}
           </span>
         </span>
         {current ? (
@@ -191,7 +192,7 @@ function AppRow({
         ) : locked ? (
           <span className="ks-appswitcher-end">
             <LockIcon />
-            <span className="ks-appswitcher-sr">Locked — opens billing</span>
+            <span className="ks-appswitcher-sr">Locked, opens billing</span>
           </span>
         ) : null}
       </a>
@@ -202,6 +203,8 @@ function AppRow({
 /** Module-grid button + popover listing Portal / CRM / WMS / Projects with entitlement-aware rows. */
 export function AppSwitcher({ current, urls, entitled }: AppSwitcherProps) {
   const [open, setOpen] = React.useState(false);
+  const [handoff, startHandoff] = useHandoff();
+  const [handoffTitle, setHandoffTitle] = React.useState('');
   const billingHref = `${urls.portal.replace(/\/+$/, '')}/billing`;
   return (
     <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
@@ -236,13 +239,22 @@ export function AppSwitcher({ current, urls, entitled }: AppSwitcherProps) {
                   current={app.id === current}
                   locked={locked}
                   href={locked ? billingHref : (href ?? '/')}
-                  onNavigate={() => setOpen(false)}
+                  onNavigate={(event) => {
+                    setOpen(false);
+                    // Plain left click that leaves this app: show the KitStak handoff screen until
+                    // the next app paints. New-tab clicks and the current app skip it.
+                    const newTab = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
+                    if (app.id === current || newTab) return;
+                    setHandoffTitle(locked ? 'Opening Portal billing' : `Opening ${app.name}`);
+                    startHandoff();
+                  }}
                 />
               );
             })}
           </ul>
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
+      {handoff ? <HandoffScreen title={handoffTitle} detail="Taking you there with the same account" /> : null}
     </PopoverPrimitive.Root>
   );
 }

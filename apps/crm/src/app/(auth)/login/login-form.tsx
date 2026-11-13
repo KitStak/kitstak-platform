@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { Mail } from 'lucide-react';
+import { HandoffScreen } from '@kitstak/ui/handoff';
 import { Button, Checkbox, Field, Input } from '@/components/ui';
 import { signIn } from '@/lib/auth-client';
 import { safeNextPath } from '@/features/shell/routes';
@@ -63,6 +64,7 @@ export function LoginForm({
 
   return (
     <>
+      {pending ? <HandoffScreen title="Signing you in" detail="Opening your KitStak workspace" /> : null}
       <AuthHeading title="Welcome back" subtitle="Sign in to your KitStak workspace." />
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
         {notice ? <FormAlert tone="success">{notice}</FormAlert> : null}

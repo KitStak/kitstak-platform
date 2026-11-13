@@ -87,7 +87,7 @@ export const northwindSeed: OrgSeed = {
           p: 'high',
           due: -20,
           time: [['ethan', 420, 21, 'On-site survey day 1', true], ['ethan', 300, 20, 'On-site survey day 2', true]],
-          c: [['ethan', 'Survey done. Aisles are wide enough everywhere except zone B row 14 — we will route around it.']],
+          c: [['ethan', 'Survey done. Aisles are wide enough everywhere except zone B row 14. We will route around it.']],
         },
         {
           id: 'wifi',
@@ -112,7 +112,7 @@ export const northwindSeed: OrgSeed = {
           due: 2,
           labels: ['Hardware'],
           time: [['lucas', 240, 1, 'Docks 1 and 2']],
-          c: [['lucas', 'Docks 1 and 2 are in. Dock 3 needs a 240V outlet — Frontier facilities is adding it Monday.']],
+          c: [['lucas', 'Docks 1 and 2 are in. Dock 3 needs a 240V outlet. Frontier facilities is adding it Monday.']],
         },
         { t: 'Map the pick zones in Fleet OS', d: p('Drive the mapping robot through zones A and B, then mark pick faces, no-go areas and the two charging lanes.'), s: 'Install', st: 'In progress', a: 'ethan', p: 'high', due: 4, deps: ['wifi'] },
         {
@@ -129,7 +129,7 @@ export const northwindSeed: OrgSeed = {
           watchers: ['hannah'],
           c: [
             ['maya', '{daniel} this depends on the Manhattan connector in Fleet OS 3.2. Can we run the beta build here?'],
-            ['daniel', 'Yes. Beta build goes to Frontier on Wednesday. We need their API keys first — {liam} can you ask their IT lead?'],
+            ['daniel', 'Yes. Beta build goes to Frontier on Wednesday. We need their API keys first. {liam} can you ask their IT lead?'],
             ['liam', 'Asked this morning. They expect to send keys Monday.', { reply: true }],
           ],
         },
@@ -243,7 +243,7 @@ export const northwindSeed: OrgSeed = {
           due: 1,
           labels: ['Pricing'],
           cf: { 'Deal size': 480000, 'Close confidence': 'High' },
-          links: [deal('Pinnacle Aerospace — Robot-as-a-Service plan', 'negotiation')],
+          links: [deal('Pinnacle Aerospace · Robot-as-a-Service plan', 'negotiation')],
           c: [
             ['liam', 'They want a 3-year term at the 2-year price. {aisha} what is the lowest monthly rate per robot we can do?'],
             ['maya', 'We can go to $1,450/robot/month if they commit to 40 robots. Not lower.'],
@@ -260,11 +260,11 @@ export const northwindSeed: OrgSeed = {
           due: 0,
           labels: ['Security review'],
           cf: { 'Deal size': 620000, 'Close confidence': 'Medium' },
-          links: [deal('Lumen Health Systems — AMR fleet', 'negotiation')],
+          links: [deal('Lumen Health Systems · AMR fleet', 'negotiation')],
           time: [['daniel', 180, 3, 'Answered sections 1–6'], ['daniel', 150, 1, 'Camera data questions']],
           sub: [{ t: 'Final read before sending it to Lumen', a: 'maya', due: 0 }, { t: 'Attach the SOC 2 report and bridge letter', a: 'daniel', done: true }],
           c: [
-            ['daniel', 'All 186 answered. Camera frames are never stored — only obstacle maps. {maya} can you give it a final read?'],
+            ['daniel', 'All 186 answered. Camera frames are never stored, only obstacle maps. {maya} can you give it a final read?'],
             ['maya', 'Reading it now. Looks great so far.', { react: [['daniel', '🙏']] }],
           ],
         },
@@ -292,10 +292,10 @@ export const northwindSeed: OrgSeed = {
           due: 0,
           labels: ['Exec sponsor'],
           cf: { 'Deal size': 540000, 'Close confidence': 'High' },
-          links: [deal('Meridian Industries — Robot-as-a-Service plan', 'negotiation')],
+          links: [deal('Meridian Industries · Robot-as-a-Service plan', 'negotiation')],
         },
         { t: 'Pilot results report for Zenith Electronics', s: 'Proposal', st: 'In progress', a: 'liam', p: 'medium', due: 4, cf: { 'Close confidence': 'Low' }, links: [deal('Zenith Electronics: Robot-as-a-Service plan pilot', 'negotiation')] },
-        { t: 'Prepare the order form for Beacon Pharma', s: 'Closing', st: 'To do', a: 'liam', p: 'medium', due: 9, cf: { 'Deal size': 210000, 'Close confidence': 'High' }, links: [deal('Beacon Pharma — Fleet orchestration software', 'negotiation')] },
+        { t: 'Prepare the order form for Beacon Pharma', s: 'Closing', st: 'To do', a: 'liam', p: 'medium', due: 9, cf: { 'Deal size': 210000, 'Close confidence': 'High' }, links: [deal('Beacon Pharma · Fleet orchestration software', 'negotiation')] },
         {
           t: 'Handoff to deployment: Frontier Aerospace phase 2',
           s: 'Closing',
@@ -324,7 +324,7 @@ export const northwindSeed: OrgSeed = {
           a: 'liam',
           p: 'low',
           due: -2,
-          links: [deal('Westbrook Energy — Predictive maintenance add-on renewal', 'lost')],
+          links: [deal('Westbrook Energy · Predictive maintenance add-on renewal', 'lost')],
           c: [['liam', 'Main reasons: they built a simple version in-house, and our reports were hard to share. Passing the second one to {hannah}.']],
         },
       ],
@@ -482,7 +482,7 @@ export const northwindSeed: OrgSeed = {
           cf: { 'Cost per unit': 64 },
           c: [
             ['daniel', 'Supplier says the servos ship November 27 now (was November 13). {maya} this pushes testing unless the second supplier works out.'],
-            ['maya', 'Understood. Let us not wait — {hannah} please get samples from the second supplier this week.'],
+            ['maya', 'Understood. Let us not wait. {hannah} please get samples from the second supplier this week.'],
           ],
         },
         { t: 'Qualify a second servo supplier', s: 'Supply chain', st: 'In progress', a: 'hannah', p: 'high', due: 6, labels: ['Supplier'] },
@@ -573,7 +573,7 @@ export const northwindSeed: OrgSeed = {
           labels: ['Design', 'Vendor'],
           cf: { Budget: 24000 },
           sub: [{ t: 'Pick a booth concept', a: 'maya', due: 2 }],
-          c: [['sofia', 'Three concepts from the agency. I like B (open floor, demo rack in the middle). {maya} {liam} which one do you prefer?'], ['liam', 'B — customers want to see robots move, not read posters.']],
+          c: [['sofia', 'Three concepts from the agency. I like B (open floor, demo rack in the middle). {maya} {liam} which one do you prefer?'], ['liam', 'B. Customers want to see robots move, not read posters.']],
         },
         {
           t: 'Live demo: two robots picking from a mini rack', d: p('A 3-bay rack with 24 bins. Two robots pick a looping order list all day while a screen shows the live fleet map.'),
@@ -624,8 +624,8 @@ export const northwindSeed: OrgSeed = {
           p: 'high',
           due: 4,
           labels: ['Case study'],
-          links: [deal('Cobalt Foods — Palletizing cells', 'won')],
-          c: [['sofia', 'Interview with their plant manager is done. Headline idea: “From 3 shifts of hand stacking to 1 robot cell.” {maya} OK to share the 41% number?'], ['maya', 'Yes — they approved it in the pilot report.', { reply: true }]],
+          links: [deal('Cobalt Foods · Palletizing cells', 'won')],
+          c: [['sofia', 'Interview with their plant manager is done. Headline idea: “From 3 shifts of hand stacking to 1 robot cell.” {maya} OK to share the 41% number?'], ['maya', 'Yes. They approved it in the pilot report.', { reply: true }]],
         },
         { t: 'Customer quote approval from Frontier Aerospace', s: 'Case studies', st: 'To do', a: 'liam', p: 'medium', due: 6 },
         { t: 'Product page for Gripper v4', s: 'Website', st: 'To do', a: 'sofia', p: 'medium', due: 18 },
@@ -719,7 +719,7 @@ export const northwindSeed: OrgSeed = {
       start: -95,
       due: -40,
       created: 98,
-      links: [deal('Cobalt Foods — Palletizing cells', 'won'), account('Cobalt Foods')],
+      links: [deal('Cobalt Foods · Palletizing cells', 'won'), account('Cobalt Foods')],
       sections: ['Site prep', 'Install', 'Training', 'Handover'],
       labels: [
         { name: 'Hardware', color: 'blue' },
@@ -930,7 +930,7 @@ export const northwindSeed: OrgSeed = {
         labelIds: [r.project('SVC').label('Customer report')],
         notifyUserIds: [r.person('ethan')],
         collectContact: true,
-        confirmationMessage: 'Got it. A field engineer will reply within 4 business hours — or 1 hour if a robot is down.',
+        confirmationMessage: 'Got it. A field engineer will reply within 4 business hours, or 1 hour if a robot is down.',
       }),
       submissions: [
         {

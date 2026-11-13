@@ -1,15 +1,33 @@
 /** Org people (core.member × core.user): pickers, mentions, assignees, avatars. */
 import 'server-only';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { member, user } from '@kitstak/db/schema';
 import { db, type Executor } from '@/server/db';
 import { parseOrgRole } from '@/lib/permissions';
 import type { OrgPerson, PersonRef } from '@/lib/types';
 import type { DomainContext } from './_shared';
+import { tableExists } from '@/server/integrations/detect';
 
-/** Every active member of the org, alphabetical. */
+/**
+ * Emails of system accounts (API / integration users) that must never show up as teammates in
+ * pickers. Today that is WMS's `is_api_user` flag (the shared Integration Service login). Fails
+ * soft: no WMS tables, or any error, means no exclusions.
+ */
+async function serviceAccountEmails(): Promise<Set<string>> {
+  try {
+    if (!(await tableExists('wms.users'))) return new Set();
+    // Always on the pool (never inside a caller's transaction, so a failure can't abort it).
+    const result = await db.execute<{ email: string }>(sql`select lower(email) as email from wms.users where is_api_user = true`);
+    return new Set(result.rows.map((row) => row.email));
+  } catch {
+    return new Set();
+  }
+}
+
+/** Every active human member of the org, alphabetical (service accounts are left out of pickers). */
 export async function listOrgPeople(ctx: DomainContext, executor: Executor = db): Promise<OrgPerson[]> {
-  const rows = await executor
+  const [rows, serviceEmails] = await Promise.all([
+    executor
     .select({
       id: user.id,
       name: user.name,
@@ -21,9 +39,12 @@ export async function listOrgPeople(ctx: DomainContext, executor: Executor = db)
     .from(member)
     .innerJoin(user, eq(member.userId, user.id))
     .where(eq(member.organizationId, ctx.orgId))
-    .orderBy(asc(user.name));
+    .orderBy(asc(user.name)),
+    serviceAccountEmails(),
+  ]);
   const out: OrgPerson[] = [];
   for (const row of rows) {
+    if (serviceEmails.has(row.email.toLowerCase())) continue;
     const orgRole = parseOrgRole(row.role);
     if (!orgRole) continue;
     out.push({ id: row.id, name: row.name, email: row.email, image: row.image, title: row.title, orgRole });

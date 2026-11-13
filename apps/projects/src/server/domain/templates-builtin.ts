@@ -3,6 +3,7 @@
  * realistic steps, dates as offsets from the project start. Org-saved templates live in pm.templates.
  */
 import type { TemplatePayload } from '@/lib/template-types';
+import { countTemplateTaskTree, withScheduledStarts } from '@/lib/template-math';
 
 export interface BuiltinTemplate {
   readonly slug: string;
@@ -21,7 +22,7 @@ const KANBAN = [
   { key: 'done', name: 'Done', category: 'done', color: 'green' },
 ] as const;
 
-export const BUILTIN_TEMPLATES: readonly BuiltinTemplate[] = [
+const BUILTIN_TEMPLATE_SOURCE: readonly BuiltinTemplate[] = [
   {
     slug: 'product-launch',
     name: 'Product launch',
@@ -324,13 +325,19 @@ export const BUILTIN_TEMPLATES: readonly BuiltinTemplate[] = [
   },
 ];
 
+/** Built-ins with start dates filled in so every dated task draws a real bar on the timeline. */
+export const BUILTIN_TEMPLATES: readonly BuiltinTemplate[] = BUILTIN_TEMPLATE_SOURCE.map((template) => ({
+  ...template,
+  payload: withScheduledStarts(template.payload),
+}));
+
 export function findBuiltinTemplate(id: string): BuiltinTemplate | undefined {
   const slug = id.startsWith('builtin:') ? id.slice('builtin:'.length) : id;
   return BUILTIN_TEMPLATES.find((template) => template.slug === slug);
 }
 
+/** All tasks including subtasks (what instantiation inserts). */
 export function countTemplateTasks(payload: TemplatePayload): number {
-  const walk = (list: TemplatePayload['tasks']): number =>
-    (list ?? []).reduce((sum, task) => sum + 1 + walk(task.subtasks), 0);
-  return walk(payload.tasks);
+  const counts = countTemplateTaskTree(payload);
+  return counts.tasks + counts.subtasks;
 }

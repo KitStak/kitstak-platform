@@ -24,6 +24,7 @@ import { isEditableTarget } from '@/lib/hooks/use-hotkeys';
 import { useTaskDrawer } from '@/lib/hooks/use-task-drawer';
 import { TaskDetailView } from './task-detail';
 import { TASK_PANEL_ATTR } from './task-nav';
+import { useTaskPrefetch } from './prefetch-task';
 
 const DEFAULT_WIDTH = 760;
 const MIN_WIDTH = 480;
@@ -62,6 +63,8 @@ function storeWidth(width: number) {
 function TaskDrawerInner() {
   const router = useRouter();
   const { taskKey, closeTask, hrefFor } = useTaskDrawer();
+  // Hovering a task row or card warms its detail so the drawer paints at once.
+  useTaskPrefetch();
   // The panel only renders in the browser (Radix portal), so reading storage here is safe.
   const [width, setWidth] = useState(() =>
     typeof window === 'undefined' ? DEFAULT_WIDTH : clampWidth(readWidth()),

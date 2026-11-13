@@ -21,6 +21,7 @@ import type {
   ViewType,
 } from './constants';
 import type { AutomationAction, AutomationCondition, AutomationTrigger } from './automation-types';
+import type { CycleReport } from './cycle-math';
 import type { CustomFieldConfig } from './custom-field-types';
 import type { FormField, FormSettings } from './form-types';
 import type { OrgRole, ProjectAction } from './permissions';
@@ -404,7 +405,10 @@ export interface TemplateDTO {
   readonly color: string;
   readonly payload: TemplatePayload;
   readonly useCount: number;
+  /** Top-level tasks (counted like the project header). */
   readonly taskCount: number;
+  /** Subtasks at any depth, shown as "11 tasks + 3 subtasks". */
+  readonly subtaskCount: number;
 }
 
 export interface IntegrationLinkDTO {
@@ -549,4 +553,74 @@ export interface ReportDTO extends ReportData {
   readonly scope:
     | { readonly kind: 'portfolio'; readonly projectCount: number; readonly spaceId: string | null }
     | { readonly kind: 'project'; readonly projectId: string; readonly key: string; readonly name: string };
+}
+
+// --- Cycles and Triage (planning team; pm.cycles / pm.cycle_tasks / pm.triage_items) ---
+
+export interface CycleDTO {
+  readonly id: string;
+  readonly projectId: string;
+  readonly number: number;
+  /** Custom name; the UI falls back to "Cycle N". */
+  readonly name: string | null;
+  readonly goal: string | null;
+  readonly startDate: IsoDate;
+  readonly endDate: IsoDate;
+  readonly autoRollover: boolean;
+  readonly completedAt: IsoDateTime | null;
+  readonly state: 'upcoming' | 'current' | 'done';
+  /** Tasks in the cycle now (or when it closed). */
+  readonly taskCount: number;
+  readonly doneCount: number;
+  readonly points: number;
+  readonly donePoints: number;
+}
+
+export interface CycleDetailDTO {
+  readonly cycle: CycleDTO;
+  /** Tasks in the cycle now (top-level); for a closed cycle, the tasks it ended with. */
+  readonly tasks: readonly TaskSummary[];
+  readonly report: CycleReport;
+}
+
+export interface CycleListDTO {
+  readonly cycles: readonly CycleDTO[];
+  readonly currentId: string | null;
+  /** Open top-level tasks that are not in any cycle. */
+  readonly backlogCount: number;
+  /** taskId → cycleId for every task in an open cycle (chips in Board/List). */
+  readonly taskCycle: Readonly<Record<string, string>>;
+}
+
+export type TriageState = 'pending' | 'snoozed' | 'accepted' | 'declined' | 'merged';
+export type TriageSource = 'manual' | 'form' | 'crm' | 'wms' | 'portal' | 'api';
+
+export interface TriageItemDTO {
+  readonly id: string;
+  readonly projectId: string;
+  readonly title: string;
+  readonly description: string | null;
+  readonly priority: Priority;
+  readonly source: TriageSource;
+  /** "Bug report form", "CRM: Acme renewal". */
+  readonly sourceLabel: string | null;
+  readonly formId: string | null;
+  readonly linkType: string | null;
+  readonly linkId: string | null;
+  readonly requesterId: string | null;
+  readonly requesterName: string | null;
+  readonly requesterEmail: string | null;
+  readonly state: TriageState;
+  readonly snoozedUntil: IsoDate | null;
+  readonly declineReason: string | null;
+  /** The task it became (accepted) or was merged into. */
+  readonly task: TaskRef | null;
+  readonly decidedBy: string | null;
+  readonly decidedAt: IsoDateTime | null;
+  readonly createdAt: IsoDateTime;
+}
+
+export interface TriageQueueDTO {
+  readonly items: readonly TriageItemDTO[];
+  readonly counts: Readonly<Record<'pending' | 'snoozed' | 'decided', number>>;
 }

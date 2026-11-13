@@ -305,6 +305,42 @@ export async function submitForm(input: SubmitFormInput): Promise<{ confirmation
     orgRole: 'owner',
     actorKind: input.viewer ? 'integration' : 'system',
   };
+  if (form.settings.sendToTriage) {
+    // The answer waits in the project's Triage queue; someone accepts it into a task.
+    const { insertTriageItem } = await import('./triage');
+    await db.transaction(async (tx) => {
+      const item = await insertTriageItem(tx, ctx, {
+        projectId: project.id,
+        title: title.slice(0, 500),
+        descriptionHtml: descriptionParts.join('') || null,
+        priority: priority ?? 'none',
+        source: 'form',
+        sourceLabel: form.name,
+        formId: form.id,
+        requesterName: submitter,
+        requesterEmail: email,
+      });
+      await tx.insert(formSubmissions).values({
+        orgId: form.orgId,
+        formId: form.id,
+        taskId: null,
+        data: answers,
+        submitterName: submitter,
+        submitterEmail: email,
+        submittedBy: input.viewer?.userId ?? null,
+      });
+      await tx.update(forms).set({ submissionCount: sql`${forms.submissionCount} + 1` }).where(eq(forms.id, form.id));
+      await logActivity(tx, ctx, { verb: 'form.submitted', entityType: 'form', entityId: form.id, projectId: project.id, meta: { submitter, email, triageItemId: item.id } });
+      await notify(tx, ctx, {
+        recipients: [...(form.settings.notifyUserIds ?? []), project.ownerId],
+        kind: 'project',
+        title: `New “${form.name}” response in Triage: ${item.title}`,
+        url: routes.projectTriage(project.key),
+        projectId: project.id,
+      });
+    });
+    return { confirmation: form.settings.confirmationMessage ?? 'Thanks! Your request was sent to the team.' };
+  }
   const task = await db.transaction(async (tx) => {
     const created = await insertTask(
       tx,

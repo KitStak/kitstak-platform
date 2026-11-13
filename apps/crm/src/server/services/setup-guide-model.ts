@@ -91,7 +91,7 @@ export const SETUP_GUIDE_STEPS: readonly StepDefinition[] = [
   {
     key: 'crm_workspace',
     title: 'Create your CRM workspace',
-    description: 'Start from a template — leads, deals, contacts and accounts, wired together.',
+    description: 'Start from a template: leads, deals, contacts and accounts, wired together.',
     action: 'templates',
     minutes: 2,
   },

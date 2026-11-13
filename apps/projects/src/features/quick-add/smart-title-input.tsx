@@ -56,8 +56,10 @@ export const SmartTitleInput = forwardRef<
     readonly placeholder?: string;
     readonly invalid?: boolean;
     readonly suggestData: SuggestData;
+    /** The user picked "Create label …": that #name may become a new label. */
+    readonly onCreateLabel?: (name: string) => void;
   }
->(function SmartTitleInput({ value, onChange, tokens, onKeyDown, placeholder, invalid, suggestData }, ref) {
+>(function SmartTitleInput({ value, onChange, tokens, onKeyDown, placeholder, invalid, suggestData, onCreateLabel }, ref) {
   const textRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
   const listId = useId();
@@ -70,12 +72,15 @@ export const SmartTitleInput = forwardRef<
   const suggestions: Suggestion[] = useMemo(() => (token ? suggestFor(token, suggestData) : []), [token?.sigil, token?.partial, suggestData]); // eslint-disable-line react-hooks/exhaustive-deps
   // Already complete ("+OPS", "@me")? Then Enter should save, not re-pick the same thing.
   const word = token ? value.slice(token.start, token.end).toLowerCase() : '';
-  const complete = suggestions.some((suggestion) => suggestion.insert.toLowerCase() === word);
-  const open = Boolean(token) && suggestions.length > 0 && !complete && dismissedAt !== token?.start;
+  // A "Create label" row is never complete on its own: the new name still needs that explicit choice.
+  const complete = suggestions.some((suggestion) => !suggestion.id.startsWith('new:') && suggestion.insert.toLowerCase() === word);
+  const open = Boolean(token) && !complete && dismissedAt !== token?.start && (suggestions.length > 0 || Boolean(token?.partial));
+  const empty = open && suggestions.length === 0;
   const active = open ? Math.min(highlight, suggestions.length - 1) : -1;
 
   const choose = (suggestion: Suggestion) => {
     if (!token) return;
+    if (suggestion.id.startsWith('new:')) onCreateLabel?.(suggestion.id.slice(4).replace(/[-_]+/g, ' '));
     const next = applySuggestion(value, token, suggestion);
     pendingCaret.current = next.caret;
     onChange(next.text);
@@ -108,6 +113,10 @@ export const SmartTitleInput = forwardRef<
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (open) {
+      if (empty) {
+        onKeyDown?.(event);
+        return;
+      }
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
         const delta = event.key === 'ArrowDown' ? 1 : -1;
@@ -204,6 +213,13 @@ export const SmartTitleInput = forwardRef<
           <li role="presentation" className="px-2 pt-1 pb-1.5 text-2xs font-semibold tracking-[0.06em] text-fg-muted uppercase">
             {token.sigil === '@' ? 'Assign to' : token.sigil === '#' ? 'Add a label' : 'Put it in'}
           </li>
+          {empty ? (
+            <li role="presentation" className="px-2 py-1.5 text-sm text-fg-secondary" data-testid="quick-add-no-match">
+              {token.sigil === '@'
+                ? `No one matches “${token.partial}”. It won't be added to the task name.`
+                : `No project matches “${token.partial}”.`}
+            </li>
+          ) : null}
           {suggestions.map((suggestion, index) => {
             const Icon = suggestion.id.startsWith('new:') ? Plus : token.sigil === '@' ? AtSign : token.sigil === '#' ? Hash : FolderKanban;
             return (
@@ -225,9 +241,11 @@ export const SmartTitleInput = forwardRef<
               </li>
             );
           })}
-          <li role="presentation" className="border-t border-border-subtle px-2 pt-1.5 pb-0.5 text-2xs text-fg-muted">
-            ↑↓ to choose · Enter or Tab to pick · Esc to close
-          </li>
+          {empty ? null : (
+            <li role="presentation" className="border-t border-border-subtle px-2 pt-1.5 pb-0.5 text-2xs text-fg-muted">
+              ↑↓ to choose · Enter or Tab to pick · Esc to close
+            </li>
+          )}
         </ul>
       ) : null}
     </div>
@@ -237,9 +255,12 @@ export const SmartTitleInput = forwardRef<
 export function UnderstoodChips({
   tokens,
   onDismiss,
+  onCreateLabel,
 }: {
   readonly tokens: readonly QuickAddToken[];
   readonly onDismiss: (token: QuickAddToken) => void;
+  /** Shown on an unknown #label chip when the user may create labels. */
+  readonly onCreateLabel?: (name: string) => void;
 }) {
   return (
     <div id="quick-add-understood" aria-live="polite" className="flex min-h-7 flex-wrap items-center gap-1.5" data-testid="quick-add-chips">
@@ -271,6 +292,17 @@ export function UnderstoodChips({
                     </>
                   )}
                 </span>
+                {token.unresolved && token.kind === 'label' && token.name && onCreateLabel ? (
+                  <button
+                    type="button"
+                    onClick={() => onCreateLabel(token.name ?? '')}
+                    data-testid="quick-add-create-label"
+                    className="ml-1 inline-flex h-5 shrink-0 items-center gap-0.5 rounded-full bg-[color-mix(in_oklab,currentColor_12%,transparent)] px-2 text-2xs font-semibold hover:bg-[color-mix(in_oklab,currentColor_20%,transparent)] focus-visible:outline-2 focus-visible:outline-focus"
+                  >
+                    <Plus aria-hidden className="size-3" />
+                    Create label
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => onDismiss(token)}

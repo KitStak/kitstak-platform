@@ -39,17 +39,72 @@ const squash = (value: string) =>
     .toLowerCase()
     .replace(/[\s._-]+/g, '');
 
-/** Prefix matches on any word first, then substring matches. */
+/** True when `a` and `b` differ by at most one edit (typo tolerance: "mya" → "maya"). */
+function withinOneEdit(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+    edits += 1;
+    if (edits > 1) return false;
+    if (a.length > b.length) i += 1;
+    else if (b.length > a.length) j += 1;
+    else {
+      i += 1;
+      j += 1;
+    }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+/** Letters of `q` appear in order in `word` ("mln" → "mikelunsford"). */
+function isSubsequence(q: string, word: string): boolean {
+  let at = 0;
+  for (const char of word) if (char === q[at]) at += 1;
+  return at === q.length;
+}
+
+/**
+ * Exact word, then prefix of any word (first name, last name, initials), then substring, then
+ * fuzzy (one typo, or letters in order) so near misses still show up.
+ */
 function rank<T>(items: readonly T[], partial: string, keys: (item: T) => readonly string[], limit: number): T[] {
   const q = squash(partial);
   if (!q) return items.slice(0, limit);
   const scored: { item: T; score: number }[] = [];
   for (const item of items) {
     const words = keys(item).flatMap((key) => [key, ...key.split(/[\s._-]+/)]).map(squash).filter(Boolean);
-    const score = words.some((w) => w === q) ? 0 : words.some((w) => w.startsWith(q)) ? 1 : words.some((w) => w.includes(q)) ? 2 : -1;
+    // Fuzzy tiers look at single words only, so "maya" never matches across "Marcus Oyelaran".
+    const parts = keys(item).flatMap((key) => key.split(/[\s._-]+/)).map(squash).filter(Boolean);
+    const score = words.some((w) => w === q)
+      ? 0
+      : words.some((w) => w.startsWith(q))
+        ? 1
+        : words.some((w) => w.includes(q))
+          ? 2
+          : q.length >= 3 && parts.some((w) => withinOneEdit(q, w.slice(0, q.length + 1)) || withinOneEdit(q, w))
+            ? 3
+            : q.length >= 3 && parts.some((w) => w[0] === q[0] && isSubsequence(q, w))
+              ? 4
+              : -1;
     if (score >= 0) scored.push({ item, score });
   }
   return scored.sort((a, b) => a.score - b.score).map((entry) => entry.item).slice(0, limit);
+}
+
+/** "Jonah Okafor" → "JO". */
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0] ?? '')
+    .join('');
 }
 
 export function suggestFor(
@@ -63,7 +118,7 @@ export function suggestFor(
   limit = 6,
 ): Suggestion[] {
   if (token.sigil === '@') {
-    const people = rank(data.people, token.partial, (p) => [p.name, p.email?.split('@')[0] ?? ''], limit);
+    const people = rank(data.people, token.partial, (p) => [p.name, initials(p.name), p.email?.split('@')[0] ?? ''], limit);
     const out: Suggestion[] = people.map((p) => ({ id: p.id, label: p.name, detail: p.email ?? undefined, insert: `@${p.name.trim().replace(/\s+/g, '.')}` }));
     if (data.meId && 'me'.startsWith(squash(token.partial)) && !out.some((s) => s.id === data.meId)) {
       out.unshift({ id: data.meId, label: 'Me', detail: 'Assign to yourself', insert: '@me' });
@@ -75,7 +130,7 @@ export function suggestFor(
     const out: Suggestion[] = labels.map((l) => ({ id: l.id, label: l.name, insert: `#${l.name.trim().replace(/\s+/g, '-')}` }));
     const typed = token.partial.trim();
     if (typed && !data.labels.some((l) => squash(l.name) === squash(typed))) {
-      out.push({ id: `new:${typed}`, label: `Create “${typed.replace(/[-_]+/g, ' ')}”`, detail: 'New label', insert: `#${typed}` });
+      out.push({ id: `new:${typed}`, label: `Create label “${typed.replace(/[-_]+/g, ' ')}”`, detail: 'New', insert: `#${typed}` });
     }
     return out.slice(0, limit);
   }

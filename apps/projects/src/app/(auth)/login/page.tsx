@@ -16,5 +16,5 @@ export default async function LoginPage({ searchParams }: { readonly searchParam
   const next = typeof params.next === 'string' ? params.next : null;
   if (await getSession()) redirect(safeNextPath(next, '/'));
   const noticeKey = typeof params.notice === 'string' ? params.notice : '';
-  return <LoginForm next={next} notice={NOTICES[noticeKey] ?? null} portalUrl={appUrls().portal} />;
+  return <LoginForm next={next} notice={NOTICES[noticeKey] ?? null} portalUrl={appUrls().portal} resetUrl="/forgot-password" />;
 }

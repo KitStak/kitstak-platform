@@ -27,7 +27,7 @@ export const SERIES = {
   overdue: 'var(--danger)',
 } as const;
 
-const days = (value: number | null) => (value === null ? '—' : value < 1 ? '<1 day' : `${value} ${value === 1 ? 'day' : 'days'}`);
+const days = (value: number | null) => (value === null ? 'No data' : value < 1 ? '<1 day' : `${value} ${value === 1 ? 'day' : 'days'}`);
 
 function Kpi({
   label,
@@ -63,7 +63,7 @@ export function KpiTiles({ report }: { readonly report: ReportDTO }) {
   const delta = t.completedThisWeek - t.completedLastWeek;
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" data-testid="report-kpis">
-      <Kpi label="Open tasks" value={t.open} hint={`${t.inProgress} being worked on`} icon={<CircleDashed aria-hidden />} help="Tasks that are not done yet." />
+      <Kpi label="Open tasks" value={t.open} hint={`${t.inProgress} being worked on`} icon={<CircleDashed aria-hidden />} help="Tasks that are not done yet, the same count as the Portal tile. Subtasks count with their parent task." />
       <Kpi
         label="Done this week"
         value={t.completedThisWeek}

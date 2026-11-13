@@ -606,3 +606,16 @@ export function CheckInDialog({ goal, open, onOpenChange, onSaved }: { readonly 
     </Dialog>
   );
 }
+
+/**
+ * Plain words for a key result's value. "6 of 10" only reads right when more is better; when the
+ * target is below the start (mis-picks, dock-to-stock hours) it says "Now 11, target 8 or less"
+ * so nobody reads 11 of 8 as more than done.
+ */
+export function krValueText(kr: Pick<KeyResultDTO, 'kind' | 'unit' | 'startValue' | 'targetValue' | 'currentValue'>): { readonly text: string; readonly lowerIsBetter: boolean } {
+  const lowerIsBetter = kr.kind !== 'boolean' && kr.kind !== 'project' && kr.targetValue < kr.startValue;
+  const now = formatKrValue(kr, kr.currentValue);
+  if (kr.kind === 'boolean') return { text: now, lowerIsBetter };
+  if (lowerIsBetter) return { text: `Now ${now}, target ${formatKrValue(kr, kr.targetValue)} or less`, lowerIsBetter };
+  return { text: `${now} of ${formatKrValue(kr, kr.targetValue)}`, lowerIsBetter };
+}

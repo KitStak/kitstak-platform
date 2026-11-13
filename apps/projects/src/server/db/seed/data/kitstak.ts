@@ -63,7 +63,7 @@ export const kitstakSeed: OrgSeed = {
       ],
       updates: [
         { by: 'renata', daysAgo: 15, health: 'on_track', note: 'Cycle counts are back on schedule after the October backlog. Accuracy is at 99.2% for zone A.' },
-        { by: 'renata', daysAgo: 2, health: 'on_track', note: 'Dock door 2 install is booked for Tuesday. Dock leveler at door 3 still needs a repair date — Mike is on it.' },
+        { by: 'renata', daysAgo: 2, health: 'on_track', note: 'Dock door 2 install is booked for Tuesday. Dock leveler at door 3 still needs a repair date. Mike is on it.' },
       ],
       views: [
         { name: 'Safety board', type: 'board', config: { filters: { match: 'all', conditions: [{ field: 'label', op: 'in', value: ['__label:Safety'] }] }, swimlane: 'none' } },
@@ -121,7 +121,7 @@ export const kitstakSeed: OrgSeed = {
           ],
           c: [
             ['renata', 'Two quotes are attached. Buckeye is cheaper but their leveler is mechanical. I lean toward Midwest Dock Systems. {mike} can you approve?'],
-            ['mike', 'Go with Midwest — the hydraulic leveler is worth it for the heavy pallets. Approved.', { react: [['renata', '👍']] }],
+            ['mike', 'Go with Midwest. The hydraulic leveler is worth it for the heavy pallets. Approved.', { react: [['renata', '👍']] }],
             ['renata', 'Install is booked for Tuesday after 6pm. {jonah} we need the staging lane moved by Monday night.'],
           ],
         },
@@ -186,7 +186,7 @@ export const kitstakSeed: OrgSeed = {
           c: [
             ['jonah', 'Found it: the PO had 3 SKUs with no storage location set up, so the RF guns refused putaway. Night shift left them in staging.'],
             ['renata', 'Can we make the WMS warn us at receiving instead of at putaway? {thao} you know the settings best.'],
-            ['thao', 'Yes — there is a "missing location" check on receipt. I will turn it on for all clients tomorrow.', { reply: true }],
+            ['thao', 'Yes, there is a "missing location" check on receipt. I will turn it on for all clients tomorrow.', { reply: true }],
           ],
         },
         {
@@ -213,7 +213,7 @@ export const kitstakSeed: OrgSeed = {
           due: -12,
           labels: ['Safety', 'Equipment'],
           sub: [{ t: 'Forklift 1 (Toyota 8FGU25)' }, { t: 'Forklift 2 (Toyota 8FGU25)' }, { t: 'Reach truck (Raymond 7500)' }],
-          c: [['jonah', 'All three passed. Reach truck needs new forks before the next inspection — added a note to the maintenance log.']],
+          c: [['jonah', 'All three passed. Reach truck needs new forks before the next inspection. Added a note to the maintenance log.']],
         },
         { t: 'Swap the battery on forklift 2', s: 'Safety & facilities', st: 'Done', a: 'jonah', p: 'high', due: -1, labels: ['Equipment'], time: [['jonah', 45, 1, 'Battery swap and charge test']] },
         { t: 'Monthly fire extinguisher check', s: 'Safety & facilities', st: 'Done', a: 'renata', p: 'medium', due: -13, labels: ['Safety'] },
@@ -306,7 +306,7 @@ export const kitstakSeed: OrgSeed = {
           c: [
             ['renata', 'We have 12 of 18 confirmed. Agency B can cover 4 more if we raise the rate to $19.50/hr. {grace} does that fit the peak budget?'],
             ['mike', 'Approved for peak weeks only. Let us lock it by Monday so they can start training.', { react: [['renata', '🙏']] }],
-            ['renata', 'Agency B confirmed 4. Still looking for 2 — I asked the team for referrals.'],
+            ['renata', 'Agency B confirmed 4. Still looking for 2. I asked the team for referrals.'],
           ],
         },
         {
@@ -489,7 +489,7 @@ export const kitstakSeed: OrgSeed = {
           p: 'high',
           due: -1,
           links: [{ type: 'wms_receipt', client: 'APX' }],
-          c: [['jonah', '18 pallets received. 2 cases of navy scarves were crushed — photos are in the receipt. {diego} can you let Dana know?']],
+          c: [['jonah', '18 pallets received. 2 cases of navy scarves were crushed. Photos are in the receipt. {diego} can you let Dana know?']],
         },
         { t: 'Connect the Shopify store', s: 'Integration', st: 'Done', a: 'diego', p: 'urgent', due: -3, labels: ['Integration'] },
         {
@@ -729,7 +729,7 @@ export const kitstakSeed: OrgSeed = {
           milestone: 'Beta for 3 clients',
           cf: { 'Client impact': 'High' },
           sub: [{ t: 'Return reasons list', done: true }, { t: 'Photo upload', done: true }, { t: 'Email confirmation with the RMA number' }],
-          c: [['diego', 'PR is up. {mike} the photo upload is capped at 5 photos, 10 MB each — OK for beta?'], ['mike', 'Yes, that is plenty.', { reply: true }]],
+          c: [['diego', 'PR is up. {mike} the photo upload is capped at 5 photos, 10 MB each. OK for beta?'], ['mike', 'Yes, that is plenty.', { reply: true }]],
         },
         { t: 'Return status tracking page', d: p('After a client starts a return, they can see where it is: requested, received, inspected, refunded or restocked.'), s: 'Returns', st: 'In progress', a: 'diego', p: 'medium', pts: 5, due: 6, labels: ['Feature'], deps: ['returns'] },
         { id: 'search', t: 'Order search by PO number or customer name', s: 'Orders', st: 'QA', a: 'thao', p: 'high', pts: 3, due: 1, labels: ['Feature'], milestone: 'Beta for 3 clients' },
@@ -807,7 +807,7 @@ export const kitstakSeed: OrgSeed = {
           p: 'high',
           due: 0,
           labels: ['Case study'],
-          c: [['mike', 'Draft is ready. {evan} can you check the numbers with Elena before we publish?'], ['renata', 'The 60% is from August vs October mis-picks — I can send the report.']],
+          c: [['mike', 'Draft is ready. {evan} can you check the numbers with Elena before we publish?'], ['renata', 'The 60% is from August vs October mis-picks. I can send the report.']],
         },
         { t: 'Rewrite the pricing page in plain language', d: p('Replace the fee table with three simple examples: a small shop, a growing brand and a subscription box. Show the monthly total for each.'), s: 'Website', st: 'In progress', a: 'mike', p: 'medium', due: 5, time: [['mike', 90, 2, 'First draft']] },
         {
@@ -916,7 +916,7 @@ export const kitstakSeed: OrgSeed = {
       checkIns: [
         { by: 'renata', daysAgo: 21, health: 'on_track', note: 'Starting point for the quarter.', values: { 'On-time ship rate': 97.6, 'Mis-picks per 10,000 orders': 16 } },
         { by: 'renata', daysAgo: 7, health: 'on_track', note: 'Relabeling aisle 12 cut mis-picks noticeably.', values: { 'On-time ship rate': 98.3, 'Mis-picks per 10,000 orders': 12 } },
-        { by: 'renata', daysAgo: 1, health: 'on_track', note: 'Steady. Peak staffing is the big risk — see the PEAK project.', values: { 'On-time ship rate': 98.6, 'Mis-picks per 10,000 orders': 11 } },
+        { by: 'renata', daysAgo: 1, health: 'on_track', note: 'Steady. Peak staffing is the big risk. See the PEAK project.', values: { 'On-time ship rate': 98.6, 'Mis-picks per 10,000 orders': 11 } },
       ],
     },
     {

@@ -30,7 +30,13 @@ import { requireOrg, requireProject } from './access';
 import { logActivity } from './activity';
 import { getProjectDetail, insertProject, type CreateProjectInput } from './projects';
 import { insertTask } from './tasks';
-import { BUILTIN_TEMPLATES, countTemplateTasks, findBuiltinTemplate } from './templates-builtin';
+import { BUILTIN_TEMPLATES, findBuiltinTemplate } from './templates-builtin';
+import { countTemplateTaskTree } from '@/lib/template-math';
+
+function templateCounts(payload: TemplatePayload): { taskCount: number; subtaskCount: number } {
+  const counts = countTemplateTaskTree(payload);
+  return { taskCount: counts.tasks, subtaskCount: counts.subtasks };
+}
 
 function orgTemplateDTO(row: Template): TemplateDTO {
   return {
@@ -43,7 +49,7 @@ function orgTemplateDTO(row: Template): TemplateDTO {
     color: row.color,
     payload: row.payload,
     useCount: row.useCount,
-    taskCount: countTemplateTasks(row.payload),
+    ...templateCounts(row.payload),
   };
 }
 
@@ -63,7 +69,7 @@ export async function listTemplates(ctx: DomainContext): Promise<TemplateDTO[]> 
     color: template.color,
     payload: template.payload,
     useCount: 0,
-    taskCount: countTemplateTasks(template.payload),
+    ...templateCounts(template.payload),
   }));
   return [...rows.map(orgTemplateDTO), ...builtins];
 }

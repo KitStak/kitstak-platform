@@ -46,6 +46,8 @@ export interface AvatarProps {
   readonly className?: string;
   /** Cap the initials (1 for very small, overlapping stacks). Default 2. */
   readonly maxInitials?: 1 | 2;
+  /** The name is already written next to it: hide the avatar from screen readers (no tooltip). */
+  readonly decorative?: boolean;
 }
 
 export function Avatar({
@@ -57,9 +59,10 @@ export function Avatar({
   showTooltip = false,
   className,
   maxInitials = 2,
+  decorative = false,
 }: AvatarProps) {
   const avatar = (
-    <span className={cn('relative inline-flex shrink-0', className)}>
+    <span aria-hidden={decorative || undefined} className={cn('relative inline-flex shrink-0', className)}>
       <AvatarPrimitive.Root
         className={cn(
           // Neutral initials: people are told apart by their initials, not by a colour.
@@ -73,7 +76,7 @@ export function Avatar({
           {initialsFor(name).slice(0, maxInitials)}
         </AvatarPrimitive.Fallback>
       </AvatarPrimitive.Root>
-      <span className="sr-only">{name}</span>
+      {decorative ? null : <span className="sr-only">{name}</span>}
       {presence ? (
         <span
           aria-label={presence}
@@ -86,7 +89,7 @@ export function Avatar({
       ) : null}
     </span>
   );
-  return showTooltip ? (
+  return showTooltip && !decorative ? (
     <Tooltip content={name} side="top">
       <span tabIndex={0} className="inline-flex rounded-full">
         {avatar}

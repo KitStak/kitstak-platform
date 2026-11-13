@@ -8,7 +8,7 @@ import { memo, useState, type KeyboardEvent } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { CalendarPlus, ChevronDown, ChevronRight, GripVertical, MessageSquare, MoreHorizontal, Pencil, Plus, Tag } from 'lucide-react';
-import { Checkbox, ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, Tooltip, cn } from '@/components/ui';
+import { Checkbox, ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, Tooltip, cn, toast } from '@/components/ui';
 import { DueDate, LabelPill, PersonAvatar, PriorityIcon, StatusIcon } from '@/components/pm';
 import { PRIORITY_LABELS } from '@/lib/constants';
 import { usePeopleMap } from '@/lib/hooks/use-people';
@@ -62,9 +62,16 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id, data: { type: 'row', taskId: task.id, group }, disabled: !draggable || editing });
   const done = task.statusCategory === 'done' || task.statusCategory === 'cancelled';
   const assignee = task.assigneeId ? people.get(task.assigneeId) : undefined;
-  const toggleDone = () => {
+  const toggleDone = async () => {
     const target = done ? props.reopenStatusId : props.doneStatusId;
-    if (target) void ops.updateTask(task.id, { statusId: target });
+    if (!target) return;
+    const previous = task.statusId;
+    const saved = await ops.updateTask(task.id, { statusId: target });
+    if (!saved) return;
+    toast.undo(done ? `Reopened ${task.key}` : `Marked ${task.key} done`, {
+      // updateTask toasts its own failure, so Undo doesn't add a second error.
+      onUndo: () => void ops.updateTask(task.id, { statusId: previous }),
+    });
   };
 
   return (
@@ -155,7 +162,7 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
             )}
             <Cell>
               <Tooltip content={done ? 'Reopen' : 'Mark done'} side="top">
-                <button type="button" disabled={!canEdit} onClick={toggleDone} aria-label={done ? `Reopen ${task.key}` : `Mark ${task.key} done`} className="inline-flex size-6 items-center justify-center rounded-full outline-none hover:bg-pressed focus-visible:outline-2 focus-visible:outline-focus disabled:pointer-events-none" data-testid="row-done">
+                <button type="button" disabled={!canEdit} onClick={() => void toggleDone()} aria-label={done ? `Reopen ${task.key}` : `Mark ${task.key} done`} className="inline-flex size-6 items-center justify-center rounded-full outline-none hover:bg-pressed focus-visible:outline-2 focus-visible:outline-focus disabled:pointer-events-none" data-testid="row-done">
                   <StatusIcon category={task.statusCategory} color={status?.color} size={16} />
                 </button>
               </Tooltip>
@@ -171,7 +178,7 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
                     event.stopPropagation();
                     setEditing(true);
                   }}
-                  className={cn('min-w-0 truncate', done ? 'text-fg-muted line-through decoration-1' : 'text-fg')}
+                  className={cn('min-w-0 shrink truncate', done ? 'text-fg-muted' : 'text-fg')}
                   title={task.title}
                 >
                   {task.title}
@@ -183,6 +190,8 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
                     </button>
                   </Cell>
                 ) : null}
+                {/* Meta gives way before the title does: it shrinks 100x faster and clips. */}
+                <span className="flex min-w-0 shrink-[100] items-center gap-1.5 overflow-hidden">
                 {task.subtaskCount > 0 ? (
                   <span className="shrink-0 rounded-full bg-muted px-1.5 text-2xs leading-5 text-fg-secondary tabular-nums" title={`${task.subtaskDoneCount} of ${task.subtaskCount} subtasks done`}>
                     {task.subtaskDoneCount}/{task.subtaskCount}
@@ -194,7 +203,8 @@ export const ListRow = memo(function ListRow(props: ListRowProps) {
                     {task.commentCount}
                   </span>
                 ) : null}
-                <LinkChips links={links} max={1} className="max-w-48 shrink-0 max-md:hidden" />
+                <LinkChips links={links} max={1} variant="pill" className="max-w-40 shrink-0 max-md:hidden" />
+                </span>
                 {canEdit && depth === 0 ? (
                   <Cell className="max-md:hidden">
                     <Tooltip content="Add a subtask" side="top">

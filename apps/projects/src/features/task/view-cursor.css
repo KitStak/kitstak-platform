@@ -1,0 +1,10 @@
+/* View cursor (j/k in List and Board): a 2px brand ring that stays while a picker is open. */
+[data-view-cursor] {
+  box-shadow: inset 0 0 0 2px var(--focus-ring) !important;
+  position: relative;
+  z-index: 1;
+}
+[data-testid='board-card'][data-view-cursor] {
+  box-shadow: 0 0 0 2px var(--focus-ring) !important;
+  border-color: transparent;
+}

@@ -14,6 +14,8 @@ import type {
   AutomationRunDTO,
   CommentDTO,
   CustomFieldDTO,
+  CycleDetailDTO,
+  CycleListDTO,
   DashboardDTO,
   FormDTO,
   GoalCheckInDTO,
@@ -33,6 +35,7 @@ import type {
   TaskSummary,
   TemplateDTO,
   TimeEntryDTO,
+  TriageQueueDTO,
 } from '@/lib/types';
 import type { OrgRole } from '@/lib/permissions';
 
@@ -282,3 +285,14 @@ export const useReport = (scope: { project?: string; space?: string | null; week
     placeholderData: (previous) => previous,
     ...opts,
   });
+
+// --- Planning team: cycles and triage -------------------------------------------------------
+
+export const useCycles = (key: string, opts?: Opts<CycleListDTO>) =>
+  useQuery({ queryKey: qk.cycles(key), queryFn: () => apiGet<CycleListDTO>(apiPath(`projects/${encodeURIComponent(key)}/cycles`)), ...opts });
+
+export const useCycle = (id: string | null, opts?: Opts<CycleDetailDTO>) =>
+  useQuery({ queryKey: qk.cycle(id ?? ''), queryFn: () => apiGet<CycleDetailDTO>(apiPath(`cycles/${id}`)), enabled: Boolean(id), ...opts });
+
+export const useTriage = (key: string, filter: 'open' | 'snoozed' | 'decided' = 'open', opts?: Opts<TriageQueueDTO>) =>
+  useQuery({ queryKey: qk.triage(key, filter), queryFn: () => apiGet<TriageQueueDTO>(apiPath(`projects/${encodeURIComponent(key)}/triage`, { filter })), ...opts });

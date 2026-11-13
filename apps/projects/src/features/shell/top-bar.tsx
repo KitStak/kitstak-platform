@@ -23,6 +23,7 @@ import { Logo, ProjectsMark } from './logo';
 import { OrgSwitcher } from './org-switcher';
 import { useShell } from './shell-context';
 import { useOnboardingStore } from '@/features/onboarding/store';
+import { RunningTimerPill } from '@/features/task/running-timer-pill';
 import { useShellStore } from './store';
 import { ThemeToggle } from './theme-toggle';
 import { UserMenu } from './user-menu';
@@ -95,6 +96,7 @@ export function TopBar() {
       <OrgSwitcher />
 
       <div className="ml-auto flex min-w-0 items-center gap-1.5">
+        <RunningTimerPill />
         <Tooltip
           content={
             <span className="flex items-center gap-1.5">
@@ -114,7 +116,7 @@ export function TopBar() {
           >
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <Search aria-hidden className="size-3.5 shrink-0" />
-              <span className="hidden min-w-0 flex-1 truncate text-left lg:inline">Search tasks and projects…</span>
+              <span className="hidden min-w-0 flex-1 truncate text-left lg:inline">Search</span>
               <span className="hidden items-center gap-0.5 lg:inline-flex">
                 <Kbd>{mod}</Kbd>
                 <Kbd>K</Kbd>

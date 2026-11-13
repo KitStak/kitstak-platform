@@ -3,7 +3,7 @@
  *
  * Rich demo data for the two seeded orgs (KitStak, Northwind Robotics), written through the
  * domain layer and then backdated (see builder.ts / backdate.ts). Idempotent: each run first
- * wipes the `pm` rows of the orgs it seeds — nothing in other orgs or other schemas is touched.
+ * wipes the `pm` rows of the orgs it seeds. Nothing in other orgs or other schemas is touched.
  *
  * Runs with `tsx --conditions=react-server` so the `server-only` guard resolves to its no-op build.
  */
@@ -62,7 +62,7 @@ async function report(spec: OrgSeed, stats: OrgSeedStats): Promise<void> {
   process.stdout.write(`\n${spec.slug}\n`);
   process.stdout.write(`  ${COUNTED.map((table) => `${table}=${row[table] ?? 0}`).join('  ')}\n`);
   process.stdout.write(`  links by type: ${linkTypes.rows.map((r) => `${r.target_type}=${r.n}`).join('  ') || 'none'}\n`);
-  if (stats.warnings.length) process.stdout.write(`  ${stats.warnings.length} warning(s) — see above\n`);
+  if (stats.warnings.length) process.stdout.write(`  ${stats.warnings.length} warning(s), see above\n`);
 }
 
 async function main(): Promise<void> {

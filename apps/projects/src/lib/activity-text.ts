@@ -90,10 +90,11 @@ export function describeActivity(event: ActivityDTO, lookups: ActivityLookups = 
       const minutes = Number(record(event.after).minutes ?? 0);
       const h = Math.floor(minutes / 60);
       const m = minutes % 60;
-      return `logged ${h ? `${h}h ` : ''}${m}m`;
+      return `logged ${[h ? `${h}h` : '', m || !h ? `${m}m` : ''].filter(Boolean).join(' ')}`;
     }
     case 'automation.ran':
-      return `ran the automation “${str(meta.name) ?? 'Automation'}”`;
+      // The actor already reads "Automation", so don't repeat the word.
+      return `ran the rule “${str(meta.name) ?? 'Untitled'}”`;
     case 'project.created':
       return 'created this project';
     case 'project.updated':
@@ -155,7 +156,67 @@ export function describeActivity(event: ActivityDTO, lookups: ActivityLookups = 
       return `reached the milestone “${str(record(event.after).name) ?? ''}”`;
     case 'milestone.deleted':
       return `removed the milestone “${str(record(event.before).name) ?? ''}”`;
+    case 'cycle.created':
+      return `planned ${str(record(event.after).name) ?? 'a cycle'}`;
+    case 'cycle.updated':
+      return `updated ${str(record(event.after).name) ?? 'a cycle'}`;
+    case 'cycle.completed': {
+      const moved = Number(meta.rolledOver ?? 0);
+      return `closed ${str(record(event.after).name) ?? 'a cycle'}${moved ? ` and moved ${moved} unfinished ${moved === 1 ? 'task' : 'tasks'} on` : ''}`;
+    }
+    case 'cycle.deleted':
+      return `removed ${str(record(event.before).name) ?? 'a cycle'}`;
+    case 'task.cycle_changed':
+      return str(record(event.after).name) ? `added this to ${str(record(event.after).name)}` : `took this out of ${str(record(event.before).name) ?? 'its cycle'}`;
+    case 'triage.added':
+      return `sent in the request “${str(record(event.after).title) ?? ''}”`;
+    case 'triage.accepted':
+      return 'accepted this from Triage';
+    case 'triage.merged':
+      return `merged the request “${str(record(event.before).title) ?? ''}” into this`;
+    case 'triage.declined':
+      return `declined the request “${str(record(event.before).title) ?? ''}”`;
     default:
       return event.verb.replace(/[._]/g, ' ');
   }
+}
+
+export interface ActivityParts {
+  /** Words before the task link ("created", "moved", "commented on"). */
+  readonly before: string;
+  /** Words after it ("to Done"); empty when the sentence ends with the task. */
+  readonly after: string;
+}
+
+/**
+ * Project-scope wording, where the task is named by a link: "created OPS-14 Write the…",
+ * "moved OPS-14 … to Done", "commented on OPS-14 …". Slot the link between `before` and
+ * `after`. Automation rows (actor shown as "Automation") read "ran “Rule” on OPS-14 …".
+ */
+export function describeActivityParts(event: ActivityDTO, lookups: ActivityLookups = {}): ActivityParts {
+  const meta = event.meta ?? {};
+  if (event.verb === 'automation.ran') return { before: `ran “${str(meta.name) ?? 'a rule'}” on`, after: '' };
+  if (event.verb === 'task.created') {
+    if (meta.formName) return { before: 'sent in', after: `with the form “${String(meta.formName)}”` };
+    if (meta.recurringFrom) return { before: 'created the next repeat of', after: '' };
+    if (meta.duplicatedFrom) return { before: 'made', after: 'as a copy' };
+    return { before: 'created', after: '' };
+  }
+  if (event.verb === 'task.restored') return { before: 'restored', after: '' };
+  const text = describeActivity(event, lookups);
+  const match = /\bthis( task)?\b/.exec(text);
+  if (match) {
+    return { before: text.slice(0, match.index).trimEnd(), after: text.slice(match.index + match[0].length).trimStart() };
+  }
+  return { before: `${text} on`, after: '' };
+}
+
+/** "added the subtask OPS-15 Order labels": a subtask's creation, shown in its parent's history. */
+export function describeSubtaskAdded(event: ActivityDTO, projectKey: string): string | null {
+  if (event.verb !== 'task.created') return null;
+  const after = record(event.after);
+  const number = typeof after.number === 'number' ? after.number : null;
+  const title = str(after.title);
+  const key = number !== null ? `${projectKey}-${number}` : null;
+  return `added the subtask ${[key, title].filter(Boolean).join(' ') || 'a subtask'}`;
 }

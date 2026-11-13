@@ -38,6 +38,7 @@ import { SectionHeading } from './property-row';
 import { useTaskContext } from './task-context';
 import { formatClock, parseDuration } from './task-utils';
 import { LocalTime } from './local-time';
+import { useTimerTask } from './running-timer-pill';
 
 function useNow(active: boolean): number {
   const [now, setNow] = useState(() => Date.now());
@@ -204,7 +205,7 @@ function EntryRow({ entry, onDelete }: { readonly entry: TimeEntryDTO; readonly 
     : (entry.durationMinutes ?? 0);
   return (
     <li className="group/time flex min-h-9 items-center gap-2 rounded-md px-1.5 py-1 hover:bg-hover">
-      <PersonAvatar userId={entry.userId} size="xs" />
+      <PersonAvatar userId={entry.userId} size="xs" decorative />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm text-fg">
           <span className="font-medium">{people.get(entry.userId)?.name ?? 'Former member'}</span>
@@ -252,7 +253,7 @@ function EntryRow({ entry, onDelete }: { readonly entry: TimeEntryDTO; readonly 
 }
 
 export function TimeSection() {
-  const { task, canLogTime, refresh, live } = useTaskContext();
+  const { task, canLogTime, refresh, live, openTask } = useTaskContext();
   const { user } = useShell();
   const queryClient = useQueryClient();
   const entries = useTaskTime(task.id, { enabled: live });
@@ -261,6 +262,7 @@ export function TimeSection() {
   const [showAll, setShowAll] = useState(false);
   const mine = task.runningTimer ?? (running.data && running.data.taskId === task.id ? running.data : null);
   const elsewhere = running.data && running.data.taskId !== task.id ? running.data : null;
+  const elsewhereTask = useTimerTask(elsewhere);
   const now = useNow(Boolean(mine));
   const elapsedMs = mine ? now - new Date(mine.startedAt).getTime() : 0;
   const runningMinutes = mine ? Math.floor(elapsedMs / 60000) : 0;
@@ -288,7 +290,7 @@ export function TimeSection() {
       const stopped = result.data as TimeEntryDTO | null;
       toast.success(`Logged ${formatMinutes(stopped?.durationMinutes ?? runningMinutes)} on ${task.key}`);
     } else if (elsewhere) {
-      toast.info('Timer moved here', 'We stopped and saved the timer on your other task.');
+      toast.info('Timer moved here', `We stopped and saved the timer on ${elsewhereTask?.key ?? 'your other task'}.`);
     }
     invalidate();
   };
@@ -388,7 +390,20 @@ export function TimeSection() {
       {elsewhere && canLogTime ? (
         <p className="mt-1.5 text-xs text-fg-muted">
           <Timer aria-hidden className="mr-1 inline size-3.5 align-[-2px]" />
-          Your timer is running on another task. Starting here will stop and save it.
+          Your timer is running on{' '}
+          {elsewhereTask ? (
+            <button
+              type="button"
+              onClick={() => openTask(elsewhereTask.key)}
+              className="font-medium text-fg-link hover:underline focus-visible:outline-2 focus-visible:outline-focus"
+              data-testid="task-timer-elsewhere"
+            >
+              {elsewhereTask.key} {elsewhereTask.title}
+            </button>
+          ) : (
+            'another task'
+          )}
+          . Starting here will stop and save it.
         </p>
       ) : null}
       {entries.isLoading ? (

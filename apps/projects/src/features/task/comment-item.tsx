@@ -206,7 +206,7 @@ export function CommentItem({
       )}
       data-testid="comment-item"
     >
-      <PersonAvatar userId={comment.authorId} size="sm" className="mt-0.5" />
+      <PersonAvatar userId={comment.authorId} size="sm" className="mt-0.5" decorative />
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-baseline gap-x-1.5 text-xs text-fg-muted">
           <span className="text-sm font-semibold text-fg">

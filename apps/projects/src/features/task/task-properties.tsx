@@ -4,7 +4,7 @@
  * labels, milestone and every custom field. Each value is a ghost button that opens the same
  * pickers the board/list/table use; edits are optimistic through the task context.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   CalendarClock,
@@ -80,6 +80,8 @@ function EstimateEditor() {
   const [points, setPoints] = useState('');
   const [time, setTime] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
+  const timeRef = useRef<HTMLInputElement>(null);
   const parts = [
     task.estimatePoints !== null
       ? `${task.estimatePoints} ${task.estimatePoints === 1 ? 'point' : 'points'}`
@@ -114,6 +116,7 @@ function EstimateEditor() {
           setPoints(task.estimatePoints === null ? '' : String(task.estimatePoints));
           setTime(task.estimateMinutes === null ? '' : formatMinutes(task.estimateMinutes));
           setError(null);
+          setHint(null);
         }
       }}
     >
@@ -141,12 +144,31 @@ function EstimateEditor() {
             <input
               id="task-estimate-points"
               autoFocus
+              onFocus={(event) => event.currentTarget.select()}
               inputMode="numeric"
               value={points}
               onChange={(event) => {
-                setPoints(event.target.value.replace(/[^0-9]/g, ''));
+                const raw = event.target.value;
                 setError(null);
+                setHint(null);
+                if (/^\s*\d+(\.\d+)?\s*(h|m|:)/i.test(raw)) {
+                  // "2h" is a time, not 2 points: move it to the time box and keep typing there.
+                  setPoints(task.estimatePoints === null ? '' : String(task.estimatePoints));
+                  setTime(raw.trim());
+                  setHint(`Moved “${raw.trim()}” to Time it should take.`);
+                  requestAnimationFrame(() => {
+                    const input = timeRef.current;
+                    if (!input) return;
+                    input.focus();
+                    input.setSelectionRange(input.value.length, input.value.length);
+                  });
+                  return;
+                }
+                const digits = raw.replace(/[^0-9]/g, '');
+                if (digits !== raw) setError('Story points are whole numbers, like 3. Put hours in the box below.');
+                setPoints(digits);
               }}
+              aria-invalid={error ? true : undefined}
               placeholder="e.g. 3"
               className="h-8 rounded-sm border border-border-input bg-panel px-2.5 text-sm text-fg outline-none placeholder:text-fg-placeholder focus:border-primary focus:shadow-[0_0_0_3px_var(--focus-ring-soft)]"
             />
@@ -157,6 +179,7 @@ function EstimateEditor() {
             </label>
             <input
               id="task-estimate-time"
+              ref={timeRef}
               value={time}
               onChange={(event) => {
                 setTime(event.target.value);
@@ -171,7 +194,7 @@ function EstimateEditor() {
               {error}
             </p>
           ) : (
-            <p className="text-xs text-fg-muted">Leave a box empty to clear it.</p>
+            <p className="text-xs text-fg-muted" aria-live="polite">{hint ?? 'Leave a box empty to clear it.'}</p>
           )}
           <div className="flex justify-end gap-1.5">
             <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>

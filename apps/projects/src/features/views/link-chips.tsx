@@ -12,6 +12,11 @@ import type { IntegrationLinkDTO } from '@/lib/types';
 
 const CRM_TYPES: ReadonlySet<IntegrationTargetType> = new Set(['crm_item', 'crm_account', 'core_customer']);
 
+/** Record titles cached from sibling apps may use a long dash ("Acme \u2014 Plan"); show "Acme · Plan". */
+export function cleanTitle(title: string): string {
+  return title.replace(/\s*\u2014\s*/g, ' · ');
+}
+
 export function isCrmLink(type: IntegrationTargetType): boolean {
   return CRM_TYPES.has(type);
 }
@@ -48,10 +53,24 @@ function WmsGlyph() {
   );
 }
 
-export function LinkChip({ link, compact = false }: { readonly link: IntegrationLinkDTO; readonly compact?: boolean }) {
+/** Short reference for a pill: the record code before " · " (PO002240), else the title cut to 16 letters. */
+export function linkRef(title: string): string {
+  const head = title.split(' · ')[0]?.trim() || title;
+  return head.length > 16 ? `${head.slice(0, 15).trimEnd()}…` : head;
+}
+
+/**
+ * `full` shows title and status, `ref` the short record code and status (board cards), `pill` the
+ * app mark with a status dot (list rows, where the task title must win the space), `compact` the
+ * app mark alone. The tooltip always carries the full record title and status.
+ */
+export type LinkChipVariant = 'full' | 'ref' | 'pill' | 'compact';
+
+export function LinkChip({ link, compact = false, variant }: { readonly link: IntegrationLinkDTO; readonly compact?: boolean; readonly variant?: LinkChipVariant }) {
+  const mode: LinkChipVariant = variant ?? (compact ? 'compact' : 'full');
   const crm = isCrmLink(link.targetType);
   const kind = INTEGRATION_TARGET_LABELS[link.targetType];
-  const title = link.title ?? kind;
+  const title = cleanTitle(link.title ?? kind);
   const tooltip = `${kind}: ${title}${link.status ? ` · ${link.status}` : ''}${link.url ? ' (opens in a new tab)' : ''}`;
   const className = cn(
     'inline-flex h-5 max-w-full min-w-0 shrink items-center gap-1 rounded-full border px-1.5 text-2xs font-medium',
@@ -60,8 +79,10 @@ export function LinkChip({ link, compact = false }: { readonly link: Integration
   const body = (
     <>
       <span className={cn('inline-flex shrink-0', crm ? 'text-[var(--label-blue)]' : 'text-[var(--label-teal)]')}>{crm ? <CrmGlyph /> : <WmsGlyph />}</span>
-      {compact ? null : <span className="truncate">{title}</span>}
-      {link.status && !compact ? <span className="shrink-0 text-fg-muted">· {link.status}</span> : null}
+      {mode === 'full' ? <span className="truncate">{title}</span> : null}
+      {mode === 'ref' ? <span className="truncate font-mono">{linkRef(title)}</span> : null}
+      {link.status && (mode === 'full' || mode === 'ref') ? <span className="min-w-0 truncate text-fg-muted">· {link.status}</span> : null}
+      {link.status && mode === 'pill' ? <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', crm ? 'bg-[var(--label-blue)]' : 'bg-[var(--label-teal)]')} /> : null}
     </>
   );
   return (
@@ -87,16 +108,22 @@ export function LinkChip({ link, compact = false }: { readonly link: Integration
   );
 }
 
-export function LinkChips({ links, max = 2, compact = false, wrap = false, className }: { readonly links: readonly IntegrationLinkDTO[] | undefined; readonly max?: number; readonly compact?: boolean; readonly wrap?: boolean; readonly className?: string }) {
+export function LinkChips({ links, max = 2, compact = false, wrap = false, variant, className }: { readonly links: readonly IntegrationLinkDTO[] | undefined; readonly max?: number; readonly compact?: boolean; readonly wrap?: boolean; readonly variant?: LinkChipVariant; readonly className?: string }) {
   if (!links || links.length === 0) return null;
   const shown = links.slice(0, max);
   const more = links.length - shown.length;
   return (
     <span className={cn('flex min-w-0 items-center gap-1', wrap && 'flex-wrap', className)}>
       {shown.map((link) => (
-        <LinkChip key={link.id} link={link} compact={compact} />
+        <LinkChip key={link.id} link={link} compact={compact} variant={variant} />
       ))}
-      {more > 0 ? <span className="shrink-0 text-2xs text-fg-muted">+{more}</span> : null}
+      {more > 0 ? (
+        <Tooltip content={links.slice(max).map((link) => `${INTEGRATION_TARGET_LABELS[link.targetType]}: ${cleanTitle(link.title ?? '')}${link.status ? ` · ${link.status}` : ''}`).join(', ')} side="top">
+          <span tabIndex={0} className="shrink-0 rounded-full px-1 text-2xs whitespace-nowrap text-fg-muted outline-none focus-visible:outline-2 focus-visible:outline-focus">
+            +{more} {more === 1 ? 'link' : 'links'}
+          </span>
+        </Tooltip>
+      ) : null}
     </span>
   );
 }

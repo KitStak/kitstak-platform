@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { Skeleton, ToggleGroup, toast } from '@/components/ui';
 import { PersonAvatar } from '@/components/pm';
-import { describeActivity } from '@/lib/activity-text';
+import { describeActivity, describeSubtaskAdded } from '@/lib/activity-text';
 import { formatRelative } from '@/lib/dates';
 import { useTaskActivity, useTaskComments } from '@/lib/hooks/use-data';
 import { usePeopleMap } from '@/lib/hooks/use-people';
@@ -91,7 +91,7 @@ function subscribeFilter(listener: () => void) {
 }
 
 function HistoryLine({ event }: { readonly event: ActivityDTO }) {
-  const { project, statusById } = useTaskContext();
+  const { task, project, statusById, openTask } = useTaskContext();
   const people = usePeopleMap();
   const actor =
     event.actorKind === 'automation'
@@ -99,7 +99,10 @@ function HistoryLine({ event }: { readonly event: ActivityDTO }) {
       : event.actorId
         ? (people.get(event.actorId)?.name ?? 'Former member')
         : 'KitStak';
-  const text = describeActivity(event, {
+  // A subtask's "created" event, listed in its parent's history.
+  const subtask = event.taskId && event.taskId !== task.id ? describeSubtaskAdded(event, project.key) : null;
+  const subtaskNumber = (event.after as { number?: unknown } | null)?.number;
+  const text = subtask ?? describeActivity(event, {
     statusName: (id) => statusById.get(id)?.name,
     personName: (id) => people.get(id)?.name,
     labelName: (id) => project.labels.find((label) => label.id === id)?.name,
@@ -111,7 +114,18 @@ function HistoryLine({ event }: { readonly event: ActivityDTO }) {
         {createElement(verbIcon(event), { 'aria-hidden': true, className: 'size-3' })}
       </span>
       <p className="min-w-0 flex-1 pt-0.5 text-xs leading-5 text-fg-secondary">
-        <span className="font-medium text-fg">{actor}</span> {text}{' '}
+        <span className="font-medium text-fg">{actor}</span>{' '}
+        {subtask && typeof subtaskNumber === 'number' ? (
+          <button
+            type="button"
+            onClick={() => openTask(`${project.key}-${subtaskNumber}`)}
+            className="rounded-xs text-left hover:text-fg hover:underline focus-visible:outline-2 focus-visible:outline-focus"
+          >
+            {text}
+          </button>
+        ) : (
+          text
+        )}{' '}
         <LocalTime iso={event.createdAt} className="text-fg-muted">
           · {formatRelative(event.createdAt)}
         </LocalTime>

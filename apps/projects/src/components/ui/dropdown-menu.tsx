@@ -60,7 +60,7 @@ export function MenuItemBody({
           </span>
         ) : null}
       </span>
-      {shortcut ? <span className="ml-4 shrink-0 text-xs tracking-wide text-fg-muted">{shortcut}</span> : null}
+      {shortcut ? <span className="ml-4 shrink-0 text-xs tracking-wide text-fg-muted pointer-coarse:hidden">{shortcut}</span> : null}
     </>
   );
 }

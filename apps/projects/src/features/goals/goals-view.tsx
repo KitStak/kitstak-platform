@@ -10,6 +10,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  ArrowDownRight,
   ChevronDown,
   CornerDownRight,
   FolderKanban,
@@ -42,7 +43,6 @@ import {
   Skeleton,
   Tooltip,
   cn,
-  toLabelColor,
   toast,
 } from '@/components/ui';
 import { DueDate, EntityIcon, PersonAvatar } from '@/components/pm';
@@ -58,7 +58,7 @@ import { deleteGoalAction, deleteKeyResultAction, linkGoalProjectAction, restore
 import { useShell } from '@/features/shell/shell-context';
 import { ProgressRing } from '@/features/dashboards/charts';
 import { LocalTime } from '@/features/task/local-time';
-import { CheckInDialog, GOAL_HEALTH_COLOR, GOAL_TONE, GoalDialog, KeyResultDialog, formatKrValue } from './goal-dialogs';
+import { CheckInDialog, GOAL_HEALTH_COLOR, GOAL_TONE, GoalDialog, KeyResultDialog, formatKrValue, krValueText } from './goal-dialogs';
 
 type DialogState =
   | { kind: 'goal'; goal: GoalDTO | null; parentId?: string | null }
@@ -69,7 +69,8 @@ type DialogState =
 const MODE_TEXT = { key_results: 'from key results', projects: 'from linked projects', manual: 'set by hand' } as const;
 
 function ringTone(health: GoalHealth) {
-  return health === 'off_track' || health === 'missed' ? 'danger' : health === 'at_risk' ? 'warning' : health === 'achieved' ? 'success' : 'primary';
+  // Red only means trouble: on-track progress is green, not brand red.
+  return health === 'off_track' || health === 'missed' ? 'danger' : health === 'at_risk' ? 'warning' : 'success';
 }
 
 function GoalHealthBadge({ health }: { readonly health: GoalHealth }) {
@@ -134,9 +135,9 @@ function KeyResultRow({
       <div className="order-3 col-span-2 flex items-center gap-2 sm:order-none sm:col-span-1 sm:justify-end">
         {kr.kind === 'project' ? (
           project ? (
-            <Link href={routes.project(project.key)} className="inline-flex min-w-0 items-center gap-1.5 truncate text-xs text-fg-link hover:underline">
+            <Link href={routes.project(project.key)} title={`Open ${project.name}`} aria-label={`Open ${project.name}`} className="inline-flex min-w-0 items-center gap-1.5 truncate text-xs text-fg-link hover:underline">
               <EntityIcon icon={project.icon} color={project.color} size={16} />
-              <span className="truncate">{project.name}</span>
+              <span className="truncate">{kr.name.trim().toLowerCase() === project.name.trim().toLowerCase() ? `${project.key} · ${project.progress.done} of ${project.progress.total} tasks done` : project.name}</span>
             </Link>
           ) : (
             <span className="text-xs text-fg-muted">Project not available</span>
@@ -176,8 +177,22 @@ function KeyResultRow({
               className="rounded-sm px-1 text-xs text-fg-secondary tabular-nums outline-none hover:bg-hover hover:text-fg focus-visible:outline-2 focus-visible:outline-focus disabled:hover:bg-transparent"
               data-testid="kr-value"
             >
-              <strong className="font-semibold text-fg">{formatKrValue(kr, kr.currentValue)}</strong>
-              {kr.kind !== 'boolean' ? <> of {formatKrValue(kr, kr.targetValue)}</> : null}
+              {(() => {
+                const { lowerIsBetter } = krValueText(kr);
+                if (kr.kind === 'boolean') return <strong className="font-semibold text-fg">{formatKrValue(kr, kr.currentValue)}</strong>;
+                return lowerIsBetter ? (
+                  <span className="inline-flex items-center gap-1" title={`Lower is better. Started at ${formatKrValue(kr, kr.startValue)}.`}>
+                    <ArrowDownRight aria-label="Lower is better" className="size-3 text-fg-muted" />
+                    <span>
+                      Now <strong className="font-semibold text-fg">{formatKrValue(kr, kr.currentValue)}</strong>, target {formatKrValue(kr, kr.targetValue)} or less
+                    </span>
+                  </span>
+                ) : (
+                  <>
+                    <strong className="font-semibold text-fg">{formatKrValue(kr, kr.currentValue)}</strong> of {formatKrValue(kr, kr.targetValue)}
+                  </>
+                );
+              })()}
             </button>
           </Tooltip>
         )}
@@ -231,7 +246,6 @@ function GoalCard({
   const [open, setOpen] = useState(depth === 0);
   const children = all.filter((g) => g.parentGoalId === goal.id);
   const linked = goal.projectIds.map((id) => projects.get(id)).filter((p): p is ProjectSummary => Boolean(p));
-  const color = toLabelColor(goal.color);
   const detailCount = goal.keyResults.length + linked.length + children.length;
 
   const unlink = async (projectId: string) => {
@@ -257,7 +271,7 @@ function GoalCard({
                 className="min-w-0 truncate rounded-sm text-left text-base font-semibold text-fg outline-none hover:underline focus-visible:outline-2 focus-visible:outline-focus"
                 data-testid="goal-title"
               >
-                <span aria-hidden className="mr-1.5 inline-block size-2.5 rounded-full align-middle" style={{ background: `var(--label-${color})` }} />
+
                 {goal.name}
               </button>
               <GoalHealthBadge health={goal.health} />
@@ -424,7 +438,7 @@ function GoalPanel({ goal, all, projects, canEdit, onClose, onDialog }: { readon
                     <div className="flex items-center justify-between gap-2 text-sm">
                       <span className="truncate text-fg">{kr.name}</span>
                       <span className="shrink-0 text-xs text-fg-muted tabular-nums">
-                        {kr.kind === 'project' ? (kr.projectId ? (projects.get(kr.projectId)?.name ?? 'Project') : 'Project') : `${formatKrValue(kr, kr.currentValue)}${kr.kind === 'boolean' ? '' : ` of ${formatKrValue(kr, kr.targetValue)}`}`}
+                        {kr.kind === 'project' ? (kr.projectId ? (projects.get(kr.projectId)?.name ?? 'Project') : 'Project') : krValueText(kr).text}
                       </span>
                     </div>
                     <ProgressBar value={kr.progress} size="sm" label={`${kr.name} progress`} className="mt-1" tone={kr.progress >= 100 ? 'success' : 'primary'} />

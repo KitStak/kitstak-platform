@@ -9,7 +9,7 @@
  * Every change is optimistic (useTaskMutations) with an Undo toast.
  */
 import { useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react';
-import { ChevronLeft, ChevronRight, Inbox, Keyboard, MousePointerClick, Move, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleCheck, Inbox, Keyboard, MousePointerClick, Move, Plus } from 'lucide-react';
 import {
   Button,
   EmptyState,
@@ -59,7 +59,7 @@ interface CalendarPrefs {
 
 type CalendarViewOptions = Pick<CalendarPrefs, 'mode' | 'colorBy' | 'plot' | 'showWeekends' | 'showCompleted' | 'showSubtasks'>;
 
-const DEFAULT_PREFS: CalendarPrefs = { mode: 'month', colorBy: 'status', plot: 'span', showWeekends: true, showCompleted: true, showSubtasks: true, trayOpen: false, viewId: null };
+const DEFAULT_PREFS: CalendarPrefs = { mode: 'month', colorBy: 'status', plot: 'span', showWeekends: true, showCompleted: false, showSubtasks: true, trayOpen: false, viewId: null };
 
 function viewOptions(prefs: CalendarPrefs): CalendarViewOptions {
   const { mode, colorBy, plot, showWeekends, showCompleted, showSubtasks } = prefs;
@@ -294,6 +294,10 @@ export function CalendarView() {
     const assignee = task.assigneeId ? people.get(task.assigneeId)?.name : null;
     const status = statusById.get(task.statusId);
     const dateText = span ? (span.start === span.end ? WEEKDAY_LONG.format(parseIsoDate(span.end)) : formatRange(span.start, span.end)) : 'No date';
+    // Long tasks (5+ days) draw as a light tinted band with a start marker, so the solid
+    // single-day chips are what you see first. Done work is a quiet tint with readable text.
+    const long = variant === 'chip' && Boolean(span) && diffDays(span?.start ?? '', span?.end ?? '') >= 4;
+    const quiet = variant === 'chip' && (done || long);
     const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
       if (!canEdit || !event.altKey) return;
       const delta = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : event.key === 'ArrowUp' ? -7 : event.key === 'ArrowDown' ? 7 : 0;
@@ -332,7 +336,10 @@ export function CalendarView() {
           className={cn(
             'group/chip flex min-w-0 items-center gap-1.5 overflow-hidden text-left text-xs font-medium outline-none',
             'transition-[filter,box-shadow,opacity] duration-[var(--duration-fast)] hover:shadow-sm hover:brightness-[0.97] active:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus',
-            variant === 'chip' && 'h-[22px] rounded-sm bg-[var(--lc-bg)] px-1.5 text-[var(--lc-fg)]',
+            variant === 'chip' && 'h-[22px] rounded-sm px-1.5',
+            variant === 'chip' && !quiet && 'bg-[var(--lc-bg)] text-[var(--lc-fg)]',
+            quiet && 'bg-[color-mix(in_srgb,var(--lc-bg)_16%,var(--surface-panel))] text-fg-secondary',
+            long && !done && !segment?.continuesBefore && 'border-l-[3px] border-[var(--lc-bg)] text-fg',
             variant === 'card' &&
               'flex-col items-stretch justify-center gap-0.5 rounded-md border border-l-[3px] border-[color-mix(in_srgb,var(--lc-bg)_45%,transparent)] border-l-[var(--lc-bg)] bg-[color-mix(in_srgb,var(--lc-bg)_14%,var(--surface-panel))] px-2 py-1.5 text-fg',
             variant === 'list' && 'h-8 w-full rounded-md border-l-[3px] border-[var(--lc-bg)] px-2 text-fg hover:bg-hover',
@@ -342,7 +349,7 @@ export function CalendarView() {
             canEdit ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
             dragging?.taskId === task.id && 'opacity-40',
             done && variant !== 'chip' && 'text-fg-muted',
-            done && variant === 'chip' && 'opacity-70',
+            done && variant === 'chip' && 'hover:text-fg',
             options.className,
           )}
         >
@@ -365,7 +372,8 @@ export function CalendarView() {
             <>
               {variant === 'list' ? <StatusIcon category={task.statusCategory} color={status?.color} size={12} /> : null}
               {overdue ? <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full bg-danger', variant === 'chip' && 'ring-1 ring-panel')} /> : null}
-              <span className={cn('truncate', done && 'line-through decoration-1')}>{task.title}</span>
+              {done && variant === 'chip' ? <CircleCheck aria-label="Done" className="size-3 shrink-0 text-[var(--lc-bg)]" /> : null}
+              <span className={cn('truncate', done && variant !== 'chip' && 'line-through decoration-1')}>{task.title}</span>
               {variant === 'list' ? (
                 <span className="ml-auto flex shrink-0 items-center gap-1.5">
                   <span className="font-mono text-2xs font-normal text-fg-muted">{task.key}</span>
@@ -646,7 +654,7 @@ export function CalendarView() {
           <OptionsDivider />
           <OptionSwitch label="Show weekends" checked={prefs.showWeekends} onChange={(showWeekends) => setPrefs({ showWeekends })} />
           <OptionSwitch label="Show subtasks" checked={prefs.showSubtasks} onChange={(showSubtasks) => setPrefs({ showSubtasks })} />
-          <OptionSwitch label="Show finished tasks" checked={prefs.showCompleted} onChange={(showCompleted) => setPrefs({ showCompleted })} />
+          <OptionSwitch label="Hide done tasks" description="Finished work stays out of the way. Turn off to see it." checked={!prefs.showCompleted} onChange={(hide) => setPrefs({ showCompleted: !hide })} />
         </OptionsMenu>
         <Button
           variant={prefs.trayOpen ? 'secondary' : 'ghost'}

@@ -11,7 +11,7 @@
  *   field.* | milestone.* | goal.* | automation.* | automation.ran | form.submitted | view.*
  */
 import 'server-only';
-import { and, desc, eq, inArray, lt, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { db, type Executor } from '@/server/db';
 import { activity } from '@/server/db/schema';
 import type { ActivityDTO } from '@/lib/types';
@@ -110,7 +110,14 @@ export async function listTaskActivity(
 ): Promise<ActivityPage> {
   await requireTask(ctx, taskId);
   return page(
-    and(eq(activity.orgId, ctx.orgId), eq(activity.taskId, taskId)) as SQL,
+    and(
+      eq(activity.orgId, ctx.orgId),
+      // The task's own events plus "added a subtask" (a child's task.created names its parent).
+      or(
+        eq(activity.taskId, taskId),
+        and(eq(activity.verb, 'task.created'), sql`${activity.after} ->> 'parentTaskId' = ${taskId}`),
+      ),
+    ) as SQL,
     options.before,
     Math.min(options.limit ?? 100, 300),
   );

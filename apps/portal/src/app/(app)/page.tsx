@@ -7,7 +7,8 @@ import { env } from '@/server/env';
 import { requirePageSession } from '@/server/session';
 import { getOrgGlance, listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getOrgModuleStates } from '@/server/entitlements';
-import { getLauncherStats } from '@/server/product-stats';
+import { getCustomerWork, getLauncherStats } from '@/server/product-stats';
+import { CustomerWorkPanel } from '@/features/launcher/customer-work';
 import { getSetupState, markGuideSeen } from '@/server/onboarding';
 import { CreateOrgForm } from '@/features/launcher/create-org-form';
 import { ProductTile } from '@/features/launcher/product-tile';
@@ -148,9 +149,10 @@ export default async function LauncherPage({
     );
   }
 
-  const [{ devAllowAll, modules }, stats, glance, setup, params] = await Promise.all([
+  const [{ devAllowAll, modules }, stats, customerWork, glance, setup, params] = await Promise.all([
     getOrgModuleStates(activeOrg.id),
     getLauncherStats(activeOrg.id),
+    getCustomerWork(activeOrg.id),
     getOrgGlance(activeOrg.id),
     getSetupState(activeOrg),
     searchParams,
@@ -231,6 +233,10 @@ export default async function LauncherPage({
         })}
       </section>
 
+      {entitledFor('projects') ? (
+        <CustomerWorkPanel rows={customerWork} projectsUrl={env.NEXT_PUBLIC_PROJECTS_URL} />
+      ) : null}
+
       <section aria-label="Quick links">
         <h2 className="text-2xs font-semibold tracking-[0.08em] text-fg-muted uppercase">Quick links</h2>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -255,8 +261,9 @@ export default async function LauncherPage({
             />
             <GlanceCell
               item={{
-                label: 'Modules active',
-                value: `${modules.filter((state) => state.entitled).length} of ${modules.length}`,
+                // Counts the licensed apps (CRM, WMS, Projects); the Portal itself is always on.
+                label: 'Apps on your plan',
+                value: `${modules.filter((state) => state.entitled).length} of ${modules.length} apps`,
                 icon: LayoutGrid,
               }}
             />

@@ -29,7 +29,7 @@ const CATEGORY_HELP: Readonly<Record<StatusCategory, string>> = {
 
 const DEFAULT_COLOR: Readonly<Record<StatusCategory, string>> = { todo: 'gray', in_progress: 'blue', done: 'green', cancelled: 'brown' };
 
-function StatusRow({ status, count, canEdit, onDelete, onlyOne }: { readonly status: StatusDTO; readonly count: number; readonly canEdit: boolean; readonly onDelete: () => void; readonly onlyOne: boolean }) {
+function StatusRow({ status, count, subtasks, canEdit, onDelete, onlyOne }: { readonly status: StatusDTO; readonly count: number; readonly subtasks: number; readonly canEdit: boolean; readonly onDelete: () => void; readonly onlyOne: boolean }) {
   const run = useSettingsRunner();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging, setActivatorNodeRef } = useSortable({ id: status.id, disabled: !canEdit });
   const [name, setName] = useState(status.name);
@@ -105,7 +105,9 @@ function StatusRow({ status, count, canEdit, onDelete, onlyOne }: { readonly sta
           containerClassName="w-24"
         />
       </Tooltip>
-      <span className="w-14 shrink-0 text-right text-xs text-fg-muted tabular-nums">{count} {count === 1 ? 'task' : 'tasks'}</span>
+      <span className="w-14 shrink-0 text-right text-xs text-fg-muted tabular-nums" title={subtasks ? `${count} ${count === 1 ? 'task' : 'tasks'} on the board, plus ${subtasks} ${subtasks === 1 ? 'subtask' : 'subtasks'}` : undefined}>
+        {count} {count === 1 ? 'task' : 'tasks'}
+      </span>
       <Tooltip content={status.isDefault ? 'New tasks start here' : 'Make new tasks start here'}>
         <IconButton
           label={status.isDefault ? `${status.name} is where new tasks start` : `Start new tasks in ${status.name}`}
@@ -128,9 +130,15 @@ export function WorkflowSettings({ highlight }: { readonly highlight?: boolean }
   const tasks = useProjectTasks(project.key);
   const [order, setOrder] = useState<readonly StatusDTO[] | null>(null);
   const statuses = order ?? project.statuses;
+  /** Every task incl. subtasks (what a delete moves), and top-level only (what the board and header count). */
   const counts = useMemo(() => {
     const map = new Map<string, number>();
     for (const task of tasks.data ?? []) map.set(task.statusId, (map.get(task.statusId) ?? 0) + 1);
+    return map;
+  }, [tasks.data]);
+  const topCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const task of tasks.data ?? []) if (!task.parentTaskId) map.set(task.statusId, (map.get(task.statusId) ?? 0) + 1);
     return map;
   }, [tasks.data]);
   const [newName, setNewName] = useState('');
@@ -165,7 +173,8 @@ export function WorkflowSettings({ highlight }: { readonly highlight?: boolean }
               <StatusRow
                 key={`${status.id}-${status.name}-${status.wipLimit}`}
                 status={status}
-                count={counts.get(status.id) ?? 0}
+                count={topCounts.get(status.id) ?? 0}
+                subtasks={(counts.get(status.id) ?? 0) - (topCounts.get(status.id) ?? 0)}
                 canEdit={canEdit}
                 onlyOne={statuses.length <= 1}
                 onDelete={() => {

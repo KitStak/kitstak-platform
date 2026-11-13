@@ -26,6 +26,7 @@ import {
   Star,
   Trash2,
   Users,
+  X,
 } from 'lucide-react';
 import {
   Badge,
@@ -55,7 +56,7 @@ import type { ProjectSummary, SpaceDTO } from '@/lib/types';
 import { archiveProjectAction, deleteProjectAction, duplicateProjectAction, restoreProjectAction, starProjectAction } from '@/server/actions/projects';
 import { useShell } from '@/features/shell/shell-context';
 import { ProgressRing } from '@/features/dashboards/charts';
-import { HealthBadge } from './health';
+import { ProjectHealthBadge, healthMismatch } from './health';
 
 export { HealthBadge } from './health';
 
@@ -126,7 +127,8 @@ function sortProjects(list: readonly ProjectSummary[], sort: SortKey, dir: 'asc'
       case 'progress':
         return a.progress.percent - b.progress.percent;
       case 'health':
-        return HEALTH_ORDER[a.health] - HEALTH_ORDER[b.health] || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999');
+        // Owner's health first, then projects whose numbers disagree with it, then the due date.
+        return HEALTH_ORDER[a.health] - HEALTH_ORDER[b.health] || Number(healthMismatch(b)) - Number(healthMismatch(a)) || (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999');
       case 'updated':
         return b.updatedAt.localeCompare(a.updatedAt);
     }
@@ -294,7 +296,7 @@ function ProjectCard({ project, space, ops, canCreate }: { readonly project: Pro
         <ProgressRing percent={project.progress.percent} size={48} strokeWidth={4.5} label={`${project.name} progress`} tone={ringTone(project.health)} />
         <div className="min-w-0 flex-1">
           <div className="mb-1">
-            <HealthBadge health={project.health} />
+            <ProjectHealthBadge project={project} size="sm" />
           </div>
           <p className="truncate text-xs text-fg-secondary">
             {project.progress.total === 0 ? 'No tasks yet' : `${project.progress.done} of ${project.progress.total} tasks done`}
@@ -390,7 +392,7 @@ function ProjectTable({
                 </td>
                 <td className="px-3 py-2 text-fg-secondary">{project.archivedAt ? 'Archived' : PROJECT_STATUS_LABELS[project.status]}</td>
                 <td className="px-3 py-2">
-                  <HealthBadge health={project.health} />
+                  <ProjectHealthBadge project={project} size="sm" />
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-2">
@@ -445,7 +447,26 @@ function SpaceSection({ title, icon, count, children, defaultOpen = true, id }: 
   );
 }
 
-export function ProjectsDirectory({ initialProjects, initialSpaces, spaceFilter }: { readonly initialProjects: ProjectSummary[]; readonly initialSpaces: SpaceDTO[]; readonly spaceFilter?: string }) {
+/** `?customer=` deep link (Portal/CRM/WMS): only projects serving this shared customer. */
+export interface CustomerFilter {
+  readonly id: string;
+  readonly name: string;
+  readonly projectIds: readonly string[];
+}
+
+export function ProjectsDirectory({
+  initialProjects,
+  initialSpaces,
+  spaceFilter,
+  customerFilter,
+  healthFilter,
+}: {
+  readonly initialProjects: ProjectSummary[];
+  readonly initialSpaces: SpaceDTO[];
+  readonly spaceFilter?: string;
+  readonly customerFilter?: CustomerFilter;
+  readonly healthFilter?: ProjectHealth;
+}) {
   const { can } = useShell();
   const canCreate = can('project:create');
   const ops = useProjectOps();
@@ -453,9 +474,17 @@ export function ProjectsDirectory({ initialProjects, initialSpaces, spaceFilter 
   const [query, setQuery] = useState('');
   const [space, setSpace] = useState<string>(spaceFilter ?? 'all');
   const [status, setStatus] = useState<'all' | ProjectStatus>('all');
-  const [health, setHealth] = useState<'all' | ProjectHealth>('all');
+  const [health, setHealth] = useState<'all' | ProjectHealth>(healthFilter ?? 'all');
+  const [customer, setCustomer] = useState<CustomerFilter | null>(customerFilter ?? null);
+  const [customerProp, setCustomerProp] = useState(customerFilter);
+  if (customerProp !== customerFilter) {
+    setCustomerProp(customerFilter);
+    setCustomer(customerFilter ?? null);
+  }
+  const customerIds = useMemo(() => (customer ? new Set(customer.projectIds) : null), [customer]);
   const [starredOnly, setStarredOnly] = useState(false);
-  const [archived, setArchived] = useState(false);
+  const [show, setShow] = useState<'active' | 'completed' | 'archived'>('active');
+  const archived = show === 'archived';
   const active = useProjects({}, { initialData: initialProjects });
   const withArchived = useProjects({ archived: true }, { enabled: archived });
   const spaces = useSpaces({ initialData: initialSpaces });
@@ -468,7 +497,9 @@ export function ProjectsDirectory({ initialProjects, initialSpaces, spaceFilter 
     setSpace(spaceFilter ?? 'all');
   }
 
-  const source = archived ? (withArchived.data ?? []).filter((p) => p.archivedAt) : (active.data ?? []).filter((p) => !p.archivedAt);
+  const source = archived
+    ? (withArchived.data ?? []).filter((p) => p.archivedAt)
+    : (active.data ?? []).filter((p) => !p.archivedAt && (show === 'completed' ? p.status === 'completed' : p.status !== 'completed'));
   const loading = archived && withArchived.isPending;
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -478,11 +509,12 @@ export function ProjectsDirectory({ initialProjects, initialSpaces, spaceFilter 
         (space === 'all' || (space === 'none' ? p.spaceId === null : p.spaceId === space)) &&
         (status === 'all' || p.status === status) &&
         (health === 'all' || p.health === health) &&
+        (!customerIds || customerIds.has(p.id) || p.crmCustomerId === customer?.id) &&
         (!starredOnly || p.starred) &&
         (!q || p.name.toLowerCase().includes(q) || p.key.toLowerCase().includes(q)),
     );
     return sortProjects(list, prefs.sort, prefs.dir);
-  }, [source, query, space, status, health, starredOnly, prefs.sort, prefs.dir]);
+  }, [source, query, space, status, health, customerIds, customer?.id, starredOnly, prefs.sort, prefs.dir]);
 
   const groups = useMemo(() => {
     if (!prefs.grouped) return null;
@@ -497,13 +529,15 @@ export function ProjectsDirectory({ initialProjects, initialSpaces, spaceFilter 
   }, [filtered, prefs.grouped, spaceById, spaces.data]);
 
   const counts = useMemo(() => {
-    const live = (active.data ?? []).filter((p) => !p.archivedAt && !p.isTemplate);
-    return { total: live.length, atRisk: live.filter((p) => p.health === 'at_risk').length, offTrack: live.filter((p) => p.health === 'off_track').length, starred: live.filter((p) => p.starred).length };
+    const all = (active.data ?? []).filter((p) => !p.archivedAt && !p.isTemplate);
+    const live = all.filter((p) => p.status !== 'completed');
+    return { total: live.length, completed: all.length - live.length, atRisk: live.filter((p) => p.health === 'at_risk').length, offTrack: live.filter((p) => p.health === 'off_track').length, starred: live.filter((p) => p.starred).length };
   }, [active.data]);
 
-  const filtersOn = query.trim() !== '' || space !== 'all' || status !== 'all' || health !== 'all' || starredOnly;
+  const filtersOn = query.trim() !== '' || space !== 'all' || status !== 'all' || health !== 'all' || starredOnly || customer !== null;
   const clearFilters = () => {
     setQuery('');
+    setCustomer(null);
     setSpace('all');
     setStatus('all');
     setHealth('all');
@@ -526,7 +560,7 @@ export function ProjectsDirectory({ initialProjects, initialSpaces, spaceFilter 
     <Page
       title="Projects"
       subtitle={
-        counts.total === 0 ? (
+        counts.total === 0 && !counts.completed ? (
           'Every project your team is working on, with health and progress at a glance.'
         ) : (
           <span>
@@ -534,6 +568,7 @@ export function ProjectsDirectory({ initialProjects, initialSpaces, spaceFilter 
             {counts.offTrack ? <span className="text-danger-text"> · {counts.offTrack} off track</span> : null}
             {counts.atRisk ? <span className="text-warning-text"> · {counts.atRisk} at risk</span> : null}
             {!counts.offTrack && !counts.atRisk ? ' · all on track' : null}
+            {counts.completed ? <span> · {counts.completed} completed</span> : null}
           </span>
         )
       }
@@ -555,6 +590,14 @@ export function ProjectsDirectory({ initialProjects, initialSpaces, spaceFilter 
       }
     >
       <div className="mb-3 flex flex-wrap items-center gap-2" data-testid="projects-filters">
+        {customer ? (
+          <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-primary bg-primary-subtle pr-1 pl-2.5 text-sm font-medium text-primary-text" data-testid="customer-filter">
+            Customer: {customer.name}
+            <button type="button" onClick={() => setCustomer(null)} aria-label={`Show projects for every customer`} className="inline-flex size-6 items-center justify-center rounded-sm hover:bg-hover">
+              <X aria-hidden className="size-3.5" />
+            </button>
+          </span>
+        ) : null}
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -577,7 +620,7 @@ export function ProjectsDirectory({ initialProjects, initialSpaces, spaceFilter 
           aria-label="Status"
           value={status}
           onValueChange={(value) => setStatus(value as 'all' | ProjectStatus)}
-          options={[{ value: 'all', label: 'Any status' }, ...PROJECT_STATUSES.filter((s) => s !== 'archived').map((s) => ({ value: s, label: PROJECT_STATUS_LABELS[s] }))]}
+          options={[{ value: 'all', label: 'Any status' }, ...PROJECT_STATUSES.filter((s) => s !== 'archived' && (show === 'archived' || (show === 'completed' ? s === 'completed' : s !== 'completed'))).map((s) => ({ value: s, label: PROJECT_STATUS_LABELS[s] }))]}
           className="w-[calc(50%-4px)] sm:w-36"
         />
         <Select
@@ -610,10 +653,14 @@ export function ProjectsDirectory({ initialProjects, initialSpaces, spaceFilter 
         <div className="flex flex-wrap items-center gap-2">
           <ToggleGroup
             label="Show"
-            value={archived ? 'archived' : 'active'}
-            onValueChange={(value) => setArchived(value === 'archived')}
+            value={show}
+            onValueChange={(value) => {
+              setShow(value);
+              setStatus('all');
+            }}
             options={[
-              { value: 'active', label: 'Active' },
+              { value: 'active', label: `Active${counts.total ? ` (${counts.total})` : ''}` },
+              { value: 'completed', label: `Completed${counts.completed ? ` (${counts.completed})` : ''}` },
               { value: 'archived', label: 'Archived' },
             ]}
           />
@@ -664,10 +711,12 @@ export function ProjectsDirectory({ initialProjects, initialSpaces, spaceFilter 
       ) : filtered.length === 0 ? (
         <EmptyState
           illustration={filtersOn ? 'search' : 'workspace'}
-          title={archived ? (filtersOn ? 'No archived projects match' : 'No archived projects') : filtersOn ? 'No projects match these filters' : 'No projects yet'}
+          title={archived ? (filtersOn ? 'No archived projects match' : 'No archived projects') : show === 'completed' ? (filtersOn ? 'No completed projects match' : 'No completed projects yet') : filtersOn ? 'No projects match these filters' : counts.completed ? 'No active projects' : 'No projects yet'}
           description={
             archived
               ? 'When a project wraps up, archive it from its menu. It shows up here and you can restore it any time.'
+              : show === 'completed' && !filtersOn
+                ? 'When you set a project to Completed, it moves here so the Active list stays focused.'
               : filtersOn
                 ? 'Try a different search or clear the filters to see everything.'
                 : 'Start from a template to get a ready-made plan in seconds, or begin with a blank project.'
@@ -677,7 +726,7 @@ export function ProjectsDirectory({ initialProjects, initialSpaces, spaceFilter 
               <Button variant="secondary" onClick={clearFilters}>
                 Clear filters
               </Button>
-            ) : canCreate && !archived ? (
+            ) : canCreate && show === 'active' ? (
               <>
                 <Link href={routes.newProject()}>
                   <Button leadingIcon={<Plus aria-hidden />}>Create a project</Button>

@@ -357,3 +357,54 @@ export function describeAutomation(
   const sentence = `When ${when}${ifPart}, ${joinWords(actions) || 'do nothing'}.`;
   return sentence.replace(/\s+/g, ' ');
 }
+
+const PRIORITY_WORDS: Readonly<Record<Priority, string>> = {
+  urgent: 'urgent',
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+  none: 'no priority',
+};
+
+/**
+ * Inbox headline for an automation "notify" action: what happened, not the rule's name (the rule
+ * name goes in the notification body). `taskLabel` is "OPS-7 Fix the dock leveler".
+ */
+export function automationEventHeadline(event: TaskEvent | undefined, taskLabel: string, statusName?: string | null): string {
+  if (!event) return `${taskLabel} needs your attention`;
+  const task = event.task;
+  switch (event.type) {
+    case 'task_created':
+      return `${taskLabel} was created`;
+    case 'status_changed':
+      if (task.statusCategory === 'done') return `${taskLabel} was marked done`;
+      if (task.statusCategory === 'cancelled') return `${taskLabel} was cancelled`;
+      return statusName ? `${taskLabel} moved to ${statusName}` : `${taskLabel} changed status`;
+    case 'assignee_changed':
+      return task.assigneeId ? `${taskLabel} was assigned` : `${taskLabel} was unassigned`;
+    case 'priority_changed':
+      return task.priority === 'none' ? `${taskLabel} no longer has a priority` : `${taskLabel} is now ${PRIORITY_WORDS[task.priority]} priority`;
+    case 'due_date_changed':
+      return task.dueDate ? `${taskLabel} has a new due date` : `${taskLabel} no longer has a due date`;
+    case 'label_added':
+      return `${taskLabel} got a new label`;
+    case 'comment_added':
+      return `New comment on ${taskLabel}`;
+    case 'section_changed':
+      return `${taskLabel} moved to another section`;
+    case 'subtasks_completed':
+      return `Every subtask of ${taskLabel} is done`;
+    case 'due_soon': {
+      const days = event.daysUntilDue ?? 1;
+      if (days <= 0) return `${taskLabel} is due today`;
+      if (days === 1) return `${taskLabel} is due tomorrow`;
+      return `${taskLabel} is due in ${days} days`;
+    }
+    case 'overdue':
+      return `${taskLabel} is overdue`;
+    case 'crm_stage_changed':
+      return `${event.targetTitle ?? 'A linked CRM record'} moved to ${event.stage ?? 'a new stage'} (${taskLabel})`;
+    case 'wms_order_shipped':
+      return `${event.targetTitle ?? 'A linked WMS order'} shipped (${taskLabel})`;
+  }
+}

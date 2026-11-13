@@ -386,7 +386,7 @@ export function LineChart({
                 <p key={s.id} className="flex items-center gap-2 text-fg-secondary">
                   <span aria-hidden className="size-2 rounded-full" style={{ background: s.color }} />
                   <span className="flex-1">{s.label}</span>
-                  <span className="font-medium text-fg tabular-nums">{value === null || value === undefined ? '—' : `${value}${valueSuffix}`}</span>
+                  <span className="font-medium text-fg tabular-nums">{value === null || value === undefined ? 'No data' : `${value}${valueSuffix}`}</span>
                 </p>
               );
             })}

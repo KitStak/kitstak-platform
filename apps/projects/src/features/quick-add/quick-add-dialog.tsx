@@ -107,6 +107,8 @@ function QuickAddForm() {
   const editable = useMemo(() => (projects.data ?? []).filter((p) => !p.archivedAt && (p.role === 'owner' || p.role === 'editor')), [projects.data]);
   const [title, setTitle] = useState(defaults.text ?? '');
   const [ignore, setIgnore] = useState<readonly string[]>([]);
+  /** New #label names the user confirmed with "Create label …". */
+  const [createLabels, setCreateLabels] = useState<readonly string[]>([]);
   const [projectChoice, setProjectId] = useState<string | null>(() => defaults.projectId ?? null);
   const [statusChoice, setStatusId] = useState<string | undefined>(defaults.statusId);
   const [assigneeChoice, setAssigneeId] = useState<string | null>(defaults.assigneeId === undefined ? null : defaults.assigneeId);
@@ -149,8 +151,9 @@ function QuickAddForm() {
         labels: projectLabels,
         meId: user.id,
         ignore,
+        createLabels,
       }),
-    [title, today, people.data, editable, projectLabels, user.id, ignore],
+    [title, today, people.data, editable, projectLabels, user.id, ignore, createLabels],
   );
 
   // What will be saved: words in the text win over the pickers.
@@ -201,6 +204,7 @@ function QuickAddForm() {
   const reset = () => {
     setTitle('');
     setIgnore([]);
+    setCreateLabels([]);
     setDetails(null);
     setLabelIds([]);
     setNewLabels([]);
@@ -271,6 +275,10 @@ function QuickAddForm() {
     [projectLabels],
   );
   const canCreateLabels = selectedProject?.role === 'owner' || selectedProject?.role === 'editor';
+  const confirmLabel = (name: string) => {
+    setCreateLabels((list) => (list.some((entry) => entry.toLowerCase() === name.toLowerCase()) ? list : [...list, name]));
+    titleRef.current?.focus();
+  };
 
   return (
     <DialogContent
@@ -293,6 +301,7 @@ function QuickAddForm() {
           tokens={parsed.tokens}
           invalid={attempted && !finalTitle}
           suggestData={suggestData}
+          onCreateLabel={canCreateLabels ? confirmLabel : undefined}
           placeholder="e.g. Call Acme tomorrow !high @maya #sales"
           onKeyDown={(event) => {
             if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -304,7 +313,7 @@ function QuickAddForm() {
             }
           }}
         />
-        <UnderstoodChips tokens={parsed.tokens} onDismiss={dismiss} />
+        <UnderstoodChips tokens={parsed.tokens} onDismiss={dismiss} onCreateLabel={canCreateLabels ? confirmLabel : undefined} />
         {finalTitle && finalTitle !== title.trim() ? (
           <p className="-mt-1 truncate text-xs text-fg-muted" data-testid="quick-add-final-title">
             Task name: <span className="font-medium text-fg-secondary">{finalTitle}</span>

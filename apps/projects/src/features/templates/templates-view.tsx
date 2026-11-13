@@ -4,6 +4,7 @@
  * "Use template" (opens the create wizard prefilled) and "Save a project as template".
  * Team templates can be renamed or deleted (with undo). URL: /templates?category=&preview=<id>&save=<projectId>
  */
+import { describeTemplateTaskCounts } from '@/lib/template-math';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -99,7 +100,7 @@ function TemplateCard({
               {template.name}
             </button>
             <p className="mt-0.5 truncate text-xs text-fg-muted">
-              {[template.category, `${template.taskCount} tasks`, durationText(payload.durationDays)]
+              {[template.category, describeTemplateTaskCounts({ tasks: template.taskCount, subtasks: template.subtaskCount ?? 0 }), durationText(payload.durationDays)]
                 .filter(Boolean)
                 .join(' · ')}
             </p>

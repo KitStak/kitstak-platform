@@ -9,11 +9,14 @@ export function PersonAvatar({
   userId,
   size = 'sm',
   showName = false,
+  decorative = false,
   className,
 }: {
   readonly userId: string | null | undefined;
   readonly size?: AvatarSize;
   readonly showName?: boolean;
+  /** The name is written right next to it (comment header, time entry): screen readers skip the avatar. */
+  readonly decorative?: boolean;
   readonly className?: string;
 }) {
   const people = usePeopleMap();
@@ -24,13 +27,13 @@ export function PersonAvatar({
         <span aria-hidden className="inline-flex size-5 items-center justify-center rounded-full border border-dashed border-border-strong">
           <UserRound className="size-3" />
         </span>
-        {showName ? <span className="text-sm">{userId ? 'Former member' : 'Unassigned'}</span> : <span className="sr-only">Unassigned</span>}
+        {showName ? <span className="text-sm">{userId ? 'Former member' : 'Unassigned'}</span> : decorative ? null : <span className="sr-only">Unassigned</span>}
       </span>
     );
   }
   return (
     <span className={cn('inline-flex min-w-0 items-center gap-1.5', className)}>
-      <Avatar name={person.name} src={person.image} size={size} showTooltip={!showName} />
+      <Avatar name={person.name} src={person.image} size={size} showTooltip={!showName && !decorative} decorative={showName || decorative} />
       {showName ? <span className="truncate text-sm text-fg">{person.name}</span> : null}
     </span>
   );

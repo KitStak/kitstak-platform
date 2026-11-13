@@ -1,6 +1,7 @@
 'use client';
 /**
- * "Create task" from a CRM record: pick a project (most recently used first), name the task,
+ * "Create task" from a CRM record: pick a project (the record's linked project first, then the most
+ * recently used), name the task,
  * optionally set status, assignee, due date, priority and notes. The task is created in KitStak
  * Projects, linked to this record, and shows up for the team there right away.
  */
@@ -59,6 +60,8 @@ export interface CreateTaskDialogProps {
   readonly onOpenChange: (open: boolean) => void;
   /** Preselect a project (e.g. "Add task" on a linked project card). */
   readonly projectId?: string | null;
+  /** Projects already linked to this record; the first writable one is the default. */
+  readonly linkedProjectIds?: readonly string[];
   readonly onCreated?: (task: BridgeTask) => void;
 }
 
@@ -80,6 +83,7 @@ function CreateTaskForm({
   open,
   onOpenChange,
   projectId: initialProjectId,
+  linkedProjectIds,
   onCreated,
 }: CreateTaskDialogProps) {
   const { user } = useOrg();
@@ -95,8 +99,10 @@ function CreateTaskForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const projects = useMemo(() => options.data?.projects ?? [], [options.data?.projects]);
-  // Until the user picks, default to the most recently used project.
-  const projectId = chosenProjectId ?? projects[0]?.id ?? null;
+  // Until the user picks: the project this record is linked to (if they can add tasks to it),
+  // otherwise the most recently used project.
+  const linkedDefault = (linkedProjectIds ?? []).find((id) => projects.some((entry) => entry.id === id)) ?? null;
+  const projectId = chosenProjectId ?? linkedDefault ?? projects[0]?.id ?? null;
 
   const project: WritableProject | undefined = projects.find((entry) => entry.id === projectId);
   const statusOptions = useMemo(

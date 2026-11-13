@@ -3,12 +3,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/components/ui';
 
-export function InlineTitle({ value, onSave, onDone, className }: { readonly value: string; readonly onSave: (title: string) => void; readonly onDone: () => void; readonly className?: string }) {
+/** `caret="end"` puts the cursor after the text (spreadsheet F2 / double-click); the default selects it all. */
+export function InlineTitle({ value, onSave, onDone, className, caret = 'all' }: { readonly value: string; readonly onSave: (title: string) => void; readonly onDone: () => void; readonly className?: string; readonly caret?: 'all' | 'end' }) {
   const [text, setText] = useState(value);
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    ref.current?.focus();
-    ref.current?.select();
+    const node = ref.current;
+    if (!node) return;
+    node.focus();
+    if (caret === 'end') node.setSelectionRange(node.value.length, node.value.length);
+    else node.select();
+    // Only on mount: later caret changes must not move the cursor while typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const commit = () => {
     const title = text.trim();

@@ -44,6 +44,7 @@ import {
 } from '@/components/ui';
 import { DueDate, EntityIcon, PersonAvatar } from '@/components/pm';
 import { Panel } from '@/components/layout/page';
+import { Customer360Strip } from '@/features/integrations/customer-360-strip';
 import {
   GOAL_HEALTH_LABELS,
   INTEGRATION_TARGET_LABELS,
@@ -56,7 +57,7 @@ import {
   type ProjectHealth,
   type ProjectStatus,
 } from '@/lib/constants';
-import { describeActivity } from '@/lib/activity-text';
+import { describeActivity, describeActivityParts } from '@/lib/activity-text';
 import { diffDays, formatRange, parseIsoDate, todayIso } from '@/lib/dates';
 import { useServerAction } from '@/lib/hooks/use-action';
 import { useIntegrationStatus, useProjectActivity, useProjectGoals, useProjectLinks, useProjectTasks, useProjectUpdates, useReport, useSpaces } from '@/lib/hooks/use-data';
@@ -188,7 +189,7 @@ function StatusUpdatesPanel({ project, canEdit }: { readonly project: ProjectDet
             <p className="flex items-start gap-2 rounded-md bg-sunken px-3 py-2 text-xs text-fg-secondary" data-testid="health-hint">
               <CalendarRange aria-hidden className="mt-0.5 size-3.5 shrink-0 text-icon" />
               <span>
-                {expected}% of the time has passed and {actual}% of tasks are done, so this looks <strong className="font-semibold text-fg">{PROJECT_HEALTH_LABELS[suggested].toLowerCase()}</strong>.{' '}
+                <strong className="font-semibold text-fg">Owner says: {PROJECT_HEALTH_LABELS[project.health]} · Data says: {PROJECT_HEALTH_LABELS[suggested]}.</strong> {expected}% of the time has passed and {actual}% of tasks are done.{' '}
                 <button type="button" className="font-medium text-fg-link hover:underline" onClick={() => setHealth(suggested)}>
                   Use “{PROJECT_HEALTH_LABELS[suggested]}”
                 </button>
@@ -499,16 +500,22 @@ function RecentActivity({ project }: { readonly project: ProjectDetail }) {
                 )}
                 <p className="min-w-0 flex-1 text-fg-secondary">
                   <span className="font-medium text-fg">{event.actorId ? (people.get(event.actorId)?.name ?? 'Someone') : 'Automation'}</span>{' '}
-                  {describeActivity(event, { statusName: (id) => statusById.get(id)?.name, personName: (id) => people.get(id)?.name, labelName: (id) => labelById.get(id)?.name })}
                   {task ? (
-                    <>
-                      {' '}
-                      on{' '}
-                      <button type="button" data-task-key={task.key} onClick={() => openTask(task.key)} className="rounded-sm font-medium text-fg-link outline-none hover:underline focus-visible:outline-2 focus-visible:outline-focus">
-                        {task.title}
-                      </button>
-                    </>
-                  ) : null}
+                    (() => {
+                      const parts = describeActivityParts(event, { statusName: (id) => statusById.get(id)?.name, personName: (id) => people.get(id)?.name, labelName: (id) => labelById.get(id)?.name });
+                      return (
+                        <>
+                          {parts.before}{' '}
+                          <button type="button" data-task-key={task.key} onClick={() => openTask(task.key)} className="rounded-sm font-medium text-fg-link outline-none hover:underline focus-visible:outline-2 focus-visible:outline-focus">
+                            {task.title}
+                          </button>
+                          {parts.after ? ` ${parts.after}` : null}
+                        </>
+                      );
+                    })()
+                  ) : (
+                    describeActivity(event, { statusName: (id) => statusById.get(id)?.name, personName: (id) => people.get(id)?.name, labelName: (id) => labelById.get(id)?.name })
+                  )}
                   <span className="text-fg-muted"> · </span>
                   <LocalTime iso={event.createdAt} className="text-xs text-fg-muted" />
                 </p>
@@ -568,8 +575,8 @@ function DetailsPanel({ project, canEdit }: { readonly project: ProjectDetail; r
             {project.visibility === 'private' ? 'Only members' : 'Whole workspace'}
           </span>
         </DetailRow>
-        <DetailRow label="Task ids">
-          <span className="font-mono">{project.key}-1, {project.key}-2…</span>
+        <DetailRow label="Key">
+          <span className="font-mono" title={`Tasks are numbered ${project.key}-1, ${project.key}-2 and so on`}>{project.key}</span>
         </DetailRow>
       </dl>
     </Panel>
@@ -761,6 +768,7 @@ export function ProjectOverview() {
           ) : null}
         </div>
       ) : null}
+      <Customer360Strip projectKey={project.key} />
       <div className="flex min-w-0 flex-col gap-5">
         <StatusUpdatesPanel key={`${project.health}-${project.status}`} project={project} canEdit={canEdit} />
         <ProgressPanel project={project} />

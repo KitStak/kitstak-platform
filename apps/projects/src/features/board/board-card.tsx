@@ -8,7 +8,7 @@
 import { memo, type KeyboardEvent, type ReactNode } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { CalendarPlus, GitBranch, MessageSquare, MoreHorizontal, Paperclip } from 'lucide-react';
+import { CalendarPlus, CircleCheck, GitBranch, MessageSquare, MoreHorizontal, Paperclip } from 'lucide-react';
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, Tooltip, cn } from '@/components/ui';
 import { DueDate, LabelPill, PersonAvatar, PriorityIcon } from '@/components/pm';
 import { PRIORITY_LABELS } from '@/lib/constants';
@@ -74,9 +74,14 @@ export function CardBody({ task, labels, links, ops, canEdit, interactive = true
           {task.labelIds.length > 3 ? <span className="text-2xs leading-5 text-fg-muted">+{task.labelIds.length - 3}</span> : null}
         </div>
       ) : null}
-      <p className={cn('line-clamp-3 pr-6 text-sm leading-5 font-medium break-words', done ? 'text-fg-muted line-through decoration-1' : 'text-fg')}>{task.title}</p>
-      {links && links.length ? <LinkChips links={links} max={3} wrap /> : null}
+      <p className={cn('line-clamp-3 pr-6 text-sm leading-5 font-medium break-words', done ? 'text-fg-secondary' : 'text-fg')}>
+        {done ? <CircleCheck aria-label="Done" className="mr-1 inline size-3.5 -translate-y-px text-success" /> : null}
+        {task.title}
+      </p>
+      {links && links.length ? <LinkChips links={links} max={2} variant="ref" wrap /> : null}
+      {/* Meta on the left clips and wraps; the editable due, priority and assignee on the right never move. */}
       <div className="flex min-h-5 items-center gap-2 text-2xs text-fg-muted">
+        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 overflow-hidden">
         <span className="shrink-0 font-mono whitespace-nowrap">{task.key}</span>
         {task.subtaskCount ? <SubtaskProgress done={task.subtaskDoneCount} total={task.subtaskCount} /> : null}
         {task.commentCount ? (
@@ -102,7 +107,8 @@ export function CardBody({ task, labels, links, ops, canEdit, interactive = true
             Blocked
           </span>
         ) : null}
-        <span className="ml-auto flex items-center gap-1">
+        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-1">
           {editable ? (
             <Stop>
               <LazyPicker picker={(p) => <DuePicker value={task.dueDate} onChange={(dueDate) => void ops.updateTask(task.id, { dueDate })} {...p}>{p.trigger}</DuePicker>}>
@@ -197,6 +203,7 @@ export const BoardCard = memo(function BoardCard({ id, task, container, labels, 
             'transition-[border-color,box-shadow,opacity] duration-[var(--duration-fast)] hover:border-border-default hover:shadow-sm',
             'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus',
             isDragging && 'opacity-40 shadow-none',
+            !isDragging && (task.statusCategory === 'done' || task.statusCategory === 'cancelled') && 'bg-[color-mix(in_srgb,var(--surface-panel),var(--surface-sunken)_50%)] opacity-80 hover:opacity-100',
             canEdit && 'touch-manipulation',
           )}
         >

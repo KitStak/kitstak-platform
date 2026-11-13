@@ -49,5 +49,9 @@ export const qk = {
   /** Portfolio team: status update history (under the project prefix), goal check-ins, reports. */
   projectUpdates: (key: string) => ['project', key, 'updates'] as const,
   goalCheckIns: (goalId: string) => ['goals', 'check-ins', goalId] as const,
+  /** Planning team: cycles and triage (under the project prefix so qk.project(key) refreshes them). */
+  cycles: (key: string) => ['project', key, 'cycles'] as const,
+  cycle: (id: string) => ['cycles', id] as const,
+  triage: (key: string, filter: string) => ['project', key, 'triage', filter] as const,
   report: (scope: { project?: string; space?: string | null; weeks?: number }) => ['reports', scope.project ?? 'portfolio', scope.space ?? 'all', scope.weeks ?? 8] as const,
 } as const;

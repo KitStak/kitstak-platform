@@ -2,7 +2,7 @@
   "name": "@kitstak/ui",
   "version": "0.1.0",
   "private": true,
-  "description": "Shared KitStak design tokens, theme, and UI primitives (TypeScript source-shipped — consumers transpile via Next transpilePackages).",
+  "description": "Shared KitStak design tokens, theme, and UI primitives (TypeScript source-shipped \u2014 consumers transpile via Next transpilePackages).",
   "sideEffects": [
     "**/*.css"
   ],
@@ -12,7 +12,8 @@
     "./logo": "./src/logo/index.ts",
     "./styles/tokens.css": "./src/styles/tokens.css",
     "./theme": "./src/theme/index.ts",
-    "./theme-handoff": "./src/theme/handoff.tsx"
+    "./theme-handoff": "./src/theme/handoff.tsx",
+    "./handoff": "./src/handoff/index.ts"
   },
   "scripts": {
     "test": "vitest run",

@@ -5,7 +5,7 @@
  */
 import { sql, type SQL } from 'drizzle-orm';
 import { orgRoleOf, visibleProjects } from './access';
-import { isUuid, list, pmAvailability, query, type BridgeExecutor } from './executor';
+import { isUuid, list, pmAvailability, query, queryOne, type BridgeExecutor } from './executor';
 import { canEditProject, effectiveProjectRole, isProjectRole } from './permissions';
 import type {
   BridgeActor,
@@ -346,10 +346,15 @@ export async function listWritableProjects(
 /** Active members of the org (assignee pickers). */
 export async function listOrgPeople(db: BridgeExecutor, orgId: string): Promise<BridgePerson[]> {
   try {
+    // System accounts (WMS `is_api_user`, e.g. the shared Integration Service login) are not teammates.
+    const wmsUsers = await queryOne<{ ok: boolean }>(db, sql`select to_regclass('wms.users') is not null as ok`);
+    const notService = wmsUsers?.ok
+      ? sql`and lower(u.email) not in (select lower(w.email) from wms.users w where w.is_api_user = true)`
+      : sql``;
     const rows = await query<{ id: string; name: string | null; email: string; image: string | null }>(
       db,
       sql`select u.id, u.name, u.email, u.image from core.member m join core."user" u on u.id = m.user_id
-           where m.organization_id = ${orgId}::uuid and m.role not like 'deactivated:%'
+           where m.organization_id = ${orgId}::uuid and m.role not like 'deactivated:%' ${notService}
            order by lower(coalesce(nullif(u.name, ''), u.email)) limit 500`,
     );
     return rows.map((row) => person(row.id, row.name, row.email, row.image) as BridgePerson);

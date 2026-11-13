@@ -25,7 +25,7 @@ import type { StatusDTO } from '@/lib/types';
 
 const WIP_OPTIONS = [3, 5, 8, 10, 15, 20] as const;
 
-export const COLUMN_WIDTH = 'w-[280px] max-sm:w-[min(280px,calc(100vw-56px))]';
+export const COLUMN_WIDTH = 'w-[256px] max-sm:w-[min(280px,calc(100vw-56px))]';
 export const COLLAPSED_WIDTH = 'w-11';
 
 export function CountPill({ count, wipCount, limit }: { readonly count: number; readonly wipCount: number; readonly limit: number | null }) {
