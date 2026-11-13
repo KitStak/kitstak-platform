@@ -8,7 +8,11 @@
  */
 import * as React from 'react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
+import { AppIcon } from '../app-icon';
 import './app-switcher.css';
+
+/** Icon box in a row. The supplied artwork carries its own padding, so it fills the tile. */
+const MARK_SIZE = 32;
 
 export type AppSwitcherAppId = 'portal' | 'crm' | 'wms';
 
@@ -52,54 +56,6 @@ function GridIcon() {
   );
 }
 
-function PortalMarkIcon() {
-  return (
-    <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-      <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.5" />
-      <rect x="9" y="1.5" width="5.5" height="5.5" rx="1.5" />
-      <rect x="1.5" y="9" width="5.5" height="5.5" rx="1.5" />
-      <rect x="9" y="9" width="5.5" height="5.5" rx="1.5" />
-    </svg>
-  );
-}
-
-function CrmMarkIcon() {
-  return (
-    <svg
-      aria-hidden
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinejoin="round"
-      strokeLinecap="round"
-    >
-      <path d="M2 3h12l-4.5 5.2V13l-3 1.5V8.2L2 3Z" />
-    </svg>
-  );
-}
-
-function WmsMarkIcon() {
-  return (
-    <svg
-      aria-hidden
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinejoin="round"
-      strokeLinecap="round"
-    >
-      <path d="M8 1.8 14 5v6L8 14.2 2 11V5l6-3.2Z" />
-      <path d="M2 5l6 3 6-3M8 8v6.2" />
-    </svg>
-  );
-}
-
 function CheckIcon() {
   return (
     <svg
@@ -137,12 +93,6 @@ function LockIcon() {
   );
 }
 
-const MARK_ICONS: Readonly<Record<AppSwitcherAppId, () => React.ReactElement>> = {
-  portal: PortalMarkIcon,
-  crm: CrmMarkIcon,
-  wms: WmsMarkIcon,
-};
-
 function isUnlocked(id: AppSwitcherAppId, entitled: AppSwitcherEntitled | undefined): boolean {
   if (id === 'portal' || entitled === undefined) return true;
   return entitled[id];
@@ -161,7 +111,6 @@ function AppRow({
   readonly href: string;
   readonly onNavigate: () => void;
 }) {
-  const Mark = MARK_ICONS[app.id];
   return (
     <li>
       <a
@@ -172,8 +121,8 @@ function AppRow({
         className="ks-appswitcher-row"
         onClick={onNavigate}
       >
-        <span className={`ks-appswitcher-mark ks-appswitcher-mark-${app.id}`}>
-          <Mark />
+        <span className="ks-appswitcher-mark">
+          <AppIcon app={app.id} size={MARK_SIZE} />
         </span>
         <span className="ks-appswitcher-text">
           <span className="ks-appswitcher-name">{app.name}</span>
