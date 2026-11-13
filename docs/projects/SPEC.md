@@ -73,3 +73,10 @@ Migrations live in `apps/projects/drizzle` with its own runner (pattern: `packag
 ## Quality bar
 
 Typecheck + lint clean, vitest unit tests for domain logic (NL quick-add parser, rank ordering, rollups, automations engine, permission checks), Playwright e2e smoke. Every button does something. No placeholder pages, no lorem ipsum, no TODOs. Seed script `pnpm --filter kitstak-projects db:seed` creates rich realistic data for both seeded orgs (spaces, ~8 projects, ~150 tasks, comments, goals, automations, CRM + WMS links to the real seeded CRM/WMS rows).
+
+## Brand pack (required)
+
+Assets in `apps/projects/public/brand/` (see `BRAND-README.txt`):
+- `kitstak-icon-projects.svg` (+ 512/1024 PNG): the Projects app mark (three staggered bars, red `#C8102E` / pink `#D65A6E`). Use as favicon (`src/app/icon.svg` / `icon.png` / `apple-icon.png`), the sidebar/top-bar product mark, the Portal launcher tile icon and the `projects` entry in the shared app switcher.
+- `kitstak-loader-projects.svg`: animated loader (respects reduced motion). Use for route `loading.tsx` states, full-page loads and long actions instead of generic spinners.
+- Brand colors: Red `#C8102E`, Pink `#D65A6E`, Navy `#0A1628` (text on light), Cream `#F5F1E8` (text on dark). Logo font Bebas Neue (+0.0485em letter spacing). Keep consistent with the shared `@kitstak/ui` tokens.
