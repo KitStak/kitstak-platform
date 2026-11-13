@@ -1,7 +1,7 @@
+import { KITSTAK_SITE_URL } from '@kitstak/ui/logo';
 import { BRAND_NAME } from '@/config/brand';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import Link from 'next/link';
 import { BrandLogo, BrandMark } from '@/components/layout/brand-logo';
 import { demoCredentialsEnabled } from './demo-credentials';
 import { LoginForm } from './login-form';
@@ -97,13 +97,13 @@ export default function LoginPage() {
     <div className="grid min-h-dvh bg-panel lg:grid-cols-[minmax(480px,1fr)_minmax(0,1.1fr)]">
       <div className="flex flex-col px-6 py-6 sm:px-12">
         <header>
-          <Link
-            href="/login"
-            aria-label={`${BRAND_NAME} WMS home`}
+          <a
+            href={KITSTAK_SITE_URL}
+            aria-label={`${BRAND_NAME} website`}
             className="inline-flex rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
           >
             <BrandLogo tone="light" height={24} showProduct />
-          </Link>
+          </a>
         </header>
         <main className="flex flex-1 flex-col items-center justify-center py-10">
           <Suspense fallback={null}>
@@ -129,8 +129,7 @@ export default function LoginPage() {
             Every order, pick and pallet, tracked from dock to door.
           </p>
           <p className="mt-3 text-md text-white/80">
-            Run receiving, inventory and outbound from one platform that keeps pace with the
-            warehouse floor.
+            Run receiving, inventory and outbound from one platform that keeps pace with the warehouse floor.
           </p>
         </div>
       </aside>
