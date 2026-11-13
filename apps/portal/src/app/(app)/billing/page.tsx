@@ -9,7 +9,11 @@ import type { ModuleAccess } from '@/server/entitlements';
 
 export const metadata: Metadata = { title: 'Billing' };
 
-const MODULE_NAMES: Readonly<Record<string, string>> = { crm: 'KitStak CRM', wms: 'KitStak WMS' };
+const MODULE_NAMES: Readonly<Record<string, string>> = {
+  crm: 'KitStak CRM',
+  wms: 'KitStak WMS',
+  projects: 'KitStak Projects',
+};
 
 const STATUS_BADGE: Readonly<
   Record<ModuleAccess, { label: string; tone: 'success' | 'info' | 'warning' | 'neutral' }>

@@ -1,7 +1,7 @@
 'use client';
 /**
  * Shared cross-app launcher menu (BLUEPRINT.md §6): a module-grid trigger in each app's top bar
- * opening a popover that lists Portal / CRM / WMS. Purely presentational — origins and
+ * opening a popover that lists Portal / CRM / WMS / Projects. Purely presentational — origins and
  * entitlement flags arrive as props (no data fetching here), and styling uses tokens.css custom
  * properties exclusively so the menu inherits the host app's light/dark theme. Keyboard and
  * focus behavior (aria-haspopup/expanded, Escape, focus return) come from the Radix popover.
@@ -10,18 +10,24 @@ import * as React from 'react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 import './app-switcher.css';
 
-export type AppSwitcherAppId = 'portal' | 'crm' | 'wms';
+export type AppSwitcherAppId = 'portal' | 'crm' | 'wms' | 'projects';
 
 export interface AppSwitcherUrls {
   readonly portal: string;
   readonly crm: string;
   readonly wms: string;
+  /** KitStak Projects origin. Omitted → the Projects row is hidden (app not deployed for this host). */
+  readonly projects?: string;
 }
 
-/** Per-module unlock state. Omit the prop entirely to show both product apps unlocked. */
+/**
+ * Per-module unlock state. Omit the prop entirely to show every product app unlocked; an
+ * omitted `projects` flag counts as unlocked so hosts that predate Projects keep working.
+ */
 export interface AppSwitcherEntitled {
   readonly crm: boolean;
   readonly wms: boolean;
+  readonly projects?: boolean;
 }
 
 export interface AppSwitcherProps {
@@ -40,6 +46,7 @@ const APPS: readonly AppMeta[] = [
   { id: 'portal', name: 'KitStak Portal', descriptor: 'Launcher, billing and organization' },
   { id: 'crm', name: 'KitStak CRM', descriptor: 'Pipelines, boards and automations' },
   { id: 'wms', name: 'KitStak WMS', descriptor: 'Receiving, inventory and shipping' },
+  { id: 'projects', name: 'KitStak Projects', descriptor: 'Projects, tasks and timelines' },
 ];
 
 function GridIcon() {
@@ -100,6 +107,17 @@ function WmsMarkIcon() {
   );
 }
 
+/** The Projects mark: three staggered bars (brand pack `kitstak-icon-projects.svg`), single-tone. */
+function ProjectsMarkIcon() {
+  return (
+    <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+      <rect x="1.5" y="3" width="8" height="2.6" rx="0.6" />
+      <rect x="4.5" y="6.7" width="8" height="2.6" rx="0.6" opacity="0.72" />
+      <rect x="7.5" y="10.4" width="7" height="2.6" rx="0.6" />
+    </svg>
+  );
+}
+
 function CheckIcon() {
   return (
     <svg
@@ -141,11 +159,16 @@ const MARK_ICONS: Readonly<Record<AppSwitcherAppId, () => React.ReactElement>> =
   portal: PortalMarkIcon,
   crm: CrmMarkIcon,
   wms: WmsMarkIcon,
+  projects: ProjectsMarkIcon,
 };
 
 function isUnlocked(id: AppSwitcherAppId, entitled: AppSwitcherEntitled | undefined): boolean {
   if (id === 'portal' || entitled === undefined) return true;
-  return entitled[id];
+  return entitled[id] ?? true;
+}
+
+function appUrl(id: AppSwitcherAppId, urls: AppSwitcherUrls): string | undefined {
+  return urls[id];
 }
 
 function AppRow({
@@ -197,7 +220,7 @@ function AppRow({
   );
 }
 
-/** Module-grid button + popover listing Portal / CRM / WMS with entitlement-aware rows. */
+/** Module-grid button + popover listing Portal / CRM / WMS / Projects with entitlement-aware rows. */
 export function AppSwitcher({ current, urls, entitled }: AppSwitcherProps) {
   const [open, setOpen] = React.useState(false);
   const billingHref = `${urls.portal.replace(/\/+$/, '')}/billing`;
@@ -223,6 +246,9 @@ export function AppSwitcher({ current, urls, entitled }: AppSwitcherProps) {
           <p className="ks-appswitcher-heading">KitStak apps</p>
           <ul className="ks-appswitcher-list">
             {APPS.map((app) => {
+              const href = appUrl(app.id, urls);
+              // The current app always lists itself; another app with no configured origin is hidden.
+              if (href === undefined && app.id !== current) return null;
               const locked = !isUnlocked(app.id, entitled);
               return (
                 <AppRow
@@ -230,7 +256,7 @@ export function AppSwitcher({ current, urls, entitled }: AppSwitcherProps) {
                   app={app}
                   current={app.id === current}
                   locked={locked}
-                  href={locked ? billingHref : urls[app.id]}
+                  href={locked ? billingHref : (href ?? '/')}
                   onNavigate={() => setOpen(false)}
                 />
               );

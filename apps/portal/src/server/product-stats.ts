@@ -18,6 +18,7 @@ export interface TileStat {
 export interface LauncherStats {
   readonly crm: readonly TileStat[] | null;
   readonly wms: readonly TileStat[] | null;
+  readonly projects: readonly TileStat[] | null;
 }
 
 /**
@@ -94,8 +95,43 @@ async function wmsStats(): Promise<readonly TileStat[] | null> {
   }
 }
 
-/** Both tiles' stats in parallel; a failed side degrades to `null`, never throws. */
+/** Open tasks (status not done/cancelled) + live projects marked at risk or off track. */
+async function projectsStats(orgId: string): Promise<readonly TileStat[] | null> {
+  try {
+    const result = await db.execute<{ open_tasks: unknown; at_risk: unknown }>(sql`
+      select
+        (select count(*)
+           from pm.tasks t
+           join pm.statuses s on s.id = t.status_id
+           join pm.projects p on p.id = t.project_id
+          where t.org_id = ${orgId}
+            and t.deleted_at is null
+            and p.deleted_at is null
+            and p.archived_at is null
+            and s.category not in ('done', 'cancelled')) as open_tasks,
+        (select count(*)
+           from pm.projects p
+          where p.org_id = ${orgId}
+            and p.deleted_at is null
+            and p.archived_at is null
+            and p.is_template = false
+            and p.status not in ('completed', 'archived')
+            and p.health in ('at_risk', 'off_track')) as at_risk
+    `);
+    const row = result.rows[0];
+    if (!row) return null;
+    return [
+      { label: 'Open tasks', value: toCount(row.open_tasks) },
+      { label: 'Projects at risk', value: toCount(row.at_risk) },
+    ];
+  } catch (error: unknown) {
+    console.error('[portal] Projects launcher stats query failed', error);
+    return null;
+  }
+}
+
+/** Every tile's stats in parallel; a failed side degrades to `null`, never throws. */
 export async function getLauncherStats(orgId: string): Promise<LauncherStats> {
-  const [crm, wms] = await Promise.all([crmStats(orgId), wmsStats()]);
-  return { crm, wms };
+  const [crm, wms, projects] = await Promise.all([crmStats(orgId), wmsStats(), projectsStats(orgId)]);
+  return { crm, wms, projects };
 }

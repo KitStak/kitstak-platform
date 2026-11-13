@@ -34,17 +34,34 @@ const PRODUCTS: Readonly<Record<Module, ProductCopy>> = {
     tagline: 'Warehouse operations',
     description: 'Receiving, inventory, picking and shipping for high-volume fulfillment.',
   },
+  projects: {
+    name: 'KitStak Projects',
+    tagline: 'Projects, tasks and timelines',
+    description: 'Plan work, assign tasks and see every deadline on boards, lists and timelines.',
+  },
 };
 
 function productUrl(module: Module): string {
-  return module === 'crm' ? env.NEXT_PUBLIC_CRM_URL : env.NEXT_PUBLIC_WMS_URL;
+  switch (module) {
+    case 'crm':
+      return env.NEXT_PUBLIC_CRM_URL;
+    case 'wms':
+      return env.NEXT_PUBLIC_WMS_URL;
+    case 'projects':
+      return env.NEXT_PUBLIC_PROJECTS_URL;
+  }
 }
 
 /** Where the tile's empty-state CTA deep-links: straight to the screen that creates the first record. */
 function emptyStateUrl(module: Module, orgSlug: string): string {
-  return module === 'crm'
-    ? `${env.NEXT_PUBLIC_CRM_URL}/${orgSlug}/crm/pipeline`
-    : `${env.NEXT_PUBLIC_WMS_URL}/orders`;
+  switch (module) {
+    case 'crm':
+      return `${env.NEXT_PUBLIC_CRM_URL}/${orgSlug}/crm/pipeline`;
+    case 'wms':
+      return `${env.NEXT_PUBLIC_WMS_URL}/orders`;
+    case 'projects':
+      return `${env.NEXT_PUBLIC_PROJECTS_URL}/projects/new`;
+  }
 }
 
 function firstName(name: string): string {

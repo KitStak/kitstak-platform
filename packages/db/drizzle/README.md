@@ -29,3 +29,5 @@ everything from zero, in journal order.
 
 uuid PKs `DEFAULT gen_random_uuid()`, `timestamptz` timestamps, `created_by`/`updated_by`
 uuid + `version integer DEFAULT 1`, soft delete `deleted_at`, enums as `text` + CHECK.
+| `0002_core_onboarding.sql` | idx 2 | `core.onboarding_progress` (guided setup state shared by portal, CRM and WMS). |
+| `0003_core_projects_module.sql` | idx 3 | Widens `core.entitlements_module_check` to `('crm', 'wms', 'projects')` for KitStak Projects. |

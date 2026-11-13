@@ -41,6 +41,7 @@ interface EmptyStateCopy {
 const EMPTY_STATS_COPY: Readonly<Record<Module, EmptyStateCopy>> = {
   crm: { message: 'No deals yet', cta: 'Create your first deal' },
   wms: { message: 'No open orders', cta: 'Create your first order' },
+  projects: { message: 'No projects yet', cta: 'Start your first project' },
 };
 
 /** Matches the stat-cell geometry (text-lg value line + text-xs label line) so both tiles stay equal height. */

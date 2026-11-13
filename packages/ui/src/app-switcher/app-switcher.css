@@ -130,6 +130,11 @@
   color: var(--label-green-text);
 }
 
+.ks-appswitcher-mark-projects {
+  background: var(--label-red-subtle);
+  color: var(--label-red-text);
+}
+
 .ks-appswitcher-row[data-locked] .ks-appswitcher-mark {
   background: var(--surface-sunken);
   color: var(--text-muted);
