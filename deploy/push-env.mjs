@@ -67,7 +67,6 @@ const PLANS = {
     ['NEXT_PUBLIC_PROJECTS_URL', urls.projects, false],
     ['TRUSTED_ORIGINS', trusted(urls.crm, urls.wms, urls.projects), false],
     ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
-    ['ENTITLEMENTS_DEV_ALLOW_ALL', '1', false],
   ],
   [s.PROJECT_CRM]: [
     ['DATABASE_URL', pooled, true],
@@ -81,7 +80,6 @@ const PLANS = {
     ['NEXT_PUBLIC_PROJECTS_URL', urls.projects, false],
     ['TRUSTED_ORIGINS', trusted(urls.portal, urls.wms, urls.projects), false],
     ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
-    ['ENTITLEMENTS_DEV_ALLOW_ALL', '1', false],
   ],
   [s.PROJECT_WMS]: [
     ['DATABASE_URL', pooled, true],
@@ -97,7 +95,6 @@ const PLANS = {
     ['NEXT_PUBLIC_PROJECTS_URL', urls.projects, false],
     ['TRUSTED_ORIGINS', trusted(urls.portal, urls.crm, urls.projects), false],
     ['AUTH_COOKIE_DOMAIN', COOKIE_DOMAIN, false],
-    ['ENTITLEMENTS_DEV_ALLOW_ALL', '1', false],
   ],
   // KitStak Projects (Root Directory apps/projects). Reads CRM/WMS through the shared database;
   // WMS data is offered only to the org that owns the single-tenant WMS install.

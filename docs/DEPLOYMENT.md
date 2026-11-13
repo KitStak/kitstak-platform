@@ -1,7 +1,7 @@
 # Deploying KitStak Platform to Vercel
 
-Four Vercel projects, all importing the same repo `KitStak/kitstak-platform`,
-distinguished only by **Root Directory**: Portal, CRM, WMS and Projects.
+Five Vercel projects (portal, crm, wms, projects + the `kitstak-website` marketing site at `apps/web`), all importing the same repo `KitStak/kitstak-platform`,
+distinguished only by **Root Directory**.
 
 ## Per-project settings
 
@@ -12,7 +12,7 @@ distinguished only by **Root Directory**: Portal, CRM, WMS and Projects.
 | Install Command | default (`pnpm install`) | default | default | default |
 | Build Command | default | default (`vercel-build` runs migrations — needs `DATABASE_URL`) | default | default |
 | Node | 22.x | 22.x | 22.x | 22.x |
-| Domain (prod) | `app.kitstak.app` | `crm.kitstak.app` | `wms.kitstak.app` | `projects.kitstak.app` |
+| Domain (prod) | `kitstak.app` | `crm.kitstak.app` | `wms.kitstak.app` | `projects.kitstak.app` |
 
 Enable "Include files outside the Root Directory" (on by default for pnpm
 workspaces — the apps import `packages/*`).
@@ -117,8 +117,10 @@ theirs. Seeding is optional — `db:seed` in each app for demo data.)
 
 - `TRUSTED_ORIGINS` / `NEXT_PUBLIC_*_URL`: come back and fill with the real
   assigned origins, then redeploy.
-- Custom domains later (`app./crm./wms./projects.kitstak.app`): set
-  `AUTH_COOKIE_DOMAIN=.kitstak.app` in all four for cross-subdomain SSO.
+- Production domains: portal `kitstak.app` (apex; `www.` and `app.kitstak.app`
+  308-redirect to it), CRM `crm.kitstak.app`, WMS `wms.kitstak.app`, Projects `projects.kitstak.app`.
+  `AUTH_COOKIE_DOMAIN=.kitstak.app` in all four for cross-app SSO (covers the apex).
+  `deploy/secrets.env` `URL_PORTAL` must be `https://kitstak.app`.
   On `*.vercel.app` origins the apps work but sessions don't carry across
   (different sites) — SSO is fully seamless once custom subdomains exist.
 - WMS cron (`/api/cron/tick` every minute) comes from `apps/wms/vercel.json`
@@ -128,3 +130,10 @@ theirs. Seeding is optional — `db:seed` in each app for demo data.)
 - Projects cron (`/api/v1/integrations/events` every 5 minutes) comes from
   `apps/projects/vercel.json`; set `CRON_SECRET` or the route answers 401.
 - Stripe: deferred — nothing to configure yet.
+
+## Marketing site (`apps/web` → kitstak.com)
+
+Vercel project `kitstak-website`, Root Directory `apps/web`, no env vars
+(fully static). Domains: `kitstak.com` (primary) and `www.kitstak.com`
+(redirects to apex). The legacy hub app that previously held these domains is
+retired. The product apps stay on `*.kitstak.app`.

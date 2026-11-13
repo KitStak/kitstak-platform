@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AppMark } from '@/features/launcher/app-mark';
+import Link from 'next/link';
 import { CreditCard } from 'lucide-react';
 import { isModule } from '@kitstak/entitlements';
 import { requirePageSession } from '@/server/session';
@@ -98,8 +99,11 @@ export default async function BillingPage({
           role="status"
           className="rounded-lg border border-warning/25 bg-warning-subtle px-4 py-3 text-sm text-warning-text"
         >
-          <span className="font-semibold">{MODULE_NAMES[requested]}</span> isn’t enabled for {activeOrg.name}.
-          Your administrator can arrange access. See below.
+          <span className="font-semibold">{MODULE_NAMES[requested]}</span> isn’t enabled for {activeOrg.name}.{' '}
+          <Link href={`/billing/upgrade?module=${requested}`} className="font-semibold underline underline-offset-2">
+            See what’s included and how to add it
+          </Link>
+          .
         </div>
       ) : null}
 

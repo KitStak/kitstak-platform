@@ -4,20 +4,42 @@
     {
       "name": "crm",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--dir", "apps/crm", "dev"],
+      "runtimeArgs": [
+        "--dir",
+        "apps/crm",
+        "dev"
+      ],
       "port": 3100
     },
     {
       "name": "portal",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--dir", "apps/portal", "dev"],
+      "runtimeArgs": [
+        "--dir",
+        "apps/portal",
+        "dev"
+      ],
       "port": 3300
     },
     {
       "name": "wms",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--dir", "apps/wms", "dev"],
+      "runtimeArgs": [
+        "--dir",
+        "apps/wms",
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--dir",
+        "apps/web",
+        "dev"
+      ],
+      "port": 3400
     }
   ]
 }

@@ -10,6 +10,7 @@ export const {
   signIn,
   signUp,
   signOut,
+  changePassword,
   useSession,
   getSession,
   organization,

@@ -8,8 +8,12 @@
  */
 import * as React from 'react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
+import { AppIcon } from '../app-icon';
 import { HandoffScreen, useHandoff } from '../handoff';
 import './app-switcher.css';
+
+/** Icon box in a row. The supplied artwork carries its own padding, so it fills the tile. */
+const MARK_SIZE = 32;
 
 export type AppSwitcherAppId = 'portal' | 'crm' | 'wms' | 'projects';
 
@@ -61,52 +65,6 @@ function GridIcon() {
       {[1, 7.25, 13.5].flatMap((y) =>
         [1, 7.25, 13.5].map((x) => <rect key={`${x}-${y}`} x={x} y={y} width="3.5" height="3.5" rx="1" />),
       )}
-    </svg>
-  );
-}
-
-/**
- * Brand-pack app marks (`apps/<app>/public/brand/kitstak-icon-<app>.svg`), inlined with their
- * exact rects so they render on every origin without fetching an asset. Two-tone red/pink;
- * locked rows render them desaturated through CSS.
- */
-type MarkRect = readonly [x: number, y: number, w: number, h: number, pink?: boolean];
-
-const MARK_RECTS: Readonly<Record<AppSwitcherAppId, readonly MarkRect[]>> = {
-  portal: [
-    [38, 56, 56, 38],
-    [106, 56, 56, 38, true],
-    [38, 106, 56, 38, true],
-    [106, 106, 56, 38],
-  ],
-  crm: [
-    [36, 50, 128, 26],
-    [56, 87, 88, 26, true],
-    [76, 124, 48, 26],
-  ],
-  wms: [
-    [46, 54, 30, 28, true],
-    [86, 62, 26, 20, true],
-    [122, 50, 32, 32, true],
-    [34, 82, 132, 14],
-    [44, 110, 36, 26, true],
-    [90, 116, 28, 20, true],
-    [128, 106, 26, 30, true],
-    [34, 136, 132, 14],
-  ],
-  projects: [
-    [38, 52, 80, 26],
-    [68, 87, 80, 26, true],
-    [98, 122, 64, 26],
-  ],
-};
-
-function BrandMark({ app }: { readonly app: AppSwitcherAppId }) {
-  return (
-    <svg aria-hidden width="22" height="18" viewBox="28 40 144 120" className="ks-appswitcher-brand">
-      {MARK_RECTS[app].map(([x, y, w, h, pink]) => (
-        <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} fill={pink ? '#D65A6E' : '#C8102E'} />
-      ))}
     </svg>
   );
 }
@@ -182,8 +140,8 @@ function AppRow({
         className="ks-appswitcher-row"
         onClick={onNavigate}
       >
-        <span className={`ks-appswitcher-mark ks-appswitcher-mark-${app.id}`}>
-          <BrandMark app={app.id} />
+        <span className="ks-appswitcher-mark">
+          <AppIcon app={app.id} size={MARK_SIZE} />
         </span>
         <span className="ks-appswitcher-text">
           <span className="ks-appswitcher-name">{app.name}</span>

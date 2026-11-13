@@ -1,0 +1,141 @@
+/* Shared building blocks for the product illustrations (small, live pieces of app UI). */
+.panel {
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elevation-lg);
+  padding: clamp(18px, 2.4vw, 28px);
+}
+.panel[data-lifted] {
+  border-color: transparent;
+  box-shadow: var(--elevation-modal);
+}
+.head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.title {
+  font-size: var(--type-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.sub {
+  margin-top: 3px;
+  font-size: var(--type-sm);
+  color: var(--text-muted);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--type-sm);
+}
+.muted {
+  color: var(--text-muted);
+}
+
+/* Segmented control */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--surface-selected);
+}
+.tab {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+  transition:
+    color var(--duration-normal) var(--ease-out),
+    background-color var(--duration-normal) var(--ease-out);
+}
+.tab:hover {
+  color: var(--text-primary);
+}
+.tab[aria-selected='true'],
+.tab[aria-pressed='true'] {
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  box-shadow: var(--elevation-xs), 0 0 0 1px var(--segment-ring);
+}
+
+/* Status pill: set --tone / --tone-subtle / --tone-text on the element. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: var(--tone-subtle, var(--surface-selected));
+  color: color-mix(in srgb, var(--tone-text, var(--text-secondary)), var(--text-primary) var(--pill-text-mix));
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--type-base);
+}
+.row:last-child {
+  border-bottom: 0;
+}
+
+.caption {
+  margin-top: 14px;
+  font-size: var(--type-sm);
+  color: var(--text-muted);
+}
+.smallBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  cursor: pointer;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  transition:
+    background-color var(--duration-normal) var(--ease-out),
+    border-color var(--duration-normal) var(--ease-out),
+    transform var(--duration-normal) var(--ease-out);
+}
+.smallBtn:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-input-hover);
+}
+.smallBtn:active {
+  transform: translateY(1px);
+}
+.smallBtn[data-primary] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-fg);
+}
+.smallBtn[data-primary]:hover {
+  background: var(--primary-hover);
+}

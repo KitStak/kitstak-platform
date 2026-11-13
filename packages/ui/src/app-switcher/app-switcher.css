@@ -115,25 +115,14 @@
   border-radius: var(--radius-lg);
 }
 
-.ks-appswitcher-mark-portal,
-.ks-appswitcher-mark-crm,
-.ks-appswitcher-mark-wms,
-.ks-appswitcher-mark-projects {
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-panel);
-}
-
-.ks-appswitcher-row[aria-current] .ks-appswitcher-mark {
-  border-color: var(--border-default);
-}
-
-.ks-appswitcher-row[data-locked] .ks-appswitcher-mark {
+/* The app icons bring their own brand colours; the tile behind them stays neutral. */
+.ks-appswitcher-mark {
   background: var(--surface-sunken);
 }
 
-.ks-appswitcher-row[data-locked] .ks-appswitcher-brand {
-  opacity: 0.55;
+.ks-appswitcher-row[data-locked] .ks-appswitcher-mark svg {
   filter: grayscale(1);
+  opacity: 0.55;
 }
 
 .ks-appswitcher-text {

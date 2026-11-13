@@ -1,0 +1,22 @@
+/* Plain status line under the section bar: this product is not available yet. */
+.notice {
+  margin-top: 28px;
+  margin-bottom: calc(var(--section-y) * -0.5);
+  font-size: var(--type-base);
+  color: var(--text-secondary);
+}
+.notice strong {
+  margin-right: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+.notice a {
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

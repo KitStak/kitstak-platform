@@ -1,0 +1,124 @@
+.panel {
+  position: fixed;
+  inset: var(--header-h) 0 0;
+  background: var(--surface-app);
+  color: var(--text-primary);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--duration-slow) var(--ease-out),
+    visibility 0s linear var(--duration-slow);
+}
+.panel[data-open] {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.inner {
+  padding-top: 24px;
+  padding-bottom: 40px;
+}
+.heading {
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.products,
+.links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.products {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-default);
+}
+.products li,
+.links li {
+  opacity: 0;
+  transform: translateY(12px);
+}
+.panel[data-open] .products li,
+.panel[data-open] .links li {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 500ms var(--ease-site),
+    transform 600ms var(--ease-site);
+  transition-delay: calc(60ms + var(--i) * 40ms);
+}
+.product {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border-default);
+}
+.product > svg {
+  margin-top: 10px;
+}
+.product > img {
+  margin-top: -2px;
+}
+.product[aria-current='page'] .productName {
+  text-decoration: underline;
+  text-decoration-color: var(--primary);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+}
+.productName {
+  display: block;
+  font-size: var(--type-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+.blurb {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--type-base);
+  color: var(--text-muted);
+}
+.links {
+  margin-top: 12px;
+}
+.links a {
+  display: block;
+  padding: 12px 0;
+  font-size: var(--type-lg);
+  font-weight: var(--weight-semibold);
+}
+.links a[aria-current='page'] {
+  text-decoration: underline;
+  text-decoration-color: var(--primary);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+}
+.actions {
+  margin-top: 28px;
+  display: grid;
+  gap: 12px;
+}
+.actions :global(.btn) {
+  justify-content: center;
+  height: 52px;
+}
+@media (min-width: 901px) {
+  .panel {
+    display: none;
+  }
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  vertical-align: middle;
+}

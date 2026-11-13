@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { ArrowUpRight, Lock } from 'lucide-react';
+import { AppIcon } from '@kitstak/ui/app-icon';
 import type { Module } from '@kitstak/entitlements';
 import type { ModuleAccess } from '@/server/entitlements';
 import type { TileStat } from '@/server/product-stats';
 import { Badge, cn } from '@/components/ui';
-import { AppMark } from './app-mark';
 
 export interface ProductTileProps {
   readonly module: Module;
@@ -107,16 +107,13 @@ export function ProductTile({
   const body = (
     <>
       <div className="flex items-start justify-between gap-3">
-        <span className="flex items-center gap-2.5">
-          <AppMark module={module} locked={!entitled} />
-          <span
-            className={cn(
-              'inline-flex h-6 items-center rounded-md px-2 text-2xs font-bold tracking-[0.12em] uppercase',
-              entitled ? 'bg-inverse text-fg-inverse' : 'bg-sunken text-fg-muted',
-            )}
-          >
-            {module}
-          </span>
+        <span
+          className={cn(
+            'inline-flex size-12 items-center justify-center rounded-lg bg-sunken',
+            !entitled && 'opacity-55 grayscale',
+          )}
+        >
+          <AppIcon app={module} size={44} />
         </span>
         <Badge tone={badge.tone}>{badge.label}</Badge>
       </div>
@@ -166,7 +163,7 @@ export function ProductTile({
           ) : (
             <>
               <Lock aria-hidden className="size-3.5" />
-              View billing
+              View plans
             </>
           )}
         </span>
@@ -201,7 +198,7 @@ export function ProductTile({
     );
   }
   return (
-    <Link href={`/billing?module=${module}`} className={tileClass}>
+    <Link href={`/billing/upgrade?module=${module}`} className={tileClass}>
       {body}
     </Link>
   );

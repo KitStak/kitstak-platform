@@ -1,0 +1,82 @@
+.band {
+  border-top: 1px solid var(--border-subtle);
+}
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(40px, 6vw, 96px);
+  align-items: center;
+}
+.included {
+  list-style: none;
+  margin: 36px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+}
+.included li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: var(--type-base);
+  color: var(--text-secondary);
+}
+.included svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--brand-red);
+}
+.card {
+  padding: clamp(24px, 3vw, 40px);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  background: var(--surface-panel);
+  box-shadow: var(--elevation-lg);
+}
+.cardName {
+  font-size: var(--type-base);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.amount {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-top: 10px;
+}
+.figure {
+  font-size: clamp(72px, 9vw, 112px);
+}
+.per {
+  padding-bottom: 8px;
+  font-size: var(--type-base);
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+.bundleLine {
+  margin: 20px 0 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--type-base);
+  color: var(--text-secondary);
+}
+.calc {
+  margin-top: 20px;
+  font-size: var(--type-base);
+}
+.fine {
+  margin-top: 16px;
+  font-size: var(--type-xs);
+  color: var(--text-muted);
+}
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .included {
+    grid-template-columns: 1fr;
+  }
+}
