@@ -234,6 +234,32 @@ export function Compare({ visual }: { readonly visual: React.ReactNode }) {
   );
 }
 
+/* ------------------------------------------------------------------ Preview product */
+
+/** A short band for the product that is announced but not yet available. */
+export function ProjectsTeaser() {
+  return (
+    <section className={styles.teaser} aria-labelledby="teaser-heading">
+      <div className={`container ${styles.teaserInner}`}>
+        <StakMark lit="projects" size={64} />
+        <div>
+          <p className={styles.teaserBadge}>Preview · in development</p>
+          <h2 id="teaser-heading" className={styles.teaserTitle}>
+            A third bar is on the way.
+          </h2>
+          <p className={styles.teaserBody}>
+            KitStak Projects puts tasks, timelines and workload on the same stack, linked to the deals and warehouse
+            records the work is about.
+          </p>
+        </div>
+        <Link href={ROUTES.projects} className="btn btn-ghost-inverse btn-lg">
+          Preview KitStak Projects <span className="btn-arrow" aria-hidden>→</span>
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 /* ------------------------------------------------------------------ How it starts */
 
 const STEPS = [

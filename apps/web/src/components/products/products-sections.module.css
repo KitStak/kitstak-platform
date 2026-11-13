@@ -260,6 +260,39 @@
   font-weight: var(--weight-semibold);
 }
 
+/* ------------------------------------------------------------ Preview product */
+.teaser {
+  background: var(--surface-brand);
+  color: var(--brand-cream);
+  padding: clamp(48px, 6vw, 80px) 0;
+}
+.teaserInner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(24px, 4vw, 56px);
+}
+.teaserBadge {
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--on-brand-muted);
+}
+.teaserTitle {
+  margin-top: 8px;
+  font-size: clamp(28px, 3.2vw, 44px);
+}
+.teaserBody {
+  margin-top: 10px;
+  color: var(--on-brand-muted);
+  max-width: 56ch;
+}
+@media (max-width: 900px) {
+  .teaserInner {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+}
+
 /* ------------------------------------------------------------ How it starts */
 .start {
   display: grid;

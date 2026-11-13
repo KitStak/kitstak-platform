@@ -107,3 +107,15 @@
     display: none;
   }
 }
+
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  vertical-align: middle;
+}

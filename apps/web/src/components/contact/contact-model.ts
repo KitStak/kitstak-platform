@@ -18,6 +18,14 @@ export const TOPICS = [
     subject: 'Walkthrough request',
   },
   {
+    id: 'projects',
+    label: 'KitStak Projects',
+    note: 'Projects is in development. Tell us how you run projects today and ask for early access.',
+    prompt: 'How does your team plan and track projects today?',
+    action: 'Ask for early access',
+    subject: 'KitStak Projects early access',
+  },
+  {
     id: 'sales',
     label: 'Pricing and bundles',
     note: 'Questions about price, the bundle, larger teams or more warehouses.',

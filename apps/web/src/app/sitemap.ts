@@ -7,6 +7,7 @@ const PAGES: readonly { readonly path: string; readonly priority: number }[] = [
   { path: '/products', priority: 0.9 },
   { path: '/wms', priority: 0.9 },
   { path: '/crm', priority: 0.9 },
+  { path: '/projects', priority: 0.7 },
   { path: '/get-started', priority: 0.8 },
   { path: '/contact', priority: 0.6 },
 ];

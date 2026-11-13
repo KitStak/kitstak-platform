@@ -12,12 +12,14 @@ export const ROUTES = {
   products: '/products',
   wms: '/wms',
   crm: '/crm',
+  projects: '/projects',
   pricing: '/products#pricing',
   bundle: '/products#bundle',
   getStarted: '/get-started',
   contact: '/contact',
   founder: '/contact?topic=founder',
   demo: '/contact?topic=demo',
+  projectsAccess: '/contact?topic=projects',
 } as const;
 
 export type StackChoice = 'crm' | 'wms' | 'both';

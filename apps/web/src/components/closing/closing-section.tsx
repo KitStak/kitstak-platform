@@ -8,12 +8,15 @@ interface ClosingSectionProps {
   /** Wizard link for the primary action; defaults to the plain setup wizard. */
   readonly startHref?: string;
   readonly startLabel?: string;
+  /** Small print under the buttons. */
+  readonly note?: string;
 }
 
 export function ClosingSection({
   title = 'Put the whole operation on one stack.',
   startHref = ROUTES.getStarted,
   startLabel = 'Set up your Stak',
+  note = 'About five minutes. No card needed to set up.',
 }: ClosingSectionProps) {
   return (
     <section className={styles.band} aria-labelledby="closing-heading">
@@ -33,7 +36,7 @@ export function ClosingSection({
           </Link>
         </div>
         <p className={styles.note} data-reveal style={{ '--reveal-delay': 200 } as React.CSSProperties}>
-          About five minutes. No card needed to set up.
+          {note}
         </p>
       </div>
     </section>

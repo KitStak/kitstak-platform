@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { LINKS, ROUTES } from '../site-links';
 import { StakMark } from '../stak-mark';
-import { PRIMARY_NAV, PRODUCT_NAV, isCurrentPath } from './nav-data';
+import { PREVIEW_PRODUCT, PRIMARY_NAV, PRODUCT_NAV, isCurrentPath } from './nav-data';
 import styles from './mobile-menu.module.css';
 
 const DESKTOP_QUERY = '(min-width: 901px)';
@@ -92,11 +92,27 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
               </span>
             </Link>
           </li>
+          <li style={{ '--i': 3 } as React.CSSProperties}>
+            <Link
+              href={PREVIEW_PRODUCT.href}
+              className={styles.product}
+              aria-current={isCurrentPath(pathname, PREVIEW_PRODUCT.href) ? 'page' : undefined}
+              onClick={onClose}
+            >
+              <StakMark lit="projects" size={32} />
+              <span>
+                <span className={styles.productName}>
+                  {PREVIEW_PRODUCT.name} <span className={styles.badge}>{PREVIEW_PRODUCT.badge}</span>
+                </span>
+                <span className={styles.blurb}>{PREVIEW_PRODUCT.blurb}</span>
+              </span>
+            </Link>
+          </li>
         </ul>
 
         <ul className={styles.links}>
           {PRIMARY_NAV.map((item, i) => (
-            <li key={item.href} style={{ '--i': i + 3 } as React.CSSProperties}>
+            <li key={item.href} style={{ '--i': i + 4 } as React.CSSProperties}>
               <Link
                 href={item.href}
                 aria-current={isCurrentPath(pathname, item.href) ? 'page' : undefined}
@@ -106,7 +122,7 @@ export function MobileMenu({ id, isOpen, pathname, onClose }: MobileMenuProps) {
               </Link>
             </li>
           ))}
-          <li style={{ '--i': PRIMARY_NAV.length + 3 } as React.CSSProperties}>
+          <li style={{ '--i': PRIMARY_NAV.length + 4 } as React.CSSProperties}>
             <Link href={ROUTES.founder} onClick={onClose}>
               Talk to the founder
             </Link>

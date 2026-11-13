@@ -26,7 +26,8 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr);
   gap: 0;
   padding-top: 32px;
-  padding-bottom: 36px;
+  padding-bottom: 28px;
+  row-gap: 24px;
 }
 .product {
   padding-right: 40px;
@@ -133,4 +134,49 @@
 }
 .all:hover {
   color: var(--brand-cream);
+}
+
+/* The product in preview: a quiet row under the ones you can buy today. */
+.preview {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--type-base);
+}
+.previewName {
+  font-weight: var(--weight-bold);
+}
+.previewBadge {
+  padding: 2px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+}
+.previewBlurb {
+  color: var(--text-muted);
+}
+.previewGo {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 8px;
+  font-weight: var(--weight-semibold);
+}
+.previewGo span {
+  color: var(--brand-red);
+  transition: transform var(--duration-slow) var(--ease-site);
+}
+.preview:hover .previewGo span {
+  transform: translateX(4px);
+}
+.preview:hover .previewName,
+.preview[aria-current='page'] .previewName {
+  text-decoration: underline;
+  text-decoration-color: var(--primary);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
 }

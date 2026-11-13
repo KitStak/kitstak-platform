@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ROUTES, getStartedHref } from '../site-links';
 import { StakMark } from '../stak-mark';
-import { PRODUCT_NAV, isCurrentPath } from './nav-data';
+import { PREVIEW_PRODUCT, PRODUCT_NAV, isCurrentPath } from './nav-data';
 import styles from './products-menu.module.css';
 
 interface ProductsMenuProps {
@@ -57,6 +57,21 @@ export function ProductsMenu({ id, isOpen, pathname, onNavigate }: ProductsMenuP
             Compare all products
           </Link>
         </aside>
+
+        <Link
+          href={PREVIEW_PRODUCT.href}
+          className={styles.preview}
+          aria-current={isCurrentPath(pathname, PREVIEW_PRODUCT.href) ? 'page' : undefined}
+          onClick={onNavigate}
+        >
+          <StakMark lit="projects" size={28} />
+          <span className={styles.previewName}>{PREVIEW_PRODUCT.name}</span>
+          <span className={styles.previewBadge}>{PREVIEW_PRODUCT.badge}</span>
+          <span className={styles.previewBlurb}>{PREVIEW_PRODUCT.blurb}</span>
+          <span className={styles.previewGo}>
+            See what is coming <span aria-hidden>→</span>
+          </span>
+        </Link>
       </div>
     </div>
   );

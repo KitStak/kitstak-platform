@@ -1,0 +1,327 @@
+/* ------------------------------------------------------------ Three views of one project */
+.viewBody {
+  min-height: 300px;
+  margin-top: 16px;
+  animation: swap 450ms var(--ease-site) both;
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.column {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+.columnHead {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--tone-subtle);
+  color: color-mix(in srgb, var(--tone-text), var(--text-primary) var(--pill-text-mix));
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+}
+.card {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--elevation-xs);
+}
+.cardTitle {
+  font-size: var(--type-base);
+  font-weight: var(--weight-semibold);
+  line-height: 1.3;
+}
+.cardOwner {
+  font-size: var(--type-xs);
+  color: var(--text-muted);
+}
+
+.weeks {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--type-xs);
+  color: var(--text-muted);
+}
+.bars {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  /* Week rules behind the bars. */
+  background: repeating-linear-gradient(to right, var(--border-subtle) 0 1px, transparent 1px 25%);
+}
+.bars li {
+  position: relative;
+  height: 44px;
+}
+.bar {
+  position: absolute;
+  top: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background: var(--tone);
+  color: #1f2533;
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  line-height: 30px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform-origin: left;
+  animation: grow 700ms var(--ease-site) both;
+  animation-delay: calc(var(--i) * 60ms);
+}
+.bar[data-milestone] {
+  width: 18px !important;
+  height: 18px;
+  top: 13px;
+  padding: 0;
+  border-radius: 2px;
+  background: var(--brand-red);
+  transform: rotate(45deg);
+  animation-name: none;
+}
+.milestoneLabel {
+  position: absolute;
+  top: 12px;
+  font-size: var(--type-xs);
+  font-weight: var(--weight-bold);
+}
+
+.workload {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.workload li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--type-base);
+}
+.person {
+  font-weight: var(--weight-semibold);
+}
+.loadTrack {
+  height: 12px;
+  background: var(--surface-selected);
+}
+.loadTrack span {
+  display: block;
+  height: 100%;
+  background: var(--chart-1);
+  transform-origin: left;
+}
+.workload li[data-over] .loadTrack span {
+  background: var(--brand-red);
+}
+.loadValue {
+  text-align: right;
+  font-size: var(--type-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ Quick add */
+.quickLabel {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-weight: var(--weight-bold);
+  font-size: var(--type-lg);
+  letter-spacing: -0.02em;
+}
+.quickLabel span {
+  font-size: var(--type-sm);
+  font-weight: var(--weight-regular);
+  letter-spacing: 0;
+}
+.quickInput {
+  width: 100%;
+  height: 52px;
+  margin-top: 12px;
+  padding: 0 14px;
+  border: 1px solid var(--border-input-hover);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--type-base);
+}
+.quickInput:focus-visible {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px var(--focus-ring-soft);
+}
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.result {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-subtle);
+}
+.resultHead {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.resultTitle {
+  font-size: var(--type-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.fields {
+  margin: 16px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.fields > div {
+  padding: 10px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  transition:
+    border-color var(--duration-slow) var(--ease-out),
+    background-color var(--duration-slow) var(--ease-out);
+}
+.fields > div[data-set] {
+  border-style: solid;
+  border-color: var(--text-primary);
+  background: var(--surface-sunken);
+}
+.fields dt {
+  font-size: var(--type-xs);
+  color: var(--text-muted);
+}
+.fields dd {
+  margin: 2px 0 0;
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+.fields > div:not([data-set]) dd {
+  font-weight: var(--weight-regular);
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------ Cross-app recipes */
+.recipes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.recipes li:nth-child(2) {
+  margin-left: clamp(0px, 3vw, 40px);
+}
+.recipes li:nth-child(3) {
+  margin-left: clamp(0px, 6vw, 80px);
+}
+.recipeFrom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.recipeLine {
+  margin-top: 10px;
+  font-size: clamp(18px, 1.8vw, 22px);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.015em;
+  line-height: 1.7;
+}
+.recipeWord {
+  color: var(--text-muted);
+}
+.recipeWhen,
+.recipeThen {
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.recipeWhen {
+  background: var(--label-sky-subtle);
+}
+.recipeThen {
+  background: var(--label-green-subtle);
+}
+
+/* ------------------------------------------------------------ Customer card */
+.signal {
+  padding: 14px 0;
+}
+.signalFrom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.signalLabel {
+  display: block;
+  font-weight: var(--weight-semibold);
+}
+.signalApp {
+  display: block;
+  font-size: var(--type-xs);
+  color: var(--text-muted);
+}
+
+@keyframes swap {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: none;
+  }
+}
+@media (max-width: 560px) {
+  .board {
+    grid-template-columns: 1fr;
+  }
+  .viewBody {
+    min-height: 0;
+  }
+  .workload li {
+    grid-template-columns: 84px minmax(0, 1fr);
+  }
+  .loadValue {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+  .fields {
+    grid-template-columns: 1fr;
+  }
+  .signal {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

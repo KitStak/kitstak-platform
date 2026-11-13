@@ -34,6 +34,14 @@
   color: var(--brand-cream);
   font-weight: var(--weight-semibold);
 }
+.badge {
+  padding: 3px 10px;
+  border: 1px solid var(--on-brand-rule);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--brand-cream);
+}
 .title {
   margin-top: 28px;
   font-size: clamp(44px, 6.6vw, 96px);

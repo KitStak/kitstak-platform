@@ -25,9 +25,11 @@ interface ProductHeroProps {
   readonly secondary: HeroAction;
   readonly visual: React.ReactNode;
   readonly facts: readonly HeroFact[];
+  /** Short status shown beside the breadcrumb, e.g. "Preview" for a product still in development. */
+  readonly badge?: string;
 }
 
-export function ProductHero({ product, lit, lines, lead, primary, secondary, visual, facts }: ProductHeroProps) {
+export function ProductHero({ product, lit, lines, lead, primary, secondary, visual, facts, badge }: ProductHeroProps) {
   return (
     <section id="top" className={styles.hero} aria-labelledby="hero-heading">
       <div className={`container ${styles.inner}`}>
@@ -39,6 +41,7 @@ export function ProductHero({ product, lit, lines, lead, primary, secondary, vis
               <StakMark lit={lit} size={22} />
               {product}
             </span>
+            {badge ? <span className={styles.badge}>{badge}</span> : null}
           </nav>
           <h1 id="hero-heading" className={styles.title}>
             {lines.map((line) => (
