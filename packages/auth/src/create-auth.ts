@@ -48,6 +48,7 @@ import {
   type PasswordPolicyPluginOptions,
   type RawSqlExecutor,
 } from './password-policy-plugin';
+import { signOutCookieSweepPlugin } from './sign-out-cookie-sweep';
 
 type DrizzleDb = Parameters<typeof drizzleAdapter>[0];
 type DrizzleSchema = Parameters<typeof drizzleAdapter>[1]['schema'];
@@ -241,6 +242,9 @@ export function createAuth(options: CreateAuthOptions) {
       // H1: lockout + policy are factory behaviour, never instance opt-in.
       passwordPolicyPlugin({ ...(options.passwordPolicy ?? {}), rawDb }),
       legacyRehashPlugin(),
+      // Sign-out must clear cookies across every plausible Domain scope, not only the
+      // configured one (2026-11-13 logout incident — see ./sign-out-cookie-sweep.ts).
+      signOutCookieSweepPlugin(),
       ...(options.extraPlugins ?? []),
       nextCookies(),
     ],
