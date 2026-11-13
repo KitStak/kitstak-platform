@@ -5,7 +5,7 @@
  */
 import 'server-only';
 import { asc, eq } from 'drizzle-orm';
-import { member, organization } from '@kitstak/db/schema';
+import { member, organization, user } from '@kitstak/db/schema';
 import { db } from '@/server/db';
 import type { Session } from '@/server/session';
 
@@ -38,6 +38,31 @@ export async function listUserOrgs(userId: string): Promise<OrgSummary[]> {
   return rows
     .filter((row) => !row.role.startsWith(DEACTIVATED_PREFIX))
     .map((row) => ({ ...row, role: row.role.split(',')[0]?.trim() || 'member' }));
+}
+
+export interface OrgOwner {
+  readonly name: string;
+  readonly email: string;
+}
+
+/**
+ * The organization's owner (billing contact for the upgrade flow). Role strings can be
+ * comma lists; deactivated members never match. Oldest owner membership wins so the
+ * contact stays stable when ownership is later shared.
+ */
+export async function getOrgOwner(orgId: string): Promise<OrgOwner | null> {
+  const rows = await db
+    .select({ name: user.name, email: user.email, role: member.role, createdAt: member.createdAt })
+    .from(member)
+    .innerJoin(user, eq(member.userId, user.id))
+    .where(eq(member.organizationId, orgId))
+    .orderBy(asc(member.createdAt));
+  const owner = rows.find(
+    (row) =>
+      !row.role.startsWith(DEACTIVATED_PREFIX) &&
+      row.role.split(',').some((part) => part.trim() === 'owner'),
+  );
+  return owner ? { name: owner.name, email: owner.email } : null;
 }
 
 export interface OrgGlance {
