@@ -158,7 +158,7 @@ export function ProductTile({
           ) : (
             <>
               <Lock aria-hidden className="size-3.5" />
-              View billing
+              View plans
             </>
           )}
         </span>
@@ -192,7 +192,7 @@ export function ProductTile({
     );
   }
   return (
-    <Link href={`/billing?module=${module}`} className={tileClass}>
+    <Link href={`/billing/upgrade?module=${module}`} className={tileClass}>
       {body}
     </Link>
   );
