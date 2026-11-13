@@ -12,6 +12,7 @@ import {
   PROJECT_VISIBILITIES,
   STATUS_CATEGORIES,
 } from '@/lib/constants';
+import type { CustomFieldConfig } from '@/lib/custom-field-types';
 import { createdAt, deletedAt, id, orgId, pmSchema, tstz, updatedAt } from './_shared';
 import { spaces } from './workspace';
 
@@ -172,22 +173,6 @@ export const labels = pmSchema.table(
   (t) => [index('labels_org_project_idx').on(t.orgId, t.projectId)],
 );
 
-/** Option of a select / multiselect custom field. */
-export interface CustomFieldOption {
-  readonly id: string;
-  readonly label: string;
-  readonly color: string;
-}
-
-export interface CustomFieldConfig {
-  readonly options?: readonly CustomFieldOption[];
-  /** ISO 4217 code for currency fields. */
-  readonly currency?: string;
-  /** Decimal places for number/currency. */
-  readonly precision?: number;
-  readonly [key: string]: unknown;
-}
-
 /** Custom field definitions. Values live in `tasks.custom_fields[<field id>]`. */
 export const customFields = pmSchema.table(
   'custom_fields',
@@ -217,3 +202,5 @@ export type Section = typeof sections.$inferSelect;
 export type Milestone = typeof milestones.$inferSelect;
 export type Label = typeof labels.$inferSelect;
 export type CustomField = typeof customFields.$inferSelect;
+
+export type { CustomFieldConfig, CustomFieldOption } from '@/lib/custom-field-types';
