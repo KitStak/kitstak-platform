@@ -85,4 +85,4 @@ Assets in `apps/projects/public/brand/` (see `BRAND-README.txt`):
 - CRM: `apps/crm/public/brand/kitstak-icon-crm.svg` (+512/1024 PNG), a funnel of three centered bars (red, pink, red).
 - Portal: `apps/portal/public/brand/kitstak-icon-portal.svg` (+512/1024 PNG), a 2x2 grid (red/pink checker).
 - Copies of all app SVG marks also live in `apps/projects/public/brand/` and `apps/portal/public/brand/`.
-Use them for each app's favicon/top-bar mark, the shared app switcher entries (`packages/ui/src/app-switcher`, render inline SVG with these exact rects so it works on every origin) and the Portal launcher tiles. WMS has no new mark yet: keep its current one.
+Use them for each app's favicon/top-bar mark, the shared app switcher entries (`packages/ui/src/app-switcher`, render inline SVG with these exact rects so it works on every origin) and the Portal launcher tiles. - WMS: `apps/wms/public/brand/kitstak-icon-wms.svg` (+512/1024 PNG), two red shelves with pink boxes.
