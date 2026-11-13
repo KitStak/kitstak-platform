@@ -1,0 +1,6 @@
+.anchor {
+  display: block;
+}
+.calc {
+  margin-top: clamp(40px, 5vw, 64px);
+}

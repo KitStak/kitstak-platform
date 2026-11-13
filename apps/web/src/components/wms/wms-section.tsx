@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { ROUTES } from '../site-links';
 import { RackMap } from './rack-map';
 import styles from './wms-section.module.css';
 
@@ -32,6 +34,11 @@ export function WmsSection() {
                 </li>
               ))}
             </ul>
+            <p className={styles.more} data-reveal>
+              <Link href={ROUTES.wms} className="text-link">
+                Explore KitStak WMS <span className="btn-arrow" aria-hidden>→</span>
+              </Link>
+            </p>
           </div>
           <div className={styles.visual} data-reveal>
             <RackMap />

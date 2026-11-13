@@ -1,4 +1,5 @@
-import { LINKS } from '../site-links';
+import Link from 'next/link';
+import { ROUTES } from '../site-links';
 import { OrderStack } from './order-stack';
 import styles from './hero.module.css';
 
@@ -17,12 +18,12 @@ export function Hero() {
             the order your floor picks.
           </p>
           <div className={styles.actions}>
-            <a href={LINKS.portal} className="btn btn-primary">
-              Get started <span className="btn-arrow" aria-hidden>→</span>
-            </a>
-            <a href="#flow" className="btn btn-ghost-inverse">
-              See how it connects
-            </a>
+            <Link href={ROUTES.getStarted} className="btn btn-primary">
+              Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
+            </Link>
+            <Link href={ROUTES.products} className="btn btn-ghost-inverse">
+              See the products
+            </Link>
           </div>
         </div>
         <OrderStack />

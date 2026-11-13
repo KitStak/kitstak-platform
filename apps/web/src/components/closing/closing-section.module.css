@@ -21,3 +21,8 @@
   flex-wrap: wrap;
   gap: 12px;
 }
+.note {
+  margin-top: 20px;
+  font-size: var(--type-base);
+  color: var(--on-brand-muted);
+}

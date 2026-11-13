@@ -1,8 +1,20 @@
+import Link from 'next/link';
 import { Logo } from '../logo';
-import { LINKS } from '../site-links';
+import { ROUTES } from '../site-links';
 import styles from './closing-section.module.css';
 
-export function ClosingSection() {
+interface ClosingSectionProps {
+  readonly title?: string;
+  /** Wizard link for the primary action; defaults to the plain setup wizard. */
+  readonly startHref?: string;
+  readonly startLabel?: string;
+}
+
+export function ClosingSection({
+  title = 'Put the whole operation on one stack.',
+  startHref = ROUTES.getStarted,
+  startLabel = 'Set up your Stak',
+}: ClosingSectionProps) {
   return (
     <section className={styles.band} aria-labelledby="closing-heading">
       <div className={`container ${styles.inner}`}>
@@ -10,16 +22,19 @@ export function ClosingSection() {
           <Logo height={34} tone="inverse" />
         </div>
         <h2 id="closing-heading" className={styles.title} data-reveal>
-          Put the whole operation on one stack.
+          {title}
         </h2>
         <div className={styles.actions} data-reveal style={{ '--reveal-delay': 120 } as React.CSSProperties}>
-          <a href={LINKS.portal} className="btn btn-primary">
-            Get started <span className="btn-arrow" aria-hidden>→</span>
-          </a>
-          <a href={LINKS.portal} className="btn btn-ghost-inverse">
-            Sign in
-          </a>
+          <Link href={startHref} className="btn btn-primary btn-lg">
+            {startLabel} <span className="btn-arrow" aria-hidden>→</span>
+          </Link>
+          <Link href={ROUTES.founder} className="btn btn-ghost-inverse btn-lg">
+            Talk to the founder
+          </Link>
         </div>
+        <p className={styles.note} data-reveal style={{ '--reveal-delay': 200 } as React.CSSProperties}>
+          About five minutes. No card needed to set up.
+        </p>
       </div>
     </section>
   );
