@@ -15,6 +15,13 @@
       "when": 1794528000000,
       "tag": "0001_core_fks",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794614400000,
+      "tag": "0002_core_onboarding",
+      "breakpoints": true
     }
   ]
 }

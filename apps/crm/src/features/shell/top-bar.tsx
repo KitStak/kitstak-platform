@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   BookOpen,
   Bell,
@@ -8,6 +9,7 @@ import {
   LifeBuoy,
   Menu,
   MessageSquareText,
+  Rocket,
   Search,
   Sparkles,
   UserPlus,
@@ -33,6 +35,7 @@ import { useShellStore } from './store';
 import { TopNav } from './top-nav/top-nav';
 import { UserMenu } from './user-menu';
 import { NotificationsRealtime } from '@/features/notifications';
+import { useSetupGuideAction } from '@/features/home/use-setup-guide';
 
 /** Cross-app origins for the shared AppSwitcher (BLUEPRINT.md §6); dev defaults match the three dev ports. */
 const APP_URLS = {
@@ -43,12 +46,28 @@ const APP_URLS = {
 
 function HelpMenu() {
   const openPanel = useShellStore((state) => state.openPanel);
+  const router = useRouter();
+  const { org } = useOrg();
+  const canManageGuide = useCan('org:update');
+  const setupGuide = useSetupGuideAction(org.id);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <IconButton label="Help" icon={<CircleHelp aria-hidden />} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuItem
+          icon={<Rocket aria-hidden />}
+          data-testid="help-setup-guide"
+          description="Reopen the getting-started checklist on Home"
+          onSelect={() => {
+            // Un-dismiss first so the card is visible when Home renders (org-level write).
+            if (canManageGuide) setupGuide.mutate({ action: 'restore' });
+            router.push(routes.home(org.slug));
+          }}
+        >
+          Setup guide
+        </DropdownMenuItem>
         <DropdownMenuItem
           icon={<Keyboard aria-hidden />}
           shortcut="?"

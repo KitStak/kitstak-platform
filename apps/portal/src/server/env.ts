@@ -41,6 +41,12 @@ const envSchema = z.object({
     .optional(),
   /** Client-IP trust for Better Auth's shared DB rate limiter (same contract as CRM/WMS). */
   TRUST_PROXY: z.string().optional(),
+  /**
+   * Slug of the org that owns the (single-tenant) WMS install. The launcher's setup
+   * guide shows WMS steps only for this org — WMS tables are not org-scoped, so reading
+   * them for any other org would leak the install's state (docs/integration/ONBOARDING.md).
+   */
+  WMS_PLATFORM_ORG_SLUG: z.string().min(1).default('kitstak'),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(5),
 });
 

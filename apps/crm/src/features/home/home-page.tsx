@@ -17,6 +17,7 @@ import { weekWindow } from '@/server/services/shell-home-model';
 import { greetingFor } from './format';
 import { FavoritesCard, InboxPreview, TemplatesRail } from './home-rail';
 import { MyWorkSection, RecentSection, UpdatesSection } from './home-sections';
+import { SetupGuideCard } from './setup-guide-card';
 
 function useActiveWorkspaceId(): string | null {
   const { org } = useOrg();
@@ -105,6 +106,8 @@ export function HomePage() {
         </div>
         <QuickActions workspaceId={workspaceId} />
       </header>
+
+      <SetupGuideCard workspaceId={workspaceId} />
 
       <RecentSection
         recents={home.data?.recents ?? []}

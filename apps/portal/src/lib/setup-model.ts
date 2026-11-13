@@ -1,0 +1,306 @@
+/**
+ * Pure guided-setup model: derives the org's setup plan from live signals, the welcome
+ * wizard's answers and explicit overrides (skips). No IO — the server module
+ * (src/server/onboarding.ts) gathers inputs and resolves deep-link hrefs.
+ *
+ * Completion is DETECTED from real data wherever possible (members, boards, warehouses,
+ * orders), never self-reported: creating your first deal checks the step off by itself.
+ */
+
+export type SetupFocus = 'wms' | 'crm' | 'both';
+export type BusinessType = '3pl' | 'brand' | 'distributor' | 'other';
+export type TeamSize = 'solo' | 'small' | 'medium' | 'large';
+export type StartMode = 'fresh' | 'sample' | 'import';
+
+export interface SetupProfile {
+  readonly focus: SetupFocus;
+  readonly businessType: BusinessType;
+  readonly teamSize: TeamSize;
+  readonly startMode: StartMode;
+}
+
+export const SETUP_FOCUSES: readonly SetupFocus[] = ['wms', 'crm', 'both'];
+export const BUSINESS_TYPES: readonly BusinessType[] = ['3pl', 'brand', 'distributor', 'other'];
+export const TEAM_SIZES: readonly TeamSize[] = ['solo', 'small', 'medium', 'large'];
+export const START_MODES: readonly StartMode[] = ['fresh', 'sample', 'import'];
+
+/** Parses a stored profile payload defensively; null when the shape is off. */
+export function parseSetupProfile(payload: unknown): SetupProfile | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const record = payload as Record<string, unknown>;
+  const focus = record.focus;
+  const businessType = record.businessType;
+  const teamSize = record.teamSize;
+  const startMode = record.startMode;
+  if (
+    typeof focus !== 'string' ||
+    !(SETUP_FOCUSES as readonly string[]).includes(focus) ||
+    typeof businessType !== 'string' ||
+    !(BUSINESS_TYPES as readonly string[]).includes(businessType) ||
+    typeof teamSize !== 'string' ||
+    !(TEAM_SIZES as readonly string[]).includes(teamSize) ||
+    typeof startMode !== 'string' ||
+    !(START_MODES as readonly string[]).includes(startMode)
+  ) {
+    return null;
+  }
+  return {
+    focus: focus as SetupFocus,
+    businessType: businessType as BusinessType,
+    teamSize: teamSize as TeamSize,
+    startMode: startMode as StartMode,
+  };
+}
+
+/** Live signals read from the shared database. `null` = query failed (degrade to todo). */
+export interface SetupSignals {
+  readonly memberCount: number;
+  readonly pendingInvites: number;
+  readonly crmEntitled: boolean;
+  readonly wmsEntitled: boolean;
+  readonly crmBoards: number | null;
+  readonly crmDeals: number | null;
+  readonly wmsWarehouses: number | null;
+  readonly wmsProducts: number | null;
+  readonly wmsOrders: number | null;
+}
+
+export type SetupScope = 'portal' | 'crm' | 'wms';
+export type SetupStepStatus = 'todo' | 'done' | 'skipped';
+
+export type SetupStepKey =
+  | 'profile'
+  | 'invite_team'
+  | 'crm_workspace'
+  | 'crm_first_deal'
+  | 'wms_warehouse'
+  | 'wms_catalog'
+  | 'wms_first_order';
+
+export const SETUP_STEP_KEYS: readonly SetupStepKey[] = [
+  'profile',
+  'invite_team',
+  'crm_workspace',
+  'crm_first_deal',
+  'wms_warehouse',
+  'wms_catalog',
+  'wms_first_order',
+];
+
+export function isSetupStepKey(value: string): value is SetupStepKey {
+  return (SETUP_STEP_KEYS as readonly string[]).includes(value);
+}
+
+export interface SetupStep {
+  readonly key: SetupStepKey;
+  readonly scope: SetupScope;
+  readonly title: string;
+  readonly description: string;
+  readonly cta: string;
+  readonly minutes: number;
+  /** Completion detected from real data ("Done automatically"), vs. a manual action. */
+  readonly auto: boolean;
+  readonly status: SetupStepStatus;
+  /** Set when the step waits on an earlier step; names what unlocks it. */
+  readonly lockedBy: string | null;
+}
+
+interface StepBlueprint {
+  readonly key: SetupStepKey;
+  readonly scope: SetupScope;
+  readonly title: string;
+  readonly description: string;
+  readonly cta: string;
+  readonly minutes: number;
+  readonly auto: boolean;
+  /** Derived completion from signals; null = not auto-detectable right now. */
+  readonly detect: (signals: SetupSignals, profile: SetupProfile | null) => boolean;
+  /** Which earlier step must be done first (operational ordering, Logiwa-fix). */
+  readonly requires?: SetupStepKey;
+  readonly include: (signals: SetupSignals, profile: SetupProfile | null) => boolean;
+}
+
+const count = (value: number | null): number => value ?? 0;
+
+const wantsCrm = (signals: SetupSignals, profile: SetupProfile | null): boolean =>
+  signals.crmEntitled && (profile === null || profile.focus !== 'wms');
+const wantsWms = (signals: SetupSignals, profile: SetupProfile | null): boolean =>
+  signals.wmsEntitled && (profile === null || profile.focus !== 'crm');
+/** Solo founders skip the invite step — unless a teammate or invite shows up anyway. */
+const wantsInvite = (signals: SetupSignals, profile: SetupProfile | null): boolean =>
+  profile?.teamSize !== 'solo' || signals.memberCount > 1 || signals.pendingInvites > 0;
+
+const BLUEPRINTS: readonly StepBlueprint[] = [
+  {
+    key: 'profile',
+    scope: 'portal',
+    title: 'Tell us about your business',
+    description: 'Three quick questions shape this plan around how you work.',
+    cta: 'Start',
+    minutes: 1,
+    auto: false,
+    detect: () => false,
+    include: () => true,
+  },
+  {
+    key: 'invite_team',
+    scope: 'portal',
+    title: 'Invite your team',
+    description: 'Teammates sign in once and get every app your plan includes.',
+    cta: 'Invite',
+    minutes: 2,
+    auto: true,
+    detect: (signals) => signals.memberCount > 1 || signals.pendingInvites > 0,
+    include: wantsInvite,
+  },
+  {
+    key: 'crm_workspace',
+    scope: 'crm',
+    title: 'Create your CRM workspace',
+    description: 'Pick a ready-made template: boards for deals, contacts and accounts.',
+    cta: 'Open CRM',
+    minutes: 2,
+    auto: true,
+    detect: (signals) => count(signals.crmBoards) > 0,
+    include: wantsCrm,
+  },
+  {
+    key: 'crm_first_deal',
+    scope: 'crm',
+    title: 'Add your first deal',
+    description: 'Put one real deal on the board and watch the pipeline come alive.',
+    cta: 'Add a deal',
+    minutes: 1,
+    auto: true,
+    detect: (signals) => count(signals.crmDeals) > 0,
+    requires: 'crm_workspace',
+    include: wantsCrm,
+  },
+  {
+    key: 'wms_warehouse',
+    scope: 'wms',
+    title: 'Create your warehouse',
+    description: 'Name your facility and lay out zones and locations.',
+    cta: 'Open WMS',
+    minutes: 3,
+    auto: true,
+    detect: (signals) => count(signals.wmsWarehouses) > 0,
+    include: wantsWms,
+  },
+  {
+    key: 'wms_catalog',
+    scope: 'wms',
+    title: 'Build your product catalog',
+    description: 'Create items one by one, or import your whole catalog from a spreadsheet.',
+    cta: 'Add products',
+    minutes: 3,
+    auto: true,
+    detect: (signals) => count(signals.wmsProducts) > 0,
+    requires: 'wms_warehouse',
+    include: wantsWms,
+  },
+  {
+    key: 'wms_first_order',
+    scope: 'wms',
+    title: 'Create your first order',
+    description: 'Run one order through pick, pack and ship — the whole loop, end to end.',
+    cta: 'Create order',
+    minutes: 2,
+    auto: true,
+    detect: (signals) => count(signals.wmsOrders) > 0,
+    requires: 'wms_catalog',
+    include: wantsWms,
+  },
+];
+
+/** 3PLs and distributors set up the warehouse first; brands start from the pipeline. */
+function scopeOrder(profile: SetupProfile | null): readonly SetupScope[] {
+  const wmsFirst =
+    profile !== null && (profile.businessType === '3pl' || profile.businessType === 'distributor');
+  return wmsFirst ? ['portal', 'wms', 'crm'] : ['portal', 'crm', 'wms'];
+}
+
+/** Explicit per-step override rows from core.onboarding_progress. */
+export type SetupOverrides = Readonly<Partial<Record<SetupStepKey, 'completed' | 'skipped'>>>;
+
+export function buildSetupSteps(
+  signals: SetupSignals,
+  profile: SetupProfile | null,
+  overrides: SetupOverrides,
+): readonly SetupStep[] {
+  const order = scopeOrder(profile);
+  const included = BLUEPRINTS.filter((blueprint) => blueprint.include(signals, profile))
+    // Stable sort: scope order from the profile, original order within a scope.
+    .map((blueprint, index) => ({ blueprint, index }))
+    .sort(
+      (a, b) =>
+        order.indexOf(a.blueprint.scope) - order.indexOf(b.blueprint.scope) || a.index - b.index,
+    )
+    .map((entry) => entry.blueprint);
+  const statusOf = new Map<SetupStepKey, SetupStepStatus>();
+  for (const blueprint of included) {
+    const override = overrides[blueprint.key];
+    const detected =
+      blueprint.key === 'profile' ? profile !== null : blueprint.detect(signals, profile);
+    const status: SetupStepStatus =
+      detected || override === 'completed' ? 'done' : override === 'skipped' ? 'skipped' : 'todo';
+    statusOf.set(blueprint.key, status);
+  }
+  return included.map((blueprint) => {
+    const status = statusOf.get(blueprint.key) ?? 'todo';
+    const requirement = blueprint.requires;
+    const blocked =
+      status === 'todo' && requirement !== undefined && statusOf.get(requirement) === 'todo';
+    const lockedBy = blocked
+      ? (BLUEPRINTS.find((candidate) => candidate.key === requirement)?.title ?? null)
+      : null;
+    return {
+      key: blueprint.key,
+      scope: blueprint.scope,
+      title: blueprint.title,
+      description: blueprint.description,
+      cta: blueprint.cta,
+      minutes: blueprint.minutes,
+      auto: blueprint.auto,
+      status,
+      lockedBy,
+    };
+  });
+}
+
+export interface SetupSummary {
+  /** DONE steps only — skips never count as finished work (ONBOARDING.md). */
+  readonly doneCount: number;
+  readonly skippedCount: number;
+  readonly totalCount: number;
+  /** Settled (done + skipped) share of the plan; drives the ring. */
+  readonly percent: number;
+  readonly remainingMinutes: number;
+  /** Everything genuinely detected/completed — the only state that earns a celebration. */
+  readonly allDone: boolean;
+  /** Nothing left to act on, but some steps were skipped (quiet wrap-up, no confetti). */
+  readonly allSettled: boolean;
+  /** First actionable todo step (not locked), if any. */
+  readonly nextKey: SetupStepKey | null;
+}
+
+export function summarizeSetup(steps: readonly SetupStep[]): SetupSummary {
+  const totalCount = steps.length;
+  const settled = steps.filter((step) => step.status !== 'todo').length;
+  const doneCount = steps.filter((step) => step.status === 'done').length;
+  const skippedCount = steps.filter((step) => step.status === 'skipped').length;
+  const remainingMinutes = steps
+    .filter((step) => step.status === 'todo')
+    .reduce((sum, step) => sum + step.minutes, 0);
+  const next = steps.find((step) => step.status === 'todo' && step.lockedBy === null);
+  return {
+    doneCount,
+    skippedCount,
+    totalCount,
+    percent: totalCount === 0 ? 100 : Math.round((settled / totalCount) * 100),
+    remainingMinutes,
+    allDone: totalCount > 0 && doneCount === totalCount,
+    allSettled: totalCount > 0 && settled === totalCount,
+    nextKey: next?.key ?? null,
+  };
+}

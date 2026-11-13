@@ -90,7 +90,9 @@ export interface WarehouseRow {
 }
 
 const scopeOf = (auth: AuthContext): SQL =>
-  auth.scope.warehouseIds.length ? inArray(w.id, [...auth.scope.warehouseIds]) : sql`0`;
+  // `false`, not `0`: this lands in WHERE, and Postgres rejects integers there (42804) —
+  // hit on a fresh install where the user has no warehouse scope yet.
+  auth.scope.warehouseIds.length ? inArray(w.id, [...auth.scope.warehouseIds]) : sql`false`;
 
 const OPEN_ORDER = sql.raw(`('Shipped','Cancelled','Delivered')`);
 const openOrdersSql = sql<number>`(SELECT COUNT(*) FROM shipment_orders so WHERE so.warehouse_id = ${qc(w.id)} AND so.status NOT IN ${OPEN_ORDER})`;

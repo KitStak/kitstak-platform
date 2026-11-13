@@ -45,6 +45,13 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: readonly WhatsNewEntry[] = [
   {
+    date: 'Nov 12, 2026',
+    version: 'v0.4',
+    tag: 'New',
+    title: 'Guided setup on the dashboard',
+    body: 'New installs get a "Get set up" checklist in the right order: warehouse, locations, client, products, first order. Steps check themselves off from live data.',
+  },
+  {
     date: 'Nov 10, 2026',
     version: 'v0.4',
     tag: 'New',
@@ -426,6 +433,22 @@ export const HELP_CATEGORIES: readonly HelpCategory[] = [
     title: 'Setup',
     description: 'Warehouses, locations, data setup, printouts and screen configuration.',
     articles: [
+      {
+        id: 'setup-guide',
+        title: 'Use the setup guide',
+        summary: 'The dashboard checklist that walks a new install through setup in the right order.',
+        contexts: ['/dashboard'],
+        steps: [
+          'The "Get set up" panel on the Dashboard lists the five first-run steps in operational order: warehouse → locations → client → products → first order.',
+          'Steps complete themselves from live data — create a warehouse anywhere and the step is checked off; a skipped step is still checked off once the data exists.',
+          'Later steps stay locked until what they depend on is done or skipped (products need a client, orders need products) — skipping a step unlocks the ones after it.',
+          'Admins can skip a step with its inline Skip button (undo any time) or dismiss the whole guide from the panel menu; the dashboard then looks exactly as before.',
+        ],
+        links: [
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Warehouses', href: '/settings/warehouses' },
+        ],
+      },
       {
         id: 'locations',
         title: 'Set up locations and zones',

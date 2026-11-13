@@ -98,7 +98,14 @@ export interface DashboardInitial {
   readonly data: LiveDashboard;
 }
 
-export function DashboardView({ initial = null }: { readonly initial?: DashboardInitial | null } = {}) {
+export function DashboardView({
+  initial = null,
+  setup = null,
+}: {
+  readonly initial?: DashboardInitial | null;
+  /** "Get set up" panel (server-decided), rendered as the first content block. */
+  readonly setup?: React.ReactNode;
+} = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -279,6 +286,7 @@ export function DashboardView({ initial = null }: { readonly initial?: Dashboard
         </div>
       </div>
       <div className={cn('space-y-4 px-6 pt-4 transition-opacity', q.isFetching && data && 'opacity-80')}>
+        {setup}
         {q.error && !data ? (
           <div
             role="alert"
