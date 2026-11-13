@@ -20,6 +20,7 @@ import {
   Search,
   Settings2,
 } from 'lucide-react';
+import { AppIcon } from '@kitstak/ui/app-icon';
 import { withThemeParam } from '@kitstak/ui/theme-handoff';
 import { Kbd, Spinner, cn } from '@/components/ui';
 import { organization, signOut } from '@/lib/auth-client';
@@ -235,7 +236,7 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, entitled }: 
               onSelect={() => (entitled.crm ? openApp(crmUrl) : go('/billing?module=crm'))}
               icon={
                 entitled.crm ? (
-                  <ArrowUpRight aria-hidden className="size-4" />
+                  <AppIcon app="crm" size={20} className="-m-0.5" />
                 ) : (
                   <Lock aria-hidden className="size-4" />
                 )
@@ -251,7 +252,7 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, entitled }: 
               onSelect={() => (entitled.wms ? openApp(wmsUrl) : go('/billing?module=wms'))}
               icon={
                 entitled.wms ? (
-                  <ArrowUpRight aria-hidden className="size-4" />
+                  <AppIcon app="wms" size={20} className="-m-0.5" />
                 ) : (
                   <Lock aria-hidden className="size-4" />
                 )

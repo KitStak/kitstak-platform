@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowLeft, Check } from 'lucide-react';
+import { AppIcon } from '@kitstak/ui/app-icon';
 import { isModule, type Module } from '@kitstak/entitlements';
 import { requirePageSession } from '@/server/session';
 import { getOrgOwner, listUserOrgs, resolveActiveOrg } from '@/server/orgs';
@@ -90,8 +91,8 @@ export default async function UpgradePage({
 
       <header>
         <div className="flex items-center gap-2.5">
-          <span className="inline-flex h-9 items-center rounded-lg bg-inverse px-3 text-sm font-bold tracking-[0.12em] text-fg-inverse uppercase">
-            {moduleParam}
+          <span className="inline-flex size-11 items-center justify-center rounded-lg bg-sunken">
+            <AppIcon app={moduleParam} size={40} />
           </span>
           <Badge tone="neutral">Not in your plan</Badge>
         </div>

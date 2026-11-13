@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ArrowUpRight, Lock } from 'lucide-react';
+import { AppIcon } from '@kitstak/ui/app-icon';
 import type { Module } from '@kitstak/entitlements';
 import type { ModuleAccess } from '@/server/entitlements';
 import type { TileStat } from '@/server/product-stats';
@@ -104,11 +105,11 @@ export function ProductTile({
       <div className="flex items-start justify-between gap-3">
         <span
           className={cn(
-            'inline-flex h-10 items-center rounded-lg px-3 text-sm font-bold tracking-[0.12em] uppercase',
-            entitled ? 'bg-inverse text-fg-inverse' : 'bg-sunken text-fg-muted',
+            'inline-flex size-12 items-center justify-center rounded-lg bg-sunken',
+            !entitled && 'opacity-55 grayscale',
           )}
         >
-          {module}
+          <AppIcon app={module} size={44} />
         </span>
         <Badge tone={badge.tone}>{badge.label}</Badge>
       </div>
