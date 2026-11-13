@@ -1,0 +1,185 @@
+/* ------------------------------------------------------------ Bundle band (navy) */
+.bundle {
+  --stak-lower: #8f122c;
+  background: var(--surface-brand);
+  color: var(--brand-cream);
+}
+.bundleGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(40px, 6vw, 96px);
+  align-items: center;
+}
+.saving {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px 8px 12px;
+  border: 1px solid var(--on-brand-rule);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-base);
+  font-weight: var(--weight-semibold);
+}
+.bundleTitle {
+  margin-top: 24px;
+  max-width: 15ch;
+}
+.onBrandLead {
+  color: var(--on-brand-muted);
+}
+.points {
+  list-style: none;
+  margin: 32px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.points li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: var(--type-md);
+}
+.points svg {
+  flex: none;
+  margin-top: 4px;
+  color: var(--brand-red);
+}
+.actions {
+  margin-top: 40px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* ------------------------------------------------------------ Founder */
+.founder {
+  border-top: 1px solid var(--border-subtle);
+}
+.founderGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+  gap: clamp(32px, 6vw, 96px);
+  align-items: center;
+}
+/* The mark, drawn large: two bars that slide in from the left. */
+.founderMark {
+  display: grid;
+  gap: clamp(14px, 2vw, 26px);
+}
+.founderMark span {
+  display: block;
+  height: clamp(28px, 4vw, 52px);
+  background: var(--brand-red);
+  transform-origin: left;
+}
+.founderMark span:last-child {
+  background: var(--brand-oxblood);
+  width: 100%;
+}
+:global(.js) .founderMark span {
+  transform: scaleX(0);
+  transition: transform 1100ms var(--ease-site);
+}
+:global(.js) .founderMark span:last-child {
+  transition-delay: 140ms;
+}
+:global(.js) .founderMark:global(.is-in) span {
+  transform: none;
+}
+.founderTitle {
+  max-width: 16ch;
+}
+
+/* ------------------------------------------------------------ FAQ */
+.faq {
+  background: var(--surface-sunken);
+  border-top: 1px solid var(--border-subtle);
+}
+.faqGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+  gap: clamp(32px, 6vw, 96px);
+  align-items: start;
+}
+.faqList {
+  border-top: 1px solid var(--border-default);
+}
+.faqItem {
+  border-bottom: 1px solid var(--border-default);
+}
+.faqItem summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--type-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  transition: color var(--duration-normal) var(--ease-out);
+}
+.faqItem summary::-webkit-details-marker {
+  display: none;
+}
+.plus {
+  position: relative;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.plus::before,
+.plus::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 7px;
+  height: 2px;
+  background: currentColor;
+  transition: transform var(--duration-slower) var(--ease-site);
+}
+.plus::after {
+  transform: rotate(90deg);
+}
+.faqItem[open] .plus::after {
+  transform: rotate(0deg);
+}
+.faqItem summary:hover .plus {
+  color: var(--brand-red);
+}
+.faqItem p {
+  padding: 0 40px 24px 0;
+  color: var(--text-secondary);
+  max-width: 62ch;
+  animation: open 400ms var(--ease-site) both;
+}
+@keyframes open {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .bundleGrid,
+  .founderGrid,
+  .faqGrid {
+    grid-template-columns: 1fr;
+  }
+  .founderMark {
+    max-width: 220px;
+  }
+}
+@media (max-width: 560px) {
+  .actions :global(.btn) {
+    width: 100%;
+    justify-content: center;
+  }
+}

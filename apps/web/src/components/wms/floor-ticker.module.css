@@ -1,0 +1,131 @@
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  background: none;
+  cursor: pointer;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+.live span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand-red);
+  animation: pulse 1800ms var(--ease-standard) infinite;
+}
+.live:hover {
+  border-color: var(--border-strong);
+}
+.live[data-paused] span {
+  animation: none;
+  background: var(--text-muted);
+}
+.stages {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.stage {
+  display: grid;
+  grid-template-columns: 28px minmax(96px, 0.9fr) minmax(0, 1.4fr) 64px;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.step {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-selected);
+  font-size: var(--type-sm);
+  font-weight: var(--weight-bold);
+  color: var(--text-muted);
+  transition:
+    background-color var(--duration-slower) var(--ease-out),
+    color var(--duration-slower) var(--ease-out);
+}
+.stage[data-active] .step {
+  background: var(--brand-red);
+  color: #fff;
+}
+.names {
+  display: grid;
+  min-width: 0;
+}
+.label {
+  font-weight: var(--weight-semibold);
+  font-size: var(--type-md);
+}
+.where {
+  font-size: var(--type-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.track {
+  height: 10px;
+  background: var(--surface-selected);
+  overflow: hidden;
+}
+.track span {
+  display: block;
+  height: 100%;
+  background: var(--brand-oxblood);
+  transform-origin: left;
+  transition:
+    transform 900ms var(--ease-site),
+    background-color var(--duration-slower) var(--ease-out);
+}
+.stage[data-active] .track span {
+  background: var(--brand-red);
+}
+.count {
+  font-size: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.event {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  font-size: var(--type-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: slide 500ms var(--ease-site) both;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@keyframes slide {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (max-width: 520px) {
+  .stage {
+    grid-template-columns: 28px minmax(0, 1fr) 56px;
+  }
+  .track {
+    display: none;
+  }
+}

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { ROUTES } from '../site-links';
 import { BoardMorph } from './board-morph';
 import styles from './crm-section.module.css';
 
@@ -20,6 +22,11 @@ export function CrmSection() {
           <p className="lead" data-reveal style={{ '--reveal-delay': 120 } as React.CSSProperties}>
             KitStak CRM keeps accounts, deals and follow-ups on boards your team shapes for itself. Switch the view; the
             records stay put.
+          </p>
+          <p className={styles.more} data-reveal style={{ '--reveal-delay': 180 } as React.CSSProperties}>
+            <Link href={ROUTES.crm} className="text-link">
+              Explore KitStak CRM <span className="btn-arrow" aria-hidden>→</span>
+            </Link>
           </p>
         </div>
         <div className={styles.grid}>

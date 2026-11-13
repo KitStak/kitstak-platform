@@ -1,0 +1,199 @@
+/* ------------------------------------------------------------ Stack diagram */
+.visual {
+  display: grid;
+  gap: 14px;
+}
+.slab {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 18px;
+  background: var(--brand-cream);
+  opacity: 0.16;
+  transform-origin: left;
+  transform: scaleX(0.3);
+  transition:
+    transform 700ms var(--ease-site),
+    opacity 400ms var(--ease-out),
+    background-color 400ms var(--ease-out);
+}
+.slab span {
+  font-family: var(--font-display);
+  font-size: 26px;
+  letter-spacing: 0.06em;
+  color: #fff;
+  opacity: 0;
+  transition: opacity 300ms var(--ease-out);
+}
+.slab[data-on] {
+  opacity: 1;
+  transform: none;
+}
+.slab[data-on] span {
+  opacity: 1;
+  transition-delay: 250ms;
+}
+.slab[data-product='crm'][data-on] {
+  background: var(--brand-red);
+}
+.slab[data-product='wms'][data-on] {
+  background: var(--brand-oxblood);
+}
+.extra {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 18px;
+  border: 1px solid rgb(244 241 233 / 0.4);
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--brand-cream);
+  animation: slabIn 600ms var(--ease-site) both;
+  transform-origin: left;
+}
+@keyframes slabIn {
+  from {
+    opacity: 0;
+    transform: scaleX(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------ Quote (on navy) */
+.lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.lines li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--on-brand-rule);
+  font-size: var(--type-base);
+  font-weight: var(--weight-semibold);
+}
+.lineBasis {
+  display: block;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-regular);
+  color: var(--on-brand-muted);
+}
+.lineAmount {
+  font-variant-numeric: tabular-nums;
+}
+.lines .saving {
+  font-weight: var(--weight-regular);
+  color: var(--on-brand-muted);
+}
+.total {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-top: 22px;
+}
+.totalFigure {
+  font-size: clamp(64px, 7vw, 96px);
+  font-variant-numeric: tabular-nums;
+}
+.totalPer {
+  padding-bottom: 6px;
+  font-size: var(--type-sm);
+  line-height: 1.4;
+  color: var(--on-brand-muted);
+}
+.saved {
+  margin-top: 14px;
+  font-size: var(--type-base);
+  font-weight: var(--weight-semibold);
+}
+.fine {
+  margin-top: 10px;
+  font-size: var(--type-xs);
+  color: var(--on-brand-muted);
+}
+
+/* ------------------------------------------------------------ Stepper */
+.stepper {
+  display: inline-grid;
+  grid-template-columns: 44px 72px 44px;
+  border: 1px solid var(--border-input-hover);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  overflow: hidden;
+}
+.stepper button {
+  height: 44px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: var(--type-lg);
+  font-weight: var(--weight-semibold);
+  transition: background-color var(--duration-normal) var(--ease-out);
+}
+.stepper button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.stepper button:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+.stepper input {
+  width: 100%;
+  height: 44px;
+  border: 0;
+  border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.stepper input::-webkit-outer-spin-button,
+.stepper input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.stepper :focus-visible {
+  outline-offset: -2px;
+}
+
+/* ------------------------------------------------------------ Billing toggle */
+.billing {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--surface-selected);
+}
+.billing label {
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+  transition:
+    color var(--duration-normal) var(--ease-out),
+    background-color var(--duration-normal) var(--ease-out);
+}
+.billing label[data-checked] {
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  box-shadow: var(--elevation-xs), 0 0 0 1px var(--text-primary);
+}
+.billing label:has(:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}

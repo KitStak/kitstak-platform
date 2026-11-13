@@ -1,0 +1,302 @@
+/* ------------------------------------------------------------ RF receiving handheld */
+.rfStage {
+  display: grid;
+  justify-items: center;
+}
+.handheld {
+  width: min(100%, 360px);
+  padding: 14px;
+  border-radius: 28px;
+  background: var(--brand-navy);
+  color: var(--text-primary);
+  box-shadow: var(--elevation-modal);
+}
+.handheldBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px 14px;
+  color: var(--brand-cream);
+  font-weight: var(--weight-semibold);
+  font-size: var(--type-base);
+}
+.handheldStep {
+  font-family: var(--font-mono);
+  font-size: var(--type-sm);
+  opacity: 0.7;
+}
+.scans {
+  list-style: none;
+  margin: 0;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  border-radius: 16px 16px 0 0;
+  background: var(--surface-panel);
+}
+.scan {
+  display: grid;
+  gap: 5px;
+  transition: opacity var(--duration-slower) var(--ease-out);
+}
+.scan[data-state='todo'] {
+  opacity: 0.4;
+}
+.scanPrompt {
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
+}
+.scanField {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  transition:
+    border-color var(--duration-slow) var(--ease-out),
+    box-shadow var(--duration-slow) var(--ease-out);
+}
+.scan[data-state='current'] .scanField {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px var(--focus-ring-soft);
+}
+.scanValue {
+  font-family: var(--font-mono);
+  font-size: var(--type-base);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.scan[data-state='current'] .scanValue {
+  animation: type 900ms steps(14, end) both;
+}
+.scanTick {
+  flex: none;
+  color: var(--success);
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity var(--duration-slow) var(--ease-out),
+    transform var(--duration-slower) var(--ease-emphasized);
+}
+.scan[data-state='done'] .scanTick {
+  opacity: 1;
+  transform: none;
+}
+.scanResult {
+  font-size: var(--type-xs);
+  color: var(--text-muted);
+}
+.received {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 0 0 16px 16px;
+  background: var(--surface-selected);
+  font-size: var(--type-sm);
+  line-height: 1.35;
+  color: var(--text-muted);
+  transition:
+    background-color var(--duration-slower) var(--ease-out),
+    color var(--duration-slower) var(--ease-out);
+}
+.received[data-on] {
+  background: var(--success);
+  color: #fff;
+}
+.receivedQty {
+  font-size: 44px;
+}
+.rfNote {
+  margin-top: 20px;
+  font-size: var(--type-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+@keyframes type {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+/* ------------------------------------------------------------ Packing station */
+.packBlock {
+  padding: 16px 0 4px;
+}
+.packLabel {
+  margin-bottom: 8px;
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.modeNote {
+  margin-top: 10px;
+  min-height: 2.9em;
+  font-size: var(--type-base);
+  color: var(--text-secondary);
+  animation: fade 400ms var(--ease-out) both;
+}
+.packItems {
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.packItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.packItem svg {
+  flex: none;
+  color: var(--success);
+}
+.packName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+}
+.rates {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.rate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px 72px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--type-base);
+  transition:
+    border-color var(--duration-slow) var(--ease-out),
+    background-color var(--duration-slow) var(--ease-out),
+    transform var(--duration-slower) var(--ease-site);
+}
+.rate[data-chosen] {
+  border-color: var(--brand-red);
+  background: var(--surface-sunken);
+  transform: translateX(6px);
+}
+.rateService {
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ratePrice {
+  text-align: right;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------ 3PL bill */
+.billRow {
+  align-items: flex-start;
+}
+.billCharge {
+  display: block;
+  font-weight: var(--weight-semibold);
+}
+.billBasis {
+  display: block;
+  font-size: var(--type-sm);
+  color: var(--text-muted);
+}
+.billAmount {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+}
+.billTotal {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  padding-top: 18px;
+  border-top: 2px solid var(--text-primary);
+}
+.billSum {
+  margin-top: 6px;
+  font-size: clamp(36px, 4vw, 52px);
+}
+
+/* ------------------------------------------------------------ Returns and kitting */
+.duo {
+  display: grid;
+  gap: 20px;
+}
+.kitPanel {
+  margin-left: clamp(0px, 4vw, 56px);
+}
+.dispositions {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.dispositions li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 0;
+}
+.dispName {
+  font-size: var(--type-base);
+  font-weight: var(--weight-medium);
+}
+.dispTrack {
+  height: 12px;
+  background: var(--surface-selected);
+}
+.dispTrack span {
+  display: block;
+  height: 100%;
+  transform-origin: left;
+}
+.dispUnits {
+  font-size: 28px;
+  text-align: right;
+}
+.kitCount {
+  font-size: 48px;
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (max-width: 520px) {
+  .rate {
+    grid-template-columns: minmax(0, 1fr) 56px 64px;
+    gap: 8px;
+  }
+  .packName {
+    display: none;
+  }
+}
+
+.rfPause {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

@@ -1,49 +1,83 @@
+import Link from 'next/link';
 import { Logo } from './logo';
-import { LINKS } from './site-links';
+import { PRODUCT_NAV } from './nav/nav-data';
+import { LINKS, ROUTES, getStartedHref } from './site-links';
 import styles from './footer.module.css';
 
-const COLUMNS = [
+interface FooterLink {
+  readonly href: string;
+  readonly label: string;
+  readonly external?: boolean;
+}
+
+const COLUMNS: readonly { readonly title: string; readonly links: readonly FooterLink[] }[] = [
   {
-    title: 'Product',
+    title: 'Products',
     links: [
-      { href: '#wms', label: 'Warehouse' },
-      { href: '#crm', label: 'CRM' },
-      { href: '#licensing', label: 'Licensing' },
+      ...PRODUCT_NAV.map((p) => ({ href: p.href, label: p.name })),
+      { href: ROUTES.products, label: 'Compare products' },
+      { href: ROUTES.bundle, label: 'Bundle and save' },
+      { href: ROUTES.pricing, label: 'Pricing' },
     ],
   },
   {
-    title: 'Apps',
+    title: 'Get started',
     links: [
-      { href: LINKS.portal, label: 'Portal' },
-      { href: LINKS.wms, label: 'KitStak WMS' },
-      { href: LINKS.crm, label: 'KitStak CRM' },
+      { href: ROUTES.getStarted, label: 'Set up your Stak' },
+      { href: getStartedHref('wms'), label: 'Start with the WMS' },
+      { href: getStartedHref('crm'), label: 'Start with the CRM' },
+      { href: ROUTES.demo, label: 'Book a walkthrough' },
     ],
   },
-] as const;
+  {
+    title: 'Company',
+    links: [
+      { href: ROUTES.platform, label: 'Platform' },
+      { href: ROUTES.founder, label: 'Talk to the founder' },
+      { href: ROUTES.contact, label: 'Contact' },
+    ],
+  },
+  {
+    title: 'Sign in',
+    links: [
+      { href: LINKS.portal, label: 'Portal', external: true },
+      { href: LINKS.wms, label: 'KitStak WMS', external: true },
+      { href: LINKS.crm, label: 'KitStak CRM', external: true },
+    ],
+  },
+];
 
 export function Footer() {
   return (
     <footer className={styles.footer}>
       <div className={`container ${styles.inner}`}>
         <div className={styles.brand}>
-          <Logo height={22} />
+          <Link href={ROUTES.home} aria-label="KitStak home">
+            <Logo height={22} />
+          </Link>
           <p className={styles.tag}>CRM and WMS on one stack.</p>
+          <Link href={ROUTES.getStarted} className={`btn btn-primary ${styles.cta}`}>
+            Set up your Stak <span className="btn-arrow" aria-hidden>→</span>
+          </Link>
         </div>
-        {COLUMNS.map((col) => (
+        <nav aria-label="Footer" className={styles.cols}>
+          {COLUMNS.map((col) => (
           <div key={col.title} className={styles.col}>
             <h3 className={styles.colTitle}>{col.title}</h3>
             <ul>
               {col.links.map((link) => (
                 <li key={link.label}>
-                  <a href={link.href}>{link.label}</a>
+                  {link.external ? <a href={link.href}>{link.label}</a> : <Link href={link.href}>{link.label}</Link>}
                 </li>
               ))}
             </ul>
           </div>
-        ))}
+          ))}
+        </nav>
       </div>
       <div className={`container ${styles.base}`}>
         <span>© {new Date().getFullYear()} KitStak</span>
+        <span>Sell it. Stock it. Ship it.</span>
       </div>
     </footer>
   );

@@ -1,0 +1,136 @@
+.panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  background: var(--surface-app);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-default);
+  box-shadow: var(--elevation-lg);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition:
+    opacity var(--duration-slow) var(--ease-out),
+    transform var(--duration-slower) var(--ease-site),
+    visibility 0s linear var(--duration-slower);
+}
+.panel[data-open] {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 0s;
+}
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr);
+  gap: 0;
+  padding-top: 32px;
+  padding-bottom: 36px;
+}
+.product {
+  padding-right: 40px;
+}
+.product + .product {
+  padding-left: 40px;
+  border-left: 1px solid var(--border-subtle);
+}
+.productHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px;
+  margin: -12px;
+  border-radius: var(--radius-lg);
+  transition: background-color var(--duration-normal) var(--ease-out);
+}
+.productHead > svg {
+  margin-top: 5px;
+}
+.productHead:hover,
+.productHead[aria-current='page'] {
+  background: var(--surface-hover);
+}
+.productName {
+  display: block;
+  font-size: var(--type-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+}
+.arrow {
+  display: inline-block;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition:
+    opacity var(--duration-slow) var(--ease-out),
+    transform var(--duration-slower) var(--ease-site);
+}
+.productHead:hover .arrow {
+  opacity: 1;
+  transform: none;
+}
+.blurb {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--type-base);
+  color: var(--text-muted);
+  max-width: 34ch;
+}
+.links {
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0 0 0 52px;
+  display: grid;
+  gap: 2px;
+}
+.links a {
+  display: block;
+  padding: 6px 0;
+  font-size: var(--type-base);
+  color: var(--text-secondary);
+  transition:
+    color var(--duration-normal) var(--ease-out),
+    transform var(--duration-slow) var(--ease-site);
+}
+.links a:hover {
+  color: var(--text-primary);
+  transform: translateX(4px);
+}
+
+.bundle {
+  --stak-lower: #8f122c;
+  margin-left: 40px;
+  padding: 28px;
+  border-radius: var(--radius-xl);
+  background: var(--surface-brand);
+  color: var(--brand-cream);
+}
+.bundleTitle {
+  margin-top: 20px;
+  font-size: var(--type-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.bundleBody {
+  margin-top: 8px;
+  font-size: var(--type-base);
+  color: rgb(244 241 233 / 0.72);
+}
+.bundleCta {
+  margin-top: 20px;
+  height: 40px;
+  padding: 0 16px;
+  font-size: var(--type-base);
+}
+.all {
+  display: block;
+  margin-top: 16px;
+  font-size: var(--type-sm);
+  color: rgb(244 241 233 / 0.72);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.all:hover {
+  color: var(--brand-cream);
+}

@@ -13,7 +13,7 @@ export default function HomePage() {
     <>
       <PageEffects />
       <Header />
-      <main>
+      <main id="main">
         <Hero />
         <FlowSection />
         <WmsSection />

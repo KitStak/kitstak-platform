@@ -1,0 +1,171 @@
+.chapter[data-tone='sunken'] {
+  background: var(--surface-sunken);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.chapter[data-tone='brand'] {
+  --stak-lower: #8f122c;
+  background: var(--surface-brand);
+  color: var(--brand-cream);
+}
+/* Re-point the text and rule tokens for copy on navy. Scoped to the copy and tiles so the
+   illustration panels beside them keep their own ink. */
+.chapter[data-tone='brand'] .copy,
+.chapter[data-tone='brand'] .tiles {
+  --text-secondary: var(--on-brand-muted);
+  --text-muted: rgb(244 241 233 / 0.62);
+  --border-default: var(--on-brand-rule);
+  --border-subtle: var(--on-brand-rule);
+  --surface-hover: rgb(244 241 233 / 0.06);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(40px, 6vw, 88px);
+  align-items: start;
+}
+.grid[data-flipped] {
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+}
+.grid[data-flipped] .visual {
+  order: -1;
+}
+.grid[data-solo] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.grid[data-solo] .copy {
+  max-width: 760px;
+}
+.visual {
+  color: var(--text-primary);
+  position: sticky;
+  top: calc(var(--header-h) + var(--subnav-h) + 32px);
+}
+
+.label {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  font-size: var(--type-base);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.index {
+  font-size: 40px;
+  color: var(--brand-red);
+}
+.title {
+  margin-top: 20px;
+  max-width: 13ch;
+}
+.lead {
+  margin-top: 24px;
+}
+
+.list {
+  list-style: none;
+  margin: 44px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--border-default);
+}
+.list li {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-default);
+  transition: padding-left var(--duration-slow) var(--ease-site);
+}
+.list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 3px;
+  background: var(--brand-red);
+  transform: scaleY(0);
+  transition: transform var(--duration-slow) var(--ease-site);
+}
+.list li:hover {
+  padding-left: 16px;
+}
+.list li:hover::before {
+  transform: scaleY(1);
+}
+.name {
+  font-weight: var(--weight-semibold);
+  font-size: var(--type-md);
+}
+.note {
+  color: var(--text-muted);
+  font-size: var(--type-base);
+  line-height: 1.5;
+}
+
+.tiles {
+  list-style: none;
+  margin: clamp(40px, 5vw, 64px) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--border-default);
+  border-left: 1px solid var(--border-default);
+}
+.tiles[data-columns='2'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.tiles[data-columns='4'] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.tiles li {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 24px;
+  border-right: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
+  transition: background-color var(--duration-slow) var(--ease-out);
+}
+.tiles li:hover {
+  background: var(--surface-hover);
+}
+
+@media (max-width: 960px) {
+  .grid,
+  .grid[data-flipped] {
+    grid-template-columns: 1fr;
+  }
+  /* One column: heading, then the picture, then the detail list. */
+  .grid:not([data-solo]) {
+    gap: 0;
+  }
+  .grid:not([data-solo]) .copy {
+    display: contents;
+  }
+  .visual,
+  .grid[data-flipped] .visual {
+    position: static;
+    order: 1;
+    margin-top: 36px;
+  }
+  .list {
+    order: 2;
+    margin-top: 36px;
+  }
+  .tiles,
+  .tiles[data-columns='4'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .tiles,
+  .tiles[data-columns='2'],
+  .tiles[data-columns='4'] {
+    grid-template-columns: 1fr;
+  }
+  .tiles li {
+    padding: 18px 16px;
+  }
+}

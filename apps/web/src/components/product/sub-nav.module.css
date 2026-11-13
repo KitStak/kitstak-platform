@@ -1,0 +1,139 @@
+.bar {
+  position: sticky;
+  top: var(--header-h);
+  z-index: var(--z-sticky);
+  background: var(--surface-app);
+  border-bottom: 1px solid var(--border-subtle);
+  transition: box-shadow var(--duration-slow) var(--ease-out);
+}
+.bar[data-stuck] {
+  box-shadow: var(--elevation-sticky);
+}
+.inner {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: var(--subnav-h);
+}
+
+.switch {
+  display: flex;
+  flex: none;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--surface-selected);
+}
+.switch a {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: var(--type-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+  transition:
+    color var(--duration-normal) var(--ease-out),
+    background-color var(--duration-normal) var(--ease-out);
+}
+.switch a:hover {
+  color: var(--text-primary);
+}
+.switch a[aria-current='page'] {
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  box-shadow: var(--elevation-xs), 0 0 0 1px var(--segment-ring);
+}
+
+.sections {
+  flex: 1;
+  min-width: 0;
+}
+.sections ul {
+  /* Positioned so each link's offsetLeft is measured from this scroll track. */
+  position: relative;
+  display: flex;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Soft edges so a link scrolled half out of view fades instead of being cut. */
+  padding: 0 12px;
+  mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+}
+.sections ul::-webkit-scrollbar {
+  display: none;
+}
+.sections a {
+  position: relative;
+  display: block;
+  padding: 0 12px;
+  line-height: var(--subnav-h);
+  font-size: var(--type-base);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: color var(--duration-normal) var(--ease-out);
+}
+.sections a::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 2px;
+  background: var(--primary);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--duration-slower) var(--ease-site);
+}
+.sections a:hover,
+.sections a[aria-current='location'] {
+  color: var(--text-primary);
+}
+.sections a[aria-current='location']::after {
+  transform: scaleX(1);
+}
+.sections a:focus-visible {
+  outline-offset: -3px;
+}
+
+.cta {
+  flex: none;
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: var(--type-base);
+  font-weight: var(--weight-semibold);
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity var(--duration-slow) var(--ease-out),
+    transform var(--duration-slower) var(--ease-site);
+}
+.cta span {
+  color: var(--brand-red);
+  transition: transform var(--duration-slow) var(--ease-site);
+}
+.cta:hover span {
+  transform: translateX(4px);
+}
+/* The header carries the action until this bar sticks; then the bar's own takes over. */
+.bar[data-stuck] .cta {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.cta:focus-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (max-width: 720px) {
+  .cta {
+    display: none;
+  }
+  .inner {
+    gap: 12px;
+  }
+}
