@@ -80,7 +80,7 @@ export interface ViewConfig {
   readonly groupBy?: GroupField;
   readonly groupFieldId?: string;
   /** Board swimlanes. */
-  readonly swimlane?: 'none' | 'assignee' | 'priority' | 'section' | 'milestone';
+  readonly swimlane?: 'none' | 'assignee' | 'priority' | 'section' | 'milestone' | 'label';
   readonly columns?: readonly ViewColumn[];
   readonly showSubtasks?: boolean;
   readonly showCompleted?: boolean;

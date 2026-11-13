@@ -16,6 +16,10 @@ export interface UserPrefs {
     readonly completedSteps?: readonly string[];
     readonly dismissed?: boolean;
     readonly tourSeen?: boolean;
+    /** First-run welcome dialog was shown (studio onboarding). */
+    readonly welcomeSeen?: boolean;
+    /** Guided tour step to resume at. */
+    readonly tourStep?: number;
   };
   readonly sidebar?: { readonly collapsed?: boolean; readonly collapsedSpaceIds?: readonly string[] };
   readonly defaultProjectView?: string;

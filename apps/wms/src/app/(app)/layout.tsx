@@ -20,6 +20,7 @@ async function AuthedShell({ children }: Readonly<{ children: React.ReactNode }>
         permissions={shell.permissions}
         initialContext={shell.initialContext}
         activeApps={shell.activeApps}
+        entitledApps={shell.entitledApps}
         passwordChange={shell.passwordChange}
         idleMinutes={shell.idleMinutes}
       >

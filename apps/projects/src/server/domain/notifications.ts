@@ -17,6 +17,9 @@ import type { NotificationKind } from '@/lib/constants';
 import type { NotificationDTO } from '@/lib/types';
 import { iso, isoRequired, type DomainContext } from './_shared';
 import { requireTask } from './access';
+import { scheduleAutomationSweep } from './automation-sweep';
+import { scheduleIntegrationEvents } from '@/server/integrations/events';
+import { ensureDueReminders } from './due-reminders';
 import { filterOrgMembers } from './people';
 
 export interface NotifyInput {
@@ -86,7 +89,7 @@ function toDTO(row: typeof notifications.$inferSelect): NotificationDTO {
   };
 }
 
-export type InboxFilter = 'all' | 'unread' | 'archived' | 'mentions' | 'assigned';
+export type InboxFilter = 'all' | 'unread' | 'archived' | 'mentions' | 'assigned' | 'comments' | 'due';
 
 export interface InboxPage {
   readonly items: readonly NotificationDTO[];
@@ -106,6 +109,8 @@ export async function listNotifications(
   if (filter === 'unread') conditions.push(isNull(notifications.readAt));
   if (filter === 'mentions') conditions.push(eq(notifications.kind, 'mention'));
   if (filter === 'assigned') conditions.push(eq(notifications.kind, 'assigned'));
+  if (filter === 'comments') conditions.push(eq(notifications.kind, 'comment'));
+  if (filter === 'due') conditions.push(inArray(notifications.kind, ['due_soon', 'overdue']));
   if (options.before) conditions.push(lt(notifications.createdAt, new Date(options.before)));
   const rows = await db
     .select()
@@ -122,6 +127,12 @@ export async function listNotifications(
 }
 
 export async function unreadCount(ctx: DomainContext): Promise<number> {
+  // Lazily create due-today / overdue reminders (throttled per person, see due-reminders.ts).
+  await ensureDueReminders(ctx);
+  // Scheduled automation triggers (due soon / overdue / CRM / WMS) run after the response.
+  scheduleAutomationSweep(ctx);
+  // CRM/WMS events (deal stage changes, orders shipped, tasks created there) → automations.
+  scheduleIntegrationEvents(ctx);
   const [row] = await db
     .select({ n: count() })
     .from(notifications)

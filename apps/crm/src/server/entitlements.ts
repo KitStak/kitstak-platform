@@ -31,3 +31,21 @@ export async function orgHasCrmModule(orgId: string): Promise<boolean> {
   if (entitlementsAllowAll()) return true;
   return hasModule(db as unknown as EntitlementsDb, orgId, 'crm');
 }
+
+export interface OrgModuleFlags {
+  readonly crm: boolean;
+  readonly wms: boolean;
+  readonly projects: boolean;
+}
+
+/**
+ * Every KitStak module's unlock state for the org (app switcher, sibling-app panels). Fails
+ * closed per module on read errors so a billing hiccup only hides integrations.
+ */
+export async function orgModuleFlags(orgId: string): Promise<OrgModuleFlags> {
+  if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true };
+  const read = (module: 'crm' | 'wms' | 'projects') =>
+    hasModule(db as unknown as EntitlementsDb, orgId, module).catch(() => false);
+  const [crm, wms, projects] = await Promise.all([read('crm'), read('wms'), read('projects')]);
+  return { crm, wms, projects };
+}

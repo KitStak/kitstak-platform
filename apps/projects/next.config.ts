@@ -19,11 +19,27 @@ const securityHeaders = [
     : []),
 ];
 
+/**
+ * Several agents/devs can run `next dev` side by side: each picks its own dist dir so the dev
+ * lockfile and caches never collide. It must live INSIDE `.next/` (e.g. `.next/alice`): Turbopack
+ * only ignores `.next`, so a sibling `.next-alice` folder makes every dev log write trigger a
+ * rebuild and an endless page reload. `.next-<name>` is mapped to `.next/<name>` automatically.
+ */
+function distDir(): string {
+  const requested = process.env.NEXT_DIST_DIR?.trim();
+  if (!requested) return '.next';
+  if (requested.startsWith('.next-')) return `.next/${requested.slice('.next-'.length)}`;
+  return requested;
+}
+
 const nextConfig: NextConfig = {
-  // Several agents/devs can run `next dev` side by side: each picks its own dist dir
-  // (NEXT_DIST_DIR=.next-<name>) so the dev lockfile and caches never collide.
-  distDir: process.env.NEXT_DIST_DIR || '.next',
+  distDir: distDir(),
+  // `next build` would otherwise empty `.next/`, including teammates' running dev dirs (.next/<name>).
+  // CI/Vercel builds start from a clean checkout, so nothing stale survives there.
+  cleanDistDir: false,
   poweredByHeader: false,
+  // Keep the dev badge away from the sidebar footer (Settings / collapse).
+  devIndicators: { position: 'bottom-right' },
   reactStrictMode: true,
   // Workspace packages are shipped as TypeScript source; Next transpiles them.
   transpilePackages: ['@kitstak/auth', '@kitstak/db', '@kitstak/entitlements', '@kitstak/ui'],

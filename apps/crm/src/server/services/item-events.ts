@@ -40,6 +40,14 @@ export async function dispatchItemEvents(ctx: ServiceContext, events: readonly I
   // Board webhooks: outbox rows written in this transaction, delivered after commit (never throws).
   const outbox = await import('./automations-webhooks-outbox');
   await outbox.enqueueWebhookEvents(ctx, events);
+  // KitStak Projects: linked tasks follow stage changes ("when the deal moves to Won…"). Never throws.
+  const stageChanges = events.filter(
+    (event): event is Extract<ItemEvent, { type: 'column_changed' }> => event.type === 'column_changed' && event.columnType === 'status',
+  );
+  if (stageChanges.length > 0) {
+    const projects = await import('./projects-bridge');
+    for (const change of stageChanges) await projects.notifyProjectsOfStageChange(ctx, change);
+  }
   const depth = ctx.automation?.depth ?? 0;
   if (depth >= MAX_AUTOMATION_DEPTH) {
     logger.warn('automations.depth_limit', { orgId: ctx.orgId, depth, events: events.length });

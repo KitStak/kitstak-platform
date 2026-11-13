@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "tsx scripts/db-migrate.ts",
-    "db:seed": "tsx src/server/db/seed/index.ts",
+    "db:seed": "tsx --conditions=react-server src/server/db/seed/index.ts",
     "shot": "node scripts/shot.mjs"
   },
   "dependencies": {

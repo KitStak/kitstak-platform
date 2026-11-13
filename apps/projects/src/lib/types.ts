@@ -26,6 +26,7 @@ import type { FormField, FormSettings } from './form-types';
 import type { OrgRole, ProjectAction } from './permissions';
 import type { TemplatePayload } from './template-types';
 import type { ViewConfig } from './view-config';
+import type { ReportData } from './report-math';
 
 /** ISO-8601 timestamp string. */
 export type IsoDateTime = string;
@@ -381,6 +382,17 @@ export interface AutomationRunDTO {
   readonly createdAt: IsoDateTime;
 }
 
+/** Run history row across rules (Automations → Run history). */
+export interface AutomationRunRowDTO extends AutomationRunDTO {
+  readonly automationName: string;
+  readonly projectId: string | null;
+  /** `OPS-42` (null when the task was deleted). */
+  readonly taskKey: string | null;
+  readonly taskTitle: string | null;
+  /** What started it: task_created, status_changed, due_soon, crm_stage_changed, … */
+  readonly event: string | null;
+}
+
 export interface TemplateDTO {
   /** Built-ins use `builtin:<slug>`; org templates use their uuid. */
   readonly id: string;
@@ -423,6 +435,18 @@ export interface FormDTO {
   readonly createdAt: IsoDateTime;
 }
 
+/** One response to an intake form (Forms → Responses). */
+export interface FormSubmissionDTO {
+  readonly id: string;
+  readonly taskId: string | null;
+  readonly data: Readonly<Record<string, unknown>>;
+  readonly submitterName: string | null;
+  readonly submitterEmail: string | null;
+  readonly createdAt: IsoDateTime;
+  readonly taskKey: string | null;
+  readonly taskTitle: string | null;
+}
+
 /** What the public /forms/[id] page needs (no internal ids beyond the form). */
 export interface PublicFormDTO {
   readonly token: string;
@@ -461,4 +485,68 @@ export interface SearchResults {
   readonly projects: readonly Pick<ProjectSummary, 'id' | 'key' | 'name' | 'color' | 'icon' | 'status'>[];
   readonly people: readonly OrgPerson[];
   readonly goals: readonly Pick<GoalDTO, 'id' | 'name' | 'health'>[];
+}
+
+/** A comment hit on the /search page (nav team). */
+export interface CommentSearchHit {
+  readonly id: string;
+  readonly taskId: string;
+  readonly taskKey: string;
+  readonly taskTitle: string;
+  readonly projectId: string;
+  readonly projectKey: string;
+  readonly projectName: string;
+  readonly authorId: string | null;
+  /** Plain-text snippet around the match (mention tokens shown as @Name). */
+  readonly excerpt: string;
+  readonly createdAt: IsoDateTime;
+}
+
+export type FullSearchType = 'all' | 'tasks' | 'projects' | 'comments' | 'people' | 'goals';
+
+/** GET /api/v1/search/full — the /search results page (nav team). */
+export interface FullSearchResults {
+  readonly query: string;
+  readonly tasks: readonly TaskSummary[];
+  readonly projects: readonly ProjectSummary[];
+  readonly comments: readonly CommentSearchHit[];
+  readonly people: readonly OrgPerson[];
+  readonly goals: readonly GoalDTO[];
+  /** Total matches per type before the page limit. */
+  readonly counts: Readonly<Record<Exclude<FullSearchType, 'all'>, number>>;
+}
+
+// --- Portfolio team: status updates, goal check-ins, reports ------------------------------
+
+/** A posted project status update (health + note), kept in the activity log. */
+export interface ProjectUpdateDTO {
+  readonly id: string;
+  readonly projectId: string;
+  readonly authorId: string | null;
+  readonly health: ProjectHealth;
+  /** Project status at the time of the update (null when it didn't change). */
+  readonly status: ProjectStatus | null;
+  readonly note: string | null;
+  /** Project completion percent when the update was posted. */
+  readonly progress: number;
+  readonly createdAt: IsoDateTime;
+}
+
+/** A goal check-in (health, note and new key result values), kept in the activity log. */
+export interface GoalCheckInDTO {
+  readonly id: string;
+  readonly goalId: string;
+  readonly authorId: string | null;
+  readonly health: GoalHealth;
+  readonly note: string | null;
+  readonly progress: number;
+  readonly keyResults: readonly { readonly id: string; readonly name: string; readonly before: number; readonly after: number; readonly unit: string | null }[];
+  readonly createdAt: IsoDateTime;
+}
+
+/** GET /api/v1/reports?project=KEY|&space=&weeks= — portfolio or single-project report. */
+export interface ReportDTO extends ReportData {
+  readonly scope:
+    | { readonly kind: 'portfolio'; readonly projectCount: number; readonly spaceId: string | null }
+    | { readonly kind: 'project'; readonly projectId: string; readonly key: string; readonly name: string };
 }

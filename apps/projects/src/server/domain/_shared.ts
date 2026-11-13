@@ -37,6 +37,8 @@ export interface DomainContext {
   readonly actorKind: ActorKind;
   /** Automation recursion depth (executor sets it; user requests start at 0). */
   readonly automationDepth?: number;
+  /** Rules already running in this chain; a rule never re-triggers itself (studio team). */
+  readonly automationChain?: readonly string[];
 }
 
 export function toDomainContext(ctx: ProjectsContext): DomainContext {

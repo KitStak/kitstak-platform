@@ -28,6 +28,14 @@ export const routes = {
   home: () => '/',
   myWork: () => '/my-work',
   inbox: () => '/inbox',
+  /** Global search page: `/search?q=…&type=tasks|comments|projects|people|goals`. */
+  search: (q?: string, type?: string) => {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (type && type !== 'all') params.set('type', type);
+    const query = params.toString();
+    return query ? `/search?${query}` : '/search';
+  },
   projects: () => '/projects',
   newProject: (opts?: { template?: string; crmItemId?: string; customerId?: string; name?: string }) => {
     const params = new URLSearchParams();
@@ -49,6 +57,10 @@ export const routes = {
   automations: () => '/automations',
   templates: () => '/templates',
   publicForm: (token: string) => `/forms/${encodeURIComponent(token)}`,
+  /** Intake forms list (studio); `form(id, tab?)` opens the builder for one form. */
+  forms: (projectId?: string) => (projectId ? `/forms?project=${encodeURIComponent(projectId)}` : '/forms'),
+  form: (id: string, tab?: 'questions' | 'settings' | 'share' | 'responses') =>
+    `/forms?form=${encodeURIComponent(id)}${tab && tab !== 'questions' ? `&tab=${tab}` : ''}`,
   settings: (section?: string) => (section ? `/settings?section=${encodeURIComponent(section)}` : '/settings'),
   space: (id: string) => `/projects?space=${encodeURIComponent(id)}`,
   login: (next?: string) => (next ? `/login?next=${encodeURIComponent(next)}` : '/login'),

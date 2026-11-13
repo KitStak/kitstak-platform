@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { after } from 'next/server';
-import { CalendarDays, CreditCard, LayoutGrid, Package, Plus, Settings2, Users, type LucideIcon } from 'lucide-react';
+import { CalendarDays, CreditCard, FolderKanban, LayoutGrid, ListChecks, Package, Plus, Settings2, Users, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { Module } from '@kitstak/entitlements';
 import { env } from '@/server/env';
@@ -181,6 +181,12 @@ export default async function LauncherPage({
     ...(entitledFor('wms')
       ? [{ label: 'Orders', href: `${env.NEXT_PUBLIC_WMS_URL}/orders`, icon: Package, external: true }]
       : []),
+    ...(entitledFor('projects')
+      ? [
+          { label: 'New project', href: `${env.NEXT_PUBLIC_PROJECTS_URL}/projects/new`, icon: FolderKanban, external: true },
+          { label: 'My work', href: `${env.NEXT_PUBLIC_PROJECTS_URL}/my-work`, icon: ListChecks, external: true },
+        ]
+      : []),
     { label: 'Billing', href: '/billing', icon: CreditCard, external: false },
     { label: 'Org settings', href: '/settings/organization', icon: Settings2, external: false },
   ];
@@ -202,11 +208,14 @@ export default async function LauncherPage({
       ) : null}
 
       <section aria-label="Your apps" className="grid gap-4 sm:grid-cols-2">
-        {modules.map((state) => {
+        {modules.map((state, index) => {
           const copy = PRODUCTS[state.module];
+          // An odd last tile spans the row so the grid never ends on a lonely half-width card.
+          const spanRow = modules.length % 2 === 1 && index === modules.length - 1;
           return (
             <ProductTile
               key={state.module}
+              className={spanRow ? 'sm:col-span-2' : undefined}
               module={state.module}
               name={copy.name}
               tagline={copy.tagline}

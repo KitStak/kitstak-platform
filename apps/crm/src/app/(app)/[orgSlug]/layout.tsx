@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { getPageOrgMembership, getSession } from '@/server/auth/session';
 import type { OrgContextValue } from '@/features/shell/org-context';
+import { orgModuleFlags } from '@/server/entitlements';
+import { env } from '@/server/env';
 import { ShellClient } from './shell-client';
 
 interface OrgLayoutProps {
@@ -29,6 +31,7 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   }
 
   const { session, membership } = result;
+  const entitled = await orgModuleFlags(membership.organization.id);
   const context: OrgContextValue = {
     org: {
       id: membership.organization.id,
@@ -44,6 +47,15 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
     },
     role: membership.role,
     permissions: membership.permissions,
+    apps: {
+      urls: {
+        portal: process.env.NEXT_PUBLIC_PORTAL_URL || 'http://localhost:3300',
+        crm: env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3100',
+        wms: process.env.NEXT_PUBLIC_WMS_URL || 'http://localhost:3000',
+        projects: env.NEXT_PUBLIC_PROJECTS_URL,
+      },
+      entitled,
+    },
   };
 
   return <ShellClient context={context}>{children}</ShellClient>;

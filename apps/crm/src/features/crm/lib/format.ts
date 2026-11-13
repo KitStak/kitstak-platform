@@ -6,6 +6,7 @@ export function formatMoney(value: number, currency = 'USD', options: { compact?
     style: 'currency',
     currency,
     notation: compact ? 'compact' : 'standard',
+    minimumFractionDigits: 0,
     maximumFractionDigits: compact ? 1 : 0,
   }).format(value);
 }

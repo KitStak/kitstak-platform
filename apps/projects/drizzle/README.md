@@ -17,3 +17,4 @@ Hand-written SQL, applied by `pnpm --filter kitstak-projects db:migrate` (`scrip
 | File | Contents |
 | --- | --- |
 | `0000_pm_init.sql` | `pm` schema: spaces, projects, members, statuses, sections, milestones, labels, custom fields, tasks (+ full-text `search`), task labels, dependencies, watchers, comments, attachments, append-only activity log, time entries, notifications, goals + key results, saved views, dashboards, automations + runs, templates, forms + submissions, integration links, user prefs, favorites, recents. Widens the entitlement module CHECK to include `projects`. |
+| `0001_integration_events.sql` | `pm.integration_events`: cross-app event inbox written by CRM/WMS through `@kitstak/pm-bridge` (deal stage changes, orders shipped, tasks created from a sibling app) and drained by Projects into automation events. |

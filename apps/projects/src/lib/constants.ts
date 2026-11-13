@@ -88,23 +88,32 @@ export type AutomationRunStatus = (typeof AUTOMATION_RUN_STATUSES)[number];
 export const DEPENDENCY_KINDS = ['finish_to_start', 'start_to_start', 'finish_to_finish', 'start_to_finish'] as const;
 export type DependencyKind = (typeof DEPENDENCY_KINDS)[number];
 
-/** Named colors from the shared token palette (`--label-<name>-*` in @kitstak/ui tokens.css). */
+/** Named colors from the shared token palette (`--label-<name>-*` in @kitstak/ui tokens.css; same set as CRM). */
 export const LABEL_COLORS = [
-  'gray',
-  'brown',
-  'orange',
-  'peach',
-  'yellow',
-  'lime',
   'green',
-  'teal',
-  'sky',
+  'orange',
+  'red',
+  'gray',
   'blue',
-  'indigo',
+  'dark-blue',
   'purple',
   'pink',
+  'teal',
+  'yellow',
+  'lime',
+  'brown',
+  'sky',
   'berry',
-  'red',
+  'indigo',
+  'peach',
+  'green-light',
+  'orange-light',
+  'red-light',
+  'blue-light',
+  'purple-light',
+  'pink-light',
+  'teal-light',
+  'yellow-light',
 ] as const;
 export type LabelColor = (typeof LABEL_COLORS)[number];
 
@@ -189,3 +198,14 @@ export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 /** Project keys: 2-6 uppercase letters/digits, starting with a letter (e.g. OPS, Q4MKT). */
 export const PROJECT_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,5}$/;
+
+/** Reactions offered on comments (server accepts only these). */
+export const REACTION_EMOJIS = ['👍', '🎉', '❤️', '😄', '👀', '🚀', '✅', '🙏'] as const;
+
+/** Default workflow for a blank project. */
+export const DEFAULT_STATUSES: readonly { name: string; category: StatusCategory; color: LabelColor }[] = [
+  { name: 'To do', category: 'todo', color: 'gray' },
+  { name: 'In progress', category: 'in_progress', color: 'blue' },
+  { name: 'In review', category: 'in_progress', color: 'purple' },
+  { name: 'Done', category: 'done', color: 'green' },
+];

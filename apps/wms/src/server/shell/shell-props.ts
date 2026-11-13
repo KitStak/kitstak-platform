@@ -8,7 +8,9 @@ import { eq } from 'drizzle-orm';
 import type { InitialShellContext } from '@/lib/context-label';
 import { getAppDb, type AppDb } from '@/server/api/db';
 import { getAuthContext } from '@/server/auth/context';
-import { wmsModuleEntitled } from '@/server/auth/entitlements';
+import { entitlementsAllowAll, wmsModuleEntitled } from '@/server/auth/entitlements';
+import { ensurePlatformOrg } from '@/server/auth/credentials';
+import { hasModule, type EntitlementsDb } from '@kitstak/entitlements';
 import { getPasswordPolicy, isPasswordExpired } from '@/server/auth/password-policy';
 import { users } from '@/server/db/schema';
 import { getSessionIdleMinutes } from '@/server/repositories/company';
@@ -36,6 +38,21 @@ export interface ShellProps {
   readonly idleMinutes: number | null;
   /** Custom Branding: CSS re-pointing the primary tokens at the brand accent (null = default theme). */
   readonly brandCss?: string | null;
+  /** KitStak module unlock state for the platform org (shared app switcher). */
+  readonly entitledApps?: { readonly crm: boolean; readonly wms: boolean; readonly projects: boolean };
+}
+
+/** Sibling modules the platform org holds (allow-all outside production, like the WMS gate). */
+async function loadEntitledApps(db: AppDb): Promise<NonNullable<ShellProps['entitledApps']>> {
+  if (entitlementsAllowAll()) return { crm: true, wms: true, projects: true };
+  try {
+    const orgId = await ensurePlatformOrg(db);
+    const check = (module: 'crm' | 'projects') => hasModule(db as unknown as EntitlementsDb, orgId, module).catch(() => false);
+    const [crm, projects] = await Promise.all([check('crm'), check('projects')]);
+    return { crm, wms: true, projects };
+  } catch {
+    return { crm: false, wms: true, projects: false };
+  }
 }
 
 async function loadBrandCss(db: AppDb): Promise<string | null> {
@@ -89,5 +106,6 @@ export async function loadShellProps(): Promise<ShellProps | null> {
     passwordChange: await loadPasswordChange(db, auth.user.id),
     idleMinutes: await getSessionIdleMinutes(db),
     brandCss: await loadBrandCss(db),
+    entitledApps: await loadEntitledApps(db),
   };
 }

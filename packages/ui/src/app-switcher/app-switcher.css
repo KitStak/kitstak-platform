@@ -115,29 +115,25 @@
   border-radius: var(--radius-lg);
 }
 
-.ks-appswitcher-mark-portal {
-  background: var(--surface-selected);
-  color: var(--icon-strong);
-}
-
-.ks-appswitcher-mark-crm {
-  background: var(--label-blue-subtle);
-  color: var(--label-blue-text);
-}
-
-.ks-appswitcher-mark-wms {
-  background: var(--label-green-subtle);
-  color: var(--label-green-text);
-}
-
+.ks-appswitcher-mark-portal,
+.ks-appswitcher-mark-crm,
+.ks-appswitcher-mark-wms,
 .ks-appswitcher-mark-projects {
-  background: var(--label-red-subtle);
-  color: var(--label-red-text);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-panel);
+}
+
+.ks-appswitcher-row[aria-current] .ks-appswitcher-mark {
+  border-color: var(--border-default);
 }
 
 .ks-appswitcher-row[data-locked] .ks-appswitcher-mark {
   background: var(--surface-sunken);
-  color: var(--text-muted);
+}
+
+.ks-appswitcher-row[data-locked] .ks-appswitcher-brand {
+  opacity: 0.55;
+  filter: grayscale(1);
 }
 
 .ks-appswitcher-text {

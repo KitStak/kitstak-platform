@@ -62,6 +62,7 @@ async function ShellOrFrame() {
       permissions={shell.permissions}
       initialContext={shell.initialContext}
       activeApps={shell.activeApps}
+      entitledApps={shell.entitledApps}
     >
       <NotFoundBody />
     </AppShell>

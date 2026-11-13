@@ -86,6 +86,7 @@ import {
 } from './wo-client';
 import { WorkOrderWizard } from './wizard/work-order-wizard';
 import { WoStatusPill } from './wo-status';
+import { ProjectTasksCard } from '@/components/projects/project-tasks-card';
 
 const TABS = [
   'components',
@@ -820,6 +821,7 @@ function Loaded({ data }: { readonly data: WorkOrderDetail }) {
               {wo.kittingInstructions || 'No kitting instructions.'}
             </p>
           </section>
+          <ProjectTasksCard kind="work-order" variant="aside" recordId={wo.id} recordLabel={wo.code} />
         </aside>
       </div>
 

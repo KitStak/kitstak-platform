@@ -4,6 +4,7 @@ import type { Module } from '@kitstak/entitlements';
 import type { ModuleAccess } from '@/server/entitlements';
 import type { TileStat } from '@/server/product-stats';
 import { Badge, cn } from '@/components/ui';
+import { AppMark } from './app-mark';
 
 export interface ProductTileProps {
   readonly module: Module;
@@ -18,6 +19,8 @@ export interface ProductTileProps {
   readonly stats?: readonly TileStat[] | null;
   /** Deep link for the empty-state CTA cell (e.g. the CRM pipeline). */
   readonly emptyStateHref?: string;
+  /** Extra grid classes from the launcher (e.g. span a full row). */
+  readonly className?: string;
 }
 
 const ACCESS_BADGE: Readonly<
@@ -98,18 +101,22 @@ export function ProductTile({
   periodEnd,
   stats,
   emptyStateHref,
+  className,
 }: ProductTileProps) {
   const badge = ACCESS_BADGE[access];
   const body = (
     <>
       <div className="flex items-start justify-between gap-3">
-        <span
-          className={cn(
-            'inline-flex h-10 items-center rounded-lg px-3 text-sm font-bold tracking-[0.12em] uppercase',
-            entitled ? 'bg-inverse text-fg-inverse' : 'bg-sunken text-fg-muted',
-          )}
-        >
-          {module}
+        <span className="flex items-center gap-2.5">
+          <AppMark module={module} locked={!entitled} />
+          <span
+            className={cn(
+              'inline-flex h-6 items-center rounded-md px-2 text-2xs font-bold tracking-[0.12em] uppercase',
+              entitled ? 'bg-inverse text-fg-inverse' : 'bg-sunken text-fg-muted',
+            )}
+          >
+            {module}
+          </span>
         </span>
         <Badge tone={badge.tone}>{badge.label}</Badge>
       </div>
@@ -122,7 +129,7 @@ export function ProductTile({
         stats.every((stat) => stat.value === 0) ? (
           <EmptyStats module={module} ctaHref={emptyStateHref} />
         ) : (
-          <dl className="mt-5 grid grid-cols-2 gap-2">
+          <dl className={cn('mt-5 grid gap-2', stats.length >= 3 ? 'grid-cols-3' : 'grid-cols-2')}>
             {stats.map((stat) => (
               <div key={stat.label} className="flex flex-col rounded-lg bg-sunken px-3 py-2">
                 <dd className="order-1 text-lg font-semibold text-fg tabular-nums">{stat.value}</dd>
@@ -174,6 +181,7 @@ export function ProductTile({
     entitled
       ? 'border-border-default shadow-xs hover:-translate-y-0.5 hover:border-border-strong hover:shadow-md'
       : 'border-border-subtle bg-muted/60 hover:border-border-default',
+    className,
   );
 
   if (entitled) {

@@ -22,11 +22,19 @@ export type AutomationTrigger =
   | { readonly type: 'label_added'; readonly labelId?: string }
   | { readonly type: 'comment_added' }
   | { readonly type: 'section_changed'; readonly toSectionId?: string }
-  | { readonly type: 'subtasks_completed' };
+  | { readonly type: 'subtasks_completed' }
+  /** Scheduled: an open task is due within `days` days (0 = today). Fires once per due date. */
+  | { readonly type: 'due_date_approaching'; readonly days: number }
+  /** Scheduled: an open task is past its due date. Fires once per due date. */
+  | { readonly type: 'task_overdue' }
+  /** A CRM deal/account linked to the task moves to a new stage (optionally a named one). */
+  | { readonly type: 'crm_stage_changed'; readonly toStage?: string }
+  /** A WMS order linked to the task ships (status becomes Shipped or Delivered). */
+  | { readonly type: 'wms_order_shipped' };
 
 export type AutomationTriggerType = AutomationTrigger['type'];
 
-export type AutomationConditionField = 'priority' | 'assignee' | 'label' | 'status' | 'statusCategory' | 'section' | 'dueDate' | 'title' | 'isSubtask';
+export type AutomationConditionField = 'project' | 'priority' | 'assignee' | 'label' | 'status' | 'statusCategory' | 'section' | 'dueDate' | 'title' | 'isSubtask';
 
 export interface AutomationCondition {
   readonly field: AutomationConditionField;
@@ -55,7 +63,20 @@ export type AutomationAction =
   | { readonly type: 'add_comment'; readonly body: string }
   | { readonly type: 'create_subtask'; readonly title: string }
   | { readonly type: 'add_watcher'; readonly target: AutomationPersonTarget; readonly userId?: string }
-  | { readonly type: 'complete_parent' };
+  | { readonly type: 'complete_parent' }
+  | { readonly type: 'move_to_project'; readonly projectId: string }
+  | {
+      readonly type: 'create_follow_up';
+      /** Title of the new task. Supports {task} (the original task's name). */
+      readonly title: string;
+      /** Due this many days after the run (omit for no due date). */
+      readonly dueInDays?: number;
+      /** Who gets it: the original task's assignee (default), a teammate, or nobody. */
+      readonly assignTo?: 'assignee' | 'reporter' | 'user' | 'none';
+      readonly userId?: string;
+      /** Create it in another project (default: the same project). */
+      readonly projectId?: string;
+    };
 
 export type AutomationActionType = AutomationAction['type'];
 
@@ -71,7 +92,17 @@ export const TRIGGER_PHRASES: Readonly<Record<AutomationTriggerType, string>> = 
   comment_added: 'someone comments',
   section_changed: 'a task moves to another section',
   subtasks_completed: 'all subtasks are done',
+  due_date_approaching: 'a due date is coming up',
+  task_overdue: 'a task becomes overdue',
+  crm_stage_changed: 'a linked CRM deal changes stage',
+  wms_order_shipped: 'a linked WMS order ships',
 };
+
+/** Triggers checked on a schedule (or when a linked record changes) instead of on a task edit. */
+export const SCHEDULED_TRIGGER_TYPES: readonly AutomationTriggerType[] = ['due_date_approaching', 'task_overdue', 'crm_stage_changed', 'wms_order_shipped'];
+
+/** WMS order statuses that count as "shipped". */
+export const WMS_SHIPPED_STATUSES: readonly string[] = ['shipped', 'delivered'];
 
 export const ACTION_PHRASES: Readonly<Record<AutomationActionType, string>> = {
   set_status: 'move it to a status',
@@ -86,4 +117,6 @@ export const ACTION_PHRASES: Readonly<Record<AutomationActionType, string>> = {
   create_subtask: 'add a subtask',
   add_watcher: 'add a follower',
   complete_parent: 'mark the parent task done',
+  move_to_project: 'move it to another project',
+  create_follow_up: 'create a follow-up task',
 };

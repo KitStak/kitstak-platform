@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDaysIso, diffDays, dueBucket, formatDue, formatMinutes, isIsoDate, isOverdue, startOfWeekIso } from './dates';
+import { addDaysIso, diffDays, dueBucket, formatDue, formatMinutes, formatRelative, isIsoDate, isOverdue, startOfWeekIso } from './dates';
 
 describe('dates', () => {
   it('validates ISO dates', () => {
@@ -43,5 +43,17 @@ describe('dates', () => {
     expect(formatMinutes(90)).toBe('1h 30m');
     expect(formatMinutes(45)).toBe('45m');
     expect(formatMinutes(120)).toBe('2h');
+  });
+
+  it('words relative times by calendar day so they match day headings', () => {
+    const now = new Date(2026, 10, 13, 9, 0); // Fri Nov 13, 9:00 local
+    expect(formatRelative(new Date(2026, 10, 13, 8, 59, 40).toISOString(), now)).toBe('just now');
+    expect(formatRelative(new Date(2026, 10, 13, 8, 30).toISOString(), now)).toBe('30 minutes ago');
+    expect(formatRelative(new Date(2026, 10, 13, 1, 0).toISOString(), now)).toBe('8 hours ago');
+    expect(formatRelative(new Date(2026, 10, 12, 10, 0).toISOString(), now)).toBe('yesterday');
+    // Calendar days, not 24-hour blocks: 33 hours back is still Thursday, 33.5 is Wednesday.
+    expect(formatRelative(new Date(2026, 10, 12, 0, 0).toISOString(), now)).toBe('yesterday');
+    expect(formatRelative(new Date(2026, 10, 11, 23, 30).toISOString(), now)).toBe('2 days ago');
+    expect(formatRelative(new Date(2026, 10, 1, 12, 0).toISOString(), now)).toBe('Nov 1');
   });
 });

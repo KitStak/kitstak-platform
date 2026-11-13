@@ -6,10 +6,11 @@ import { ThemeHandoff } from '@kitstak/ui/theme-handoff';
 import { Toaster, TooltipProvider, toast } from '@/components/ui';
 import { ThemeProvider, useTheme } from '@/features/shell/theme';
 
-/** Sibling-app origins for the cross-app theme handoff; dev defaults match the three dev ports. */
+/** Sibling-app origins for the cross-app theme handoff; dev defaults match the dev ports. */
 const SIBLING_APP_URLS = [
   process.env.NEXT_PUBLIC_PORTAL_URL ?? 'http://localhost:3300',
   process.env.NEXT_PUBLIC_WMS_URL ?? 'http://localhost:3000',
+  process.env.NEXT_PUBLIC_PROJECTS_URL ?? 'http://localhost:3400',
 ];
 
 const MAX_RETRIES = 2;

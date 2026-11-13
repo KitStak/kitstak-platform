@@ -40,6 +40,8 @@ const envSchema = z.object({
   WMS_PLATFORM_ORG_SLUG: z.string().min(1).default('kitstak'),
   /** Attachments go to Vercel Blob when set, else into the database. */
   BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
+  /** Bearer token for scheduled routes (Vercel Cron sends `Authorization: Bearer $CRON_SECRET`). */
+  CRON_SECRET: z.string().min(16).optional(),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(200).default(5),
 });
 
@@ -108,6 +110,13 @@ export function trustedOrigins(): string[] {
       origins.add(new URL(origin).origin);
     } catch {
       throw new Error(`TRUSTED_ORIGINS contains an invalid URL: ${origin}`);
+    }
+  }
+  // Local development: teammates run extra dev servers on 3400-3420 (NEXT_DIST_DIR=.next-<name>).
+  if (current.NODE_ENV !== 'production') {
+    for (let port = 3400; port <= 3420; port += 1) {
+      origins.add(`http://localhost:${port}`);
+      origins.add(`http://127.0.0.1:${port}`);
     }
   }
   return [...origins];

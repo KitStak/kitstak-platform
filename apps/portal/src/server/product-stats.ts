@@ -95,20 +95,30 @@ async function wmsStats(): Promise<readonly TileStat[] | null> {
   }
 }
 
-/** Open tasks (status not done/cancelled) + live projects marked at risk or off track. */
+/**
+ * Open tasks, live projects marked at risk / off track, and open tasks due in the next 7 days
+ * (KitStak Projects, `pm` schema). Guarded by to_regclass: an environment without Projects
+ * installed returns null quietly (no error log), like a missing sibling app should.
+ */
 async function projectsStats(orgId: string): Promise<readonly TileStat[] | null> {
   try {
-    const result = await db.execute<{ open_tasks: unknown; at_risk: unknown }>(sql`
+    const installed = await db.execute<{ ok: boolean }>(sql`select to_regclass('pm.tasks') is not null as ok`);
+    if (!installed.rows[0]?.ok) return null;
+    const result = await db.execute<{ open_tasks: unknown; at_risk: unknown; due_this_week: unknown }>(sql`
+      with open_tasks as (
+        select t.due_date
+          from pm.tasks t
+          join pm.statuses s on s.id = t.status_id
+          join pm.projects p on p.id = t.project_id
+         where t.org_id = ${orgId}
+           and t.deleted_at is null
+           and p.deleted_at is null
+           and p.archived_at is null
+           and p.is_template = false
+           and s.category not in ('done', 'cancelled')
+      )
       select
-        (select count(*)
-           from pm.tasks t
-           join pm.statuses s on s.id = t.status_id
-           join pm.projects p on p.id = t.project_id
-          where t.org_id = ${orgId}
-            and t.deleted_at is null
-            and p.deleted_at is null
-            and p.archived_at is null
-            and s.category not in ('done', 'cancelled')) as open_tasks,
+        (select count(*) from open_tasks) as open_tasks,
         (select count(*)
            from pm.projects p
           where p.org_id = ${orgId}
@@ -116,13 +126,15 @@ async function projectsStats(orgId: string): Promise<readonly TileStat[] | null>
             and p.archived_at is null
             and p.is_template = false
             and p.status not in ('completed', 'archived')
-            and p.health in ('at_risk', 'off_track')) as at_risk
+            and p.health in ('at_risk', 'off_track')) as at_risk,
+        (select count(*) from open_tasks where due_date between current_date and current_date + 6) as due_this_week
     `);
     const row = result.rows[0];
     if (!row) return null;
     return [
       { label: 'Open tasks', value: toCount(row.open_tasks) },
-      { label: 'Projects at risk', value: toCount(row.at_risk) },
+      { label: 'Due soon', value: toCount(row.due_this_week) },
+      { label: 'At risk', value: toCount(row.at_risk) },
     ];
   } catch (error: unknown) {
     console.error('[portal] Projects launcher stats query failed', error);

@@ -207,3 +207,30 @@ describe('summarizeSetup', () => {
     expect(summarizeSetup(steps).nextKey).toBe('wms_warehouse');
   });
 });
+
+describe('KitStak Projects steps', () => {
+  const withProjects: SetupSignals = { ...freshSignals, projectsEntitled: true, pmProjects: 0, pmAssignedTasks: 0, pmLinks: 0 };
+
+  it('adds the Projects steps after the app steps when Projects is licensed', () => {
+    const keys = buildSetupSteps(withProjects, null, {}).map((step) => step.key);
+    expect(keys.slice(-3)).toEqual(['projects_first_project', 'projects_assign_task', 'projects_connect']);
+  });
+
+  it('leaves Projects out when the module is not licensed', () => {
+    const steps = buildSetupSteps(freshSignals, null, {});
+    expect(steps.some((step) => step.scope === 'projects')).toBe(false);
+  });
+
+  it('locks the follow-up steps until the first project exists, then detects them', () => {
+    const before = buildSetupSteps(withProjects, null, {});
+    expect(before.find((step) => step.key === 'projects_assign_task')?.lockedBy).toBe('Start your first project');
+    const after = buildSetupSteps({ ...withProjects, pmProjects: 2, pmAssignedTasks: 5, pmLinks: 1 }, null, {});
+    expect(after.filter((step) => step.scope === 'projects').every((step) => step.status === 'done')).toBe(true);
+  });
+
+  it('only offers the connect step when there is a CRM or WMS to connect to', () => {
+    const steps = buildSetupSteps({ ...withProjects, crmEntitled: false, wmsEntitled: false }, null, {});
+    expect(steps.map((step) => step.key)).not.toContain('projects_connect');
+    expect(steps.map((step) => step.key)).toContain('projects_first_project');
+  });
+});

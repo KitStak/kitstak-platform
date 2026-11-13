@@ -18,13 +18,15 @@ export default async function AppLayout({ children }: { readonly children: React
 
   // Real entitlement reads for the shared AppSwitcher (BLUEPRINT.md §6); no org → both locked.
   const moduleStates = activeOrg ? await getOrgModuleStates(activeOrg.id) : null;
-  const entitledFor = (module: 'crm' | 'wms'): boolean =>
+  const entitledFor = (module: 'crm' | 'wms' | 'projects'): boolean =>
     moduleStates?.modules.find((state) => state.module === module)?.entitled ?? false;
   const appUrls = {
     portal: env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3300',
     crm: env.NEXT_PUBLIC_CRM_URL,
     wms: env.NEXT_PUBLIC_WMS_URL,
+    projects: env.NEXT_PUBLIC_PROJECTS_URL,
   };
+  const entitled = { crm: entitledFor('crm'), wms: entitledFor('wms'), projects: entitledFor('projects') };
 
   return (
     <div className="flex min-h-dvh flex-col bg-app">
@@ -69,12 +71,13 @@ export default async function AppLayout({ children }: { readonly children: React
               activeOrgId={activeOrg?.id ?? null}
               crmUrl={appUrls.crm}
               wmsUrl={appUrls.wms}
-              entitled={{ crm: entitledFor('crm'), wms: entitledFor('wms') }}
+              projectsUrl={appUrls.projects}
+              entitled={entitled}
             />
             <AppSwitcher
               current="portal"
               urls={appUrls}
-              entitled={{ crm: entitledFor('crm'), wms: entitledFor('wms') }}
+              entitled={entitled}
             />
             <ThemeToggle />
             <UserMenu name={session.user.name} email={session.user.email} />
@@ -85,7 +88,7 @@ export default async function AppLayout({ children }: { readonly children: React
       <footer className="border-t border-border-subtle">
         <div className="mx-auto flex w-full max-w-[1120px] items-center justify-between px-4 py-4 text-xs text-fg-muted sm:px-6">
           <span>© {new Date().getFullYear()} KitStak</span>
-          <span>Portal · CRM · WMS</span>
+          <span>Portal · CRM · WMS · Projects</span>
         </div>
       </footer>
     </div>

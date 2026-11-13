@@ -105,7 +105,7 @@ export async function requireTask(
 export function visibleProjectsWhere(ctx: DomainContext): SQL {
   const base = and(eq(projects.orgId, ctx.orgId), isNull(projects.deletedAt)) as SQL;
   if (ctx.actorKind !== 'user' || ctx.orgRole === 'owner' || ctx.orgRole === 'admin') return base;
-  const isMember = sql`exists (select 1 from ${projectMembers} pm_m where pm_m.project_id = ${projects.id} and pm_m.user_id = ${ctx.userId})`;
+  const isMember = sql`exists (select 1 from ${projectMembers} pm_m where pm_m.project_id = "pm"."projects"."id" and pm_m.user_id = ${ctx.userId})`;
   const access =
     ctx.orgRole === 'guest'
       ? or(isMember, eq(projects.ownerId, ctx.userId))

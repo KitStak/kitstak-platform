@@ -68,6 +68,10 @@ import { UpdatesTab as UpdatesTabView } from './updates/updates-tab';
 import { FilesTab as FilesTabView } from './files/files-tab';
 import { ActivityTab as ActivityTabView } from './activity/activity-tab';
 import { ItemCardTab as ItemCardTabView } from './item-card/item-card-tab';
+import { ProjectsTab } from './projects/projects-tab';
+import { ProjectsMark } from './projects/projects-mark';
+import { useItemProjects } from './projects/api';
+import { useOptionalOrg } from '@/features/shell/org-context';
 
 // Memoized: switching tabs re-renders the body, not every mounted tab.
 const UpdatesTab = memo(UpdatesTabView);
@@ -494,6 +498,12 @@ function PanelBody({
   };
   const updates = useItemUpdates(itemId);
   const files = useItemFiles(itemId);
+  // KitStak Projects tab: only when the org has Projects (and its tables exist). Top-level records only.
+  const shellOrg = useOptionalOrg();
+  const projectsEntitled = shellOrg?.apps?.entitled.projects ?? false;
+  const projectsQuery = useItemProjects(itemId, projectsEntitled && data.item?.parentItemId === null);
+  const projectsAvailable = projectsQuery.data?.available === true;
+  const projectsCount = projectsAvailable ? (projectsQuery.data?.work.projects.length ?? 0) + (projectsQuery.data?.work.openTasks ?? 0) : 0;
   const actions = useItemActions(data.boardId, data.term);
   const baseServices = useBoardCellServices(data.boardId, data.payload?.items ?? []);
   const linked = data.detail?.linkedItems;
@@ -728,6 +738,11 @@ function PanelBody({
                 <TabsTrigger value="card" icon={<FileText aria-hidden />} data-testid="tab-card">
                   {data.term} card
                 </TabsTrigger>
+                {projectsAvailable ? (
+                  <TabsTrigger value="projects" icon={<ProjectsMark size={14} />} count={projectsCount || undefined} data-testid="tab-projects">
+                    Projects
+                  </TabsTrigger>
+                ) : null}
               </TabsList>
             </TabStrip>
           </div>
@@ -772,6 +787,11 @@ function PanelBody({
                     canEdit={canEdit}
                     onOpenItem={navigate}
                   />
+                </TabsContent>
+              ) : null}
+              {visited.has('projects') && projectsAvailable ? (
+                <TabsContent value="projects" forceMount className={KEEP_MOUNTED}>
+                  <ProjectsTab itemId={item.id} recordName={item.name} term={data.term} canEdit={canEdit} />
                 </TabsContent>
               ) : null}
             </div>

@@ -59,61 +59,48 @@ function GridIcon() {
   );
 }
 
-function PortalMarkIcon() {
-  return (
-    <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-      <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.5" />
-      <rect x="9" y="1.5" width="5.5" height="5.5" rx="1.5" />
-      <rect x="1.5" y="9" width="5.5" height="5.5" rx="1.5" />
-      <rect x="9" y="9" width="5.5" height="5.5" rx="1.5" />
-    </svg>
-  );
-}
+/**
+ * Brand-pack app marks (`apps/<app>/public/brand/kitstak-icon-<app>.svg`), inlined with their
+ * exact rects so they render on every origin without fetching an asset. Two-tone red/pink;
+ * locked rows render them desaturated through CSS.
+ */
+type MarkRect = readonly [x: number, y: number, w: number, h: number, pink?: boolean];
 
-function CrmMarkIcon() {
-  return (
-    <svg
-      aria-hidden
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinejoin="round"
-      strokeLinecap="round"
-    >
-      <path d="M2 3h12l-4.5 5.2V13l-3 1.5V8.2L2 3Z" />
-    </svg>
-  );
-}
+const MARK_RECTS: Readonly<Record<AppSwitcherAppId, readonly MarkRect[]>> = {
+  portal: [
+    [38, 56, 56, 38],
+    [106, 56, 56, 38, true],
+    [38, 106, 56, 38, true],
+    [106, 106, 56, 38],
+  ],
+  crm: [
+    [36, 50, 128, 26],
+    [56, 87, 88, 26, true],
+    [76, 124, 48, 26],
+  ],
+  wms: [
+    [46, 54, 30, 28, true],
+    [86, 62, 26, 20, true],
+    [122, 50, 32, 32, true],
+    [34, 82, 132, 14],
+    [44, 110, 36, 26, true],
+    [90, 116, 28, 20, true],
+    [128, 106, 26, 30, true],
+    [34, 136, 132, 14],
+  ],
+  projects: [
+    [38, 52, 80, 26],
+    [68, 87, 80, 26, true],
+    [98, 122, 64, 26],
+  ],
+};
 
-function WmsMarkIcon() {
+function BrandMark({ app }: { readonly app: AppSwitcherAppId }) {
   return (
-    <svg
-      aria-hidden
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinejoin="round"
-      strokeLinecap="round"
-    >
-      <path d="M8 1.8 14 5v6L8 14.2 2 11V5l6-3.2Z" />
-      <path d="M2 5l6 3 6-3M8 8v6.2" />
-    </svg>
-  );
-}
-
-/** The Projects mark: three staggered bars (brand pack `kitstak-icon-projects.svg`), single-tone. */
-function ProjectsMarkIcon() {
-  return (
-    <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-      <rect x="1.5" y="3" width="8" height="2.6" rx="0.6" />
-      <rect x="4.5" y="6.7" width="8" height="2.6" rx="0.6" opacity="0.72" />
-      <rect x="7.5" y="10.4" width="7" height="2.6" rx="0.6" />
+    <svg aria-hidden width="22" height="18" viewBox="28 40 144 120" className="ks-appswitcher-brand">
+      {MARK_RECTS[app].map(([x, y, w, h, pink]) => (
+        <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} fill={pink ? '#D65A6E' : '#C8102E'} />
+      ))}
     </svg>
   );
 }
@@ -155,13 +142,6 @@ function LockIcon() {
   );
 }
 
-const MARK_ICONS: Readonly<Record<AppSwitcherAppId, () => React.ReactElement>> = {
-  portal: PortalMarkIcon,
-  crm: CrmMarkIcon,
-  wms: WmsMarkIcon,
-  projects: ProjectsMarkIcon,
-};
-
 function isUnlocked(id: AppSwitcherAppId, entitled: AppSwitcherEntitled | undefined): boolean {
   if (id === 'portal' || entitled === undefined) return true;
   return entitled[id] ?? true;
@@ -184,7 +164,6 @@ function AppRow({
   readonly href: string;
   readonly onNavigate: () => void;
 }) {
-  const Mark = MARK_ICONS[app.id];
   return (
     <li>
       <a
@@ -196,7 +175,7 @@ function AppRow({
         onClick={onNavigate}
       >
         <span className={`ks-appswitcher-mark ks-appswitcher-mark-${app.id}`}>
-          <Mark />
+          <BrandMark app={app.id} />
         </span>
         <span className="ks-appswitcher-text">
           <span className="ks-appswitcher-name">{app.name}</span>

@@ -1,0 +1,31 @@
+{
+  "name": "@kitstak/pm-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared-database bridge into KitStak Projects (the pm schema) for CRM and WMS: read linked projects/tasks for a record, create tasks and links, and emit events that Projects automations react to. Works over any Drizzle Postgres executor (node-postgres, postgres-js, PGlite). Fails soft when the pm schema is absent. TypeScript source-shipped (consumers transpile via Next transpilePackages).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./permissions": "./src/permissions.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "fractional-indexing": "^4.0.0"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "^0.45.4"
+  },
+  "devDependencies": {
+    "@kitstak/config": "workspace:*",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1",
+    "typescript": "^5",
+    "vitest": "^5.1.0"
+  }
+}

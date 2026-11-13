@@ -341,6 +341,17 @@ export async function recordUpdate(
     );
   }
   if (changes.length === 0) return 0;
+  // KitStak Projects: linked tasks follow order / work order / receipt / count status changes.
+  if (changes.some((c) => c.field === 'status')) {
+    const { notifyProjectsOfStatusChange } = await import('@/server/projects/bridge');
+    await notifyProjectsOfStatusChange(tx as unknown as Parameters<typeof notifyProjectsOfStatusChange>[0], {
+      entityType: ref.entityType,
+      entityId: ref.entityId,
+      before: ref.before.status,
+      after: ref.after.status,
+      userId: ctx.userId,
+    });
+  }
   // from/to stay machine-readable; the message gets "—" for an empty side and zoned datetimes.
   const zone = changes.some((c) => isIsoDateTime(c.from) || isIsoDateTime(c.to))
     ? await snapshotZone(tx, { ...ref.before, ...ref.after })

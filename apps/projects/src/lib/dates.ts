@@ -100,8 +100,14 @@ export function formatRelative(iso: string, now: Date = new Date()): string {
   const abs = Math.abs(seconds);
   if (abs < 45) return 'just now';
   if (abs < 3600) return RELATIVE.format(Math.round(seconds / 60), 'minute');
-  if (abs < 86_400) return RELATIVE.format(Math.round(seconds / 3600), 'hour');
-  if (abs < 7 * 86_400) return RELATIVE.format(Math.round(seconds / 86_400), 'day');
+  // Count calendar days (local), so "yesterday" always matches the day headings beside it.
+  const days = Math.round(
+    (new Date(then.getFullYear(), then.getMonth(), then.getDate()).getTime() -
+      new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) /
+      86_400_000,
+  );
+  if (days === 0 || abs < 3600 * 6) return RELATIVE.format(Math.round(seconds / 3600), 'hour');
+  if (Math.abs(days) < 7) return RELATIVE.format(days, 'day');
   return then.getFullYear() === now.getFullYear() ? SHORT.format(then) : SHORT_YEAR.format(then);
 }
 

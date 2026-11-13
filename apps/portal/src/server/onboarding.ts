@@ -75,7 +75,7 @@ function wmsStepsEligible(
 }
 
 async function getSetupSignals(orgId: string, orgSlug: string): Promise<SetupSignals> {
-  const [team, moduleStates, crmBoards, crmDeals, wmsWarehouses, wmsProducts, wmsOrders] =
+  const [team, moduleStates, crmBoards, crmDeals, wmsWarehouses, wmsProducts, wmsOrders, pm] =
     await Promise.all([
       teamSignals(orgId),
       getOrgModuleStates(orgId),
@@ -97,6 +97,7 @@ async function getSetupSignals(orgId: string, orgSlug: string): Promise<SetupSig
       countOrNull(sql`select count(*) as n from wms.warehouses`, 'wms warehouses'),
       countOrNull(sql`select count(*) as n from wms.products`, 'wms products'),
       countOrNull(sql`select count(*) as n from wms.shipment_orders`, 'wms orders'),
+      projectsSignals(orgId),
     ]);
   const moduleState = (module: 'crm' | 'wms') =>
     moduleStates.modules.find((state) => state.module === module);
@@ -115,7 +116,39 @@ async function getSetupSignals(orgId: string, orgSlug: string): Promise<SetupSig
     wmsWarehouses,
     wmsProducts,
     wmsOrders,
+    projectsEntitled: moduleStates.modules.find((state) => state.module === 'projects')?.entitled ?? false,
+    pmProjects: pm?.projects ?? null,
+    pmAssignedTasks: pm?.assigned ?? null,
+    pmLinks: pm?.links ?? null,
   };
+}
+
+/**
+ * KitStak Projects signals (pm schema). Guarded by to_regclass so an environment without
+ * Projects installed reads as "no data" quietly instead of logging a failed query.
+ */
+async function projectsSignals(orgId: string): Promise<{ projects: number; assigned: number; links: number } | null> {
+  try {
+    const result = await db.execute<{ installed: boolean; projects: unknown; assigned: unknown; links: unknown }>(sql`
+      select to_regclass('pm.projects') is not null as installed`);
+    if (!result.rows[0]?.installed) return null;
+    const counts = await db.execute<{ projects: unknown; assigned: unknown; links: unknown }>(sql`
+      select
+        (select count(*) from pm.projects p
+          where p.org_id = ${orgId} and p.deleted_at is null and p.is_template = false
+            and coalesce(p.settings ->> 'sample', 'false') <> 'true') as projects,
+        (select count(*) from pm.tasks t join pm.projects p on p.id = t.project_id
+          where t.org_id = ${orgId} and t.deleted_at is null and t.assignee_id is not null
+            and coalesce(p.settings ->> 'sample', 'false') <> 'true') as assigned,
+        (select count(*) from pm.integration_links l
+          where l.org_id = ${orgId} and l.target_type <> 'core_customer') as links`);
+    const row = counts.rows[0];
+    const n = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+    return { projects: n(row?.projects), assigned: n(row?.assigned), links: n(row?.links) };
+  } catch (error: unknown) {
+    console.error('[portal] setup signal query failed (projects)', error);
+    return null;
+  }
 }
 
 export interface SetupStepView extends SetupStep {
@@ -151,6 +184,7 @@ interface StepLink {
 function stepHref(key: SetupStepKey, orgSlug: string, profile: SetupProfile | null): StepLink {
   const crm = (path: string): string => `${env.NEXT_PUBLIC_CRM_URL}/${orgSlug}${path}`;
   const wms = (path: string): string => `${env.NEXT_PUBLIC_WMS_URL}${path}`;
+  const projects = (path: string): string => `${env.NEXT_PUBLIC_PROJECTS_URL}${path}`;
   switch (key) {
     case 'profile':
       return { href: '/welcome', external: false };
@@ -170,6 +204,12 @@ function stepHref(key: SetupStepKey, orgSlug: string, profile: SetupProfile | nu
         : { href: wms('/products?setup=wms_catalog'), external: true };
     case 'wms_first_order':
       return { href: wms('/orders?setup=wms_first_order'), external: true };
+    case 'projects_first_project':
+      return { href: projects('/projects/new?setup=projects_first_project'), external: true };
+    case 'projects_assign_task':
+      return { href: projects('/my-work?setup=projects_assign_task'), external: true };
+    case 'projects_connect':
+      return { href: projects('/projects?setup=projects_connect'), external: true };
   }
 }
 
