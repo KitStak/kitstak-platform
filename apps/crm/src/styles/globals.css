@@ -121,6 +121,7 @@
   --animate-dialog-out: ks-dialog-out 140ms var(--ease-exit);
   --animate-shimmer: ks-shimmer 1.4s ease-in-out infinite;
   --animate-spin: spin 0.7s linear infinite;
+  --animate-confetti-fall: ks-confetti-fall 1200ms ease-in forwards;
 
   @keyframes ks-fade-in {
     from {
@@ -142,6 +143,17 @@
     to {
       opacity: 0;
       transform: scale(0.98);
+    }
+  }
+  /* Getting-started celebration confetti (token colors; hidden under reduced motion). */
+  @keyframes ks-confetti-fall {
+    from {
+      transform: translateY(0) rotate(0deg);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(150px) rotate(var(--ks-confetti-spin, 540deg));
+      opacity: 0;
     }
   }
   @keyframes ks-peek-in {

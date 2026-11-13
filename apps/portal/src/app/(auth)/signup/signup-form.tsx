@@ -106,7 +106,8 @@ export function SignupForm({ next }: { readonly next: string | null }) {
     } catch {
       // The account exists and the user is signed in; the launcher offers org creation again.
     }
-    router.replace(safeNextPath(next, '/'));
+    // Brand-new accounts land in the welcome wizard; explicit ?next= destinations win.
+    router.replace(safeNextPath(next, '/welcome'));
     router.refresh();
   };
 

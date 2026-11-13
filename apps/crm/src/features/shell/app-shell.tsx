@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, type ReactNode } from 'react';
+import { Suspense, useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { CommandPalette } from './command-palette';
 import { CreateBoardDialog } from './dialogs/create-board-dialog';
@@ -9,6 +9,7 @@ import { MobileNav } from './mobile-nav';
 import { ShortcutsDialog } from './dialogs/shortcuts-dialog';
 import { OrgProvider, type OrgContextValue } from './org-context';
 import { routes } from './routes';
+import { SetupCallout } from './setup-callout';
 import { useShellStore, type CreateRequest } from './store';
 import { TopBar } from './top-bar';
 import { useShellLayout } from './use-media-query';
@@ -124,6 +125,10 @@ export function AppShell({ context, slots, children }: AppShellProps) {
       </a>
       <div data-testid="app-shell" className="flex h-dvh min-h-[560px] flex-col overflow-hidden bg-app">
         <TopBar />
+        {/* In-context setup arrival (?setup=<step_key>); Suspense: useSearchParams. */}
+        <Suspense fallback={null}>
+          <SetupCallout />
+        </Suspense>
         <main id="main-content" tabIndex={-1} className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-app outline-none">
           <div className="h-full overflow-auto">{children}</div>
         </main>

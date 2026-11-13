@@ -14,6 +14,7 @@ import {
   CornerDownLeft,
   CreditCard,
   LayoutGrid,
+  ListChecks,
   Lock,
   LogOut,
   Search,
@@ -269,6 +270,15 @@ export function CommandPalette({ orgs, activeOrgId, crmUrl, wmsUrl, entitled }: 
               icon={<LayoutGrid aria-hidden className="size-4" />}
             >
               Apps
+            </PaletteItem>
+            <PaletteItem
+              value="setup-guide"
+              keywords={['setup', 'guide', 'get started', 'onboarding', 'checklist', 'welcome']}
+              onSelect={() => go('/?setup=1')}
+              icon={<ListChecks aria-hidden className="size-4" />}
+              meta="Your guided setup checklist"
+            >
+              Setup guide
             </PaletteItem>
             <PaletteItem
               value="billing"

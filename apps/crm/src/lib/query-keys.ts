@@ -47,6 +47,7 @@ export const queryKeys = {
   unreadCount: (orgId: string) => ['org', orgId, 'notifications-unread'] as const,
 
   favorites: (orgId: string) => ['org', orgId, 'favorites'] as const,
+  setupGuide: (orgId: string) => ['org', orgId, 'setup-guide'] as const,
   recents: (orgId: string) => ['org', orgId, 'recents'] as const,
   search: (orgId: string, q: string, options: Record<string, unknown> = {}) =>
     ['org', orgId, 'search', q, options] as const,

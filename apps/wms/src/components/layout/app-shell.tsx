@@ -23,6 +23,7 @@ import { NotificationsBell } from './notifications-bell';
 import { PasswordChangeGate } from './password-change-gate';
 import { PrintersPopover } from './printers-popover';
 import { RouteProgress } from './route-progress';
+import { SetupCallout } from './setup-callout';
 import { ShellProvider, useShell, useShellAllows, type ShellUser } from './shell-context';
 import { TransactionsTray } from './transactions-tray';
 import { UserMenu } from './user-menu';
@@ -165,6 +166,7 @@ export function AppShell({
           <TopBar />
           {/* lg:pr-6 reserves a gutter as wide as the fixed (w-6) "Feedback" side tab so it never covers grid action columns. */}
           <main id="main-content" className="flex min-h-0 flex-1 flex-col lg:pr-6 print:pr-0">
+            <SetupCallout />
             <PasswordChangeGate reason={passwordChange}>{children}</PasswordChangeGate>
           </main>
           <IdleSignOut minutes={idleMinutes} />

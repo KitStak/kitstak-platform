@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { DashboardView } from '@/components/dashboard/dashboard-view';
+import { SetupGuidePanel } from '@/components/dashboard/setup-guide-panel';
+import type { SetupGuide } from '@/lib/setup-guide-model';
 import { getAuthContext } from '@/server/auth/context';
 import { getAppDb } from '@/server/api/db';
 import { getLiveDashboard, type LiveDashboard } from '@/server/repositories/dashboard-live';
+import { loadSetupGuide } from '@/server/setup/setup-guide';
 import DashboardLoading from './loading';
 
 export const metadata: Metadata = { title: 'Dashboard' };
@@ -29,19 +32,32 @@ async function DashboardWithData({ searchParams }: { readonly searchParams: Prom
   const wh = ids(sp.wh);
   const cl = ids(sp.cl);
   let initial: LiveDashboard | null = null;
+  // "Get set up" guide: server-decided so the panel is in the first HTML (no pop-in);
+  // on failure the client panel fetches (and renders nothing until it knows the state).
+  let setup: SetupGuide | null = null;
   try {
     const auth = await getAuthContext();
-    if (auth)
-      initial = JSON.parse(
-        JSON.stringify(await getLiveDashboard(await getAppDb(), auth, { warehouseIds: wh, clientIds: cl })),
-      ) as LiveDashboard;
+    if (auth) {
+      const db = await getAppDb();
+      const [dashboard, guide] = await Promise.all([
+        getLiveDashboard(db, auth, { warehouseIds: wh, clientIds: cl }),
+        loadSetupGuide(db).catch(() => null),
+      ]);
+      initial = JSON.parse(JSON.stringify(dashboard)) as LiveDashboard;
+      setup = guide;
+    }
   } catch {
     initial = null;
   }
   const qs = new URLSearchParams();
   if (wh.length) qs.set('wh', wh.join(','));
   if (cl.length) qs.set('cl', cl.join(','));
-  return <DashboardView initial={initial ? { qs: qs.toString(), data: initial } : null} />;
+  return (
+    <DashboardView
+      initial={initial ? { qs: qs.toString(), data: initial } : null}
+      setup={<SetupGuidePanel key="setup-guide" initial={setup} />}
+    />
+  );
 }
 
 export default function DashboardPage({ searchParams }: { searchParams: Promise<SP> }) {

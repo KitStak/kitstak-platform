@@ -15,5 +15,6 @@ export { rateLimit as rate_limit } from './core/rate-limit';
 export * from './core/customers';
 export * from './core/items';
 export * from './core/billing';
+export * from './core/onboarding';
 export * from './core/links';
 export * from './core/wms-profiles';

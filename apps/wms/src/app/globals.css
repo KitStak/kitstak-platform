@@ -201,6 +201,21 @@
   --text-xl--line-height: 30px;
   --text-2xl: 32px;
   --text-2xl--line-height: 40px;
+
+  /* Setup guide celebration (portal parity). The component hides the whole burst
+     under prefers-reduced-motion. */
+  --animate-confetti-fall: ks-confetti-fall 1200ms ease-in forwards;
+
+  @keyframes ks-confetti-fall {
+    from {
+      transform: translateY(0) rotate(0deg);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(150px) rotate(var(--ks-confetti-spin, 540deg));
+      opacity: 0;
+    }
+  }
 }
 
 /* Default border colour. MUST stay inside @layer base: an unlayered rule here

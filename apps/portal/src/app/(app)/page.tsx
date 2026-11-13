@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { after } from 'next/server';
 import { CalendarDays, CreditCard, LayoutGrid, Package, Plus, Settings2, Users, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { Module } from '@kitstak/entitlements';
@@ -7,8 +8,10 @@ import { requirePageSession } from '@/server/session';
 import { getOrgGlance, listUserOrgs, resolveActiveOrg } from '@/server/orgs';
 import { getOrgModuleStates } from '@/server/entitlements';
 import { getLauncherStats } from '@/server/product-stats';
+import { getSetupState, markGuideSeen } from '@/server/onboarding';
 import { CreateOrgForm } from '@/features/launcher/create-org-form';
 import { ProductTile } from '@/features/launcher/product-tile';
+import { SetupGuide } from '@/features/setup/setup-guide';
 import { LogoMark } from '@/features/shell/logo';
 import { Badge, cn } from '@/components/ui';
 
@@ -103,7 +106,11 @@ function QuickLinkChip({ link }: { readonly link: QuickLink }) {
 }
 
 /** The launcher: org-aware product tiles with live operational signal (BLUEPRINT.md §6). */
-export default async function LauncherPage() {
+export default async function LauncherPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await requirePageSession('/');
   const orgs = await listUserOrgs(session.user.id);
   const activeOrg = await resolveActiveOrg(session, orgs);
@@ -124,11 +131,22 @@ export default async function LauncherPage() {
     );
   }
 
-  const [{ devAllowAll, modules }, stats, glance] = await Promise.all([
+  const [{ devAllowAll, modules }, stats, glance, setup, params] = await Promise.all([
     getOrgModuleStates(activeOrg.id),
     getLauncherStats(activeOrg.id),
     getOrgGlance(activeOrg.id),
+    getSetupState(activeOrg),
+    searchParams,
   ]);
+  const canManageSetup = activeOrg.role === 'owner' || activeOrg.role === 'admin';
+  const forceSetupGuide = params.setup === '1';
+  // Rollout guard (ONBOARDING.md): an org that was already fully set up before ever
+  // seeing the guide never gets a surprise card or celebration.
+  const showSetupGuide =
+    forceSetupGuide || (!setup.dismissed && (!setup.summary.allDone || setup.seen));
+  if (showSetupGuide && !setup.summary.allDone && !setup.seen) {
+    after(() => markGuideSeen(activeOrg.id));
+  }
   const entitledFor = (module: Module): boolean =>
     modules.find((state) => state.module === module)?.entitled ?? false;
 
@@ -161,6 +179,10 @@ export default async function LauncherPage() {
           Pick an app to open. Your session carries over: no second sign-in.
         </p>
       </section>
+
+      {showSetupGuide ? (
+        <SetupGuide orgName={activeOrg.name} state={setup} canManage={canManageSetup} />
+      ) : null}
 
       <section aria-label="Your apps" className="grid gap-4 sm:grid-cols-2">
         {modules.map((state) => {
